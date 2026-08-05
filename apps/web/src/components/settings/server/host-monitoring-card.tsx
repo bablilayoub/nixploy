@@ -97,9 +97,19 @@ export function HostMonitoringCard() {
 							<Meter
 								icon={HardDrive}
 								label="Disk"
-								value={`${formatBytes(stats.disk.usedBytes)} / ${formatBytes(stats.disk.totalBytes)}`}
+								value={
+									stats.disk.totalBytes
+										? `${formatBytes(stats.disk.usedBytes)} / ${formatBytes(stats.disk.totalBytes)}`
+										: "Unavailable"
+								}
 								percent={diskPercent}
-								detail={stats.disk.usedPercent ? `${stats.disk.usedPercent} used` : undefined}
+								detail={
+									stats.disk.totalBytes
+										? stats.disk.usedPercent
+											? `${stats.disk.usedPercent} used`
+											: undefined
+										: "Could not read filesystem usage"
+								}
 							/>
 							<Meter
 								icon={Cpu}
