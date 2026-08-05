@@ -79,6 +79,18 @@ Useful overrides: `NIXPLOY_VERSION`, `NIXPLOY_IMAGE`, `NIXPLOY_PORT`, `NIXPLOY_C
 
 The app image is published to [`ghcr.io/bablilayoub/nixploy`](https://github.com/bablilayoub/nixploy/pkgs/container/nixploy). If the pull fails (e.g. before the first CI publish), the installer builds from source automatically.
 
+### Update
+
+On an existing install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/update.sh | sudo bash
+```
+
+Pulls `ghcr.io/bablilayoub/nixploy:latest`, rolls the Swarm services, refreshes Traefik's static config, and waits until the dashboard is healthy. Secrets, Postgres data, ACME certificates and dynamic routes are kept — database migrations run automatically when the new container starts.
+
+Pin a version with `NIXPLOY_VERSION=v0.1.0`, or skip Traefik with `NIXPLOY_UPDATE_TRAEFIK=0` (see the header of `update.sh`).
+
 ### Local development
 
 Prerequisites: **Node.js ≥ 22**, **pnpm ≥ 10**, **Docker** running locally.
@@ -134,6 +146,7 @@ Every tRPC procedure is exposed as a REST endpoint under `/api/<router>.<procedu
 | `packages/server` | `@nixploy/server` — Drizzle schema, auth, deploy engine, builders, Traefik/Docker utilities, backups |
 | `docker/` | Production Dockerfile, Traefik static config, dev compose file |
 | `install.sh` | One-liner production installer (Docker + Swarm + app/postgres/traefik services) |
+| `update.sh` | One-liner updater (pull image, roll services, keep data) |
 
 ## Environment Variables
 
