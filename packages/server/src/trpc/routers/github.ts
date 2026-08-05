@@ -28,7 +28,8 @@ const githubIdInput = z.object({ githubId: z.string().min(1) });
 
 /** Public base URL of this instance (used for GitHub App manifest URLs). */
 function getBaseUrl(input?: string): string {
-	const baseUrl = input ?? process.env.NIXPLOY_BASE_URL ?? "http://localhost:3000";
+	const baseUrl =
+		input ?? process.env.NIXPLOY_BASE_URL ?? process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
 	return baseUrl.replace(/\/$/, "");
 }
 

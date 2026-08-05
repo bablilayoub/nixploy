@@ -145,7 +145,6 @@ Every tRPC procedure is exposed as a REST endpoint under `/api/<router>.<procedu
 | `BETTER_AUTH_URL` | no | Public base URL of the app (auth callbacks, trusted origin) |
 | `NIXPLOY_CONFIG_DIR` | no | Config/data directory for Traefik YAML, app code, logs (default `/etc/nixploy`) |
 | `PORT` | no | HTTP port of the app process (default `3000`) |
-| `NEXT_PUBLIC_APP_URL` | no | Client-side base URL (default `http://localhost:3000`) |
 
 ## License
 

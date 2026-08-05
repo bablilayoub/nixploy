@@ -8,9 +8,18 @@ import superjson from "superjson";
 
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { env } from "@/lib/env";
 import { TRPCProvider } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
+
+/**
+ * In the browser, always call the origin the page was served from — a
+ * build-time env URL would be baked into the Docker image and point at the
+ * wrong host in production. The absolute form is only for the SSR pass.
+ */
+function trpcUrl(): string {
+	if (typeof window !== "undefined") return "/api/trpc";
+	return `${process.env.BETTER_AUTH_URL ?? "http://localhost:3000"}/api/trpc`;
+}
 
 function makeQueryClient() {
 	return new QueryClient({
@@ -49,7 +58,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 		createTRPCClient<AppRouter>({
 			links: [
 				httpBatchLink({
-					url: `${env.NEXT_PUBLIC_APP_URL}/api/trpc`,
+					url: trpcUrl(),
 					transformer: superjson,
 				}),
 			],

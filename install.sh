@@ -275,7 +275,6 @@ write_env_file() {
 		set -a; . "${ENV_FILE}"; set +a
 		if [ "${BETTER_AUTH_URL:-}" != "${public_url}" ]; then
 			set_env_var "BETTER_AUTH_URL" "${public_url}"
-			set_env_var "NEXT_PUBLIC_APP_URL" "${public_url}"
 			# shellcheck disable=SC1090
 			set -a; . "${ENV_FILE}"; set +a
 			ok "Updated public URL → ${public_url}"
@@ -294,7 +293,6 @@ POSTGRES_DB=nixploy
 BETTER_AUTH_SECRET=$(random_hex 32)
 BETTER_AUTH_URL=${public_url}
 ENCRYPTION_KEY=$(random_hex 32)
-NEXT_PUBLIC_APP_URL=${public_url}
 PORT=3000
 NIXPLOY_CONFIG_DIR=/etc/nixploy
 EOF
@@ -518,7 +516,6 @@ create_app() {
 			--detach --force --no-resolve-image \
 			--image "${APP_IMAGE}" \
 			--env-add "BETTER_AUTH_URL=${BETTER_AUTH_URL}" \
-			--env-add "NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}" \
 			nixploy >/dev/null
 		ok "Updated nixploy → ${APP_IMAGE}"
 		return
@@ -533,7 +530,7 @@ create_app() {
 		--publish "mode=host,target=3000,published=${NIXPLOY_PORT}" \
 		--env-file "${ENV_FILE}" \
 		--env DATABASE_URL --env BETTER_AUTH_SECRET --env BETTER_AUTH_URL \
-		--env ENCRYPTION_KEY --env NEXT_PUBLIC_APP_URL \
+		--env ENCRYPTION_KEY \
 		--env PORT=3000 \
 		--env NIXPLOY_CONFIG_DIR=/etc/nixploy \
 		--env NIXPLOY_DISABLE_TRAEFIK_BOOT=1 \
