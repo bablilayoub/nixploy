@@ -534,7 +534,13 @@ create_app() {
 
 	if docker service inspect nixploy >/dev/null 2>&1; then
 		info "Updating nixploy → ${APP_IMAGE}"
+		# --no-resolve-image: use the local tag (required after build-from-source;
+		# otherwise Swarm hangs trying to pull from GHCR and never converges).
+		# --detach: don't block the installer on task convergence.
 		docker service update \
+			--detach \
+			--force \
+			--no-resolve-image \
 			--image "${APP_IMAGE}" \
 			--env-add "BETTER_AUTH_URL=${BETTER_AUTH_URL}" \
 			--env-add "NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}" \
@@ -550,6 +556,8 @@ create_app() {
 		--network "${NETWORK_NAME}" \
 		--constraint 'node.role == manager' \
 		--replicas 1 \
+		--detach \
+		--no-resolve-image \
 		--publish "mode=host,target=3000,published=${NIXPLOY_PORT}" \
 		"${env_args[@]}" \
 		--mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
