@@ -604,7 +604,7 @@ print_summary() {
 	printf '\n'
 	printf '   %sConfig%s   %s\n' "${C_DIM}" "${C_RESET}" "${NIXPLOY_CONFIG_DIR}"
 	printf '   %sLogs%s     docker service logs -f nixploy\n' "${C_DIM}" "${C_RESET}"
-	printf '   %sUpdate%s   re-run this installer\n' "${C_DIM}" "${C_RESET}"
+	printf '   %sUpdate%s   curl -fsSL …/update.sh | sudo bash\n' "${C_DIM}" "${C_RESET}"
 	printf '\n'
 }
 
