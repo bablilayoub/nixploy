@@ -14,6 +14,7 @@ import {
 	getUpdateSettings,
 	patchUpdateSettings,
 	rescheduleUpdateChecker,
+	resolveStuckUpdate,
 } from "../../modules/updates";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
@@ -49,6 +50,8 @@ export const updatesRouter = router({
 	/** Current version, digests and auto-update preferences. */
 	getStatus: protectedProcedure.query(async ({ ctx }) => {
 		await requireOwnerOrAdmin(ctx.session);
+		// Un-stick rolls that never converged so the UI doesn't spin forever.
+		await resolveStuckUpdate();
 		const settings = await getUpdateSettings();
 		return {
 			appVersion: getAppVersion(),

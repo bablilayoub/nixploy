@@ -512,8 +512,11 @@ create_traefik() {
 
 create_app() {
 	if docker service inspect nixploy >/dev/null 2>&1; then
+		# stop-first: port 3000 is host-published, a second task can never bind
+		# it while the old one runs (start-first deadlocks the update).
 		docker service update \
 			--detach --force --no-resolve-image \
+			--update-order stop-first \
 			--image "${APP_IMAGE}" \
 			--env-add "BETTER_AUTH_URL=${BETTER_AUTH_URL}" \
 			nixploy >/dev/null
@@ -536,7 +539,7 @@ create_app() {
 		--env NIXPLOY_DISABLE_TRAEFIK_BOOT=1 \
 		--mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
 		--mount type=bind,source="${NIXPLOY_CONFIG_DIR}",target=/etc/nixploy \
-		--update-order start-first \
+		--update-order stop-first \
 		"${APP_IMAGE}" >/dev/null
 	ok "Created nixploy"
 }

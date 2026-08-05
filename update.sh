@@ -214,13 +214,14 @@ update_app() {
 	# --no-resolve-image: use the local tag after a source build; otherwise
 	# Swarm can hang trying to re-resolve against GHCR.
 	# --force: recreate even when the image tag string is unchanged (e.g. :latest).
-	# --update-order start-first: bring the new task up before killing the old one.
+	# --update-order stop-first: port 3000 is host-published, so a second task
+	# can never bind it while the old one runs (start-first deadlocks).
 	docker service update \
 		--detach \
 		--force \
 		--no-resolve-image \
 		--image "${APP_IMAGE}" \
-		--update-order start-first \
+		--update-order stop-first \
 		--env-add "BETTER_AUTH_URL=${BETTER_AUTH_URL:-}" \
 		--env-add "NIXPLOY_DISABLE_TRAEFIK_BOOT=1" \
 		nixploy >/dev/null

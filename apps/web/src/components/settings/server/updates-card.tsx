@@ -140,12 +140,18 @@ export function UpdatesCard() {
 						<Skeleton className="h-16 w-full" />
 						<Skeleton className="h-9 w-48" />
 					</div>
-				) : statusQuery.error ? (
+				) : statusQuery.error && !data ? (
 					<p className="rounded-md border border-dashed py-6 text-center text-sm text-muted-foreground">
 						{statusQuery.error.message}
 					</p>
 				) : data ? (
 					<div className="grid gap-5">
+						{data.updateInProgress && (
+							<p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+								Applying the update — the dashboard restarts and reconnects automatically. This
+								usually takes under a minute.
+							</p>
+						)}
 						<div className="grid gap-2 rounded-lg border p-3 text-sm sm:grid-cols-2">
 							<div className="flex justify-between gap-4 sm:block">
 								<p className="text-muted-foreground">Version</p>

@@ -1,4 +1,9 @@
-export { type ApplyUpdateResult, applyUpdate, clearStaleUpdateFlag } from "./apply";
+export {
+	type ApplyUpdateResult,
+	applyUpdate,
+	clearStaleUpdateFlag,
+	resolveStuckUpdate,
+} from "./apply";
 export {
 	checkForUpdates,
 	getAppVersion,
