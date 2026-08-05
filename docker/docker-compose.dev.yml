@@ -1,0 +1,44 @@
+# Local development stack: PostgreSQL + the Nixploy app built from source.
+# Usage: docker compose -f docker/docker-compose.dev.yml up --build
+name: nixploy-dev
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nixploy
+      POSTGRES_PASSWORD: nixploy
+      POSTGRES_DB: nixploy
+    ports:
+      - "5432:5432"
+    volumes:
+      - nixploy-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nixploy -d nixploy"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://nixploy:nixploy@postgres:5432/nixploy
+      PORT: "3000"
+      # See apps/web/.env.example for the full list of supported variables.
+    ports:
+      - "3000:3000"
+    volumes:
+      # Lets the app manage containers on the host (local single-node mode).
+      - /var/run/docker.sock:/var/run/docker.sock
+      - nixploy-config:/etc/nixploy
+
+volumes:
+  nixploy-postgres-data:
+  nixploy-config:

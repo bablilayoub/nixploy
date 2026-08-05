@@ -1,0 +1,279 @@
+"use client";
+
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+	Container,
+	FileCode2,
+	Layers,
+	Loader2,
+	Package,
+	Sparkles,
+	Boxes as StackIcon,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { useTRPC } from "@/lib/trpc";
+import { cn } from "@/lib/utils";
+
+import type { Application } from "./types";
+
+type BuildType = Application["buildType"];
+
+const BUILD_TYPES: {
+	value: BuildType;
+	label: string;
+	description: string;
+	icon: typeof Package;
+}[] = [
+	{
+		value: "nixpacks",
+		label: "Nixpacks",
+		description: "Auto-detect your stack and build with Nix (Railway).",
+		icon: Package,
+	},
+	{
+		value: "railpack",
+		label: "Railpack",
+		description: "Railway's next-gen builder, smaller images.",
+		icon: Sparkles,
+	},
+	{
+		value: "dockerfile",
+		label: "Dockerfile",
+		description: "Build from a Dockerfile in your repo.",
+		icon: Container,
+	},
+	{
+		value: "static",
+		label: "Static",
+		description: "Serve pre-built assets with nginx.",
+		icon: FileCode2,
+	},
+	{
+		value: "heroku_buildpacks",
+		label: "Heroku Buildpacks",
+		description: "Classic Cloud Native Buildpacks (Heroku builder).",
+		icon: Layers,
+	},
+	{
+		value: "paketo_buildpacks",
+		label: "Paketo Buildpacks",
+		description: "Cloud Native Buildpacks (Paketo builder).",
+		icon: StackIcon,
+	},
+];
+
+export function BuildTypeConfig({ application }: { application: Application }) {
+	const trpc = useTRPC();
+	const queryClient = useQueryClient();
+	const applicationId = application.applicationId;
+
+	const [buildType, setBuildType] = useState<BuildType>(application.buildType);
+	const [dockerfile, setDockerfile] = useState(application.dockerfile ?? "Dockerfile");
+	const [dockerContextPath, setDockerContextPath] = useState(application.dockerContextPath ?? "");
+	const [dockerBuildStage, setDockerBuildStage] = useState(application.dockerBuildStage ?? "");
+	const [publishDirectory, setPublishDirectory] = useState(application.publishDirectory ?? "");
+	const [isStaticSpa, setIsStaticSpa] = useState(application.isStaticSpa ?? false);
+	const [buildArgs, setBuildArgs] = useState(application.buildArgs ?? "");
+
+	useEffect(() => {
+		setBuildType(application.buildType);
+		setDockerfile(application.dockerfile ?? "Dockerfile");
+		setDockerContextPath(application.dockerContextPath ?? "");
+		setDockerBuildStage(application.dockerBuildStage ?? "");
+		setPublishDirectory(application.publishDirectory ?? "");
+		setIsStaticSpa(application.isStaticSpa ?? false);
+		setBuildArgs(application.buildArgs ?? "");
+	}, [application]);
+
+	const invalidate = () =>
+		queryClient.invalidateQueries({
+			queryKey: trpc.application.one.queryKey({ applicationId }),
+		});
+
+	const saveBuildType = useMutation(
+		trpc.application.saveBuildType.mutationOptions({
+			onError: (error) => toast.error(error.message),
+		}),
+	);
+	const update = useMutation(
+		trpc.application.update.mutationOptions({
+			onError: (error) => toast.error(error.message),
+		}),
+	);
+
+	const isPending = saveBuildType.isPending || update.isPending;
+
+	const onSave = async () => {
+		try {
+			await saveBuildType.mutateAsync({
+				applicationId,
+				buildType,
+				dockerfile: buildType === "dockerfile" ? dockerfile || null : null,
+				dockerContextPath: buildType === "dockerfile" ? dockerContextPath || null : null,
+				dockerBuildStage: buildType === "dockerfile" ? dockerBuildStage || null : null,
+				publishDirectory: buildType === "static" ? publishDirectory || null : null,
+				isStaticSpa: buildType === "static" ? isStaticSpa : null,
+			});
+			if ((application.buildArgs ?? "") !== buildArgs) {
+				await update.mutateAsync({ applicationId, buildArgs: buildArgs || null });
+			}
+			toast.success("Build configuration saved");
+			invalidate();
+		} catch {
+			// errors are surfaced via onError toasts
+		}
+	};
+
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle className="text-sm font-medium">Build</CardTitle>
+				<CardDescription>How the source is built into a deployable image.</CardDescription>
+			</CardHeader>
+			<CardContent className="flex flex-col gap-5">
+				<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+					{BUILD_TYPES.map((option) => (
+						<button
+							key={option.value}
+							type="button"
+							onClick={() => setBuildType(option.value)}
+							className={cn(
+								"flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors",
+								buildType === option.value
+									? "border-foreground bg-secondary/60 ring-1 ring-foreground"
+									: "border-border hover:border-foreground/40 hover:bg-secondary/40",
+							)}
+						>
+							<span className="flex items-center gap-2 text-sm font-medium">
+								<option.icon className="size-4 text-muted-foreground" />
+								{option.label}
+							</span>
+							<span className="text-xs text-muted-foreground">{option.description}</span>
+						</button>
+					))}
+				</div>
+
+				{buildType === "dockerfile" && (
+					<div className="grid gap-4 sm:grid-cols-3">
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="dockerfile">Dockerfile Path</Label>
+							<Input
+								id="dockerfile"
+								placeholder="Dockerfile"
+								value={dockerfile}
+								onChange={(e) => setDockerfile(e.target.value)}
+							/>
+						</div>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="docker-context">Build Context</Label>
+							<Input
+								id="docker-context"
+								placeholder="."
+								value={dockerContextPath}
+								onChange={(e) => setDockerContextPath(e.target.value)}
+							/>
+						</div>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="docker-stage">Build Stage (optional)</Label>
+							<Input
+								id="docker-stage"
+								placeholder="builder"
+								value={dockerBuildStage}
+								onChange={(e) => setDockerBuildStage(e.target.value)}
+							/>
+						</div>
+					</div>
+				)}
+
+				{buildType === "static" && (
+					<>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="publish-dir">Publish Directory</Label>
+							<Input
+								id="publish-dir"
+								placeholder="dist"
+								className="sm:max-w-xs"
+								value={publishDirectory}
+								onChange={(e) => setPublishDirectory(e.target.value)}
+							/>
+							<p className="text-xs text-muted-foreground">
+								Directory with the compiled assets, relative to the repo root. No build step runs.
+							</p>
+						</div>
+						<div className="flex items-center justify-between rounded-md border p-3">
+							<div className="flex flex-col gap-1">
+								<Label htmlFor="is-spa">Single Page Application</Label>
+								<p className="text-xs text-muted-foreground">
+									Rewrite all paths to index.html (React, Vue, etc.).
+								</p>
+							</div>
+							<Switch id="is-spa" checked={isStaticSpa} onCheckedChange={setIsStaticSpa} />
+						</div>
+					</>
+				)}
+
+				{(buildType === "nixpacks" || buildType === "railpack" || buildType === "dockerfile") && (
+					<div className="flex flex-col gap-2">
+						<Label htmlFor="build-args">Build Args</Label>
+						<Textarea
+							id="build-args"
+							placeholder={"NODE_ENV=production\nSOME_FLAG=1"}
+							className="min-h-24 font-mono text-sm"
+							value={buildArgs}
+							onChange={(e) => setBuildArgs(e.target.value)}
+						/>
+						<p className="text-xs text-muted-foreground">
+							One KEY=value pair per line, passed to the builder at build time.
+						</p>
+					</div>
+				)}
+
+				<div className="flex justify-end">
+					<Button onClick={onSave} disabled={isPending}>
+						{isPending && <Loader2 className="size-4 animate-spin" />}
+						Save Build
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
+	);
+}
+
+/** Shown for docker/drop sources: no build step, the image is used as-is. */
+export function BuildTypeInfoCard({ sourceType }: { sourceType: Application["sourceType"] }) {
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle className="text-sm font-medium">Build</CardTitle>
+				<CardDescription>How the source is built into a deployable image.</CardDescription>
+			</CardHeader>
+			<CardContent>
+				<div className="flex items-start gap-3 rounded-lg border border-dashed border-border p-4">
+					<Container className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+					<p className="text-sm text-muted-foreground">
+						{sourceType === "docker" ? (
+							<>
+								This application deploys a pre-built <strong>Docker image</strong> — there is no
+								build step. To build from source instead, switch the source type to Git and pick a
+								builder here (Nixpacks, Railpack, Dockerfile, Static, buildpacks).
+							</>
+						) : (
+							<>
+								This application deploys an <strong>uploaded zip</strong> — there is no build step.
+								To build from source instead, switch the source type to Git and pick a builder here.
+							</>
+						)}
+					</p>
+				</div>
+			</CardContent>
+		</Card>
+	);
+}

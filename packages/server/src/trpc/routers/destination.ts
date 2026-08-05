@@ -1,0 +1,127 @@
+import { TRPCError } from "@trpc/server";
+import { and, desc, eq } from "drizzle-orm";
+import { z } from "zod";
+import { db } from "../../db";
+import { destinations } from "../../db/schema";
+import { testDestination } from "../../modules/backups/runner";
+import { resolveCallerOrganizationId } from "../../modules/projects";
+import type { TRPCContext } from "../init";
+import { protectedProcedure, router } from "../init";
+
+type Session = NonNullable<TRPCContext["session"]>;
+
+async function getOrganizationId(session: Session): Promise<string> {
+	return await resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
+}
+
+async function findDestinationOrThrow(destinationId: string, organizationId: string) {
+	const row = await db.query.destinations.findFirst({
+		where: and(
+			eq(destinations.destinationId, destinationId),
+			eq(destinations.organizationId, organizationId),
+		),
+	});
+	if (!row) {
+		throw new TRPCError({ code: "NOT_FOUND", message: "Destination not found" });
+	}
+	return row;
+}
+
+const destinationIdInput = z.object({ destinationId: z.string().min(1) });
+
+const createDestinationInput = z.object({
+	name: z.string().min(1),
+	accessKey: z.string().min(1),
+	secretAccessKey: z.string().min(1),
+	bucket: z.string().min(1),
+	region: z.string().min(1),
+	endpoint: z.string().min(1),
+	provider: z.string().optional(),
+});
+
+/**
+ * Response shape: the S3 secret key is write-only. The access key stays
+ * visible — it is an identifier the edit form prefills, not a credential on
+ * its own.
+ */
+const publicDestination = <T extends { secretAccessKey: string }>(
+	destination: T,
+): Omit<T, "secretAccessKey"> => {
+	const { secretAccessKey: _secretAccessKey, ...rest } = destination;
+	return rest;
+};
+
+export const destinationRouter = router({
+	/** All S3 destinations of the caller's organization. */
+	all: protectedProcedure.query(async ({ ctx }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		const rows = await db.query.destinations.findMany({
+			where: eq(destinations.organizationId, organizationId),
+			orderBy: [desc(destinations.createdAt)],
+		});
+		return rows.map(publicDestination);
+	}),
+
+	/** A single destination by id. */
+	one: protectedProcedure.input(destinationIdInput).query(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		return publicDestination(await findDestinationOrThrow(input.destinationId, organizationId));
+	}),
+
+	/** Add an S3-compatible destination (secret key is encrypted at rest). */
+	create: protectedProcedure.input(createDestinationInput).mutation(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		const [row] = await db
+			.insert(destinations)
+			.values({ ...input, organizationId })
+			.returning();
+		if (!row) {
+			throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+		}
+		return publicDestination(row);
+	}),
+
+	/** Update destination credentials/settings. */
+	update: protectedProcedure
+		.input(createDestinationInput.partial().extend({ destinationId: z.string().min(1) }))
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			const { destinationId, ...values } = input;
+			await findDestinationOrThrow(destinationId, organizationId);
+			const [row] = await db
+				.update(destinations)
+				.set(values)
+				.where(
+					and(
+						eq(destinations.destinationId, destinationId),
+						eq(destinations.organizationId, organizationId),
+					),
+				)
+				.returning();
+			return row ? publicDestination(row) : row;
+		}),
+
+	/** Remove a destination (backups pointing at it cascade-delete). */
+	remove: protectedProcedure.input(destinationIdInput).mutation(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		const row = publicDestination(
+			await findDestinationOrThrow(input.destinationId, organizationId),
+		);
+		await db
+			.delete(destinations)
+			.where(
+				and(
+					eq(destinations.destinationId, input.destinationId),
+					eq(destinations.organizationId, organizationId),
+				),
+			);
+		return row;
+	}),
+
+	/** Verify bucket access with the stored credentials (ListObjects probe). */
+	testConnection: protectedProcedure.input(destinationIdInput).mutation(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		const row = await findDestinationOrThrow(input.destinationId, organizationId);
+		return await testDestination(row);
+	}),
+});

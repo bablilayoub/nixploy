@@ -1,0 +1,232 @@
+import { type ChildProcess, spawn } from "node:child_process";
+import Docker from "dockerode";
+import { eq } from "drizzle-orm";
+import { Client as SshClient } from "ssh2";
+import { db } from "../../db";
+import { servers } from "../../db/schema";
+import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { shellQuote } from "./paths";
+
+/**
+ * Get a dockerode client for a managed server.
+ * - `serverId` null/undefined → the Nixploy host's local docker socket.
+ * - otherwise → docker engine API tunneled over SSH (docker-modem ssh protocol).
+ */
+export async function getDocker(serverId?: string | null): Promise<Docker> {
+	if (!serverId) {
+		return new Docker({
+			socketPath: process.env.DOCKER_SOCKET ?? "/var/run/docker.sock",
+		});
+	}
+	const server = await db.query.servers.findFirst({
+		where: eq(servers.serverId, serverId),
+		with: { sshKey: true },
+	});
+	if (!server) {
+		throw new Error(`Server not found: ${serverId}`);
+	}
+	const sshKey = server.sshKey;
+	if (!sshKey) {
+		throw new Error(`Server ${server.name} (${serverId}) has no SSH key attached`);
+	}
+	return new Docker({
+		protocol: "ssh",
+		host: server.ipAddress,
+		port: server.port,
+		username: server.username,
+		sshOptions: { privateKey: sshKey.privateKey },
+	});
+}
+
+/** Error thrown when a spawned command exits non-zero (or is killed). */
+export class CommandError extends Error {
+	constructor(
+		message: string,
+		readonly exitCode: number | null,
+		readonly killed: boolean,
+	) {
+		super(message);
+		this.name = "CommandError";
+	}
+}
+
+/** Handle for a command running locally or over SSH. */
+export interface TargetedProcess {
+	/** OS pid (local processes only; undefined over SSH). */
+	readonly pid?: number;
+	/** Terminate the process (SIGTERM locally, closes the channel over SSH). */
+	kill(): void;
+	/** Resolves on exit 0, rejects with {@link CommandError} otherwise. */
+	done: Promise<void>;
+}
+
+export interface SpawnOptions {
+	cwd?: string;
+	onData?: (chunk: string) => void;
+}
+
+/**
+ * Spawn a shell command on the target server, streaming combined
+ * stdout/stderr to `onData`. Local → `bash -c`; remote → ssh2 channel.
+ * Killing the returned handle is how deployment cancellation stops builds.
+ */
+export async function spawnTargeted(
+	serverId: string | null | undefined,
+	command: string,
+	options: SpawnOptions = {},
+): Promise<TargetedProcess> {
+	if (!serverId) {
+		return spawnLocal(command, options);
+	}
+	return spawnRemote(serverId, command, options);
+}
+
+function spawnLocal(command: string, options: SpawnOptions): TargetedProcess {
+	const child: ChildProcess = spawn("bash", ["-c", command], { cwd: options.cwd });
+	let killed = false;
+
+	const done = new Promise<void>((resolve, reject) => {
+		child.stdout?.on("data", (d: Buffer) => options.onData?.(d.toString()));
+		child.stderr?.on("data", (d: Buffer) => options.onData?.(d.toString()));
+		child.on("error", reject);
+		child.on("close", (code) => {
+			if (code === 0) {
+				resolve();
+			} else {
+				reject(
+					new CommandError(
+						killed
+							? `Command was cancelled: ${command}`
+							: `Command failed (exit ${code}): ${command}`,
+						code,
+						killed,
+					),
+				);
+			}
+		});
+	});
+
+	return {
+		pid: child.pid,
+		kill: () => {
+			killed = true;
+			child.kill("SIGTERM");
+			// Escalate if the process ignores SIGTERM.
+			setTimeout(() => child.kill("SIGKILL"), 5_000).unref();
+		},
+		done,
+	};
+}
+
+async function spawnRemote(
+	serverId: string,
+	command: string,
+	options: SpawnOptions,
+): Promise<TargetedProcess> {
+	const server = await db.query.servers.findFirst({
+		where: eq(servers.serverId, serverId),
+		with: { sshKey: true },
+	});
+	if (!server) {
+		throw new Error(`Server not found: ${serverId}`);
+	}
+	const sshKey = server.sshKey;
+	if (!sshKey) {
+		throw new Error(`Server ${server.name} (${serverId}) has no SSH key attached`);
+	}
+
+	const conn = new SshClient();
+	await new Promise<void>((resolve, reject) => {
+		conn
+			.on("ready", () => resolve())
+			.on("error", reject)
+			.connect({
+				host: server.ipAddress,
+				port: server.port,
+				username: server.username,
+				privateKey: sshKey.privateKey,
+				readyTimeout: 30_000,
+			});
+	});
+
+	const stream = await new Promise<import("ssh2").ClientChannel>((resolve, reject) => {
+		const remoteCommand = options.cwd ? `cd ${shellQuote(options.cwd)} && ${command}` : command;
+		conn.exec(remoteCommand, (err, s) => (err ? reject(err) : resolve(s)));
+	});
+
+	let killed = false;
+	const done = new Promise<void>((resolve, reject) => {
+		stream.on("data", (d: Buffer) => options.onData?.(d.toString()));
+		stream.stderr.on("data", (d: Buffer) => options.onData?.(d.toString()));
+		stream.on("close", (code: number | null) => {
+			conn.end();
+			if (code === 0 || (code === null && killed)) {
+				if (code === null && killed) {
+					reject(new CommandError(`Command was cancelled: ${command}`, code, true));
+					return;
+				}
+				resolve();
+			} else {
+				reject(
+					new CommandError(
+						killed
+							? `Command was cancelled: ${command}`
+							: `Remote command failed (exit ${code}) on server ${server.name}: ${command}`,
+						code,
+						killed,
+					),
+				);
+			}
+		});
+	});
+
+	return {
+		kill: () => {
+			killed = true;
+			stream.close();
+			conn.end();
+		},
+		done,
+	};
+}
+
+/** Check whether a binary exists on the target server (`command -v`). */
+export async function commandExists(
+	serverId: string | null | undefined,
+	binary: string,
+): Promise<boolean> {
+	try {
+		const cmd = `command -v ${shellQuote(binary)} >/dev/null 2>&1`;
+		if (serverId) {
+			await execAsyncRemote(serverId, cmd);
+		} else {
+			await execAsync(cmd);
+		}
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Write a text file on the target server (base64 through the shell, so it
+ * works identically locally and over SSH). Parent dirs are created.
+ */
+export async function writeFileTargeted(
+	serverId: string | null | undefined,
+	absPath: string,
+	content: string | Buffer,
+	mode?: string,
+): Promise<void> {
+	const dir = absPath.slice(0, absPath.lastIndexOf("/")) || "/";
+	const b64 = (Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8")).toString(
+		"base64",
+	);
+	const chmod = mode ? ` && chmod ${mode} ${shellQuote(absPath)}` : "";
+	const cmd = `mkdir -p ${shellQuote(dir)} && printf %s ${shellQuote(b64)} | base64 -d > ${shellQuote(absPath)}${chmod}`;
+	if (serverId) {
+		await execAsyncRemote(serverId, cmd);
+	} else {
+		await execAsync(cmd);
+	}
+}

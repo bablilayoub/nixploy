@@ -1,0 +1,22 @@
+# VCS
+.git
+.gitignore
+
+# Dependencies
+node_modules
+**/node_modules
+
+# Build output
+.next
+**/dist
+**/tsconfig.tsbuildinfo
+
+# Local runtime data
+.nixploy-data
+
+# Logs
+*.log
+
+# Env / secrets
+.env
+**/.env

@@ -1,0 +1,135 @@
+"use client";
+
+import { AlertTriangle, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { authClient, useSession } from "@/lib/auth-client";
+
+/** Only the organization's owner may permanently delete it. */
+export function DangerZoneCard() {
+	const router = useRouter();
+	const { data: session } = useSession();
+	const { data: activeOrganization, isPending: isOrgPending } = authClient.useActiveOrganization();
+	const [isOwner, setIsOwner] = useState(false);
+	const [open, setOpen] = useState(false);
+	const [confirmName, setConfirmName] = useState("");
+	const [isDeleting, setIsDeleting] = useState(false);
+
+	useEffect(() => {
+		const organizationId = activeOrganization?.id;
+		const userId = session?.user?.id;
+		if (!organizationId || !userId) {
+			setIsOwner(false);
+			return;
+		}
+		let cancelled = false;
+		authClient.organization.listMembers({ query: { organizationId } }).then(({ data }) => {
+			if (cancelled) return;
+			const self = data?.members?.find((member) => member.userId === userId);
+			setIsOwner(self?.role === "owner");
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [activeOrganization?.id, session?.user?.id]);
+
+	if (isOrgPending || !activeOrganization || !isOwner) {
+		return null;
+	}
+
+	async function handleDelete() {
+		if (!activeOrganization) return;
+		setIsDeleting(true);
+		const { error } = await authClient.organization.delete({
+			organizationId: activeOrganization.id,
+		});
+		setIsDeleting(false);
+		if (error) {
+			toast.error(error.message ?? "Failed to delete organization");
+			return;
+		}
+		toast.success(`Organization "${activeOrganization.name}" deleted`);
+		setOpen(false);
+		router.push("/dashboard");
+		router.refresh();
+	}
+
+	return (
+		<Card className="border-destructive/50">
+			<CardHeader>
+				<CardTitle className="flex items-center gap-2 text-destructive">
+					<AlertTriangle className="size-4" />
+					Danger Zone
+				</CardTitle>
+				<CardDescription>
+					Permanently delete every project, environment, service, domain, server and backup
+					destination in this organization. This cannot be undone.
+				</CardDescription>
+			</CardHeader>
+			<CardContent>
+				<Button variant="destructive" onClick={() => setOpen(true)}>
+					Delete organization
+				</Button>
+				<AlertDialog
+					open={open}
+					onOpenChange={(next) => {
+						setOpen(next);
+						if (!next) setConfirmName("");
+					}}
+				>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>Delete "{activeOrganization.name}"?</AlertDialogTitle>
+							<AlertDialogDescription>
+								This tears down every Swarm service, Traefik route, volume and file on disk for
+								every project in this organization, then deletes the organization itself. This
+								action cannot be undone.
+							</AlertDialogDescription>
+						</AlertDialogHeader>
+						<div className="grid gap-2 text-left">
+							<Label htmlFor="confirm-org-name">
+								Type <span className="font-semibold">{activeOrganization.name}</span> to confirm
+							</Label>
+							<Input
+								id="confirm-org-name"
+								value={confirmName}
+								onChange={(event) => setConfirmName(event.target.value)}
+								autoComplete="off"
+							/>
+						</div>
+						<AlertDialogFooter>
+							<AlertDialogCancel>Cancel</AlertDialogCancel>
+							<AlertDialogAction
+								variant="destructive"
+								disabled={isDeleting || confirmName !== activeOrganization.name}
+								onClick={(event) => {
+									event.preventDefault();
+									handleDelete();
+								}}
+							>
+								{isDeleting && <Loader2 className="size-4 animate-spin" />}
+								Delete organization
+							</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
+			</CardContent>
+		</Card>
+	);
+}

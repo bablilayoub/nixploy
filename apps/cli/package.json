@@ -1,0 +1,30 @@
+{
+	"name": "@nixploy/cli",
+	"version": "0.1.0",
+	"description": "Command-line interface for Nixploy — manage projects, apps, databases and env vars from your terminal",
+	"license": "Apache-2.0",
+	"type": "module",
+	"bin": {
+		"nixploy": "./dist/index.js"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"engines": {
+		"node": ">=22"
+	},
+	"scripts": {
+		"build": "tsup",
+		"dev": "tsup --watch",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"commander": "^13.1.0"
+	},
+	"devDependencies": {
+		"@types/node": "^22.10.0",
+		"tsup": "^8.3.5",
+		"typescript": "^5.7.2"
+	}
+}

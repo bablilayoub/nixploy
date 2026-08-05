@@ -1,0 +1,35 @@
+---
+description: Nixploy core conventions — always apply
+alwaysApply: true
+---
+
+# Nixploy — core rules
+
+Self-hosted PaaS (Dokploy replica). pnpm monorepo: `apps/web` (Next.js 16 +
+Tailwind v4 + shadcn/ui, custom `server.ts` with WebSockets/deploy queue/crons),
+`apps/cli`, `packages/server` (Drizzle schema, better-auth, tRPC routers, deploy
+engine). Full guides in `docs/`, agent rules in `AGENTS.md`.
+
+## Non-negotiables
+
+- Biome style: tabs, double quotes, named exports. Run
+  `pnpm exec biome check --write <files>` from the repo root before finishing.
+- Typecheck after changes: `pnpm -F @nixploy/server exec tsc --noEmit` and/or
+  `cd apps/web && pnpm exec tsc --noEmit`.
+- Tests: `pnpm test` (vitest in packages/server) must stay green.
+- No `child_process` in feature code — use `execAsync` / `execAsyncRemote(serverId)`.
+- No hardcoded `/etc/nixploy` — resolve via `paths.ts` helpers (`NIXPLOY_CONFIG_DIR`).
+- Secrets only in `encryptedText` columns (AES, `ENCRYPTION_KEY`).
+- New DB fields: edit Drizzle schema → `pnpm db:generate` → commit migration.
+- Minimal diffs; match surrounding code style; no speculative abstractions.
+- Do not run `pnpm install` inside a single workspace package — install at the
+  repo root so workspace symlinks stay intact.
+
+## Tenancy
+
+organization → project → environment → service (application, compose,
+postgres, mysql, mariadb, mongo, redis). Every tenant-scoped procedure
+resolves the org with `resolveCallerOrganizationId(userId, activeOrganizationId)`
+from `modules/projects` (async, falls back to first membership) and filters
+rows by it. Never read `session.activeOrganizationId` raw, never throw on it
+being null.

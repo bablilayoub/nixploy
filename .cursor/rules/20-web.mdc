@@ -1,0 +1,38 @@
+---
+description: Rules for apps/web — Next.js UI, data fetching, components
+globs:
+  - apps/web/**
+alwaysApply: false
+---
+
+# Web app rules
+
+## Data fetching
+
+- Client components use `useTRPC()` from `@/lib/trpc` with
+  `trpc.<router>.<proc>.queryOptions` / `mutationOptions` (TanStack Query).
+  After mutations, invalidate via `queryKey`.
+- Toasts via `sonner`; sentence-case messages ("Domain created").
+- Better-auth client from `@/lib/auth-client`; POSTs to `/api/auth/*` from
+  non-browser contexts must include an `Origin` header (CSRF).
+
+## Components & styling
+
+- shadcn/ui primitives in `@/components/ui`; Tailwind v4 classes; lucide icons.
+- Every list/query surface ships with three states from day one: loading
+  skeleton, error-with-retry, empty state (see `components/query-state.tsx`
+  and `components/services/empty-state.tsx`).
+- Dialogs: content grids need `min-w-0` tracks (`dialog.tsx` already sets
+  `grid-cols-[minmax(0,1fr)]`) or wide content overflows the panel.
+- SSR/CSR consistency: gate client-only rendering behind a mounted flag —
+  mismatches hydrate the whole tree again (see `user-menu.tsx`).
+- Log rendering goes through `components/services/log-viewer.tsx` (level
+  badges + colors); monitoring through `monitoring-charts.tsx` — extend them
+  instead of forking viewers.
+
+## Routing
+
+- Dashboard routes live in `src/app/(dashboard)/dashboard/…`; services are
+  `projects/[projectId]/services/<type>/<id>` with `<type>` in
+  application | compose | postgres | mysql | mariadb | mongo | redis.
+- `useSearchParams` requires a `<Suspense>` boundary in the page.

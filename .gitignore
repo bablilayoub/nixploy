@@ -1,0 +1,42 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# test / coverage
+coverage/
+playwright-report/
+test-results/
+
+# env & secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# local Nixploy runtime (Traefik YAML, compose files, logs, metrics, ACME)
+.nixploy-data/
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# keys / certs that may appear during local setup
+*.pem
+*.key
+
+# misc
+.DS_Store
+.turbo/
+.vercel/
+.idea/
+.vscode/
+*.swp
+drizzle/meta/_journal.json.bak

@@ -1,0 +1,32 @@
+---
+description: Rules for packages/server — tRPC routers, deploy engine, Drizzle
+globs:
+  - packages/server/**
+alwaysApply: false
+---
+
+# Server package rules
+
+## tRPC
+
+- One router per domain in `trpc/routers/<kebab-case>.ts`, exported as
+  `<name>Router`, and **registered in `trpc/root.ts`** — unregistered routers
+  are unreachable (tRPC, REST/OpenAPI and the CLI share the root router).
+- Tenant data ⇒ `protectedProcedure` + `resolveCallerOrganizationId` (see
+  00-general). Access-check helpers live in `modules/application/org.ts`
+  (`assertApplicationAccess`, `assertEnvironmentAccess`, `getServiceContext`).
+- Input validation with zod on every procedure.
+
+## Engine
+
+- Domains live under `modules/<domain>/`; routers stay thin — logic belongs in
+  modules, which are unit-testable (vitest next to the code, `*.test.ts`).
+- Deployments go through the in-process queue (`modules/deployment/queue.ts`);
+  never spawn builds directly from a router.
+- Traefik config changes go through `writeAppTraefikConfig` /
+  `removeTraefikConfig` — never hand-write dynamic YAML from feature code.
+- Every docker/shell operation takes the local/remote duality:
+  `execAsync` for the Nixploy host, `execAsyncRemote(serverId)` over SSH.
+- better-auth schema (`db/schema/auth.ts`) must stay in sync with the plugin
+  version — missing columns silently break flows (e.g. 2FA `verified`,
+  `failedVerificationCount`, `lockedUntil`).

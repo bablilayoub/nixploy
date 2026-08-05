@@ -1,0 +1,54 @@
+# Nixploy — Traefik v3 static configuration (template).
+# install.sh copies this to /etc/nixploy/traefik/traefik.yml on the host.
+#
+# Routing config is NOT stored here: Nixploy writes per-app dynamic YAML
+# into /etc/nixploy/traefik/dynamic/, which the file provider watches and
+# hot-reloads.
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+log:
+  level: INFO
+
+accessLog: {}
+
+api:
+  dashboard: false
+
+ping: {}
+
+entryPoints:
+  web:
+    address: ":80"
+    # Redirect all plain HTTP to HTTPS. Remove this block to serve HTTP directly.
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        certResolver: letsencrypt
+
+providers:
+  # Docker provider intentionally disabled: user apps are routed exclusively
+  # through Nixploy-generated dynamic config files.
+  docker:
+    exposedByDefault: false
+  file:
+    directory: /etc/nixploy/traefik/dynamic
+    watch: true
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      # Overwritten by install.sh / Nixploy server settings (web-server-settings).
+      email: admin@example.com
+      storage: /etc/nixploy/traefik/acme.json
+      httpChallenge:
+        entryPoint: web

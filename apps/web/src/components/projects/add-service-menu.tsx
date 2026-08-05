@@ -1,0 +1,418 @@
+"use client";
+
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, Plus } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useTRPC } from "@/lib/trpc";
+
+import { DATABASE_TYPES, type DatabaseType, SERVICE_TYPE_META } from "./service-types";
+
+const SECRET_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+function randomSecret(length = 20) {
+	const bytes = new Uint8Array(length);
+	crypto.getRandomValues(bytes);
+	return Array.from(bytes, (byte) => SECRET_ALPHABET[byte % SECRET_ALPHABET.length]).join("");
+}
+
+function slugify(value: string) {
+	return (
+		value
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-+|-+$/g, "") || "db"
+	);
+}
+
+interface CreatedDatabase {
+	type: DatabaseType;
+	name: string;
+	credentials: Record<string, string>;
+}
+
+interface CredentialField {
+	key: string;
+	label: string;
+	/** Secret fields default to a random value; the rest default to the name slug. */
+	secret?: boolean;
+}
+
+/** Credential inputs shown per database type in the create dialog. All are
+ * optional — blank fields fall back to auto-generated values. */
+const DATABASE_CREDENTIAL_FIELDS: Record<DatabaseType, CredentialField[]> = {
+	postgres: [
+		{ key: "databaseName", label: "Database name" },
+		{ key: "databaseUser", label: "User" },
+		{ key: "databasePassword", label: "Password", secret: true },
+	],
+	mysql: [
+		{ key: "databaseName", label: "Database name" },
+		{ key: "databaseUser", label: "User" },
+		{ key: "databasePassword", label: "Password", secret: true },
+		{ key: "databaseRootPassword", label: "Root password", secret: true },
+	],
+	mariadb: [
+		{ key: "databaseName", label: "Database name" },
+		{ key: "databaseUser", label: "User" },
+		{ key: "databasePassword", label: "Password", secret: true },
+		{ key: "databaseRootPassword", label: "Root password", secret: true },
+	],
+	mongo: [
+		{ key: "databaseUser", label: "User" },
+		{ key: "databasePassword", label: "Password", secret: true },
+	],
+	redis: [{ key: "databasePassword", label: "Password", secret: true }],
+};
+
+export function AddServiceMenu({
+	projectId,
+	environmentId,
+	environmentName,
+	initialDialog,
+}: {
+	projectId: string;
+	environmentId: string;
+	environmentName: string;
+	/** Seed the open dialog on mount (e.g. from a ?new=application deep link). */
+	initialDialog?: "application" | "compose" | DatabaseType;
+}) {
+	const trpc = useTRPC();
+	const queryClient = useQueryClient();
+
+	const [dialog, setDialog] = useState<"application" | "compose" | DatabaseType | null>(
+		initialDialog ?? null,
+	);
+	const [name, setName] = useState("");
+	const [description, setDescription] = useState("");
+	const [composeType, setComposeType] = useState<"docker-compose" | "stack">("docker-compose");
+	const [credentials, setCredentials] = useState<Record<string, string>>({});
+	const [createdDatabase, setCreatedDatabase] = useState<CreatedDatabase | null>(null);
+
+	const resetForm = () => {
+		setName("");
+		setDescription("");
+		setComposeType("docker-compose");
+		setCredentials({});
+	};
+
+	const serviceInput = { projectId, environmentName };
+
+	/** Invalidate the .all list of the created type plus the count sources. */
+	const invalidateServices = async (type: "application" | "compose" | DatabaseType) => {
+		await Promise.all([
+			queryClient.invalidateQueries({
+				queryKey: trpc[type].all.queryKey(serviceInput),
+			}),
+			queryClient.invalidateQueries({
+				queryKey: trpc.environment.byProject.queryKey({ projectId }),
+			}),
+			queryClient.invalidateQueries({
+				queryKey: trpc.project.all.queryKey(),
+			}),
+		]);
+	};
+
+	const onMutationError = (error: { message: string }) => toast.error(error.message);
+
+	const createApplication = useMutation(
+		trpc.application.create.mutationOptions({
+			onSuccess: async (application) => {
+				toast.success(`Application "${application.name}" created`);
+				await invalidateServices("application");
+				setDialog(null);
+				resetForm();
+			},
+			onError: onMutationError,
+		}),
+	);
+
+	const createCompose = useMutation(
+		trpc.compose.create.mutationOptions({
+			onSuccess: async (service) => {
+				toast.success(`Compose service "${service.name}" created`);
+				await invalidateServices("compose");
+				setDialog(null);
+				resetForm();
+			},
+			onError: onMutationError,
+		}),
+	);
+
+	const handleDatabaseCreated = async (
+		type: DatabaseType,
+		serviceName: string,
+		credentials: Record<string, string>,
+	) => {
+		toast.success(`${SERVICE_TYPE_META[type].label} "${serviceName}" created`);
+		await invalidateServices(type);
+		setDialog(null);
+		resetForm();
+		// Credentials are stored encrypted; show them once so the user can copy.
+		setCreatedDatabase({ type, name: serviceName, credentials });
+	};
+
+	// NOTE: the database router factory spreads per-type credential fields
+	// (databaseName, databaseUser, ...) into the zod schema at runtime, but
+	// that spread is lost in the inferred AppRouter input types. Payloads are
+	// cast (`as never`) to satisfy TS; the runtime schema accepts them.
+	const createPostgres = useMutation(
+		trpc.postgres.create.mutationOptions({ onError: onMutationError }),
+	);
+	const createMysql = useMutation(trpc.mysql.create.mutationOptions({ onError: onMutationError }));
+	const createMariadb = useMutation(
+		trpc.mariadb.create.mutationOptions({ onError: onMutationError }),
+	);
+	const createMongo = useMutation(trpc.mongo.create.mutationOptions({ onError: onMutationError }));
+	const createRedis = useMutation(trpc.redis.create.mutationOptions({ onError: onMutationError }));
+
+	const isDatabaseDialog = dialog !== null && dialog !== "application" && dialog !== "compose";
+	const isPending =
+		createApplication.isPending ||
+		createCompose.isPending ||
+		createPostgres.isPending ||
+		createMysql.isPending ||
+		createMariadb.isPending ||
+		createMongo.isPending ||
+		createRedis.isPending;
+
+	const submit = () => {
+		const trimmed = name.trim();
+		if (!trimmed) return;
+		if (dialog === "application") {
+			createApplication.mutate({
+				name: trimmed,
+				description: description.trim() || undefined,
+				projectId,
+				environmentName,
+			});
+			return;
+		}
+		if (dialog === "compose") {
+			createCompose.mutate({
+				name: trimmed,
+				description: description.trim() || undefined,
+				environmentId,
+				composeType,
+				sourceType: "raw",
+			});
+			return;
+		}
+		if (!dialog) return;
+		const databaseDialog = dialog;
+		const slug = slugify(trimmed).replace(/-/g, "_");
+		const base = { name: trimmed, environmentId };
+		// User-provided credentials win; blank fields are auto-generated.
+		const fields = DATABASE_CREDENTIAL_FIELDS[databaseDialog];
+		const values: Record<string, string> = {};
+		for (const field of fields) {
+			values[field.key] = credentials[field.key]?.trim() || (field.secret ? randomSecret() : slug);
+		}
+		const display = Object.fromEntries(fields.map((field) => [field.label, values[field.key]]));
+		const onSuccess = (row: { name: string }) =>
+			handleDatabaseCreated(databaseDialog, row.name, display);
+		switch (databaseDialog) {
+			case "postgres":
+				createPostgres.mutate({ ...base, ...values } as never, { onSuccess });
+				break;
+			case "mysql":
+				createMysql.mutate({ ...base, ...values } as never, { onSuccess });
+				break;
+			case "mariadb":
+				createMariadb.mutate({ ...base, ...values } as never, { onSuccess });
+				break;
+			case "mongo":
+				createMongo.mutate({ ...base, ...values } as never, { onSuccess });
+				break;
+			case "redis":
+				createRedis.mutate({ ...base, ...values } as never, { onSuccess });
+				break;
+		}
+	};
+
+	const dialogTitle =
+		dialog === null
+			? ""
+			: dialog === "application"
+				? "Create application"
+				: dialog === "compose"
+					? "Create compose service"
+					: `Create ${SERVICE_TYPE_META[dialog].label} database`;
+
+	return (
+		<>
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<Button>
+						<Plus className="size-4" />
+						Add Service
+						<ChevronDown className="size-4" />
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end" className="w-52">
+					<DropdownMenuItem onSelect={() => setDialog("application")}>Application</DropdownMenuItem>
+					<DropdownMenuItem onSelect={() => setDialog("compose")}>Compose</DropdownMenuItem>
+					<DropdownMenuSeparator />
+					<DropdownMenuLabel className="text-xs text-muted-foreground">Databases</DropdownMenuLabel>
+					{DATABASE_TYPES.map((type) => (
+						<DropdownMenuItem key={type} onSelect={() => setDialog(type)}>
+							{SERVICE_TYPE_META[type].label}
+						</DropdownMenuItem>
+					))}
+				</DropdownMenuContent>
+			</DropdownMenu>
+
+			<Dialog
+				open={dialog !== null}
+				onOpenChange={(open) => {
+					if (!open) {
+						setDialog(null);
+						resetForm();
+					}
+				}}
+			>
+				<DialogContent className="sm:max-w-md">
+					<DialogHeader>
+						<DialogTitle>{dialogTitle}</DialogTitle>
+						<DialogDescription>
+							{isDatabaseDialog
+								? "Credentials are optional — leave blank to auto-generate. They are shown once after creation."
+								: `Add a new service to the "${environmentName}" environment.`}
+						</DialogDescription>
+					</DialogHeader>
+					<form
+						onSubmit={(event) => {
+							event.preventDefault();
+							submit();
+						}}
+						className="flex flex-col gap-4"
+					>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="service-name">Name</Label>
+							<Input
+								id="service-name"
+								placeholder="my-service"
+								value={name}
+								onChange={(event) => setName(event.target.value)}
+								autoFocus
+							/>
+						</div>
+						{dialog === "compose" && (
+							<div className="flex flex-col gap-2">
+								<Label>Type</Label>
+								<Select
+									value={composeType}
+									onValueChange={(value) => setComposeType(value as "docker-compose" | "stack")}
+								>
+									<SelectTrigger className="w-full">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="docker-compose">Docker Compose</SelectItem>
+										<SelectItem value="stack">Docker Stack (Swarm)</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+						)}
+						{(dialog === "application" || dialog === "compose") && (
+							<div className="flex flex-col gap-2">
+								<Label htmlFor="service-description">Description</Label>
+								<Textarea
+									id="service-description"
+									placeholder="Optional description"
+									value={description}
+									onChange={(event) => setDescription(event.target.value)}
+									rows={3}
+								/>
+							</div>
+						)}
+						{isDatabaseDialog &&
+							DATABASE_CREDENTIAL_FIELDS[dialog as DatabaseType].map((field) => (
+								<div key={field.key} className="flex flex-col gap-2">
+									<Label htmlFor={`credential-${field.key}`}>{field.label}</Label>
+									<Input
+										id={`credential-${field.key}`}
+										placeholder={field.secret ? "Auto-generated" : slugify(name).replace(/-/g, "_")}
+										value={credentials[field.key] ?? ""}
+										onChange={(event) =>
+											setCredentials((current) => ({
+												...current,
+												[field.key]: event.target.value,
+											}))
+										}
+										autoComplete="off"
+									/>
+								</div>
+							))}
+						<DialogFooter>
+							<Button type="submit" disabled={!name.trim() || isPending}>
+								{isPending ? "Creating..." : "Create"}
+							</Button>
+						</DialogFooter>
+					</form>
+				</DialogContent>
+			</Dialog>
+
+			<Dialog
+				open={createdDatabase !== null}
+				onOpenChange={(open) => {
+					if (!open) setCreatedDatabase(null);
+				}}
+			>
+				<DialogContent className="sm:max-w-md">
+					<DialogHeader>
+						<DialogTitle>
+							{createdDatabase
+								? `${SERVICE_TYPE_META[createdDatabase.type].label} credentials`
+								: ""}
+						</DialogTitle>
+						<DialogDescription>
+							Save these credentials for "{createdDatabase?.name}". They are stored encrypted and
+							shown here only once.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="flex flex-col gap-3">
+						{createdDatabase &&
+							Object.entries(createdDatabase.credentials).map(([label, value]) => (
+								<div key={label} className="flex flex-col gap-1.5">
+									<Label>{label}</Label>
+									<Input readOnly value={value} className="font-mono" />
+								</div>
+							))}
+					</div>
+					<DialogFooter>
+						<Button onClick={() => setCreatedDatabase(null)}>Done</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+		</>
+	);
+}

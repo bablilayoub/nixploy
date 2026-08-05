@@ -1,0 +1,18 @@
+---
+description: Rules for the templates catalog
+globs:
+  - packages/server/src/modules/templates/**
+alwaysApply: false
+---
+
+# Templates rules
+
+- Data files declare `TemplateData` (no `category`); the category is attached
+  by `categorize("<Category>", list)` in `catalog.ts`. New category = new data
+  file + one `categorize` line in `catalog.ts`.
+- Compose YAML must not publish host ports — Traefik routes everything.
+- Every `${VAR}` referenced in `compose` must be declared in `env` and vice
+  versa; `suggestedDomain.service` must exist in the compose services.
+- Ids are unique kebab-case; logos are simpleicons.org slugs.
+- `catalog.test.ts` validates the whole catalog — run `pnpm test` after edits.
+  See `docs/templates.md` for the full field reference.

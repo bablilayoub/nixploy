@@ -1,0 +1,133 @@
+import { randomBytes } from "node:crypto";
+import { TRPCError } from "@trpc/server";
+import { and, eq } from "drizzle-orm";
+import { db } from "../../db";
+import { compose, domains, environments } from "../../db/schema";
+import { listComposeServices } from "../compose/compose-file";
+import { createCompose, resyncComposeDomains, updateComposeById } from "../compose/service";
+import { queueDeployment } from "../deployment";
+import { findProjectById } from "../projects";
+import { findTemplateById, listTemplateSummaries } from "./catalog";
+import { summarizeTemplateServices } from "./services";
+
+export type { TemplateServiceSummary } from "./services";
+export type { Template, TemplateEnvVar, TemplateSummary } from "./types";
+export { findTemplateById, listTemplateSummaries, summarizeTemplateServices };
+
+export interface TemplateDomainInput {
+	host: string;
+	serviceName: string;
+	port: number;
+}
+
+export interface DeployTemplateInput {
+	templateId: string;
+	projectId: string;
+	environmentName: string;
+	/** Caller-provided env values; schema defaults fill in the rest. */
+	envValues?: Record<string, string>;
+	domains?: TemplateDomainInput[];
+}
+
+export interface DeployTemplateResult {
+	composeId: string;
+	appName: string;
+	deploymentId: string;
+}
+
+/** `"{{generateSecret}}"` placeholders are replaced with random secrets. */
+function resolveDefault(value: string): string {
+	if (!value.includes("{{generateSecret}}")) return value;
+	return value.replaceAll("{{generateSecret}}", () => randomBytes(24).toString("hex"));
+}
+
+/**
+ * Instantiate a template: create a raw compose service whose compose file
+ * keeps the template's `${VAR}` placeholders and whose `.env` carries the
+ * resolved values (provided values over schema defaults), optionally attach
+ * domains, then enqueue the first deployment.
+ */
+export async function deployTemplate(
+	organizationId: string,
+	input: DeployTemplateInput,
+): Promise<DeployTemplateResult> {
+	const template = findTemplateById(input.templateId);
+	if (!template) {
+		throw new TRPCError({ code: "NOT_FOUND", message: "Template not found" });
+	}
+
+	// Org-scope: throws NOT_FOUND/FORBIDDEN when the project is not the caller's.
+	await findProjectById(input.projectId, organizationId);
+
+	const environment = await db.query.environments.findFirst({
+		where: and(
+			eq(environments.projectId, input.projectId),
+			eq(environments.name, input.environmentName),
+		),
+	});
+	if (!environment) {
+		throw new TRPCError({
+			code: "NOT_FOUND",
+			message: `Environment "${input.environmentName}" not found in this project`,
+		});
+	}
+
+	// Validate requested domains against the compose services up front so a
+	// bad serviceName never leaves a half-configured service behind.
+	const serviceNames = listComposeServices(template.compose);
+	for (const domain of input.domains ?? []) {
+		if (!serviceNames.includes(domain.serviceName)) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: `Service "${domain.serviceName}" is not defined by the ${template.name} compose file`,
+			});
+		}
+	}
+
+	const env = template.env
+		.map((entry) => {
+			const raw = input.envValues?.[entry.key] ?? resolveDefault(entry.default);
+			// The value lands in a dotenv file — keep it single-line.
+			return `${entry.key}=${raw.replace(/[\r\n]+/g, " ")}`;
+		})
+		.join("\n");
+
+	const service = await createCompose({
+		name: template.name,
+		description: template.description,
+		environmentId: environment.environmentId,
+		composeType: "docker-compose",
+		sourceType: "raw",
+	});
+
+	try {
+		await updateComposeById(service.composeId, { composeFile: template.compose, env });
+
+		if (input.domains && input.domains.length > 0) {
+			await db.insert(domains).values(
+				input.domains.map((domain) => ({
+					host: domain.host,
+					path: "/",
+					port: domain.port,
+					https: false,
+					certificateType: "none" as const,
+					serviceName: domain.serviceName,
+					domainType: "compose" as const,
+					uniqueConfigKey: randomBytes(6).toString("hex"),
+					composeId: service.composeId,
+				})),
+			);
+			await resyncComposeDomains(service.composeId);
+		}
+	} catch (error) {
+		// Roll back the row so a failed instantiation never leaves an orphan.
+		await db
+			.delete(compose)
+			.where(eq(compose.composeId, service.composeId))
+			.catch(() => {});
+		throw error;
+	}
+
+	const deploymentId = await queueDeployment({ composeId: service.composeId, type: "deploy" });
+	return { composeId: service.composeId, appName: service.appName, deploymentId };
+}

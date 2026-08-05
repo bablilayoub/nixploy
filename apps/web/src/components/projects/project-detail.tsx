@@ -1,0 +1,396 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle, FolderGit2, Plus, Search } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+
+import { PageHeader } from "@/components/shell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useTRPC } from "@/lib/trpc";
+import { cn } from "@/lib/utils";
+
+import { AddServiceMenu } from "./add-service-menu";
+import { CreateEnvironmentDialog } from "./create-environment-dialog";
+import { DeploymentsTab } from "./deployments-tab";
+import { EnvironmentActions } from "./environment-actions";
+import { EnvironmentVariablesTab } from "./environment-variables-tab";
+import { ProjectActions } from "./project-actions";
+import { DATABASE_TYPES, type DatabaseType } from "./service-types";
+import { type ServiceEntry, ServicesTable } from "./services-table";
+
+type NewServiceDialog = "application" | "compose" | DatabaseType;
+
+/** Validate the ?new= deep link from the command palette. */
+function parseNewParam(value: string | null): NewServiceDialog | null {
+	if (value === "application" || value === "compose") {
+		return value;
+	}
+	if (value && (DATABASE_TYPES as readonly string[]).includes(value)) {
+		return value as DatabaseType;
+	}
+	return null;
+}
+
+type ProjectTab = "services" | "environment" | "deployments";
+
+const PROJECT_TABS: { value: ProjectTab; label: string }[] = [
+	{ value: "services", label: "Services" },
+	{ value: "environment", label: "Environment Variables" },
+	{ value: "deployments", label: "Deployments" },
+];
+
+function isProjectTab(value: string | undefined): value is ProjectTab {
+	return PROJECT_TABS.some((tab) => tab.value === value);
+}
+
+/** SubNav-style underline tabs rendered as buttons (state-driven, not routes). */
+function UnderlineTabs({
+	items,
+	value,
+	onChange,
+}: {
+	items: { value: string; label: string }[];
+	value: string;
+	onChange: (value: string) => void;
+}) {
+	return (
+		<nav className="flex items-center gap-1 overflow-x-auto">
+			{items.map((item) => (
+				<button
+					key={item.value}
+					type="button"
+					onClick={() => onChange(item.value)}
+					className={cn(
+						"whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors",
+						item.value === value
+							? "border-foreground font-medium text-foreground"
+							: "border-transparent text-muted-foreground hover:text-foreground",
+					)}
+				>
+					{item.label}
+				</button>
+			))}
+		</nav>
+	);
+}
+
+export function ProjectDetail({
+	projectId,
+	initialEnvironment,
+	initialTab,
+}: {
+	projectId: string;
+	initialEnvironment?: string;
+	initialTab?: string;
+}) {
+	const trpc = useTRPC();
+	const router = useRouter();
+	const searchParams = useSearchParams();
+	const [search, setSearch] = useState("");
+	const [environmentName, setEnvironmentName] = useState(initialEnvironment || "production");
+	const [tab, setTab] = useState<ProjectTab>(isProjectTab(initialTab) ? initialTab : "services");
+	// Deep link (?new=application|compose|<db>) opens the matching create dialog once.
+	const [initialDialog] = useState<NewServiceDialog | null>(() =>
+		parseNewParam(searchParams.get("new")),
+	);
+
+	useEffect(() => {
+		if (!initialDialog) {
+			return;
+		}
+		// Strip the param so a refresh doesn't reopen the dialog.
+		const params = new URLSearchParams(searchParams.toString());
+		params.delete("new");
+		const query = params.toString();
+		router.replace(`/dashboard/projects/${projectId}${query ? `?${query}` : ""}`, {
+			scroll: false,
+		});
+	}, [initialDialog, projectId, router, searchParams]);
+
+	const projectQuery = useQuery(trpc.project.one.queryOptions({ projectId }));
+	const environmentsQuery = useQuery(trpc.environment.byProject.queryOptions({ projectId }));
+
+	const environments = environmentsQuery.data;
+	const activeEnvironment =
+		environments?.find((environment) => environment.name === environmentName) ?? environments?.[0];
+	const activeEnvironmentName = activeEnvironment?.name ?? environmentName;
+
+	const serviceInput = useMemo(
+		() => ({ projectId, environmentName: activeEnvironmentName }),
+		[projectId, activeEnvironmentName],
+	);
+
+	const applicationsQuery = useQuery({
+		...trpc.application.all.queryOptions(serviceInput),
+		enabled: tab === "services",
+	});
+	const composeQuery = useQuery({
+		...trpc.compose.all.queryOptions(serviceInput),
+		enabled: tab === "services",
+	});
+	const postgresQuery = useQuery({
+		...trpc.postgres.all.queryOptions(serviceInput),
+		enabled: tab === "services",
+	});
+	const mysqlQuery = useQuery({
+		...trpc.mysql.all.queryOptions(serviceInput),
+		enabled: tab === "services",
+	});
+	const mariadbQuery = useQuery({
+		...trpc.mariadb.all.queryOptions(serviceInput),
+		enabled: tab === "services",
+	});
+	const mongoQuery = useQuery({
+		...trpc.mongo.all.queryOptions(serviceInput),
+		enabled: tab === "services",
+	});
+	const redisQuery = useQuery({
+		...trpc.redis.all.queryOptions(serviceInput),
+		enabled: tab === "services",
+	});
+
+	const services: ServiceEntry[] = [
+		...(applicationsQuery.data ?? []).map((row) => ({
+			type: "application" as const,
+			id: row.applicationId,
+			name: row.name,
+			description: row.description,
+			status: row.status,
+		})),
+		...(composeQuery.data ?? []).map((row) => ({
+			type: "compose" as const,
+			id: row.composeId,
+			name: row.name,
+			description: row.description,
+			status: row.status,
+		})),
+		...(postgresQuery.data ?? []).map((row) => ({
+			type: "postgres" as const,
+			id: row.postgresId,
+			name: row.name,
+			description: row.description,
+			status: row.status,
+		})),
+		...(mysqlQuery.data ?? []).map((row) => ({
+			type: "mysql" as const,
+			id: row.mysqlId,
+			name: row.name,
+			description: row.description,
+			status: row.status,
+		})),
+		...(mariadbQuery.data ?? []).map((row) => ({
+			type: "mariadb" as const,
+			id: row.mariadbId,
+			name: row.name,
+			description: row.description,
+			status: row.status,
+		})),
+		...(mongoQuery.data ?? []).map((row) => ({
+			type: "mongo" as const,
+			id: row.mongoId,
+			name: row.name,
+			description: row.description,
+			status: row.status,
+		})),
+		...(redisQuery.data ?? []).map((row) => ({
+			type: "redis" as const,
+			id: row.redisId,
+			name: row.name,
+			description: row.description,
+			status: row.status,
+		})),
+	];
+
+	const isLoadingServices =
+		applicationsQuery.isPending ||
+		composeQuery.isPending ||
+		postgresQuery.isPending ||
+		mysqlQuery.isPending ||
+		mariadbQuery.isPending ||
+		mongoQuery.isPending ||
+		redisQuery.isPending;
+
+	const filteredServices = services.filter((service) =>
+		service.name.toLowerCase().includes(search.trim().toLowerCase()),
+	);
+
+	const syncUrl = (env: string, nextTab: ProjectTab) => {
+		const params = new URLSearchParams({ env });
+		if (nextTab !== "services") {
+			params.set("tab", nextTab);
+		}
+		router.replace(`/dashboard/projects/${projectId}?${params.toString()}`, {
+			scroll: false,
+		});
+	};
+
+	const selectEnvironment = (name: string) => {
+		setEnvironmentName(name);
+		syncUrl(name, tab);
+	};
+
+	const selectTab = (value: string) => {
+		const nextTab = value as ProjectTab;
+		setTab(nextTab);
+		syncUrl(activeEnvironmentName, nextTab);
+	};
+
+	const project = projectQuery.data;
+
+	if (projectQuery.isError || (!projectQuery.isPending && !project)) {
+		return (
+			<div className="flex flex-1 flex-col items-center justify-center gap-2 p-10 text-center">
+				<AlertTriangle className="size-8 text-muted-foreground" />
+				<h2 className="text-lg font-semibold">Project not found</h2>
+				<p className="text-sm text-muted-foreground">
+					{projectQuery.error?.message ?? "This project does not exist or you don't have access."}
+				</p>
+				<Button variant="outline" onClick={() => router.push("/dashboard")}>
+					Back to projects
+				</Button>
+			</div>
+		);
+	}
+
+	return (
+		<div className="flex flex-col gap-6">
+			<PageHeader
+				breadcrumb={
+					<Link href="/dashboard" className="transition-colors hover:text-foreground">
+						Projects
+					</Link>
+				}
+				title={
+					projectQuery.isPending ? <Skeleton className="h-7 w-40" /> : (project?.name ?? "Project")
+				}
+				description={project?.description || undefined}
+				actions={project ? <ProjectActions project={project} /> : undefined}
+			/>
+
+			<div className="border-b">
+				<UnderlineTabs items={PROJECT_TABS} value={tab} onChange={selectTab} />
+			</div>
+
+			{tab !== "deployments" && (
+				<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+					{environmentsQuery.isPending ? (
+						<Skeleton className="h-9 w-64" />
+					) : (
+						<div className="flex items-center gap-1">
+							<UnderlineTabs
+								items={(environments ?? []).map((environment) => ({
+									value: environment.name,
+									label: environment.name,
+								}))}
+								value={activeEnvironmentName}
+								onChange={selectEnvironment}
+							/>
+							{activeEnvironment && (
+								<EnvironmentActions
+									projectId={projectId}
+									environment={activeEnvironment}
+									isOnlyEnvironment={(environments ?? []).length <= 1}
+									onRenamed={selectEnvironment}
+									onDuplicated={selectEnvironment}
+									onDeleted={() => {
+										const remaining = (environments ?? []).find(
+											(environment) =>
+												environment.environmentId !== activeEnvironment.environmentId,
+										);
+										if (remaining) {
+											selectEnvironment(remaining.name);
+										}
+									}}
+								/>
+							)}
+						</div>
+					)}
+					{tab === "services" && (
+						<div className="flex items-center gap-2">
+							<CreateEnvironmentDialog projectId={projectId} onCreated={selectEnvironment}>
+								<Button variant="outline" size="sm">
+									<Plus className="size-4" />
+									Environment
+								</Button>
+							</CreateEnvironmentDialog>
+							<div className="relative">
+								<Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+								<Input
+									placeholder="Search services..."
+									value={search}
+									onChange={(event) => setSearch(event.target.value)}
+									className="h-8 w-full pl-8 sm:w-56"
+								/>
+							</div>
+							{activeEnvironment && (
+								<AddServiceMenu
+									projectId={projectId}
+									environmentId={activeEnvironment.environmentId}
+									environmentName={activeEnvironment.name}
+									initialDialog={initialDialog ?? undefined}
+								/>
+							)}
+						</div>
+					)}
+				</div>
+			)}
+
+			{tab === "services" &&
+				(isLoadingServices ? (
+					<div className="divide-y rounded-lg border">
+						{Array.from({ length: 4 }).map((_, index) => (
+							// biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders
+							<div key={index} className="flex items-center gap-4 px-4 py-3">
+								<Skeleton className="h-4 w-24" />
+								<Skeleton className="h-4 w-40" />
+							</div>
+						))}
+					</div>
+				) : filteredServices.length > 0 ? (
+					<ServicesTable
+						projectId={projectId}
+						services={filteredServices}
+						currentEnvironmentId={activeEnvironment?.environmentId}
+					/>
+				) : (
+					<div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed py-16 text-center">
+						<div className="flex size-12 items-center justify-center rounded-full bg-secondary">
+							<FolderGit2 className="size-6 text-muted-foreground" />
+						</div>
+						<div className="flex flex-col gap-1">
+							<p className="font-medium">
+								{search ? "No services match your search" : "No services in this environment"}
+							</p>
+							<p className="text-sm text-muted-foreground">
+								{search
+									? "Try a different search term."
+									: `Add an application, compose stack or database to "${activeEnvironmentName}".`}
+							</p>
+						</div>
+						{!search && activeEnvironment && (
+							<AddServiceMenu
+								projectId={projectId}
+								environmentId={activeEnvironment.environmentId}
+								environmentName={activeEnvironment.name}
+								initialDialog={initialDialog ?? undefined}
+							/>
+						)}
+					</div>
+				))}
+
+			{tab === "environment" && (
+				<EnvironmentVariablesTab
+					projectId={projectId}
+					projectEnv={project?.env}
+					environment={activeEnvironment}
+				/>
+			)}
+
+			{tab === "deployments" && <DeploymentsTab projectId={projectId} />}
+		</div>
+	);
+}
