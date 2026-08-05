@@ -10,12 +10,14 @@
 #
 # Environment overrides:
 #   NIXPLOY_VERSION              App image tag                 (default: latest)
+#   NIXPLOY_IMAGE                Full image ref (overrides tag) (default: ghcr.io/bablilayoub/nixploy:$NIXPLOY_VERSION)
 #   NIXPLOY_PORT                 Host port for the dashboard   (default: 3000)
 #   NIXPLOY_CONFIG_DIR           Host config directory         (default: /etc/nixploy)
 #   NIXPLOY_DOMAIN               Public URL host (optional)    → BETTER_AUTH_URL
 #   POSTGRES_VERSION             Postgres image tag            (default: 17-alpine)
 #   TRAEFIK_VERSION              Traefik image tag             (default: v3.5.0)
 #   NIXPLOY_SKIP_DOCKER_INSTALL  Set to 1 to skip Docker install
+#   NIXPLOY_BUILD_FROM_SOURCE    Set to 1 to skip pull and build locally
 #   NIXPLOY_REPO                 GitHub org/repo for assets    (default: bablilayoub/nixploy)
 #   NIXPLOY_BRANCH               Branch for raw assets         (default: main)
 #
@@ -31,7 +33,7 @@ NIXPLOY_REPO="${NIXPLOY_REPO:-bablilayoub/nixploy}"
 NIXPLOY_BRANCH="${NIXPLOY_BRANCH:-main}"
 
 NETWORK_NAME="nixploy-network"
-APP_IMAGE="bablilayoub/nixploy:${NIXPLOY_VERSION}"
+APP_IMAGE="${NIXPLOY_IMAGE:-ghcr.io/bablilayoub/nixploy:${NIXPLOY_VERSION}}"
 POSTGRES_IMAGE="postgres:${POSTGRES_VERSION}"
 TRAEFIK_IMAGE="traefik:${TRAEFIK_VERSION}"
 ENV_FILE="${NIXPLOY_CONFIG_DIR}/.env"
@@ -123,28 +125,29 @@ ensure_basics() {
 	local missing=()
 	need_cmd curl || missing+=(curl)
 	need_cmd openssl || missing+=(openssl)
-	need_cmd ca-certificates && true
-	if [ "${#missing[@]}" -eq 0 ] && need_cmd curl && need_cmd openssl; then
-		ok "curl, openssl present"
+	need_cmd git || missing+=(git)
+	if [ "${#missing[@]}" -eq 0 ]; then
+		ok "curl, openssl, git present"
 		return
 	fi
-	info "Installing base packages: ${missing[*]:-curl openssl ca-certificates}"
+	info "Installing base packages: ${missing[*]} ca-certificates"
 	case "${FAMILY}" in
 		debian)
 			export DEBIAN_FRONTEND=noninteractive
 			apt-get update -qq
-			apt-get install -y -qq curl openssl ca-certificates >/dev/null
+			apt-get install -y -qq curl openssl ca-certificates git >/dev/null
 			;;
 		rhel)
 			if need_cmd dnf; then
-				dnf install -y -q curl openssl ca-certificates >/dev/null
+				dnf install -y -q curl openssl ca-certificates git >/dev/null
 			else
-				yum install -y -q curl openssl ca-certificates >/dev/null
+				yum install -y -q curl openssl ca-certificates git >/dev/null
 			fi
 			;;
 		*)
 			need_cmd curl || die "Install curl, then re-run"
 			need_cmd openssl || die "Install openssl, then re-run"
+			need_cmd git || die "Install git, then re-run"
 			;;
 	esac
 	ok "Base packages ready"
@@ -312,14 +315,44 @@ YAML
 }
 
 # ── services ────────────────────────────────────────────────────────────────
-pull_images() {
-	info "Pulling ${APP_IMAGE}"
-	if ! docker pull "${APP_IMAGE}"; then
-		warn "Could not pull ${APP_IMAGE} — ensure the image exists or set NIXPLOY_VERSION"
-		warn "Continuing; create will fail if the image is missing locally"
-	else
-		ok "App image"
+build_app_image() {
+	local tmp
+	tmp="$(mktemp -d)"
+	info "Building ${APP_IMAGE} from https://github.com/${NIXPLOY_REPO} (${NIXPLOY_BRANCH})…"
+	info "This can take several minutes and needs ~4GB RAM"
+	if ! git clone --depth 1 --branch "${NIXPLOY_BRANCH}" \
+		"https://github.com/${NIXPLOY_REPO}.git" "${tmp}/src" >/dev/null; then
+		rm -rf "${tmp}"
+		die "Failed to clone ${NIXPLOY_REPO}@${NIXPLOY_BRANCH}"
 	fi
+	if ! docker build \
+		-t "${APP_IMAGE}" \
+		-f "${tmp}/src/docker/Dockerfile" \
+		"${tmp}/src"; then
+		rm -rf "${tmp}"
+		die "Docker build failed — check free disk/RAM, or wait for ghcr.io/${NIXPLOY_REPO}:${NIXPLOY_VERSION}"
+	fi
+	rm -rf "${tmp}"
+	ok "Built ${APP_IMAGE}"
+}
+
+ensure_app_image() {
+	if [ "${NIXPLOY_BUILD_FROM_SOURCE:-0}" = "1" ]; then
+		build_app_image
+		return
+	fi
+	info "Pulling ${APP_IMAGE}"
+	if docker pull "${APP_IMAGE}"; then
+		ok "App image"
+		return
+	fi
+	warn "Could not pull ${APP_IMAGE} (image may not be published yet)"
+	warn "Falling back to a local build from source"
+	build_app_image
+}
+
+pull_images() {
+	ensure_app_image
 	docker pull "${POSTGRES_IMAGE}" >/dev/null
 	ok "Postgres ${POSTGRES_VERSION}"
 	docker pull "${TRAEFIK_IMAGE}" >/dev/null
@@ -387,6 +420,7 @@ create_app() {
 		--env NEXT_PUBLIC_APP_URL
 		--env PORT=3000
 		--env NIXPLOY_CONFIG_DIR=/etc/nixploy
+		--env NIXPLOY_DISABLE_TRAEFIK_BOOT=1
 	)
 
 	if docker service inspect nixploy >/dev/null 2>&1; then

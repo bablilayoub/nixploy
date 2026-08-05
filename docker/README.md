@@ -2,11 +2,10 @@
 
 Container packaging for Nixploy.
 
-- `Dockerfile` — multi-stage build of the pnpm monorepo producing the Next.js
-  standalone output of `apps/web`, plus an entrypoint that applies Drizzle
-  migrations before boot. Requires `output: "standalone"` in
-  `apps/web/next.config.*` and a `.dockerignore` at the **repo root**
-  (at minimum: `node_modules`, `.next`, `.git`, `dist`).
+- `Dockerfile` — multi-stage build of the pnpm monorepo; runs `apps/web` via
+  the custom `server.ts` (WebSockets, deploy queue, crons). Entrypoint
+  applies Drizzle migrations before boot. Published as
+  `ghcr.io/bablilayoub/nixploy` by `.github/workflows/docker.yml`.
 - `entrypoint.sh` / `migrate.mjs` — production migrate-then-start helpers.
 - `docker-compose.dev.yml` — local dev stack (PostgreSQL 17 + app).
   Run from the repo root:

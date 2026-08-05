@@ -66,7 +66,9 @@ curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh
 
 The script is **idempotent**. It detects the OS, installs Docker if needed, initializes a single-node Swarm, creates the `nixploy-network` overlay, generates secrets under `/etc/nixploy/.env`, and starts three services: `nixploy` (the app), `nixploy-postgres` and `nixploy-traefik` (ports 80/443). When it finishes, open the printed **Setup** URL and create the owner account — public `/register` is disabled after that.
 
-Useful overrides: `NIXPLOY_VERSION`, `NIXPLOY_PORT`, `NIXPLOY_CONFIG_DIR`, `NIXPLOY_DOMAIN`, `NIXPLOY_SKIP_DOCKER_INSTALL=1` (see the header of `install.sh`).
+Useful overrides: `NIXPLOY_VERSION`, `NIXPLOY_IMAGE`, `NIXPLOY_PORT`, `NIXPLOY_CONFIG_DIR`, `NIXPLOY_DOMAIN`, `NIXPLOY_BUILD_FROM_SOURCE=1`, `NIXPLOY_SKIP_DOCKER_INSTALL=1` (see the header of `install.sh`).
+
+The app image is published to [`ghcr.io/bablilayoub/nixploy`](https://github.com/bablilayoub/nixploy/pkgs/container/nixploy). If the pull fails (e.g. before the first CI publish), the installer builds from source automatically.
 
 ### Local development
 

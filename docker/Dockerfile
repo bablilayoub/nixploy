@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 
-# Nixploy main app image: builds the pnpm monorepo and produces the
-# Next.js standalone output of apps/web (UI + tRPC API).
+# Nixploy main app image: builds the pnpm monorepo and runs apps/web via the
+# custom server (WebSockets, deploy queue, crons). Traefik is expected as a
+# sibling Swarm service — set NIXPLOY_DISABLE_TRAEFIK_BOOT=1 in production.
 
 FROM node:22-alpine AS base
 ENV PNPM_HOME="/pnpm"
@@ -12,7 +13,6 @@ RUN corepack enable && corepack prepare pnpm@10 --activate
 FROM base AS deps
 WORKDIR /app
 
-# Copy only manifests first so this layer caches on dependency changes.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/web/package.json apps/web/package.json
 COPY apps/cli/package.json apps/cli/package.json
@@ -23,42 +23,49 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 
 # ---- Build ----
 FROM deps AS build
+WORKDIR /app
 COPY . .
-RUN pnpm --filter @nixploy/server build || true
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+# Public URL is runtime-configured; a placeholder keeps Next happy at build.
+ARG NEXT_PUBLIC_APP_URL=http://localhost:3000
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 RUN pnpm --filter @nixploy/web build
 
 # ---- Runtime ----
-FROM node:22-alpine AS runner
+FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-ENV NIXPLOY_MIGRATIONS_DIR=/app/drizzle
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NIXPLOY_MIGRATIONS_DIR=/app/packages/server/drizzle
+ENV NIXPLOY_DISABLE_TRAEFIK_BOOT=1
 
-RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
+# Docker CLI talks to the host socket (Swarm, builds, logs).
+# git/openssh used when cloning app sources during deploys.
+RUN apk add --no-cache docker-cli docker-cli-compose git openssh-client curl
 
-# Docker CLI is required so the app can talk to the mounted host
-# docker socket (swarm service create/update, builds, logs).
-RUN apk add --no-cache docker-cli docker-cli-compose
+# Root is required for the mounted docker.sock (same pattern as most PaaS images).
+COPY --from=build /app /app
 
-# Next.js standalone output (set `output: "standalone"` in apps/web/next.config).
-COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
-COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
-COPY --from=build --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
+# Drop build caches that are useless at runtime.
+RUN rm -rf \
+	/app/apps/web/.next/cache \
+	/app/apps/web/.next/dev \
+	/tmp/* \
+	/root/.npm \
+	/root/.cache
 
-# DB migrations + runner (entrypoint applies them before boot).
-COPY --from=build --chown=nextjs:nodejs /app/packages/server/drizzle ./drizzle
-COPY --chown=nextjs:nodejs docker/migrate.mjs /app/migrate-deps/migrate.mjs
-COPY --chown=nextjs:nodejs docker/entrypoint.sh /app/entrypoint.sh
+COPY docker/entrypoint.sh /app/entrypoint.sh
+COPY docker/migrate.mjs /app/migrate-deps/migrate.mjs
 RUN chmod +x /app/entrypoint.sh \
 	&& cd /app/migrate-deps \
 	&& npm init -y >/dev/null \
 	&& npm pkg set type=module \
-	&& npm install --omit=dev drizzle-orm@0.45.2 postgres@3.4.5 \
-	&& chown -R nextjs:nodejs /app/migrate-deps
+	&& npm install --omit=dev drizzle-orm@0.45.2 postgres@3.4.5
 
-USER nextjs
 EXPOSE 3000
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["node", "apps/web/server.js"]
+CMD ["pnpm", "--filter", "@nixploy/web", "exec", "tsx", "server.ts"]
