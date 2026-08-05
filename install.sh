@@ -1,29 +1,30 @@
 #!/usr/bin/env bash
 #
-# Nixploy installer — one script to provision a self-hosted instance.
+# Nixploy installer.
 #
 #   curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash
 #
-# Idempotent. Detects OS, installs Docker if missing, initializes Swarm,
-# writes secrets, starts postgres + traefik + nixploy, waits until healthy,
-# then prints the setup URL for the first admin account.
+# With a domain (recommended — real HTTPS via Let's Encrypt):
+#
+#   NIXPLOY_DOMAIN=nixploy.example.com NIXPLOY_LETSENCRYPT_EMAIL=you@example.com \
+#     curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash
 #
 # Environment overrides:
-#   NIXPLOY_VERSION              App image tag                 (default: latest)
-#   NIXPLOY_IMAGE                Full image ref (overrides tag) (default: ghcr.io/bablilayoub/nixploy:$NIXPLOY_VERSION)
-#   NIXPLOY_PORT                 Host port for the dashboard   (default: 3000)
-#   NIXPLOY_CONFIG_DIR           Host config directory         (default: /etc/nixploy)
-#   NIXPLOY_DOMAIN               Public URL host (optional)    → BETTER_AUTH_URL
-#   POSTGRES_VERSION             Postgres image tag            (default: 17-alpine)
-#   TRAEFIK_VERSION              Traefik image tag             (default: v3.5.0)
-#   NIXPLOY_SKIP_DOCKER_INSTALL  Set to 1 to skip Docker install
-#   NIXPLOY_BUILD_FROM_SOURCE    Set to 1 to skip pull and build locally
-#   NIXPLOY_REPO                 GitHub org/repo for assets    (default: bablilayoub/nixploy)
-#   NIXPLOY_BRANCH               Branch for raw assets         (default: main)
+#   NIXPLOY_DOMAIN               Dashboard domain (A record → this server)
+#   NIXPLOY_LETSENCRYPT_EMAIL    ACME email for certificates
+#   NIXPLOY_VERSION              App image tag                  (default: latest)
+#   NIXPLOY_IMAGE                Full image ref (overrides tag)
+#   NIXPLOY_PORT                 Host port for direct app access (default: 3000)
+#   NIXPLOY_CONFIG_DIR           Host config directory          (default: /etc/nixploy)
+#   POSTGRES_VERSION             Postgres image tag             (default: 17-alpine)
+#   TRAEFIK_VERSION              Traefik image tag              (default: v3.5.0)
+#   NIXPLOY_SKIP_DOCKER_INSTALL  1 = require pre-installed Docker
+#   NIXPLOY_BUILD_FROM_SOURCE    1 = always build the image locally
+#   NIXPLOY_REPO                 GitHub org/repo                (default: bablilayoub/nixploy)
+#   NIXPLOY_BRANCH               Branch for assets/source       (default: main)
 #
 set -euo pipefail
 
-# ── defaults ────────────────────────────────────────────────────────────────
 NIXPLOY_VERSION="${NIXPLOY_VERSION:-latest}"
 NIXPLOY_PORT="${NIXPLOY_PORT:-3000}"
 NIXPLOY_CONFIG_DIR="${NIXPLOY_CONFIG_DIR:-/etc/nixploy}"
@@ -37,27 +38,37 @@ APP_IMAGE="${NIXPLOY_IMAGE:-ghcr.io/bablilayoub/nixploy:${NIXPLOY_VERSION}}"
 POSTGRES_IMAGE="postgres:${POSTGRES_VERSION}"
 TRAEFIK_IMAGE="traefik:${TRAEFIK_VERSION}"
 ENV_FILE="${NIXPLOY_CONFIG_DIR}/.env"
+LOG_FILE="/var/log/nixploy-install.log"
 
-# ── modern CLI theme ────────────────────────────────────────────────────────
+# Normalized dashboard domain ("https://x.com/y" → "x.com"), empty if unset.
+DASHBOARD_DOMAIN=""
+if [ -n "${NIXPLOY_DOMAIN:-}" ]; then
+	DASHBOARD_DOMAIN="${NIXPLOY_DOMAIN#http://}"
+	DASHBOARD_DOMAIN="${DASHBOARD_DOMAIN#https://}"
+	DASHBOARD_DOMAIN="${DASHBOARD_DOMAIN%%/*}"
+	DASHBOARD_DOMAIN="${DASHBOARD_DOMAIN%%:*}"
+fi
+ACME_EMAIL="${NIXPLOY_LETSENCRYPT_EMAIL:-}"
+if [ -z "${ACME_EMAIL}" ] && [ -n "${DASHBOARD_DOMAIN}" ]; then
+	ACME_EMAIL="admin@${DASHBOARD_DOMAIN}"
+fi
+
+# ── output helpers ───────────────────────────────────────────────────────────
 if [ -t 1 ] && [ "${NO_COLOR:-}" = "" ]; then
-	C_RESET=$'\033[0m'
-	C_BOLD=$'\033[1m'
-	C_DIM=$'\033[2m'
-	C_CYAN=$'\033[36m'
-	C_GREEN=$'\033[32m'
-	C_YELLOW=$'\033[33m'
-	C_RED=$'\033[31m'
-	C_BLUE=$'\033[34m'
+	C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+	C_CYAN=$'\033[36m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'
+	C_RED=$'\033[31m'; C_BLUE=$'\033[34m'
+	IS_TTY=1
 else
 	C_RESET=""; C_BOLD=""; C_DIM=""; C_CYAN=""; C_GREEN=""; C_YELLOW=""; C_RED=""; C_BLUE=""
+	IS_TTY=0
 fi
 
 STEP=0
 TOTAL_STEPS=9
 
 banner() {
-	printf '\n'
-	printf '%s' "${C_CYAN}${C_BOLD}"
+	printf '\n%s' "${C_CYAN}${C_BOLD}"
 	cat <<'EOF'
     _   ___            __           
    / | / (_)  ______  / /___  __  __
@@ -67,36 +78,74 @@ banner() {
             /_/            /____/   
 EOF
 	printf '%s\n' "${C_RESET}${C_DIM}  Self-hosted PaaS · Docker Swarm · one-command install${C_RESET}"
+	if [ -n "${DASHBOARD_DOMAIN}" ]; then
+		printf '%s\n' "${C_DIM}  Domain: ${DASHBOARD_DOMAIN} (Let's Encrypt)${C_RESET}"
+	fi
 	printf '\n'
+}
+
+progress_bar() {
+	local width=28 filled fill="" todo="" i
+	filled=$((STEP * width / TOTAL_STEPS))
+	for ((i = 0; i < filled; i++)); do fill+="━"; done
+	for ((i = filled; i < width; i++)); do todo+="─"; done
+	printf '%s%s%s%s%s' "${C_GREEN}" "${fill}" "${C_DIM}" "${todo}" "${C_RESET}"
 }
 
 step() {
 	STEP=$((STEP + 1))
-	printf '\n%s[%d/%d]%s %s%s%s\n' "${C_BLUE}${C_BOLD}" "$STEP" "$TOTAL_STEPS" "${C_RESET}" "${C_BOLD}" "$*" "${C_RESET}"
+	printf '\n %s %s%d/%d%s %s%s%s\n' "$(progress_bar)" "${C_BLUE}${C_BOLD}" "$STEP" "$TOTAL_STEPS" "${C_RESET}" "${C_BOLD}" "$*" "${C_RESET}"
 }
 
-ok()   { printf '  %s✓%s %s\n' "${C_GREEN}" "${C_RESET}" "$*"; }
-info() { printf '  %s•%s %s\n' "${C_CYAN}" "${C_RESET}" "$*"; }
-warn() { printf '  %s!%s %s\n' "${C_YELLOW}" "${C_RESET}" "$*" >&2; }
-die()  { printf '\n  %s✗ ERROR:%s %s\n\n' "${C_RED}${C_BOLD}" "${C_RESET}" "$*" >&2; exit 1; }
+ok()   { printf '   %s✓%s %s\n' "${C_GREEN}" "${C_RESET}" "$*"; }
+info() { printf '   %s•%s %s\n' "${C_CYAN}" "${C_RESET}" "$*"; }
+warn() { printf '   %s!%s %s\n' "${C_YELLOW}" "${C_RESET}" "$*" >&2; }
+die()  { printf '\n   %s✗ ERROR:%s %s\n\n' "${C_RED}${C_BOLD}" "${C_RESET}" "$*" >&2; exit 1; }
 
-# ── preflight ───────────────────────────────────────────────────────────────
-require_root() {
-	if [ "$(id -u)" -ne 0 ]; then
-		die "Run as root: curl -fsSL <url> | sudo bash"
+# Run a slow command quietly: spinner + log to $LOG_FILE, tail on failure.
+run_quiet() {
+	local label="$1"
+	shift
+	printf '%s\n── %s ──\n' "$(date -u +%H:%M:%S)" "${label}" >> "${LOG_FILE}" 2>/dev/null || true
+	if [ "${IS_TTY}" = "1" ]; then
+		"$@" >> "${LOG_FILE}" 2>&1 &
+		local pid=$! frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏' i=0
+		while kill -0 "${pid}" 2>/dev/null; do
+			printf '\r   %s%s%s %s' "${C_CYAN}" "${frames:i%10:1}" "${C_RESET}" "${label}"
+			i=$((i + 1))
+			sleep 0.15
+		done
+		printf '\r\033[K'
+		if wait "${pid}"; then
+			ok "${label}"
+		else
+			warn "${label} failed — last log lines:"
+			tail -n 25 "${LOG_FILE}" >&2 2>/dev/null || true
+			return 1
+		fi
+	else
+		info "${label}…"
+		if "$@" >> "${LOG_FILE}" 2>&1; then
+			ok "${label}"
+		else
+			warn "${label} failed — last log lines:"
+			tail -n 25 "${LOG_FILE}" >&2 2>/dev/null || true
+			return 1
+		fi
 	fi
 }
 
+# ── preflight ────────────────────────────────────────────────────────────────
+require_root() {
+	[ "$(id -u)" -eq 0 ] || die "Run as root: curl -fsSL <url> | sudo bash"
+}
+
 detect_os() {
-	OS_ID="unknown"
-	OS_LIKE=""
-	OS_VERSION=""
+	OS_ID="unknown"; OS_LIKE=""; OS_VERSION=""
 	if [ -f /etc/os-release ]; then
 		# shellcheck disable=SC1091
 		. /etc/os-release
-		OS_ID="${ID:-unknown}"
-		OS_LIKE="${ID_LIKE:-}"
-		OS_VERSION="${VERSION_ID:-}"
+		OS_ID="${ID:-unknown}"; OS_LIKE="${ID_LIKE:-}"; OS_VERSION="${VERSION_ID:-}"
 	fi
 	ARCH="$(uname -m)"
 	case "${ARCH}" in
@@ -114,34 +163,27 @@ detect_os() {
 			esac
 			;;
 	esac
-	info "OS: ${OS_ID} ${OS_VERSION} (${FAMILY}) · arch: ${ARCH}"
+	ok "OS: ${OS_ID} ${OS_VERSION} · arch: ${ARCH}"
 }
 
-need_cmd() {
-	command -v "$1" >/dev/null 2>&1
-}
+need_cmd() { command -v "$1" >/dev/null 2>&1; }
 
 ensure_basics() {
-	local missing=()
-	need_cmd curl || missing+=(curl)
-	need_cmd openssl || missing+=(openssl)
-	need_cmd git || missing+=(git)
-	if [ "${#missing[@]}" -eq 0 ]; then
+	if need_cmd curl && need_cmd openssl && need_cmd git; then
 		ok "curl, openssl, git present"
 		return
 	fi
-	info "Installing base packages: ${missing[*]} ca-certificates"
 	case "${FAMILY}" in
 		debian)
 			export DEBIAN_FRONTEND=noninteractive
-			apt-get update -qq
-			apt-get install -y -qq curl openssl ca-certificates git >/dev/null
+			run_quiet "Installing base packages" bash -c \
+				"apt-get update -qq && apt-get install -y -qq curl openssl ca-certificates git"
 			;;
 		rhel)
 			if need_cmd dnf; then
-				dnf install -y -q curl openssl ca-certificates git >/dev/null
+				run_quiet "Installing base packages" dnf install -y -q curl openssl ca-certificates git
 			else
-				yum install -y -q curl openssl ca-certificates git >/dev/null
+				run_quiet "Installing base packages" yum install -y -q curl openssl ca-certificates git
 			fi
 			;;
 		*)
@@ -150,7 +192,6 @@ ensure_basics() {
 			need_cmd git || die "Install git, then re-run"
 			;;
 	esac
-	ok "Base packages ready"
 }
 
 install_docker() {
@@ -158,14 +199,10 @@ install_docker() {
 		ok "Docker $(docker --version | awk '{print $3}' | tr -d ',')"
 		return
 	fi
-	if [ "${NIXPLOY_SKIP_DOCKER_INSTALL:-0}" = "1" ]; then
-		die "Docker missing and NIXPLOY_SKIP_DOCKER_INSTALL=1"
-	fi
-	info "Installing Docker Engine via get.docker.com…"
-	curl -fsSL https://get.docker.com | sh
+	[ "${NIXPLOY_SKIP_DOCKER_INSTALL:-0}" = "1" ] && die "Docker missing and NIXPLOY_SKIP_DOCKER_INSTALL=1"
+	run_quiet "Installing Docker Engine" bash -c "curl -fsSL https://get.docker.com | sh"
 	need_cmd docker || die "Docker install failed"
 	systemctl enable --now docker 2>/dev/null || service docker start 2>/dev/null || true
-	# Give the daemon a moment on fresh installs.
 	local i
 	for i in $(seq 1 30); do
 		docker info >/dev/null 2>&1 && break
@@ -179,21 +216,15 @@ init_swarm() {
 	local state
 	state="$(docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null || true)"
 	if [ "${state}" = "active" ]; then
-		ok "Swarm already active"
-		return
+		ok "Swarm active"
+	else
+		local addr
+		addr="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}' || true)"
+		addr="${addr:-$(hostname -I 2>/dev/null | awk '{print $1}')}"
+		addr="${addr:-127.0.0.1}"
+		docker swarm init --advertise-addr "${addr}" >/dev/null
+		ok "Swarm initialized (${addr})"
 	fi
-	local advertise_addr
-	advertise_addr="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}' || true)"
-	if [ -z "${advertise_addr}" ]; then
-		advertise_addr="$(hostname -I 2>/dev/null | awk '{print $1}')"
-	fi
-	advertise_addr="${advertise_addr:-127.0.0.1}"
-	info "Initializing Swarm (advertise-addr: ${advertise_addr})"
-	docker swarm init --advertise-addr "${advertise_addr}" >/dev/null
-	ok "Swarm ready"
-}
-
-ensure_network() {
 	if docker network inspect "${NETWORK_NAME}" >/dev/null 2>&1; then
 		ok "Network ${NETWORK_NAME}"
 	else
@@ -202,7 +233,7 @@ ensure_network() {
 	fi
 }
 
-# ── secrets & dirs ──────────────────────────────────────────────────────────
+# ── secrets & config ─────────────────────────────────────────────────────────
 random_hex() { openssl rand -hex "$1"; }
 
 detect_public_ip() {
@@ -212,15 +243,24 @@ detect_public_ip() {
 }
 
 detect_public_url() {
-	if [ -n "${NIXPLOY_DOMAIN:-}" ]; then
-		case "${NIXPLOY_DOMAIN}" in
-			http://*|https://*) printf '%s' "${NIXPLOY_DOMAIN}" ;;
-			*) printf 'https://%s' "${NIXPLOY_DOMAIN}" ;;
-		esac
-		return
+	if [ -n "${DASHBOARD_DOMAIN}" ]; then
+		printf 'https://%s' "${DASHBOARD_DOMAIN}"
+	else
+		printf 'https://%s' "$(detect_public_ip)"
 	fi
-	# Dashboard is served via Traefik on :443 with a self-signed cert.
-	printf 'https://%s' "$(detect_public_ip)"
+}
+
+set_env_var() {
+	local name="$1" value="$2" tmp
+	tmp="$(mktemp)"
+	awk -v k="${name}" -v v="${value}" '
+		BEGIN { done=0 }
+		$0 ~ "^"k"=" { print k"="v; done=1; next }
+		{ print }
+		END { if (!done) print k"="v }
+	' "${ENV_FILE}" > "${tmp}"
+	mv "${tmp}" "${ENV_FILE}"
+	chmod 600 "${ENV_FILE}"
 }
 
 write_env_file() {
@@ -231,147 +271,46 @@ write_env_file() {
 	public_url="$(detect_public_url)"
 
 	if [ -f "${ENV_FILE}" ]; then
-		ok "Keeping existing ${ENV_FILE}"
 		# shellcheck disable=SC1090
 		set -a; . "${ENV_FILE}"; set +a
-		# Migrate first-boot http://IP:3000 installs to https://IP (Traefik).
-		if [ -z "${NIXPLOY_DOMAIN:-}" ]; then
-			local current="${BETTER_AUTH_URL:-}"
-			case "${current}" in
-				http://*|https://*:[0-9]*|"")
-					if [ "${current}" != "${public_url}" ]; then
-						info "Updating public URL → ${public_url}"
-						# Rewrite in place without depending on GNU/BSD sed -i.
-						local tmp
-						tmp="$(mktemp)"
-						awk -v url="${public_url}" '
-							BEGIN { u=0; n=0 }
-							/^BETTER_AUTH_URL=/ { print "BETTER_AUTH_URL=" url; u=1; next }
-							/^NEXT_PUBLIC_APP_URL=/ { print "NEXT_PUBLIC_APP_URL=" url; n=1; next }
-							{ print }
-							END {
-								if (!u) print "BETTER_AUTH_URL=" url
-								if (!n) print "NEXT_PUBLIC_APP_URL=" url
-							}
-						' "${ENV_FILE}" > "${tmp}"
-						mv "${tmp}" "${ENV_FILE}"
-						chmod 600 "${ENV_FILE}"
-						# shellcheck disable=SC1090
-						set -a; . "${ENV_FILE}"; set +a
-					fi
-					;;
-			esac
+		if [ "${BETTER_AUTH_URL:-}" != "${public_url}" ]; then
+			set_env_var "BETTER_AUTH_URL" "${public_url}"
+			set_env_var "NEXT_PUBLIC_APP_URL" "${public_url}"
+			# shellcheck disable=SC1090
+			set -a; . "${ENV_FILE}"; set +a
+			ok "Updated public URL → ${public_url}"
+		else
+			ok "Keeping existing secrets (${ENV_FILE})"
 		fi
 		return
 	fi
 
-	local auth_secret enc_key pg_pass
-	auth_secret="$(random_hex 32)"
-	enc_key="$(random_hex 32)"
-	pg_pass="$(random_hex 24)"
-
 	umask 077
 	cat > "${ENV_FILE}" <<EOF
 # Generated by Nixploy install.sh — do not commit.
-# $(date -u +%Y-%m-%dT%H:%M:%SZ)
-
 POSTGRES_USER=nixploy
-POSTGRES_PASSWORD=${pg_pass}
+POSTGRES_PASSWORD=$(random_hex 24)
 POSTGRES_DB=nixploy
-DATABASE_URL=postgres://nixploy:${pg_pass}@nixploy-postgres:5432/nixploy
-
-BETTER_AUTH_SECRET=${auth_secret}
+BETTER_AUTH_SECRET=$(random_hex 32)
 BETTER_AUTH_URL=${public_url}
-ENCRYPTION_KEY=${enc_key}
+ENCRYPTION_KEY=$(random_hex 32)
 NEXT_PUBLIC_APP_URL=${public_url}
 PORT=3000
 NIXPLOY_CONFIG_DIR=/etc/nixploy
 EOF
-	chmod 600 "${ENV_FILE}"
-	ok "Wrote secrets to ${ENV_FILE}"
+	set_env_var "DATABASE_URL" "postgres://nixploy:$(awk -F= '/^POSTGRES_PASSWORD=/{print $2}' "${ENV_FILE}")@nixploy-postgres:5432/nixploy"
+	ok "Generated secrets (${ENV_FILE})"
 	# shellcheck disable=SC1090
 	set -a; . "${ENV_FILE}"; set +a
 }
 
-ensure_self_signed_tls() {
-	local cert="${NIXPLOY_CONFIG_DIR}/traefik/dynamic/default.crt"
-	local key="${NIXPLOY_CONFIG_DIR}/traefik/dynamic/default.key"
-	local ip domain_san=""
-	ip="$(detect_public_ip)"
-
-	if [ -n "${NIXPLOY_DOMAIN:-}" ]; then
-		local host="${NIXPLOY_DOMAIN}"
-		host="${host#http://}"
-		host="${host#https://}"
-		host="${host%%/*}"
-		host="${host%%:*}"
-		if [ -n "${host}" ]; then
-			domain_san=",DNS:${host}"
-		fi
-	fi
-
-	if [ -f "${cert}" ] && [ -f "${key}" ]; then
-		ok "Keeping existing self-signed TLS cert"
-	else
-		info "Generating self-signed TLS cert for ${ip} (browser will warn once)"
-		if ! openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
-			-keyout "${key}" -out "${cert}" \
-			-subj "/CN=nixploy" \
-			-addext "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:${ip}${domain_san}" 2>/dev/null; then
-			# OpenSSL without -addext (older distros)
-			openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
-				-keyout "${key}" -out "${cert}" \
-				-subj "/CN=${ip}"
-		fi
-		chmod 600 "${key}" "${cert}"
-		ok "Wrote ${cert}"
-	fi
-
-	cat > "${NIXPLOY_CONFIG_DIR}/traefik/dynamic/00-default-tls.yml" <<EOF
-tls:
-  stores:
-    default:
-      defaultCertificate:
-        certFile: /etc/nixploy/traefik/dynamic/default.crt
-        keyFile: /etc/nixploy/traefik/dynamic/default.key
-EOF
-
-	cat > "${NIXPLOY_CONFIG_DIR}/traefik/dynamic/00-nixploy-dashboard.yml" <<'EOF'
-http:
-  routers:
-    nixploy-dashboard:
-      rule: PathPrefix(`/`)
-      entryPoints:
-        - websecure
-      service: nixploy-dashboard
-      tls: {}
-      priority: 1
-  services:
-    nixploy-dashboard:
-      loadBalancer:
-        servers:
-          - url: http://nixploy:3000
-EOF
-	ok "Traefik dashboard router + default TLS"
-}
-
-ensure_directories() {
-	mkdir -p \
-		"${NIXPLOY_CONFIG_DIR}/traefik/dynamic" \
-		"${NIXPLOY_CONFIG_DIR}/applications" \
-		"${NIXPLOY_CONFIG_DIR}/compose" \
-		"${NIXPLOY_CONFIG_DIR}/logs"
-
-	# Always refresh static config so HTTP→HTTPS redirect stays in sync.
-	local url="https://raw.githubusercontent.com/${NIXPLOY_REPO}/${NIXPLOY_BRANCH}/docker/traefik/traefik.yml"
-	if curl -fsSL "${url}" -o "${NIXPLOY_CONFIG_DIR}/traefik/traefik.yml"; then
-		ok "Fetched traefik.yml"
-	else
-		warn "Could not fetch traefik.yml — writing embedded fallback"
-		cat > "${NIXPLOY_CONFIG_DIR}/traefik/traefik.yml" <<'YAML'
+write_traefik_static() {
+	cat > "${NIXPLOY_CONFIG_DIR}/traefik/traefik.yml" <<EOF
 global:
   checkNewVersion: false
   sendAnonymousUsage: false
+log:
+  level: ERROR
 entryPoints:
   web:
     address: ":80"
@@ -390,44 +329,107 @@ providers:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: nixploy@localhost
+      email: ${ACME_EMAIL:-nixploy@localhost}
       storage: /etc/nixploy/traefik/acme.json
       httpChallenge:
         entryPoint: web
 api:
   dashboard: false
-YAML
-	fi
-
-	if [ ! -f "${NIXPLOY_CONFIG_DIR}/traefik/acme.json" ]; then
-		touch "${NIXPLOY_CONFIG_DIR}/traefik/acme.json"
-	fi
-	chmod 600 "${NIXPLOY_CONFIG_DIR}/traefik/acme.json"
-
-	ensure_self_signed_tls
-	ok "Config dirs under ${NIXPLOY_CONFIG_DIR}"
+EOF
+	ok "Traefik static config (HTTPS redirect on)"
 }
 
-# ── services ────────────────────────────────────────────────────────────────
+write_tls_and_routing() {
+	local dyn="${NIXPLOY_CONFIG_DIR}/traefik/dynamic"
+	local cert="${dyn}/default.crt" key="${dyn}/default.key"
+	local ip
+	ip="$(detect_public_ip)"
+
+	if [ ! -f "${cert}" ] || [ ! -f "${key}" ]; then
+		local san="DNS:localhost,IP:127.0.0.1,IP:${ip}"
+		[ -n "${DASHBOARD_DOMAIN}" ] && san="${san},DNS:${DASHBOARD_DOMAIN}"
+		openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
+			-keyout "${key}" -out "${cert}" \
+			-subj "/CN=nixploy" -addext "subjectAltName=${san}" 2>/dev/null \
+			|| openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
+				-keyout "${key}" -out "${cert}" -subj "/CN=${ip}"
+		chmod 600 "${key}" "${cert}"
+		ok "Self-signed fallback certificate"
+	else
+		ok "Keeping existing fallback certificate"
+	fi
+
+	cat > "${dyn}/00-default-tls.yml" <<EOF
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/nixploy/traefik/dynamic/default.crt
+        keyFile: /etc/nixploy/traefik/dynamic/default.key
+EOF
+
+	local domain_router=""
+	if [ -n "${DASHBOARD_DOMAIN}" ]; then
+		domain_router="    nixploy-dashboard-domain:
+      rule: Host(\`${DASHBOARD_DOMAIN}\`)
+      entryPoints:
+        - websecure
+      service: nixploy-dashboard
+      tls:
+        certResolver: letsencrypt
+"
+	fi
+	cat > "${dyn}/00-nixploy-dashboard.yml" <<EOF
+http:
+  routers:
+    nixploy-dashboard:
+      rule: PathPrefix(\`/\`)
+      entryPoints:
+        - websecure
+      service: nixploy-dashboard
+      tls: {}
+      priority: 1
+${domain_router}  services:
+    nixploy-dashboard:
+      loadBalancer:
+        servers:
+          - url: http://nixploy:3000
+EOF
+	if [ -n "${DASHBOARD_DOMAIN}" ]; then
+		ok "Dashboard routing: https://${DASHBOARD_DOMAIN} (Let's Encrypt) + https://${ip} (fallback)"
+	else
+		ok "Dashboard routing: https://${ip} (self-signed)"
+	fi
+}
+
+ensure_directories() {
+	mkdir -p \
+		"${NIXPLOY_CONFIG_DIR}/traefik/dynamic" \
+		"${NIXPLOY_CONFIG_DIR}/applications" \
+		"${NIXPLOY_CONFIG_DIR}/compose" \
+		"${NIXPLOY_CONFIG_DIR}/logs"
+	touch "${NIXPLOY_CONFIG_DIR}/traefik/acme.json"
+	chmod 600 "${NIXPLOY_CONFIG_DIR}/traefik/acme.json"
+	write_traefik_static
+	write_tls_and_routing
+}
+
+# ── images ───────────────────────────────────────────────────────────────────
 build_app_image() {
 	local tmp
 	tmp="$(mktemp -d)"
-	info "Building ${APP_IMAGE} from https://github.com/${NIXPLOY_REPO} (${NIXPLOY_BRANCH})…"
-	info "This can take several minutes and needs ~4GB RAM"
-	if ! git clone --depth 1 --branch "${NIXPLOY_BRANCH}" \
-		"https://github.com/${NIXPLOY_REPO}.git" "${tmp}/src" >/dev/null; then
+	info "Building from source — this takes several minutes (~4GB RAM needed)"
+	if ! run_quiet "Cloning ${NIXPLOY_REPO}@${NIXPLOY_BRANCH}" \
+		git clone --depth 1 --branch "${NIXPLOY_BRANCH}" "https://github.com/${NIXPLOY_REPO}.git" "${tmp}/src"; then
 		rm -rf "${tmp}"
-		die "Failed to clone ${NIXPLOY_REPO}@${NIXPLOY_BRANCH}"
+		die "Clone failed"
 	fi
-	if ! docker build \
-		-t "${APP_IMAGE}" \
-		-f "${tmp}/src/docker/Dockerfile" \
-		"${tmp}/src"; then
+	if ! run_quiet "Building ${APP_IMAGE}" \
+		docker build -t "${APP_IMAGE}" -f "${tmp}/src/docker/Dockerfile" "${tmp}/src"; then
 		rm -rf "${tmp}"
-		die "Docker build failed — check free disk/RAM, or wait for ghcr.io/${NIXPLOY_REPO}:${NIXPLOY_VERSION}"
+		die "Build failed — full log: ${LOG_FILE}"
 	fi
 	rm -rf "${tmp}"
-	ok "Built ${APP_IMAGE}"
 }
 
 ensure_app_image() {
@@ -435,24 +437,20 @@ ensure_app_image() {
 		build_app_image
 		return
 	fi
-	info "Pulling ${APP_IMAGE}"
-	if docker pull "${APP_IMAGE}"; then
-		ok "App image"
+	if run_quiet "Pulling ${APP_IMAGE}" docker pull "${APP_IMAGE}"; then
 		return
 	fi
-	warn "Could not pull ${APP_IMAGE} (image may not be published yet)"
-	warn "Falling back to a local build from source"
+	warn "Pull failed — building from source instead"
 	build_app_image
 }
 
 pull_images() {
 	ensure_app_image
-	docker pull "${POSTGRES_IMAGE}" >/dev/null
-	ok "Postgres ${POSTGRES_VERSION}"
-	docker pull "${TRAEFIK_IMAGE}" >/dev/null
-	ok "Traefik ${TRAEFIK_VERSION}"
+	run_quiet "Pulling Postgres ${POSTGRES_VERSION}" docker pull "${POSTGRES_IMAGE}" || die "Postgres pull failed"
+	run_quiet "Pulling Traefik ${TRAEFIK_VERSION}" docker pull "${TRAEFIK_IMAGE}" || die "Traefik pull failed"
 }
 
+# ── services ─────────────────────────────────────────────────────────────────
 create_postgres() {
 	if docker service inspect nixploy-postgres >/dev/null 2>&1; then
 		ok "Service nixploy-postgres (existing)"
@@ -463,94 +461,68 @@ create_postgres() {
 		--network "${NETWORK_NAME}" \
 		--constraint 'node.role == manager' \
 		--replicas 1 \
+		--detach \
 		--env-file "${ENV_FILE}" \
-		--env POSTGRES_USER \
-		--env POSTGRES_PASSWORD \
-		--env POSTGRES_DB \
+		--env POSTGRES_USER --env POSTGRES_PASSWORD --env POSTGRES_DB \
 		--mount type=volume,source=nixploy-postgres-data,target=/var/lib/postgresql/data \
 		"${POSTGRES_IMAGE}" >/dev/null
 	ok "Created nixploy-postgres"
 }
 
 wait_for_postgres() {
-	info "Waiting for Postgres…"
 	local i
 	for i in $(seq 1 60); do
 		if docker run --rm --network "${NETWORK_NAME}" "${POSTGRES_IMAGE}" \
 			pg_isready -h nixploy-postgres -U "${POSTGRES_USER:-nixploy}" -d "${POSTGRES_DB:-nixploy}" >/dev/null 2>&1; then
-			ok "Postgres accepting connections"
+			ok "Postgres ready"
 			return
 		fi
 		sleep 2
 	done
-	die "Postgres did not become ready in time — check: docker service logs nixploy-postgres"
+	die "Postgres not ready — check: docker service logs nixploy-postgres"
 }
 
 create_traefik() {
-	local need_create=1
 	if docker service inspect nixploy-traefik >/dev/null 2>&1; then
 		local mounts
 		mounts="$(docker service inspect nixploy-traefik --format '{{range .Spec.TaskTemplate.ContainerSpec.Mounts}}{{.Target}} {{end}}' 2>/dev/null || true)"
 		case " ${mounts} " in
 			*" /etc/nixploy/traefik/dynamic "*)
 				ok "Service nixploy-traefik (existing)"
-				need_create=0
+				return
 				;;
 			*)
-				warn "Recreating nixploy-traefik with correct bind mounts"
 				docker service rm nixploy-traefik >/dev/null
 				sleep 2
 				;;
 		esac
 	fi
-	if [ "${need_create}" -eq 1 ]; then
-		docker service create \
-			--name nixploy-traefik \
-			--network "${NETWORK_NAME}" \
-			--mode global \
-			--constraint 'node.role == manager' \
-			--publish mode=host,target=80,published=80 \
-			--publish mode=host,target=443,published=443 \
-			--mount type=bind,source="${NIXPLOY_CONFIG_DIR}/traefik/traefik.yml",target=/etc/traefik/traefik.yml,readonly \
-			--mount type=bind,source="${NIXPLOY_CONFIG_DIR}/traefik/dynamic",target=/etc/nixploy/traefik/dynamic \
-			--mount type=bind,source="${NIXPLOY_CONFIG_DIR}/traefik/acme.json",target=/etc/nixploy/traefik/acme.json \
-			"${TRAEFIK_IMAGE}" >/dev/null
-		ok "Created nixploy-traefik (80/443, HTTPS redirect)"
-	fi
+	docker service create \
+		--name nixploy-traefik \
+		--network "${NETWORK_NAME}" \
+		--mode global \
+		--constraint 'node.role == manager' \
+		--detach \
+		--publish mode=host,target=80,published=80 \
+		--publish mode=host,target=443,published=443 \
+		--mount type=bind,source="${NIXPLOY_CONFIG_DIR}/traefik/traefik.yml",target=/etc/traefik/traefik.yml,readonly \
+		--mount type=bind,source="${NIXPLOY_CONFIG_DIR}/traefik/dynamic",target=/etc/nixploy/traefik/dynamic \
+		--mount type=bind,source="${NIXPLOY_CONFIG_DIR}/traefik/acme.json",target=/etc/nixploy/traefik/acme.json \
+		"${TRAEFIK_IMAGE}" >/dev/null
+	ok "Created nixploy-traefik (:80 → :443)"
 }
 
 create_app() {
-	local env_args=(
-		--env-file "${ENV_FILE}"
-		--env DATABASE_URL
-		--env BETTER_AUTH_SECRET
-		--env BETTER_AUTH_URL
-		--env ENCRYPTION_KEY
-		--env NEXT_PUBLIC_APP_URL
-		--env PORT=3000
-		--env NIXPLOY_CONFIG_DIR=/etc/nixploy
-		--env NIXPLOY_DISABLE_TRAEFIK_BOOT=1
-	)
-
 	if docker service inspect nixploy >/dev/null 2>&1; then
-		info "Updating nixploy → ${APP_IMAGE}"
-		# --no-resolve-image: use the local tag (required after build-from-source;
-		# otherwise Swarm hangs trying to pull from GHCR and never converges).
-		# --detach: don't block the installer on task convergence.
 		docker service update \
-			--detach \
-			--force \
-			--no-resolve-image \
+			--detach --force --no-resolve-image \
 			--image "${APP_IMAGE}" \
 			--env-add "BETTER_AUTH_URL=${BETTER_AUTH_URL}" \
 			--env-add "NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}" \
 			nixploy >/dev/null
-		ok "Updated nixploy"
+		ok "Updated nixploy → ${APP_IMAGE}"
 		return
 	fi
-
-	# Port 3000 stays published for local health checks / emergency access.
-	# Public traffic should use https://<ip> via Traefik (:443).
 	docker service create \
 		--name nixploy \
 		--network "${NETWORK_NAME}" \
@@ -559,107 +531,115 @@ create_app() {
 		--detach \
 		--no-resolve-image \
 		--publish "mode=host,target=3000,published=${NIXPLOY_PORT}" \
-		"${env_args[@]}" \
+		--env-file "${ENV_FILE}" \
+		--env DATABASE_URL --env BETTER_AUTH_SECRET --env BETTER_AUTH_URL \
+		--env ENCRYPTION_KEY --env NEXT_PUBLIC_APP_URL \
+		--env PORT=3000 \
+		--env NIXPLOY_CONFIG_DIR=/etc/nixploy \
+		--env NIXPLOY_DISABLE_TRAEFIK_BOOT=1 \
 		--mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
 		--mount type=bind,source="${NIXPLOY_CONFIG_DIR}",target=/etc/nixploy \
 		--update-order start-first \
 		"${APP_IMAGE}" >/dev/null
-	ok "Created nixploy (port ${NIXPLOY_PORT}; public URL via :443)"
+	ok "Created nixploy"
 }
 
 wait_for_app() {
-	info "Waiting for dashboard…"
-	info "Public URL is https://<ip>/ (port 443) — not :3000"
-	local i code url
+	local url
 	url="${BETTER_AUTH_URL:-$(detect_public_url)}"
-	for i in $(seq 1 90); do
-		# Direct to the app (plain HTTP on the published port).
-		code="$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 \
-			"http://127.0.0.1:${NIXPLOY_PORT}/setup" 2>/dev/null || true)"
-		case "${code}" in
-			200|302|307|308)
-				ok "App listening on :${NIXPLOY_PORT} (HTTP ${code})"
-				# Prefer confirming Traefik too, but don't fail the install on it.
-				local tcode
-				tcode="$(curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 2 \
-					"${url}/setup" 2>/dev/null || true)"
-				case "${tcode}" in
-					200|302|307|308) ok "Traefik HTTPS ready at ${url}" ;;
-					*) warn "App is up; Traefik returned HTTP ${tcode:-000} for ${url}/setup — try again in a few seconds" ;;
-				esac
-				return
-				;;
-		esac
-		if [ $((i % 15)) -eq 0 ]; then
-			info "Still waiting… (attempt ${i}/90) — service state:"
-			docker service ps nixploy --no-trunc 2>/dev/null | head -n 5 || true
-		fi
-		sleep 2
-	done
-	warn "App not healthy after ~3 minutes"
-	warn "Recent tasks:"
-	docker service ps nixploy --no-trunc 2>/dev/null | head -n 8 || true
-	warn "Last logs:"
-	docker service logs --tail 80 nixploy 2>/dev/null || true
-	warn "Debug: docker service logs -f nixploy"
-	warn "Open ${url}/setup (HTTPS on :443). http://${NIXPLOY_PORT} is emergency-only."
+	local i code
+	if [ "${IS_TTY}" = "1" ]; then
+		local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+		for i in $(seq 1 90); do
+			code="$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 \
+				"http://127.0.0.1:${NIXPLOY_PORT}/setup" 2>/dev/null || true)"
+			case "${code}" in
+				200|302|307|308) printf '\r\033[K'; ok "App is up"; break ;;
+			esac
+			printf '\r   %s%s%s Waiting for the app to start (%d/90)' \
+				"${C_CYAN}" "${frames:i%10:1}" "${C_RESET}" "$i"
+			sleep 2
+			code=""
+		done
+		[ -n "${code}" ] || printf '\r\033[K'
+	else
+		for i in $(seq 1 90); do
+			code="$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 \
+				"http://127.0.0.1:${NIXPLOY_PORT}/setup" 2>/dev/null || true)"
+			case "${code}" in
+				200|302|307|308) ok "App is up"; break ;;
+			esac
+			sleep 2
+			code=""
+		done
+	fi
+	if [ -z "${code}" ]; then
+		warn "App not responding after ~3 minutes"
+		docker service ps nixploy --no-trunc 2>/dev/null | head -n 5 >&2 || true
+		docker service logs --tail 50 nixploy >&2 2>/dev/null || true
+		die "Startup failed — debug with: docker service logs -f nixploy"
+	fi
+	code="$(curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 3 "${url}/setup" 2>/dev/null || true)"
+	case "${code}" in
+		200|302|307|308) ok "HTTPS ready at ${url}" ;;
+		*) warn "Traefik still settling for ${url} — give it a few seconds" ;;
+	esac
 }
 
 print_summary() {
 	local url
 	url="${BETTER_AUTH_URL:-$(detect_public_url)}"
 	printf '\n'
-	printf '%s┌─────────────────────────────────────────────────────────┐%s\n' "${C_GREEN}" "${C_RESET}"
-	printf '%s│%s  %sNixploy is installed%s                                  %s│%s\n' "${C_GREEN}" "${C_RESET}" "${C_BOLD}" "${C_RESET}" "${C_GREEN}" "${C_RESET}"
-	printf '%s└─────────────────────────────────────────────────────────┘%s\n' "${C_GREEN}" "${C_RESET}"
+	printf '  %s╭──────────────────────────────────────────────╮%s\n' "${C_GREEN}" "${C_RESET}"
+	printf '  %s│%s        %s🚀 Nixploy is installed%s               %s│%s\n' "${C_GREEN}" "${C_RESET}" "${C_BOLD}" "${C_RESET}" "${C_GREEN}" "${C_RESET}"
+	printf '  %s╰──────────────────────────────────────────────╯%s\n' "${C_GREEN}" "${C_RESET}"
 	printf '\n'
-	printf '  %sSetup (first admin):%s  %s/setup\n' "${C_BOLD}" "${C_RESET}" "${url}"
-	printf '  %sDashboard:%s            %s\n' "${C_BOLD}" "${C_RESET}" "${url}"
-	printf '  %sConfig:%s               %s\n' "${C_BOLD}" "${C_RESET}" "${NIXPLOY_CONFIG_DIR}"
-	printf '  %sSecrets:%s              %s\n' "${C_BOLD}" "${C_RESET}" "${ENV_FILE}"
+	printf '   %sCreate your admin account:%s\n' "${C_BOLD}" "${C_RESET}"
+	printf '   %s→%s  %s%s/setup%s\n' "${C_GREEN}" "${C_RESET}" "${C_BOLD}${C_CYAN}" "${url}" "${C_RESET}"
 	printf '\n'
-	printf '  %sHTTP (:80) redirects to HTTPS. The cert is self-signed —%s\n' "${C_DIM}" "${C_RESET}"
-	printf '  %saccept the browser warning once (or set NIXPLOY_DOMAIN + LE).%s\n' "${C_DIM}" "${C_RESET}"
+	if [ -n "${DASHBOARD_DOMAIN}" ]; then
+		printf '   %sThe Let'"'"'s Encrypt certificate is issued on first visit.%s\n' "${C_DIM}" "${C_RESET}"
+		printf '   %sMake sure the DNS A record of %s points here.%s\n' "${C_DIM}" "${DASHBOARD_DOMAIN}" "${C_RESET}"
+	else
+		printf '   %sThe certificate is self-signed — accept the browser warning once.%s\n' "${C_DIM}" "${C_RESET}"
+		printf '   %sAdd a real domain later in Settings → Server → Dashboard domain.%s\n' "${C_DIM}" "${C_RESET}"
+	fi
 	printf '\n'
-	printf '  %sPublic registration is disabled after you create the owner.%s\n' "${C_DIM}" "${C_RESET}"
-	printf '  Invite teammates later from Settings → Organization.\n'
-	printf '\n'
-	printf '  %sUseful commands%s\n' "${C_BOLD}" "${C_RESET}"
-	printf '    docker service ls\n'
-	printf '    docker service logs -f nixploy\n'
-	printf '    docker service update --image %s nixploy\n' "${APP_IMAGE}"
+	printf '   %sConfig%s   %s\n' "${C_DIM}" "${C_RESET}" "${NIXPLOY_CONFIG_DIR}"
+	printf '   %sLogs%s     docker service logs -f nixploy\n' "${C_DIM}" "${C_RESET}"
+	printf '   %sUpdate%s   re-run this installer\n' "${C_DIM}" "${C_RESET}"
 	printf '\n'
 }
 
 main() {
 	banner
 	require_root
+	: > "${LOG_FILE}" 2>/dev/null || LOG_FILE="/tmp/nixploy-install.log"
 
-	step "Detecting operating system"
+	step "Operating system"
 	detect_os
 
-	step "Installing prerequisites"
+	step "Prerequisites"
 	ensure_basics
 
-	step "Ensuring Docker Engine"
+	step "Docker Engine"
 	install_docker
 
-	step "Initializing Docker Swarm"
+	step "Docker Swarm"
 	init_swarm
-	ensure_network
 
-	step "Writing config and secrets"
+	step "Config & secrets"
 	write_env_file
 	ensure_directories
 
-	step "Pulling container images"
+	step "Container images"
 	pull_images
 
-	step "Starting Postgres"
+	step "Database"
 	create_postgres
 	wait_for_postgres
 
-	step "Starting Traefik + Nixploy"
+	step "Traefik & Nixploy"
 	create_traefik
 	create_app
 

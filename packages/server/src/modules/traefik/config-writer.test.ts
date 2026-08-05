@@ -35,7 +35,7 @@ const baseDomain: TraefikDomainEntry = {
 };
 
 describe("buildTraefikFileConfig", () => {
-	it("single http domain: web router + load-balancer service, no middlewares", async () => {
+	it("single http domain: web router + default-cert websecure router", async () => {
 		const config = await buildTraefikFileConfig({
 			appName: "myapp",
 			domains: [baseDomain],
@@ -50,6 +50,12 @@ describe("buildTraefikFileConfig", () => {
 		expect(router?.entryPoints).toEqual(["web"]);
 		expect(router?.service).toBe("myapp-service-0");
 		expect(router?.tls).toBeUndefined();
+
+		// The platform redirects :80→:443 globally, so https-off domains get a
+		// websecure router that serves the self-signed default certificate.
+		const secureRouter = config.http.routers["myapp-router-websecure-0"];
+		expect(secureRouter?.entryPoints).toEqual(["websecure"]);
+		expect(secureRouter?.tls).toEqual({});
 
 		const service = config.http.services["myapp-service-0"];
 		expect(service?.loadBalancer.servers).toEqual([{ url: "http://myapp:3000" }]);

@@ -21,6 +21,12 @@ export {
 	writeFileOnServer,
 } from "./config-writer";
 export {
+	buildDashboardRouterYaml,
+	getDashboardDomain,
+	normalizeDashboardDomain,
+	writeDashboardRouterConfig,
+} from "./dashboard";
+export {
 	getCertificatesDir,
 	getConfigDir,
 	getDynamicDir,

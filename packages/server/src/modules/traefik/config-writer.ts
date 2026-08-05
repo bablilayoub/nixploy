@@ -140,9 +140,9 @@ export const removeFileOnServer = async (
  * Build the Traefik v3 file-provider config for one app, modeled on Dokploy's
  * `manageDomain`/`createRouterConfig`:
  * - one service per domain (`http://<appName>:<port>` load balancer);
- * - one `web` router per domain, plus a `websecure` router when https;
- * - http→https is a per-router `redirectScheme` middleware (never global, so
- *   plain-HTTP domains keep working);
+ * - one `web` router per domain, plus a `websecure` router (the platform
+ *   redirects :80→:443 at the entrypoint, so every domain needs a TLS
+ *   router — https-off domains fall back to the self-signed default cert);
  * - redirects / basic-auth / internal-path become named middlewares;
  * - custom certificates are inlined in `tls.certificates` (files previously
  *   written under the dynamic dir by the certificate module).
@@ -247,6 +247,15 @@ export const buildTraefikFileConfig = async (
 				service: serviceName,
 				entryPoints: ["web"],
 				middlewares: domainMiddlewares,
+			};
+			// The platform redirects :80→:443 globally, so an https-off domain
+			// still needs a websecure router; it serves the default cert.
+			config.http.routers[routerNameSecure] = {
+				rule,
+				service: serviceName,
+				entryPoints: ["websecure"],
+				middlewares: domainMiddlewares,
+				tls: {},
 			};
 		}
 	});

@@ -1,3 +1,4 @@
+import { resolve4, resolve6 } from "node:dns/promises";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { TRPCError } from "@trpc/server";
@@ -11,11 +12,28 @@ import {
 	ensureTraefikSetup,
 	getDynamicDir,
 	getTraefikDir,
+	normalizeDashboardDomain,
 	TRAEFIK_SERVICE_NAME,
+	writeDashboardRouterConfig,
 } from "../../modules/traefik";
 import { execAsync } from "../../utils/exec";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
+
+/** Public IPv4 of this host, or null when detection fails (offline, etc.). */
+async function detectPublicIp(): Promise<string | null> {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), 4000);
+	try {
+		const res = await fetch("https://api.ipify.org", { signal: controller.signal });
+		const text = (await res.text()).trim();
+		return /^\d{1,3}(\.\d{1,3}){3}$/.test(text) ? text : null;
+	} catch {
+		return null;
+	} finally {
+		clearTimeout(timer);
+	}
+}
 
 type Session = NonNullable<TRPCContext["session"]>;
 
@@ -131,8 +149,20 @@ export const webServerRouter = router({
 			[EXTRAS_KEY]: extras,
 		};
 
+		// The dashboard domain is stored normalized ("panel.example.com").
+		let host: string | null | undefined;
+		if (input.host !== undefined) {
+			host = normalizeDashboardDomain(input.host);
+			if (input.host?.trim() && !host) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Enter a valid domain, e.g. nixploy.example.com",
+				});
+			}
+		}
+
 		const values = {
-			...(input.host !== undefined && { host: input.host }),
+			...(host !== undefined && { host }),
 			...(input.letsEncryptEmail !== undefined && {
 				letsEncryptEmail: input.letsEncryptEmail,
 			}),
@@ -151,23 +181,67 @@ export const webServerRouter = router({
 			await db.insert(webServerSettings).values(values);
 		}
 
-		// Rewrite traefik.yml when the ACME account email changed. Failures
-		// (e.g. no docker on a UI-only dev machine) must not lose the save.
+		// Rewrite traefik.yml when the ACME account email changed, and the
+		// dashboard router when the domain changed. Failures (e.g. no docker
+		// on a UI-only dev machine) must not lose the save.
 		let traefikConfigRewritten = false;
-		if (
+		const emailChanged =
 			input.letsEncryptEmail !== undefined &&
-			input.letsEncryptEmail !== (existing?.letsEncryptEmail ?? null)
-		) {
+			input.letsEncryptEmail !== (existing?.letsEncryptEmail ?? null);
+		const hostChanged = host !== undefined && host !== (existing?.host ?? null);
+		if (emailChanged || hostChanged) {
 			try {
 				await ensureTraefikSetup();
 				traefikConfigRewritten = true;
 			} catch {
-				traefikConfigRewritten = false;
+				if (hostChanged) {
+					// Still try to hot-write the router file alone.
+					try {
+						await writeDashboardRouterConfig(host ?? null);
+						traefikConfigRewritten = true;
+					} catch {
+						traefikConfigRewritten = false;
+					}
+				}
 			}
 		}
 
-		return { success: true, traefikConfigRewritten };
+		return { success: true, traefikConfigRewritten, host: host ?? existing?.host ?? null };
 	}),
+
+	/**
+	 * DNS preflight for the dashboard domain: does it resolve, and does it
+	 * point at this server's public IP? Advisory only — saving is allowed
+	 * either way (DNS may still be propagating).
+	 */
+	checkDashboardDomain: protectedProcedure
+		.input(z.object({ domain: z.string().min(1) }))
+		.query(async ({ ctx, input }) => {
+			await requireOwnerOrAdmin(ctx.session);
+			const domain = normalizeDashboardDomain(input.domain);
+			if (!domain) {
+				return {
+					domain: input.domain,
+					valid: false as const,
+					resolvedIps: [] as string[],
+					serverIp: null,
+					matches: false,
+				};
+			}
+			const [v4, v6, serverIp] = await Promise.all([
+				resolve4(domain).catch(() => [] as string[]),
+				resolve6(domain).catch(() => [] as string[]),
+				detectPublicIp(),
+			]);
+			const resolvedIps = [...v4, ...v6];
+			return {
+				domain,
+				valid: true as const,
+				resolvedIps,
+				serverIp,
+				matches: serverIp !== null && v4.includes(serverIp),
+			};
+		}),
 
 	/** Static traefik.yml contents plus the dynamic file-provider config names. */
 	getTraefikConfig: protectedProcedure.query(async ({ ctx }) => {

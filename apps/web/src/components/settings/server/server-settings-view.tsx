@@ -3,7 +3,17 @@
 import { yaml } from "@codemirror/lang-yaml";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import CodeMirror from "@uiw/react-codemirror";
-import { FileCode2, Loader2, RefreshCw, ShieldAlert, Trash2 } from "lucide-react";
+import {
+	CheckCircle2,
+	ExternalLink,
+	FileCode2,
+	Globe,
+	Loader2,
+	RefreshCw,
+	ShieldAlert,
+	Trash2,
+	XCircle,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { HostMonitoringCard } from "@/components/settings/server/host-monitoring-card";
@@ -98,6 +108,197 @@ function ConfirmActionDialog({
 	);
 }
 
+interface DnsCheckResult {
+	domain: string;
+	valid: boolean;
+	resolvedIps: string[];
+	serverIp: string | null;
+	matches: boolean;
+}
+
+/**
+ * Configure a domain for the Nixploy dashboard itself: DNS preflight,
+ * Traefik router with Let's Encrypt, and a link once live.
+ */
+function DashboardDomainCard({
+	savedDomain,
+	letsEncryptEmail,
+	isLoading,
+	onSave,
+	isSaving,
+}: {
+	savedDomain: string | null;
+	letsEncryptEmail: string | null;
+	isLoading: boolean;
+	onSave: (domain: string | null) => void;
+	isSaving: boolean;
+}) {
+	const trpc = useTRPC();
+	const queryClient = useQueryClient();
+	const [domain, setDomain] = useState("");
+	const [dnsResult, setDnsResult] = useState<DnsCheckResult | null>(null);
+	const [checking, setChecking] = useState(false);
+
+	useEffect(() => {
+		setDomain(savedDomain ?? "");
+		setDnsResult(null);
+	}, [savedDomain]);
+
+	const checkDns = async () => {
+		const value = domain.trim();
+		if (!value) return;
+		setChecking(true);
+		setDnsResult(null);
+		try {
+			const result = await queryClient.fetchQuery(
+				trpc.webServer.checkDashboardDomain.queryOptions({ domain: value }),
+			);
+			setDnsResult(result);
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "DNS check failed");
+		} finally {
+			setChecking(false);
+		}
+	};
+
+	const trimmed = domain.trim();
+	const dirty = trimmed !== (savedDomain ?? "");
+
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle className="flex items-center gap-2">
+					<Globe className="size-4" />
+					Dashboard domain
+				</CardTitle>
+				<CardDescription>
+					Serve this panel from your own domain with automatic HTTPS instead of the server IP.
+				</CardDescription>
+			</CardHeader>
+			<CardContent>
+				{isLoading ? (
+					<div className="grid max-w-md gap-4">
+						<Skeleton className="h-9 w-full" />
+						<Skeleton className="h-9 w-40" />
+					</div>
+				) : (
+					<div className="grid gap-4">
+						<ol className="grid gap-1.5 text-xs text-muted-foreground">
+							<li>
+								1. Create a DNS <span className="font-mono">A</span> record for your domain pointing
+								at this server&apos;s public IP.
+							</li>
+							<li>2. Set the Let&apos;s Encrypt email below (required for certificates).</li>
+							<li>
+								3. Save — the certificate is issued automatically on the first visit (may take a few
+								seconds).
+							</li>
+						</ol>
+						<div className="flex max-w-xl flex-wrap items-end gap-2">
+							<div className="grid min-w-64 flex-1 gap-2">
+								<Label htmlFor="dashboard-domain">Domain</Label>
+								<Input
+									id="dashboard-domain"
+									placeholder="nixploy.example.com"
+									value={domain}
+									onChange={(event) => {
+										setDomain(event.target.value);
+										setDnsResult(null);
+									}}
+								/>
+							</div>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								className="h-9"
+								onClick={checkDns}
+								disabled={checking || !trimmed}
+							>
+								{checking && <Loader2 className="size-4 animate-spin" />}
+								Check DNS
+							</Button>
+							<Button
+								type="button"
+								size="sm"
+								className="h-9"
+								disabled={isSaving || !dirty}
+								onClick={() => onSave(trimmed || null)}
+							>
+								{isSaving && <Loader2 className="size-4 animate-spin" />}
+								{trimmed ? "Save & apply" : "Remove domain"}
+							</Button>
+						</div>
+
+						{dnsResult && (
+							<div
+								className={`flex items-start gap-2 rounded-md border p-3 text-sm ${
+									dnsResult.matches
+										? "border-success/50 bg-success/10 text-success"
+										: "border-warning/50 bg-warning/10 text-warning"
+								}`}
+							>
+								{dnsResult.matches ? (
+									<CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+								) : (
+									<XCircle className="mt-0.5 size-4 shrink-0" />
+								)}
+								<div className="grid gap-0.5">
+									{!dnsResult.valid ? (
+										<p>Not a valid domain name.</p>
+									) : dnsResult.matches ? (
+										<p>
+											<span className="font-mono">{dnsResult.domain}</span> points at this server (
+											{dnsResult.serverIp}). You&apos;re good to go.
+										</p>
+									) : dnsResult.resolvedIps.length === 0 ? (
+										<p>
+											<span className="font-mono">{dnsResult.domain}</span> does not resolve yet.
+											DNS may still be propagating — you can save anyway and it will work once it
+											does.
+										</p>
+									) : (
+										<p>
+											<span className="font-mono">{dnsResult.domain}</span> resolves to{" "}
+											{dnsResult.resolvedIps.join(", ")}
+											{dnsResult.serverIp
+												? ` but this server's public IP is ${dnsResult.serverIp}`
+												: ""}
+											. Update the A record, or save anyway if you know it&apos;s right.
+										</p>
+									)}
+								</div>
+							</div>
+						)}
+
+						{savedDomain && (
+							<div className="flex items-center gap-2 text-sm">
+								<span className="text-muted-foreground">Active:</span>
+								<a
+									href={`https://${savedDomain}`}
+									target="_blank"
+									rel="noreferrer"
+									className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+								>
+									https://{savedDomain}
+									<ExternalLink className="size-3.5" />
+								</a>
+							</div>
+						)}
+
+						{trimmed && !letsEncryptEmail && (
+							<p className="text-xs text-warning">
+								Set the Let&apos;s Encrypt email below first — certificates cannot be issued without
+								it.
+							</p>
+						)}
+					</div>
+				)}
+			</CardContent>
+		</Card>
+	);
+}
+
 export function ServerSettingsView() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
@@ -131,7 +332,7 @@ export function ServerSettingsView() {
 			onSuccess: async (result) => {
 				toast.success(
 					result.traefikConfigRewritten
-						? "Settings saved — Traefik config updated, restart to apply"
+						? "Settings saved — routing updated (no restart needed)"
 						: "Settings saved",
 				);
 				await invalidate();
@@ -198,6 +399,14 @@ export function ServerSettingsView() {
 	return (
 		<div className="flex flex-col gap-6">
 			<PageHeader title="Server" description="Platform web server, TLS and maintenance settings." />
+
+			<DashboardDomainCard
+				savedDomain={settingsQuery.data?.host ?? null}
+				letsEncryptEmail={settingsQuery.data?.letsEncryptEmail ?? null}
+				isLoading={settingsQuery.isPending}
+				isSaving={updateMutation.isPending}
+				onSave={(host) => updateMutation.mutate({ host })}
+			/>
 
 			<HostMonitoringCard />
 

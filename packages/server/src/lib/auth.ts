@@ -15,6 +15,31 @@ type InvitationRow = typeof invitations.$inferSelect;
 
 const BCRYPT_ROUNDS = 10;
 
+/**
+ * Trusted origins must include the dashboard domain configured at runtime in
+ * web-server settings (Settings → Server), otherwise sign-in from that
+ * domain fails better-auth's origin check. Cached briefly — a settings save
+ * becomes effective within seconds without a restart.
+ */
+const envOrigins = process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : [];
+let originsCache: { at: number; origins: string[] } = { at: 0, origins: [] };
+const trustedOriginsWithDashboardDomain = async (): Promise<string[]> => {
+	if (Date.now() - originsCache.at > 15_000) {
+		let origins: string[] = [];
+		try {
+			const [row] = await db.select().from(schema.webServerSettings).limit(1);
+			const host = row?.host?.trim().toLowerCase();
+			if (host) {
+				origins = [`https://${host}`, `http://${host}`];
+			}
+		} catch {
+			// Table may not exist yet (first migration run) — fall back to env.
+		}
+		originsCache = { at: Date.now(), origins };
+	}
+	return [...envOrigins, ...originsCache.origins];
+};
+
 export const auth = betterAuth({
 	appName: "Nixploy",
 	baseURL: process.env.BETTER_AUTH_URL,
@@ -83,7 +108,7 @@ export const auth = betterAuth({
 			enableMetadata: true,
 		}),
 	],
-	trustedOrigins: process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : [],
+	trustedOrigins: () => trustedOriginsWithDashboardDomain(),
 	databaseHooks: {
 		user: {
 			create: {

@@ -3,6 +3,12 @@ import { webServerSettings } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { writeFileOnServer } from "./config-writer";
 import {
+	buildDefaultTlsYaml,
+	DEFAULT_TLS_CONFIG_FILE,
+	getDashboardDomain,
+	writeDashboardRouterConfig,
+} from "./dashboard";
+import {
 	getDynamicDir,
 	getTraefikDir,
 	REMOTE_TRAEFIK_DIR,
@@ -71,9 +77,9 @@ const getLetsEncryptEmail = async (): Promise<string | null> => {
 };
 
 /**
- * Self-signed default cert + catch-all dashboard router so bare-IP installs
- * get HTTPS (secure context) without Let's Encrypt. Regenerated only when
- * the cert files are missing; the YAML is always refreshed.
+ * Self-signed default cert + dashboard routing (catch-all for bare-IP HTTPS
+ * plus the configured domain, if any). The cert is generated only when
+ * missing; the YAML files are always refreshed.
  */
 const ensureDefaultTlsAndDashboard = async (serverId?: string | null): Promise<void> => {
 	const dynamicDir = serverId ? `${REMOTE_TRAEFIK_DIR}/dynamic` : getDynamicDir();
@@ -103,37 +109,11 @@ const ensureDefaultTlsAndDashboard = async (serverId?: string | null): Promise<v
 	);
 
 	await writeFileOnServer(
-		`${dynamicDir}/00-default-tls.yml`,
-		`tls:
-  stores:
-    default:
-      defaultCertificate:
-        certFile: ${TRAEFIK_DYNAMIC_CONTAINER_DIR}/default.crt
-        keyFile: ${TRAEFIK_DYNAMIC_CONTAINER_DIR}/default.key
-`,
+		`${dynamicDir}/${DEFAULT_TLS_CONFIG_FILE}`,
+		buildDefaultTlsYaml(),
 		serverId,
 	);
-
-	// Low priority catch-all so Host()-scoped app routers always win.
-	await writeFileOnServer(
-		`${dynamicDir}/00-nixploy-dashboard.yml`,
-		`http:
-  routers:
-    nixploy-dashboard:
-      rule: PathPrefix(\`/\`)
-      entryPoints:
-        - websecure
-      service: nixploy-dashboard
-      tls: {}
-      priority: 1
-  services:
-    nixploy-dashboard:
-      loadBalancer:
-        servers:
-          - url: http://nixploy:3000
-`,
-		serverId,
-	);
+	await writeDashboardRouterConfig(await getDashboardDomain(), serverId);
 };
 
 /**

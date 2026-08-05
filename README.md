@@ -64,9 +64,18 @@ On a fresh Linux server with root access:
 curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash
 ```
 
-The script is **idempotent**. It detects the OS, installs Docker if needed, initializes a single-node Swarm, creates the `nixploy-network` overlay, generates secrets under `/etc/nixploy/.env`, and starts three services: `nixploy` (the app), `nixploy-postgres` and `nixploy-traefik` (ports 80→443 with a self-signed cert for bare-IP access). When it finishes, open the printed **Setup** URL (`https://<server-ip>/setup`), accept the browser warning once, and create the owner account — public `/register` is disabled after that.
+With your own domain (recommended — real HTTPS via Let's Encrypt; point the DNS A record at the server first):
 
-Useful overrides: `NIXPLOY_VERSION`, `NIXPLOY_IMAGE`, `NIXPLOY_PORT`, `NIXPLOY_CONFIG_DIR`, `NIXPLOY_DOMAIN`, `NIXPLOY_BUILD_FROM_SOURCE=1`, `NIXPLOY_SKIP_DOCKER_INSTALL=1` (see the header of `install.sh`).
+```bash
+NIXPLOY_DOMAIN=nixploy.example.com NIXPLOY_LETSENCRYPT_EMAIL=you@example.com \
+  curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash
+```
+
+The script is **idempotent**. It detects the OS, installs Docker if needed, initializes a single-node Swarm, creates the `nixploy-network` overlay, generates secrets under `/etc/nixploy/.env`, and starts three services: `nixploy` (the app), `nixploy-postgres` and `nixploy-traefik`. All HTTP traffic redirects to HTTPS; without a domain the dashboard is served at `https://<server-ip>` with a self-signed certificate (accept the browser warning once). When it finishes, open the printed **Setup** URL and create the owner account — public `/register` is disabled after that.
+
+A domain can also be linked later from the UI: **Settings → Server → Dashboard domain** (with DNS preflight check and automatic Let's Encrypt certificates).
+
+Useful overrides: `NIXPLOY_VERSION`, `NIXPLOY_IMAGE`, `NIXPLOY_PORT`, `NIXPLOY_CONFIG_DIR`, `NIXPLOY_BUILD_FROM_SOURCE=1`, `NIXPLOY_SKIP_DOCKER_INSTALL=1` (see the header of `install.sh`).
 
 The app image is published to [`ghcr.io/bablilayoub/nixploy`](https://github.com/bablilayoub/nixploy/pkgs/container/nixploy). If the pull fails (e.g. before the first CI publish), the installer builds from source automatically.
 
