@@ -26,9 +26,10 @@ const runOn = (serverId: string | null | undefined, command: string): Promise<st
 
 /**
  * Traefik v3 static configuration. The file provider watches the dynamic
- * directory (hot-reload); ACME uses the HTTP challenge on the `web`
- * entrypoint. TLS is terminated per-router by the generated dynamic YAML,
- * never globally, so plain-HTTP domains keep working.
+ * directory (hot-reload). HTTP is redirected to HTTPS globally; ACME uses
+ * the HTTP challenge on `web` (Traefik serves challenges before redirect).
+ * TLS for bare IPs uses the self-signed defaultCertificate; app domains
+ * attach `certResolver: letsencrypt` per-router in dynamic YAML.
  */
 export const buildTraefikStaticConfig = (letsEncryptEmail?: string | null): string => {
 	const email = letsEncryptEmail?.trim() || "nixploy@localhost";
@@ -40,6 +41,12 @@ log:
 entryPoints:
   web:
     address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
   websecure:
     address: ":443"
 providers:
@@ -64,12 +71,79 @@ const getLetsEncryptEmail = async (): Promise<string | null> => {
 };
 
 /**
+ * Self-signed default cert + catch-all dashboard router so bare-IP installs
+ * get HTTPS (secure context) without Let's Encrypt. Regenerated only when
+ * the cert files are missing; the YAML is always refreshed.
+ */
+const ensureDefaultTlsAndDashboard = async (serverId?: string | null): Promise<void> => {
+	const dynamicDir = serverId ? `${REMOTE_TRAEFIK_DIR}/dynamic` : getDynamicDir();
+	const certPath = `${dynamicDir}/default.crt`;
+	const keyPath = `${dynamicDir}/default.key`;
+
+	await runOn(
+		serverId,
+		[
+			`mkdir -p ${shq(dynamicDir)}`,
+			`if [ ! -f ${shq(certPath)} ] || [ ! -f ${shq(keyPath)} ]; then`,
+			`  IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}' || true)"`,
+			`  IP="\${IP:-127.0.0.1}"`,
+			`  SAN="DNS:localhost,IP:127.0.0.1,IP:\${IP}"`,
+			`  if openssl req -x509 -newkey rsa:2048 -nodes -days 825`,
+			`      -keyout ${shq(keyPath)} -out ${shq(certPath)}`,
+			`      -subj "/CN=nixploy" -addext "subjectAltName=\${SAN}" 2>/dev/null; then`,
+			`    true`,
+			`  else`,
+			`    openssl req -x509 -newkey rsa:2048 -nodes -days 825`,
+			`      -keyout ${shq(keyPath)} -out ${shq(certPath)}`,
+			`      -subj "/CN=nixploy"`,
+			`  fi`,
+			`  chmod 600 ${shq(keyPath)} ${shq(certPath)}`,
+			`fi`,
+		].join("\n"),
+	);
+
+	await writeFileOnServer(
+		`${dynamicDir}/00-default-tls.yml`,
+		`tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: ${TRAEFIK_DYNAMIC_CONTAINER_DIR}/default.crt
+        keyFile: ${TRAEFIK_DYNAMIC_CONTAINER_DIR}/default.key
+`,
+		serverId,
+	);
+
+	// Low priority catch-all so Host()-scoped app routers always win.
+	await writeFileOnServer(
+		`${dynamicDir}/00-nixploy-dashboard.yml`,
+		`http:
+  routers:
+    nixploy-dashboard:
+      rule: PathPrefix(\`/\`)
+      entryPoints:
+        - websecure
+      service: nixploy-dashboard
+      tls: {}
+      priority: 1
+  services:
+    nixploy-dashboard:
+      loadBalancer:
+        servers:
+          - url: http://nixploy:3000
+`,
+		serverId,
+	);
+};
+
+/**
  * Idempotently ensure a working Traefik v3 reverse proxy on the Nixploy
  * host (or, with `serverId`, on a managed server over SSH):
  * 1. write the static `traefik.yml` (always refreshed — email may change);
  * 2. create the dynamic dir + a `chmod 600` acme.json;
- * 3. create the shared overlay network if missing;
- * 4. create the global `nixploy-traefik` swarm service if missing.
+ * 3. ensure self-signed default TLS + dashboard catch-all router;
+ * 4. create the shared overlay network if missing;
+ * 5. create the global `nixploy-traefik` swarm service if missing.
  *
  * Swarm itself must already be active (install.sh / cluster setupServer).
  */
@@ -89,13 +163,16 @@ export const ensureTraefikSetup = async (serverId?: string | null): Promise<void
 		`mkdir -p ${shq(dynamicDir)} && touch ${shq(acmePath)} && chmod 600 ${shq(acmePath)}`,
 	);
 
-	// 3. Shared attachable overlay network for service discovery.
+	// 3. Self-signed default cert + dashboard route (bare-IP HTTPS).
+	await ensureDefaultTlsAndDashboard(serverId);
+
+	// 4. Shared attachable overlay network for service discovery.
 	await runOn(
 		serverId,
 		`if [ -z "$(docker network ls --filter name=^${network}$ --format '{{.Name}}')" ]; then docker network create --driver overlay --attachable ${network}; fi`,
 	);
 
-	// 4. The proxy service itself — created once, then left alone. `service ls`
+	// 5. The proxy service itself — created once, then left alone. `service ls`
 	// filters names by prefix and rejects regex anchors, so the exact match is
 	// done here instead of in the filter.
 	const existing = await runOn(

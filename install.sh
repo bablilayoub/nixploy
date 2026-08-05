@@ -205,6 +205,12 @@ ensure_network() {
 # ── secrets & dirs ──────────────────────────────────────────────────────────
 random_hex() { openssl rand -hex "$1"; }
 
+detect_public_ip() {
+	local ip
+	ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}' || true)"
+	printf '%s' "${ip:-127.0.0.1}"
+}
+
 detect_public_url() {
 	if [ -n "${NIXPLOY_DOMAIN:-}" ]; then
 		case "${NIXPLOY_DOMAIN}" in
@@ -213,32 +219,56 @@ detect_public_url() {
 		esac
 		return
 	fi
-	local ip
-	ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}' || true)"
-	ip="${ip:-127.0.0.1}"
-	if [ "${NIXPLOY_PORT}" = "80" ]; then
-		printf 'http://%s' "${ip}"
-	else
-		printf 'http://%s:%s' "${ip}" "${NIXPLOY_PORT}"
-	fi
+	# Dashboard is served via Traefik on :443 with a self-signed cert.
+	printf 'https://%s' "$(detect_public_ip)"
 }
 
 write_env_file() {
 	mkdir -p "${NIXPLOY_CONFIG_DIR}"
 	chmod 700 "${NIXPLOY_CONFIG_DIR}"
 
+	local public_url
+	public_url="$(detect_public_url)"
+
 	if [ -f "${ENV_FILE}" ]; then
 		ok "Keeping existing ${ENV_FILE}"
 		# shellcheck disable=SC1090
 		set -a; . "${ENV_FILE}"; set +a
+		# Migrate first-boot http://IP:3000 installs to https://IP (Traefik).
+		if [ -z "${NIXPLOY_DOMAIN:-}" ]; then
+			local current="${BETTER_AUTH_URL:-}"
+			case "${current}" in
+				http://*|https://*:[0-9]*|"")
+					if [ "${current}" != "${public_url}" ]; then
+						info "Updating public URL → ${public_url}"
+						# Rewrite in place without depending on GNU/BSD sed -i.
+						local tmp
+						tmp="$(mktemp)"
+						awk -v url="${public_url}" '
+							BEGIN { u=0; n=0 }
+							/^BETTER_AUTH_URL=/ { print "BETTER_AUTH_URL=" url; u=1; next }
+							/^NEXT_PUBLIC_APP_URL=/ { print "NEXT_PUBLIC_APP_URL=" url; n=1; next }
+							{ print }
+							END {
+								if (!u) print "BETTER_AUTH_URL=" url
+								if (!n) print "NEXT_PUBLIC_APP_URL=" url
+							}
+						' "${ENV_FILE}" > "${tmp}"
+						mv "${tmp}" "${ENV_FILE}"
+						chmod 600 "${ENV_FILE}"
+						# shellcheck disable=SC1090
+						set -a; . "${ENV_FILE}"; set +a
+					fi
+					;;
+			esac
+		fi
 		return
 	fi
 
-	local auth_secret enc_key pg_pass public_url
+	local auth_secret enc_key pg_pass
 	auth_secret="$(random_hex 32)"
 	enc_key="$(random_hex 32)"
 	pg_pass="$(random_hex 24)"
-	public_url="$(detect_public_url)"
 
 	umask 077
 	cat > "${ENV_FILE}" <<EOF
@@ -263,6 +293,68 @@ EOF
 	set -a; . "${ENV_FILE}"; set +a
 }
 
+ensure_self_signed_tls() {
+	local cert="${NIXPLOY_CONFIG_DIR}/traefik/dynamic/default.crt"
+	local key="${NIXPLOY_CONFIG_DIR}/traefik/dynamic/default.key"
+	local ip domain_san=""
+	ip="$(detect_public_ip)"
+
+	if [ -n "${NIXPLOY_DOMAIN:-}" ]; then
+		local host="${NIXPLOY_DOMAIN}"
+		host="${host#http://}"
+		host="${host#https://}"
+		host="${host%%/*}"
+		host="${host%%:*}"
+		if [ -n "${host}" ]; then
+			domain_san=",DNS:${host}"
+		fi
+	fi
+
+	if [ -f "${cert}" ] && [ -f "${key}" ]; then
+		ok "Keeping existing self-signed TLS cert"
+	else
+		info "Generating self-signed TLS cert for ${ip} (browser will warn once)"
+		if ! openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
+			-keyout "${key}" -out "${cert}" \
+			-subj "/CN=nixploy" \
+			-addext "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:${ip}${domain_san}" 2>/dev/null; then
+			# OpenSSL without -addext (older distros)
+			openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
+				-keyout "${key}" -out "${cert}" \
+				-subj "/CN=${ip}"
+		fi
+		chmod 600 "${key}" "${cert}"
+		ok "Wrote ${cert}"
+	fi
+
+	cat > "${NIXPLOY_CONFIG_DIR}/traefik/dynamic/00-default-tls.yml" <<EOF
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/nixploy/traefik/dynamic/default.crt
+        keyFile: /etc/nixploy/traefik/dynamic/default.key
+EOF
+
+	cat > "${NIXPLOY_CONFIG_DIR}/traefik/dynamic/00-nixploy-dashboard.yml" <<'EOF'
+http:
+  routers:
+    nixploy-dashboard:
+      rule: PathPrefix(`/`)
+      entryPoints:
+        - websecure
+      service: nixploy-dashboard
+      tls: {}
+      priority: 1
+  services:
+    nixploy-dashboard:
+      loadBalancer:
+        servers:
+          - url: http://nixploy:3000
+EOF
+	ok "Traefik dashboard router + default TLS"
+}
+
 ensure_directories() {
 	mkdir -p \
 		"${NIXPLOY_CONFIG_DIR}/traefik/dynamic" \
@@ -270,47 +362,49 @@ ensure_directories() {
 		"${NIXPLOY_CONFIG_DIR}/compose" \
 		"${NIXPLOY_CONFIG_DIR}/logs"
 
-	if [ ! -f "${NIXPLOY_CONFIG_DIR}/traefik/traefik.yml" ]; then
-		local url="https://raw.githubusercontent.com/${NIXPLOY_REPO}/${NIXPLOY_BRANCH}/docker/traefik/traefik.yml"
-		if curl -fsSL "${url}" -o "${NIXPLOY_CONFIG_DIR}/traefik/traefik.yml"; then
-			ok "Fetched traefik.yml"
-		else
-			warn "Could not fetch traefik.yml — writing embedded fallback"
-			cat > "${NIXPLOY_CONFIG_DIR}/traefik/traefik.yml" <<'YAML'
+	# Always refresh static config so HTTP→HTTPS redirect stays in sync.
+	local url="https://raw.githubusercontent.com/${NIXPLOY_REPO}/${NIXPLOY_BRANCH}/docker/traefik/traefik.yml"
+	if curl -fsSL "${url}" -o "${NIXPLOY_CONFIG_DIR}/traefik/traefik.yml"; then
+		ok "Fetched traefik.yml"
+	else
+		warn "Could not fetch traefik.yml — writing embedded fallback"
+		cat > "${NIXPLOY_CONFIG_DIR}/traefik/traefik.yml" <<'YAML'
 global:
   checkNewVersion: false
   sendAnonymousUsage: false
 entryPoints:
   web:
     address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
   websecure:
     address: ":443"
-    http:
-      tls:
-        certResolver: letsencrypt
 providers:
   file:
-    directory: /etc/traefik/dynamic
+    directory: /etc/nixploy/traefik/dynamic
     watch: true
 certificatesResolvers:
   letsencrypt:
     acme:
       email: nixploy@localhost
-      storage: /etc/traefik/dynamic/acme.json
+      storage: /etc/nixploy/traefik/acme.json
       httpChallenge:
         entryPoint: web
 api:
-  insecure: false
+  dashboard: false
 YAML
-		fi
-	else
-		ok "Keeping existing traefik.yml"
 	fi
 
-	if [ ! -f "${NIXPLOY_CONFIG_DIR}/traefik/dynamic/acme.json" ]; then
-		touch "${NIXPLOY_CONFIG_DIR}/traefik/dynamic/acme.json"
+	if [ ! -f "${NIXPLOY_CONFIG_DIR}/traefik/acme.json" ]; then
+		touch "${NIXPLOY_CONFIG_DIR}/traefik/acme.json"
 	fi
-	chmod 600 "${NIXPLOY_CONFIG_DIR}/traefik/dynamic/acme.json"
+	chmod 600 "${NIXPLOY_CONFIG_DIR}/traefik/acme.json"
+
+	ensure_self_signed_tls
 	ok "Config dirs under ${NIXPLOY_CONFIG_DIR}"
 }
 
@@ -393,21 +487,36 @@ wait_for_postgres() {
 }
 
 create_traefik() {
+	local need_create=1
 	if docker service inspect nixploy-traefik >/dev/null 2>&1; then
-		ok "Service nixploy-traefik (existing)"
-		return
+		local mounts
+		mounts="$(docker service inspect nixploy-traefik --format '{{range .Spec.TaskTemplate.ContainerSpec.Mounts}}{{.Target}} {{end}}' 2>/dev/null || true)"
+		case " ${mounts} " in
+			*" /etc/nixploy/traefik/dynamic "*)
+				ok "Service nixploy-traefik (existing)"
+				need_create=0
+				;;
+			*)
+				warn "Recreating nixploy-traefik with correct bind mounts"
+				docker service rm nixploy-traefik >/dev/null
+				sleep 2
+				;;
+		esac
 	fi
-	docker service create \
-		--name nixploy-traefik \
-		--network "${NETWORK_NAME}" \
-		--mode global \
-		--constraint 'node.role == manager' \
-		--publish mode=host,target=80,published=80 \
-		--publish mode=host,target=443,published=443 \
-		--mount type=bind,source="${NIXPLOY_CONFIG_DIR}/traefik/traefik.yml",target=/etc/traefik/traefik.yml,readonly \
-		--mount type=bind,source="${NIXPLOY_CONFIG_DIR}/traefik/dynamic",target=/etc/traefik/dynamic \
-		"${TRAEFIK_IMAGE}" >/dev/null
-	ok "Created nixploy-traefik (80/443)"
+	if [ "${need_create}" -eq 1 ]; then
+		docker service create \
+			--name nixploy-traefik \
+			--network "${NETWORK_NAME}" \
+			--mode global \
+			--constraint 'node.role == manager' \
+			--publish mode=host,target=80,published=80 \
+			--publish mode=host,target=443,published=443 \
+			--mount type=bind,source="${NIXPLOY_CONFIG_DIR}/traefik/traefik.yml",target=/etc/traefik/traefik.yml,readonly \
+			--mount type=bind,source="${NIXPLOY_CONFIG_DIR}/traefik/dynamic",target=/etc/nixploy/traefik/dynamic \
+			--mount type=bind,source="${NIXPLOY_CONFIG_DIR}/traefik/acme.json",target=/etc/nixploy/traefik/acme.json \
+			"${TRAEFIK_IMAGE}" >/dev/null
+		ok "Created nixploy-traefik (80/443, HTTPS redirect)"
+	fi
 }
 
 create_app() {
@@ -434,6 +543,8 @@ create_app() {
 		return
 	fi
 
+	# Port 3000 stays published for local health checks / emergency access.
+	# Public traffic should use https://<ip> via Traefik (:443).
 	docker service create \
 		--name nixploy \
 		--network "${NETWORK_NAME}" \
@@ -445,20 +556,21 @@ create_app() {
 		--mount type=bind,source="${NIXPLOY_CONFIG_DIR}",target=/etc/nixploy \
 		--update-order start-first \
 		"${APP_IMAGE}" >/dev/null
-	ok "Created nixploy (port ${NIXPLOY_PORT})"
+	ok "Created nixploy (port ${NIXPLOY_PORT}; public URL via :443)"
 }
 
 wait_for_app() {
-	info "Waiting for dashboard on :${NIXPLOY_PORT}…"
-	local i code
+	info "Waiting for dashboard…"
+	local i code url
+	url="${BETTER_AUTH_URL:-$(detect_public_url)}"
 	for i in $(seq 1 90); do
+		code="$(curl -sk -o /dev/null -w '%{http_code}' "${url}/setup" 2>/dev/null || true)"
+		case "${code}" in
+			200|302|307|308) ok "Dashboard responding on ${url} (HTTP ${code})"; return ;;
+		esac
 		code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${NIXPLOY_PORT}/setup" 2>/dev/null || true)"
 		case "${code}" in
-			200|302|307|308) ok "Dashboard responding (HTTP ${code})"; return ;;
-		esac
-		code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${NIXPLOY_PORT}/login" 2>/dev/null || true)"
-		case "${code}" in
-			200|302|307|308) ok "Dashboard responding (HTTP ${code})"; return ;;
+			200|302|307|308) ok "Dashboard up on :${NIXPLOY_PORT} (Traefik may still be settling)"; return ;;
 		esac
 		sleep 2
 	done
@@ -477,6 +589,9 @@ print_summary() {
 	printf '  %sDashboard:%s            %s\n' "${C_BOLD}" "${C_RESET}" "${url}"
 	printf '  %sConfig:%s               %s\n' "${C_BOLD}" "${C_RESET}" "${NIXPLOY_CONFIG_DIR}"
 	printf '  %sSecrets:%s              %s\n' "${C_BOLD}" "${C_RESET}" "${ENV_FILE}"
+	printf '\n'
+	printf '  %sHTTP (:80) redirects to HTTPS. The cert is self-signed —%s\n' "${C_DIM}" "${C_RESET}"
+	printf '  %saccept the browser warning once (or set NIXPLOY_DOMAIN + LE).%s\n' "${C_DIM}" "${C_RESET}"
 	printf '\n'
 	printf '  %sPublic registration is disabled after you create the owner.%s\n' "${C_DIM}" "${C_RESET}"
 	printf '  Invite teammates later from Settings → Organization.\n'

@@ -1,9 +1,11 @@
 # Nixploy — Traefik v3 static configuration (template).
 # install.sh copies this to /etc/nixploy/traefik/traefik.yml on the host.
+# ensureTraefikSetup() also regenerates it on app boot.
 #
 # Routing config is NOT stored here: Nixploy writes per-app dynamic YAML
 # into /etc/nixploy/traefik/dynamic/, which the file provider watches and
-# hot-reloads.
+# hot-reloads. A self-signed default certificate (00-default-tls.yml) covers
+# bare-IP / first-boot HTTPS; app domains use Let's Encrypt per-router.
 
 global:
   checkNewVersion: false
@@ -22,7 +24,8 @@ ping: {}
 entryPoints:
   web:
     address: ":80"
-    # Redirect all plain HTTP to HTTPS. Remove this block to serve HTTP directly.
+    # Force HTTPS. ACME HTTP-01 still works — Traefik serves the challenge
+    # on this entrypoint before applying the redirect.
     http:
       redirections:
         entryPoint:
@@ -31,13 +34,11 @@ entryPoints:
           permanent: true
   websecure:
     address: ":443"
-    http:
-      tls:
-        certResolver: letsencrypt
+    # No entrypoint-level certResolver: bare IPs cannot use Let's Encrypt.
+    # Routers opt into `certResolver: letsencrypt` or fall back to the
+    # defaultCertificate from 00-default-tls.yml.
 
 providers:
-  # Docker provider intentionally disabled: user apps are routed exclusively
-  # through Nixploy-generated dynamic config files.
   docker:
     exposedByDefault: false
   file:
