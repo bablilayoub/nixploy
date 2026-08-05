@@ -569,20 +569,40 @@ create_app() {
 
 wait_for_app() {
 	info "Waiting for dashboard…"
+	info "Public URL is https://<ip>/ (port 443) — not :3000"
 	local i code url
 	url="${BETTER_AUTH_URL:-$(detect_public_url)}"
 	for i in $(seq 1 90); do
-		code="$(curl -sk -o /dev/null -w '%{http_code}' "${url}/setup" 2>/dev/null || true)"
+		# Direct to the app (plain HTTP on the published port).
+		code="$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 \
+			"http://127.0.0.1:${NIXPLOY_PORT}/setup" 2>/dev/null || true)"
 		case "${code}" in
-			200|302|307|308) ok "Dashboard responding on ${url} (HTTP ${code})"; return ;;
+			200|302|307|308)
+				ok "App listening on :${NIXPLOY_PORT} (HTTP ${code})"
+				# Prefer confirming Traefik too, but don't fail the install on it.
+				local tcode
+				tcode="$(curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 2 \
+					"${url}/setup" 2>/dev/null || true)"
+				case "${tcode}" in
+					200|302|307|308) ok "Traefik HTTPS ready at ${url}" ;;
+					*) warn "App is up; Traefik returned HTTP ${tcode:-000} for ${url}/setup — try again in a few seconds" ;;
+				esac
+				return
+				;;
 		esac
-		code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${NIXPLOY_PORT}/setup" 2>/dev/null || true)"
-		case "${code}" in
-			200|302|307|308) ok "Dashboard up on :${NIXPLOY_PORT} (Traefik may still be settling)"; return ;;
-		esac
+		if [ $((i % 15)) -eq 0 ]; then
+			info "Still waiting… (attempt ${i}/90) — service state:"
+			docker service ps nixploy --no-trunc 2>/dev/null | head -n 5 || true
+		fi
 		sleep 2
 	done
-	warn "App not healthy yet — check: docker service logs -f nixploy"
+	warn "App not healthy after ~3 minutes"
+	warn "Recent tasks:"
+	docker service ps nixploy --no-trunc 2>/dev/null | head -n 8 || true
+	warn "Last logs:"
+	docker service logs --tail 80 nixploy 2>/dev/null || true
+	warn "Debug: docker service logs -f nixploy"
+	warn "Open ${url}/setup (HTTPS on :443). http://${NIXPLOY_PORT} is emergency-only."
 }
 
 print_summary() {

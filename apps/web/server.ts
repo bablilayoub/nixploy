@@ -113,10 +113,13 @@ async function initTraefik() {
 }
 
 const dev = process.env.NODE_ENV !== "production";
-const hostname = process.env.HOSTNAME ?? "0.0.0.0";
+// Never use process.env.HOSTNAME — Docker/Swarm sets it to the container id,
+// which makes server.listen() bind to a single overlay IP. Host-published
+// ports then refuse connections (ERR_CONNECTION_REFUSED on :3000).
+const listenHost = process.env.LISTEN_HOST ?? "0.0.0.0";
 const port = Number.parseInt(process.env.PORT ?? "3000", 10);
 
-const app = next({ dev, hostname, port });
+const app = next({ dev, hostname: listenHost, port });
 const handle = app.getRequestHandler();
 
 async function main() {
@@ -133,8 +136,8 @@ async function main() {
 	await initBackgroundSchedules();
 	await initTraefik();
 
-	server.listen(port, hostname, () => {
-		console.log(`▲ Nixploy ready on http://${hostname}:${port}`);
+	server.listen(port, listenHost, () => {
+		console.log(`▲ Nixploy ready on http://${listenHost}:${port}`);
 	});
 }
 
