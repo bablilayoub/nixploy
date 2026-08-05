@@ -64,7 +64,7 @@ On a fresh Linux server with root access:
 curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash
 ```
 
-The script is **idempotent**. It detects the OS, installs Docker if needed, initializes a single-node Swarm, creates the `nixploy-network` overlay, generates secrets under `/etc/nixploy/.env`, and starts three services: `nixploy` (the app), `nixploy-postgres` and `nixploy-traefik` (ports 80/443). When it finishes, open the printed **Setup** URL and create the owner account — public `/register` is disabled after that.
+The script is **idempotent**. It detects the OS, installs Docker if needed, initializes a single-node Swarm, creates the `nixploy-network` overlay, generates secrets under `/etc/nixploy/.env`, and starts three services: `nixploy` (the app), `nixploy-postgres` and `nixploy-traefik` (ports 80→443 with a self-signed cert for bare-IP access). When it finishes, open the printed **Setup** URL (`https://<server-ip>/setup`), accept the browser warning once, and create the owner account — public `/register` is disabled after that.
 
 Useful overrides: `NIXPLOY_VERSION`, `NIXPLOY_IMAGE`, `NIXPLOY_PORT`, `NIXPLOY_CONFIG_DIR`, `NIXPLOY_DOMAIN`, `NIXPLOY_BUILD_FROM_SOURCE=1`, `NIXPLOY_SKIP_DOCKER_INSTALL=1` (see the header of `install.sh`).
 
