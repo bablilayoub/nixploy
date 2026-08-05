@@ -61,10 +61,8 @@ cluster-wide on managers — remotes do not run an isolated swarm.
 On a fresh Linux server with root access:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nixploy/nixploy/canary/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash
 ```
-
-> The repository URL is a placeholder — replace `nixploy/nixploy` with the real repo location once published.
 
 The script is **idempotent**. It detects the OS, installs Docker if needed, initializes a single-node Swarm, creates the `nixploy-network` overlay, generates secrets under `/etc/nixploy/.env`, and starts three services: `nixploy` (the app), `nixploy-postgres` and `nixploy-traefik` (ports 80/443). When it finishes, open the printed **Setup** URL and create the owner account — public `/register` is disabled after that.
 

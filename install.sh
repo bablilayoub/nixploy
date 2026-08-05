@@ -2,7 +2,7 @@
 #
 # Nixploy installer — one script to provision a self-hosted instance.
 #
-#   curl -fsSL https://raw.githubusercontent.com/nixploy/nixploy/canary/install.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash
 #
 # Idempotent. Detects OS, installs Docker if missing, initializes Swarm,
 # writes secrets, starts postgres + traefik + nixploy, waits until healthy,
@@ -16,8 +16,8 @@
 #   POSTGRES_VERSION             Postgres image tag            (default: 17-alpine)
 #   TRAEFIK_VERSION              Traefik image tag             (default: v3.5.0)
 #   NIXPLOY_SKIP_DOCKER_INSTALL  Set to 1 to skip Docker install
-#   NIXPLOY_REPO                 GitHub org/repo for assets    (default: nixploy/nixploy)
-#   NIXPLOY_BRANCH               Branch for raw assets         (default: canary)
+#   NIXPLOY_REPO                 GitHub org/repo for assets    (default: bablilayoub/nixploy)
+#   NIXPLOY_BRANCH               Branch for raw assets         (default: main)
 #
 set -euo pipefail
 
@@ -27,11 +27,11 @@ NIXPLOY_PORT="${NIXPLOY_PORT:-3000}"
 NIXPLOY_CONFIG_DIR="${NIXPLOY_CONFIG_DIR:-/etc/nixploy}"
 POSTGRES_VERSION="${POSTGRES_VERSION:-17-alpine}"
 TRAEFIK_VERSION="${TRAEFIK_VERSION:-v3.5.0}"
-NIXPLOY_REPO="${NIXPLOY_REPO:-nixploy/nixploy}"
-NIXPLOY_BRANCH="${NIXPLOY_BRANCH:-canary}"
+NIXPLOY_REPO="${NIXPLOY_REPO:-bablilayoub/nixploy}"
+NIXPLOY_BRANCH="${NIXPLOY_BRANCH:-main}"
 
 NETWORK_NAME="nixploy-network"
-APP_IMAGE="nixploy/nixploy:${NIXPLOY_VERSION}"
+APP_IMAGE="bablilayoub/nixploy:${NIXPLOY_VERSION}"
 POSTGRES_IMAGE="postgres:${POSTGRES_VERSION}"
 TRAEFIK_IMAGE="traefik:${TRAEFIK_VERSION}"
 ENV_FILE="${NIXPLOY_CONFIG_DIR}/.env"

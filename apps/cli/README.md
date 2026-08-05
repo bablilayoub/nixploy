@@ -1,6 +1,6 @@
 # @nixploy/cli
 
-Command-line interface for [Nixploy](https://github.com/nixploy/nixploy) — a self-hosted PaaS (Dokploy replica). Manage projects, applications, databases and environment variables against any Nixploy server over its REST API.
+Command-line interface for [Nixploy](https://github.com/bablilayoub/nixploy) — a self-hosted PaaS (Dokploy replica). Manage projects, applications, databases and environment variables against any Nixploy server over its REST API.
 
 ## Install
 
