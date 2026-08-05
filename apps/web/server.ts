@@ -55,6 +55,15 @@ async function initBackgroundSchedules() {
 				initDeploymentMaintenance();
 			},
 		],
+		[
+			"update checker",
+			async () => {
+				const { initUpdateChecker } = await import(
+					"../../packages/server/src/modules/updates/scheduler"
+				);
+				await initUpdateChecker();
+			},
+		],
 	];
 	for (const [label, start] of jobs) {
 		try {

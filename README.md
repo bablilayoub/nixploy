@@ -28,7 +28,8 @@ A free, self-hostable Platform as a Service (PaaS) that simplifies the deploymen
 - **Observability** — colorized logs with level badges, text/level filtering and download; 48h metrics history with range picker; a status reconciler that keeps service status truthful against real container state.
 - **API, CLI & Swagger** — every tRPC procedure is also exposed as a REST endpoint authenticated with `x-api-key`, documented at `/swagger`, and drivable from the `@nixploy/cli`.
 - **Templates** — one-click gallery of 86 compose-based templates in 16 categories for popular open-source tools.
-- **Web server settings** — manage Traefik, Let's Encrypt email and scheduled Docker cleanup from the UI.
+- **Web server settings** — manage Traefik, Let's Encrypt email, dashboard domain and scheduled Docker cleanup from the UI.
+- **In-app updates** — Settings → Server checks GHCR for a newer image, with optional automatic checks and auto-update.
 
 ## Architecture
 

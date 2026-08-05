@@ -17,6 +17,7 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { HostMonitoringCard } from "@/components/settings/server/host-monitoring-card";
+import { UpdatesCard } from "@/components/settings/server/updates-card";
 import { PageHeader } from "@/components/shell";
 import {
 	AlertDialog,
@@ -409,6 +410,8 @@ export function ServerSettingsView() {
 			/>
 
 			<HostMonitoringCard />
+
+			<UpdatesCard />
 
 			<Card>
 				<CardHeader>

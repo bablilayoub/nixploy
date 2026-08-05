@@ -38,6 +38,9 @@ ENV LISTEN_HOST=0.0.0.0
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NIXPLOY_MIGRATIONS_DIR=/app/packages/server/drizzle
 ENV NIXPLOY_DISABLE_TRAEFIK_BOOT=1
+# Surfaced in Settings → Updates. Overridden at build with --build-arg when needed.
+ARG NIXPLOY_APP_VERSION=0.1.0
+ENV NIXPLOY_APP_VERSION=$NIXPLOY_APP_VERSION
 
 # Docker CLI talks to the host socket (Swarm, builds, logs).
 # git/openssh used when cloning app sources during deploys.
