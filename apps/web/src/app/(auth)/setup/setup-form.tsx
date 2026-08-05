@@ -65,7 +65,13 @@ export function SetupForm() {
 				return;
 			}
 
-			const slug = `personal-${crypto.randomUUID().slice(0, 8)}`;
+			// crypto.randomUUID is missing on non-secure HTTP (common for first
+			// install via http://server-ip:3000). Fall back for the org slug.
+			const suffix =
+				typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+					? crypto.randomUUID().slice(0, 8)
+					: Math.random().toString(36).slice(2, 10);
+			const slug = `personal-${suffix}`;
 			const orgRes = await fetch("/api/auth/organization/create", {
 				method: "POST",
 				headers: { "Content-Type": "application/json", Origin: window.location.origin },
