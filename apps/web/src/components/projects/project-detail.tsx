@@ -18,6 +18,7 @@ import { CreateEnvironmentDialog } from "./create-environment-dialog";
 import { DeploymentsTab } from "./deployments-tab";
 import { EnvironmentActions } from "./environment-actions";
 import { EnvironmentVariablesTab } from "./environment-variables-tab";
+import { GitopsCard } from "./gitops-card";
 import { ProjectActions } from "./project-actions";
 import { DATABASE_TYPES, type DatabaseType } from "./service-types";
 import { type ServiceEntry, ServicesTable } from "./services-table";
@@ -274,6 +275,10 @@ export function ProjectDetail({
 			<div className="border-b">
 				<UnderlineTabs items={PROJECT_TABS} value={tab} onChange={selectTab} />
 			</div>
+
+			{tab !== "deployments" && activeEnvironment && (
+				<GitopsCard projectId={projectId} environmentName={activeEnvironmentName} />
+			)}
 
 			{tab !== "deployments" && (
 				<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

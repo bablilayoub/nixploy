@@ -82,6 +82,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 	const [publishDirectory, setPublishDirectory] = useState(application.publishDirectory ?? "");
 	const [isStaticSpa, setIsStaticSpa] = useState(application.isStaticSpa ?? false);
 	const [buildArgs, setBuildArgs] = useState(application.buildArgs ?? "");
+	const [useBuildCache, setUseBuildCache] = useState(application.useBuildCache ?? true);
 
 	useEffect(() => {
 		setBuildType(application.buildType);
@@ -91,6 +92,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 		setPublishDirectory(application.publishDirectory ?? "");
 		setIsStaticSpa(application.isStaticSpa ?? false);
 		setBuildArgs(application.buildArgs ?? "");
+		setUseBuildCache(application.useBuildCache ?? true);
 	}, [application]);
 
 	const invalidate = () =>
@@ -121,6 +123,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 				dockerBuildStage: buildType === "dockerfile" ? dockerBuildStage || null : null,
 				publishDirectory: buildType === "static" ? publishDirectory || null : null,
 				isStaticSpa: buildType === "static" ? isStaticSpa : null,
+				useBuildCache,
 			});
 			if ((application.buildArgs ?? "") !== buildArgs) {
 				await update.mutateAsync({ applicationId, buildArgs: buildArgs || null });
@@ -221,19 +224,35 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 				)}
 
 				{(buildType === "nixpacks" || buildType === "railpack" || buildType === "dockerfile") && (
-					<div className="flex flex-col gap-2">
-						<Label htmlFor="build-args">Build Args</Label>
-						<Textarea
-							id="build-args"
-							placeholder={"NODE_ENV=production\nSOME_FLAG=1"}
-							className="min-h-24 font-mono text-sm"
-							value={buildArgs}
-							onChange={(e) => setBuildArgs(e.target.value)}
-						/>
-						<p className="text-xs text-muted-foreground">
-							One KEY=value pair per line, passed to the builder at build time.
-						</p>
-					</div>
+					<>
+						<div className="flex items-center justify-between rounded-md border p-3">
+							<div className="flex flex-col gap-1">
+								<Label htmlFor="use-build-cache">Use build cache</Label>
+								<p className="text-xs text-muted-foreground">
+									Reuse BuildKit layers between deploys (faster rebuilds). Turn off for a clean
+									build.
+								</p>
+							</div>
+							<Switch
+								id="use-build-cache"
+								checked={useBuildCache}
+								onCheckedChange={setUseBuildCache}
+							/>
+						</div>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="build-args">Build Args</Label>
+							<Textarea
+								id="build-args"
+								placeholder={"NODE_ENV=production\nSOME_FLAG=1"}
+								className="min-h-24 font-mono text-sm"
+								value={buildArgs}
+								onChange={(e) => setBuildArgs(e.target.value)}
+							/>
+							<p className="text-xs text-muted-foreground">
+								One KEY=value pair per line, passed to the builder at build time.
+							</p>
+						</div>
+					</>
 				)}
 
 				<div className="flex justify-end">

@@ -156,7 +156,7 @@ export const webServerRouter = router({
 			if (input.host?.trim() && !host) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
-					message: "Enter a valid domain, e.g. nixploy.example.com",
+					message: "Enter a valid domain, e.g. panel.nixploy.com",
 				});
 			}
 		}

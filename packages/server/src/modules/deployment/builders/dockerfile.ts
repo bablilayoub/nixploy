@@ -1,6 +1,7 @@
 import { normalize } from "node:path";
 import { parseEnv } from "../env";
 import { shellQuote } from "../paths";
+import { prepareBuildCache } from "./cache";
 import type { BuildInput } from "./index";
 
 /** Resolve a user-supplied relative path, keeping it inside the build dir. */
@@ -20,6 +21,7 @@ export const resolveInside = (base: string, relative: string): string => {
  * relative to the build dir, default `Dockerfile`), `dockerContextPath`
  * (build context, relative to the build dir), `dockerBuildStage`
  * (`--target`) and `buildArgs` (`KEY=VALUE` lines → `--build-arg`).
+ * Uses BuildKit local cache when `useBuildCache` is true.
  */
 export async function buildWithDockerfile(input: BuildInput, imageTag: string): Promise<void> {
 	const { ctx, application, buildDir } = input;
@@ -39,7 +41,10 @@ export async function buildWithDockerfile(input: BuildInput, imageTag: string): 
 		? ` --target ${shellQuote(application.dockerBuildStage)}`
 		: "";
 
+	const cache = prepareBuildCache(input);
+	const cacheFlags = cache.buildxCacheFlags ? ` ${cache.buildxCacheFlags}` : "";
+
 	await ctx.run(
-		`docker build -f ${shellQuote(dockerfilePath)} -t ${shellQuote(imageTag)}${target} ${buildArgs} ${shellQuote(contextPath)}`,
+		`docker buildx build --load -f ${shellQuote(dockerfilePath)} -t ${shellQuote(imageTag)}${target} ${buildArgs}${cacheFlags} ${shellQuote(contextPath)}`,
 	);
 }

@@ -11,7 +11,7 @@ export function authCommand(): Command {
 		.description("Store an API key for a Nixploy server")
 		.requiredOption(
 			"--url <url>",
-			"Base URL of the Nixploy server (e.g. https://nixploy.example.com)",
+			"Base URL of the Nixploy server (e.g. https://panel.nixploy.com)",
 		)
 		.requiredOption("--api-key <key>", "API key generated in Settings → Profile")
 		.action(async (options: { url: string; apiKey: string }) => {

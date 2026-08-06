@@ -1,6 +1,10 @@
 # Nixploy
 
-A free, self-hostable Platform as a Service (PaaS) that simplifies the deployment and management of applications and databases — a faithful functional replica of [Dokploy](https://github.com/dokploy/dokploy).
+A free, self-hostable Platform as a Service (PaaS) that simplifies the deployment and management of applications and databases.
+
+**Website:** [nixploy.com](https://nixploy.com) · **GitHub:** [bablilayoub/nixploy](https://github.com/bablilayoub/nixploy)
+
+Inspired by Dokploy and Coolify — built to be better.
 
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D22-green)
@@ -68,7 +72,7 @@ curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh
 With your own domain (recommended — real HTTPS via Let's Encrypt; point the DNS A record at the server first):
 
 ```bash
-NIXPLOY_DOMAIN=nixploy.example.com NIXPLOY_LETSENCRYPT_EMAIL=you@example.com \
+NIXPLOY_DOMAIN=panel.nixploy.com NIXPLOY_LETSENCRYPT_EMAIL=you@nixploy.com \
   curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash
 ```
 

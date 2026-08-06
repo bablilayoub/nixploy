@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AiSettingsCard } from "@/components/settings/server/ai-settings-card";
 import { HostMonitoringCard } from "@/components/settings/server/host-monitoring-card";
 import { UpdatesCard } from "@/components/settings/server/updates-card";
 import { PageHeader } from "@/components/shell";
@@ -200,7 +201,7 @@ function DashboardDomainCard({
 								<Label htmlFor="dashboard-domain">Domain</Label>
 								<Input
 									id="dashboard-domain"
-									placeholder="nixploy.example.com"
+									placeholder="panel.nixploy.com"
 									value={domain}
 									onChange={(event) => {
 										setDomain(event.target.value);
@@ -410,7 +411,7 @@ export function ServerSettingsView() {
 			/>
 
 			<HostMonitoringCard />
-
+			<AiSettingsCard />
 			<UpdatesCard />
 
 			<Card>

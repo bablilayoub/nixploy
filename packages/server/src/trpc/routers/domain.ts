@@ -103,6 +103,57 @@ const rethrowUniqueViolation = (error: unknown): never => {
 };
 
 export const domainRouter = router({
+	/** Domains for an application, compose, or (when neither set) a project. */
+	all: protectedProcedure
+		.input(
+			z.object({
+				applicationId: z.string().min(1).optional(),
+				composeId: z.string().min(1).optional(),
+				projectId: z.string().min(1).optional(),
+			}),
+		)
+		.query(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			if (input.applicationId) {
+				await assertApplicationAccess(input.applicationId, organizationId);
+				return db.query.domains.findMany({
+					where: eq(domains.applicationId, input.applicationId),
+					orderBy: desc(domains.createdAt),
+				});
+			}
+			if (input.composeId) {
+				await assertComposeAccess(input.composeId, organizationId);
+				return db.query.domains.findMany({
+					where: eq(domains.composeId, input.composeId),
+					orderBy: desc(domains.createdAt),
+				});
+			}
+			if (input.projectId) {
+				const rows = await db.query.domains.findMany({
+					with: {
+						application: { with: { environment: { with: { project: true } } } },
+						compose: { with: { environment: { with: { project: true } } } },
+					},
+					orderBy: desc(domains.createdAt),
+				});
+				return rows
+					.filter((row) => {
+						const projectId =
+							row.application?.environment.project.projectId ??
+							row.compose?.environment.project.projectId;
+						const orgId =
+							row.application?.environment.project.organizationId ??
+							row.compose?.environment.project.organizationId;
+						return projectId === input.projectId && orgId === organizationId;
+					})
+					.map(({ application: _a, compose: _c, ...row }) => row);
+			}
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: "Provide applicationId, composeId, or projectId",
+			});
+		}),
+
 	/** Domains of one application. */
 	byApplication: protectedProcedure
 		.input(z.object({ applicationId: z.string().min(1) }))

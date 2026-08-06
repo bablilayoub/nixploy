@@ -5,6 +5,7 @@ import { Loader2, Play, RefreshCw, Rocket, Square } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
+import { CopilotChatDrawer } from "@/components/application/copilot-chat-drawer";
 import { PageHeader, StatusDot, type StatusDotStatus } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { useTRPC } from "@/lib/trpc";
@@ -109,6 +110,7 @@ export function ApplicationHeader({
 			}
 			actions={
 				<>
+					<CopilotChatDrawer applicationId={applicationId} applicationName={application.name} />
 					<Button onClick={() => deploy.mutate({ applicationId })} disabled={isBusy}>
 						{deploy.isPending ? (
 							<Loader2 className="size-4 animate-spin" />

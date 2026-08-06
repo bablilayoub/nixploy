@@ -1,6 +1,7 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Palette } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -9,11 +10,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { useTRPC } from "@/lib/trpc";
 
 export function OrganizationCard() {
+	const trpc = useTRPC();
+	const queryClient = useQueryClient();
 	const { data: activeOrganization, isPending: isOrgPending } = authClient.useActiveOrganization();
+	const settingsQuery = useQuery(trpc.organization.settings.queryOptions());
+
 	const [name, setName] = useState("");
-	const [isPending, setIsPending] = useState(false);
+	const [displayName, setDisplayName] = useState("");
+	const [logoUrl, setLogoUrl] = useState("");
+	const [accentColor, setAccentColor] = useState("#1c1917");
+	const [isNamePending, setIsNamePending] = useState(false);
 
 	useEffect(() => {
 		if (activeOrganization?.name) {
@@ -21,20 +30,51 @@ export function OrganizationCard() {
 		}
 	}, [activeOrganization?.name]);
 
-	async function onSubmit(event: React.FormEvent) {
+	useEffect(() => {
+		if (!settingsQuery.data) return;
+		setDisplayName(settingsQuery.data.branding.displayName ?? "");
+		setLogoUrl(settingsQuery.data.logo ?? "");
+		setAccentColor(settingsQuery.data.branding.accentColor ?? "#1c1917");
+	}, [settingsQuery.data]);
+
+	const saveBranding = useMutation({
+		...trpc.organization.updateSettings.mutationOptions(),
+		onSuccess: async () => {
+			toast.success("Branding updated");
+			await queryClient.invalidateQueries({ queryKey: trpc.organization.settings.queryKey() });
+		},
+		onError: (error) => toast.error(error.message),
+	});
+
+	async function onNameSubmit(event: React.FormEvent) {
 		event.preventDefault();
 		if (!activeOrganization) return;
-		setIsPending(true);
+		setIsNamePending(true);
 		const { error } = await authClient.organization.update({
 			organizationId: activeOrganization.id,
 			data: { name },
 		});
-		setIsPending(false);
+		setIsNamePending(false);
 		if (error) {
 			toast.error(error.message ?? "Failed to update organization");
 			return;
 		}
 		toast.success("Organization updated");
+	}
+
+	function onBrandingSubmit(event: React.FormEvent) {
+		event.preventDefault();
+		const accent =
+			accentColor.trim() && /^#[0-9A-Fa-f]{6}$/.test(accentColor.trim())
+				? accentColor.trim()
+				: null;
+		saveBranding.mutate({
+			logo: logoUrl.trim() || null,
+			branding: {
+				displayName: displayName.trim() || null,
+				accentColor: accent,
+			},
+		});
 	}
 
 	return (
@@ -43,8 +83,8 @@ export function OrganizationCard() {
 				<CardTitle>Organization</CardTitle>
 				<CardDescription>General settings for your active organization.</CardDescription>
 			</CardHeader>
-			<CardContent>
-				<form onSubmit={onSubmit} className="grid max-w-sm gap-4">
+			<CardContent className="grid gap-8">
+				<form onSubmit={onNameSubmit} className="grid max-w-sm gap-4">
 					<div className="grid gap-2">
 						<Label htmlFor="org-name">Name</Label>
 						<Input
@@ -62,10 +102,63 @@ export function OrganizationCard() {
 					<div>
 						<Button
 							type="submit"
-							disabled={isPending || !name || name === activeOrganization?.name}
+							disabled={isNamePending || !name || name === activeOrganization?.name}
 						>
-							{isPending && <Loader2 className="size-4 animate-spin" />}
-							Save changes
+							{isNamePending && <Loader2 className="size-4 animate-spin" />}
+							Save name
+						</Button>
+					</div>
+				</form>
+
+				<form onSubmit={onBrandingSubmit} className="grid max-w-sm gap-4 border-t pt-6">
+					<div className="flex items-center gap-2 text-sm font-medium">
+						<Palette className="size-4 text-muted-foreground" />
+						White-label branding
+					</div>
+					<div className="grid gap-2">
+						<Label htmlFor="org-display-name">Display name</Label>
+						<Input
+							id="org-display-name"
+							placeholder={activeOrganization?.name ?? "Shown in the shell"}
+							disabled={settingsQuery.isPending}
+							value={displayName}
+							onChange={(e) => setDisplayName(e.target.value)}
+						/>
+					</div>
+					<div className="grid gap-2">
+						<Label htmlFor="org-logo">Logo URL</Label>
+						<Input
+							id="org-logo"
+							type="url"
+							placeholder="https://…"
+							disabled={settingsQuery.isPending}
+							value={logoUrl}
+							onChange={(e) => setLogoUrl(e.target.value)}
+						/>
+					</div>
+					<div className="grid gap-2">
+						<Label htmlFor="org-accent">Accent color</Label>
+						<div className="flex items-center gap-2">
+							<Input
+								id="org-accent"
+								type="color"
+								className="h-9 w-14 shrink-0 p-1"
+								disabled={settingsQuery.isPending}
+								value={accentColor}
+								onChange={(e) => setAccentColor(e.target.value)}
+							/>
+							<Input
+								value={accentColor}
+								onChange={(e) => setAccentColor(e.target.value)}
+								placeholder="#1c1917"
+								disabled={settingsQuery.isPending}
+							/>
+						</div>
+					</div>
+					<div>
+						<Button type="submit" disabled={saveBranding.isPending || settingsQuery.isPending}>
+							{saveBranding.isPending && <Loader2 className="size-4 animate-spin" />}
+							Save branding
 						</Button>
 					</div>
 				</form>

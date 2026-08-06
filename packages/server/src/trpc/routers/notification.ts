@@ -75,6 +75,8 @@ const eventTogglesSchema = z.object({
 	nixployRestart: z.boolean().optional(),
 	dockerCleanup: z.boolean().optional(),
 	serverThreshold: z.boolean().optional(),
+	serviceAlert: z.boolean().optional(),
+	uptimeFlip: z.boolean().optional(),
 });
 
 const createNotificationSchema = z

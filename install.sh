@@ -6,7 +6,7 @@
 #
 # With a domain (recommended — real HTTPS via Let's Encrypt):
 #
-#   NIXPLOY_DOMAIN=nixploy.example.com NIXPLOY_LETSENCRYPT_EMAIL=you@example.com \
+#   NIXPLOY_DOMAIN=panel.nixploy.com NIXPLOY_LETSENCRYPT_EMAIL=you@nixploy.com \
 #     curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash
 #
 # Environment overrides:

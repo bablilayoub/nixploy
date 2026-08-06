@@ -50,6 +50,20 @@
       "when": 1785892936266,
       "tag": "0006_careful_mariko_yashida",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786014667393,
+      "tag": "0007_sudden_sugar_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786033816582,
+      "tag": "0008_sloppy_the_professor",
+      "breakpoints": true
     }
   ]
 }

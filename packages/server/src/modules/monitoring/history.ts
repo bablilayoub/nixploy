@@ -157,11 +157,16 @@ async function appendPoints(appName: string, point: HistoryPoint): Promise<void>
 export async function sampleAllServices(): Promise<void> {
 	const [apps, composeRows, pg, my, maria, mongoRows, redisRows] = await Promise.all([
 		db.query.applications.findMany({
-			columns: { appName: true, serverId: true, environmentId: true },
+			columns: {
+				applicationId: true,
+				appName: true,
+				serverId: true,
+				environmentId: true,
+			},
 		}),
 		// Compose: the first running container of the stack (partial but useful).
 		db.query.compose.findMany({
-			columns: { appName: true, serverId: true, environmentId: true },
+			columns: { composeId: true, appName: true, serverId: true, environmentId: true },
 		}),
 		db.query.postgres.findMany({
 			columns: { appName: true, serverId: true, environmentId: true },
@@ -180,13 +185,13 @@ export async function sampleAllServices(): Promise<void> {
 		}),
 	]);
 	const targets = [
-		...apps,
-		...composeRows,
-		...pg,
-		...my,
-		...maria,
-		...mongoRows,
-		...redisRows,
+		...apps.map((row) => ({ ...row, kind: "application" as const })),
+		...composeRows.map((row) => ({ ...row, kind: "compose" as const })),
+		...pg.map((row) => ({ ...row, kind: "other" as const })),
+		...my.map((row) => ({ ...row, kind: "other" as const })),
+		...maria.map((row) => ({ ...row, kind: "other" as const })),
+		...mongoRows.map((row) => ({ ...row, kind: "other" as const })),
+		...redisRows.map((row) => ({ ...row, kind: "other" as const })),
 	].filter(
 		(row) => !row.serverId, // local only (see module doc)
 	);
@@ -201,6 +206,29 @@ export async function sampleAllServices(): Promise<void> {
 			const stats = await container.stats({ stream: false });
 			const frame = mapDockerStats(stats);
 			await evaluateAlerts(appName, target.environmentId, frame, thresholds);
+
+			if (target.kind === "application" || target.kind === "compose") {
+				const environment = await db.query.environments.findFirst({
+					where: eq(environments.environmentId, target.environmentId),
+					with: { project: true },
+				});
+				if (environment?.project.organizationId) {
+					const { evaluateServiceAlertRules } = await import("../observability");
+					await evaluateServiceAlertRules({
+						organizationId: environment.project.organizationId,
+						projectId: environment.project.projectId,
+						applicationId:
+							target.kind === "application" && "applicationId" in target
+								? target.applicationId
+								: null,
+						composeId: target.kind === "compose" && "composeId" in target ? target.composeId : null,
+						appName,
+						cpu: frame.cpu,
+						memoryPercent: frame.memory.percent,
+					});
+				}
+			}
+
 			await appendPoints(appName, {
 				t: now,
 				cpu: frame.cpu,

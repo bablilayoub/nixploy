@@ -48,6 +48,10 @@ export const getSshKeysPath = (): string => path.join(getConfigDir(), "ssh");
 export const getDeploymentLogPath = (appName: string, deploymentId: string): string =>
 	path.join(getConfigDir(), "logs", appName, `${deploymentId}.log`);
 
+/** Local BuildKit cache root for an application (`cache-from` / `cache-to`). */
+export const getBuildCachePath = (appName: string): string =>
+	path.join(getConfigDir(), "cache", "buildkit", appName);
+
 export function ensureDir(dir: string): void {
 	fs.mkdirSync(dir, { recursive: true });
 }

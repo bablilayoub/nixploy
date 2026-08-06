@@ -9,6 +9,7 @@ import type { invitations, members } from "../db/schema";
 import { recordAudit } from "../modules/audit";
 import { canSignUpEmail, hasAnyUsers } from "../modules/auth/setup";
 import { deleteOrganizationCascade } from "../modules/projects";
+import { orgAc, orgPluginRoles } from "./org-roles";
 
 type MemberRow = typeof members.$inferSelect;
 type InvitationRow = typeof invitations.$inferSelect;
@@ -88,6 +89,8 @@ export const auth = betterAuth({
 	},
 	plugins: [
 		organization({
+			ac: orgAc,
+			roles: orgPluginRoles,
 			organizationHooks: {
 				// Real infra (Swarm services, Traefik configs, volumes, on-disk
 				// state) must be torn down while rows still exist — Postgres FK

@@ -10,6 +10,7 @@ export * from "./enums";
 export * from "./git-provider";
 export * from "./mount";
 export * from "./notification";
+export * from "./observability";
 export * from "./port";
 export * from "./project";
 export * from "./redirect";

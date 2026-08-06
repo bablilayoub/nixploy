@@ -1,6 +1,6 @@
 # @nixploy/cli
 
-Command-line interface for [Nixploy](https://github.com/bablilayoub/nixploy) — a self-hosted PaaS (Dokploy replica). Manage projects, applications, databases and environment variables against any Nixploy server over its REST API.
+Command-line interface for [Nixploy](https://nixploy.com) — a self-hosted PaaS. Manage projects, applications, databases and environment variables against any Nixploy server over its REST API.
 
 ## Install
 
@@ -17,7 +17,7 @@ Requires Node.js >= 22.
 Generate an API key in the Nixploy dashboard (**Settings → Profile → API Keys**), then:
 
 ```bash
-nixploy auth login --url https://nixploy.example.com --api-key nxlp_...
+nixploy auth login --url https://panel.nixploy.com --api-key nxlp_...
 nixploy auth status
 ```
 

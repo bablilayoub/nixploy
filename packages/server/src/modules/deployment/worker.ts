@@ -295,6 +295,55 @@ async function processJob(job: QueueJob): Promise<void> {
 		).catch(() => {});
 		await logger.close();
 		deploymentEvents.emit("finish", { deploymentId: job.deploymentId, status: terminalStatus });
+
+		if (terminalStatus === "error") {
+			try {
+				const { recordIncident, ingestServiceLog } = await import("../observability");
+				const deployment = await db.query.deployments.findFirst({
+					where: eq(deployments.deploymentId, job.deploymentId),
+					with: {
+						application: { with: { environment: { with: { project: true } } } },
+						compose: { with: { environment: { with: { project: true } } } },
+					},
+				});
+				const orgId =
+					deployment?.application?.environment.project.organizationId ??
+					deployment?.compose?.environment.project.organizationId;
+				const projectId =
+					deployment?.application?.environment.project.projectId ??
+					deployment?.compose?.environment.project.projectId;
+				const serviceName = deployment?.application?.name ?? deployment?.compose?.name ?? "service";
+				const serviceId = job.applicationId ?? job.composeId ?? null;
+				if (orgId) {
+					await recordIncident({
+						organizationId: orgId,
+						projectId,
+						kind: "deploy_failure",
+						severity: "critical",
+						title: `Deploy failed: ${serviceName}`,
+						message: deployment?.errorMessage ?? "Deployment failed",
+						serviceId,
+						serviceName,
+						metadata: { deploymentId: job.deploymentId },
+					});
+					if (deployment?.logPath) {
+						const { readFile } = await import("node:fs/promises");
+						const body = await readFile(deployment.logPath, "utf8").catch(() => "");
+						if (body && serviceId) {
+							await ingestServiceLog({
+								organizationId: orgId,
+								serviceId,
+								serviceType: job.applicationId ? "application" : "compose",
+								deploymentId: job.deploymentId,
+								body,
+							});
+						}
+					}
+				}
+			} catch (obsError) {
+				console.error("Failed to record deploy observability:", obsError);
+			}
+		}
 	}
 }
 

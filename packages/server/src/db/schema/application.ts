@@ -72,6 +72,8 @@ export const applications = pgTable("application", {
 	dockerfile: text("dockerfile"),
 	dockerContextPath: text("docker_context_path"),
 	dockerBuildStage: text("docker_build_stage"),
+	/** When true, BuildKit local cache-from/cache-to is used for dockerfile/nixpacks/railpack. */
+	useBuildCache: boolean("use_build_cache").notNull().default(true),
 	/** static build type: directory served by nginx. */
 	publishDirectory: text("publish_directory"),
 	isStaticSpa: boolean("is_static_spa"),

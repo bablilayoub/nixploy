@@ -1,6 +1,7 @@
 "use client";
 
 import { apiKeyClient } from "@better-auth/api-key/client";
+import { orgAc, orgPluginRoles } from "@nixploy/server/lib/org-roles";
 import { adminClient, organizationClient, twoFactorClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
@@ -14,7 +15,12 @@ import { createAuthClient } from "better-auth/react";
  * and point at the wrong host (e.g. localhost) in production.
  */
 export const authClient = createAuthClient({
-	plugins: [organizationClient(), adminClient(), twoFactorClient(), apiKeyClient()],
+	plugins: [
+		organizationClient({ ac: orgAc, roles: orgPluginRoles }),
+		adminClient(),
+		twoFactorClient(),
+		apiKeyClient(),
+	],
 });
 
 export const { signIn, signUp, signOut, useSession, organization, twoFactor, apiKey } = authClient;

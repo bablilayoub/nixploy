@@ -1,6 +1,6 @@
 # Architecture
 
-Nixploy is a self-hosted PaaS (a functional Dokploy replica) built as a pnpm
+Nixploy is a self-hosted PaaS built as a pnpm
 monorepo. One Node process serves the UI, the API, the realtime streams and
 the deploy engine.
 

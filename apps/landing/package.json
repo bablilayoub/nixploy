@@ -1,0 +1,27 @@
+{
+	"name": "@nixploy/landing",
+	"version": "0.1.0",
+	"private": true,
+	"scripts": {
+		"dev": "next dev -p 3001",
+		"build": "next build",
+		"start": "next start -p 3001"
+	},
+	"dependencies": {
+		"@tailwindcss/postcss": "^4.1.12",
+		"gsap": "^3.13.0",
+		"lucide-react": "^0.544.0",
+		"motion": "^12.23.12",
+		"motion-dom": "^12.23.12",
+		"next": "^15.5.2",
+		"react": "^19.1.0",
+		"react-dom": "^19.1.0",
+		"tailwindcss": "^4.1.12"
+	},
+	"devDependencies": {
+		"@types/node": "^22.15.0",
+		"@types/react": "^19.1.0",
+		"@types/react-dom": "^19.1.0",
+		"typescript": "^5.8.3"
+	}
+}

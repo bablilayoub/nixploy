@@ -16,6 +16,7 @@ import { SchedulesTab } from "@/components/schedules/schedules-tab";
 import { DomainManager } from "@/components/services/domain-manager";
 import { LogViewer } from "@/components/services/log-viewer";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
+import { ServiceAlertRulesCard } from "@/components/services/service-alert-rules-card";
 import { ServiceTerminal } from "@/components/services/service-terminal";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -104,7 +105,10 @@ export default function ApplicationDetailPage({
 					<LogViewer appName={application.appName} serverId={application.serverId} />
 				</TabsContent>
 				<TabsContent value="monitoring" className="mt-6">
-					<MonitoringCharts appName={application.appName} serverId={application.serverId} />
+					<div className="flex flex-col gap-6">
+						<MonitoringCharts appName={application.appName} serverId={application.serverId} />
+						<ServiceAlertRulesCard applicationId={application.applicationId} />
+					</div>
 				</TabsContent>
 				<TabsContent value="terminal" className="mt-6">
 					<ServiceTerminal appName={application.appName} serverId={application.serverId} />

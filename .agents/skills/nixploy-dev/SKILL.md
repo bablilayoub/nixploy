@@ -1,6 +1,6 @@
 ---
 name: nixploy-dev
-description: Develop, run and verify Nixploy (self-hosted PaaS, Dokploy replica) — dev setup, the verification loop, tenancy/auth rules, and how to add features (routers, pages, templates). Use when working in the nixploy monorepo.
+description: Develop, run and verify Nixploy (self-hosted PaaS) — dev setup, the verification loop, tenancy/auth rules, and how to add features (routers, pages, templates). Use when working in the nixploy monorepo.
 ---
 
 # Nixploy development

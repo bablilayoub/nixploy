@@ -1,4 +1,5 @@
 import { router } from "./init";
+import { aiRouter } from "./routers/ai";
 import { applicationRouter } from "./routers/application";
 import { auditRouter } from "./routers/audit";
 import { backupRouter } from "./routers/backup";
@@ -13,12 +14,15 @@ import { environmentRouter } from "./routers/environment";
 import { giteaRouter } from "./routers/gitea";
 import { githubRouter } from "./routers/github";
 import { gitlabRouter } from "./routers/gitlab";
+import { gitopsRouter } from "./routers/gitops";
 import { mariadbRouter } from "./routers/mariadb";
 import { mongoRouter } from "./routers/mongo";
 import { monitoringRouter } from "./routers/monitoring";
 import { mountRouter } from "./routers/mount";
 import { mysqlRouter } from "./routers/mysql";
 import { notificationRouter } from "./routers/notification";
+import { observabilityRouter } from "./routers/observability";
+import { organizationRouter } from "./routers/organization";
 import { portRouter } from "./routers/port";
 import { postgresRouter } from "./routers/postgres";
 import { previewDeploymentRouter } from "./routers/preview-deployment";
@@ -38,6 +42,7 @@ import { volumeBackupRouter } from "./routers/volume-backup";
 import { webServerRouter } from "./routers/web-server";
 
 export const appRouter = router({
+	ai: aiRouter,
 	application: applicationRouter,
 	audit: auditRouter,
 	backup: backupRouter,
@@ -52,12 +57,15 @@ export const appRouter = router({
 	gitea: giteaRouter,
 	github: githubRouter,
 	gitlab: gitlabRouter,
+	gitops: gitopsRouter,
 	mariadb: mariadbRouter,
 	mongo: mongoRouter,
 	monitoring: monitoringRouter,
 	mount: mountRouter,
 	mysql: mysqlRouter,
 	notification: notificationRouter,
+	observability: observabilityRouter,
+	organization: organizationRouter,
 	port: portRouter,
 	postgres: postgresRouter,
 	previewDeployment: previewDeploymentRouter,

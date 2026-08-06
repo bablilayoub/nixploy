@@ -169,6 +169,8 @@ const EVENT_TOGGLES = [
 	{ key: "nixployRestart", label: "Nixploy restarts" },
 	{ key: "dockerCleanup", label: "Docker cleanup" },
 	{ key: "serverThreshold", label: "Server thresholds" },
+	{ key: "serviceAlert", label: "Per-service alerts" },
+	{ key: "uptimeFlip", label: "Uptime flips" },
 ] as const;
 
 function buildConfig(
@@ -373,6 +375,8 @@ export function NotificationDialog({
 				nixployRestart: editing.nixployRestart,
 				dockerCleanup: editing.dockerCleanup,
 				serverThreshold: editing.serverThreshold,
+				serviceAlert: editing.serviceAlert,
+				uptimeFlip: editing.uptimeFlip,
 			});
 		} else {
 			setName("");

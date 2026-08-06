@@ -17,6 +17,7 @@ import { auditFromSession } from "../../modules/audit";
 import { duplicateCompose } from "../../modules/compose/service";
 import { duplicateDatabase } from "../../modules/databases/engine";
 import {
+	assertOrgRole,
 	deleteEnvironmentCascade,
 	emptyServiceCounts,
 	findEnvironmentById,
@@ -86,6 +87,7 @@ export const environmentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			const project = await findProjectById(input.projectId, organizationId);
 			await assertEnvironmentNameAvailable(project.projectId, input.name);
 			const [environment] = await db
@@ -142,6 +144,7 @@ export const environmentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const environment = await findEnvironmentById(input.environmentId, organizationId);
 			await deleteEnvironmentCascade(environment.environmentId);
 			return environment;

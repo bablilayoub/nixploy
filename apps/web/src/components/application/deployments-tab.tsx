@@ -2,7 +2,7 @@
 
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Ban, ChevronDown, ScrollText } from "lucide-react";
+import { Ban, Bot, ChevronDown, Loader2, ScrollText } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -31,6 +31,15 @@ import type { Application, Deployment } from "./types";
 
 const PAGE_SIZE = 10;
 
+type ExplainResult = {
+	summary: string;
+	rootCause: string;
+	steps: string[];
+	suggestedPatch: string | null;
+	model: string;
+	deploymentId: string;
+};
+
 const STATUS_CONFIG: Record<Deployment["status"], { label: string; status: StatusDotStatus }> = {
 	running: { label: "Running", status: "success" },
 	done: { label: "Done", status: "info" },
@@ -53,6 +62,7 @@ export function DeploymentsTab({ application }: { application: Application }) {
 	const applicationId = application.applicationId;
 
 	const [logDeployment, setLogDeployment] = useState<Deployment | null>(null);
+	const [explainResult, setExplainResult] = useState<ExplainResult | null>(null);
 
 	const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useInfiniteQuery(
 		trpc.deployment.byApplication.infiniteQueryOptions(
@@ -68,6 +78,15 @@ export function DeploymentsTab({ application }: { application: Application }) {
 				queryClient.invalidateQueries({
 					queryKey: trpc.deployment.byApplication.pathKey(),
 				});
+			},
+			onError: (error) => toast.error(error.message),
+		}),
+	);
+
+	const explain = useMutation(
+		trpc.ai.explainDeployment.mutationOptions({
+			onSuccess: (result) => {
+				setExplainResult(result);
 			},
 			onError: (error) => toast.error(error.message),
 		}),
@@ -146,6 +165,24 @@ export function DeploymentsTab({ application }: { application: Application }) {
 													<ScrollText className="size-4" />
 													Logs
 												</Button>
+												{deployment.status === "error" && (
+													<Button
+														variant="ghost"
+														size="sm"
+														disabled={explain.isPending}
+														onClick={() =>
+															explain.mutate({ deploymentId: deployment.deploymentId })
+														}
+													>
+														{explain.isPending &&
+														explain.variables?.deploymentId === deployment.deploymentId ? (
+															<Loader2 className="size-4 animate-spin" />
+														) : (
+															<Bot className="size-4" />
+														)}
+														Explain
+													</Button>
+												)}
 												{deployment.status === "running" && (
 													<Button
 														variant="ghost"
@@ -200,6 +237,53 @@ export function DeploymentsTab({ application }: { application: Application }) {
 					<div className="min-h-0 flex-1">
 						{logDeployment && <LogViewer deploymentId={logDeployment.deploymentId} />}
 					</div>
+				</DialogContent>
+			</Dialog>
+
+			<Dialog
+				open={explainResult !== null}
+				onOpenChange={(open) => !open && setExplainResult(null)}
+			>
+				<DialogContent className="max-w-lg">
+					<DialogHeader>
+						<DialogTitle className="flex items-center gap-2">
+							<Bot className="size-4" />
+							Deploy Copilot
+						</DialogTitle>
+						<DialogDescription>
+							{explainResult ? `Analyzed with ${explainResult.model}` : ""}
+						</DialogDescription>
+					</DialogHeader>
+					{explainResult && (
+						<div className="grid gap-4 text-sm">
+							<div>
+								<p className="mb-1 font-medium">Summary</p>
+								<p className="text-muted-foreground whitespace-pre-wrap">{explainResult.summary}</p>
+							</div>
+							<div>
+								<p className="mb-1 font-medium">Root cause</p>
+								<p className="text-muted-foreground">{explainResult.rootCause}</p>
+							</div>
+							{explainResult.steps.length > 0 && (
+								<div>
+									<p className="mb-1 font-medium">Suggested steps</p>
+									<ol className="list-decimal space-y-1 pl-5 text-muted-foreground">
+										{explainResult.steps.map((step) => (
+											<li key={step}>{step}</li>
+										))}
+									</ol>
+								</div>
+							)}
+							{explainResult.suggestedPatch && (
+								<div>
+									<p className="mb-1 font-medium">Suggested patch</p>
+									<pre className="overflow-x-auto rounded-md border bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap">
+										{explainResult.suggestedPatch}
+									</pre>
+								</div>
+							)}
+						</div>
+					)}
 				</DialogContent>
 			</Dialog>
 		</section>

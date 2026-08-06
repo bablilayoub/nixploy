@@ -1,0 +1,1 @@
+ALTER TABLE "application" ADD COLUMN "use_build_cache" boolean DEFAULT true NOT NULL;

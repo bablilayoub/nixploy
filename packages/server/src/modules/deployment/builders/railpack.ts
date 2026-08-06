@@ -1,5 +1,6 @@
 import { commandExists } from "../docker";
 import { shellQuote } from "../paths";
+import { prepareBuildCache } from "./cache";
 import type { BuildInput } from "./index";
 import { ensureToolBinary, type PinnedTool } from "./tools";
 
@@ -46,7 +47,10 @@ export async function buildWithRailpack(input: BuildInput, imageTag: string): Pr
 		`docker start ${BUILDKIT_CONTAINER} >/dev/null 2>&1 || docker run -d --name ${BUILDKIT_CONTAINER} --privileged --restart unless-stopped moby/buildkit:latest`,
 	);
 
+	const cache = prepareBuildCache(input);
+	const noCache = cache.noCacheFlag ? ` ${cache.noCacheFlag}` : "";
+
 	await ctx.run(
-		`BUILDKIT_HOST=docker-container://${BUILDKIT_CONTAINER} ${binary} build ${shellQuote(buildDir)} --name ${shellQuote(imageTag)} ${envFlags}`,
+		`BUILDKIT_HOST=docker-container://${BUILDKIT_CONTAINER} ${binary} build ${shellQuote(buildDir)} --name ${shellQuote(imageTag)} ${envFlags}${noCache}`,
 	);
 }

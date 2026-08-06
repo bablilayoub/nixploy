@@ -67,16 +67,24 @@ export function appCommand(): Command {
 		.command("logs")
 		.description("Print recent deployment logs of an application")
 		.argument("<applicationId>", "Application ID")
-		.action(async (applicationId: string) => {
-			const result = await apiGet<{ logPath?: string; log?: string } | string>("application.logs", {
-				applicationId,
-			});
-			if (typeof result === "string") {
-				process.stdout.write(result);
-			} else if (result.log) {
-				process.stdout.write(result.log);
-			} else {
-				printJson(result);
+		.option("-f, --follow", "Follow until the latest deployment finishes")
+		.action(async (applicationId: string, options: { follow?: boolean }) => {
+			let offset = 0;
+			for (;;) {
+				const chunk = await apiGet<{
+					deploymentId: string;
+					status: string;
+					log: string;
+					offset: number;
+					done: boolean;
+				}>("deployment.getLogs", {
+					applicationId,
+					offset: String(offset),
+				});
+				if (chunk.log) process.stdout.write(chunk.log);
+				offset = chunk.offset;
+				if (!options.follow || chunk.done) return;
+				await new Promise((resolve) => setTimeout(resolve, 1500));
 			}
 		});
 

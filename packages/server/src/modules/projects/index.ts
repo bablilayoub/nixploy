@@ -71,29 +71,39 @@ export async function userHasOrganization(userId: string): Promise<boolean> {
 
 // ── role checks ─────────────────────────────────────────────────────────────
 
-const ROLE_RANK: Record<"member" | "admin" | "owner", number> = { member: 0, admin: 1, owner: 2 };
+export type OrgRole = "viewer" | "member" | "deployer" | "admin" | "owner";
+
+export const ORG_ROLE_RANK: Record<OrgRole, number> = {
+	viewer: 0,
+	member: 1,
+	deployer: 2,
+	admin: 3,
+	owner: 4,
+};
+
+/** Rank for a stored member role string; unknown values fall back to member. */
+export function orgRoleRank(role: string): number {
+	return ORG_ROLE_RANK[role as OrgRole] ?? ORG_ROLE_RANK.member;
+}
 
 /**
  * Require the caller's role in `organizationId` to be at least `minRole`
- * (member < admin < owner). Used by destructive/infrastructure mutations
- * (Docker control, server settings, member management).
+ * (viewer < member < deployer < admin < owner). Used by destructive/infrastructure
+ * mutations (Docker control, server settings, member management).
  * @throws TRPCError FORBIDDEN.
  */
 export async function assertOrgRole(
 	userId: string,
 	organizationId: string,
-	minRole: "admin" | "owner",
+	minRole: OrgRole,
 ): Promise<void> {
 	const membership = await db.query.members.findFirst({
 		where: and(eq(members.userId, userId), eq(members.organizationId, organizationId)),
 	});
-	if (
-		!membership ||
-		(ROLE_RANK[membership.role as keyof typeof ROLE_RANK] ?? 0) < ROLE_RANK[minRole]
-	) {
+	if (!membership || orgRoleRank(membership.role) < ORG_ROLE_RANK[minRole]) {
 		throw new TRPCError({
 			code: "FORBIDDEN",
-			message: `This action requires the ${minRole} role`,
+			message: `This action requires the ${minRole} role or higher`,
 		});
 	}
 }
@@ -487,3 +497,5 @@ export async function deleteOrganizationCascade(organizationId: string): Promise
 		await deleteProjectCascade(project.projectId);
 	}
 }
+
+export * from "./quotas";

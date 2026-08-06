@@ -34,6 +34,8 @@ export const notifications = pgTable("notification", {
 	nixployRestart: boolean("nixploy_restart").notNull().default(false),
 	dockerCleanup: boolean("docker_cleanup").notNull().default(false),
 	serverThreshold: boolean("server_threshold").notNull().default(false),
+	serviceAlert: boolean("service_alert").notNull().default(false),
+	uptimeFlip: boolean("uptime_flip").notNull().default(false),
 	organizationId: text("organization_id")
 		.notNull()
 		.references(() => organizations.id, { onDelete: "cascade" }),

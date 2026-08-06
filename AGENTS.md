@@ -4,7 +4,7 @@ Guidance for AI agents and contributors working in this repository.
 
 ## What this is
 
-Nixploy is a self-hosted PaaS (Dokploy replica): pnpm monorepo with a Next.js app, a CLI, and a shared server package that contains the deploy engine (Docker Swarm + Traefik). See `README.md` and `PLAN.md` for product context.
+Nixploy is a self-hosted PaaS: pnpm monorepo with a Next.js app, a CLI, and a shared server package that contains the deploy engine (Docker Swarm + Traefik). Marketing site: [nixploy.com](https://nixploy.com). See `README.md` and `PLAN.md` for product context.
 
 ## Commands
 
@@ -27,6 +27,7 @@ cd apps/web && pnpm dev         # dev server on :3000
 ## Monorepo layout
 
 - `apps/web` — Next.js 16 (App Router) + Tailwind v4 + shadcn/ui. Custom server (`server.ts`) hosts websockets, the in-memory deploy queue and node-schedule crons. UI + tRPC + REST/OpenAPI + Swagger in one process.
+- `apps/landing` — public marketing site at [nixploy.com](https://nixploy.com): Next.js 15 + Tailwind v4 + Motion. Runs on :3001 (`cd apps/landing && pnpm dev`).
 - `apps/cli` — `@nixploy/cli`, talks to the REST API with `x-api-key`.
 - `packages/server` — `@nixploy/server`: Drizzle schema, better-auth config, tRPC routers, deploy engine, builders, Traefik/Docker utils, backups, notifications.
 - `docker/` — production Dockerfile, Traefik static config; `install.sh` at the root is the production installer.

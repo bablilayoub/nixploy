@@ -1,10 +1,11 @@
 "use client";
 
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { format } from "date-fns";
-import { ScrollText } from "lucide-react";
+import { Bot, Loader2, ScrollText } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import type { ComposeService } from "@/components/compose/compose-detail";
 import { LogViewer } from "@/components/services/log-viewer";
@@ -33,6 +34,15 @@ import type { AppRouter } from "@/lib/trpc-types";
 type ComposeDeployment =
 	inferRouterOutputs<AppRouter>["deployment"]["byCompose"]["deployments"][number];
 
+type ExplainResult = {
+	summary: string;
+	rootCause: string;
+	steps: string[];
+	suggestedPatch: string | null;
+	model: string;
+	deploymentId: string;
+};
+
 const PAGE_SIZE = 10;
 
 const formatDuration = (deployment: ComposeDeployment) => {
@@ -47,12 +57,20 @@ const formatDuration = (deployment: ComposeDeployment) => {
 export function DeploymentsTab({ compose }: { compose: ComposeService }) {
 	const trpc = useTRPC();
 	const [logDeployment, setLogDeployment] = useState<ComposeDeployment | null>(null);
+	const [explainResult, setExplainResult] = useState<ExplainResult | null>(null);
 
 	const deploymentsQuery = useInfiniteQuery(
 		trpc.deployment.byCompose.infiniteQueryOptions(
 			{ composeId: compose.composeId, limit: PAGE_SIZE },
 			{ getNextPageParam: (lastPage) => lastPage.nextCursor },
 		),
+	);
+
+	const explain = useMutation(
+		trpc.ai.explainDeployment.mutationOptions({
+			onSuccess: (result) => setExplainResult(result),
+			onError: (error) => toast.error(error.message),
+		}),
 	);
 
 	const deployments = deploymentsQuery.data?.pages.flatMap((page) => page.deployments) ?? [];
@@ -106,10 +124,32 @@ export function DeploymentsTab({ compose }: { compose: ComposeService }) {
 										{formatDuration(deployment)}
 									</TableCell>
 									<TableCell className="text-right">
-										<Button variant="ghost" size="sm" onClick={() => setLogDeployment(deployment)}>
-											<ScrollText className="size-4" />
-											Logs
-										</Button>
+										<div className="flex justify-end gap-1">
+											<Button
+												variant="ghost"
+												size="sm"
+												onClick={() => setLogDeployment(deployment)}
+											>
+												<ScrollText className="size-4" />
+												Logs
+											</Button>
+											{deployment.status === "error" && (
+												<Button
+													variant="ghost"
+													size="sm"
+													disabled={explain.isPending}
+													onClick={() => explain.mutate({ deploymentId: deployment.deploymentId })}
+												>
+													{explain.isPending &&
+													explain.variables?.deploymentId === deployment.deploymentId ? (
+														<Loader2 className="size-4 animate-spin" />
+													) : (
+														<Bot className="size-4" />
+													)}
+													Explain
+												</Button>
+											)}
+										</div>
 									</TableCell>
 								</TableRow>
 							))}
@@ -146,6 +186,53 @@ export function DeploymentsTab({ compose }: { compose: ComposeService }) {
 					<div className="min-h-0 flex-1">
 						{logDeployment && <LogViewer deploymentId={logDeployment.deploymentId} />}
 					</div>
+				</DialogContent>
+			</Dialog>
+
+			<Dialog
+				open={explainResult !== null}
+				onOpenChange={(open) => !open && setExplainResult(null)}
+			>
+				<DialogContent className="max-w-lg">
+					<DialogHeader>
+						<DialogTitle className="flex items-center gap-2">
+							<Bot className="size-4" />
+							Deploy Copilot
+						</DialogTitle>
+						<DialogDescription>
+							{explainResult ? `Analyzed with ${explainResult.model}` : ""}
+						</DialogDescription>
+					</DialogHeader>
+					{explainResult && (
+						<div className="grid gap-4 text-sm">
+							<div>
+								<p className="mb-1 font-medium">Summary</p>
+								<p className="text-muted-foreground whitespace-pre-wrap">{explainResult.summary}</p>
+							</div>
+							<div>
+								<p className="mb-1 font-medium">Root cause</p>
+								<p className="text-muted-foreground">{explainResult.rootCause}</p>
+							</div>
+							{explainResult.steps.length > 0 && (
+								<div>
+									<p className="mb-1 font-medium">Suggested steps</p>
+									<ol className="list-decimal space-y-1 pl-5 text-muted-foreground">
+										{explainResult.steps.map((step) => (
+											<li key={step}>{step}</li>
+										))}
+									</ol>
+								</div>
+							)}
+							{explainResult.suggestedPatch && (
+								<div>
+									<p className="mb-1 font-medium">Suggested patch</p>
+									<pre className="overflow-x-auto rounded-md border bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap">
+										{explainResult.suggestedPatch}
+									</pre>
+								</div>
+							)}
+						</div>
+					)}
 				</DialogContent>
 			</Dialog>
 		</Card>

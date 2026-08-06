@@ -8,6 +8,7 @@
 		"./db": "./src/db/index.ts",
 		"./schema": "./src/db/schema/index.ts",
 		"./auth": "./src/lib/auth.ts",
+		"./lib/*": "./src/lib/*.ts",
 		"./exec": "./src/utils/exec.ts",
 		"./encryption": "./src/lib/encryption.ts",
 		"./trpc": "./src/trpc/root.ts",

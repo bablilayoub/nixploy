@@ -1,0 +1,147 @@
+@import "tailwindcss";
+
+@theme {
+	--font-sans: var(--font-geist), "Geist", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: var(--font-mono), "Geist Mono", ui-monospace, monospace;
+	--color-background: #050505;
+	--color-foreground: #fafafa;
+	--color-border: #262626;
+	--color-muted: #a3a3a3;
+}
+
+html {
+	scroll-behavior: smooth;
+}
+
+body {
+	background: #050505;
+	color: #fafafa;
+	font-family: var(--font-sans);
+	overflow-x: hidden;
+	-webkit-font-smoothing: antialiased;
+}
+
+::selection {
+	background: #fff;
+	color: #000;
+}
+
+/* Magic UI animations */
+@keyframes shiny-text {
+	0%,
+	90%,
+	100% {
+		background-position: calc(-100% - var(--shiny-width)) 0;
+	}
+	30%,
+	60% {
+		background-position: calc(100% + var(--shiny-width)) 0;
+	}
+}
+
+@keyframes marquee {
+	from {
+		transform: translateX(0);
+	}
+	to {
+		transform: translateX(calc(-100% - var(--gap)));
+	}
+}
+
+@keyframes marquee-vertical {
+	from {
+		transform: translateY(0);
+	}
+	to {
+		transform: translateY(calc(-100% - var(--gap)));
+	}
+}
+
+@keyframes meteor {
+	0% {
+		transform: rotate(var(--angle)) translateX(0);
+		opacity: 1;
+	}
+	70% {
+		opacity: 1;
+	}
+	100% {
+		transform: rotate(var(--angle)) translateX(-500px);
+		opacity: 0;
+	}
+}
+
+@keyframes shimmer-slide {
+	to {
+		transform: translate(calc(100cqw - 100%), 0);
+	}
+}
+
+@keyframes spin-around {
+	0% {
+		transform: translateZ(0) rotate(0);
+	}
+	15%,
+	35% {
+		transform: translateZ(0) rotate(90deg);
+	}
+	65%,
+	85% {
+		transform: translateZ(0) rotate(270deg);
+	}
+	100% {
+		transform: translateZ(0) rotate(360deg);
+	}
+}
+
+@keyframes shine {
+	0% {
+		background-position: 0% 0%;
+	}
+	50% {
+		background-position: 100% 100%;
+	}
+	to {
+		background-position: 0% 0%;
+	}
+}
+
+.animate-shiny-text {
+	animation: shiny-text 8s infinite;
+}
+
+.animate-marquee {
+	animation: marquee var(--duration) infinite linear;
+}
+
+.animate-marquee-vertical {
+	animation: marquee-vertical var(--duration) linear infinite;
+}
+
+.animate-meteor {
+	animation: meteor 5s linear infinite;
+}
+
+.animate-shimmer-slide {
+	animation: shimmer-slide var(--speed) ease-in-out infinite alternate;
+}
+
+.animate-spin-around {
+	animation: spin-around calc(var(--speed) * 2) infinite linear;
+}
+
+.animate-shine {
+	animation: shine var(--duration) infinite linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.animate-marquee,
+	.animate-marquee-vertical,
+	.animate-shiny-text,
+	.animate-meteor,
+	.animate-shimmer-slide,
+	.animate-spin-around,
+	.animate-shine {
+		animation: none !important;
+	}
+}

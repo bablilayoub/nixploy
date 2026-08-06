@@ -41,7 +41,9 @@ export type NotificationEvent =
 	| "databaseBackup"
 	| "nixployRestart"
 	| "dockerCleanup"
-	| "serverThreshold";
+	| "serverThreshold"
+	| "serviceAlert"
+	| "uptimeFlip";
 
 /**
  * Dispatch a payload to a single notification row, using the config column

@@ -6,6 +6,7 @@ export const settingsNavItems: SubNavItem[] = [
 	{ label: "Profile", href: "/dashboard/settings/profile" },
 	{ label: "Organization", href: "/dashboard/settings/organization" },
 	{ label: "Activity", href: "/dashboard/settings/activity" },
+	{ label: "Incidents", href: "/dashboard/settings/incidents" },
 	{ label: "Servers", href: "/dashboard/settings/servers" },
 	{ label: "Web Server", href: "/dashboard/settings/server" },
 	{ label: "SSH Keys", href: "/dashboard/settings/ssh-keys" },

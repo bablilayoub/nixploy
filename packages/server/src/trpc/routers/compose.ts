@@ -18,7 +18,11 @@ import {
 	updateComposeById,
 } from "../../modules/compose/service";
 import { queueDeployment } from "../../modules/deployment";
-import { resolveCallerOrganizationId } from "../../modules/projects";
+import {
+	assertOrgRole,
+	assertWithinQuota,
+	resolveCallerOrganizationId,
+} from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -90,6 +94,8 @@ export const composeRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertWithinQuota(organizationId, { services: true });
 			await assertEnvironmentAccess(input.environmentId, organizationId);
 			const created = await createCompose({
 				name: input.name,
@@ -200,6 +206,7 @@ export const composeRouter = router({
 
 	delete: protectedProcedure.input(composeIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 		const row = await findComposeForOrg(input.composeId, organizationId);
 		await deleteCompose(row);
 		await auditFromSession(ctx, organizationId, {
@@ -214,6 +221,7 @@ export const composeRouter = router({
 	/** Enqueue a deployment (clone/pull + `compose up` / `stack deploy`). */
 	deploy: protectedProcedure.input(composeIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
 		await findComposeForOrg(input.composeId, organizationId);
 		const deploymentId = await queueDeployment({ composeId: input.composeId, type: "deploy" });
 		await auditFromSession(ctx, organizationId, {
@@ -228,6 +236,7 @@ export const composeRouter = router({
 	/** Enqueue a redeployment of the current source. */
 	redeploy: protectedProcedure.input(composeIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
 		await findComposeForOrg(input.composeId, organizationId);
 		const deploymentId = await queueDeployment({
 			composeId: input.composeId,
@@ -239,6 +248,7 @@ export const composeRouter = router({
 	/** Start a stopped deployment (`compose up -d` / `stack deploy`). */
 	start: protectedProcedure.input(composeIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
 		const row = await findComposeForOrg(input.composeId, organizationId);
 		await startCompose(row);
 		return true;
@@ -247,6 +257,7 @@ export const composeRouter = router({
 	/** Stop the deployment (`compose stop` / `stack rm`), keeping the row. */
 	stop: protectedProcedure.input(composeIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
 		const row = await findComposeForOrg(input.composeId, organizationId);
 		await stopCompose(row);
 		return true;

@@ -18,8 +18,6 @@ describe("summarizeTemplateServices", () => {
 		expect(app?.volumes.some((volume) => volume.includes("wordpress-data"))).toBe(true);
 		expect(app?.envKeys).toContain("WORDPRESS_DB_PASSWORD");
 		expect(app?.isDomainTarget).toBe(true);
-		expect(services.find((service) => service.name === "wordpress_db")?.isDomainTarget).toBe(
-			false,
-		);
+		expect(services.find((service) => service.name === "wordpress_db")?.isDomainTarget).toBe(false);
 	});
 });

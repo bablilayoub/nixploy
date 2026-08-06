@@ -64,6 +64,15 @@ async function initBackgroundSchedules() {
 				await initUpdateChecker();
 			},
 		],
+		[
+			"uptime probes",
+			async () => {
+				const { initUptimeProbes } = await import(
+					"../../packages/server/src/modules/observability/index"
+				);
+				await initUptimeProbes();
+			},
+		],
 	];
 	for (const [label, start] of jobs) {
 		try {

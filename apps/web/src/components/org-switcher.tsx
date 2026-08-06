@@ -1,6 +1,6 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth-client";
+import { useTRPC } from "@/lib/trpc";
 
 function slugify(name: string) {
 	return (
@@ -37,14 +38,18 @@ function slugify(name: string) {
 }
 
 export function OrgSwitcher() {
+	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const { data: organizations, isPending } = authClient.useListOrganizations();
 	const { data: activeOrganization } = authClient.useActiveOrganization();
+	const { data: orgSettings } = useQuery(trpc.organization.settings.queryOptions());
 	const [createOpen, setCreateOpen] = useState(false);
 	const [name, setName] = useState("");
 	const [isCreating, setIsCreating] = useState(false);
 
 	const active = activeOrganization ?? organizations?.[0] ?? null;
+	const displayName = orgSettings?.branding.displayName?.trim() || active?.name;
+	const logoUrl = orgSettings?.logo;
 
 	const switchOrganization = async (organizationId: string) => {
 		if (organizationId === active?.id) return;
@@ -96,10 +101,15 @@ export function OrgSwitcher() {
 							</>
 						) : (
 							<>
-								<span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
-									{active?.name?.charAt(0).toUpperCase() ?? "?"}
-								</span>
-								<span className="truncate">{active?.name ?? "No organization"}</span>
+								{logoUrl ? (
+									// biome-ignore lint/performance/noImgElement: user-supplied white-label URL
+									<img src={logoUrl} alt="" className="size-5 shrink-0 rounded-full object-cover" />
+								) : (
+									<span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+										{displayName?.charAt(0).toUpperCase() ?? "?"}
+									</span>
+								)}
+								<span className="truncate">{displayName ?? "No organization"}</span>
 								<ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
 							</>
 						)}

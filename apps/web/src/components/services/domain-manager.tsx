@@ -76,6 +76,16 @@ export function DomainManager({
 			: trpc.domain.byCompose.queryOptions({ composeId: serviceId }),
 	);
 	const certificatesQuery = useQuery(trpc.certificate.all.queryOptions());
+	const probesQuery = useQuery(trpc.observability.uptimeProbes.queryOptions());
+	const setProbe = useMutation(
+		trpc.observability.setUptimeProbe.mutationOptions({
+			onSuccess: () => {
+				queryClient.invalidateQueries({ queryKey: trpc.observability.uptimeProbes.pathKey() });
+				toast.success("Uptime probe updated");
+			},
+			onError: (error) => toast.error(error.message),
+		}),
+	);
 
 	type DomainRow = NonNullable<typeof domainsQuery.data>[number];
 
@@ -288,6 +298,7 @@ export function DomainManager({
 								<TableHead>Port</TableHead>
 								{serviceType === "compose" && <TableHead>Service</TableHead>}
 								<TableHead>Certificate</TableHead>
+								<TableHead>Uptime</TableHead>
 								<TableHead className="w-24 text-right">Actions</TableHead>
 							</TableRow>
 						</TableHeader>
@@ -316,6 +327,27 @@ export function DomainManager({
 												? "Let's Encrypt"
 												: domain.certificateType}
 										</Badge>
+									</TableCell>
+									<TableCell>
+										{(() => {
+											const probe = (probesQuery.data ?? []).find(
+												(row) => row.domainId === domain.domainId,
+											);
+											return (
+												<div className="flex items-center gap-2">
+													<Switch
+														checked={Boolean(probe?.enabled)}
+														disabled={setProbe.isPending}
+														onCheckedChange={(enabled) =>
+															setProbe.mutate({ domainId: domain.domainId, enabled })
+														}
+													/>
+													<span className="text-xs text-muted-foreground capitalize">
+														{probe?.status ?? "off"}
+													</span>
+												</div>
+											);
+										})()}
 									</TableCell>
 									<TableCell className="text-right">
 										<div className="flex justify-end gap-1">

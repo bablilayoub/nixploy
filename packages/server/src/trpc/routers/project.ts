@@ -17,6 +17,7 @@ import { auditFromSession } from "../../modules/audit";
 import { getDeploymentStatsSince } from "../../modules/deployments";
 import {
 	assertOrgRole,
+	assertWithinQuota,
 	deleteProjectCascade,
 	emptyServiceCounts,
 	findProjectById,
@@ -229,6 +230,8 @@ export const projectRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertWithinQuota(organizationId, { projects: true });
 			const [project] = await db
 				.insert(projects)
 				.values({

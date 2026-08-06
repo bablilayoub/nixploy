@@ -1,5 +1,6 @@
 "use client";
 
+import { useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Loader2, Mail, Plus, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -37,6 +38,16 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { authClient, useSession } from "@/lib/auth-client";
+import { useTRPC } from "@/lib/trpc";
+
+type InvitableRole = "viewer" | "member" | "deployer" | "admin";
+
+const INVITABLE_ROLES: { value: InvitableRole; label: string }[] = [
+	{ value: "viewer", label: "Viewer" },
+	{ value: "member", label: "Member" },
+	{ value: "deployer", label: "Deployer" },
+	{ value: "admin", label: "Admin" },
+];
 
 interface MemberRow {
 	id: string;
@@ -55,6 +66,7 @@ interface InvitationRow {
 }
 
 export function MembersCard() {
+	const trpc = useTRPC();
 	const { data: session } = useSession();
 	const { data: activeOrganization, isPending: isOrgPending } = authClient.useActiveOrganization();
 	const organizationId = activeOrganization?.id;
@@ -64,8 +76,21 @@ export function MembersCard() {
 	const [isLoading, setIsLoading] = useState(true);
 	const [inviteOpen, setInviteOpen] = useState(false);
 	const [email, setEmail] = useState("");
-	const [role, setRole] = useState<"admin" | "member">("member");
-	const [isPending, setIsPending] = useState(false);
+	const [role, setRole] = useState<InvitableRole>("member");
+	const [expiryDays, setExpiryDays] = useState<"1" | "7" | "30">("7");
+
+	const inviteMember = useMutation({
+		...trpc.organization.inviteMember.mutationOptions(),
+		onSuccess: async (_data, variables) => {
+			toast.success(`Invitation sent to ${variables.email}`);
+			setInviteOpen(false);
+			setEmail("");
+			setRole("member");
+			setExpiryDays("7");
+			await loadMembers();
+		},
+		onError: (error) => toast.error(error.message),
+	});
 
 	const loadMembers = useCallback(async () => {
 		if (!organizationId) {
@@ -96,26 +121,6 @@ export function MembersCard() {
 		loadMembers();
 	}, [loadMembers]);
 
-	async function inviteMember() {
-		if (!organizationId) return;
-		setIsPending(true);
-		const { error } = await authClient.organization.inviteMember({
-			email,
-			role,
-			organizationId,
-		});
-		setIsPending(false);
-		if (error) {
-			toast.error(error.message ?? "Failed to invite member");
-			return;
-		}
-		toast.success(`Invitation sent to ${email}`);
-		setInviteOpen(false);
-		setEmail("");
-		setRole("member");
-		await loadMembers();
-	}
-
 	async function removeMember(member: MemberRow) {
 		if (!organizationId) return;
 		const { error } = await authClient.organization.removeMember({
@@ -134,7 +139,7 @@ export function MembersCard() {
 		if (!organizationId) return;
 		const { error } = await authClient.organization.updateMemberRole({
 			memberId: member.id,
-			role: nextRole as "admin" | "member",
+			role: nextRole as InvitableRole,
 			organizationId,
 		});
 		if (error) {
@@ -193,23 +198,48 @@ export function MembersCard() {
 								</div>
 								<div className="grid gap-2">
 									<Label>Role</Label>
+									<Select value={role} onValueChange={(value) => setRole(value as InvitableRole)}>
+										<SelectTrigger>
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											{INVITABLE_ROLES.map((item) => (
+												<SelectItem key={item.value} value={item.value}>
+													{item.label}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+								<div className="grid gap-2">
+									<Label>Expires in</Label>
 									<Select
-										value={role}
-										onValueChange={(value) => setRole(value as "admin" | "member")}
+										value={expiryDays}
+										onValueChange={(value) => setExpiryDays(value as "1" | "7" | "30")}
 									>
 										<SelectTrigger>
 											<SelectValue />
 										</SelectTrigger>
 										<SelectContent>
-											<SelectItem value="member">Member</SelectItem>
-											<SelectItem value="admin">Admin</SelectItem>
+											<SelectItem value="1">1 day</SelectItem>
+											<SelectItem value="7">7 days</SelectItem>
+											<SelectItem value="30">30 days</SelectItem>
 										</SelectContent>
 									</Select>
 								</div>
 							</div>
 							<DialogFooter>
-								<Button disabled={isPending || !email} onClick={inviteMember}>
-									{isPending && <Loader2 className="size-4 animate-spin" />}
+								<Button
+									disabled={inviteMember.isPending || !email}
+									onClick={() =>
+										inviteMember.mutate({
+											email,
+											role,
+											expiryDays: Number.parseInt(expiryDays, 10) as 1 | 7 | 30,
+										})
+									}
+								>
+									{inviteMember.isPending && <Loader2 className="size-4 animate-spin" />}
 									Send invitation
 								</Button>
 							</DialogFooter>
@@ -283,8 +313,11 @@ export function MembersCard() {
 														<SelectValue />
 													</SelectTrigger>
 													<SelectContent>
-														<SelectItem value="member">Member</SelectItem>
-														<SelectItem value="admin">Admin</SelectItem>
+														{INVITABLE_ROLES.map((item) => (
+															<SelectItem key={item.value} value={item.value}>
+																{item.label}
+															</SelectItem>
+														))}
 													</SelectContent>
 												</Select>
 											)}
@@ -315,7 +348,7 @@ export function MembersCard() {
 										<span className="truncate text-sm font-medium">{invitation.email}</span>
 										<span className="text-xs text-muted-foreground capitalize">
 											{invitation.role} · expires{" "}
-											{format(new Date(invitation.expiresAt), "MMM d, yyyy")}
+											{format(new Date(invitation.expiresAt), "MMM d, yyyy 'at' h:mm a")}
 										</span>
 									</div>
 									<Button variant="ghost" size="sm" onClick={() => cancelInvitation(invitation)}>

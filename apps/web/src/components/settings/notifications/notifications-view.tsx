@@ -139,6 +139,8 @@ export function NotificationsView() {
 													notification.nixployRestart && "Restarts",
 													notification.dockerCleanup && "Cleanup",
 													notification.serverThreshold && "Thresholds",
+													notification.serviceAlert && "Service alerts",
+													notification.uptimeFlip && "Uptime",
 												].filter(Boolean);
 												return (
 													<TableRow key={notification.notificationId}>

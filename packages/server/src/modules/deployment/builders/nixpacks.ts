@@ -1,5 +1,6 @@
 import { commandExists } from "../docker";
 import { shellQuote } from "../paths";
+import { prepareBuildCache } from "./cache";
 import type { BuildInput } from "./index";
 import { ensureToolBinary, type PinnedTool } from "./tools";
 
@@ -37,7 +38,13 @@ export async function buildWithNixpacks(input: BuildInput, imageTag: string): Pr
 		);
 	}
 
+	const cache = prepareBuildCache(input);
+	const noCache = cache.noCacheFlag ? ` ${cache.noCacheFlag}` : "";
+	const cacheKey = cache.enabled
+		? ` --cache-key ${shellQuote(`nixploy-${input.application.appName}`)}`
+		: "";
+
 	await ctx.run(
-		`${binary} build ${shellQuote(buildDir)} --name ${shellQuote(imageTag)} ${envFlags}`,
+		`${binary} build ${shellQuote(buildDir)} --name ${shellQuote(imageTag)} ${envFlags}${noCache}${cacheKey}`,
 	);
 }
