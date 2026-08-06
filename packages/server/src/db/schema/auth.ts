@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { boolean, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { createdAt, updatedAt } from "./utils";
 
 // ── better-auth core tables ─────────────────────────────────────────────────
@@ -80,17 +80,21 @@ export const organizations = pgTable("organization", {
 	createdAt: createdAt(),
 });
 
-export const members = pgTable("member", {
-	id: text("id").primaryKey(),
-	organizationId: text("organization_id")
-		.notNull()
-		.references(() => organizations.id, { onDelete: "cascade" }),
-	userId: text("user_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
-	role: text("role").notNull(),
-	createdAt: createdAt(),
-});
+export const members = pgTable(
+	"member",
+	{
+		id: text("id").primaryKey(),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		role: text("role").notNull(),
+		createdAt: createdAt(),
+	},
+	(table) => [index("member_user_org_idx").on(table.userId, table.organizationId)],
+);
 
 export const invitations = pgTable("invitation", {
 	id: text("id").primaryKey(),

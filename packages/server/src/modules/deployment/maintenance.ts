@@ -4,8 +4,11 @@ import { and, isNotNull, lt } from "drizzle-orm";
 import schedule from "node-schedule";
 import { db } from "../../db";
 import { previewDeployments } from "../../db/schema";
+import { createLogger } from "../../lib/logger";
 import { getConfigDir } from "../application/paths";
 import { deletePreviewDeployment } from "../preview";
+
+const log = createLogger("deployment-maintenance");
 
 /**
  * Housekeeping cron (hourly):
@@ -45,12 +48,11 @@ export async function expirePreviewDeployments(now = new Date()): Promise<number
 		try {
 			await deletePreviewDeployment(preview.previewDeploymentId);
 			removed += 1;
-			console.log(`▲ Expired preview deployment ${preview.appName}`);
+			log.info(`Expired preview deployment ${preview.appName}`);
 		} catch (error) {
-			console.error(
-				`Failed to expire preview deployment ${preview.appName}:`,
-				error instanceof Error ? error.message : error,
-			);
+			log.error(`Failed to expire preview deployment ${preview.appName}`, {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 	}
 	return removed;
@@ -99,10 +101,9 @@ export async function pruneDeploymentLogs(
 				await fs.rm(filePath, { force: true });
 				removed += 1;
 			} catch (error) {
-				console.error(
-					`Failed to prune deployment log ${filePath}:`,
-					error instanceof Error ? error.message : error,
-				);
+				log.error(`Failed to prune deployment log ${filePath}`, {
+					error: error instanceof Error ? error.message : String(error),
+				});
 			}
 		}
 		// Drop the service directory once it holds no logs at all.
@@ -130,7 +131,9 @@ export function initDeploymentMaintenance(): void {
 			await expirePreviewDeployments();
 			await pruneDeploymentLogs();
 		} catch (error) {
-			console.error("Deployment maintenance pass failed:", error);
+			log.error("Deployment maintenance pass failed", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		} finally {
 			inFlight = false;
 		}

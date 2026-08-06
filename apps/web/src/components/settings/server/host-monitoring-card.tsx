@@ -52,7 +52,7 @@ export function HostMonitoringCard() {
 	const trpc = useTRPC();
 	const statsQuery = useQuery({
 		...trpc.monitoring.serverStats.queryOptions({}),
-		refetchInterval: 10_000,
+		refetchInterval: 30_000,
 		retry: false,
 	});
 	const stats = statsQuery.data;

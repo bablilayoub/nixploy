@@ -60,7 +60,8 @@ cd apps/web && pnpm dev         # dev server on :3000
 - Apply schema with `pnpm db:migrate` (run in `packages/server` or from the root script), generate new migrations with `pnpm db:generate` after editing `packages/server/src/db/schema/*`.
 - First user completes `/setup` on a fresh database (public `/register` is
   removed); an organization named `<name>'s Org` is created during setup.
-- Detailed guides live in `docs/` (architecture, development setup, deployment flow, domains/Traefik, auth, audit & roles, docker control center, observability, templates).
+- Detailed guides live in `docs/` — start at [`docs/README.md`](docs/README.md). Phase 9 polish checklist: [`docs/next.md`](docs/next.md).
+- `docs/hardening.md` is the current Phase 9 backlog: indexes, tenancy tests, dedupe and runtime cost. Check it before starting cleanup work so two people don't fix the same thing.
 
 ## Notes
 

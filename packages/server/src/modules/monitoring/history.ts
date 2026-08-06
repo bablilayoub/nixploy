@@ -4,10 +4,13 @@ import { eq } from "drizzle-orm";
 import schedule from "node-schedule";
 import { db } from "../../db";
 import { environments, webServerSettings } from "../../db/schema";
+import { createLogger } from "../../lib/logger";
 import { resolveLocalContainer } from "../../ws/docker";
 import { mapDockerStats } from "../../ws/docker-stats";
 import { getConfigDir } from "../application/paths";
 import { notifyEvent } from "../notifications";
+
+const log = createLogger("metrics-history");
 
 /**
  * Metrics history: a lightweight per-service ring buffer on disk. Every 30s
@@ -299,7 +302,9 @@ export function initMetricsHistory(): void {
 		try {
 			await sampleAllServices();
 		} catch (error) {
-			console.error("Metrics history pass failed:", error);
+			log.error("Metrics history pass failed", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		} finally {
 			inFlight = false;
 		}

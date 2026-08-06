@@ -314,3 +314,62 @@ export async function getServerStats(serverId: string): Promise<ServerStats> {
 		loadAverage: [Number(loadParts[0] ?? 0), Number(loadParts[1] ?? 0), Number(loadParts[2] ?? 0)],
 	};
 }
+
+const STATS_CACHE_TTL_MS = 30_000;
+const STATS_BATCH_CONCURRENCY = 4;
+
+type StatsCacheEntry = { at: number; promise: Promise<ServerStats> };
+const serverStatsCache = new Map<string, StatsCacheEntry>();
+
+/** Same as `getServerStats` but shares in-flight / fresh results for ~30s. */
+export async function getServerStatsCached(serverId: string): Promise<ServerStats> {
+	const hit = serverStatsCache.get(serverId);
+	if (hit && Date.now() - hit.at < STATS_CACHE_TTL_MS) {
+		return hit.promise;
+	}
+	const promise = getServerStats(serverId).catch((error: unknown) => {
+		serverStatsCache.delete(serverId);
+		throw error;
+	});
+	serverStatsCache.set(serverId, { at: Date.now(), promise });
+	return promise;
+}
+
+async function mapWithConcurrency<T, R>(
+	items: T[],
+	concurrency: number,
+	fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+	if (items.length === 0) return [];
+	const results: R[] = new Array(items.length);
+	let nextIndex = 0;
+	const worker = async () => {
+		while (nextIndex < items.length) {
+			const index = nextIndex;
+			nextIndex += 1;
+			results[index] = await fn(items[index] as T);
+		}
+	};
+	const poolSize = Math.min(concurrency, items.length);
+	await Promise.all(Array.from({ length: poolSize }, () => worker()));
+	return results;
+}
+
+/**
+ * Collect live metrics for many servers with a bounded SSH pool and the
+ * shared TTL cache. Failed hosts map to `null` so one bad node does not
+ * fail the whole servers table.
+ */
+export async function getServerStatsBatch(
+	serverIds: string[],
+): Promise<Record<string, ServerStats | null>> {
+	const unique = [...new Set(serverIds.filter(Boolean))];
+	const pairs = await mapWithConcurrency(unique, STATS_BATCH_CONCURRENCY, async (serverId) => {
+		try {
+			return [serverId, await getServerStatsCached(serverId)] as const;
+		} catch {
+			return [serverId, null] as const;
+		}
+	});
+	return Object.fromEntries(pairs);
+}

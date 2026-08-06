@@ -2,8 +2,9 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
 	test: {
-		// Unit tests only: pure/logic-heavy modules with mocked boundaries.
-		// No live Docker, database, or network access.
+		// Unit tests: pure/logic-heavy modules with mocked boundaries.
+		// Tenancy suite (`trpc/tenancy.test.ts`) needs DATABASE_URL_TEST; it
+		// skips when unset so the default run stays offline.
 		include: ["src/**/*.test.ts"],
 		environment: "node",
 		env: {

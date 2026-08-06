@@ -17,14 +17,29 @@ import { resolveCallerOrganizationId } from "../projects";
 
 type Session = NonNullable<TRPCContext["session"]>;
 
+/** Per-request cache keyed by the session object shared across tRPC procedures. */
+const organizationIdBySession = new WeakMap<object, Promise<string>>();
+
 /**
  * Active organization of the request. Falls back to the caller's first
  * membership when the session has no active organization (e.g. stale
  * sessions created before org selection); hard-fails only when the user
  * belongs to no organization at all.
+ *
+ * Memoized per session object so batched tRPC procedures share one membership
+ * query. Outside tRPC (crons, webhooks) each call still resolves normally when
+ * sessions are distinct objects.
  */
-export const getOrganizationId = (session: Session): Promise<string> =>
-	resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
+export const getOrganizationId = (session: Session): Promise<string> => {
+	const cached = organizationIdBySession.get(session);
+	if (cached) return cached;
+	const promise = resolveCallerOrganizationId(
+		session.user.id,
+		session.session.activeOrganizationId,
+	);
+	organizationIdBySession.set(session, promise);
+	return promise;
+};
 
 export type ApplicationWithTenancy = NonNullable<Awaited<ReturnType<typeof findApplication>>>;
 

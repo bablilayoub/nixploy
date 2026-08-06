@@ -14,7 +14,7 @@ import {
 	redis,
 } from "../../db/schema";
 import { auditFromSession } from "../../modules/audit";
-import { getDeploymentStatsSince } from "../../modules/deployments";
+import { getDeploymentStatsSince } from "../../modules/deployment/queries";
 import {
 	assertOrgRole,
 	assertWithinQuota,

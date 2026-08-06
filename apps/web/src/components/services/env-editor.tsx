@@ -1,10 +1,10 @@
 "use client";
 
-import CodeMirror from "@uiw/react-codemirror";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { CodeEditor } from "@/components/ui/code-editor";
 
 export function EnvEditor({
 	value,
@@ -17,19 +17,30 @@ export function EnvEditor({
 }) {
 	const [draft, setDraft] = useState(value);
 	const [saving, setSaving] = useState(false);
+	const [editing, setEditing] = useState(false);
 
-	// Re-sync when the server value changes (e.g. after refetch).
 	useEffect(() => {
-		setDraft(value);
-	}, [value]);
+		if (!editing) setDraft(value);
+	}, [value, editing]);
 
 	const dirty = draft !== value;
 	const busy = Boolean(loading) || saving;
+
+	const startEditing = () => {
+		setDraft(value);
+		setEditing(true);
+	};
+
+	const stopEditing = (reset: boolean) => {
+		if (reset) setDraft(value);
+		setEditing(false);
+	};
 
 	const handleSave = async () => {
 		setSaving(true);
 		try {
 			await onSave(draft);
+			stopEditing(false);
 		} finally {
 			setSaving(false);
 		}
@@ -37,29 +48,46 @@ export function EnvEditor({
 
 	return (
 		<div className="space-y-3">
-			<div className="overflow-hidden rounded-lg border border-border [&_.cm-editor]:bg-transparent [&_.cm-editor]:text-[13px] [&_.cm-gutters]:bg-transparent [&_.cm-gutters]:border-r-border">
-				<CodeMirror
-					value={draft}
-					onChange={setDraft}
-					theme="dark"
-					minHeight="16rem"
-					placeholder={"KEY=value\nANOTHER_KEY=another value"}
-					basicSetup={{
-						lineNumbers: true,
-						foldGutter: false,
-						highlightActiveLine: true,
-					}}
-				/>
-			</div>
+			<CodeEditor
+				value={draft}
+				onChange={setDraft}
+				protect={!editing}
+				locked={!editing}
+				onLockedChange={(nextLocked) => {
+					if (!nextLocked) startEditing();
+				}}
+				readOnly={!editing}
+				minHeight="16rem"
+				placeholder={"KEY=value\nANOTHER_KEY=another value"}
+				basicSetup={{
+					lineNumbers: true,
+					foldGutter: false,
+				}}
+				lockMessage="Locked to prevent accidental edits."
+			/>
 			<div className="flex items-center justify-between gap-3">
 				<p className="text-xs text-muted-foreground">
 					One <code className="font-mono">KEY=VALUE</code> pair per line. Lines starting with{" "}
 					<code className="font-mono">#</code> are comments.
 				</p>
-				<Button onClick={handleSave} disabled={!dirty || busy} size="sm">
-					{busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-					Save
-				</Button>
+				{editing && (
+					<div className="flex items-center gap-2">
+						<Button
+							type="button"
+							variant="secondary"
+							size="sm"
+							onClick={() => stopEditing(true)}
+							disabled={busy}
+						>
+							<X className="size-3.5" />
+							Cancel
+						</Button>
+						<Button onClick={handleSave} disabled={!dirty || busy} size="sm">
+							{busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+							Save
+						</Button>
+					</div>
+				)}
 			</div>
 		</div>
 	);

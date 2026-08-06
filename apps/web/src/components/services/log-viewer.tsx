@@ -86,8 +86,8 @@ const LEVEL_STYLES: Record<
 	},
 	debug: {
 		tag: "DBG",
-		badge: "bg-zinc-500/15 text-zinc-400",
-		text: "text-zinc-500",
+		badge: "bg-muted text-muted-foreground",
+		text: "text-muted-foreground",
 	},
 };
 
@@ -115,10 +115,10 @@ function LogLine({ line, wrap }: { line: string; wrap: boolean }) {
 				className={cn(
 					"min-w-0 flex-1",
 					wrap ? "whitespace-pre-wrap break-all" : "whitespace-pre",
-					style?.text ?? "text-[#ededed]",
+					style?.text ?? "text-foreground",
 				)}
 			>
-				{timestamp && <span className="text-[#666666]">{timestamp[1]} </span>}
+				{timestamp && <span className="text-muted-foreground">{timestamp[1]} </span>}
 				{body || " "}
 			</span>
 		</div>
@@ -497,10 +497,10 @@ export function LogViewer({
 			<div
 				ref={containerRef}
 				onScroll={handleScroll}
-				className="h-[28rem] overflow-auto bg-[#0a0a0a] p-3 font-mono text-xs leading-5 text-[#ededed]"
+				className="h-[28rem] overflow-auto bg-card p-3 font-mono text-xs leading-5 text-foreground"
 			>
 				{visibleLines.length === 0 ? (
-					<span className="text-[#666666]">
+					<span className="text-muted-foreground">
 						{lines.length === 0
 							? status === "connecting"
 								? "Waiting for logs…"

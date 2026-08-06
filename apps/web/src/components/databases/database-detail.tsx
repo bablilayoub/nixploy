@@ -135,7 +135,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 	const db = rowQuery.data as DatabaseRow | undefined;
 
 	const statusQuery = useQuery(
-		ns.getStatus.queryOptions(idInput, { refetchInterval: 10_000, retry: false }),
+		ns.getStatus.queryOptions(idInput, { refetchInterval: 30_000, retry: false }),
 	);
 	const status = ((statusQuery.data as ServiceStatus | undefined) ??
 		db?.status ??

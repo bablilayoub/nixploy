@@ -2,7 +2,6 @@
 
 import { yaml } from "@codemirror/lang-yaml";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import CodeMirror from "@uiw/react-codemirror";
 import {
 	CheckCircle2,
 	ExternalLink,
@@ -33,6 +32,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CodeEditor } from "@/components/ui/code-editor";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -545,16 +545,14 @@ export function ServerSettingsView() {
 					) : (
 						<>
 							{traefikConfig?.staticConfig ? (
-								<div className="overflow-hidden rounded-lg border border-border [&_.cm-editor]:bg-transparent [&_.cm-editor]:text-[13px] [&_.cm-gutters]:bg-transparent">
-									<CodeMirror
-										value={traefikConfig.staticConfig}
-										extensions={[yaml()]}
-										readOnly
-										editable={false}
-										maxHeight="24rem"
-										basicSetup={{ lineNumbers: true, foldGutter: true }}
-									/>
-								</div>
+								<CodeEditor
+									value={traefikConfig.staticConfig}
+									extensions={[yaml()]}
+									readOnly
+									maxHeight="24rem"
+									basicSetup={{ lineNumbers: true, foldGutter: true }}
+									lockMessage="Traefik static config is read-only. Unlock to view the full file."
+								/>
 							) : (
 								<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
 									<FileCode2 className="size-8 text-muted-foreground" />

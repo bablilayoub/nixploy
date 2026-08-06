@@ -2,7 +2,6 @@
 
 import { yaml } from "@codemirror/lang-yaml";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import CodeMirror from "@uiw/react-codemirror";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -10,6 +9,7 @@ import type { ComposeService } from "@/components/compose/compose-detail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CodeEditor } from "@/components/ui/code-editor";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
 
@@ -18,9 +18,10 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 	const queryClient = useQueryClient();
 
 	const [value, setValue] = useState(compose.composeFile);
+	const [locked, setLocked] = useState(true);
 	useEffect(() => {
-		setValue(compose.composeFile);
-	}, [compose.composeFile]);
+		if (locked) setValue(compose.composeFile);
+	}, [compose.composeFile, locked]);
 
 	const servicesQuery = useQuery(
 		trpc.compose.loadServices.queryOptions({ composeId: compose.composeId }),
@@ -30,6 +31,7 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 		trpc.compose.saveComposeFile.mutationOptions({
 			onSuccess: () => {
 				toast.success("Compose file saved");
+				setLocked(true);
 				queryClient.invalidateQueries({
 					queryKey: trpc.compose.one.queryKey({ composeId: compose.composeId }),
 				});
@@ -43,6 +45,11 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 		}),
 	);
 
+	const cancelEditing = () => {
+		setValue(compose.composeFile);
+		setLocked(true);
+	};
+
 	return (
 		<div className="flex flex-col gap-4">
 			<Card>
@@ -55,30 +62,46 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 								: "Overwrites the compose file inside the local clone of the source."}
 						</CardDescription>
 					</div>
-					<Button
-						size="sm"
-						disabled={saveMutation.isPending || value === compose.composeFile}
-						onClick={() =>
-							saveMutation.mutate({
-								composeId: compose.composeId,
-								composeFile: value,
-							})
-						}
-					>
-						{saveMutation.isPending ? "Saving…" : "Save"}
-					</Button>
+					{!locked && (
+						<div className="flex items-center gap-2">
+							<Button
+								size="sm"
+								variant="secondary"
+								disabled={saveMutation.isPending}
+								onClick={cancelEditing}
+							>
+								Cancel
+							</Button>
+							<Button
+								size="sm"
+								disabled={saveMutation.isPending || value === compose.composeFile}
+								onClick={() =>
+									saveMutation.mutate({
+										composeId: compose.composeId,
+										composeFile: value,
+									})
+								}
+							>
+								{saveMutation.isPending ? "Saving…" : "Save"}
+							</Button>
+						</div>
+					)}
 				</CardHeader>
 				<CardContent>
-					<div className="overflow-hidden rounded-lg border [&_.cm-editor]:min-h-[60vh] [&_.cm-editor]:text-sm">
-						<CodeMirror
-							value={value}
-							onChange={setValue}
-							extensions={[yaml()]}
-							theme="dark"
-							height="60vh"
-							basicSetup={{ lineNumbers: true, foldGutter: true }}
-						/>
-					</div>
+					<CodeEditor
+						value={value}
+						onChange={setValue}
+						locked={locked}
+						onLockedChange={(next) => {
+							if (!next) setValue(compose.composeFile);
+							setLocked(next);
+						}}
+						extensions={[yaml()]}
+						height="60vh"
+						className="[&_.cm-editor]:min-h-[60vh] [&_.cm-editor]:text-sm"
+						basicSetup={{ lineNumbers: true, foldGutter: true }}
+						lockMessage="Locked to prevent accidental edits. Unlock to change the compose file."
+					/>
 				</CardContent>
 			</Card>
 

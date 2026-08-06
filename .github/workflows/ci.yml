@@ -14,6 +14,24 @@ jobs:
   check:
     name: Typecheck & test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nixploy
+          POSTGRES_PASSWORD: nixploy
+          POSTGRES_DB: nixploy_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nixploy -d nixploy_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://nixploy:nixploy@localhost:5432/nixploy_test
+      DATABASE_URL_TEST: postgres://nixploy:nixploy@localhost:5432/nixploy_test
+      ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,6 +53,9 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Migrate test database
+        run: pnpm db:migrate
 
       - name: Unit tests
         run: pnpm test

@@ -6,6 +6,8 @@ A free, self-hostable Platform as a Service (PaaS) that simplifies the deploymen
 
 Inspired by Dokploy and Coolify — built to be better.
 
+**Migrating?** See [from Dokploy](docs/migrate-from-dokploy.md) or [from Coolify](docs/migrate-from-coolify.md). New install: [docs/install.md](docs/install.md) · [getting started](docs/getting-started.md). Full docs index: [docs/README.md](docs/README.md). What’s next (polish): [docs/next.md](docs/next.md).
+
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D22-green)
 ![pnpm](https://img.shields.io/badge/pnpm-%3E%3D10-orange)
@@ -80,7 +82,10 @@ The script is **idempotent**. It detects the OS, installs Docker if needed, init
 
 A domain can also be linked later from the UI: **Settings → Server → Dashboard domain** (with DNS preflight check and automatic Let's Encrypt certificates).
 
-Useful overrides: `NIXPLOY_VERSION`, `NIXPLOY_IMAGE`, `NIXPLOY_PORT`, `NIXPLOY_CONFIG_DIR`, `NIXPLOY_BUILD_FROM_SOURCE=1`, `NIXPLOY_SKIP_DOCKER_INSTALL=1` (see the header of `install.sh`).
+Useful overrides: see [`docs/install.md`](./docs/install.md) (source of truth
+for installer/updater env knobs). Examples: `NIXPLOY_VERSION`, `NIXPLOY_IMAGE`,
+`NIXPLOY_PORT`, `NIXPLOY_CONFIG_DIR`, `NIXPLOY_BUILD_FROM_SOURCE=1`,
+`NIXPLOY_SKIP_DOCKER_INSTALL=1`.
 
 The app image is published to [`ghcr.io/bablilayoub/nixploy`](https://github.com/bablilayoub/nixploy/pkgs/container/nixploy). If the pull fails (e.g. before the first CI publish), the installer builds from source automatically.
 
@@ -94,7 +99,9 @@ curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/update.sh 
 
 Pulls `ghcr.io/bablilayoub/nixploy:latest`, rolls the Swarm services, refreshes Traefik's static config, and waits until the dashboard is healthy. Secrets, Postgres data, ACME certificates and dynamic routes are kept — database migrations run automatically when the new container starts.
 
-Pin a version with `NIXPLOY_VERSION=v0.1.0`, or skip Traefik with `NIXPLOY_UPDATE_TRAEFIK=0` (see the header of `update.sh`).
+Pin a version with `NIXPLOY_VERSION=v0.1.0`, or skip Traefik with
+`NIXPLOY_UPDATE_TRAEFIK=0`. Full update knobs:
+[`docs/install.md`](./docs/install.md#update-overrides).
 
 ### Local development
 
@@ -155,6 +162,10 @@ Every tRPC procedure is exposed as a REST endpoint under `/api/<router>.<procedu
 
 ## Environment Variables
 
+Runtime secrets for the app process (set by the installer under
+`$NIXPLOY_CONFIG_DIR/.env`). Installer/updater knobs live in
+[`docs/install.md`](./docs/install.md).
+
 | Variable | Required | Description |
 |---|---|---|
 | `DATABASE_URL` | yes | PostgreSQL connection string |
@@ -163,6 +174,8 @@ Every tRPC procedure is exposed as a REST endpoint under `/api/<router>.<procedu
 | `BETTER_AUTH_URL` | no | Public base URL of the app (auth callbacks, trusted origin) |
 | `NIXPLOY_CONFIG_DIR` | no | Config/data directory for Traefik YAML, app code, logs (default `/etc/nixploy`) |
 | `PORT` | no | HTTP port of the app process (default `3000`) |
+| `DATABASE_POOL_MAX` | no | Postgres pool size (default `10`) |
+| `LOG_LEVEL` / `LOG_FORMAT` | no | Process logger level / `json` output |
 
 ## License
 

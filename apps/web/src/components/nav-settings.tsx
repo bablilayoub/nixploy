@@ -10,11 +10,11 @@ export const settingsNavItems: SubNavItem[] = [
 	{ label: "Servers", href: "/dashboard/settings/servers" },
 	{ label: "Web Server", href: "/dashboard/settings/server" },
 	{ label: "SSH Keys", href: "/dashboard/settings/ssh-keys" },
+	{ label: "Certificates", href: "/dashboard/settings/certificates" },
 	{ label: "Git Providers", href: "/dashboard/settings/git-providers" },
 	{ label: "Registries", href: "/dashboard/settings/registries" },
 	{ label: "Destinations", href: "/dashboard/settings/destinations" },
 	{ label: "Notifications", href: "/dashboard/settings/notifications" },
-	{ label: "Certificates", href: "/dashboard/settings/certificates" },
 ];
 
 /** Settings sub-navigation rendered as horizontal tabs under the top navbar. */

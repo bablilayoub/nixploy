@@ -82,7 +82,7 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 
 	const containersQuery = useQuery({
 		...trpc.docker.containers.queryOptions({ serverId }),
-		refetchInterval: 10_000,
+		refetchInterval: 30_000,
 	});
 
 	const invalidate = () =>

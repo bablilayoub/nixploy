@@ -3,6 +3,7 @@ import {
 	boolean,
 	customType,
 	doublePrecision,
+	index,
 	integer,
 	jsonb,
 	pgTable,
@@ -68,19 +69,27 @@ export const incidents = pgTable("incident", {
  * Indexed log chunks for lite search (Postgres tsvector).
  * Retention is enforced by pruning oldest rows when total size exceeds a cap.
  */
-export const serviceLogs = pgTable("service_log", {
-	serviceLogId: idColumn("service_log_id"),
-	organizationId: text("organization_id")
-		.notNull()
-		.references(() => organizations.id, { onDelete: "cascade" }),
-	serviceId: text("service_id").notNull(),
-	/** application | compose */
-	serviceType: text("service_type").notNull(),
-	deploymentId: text("deployment_id"),
-	body: text("body").notNull(),
-	searchVector: tsvector("search_vector"),
-	createdAt: createdAt(),
-});
+export const serviceLogs = pgTable(
+	"service_log",
+	{
+		serviceLogId: idColumn("service_log_id"),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		serviceId: text("service_id").notNull(),
+		/** application | compose */
+		serviceType: text("service_type").notNull(),
+		deploymentId: text("deployment_id"),
+		body: text("body").notNull(),
+		searchVector: tsvector("search_vector"),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		// Name matches 0008 (created outside Drizzle schema tracking).
+		index("service_log_search_vector_idx").using("gin", table.searchVector),
+		index("service_log_org_created_idx").on(table.organizationId, table.createdAt),
+	],
+);
 
 /** Optional HTTP uptime probe configuration (one row per domain when enabled). */
 export const uptimeProbes = pgTable("uptime_probe", {

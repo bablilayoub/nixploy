@@ -59,6 +59,14 @@ export function ServersView() {
 		refetch,
 	} = useQuery(trpc.server.all.queryOptions());
 
+	const serverIds = servers?.map((server) => server.serverId) ?? [];
+	const { data: statsByServerId, isPending: statsPending } = useQuery({
+		...trpc.server.getStatsBatch.queryOptions({ serverIds }),
+		enabled: serverIds.length > 0,
+		staleTime: 30_000,
+		retry: false,
+	});
+
 	const invalidate = () => queryClient.invalidateQueries({ queryKey: trpc.server.all.queryKey() });
 
 	const testMutation = useMutation(
@@ -202,7 +210,10 @@ export function ServersView() {
 											</span>
 										</TableCell>
 										<TableCell className="hidden lg:table-cell">
-											<ServerCapacityCell serverId={server.serverId} />
+											<ServerCapacityCell
+												stats={statsByServerId?.[server.serverId]}
+												isPending={serverIds.length > 0 && statsPending}
+											/>
 										</TableCell>
 										<TableCell className="hidden text-muted-foreground md:table-cell">
 											{format(new Date(server.createdAt), "MMM d, yyyy")}

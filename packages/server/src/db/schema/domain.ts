@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { boolean, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { encryptedText } from "../custom-columns";
 import { applications } from "./application";
@@ -41,7 +41,11 @@ export const domains = pgTable(
 		certificateId: text("certificate_id"),
 		createdAt: createdAt(),
 	},
-	(table) => [uniqueIndex("domain_host_path_unique").on(table.host, table.path, table.port)],
+	(table) => [
+		uniqueIndex("domain_host_path_unique").on(table.host, table.path, table.port),
+		index("domain_application_id_idx").on(table.applicationId),
+		index("domain_compose_id_idx").on(table.composeId),
+	],
 );
 
 /** Manually uploaded TLS certificates. */

@@ -7,9 +7,10 @@ import { findProjectById } from "../projects";
 
 /**
  * Read-side deployment queries for the organization-wide deployments
- * overview. Writes (queue/cancel) live in `modules/deployment`; this module
- * only lists and aggregates, always scoped to the caller's organization via
- * the service → environment → project tenancy chain.
+ * overview. Writes (queue/cancel) live in sibling files under
+ * `modules/deployment`; this module only lists and aggregates, always scoped
+ * to the caller's organization via the service → environment → project
+ * tenancy chain.
  */
 
 export type DeploymentRow = typeof deployments.$inferSelect;

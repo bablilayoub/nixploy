@@ -4,8 +4,11 @@ import { eq } from "drizzle-orm";
 import schedule from "node-schedule";
 import { db } from "../../db";
 import { deployments, schedules } from "../../db/schema";
+import { createLogger } from "../../lib/logger";
 import { getConfigDir } from "../application/paths";
 import { runScheduleCommand } from "./runner";
+
+const log = createLogger("schedules");
 
 export type { ScheduleTarget } from "./runner";
 export { runScheduleCommand } from "./runner";
@@ -90,7 +93,9 @@ async function recordRun(
 			scheduleId: row.scheduleId,
 		});
 	} catch (error) {
-		console.error(`Failed to record schedule run ${row.scheduleId}:`, error);
+		log.error(`Failed to record schedule run ${row.scheduleId}`, {
+			error: error instanceof Error ? error.message : String(error),
+		});
 	}
 }
 
@@ -151,7 +156,9 @@ export function registerSchedule(row: ScheduleRow): void {
 	if (!row.enabled) return;
 	const job = schedule.scheduleJob(row.scheduleId, row.cronExpression, () => {
 		void runSchedule(row, "cron").catch((error) => {
-			console.error(`Schedule ${row.name} (${row.scheduleId}) failed:`, error);
+			log.error(`Schedule ${row.name} (${row.scheduleId}) failed`, {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		});
 	});
 	if (!job) {
@@ -179,8 +186,10 @@ export async function initSchedules(): Promise<void> {
 		try {
 			registerSchedule(row);
 		} catch (error) {
-			console.error(`Failed to register schedule ${row.name} (${row.scheduleId}):`, error);
+			log.error(`Failed to register schedule ${row.name} (${row.scheduleId})`, {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 	}
-	console.log(`Initialized ${jobs.size} schedules`);
+	log.info(`Initialized ${jobs.size} schedules`);
 }

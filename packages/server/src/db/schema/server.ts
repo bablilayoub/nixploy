@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { boolean, integer, jsonb, pgTable, text } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, text } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { encryptedText } from "../custom-columns";
 import { organizations } from "./auth";
@@ -19,28 +19,32 @@ export const sshKeys = pgTable("ssh_key", {
 });
 
 /** A remote (or local) Docker host managed over SSH. */
-export const servers = pgTable("server", {
-	serverId: idColumn("server_id"),
-	name: text("name").notNull(),
-	description: text("description"),
-	ipAddress: text("ip_address").notNull(),
-	port: integer("port").notNull().default(22),
-	username: text("username").notNull().default("root"),
-	sshKeyId: text("ssh_key_id").references(() => sshKeys.sshKeyId, {
-		onDelete: "set null",
-	}),
-	serverStatus: serverStatus("server_status").notNull().default("active"),
-	/** Join the primary swarm as a worker (default) or manager. */
-	swarmRole: swarmRole("swarm_role").notNull().default("worker"),
-	/** Shell command run after provisioning (swarm join log etc.). */
-	command: text("command").notNull().default(""),
-	metricsConfig: jsonb("metrics_config"),
-	enableDockerCleanup: boolean("enable_docker_cleanup").notNull().default(false),
-	organizationId: text("organization_id")
-		.notNull()
-		.references(() => organizations.id, { onDelete: "cascade" }),
-	createdAt: createdAt(),
-});
+export const servers = pgTable(
+	"server",
+	{
+		serverId: idColumn("server_id"),
+		name: text("name").notNull(),
+		description: text("description"),
+		ipAddress: text("ip_address").notNull(),
+		port: integer("port").notNull().default(22),
+		username: text("username").notNull().default("root"),
+		sshKeyId: text("ssh_key_id").references(() => sshKeys.sshKeyId, {
+			onDelete: "set null",
+		}),
+		serverStatus: serverStatus("server_status").notNull().default("active"),
+		/** Join the primary swarm as a worker (default) or manager. */
+		swarmRole: swarmRole("swarm_role").notNull().default("worker"),
+		/** Shell command run after provisioning (swarm join log etc.). */
+		command: text("command").notNull().default(""),
+		metricsConfig: jsonb("metrics_config"),
+		enableDockerCleanup: boolean("enable_docker_cleanup").notNull().default(false),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		createdAt: createdAt(),
+	},
+	(table) => [index("server_organization_id_idx").on(table.organizationId)],
+);
 
 /** Singleton row with settings for the Nixploy host itself. */
 export const webServerSettings = pgTable("web_server_settings", {

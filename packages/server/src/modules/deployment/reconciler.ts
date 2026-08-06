@@ -12,9 +12,12 @@ import {
 	postgres,
 	redis,
 } from "../../db/schema";
+import { createLogger } from "../../lib/logger";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { inspectServiceState, statusFromServiceState } from "../databases/engine";
 import { notifyEvent } from "../notifications";
+
+const log = createLogger("status-reconciler");
 
 /**
  * Status reconciler: periodically compares every service's stored status
@@ -311,10 +314,12 @@ export function initStatusReconciler(): void {
 		try {
 			const corrections = await reconcileServiceStatuses();
 			for (const fix of corrections) {
-				console.log(`▲ Status reconciler: ${fix.kind} ${fix.appName} ${fix.from} → ${fix.to}`);
+				log.info(`Status reconciler: ${fix.kind} ${fix.appName} ${fix.from} → ${fix.to}`);
 			}
 		} catch (error) {
-			console.error("Status reconciler pass failed:", error);
+			log.error("Status reconciler pass failed", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		} finally {
 			running = false;
 		}

@@ -64,5 +64,7 @@ Production build before shipping big UI changes:
 
 `AGENTS.md` (conventions), `docs/architecture.md`, `docs/development.md`,
 `docs/auth.md`, `docs/deployment-flow.md`, `docs/domains-traefik.md`,
-`docs/templates.md`, `PLAN.md` (product blueprint). Keep them in sync when you
+`docs/templates.md`, `docs/install.md`, `docs/getting-started.md`,
+`docs/migrate-from-dokploy.md`, `docs/migrate-from-coolify.md`,
+`PLAN.md` (product blueprint). Keep them in sync when you
 change behavior.

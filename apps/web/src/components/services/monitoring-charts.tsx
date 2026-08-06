@@ -385,7 +385,7 @@ export function MonitoringCharts({
 	// Per-replica breakdown (only rendered when the service has >1 container).
 	const replicasQuery = useQuery({
 		...trpc.monitoring.replicaStats.queryOptions({ appName, serverId }),
-		refetchInterval: 5_000,
+		refetchInterval: 30_000,
 	});
 	const replicas = replicasQuery.data ?? [];
 

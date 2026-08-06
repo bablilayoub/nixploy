@@ -1,7 +1,10 @@
 import schedule from "node-schedule";
+import { createLogger } from "../../lib/logger";
 import { applyUpdate, clearStaleUpdateFlag } from "./apply";
 import { checkForUpdates } from "./check";
 import { DEFAULT_CHECK_CRON, getUpdateSettings } from "./settings";
+
+const log = createLogger("updates");
 
 let started = false;
 let inFlight = false;
@@ -16,20 +19,22 @@ async function runUpdatePass(): Promise<void> {
 
 		const result = await checkForUpdates({ persist: true });
 		if (result.error) {
-			console.warn(`▲ Update check failed: ${result.error}`);
+			log.warn(`Update check failed: ${result.error}`);
 			return;
 		}
 		if (result.updateAvailable) {
-			console.log(
-				`▲ Update available: ${result.currentDigest?.slice(0, 19)}… → ${result.latestDigest?.slice(0, 19)}…`,
+			log.info(
+				`Update available: ${result.currentDigest?.slice(0, 19)}… → ${result.latestDigest?.slice(0, 19)}…`,
 			);
 		}
 		if (result.updateAvailable && settings.autoUpdateEnabled) {
-			console.log(`▲ Auto-update: rolling ${result.latestImage}`);
+			log.info(`Auto-update: rolling ${result.latestImage}`);
 			await applyUpdate({ image: result.latestImage });
 		}
 	} catch (error) {
-		console.error("Update check pass failed:", error);
+		log.error("Update check pass failed", {
+			error: error instanceof Error ? error.message : String(error),
+		});
 	} finally {
 		inFlight = false;
 	}
@@ -44,13 +49,13 @@ export async function rescheduleUpdateChecker(): Promise<void> {
 		job = null;
 	}
 	if (!settings.autoCheckEnabled) {
-		console.log("▲ Update checker disabled");
+		log.info("Update checker disabled");
 		return;
 	}
 	job = schedule.scheduleJob("nixploy-update-check", cron, () => {
 		void runUpdatePass();
 	});
-	console.log(`▲ Update checker scheduled (${cron})`);
+	log.info(`Update checker scheduled (${cron})`);
 }
 
 /**

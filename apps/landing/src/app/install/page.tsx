@@ -29,13 +29,48 @@ export default function InstallPage() {
 				</section>
 				<section className="space-y-3">
 					<h2 className="text-xl font-semibold tracking-tight text-white">Useful env overrides</h2>
-					<ul className="list-disc space-y-2 pl-5 font-mono text-xs text-neutral-300">
-						<li>NIXPLOY_DOMAIN</li>
-						<li>NIXPLOY_LETSENCRYPT_EMAIL</li>
-						<li>NIXPLOY_VERSION / NIXPLOY_IMAGE</li>
-						<li>NIXPLOY_PORT / NIXPLOY_CONFIG_DIR</li>
-						<li>NIXPLOY_BUILD_FROM_SOURCE=1</li>
-					</ul>
+					<p>
+						Installer and updater knobs (`NIXPLOY_DOMAIN`, `NIXPLOY_VERSION`,
+						`NIXPLOY_UPDATE_TRAEFIK`, pool/log settings, …) are documented in one place:
+					</p>
+					<p className="text-sm">
+						<a
+							href={`${site.github}/blob/main/docs/install.md`}
+							className="text-white underline underline-offset-4"
+						>
+							docs/install.md
+						</a>
+					</p>
+				</section>
+				<section className="space-y-3">
+					<h2 className="text-xl font-semibold tracking-tight text-white">After install</h2>
+					<ol className="list-decimal space-y-2 pl-5">
+						<li>Open the Setup URL and create the owner account.</li>
+						<li>Deploy a whoami image or a template to confirm Traefik.</li>
+						<li>Create an API key under Settings → Profile for the CLI.</li>
+					</ol>
+					<p className="text-sm">
+						Full guide in the repo:{" "}
+						<a
+							href={`${site.github}/blob/main/docs/install.md`}
+							className="text-white underline underline-offset-4"
+						>
+							docs/install.md
+						</a>
+						{" · "}
+						<a
+							href={`${site.github}/blob/main/docs/getting-started.md`}
+							className="text-white underline underline-offset-4"
+						>
+							getting-started.md
+						</a>
+					</p>
+				</section>
+				<section className="space-y-3">
+					<h2 className="text-xl font-semibold tracking-tight text-white">Update</h2>
+					<pre className="overflow-x-auto rounded-lg border border-white/10 bg-white/[0.03] p-4 font-mono text-xs whitespace-pre-wrap text-neutral-300">
+						{`curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/update.sh | sudo bash`}
+					</pre>
 				</section>
 			</div>
 		</PageShell>

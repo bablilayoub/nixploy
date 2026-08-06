@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import schedule from "node-schedule";
 import { db } from "../../db";
 import { backups, destinations, volumeBackups } from "../../db/schema";
+import { createLogger } from "../../lib/logger";
 import {
 	type BackupRow,
 	emitBackupNotification,
@@ -9,6 +10,8 @@ import {
 	runVolumeBackup,
 	type VolumeBackupRow,
 } from "./runner";
+
+const log = createLogger("backups");
 
 /**
  * node-schedule registry for database backups and volume backups. Mirrors
@@ -53,7 +56,9 @@ async function executeBackup(backupRow: BackupRow, trigger: "cron" | "manual"): 
 			});
 		}
 		if (trigger === "manual") throw error;
-		console.error(`Backup ${backupRow.appName} (${backupRow.backupId}) failed:`, error);
+		log.error(`Backup ${backupRow.appName} (${backupRow.backupId}) failed`, {
+			error: error instanceof Error ? error.message : String(error),
+		});
 	}
 }
 
@@ -80,10 +85,9 @@ async function executeVolumeBackup(
 			});
 		}
 		if (trigger === "manual") throw error;
-		console.error(
-			`Volume backup ${volumeBackup.volumeName} (${volumeBackup.volumeBackupId}) failed:`,
-			error,
-		);
+		log.error(`Volume backup ${volumeBackup.volumeName} (${volumeBackup.volumeBackupId}) failed`, {
+			error: error instanceof Error ? error.message : String(error),
+		});
 	}
 }
 
@@ -149,17 +153,21 @@ export async function initBackupSchedules(): Promise<void> {
 		try {
 			registerBackupSchedule(row);
 		} catch (error) {
-			console.error(`Failed to register backup ${row.backupId}:`, error);
+			log.error(`Failed to register backup ${row.backupId}`, {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 	}
 	for (const row of volumeBackupRows) {
 		try {
 			registerVolumeBackupSchedule(row);
 		} catch (error) {
-			console.error(`Failed to register volume backup ${row.volumeBackupId}:`, error);
+			log.error(`Failed to register volume backup ${row.volumeBackupId}`, {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 	}
-	console.log(
+	log.info(
 		`Initialized ${backupJobs.size} backup schedules, ${volumeBackupJobs.size} volume backup schedules`,
 	);
 }

@@ -3,9 +3,11 @@
 import type { FitAddon } from "@xterm/addon-fit";
 import type { Terminal } from "@xterm/xterm";
 import { Loader2, RotateCcw } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { nixployTerminalTheme } from "@/lib/codemirror-theme";
 import { cn } from "@/lib/utils";
 
 function wsUrl(params: Record<string, string | null | undefined>) {
@@ -27,12 +29,22 @@ export function ServiceTerminal({
 	serverId?: string | null;
 }) {
 	const containerRef = useRef<HTMLDivElement>(null);
+	const terminalRef = useRef<Terminal | null>(null);
 	const [status, setStatus] = useState<TerminalStatus>("connecting");
 	// A closed shell cannot be resumed, so reconnecting is an explicit action
 	// that starts a fresh session rather than a silent background retry.
 	const [session, setSession] = useState(0);
+	const { resolvedTheme } = useTheme();
+	const isDark = resolvedTheme !== "light";
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: `session` only exists to re-run this effect and open a new shell.
+	// Keep chrome in sync with light/dark without tearing down the shell.
+	useEffect(() => {
+		const term = terminalRef.current;
+		if (!term) return;
+		term.options.theme = nixployTerminalTheme[isDark ? "dark" : "light"];
+	}, [isDark]);
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `session` re-runs this effect to open a fresh shell.
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container) return;
@@ -57,30 +69,9 @@ export function ServiceTerminal({
 				fontSize: 13,
 				fontFamily: "var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace",
 				convertEol: true,
-				theme: {
-					background: "#0a0a0a",
-					foreground: "#ededed",
-					cursor: "#ededed",
-					cursorAccent: "#0a0a0a",
-					selectionBackground: "#333333",
-					black: "#0a0a0a",
-					red: "#ee0000",
-					green: "#17c964",
-					yellow: "#f5a524",
-					blue: "#3291ff",
-					magenta: "#c084fc",
-					cyan: "#22d3ee",
-					white: "#ededed",
-					brightBlack: "#666666",
-					brightRed: "#ff5555",
-					brightGreen: "#4ade80",
-					brightYellow: "#fde047",
-					brightBlue: "#93c5fd",
-					brightMagenta: "#d8b4fe",
-					brightCyan: "#67e8f9",
-					brightWhite: "#fafafa",
-				},
+				theme: nixployTerminalTheme[isDark ? "dark" : "light"],
 			});
+			terminalRef.current = terminal;
 			fitAddon = new Fit();
 			terminal.loadAddon(fitAddon);
 			terminal.open(container);
@@ -158,16 +149,17 @@ export function ServiceTerminal({
 			resizeObserver?.disconnect();
 			ws?.close();
 			terminal?.dispose();
+			if (terminalRef.current === terminal) terminalRef.current = null;
 		};
 	}, [appName, serverId, session]);
 
 	return (
-		<div className="relative overflow-hidden rounded-lg border border-border bg-[#0a0a0a]">
+		<div className="relative overflow-hidden rounded-lg border border-border bg-card">
 			{status !== "connected" && (
 				<div
 					className={cn(
-						"absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#0a0a0a]/80",
-						"text-sm text-[#ededed]/60",
+						"absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-card/80",
+						"text-sm text-muted-foreground",
 					)}
 				>
 					{status === "connecting" ? (

@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { applications } from "./application";
 import { compose } from "./compose";
@@ -8,31 +8,38 @@ import { servers } from "./server";
 import { createdAt, idColumn } from "./utils";
 
 /** One row per deploy job; logs are written to `logPath` on disk. */
-export const deployments = pgTable("deployment", {
-	deploymentId: idColumn("deployment_id"),
-	title: text("title").notNull().default("Deployment"),
-	description: text("description"),
-	status: deploymentStatus("status").notNull().default("running"),
-	/** Absolute path of the build/deploy log file. */
-	logPath: text("log_path").notNull(),
-	/** PID of the running deploy process, used for cancellation. */
-	pid: text("pid"),
-	isPreview: boolean("is_preview").notNull().default(false),
-	errorMessage: text("error_message"),
-	startedAt: timestamp("started_at", { withTimezone: true }),
-	finishedAt: timestamp("finished_at", { withTimezone: true }),
-	applicationId: text("application_id").references(() => applications.applicationId, {
-		onDelete: "cascade",
-	}),
-	composeId: text("compose_id").references(() => compose.composeId, {
-		onDelete: "cascade",
-	}),
-	scheduleId: text("schedule_id"),
-	serverId: text("server_id").references(() => servers.serverId, {
-		onDelete: "set null",
-	}),
-	createdAt: createdAt(),
-});
+export const deployments = pgTable(
+	"deployment",
+	{
+		deploymentId: idColumn("deployment_id"),
+		title: text("title").notNull().default("Deployment"),
+		description: text("description"),
+		status: deploymentStatus("status").notNull().default("running"),
+		/** Absolute path of the build/deploy log file. */
+		logPath: text("log_path").notNull(),
+		/** PID of the running deploy process, used for cancellation. */
+		pid: text("pid"),
+		isPreview: boolean("is_preview").notNull().default(false),
+		errorMessage: text("error_message"),
+		startedAt: timestamp("started_at", { withTimezone: true }),
+		finishedAt: timestamp("finished_at", { withTimezone: true }),
+		applicationId: text("application_id").references(() => applications.applicationId, {
+			onDelete: "cascade",
+		}),
+		composeId: text("compose_id").references(() => compose.composeId, {
+			onDelete: "cascade",
+		}),
+		scheduleId: text("schedule_id"),
+		serverId: text("server_id").references(() => servers.serverId, {
+			onDelete: "set null",
+		}),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		index("deployment_app_created_idx").on(table.applicationId, table.createdAt.desc()),
+		index("deployment_compose_created_idx").on(table.composeId, table.createdAt.desc()),
+	],
+);
 
 /** A preview (per-PR) instance of an application. */
 export const previewDeployments = pgTable("preview_deployment", {

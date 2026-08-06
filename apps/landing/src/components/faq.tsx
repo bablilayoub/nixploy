@@ -2,7 +2,7 @@
 
 import { Plus } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { site } from "@/lib/site";
 
@@ -28,6 +28,10 @@ const faqs = [
 		a: "Add remote servers over SSH and deploy from one dashboard — including multi-node Docker Swarm.",
 	},
 	{
+		q: "Can I migrate from Coolify or Dokploy?",
+		a: "Yes — recreate services on Nixploy and flip DNS when ready. See Docs for Coolify and Dokploy migration guides (no automatic DB import).",
+	},
+	{
 		q: "Is it free?",
 		a: "The self-hosted product is free and open source. See Pricing and the GitHub license for details.",
 	},
@@ -35,21 +39,35 @@ const faqs = [
 
 function Item({ q, a }: { q: string; a: string }) {
 	const [open, setOpen] = useState(false);
+	const panelId = useId();
+	const buttonId = `${panelId}-button`;
+
 	return (
 		<div className="border-b border-white/10">
 			<button
 				type="button"
+				id={buttonId}
+				aria-expanded={open}
+				aria-controls={panelId}
 				onClick={() => setOpen((v) => !v)}
 				className="flex w-full items-center justify-between gap-4 py-5 text-left"
 			>
 				<span className="text-[15px] font-medium text-white">{q}</span>
 				<Plus
+					aria-hidden
 					className={`size-4 shrink-0 text-neutral-500 transition-transform duration-300 ${
 						open ? "rotate-45" : ""
 					}`}
 				/>
 			</button>
-			{open && <p className="pb-5 text-sm leading-relaxed text-neutral-400">{a}</p>}
+			<section
+				id={panelId}
+				aria-labelledby={buttonId}
+				hidden={!open}
+				className={open ? "pb-5" : undefined}
+			>
+				{open && <p className="text-sm leading-relaxed text-neutral-400">{a}</p>}
+			</section>
 		</div>
 	);
 }

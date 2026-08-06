@@ -4,7 +4,8 @@ import { auditFromSession } from "../../modules/audit";
 import {
 	createServer,
 	findServerById,
-	getServerStats,
+	getServerStatsBatch,
+	getServerStatsCached,
 	listServersByOrganization,
 	removeServer,
 	setupServer,
@@ -137,6 +138,21 @@ export const serverRouter = router({
 	getStats: protectedProcedure.input(serverIdInput).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await findServerOrThrow(input.serverId, organizationId);
-		return await getServerStats(input.serverId);
+		return await getServerStatsCached(input.serverId);
 	}),
+
+	/**
+	 * Batch capacity metrics for the servers table. Caps concurrent SSH at 4
+	 * and reuses the 30s process cache so refreshes / multi-user views do not
+	 * fan out again.
+	 */
+	getStatsBatch: protectedProcedure
+		.input(z.object({ serverIds: z.array(z.string().min(1)).max(100) }))
+		.query(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			const owned = await listServersByOrganization(organizationId);
+			const ownedIds = new Set(owned.map((server) => server.serverId));
+			const allowed = input.serverIds.filter((id) => ownedIds.has(id));
+			return await getServerStatsBatch(allowed);
+		}),
 });

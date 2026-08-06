@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { History, Search } from "lucide-react";
 import { useState } from "react";
 
+import { QueryState } from "@/components/query-state";
 import { PageHeader } from "@/components/shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -146,26 +147,32 @@ export function ActivityView() {
 				</Select>
 			</div>
 
-			{auditQuery.isLoading ? (
-				<Skeleton className="h-64 w-full" />
-			) : rows.length === 0 ? (
-				<div className="flex h-48 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border text-center">
-					<History className="size-6 text-muted-foreground" />
-					<p className="text-sm font-medium">No activity yet</p>
-					<p className="text-xs text-muted-foreground">
-						{action !== ALL || targetType !== ALL || search ? (
-							<>
-								Nothing matches these filters.{" "}
-								<button type="button" className="underline" onClick={resetFilters}>
-									Reset filters
-								</button>
-							</>
-						) : (
-							"Actions like deploys, deletions and member changes appear here."
-						)}
-					</p>
-				</div>
-			) : (
+			<QueryState
+				isPending={auditQuery.isLoading}
+				isError={auditQuery.isError}
+				error={auditQuery.error}
+				onRetry={() => auditQuery.refetch()}
+				skeleton={<Skeleton className="h-64 w-full" />}
+				isEmpty={rows.length === 0}
+				empty={
+					<div className="flex h-48 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border text-center">
+						<History className="size-6 text-muted-foreground" />
+						<p className="text-sm font-medium">No activity yet</p>
+						<p className="text-xs text-muted-foreground">
+							{action !== ALL || targetType !== ALL || search ? (
+								<>
+									Nothing matches these filters.{" "}
+									<button type="button" className="underline" onClick={resetFilters}>
+										Reset filters
+									</button>
+								</>
+							) : (
+								"Actions like deploys, deletions and member changes appear here."
+							)}
+						</p>
+					</div>
+				}
+			>
 				<div className="overflow-x-auto rounded-lg border border-border">
 					<Table>
 						<TableHeader>
@@ -203,7 +210,7 @@ export function ActivityView() {
 						</TableBody>
 					</Table>
 				</div>
-			)}
+			</QueryState>
 
 			{pageCount > 1 && (
 				<div className="flex items-center justify-between text-sm text-muted-foreground">

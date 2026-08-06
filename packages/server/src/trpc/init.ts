@@ -2,6 +2,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { db } from "../db";
 import { auth } from "../lib/auth";
+import { getOrganizationId } from "../modules/application/org";
 
 export const createTRPCContext = async (opts: { headers: Headers }) => {
 	const session = await auth.api.getSession({ headers: opts.headers });
@@ -34,10 +35,15 @@ export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
 	if (!ctx.session) {
 		throw new TRPCError({ code: "UNAUTHORIZED" });
 	}
+	const session = ctx.session;
+	// Lazily memoized via getOrganizationId's per-session WeakMap — one
+	// membership lookup shared across every procedure in this HTTP request.
+	const organizationId = () => getOrganizationId(session);
 	return next({
 		ctx: {
 			...ctx,
-			session: ctx.session,
+			session,
+			organizationId,
 		},
 	});
 });

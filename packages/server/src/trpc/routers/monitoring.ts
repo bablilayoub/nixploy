@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import { applications, compose, mariadb, mongo, mysql, postgres, redis } from "../../db/schema";
-import { findServerById, getServerStats, type ServerStats } from "../../modules/cluster";
+import { findServerById, getServerStatsCached, type ServerStats } from "../../modules/cluster";
 import { readMetricsHistory } from "../../modules/monitoring/history";
 import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
@@ -178,7 +178,7 @@ export const monitoringRouter = router({
 			}
 			const organizationId = await getOrganizationId(ctx.session);
 			await findServerOrThrow(input.serverId, organizationId);
-			return await getServerStats(input.serverId);
+			return await getServerStatsCached(input.serverId);
 		}),
 
 	/** One-shot container stats (locally via dockerode, remotely via SSH). */

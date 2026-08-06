@@ -1,9 +1,11 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import type { inferRouterOutputs } from "@trpc/server";
 import { Loader2 } from "lucide-react";
 
-import { useTRPC } from "@/lib/trpc";
+import type { AppRouter } from "@/lib/trpc-types";
+
+type ServerStats = inferRouterOutputs<AppRouter>["server"]["getStats"];
 
 function formatBytes(bytes: number): string {
 	if (!bytes) return "—";
@@ -12,34 +14,33 @@ function formatBytes(bytes: number): string {
 	return `${(bytes / 2 ** (10 * index)).toFixed(0)} ${units[index]}`;
 }
 
-/** Inline CPU / memory capacity for the servers table. */
-export function ServerCapacityCell({ serverId }: { serverId: string }) {
-	const trpc = useTRPC();
-	const { data, isPending, isError } = useQuery({
-		...trpc.server.getStats.queryOptions({ serverId }),
-		retry: false,
-		staleTime: 30_000,
-	});
-
+/** Inline CPU / memory capacity for the servers table (fed from getStatsBatch). */
+export function ServerCapacityCell({
+	stats,
+	isPending,
+}: {
+	stats: ServerStats | null | undefined;
+	isPending: boolean;
+}) {
 	if (isPending) {
 		return <Loader2 className="size-3.5 animate-spin text-muted-foreground" />;
 	}
-	if (isError || !data) {
+	if (!stats) {
 		return <span className="text-muted-foreground text-xs">—</span>;
 	}
 
 	const usedPct =
-		data.memory.totalBytes > 0
-			? Math.round((data.memory.usedBytes / data.memory.totalBytes) * 100)
+		stats.memory.totalBytes > 0
+			? Math.round((stats.memory.usedBytes / stats.memory.totalBytes) * 100)
 			: 0;
 
 	return (
 		<div className="text-xs leading-tight">
 			<div>
-				{data.cpus} CPU · {formatBytes(data.memory.totalBytes)}
+				{stats.cpus} CPU · {formatBytes(stats.memory.totalBytes)}
 			</div>
 			<div className="text-muted-foreground">
-				{usedPct}% mem · {data.containersRunning} ctr
+				{usedPct}% mem · {stats.containersRunning} ctr
 			</div>
 		</div>
 	);

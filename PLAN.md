@@ -10,6 +10,8 @@ A free, self-hostable PaaS that simplifies deployment and management of applicat
 
 **Phase 8 is shipped** — reliability (template image CI + Traefik golden-path smoke), Deploy Copilot close-the-loop (explain → apply env → redeploy, auto-explain on failure), multi-server placement + capacity, and GitOps-lite (URL sync + apply with redeploy).
 
+**Phase 9 is complete — polish only (no new features).** Working checklist: [`docs/next.md`](docs/next.md). Technical evidence/acceptance: [`docs/hardening.md`](docs/hardening.md). Docs index: [`docs/README.md`](docs/README.md).
+
 ## 1. Tech Stack (decided)
 
 Dokploy's own stack is proven for exactly this product, so we replicate it — with Tailwind CSS + shadcn/ui as required.
@@ -130,6 +132,12 @@ Wins on **trust + speed + sharp edges**, not feature checklists.
 - **Deploy Copilot close-the-loop** — Explain → Redeploy; auto-explain on failure (cached beside logs); **Apply env & redeploy** for KEY=VALUE patches
 - **Multi-server** — Advanced → Placement constraints; servers list capacity (CPU/mem); drain via Docker → Swarm (linked from Servers)
 - **GitOps-lite** — apply/sync redeploys changed apps/compose; **sync from HTTPS URL** (raw `nixploy.yaml`)
+
+### Phase 9 — Polish (organize / harden / optimize) — DONE
+
+No new features. Checklist: [`docs/next.md`](docs/next.md). Specs: [`docs/hardening.md`](docs/hardening.md).
+
+Sprints: **A** DB indexes + org cache → **B** tenancy tests → **C** servers batch stats → **D** structure dedupe → **E** logger / landing typecheck / polling → **F** docs index + UX consistency.
 
 **Still deferred / out of scope**
 - Stripe billing, SSO/SCIM, granular member permission toggles, libsql, AI compose generation

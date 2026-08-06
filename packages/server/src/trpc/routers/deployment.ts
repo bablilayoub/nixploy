@@ -11,7 +11,7 @@ import {
 	listDeploymentsByCompose,
 	listDeploymentsByProject,
 	listRecentDeployments,
-} from "../../modules/deployments";
+} from "../../modules/deployment/queries";
 import { resolveCallerOrganizationId } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 

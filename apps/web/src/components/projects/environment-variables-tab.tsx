@@ -132,7 +132,7 @@ export function EnvironmentVariablesTab({
 					{resolvedQuery.isPending ? (
 						<Skeleton className="h-64 rounded-lg" />
 					) : (
-						<pre className="max-h-96 overflow-auto rounded-lg border bg-secondary p-4 font-mono text-[13px] whitespace-pre-wrap">
+						<pre className="max-h-96 overflow-auto rounded-lg border border-border bg-card p-4 font-mono text-[13px] whitespace-pre-wrap text-foreground">
 							{resolvedQuery.data?.env || "# No variables defined"}
 						</pre>
 					)}

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, compose, environments } from "../../db/schema";
 import { queueDeployment } from "../deployment";
@@ -26,18 +26,38 @@ export async function redeployChangedFromApply(
 		throw new Error(`Environment "${result.environmentName}" not found`);
 	}
 
+	const changed = result.items.filter((item) => item.action !== "noop");
+	const appNames = changed.filter((item) => item.kind === "application").map((item) => item.name);
+	const composeNames = changed.filter((item) => item.kind === "compose").map((item) => item.name);
+
+	const [appRows, composeRows] = await Promise.all([
+		appNames.length > 0
+			? db.query.applications.findMany({
+					where: and(
+						eq(applications.environmentId, environment.environmentId),
+						inArray(applications.name, appNames),
+					),
+				})
+			: Promise.resolve([]),
+		composeNames.length > 0
+			? db.query.compose.findMany({
+					where: and(
+						eq(compose.environmentId, environment.environmentId),
+						inArray(compose.name, composeNames),
+					),
+				})
+			: Promise.resolve([]),
+	]);
+
+	const appByName = new Map(appRows.map((row) => [row.name, row]));
+	const composeByName = new Map(composeRows.map((row) => [row.name, row]));
+
 	const deploymentIds: string[] = [];
 	const skipped: string[] = [];
 
-	for (const item of result.items) {
-		if (item.action === "noop") continue;
+	for (const item of changed) {
 		if (item.kind === "application") {
-			const app = await db.query.applications.findFirst({
-				where: and(
-					eq(applications.environmentId, environment.environmentId),
-					eq(applications.name, item.name),
-				),
-			});
+			const app = appByName.get(item.name);
 			if (!app) {
 				skipped.push(`application:${item.name}`);
 				continue;
@@ -48,12 +68,7 @@ export async function redeployChangedFromApply(
 			continue;
 		}
 		if (item.kind === "compose") {
-			const row = await db.query.compose.findFirst({
-				where: and(
-					eq(compose.environmentId, environment.environmentId),
-					eq(compose.name, item.name),
-				),
-			});
+			const row = composeByName.get(item.name);
 			if (!row) {
 				skipped.push(`compose:${item.name}`);
 				continue;

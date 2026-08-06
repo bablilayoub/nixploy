@@ -17,8 +17,10 @@ function getDatabaseUrl(): string {
 }
 
 function createDb(url: string) {
+	const poolMaxRaw = process.env.DATABASE_POOL_MAX;
+	const poolMax = poolMaxRaw ? Number.parseInt(poolMaxRaw, 10) : 10;
 	_client = postgres(url, {
-		max: 10,
+		max: Number.isFinite(poolMax) && poolMax > 0 ? poolMax : 10,
 		prepare: false,
 	});
 	return drizzle(_client, { schema });
