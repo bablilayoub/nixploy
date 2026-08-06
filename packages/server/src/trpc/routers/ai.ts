@@ -11,7 +11,7 @@ import {
 	publicAiSettings,
 } from "../../modules/ai";
 import { auditFromSession } from "../../modules/audit";
-import { resolveCallerOrganizationId } from "../../modules/projects";
+import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -36,7 +36,12 @@ async function requireOwnerOrAdmin(session: Session): Promise<string> {
 }
 
 async function requireMember(session: Session): Promise<string> {
-	return resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
+	const organizationId = await resolveCallerOrganizationId(
+		session.user.id,
+		session.session.activeOrganizationId,
+	);
+	await assertOrgRole(session.user.id, organizationId, "member");
+	return organizationId;
 }
 
 const providerSchema = z.enum(["openai", "anthropic", "openai-compatible", "ollama"]);

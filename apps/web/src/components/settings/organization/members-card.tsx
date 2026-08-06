@@ -2,9 +2,10 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Loader2, Mail, Plus, Users } from "lucide-react";
+import { Link2, Loader2, Plus, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { CopyButton } from "@/components/services/copy-button";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { StatusDot } from "@/components/shell";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -65,6 +66,11 @@ interface InvitationRow {
 	expiresAt: string | Date;
 }
 
+function invitationLink(invitationId: string): string {
+	if (typeof window === "undefined") return `/accept-invitation/${invitationId}`;
+	return `${window.location.origin}/accept-invitation/${invitationId}`;
+}
+
 export function MembersCard() {
 	const trpc = useTRPC();
 	const { data: session } = useSession();
@@ -75,15 +81,22 @@ export function MembersCard() {
 	const [invitations, setInvitations] = useState<InvitationRow[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [inviteOpen, setInviteOpen] = useState(false);
+	const [createdLink, setCreatedLink] = useState<string | null>(null);
 	const [email, setEmail] = useState("");
 	const [role, setRole] = useState<InvitableRole>("member");
 	const [expiryDays, setExpiryDays] = useState<"1" | "7" | "30">("7");
 
 	const inviteMember = useMutation({
 		...trpc.organization.inviteMember.mutationOptions(),
-		onSuccess: async (_data, variables) => {
-			toast.success(`Invitation sent to ${variables.email}`);
-			setInviteOpen(false);
+		onSuccess: async (data, variables) => {
+			const link = invitationLink(data.id);
+			try {
+				await navigator.clipboard.writeText(link);
+				toast.success(`Invite link for ${variables.email} copied`);
+			} catch {
+				toast.success(`Invitation created for ${variables.email}`);
+			}
+			setCreatedLink(link);
 			setEmail("");
 			setRole("member");
 			setExpiryDays("7");
@@ -173,7 +186,13 @@ export function MembersCard() {
 						</CardTitle>
 						<CardDescription>People with access to this organization.</CardDescription>
 					</div>
-					<Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+					<Dialog
+						open={inviteOpen}
+						onOpenChange={(open) => {
+							setInviteOpen(open);
+							if (!open) setCreatedLink(null);
+						}}
+					>
 						<DialogTrigger asChild>
 							<Button size="sm">
 								<Plus className="size-4" />
@@ -181,68 +200,106 @@ export function MembersCard() {
 							</Button>
 						</DialogTrigger>
 						<DialogContent>
-							<DialogHeader>
-								<DialogTitle>Invite member</DialogTitle>
-								<DialogDescription>Send an invitation to join this organization.</DialogDescription>
-							</DialogHeader>
-							<div className="grid gap-4">
-								<div className="grid gap-2">
-									<Label htmlFor="invite-email">Email</Label>
-									<Input
-										id="invite-email"
-										type="email"
-										placeholder="teammate@example.com"
-										value={email}
-										onChange={(e) => setEmail(e.target.value)}
-									/>
-								</div>
-								<div className="grid gap-2">
-									<Label>Role</Label>
-									<Select value={role} onValueChange={(value) => setRole(value as InvitableRole)}>
-										<SelectTrigger>
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent>
-											{INVITABLE_ROLES.map((item) => (
-												<SelectItem key={item.value} value={item.value}>
-													{item.label}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								</div>
-								<div className="grid gap-2">
-									<Label>Expires in</Label>
-									<Select
-										value={expiryDays}
-										onValueChange={(value) => setExpiryDays(value as "1" | "7" | "30")}
-									>
-										<SelectTrigger>
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="1">1 day</SelectItem>
-											<SelectItem value="7">7 days</SelectItem>
-											<SelectItem value="30">30 days</SelectItem>
-										</SelectContent>
-									</Select>
-								</div>
-							</div>
-							<DialogFooter>
-								<Button
-									disabled={inviteMember.isPending || !email}
-									onClick={() =>
-										inviteMember.mutate({
-											email,
-											role,
-											expiryDays: Number.parseInt(expiryDays, 10) as 1 | 7 | 30,
-										})
-									}
-								>
-									{inviteMember.isPending && <Loader2 className="size-4 animate-spin" />}
-									Send invitation
-								</Button>
-							</DialogFooter>
+							{createdLink ? (
+								<>
+									<DialogHeader>
+										<DialogTitle>Share invite link</DialogTitle>
+										<DialogDescription>
+											No email is sent. Copy this link and give it to the invitee so they can create
+											their account and join.
+										</DialogDescription>
+									</DialogHeader>
+									<div className="grid gap-3">
+										<div className="flex gap-2">
+											<Input value={createdLink} readOnly className="font-mono text-xs" />
+											<CopyButton value={createdLink} label="Copy" />
+										</div>
+									</div>
+									<DialogFooter>
+										<Button
+											onClick={() => {
+												setInviteOpen(false);
+												setCreatedLink(null);
+											}}
+										>
+											Done
+										</Button>
+									</DialogFooter>
+								</>
+							) : (
+								<>
+									<DialogHeader>
+										<DialogTitle>Invite member</DialogTitle>
+										<DialogDescription>
+											Create a unique invite link. Share it yourself — Nixploy does not send email.
+										</DialogDescription>
+									</DialogHeader>
+									<div className="grid gap-4">
+										<div className="grid gap-2">
+											<Label htmlFor="invite-email">Email</Label>
+											<Input
+												id="invite-email"
+												type="email"
+												placeholder="teammate@example.com"
+												value={email}
+												onChange={(e) => setEmail(e.target.value)}
+											/>
+											<p className="text-xs text-muted-foreground">
+												The invitee must sign up with this exact email.
+											</p>
+										</div>
+										<div className="grid gap-2">
+											<Label>Role</Label>
+											<Select
+												value={role}
+												onValueChange={(value) => setRole(value as InvitableRole)}
+											>
+												<SelectTrigger>
+													<SelectValue />
+												</SelectTrigger>
+												<SelectContent>
+													{INVITABLE_ROLES.map((item) => (
+														<SelectItem key={item.value} value={item.value}>
+															{item.label}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
+										</div>
+										<div className="grid gap-2">
+											<Label>Expires in</Label>
+											<Select
+												value={expiryDays}
+												onValueChange={(value) => setExpiryDays(value as "1" | "7" | "30")}
+											>
+												<SelectTrigger>
+													<SelectValue />
+												</SelectTrigger>
+												<SelectContent>
+													<SelectItem value="1">1 day</SelectItem>
+													<SelectItem value="7">7 days</SelectItem>
+													<SelectItem value="30">30 days</SelectItem>
+												</SelectContent>
+											</Select>
+										</div>
+									</div>
+									<DialogFooter>
+										<Button
+											disabled={inviteMember.isPending || !email}
+											onClick={() =>
+												inviteMember.mutate({
+													email,
+													role,
+													expiryDays: Number.parseInt(expiryDays, 10) as 1 | 7 | 30,
+												})
+											}
+										>
+											{inviteMember.isPending && <Loader2 className="size-4 animate-spin" />}
+											Create invite link
+										</Button>
+									</DialogFooter>
+								</>
+							)}
 						</DialogContent>
 					</Dialog>
 				</div>
@@ -343,7 +400,7 @@ export function MembersCard() {
 						<div className="divide-y rounded-lg border">
 							{invitations.map((invitation) => (
 								<div key={invitation.id} className="flex items-center gap-3 px-4 py-3">
-									<Mail className="size-4 shrink-0 text-muted-foreground" />
+									<Link2 className="size-4 shrink-0 text-muted-foreground" />
 									<div className="flex min-w-0 flex-1 flex-col">
 										<span className="truncate text-sm font-medium">{invitation.email}</span>
 										<span className="text-xs text-muted-foreground capitalize">
@@ -351,6 +408,7 @@ export function MembersCard() {
 											{format(new Date(invitation.expiresAt), "MMM d, yyyy 'at' h:mm a")}
 										</span>
 									</div>
+									<CopyButton value={invitationLink(invitation.id)} label="Copy link" />
 									<Button variant="ghost" size="sm" onClick={() => cancelInvitation(invitation)}>
 										Cancel
 									</Button>

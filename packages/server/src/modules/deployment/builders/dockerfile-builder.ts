@@ -41,7 +41,7 @@ export async function buildWithDockerfile(input: BuildInput, imageTag: string): 
 		? ` --target ${shellQuote(application.dockerBuildStage)}`
 		: "";
 
-	const cache = prepareBuildCache(input);
+	const cache = await prepareBuildCache(input);
 	const cacheFlags = cache.buildxCacheFlags ? ` ${cache.buildxCacheFlags}` : "";
 
 	await ctx.run(

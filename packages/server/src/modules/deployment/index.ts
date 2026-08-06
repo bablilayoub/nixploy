@@ -9,7 +9,7 @@ import { enqueue, requestCancellation } from "./queue";
 import "./worker";
 
 export { dockerCleanup } from "./cleanup";
-export type { DeploymentFinishEvent, DeploymentLogEvent, DeploymentStatus } from "./events";
+export type { DeploymentFinishEvent, DeploymentStatus } from "./events";
 export { deploymentEvents } from "./events";
 export { queueDepth, setServerConcurrency } from "./queue";
 
@@ -21,8 +21,8 @@ export interface DeploymentJobInput {
 
 /**
  * Create a deployment row and enqueue the job (FIFO per target server).
- * Returns the deploymentId — the WS layer streams its log from
- * {@link deploymentEvents} and the row is finalized by the worker.
+ * Returns the deploymentId — the WS layer streams the log from disk and
+ * closes on the matching {@link deploymentEvents} `finish` (or DB status).
  */
 export async function queueDeployment(job: DeploymentJobInput): Promise<string> {
 	if (!job.applicationId && !job.composeId) {

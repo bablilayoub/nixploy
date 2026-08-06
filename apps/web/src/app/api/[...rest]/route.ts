@@ -110,6 +110,27 @@ function decodeSerialized(raw: string): unknown {
 	return parsed;
 }
 
+/**
+ * Flattened GET query params arrive as strings. Coerce obvious booleans and
+ * numbers so Zod schemas (e.g. `z.boolean()`, `z.number()`) accept CLI input.
+ * UUID-like and non-numeric strings stay strings.
+ */
+function coerceFlattenedParams(params: Record<string, string>): Record<string, unknown> {
+	const out: Record<string, unknown> = {};
+	for (const [key, value] of Object.entries(params)) {
+		if (value === "true") {
+			out[key] = true;
+		} else if (value === "false") {
+			out[key] = false;
+		} else if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) {
+			out[key] = Number(value);
+		} else {
+			out[key] = value;
+		}
+	}
+	return out;
+}
+
 async function buildContext(req: Request): Promise<TRPCContext> {
 	const apiKeyHeader = req.headers.get("x-api-key");
 	if (!apiKeyHeader) {
@@ -148,12 +169,31 @@ async function buildContext(req: Request): Promise<TRPCContext> {
 		throw new TRPCError({ code: "UNAUTHORIZED", message: "Unknown API key owner" });
 	}
 
-	const memberships = await client`
-		SELECT organization_id AS "organizationId"
-		FROM member WHERE user_id = ${userId} LIMIT 1
-	`;
-	const activeOrganizationId =
-		(memberships[0] as { organizationId?: string } | undefined)?.organizationId ?? null;
+	// Prefer explicit org from the client (multi-org API keys); otherwise first membership.
+	const requestedOrgId = req.headers.get("x-organization-id")?.trim() || null;
+	let activeOrganizationId: string | null = null;
+	if (requestedOrgId) {
+		const membership = await client`
+			SELECT organization_id AS "organizationId"
+			FROM member
+			WHERE user_id = ${userId} AND organization_id = ${requestedOrgId}
+			LIMIT 1
+		`;
+		if (!membership[0]) {
+			throw new TRPCError({
+				code: "FORBIDDEN",
+				message: "Not a member of the requested organization",
+			});
+		}
+		activeOrganizationId = requestedOrgId;
+	} else {
+		const memberships = await client`
+			SELECT organization_id AS "organizationId"
+			FROM member WHERE user_id = ${userId} LIMIT 1
+		`;
+		activeOrganizationId =
+			(memberships[0] as { organizationId?: string } | undefined)?.organizationId ?? null;
+	}
 
 	// Synthesize the same { user, session } shape better-auth's getSession
 	// returns — the routers only read user.id and session.activeOrganizationId.
@@ -200,7 +240,7 @@ async function handle(req: Request, path: string): Promise<Response> {
 				for (const [key, value] of url.searchParams.entries()) {
 					params[key] = value;
 				}
-				input = Object.keys(params).length > 0 ? params : undefined;
+				input = Object.keys(params).length > 0 ? coerceFlattenedParams(params) : undefined;
 			}
 		} else {
 			const text = await req.text();

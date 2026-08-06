@@ -1,6 +1,7 @@
 import { needsSetup } from "@nixploy/server/modules/auth/setup";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { LoginForm } from "./login-form";
 
@@ -14,5 +15,9 @@ export default async function LoginPage() {
 	if (await needsSetup()) {
 		redirect("/setup");
 	}
-	return <LoginForm />;
+	return (
+		<Suspense>
+			<LoginForm />
+		</Suspense>
+	);
 }

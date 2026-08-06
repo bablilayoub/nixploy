@@ -81,15 +81,29 @@ export const ORG_ROLE_RANK: Record<OrgRole, number> = {
 	owner: 4,
 };
 
-/** Rank for a stored member role string; unknown values fall back to member. */
+/** Rank for a stored member role string; unknown values fall back to viewer. */
 export function orgRoleRank(role: string): number {
-	return ORG_ROLE_RANK[role as OrgRole] ?? ORG_ROLE_RANK.member;
+	const parts = role
+		.split(",")
+		.map((part) => part.trim())
+		.filter(Boolean);
+	let max = ORG_ROLE_RANK.viewer;
+	let matched = false;
+	for (const part of parts) {
+		const rank = ORG_ROLE_RANK[part as OrgRole];
+		if (rank !== undefined) {
+			matched = true;
+			if (rank > max) max = rank;
+		}
+	}
+	// Unknown custom roles: treat as viewer (never elevate).
+	return matched ? max : ORG_ROLE_RANK.viewer;
 }
 
 /**
  * Require the caller's role in `organizationId` to be at least `minRole`
- * (viewer < member < deployer < admin < owner). Used by destructive/infrastructure
- * mutations (Docker control, server settings, member management).
+ * (viewer < member < deployer < admin < owner). Used by write/destructive
+ * mutations across tRPC routers.
  * @throws TRPCError FORBIDDEN.
  */
 export async function assertOrgRole(
@@ -106,6 +120,18 @@ export async function assertOrgRole(
 			message: `This action requires the ${minRole} role or higher`,
 		});
 	}
+}
+
+/** True when the caller meets `minRole` in the org (no throw). */
+export async function hasOrgRole(
+	userId: string,
+	organizationId: string,
+	minRole: OrgRole,
+): Promise<boolean> {
+	const membership = await db.query.members.findFirst({
+		where: and(eq(members.userId, userId), eq(members.organizationId, organizationId)),
+	});
+	return Boolean(membership && orgRoleRank(membership.role) >= ORG_ROLE_RANK[minRole]);
 }
 
 // ── scoped lookups ──────────────────────────────────────────────────────────

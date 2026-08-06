@@ -104,6 +104,7 @@ export const invitations = pgTable("invitation", {
 	inviterId: text("inviter_id")
 		.notNull()
 		.references(() => users.id, { onDelete: "cascade" }),
+	createdAt: createdAt(),
 });
 
 // ── apiKey plugin ───────────────────────────────────────────────────────────

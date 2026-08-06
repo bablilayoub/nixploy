@@ -17,7 +17,7 @@ import {
 	teamsConfigSchema,
 	telegramConfigSchema,
 } from "../../modules/notifications";
-import { resolveCallerOrganizationId } from "../../modules/projects";
+import { assertOrgRole, hasOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 /** Caller organization; falls back to first membership when the session has none active. */
@@ -39,6 +39,42 @@ async function findNotificationInOrg(notificationId: string, orgId: string) {
 	}
 	return row;
 }
+
+/** Channel configs hold webhook URLs / bot tokens — strip for viewers. */
+const publicNotification = <
+	T extends {
+		slackConfig: unknown;
+		telegramConfig: unknown;
+		discordConfig: unknown;
+		emailConfig: unknown;
+		gotifyConfig: unknown;
+		ntfyConfig: unknown;
+		pushoverConfig: unknown;
+		mattermostConfig: unknown;
+		larkConfig: unknown;
+		teamsConfig: unknown;
+		customConfig: unknown;
+	},
+>(
+	row: T,
+	canSeeSecrets: boolean,
+): T => {
+	if (canSeeSecrets) return row;
+	return {
+		...row,
+		slackConfig: null,
+		telegramConfig: null,
+		discordConfig: null,
+		emailConfig: null,
+		gotifyConfig: null,
+		ntfyConfig: null,
+		pushoverConfig: null,
+		mattermostConfig: null,
+		larkConfig: null,
+		teamsConfig: null,
+		customConfig: null,
+	};
+};
 
 const notificationTypeSchema = z.enum([
 	"slack",
@@ -108,20 +144,28 @@ const testNotificationSchema = z
 export const notificationRouter = router({
 	all: protectedProcedure.query(async ({ ctx }) => {
 		const orgId = await organizationId(ctx);
-		return db.query.notifications.findMany({
+		const canSeeSecrets = await hasOrgRole(ctx.session.user.id, orgId, "member");
+		const rows = await db.query.notifications.findMany({
 			where: eq(notifications.organizationId, orgId),
 			orderBy: (n, { desc }) => [desc(n.createdAt)],
 		});
+		return rows.map((row) => publicNotification(row, canSeeSecrets));
 	}),
 
 	one: protectedProcedure
 		.input(z.object({ notificationId: z.string().min(1) }))
 		.query(async ({ ctx, input }) => {
-			return findNotificationInOrg(input.notificationId, await organizationId(ctx));
+			const orgId = await organizationId(ctx);
+			const canSeeSecrets = await hasOrgRole(ctx.session.user.id, orgId, "member");
+			return publicNotification(
+				await findNotificationInOrg(input.notificationId, orgId),
+				canSeeSecrets,
+			);
 		}),
 
 	create: protectedProcedure.input(createNotificationSchema).mutation(async ({ ctx, input }) => {
 		const orgId = await organizationId(ctx);
+		await assertOrgRole(ctx.session.user.id, orgId, "admin");
 		const [row] = await db
 			.insert(notifications)
 			.values({ ...input, organizationId: orgId })
@@ -131,6 +175,7 @@ export const notificationRouter = router({
 
 	update: protectedProcedure.input(updateNotificationSchema).mutation(async ({ ctx, input }) => {
 		const orgId = await organizationId(ctx);
+		await assertOrgRole(ctx.session.user.id, orgId, "admin");
 		await findNotificationInOrg(input.notificationId, orgId);
 		const { notificationId, ...values } = input;
 		const [row] = await db
@@ -145,6 +190,7 @@ export const notificationRouter = router({
 		.input(z.object({ notificationId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const orgId = await organizationId(ctx);
+			await assertOrgRole(ctx.session.user.id, orgId, "admin");
 			await findNotificationInOrg(input.notificationId, orgId);
 			await db.delete(notifications).where(eq(notifications.notificationId, input.notificationId));
 			return true;
@@ -152,6 +198,7 @@ export const notificationRouter = router({
 
 	test: protectedProcedure.input(testNotificationSchema).mutation(async ({ ctx, input }) => {
 		const orgId = await organizationId(ctx);
+		await assertOrgRole(ctx.session.user.id, orgId, "admin");
 		if (input.notificationId) {
 			await findNotificationInOrg(input.notificationId, orgId);
 			await sendTestNotification({ notificationId: input.notificationId });

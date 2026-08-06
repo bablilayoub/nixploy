@@ -24,6 +24,7 @@ import {
 	getEnvironmentServices,
 	getOrganizationServiceStatusCounts,
 	getServiceCountsByEnvironment,
+	hasOrgRole,
 	resolveCallerOrganizationId,
 	resolveEnvironmentVariables,
 	toEnvString,
@@ -104,13 +105,17 @@ export const projectRouter = router({
 			where: eq(environments.projectId, project.projectId),
 			orderBy: asc(environments.createdAt),
 		});
+		const canSeeSecrets = await hasOrgRole(ctx.session.user.id, organizationId, "member");
 		const environmentsWithServices = await Promise.all(
 			environmentList.map(async (environment) => ({
-				...environment,
+				...(canSeeSecrets ? environment : { ...environment, env: null }),
 				services: await getEnvironmentServices(environment.environmentId),
 			})),
 		);
-		return { ...project, environments: environmentsWithServices };
+		return {
+			...(canSeeSecrets ? project : { ...project, env: null }),
+			environments: environmentsWithServices,
+		};
 	}),
 
 	/**
@@ -275,6 +280,7 @@ export const projectRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			await findProjectById(input.projectId, organizationId);
 			const [updated] = await db
 				.update(projects)
@@ -327,6 +333,7 @@ export const projectRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			await findProjectById(input.projectId, organizationId);
 			const [updated] = await db
 				.update(projects)
@@ -353,6 +360,7 @@ export const projectRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			const project = await findProjectById(input.projectId, organizationId);
 			const environment = await db.query.environments.findFirst({
 				where: and(

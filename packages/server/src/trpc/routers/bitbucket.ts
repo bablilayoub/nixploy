@@ -11,7 +11,7 @@ import {
 	updateBitbucketById,
 	updateBitbucketProviderName,
 } from "../../modules/git";
-import { resolveCallerOrganizationId } from "../../modules/projects";
+import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -31,11 +31,32 @@ const createBitbucketInput = z.object({
 	apiToken: z.string().nullish(),
 });
 
+/** Response shape: app password and API token are write-only. */
+const publicBitbucket = <
+	T extends {
+		appPassword: string | null;
+		apiToken: string | null;
+	},
+>(
+	row: T,
+) => {
+	const { appPassword, apiToken, ...rest } = row;
+	return {
+		...rest,
+		appPasswordConfigured: Boolean(appPassword),
+		apiTokenConfigured: Boolean(apiToken),
+	};
+};
+
 export const bitbucketRouter = router({
 	/** All Bitbucket providers of the caller's organization. */
 	all: protectedProcedure.query(async ({ ctx }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		return await listBitbucketByOrganization(organizationId);
+		const rows = await listBitbucketByOrganization(organizationId);
+		return rows.map(({ bitbucket: row, gitProvider }) => ({
+			bitbucket: publicBitbucket(row),
+			gitProvider,
+		}));
 	}),
 
 	/** A single Bitbucket provider by id. */
@@ -45,12 +66,13 @@ export const bitbucketRouter = router({
 		if (!row) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Bitbucket provider not found" });
 		}
-		return row;
+		return publicBitbucket(row);
 	}),
 
 	/** Add a Bitbucket Cloud provider (API token or username + app password). */
 	create: protectedProcedure.input(createBitbucketInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 		return await createBitbucket(input, organizationId);
 	}),
 
@@ -59,6 +81,7 @@ export const bitbucketRouter = router({
 		.input(createBitbucketInput.partial().extend({ bitbucketId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const { bitbucketId, name, ...values } = input;
 			if (name) {
 				await updateBitbucketProviderName(bitbucketId, name, organizationId);
@@ -73,6 +96,7 @@ export const bitbucketRouter = router({
 	/** Remove the provider (cascades to the bitbucket credentials row). */
 	remove: protectedProcedure.input(bitbucketIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 		const removed = await removeBitbucket(input.bitbucketId, organizationId);
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Bitbucket provider not found" });
@@ -102,6 +126,7 @@ export const bitbucketRouter = router({
 	/** Verify the configured credentials against the Bitbucket API. */
 	testConnection: protectedProcedure.input(bitbucketIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 		return await testBitbucketConnection(input.bitbucketId, organizationId);
 	}),
 });

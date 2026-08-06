@@ -23,6 +23,7 @@ import {
 	findEnvironmentById,
 	findProjectById,
 	getServiceCountsByEnvironment,
+	hasOrgRole,
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
@@ -66,8 +67,9 @@ export const environmentRouter = router({
 			const countsByEnvironment = await getServiceCountsByEnvironment(
 				environmentList.map((environment) => environment.environmentId),
 			);
+			const canSeeSecrets = await hasOrgRole(ctx.session.user.id, organizationId, "member");
 			return environmentList.map((environment) => ({
-				...environment,
+				...(canSeeSecrets ? environment : { ...environment, env: null }),
 				services: countsByEnvironment.get(environment.environmentId) ?? emptyServiceCounts(),
 			}));
 		}),
@@ -117,6 +119,7 @@ export const environmentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			const current = await findEnvironmentById(input.environmentId, organizationId);
 			if (input.name !== undefined) {
 				await assertEnvironmentNameAvailable(current.projectId, input.name, input.environmentId);
@@ -166,6 +169,7 @@ export const environmentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			const source = await findEnvironmentById(input.environmentId, organizationId);
 			await assertEnvironmentNameAvailable(source.projectId, input.name ?? `${source.name} copy`);
 			const [duplicate] = await db
@@ -197,6 +201,7 @@ export const environmentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			const source = await findEnvironmentById(input.environmentId, organizationId);
 			await assertEnvironmentNameAvailable(source.projectId, input.name);
 			const [environment] = await db
@@ -295,6 +300,7 @@ export const environmentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			await findEnvironmentById(input.environmentId, organizationId);
 			const [updated] = await db
 				.update(environments)

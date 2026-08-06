@@ -9,7 +9,7 @@ import {
 	testRegistry,
 	updateRegistryById,
 } from "../../modules/cluster";
-import { resolveCallerOrganizationId } from "../../modules/projects";
+import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -57,6 +57,7 @@ export const registryRouter = router({
 	/** Add registry credentials (password is encrypted at rest). */
 	create: protectedProcedure.input(createRegistryInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 		const created = await createRegistry(input, organizationId);
 		if (!created) {
 			throw new TRPCError({
@@ -72,6 +73,7 @@ export const registryRouter = router({
 		.input(createRegistryInput.partial().extend({ registryId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const { registryId, ...values } = input;
 			const updated = await updateRegistryById(registryId, values, organizationId);
 			if (!updated) {
@@ -83,6 +85,7 @@ export const registryRouter = router({
 	/** Remove a registry. */
 	remove: protectedProcedure.input(registryIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 		const removed = await removeRegistry(input.registryId, organizationId);
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Registry not found" });
@@ -98,6 +101,7 @@ export const registryRouter = router({
 		.input(registryIdInput.extend({ serverId: z.string().nullish() }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			if (input.serverId) {
 				const server = await findServerById(input.serverId, organizationId);
 				if (!server) {

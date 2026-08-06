@@ -121,9 +121,18 @@ async function initTraefik() {
 		console.log("▲ Traefik boot skipped (docker socket unreachable)");
 		return;
 	}
+	const TRAEFIK_BOOT_TIMEOUT_MS = 45_000;
 	try {
 		const { ensureTraefikSetup } = await import("../../packages/server/src/modules/traefik/setup");
-		await ensureTraefikSetup();
+		await Promise.race([
+			ensureTraefikSetup(),
+			new Promise<never>((_, reject) => {
+				setTimeout(
+					() => reject(new Error(`Traefik boot timed out after ${TRAEFIK_BOOT_TIMEOUT_MS}ms`)),
+					TRAEFIK_BOOT_TIMEOUT_MS,
+				);
+			}),
+		]);
 		console.log("▲ Traefik reverse proxy ready");
 	} catch (error) {
 		console.error("Failed to initialize Traefik:", error);

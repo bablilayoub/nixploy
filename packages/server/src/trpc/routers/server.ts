@@ -115,6 +115,7 @@ export const serverRouter = router({
 	/** Verify SSH reachability and remote Docker availability. */
 	testConnection: protectedProcedure.input(serverIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 		await findServerOrThrow(input.serverId, organizationId);
 		return await testConnection(input.serverId);
 	}),

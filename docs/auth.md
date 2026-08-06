@@ -16,12 +16,14 @@ Dokploy:
 2. That signup is allowed only while `needsSetup()` is true (or later when the
    email matches a pending organization invitation).
 3. The first user is given `role: "admin"` and creates `<name>'s Org`.
-4. After that, public registration is blocked. Teammates join via
-   Settings → Organization invitations.
+4. After that, public registration is blocked. Teammates join via a
+   **shareable invite link** from Settings → Organization (no SMTP): the admin
+   copies `/accept-invitation/<id>` and gives it to the invitee, who creates
+   their account (name/password; email locked to the invite) and joins.
 5. Legacy `/register` permanently redirects to `/setup`.
 
-Probe: `setup.needsSetup` (public tRPC). Helpers live in
-`packages/server/src/modules/auth/setup.ts`.
+Probe: `setup.needsSetup` and `setup.invitationPreview` (public tRPC). Helpers
+live in `packages/server/src/modules/auth/setup.ts`.
 
 ## Sessions & the active organization
 

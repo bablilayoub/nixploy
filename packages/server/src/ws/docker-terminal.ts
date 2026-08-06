@@ -1,5 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import type { WebSocket } from "ws";
+import { assertWsContainerAccess } from "./access";
 import type { WsSession } from "./auth";
 import {
 	connectToServer,
@@ -30,7 +31,7 @@ const DEFAULT_ROWS = 24;
 export async function handleDockerTerminal(
 	ws: WebSocket,
 	req: IncomingMessage,
-	_session: WsSession,
+	session: WsSession,
 ): Promise<void> {
 	const params = upgradeSearchParams(req);
 	const appName = params.get("appName");
@@ -42,6 +43,7 @@ export async function handleDockerTerminal(
 	}
 
 	try {
+		await assertWsContainerAccess(session, appName, serverId);
 		if (serverId) {
 			await attachRemoteTerminal(ws, serverId, appName);
 		} else {

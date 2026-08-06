@@ -1,5 +1,9 @@
 import { TRPCError } from "@trpc/server";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { db } from "../../db";
+import { domains } from "../../db/schema";
+import { assertApplicationAccess, getServiceContext } from "../../modules/application";
 import {
 	deleteAlertRule,
 	ingestServiceLog,
@@ -14,6 +18,31 @@ import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projec
 import { protectedProcedure, router } from "../init";
 
 const metricSchema = z.enum(["cpu", "memory", "restarts", "deploy_failure_streak"]);
+
+const assertDomainAccess = async (domainId: string, organizationId: string) => {
+	const domain = await db.query.domains.findFirst({
+		where: eq(domains.domainId, domainId),
+		with: {
+			application: { with: { environment: { with: { project: true } } } },
+			compose: { with: { environment: { with: { project: true } } } },
+		},
+	});
+	const owner =
+		domain?.application?.environment.project.organizationId ??
+		domain?.compose?.environment.project.organizationId;
+	if (!domain || owner !== organizationId) {
+		throw new TRPCError({ code: "NOT_FOUND", message: "Domain not found" });
+	}
+	return domain;
+};
+
+const assertComposeAccess = async (composeId: string, organizationId: string) => {
+	const context = await getServiceContext("compose", composeId);
+	if (context.organizationId !== organizationId) {
+		throw new TRPCError({ code: "NOT_FOUND", message: "Compose service not found" });
+	}
+	return context;
+};
 
 export const observabilityRouter = router({
 	incidents: protectedProcedure
@@ -70,11 +99,18 @@ export const observabilityRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			if (!input.applicationId && !input.composeId && !input.alertRuleId) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
 					message: "applicationId or composeId is required",
 				});
+			}
+			if (input.applicationId) {
+				await assertApplicationAccess(input.applicationId, organizationId);
+			}
+			if (input.composeId) {
+				await assertComposeAccess(input.composeId, organizationId);
 			}
 			return upsertAlertRule({ organizationId, ...input });
 		}),
@@ -86,6 +122,7 @@ export const observabilityRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			await deleteAlertRule(input.alertRuleId, organizationId);
 			return { ok: true };
 		}),
@@ -121,6 +158,10 @@ export const observabilityRouter = router({
 				ctx.session.session.activeOrganizationId,
 			);
 			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			const service = await getServiceContext(input.serviceType, input.serviceId);
+			if (service.organizationId !== organizationId) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Service not found" });
+			}
 			await ingestServiceLog({ organizationId, ...input });
 			return { ok: true };
 		}),
@@ -148,6 +189,8 @@ export const observabilityRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertDomainAccess(input.domainId, organizationId);
 			return setUptimeProbe({ organizationId, ...input });
 		}),
 });

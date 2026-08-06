@@ -10,6 +10,7 @@ import {
 	removeFileMount,
 	upsertApplicationSwarmService,
 } from "../../modules/application";
+import { assertOrgRole } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 const mountFields = {
@@ -25,6 +26,31 @@ const mountFields = {
 	/** file: content written to `filePath`. */
 	content: z.string().nullable().optional(),
 } as const;
+
+const BLOCKED_HOST_PATH_PREFIXES = [
+	"/var/run/docker.sock",
+	"/run/docker.sock",
+	"/etc/nixploy",
+	"/etc/shadow",
+	"/etc/passwd",
+	"/root",
+	"/proc",
+	"/sys",
+] as const;
+
+/** Reject bind mounts that would expose host secrets or the Docker socket. */
+const assertSafeHostPath = (hostPath: string | null | undefined) => {
+	if (!hostPath) return;
+	const normalized = hostPath.replace(/\/+$/, "") || "/";
+	for (const blocked of BLOCKED_HOST_PATH_PREFIXES) {
+		if (normalized === blocked || normalized.startsWith(`${blocked}/`)) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: `Bind mount hostPath is not allowed: ${blocked}`,
+			});
+		}
+	}
+};
 
 /** Validate that the fields required by the mount type are present. */
 const validateMountFields = (input: {
@@ -92,8 +118,10 @@ export const mountRouter = router({
 		.input(z.object({ applicationId: z.string().min(1), ...mountFields }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 			validateMountFields(input);
+			if (input.type === "bind") assertSafeHostPath(input.hostPath);
 
 			const [mount] = await db
 				.insert(mounts)
@@ -138,6 +166,7 @@ export const mountRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const { mount, application } = await findApplicationMount(input.mountId, organizationId);
 
 			const next = {
@@ -149,6 +178,7 @@ export const mountRouter = router({
 				content: input.content !== undefined ? input.content : mount.content,
 			};
 			validateMountFields(next);
+			if (next.type === "bind") assertSafeHostPath(next.hostPath);
 
 			const [updated] = await db
 				.update(mounts)
@@ -184,6 +214,7 @@ export const mountRouter = router({
 		.input(z.object({ mountId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const { mount, application } = await findApplicationMount(input.mountId, organizationId);
 
 			await db.delete(mounts).where(eq(mounts.mountId, mount.mountId));

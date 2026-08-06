@@ -122,8 +122,8 @@ export function CopilotChatDrawer({
 					Copilot
 				</Button>
 			</SheetTrigger>
-			<SheetContent className="flex w-full flex-col sm:max-w-md">
-				<SheetHeader>
+			<SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+				<SheetHeader className="space-y-1 border-b px-4 pt-4 pb-3 pr-12 text-left">
 					<SheetTitle className="flex items-center gap-2">
 						<Bot className="size-4" />
 						Deploy Copilot
@@ -133,7 +133,7 @@ export function CopilotChatDrawer({
 					</SheetDescription>
 				</SheetHeader>
 
-				<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1 py-4">
+				<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
 					{messages.length === 0 && (
 						<p className="text-sm text-muted-foreground">
 							Try: “Why is this restarting?”, “How do I add a healthcheck?”, or “Wire a domain.”
@@ -144,21 +144,21 @@ export function CopilotChatDrawer({
 							key={`${message.role}-${message.content.slice(0, 48)}`}
 							className={
 								message.role === "user"
-									? "ml-8 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground"
-									: "mr-4 rounded-lg border bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap"
+									? "ml-6 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground"
+									: "mr-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap"
 							}
 						>
 							{message.content}
 						</div>
 					))}
 					{chat.isPending && (
-						<div className="mr-4 flex items-center gap-2 text-sm text-muted-foreground">
+						<div className="flex items-center gap-2 text-sm text-muted-foreground">
 							<Loader2 className="size-4 animate-spin" />
 							Thinking…
 						</div>
 					)}
 					{pendingActions.length > 0 && (
-						<div className="mr-4 flex flex-wrap gap-2 rounded-lg border border-dashed p-3">
+						<div className="flex flex-wrap gap-2 rounded-lg border border-dashed p-3">
 							<p className="w-full text-xs text-muted-foreground">
 								Confirm to run (never applied silently):
 							</p>
@@ -187,7 +187,7 @@ export function CopilotChatDrawer({
 				</div>
 
 				<form
-					className="flex gap-2 border-t pt-4"
+					className="flex gap-2 border-t px-4 py-4"
 					onSubmit={(event) => {
 						event.preventDefault();
 						send();

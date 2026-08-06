@@ -64,6 +64,13 @@
       "when": 1786033816582,
       "tag": "0008_sloppy_the_professor",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786048364270,
+      "tag": "0009_square_black_tom",
+      "breakpoints": true
     }
   ]
 }

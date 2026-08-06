@@ -1,20 +1,22 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+	ArrowLeft,
+	ArrowRight,
+	Check,
+	Globe,
+	Loader2,
+	RefreshCw,
+	Rocket,
+	Server,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -24,13 +26,24 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import {
+	Sheet,
+	SheetContent,
+	SheetDescription,
+	SheetFooter,
+	SheetHeader,
+	SheetTitle,
+} from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { useTRPC } from "@/lib/trpc";
+import { useTRPC, useTRPCClient } from "@/lib/trpc";
+import { cn } from "@/lib/utils";
 
 import type { TemplateSummary } from "./templates-view";
 
 /** Env defaults containing this placeholder are generated server-side. */
 const GENERATE_SECRET = "{{generateSecret}}";
+
+type StepId = "destination" | "configure" | "domain";
 
 export function DeployTemplateDialog({
 	template,
@@ -40,20 +53,102 @@ export function DeployTemplateDialog({
 	onClose: () => void;
 }) {
 	return (
-		<Dialog open={template !== null} onOpenChange={(open) => !open && onClose()}>
+		<Sheet open={template !== null} onOpenChange={(open) => !open && onClose()}>
 			{/* key resets the form when another template is selected */}
 			{template && <DeployTemplateForm key={template.id} template={template} />}
-		</Dialog>
+		</Sheet>
+	);
+}
+
+function TemplateMark({ template }: { template: Pick<TemplateSummary, "name" | "logo"> }) {
+	const [failed, setFailed] = useState(false);
+	if (failed || !template.logo) {
+		return (
+			<div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-secondary text-sm font-semibold uppercase">
+				{template.name.charAt(0)}
+			</div>
+		);
+	}
+	return (
+		// biome-ignore lint/performance/noImgElement: remote simple-icons CDN logo with a local fallback
+		<img
+			src={`https://cdn.simpleicons.org/${template.logo}`}
+			alt=""
+			className="size-10 shrink-0 rounded-md"
+			onError={() => setFailed(true)}
+		/>
+	);
+}
+
+function StepRail({
+	steps,
+	current,
+	onSelect,
+}: {
+	steps: { id: StepId; label: string }[];
+	current: StepId;
+	onSelect: (id: StepId) => void;
+}) {
+	const currentIndex = steps.findIndex((step) => step.id === current);
+	return (
+		<ol className="flex items-center gap-1 px-4 pb-3">
+			{steps.map((step, index) => {
+				const done = index < currentIndex;
+				const active = step.id === current;
+				return (
+					<li key={step.id} className="flex min-w-0 flex-1 items-center gap-1">
+						<button
+							type="button"
+							disabled={index > currentIndex}
+							onClick={() => onSelect(step.id)}
+							className={cn(
+								"flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+								active && "bg-secondary text-foreground",
+								done && "text-foreground hover:bg-secondary/60",
+								!active && !done && "text-muted-foreground",
+								index > currentIndex && "cursor-not-allowed opacity-50",
+							)}
+						>
+							<span
+								className={cn(
+									"flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+									active && "bg-foreground text-background",
+									done && "bg-foreground/15 text-foreground",
+									!active && !done && "bg-muted text-muted-foreground",
+								)}
+							>
+								{done ? <Check className="size-3" /> : index + 1}
+							</span>
+							<span className="truncate font-medium">{step.label}</span>
+						</button>
+						{index < steps.length - 1 && (
+							<span className="mx-0.5 hidden h-px w-3 shrink-0 bg-border sm:block" />
+						)}
+					</li>
+				);
+			})}
+		</ol>
 	);
 }
 
 function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 	const trpc = useTRPC();
+	const trpcClient = useTRPCClient();
 	const queryClient = useQueryClient();
 	const router = useRouter();
 
 	const { data: projects } = useQuery(trpc.project.all.queryOptions());
 
+	const steps = useMemo(() => {
+		const list: { id: StepId; label: string }[] = [{ id: "destination", label: "Destination" }];
+		if (template.env.length > 0) {
+			list.push({ id: "configure", label: "Configure" });
+		}
+		list.push({ id: "domain", label: "Domain" });
+		return list;
+	}, [template.env.length]);
+
+	const [step, setStep] = useState<StepId>("destination");
 	const [projectId, setProjectId] = useState("");
 	const [environmentName, setEnvironmentName] = useState("");
 	const [envValues, setEnvValues] = useState<Record<string, string>>(() =>
@@ -66,9 +161,33 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 	);
 	const [domainEnabled, setDomainEnabled] = useState(false);
 	const [domainHost, setDomainHost] = useState("");
+	const [generatingHost, setGeneratingHost] = useState(false);
 
 	const project = projects?.find((p) => p.projectId === projectId);
 	const environments = project?.environments ?? [];
+	const stepIndex = steps.findIndex((entry) => entry.id === step);
+	const isLastStep = stepIndex === steps.length - 1;
+
+	const generateHost = async () => {
+		setGeneratingHost(true);
+		try {
+			const generated = await trpcClient.domain.generateDomain.query({
+				appName: template.id || template.name,
+			});
+			setDomainHost(generated);
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "Failed to generate domain");
+		} finally {
+			setGeneratingHost(false);
+		}
+	};
+
+	const onDomainToggle = (enabled: boolean) => {
+		setDomainEnabled(enabled);
+		if (enabled && !domainHost.trim()) {
+			void generateHost();
+		}
+	};
 
 	const deploy = useMutation(
 		trpc.template.deploy.mutationOptions({
@@ -84,8 +203,6 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 	);
 
 	const submit = () => {
-		// Empty values are omitted so schema defaults (and generated secrets)
-		// apply server-side.
 		const provided = Object.fromEntries(
 			Object.entries(envValues).filter(([, value]) => value !== ""),
 		);
@@ -107,71 +224,113 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 		});
 	};
 
+	const canContinueDestination = Boolean(projectId && environmentName);
+	const canDeploy =
+		canContinueDestination && !(domainEnabled && !domainHost.trim()) && !generatingHost;
+
+	const goNext = () => {
+		const next = steps[stepIndex + 1];
+		if (next) setStep(next.id);
+	};
+
+	const goBack = () => {
+		const prev = steps[stepIndex - 1];
+		if (prev) setStep(prev.id);
+	};
+
 	return (
-		<DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
-			<DialogHeader>
-				<DialogTitle>Deploy {template.name}</DialogTitle>
-				<DialogDescription>
-					Creates a compose service from the {template.name} template and starts its first
-					deployment.
-				</DialogDescription>
-			</DialogHeader>
-			<form
-				onSubmit={(event) => {
-					event.preventDefault();
-					submit();
-				}}
-				className="flex flex-col gap-4"
-			>
-				<div className="grid gap-4 sm:grid-cols-2">
-					<div className="flex flex-col gap-2">
-						<Label>Project</Label>
-						<Select
-							value={projectId}
-							onValueChange={(value) => {
-								setProjectId(value);
-								setEnvironmentName("");
-							}}
-						>
-							<SelectTrigger className="w-full">
-								<SelectValue placeholder="Select a project" />
-							</SelectTrigger>
-							<SelectContent>
-								{projects?.map((p) => (
-									<SelectItem key={p.projectId} value={p.projectId}>
-										{p.name}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-					</div>
-					<div className="flex flex-col gap-2">
-						<Label>Environment</Label>
-						<Select value={environmentName} onValueChange={setEnvironmentName} disabled={!project}>
-							<SelectTrigger className="w-full">
-								<SelectValue placeholder="Select an environment" />
-							</SelectTrigger>
-							<SelectContent>
-								{environments.map((environment) => (
-									<SelectItem key={environment.environmentId} value={environment.name}>
-										{environment.name}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
+		<SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-xl">
+			<SheetHeader className="space-y-3 border-b px-4 pt-4 pb-0 pr-12 text-left">
+				<div className="flex items-start gap-3">
+					<TemplateMark template={template} />
+					<div className="min-w-0 flex-1">
+						<SheetTitle className="truncate">Deploy {template.name}</SheetTitle>
+						<SheetDescription className="line-clamp-2">{template.description}</SheetDescription>
 					</div>
 				</div>
+				<StepRail
+					steps={steps}
+					current={step}
+					onSelect={(id) => {
+						const target = steps.findIndex((entry) => entry.id === id);
+						if (target <= stepIndex) setStep(id);
+					}}
+				/>
+			</SheetHeader>
 
-				{template.env.length > 0 && (
-					<div className="flex flex-col gap-3">
-						<Label className="text-muted-foreground">Environment variables</Label>
+			<div className="flex-1 overflow-y-auto px-4 py-4">
+				{step === "destination" && (
+					<div className="flex flex-col gap-5">
+						<div className="flex items-start gap-3 rounded-lg border bg-secondary/40 p-3">
+							<Server className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+							<p className="text-sm text-muted-foreground">
+								Pick where this compose stack should live. A new service is created in the chosen
+								environment and its first deployment starts immediately.
+							</p>
+						</div>
+						<div className="flex flex-col gap-2">
+							<Label>Project</Label>
+							<Select
+								value={projectId}
+								onValueChange={(value) => {
+									setProjectId(value);
+									setEnvironmentName("");
+								}}
+							>
+								<SelectTrigger className="w-full">
+									<SelectValue placeholder="Select a project" />
+								</SelectTrigger>
+								<SelectContent>
+									{projects?.map((p) => (
+										<SelectItem key={p.projectId} value={p.projectId}>
+											{p.name}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+						<div className="flex flex-col gap-2">
+							<Label>Environment</Label>
+							<Select
+								value={environmentName}
+								onValueChange={setEnvironmentName}
+								disabled={!project}
+							>
+								<SelectTrigger className="w-full">
+									<SelectValue placeholder="Select an environment" />
+								</SelectTrigger>
+								<SelectContent>
+									{environments.map((environment) => (
+										<SelectItem key={environment.environmentId} value={environment.name}>
+											{environment.name}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+					</div>
+				)}
+
+				{step === "configure" && (
+					<div className="flex flex-col gap-4">
+						<p className="text-sm text-muted-foreground">
+							Leave generated secrets blank to create them automatically on deploy. Override any
+							value you want to control yourself.
+						</p>
 						{template.env.map((entry) => {
 							const generated = entry.default.includes(GENERATE_SECRET);
 							return (
 								<div key={entry.key} className="flex flex-col gap-1.5">
-									<Label htmlFor={`env-${entry.key}`} className="font-mono text-xs">
-										{entry.key}
-									</Label>
+									<div className="flex items-center justify-between gap-2">
+										<Label htmlFor={`env-${entry.key}`} className="font-mono text-xs">
+											{entry.key}
+										</Label>
+										{generated && (
+											<Badge variant="outline" className="text-[10px]">
+												auto-generated
+											</Badge>
+										)}
+									</div>
 									<Input
 										id={`env-${entry.key}`}
 										value={envValues[entry.key] ?? ""}
@@ -190,46 +349,116 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 					</div>
 				)}
 
-				<div className="flex flex-col gap-3 rounded-md border p-3">
-					<div className="flex items-center justify-between gap-4">
-						<div className="flex flex-col gap-1">
-							<Label htmlFor="template-domain-toggle">Add a domain</Label>
-							<p className="text-xs text-muted-foreground">
-								Routes to{" "}
-								<Badge variant="secondary" className="font-mono text-xs">
-									{template.suggestedDomain.serviceName}:{template.suggestedDomain.port}
-								</Badge>
+				{step === "domain" && (
+					<div className="flex flex-col gap-5">
+						<div className="rounded-lg border p-3">
+							<p className="text-xs font-medium text-muted-foreground">Deploying to</p>
+							<p className="mt-1 text-sm font-medium">
+								{project?.name ?? "Project"}
+								<span className="text-muted-foreground"> / </span>
+								{environmentName || "environment"}
 							</p>
+							{domainEnabled && domainHost.trim() ? (
+								<p className="mt-2 truncate font-mono text-xs text-muted-foreground">
+									{domainHost.trim()}
+								</p>
+							) : (
+								<p className="mt-2 text-xs text-muted-foreground">No public domain yet</p>
+							)}
 						</div>
-						<Switch
-							id="template-domain-toggle"
-							checked={domainEnabled}
-							onCheckedChange={setDomainEnabled}
-						/>
-					</div>
-					{domainEnabled && (
-						<Input
-							placeholder="app.example.com"
-							value={domainHost}
-							onChange={(event) => setDomainHost(event.target.value)}
-						/>
-					)}
-				</div>
 
-				<DialogFooter>
-					<Button
-						type="submit"
-						disabled={
-							!projectId ||
-							!environmentName ||
-							(domainEnabled && !domainHost.trim()) ||
-							deploy.isPending
-						}
-					>
-						{deploy.isPending ? "Deploying..." : "Deploy"}
+						<div className="flex flex-col gap-3 rounded-lg border p-3">
+							<div className="flex items-center justify-between gap-4">
+								<div className="flex items-start gap-3">
+									<Globe className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+									<div className="flex flex-col gap-1">
+										<Label htmlFor="template-domain-toggle">Add a domain</Label>
+										<p className="text-xs text-muted-foreground">
+											Routes to{" "}
+											<Badge variant="secondary" className="font-mono text-xs">
+												{template.suggestedDomain.serviceName}:{template.suggestedDomain.port}
+											</Badge>
+										</p>
+									</div>
+								</div>
+								<Switch
+									id="template-domain-toggle"
+									checked={domainEnabled}
+									onCheckedChange={onDomainToggle}
+								/>
+							</div>
+							{domainEnabled && (
+								<div className="flex flex-col gap-1.5 border-t pt-3">
+									<Label htmlFor="template-domain-host">Host</Label>
+									<div className="flex gap-2">
+										<Input
+											id="template-domain-host"
+											placeholder="app.example.com"
+											value={domainHost}
+											onChange={(event) => setDomainHost(event.target.value)}
+										/>
+										<Button
+											type="button"
+											variant="outline"
+											size="icon"
+											onClick={() => void generateHost()}
+											disabled={generatingHost}
+											aria-label="Generate a free traefik.me domain"
+											title="Generate a free traefik.me domain"
+										>
+											{generatingHost ? (
+												<Loader2 className="size-4 animate-spin" />
+											) : (
+												<RefreshCw className="size-4" />
+											)}
+										</Button>
+									</div>
+									<p className="text-xs text-muted-foreground">
+										Custom hostname, or refresh for a free{" "}
+										<span className="font-mono">*.traefik.me</span> domain.
+									</p>
+								</div>
+							)}
+						</div>
+					</div>
+				)}
+			</div>
+
+			<SheetFooter className="flex-row items-center justify-between gap-2 border-t sm:space-x-0">
+				<Button
+					type="button"
+					variant="ghost"
+					onClick={goBack}
+					disabled={stepIndex === 0 || deploy.isPending}
+				>
+					<ArrowLeft className="size-4" />
+					Back
+				</Button>
+				{isLastStep ? (
+					<Button type="button" onClick={submit} disabled={!canDeploy || deploy.isPending}>
+						{deploy.isPending ? (
+							<>
+								<Loader2 className="size-4 animate-spin" />
+								Deploying…
+							</>
+						) : (
+							<>
+								<Rocket className="size-4" />
+								Deploy {template.name}
+							</>
+						)}
 					</Button>
-				</DialogFooter>
-			</form>
-		</DialogContent>
+				) : (
+					<Button
+						type="button"
+						onClick={goNext}
+						disabled={step === "destination" && !canContinueDestination}
+					>
+						Continue
+						<ArrowRight className="size-4" />
+					</Button>
+				)}
+			</SheetFooter>
+		</SheetContent>
 	);
 }

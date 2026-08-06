@@ -240,7 +240,7 @@ async function processJob(job: QueueJob): Promise<void> {
 	// Already finalized (e.g. cancelled while pending) — nothing to do.
 	if (deployment.status !== "running") return;
 
-	const logger = new DeploymentLogger(job.deploymentId, deployment.logPath);
+	const logger = new DeploymentLogger(deployment.logPath);
 	const ctx: DeploymentContext = {
 		serverId: job.serverId,
 		logger,
@@ -293,7 +293,7 @@ async function processJob(job: QueueJob): Promise<void> {
 			job,
 			terminalStatus === "done" ? "done" : terminalStatus === "cancelled" ? "idle" : "error",
 		).catch(() => {});
-		await logger.close();
+		logger.close();
 		deploymentEvents.emit("finish", { deploymentId: job.deploymentId, status: terminalStatus });
 
 		if (terminalStatus === "error") {

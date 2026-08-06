@@ -1,7 +1,7 @@
 import type { DeploymentContext } from "../context";
 import type { ApplicationRow } from "../sources";
 import { buildWithPack } from "./buildpacks";
-import { buildWithDockerfile } from "./dockerfile";
+import { buildWithDockerfile } from "./dockerfile-builder";
 import { buildWithNixpacks } from "./nixpacks";
 import { buildWithRailpack } from "./railpack";
 import { buildStatic } from "./static";

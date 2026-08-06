@@ -38,7 +38,7 @@ export async function buildWithNixpacks(input: BuildInput, imageTag: string): Pr
 		);
 	}
 
-	const cache = prepareBuildCache(input);
+	const cache = await prepareBuildCache(input);
 	const noCache = cache.noCacheFlag ? ` ${cache.noCacheFlag}` : "";
 	const cacheKey = cache.enabled
 		? ` --cache-key ${shellQuote(`nixploy-${input.application.appName}`)}`

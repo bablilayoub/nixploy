@@ -75,7 +75,7 @@ export function gitopsCommand(): Command {
 			const result = await apiGet<{ stack: unknown; yaml?: string }>("gitops.exportStack", {
 				projectId: options.projectId,
 				environmentName: options.env,
-				asYaml: "true",
+				asYaml: true,
 			});
 			const yaml = result.yaml ?? JSON.stringify(result.stack, null, 2);
 			if (options.output) {

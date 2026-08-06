@@ -67,7 +67,16 @@ export function DeploymentsTab({ application }: { application: Application }) {
 	const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useInfiniteQuery(
 		trpc.deployment.byApplication.infiniteQueryOptions(
 			{ applicationId, limit: PAGE_SIZE },
-			{ getNextPageParam: (lastPage) => lastPage.nextCursor },
+			{
+				getNextPageParam: (lastPage) => lastPage.nextCursor,
+				refetchInterval: (query) => {
+					const pages = query.state.data?.pages ?? [];
+					const hasRunning = pages.some((page) =>
+						page.deployments.some((deployment) => deployment.status === "running"),
+					);
+					return hasRunning ? 2_000 : false;
+				},
+			},
 		),
 	);
 
@@ -226,7 +235,7 @@ export function DeploymentsTab({ application }: { application: Application }) {
 				open={logDeployment !== null}
 				onOpenChange={(open) => !open && setLogDeployment(null)}
 			>
-				<DialogContent className="flex max-h-[85vh] max-w-4xl flex-col">
+				<DialogContent className="flex max-h-[85vh] w-[calc(100%-2rem)] flex-col sm:max-w-5xl">
 					<DialogHeader>
 						<DialogTitle>{logDeployment?.title ?? "Deployment logs"}</DialogTitle>
 						<DialogDescription>

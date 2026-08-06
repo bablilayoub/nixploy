@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveInside } from "./dockerfile";
+import { resolveInside } from "./dockerfile-builder";
 
 describe("resolveInside", () => {
 	it("resolves plain relative paths inside the build dir", () => {

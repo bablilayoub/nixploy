@@ -15,27 +15,27 @@ export function Hero() {
 				aria-hidden
 			/>
 			<div className="relative mx-auto max-w-6xl px-5 text-center sm:px-6">
-				<BlurFade delay={0.05} inView>
+				<BlurFade delay={0.05}>
 					<div className="mx-auto mb-7 flex max-w-fit items-center gap-2 rounded-full border border-white/10 bg-white/3 px-3 py-1.5 text-xs text-neutral-400">
 						<span className="size-1.5 rounded-full bg-emerald-400" />
 						Open source · Self-hosted PaaS
 					</div>
 				</BlurFade>
 
-				<BlurFade delay={0.1} inView>
+				<BlurFade delay={0.1}>
 					<h1 className="mx-auto max-w-4xl text-balance text-5xl font-semibold tracking-[-0.06em] text-white sm:text-7xl">
 						Your servers. <span className="text-neutral-500">Your PaaS.</span>
 					</h1>
 				</BlurFade>
 
-				<BlurFade delay={0.2} inView>
+				<BlurFade delay={0.2}>
 					<p className="mx-auto mt-6 max-w-xl text-balance text-lg leading-relaxed text-neutral-400">
 						Nixploy makes it simple to deploy applications, databases, and Docker Compose on
 						infrastructure you already own.
 					</p>
 				</BlurFade>
 
-				<BlurFade delay={0.3} inView>
+				<BlurFade delay={0.3}>
 					<div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
 						<Link
 							href="/install"
@@ -54,7 +54,7 @@ export function Hero() {
 					</div>
 				</BlurFade>
 
-				<BlurFade delay={0.4} inView>
+				<BlurFade delay={0.4}>
 					<div className="mt-7 flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-neutral-500">
 						{["Git-based deploys", "Automatic SSL", "Docker native"].map((item) => (
 							<span key={item} className="flex items-center gap-1.5">
@@ -65,7 +65,7 @@ export function Hero() {
 					</div>
 				</BlurFade>
 
-				<BlurFade delay={0.45} inView>
+				<BlurFade delay={0.45}>
 					<div className="relative mx-auto mt-16 max-w-6xl">
 						<div className="relative overflow-hidden rounded-lg border border-white/10 bg-[#101010] shadow-[0_25px_90px_-30px_rgba(255,255,255,0.22)]">
 							<BorderBeam size={90} duration={14} colorFrom="#ffffff" colorTo="#404040" />

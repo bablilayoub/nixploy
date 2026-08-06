@@ -14,7 +14,7 @@ import {
 	setupGithubApp,
 	syncGithubInstallation,
 } from "../../modules/git";
-import { resolveCallerOrganizationId } from "../../modules/projects";
+import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -33,11 +33,37 @@ function getBaseUrl(input?: string): string {
 	return baseUrl.replace(/\/$/, "");
 }
 
+/**
+ * Response shape: App private key, client secret and webhook secret are
+ * write-only. Clients get `*Configured` flags so the UI can show setup state.
+ */
+const publicGithub = <
+	T extends {
+		githubPrivateKey: string | null;
+		githubClientSecret: string | null;
+		githubWebhookSecret: string | null;
+	},
+>(
+	row: T,
+) => {
+	const { githubPrivateKey, githubClientSecret, githubWebhookSecret, ...rest } = row;
+	return {
+		...rest,
+		githubPrivateKeyConfigured: Boolean(githubPrivateKey),
+		githubClientSecretConfigured: Boolean(githubClientSecret),
+		githubWebhookSecretConfigured: Boolean(githubWebhookSecret),
+	};
+};
+
 export const githubRouter = router({
 	/** All GitHub App providers of the caller's organization. */
 	all: protectedProcedure.query(async ({ ctx }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		return await listGithubByOrganization(organizationId);
+		const rows = await listGithubByOrganization(organizationId);
+		return rows.map(({ github: row, gitProvider }) => ({
+			github: publicGithub(row),
+			gitProvider,
+		}));
 	}),
 
 	/** A single GitHub provider by id. */
@@ -47,7 +73,7 @@ export const githubRouter = router({
 		if (!row) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "GitHub provider not found" });
 		}
-		return row;
+		return publicGithub(row);
 	}),
 
 	/** Create an (unconfigured) GitHub provider; convert it via `createAppManifest`. */
@@ -55,6 +81,7 @@ export const githubRouter = router({
 		.input(z.object({ name: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			return await createGithub(input.name, organizationId);
 		}),
 
@@ -63,6 +90,7 @@ export const githubRouter = router({
 		.input(githubIdInput.extend({ name: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const row = await findGithubById(input.githubId, organizationId);
 			if (!row) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "GitHub provider not found" });
@@ -78,6 +106,7 @@ export const githubRouter = router({
 	/** Remove the provider (cascades to the github credentials row). */
 	remove: protectedProcedure.input(githubIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 		const removed = await removeGithub(input.githubId, organizationId);
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "GitHub provider not found" });
@@ -120,6 +149,7 @@ export const githubRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			return await getGithubAppManifest({
 				githubId: input.githubId,
 				organizationId,
@@ -143,6 +173,7 @@ export const githubRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			return await setupGithubApp({
 				githubId: input.githubId,
 				organizationId,
@@ -154,6 +185,7 @@ export const githubRouter = router({
 	/** Re-fetch the App installation id (after installing on a new account). */
 	syncInstallation: protectedProcedure.input(githubIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 		const row = await findGithubById(input.githubId, organizationId);
 		if (!row) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "GitHub provider not found" });

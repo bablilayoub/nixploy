@@ -36,7 +36,7 @@ the status reconciler (see `docs/architecture.md`) owns that cleanup.
      themselves (clear error otherwise). **Metrics history** only samples
      local services; managed-server services are live-WS only
      (see `docs/observability.md`).
-   - `dockerfile.ts` — build the repo's Dockerfile (path/context/stage,
+   - `dockerfile-builder.ts` — build the repo's Dockerfile (path/context/stage,
      `--build-arg` from build args).
    - `buildpacks.ts` — Heroku or Paketo buildpacks via `pack` (local binary
      or the `buildpacksio/pack` image). **Platform caveat**: both builders

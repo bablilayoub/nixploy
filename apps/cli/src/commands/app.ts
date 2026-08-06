@@ -79,7 +79,7 @@ export function appCommand(): Command {
 					done: boolean;
 				}>("deployment.getLogs", {
 					applicationId,
-					offset: String(offset),
+					offset,
 				});
 				if (chunk.log) process.stdout.write(chunk.log);
 				offset = chunk.offset;

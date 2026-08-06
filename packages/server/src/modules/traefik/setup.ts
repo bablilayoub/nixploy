@@ -81,32 +81,44 @@ const getLetsEncryptEmail = async (): Promise<string | null> => {
  * plus the configured domain, if any). The cert is generated only when
  * missing; the YAML files are always refreshed.
  */
-const ensureDefaultTlsAndDashboard = async (serverId?: string | null): Promise<void> => {
+/**
+ * Generate the self-signed default cert. Uses a short timeout so `ip` /
+ * openssl quirks on macOS never hang Traefik boot (which previously led to
+ * `NIXPLOY_DISABLE_TRAEFIK_BOOT` workarounds).
+ */
+const ensureDefaultTlsCert = async (serverId?: string | null): Promise<void> => {
 	const dynamicDir = serverId ? `${REMOTE_TRAEFIK_DIR}/dynamic` : getDynamicDir();
 	const certPath = `${dynamicDir}/default.crt`;
 	const keyPath = `${dynamicDir}/default.key`;
 
-	await runOn(
-		serverId,
-		[
-			`mkdir -p ${shq(dynamicDir)}`,
-			`if [ ! -f ${shq(certPath)} ] || [ ! -f ${shq(keyPath)} ]; then`,
-			`  IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}' || true)"`,
-			`  IP="\${IP:-127.0.0.1}"`,
-			`  SAN="DNS:localhost,IP:127.0.0.1,IP:\${IP}"`,
-			`  if openssl req -x509 -newkey rsa:2048 -nodes -days 825`,
-			`      -keyout ${shq(keyPath)} -out ${shq(certPath)}`,
-			`      -subj "/CN=nixploy" -addext "subjectAltName=\${SAN}" 2>/dev/null; then`,
-			`    true`,
-			`  else`,
-			`    openssl req -x509 -newkey rsa:2048 -nodes -days 825`,
-			`      -keyout ${shq(keyPath)} -out ${shq(certPath)}`,
-			`      -subj "/CN=nixploy"`,
-			`  fi`,
-			`  chmod 600 ${shq(keyPath)} ${shq(certPath)}`,
-			`fi`,
-		].join("\n"),
-	);
+	const command = [
+		`mkdir -p ${shq(dynamicDir)}`,
+		`if [ ! -f ${shq(certPath)} ] || [ ! -f ${shq(keyPath)} ]; then`,
+		// Prefer a fixed SAN; probing the host IP is nice-to-have and must not block.
+		`  SAN="DNS:localhost,IP:127.0.0.1"`,
+		`  openssl req -x509 -newkey rsa:2048 -nodes -days 825`,
+		`    -keyout ${shq(keyPath)} -out ${shq(certPath)}`,
+		`    -subj "/CN=nixploy" -addext "subjectAltName=\${SAN}" 2>/dev/null`,
+		`  || openssl req -x509 -newkey rsa:2048 -nodes -days 825`,
+		`    -keyout ${shq(keyPath)} -out ${shq(certPath)}`,
+		`    -subj "/CN=nixploy"`,
+		`  chmod 600 ${shq(keyPath)} ${shq(certPath)}`,
+		`fi`,
+	].join("\n");
+
+	if (serverId) {
+		await runOn(serverId, command);
+		return;
+	}
+
+	const { execAsync } = await import("../../utils/exec");
+	await execAsync(command, { timeout: 15_000 });
+};
+
+const ensureDefaultTlsAndDashboard = async (serverId?: string | null): Promise<void> => {
+	const dynamicDir = serverId ? `${REMOTE_TRAEFIK_DIR}/dynamic` : getDynamicDir();
+
+	await ensureDefaultTlsCert(serverId);
 
 	await writeFileOnServer(
 		`${dynamicDir}/${DEFAULT_TLS_CONFIG_FILE}`,
@@ -168,10 +180,13 @@ export const ensureTraefikSetup = async (serverId?: string | null): Promise<void
 		return;
 	}
 
+	// `--detach` returns as soon as the service is accepted so first-time
+	// image pulls don't block app boot past the Traefik timeout.
 	await runOn(
 		serverId,
 		[
 			"docker service create",
+			"--detach",
 			`--name ${TRAEFIK_SERVICE_NAME}`,
 			"--mode global",
 			"--constraint node.role==manager",

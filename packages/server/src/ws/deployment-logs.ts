@@ -4,24 +4,30 @@ import { eq } from "drizzle-orm";
 import type { WebSocket } from "ws";
 import { db } from "../db";
 import { deployments } from "../db/schema";
-// Shared contract with the deploy engine (modules/deployment). The module is
-// built in parallel; until it lands this import is the agreed interface:
-// `deploymentEvents` emits 'log' { deploymentId, chunk } and 'finish' { deploymentId, status }.
+// Shared contract with the deploy engine (modules/deployment).
+// `deploymentEvents` emits 'finish' { deploymentId, status } when a job ends.
 import { deploymentEvents } from "../modules/deployment";
+import { assertWsDeploymentAccess, resolveWsOrganizationId } from "./access";
 import type { WsSession } from "./auth";
 import { closeWithError, sendJson, upgradeSearchParams } from "./utils";
+
+const FILE_POLL_MS = 500;
 
 /**
  * /ws/deployment?deploymentId=<id>
  *
- * Replays the accumulated deploy log (stored on disk at the deployment row's
- * logPath), then live-follows `deploymentEvents` until the matching 'finish'.
+ * Streams the deploy log from disk (replay + follow) and closes when the
+ * deployment leaves `running`. File polling is the source of truth for log
+ * bytes so live updates work even when the custom server and Next request
+ * graph do not share one EventEmitter instance. `finish` events still close
+ * the socket promptly when the worker publishes them.
+ *
  * Frames: { type: "log", message } | { type: "finish", status }.
  */
 export async function handleDeploymentLogs(
 	ws: WebSocket,
 	req: IncomingMessage,
-	_session: WsSession,
+	session: WsSession,
 ): Promise<void> {
 	const deploymentId = upgradeSearchParams(req).get("deploymentId");
 	if (!deploymentId) {
@@ -29,71 +35,81 @@ export async function handleDeploymentLogs(
 		return;
 	}
 
-	// Subscribe before reading the log file so no chunk is lost between replay and follow.
-	let replaying = true;
-	let finishedStatus: string | null = null;
-	const pending: string[] = [];
+	let logPath: string | null = null;
+	let sentLength = 0;
+	let pollTimer: ReturnType<typeof setInterval> | null = null;
+	let closed = false;
 
-	const onLog = (payload: { deploymentId: string; chunk: string }) => {
-		if (payload.deploymentId !== deploymentId) return;
-		if (replaying) {
-			pending.push(payload.chunk);
-		} else {
-			sendJson(ws, { type: "log", message: payload.chunk });
-		}
-	};
-	const onFinish = (payload: { deploymentId: string; status: string }) => {
-		if (payload.deploymentId !== deploymentId) return;
-		if (replaying) {
-			finishedStatus = payload.status;
-		} else {
-			sendJson(ws, { type: "finish", status: payload.status });
-			cleanup();
-			ws.close(1000);
-		}
-	};
 	const cleanup = () => {
-		deploymentEvents.off("log", onLog);
+		closed = true;
+		if (pollTimer) {
+			clearInterval(pollTimer);
+			pollTimer = null;
+		}
 		deploymentEvents.off("finish", onFinish);
 	};
 
-	deploymentEvents.on("log", onLog);
+	const finishAndClose = (status: string) => {
+		if (closed) return;
+		closed = true;
+		sendJson(ws, { type: "finish", status });
+		cleanup();
+		ws.close(1000);
+	};
+
+	const flushLog = async () => {
+		if (closed || !logPath) return;
+		try {
+			const contents = await readFile(logPath, "utf8");
+			if (contents.length > sentLength) {
+				const next = contents.slice(sentLength);
+				sentLength = contents.length;
+				sendJson(ws, { type: "log", message: next });
+			}
+		} catch {
+			// Log file may not exist yet while the job is still queued.
+		}
+	};
+
+	const onFinish = (payload: { deploymentId: string; status: string }) => {
+		if (payload.deploymentId !== deploymentId) return;
+		void flushLog().then(() => finishAndClose(payload.status));
+	};
+
 	deploymentEvents.on("finish", onFinish);
 	ws.on("close", cleanup);
 
 	try {
-		const deployment = await db.query.deployments.findFirst({
-			where: eq(deployments.deploymentId, deploymentId),
-		});
-		if (!deployment) {
-			cleanup();
-			closeWithError(ws, `Deployment not found: ${deploymentId}`);
+		const organizationId = await resolveWsOrganizationId(session);
+		const deployment = await assertWsDeploymentAccess(deploymentId, organizationId);
+		logPath = deployment.logPath;
+
+		await flushLog();
+
+		if (deployment.status !== "running") {
+			finishAndClose(deployment.status);
 			return;
 		}
 
-		let accumulated = "";
-		try {
-			accumulated = await readFile(deployment.logPath, "utf8");
-		} catch {
-			// Log file not created yet (job still queued) — replay nothing.
-		}
-		if (accumulated) {
-			sendJson(ws, { type: "log", message: accumulated });
-		}
-
-		replaying = false;
-		for (const chunk of pending) {
-			sendJson(ws, { type: "log", message: chunk });
-		}
-		pending.length = 0;
-
-		// The deploy may have finished before (or while) we replayed.
-		const status = finishedStatus ?? (deployment.status !== "running" ? deployment.status : null);
-		if (status) {
-			sendJson(ws, { type: "finish", status });
-			cleanup();
-			ws.close(1000);
-		}
+		pollTimer = setInterval(() => {
+			void (async () => {
+				if (closed) return;
+				await flushLog();
+				try {
+					const [row] = await db
+						.select({ status: deployments.status })
+						.from(deployments)
+						.where(eq(deployments.deploymentId, deploymentId))
+						.limit(1);
+					if (row && row.status !== "running") {
+						await flushLog();
+						finishAndClose(row.status);
+					}
+				} catch {
+					// Ignore transient DB errors during follow.
+				}
+			})();
+		}, FILE_POLL_MS);
 	} catch (error) {
 		cleanup();
 		closeWithError(ws, error instanceof Error ? error.message : "Failed to load deployment");

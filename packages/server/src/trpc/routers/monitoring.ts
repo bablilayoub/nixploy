@@ -136,43 +136,6 @@ export interface ContainerStats {
 	pids: number;
 }
 
-function sumBlockIo(entries: Array<{ op?: string; value?: number }> | undefined, op: string) {
-	return (entries ?? [])
-		.filter((entry) => entry.op === op)
-		.reduce((total, entry) => total + (entry.value ?? 0), 0);
-}
-
-/** Normalize dockerode's one-shot container stats payload. */
-function normalizeContainerStats(stats: Docker.ContainerStats): ContainerStats {
-	const cpuDelta =
-		(stats.cpu_stats?.cpu_usage?.total_usage ?? 0) -
-		(stats.precpu_stats?.cpu_usage?.total_usage ?? 0);
-	const systemDelta =
-		(stats.cpu_stats?.system_cpu_usage ?? 0) - (stats.precpu_stats?.system_cpu_usage ?? 0);
-	const onlineCpus =
-		stats.cpu_stats?.online_cpus ?? stats.cpu_stats?.cpu_usage?.percpu_usage?.length ?? 1;
-	const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * onlineCpus * 100 : 0;
-
-	const networks = Object.values(stats.networks ?? {}) as Array<{
-		rx_bytes?: number;
-		tx_bytes?: number;
-	}>;
-
-	return {
-		cpuPercent: Math.max(0, cpuPercent),
-		memoryUsageBytes: stats.memory_stats?.usage ?? 0,
-		memoryLimitBytes: stats.memory_stats?.limit ?? 0,
-		memoryPercent: stats.memory_stats?.limit
-			? ((stats.memory_stats?.usage ?? 0) / stats.memory_stats.limit) * 100
-			: 0,
-		networkRxBytes: networks.reduce((total, n) => total + (n.rx_bytes ?? 0), 0),
-		networkTxBytes: networks.reduce((total, n) => total + (n.tx_bytes ?? 0), 0),
-		blockReadBytes: sumBlockIo(stats.blkio_stats?.io_service_bytes_recursive, "read"),
-		blockWriteBytes: sumBlockIo(stats.blkio_stats?.io_service_bytes_recursive, "write"),
-		pids: stats.pids_stats?.current ?? 0,
-	};
-}
-
 /** One-shot container stats on a remote server (`docker stats --no-stream`). */
 async function getRemoteContainerStats(
 	serverId: string,
@@ -222,13 +185,16 @@ export const monitoringRouter = router({
 	containerStats: protectedProcedure
 		.input(z.object({ containerId: z.string().min(1), serverId: z.string().nullish() }))
 		.query(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
 			if (input.serverId) {
-				const organizationId = await getOrganizationId(ctx.session);
 				await findServerOrThrow(input.serverId, organizationId);
 				return await getRemoteContainerStats(input.serverId, input.containerId);
 			}
-			const stats = await docker.getContainer(input.containerId).stats({ stream: false });
-			return normalizeContainerStats(stats as Docker.ContainerStats);
+			// Local-by-id without org mapping is an IDOR risk — require an owned serverId.
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: "serverId is required for container stats",
+			});
 		}),
 
 	/** Manually trigger the deploy engine's docker cleanup (prune) routine. */

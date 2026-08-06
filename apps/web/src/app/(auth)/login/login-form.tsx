@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertCircle } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -20,8 +20,15 @@ import { Input } from "@/components/ui/input";
 
 import { type LoginInput, loginSchema } from "@/server/actions/auth.schema";
 
+function safeNextPath(raw: string | null): string {
+	if (!raw?.startsWith("/") || raw.startsWith("//")) return "/dashboard";
+	return raw;
+}
+
 export function LoginForm() {
 	const router = useRouter();
+	const searchParams = useSearchParams();
+	const nextPath = safeNextPath(searchParams.get("next"));
 	const [formError, setFormError] = useState<string | null>(null);
 	const form = useForm<LoginInput>({
 		resolver: zodResolver(loginSchema),
@@ -56,12 +63,12 @@ export function LoginForm() {
 			}
 
 			if ((data as { twoFactorRedirect?: boolean }).twoFactorRedirect) {
-				router.push("/two-factor");
+				router.push(`/two-factor?next=${encodeURIComponent(nextPath)}`);
 				return;
 			}
 
 			toast.success("Signed in");
-			router.push("/dashboard");
+			router.push(nextPath);
 			router.refresh();
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : "Network error";

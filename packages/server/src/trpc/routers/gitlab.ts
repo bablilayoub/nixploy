@@ -11,7 +11,7 @@ import {
 	updateGitlabById,
 	updateGitlabProviderName,
 } from "../../modules/git";
-import { resolveCallerOrganizationId } from "../../modules/projects";
+import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -33,11 +33,34 @@ const createGitlabInput = z.object({
 	redirectUri: z.string().nullish(),
 });
 
+/** Response shape: PAT / OAuth secrets are write-only. */
+const publicGitlab = <
+	T extends {
+		accessToken: string | null;
+		refreshToken: string | null;
+		secret: string | null;
+	},
+>(
+	row: T,
+) => {
+	const { accessToken, refreshToken, secret, ...rest } = row;
+	return {
+		...rest,
+		accessTokenConfigured: Boolean(accessToken),
+		refreshTokenConfigured: Boolean(refreshToken),
+		secretConfigured: Boolean(secret),
+	};
+};
+
 export const gitlabRouter = router({
 	/** All GitLab providers of the caller's organization. */
 	all: protectedProcedure.query(async ({ ctx }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		return await listGitlabByOrganization(organizationId);
+		const rows = await listGitlabByOrganization(organizationId);
+		return rows.map(({ gitlab: row, gitProvider }) => ({
+			gitlab: publicGitlab(row),
+			gitProvider,
+		}));
 	}),
 
 	/** A single GitLab provider by id. */
@@ -47,12 +70,13 @@ export const gitlabRouter = router({
 		if (!row) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "GitLab provider not found" });
 		}
-		return row;
+		return publicGitlab(row);
 	}),
 
 	/** Add a GitLab provider (PAT and/or OAuth app credentials). */
 	create: protectedProcedure.input(createGitlabInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 		return await createGitlab(input, organizationId);
 	}),
 
@@ -67,6 +91,7 @@ export const gitlabRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const { gitlabId, name, ...values } = input;
 			if (name) {
 				await updateGitlabProviderName(gitlabId, name, organizationId);
@@ -81,6 +106,7 @@ export const gitlabRouter = router({
 	/** Remove the provider (cascades to the gitlab credentials row). */
 	remove: protectedProcedure.input(gitlabIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 		const removed = await removeGitlab(input.gitlabId, organizationId);
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "GitLab provider not found" });
@@ -109,6 +135,7 @@ export const gitlabRouter = router({
 	/** Verify the configured token against the GitLab API. */
 	testConnection: protectedProcedure.input(gitlabIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 		return await testGitlabConnection(input.gitlabId, organizationId);
 	}),
 });

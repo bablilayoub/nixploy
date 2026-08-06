@@ -28,6 +28,41 @@ const defaults: AiSettings = {
 	autoExplainOnFailure: false,
 };
 
+/**
+ * Block AI provider base URLs that would SSRF into link-local / private ranges
+ * when the provider is a public cloud API. Ollama / openai-compatible may use
+ * localhost for local models.
+ */
+function assertSafeAiBaseUrl(baseUrl: string | null, provider: AiProvider): void {
+	if (!baseUrl?.trim()) return;
+	let parsed: URL;
+	try {
+		parsed = new URL(baseUrl);
+	} catch {
+		throw new Error("Invalid AI base URL");
+	}
+	if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+		throw new Error("AI base URL must be http(s)");
+	}
+	if (provider === "ollama" || provider === "openai-compatible") {
+		return;
+	}
+	const host = parsed.hostname.toLowerCase();
+	if (
+		host === "localhost" ||
+		host === "127.0.0.1" ||
+		host === "::1" ||
+		host.endsWith(".local") ||
+		host.startsWith("10.") ||
+		host.startsWith("192.168.") ||
+		/^172\.(1[6-9]|2\d|3[0-1])\./.test(host) ||
+		host.startsWith("169.254.") ||
+		host.startsWith("metadata.")
+	) {
+		throw new Error("AI base URL must not target private or link-local addresses");
+	}
+}
+
 function readExtras(metricsConfig: unknown): Record<string, unknown> {
 	if (typeof metricsConfig === "object" && metricsConfig !== null) {
 		const extras = (metricsConfig as Record<string, unknown>)[EXTRAS_KEY];
@@ -119,10 +154,13 @@ export async function patchAiSettings(
 		nextKey = patch.apiKey.trim();
 	}
 
+	const nextBaseUrl = patch.baseUrl !== undefined ? patch.baseUrl : current.baseUrl;
+	assertSafeAiBaseUrl(nextBaseUrl, patch.provider ?? current.provider);
+
 	const next: AiSettings = {
 		enabled: patch.enabled ?? current.enabled,
 		provider: patch.provider ?? current.provider,
-		baseUrl: patch.baseUrl !== undefined ? patch.baseUrl : current.baseUrl,
+		baseUrl: nextBaseUrl,
 		model: patch.model?.trim() || current.model,
 		apiKey: nextKey,
 		autoExplainOnFailure: patch.autoExplainOnFailure ?? current.autoExplainOnFailure,

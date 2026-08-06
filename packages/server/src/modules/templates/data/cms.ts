@@ -115,7 +115,7 @@ volumes:
 		links: {
 			website: "https://strapi.io",
 			github: "https://github.com/strapi/strapi",
-			docs: "https://docs.strapi.io",
+			docs: "https://docs.strapi.io/cms/installation/docker",
 		},
 		suggestedDomain: { serviceName: "strapi", port: 1337 },
 		env: [
@@ -124,44 +124,22 @@ volumes:
 				default: "{{generateSecret}}",
 				description: "Password of the strapi PostgreSQL user",
 			},
-			{
-				key: "APP_KEYS",
-				default: "{{generateSecret}},{{generateSecret}}",
-				description: "Comma-separated app keys for session encryption",
-			},
-			{
-				key: "API_TOKEN_SALT",
-				default: "{{generateSecret}}",
-				description: "Salt for API tokens",
-			},
-			{
-				key: "ADMIN_JWT_SECRET",
-				default: "{{generateSecret}}",
-				description: "JWT secret for the admin panel",
-			},
-			{
-				key: "JWT_SECRET",
-				default: "{{generateSecret}}",
-				description: "JWT secret for users & permissions",
-			},
 		],
+		// Official strapi/* Hub images were removed; community image recommended by Strapi docs.
 		compose: `services:
   strapi:
-    image: strapi/strapi:latest
+    image: naskio/strapi:5.30.1
     restart: always
     depends_on:
       - strapi_db
     environment:
+      NODE_ENV: development
       DATABASE_CLIENT: postgres
       DATABASE_HOST: strapi_db
       DATABASE_PORT: "5432"
       DATABASE_NAME: strapi
       DATABASE_USERNAME: strapi
       DATABASE_PASSWORD: \${DATABASE_PASSWORD}
-      APP_KEYS: "\${APP_KEYS}"
-      API_TOKEN_SALT: \${API_TOKEN_SALT}
-      ADMIN_JWT_SECRET: \${ADMIN_JWT_SECRET}
-      JWT_SECRET: \${JWT_SECRET}
     volumes:
       - strapi-data:/srv/app
   strapi_db:
@@ -178,6 +156,7 @@ volumes:
   strapi-db-data:
 `,
 	},
+
 	{
 		id: "directus",
 		name: "Directus",

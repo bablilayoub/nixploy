@@ -36,7 +36,7 @@ import {
 	cancelDeployment as cancelQueuedDeployment,
 	queueDeployment,
 } from "../../modules/deployment";
-import { assertOrgRole, assertWithinQuota } from "../../modules/projects";
+import { assertOrgRole, assertWithinQuota, hasOrgRole } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { protectedProcedure, router } from "../init";
 
@@ -168,7 +168,9 @@ export const applicationRouter = router({
 		if (!application || application.environment.project.organizationId !== organizationId) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
 		}
-		return application;
+		const canSeeSecrets = await hasOrgRole(ctx.session.user.id, organizationId, "member");
+		if (canSeeSecrets) return application;
+		return { ...application, env: null, buildArgs: null };
 	}),
 
 	create: protectedProcedure
@@ -255,6 +257,7 @@ export const applicationRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			await assertApplicationAccess(input.applicationId, organizationId);
 
 			const { applicationId, ...data } = input;
@@ -277,6 +280,7 @@ export const applicationRouter = router({
 		.input(applicationIdInput.extend({ environmentId: z.string().optional() }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 			const targetEnvironmentId = input.environmentId ?? application.environmentId;
 			if (targetEnvironmentId !== application.environmentId) {
@@ -298,6 +302,7 @@ export const applicationRouter = router({
 		.input(applicationIdInput.extend({ environmentId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 			const environment = await assertEnvironmentAccess(input.environmentId, organizationId);
 			const updated = await updateApplication(input.applicationId, {
@@ -385,6 +390,7 @@ export const applicationRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			await assertApplicationAccess(input.applicationId, organizationId);
 			const application = await saveEnvironment(input.applicationId, input.env, input.buildArgs);
 			await upsertApplicationSwarmService(application);
@@ -412,6 +418,7 @@ export const applicationRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			await assertApplicationAccess(input.applicationId, organizationId);
 			const { applicationId, ...data } = input;
 			return updateApplication(applicationId, data);
@@ -447,6 +454,7 @@ export const applicationRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			await assertApplicationAccess(input.applicationId, organizationId);
 
 			// Cross-org reference checks.
@@ -543,6 +551,7 @@ export const applicationRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			await assertApplicationAccess(input.applicationId, organizationId);
 			if (input.registryId) {
 				const reg = await db.query.registry.findFirst({
@@ -653,6 +662,7 @@ export const applicationRouter = router({
 		.input(applicationIdInput.extend({ rollbackId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 
 			const rollback = await db.query.rollbacks.findFirst({

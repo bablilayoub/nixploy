@@ -76,11 +76,37 @@ export async function api<T = unknown>(path: string, options: RequestOptions = {
 	return data as T;
 }
 
+/**
+ * GET with query input. Non-string values (booleans, numbers) are sent as a
+ * single JSON `input` blob so Zod schemas receive the correct types. Pure
+ * string maps stay flattened for simple filters.
+ */
 export const apiGet = <T>(
 	path: string,
-	query?: Record<string, string | undefined>,
+	query?: Record<string, string | number | boolean | undefined>,
 	options?: Pick<RequestOptions, "apiUrl" | "apiKey">,
-): Promise<T> => api<T>(path, { ...options, method: "GET", query });
+): Promise<T> => {
+	if (!query || Object.keys(query).length === 0) {
+		return api<T>(path, { ...options, method: "GET" });
+	}
+	const needsJson = Object.values(query).some((v) => v !== undefined && typeof v !== "string");
+	if (needsJson) {
+		const cleaned: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(query)) {
+			if (value !== undefined) cleaned[key] = value;
+		}
+		return api<T>(path, {
+			...options,
+			method: "GET",
+			query: { input: JSON.stringify(cleaned) },
+		});
+	}
+	const stringQuery: Record<string, string | undefined> = {};
+	for (const [key, value] of Object.entries(query)) {
+		stringQuery[key] = value === undefined ? undefined : String(value);
+	}
+	return api<T>(path, { ...options, method: "GET", query: stringQuery });
+};
 
 export const apiPost = <T>(
 	path: string,

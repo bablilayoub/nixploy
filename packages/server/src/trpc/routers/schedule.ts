@@ -188,6 +188,8 @@ export const scheduleRouter = router({
 					message: `Invalid cron expression: ${input.cronExpression}`,
 				});
 			}
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			await assertTargetAccess(ctx.session, input);
 			const [row] = await db
 				.insert(schedules)
@@ -227,6 +229,8 @@ export const scheduleRouter = router({
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const row = await findScheduleOrThrow(input.scheduleId);
 			await assertScheduleAccess(ctx.session, row);
 			if (input.cronExpression && !isValidCron(input.cronExpression)) {
@@ -252,6 +256,8 @@ export const scheduleRouter = router({
 	remove: protectedProcedure
 		.input(z.object({ scheduleId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const row = await findScheduleOrThrow(input.scheduleId);
 			await assertScheduleAccess(ctx.session, row);
 			unregisterSchedule(row.scheduleId);
@@ -263,6 +269,8 @@ export const scheduleRouter = router({
 	runManually: protectedProcedure
 		.input(z.object({ scheduleId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const row = await findScheduleOrThrow(input.scheduleId);
 			await assertScheduleAccess(ctx.session, row);
 			return await runSchedule(row, "manual");
@@ -272,6 +280,8 @@ export const scheduleRouter = router({
 	enable: protectedProcedure
 		.input(z.object({ scheduleId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const row = await findScheduleOrThrow(input.scheduleId);
 			await assertScheduleAccess(ctx.session, row);
 			const [updated] = await db
@@ -290,6 +300,8 @@ export const scheduleRouter = router({
 	disable: protectedProcedure
 		.input(z.object({ scheduleId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const row = await findScheduleOrThrow(input.scheduleId);
 			await assertScheduleAccess(ctx.session, row);
 			unregisterSchedule(row.scheduleId);

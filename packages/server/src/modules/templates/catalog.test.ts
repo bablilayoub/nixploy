@@ -85,4 +85,25 @@ describe("template catalog", () => {
 			}
 		},
 	);
+
+	it("avoids known-unpublished image tags", () => {
+		/** Floating / removed tags that previously broke deploys. */
+		const bannedExact = new Set([
+			"supabase/postgres-meta:latest",
+			"supabase/gotrue:latest",
+			"supabase/postgres:15.8.1",
+			"supabase/studio:latest",
+			"strapi/strapi:latest",
+		]);
+		const imagePattern = /^\s*image:\s*(\S+)\s*$/gm;
+		for (const template of templates) {
+			for (const match of template.compose.matchAll(imagePattern)) {
+				const image = match[1] ?? "";
+				expect(bannedExact.has(image), `${template.id} still references ${image}`).toBe(false);
+				expect(image.startsWith("strapi/strapi:"), `${template.id} still references ${image}`).toBe(
+					false,
+				);
+			}
+		}
+	});
 });

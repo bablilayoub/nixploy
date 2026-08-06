@@ -1,6 +1,7 @@
 import type { IncomingMessage } from "node:http";
 import type Docker from "dockerode";
 import type { WebSocket } from "ws";
+import { assertWsContainerAccess } from "./access";
 import type { WsSession } from "./auth";
 import {
 	connectToServer,
@@ -31,7 +32,7 @@ export interface ContainerStatsFrame {
 export async function handleDockerStats(
 	ws: WebSocket,
 	req: IncomingMessage,
-	_session: WsSession,
+	session: WsSession,
 ): Promise<void> {
 	const params = upgradeSearchParams(req);
 	const appName = params.get("appName");
@@ -46,6 +47,7 @@ export async function handleDockerStats(
 	let tickInFlight = false;
 
 	try {
+		await assertWsContainerAccess(session, appName, serverId);
 		const sample = serverId
 			? await createRemoteSampler(ws, serverId, appName)
 			: await createLocalSampler(appName);

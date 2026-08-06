@@ -208,6 +208,9 @@ export function DomainManager({
 		try {
 			const generated = await trpcClient.domain.generateDomain.query({});
 			setHost(generated);
+			// traefik.me → 127.0.0.1; Let's Encrypt can never issue for it.
+			setCertificateType("none");
+			setCertificateId(null);
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : "Failed to generate domain");
 		}
@@ -233,6 +236,15 @@ export function DomainManager({
 		}
 		if (certificateType === "custom" && !certificateId) {
 			toast.error("Select a certificate for custom certificate type");
+			return;
+		}
+		const isTraefikMe =
+			trimmedHost.toLowerCase().endsWith(".traefik.me") ||
+			trimmedHost.toLowerCase() === "traefik.me";
+		if (isTraefikMe && certificateType === "letsencrypt") {
+			toast.error(
+				"Let's Encrypt cannot issue for *.traefik.me (localhost). Use certificate “None”.",
+			);
 			return;
 		}
 
@@ -493,11 +505,17 @@ export function DomainManager({
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="none">None</SelectItem>
+									<SelectItem value="none">None (self-signed / default)</SelectItem>
 									<SelectItem value="letsencrypt">Let's Encrypt</SelectItem>
 									<SelectItem value="custom">Custom</SelectItem>
 								</SelectContent>
 							</Select>
+							{host.trim().toLowerCase().endsWith(".traefik.me") && (
+								<p className="text-xs text-amber-600 dark:text-amber-400">
+									*.traefik.me is for localhost only — keep certificate on “None”. Open the HTTPS
+									URL and accept the browser warning for Traefik’s default cert.
+								</p>
+							)}
 							{certificateType === "letsencrypt" && (
 								<p className="text-xs text-muted-foreground">
 									Point the domain's DNS A record to this server's public IP and make sure a Let's

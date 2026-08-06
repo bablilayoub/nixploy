@@ -9,6 +9,7 @@ import {
 	getOrganizationId,
 	syncApplicationTraefik,
 } from "../../modules/application";
+import { assertOrgRole } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 const BCRYPT_ROUNDS = 10;
@@ -62,6 +63,7 @@ export const securityRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 
 			// Traefik's basicAuth middleware expects bcrypt-hashed passwords.
@@ -96,6 +98,7 @@ export const securityRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const { entry, application } = await findApplicationSecurity(
 				input.securityId,
 				organizationId,
@@ -118,6 +121,7 @@ export const securityRouter = router({
 		.input(z.object({ securityId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 			const { entry, application } = await findApplicationSecurity(
 				input.securityId,
 				organizationId,

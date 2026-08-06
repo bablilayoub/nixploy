@@ -21,6 +21,7 @@ import { queueDeployment } from "../../modules/deployment";
 import {
 	assertOrgRole,
 	assertWithinQuota,
+	hasOrgRole,
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
 import type { TRPCContext } from "../init";
@@ -71,7 +72,10 @@ export const composeRouter = router({
 	/** A single compose service by id. */
 	one: protectedProcedure.input(composeIdInput).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		return await findComposeForOrg(input.composeId, organizationId);
+		const row = await findComposeForOrg(input.composeId, organizationId);
+		const canSeeSecrets = await hasOrgRole(ctx.session.user.id, organizationId, "member");
+		if (canSeeSecrets) return row;
+		return { ...row, env: null };
 	}),
 
 	/** Create a compose service (raw paste or git-backed source). */
@@ -149,6 +153,7 @@ export const composeRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			await findComposeForOrg(input.composeId, organizationId);
 			const { composeId, ...values } = input;
 			return await updateComposeById(composeId, values);
@@ -166,6 +171,7 @@ export const composeRouter = router({
 		.input(composeIdInput.extend({ environmentId: z.string().optional() }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			const row = await findComposeForOrg(input.composeId, organizationId);
 			const targetEnvironmentId = input.environmentId ?? row.environmentId;
 			if (targetEnvironmentId !== row.environmentId) {
@@ -187,6 +193,7 @@ export const composeRouter = router({
 		.input(composeIdInput.extend({ environmentId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			const row = await findComposeForOrg(input.composeId, organizationId);
 			await assertEnvironmentAccess(input.environmentId, organizationId);
 			const [updated] = await db
@@ -268,6 +275,7 @@ export const composeRouter = router({
 		.input(composeIdInput.extend({ env: z.string() }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			await findComposeForOrg(input.composeId, organizationId);
 			await saveEnvironment(input.composeId, input.env);
 			return true;
@@ -281,6 +289,7 @@ export const composeRouter = router({
 		.input(composeIdInput.extend({ composeFile: z.string() }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			const row = await findComposeForOrg(input.composeId, organizationId);
 			await saveComposeFile(row, input.composeFile);
 			return true;

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import schedule from "node-schedule";
 import { db } from "../../db";
 import { deployments, schedules } from "../../db/schema";
+import { getConfigDir } from "../application/paths";
 import { runScheduleCommand } from "./runner";
 
 export type { ScheduleTarget } from "./runner";
@@ -18,7 +19,8 @@ export interface ScheduleRunState {
 	lastError: string | null;
 }
 
-const SCHEDULES_LOG_DIR = process.env.NIXPLOY_SCHEDULES_LOG_PATH ?? "/etc/nixploy/schedules";
+const SCHEDULES_LOG_DIR =
+	process.env.NIXPLOY_SCHEDULES_LOG_PATH ?? path.join(getConfigDir(), "schedules");
 
 /** Live node-schedule jobs, keyed by scheduleId. */
 const jobs = new Map<string, schedule.Job>();

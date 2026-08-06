@@ -350,23 +350,43 @@ volumes:
 		links: {
 			website: "https://supabase.com",
 			github: "https://github.com/supabase/supabase",
-			docs: "https://supabase.com/docs",
+			docs: "https://supabase.com/docs/guides/self-hosting",
 		},
 		suggestedDomain: { serviceName: "studio", port: 3000 },
 		env: [
 			{
 				key: "POSTGRES_PASSWORD",
 				default: "{{generateSecret}}",
-				description: "Password of the Postgres superuser",
+				description:
+					"Password for Postgres and built-in Supabase roles (letters+numbers; avoid special characters)",
 			},
 			{
 				key: "JWT_SECRET",
+				// Must match the default ANON_KEY / SERVICE_ROLE_KEY below (Supabase demo pair).
+				default: "your-super-secret-jwt-token-with-at-least-32-characters-long",
+				description:
+					"HS256 secret used to sign JWTs — must match ANON_KEY and SERVICE_ROLE_KEY (rotate all three together)",
+			},
+			{
+				key: "ANON_KEY",
+				default:
+					"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0",
+				description: "Anon JWT (must be signed with JWT_SECRET)",
+			},
+			{
+				key: "SERVICE_ROLE_KEY",
+				default:
+					"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU",
+				description: "Service-role JWT (must be signed with JWT_SECRET)",
+			},
+			{
+				key: "PG_META_CRYPTO_KEY",
 				default: "{{generateSecret}}",
-				description: "Secret used to sign JWTs (at least 32 characters)",
+				description: "Encryption key for postgres-meta (at least 32 characters)",
 			},
 			{
 				key: "SITE_URL",
-				default: "http://localhost:8000",
+				default: "http://localhost:3000",
 				description: "Public URL of your frontend (used in auth emails/redirects)",
 			},
 			{
@@ -376,30 +396,81 @@ volumes:
 					"Public URL of the API (add a domain for the `rest` service and set its URL here)",
 			},
 		],
+		// Image tags pinned to the official self-hosted compose. `db-roles` syncs
+		// built-in role passwords (same job as docker/volumes/db/roles.sql).
 		compose: `services:
   studio:
-    image: supabase/studio:latest
+    image: supabase/studio:2026.08.03-sha-022b374
     restart: always
     depends_on:
       - rest
+      - meta
     environment:
+      HOSTNAME: "0.0.0.0"
       STUDIO_PG_META_URL: http://meta:8080
-      STUDIO_PROJECT_REF: default
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_USER_READ_WRITE: postgres
+      PG_META_CRYPTO_KEY: \${PG_META_CRYPTO_KEY}
       SUPABASE_PUBLIC_URL: \${API_EXTERNAL_URL}
       SUPABASE_URL: http://rest:3000
+      SUPABASE_ANON_KEY: \${ANON_KEY}
+      SUPABASE_SERVICE_KEY: \${SERVICE_ROLE_KEY}
+      AUTH_JWT_SECRET: \${JWT_SECRET}
   db:
-    image: supabase/postgres:15.8.1
+    image: supabase/postgres:15.8.1.085
     restart: always
-    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     environment:
+      POSTGRES_HOST: /var/run/postgresql
       POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      PGPASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+      JWT_SECRET: \${JWT_SECRET}
+      JWT_EXP: "3600"
+    command:
+      [
+        "postgres",
+        "-c",
+        "config_file=/etc/postgresql/postgresql.conf",
+        "-c",
+        "log_min_messages=fatal",
+      ]
     volumes:
       - supabase-db-data:/var/lib/postgresql/data
+  db-roles:
+    image: supabase/postgres:15.8.1.085
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      PGPASSWORD: \${POSTGRES_PASSWORD}
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+        psql -h db -U postgres -d postgres -v ON_ERROR_STOP=1 \\
+          -c "ALTER USER authenticator WITH PASSWORD '$$POSTGRES_PASSWORD'" \\
+          -c "ALTER USER supabase_auth_admin WITH PASSWORD '$$POSTGRES_PASSWORD'" \\
+          -c "ALTER USER supabase_admin WITH PASSWORD '$$POSTGRES_PASSWORD'" \\
+          -c "ALTER USER supabase_storage_admin WITH PASSWORD '$$POSTGRES_PASSWORD'" \\
+          -c "ALTER USER supabase_functions_admin WITH PASSWORD '$$POSTGRES_PASSWORD'"
   auth:
-    image: supabase/gotrue:latest
+    image: supabase/gotrue:v2.189.0
     restart: always
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      db-roles:
+        condition: service_completed_successfully
     environment:
       GOTRUE_API_HOST: 0.0.0.0
       GOTRUE_API_PORT: "9999"
@@ -409,31 +480,40 @@ volumes:
       GOTRUE_SITE_URL: \${SITE_URL}
       GOTRUE_JWT_SECRET: \${JWT_SECRET}
       GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
       GOTRUE_MAILER_AUTOCONFIRM: "true"
   rest:
-    image: postgrest/postgrest:latest
+    image: postgrest/postgrest:v14.12
     restart: always
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      db-roles:
+        condition: service_completed_successfully
     environment:
       PGRST_DB_URI: postgres://authenticator:\${POSTGRES_PASSWORD}@db:5432/postgres
-      PGRST_DB_SCHEMAS: public,storage,graphql_public
+      PGRST_DB_SCHEMAS: public,graphql_public
       PGRST_DB_ANON_ROLE: anon
       PGRST_JWT_SECRET: \${JWT_SECRET}
       PGRST_APP_SETTINGS_JWT_SECRET: \${JWT_SECRET}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
   meta:
-    image: supabase/postgres-meta:latest
+    image: supabase/postgres-meta:v0.96.6
     restart: always
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       PG_META_PORT: "8080"
       PG_META_DB_HOST: db
       PG_META_DB_PORT: "5432"
       PG_META_DB_NAME: postgres
-      PG_META_DB_USER: supabase_admin
+      PG_META_DB_USER: postgres
       PG_META_DB_PASSWORD: \${POSTGRES_PASSWORD}
+      CRYPTO_KEY: \${PG_META_CRYPTO_KEY}
 volumes:
   supabase-db-data:
 `,

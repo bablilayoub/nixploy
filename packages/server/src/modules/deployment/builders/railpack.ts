@@ -47,7 +47,7 @@ export async function buildWithRailpack(input: BuildInput, imageTag: string): Pr
 		`docker start ${BUILDKIT_CONTAINER} >/dev/null 2>&1 || docker run -d --name ${BUILDKIT_CONTAINER} --privileged --restart unless-stopped moby/buildkit:latest`,
 	);
 
-	const cache = prepareBuildCache(input);
+	const cache = await prepareBuildCache(input);
 	const noCache = cache.noCacheFlag ? ` ${cache.noCacheFlag}` : "";
 
 	await ctx.run(

@@ -12,11 +12,29 @@ import {
 } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
 import { resyncComposeDomains } from "../../modules/compose/service";
+import { assertOrgRole } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 const domainIdInput = z.object({ domainId: z.string().min(1) });
 
 const certificateTypeSchema = z.enum(["letsencrypt", "none", "custom"]);
+
+/** `*.traefik.me` resolves to 127.0.0.1 — Let's Encrypt HTTP-01 can never succeed. */
+const isLocalWildcardHost = (host: string): boolean =>
+	host.trim().toLowerCase().endsWith(".traefik.me") || host.trim().toLowerCase() === "traefik.me";
+
+const assertCertificateAllowedForHost = (
+	host: string,
+	certificateType: z.infer<typeof certificateTypeSchema>,
+) => {
+	if (certificateType === "letsencrypt" && isLocalWildcardHost(host)) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message:
+				"Let's Encrypt cannot issue certificates for *.traefik.me (it resolves to 127.0.0.1). Use certificate type “None” and open https://… — Traefik serves the self-signed default cert for local domains.",
+		});
+	}
+};
 
 /** A domain row with both possible parents eager-loaded for tenancy checks. */
 const findDomain = (domainId: string) =>
@@ -208,6 +226,7 @@ export const domainRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 
 			if (input.applicationId) {
 				await assertApplicationAccess(input.applicationId, organizationId);
@@ -222,6 +241,7 @@ export const domainRouter = router({
 			}
 
 			const certificateType = input.certificateType ?? "none";
+			assertCertificateAllowedForHost(input.host, certificateType);
 			if (certificateType === "custom") {
 				if (!input.certificateId) {
 					throw new TRPCError({
@@ -285,9 +305,12 @@ export const domainRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "member");
 			const existing = await assertDomainAccess(input.domainId, organizationId);
 
 			const certificateType = input.certificateType ?? existing.certificateType;
+			const nextHost = input.host ?? existing.host;
+			assertCertificateAllowedForHost(nextHost, certificateType);
 			const certificateId =
 				certificateType === "custom" ? (input.certificateId ?? existing.certificateId) : null;
 			if (certificateType === "custom") {
@@ -330,6 +353,7 @@ export const domainRouter = router({
 
 	delete: protectedProcedure.input(domainIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
 		const domain = await assertDomainAccess(input.domainId, organizationId);
 
 		await db.delete(domains).where(eq(domains.domainId, input.domainId));

@@ -1,6 +1,7 @@
 import type { IncomingMessage } from "node:http";
 import { type Readable, Writable } from "node:stream";
 import type { WebSocket } from "ws";
+import { assertWsContainerAccess } from "./access";
 import type { WsSession } from "./auth";
 import {
 	connectToServer,
@@ -21,7 +22,7 @@ const DEFAULT_TAIL = 1000;
 export async function handleDockerLogs(
 	ws: WebSocket,
 	req: IncomingMessage,
-	_session: WsSession,
+	session: WsSession,
 ): Promise<void> {
 	const params = upgradeSearchParams(req);
 	const appName = params.get("appName");
@@ -36,6 +37,7 @@ export async function handleDockerLogs(
 	}
 
 	try {
+		await assertWsContainerAccess(session, appName, serverId);
 		if (serverId) {
 			await streamRemoteLogs(ws, serverId, appName, tail);
 		} else {

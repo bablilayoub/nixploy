@@ -24,13 +24,27 @@ search, paginated).
 
 ## Roles
 
-Org members have better-auth roles: `owner` > `admin` > `member`.
+Org members have ranks:
+
+`viewer` < `member` < `deployer` < `admin` < `owner`
+
+| Role | Can |
+|------|-----|
+| **viewer** | Read dashboards, status, logs, metrics. No mutations. Secrets (env, DB passwords, tokens, notification configs) are redacted. |
+| **member** | Create/update service config, domains, ports, redirects, env vars; AI chat/explain. |
+| **deployer** | Everything member can, plus deploy / redeploy / start / stop / rollback / preview / backups run+restore / template deploy. |
+| **admin** | Everything deployer can, plus delete resources, invites, servers, SSH keys, registries, git providers, notifications, certificates, mounts, Docker control, schedules, gitops apply, Traefik/web-server/AI settings. |
+| **owner** | Same as admin for tRPC gates (highest rank). better-auth additionally owns org lifecycle. |
+
+Enforcement:
 
 - `assertOrgRole(userId, organizationId, minRole)` in
-  `packages/server/src/modules/projects/index.ts` throws FORBIDDEN unless
-  the caller's rank meets `minRole`.
-- Enforced at **admin** for: Docker mutations, server create/remove, project
-  delete. better-auth's organization plugin additionally enforces its own
-  rules for member/invitation management.
-- Member management UI: Settings → Organization (invite with role picker,
-  pending invitations with cancel, change role, remove member).
+  `packages/server/src/modules/projects/index.ts` throws `FORBIDDEN` unless
+  the caller's rank meets `minRole`. Comma-separated better-auth roles take
+  the maximum rank; unknown roles count as viewer.
+- `hasOrgRole(...)` is the non-throwing variant used when redacting secrets
+  on reads.
+- better-auth's organization plugin AC still gates member/invitation
+  management on the auth API (viewers have empty org permissions).
+- Member management UI: Settings → Organization (shareable invite link,
+  role picker, cancel invite, change role, remove member).
