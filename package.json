@@ -16,6 +16,8 @@
 		"format": "biome format --write .",
 		"typecheck": "pnpm -r typecheck",
 		"test": "pnpm -F @nixploy/server exec vitest run",
+		"test:template-images": "TEMPLATE_IMAGE_CHECK=1 pnpm -F @nixploy/server exec vitest run src/modules/templates/images-health.test.ts",
+		"smoke:golden-path": "node tools/golden-path-api.mjs",
 		"db:generate": "pnpm -F @nixploy/server db:generate",
 		"db:migrate": "pnpm -F @nixploy/server db:migrate",
 		"db:push": "pnpm -F @nixploy/server db:push",

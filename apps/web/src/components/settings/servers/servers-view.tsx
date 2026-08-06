@@ -4,11 +4,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { format } from "date-fns";
 import { Loader2, Pencil, Plug, Server, Wrench } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { QueryState } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { CreateServerDialog } from "@/components/settings/servers/create-server-dialog";
+import { ServerCapacityCell } from "@/components/settings/servers/server-capacity-cell";
 import { ServerStatsPopover } from "@/components/settings/servers/server-stats-popover";
 import { PageHeader, StatusDot } from "@/components/shell";
 import { Button } from "@/components/ui/button";
@@ -124,7 +126,15 @@ export function ServersView() {
 		<div className="flex flex-col gap-4">
 			<PageHeader
 				title="Servers"
-				description="Remote Docker hosts that join the primary Swarm over SSH."
+				description={
+					<span>
+						Remote Docker hosts that join the primary Swarm over SSH. Drain or pause nodes in{" "}
+						<Link href="/dashboard/docker" className="underline underline-offset-2">
+							Docker → Swarm
+						</Link>
+						. Pin apps with Advanced → Placement constraints.
+					</span>
+				}
 				actions={<CreateServerDialog />}
 			/>
 			<Card>
@@ -157,6 +167,7 @@ export function ServersView() {
 									<TableHead className="hidden md:table-cell">Address</TableHead>
 									<TableHead className="hidden sm:table-cell">Role</TableHead>
 									<TableHead>Status</TableHead>
+									<TableHead className="hidden lg:table-cell">Capacity</TableHead>
 									<TableHead className="hidden md:table-cell">Added</TableHead>
 									<TableHead className="w-36 text-right">Actions</TableHead>
 								</TableRow>
@@ -189,6 +200,9 @@ export function ServersView() {
 												/>
 												{server.serverStatus}
 											</span>
+										</TableCell>
+										<TableCell className="hidden lg:table-cell">
+											<ServerCapacityCell serverId={server.serverId} />
 										</TableCell>
 										<TableCell className="hidden text-muted-foreground md:table-cell">
 											{format(new Date(server.createdAt), "MMM d, yyyy")}

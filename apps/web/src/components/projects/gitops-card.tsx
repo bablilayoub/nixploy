@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, Upload } from "lucide-react";
+import { Download, Link2, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -15,6 +15,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useTRPC } from "@/lib/trpc";
@@ -40,6 +41,8 @@ export function GitopsCard({
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const [importOpen, setImportOpen] = useState(false);
 	const [yaml, setYaml] = useState("");
+	const [stackUrl, setStackUrl] = useState("");
+	const [redeployAfter, setRedeployAfter] = useState(true);
 	const [confirmOpen, setConfirmOpen] = useState(false);
 
 	const exportQuery = useQuery({
@@ -53,6 +56,7 @@ export function GitopsCard({
 
 	const planMutation = useMutation(trpc.gitops.plan.mutationOptions());
 	const applyMutation = useMutation(trpc.gitops.runApply.mutationOptions());
+	const syncUrlMutation = useMutation(trpc.gitops.syncFromUrl.mutationOptions());
 
 	const handleExport = async () => {
 		try {
@@ -89,8 +93,17 @@ export function GitopsCard({
 
 	const handleApply = async () => {
 		try {
-			const result = await applyMutation.mutateAsync({ yaml, projectId });
-			toast.success(`Applied ${result.applied} change(s)`);
+			const result = await applyMutation.mutateAsync({
+				yaml,
+				projectId,
+				redeploy: redeployAfter,
+			});
+			const redeployed = result.redeploy?.deploymentIds.length ?? 0;
+			toast.success(
+				redeployed > 0
+					? `Applied ${result.applied} change(s), queued ${redeployed} redeploy(s)`
+					: `Applied ${result.applied} change(s)`,
+			);
 			setConfirmOpen(false);
 			setImportOpen(false);
 			setYaml("");
@@ -105,6 +118,38 @@ export function GitopsCard({
 			]);
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : "Apply failed");
+		}
+	};
+
+	const handleSyncUrl = async () => {
+		if (!stackUrl.trim()) {
+			toast.error("Enter an https URL to a raw nixploy.yaml");
+			return;
+		}
+		try {
+			const result = await syncUrlMutation.mutateAsync({
+				url: stackUrl.trim(),
+				projectId,
+				redeploy: redeployAfter,
+			});
+			const redeployed = result.redeploy?.deploymentIds.length ?? 0;
+			toast.success(
+				redeployed > 0
+					? `Synced ${result.applied} change(s), queued ${redeployed} redeploy(s)`
+					: `Synced ${result.applied} change(s)`,
+			);
+			setImportOpen(false);
+			await Promise.all([
+				queryClient.invalidateQueries({ queryKey: trpc.project.one.queryKey({ projectId }) }),
+				queryClient.invalidateQueries({
+					queryKey: trpc.application.all.queryKey({ projectId, environmentName }),
+				}),
+				queryClient.invalidateQueries({
+					queryKey: trpc.compose.all.queryKey({ projectId, environmentName }),
+				}),
+			]);
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "Sync failed");
 		}
 	};
 
@@ -142,6 +187,31 @@ export function GitopsCard({
 						</DialogDescription>
 					</DialogHeader>
 					<div className="grid gap-3">
+						<div className="grid gap-2">
+							<Label htmlFor="gitops-url">Sync from URL</Label>
+							<div className="flex flex-wrap gap-2">
+								<Input
+									id="gitops-url"
+									value={stackUrl}
+									onChange={(event) => setStackUrl(event.target.value)}
+									placeholder="https://raw.githubusercontent.com/org/repo/main/nixploy.yaml"
+									className="font-mono text-xs"
+								/>
+								<Button
+									type="button"
+									variant="secondary"
+									disabled={syncUrlMutation.isPending}
+									onClick={() => void handleSyncUrl()}
+								>
+									<Link2 className="size-4" />
+									Pull & apply
+								</Button>
+							</div>
+							<p className="text-muted-foreground text-xs">
+								HTTPS raw file only. Applies the stack and redeploys changed apps/compose by
+								default.
+							</p>
+						</div>
 						<div className="flex items-center gap-2">
 							<input
 								ref={fileInputRef}
@@ -163,6 +233,14 @@ export function GitopsCard({
 							>
 								Upload file
 							</Button>
+							<label className="text-muted-foreground flex items-center gap-2 text-xs">
+								<input
+									type="checkbox"
+									checked={redeployAfter}
+									onChange={(event) => setRedeployAfter(event.target.checked)}
+								/>
+								Redeploy changed services after apply
+							</label>
 						</div>
 						<div className="grid gap-2">
 							<Label htmlFor="gitops-yaml">Stack YAML</Label>

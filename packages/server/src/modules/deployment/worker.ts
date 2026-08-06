@@ -339,6 +339,10 @@ async function processJob(job: QueueJob): Promise<void> {
 							});
 						}
 					}
+					const { maybeAutoExplainOnFailure } = await import("../ai");
+					void maybeAutoExplainOnFailure(job.deploymentId, orgId).catch((aiError) => {
+						console.error("Deploy Copilot auto-explain failed:", aiError);
+					});
 				}
 			} catch (obsError) {
 				console.error("Failed to record deploy observability:", obsError);

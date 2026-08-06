@@ -4,6 +4,7 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 
 import { HealthcheckManager } from "./healthcheck-manager";
 import { MountsManager } from "./mounts-manager";
+import { PlacementManager } from "./placement-manager";
 import { PortsManager } from "./ports-manager";
 import { RedirectsManager } from "./redirects-manager";
 import { RollbacksManager } from "./rollbacks-manager";
@@ -22,6 +23,7 @@ export function AdvancedTab({ application }: { application: Application }) {
 				<UnderlineTabsTrigger value="redirects">Redirects</UnderlineTabsTrigger>
 				<UnderlineTabsTrigger value="security">Security</UnderlineTabsTrigger>
 				<UnderlineTabsTrigger value="healthcheck">Healthcheck</UnderlineTabsTrigger>
+				<UnderlineTabsTrigger value="placement">Placement</UnderlineTabsTrigger>
 				<UnderlineTabsTrigger value="rollbacks">Rollbacks</UnderlineTabsTrigger>
 			</UnderlineTabsList>
 			<TabsContent value="mounts" className="mt-6">
@@ -38,6 +40,9 @@ export function AdvancedTab({ application }: { application: Application }) {
 			</TabsContent>
 			<TabsContent value="healthcheck" className="mt-6">
 				<HealthcheckManager application={application} />
+			</TabsContent>
+			<TabsContent value="placement" className="mt-6">
+				<PlacementManager application={application} />
 			</TabsContent>
 			<TabsContent value="rollbacks" className="mt-6">
 				<RollbacksManager applicationId={applicationId} />

@@ -15,7 +15,7 @@ export interface AiSettings {
 	model: string;
 	/** Decrypted API key; never returned to the client in full. */
 	apiKey: string | null;
-	/** Auto-run explain on failed deploys (notification path). */
+	/** Auto-run explain on failed deploys (cached beside the log + Deployments UI). */
 	autoExplainOnFailure: boolean;
 }
 

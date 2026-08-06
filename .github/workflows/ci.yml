@@ -1,0 +1,171 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck & test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Biome
+        run: pnpm exec biome check packages/server apps/web apps/cli apps/landing
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+  template-images:
+    name: Template image health
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Registry manifest check
+        env:
+          TEMPLATE_IMAGE_CHECK: "1"
+        run: pnpm -F @nixploy/server exec vitest run src/modules/templates/images-health.test.ts
+
+  swarm-smoke:
+    name: Swarm golden-path smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Init Swarm
+        run: docker swarm init
+
+      - name: Overlay network
+        run: docker network create --driver overlay --attachable nixploy-network
+
+      - name: Traefik dynamic config
+        run: |
+          mkdir -p /tmp/nixploy-smoke/traefik/dynamic
+          cat > /tmp/nixploy-smoke/traefik/traefik.yml <<'EOF'
+          entryPoints:
+            web:
+              address: ":80"
+          providers:
+            file:
+              directory: /etc/traefik/dynamic
+              watch: true
+          EOF
+          # Strip workflow indentation from heredoc content
+          sed -i 's/^          //' /tmp/nixploy-smoke/traefik/traefik.yml
+          cat > /tmp/nixploy-smoke/traefik/dynamic/whoami.yml <<'EOF'
+          http:
+            routers:
+              whoami:
+                rule: Host(`whoami.localhost`)
+                entryPoints:
+                  - web
+                service: whoami
+            services:
+              whoami:
+                loadBalancer:
+                  servers:
+                    - url: http://nixploy-smoke-whoami:80
+          EOF
+          sed -i 's/^          //' /tmp/nixploy-smoke/traefik/dynamic/whoami.yml
+
+      - name: Deploy whoami + Traefik
+        run: |
+          docker service create \
+            --name nixploy-smoke-whoami \
+            --network nixploy-network \
+            --replicas 1 \
+            traefik/whoami:v1.10.1
+
+          docker service create \
+            --name nixploy-smoke-traefik \
+            --network nixploy-network \
+            --publish published=8080,target=80 \
+            --mount type=bind,source=/tmp/nixploy-smoke/traefik/traefik.yml,target=/etc/traefik/traefik.yml \
+            --mount type=bind,source=/tmp/nixploy-smoke/traefik/dynamic,target=/etc/traefik/dynamic \
+            --replicas 1 \
+            traefik:v3.5.0 \
+            --configFile=/etc/traefik/traefik.yml
+
+      - name: Wait for Traefik → whoami HTTP 200
+        run: |
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: whoami.localhost' http://127.0.0.1:8080/ || true)
+            if [ "$code" = "200" ]; then
+              echo "traefik→whoami ok"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "traefik routing never became ready"
+          docker service ps nixploy-smoke-whoami nixploy-smoke-traefik
+          docker service logs nixploy-smoke-traefik || true
+          docker service logs nixploy-smoke-whoami || true
+          exit 1
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker service rm nixploy-smoke-whoami nixploy-smoke-traefik || true
+
+  # Optional full API golden path against a running Nixploy (secrets required).
+  api-golden-path:
+    name: API golden-path (manual)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run API smoke
+        env:
+          NIXPLOY_URL: ${{ secrets.NIXPLOY_SMOKE_URL }}
+          NIXPLOY_API_KEY: ${{ secrets.NIXPLOY_SMOKE_API_KEY }}
+        run: |
+          if [ -z "$NIXPLOY_URL" ] || [ -z "$NIXPLOY_API_KEY" ]; then
+            echo "Set NIXPLOY_SMOKE_URL and NIXPLOY_SMOKE_API_KEY secrets to enable this job"
+            exit 0
+          fi
+          node tools/golden-path-api.mjs

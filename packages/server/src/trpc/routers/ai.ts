@@ -2,13 +2,16 @@ import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { members } from "../../db/schema";
+import { deployments, members } from "../../db/schema";
 import {
+	applySuggestedEnvPatch,
 	chatAboutApplication,
-	explainDeploymentFailure,
+	explainAndCacheDeploymentFailure,
 	getAiSettings,
+	isEnvLikePatch,
 	patchAiSettings,
 	publicAiSettings,
+	readCachedExplanation,
 } from "../../modules/ai";
 import { auditFromSession } from "../../modules/audit";
 import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
@@ -82,11 +85,103 @@ export const aiRouter = router({
 		}),
 
 	explainDeployment: protectedProcedure
-		.input(z.object({ deploymentId: z.string().min(1) }))
+		.input(
+			z.object({
+				deploymentId: z.string().min(1),
+				/** Skip cached auto/manual explanation and call the model again. */
+				force: z.boolean().optional(),
+			}),
+		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await requireMember(ctx.session);
 			try {
-				return await explainDeploymentFailure(input.deploymentId, organizationId);
+				if (!input.force) {
+					const deployment = await db.query.deployments.findFirst({
+						where: eq(deployments.deploymentId, input.deploymentId),
+						with: {
+							application: { with: { environment: { with: { project: true } } } },
+							compose: { with: { environment: { with: { project: true } } } },
+						},
+					});
+					const orgId =
+						deployment?.application?.environment.project.organizationId ??
+						deployment?.compose?.environment.project.organizationId;
+					if (deployment?.logPath && orgId === organizationId) {
+						const cached = await readCachedExplanation(deployment.logPath);
+						if (cached) return cached;
+					}
+				}
+				return await explainAndCacheDeploymentFailure(input.deploymentId, organizationId);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				if (message.includes("not found")) {
+					throw new TRPCError({ code: "NOT_FOUND", message });
+				}
+				throw new TRPCError({ code: "BAD_REQUEST", message });
+			}
+		}),
+
+	/** Read a cached Copilot explanation without calling the model. */
+	getExplanation: protectedProcedure
+		.input(z.object({ deploymentId: z.string().min(1) }))
+		.query(async ({ ctx, input }) => {
+			const organizationId = await requireMember(ctx.session);
+			const deployment = await db.query.deployments.findFirst({
+				where: eq(deployments.deploymentId, input.deploymentId),
+				with: {
+					application: { with: { environment: { with: { project: true } } } },
+					compose: { with: { environment: { with: { project: true } } } },
+				},
+			});
+			const orgId =
+				deployment?.application?.environment.project.organizationId ??
+				deployment?.compose?.environment.project.organizationId;
+			if (!deployment || orgId !== organizationId) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Deployment not found" });
+			}
+			if (!deployment.logPath) return null;
+			return readCachedExplanation(deployment.logPath);
+		}),
+
+	/**
+	 * Apply an env-like Copilot suggestedPatch to the service and optionally redeploy.
+	 * Non-env patches are rejected — copy them manually from the Explain dialog.
+	 */
+	applySuggestedPatch: protectedProcedure
+		.input(
+			z.object({
+				deploymentId: z.string().min(1),
+				patch: z.string().max(16_000).optional(),
+				redeploy: z.boolean().optional(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await requireMember(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			const patch = input.patch?.trim();
+			if (patch && !isEnvLikePatch(patch)) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Suggested patch is not env KEY=VALUE lines — copy it manually, then Redeploy",
+				});
+			}
+			try {
+				const result = await applySuggestedEnvPatch({
+					deploymentId: input.deploymentId,
+					organizationId,
+					patch,
+					redeploy: input.redeploy,
+				});
+				void auditFromSession(ctx, organizationId, {
+					action: "ai.applySuggestedPatch",
+					targetType: "deployment",
+					targetId: input.deploymentId,
+					metadata: {
+						keys: result.appliedKeys,
+						redeployed: Boolean(result.deploymentId),
+					},
+				});
+				return result;
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				if (message.includes("not found")) {

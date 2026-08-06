@@ -48,6 +48,10 @@ export const getSshKeysPath = (): string => path.join(getConfigDir(), "ssh");
 export const getDeploymentLogPath = (appName: string, deploymentId: string): string =>
 	path.join(getConfigDir(), "logs", appName, `${deploymentId}.log`);
 
+/** Sidecar JSON for Deploy Copilot auto/manual explain results. */
+export const getDeploymentExplainPath = (logPath: string): string =>
+	logPath.replace(/\.log$/i, ".explain.json");
+
 /** Local BuildKit cache root for an application (`cache-from` / `cache-to`). */
 export const getBuildCachePath = (appName: string): string =>
 	path.join(getConfigDir(), "cache", "buildkit", appName);

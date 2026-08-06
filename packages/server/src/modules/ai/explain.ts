@@ -3,6 +3,7 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, deployments, domains } from "../../db/schema";
 import { completeChat } from "./client";
+import { writeCachedExplanation } from "./explanation-cache";
 import { getAiSettings } from "./settings";
 
 const MAX_LOG_CHARS = 24_000;
@@ -105,7 +106,9 @@ export async function explainDeploymentFailure(
 	const system = `You are Nixploy Deploy Copilot, an expert at debugging Docker/Swarm PaaS deployments.
 Respond in JSON only with this shape:
 {"summary":"one paragraph","rootCause":"short cause","steps":["actionable step",...],"suggestedPatch":"optional dockerfile/compose/env hint or null"}
-Be concrete. Prefer fixes the user can apply in Nixploy (build type, Dockerfile, env, healthcheck, resources). Never invent secrets.`;
+Be concrete. Prefer fixes the user can apply in Nixploy (build type, Dockerfile, env, healthcheck, resources).
+When the fix is environment variables, put ONLY dotenv KEY=VALUE lines in suggestedPatch (no prose) so Nixploy can apply them automatically.
+Never invent secrets.`;
 
 	const user = `Service: ${serviceName} (${serviceKind})
 Build type: ${buildType}
@@ -148,6 +151,21 @@ ${safeLog}
 		model: completion.model,
 		deploymentId,
 	};
+}
+
+/** Explain a failure and persist the result next to the deploy log. */
+export async function explainAndCacheDeploymentFailure(
+	deploymentId: string,
+	organizationId: string,
+): Promise<ExplainFailureResult> {
+	const result = await explainDeploymentFailure(deploymentId, organizationId);
+	const deployment = await db.query.deployments.findFirst({
+		where: eq(deployments.deploymentId, deploymentId),
+	});
+	if (deployment?.logPath) {
+		await writeCachedExplanation(deployment.logPath, result);
+	}
+	return result;
 }
 
 export type ProposedAction =

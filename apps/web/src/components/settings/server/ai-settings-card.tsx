@@ -155,7 +155,8 @@ export function AiSettingsCard() {
 					<div>
 						<Label htmlFor="ai-auto">Auto-explain on failure</Label>
 						<p className="text-xs text-muted-foreground">
-							Reserved for future notify hooks — Explain is always available manually
+							When a deploy fails, Copilot analyzes the logs and shows the result on the Deployments
+							tab
 						</p>
 					</div>
 					<Switch id="ai-auto" checked={autoExplain} onCheckedChange={setAutoExplain} />

@@ -25,6 +25,14 @@ describe("parseImageRef", () => {
 	it("defaults missing tags to latest", () => {
 		expect(parseImageRef("ghcr.io/bablilayoub/nixploy").tag).toBe("latest");
 	});
+
+	it("maps Docker Hub short names to library/", () => {
+		const ref = parseImageRef("nginx:1.27");
+		expect(ref.registry).toBe("docker.io");
+		expect(ref.repository).toBe("library/nginx");
+		expect(ref.tag).toBe("1.27");
+		expect(ref.canonical).toBe("docker.io/library/nginx:1.27");
+	});
 });
 
 describe("normalizeDigest", () => {

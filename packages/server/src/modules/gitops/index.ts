@@ -18,6 +18,11 @@ export {
 	type LiveStackState,
 } from "./plan";
 export {
+	fetchStackYamlFromUrl,
+	type RedeployFromApplyResult,
+	redeployChangedFromApply,
+} from "./redeploy";
+export {
 	envKeysFromDotenv,
 	type GitopsApplication,
 	type GitopsCompose,

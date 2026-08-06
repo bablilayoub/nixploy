@@ -1,8 +1,8 @@
 "use client";
 
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Ban, Bot, ChevronDown, Loader2, ScrollText } from "lucide-react";
+import { Ban, Bot, ChevronDown, Loader2, RefreshCw, ScrollText } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -13,6 +13,7 @@ import {
 	Dialog,
 	DialogContent,
 	DialogDescription,
+	DialogFooter,
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
@@ -101,7 +102,53 @@ export function DeploymentsTab({ application }: { application: Application }) {
 		}),
 	);
 
+	const redeploy = useMutation(
+		trpc.application.redeploy.mutationOptions({
+			onSuccess: () => {
+				toast.success("Redeploy queued");
+				setExplainResult(null);
+				queryClient.invalidateQueries({
+					queryKey: trpc.deployment.byApplication.pathKey(),
+				});
+			},
+			onError: (error) => toast.error(error.message),
+		}),
+	);
+
+	const applyPatch = useMutation(
+		trpc.ai.applySuggestedPatch.mutationOptions({
+			onSuccess: (result) => {
+				toast.success(
+					result.deploymentId
+						? `Applied ${result.appliedKeys.join(", ")} and queued redeploy`
+						: `Applied ${result.appliedKeys.join(", ")}`,
+				);
+				setExplainResult(null);
+				queryClient.invalidateQueries({
+					queryKey: trpc.deployment.byApplication.pathKey(),
+				});
+				queryClient.invalidateQueries({ queryKey: trpc.application.one.queryKey() });
+			},
+			onError: (error) => toast.error(error.message),
+		}),
+	);
+
 	const deployments = data?.pages.flatMap((page) => page.deployments) ?? [];
+	const latestError = deployments.find((deployment) => deployment.status === "error");
+
+	const cachedExplanation = useQuery({
+		...trpc.ai.getExplanation.queryOptions({
+			deploymentId: latestError?.deploymentId ?? "",
+		}),
+		enabled: Boolean(latestError?.deploymentId),
+		refetchInterval: (query) => {
+			if (query.state.data) return false;
+			const finishedAt = latestError?.finishedAt ? new Date(latestError.finishedAt).getTime() : 0;
+			// Auto-explain is async — poll for up to 2 minutes after failure.
+			if (finishedAt && Date.now() - finishedAt > 120_000) return false;
+			return 3_000;
+		},
+	});
 
 	return (
 		<section className="flex flex-col gap-4">
@@ -111,6 +158,23 @@ export function DeploymentsTab({ application }: { application: Application }) {
 					Build and deployment history for this application.
 				</p>
 			</div>
+
+			{cachedExplanation.data && latestError && (
+				<div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
+					<p className="text-muted-foreground">
+						<span className="font-medium text-foreground">Deploy Copilot</span> analyzed the latest
+						failure ({cachedExplanation.data.model}).
+					</p>
+					<Button
+						size="sm"
+						variant="outline"
+						onClick={() => setExplainResult(cachedExplanation.data ?? null)}
+					>
+						<Bot className="size-4" />
+						View analysis
+					</Button>
+				</div>
+			)}
 
 			{isLoading ? (
 				<div className="flex flex-col gap-2">
@@ -293,6 +357,44 @@ export function DeploymentsTab({ application }: { application: Application }) {
 							)}
 						</div>
 					)}
+					<DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+						<p className="text-muted-foreground text-xs">
+							Env KEY=VALUE patches can be applied automatically; other fixes need a manual edit.
+						</p>
+						<div className="flex flex-wrap gap-2">
+							{explainResult?.suggestedPatch && (
+								<Button
+									disabled={applyPatch.isPending || redeploy.isPending}
+									onClick={() =>
+										applyPatch.mutate({
+											deploymentId: explainResult.deploymentId,
+											patch: explainResult.suggestedPatch ?? undefined,
+											redeploy: true,
+										})
+									}
+								>
+									{applyPatch.isPending ? (
+										<Loader2 className="size-4 animate-spin" />
+									) : (
+										<RefreshCw className="size-4" />
+									)}
+									Apply env & redeploy
+								</Button>
+							)}
+							<Button
+								variant={explainResult?.suggestedPatch ? "outline" : "default"}
+								disabled={redeploy.isPending || applyPatch.isPending}
+								onClick={() => redeploy.mutate({ applicationId })}
+							>
+								{redeploy.isPending ? (
+									<Loader2 className="size-4 animate-spin" />
+								) : (
+									<RefreshCw className="size-4" />
+								)}
+								Redeploy
+							</Button>
+						</div>
+					</DialogFooter>
 				</DialogContent>
 			</Dialog>
 		</section>

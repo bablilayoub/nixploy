@@ -8,6 +8,8 @@ A free, self-hostable PaaS that simplifies deployment and management of applicat
 
 **Phases 6–7 are shipped too**: marketed features are truthful end-to-end (preview PR lifecycle with PR comments, primary-swarm remote join, production installer, cascading infra deletes), and a security/correctness pass closed the cross-tenant, injection and secret-leak gaps listed below.
 
+**Phase 8 is shipped** — reliability (template image CI + Traefik golden-path smoke), Deploy Copilot close-the-loop (explain → apply env → redeploy, auto-explain on failure), multi-server placement + capacity, and GitOps-lite (URL sync + apply with redeploy).
+
 ## 1. Tech Stack (decided)
 
 Dokploy's own stack is proven for exactly this product, so we replicate it — with Tailwind CSS + shadcn/ui as required.
@@ -119,9 +121,19 @@ Secrets at rest: encrypted column helper (AES) for env vars, DB passwords, regis
 - Features: preview URL commented back on the pull request (GitHub/GitLab/Gitea); Mattermost, Lark/Feishu and Microsoft Teams notification channels wired end to end
 - UX: App Router error/global-error/not-found/loading boundaries; no-organization empty state with a create-org CTA; explicit terminal "start new session"; accessible names for icon-only actions
 
+### Phase 8 — Beat Dokploy/Coolify (reliability + Copilot + templates) — DONE
+
+Wins on **trust + speed + sharp edges**, not feature checklists.
+
+- **Template hardening** — catalog image registry probes (`pnpm test:template-images`); CI fails on unpublished tags
+- **Golden-path CI** — PR/main: biome + typecheck + vitest; Swarm + Traefik → whoami HTTP 200; `tools/golden-path-api.mjs` / `pnpm smoke:golden-path` for full API deploy→HTTP (workflow_dispatch + secrets)
+- **Deploy Copilot close-the-loop** — Explain → Redeploy; auto-explain on failure (cached beside logs); **Apply env & redeploy** for KEY=VALUE patches
+- **Multi-server** — Advanced → Placement constraints; servers list capacity (CPU/mem); drain via Docker → Swarm (linked from Servers)
+- **GitOps-lite** — apply/sync redeploys changed apps/compose; **sync from HTTPS URL** (raw `nixploy.yaml`)
+
 **Still deferred / out of scope**
 - Stripe billing, SSO/SCIM, granular member permission toggles, libsql, AI compose generation
-- Dedicated build-server role beyond manager/worker
+- Dedicated build-server role beyond manager/worker (use placement constraints for affinity)
 - CLI compose/template commands; remote builder auto-provision; tags UI
 
 ## 6. UI Map (pages)
@@ -143,6 +155,9 @@ First-boot `/setup` → Login → Dashboard → Project → Environment →
 
 ## 8. Validation
 
-- Vitest for builder/traefik/db/webhook/preview utils
+- Vitest for builder/traefik/db/webhook/preview/template/gitops/ai utils
+- Template image health: `pnpm test:template-images` (also CI)
+- GitHub Actions `ci.yml`: typecheck + vitest + Swarm/Traefik whoami smoke on PR/main
+- API golden path: `pnpm smoke:golden-path` (needs `NIXPLOY_URL` + `NIXPLOY_API_KEY`)
 - Playwright smoke: `apps/web/e2e/smoke.mjs` (requires `playwright-core`)
 - Real acceptance: deploy a docker-image app on local Swarm and reach it over Traefik

@@ -62,20 +62,43 @@ export function normalizeDigest(value: string | null | undefined): string | null
 	return match ? match[0].toLowerCase() : null;
 }
 
+function registryEndpoints(ref: ParsedImageRef): { tokenUrl: string; manifestHost: string } {
+	const scope = `repository:${ref.repository}:pull`;
+	if (ref.registry === "docker.io") {
+		return {
+			tokenUrl: `https://auth.docker.io/token?service=registry.docker.io&scope=${encodeURIComponent(scope)}`,
+			manifestHost: "registry-1.docker.io",
+		};
+	}
+	if (ref.registry === "ghcr.io") {
+		return {
+			tokenUrl: `https://ghcr.io/token?service=ghcr.io&scope=${encodeURIComponent(scope)}`,
+			manifestHost: "ghcr.io",
+		};
+	}
+	// LinuxServer's lscr.io is a GHCR front; token must come from ghcr.io.
+	if (ref.registry === "lscr.io") {
+		return {
+			tokenUrl: `https://ghcr.io/token?service=ghcr.io&scope=${encodeURIComponent(scope)}`,
+			manifestHost: "lscr.io",
+		};
+	}
+	return {
+		tokenUrl: `https://${ref.registry}/token?service=${encodeURIComponent(ref.registry)}&scope=${encodeURIComponent(scope)}`,
+		manifestHost: ref.registry,
+	};
+}
+
 /**
  * Ask the registry for the content digest of a tag without pulling layers.
- * Works for public GHCR packages (anonymous token).
+ * Works for public Docker Hub / GHCR / lscr.io packages (anonymous token).
  */
 export async function fetchRemoteDigest(image: string): Promise<string | null> {
 	const ref = parseImageRef(image);
 	if (ref.digest) return normalizeDigest(ref.digest);
 	if (!ref.tag) return null;
 
-	const scope = `repository:${ref.repository}:pull`;
-	const tokenUrl =
-		ref.registry === "ghcr.io"
-			? `https://ghcr.io/token?service=ghcr.io&scope=${encodeURIComponent(scope)}`
-			: `https://${ref.registry}/token?service=${encodeURIComponent(ref.registry)}&scope=${encodeURIComponent(scope)}`;
+	const { tokenUrl, manifestHost } = registryEndpoints(ref);
 
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), 15_000);
@@ -92,20 +115,46 @@ export async function fetchRemoteDigest(image: string): Promise<string | null> {
 			// Some registries allow anonymous pulls without a token dance.
 		}
 
-		const manifestUrl = `https://${ref.registry}/v2/${ref.repository}/manifests/${encodeURIComponent(ref.tag)}`;
-		const res = await fetch(manifestUrl, {
+		const manifestUrl = `https://${manifestHost}/v2/${ref.repository}/manifests/${encodeURIComponent(ref.tag)}`;
+		const accept = [
+			"application/vnd.oci.image.index.v1+json",
+			"application/vnd.docker.distribution.manifest.list.v2+json",
+			"application/vnd.oci.image.manifest.v1+json",
+			"application/vnd.docker.distribution.manifest.v2+json",
+		].join(", ");
+
+		let res = await fetch(manifestUrl, {
 			method: "GET",
 			signal: controller.signal,
 			headers: {
 				...(authHeader ? { Authorization: authHeader } : {}),
-				Accept: [
-					"application/vnd.oci.image.index.v1+json",
-					"application/vnd.docker.distribution.manifest.list.v2+json",
-					"application/vnd.oci.image.manifest.v1+json",
-					"application/vnd.docker.distribution.manifest.v2+json",
-				].join(", "),
+				Accept: accept,
 			},
 		});
+
+		// Follow WWW-Authenticate when the first token endpoint was wrong (e.g. n8n).
+		if (res.status === 401) {
+			const www = res.headers.get("www-authenticate") ?? "";
+			const realm = /realm="([^"]+)"/.exec(www)?.[1];
+			const service = /service="([^"]+)"/.exec(www)?.[1];
+			const scope = /scope="([^"]+)"/.exec(www)?.[1] ?? `repository:${ref.repository}:pull`;
+			if (realm) {
+				const challengeUrl = `${realm}?service=${encodeURIComponent(service ?? ref.registry)}&scope=${encodeURIComponent(scope)}`;
+				const tokenRes = await fetch(challengeUrl, { signal: controller.signal });
+				if (tokenRes.ok) {
+					const body = (await tokenRes.json()) as { token?: string; access_token?: string };
+					const token = body.token ?? body.access_token;
+					if (token) {
+						res = await fetch(manifestUrl, {
+							method: "GET",
+							signal: controller.signal,
+							headers: { Authorization: `Bearer ${token}`, Accept: accept },
+						});
+					}
+				}
+			}
+		}
+
 		if (!res.ok) return null;
 		return (
 			normalizeDigest(res.headers.get("docker-content-digest")) ??

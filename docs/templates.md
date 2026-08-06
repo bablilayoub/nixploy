@@ -16,6 +16,9 @@ deployable as compose services. Catalog code lives in
   unique kebab-case ids, valid compose YAML, env refs matching
   `${VAR}` declarations bidirectionally, no host ports published,
   `suggestedDomain.service` existing in the compose file, non-empty category.
+- `images.ts` / `images-health.test.ts` — extracts every `image:` ref and
+  (when `TEMPLATE_IMAGE_CHECK=1`) probes registry manifests so CI catches
+  unpublished tags. Locally: `pnpm test:template-images`.
 
 ## Adding a template
 
