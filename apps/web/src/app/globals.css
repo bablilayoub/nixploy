@@ -54,7 +54,7 @@
 
 :root {
 	--radius: 0.625rem;
-	--background: #f4f4f2;
+	--background: #fafafa;
 	--foreground: #1c1917;
 	--card: #ffffff;
 	--card-foreground: #1c1917;
@@ -62,16 +62,16 @@
 	--popover-foreground: #1c1917;
 	--primary: #1c1917;
 	--primary-foreground: #fafaf9;
-	--secondary: #ebebe8;
+	--secondary: #f5f5f4;
 	--secondary-foreground: #1c1917;
-	--muted: #ebebe8;
-	--muted-foreground: #6b6560;
-	--accent: #ebebe8;
+	--muted: #f5f5f4;
+	--muted-foreground: #78716c;
+	--accent: #f5f5f4;
 	--accent-foreground: #1c1917;
 	--destructive: #dc2626;
-	--border: #d6d3d0;
-	--input: #d6d3d0;
-	--ring: #78716c;
+	--border: #e7e5e4;
+	--input: #e7e5e4;
+	--ring: #a8a29e;
 	--success: #16a34a;
 	--warning: #d97706;
 	--info: #2563eb;
@@ -80,59 +80,73 @@
 	--chart-3: #d97706;
 	--chart-4: #78716c;
 	--chart-5: #1c1917;
-	--sidebar: #ecece9;
-	--sidebar-foreground: #1c1917;
-	--sidebar-primary: #1c1917;
-	--sidebar-primary-foreground: #fafaf9;
-	--sidebar-accent: #e0e0dc;
-	--sidebar-accent-foreground: #1c1917;
-	--sidebar-border: #d6d3d0;
-	--sidebar-ring: #78716c;
+	/* Match shadcn-admin: sidebar tracks page bg so inset gutters read as one canvas */
+	--sidebar: var(--background);
+	--sidebar-foreground: var(--foreground);
+	--sidebar-primary: var(--primary);
+	--sidebar-primary-foreground: var(--primary-foreground);
+	--sidebar-accent: var(--accent);
+	--sidebar-accent-foreground: var(--accent-foreground);
+	--sidebar-border: var(--border);
+	--sidebar-ring: var(--ring);
 }
 
 .dark {
-	/* Deeper canvas; cards lift slightly above it. */
-	--background: #080807;
-	--foreground: #f5f5f4;
-	--card: #111110;
-	--card-foreground: #f5f5f4;
-	--popover: #161614;
-	--popover-foreground: #f5f5f4;
-	--primary: #fafaf9;
-	--primary-foreground: #0c0c0b;
-	--secondary: #1a1a18;
-	--secondary-foreground: #f5f5f4;
-	--muted: #1a1a18;
-	--muted-foreground: #a1a09a;
-	--accent: #1f1f1c;
-	--accent-foreground: #f5f5f4;
+	/* Deeper canvas so cards actually lift (Vercel zinc-ish). */
+	--background: #09090b;
+	--foreground: #fafafa;
+	--card: #121214;
+	--card-foreground: #fafafa;
+	--popover: #18181b;
+	--popover-foreground: #fafafa;
+	--primary: #fafafa;
+	--primary-foreground: #09090b;
+	--secondary: #1c1c1f;
+	--secondary-foreground: #fafafa;
+	--muted: #1c1c1f;
+	--muted-foreground: #a1a1aa;
+	--accent: #1c1c1f;
+	--accent-foreground: #fafafa;
 	--destructive: #f87171;
-	--border: #2a2a26;
-	--input: #2a2a26;
-	--ring: #6b6a64;
+	--border: rgb(255 255 255 / 10%);
+	--input: rgb(255 255 255 / 12%);
+	--ring: #71717a;
 	--success: #4ade80;
 	--warning: #fbbf24;
 	--info: #60a5fa;
 	--chart-1: #60a5fa;
 	--chart-2: #4ade80;
 	--chart-3: #fbbf24;
-	--chart-4: #a8a29e;
-	--chart-5: #f5f5f4;
-	--sidebar: #0c0c0b;
-	--sidebar-foreground: #f5f5f4;
-	--sidebar-primary: #fafaf9;
-	--sidebar-primary-foreground: #0c0c0b;
-	--sidebar-accent: #1a1a18;
-	--sidebar-accent-foreground: #f5f5f4;
-	--sidebar-border: #2a2a26;
-	--sidebar-ring: #6b6a64;
+	--chart-4: #a1a1aa;
+	--chart-5: #fafafa;
 }
 
 @layer base {
 	* {
 		@apply border-border outline-ring/50;
+		scrollbar-width: thin;
+		scrollbar-color: var(--border) transparent;
+	}
+	html {
+		@apply overflow-x-hidden;
 	}
 	body {
-		@apply bg-background text-foreground antialiased;
+		@apply min-h-svh w-full bg-background text-foreground antialiased;
 	}
+	button:not(:disabled),
+	[role="button"]:not(:disabled) {
+		cursor: pointer;
+	}
+}
+
+@utility no-scrollbar {
+	-ms-overflow-style: none;
+	scrollbar-width: none;
+	&::-webkit-scrollbar {
+		display: none;
+	}
+}
+
+@utility faded-bottom {
+	@apply after:pointer-events-none after:absolute after:inset-s-0 after:bottom-0 after:hidden after:h-32 after:w-full after:rounded-b-2xl after:bg-[linear-gradient(180deg,transparent_10%,var(--background)_70%)] md:after:block;
 }

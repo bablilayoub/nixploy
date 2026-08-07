@@ -12,8 +12,8 @@ import {
 	splitRepoSelection,
 } from "@/components/git-provider-repo-picker";
 
+import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -210,12 +210,11 @@ export function SourceConfig({ application }: { application: Application }) {
 		sourceType === "gitea";
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="text-sm font-medium">Source</CardTitle>
-				<CardDescription>Where the code or image for this application comes from.</CardDescription>
-			</CardHeader>
-			<CardContent className="flex flex-col gap-4">
+		<SettingsSection
+			title="Source"
+			description="Where the code or image for this application comes from."
+		>
+			<div className="flex flex-col gap-4">
 				<div className="flex flex-col gap-2">
 					<Label>Source Type</Label>
 					<Select value={sourceType} onValueChange={(v) => setSourceType(v as SourceType)}>
@@ -416,7 +415,7 @@ export function SourceConfig({ application }: { application: Application }) {
 						Save Source
 					</Button>
 				</div>
-			</CardContent>
-		</Card>
+			</div>
+		</SettingsSection>
 	);
 }

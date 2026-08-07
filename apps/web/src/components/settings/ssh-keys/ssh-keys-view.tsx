@@ -8,9 +8,9 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { QueryState } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
+import { SettingsSection } from "@/components/settings/settings-section";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -137,10 +137,12 @@ export function SshKeysView() {
 	);
 
 	return (
-		<div className="flex flex-col gap-4">
-			<PageHeader
-				title="SSH Keys"
+		<div className="flex flex-col gap-8">
+			<PageHeader title="SSH Keys" description="Keypairs used to connect to remote servers." />
+			<SettingsSection
+				title="SSH keys"
 				description="Keypairs used to connect to remote servers."
+				wide
 				actions={
 					<Dialog open={open} onOpenChange={setOpen}>
 						<DialogTrigger asChild>
@@ -225,79 +227,76 @@ export function SshKeysView() {
 						</DialogContent>
 					</Dialog>
 				}
-			/>
-			<Card>
-				<CardContent>
-					<QueryState
-						isPending={isPending}
-						isError={isError}
-						error={error}
-						onRetry={() => refetch()}
-						isEmpty={!sshKeys || sshKeys.length === 0}
-						skeleton={
-							<div className="grid gap-2">
-								<Skeleton className="h-10 w-full" />
-								<Skeleton className="h-10 w-full" />
-							</div>
-						}
-						empty={
-							<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-								<KeyRound className="size-8 text-muted-foreground" />
-								<p className="text-sm text-muted-foreground">
-									No SSH keys yet. Generate one to connect remote servers.
-								</p>
-							</div>
-						}
-					>
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Name</TableHead>
-									<TableHead>Public key</TableHead>
-									<TableHead>Created</TableHead>
-									<TableHead className="w-12" />
+			>
+				<QueryState
+					isPending={isPending}
+					isError={isError}
+					error={error}
+					onRetry={() => refetch()}
+					isEmpty={!sshKeys || sshKeys.length === 0}
+					skeleton={
+						<div className="grid gap-2">
+							<Skeleton className="h-10 w-full" />
+							<Skeleton className="h-10 w-full" />
+						</div>
+					}
+					empty={
+						<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
+							<KeyRound className="size-8 text-muted-foreground" />
+							<p className="text-sm text-muted-foreground">
+								No SSH keys yet. Generate one to connect remote servers.
+							</p>
+						</div>
+					}
+				>
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>Name</TableHead>
+								<TableHead>Public key</TableHead>
+								<TableHead>Created</TableHead>
+								<TableHead className="w-12" />
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{(sshKeys ?? []).map((key) => (
+								<TableRow key={key.sshKeyId}>
+									<TableCell>
+										<div className="grid">
+											<span className="font-medium">{key.name}</span>
+											{key.description && (
+												<span className="text-xs text-muted-foreground">{key.description}</span>
+											)}
+										</div>
+									</TableCell>
+									<TableCell>
+										<code className="block max-w-xs truncate text-xs text-muted-foreground">
+											{key.publicKey}
+										</code>
+									</TableCell>
+									<TableCell className="text-muted-foreground">
+										{format(new Date(key.createdAt), "MMM d, yyyy")}
+									</TableCell>
+									<TableCell>
+										<div className="flex items-center justify-end">
+											<Button variant="ghost" size="icon" onClick={() => setEditing(key)}>
+												<Pencil className="size-4" />
+												<span className="sr-only">Edit SSH key</span>
+											</Button>
+											<ConfirmDeleteDialog
+												title="Delete SSH key"
+												description={`Delete "${key.name}"? Servers referencing it keep working until edited.`}
+												isPending={removeMutation.isPending}
+												onConfirm={() => removeMutation.mutate({ sshKeyId: key.sshKeyId })}
+											/>
+										</div>
+									</TableCell>
 								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{(sshKeys ?? []).map((key) => (
-									<TableRow key={key.sshKeyId}>
-										<TableCell>
-											<div className="grid">
-												<span className="font-medium">{key.name}</span>
-												{key.description && (
-													<span className="text-xs text-muted-foreground">{key.description}</span>
-												)}
-											</div>
-										</TableCell>
-										<TableCell>
-											<code className="block max-w-xs truncate text-xs text-muted-foreground">
-												{key.publicKey}
-											</code>
-										</TableCell>
-										<TableCell className="text-muted-foreground">
-											{format(new Date(key.createdAt), "MMM d, yyyy")}
-										</TableCell>
-										<TableCell>
-											<div className="flex items-center justify-end">
-												<Button variant="ghost" size="icon" onClick={() => setEditing(key)}>
-													<Pencil className="size-4" />
-													<span className="sr-only">Edit SSH key</span>
-												</Button>
-												<ConfirmDeleteDialog
-													title="Delete SSH key"
-													description={`Delete "${key.name}"? Servers referencing it keep working until edited.`}
-													isPending={removeMutation.isPending}
-													onConfirm={() => removeMutation.mutate({ sshKeyId: key.sshKeyId })}
-												/>
-											</div>
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					</QueryState>
-				</CardContent>
-			</Card>
+							))}
+						</TableBody>
+					</Table>
+				</QueryState>
+			</SettingsSection>
 			<Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
 				<DialogContent>
 					<DialogHeader>

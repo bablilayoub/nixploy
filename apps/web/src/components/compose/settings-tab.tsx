@@ -6,19 +6,9 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import type { ComposeService } from "@/components/compose/compose-detail";
-import {
-	AlertDialog,
-	AlertDialogAction,
-	AlertDialogCancel,
-	AlertDialogContent,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogHeader,
-	AlertDialogTitle,
-	AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { DangerZone } from "@/components/services/danger-zone";
+import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -68,13 +58,9 @@ export function SettingsTab({
 	);
 
 	return (
-		<div className="flex flex-col gap-4">
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-sm font-medium">Settings</CardTitle>
-					<CardDescription>Rename or describe this compose service.</CardDescription>
-				</CardHeader>
-				<CardContent className="flex flex-col gap-4">
+		<SettingsStack>
+			<SettingsSection title="Settings" description="Rename or describe this compose service.">
+				<div className="flex flex-col gap-4">
 					<div className="flex flex-col gap-2">
 						<Label htmlFor="name">Name</Label>
 						<Input
@@ -108,44 +94,18 @@ export function SettingsTab({
 							{updateMutation.isPending ? "Saving…" : "Save"}
 						</Button>
 					</div>
-				</CardContent>
-			</Card>
+				</div>
+			</SettingsSection>
 
-			<Card className="border-destructive/40">
-				<CardHeader>
-					<CardTitle className="text-sm font-medium text-destructive">Danger Zone</CardTitle>
-					<CardDescription>
-						Deleting a compose service tears down its deployment and removes its domains. This
-						cannot be undone.
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<AlertDialog>
-						<AlertDialogTrigger asChild>
-							<Button variant="destructive">Delete Compose Service</Button>
-						</AlertDialogTrigger>
-						<AlertDialogContent>
-							<AlertDialogHeader>
-								<AlertDialogTitle>Delete {compose.name}?</AlertDialogTitle>
-								<AlertDialogDescription>
-									This will stop the deployment, remove its Traefik configuration and permanently
-									delete the service.
-								</AlertDialogDescription>
-							</AlertDialogHeader>
-							<AlertDialogFooter>
-								<AlertDialogCancel>Cancel</AlertDialogCancel>
-								<AlertDialogAction
-									variant="destructive"
-									disabled={deleteMutation.isPending}
-									onClick={() => deleteMutation.mutate({ composeId: compose.composeId })}
-								>
-									{deleteMutation.isPending ? "Deleting…" : "Delete"}
-								</AlertDialogAction>
-							</AlertDialogFooter>
-						</AlertDialogContent>
-					</AlertDialog>
-				</CardContent>
-			</Card>
-		</div>
+			<DangerZone
+				title="Delete compose service"
+				description="Deleting a compose service tears down its deployment and removes its domains. This cannot be undone."
+				actionLabel="Delete Compose Service"
+				requireText={compose.name}
+				onConfirm={async () => {
+					await deleteMutation.mutateAsync({ composeId: compose.composeId });
+				}}
+			/>
+		</SettingsStack>
 	);
 }

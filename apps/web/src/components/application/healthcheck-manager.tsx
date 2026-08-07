@@ -5,8 +5,8 @@ import { HeartPulse, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -112,21 +112,24 @@ export function HealthcheckManager({ application }: { application: Application }
 	};
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="flex items-center gap-2 text-base">
+		<SettingsSection
+			title={
+				<span className="flex items-center gap-2">
 					<HeartPulse className="size-4 text-muted-foreground" />
 					Healthcheck
-				</CardTitle>
-				<CardDescription>
-					HTTP probe run inside the container — the image must contain
+				</span>
+			}
+			description={
+				<>
+					HTTP probe run inside the container — the image must contain{" "}
 					<code className="font-mono text-xs">curl</code> or{" "}
 					<code className="font-mono text-xs">wget</code>, otherwise the probe fails and Docker
 					restarts the container as unhealthy. Minimal images (distroless, scratch) usually have
 					neither.
-				</CardDescription>
-			</CardHeader>
-			<CardContent className="space-y-4">
+				</>
+			}
+		>
+			<div className="space-y-4">
 				<div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
 					<div>
 						<Label htmlFor="hc-enabled">Enable healthcheck</Label>
@@ -205,7 +208,7 @@ export function HealthcheckManager({ application }: { application: Application }
 					{save.isPending && <Loader2 className="size-4 animate-spin" />}
 					Save healthcheck
 				</Button>
-			</CardContent>
-		</Card>
+			</div>
+		</SettingsSection>
 	);
 }

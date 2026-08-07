@@ -26,6 +26,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps } from "./docker-view";
@@ -123,7 +124,7 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 				</div>
 			</div>
 
-			<div className="overflow-x-auto rounded-lg border border-border">
+			<TableCard>
 				<Table>
 					<TableHeader>
 						<TableRow>
@@ -172,7 +173,7 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 						)}
 					</TableBody>
 				</Table>
-			</div>
+			</TableCard>
 
 			<AlertDialog open={pruneOpen} onOpenChange={setPruneOpen}>
 				<AlertDialogContent>

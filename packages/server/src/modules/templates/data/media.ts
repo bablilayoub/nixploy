@@ -103,7 +103,7 @@ volumes:
 		name: "PhotoPrism",
 		description:
 			"AI-powered photo app — browse, organize and share your photo collection with automatic classification.",
-		logo: "",
+		logo: "https://dl.photoprism.app/img/logo/logo.svg",
 		tags: ["photos", "ai", "media"],
 		links: {
 			website: "https://www.photoprism.app",
@@ -147,7 +147,7 @@ volumes:
 		name: "Kavita",
 		description:
 			"Fast, feature-rich reading server for manga, comics and ebooks — with OPDS and a slick reader.",
-		logo: "",
+		logo: "https://raw.githubusercontent.com/Kareadita/Kavita/develop/UI/Web/src/assets/images/logo.png",
 		tags: ["media", "books", "comics"],
 		links: {
 			website: "https://www.kavitareader.com",

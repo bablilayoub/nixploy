@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
+import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -16,7 +16,6 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -124,20 +123,18 @@ export function SecurityManager({ applicationId }: { applicationId: string }) {
 	};
 
 	return (
-		<Card>
-			<CardHeader className="flex flex-row items-center justify-between space-y-0">
-				<div className="flex flex-col gap-1.5">
-					<CardTitle className="text-sm font-medium">Security</CardTitle>
-					<CardDescription>
-						Protect the application with HTTP basic auth at the reverse proxy.
-					</CardDescription>
-				</div>
-				<Button size="sm" onClick={() => setDialogOpen(true)}>
-					<Plus className="size-4" />
-					Add Credentials
-				</Button>
-			</CardHeader>
-			<CardContent>
+		<>
+			<SettingsSection
+				title="Security"
+				description="Protect the application with HTTP basic auth at the reverse proxy."
+				wide
+				actions={
+					<Button size="sm" onClick={() => setDialogOpen(true)}>
+						<Plus className="size-4" />
+						Add Credentials
+					</Button>
+				}
+			>
 				{isLoading ? (
 					<div className="flex flex-col gap-2">
 						{Array.from({ length: 2 }).map((_, i) => (
@@ -191,7 +188,7 @@ export function SecurityManager({ applicationId }: { applicationId: string }) {
 						</TableBody>
 					</Table>
 				)}
-			</CardContent>
+			</SettingsSection>
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>
@@ -263,6 +260,6 @@ export function SecurityManager({ applicationId }: { applicationId: string }) {
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
-		</Card>
+		</>
 	);
 }

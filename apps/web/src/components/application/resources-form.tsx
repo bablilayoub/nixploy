@@ -5,8 +5,8 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { useTRPC } from "@/lib/trpc";
@@ -89,12 +89,11 @@ export function ResourcesForm({ application }: { application: Application }) {
 		});
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="text-sm font-medium">Resources</CardTitle>
-				<CardDescription>Replicas and CPU / memory reservations and limits.</CardDescription>
-			</CardHeader>
-			<CardContent className="flex flex-col gap-6">
+		<SettingsSection
+			title="Resources"
+			description="Replicas and CPU / memory reservations and limits."
+		>
+			<div className="flex flex-col gap-6">
 				<div className="flex flex-col gap-3">
 					<div className="flex items-center justify-between">
 						<Label>Replicas</Label>
@@ -177,7 +176,7 @@ export function ResourcesForm({ application }: { application: Application }) {
 						Save Resources
 					</Button>
 				</div>
-			</CardContent>
-		</Card>
+			</div>
+		</SettingsSection>
 	);
 }

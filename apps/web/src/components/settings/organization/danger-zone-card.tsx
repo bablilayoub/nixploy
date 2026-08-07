@@ -1,10 +1,11 @@
 "use client";
 
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -16,7 +17,6 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient, useSession } from "@/lib/auth-client";
@@ -71,65 +71,64 @@ export function DangerZoneCard() {
 	}
 
 	return (
-		<Card className="border-destructive/50">
-			<CardHeader>
-				<CardTitle className="flex items-center gap-2 text-destructive">
-					<AlertTriangle className="size-4" />
-					Danger Zone
-				</CardTitle>
-				<CardDescription>
-					Permanently delete every project, environment, service, domain, server and backup
-					destination in this organization. This cannot be undone.
-				</CardDescription>
-			</CardHeader>
-			<CardContent>
-				<Button variant="destructive" onClick={() => setOpen(true)}>
-					Delete organization
-				</Button>
-				<AlertDialog
-					open={open}
-					onOpenChange={(next) => {
-						setOpen(next);
-						if (!next) setConfirmName("");
-					}}
-				>
-					<AlertDialogContent>
-						<AlertDialogHeader>
-							<AlertDialogTitle>Delete "{activeOrganization.name}"?</AlertDialogTitle>
-							<AlertDialogDescription>
-								This tears down every Swarm service, Traefik route, volume and file on disk for
-								every project in this organization, then deletes the organization itself. This
-								action cannot be undone.
-							</AlertDialogDescription>
-						</AlertDialogHeader>
-						<div className="grid gap-2 text-left">
-							<Label htmlFor="confirm-org-name">
-								Type <span className="font-semibold">{activeOrganization.name}</span> to confirm
-							</Label>
-							<Input
-								id="confirm-org-name"
-								value={confirmName}
-								onChange={(event) => setConfirmName(event.target.value)}
-								autoComplete="off"
-							/>
-						</div>
-						<AlertDialogFooter>
-							<AlertDialogCancel>Cancel</AlertDialogCancel>
-							<AlertDialogAction
-								variant="destructive"
-								disabled={isDeleting || confirmName !== activeOrganization.name}
-								onClick={(event) => {
-									event.preventDefault();
-									handleDelete();
-								}}
-							>
-								{isDeleting && <Loader2 className="size-4 animate-spin" />}
-								Delete organization
-							</AlertDialogAction>
-						</AlertDialogFooter>
-					</AlertDialogContent>
-				</AlertDialog>
-			</CardContent>
-		</Card>
+		<>
+			<SettingsSection
+				danger
+				title="Delete organization"
+				description="Permanently delete every project, environment, service, domain, server and backup destination in this organization. This cannot be undone."
+				actions={
+					<Button
+						variant="outline"
+						className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+						onClick={() => setOpen(true)}
+					>
+						Delete organization
+					</Button>
+				}
+			/>
+			<AlertDialog
+				open={open}
+				onOpenChange={(next) => {
+					setOpen(next);
+					if (!next) setConfirmName("");
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Delete "{activeOrganization.name}"?</AlertDialogTitle>
+						<AlertDialogDescription>
+							This tears down every Swarm service, Traefik route, volume and file on disk for every
+							project in this organization, then deletes the organization itself. This action cannot
+							be undone.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<div className="grid gap-2 text-left">
+						<Label htmlFor="confirm-org-name">
+							Type <span className="font-semibold">{activeOrganization.name}</span> to confirm
+						</Label>
+						<Input
+							id="confirm-org-name"
+							value={confirmName}
+							onChange={(event) => setConfirmName(event.target.value)}
+							autoComplete="off"
+						/>
+					</div>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							variant="destructive"
+							disabled={isDeleting || confirmName !== activeOrganization.name}
+							onClick={(event) => {
+								event.preventDefault();
+								handleDelete();
+							}}
+						>
+							{isDeleting && <Loader2 className="size-4 animate-spin" />}
+							Delete organization
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+		</>
 	);
 }

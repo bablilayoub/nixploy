@@ -10,6 +10,7 @@ import { StatusDot, type StatusDotStatus } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { useTRPCClient } from "@/lib/trpc";
 
 import { ServiceRowActions } from "./service-row-actions";
@@ -139,7 +140,7 @@ export function ServicesTable({
 				</div>
 			)}
 
-			<div className="overflow-hidden rounded-lg border">
+			<TableCard>
 				<Table>
 					<TableBody>
 						{groups.map((group) => (
@@ -222,7 +223,7 @@ export function ServicesTable({
 						))}
 					</TableBody>
 				</Table>
-			</div>
+			</TableCard>
 		</div>
 	);
 }

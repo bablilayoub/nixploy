@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/command";
 import { signOut } from "@/lib/auth-client";
 import { useTRPC } from "@/lib/trpc";
+import { cn } from "@/lib/utils";
 
 const RECENTS_KEY = "nixploy:command-palette:recents";
 const MAX_RECENTS = 5;
@@ -78,7 +79,7 @@ function pushRecentId(id: string) {
 }
 
 /** ⌘K command palette: navigation, project services, and actions. */
-export function CommandPalette() {
+export function CommandPalette({ className }: { className?: string }) {
 	const trpc = useTRPC();
 	const router = useRouter();
 	const queryClient = useQueryClient();
@@ -537,11 +538,15 @@ export function CommandPalette() {
 				type="button"
 				data-slot="command-palette-trigger"
 				onClick={() => setOpen(true)}
-				className="hidden h-8 items-center gap-2 rounded-md border bg-secondary px-3 text-sm text-muted-foreground transition-colors hover:bg-accent sm:flex"
+				aria-keyshortcuts="Meta+K Control+K"
+				className={cn(
+					"group relative hidden h-8 items-center gap-2 rounded-md bg-muted/40 pe-12 ps-2.5 text-sm font-normal text-muted-foreground shadow-none hover:bg-accent sm:inline-flex sm:w-40 lg:w-52 xl:w-64",
+					className,
+				)}
 			>
-				<Search className="size-3.5" />
-				<span>Search...</span>
-				<kbd className="pointer-events-none ml-2 flex items-center gap-0.5 rounded border bg-background px-1.5 font-mono text-[10px] text-muted-foreground">
+				<Search aria-hidden className="size-4 shrink-0 opacity-70" />
+				<span className="truncate">Search…</span>
+				<kbd className="pointer-events-none absolute end-1.5 top-1/2 hidden h-5 -translate-y-1/2 items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium select-none sm:inline-flex">
 					<span className="text-xs">⌘</span>K
 				</kbd>
 			</button>
@@ -550,7 +555,10 @@ export function CommandPalette() {
 				data-slot="command-palette-trigger-mobile"
 				onClick={() => setOpen(true)}
 				aria-label="Search"
-				className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:hidden"
+				className={cn(
+					"inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:hidden",
+					className,
+				)}
 			>
 				<Search className="size-4" />
 			</button>

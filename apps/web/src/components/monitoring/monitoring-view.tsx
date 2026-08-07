@@ -122,7 +122,7 @@ export function MonitoringView() {
 					</Button>
 				</div>
 			) : (
-				<div className="flex flex-col overflow-hidden rounded-lg border sm:flex-row">
+				<div className="flex flex-col overflow-hidden rounded-xl border bg-card sm:flex-row">
 					<HostStat
 						icon={MemoryStick}
 						label="Memory"

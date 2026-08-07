@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { HardDrive, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
+import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -16,7 +16,6 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -168,20 +167,18 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 				: mount.filePath;
 
 	return (
-		<Card>
-			<CardHeader className="flex flex-row items-center justify-between space-y-0">
-				<div className="flex flex-col gap-1.5">
-					<CardTitle className="text-sm font-medium">Mounts</CardTitle>
-					<CardDescription>
-						Persist data with volumes, bind host paths, or inject config files.
-					</CardDescription>
-				</div>
-				<Button size="sm" onClick={() => setDialogOpen(true)}>
-					<Plus className="size-4" />
-					Add Mount
-				</Button>
-			</CardHeader>
-			<CardContent>
+		<>
+			<SettingsSection
+				title="Mounts"
+				description="Persist data with volumes, bind host paths, or inject config files."
+				wide
+				actions={
+					<Button size="sm" onClick={() => setDialogOpen(true)}>
+						<Plus className="size-4" />
+						Add Mount
+					</Button>
+				}
+			>
 				{isLoading ? (
 					<div className="flex flex-col gap-2">
 						{Array.from({ length: 2 }).map((_, i) => (
@@ -237,7 +234,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 						</TableBody>
 					</Table>
 				)}
-			</CardContent>
+			</SettingsSection>
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>
@@ -363,6 +360,6 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
-		</Card>
+		</>
 	);
 }

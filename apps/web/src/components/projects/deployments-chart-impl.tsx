@@ -1,28 +1,30 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
-	Area,
-	AreaChart,
-	CartesianGrid,
-	ResponsiveContainer,
-	Tooltip,
-	XAxis,
-	YAxis,
-} from "recharts";
-
+	type ChartConfig,
+	ChartContainer,
+	ChartLegend,
+	ChartLegendContent,
+	ChartTooltip,
+	ChartTooltipContent,
+} from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
 
-const chartTooltipStyle = {
-	backgroundColor: "var(--card)",
-	border: "1px solid var(--border)",
-	borderRadius: "10px",
-	fontSize: "12px",
-	color: "var(--foreground)",
-} as const;
+const chartConfig = {
+	done: {
+		label: "Succeeded",
+		color: "var(--chart-2)",
+	},
+	error: {
+		label: "Failed",
+		color: "var(--destructive)",
+	},
+} satisfies ChartConfig;
 
-/** Deployments per day (14d), done vs error — dashboard trend card. */
+/** Deployments per day (14d), done vs error — dashboard trend panel. */
 export function DeploymentsChart() {
 	const trpc = useTRPC();
 	const { data, isPending } = useQuery(trpc.deployment.daily.queryOptions({ days: 14 }));
@@ -32,57 +34,49 @@ export function DeploymentsChart() {
 	}));
 
 	return (
-		<div className="flex flex-col gap-3 rounded-xl border p-5">
-			<div className="flex items-center justify-between">
-				<span className="text-sm text-muted-foreground">Deployments — last 14 days</span>
-				<div className="flex items-center gap-3 text-xs text-muted-foreground">
-					<span className="flex items-center gap-1.5">
-						<span className="size-2 rounded-full bg-emerald-500" /> Succeeded
-					</span>
-					<span className="flex items-center gap-1.5">
-						<span className="size-2 rounded-full bg-red-500" /> Failed
-					</span>
-				</div>
+		<section className="flex h-full flex-col rounded-lg border border-border p-4 sm:p-5">
+			<div className="mb-4 space-y-1">
+				<h3 className="text-sm font-medium">Overview</h3>
+				<p className="text-sm text-muted-foreground">Deployments over the last 14 days</p>
 			</div>
-			<div className="h-40">
+			<div className="ps-2">
 				{isPending ? (
-					<Skeleton className="h-full w-full" />
+					<Skeleton className="h-[220px] w-full" />
 				) : (
-					<ResponsiveContainer width="100%" height="100%">
+					<ChartContainer config={chartConfig} className="aspect-auto h-[220px] w-full">
 						<AreaChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
 							<defs>
 								<linearGradient id="dash-done" x1="0" y1="0" x2="0" y2="1">
-									<stop offset="0%" stopColor="#17c964" stopOpacity={0.3} />
-									<stop offset="100%" stopColor="#17c964" stopOpacity={0.02} />
+									<stop offset="0%" stopColor="var(--color-done)" stopOpacity={0.3} />
+									<stop offset="100%" stopColor="var(--color-done)" stopOpacity={0.02} />
 								</linearGradient>
 								<linearGradient id="dash-error" x1="0" y1="0" x2="0" y2="1">
-									<stop offset="0%" stopColor="#f31260" stopOpacity={0.3} />
-									<stop offset="100%" stopColor="#f31260" stopOpacity={0.02} />
+									<stop offset="0%" stopColor="var(--color-error)" stopOpacity={0.3} />
+									<stop offset="100%" stopColor="var(--color-error)" stopOpacity={0.02} />
 								</linearGradient>
 							</defs>
-							<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+							<CartesianGrid strokeDasharray="3 3" vertical={false} />
 							<XAxis
 								dataKey="label"
-								stroke="var(--muted-foreground)"
-								fontSize={10}
 								tickLine={false}
 								axisLine={false}
 								minTickGap={24}
+								tickMargin={6}
+								fontSize={10}
 							/>
 							<YAxis
-								stroke="var(--muted-foreground)"
-								fontSize={10}
 								tickLine={false}
 								axisLine={false}
 								width={28}
 								allowDecimals={false}
+								fontSize={10}
 							/>
-							<Tooltip contentStyle={chartTooltipStyle} />
+							<ChartTooltip content={<ChartTooltipContent />} />
+							<ChartLegend content={<ChartLegendContent />} />
 							<Area
 								type="monotone"
 								dataKey="done"
-								name="Succeeded"
-								stroke="#17c964"
+								stroke="var(--color-done)"
 								fill="url(#dash-done)"
 								strokeWidth={1.5}
 								isAnimationActive={false}
@@ -90,16 +84,15 @@ export function DeploymentsChart() {
 							<Area
 								type="monotone"
 								dataKey="error"
-								name="Failed"
-								stroke="#f31260"
+								stroke="var(--color-error)"
 								fill="url(#dash-error)"
 								strokeWidth={1.5}
 								isAnimationActive={false}
 							/>
 						</AreaChart>
-					</ResponsiveContainer>
+					</ChartContainer>
 				)}
 			</div>
-		</div>
+		</section>
 	);
 }

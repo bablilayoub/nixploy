@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { ExternalLink, GitPullRequest, Loader2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { SettingsSection } from "@/components/settings/settings-section";
 import { StatusDot, type StatusDotStatus } from "@/components/shell";
 import {
 	AlertDialog,
@@ -17,7 +18,6 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -109,16 +109,11 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 	);
 
 	return (
-		<Card>
-			<CardHeader className="flex flex-row items-center justify-between space-y-0">
-				<div className="flex flex-col gap-1.5">
-					<CardTitle className="text-sm font-medium">Preview Deployments</CardTitle>
-					<CardDescription>
-						Per-pull-request instances of this application. Enable Preview Deployments under Source
-						to create and tear them down automatically from git webhooks; you can still create one
-						manually here.
-					</CardDescription>
-				</div>
+		<SettingsSection
+			title="Preview Deployments"
+			description="Per-PR preview instances. Enable under Source for git webhooks."
+			wide
+			actions={
 				<Dialog open={createOpen} onOpenChange={setCreateOpen}>
 					<DialogTrigger asChild>
 						<Button size="sm">
@@ -206,91 +201,90 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 						</DialogFooter>
 					</DialogContent>
 				</Dialog>
-			</CardHeader>
-			<CardContent>
-				{isLoading ? (
-					<div className="flex flex-col gap-2">
-						{["sk-a", "sk-b"].map((id) => (
-							<Skeleton key={id} className="h-10 w-full" />
-						))}
-					</div>
-				) : !previews || previews.length === 0 ? (
-					<div className="flex flex-col items-center gap-2 py-10 text-center">
-						<GitPullRequest className="size-8 text-muted-foreground" />
-						<p className="text-sm text-muted-foreground">
-							No preview deployments. Create one to test a pull request in isolation.
-						</p>
-					</div>
-				) : (
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead>Pull Request</TableHead>
-								<TableHead>Branch</TableHead>
-								<TableHead>Status</TableHead>
-								<TableHead>Domain</TableHead>
-								<TableHead>Created</TableHead>
-								<TableHead>Expires</TableHead>
-								<TableHead className="text-right">Actions</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{previews.map((preview) => (
-								<TableRow key={preview.previewDeploymentId}>
-									<TableCell className="font-medium">
-										#{preview.pullRequestNumber}
-										{preview.pullRequestTitle && (
-											<span className="block max-w-48 truncate text-xs text-muted-foreground">
-												{preview.pullRequestTitle}
-											</span>
-										)}
-									</TableCell>
-									<TableCell className="text-muted-foreground">{preview.branch ?? "—"}</TableCell>
-									<TableCell>
-										<span className="inline-flex items-center gap-1.5 text-sm">
-											<StatusDot
-												status={(STATUS_CONFIG[preview.previewStatus] ?? STATUS_CONFIG.idle).status}
-											/>
-											{(STATUS_CONFIG[preview.previewStatus] ?? STATUS_CONFIG.idle).label}
+			}
+		>
+			{isLoading ? (
+				<div className="flex flex-col gap-2">
+					{["sk-a", "sk-b"].map((id) => (
+						<Skeleton key={id} className="h-10 w-full" />
+					))}
+				</div>
+			) : !previews || previews.length === 0 ? (
+				<div className="flex flex-col items-center gap-2 py-10 text-center">
+					<GitPullRequest className="size-8 text-muted-foreground" />
+					<p className="text-sm text-muted-foreground">
+						No preview deployments. Create one to test a pull request in isolation.
+					</p>
+				</div>
+			) : (
+				<Table>
+					<TableHeader>
+						<TableRow>
+							<TableHead>Pull Request</TableHead>
+							<TableHead>Branch</TableHead>
+							<TableHead>Status</TableHead>
+							<TableHead>Domain</TableHead>
+							<TableHead>Created</TableHead>
+							<TableHead>Expires</TableHead>
+							<TableHead className="text-right">Actions</TableHead>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{previews.map((preview) => (
+							<TableRow key={preview.previewDeploymentId}>
+								<TableCell className="font-medium">
+									#{preview.pullRequestNumber}
+									{preview.pullRequestTitle && (
+										<span className="block max-w-48 truncate text-xs text-muted-foreground">
+											{preview.pullRequestTitle}
 										</span>
-									</TableCell>
-									<TableCell>
-										{preview.domain ? (
-											<a
-												href={`${preview.domain.https ? "https" : "http"}://${preview.domain.host}`}
-												target="_blank"
-												rel="noreferrer"
-												className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-											>
-												{preview.domain.host}
-												<ExternalLink className="size-3" />
-											</a>
-										) : (
-											"—"
-										)}
-									</TableCell>
-									<TableCell className="text-muted-foreground">
-										{format(preview.createdAt, "MMM d, yyyy HH:mm")}
-									</TableCell>
-									<TableCell className="text-muted-foreground">
-										{preview.expiresAt ? format(preview.expiresAt, "MMM d, yyyy HH:mm") : "Never"}
-									</TableCell>
-									<TableCell className="text-right">
-										<Button
-											variant="ghost"
-											size="sm"
-											onClick={() => setDeleteTarget(preview)}
-											aria-label={`Delete preview for PR #${preview.pullRequestNumber}`}
+									)}
+								</TableCell>
+								<TableCell className="text-muted-foreground">{preview.branch ?? "—"}</TableCell>
+								<TableCell>
+									<span className="inline-flex items-center gap-1.5 text-sm">
+										<StatusDot
+											status={(STATUS_CONFIG[preview.previewStatus] ?? STATUS_CONFIG.idle).status}
+										/>
+										{(STATUS_CONFIG[preview.previewStatus] ?? STATUS_CONFIG.idle).label}
+									</span>
+								</TableCell>
+								<TableCell>
+									{preview.domain ? (
+										<a
+											href={`${preview.domain.https ? "https" : "http"}://${preview.domain.host}`}
+											target="_blank"
+											rel="noreferrer"
+											className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
 										>
-											<Trash2 className="size-4 text-destructive" />
-										</Button>
-									</TableCell>
-								</TableRow>
-							))}
-						</TableBody>
-					</Table>
-				)}
-			</CardContent>
+											{preview.domain.host}
+											<ExternalLink className="size-3" />
+										</a>
+									) : (
+										"—"
+									)}
+								</TableCell>
+								<TableCell className="text-muted-foreground">
+									{format(preview.createdAt, "MMM d, yyyy HH:mm")}
+								</TableCell>
+								<TableCell className="text-muted-foreground">
+									{preview.expiresAt ? format(preview.expiresAt, "MMM d, yyyy HH:mm") : "Never"}
+								</TableCell>
+								<TableCell className="text-right">
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => setDeleteTarget(preview)}
+										aria-label={`Delete preview for PR #${preview.pullRequestNumber}`}
+									>
+										<Trash2 className="size-4 text-destructive" />
+									</Button>
+								</TableCell>
+							</TableRow>
+						))}
+					</TableBody>
+				</Table>
+			)}
 
 			<AlertDialog
 				open={deleteTarget !== null}
@@ -320,6 +314,6 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
-		</Card>
+		</SettingsSection>
 	);
 }

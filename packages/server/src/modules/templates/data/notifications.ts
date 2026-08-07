@@ -144,7 +144,7 @@ volumes:
 		name: "Apprise API",
 		description:
 			"One HTTP API to push notifications to 100+ services — Slack, Discord, Telegram, email and more.",
-		logo: "",
+		logo: "https://raw.githubusercontent.com/caronc/apprise-api/master/apprise_api/static/favicon.ico",
 		tags: ["notifications", "push", "api"],
 		links: {
 			github: "https://github.com/caronc/apprise-api",

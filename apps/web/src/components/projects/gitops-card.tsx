@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, Link2, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { Link2 } from "lucide-react";
+import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -29,17 +29,26 @@ type PlanItem = {
 	changes?: string[];
 };
 
-export function GitopsCard({
-	projectId,
-	environmentName,
-}: {
-	projectId: string;
-	environmentName: string;
-}) {
+export type GitopsCardHandle = {
+	exportStack: () => Promise<void>;
+};
+
+/**
+ * GitOps import/apply dialogs. Mount outside DropdownMenuContent so the menu
+ * closing does not unmount the dialog. Menu items live in EnvironmentActions.
+ */
+export const GitopsCard = forwardRef<
+	GitopsCardHandle,
+	{
+		projectId: string;
+		environmentName: string;
+		importOpen: boolean;
+		onImportOpenChange: (open: boolean) => void;
+	}
+>(function GitopsCard({ projectId, environmentName, importOpen, onImportOpenChange }, ref) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const fileInputRef = useRef<HTMLInputElement>(null);
-	const [importOpen, setImportOpen] = useState(false);
 	const [yaml, setYaml] = useState("");
 	const [stackUrl, setStackUrl] = useState("");
 	const [redeployAfter, setRedeployAfter] = useState(true);
@@ -78,6 +87,10 @@ export function GitopsCard({
 		}
 	};
 
+	useImperativeHandle(ref, () => ({
+		exportStack: handleExport,
+	}));
+
 	const handlePreview = async () => {
 		if (!yaml.trim()) {
 			toast.error("Paste or upload a stack file first");
@@ -105,7 +118,7 @@ export function GitopsCard({
 					: `Applied ${result.applied} change(s)`,
 			);
 			setConfirmOpen(false);
-			setImportOpen(false);
+			onImportOpenChange(false);
 			setYaml("");
 			await Promise.all([
 				queryClient.invalidateQueries({ queryKey: trpc.project.one.queryKey({ projectId }) }),
@@ -138,7 +151,7 @@ export function GitopsCard({
 					? `Synced ${result.applied} change(s), queued ${redeployed} redeploy(s)`
 					: `Synced ${result.applied} change(s)`,
 			);
-			setImportOpen(false);
+			onImportOpenChange(false);
 			await Promise.all([
 				queryClient.invalidateQueries({ queryKey: trpc.project.one.queryKey({ projectId }) }),
 				queryClient.invalidateQueries({
@@ -157,33 +170,14 @@ export function GitopsCard({
 
 	return (
 		<>
-			<div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-4">
-				<div className="min-w-0 flex-1">
-					<p className="text-sm font-medium">GitOps</p>
-					<p className="text-xs text-muted-foreground">
-						Export or import <code className="text-xs">nixploy.yaml</code> for{" "}
-						<span className="font-medium">{environmentName}</span>
-					</p>
-				</div>
-				<div className="flex items-center gap-2">
-					<Button variant="outline" size="sm" onClick={() => void handleExport()}>
-						<Download className="size-4" />
-						Export
-					</Button>
-					<Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
-						<Upload className="size-4" />
-						Import
-					</Button>
-				</div>
-			</div>
-
-			<Dialog open={importOpen} onOpenChange={setImportOpen}>
+			<Dialog open={importOpen} onOpenChange={onImportOpenChange}>
 				<DialogContent className="max-w-2xl">
 					<DialogHeader>
 						<DialogTitle>Import stack</DialogTitle>
 						<DialogDescription>
-							Paste or upload a nixploy.yaml file. Secrets are not stored in the file — only env
-							variable names are referenced.
+							Paste or upload a nixploy.yaml for{" "}
+							<span className="font-medium">{environmentName}</span>. Secrets are not stored in the
+							file — only env variable names are referenced.
 						</DialogDescription>
 					</DialogHeader>
 					<div className="grid gap-3">
@@ -254,7 +248,7 @@ export function GitopsCard({
 						</div>
 					</div>
 					<DialogFooter>
-						<Button variant="outline" onClick={() => setImportOpen(false)}>
+						<Button variant="outline" onClick={() => onImportOpenChange(false)}>
 							Cancel
 						</Button>
 						<Button onClick={() => void handlePreview()} disabled={planMutation.isPending}>
@@ -308,4 +302,4 @@ export function GitopsCard({
 			</Dialog>
 		</>
 	);
-}
+});

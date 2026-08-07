@@ -11,12 +11,12 @@ import {
 	Play,
 	RefreshCw,
 	Square,
-	Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { UnderlineTabsList, UnderlineTabsTrigger } from "@/components/application/underline-tabs";
 import { DatabaseBackups } from "@/components/databases/database-backups";
 import {
 	type ConnectionUrls,
@@ -27,36 +27,20 @@ import {
 	type DatabaseType,
 	type ServiceStatus,
 } from "@/components/databases/database-types";
+import { DangerZone } from "@/components/services/danger-zone";
 import { EnvEditor } from "@/components/services/env-editor";
 import { LogViewer } from "@/components/services/log-viewer";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
 import { ServiceTerminal } from "@/components/services/service-terminal";
 import { ServiceStatusBadge } from "@/components/services/status-badge";
+import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
+import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { PageHeader } from "@/components/shell";
-import {
-	AlertDialog,
-	AlertDialogAction,
-	AlertDialogCancel,
-	AlertDialogContent,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogHeader,
-	AlertDialogTitle,
-	AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardFooter,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useTRPC } from "@/lib/trpc";
 
@@ -276,6 +260,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 						<Button
 							variant="outline"
 							size="sm"
+							className="hidden sm:inline-flex"
 							disabled={actionPending || (status !== "running" && status !== "done")}
 							onClick={() => reloadMutation.mutate(idInput)}
 						>
@@ -291,18 +276,18 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 			/>
 
 			<Tabs defaultValue="general">
-				<TabsList variant="line" className="w-full flex-wrap justify-start border-b">
-					<TabsTrigger value="general">General</TabsTrigger>
-					<TabsTrigger value="connection">Connection</TabsTrigger>
-					<TabsTrigger value="environment">Environment</TabsTrigger>
-					{cfg.supportsBackups && <TabsTrigger value="backups">Backups</TabsTrigger>}
-					<TabsTrigger value="logs">Logs</TabsTrigger>
-					<TabsTrigger value="monitoring">Monitoring</TabsTrigger>
-					<TabsTrigger value="terminal">Terminal</TabsTrigger>
-					<TabsTrigger value="settings">Settings</TabsTrigger>
-				</TabsList>
+				<UnderlineTabsList>
+					<UnderlineTabsTrigger value="general">General</UnderlineTabsTrigger>
+					<UnderlineTabsTrigger value="connection">Connection</UnderlineTabsTrigger>
+					<UnderlineTabsTrigger value="environment">Environment</UnderlineTabsTrigger>
+					{cfg.supportsBackups ? (
+						<UnderlineTabsTrigger value="backups">Backups</UnderlineTabsTrigger>
+					) : null}
+					<UnderlineTabsTrigger value="runtime">Runtime</UnderlineTabsTrigger>
+					<UnderlineTabsTrigger value="settings">Settings</UnderlineTabsTrigger>
+				</UnderlineTabsList>
 
-				<TabsContent value="general">
+				<TabsContent value="general" className="mt-6">
 					<GeneralTab
 						ns={ns}
 						idInput={idInput}
@@ -315,16 +300,16 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 					/>
 				</TabsContent>
 
-				<TabsContent value="connection">
+				<TabsContent value="connection" className="mt-6">
 					<ConnectionTab ns={ns} idInput={idInput} hasExternalPort={db.externalPort != null} />
 				</TabsContent>
 
-				<TabsContent value="environment">
+				<TabsContent value="environment" className="mt-6">
 					<EnvironmentTab ns={ns} idInput={idInput} env={db.env} invalidate={invalidate} />
 				</TabsContent>
 
 				{cfg.supportsBackups && (
-					<TabsContent value="backups">
+					<TabsContent value="backups" className="mt-6">
 						<DatabaseBackups
 							databaseType={type as Exclude<DatabaseType, "redis">}
 							serviceId={id}
@@ -333,31 +318,32 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 					</TabsContent>
 				)}
 
-				<TabsContent value="logs">
-					<Card>
-						<CardContent className="pt-6">
-							<LogViewer appName={db.appName} serverId={db.serverId} />
-						</CardContent>
-					</Card>
+				<TabsContent value="runtime" className="mt-6">
+					<Tabs defaultValue="logs" className="w-full gap-4">
+						<SubTabsList>
+							<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
+							<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>
+							<SubTabsTrigger value="terminal">Terminal</SubTabsTrigger>
+						</SubTabsList>
+						<TabsContent value="logs" className="mt-0">
+							<SettingsSection bare title="Logs" description="Live container output.">
+								<LogViewer appName={db.appName} serverId={db.serverId} />
+							</SettingsSection>
+						</TabsContent>
+						<TabsContent value="monitoring" className="mt-0">
+							<SettingsSection bare title="Monitoring" description="CPU, memory, and network.">
+								<MonitoringCharts appName={db.appName} serverId={db.serverId} />
+							</SettingsSection>
+						</TabsContent>
+						<TabsContent value="terminal" className="mt-0">
+							<SettingsSection bare title="Terminal" description="Shell into the container.">
+								<ServiceTerminal appName={db.appName} serverId={db.serverId} />
+							</SettingsSection>
+						</TabsContent>
+					</Tabs>
 				</TabsContent>
 
-				<TabsContent value="monitoring">
-					<Card>
-						<CardContent className="pt-6">
-							<MonitoringCharts appName={db.appName} serverId={db.serverId} />
-						</CardContent>
-					</Card>
-				</TabsContent>
-
-				<TabsContent value="terminal">
-					<Card>
-						<CardContent className="pt-6">
-							<ServiceTerminal appName={db.appName} serverId={db.serverId} />
-						</CardContent>
-					</Card>
-				</TabsContent>
-
-				<TabsContent value="settings">
+				<TabsContent value="settings" className="mt-6">
 					<SettingsTab
 						ns={ns}
 						idInput={idInput}
@@ -365,7 +351,6 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 						label={cfg.label}
 						invalidate={invalidate}
 						onRemove={() => removeMutation.mutate(idInput)}
-						removePending={removeMutation.isPending}
 					/>
 				</TabsContent>
 			</Tabs>
@@ -425,13 +410,9 @@ function GeneralTab({
 		parsedPort === null || (Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535);
 
 	return (
-		<div className="grid gap-4 lg:grid-cols-2">
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-sm font-medium">General</CardTitle>
-					<CardDescription>Basic settings for this {label} instance.</CardDescription>
-				</CardHeader>
-				<CardContent className="space-y-4">
+		<SettingsStack>
+			<SettingsSection title="General" description={`Basic settings for this ${label} instance.`}>
+				<div className="space-y-4">
 					<div className="space-y-1.5">
 						<Label htmlFor="db-name">Name</Label>
 						<Input id="db-name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -458,71 +439,62 @@ function GeneralTab({
 							Reload the service after changing the image for it to take effect.
 						</p>
 					</div>
-				</CardContent>
-				<CardFooter>
-					<Button
-						disabled={updateMutation.isPending || !name.trim() || !dockerImage.trim()}
-						onClick={() =>
-							updateMutation.mutate({
-								...idInput,
-								name: name.trim(),
-								description: description.trim() || undefined,
-								dockerImage: dockerImage.trim(),
-							})
-						}
-					>
-						{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-						Save
-					</Button>
-				</CardFooter>
-			</Card>
+					<div className="flex justify-end">
+						<Button
+							disabled={updateMutation.isPending || !name.trim() || !dockerImage.trim()}
+							onClick={() =>
+								updateMutation.mutate({
+									...idInput,
+									name: name.trim(),
+									description: description.trim() || undefined,
+									dockerImage: dockerImage.trim(),
+								})
+							}
+						>
+							{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+							Save
+						</Button>
+					</div>
+				</div>
+			</SettingsSection>
 
-			<div className="flex flex-col gap-4">
-				<Card>
-					<CardHeader>
-						<CardTitle className="text-sm font-medium">Credentials</CardTitle>
-						<CardDescription>Auto-generated credentials for this instance.</CardDescription>
-					</CardHeader>
-					<CardContent className="space-y-4">
-						{hasUser && db.databaseUser && (
-							<ReadOnlyField label="Username" value={db.databaseUser} />
-						)}
-						{hasDatabaseName && db.databaseName && (
-							<ReadOnlyField label="Database" value={db.databaseName} />
-						)}
-						{db.databasePassword && <SecretField label="Password" value={db.databasePassword} />}
-						{hasRootPassword && db.databaseRootPassword && (
-							<SecretField label="Root password" value={db.databaseRootPassword} />
-						)}
-					</CardContent>
-				</Card>
+			<SettingsSection
+				title="Credentials"
+				description="Auto-generated credentials for this instance."
+			>
+				<div className="space-y-4">
+					{hasUser && db.databaseUser && <ReadOnlyField label="Username" value={db.databaseUser} />}
+					{hasDatabaseName && db.databaseName && (
+						<ReadOnlyField label="Database" value={db.databaseName} />
+					)}
+					{db.databasePassword && <SecretField label="Password" value={db.databasePassword} />}
+					{hasRootPassword && db.databaseRootPassword && (
+						<SecretField label="Root password" value={db.databaseRootPassword} />
+					)}
+				</div>
+			</SettingsSection>
 
-				<Card>
-					<CardHeader>
-						<CardTitle className="text-sm font-medium">External port</CardTitle>
-						<CardDescription>
-							Publish a host port so the database is reachable from outside the internal network.
-							Leave empty for internal-only access.
-						</CardDescription>
-					</CardHeader>
-					<CardContent>
-						<div className="space-y-1.5">
-							<Label htmlFor="db-port">Port</Label>
-							<Input
-								id="db-port"
-								type="number"
-								min={1}
-								max={65535}
-								placeholder="e.g. 5432"
-								value={externalPort}
-								onChange={(e) => setExternalPort(e.target.value)}
-							/>
-							{!portValid && (
-								<p className="text-sm text-destructive">Enter a port between 1 and 65535.</p>
-							)}
-						</div>
-					</CardContent>
-					<CardFooter>
+			<SettingsSection
+				title="External port"
+				description="Host port for external access. Leave empty for internal-only."
+			>
+				<div className="space-y-4">
+					<div className="space-y-1.5">
+						<Label htmlFor="db-port">Port</Label>
+						<Input
+							id="db-port"
+							type="number"
+							min={1}
+							max={65535}
+							placeholder="e.g. 5432"
+							value={externalPort}
+							onChange={(e) => setExternalPort(e.target.value)}
+						/>
+						{!portValid && (
+							<p className="text-sm text-destructive">Enter a port between 1 and 65535.</p>
+						)}
+					</div>
+					<div className="flex justify-end">
 						<Button
 							disabled={portMutation.isPending || !portValid}
 							onClick={() => portMutation.mutate({ ...idInput, externalPort: parsedPort })}
@@ -530,10 +502,10 @@ function GeneralTab({
 							{portMutation.isPending && <Loader2 className="size-4 animate-spin" />}
 							Save port
 						</Button>
-					</CardFooter>
-				</Card>
-			</div>
-		</div>
+					</div>
+				</div>
+			</SettingsSection>
+		</SettingsStack>
 	);
 }
 
@@ -550,53 +522,43 @@ function ConnectionTab({
 	const urls = urlsQuery.data as ConnectionUrls | undefined;
 
 	return (
-		<div className="grid gap-4 lg:grid-cols-2">
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-sm font-medium">Internal connection URL</CardTitle>
-					<CardDescription>
-						Use this URL from services deployed on the internal network.
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					{urlsQuery.isLoading ? (
-						<Skeleton className="h-9 w-full" />
-					) : urls ? (
-						<div className="flex items-center gap-1">
-							<Input readOnly value={urls.internal} className="font-mono text-xs" />
-							<CopyButton value={urls.internal} />
-						</div>
-					) : (
-						<p className="text-sm text-muted-foreground">Connection URL unavailable.</p>
-					)}
-				</CardContent>
-			</Card>
+		<SettingsStack>
+			<SettingsSection
+				title="Internal connection URL"
+				description="Use this URL from services deployed on the internal network."
+			>
+				{urlsQuery.isLoading ? (
+					<Skeleton className="h-9 w-full" />
+				) : urls ? (
+					<div className="flex items-center gap-1">
+						<Input readOnly value={urls.internal} className="font-mono text-xs" />
+						<CopyButton value={urls.internal} />
+					</div>
+				) : (
+					<p className="text-sm text-muted-foreground">Connection URL unavailable.</p>
+				)}
+			</SettingsSection>
 
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-sm font-medium">External connection URL</CardTitle>
-					<CardDescription>
-						Use this URL to connect from outside this server (requires an external port).
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					{urlsQuery.isLoading ? (
-						<Skeleton className="h-9 w-full" />
-					) : urls?.external ? (
-						<div className="flex items-center gap-1">
-							<Input readOnly value={urls.external} className="font-mono text-xs" />
-							<CopyButton value={urls.external} />
-						</div>
-					) : (
-						<p className="text-sm text-muted-foreground">
-							{hasExternalPort
-								? "External URL unavailable."
-								: "No external port configured. Set one in the General tab to enable external access."}
-						</p>
-					)}
-				</CardContent>
-			</Card>
-		</div>
+			<SettingsSection
+				title="External connection URL"
+				description="Use this URL to connect from outside this server (requires an external port)."
+			>
+				{urlsQuery.isLoading ? (
+					<Skeleton className="h-9 w-full" />
+				) : urls?.external ? (
+					<div className="flex items-center gap-1">
+						<Input readOnly value={urls.external} className="font-mono text-xs" />
+						<CopyButton value={urls.external} />
+					</div>
+				) : (
+					<p className="text-sm text-muted-foreground">
+						{hasExternalPort
+							? "External URL unavailable."
+							: "No external port configured. Set one in the General tab to enable external access."}
+					</p>
+				)}
+			</SettingsSection>
+		</SettingsStack>
 	);
 }
 
@@ -612,21 +574,17 @@ function EnvironmentTab({ ns, idInput, env, invalidate }: TabProps & { env: stri
 	);
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="text-sm font-medium">Environment variables</CardTitle>
-				<CardDescription>
-					Service-level variables. Reload the service to apply changes.
-				</CardDescription>
-			</CardHeader>
-			<CardContent>
-				<EnvEditor
-					value={env ?? ""}
-					loading={saveMutation.isPending}
-					onSave={(nextEnv) => saveMutation.mutate({ ...idInput, env: nextEnv })}
-				/>
-			</CardContent>
-		</Card>
+		<SettingsSection
+			title="Environment variables"
+			description="Service-level variables. Reload the service to apply changes."
+			wide
+		>
+			<EnvEditor
+				value={env ?? ""}
+				loading={saveMutation.isPending}
+				onSave={(nextEnv) => saveMutation.mutate({ ...idInput, env: nextEnv })}
+			/>
+		</SettingsSection>
 	);
 }
 
@@ -637,12 +595,10 @@ function SettingsTab({
 	label,
 	invalidate,
 	onRemove,
-	removePending,
 }: TabProps & {
 	db: DatabaseRow;
 	label: string;
 	onRemove: () => void;
-	removePending: boolean;
 }) {
 	const [name, setName] = useState(db.name);
 
@@ -657,65 +613,37 @@ function SettingsTab({
 	);
 
 	return (
-		<div className="flex max-w-2xl flex-col gap-4">
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-sm font-medium">Rename</CardTitle>
-					<CardDescription>Change the display name of this {label} instance.</CardDescription>
-				</CardHeader>
-				<CardContent className="space-y-1.5">
-					<Label htmlFor="rename-input">Name</Label>
-					<Input id="rename-input" value={name} onChange={(e) => setName(e.target.value)} />
-				</CardContent>
-				<CardFooter>
-					<Button
-						disabled={renameMutation.isPending || !name.trim() || name.trim() === db.name}
-						onClick={() => renameMutation.mutate({ ...idInput, name: name.trim() })}
-					>
-						{renameMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-						Rename
-					</Button>
-				</CardFooter>
-			</Card>
+		<SettingsStack>
+			<SettingsSection
+				title="Rename"
+				description={`Change the display name of this ${label} instance.`}
+			>
+				<div className="space-y-4">
+					<div className="space-y-1.5">
+						<Label htmlFor="rename-input">Name</Label>
+						<Input id="rename-input" value={name} onChange={(e) => setName(e.target.value)} />
+					</div>
+					<div className="flex justify-end">
+						<Button
+							disabled={renameMutation.isPending || !name.trim() || name.trim() === db.name}
+							onClick={() => renameMutation.mutate({ ...idInput, name: name.trim() })}
+						>
+							{renameMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+							Rename
+						</Button>
+					</div>
+				</div>
+			</SettingsSection>
 
-			<Card className="border-destructive/40">
-				<CardHeader>
-					<CardTitle className="text-sm font-medium text-destructive">Danger zone</CardTitle>
-					<CardDescription>
-						Permanently delete this {label} instance, its container and its data volume. This action
-						cannot be undone.
-					</CardDescription>
-				</CardHeader>
-				<CardFooter>
-					<AlertDialog>
-						<AlertDialogTrigger asChild>
-							<Button variant="destructive" disabled={removePending}>
-								{removePending ? (
-									<Loader2 className="size-4 animate-spin" />
-								) : (
-									<Trash2 className="size-4" />
-								)}
-								Delete database
-							</Button>
-						</AlertDialogTrigger>
-						<AlertDialogContent>
-							<AlertDialogHeader>
-								<AlertDialogTitle>Delete {db.name}?</AlertDialogTitle>
-								<AlertDialogDescription>
-									This permanently removes the {label} service, its container and its data volume.
-									This action cannot be undone.
-								</AlertDialogDescription>
-							</AlertDialogHeader>
-							<AlertDialogFooter>
-								<AlertDialogCancel>Cancel</AlertDialogCancel>
-								<AlertDialogAction variant="destructive" onClick={onRemove}>
-									Delete
-								</AlertDialogAction>
-							</AlertDialogFooter>
-						</AlertDialogContent>
-					</AlertDialog>
-				</CardFooter>
-			</Card>
-		</div>
+			<DangerZone
+				title="Delete database"
+				description={`Permanently delete this ${label} instance, its container and its data volume. This action cannot be undone.`}
+				actionLabel="Delete database"
+				requireText={db.name}
+				onConfirm={async () => {
+					onRemove();
+				}}
+			/>
+		</SettingsStack>
 	);
 }

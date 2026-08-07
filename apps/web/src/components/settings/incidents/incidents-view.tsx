@@ -3,8 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { useState } from "react";
+import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -28,15 +28,12 @@ export function IncidentsView() {
 	);
 
 	return (
-		<div className="flex flex-col gap-6">
-			<Card>
-				<CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-					<div>
-						<CardTitle className="text-sm font-medium">Incident timeline</CardTitle>
-						<CardDescription>
-							Deploy failures, threshold trips, watchdog events, and uptime flips.
-						</CardDescription>
-					</div>
+		<SettingsStack>
+			<SettingsSection
+				title="Incident timeline"
+				description="Deploy failures, threshold trips, watchdog events, and uptime flips."
+				wide
+				actions={
 					<Select value={projectId} onValueChange={setProjectId}>
 						<SelectTrigger className="w-48">
 							<SelectValue placeholder="All projects" />
@@ -50,8 +47,9 @@ export function IncidentsView() {
 							))}
 						</SelectContent>
 					</Select>
-				</CardHeader>
-				<CardContent className="flex flex-col gap-3">
+				}
+			>
+				<div className="flex flex-col gap-3">
 					{incidents.isLoading ? (
 						["a", "b", "c"].map((key) => <Skeleton key={key} className="h-16 w-full" />)
 					) : incidents.isError ? (
@@ -90,15 +88,15 @@ export function IncidentsView() {
 							</div>
 						))
 					)}
-				</CardContent>
-			</Card>
+				</div>
+			</SettingsSection>
 
-			<LogSearchCard />
-		</div>
+			<LogSearchSection />
+		</SettingsStack>
 	);
 }
 
-function LogSearchCard() {
+function LogSearchSection() {
 	const trpc = useTRPC();
 	const [query, setQuery] = useState("");
 	const [submitted, setSubmitted] = useState("");
@@ -108,41 +106,36 @@ function LogSearchCard() {
 	});
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="text-sm font-medium">Log search</CardTitle>
-				<CardDescription>
-					Search indexed deployment logs (Postgres tsvector). Failed deploys are ingested
-					automatically.
-				</CardDescription>
-			</CardHeader>
-			<CardContent className="flex flex-col gap-4">
-				<form
-					className="flex gap-2"
-					onSubmit={(event) => {
-						event.preventDefault();
-						setSubmitted(query.trim());
-					}}
+		<SettingsSection
+			title="Log search"
+			description="Search indexed deployment logs (Postgres tsvector). Failed deploys are ingested automatically."
+			wide
+		>
+			<form
+				className="flex gap-2"
+				onSubmit={(event) => {
+					event.preventDefault();
+					setSubmitted(query.trim());
+				}}
+			>
+				<Input
+					value={query}
+					onChange={(event) => setQuery(event.target.value)}
+					placeholder="Search logs…"
+				/>
+			</form>
+			{submitted && results.isLoading && <Skeleton className="h-20 w-full" />}
+			{submitted && !results.isLoading && (results.data ?? []).length === 0 && (
+				<p className="text-sm text-muted-foreground">No matches.</p>
+			)}
+			{(results.data ?? []).map((row) => (
+				<pre
+					key={row.serviceLogId}
+					className="overflow-x-auto rounded-md border bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap"
 				>
-					<Input
-						value={query}
-						onChange={(event) => setQuery(event.target.value)}
-						placeholder="Search logs…"
-					/>
-				</form>
-				{submitted && results.isLoading && <Skeleton className="h-20 w-full" />}
-				{submitted && !results.isLoading && (results.data ?? []).length === 0 && (
-					<p className="text-sm text-muted-foreground">No matches.</p>
-				)}
-				{(results.data ?? []).map((row) => (
-					<pre
-						key={row.serviceLogId}
-						className="overflow-x-auto rounded-md border bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap"
-					>
-						{row.body.slice(0, 2000)}
-					</pre>
-				))}
-			</CardContent>
-		</Card>
+					{row.body.slice(0, 2000)}
+				</pre>
+			))}
+		</SettingsSection>
 	);
 }

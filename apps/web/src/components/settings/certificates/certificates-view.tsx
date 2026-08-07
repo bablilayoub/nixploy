@@ -8,9 +8,9 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { QueryState } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
+import { SettingsSection } from "@/components/settings/settings-section";
 import { PageHeader, StatusDot } from "@/components/shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -116,11 +116,18 @@ export function CertificatesView() {
 	);
 
 	return (
-		<div className="flex flex-col gap-6">
+		<div className="flex flex-col gap-8">
 			<Dialog open={open} onOpenChange={setOpen}>
-				<PageHeader
-					title="Certificates"
-					description="Custom TLS certificates served by Traefik."
+				<PageHeader title="Certificates" description="Custom TLS certificates served by Traefik." />
+				<SettingsSection
+					title={
+						<span className="flex items-center gap-2">
+							<Award className="size-4 text-muted-foreground" />
+							Certificates
+						</span>
+					}
+					description="Certificates stored on this server."
+					wide
 					actions={
 						<DialogTrigger asChild>
 							<Button size="sm">
@@ -129,98 +136,84 @@ export function CertificatesView() {
 							</Button>
 						</DialogTrigger>
 					}
-				/>
-				<Card>
-					<CardHeader>
-						<CardTitle className="flex items-center gap-2">
-							<Award className="size-4 text-muted-foreground" />
-							Certificates
-						</CardTitle>
-						<CardDescription>Certificates stored on this server.</CardDescription>
-					</CardHeader>
-					<CardContent>
-						<QueryState
-							isPending={isPending}
-							isError={isError}
-							error={error}
-							onRetry={() => refetch()}
-							isEmpty={!certificates || certificates.length === 0}
-							skeleton={
-								<div className="grid gap-2">
-									<Skeleton className="h-10 w-full" />
-									<Skeleton className="h-10 w-full" />
-								</div>
-							}
-							empty={
-								<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-									<Award className="size-8 text-muted-foreground" />
-									<p className="text-sm text-muted-foreground">
-										No certificates yet. Add one to serve custom TLS certificates.
-									</p>
-								</div>
-							}
-						>
-							<Table>
-								<TableHeader>
-									<TableRow>
-										<TableHead>Name</TableHead>
-										<TableHead className="hidden md:table-cell">Path</TableHead>
-										<TableHead className="hidden md:table-cell">Server</TableHead>
-										<TableHead>Auto-renew</TableHead>
-										<TableHead className="hidden md:table-cell">Created</TableHead>
-										<TableHead className="w-12" />
+				>
+					<QueryState
+						isPending={isPending}
+						isError={isError}
+						error={error}
+						onRetry={() => refetch()}
+						isEmpty={!certificates || certificates.length === 0}
+						skeleton={
+							<div className="grid gap-2">
+								<Skeleton className="h-10 w-full" />
+								<Skeleton className="h-10 w-full" />
+							</div>
+						}
+						empty={
+							<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
+								<Award className="size-8 text-muted-foreground" />
+								<p className="text-sm text-muted-foreground">
+									No certificates yet. Add one to serve custom TLS certificates.
+								</p>
+							</div>
+						}
+					>
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>Name</TableHead>
+									<TableHead className="hidden md:table-cell">Path</TableHead>
+									<TableHead className="hidden md:table-cell">Server</TableHead>
+									<TableHead>Auto-renew</TableHead>
+									<TableHead className="hidden md:table-cell">Created</TableHead>
+									<TableHead className="w-12" />
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								{(certificates ?? []).map((certificate) => (
+									<TableRow key={certificate.certificateId}>
+										<TableCell className="font-medium">{certificate.name}</TableCell>
+										<TableCell className="hidden md:table-cell">
+											<code className="block max-w-56 truncate text-xs text-muted-foreground">
+												{certificate.certificatePath}
+											</code>
+										</TableCell>
+										<TableCell className="hidden text-muted-foreground md:table-cell">
+											{certificate.serverName ?? "This server"}
+										</TableCell>
+										<TableCell>
+											<span className="flex items-center gap-2 text-sm">
+												<StatusDot status={certificate.autoRenew ? "success" : "neutral"} />
+												{certificate.autoRenew ? "On" : "Off"}
+											</span>
+										</TableCell>
+										<TableCell className="hidden text-muted-foreground md:table-cell">
+											{format(new Date(certificate.createdAt), "MMM d, yyyy")}
+										</TableCell>
+										<TableCell>
+											<div className="flex items-center justify-end">
+												<Button variant="ghost" size="icon" onClick={() => setEditing(certificate)}>
+													<Pencil className="size-4" />
+													<span className="sr-only">Edit certificate</span>
+												</Button>
+												<ConfirmDeleteDialog
+													title="Remove certificate"
+													description={`Remove "${certificate.name}"? Domains using it will fall back to the default certificate.`}
+													isPending={deleteMutation.isPending}
+													onConfirm={() =>
+														deleteMutation.mutate({
+															certificateId: certificate.certificateId,
+														})
+													}
+												/>
+											</div>
+										</TableCell>
 									</TableRow>
-								</TableHeader>
-								<TableBody>
-									{(certificates ?? []).map((certificate) => (
-										<TableRow key={certificate.certificateId}>
-											<TableCell className="font-medium">{certificate.name}</TableCell>
-											<TableCell className="hidden md:table-cell">
-												<code className="block max-w-56 truncate text-xs text-muted-foreground">
-													{certificate.certificatePath}
-												</code>
-											</TableCell>
-											<TableCell className="hidden text-muted-foreground md:table-cell">
-												{certificate.serverName ?? "This server"}
-											</TableCell>
-											<TableCell>
-												<span className="flex items-center gap-2 text-sm">
-													<StatusDot status={certificate.autoRenew ? "success" : "neutral"} />
-													{certificate.autoRenew ? "On" : "Off"}
-												</span>
-											</TableCell>
-											<TableCell className="hidden text-muted-foreground md:table-cell">
-												{format(new Date(certificate.createdAt), "MMM d, yyyy")}
-											</TableCell>
-											<TableCell>
-												<div className="flex items-center justify-end">
-													<Button
-														variant="ghost"
-														size="icon"
-														onClick={() => setEditing(certificate)}
-													>
-														<Pencil className="size-4" />
-														<span className="sr-only">Edit certificate</span>
-													</Button>
-													<ConfirmDeleteDialog
-														title="Remove certificate"
-														description={`Remove "${certificate.name}"? Domains using it will fall back to the default certificate.`}
-														isPending={deleteMutation.isPending}
-														onConfirm={() =>
-															deleteMutation.mutate({
-																certificateId: certificate.certificateId,
-															})
-														}
-													/>
-												</div>
-											</TableCell>
-										</TableRow>
-									))}
-								</TableBody>
-							</Table>
-						</QueryState>
-					</CardContent>
-				</Card>
+								))}
+							</TableBody>
+						</Table>
+					</QueryState>
+				</SettingsSection>
 				<DialogContent className="max-w-2xl">
 					<DialogHeader>
 						<DialogTitle>Add certificate</DialogTitle>

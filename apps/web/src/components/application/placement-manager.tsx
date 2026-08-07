@@ -5,8 +5,8 @@ import { Loader2, Server } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useTRPC } from "@/lib/trpc";
 
@@ -47,19 +47,22 @@ export function PlacementManager({ application }: { application: Application }) 
 	);
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="flex items-center gap-2 text-sm font-medium">
+		<SettingsSection
+			title={
+				<span className="flex items-center gap-2">
 					<Server className="size-4" />
 					Placement
-				</CardTitle>
-				<CardDescription>
+				</span>
+			}
+			description={
+				<>
 					Docker Swarm constraints for where replicas run (one per line). Examples:{" "}
 					<code className="text-xs">node.role==worker</code>,{" "}
 					<code className="text-xs">node.labels.zone==eu</code>. Leave empty for any node.
-				</CardDescription>
-			</CardHeader>
-			<CardContent className="flex flex-col gap-3">
+				</>
+			}
+		>
+			<div className="flex flex-col gap-3">
 				<div className="grid gap-2">
 					<Label htmlFor="placement-constraints">Constraints</Label>
 					<textarea
@@ -84,7 +87,7 @@ export function PlacementManager({ application }: { application: Application }) 
 					{save.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
 					Save placement
 				</Button>
-			</CardContent>
-		</Card>
+			</div>
+		</SettingsSection>
 	);
 }

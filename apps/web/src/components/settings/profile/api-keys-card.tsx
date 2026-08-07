@@ -2,12 +2,12 @@
 
 import type { ApiKey } from "@better-auth/api-key";
 import { format } from "date-fns";
-import { Check, Copy, KeyRound, Loader2, Plus } from "lucide-react";
+import { Check, Copy, Loader2, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
+import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -35,6 +35,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { authClient } from "@/lib/auth-client";
 
 const EXPIRATION_OPTIONS = [
@@ -109,116 +110,108 @@ export function ApiKeysCard() {
 	}
 
 	return (
-		<Card>
-			<CardHeader>
-				<div className="flex items-center justify-between">
-					<div>
-						<CardTitle className="flex items-center gap-2">
-							<KeyRound className="size-4 text-muted-foreground" />
-							API Keys
-						</CardTitle>
-						<CardDescription>Personal API keys for the REST API and CLI.</CardDescription>
-					</div>
-					<Dialog
-						open={createOpen}
-						onOpenChange={(open) => {
-							setCreateOpen(open);
-							if (!open) setCreatedKey(null);
-						}}
-					>
-						<DialogTrigger asChild>
-							<Button size="sm">
-								<Plus className="size-4" />
-								Create API Key
-							</Button>
-						</DialogTrigger>
-						<DialogContent>
-							{createdKey ? (
-								<>
-									<DialogHeader>
-										<DialogTitle>API key created</DialogTitle>
-										<DialogDescription>
-											Copy this key now — it will not be shown again.
-										</DialogDescription>
-									</DialogHeader>
-									<div className="flex items-center gap-2">
-										<code className="flex-1 truncate rounded-md border bg-muted px-3 py-2 text-xs">
-											{createdKey}
-										</code>
-										<Button
-											type="button"
-											variant="outline"
-											size="icon"
-											aria-label="Copy API key"
-											onClick={copyKey}
-										>
-											{copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-										</Button>
+		<SettingsSection
+			title="API keys"
+			description="Personal API keys for the REST API and CLI."
+			wide
+			actions={
+				<Dialog
+					open={createOpen}
+					onOpenChange={(open) => {
+						setCreateOpen(open);
+						if (!open) setCreatedKey(null);
+					}}
+				>
+					<DialogTrigger asChild>
+						<Button size="sm">
+							<Plus className="size-4" />
+							Create API Key
+						</Button>
+					</DialogTrigger>
+					<DialogContent>
+						{createdKey ? (
+							<>
+								<DialogHeader>
+									<DialogTitle>API key created</DialogTitle>
+									<DialogDescription>
+										Copy this key now — it will not be shown again.
+									</DialogDescription>
+								</DialogHeader>
+								<div className="flex items-center gap-2">
+									<code className="flex-1 truncate rounded-md border bg-muted px-3 py-2 text-xs">
+										{createdKey}
+									</code>
+									<Button
+										type="button"
+										variant="outline"
+										size="icon"
+										aria-label="Copy API key"
+										onClick={copyKey}
+									>
+										{copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+									</Button>
+								</div>
+								<DialogFooter>
+									<Button onClick={() => setCreateOpen(false)}>Done</Button>
+								</DialogFooter>
+							</>
+						) : (
+							<>
+								<DialogHeader>
+									<DialogTitle>Create API key</DialogTitle>
+									<DialogDescription>
+										Give the key a name and an optional expiration.
+									</DialogDescription>
+								</DialogHeader>
+								<div className="grid gap-4">
+									<div className="grid gap-2">
+										<Label htmlFor="api-key-name">Name</Label>
+										<Input
+											id="api-key-name"
+											placeholder="e.g. CLI on my laptop"
+											value={name}
+											onChange={(e) => setName(e.target.value)}
+										/>
 									</div>
-									<DialogFooter>
-										<Button onClick={() => setCreateOpen(false)}>Done</Button>
-									</DialogFooter>
-								</>
-							) : (
-								<>
-									<DialogHeader>
-										<DialogTitle>Create API key</DialogTitle>
-										<DialogDescription>
-											Give the key a name and an optional expiration.
-										</DialogDescription>
-									</DialogHeader>
-									<div className="grid gap-4">
-										<div className="grid gap-2">
-											<Label htmlFor="api-key-name">Name</Label>
-											<Input
-												id="api-key-name"
-												placeholder="e.g. CLI on my laptop"
-												value={name}
-												onChange={(e) => setName(e.target.value)}
-											/>
-										</div>
-										<div className="grid gap-2">
-											<Label>Expires</Label>
-											<Select value={expiration} onValueChange={setExpiration}>
-												<SelectTrigger>
-													<SelectValue />
-												</SelectTrigger>
-												<SelectContent>
-													{EXPIRATION_OPTIONS.map((option) => (
-														<SelectItem key={option.value} value={option.value}>
-															{option.label}
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-										</div>
+									<div className="grid gap-2">
+										<Label>Expires</Label>
+										<Select value={expiration} onValueChange={setExpiration}>
+											<SelectTrigger>
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												{EXPIRATION_OPTIONS.map((option) => (
+													<SelectItem key={option.value} value={option.value}>
+														{option.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
 									</div>
-									<DialogFooter>
-										<Button disabled={isPending || !name} onClick={createKey}>
-											{isPending && <Loader2 className="size-4 animate-spin" />}
-											Create
-										</Button>
-									</DialogFooter>
-								</>
-							)}
-						</DialogContent>
-					</Dialog>
+								</div>
+								<DialogFooter>
+									<Button disabled={isPending || !name} onClick={createKey}>
+										{isPending && <Loader2 className="size-4 animate-spin" />}
+										Create
+									</Button>
+								</DialogFooter>
+							</>
+						)}
+					</DialogContent>
+				</Dialog>
+			}
+		>
+			{isLoading ? (
+				<div className="grid gap-2">
+					<Skeleton className="h-9 w-full" />
+					<Skeleton className="h-9 w-full" />
 				</div>
-			</CardHeader>
-			<CardContent>
-				{isLoading ? (
-					<div className="grid gap-2">
-						<Skeleton className="h-9 w-full" />
-						<Skeleton className="h-9 w-full" />
-					</div>
-				) : keys.length === 0 ? (
-					<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-						<KeyRound className="size-8 text-muted-foreground" />
-						<p className="text-sm text-muted-foreground">
-							No API keys yet. Create one to use the REST API or CLI.
-						</p>
-					</div>
-				) : (
+			) : keys.length === 0 ? (
+				<p className="text-sm text-muted-foreground">
+					No API keys yet. Create one to use the REST API or CLI.
+				</p>
+			) : (
+				<TableCard>
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -255,8 +248,8 @@ export function ApiKeysCard() {
 							))}
 						</TableBody>
 					</Table>
-				)}
-			</CardContent>
-		</Card>
+				</TableCard>
+			)}
+		</SettingsSection>
 	);
 }

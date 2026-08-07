@@ -13,8 +13,8 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -136,12 +136,8 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 	};
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="text-sm font-medium">Build</CardTitle>
-				<CardDescription>How the source is built into a deployable image.</CardDescription>
-			</CardHeader>
-			<CardContent className="flex flex-col gap-5">
+		<SettingsSection title="Build" description="How the source is built into a deployable image.">
+			<div className="flex flex-col gap-5">
 				<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
 					{BUILD_TYPES.map((option) => (
 						<button
@@ -261,38 +257,32 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 						Save Build
 					</Button>
 				</div>
-			</CardContent>
-		</Card>
+			</div>
+		</SettingsSection>
 	);
 }
 
 /** Shown for docker/drop sources: no build step, the image is used as-is. */
 export function BuildTypeInfoCard({ sourceType }: { sourceType: Application["sourceType"] }) {
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="text-sm font-medium">Build</CardTitle>
-				<CardDescription>How the source is built into a deployable image.</CardDescription>
-			</CardHeader>
-			<CardContent>
-				<div className="flex items-start gap-3 rounded-lg border border-dashed border-border p-4">
-					<Container className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-					<p className="text-sm text-muted-foreground">
-						{sourceType === "docker" ? (
-							<>
-								This application deploys a pre-built <strong>Docker image</strong> — there is no
-								build step. To build from source instead, switch the source type to Git and pick a
-								builder here (Nixpacks, Railpack, Dockerfile, Static, buildpacks).
-							</>
-						) : (
-							<>
-								This application deploys an <strong>uploaded zip</strong> — there is no build step.
-								To build from source instead, switch the source type to Git and pick a builder here.
-							</>
-						)}
-					</p>
-				</div>
-			</CardContent>
-		</Card>
+		<SettingsSection title="Build" description="How the source is built into a deployable image.">
+			<div className="flex items-start gap-3 rounded-lg border border-dashed border-border p-4">
+				<Container className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+				<p className="text-sm text-muted-foreground">
+					{sourceType === "docker" ? (
+						<>
+							This application deploys a pre-built <strong>Docker image</strong> — there is no build
+							step. To build from source instead, switch the source type to Git and pick a builder
+							here (Nixpacks, Railpack, Dockerfile, Static, buildpacks).
+						</>
+					) : (
+						<>
+							This application deploys an <strong>uploaded zip</strong> — there is no build step. To
+							build from source instead, switch the source type to Git and pick a builder here.
+						</>
+					)}
+				</p>
+			</div>
+		</SettingsSection>
 	);
 }

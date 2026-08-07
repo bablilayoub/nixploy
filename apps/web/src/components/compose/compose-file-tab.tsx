@@ -6,9 +6,9 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import type { ComposeService } from "@/components/compose/compose-detail";
+import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CodeEditor } from "@/components/ui/code-editor";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
@@ -51,19 +51,20 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 	};
 
 	return (
-		<div className="flex flex-col gap-4">
-			<Card>
-				<CardHeader className="flex-row items-center justify-between gap-4">
-					<div>
-						<CardTitle className="text-sm font-medium">Compose File</CardTitle>
-						<CardDescription>
-							{compose.sourceType === "raw"
-								? "This file is stored directly on the service."
-								: "Overwrites the compose file inside the local clone of the source."}{" "}
-							Use Copilot in the header to draft or rewrite YAML.
-						</CardDescription>
-					</div>
-					{!locked && (
+		<SettingsStack>
+			<SettingsSection
+				title="Compose File"
+				description={
+					<>
+						{compose.sourceType === "raw"
+							? "This file is stored directly on the service."
+							: "Overwrites the compose file inside the local clone of the source."}{" "}
+						Use Copilot in the header to draft or rewrite YAML.
+					</>
+				}
+				wide
+				actions={
+					!locked ? (
 						<div className="flex items-center gap-2">
 							<Button
 								size="sm"
@@ -86,57 +87,51 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 								{saveMutation.isPending ? "Saving…" : "Save"}
 							</Button>
 						</div>
-					)}
-				</CardHeader>
-				<CardContent>
-					<CodeEditor
-						value={value}
-						onChange={setValue}
-						locked={locked}
-						onLockedChange={(next) => {
-							if (!next) setValue(compose.composeFile);
-							setLocked(next);
-						}}
-						extensions={[yaml()]}
-						height="60vh"
-						className="[&_.cm-editor]:min-h-[60vh] [&_.cm-editor]:text-sm"
-						basicSetup={{ lineNumbers: true, foldGutter: true }}
-						lockMessage="Locked to prevent accidental edits. Unlock to change the compose file."
-					/>
-				</CardContent>
-			</Card>
+					) : undefined
+				}
+			>
+				<CodeEditor
+					value={value}
+					onChange={setValue}
+					locked={locked}
+					onLockedChange={(next) => {
+						if (!next) setValue(compose.composeFile);
+						setLocked(next);
+					}}
+					extensions={[yaml()]}
+					height="60vh"
+					className="[&_.cm-editor]:min-h-[60vh] [&_.cm-editor]:text-sm"
+					basicSetup={{ lineNumbers: true, foldGutter: true }}
+					lockMessage="Locked to prevent accidental edits. Unlock to change the compose file."
+				/>
+			</SettingsSection>
 
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-sm font-medium">Services</CardTitle>
-					<CardDescription>
-						Services defined by the compose file — used for domains and logs.
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					{servicesQuery.isLoading ? (
-						<div className="flex flex-wrap gap-2">
-							<Skeleton className="h-6 w-24" />
-							<Skeleton className="h-6 w-24" />
-						</div>
-					) : servicesQuery.isError ? (
-						<p className="text-sm text-muted-foreground">
-							Could not load services — the compose file may not be available yet. Deploy once, or
-							fix the compose file.
-						</p>
-					) : (servicesQuery.data ?? []).length === 0 ? (
-						<p className="text-sm text-muted-foreground">No services found in the compose file.</p>
-					) : (
-						<div className="flex flex-wrap gap-2">
-							{(servicesQuery.data ?? []).map((serviceName) => (
-								<Badge key={serviceName} variant="secondary">
-									{serviceName}
-								</Badge>
-							))}
-						</div>
-					)}
-				</CardContent>
-			</Card>
-		</div>
+			<SettingsSection
+				title="Services"
+				description="Services defined by the compose file — used for domains and logs."
+			>
+				{servicesQuery.isLoading ? (
+					<div className="flex flex-wrap gap-2">
+						<Skeleton className="h-6 w-24" />
+						<Skeleton className="h-6 w-24" />
+					</div>
+				) : servicesQuery.isError ? (
+					<p className="text-sm text-muted-foreground">
+						Could not load services — the compose file may not be available yet. Deploy once, or fix
+						the compose file.
+					</p>
+				) : (servicesQuery.data ?? []).length === 0 ? (
+					<p className="text-sm text-muted-foreground">No services found in the compose file.</p>
+				) : (
+					<div className="flex flex-wrap gap-2">
+						{(servicesQuery.data ?? []).map((serviceName) => (
+							<Badge key={serviceName} variant="secondary">
+								{serviceName}
+							</Badge>
+						))}
+					</div>
+				)}
+			</SettingsSection>
+		</SettingsStack>
 	);
 }

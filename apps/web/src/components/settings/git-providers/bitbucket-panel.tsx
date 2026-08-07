@@ -6,8 +6,8 @@ import { Loader2, Plug, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
+import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -87,177 +87,169 @@ export function BitbucketPanel() {
 	);
 
 	return (
-		<Card>
-			<CardHeader>
-				<div className="flex items-center justify-between">
-					<div>
-						<CardTitle>Bitbucket</CardTitle>
-						<CardDescription>
-							Bitbucket Cloud workspaces connected with an API token or app password.
-						</CardDescription>
-					</div>
-					<Dialog open={open} onOpenChange={setOpen}>
-						<DialogTrigger asChild>
-							<Button size="sm">
-								<Plus className="size-4" />
-								Add Bitbucket Provider
-							</Button>
-						</DialogTrigger>
-						<DialogContent>
-							<DialogHeader>
-								<DialogTitle>Add Bitbucket provider</DialogTitle>
-								<DialogDescription>
-									Use an API token, or a username + app password.
-								</DialogDescription>
-							</DialogHeader>
-							<div className="grid gap-4">
-								<div className="grid gap-2">
-									<Label htmlFor="bb-name">Name</Label>
-									<Input id="bb-name" value={name} onChange={(e) => setName(e.target.value)} />
-								</div>
-								<div className="grid gap-2">
-									<Label htmlFor="bb-workspace">Workspace name</Label>
-									<Input
-										id="bb-workspace"
-										value={workspace}
-										onChange={(e) => setWorkspace(e.target.value)}
-									/>
-								</div>
-								<div className="grid gap-2">
-									<Label htmlFor="bb-api-token">API token</Label>
-									<Input
-										id="bb-api-token"
-										type="password"
-										value={apiToken}
-										onChange={(e) => setApiToken(e.target.value)}
-									/>
-								</div>
-								<div className="grid gap-2">
-									<Label htmlFor="bb-username">Username (for app password)</Label>
-									<Input
-										id="bb-username"
-										value={username}
-										onChange={(e) => setUsername(e.target.value)}
-									/>
-								</div>
-								<div className="grid gap-2">
-									<Label htmlFor="bb-app-password">App password</Label>
-									<Input
-										id="bb-app-password"
-										type="password"
-										value={appPassword}
-										onChange={(e) => setAppPassword(e.target.value)}
-									/>
-								</div>
-							</div>
-							<DialogFooter>
-								<Button
-									disabled={
-										createMutation.isPending || !name || (!apiToken && !(username && appPassword))
-									}
-									onClick={() =>
-										createMutation.mutate({
-											name,
-											bitbucketWorkspaceName: workspace || undefined,
-											bitbucketUsername: username || undefined,
-											appPassword: appPassword || undefined,
-											apiToken: apiToken || undefined,
-										})
-									}
-								>
-									{createMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-									Add provider
-								</Button>
-							</DialogFooter>
-						</DialogContent>
-					</Dialog>
-				</div>
-			</CardHeader>
-			<CardContent>
-				{isPending ? (
-					<div className="grid gap-2">
-						<Skeleton className="h-10 w-full" />
-						<Skeleton className="h-10 w-full" />
-					</div>
-				) : isError ? (
-					<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-						<p className="text-sm font-medium">Could not load Bitbucket providers</p>
-						<p className="text-sm text-muted-foreground">
-							{error.message || "Try again in a moment."}
-						</p>
-						<Button variant="outline" size="sm" onClick={() => void refetch()}>
-							Retry
+		<SettingsSection
+			title="Bitbucket"
+			description="Bitbucket Cloud workspaces connected with an API token or app password."
+			wide
+			actions={
+				<Dialog open={open} onOpenChange={setOpen}>
+					<DialogTrigger asChild>
+						<Button size="sm">
+							<Plus className="size-4" />
+							Add Bitbucket Provider
 						</Button>
-					</div>
-				) : !providers || providers.length === 0 ? (
-					<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-						<p className="text-sm text-muted-foreground">No Bitbucket providers yet.</p>
-					</div>
-				) : (
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead>Name</TableHead>
-								<TableHead>Workspace</TableHead>
-								<TableHead>Username</TableHead>
-								<TableHead>Created</TableHead>
-								<TableHead className="w-24 text-right">Actions</TableHead>
+					</DialogTrigger>
+					<DialogContent>
+						<DialogHeader>
+							<DialogTitle>Add Bitbucket provider</DialogTitle>
+							<DialogDescription>Use an API token, or a username + app password.</DialogDescription>
+						</DialogHeader>
+						<div className="grid gap-4">
+							<div className="grid gap-2">
+								<Label htmlFor="bb-name">Name</Label>
+								<Input id="bb-name" value={name} onChange={(e) => setName(e.target.value)} />
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="bb-workspace">Workspace name</Label>
+								<Input
+									id="bb-workspace"
+									value={workspace}
+									onChange={(e) => setWorkspace(e.target.value)}
+								/>
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="bb-api-token">API token</Label>
+								<Input
+									id="bb-api-token"
+									type="password"
+									value={apiToken}
+									onChange={(e) => setApiToken(e.target.value)}
+								/>
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="bb-username">Username (for app password)</Label>
+								<Input
+									id="bb-username"
+									value={username}
+									onChange={(e) => setUsername(e.target.value)}
+								/>
+							</div>
+							<div className="grid gap-2">
+								<Label htmlFor="bb-app-password">App password</Label>
+								<Input
+									id="bb-app-password"
+									type="password"
+									value={appPassword}
+									onChange={(e) => setAppPassword(e.target.value)}
+								/>
+							</div>
+						</div>
+						<DialogFooter>
+							<Button
+								disabled={
+									createMutation.isPending || !name || (!apiToken && !(username && appPassword))
+								}
+								onClick={() =>
+									createMutation.mutate({
+										name,
+										bitbucketWorkspaceName: workspace || undefined,
+										bitbucketUsername: username || undefined,
+										appPassword: appPassword || undefined,
+										apiToken: apiToken || undefined,
+									})
+								}
+							>
+								{createMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+								Add provider
+							</Button>
+						</DialogFooter>
+					</DialogContent>
+				</Dialog>
+			}
+		>
+			{isPending ? (
+				<div className="grid gap-2">
+					<Skeleton className="h-10 w-full" />
+					<Skeleton className="h-10 w-full" />
+				</div>
+			) : isError ? (
+				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
+					<p className="text-sm font-medium">Could not load Bitbucket providers</p>
+					<p className="text-sm text-muted-foreground">
+						{error.message || "Try again in a moment."}
+					</p>
+					<Button variant="outline" size="sm" onClick={() => void refetch()}>
+						Retry
+					</Button>
+				</div>
+			) : !providers || providers.length === 0 ? (
+				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
+					<p className="text-sm text-muted-foreground">No Bitbucket providers yet.</p>
+				</div>
+			) : (
+				<Table>
+					<TableHeader>
+						<TableRow>
+							<TableHead>Name</TableHead>
+							<TableHead>Workspace</TableHead>
+							<TableHead>Username</TableHead>
+							<TableHead>Created</TableHead>
+							<TableHead className="w-24 text-right">Actions</TableHead>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{providers.map(({ bitbucket, gitProvider }) => (
+							<TableRow key={bitbucket.bitbucketId}>
+								<TableCell className="font-medium">{gitProvider.name}</TableCell>
+								<TableCell className="text-muted-foreground">
+									{bitbucket.bitbucketWorkspaceName ?? "—"}
+								</TableCell>
+								<TableCell className="text-muted-foreground">
+									{bitbucket.bitbucketUsername ?? "—"}
+								</TableCell>
+								<TableCell className="text-muted-foreground">
+									{format(new Date(bitbucket.createdAt), "MMM d, yyyy")}
+								</TableCell>
+								<TableCell>
+									<div className="flex items-center justify-end">
+										<Button
+											variant="ghost"
+											size="icon"
+											disabled={
+												testMutation.isPending &&
+												testMutation.variables?.bitbucketId === bitbucket.bitbucketId
+											}
+											onClick={() =>
+												testMutation.mutate({
+													bitbucketId: bitbucket.bitbucketId,
+												})
+											}
+										>
+											{testMutation.isPending &&
+											testMutation.variables?.bitbucketId === bitbucket.bitbucketId ? (
+												<Loader2 className="size-4 animate-spin" />
+											) : (
+												<Plug className="size-4" />
+											)}
+											<span className="sr-only">Test connection</span>
+										</Button>
+										<ConfirmDeleteDialog
+											title="Remove Bitbucket provider"
+											description={`Remove "${gitProvider.name}"?`}
+											isPending={removeMutation.isPending}
+											onConfirm={() =>
+												removeMutation.mutate({
+													bitbucketId: bitbucket.bitbucketId,
+												})
+											}
+										/>
+									</div>
+								</TableCell>
 							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{providers.map(({ bitbucket, gitProvider }) => (
-								<TableRow key={bitbucket.bitbucketId}>
-									<TableCell className="font-medium">{gitProvider.name}</TableCell>
-									<TableCell className="text-muted-foreground">
-										{bitbucket.bitbucketWorkspaceName ?? "—"}
-									</TableCell>
-									<TableCell className="text-muted-foreground">
-										{bitbucket.bitbucketUsername ?? "—"}
-									</TableCell>
-									<TableCell className="text-muted-foreground">
-										{format(new Date(bitbucket.createdAt), "MMM d, yyyy")}
-									</TableCell>
-									<TableCell>
-										<div className="flex items-center justify-end">
-											<Button
-												variant="ghost"
-												size="icon"
-												disabled={
-													testMutation.isPending &&
-													testMutation.variables?.bitbucketId === bitbucket.bitbucketId
-												}
-												onClick={() =>
-													testMutation.mutate({
-														bitbucketId: bitbucket.bitbucketId,
-													})
-												}
-											>
-												{testMutation.isPending &&
-												testMutation.variables?.bitbucketId === bitbucket.bitbucketId ? (
-													<Loader2 className="size-4 animate-spin" />
-												) : (
-													<Plug className="size-4" />
-												)}
-												<span className="sr-only">Test connection</span>
-											</Button>
-											<ConfirmDeleteDialog
-												title="Remove Bitbucket provider"
-												description={`Remove "${gitProvider.name}"?`}
-												isPending={removeMutation.isPending}
-												onConfirm={() =>
-													removeMutation.mutate({
-														bitbucketId: bitbucket.bitbucketId,
-													})
-												}
-											/>
-										</div>
-									</TableCell>
-								</TableRow>
-							))}
-						</TableBody>
-					</Table>
-				)}
-			</CardContent>
-		</Card>
+						))}
+					</TableBody>
+				</Table>
+			)}
+		</SettingsSection>
 	);
 }

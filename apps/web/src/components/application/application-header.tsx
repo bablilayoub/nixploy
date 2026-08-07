@@ -127,6 +127,7 @@ export function ApplicationHeader({
 					</Button>
 					<Button
 						variant="outline"
+						className="hidden sm:inline-flex"
 						onClick={() => redeploy.mutate({ applicationId })}
 						disabled={isBusy}
 					>
@@ -140,6 +141,7 @@ export function ApplicationHeader({
 					{isRunning ? (
 						<Button
 							variant="outline"
+							className="hidden sm:inline-flex"
 							onClick={() => stop.mutate({ applicationId })}
 							disabled={isBusy}
 						>
@@ -153,6 +155,7 @@ export function ApplicationHeader({
 					) : (
 						<Button
 							variant="outline"
+							className="hidden sm:inline-flex"
 							onClick={() => start.mutate({ applicationId })}
 							disabled={isBusy}
 						>

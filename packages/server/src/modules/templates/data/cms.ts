@@ -244,7 +244,7 @@ volumes:
 		name: "NocoDB",
 		description:
 			"Open-source Airtable alternative — turn any database into a smart spreadsheet with views and automations.",
-		logo: "",
+		logo: "https://avatars.githubusercontent.com/u/55782844?s=64&v=4",
 		tags: ["database", "nocode", "spreadsheet"],
 		links: {
 			website: "https://nocodb.com",
@@ -285,7 +285,7 @@ volumes:
 		name: "Halo",
 		description:
 			"Modern open-source publishing platform — clean editor, themes and plugins, popular in the blogging community.",
-		logo: "",
+		logo: "https://www.halo.run/upload/logo.png",
 		tags: ["cms", "blog", "publishing"],
 		links: {
 			website: "https://www.halo.run",

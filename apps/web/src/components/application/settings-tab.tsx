@@ -1,23 +1,13 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Trash2, TriangleAlert } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
-import {
-	AlertDialog,
-	AlertDialogAction,
-	AlertDialogCancel,
-	AlertDialogContent,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogHeader,
-	AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { DangerZone } from "@/components/services/danger-zone";
+import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,7 +29,6 @@ export function SettingsTab({
 
 	const [name, setName] = useState(application.name);
 	const [description, setDescription] = useState(application.description ?? "");
-	const [deleteOpen, setDeleteOpen] = useState(false);
 
 	useEffect(() => {
 		setName(application.name);
@@ -75,13 +64,12 @@ export function SettingsTab({
 	);
 
 	return (
-		<div className="flex flex-col gap-6">
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-sm font-medium">General</CardTitle>
-					<CardDescription>Rename the application or change its description.</CardDescription>
-				</CardHeader>
-				<CardContent className="flex flex-col gap-4">
+		<SettingsStack>
+			<SettingsSection
+				title="General"
+				description="Rename the application or change its description."
+			>
+				<div className="flex flex-col gap-4">
 					<div className="flex flex-col gap-2">
 						<Label htmlFor="app-name">Name</Label>
 						<Input
@@ -116,51 +104,18 @@ export function SettingsTab({
 							Save
 						</Button>
 					</div>
-				</CardContent>
-			</Card>
+				</div>
+			</SettingsSection>
 
-			<Card className="border-destructive/50">
-				<CardHeader>
-					<CardTitle className="flex items-center gap-2 text-sm font-medium text-destructive">
-						<TriangleAlert className="size-4" />
-						Danger Zone
-					</CardTitle>
-					<CardDescription>
-						Deleting an application removes its swarm service, routes, domains, mounts and
-						deployment history. This action is irreversible.
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<Button variant="destructive" onClick={() => setDeleteOpen(true)}>
-						<Trash2 className="size-4" />
-						Delete Application
-					</Button>
-				</CardContent>
-			</Card>
-
-			<AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>Delete {application.name}?</AlertDialogTitle>
-						<AlertDialogDescription>
-							This permanently deletes the application{" "}
-							<span className="font-medium">{application.name}</span> (
-							<code className="rounded bg-muted px-1">{application.appName}</code>), stops its
-							containers and removes its routing configuration. This cannot be undone.
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
-						<AlertDialogAction
-							onClick={() => remove.mutate({ applicationId })}
-							disabled={remove.isPending}
-						>
-							{remove.isPending && <Loader2 className="size-4 animate-spin" />}
-							Delete Application
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
-		</div>
+			<DangerZone
+				title="Delete application"
+				description="Deleting an application removes its swarm service, routes, domains, mounts and deployment history. This action is irreversible."
+				actionLabel="Delete Application"
+				requireText={application.name}
+				onConfirm={async () => {
+					await remove.mutateAsync({ applicationId });
+				}}
+			/>
+		</SettingsStack>
 	);
 }

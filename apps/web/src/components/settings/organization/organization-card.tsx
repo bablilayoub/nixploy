@@ -1,12 +1,12 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Palette } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
@@ -78,13 +78,12 @@ export function OrganizationCard() {
 	}
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle>Organization</CardTitle>
-				<CardDescription>General settings for your active organization.</CardDescription>
-			</CardHeader>
-			<CardContent className="grid gap-8">
-				<form onSubmit={onNameSubmit} className="grid max-w-sm gap-4">
+		<>
+			<SettingsSection
+				title="Organization"
+				description="General settings for your active organization."
+			>
+				<form onSubmit={onNameSubmit} className="grid gap-4">
 					<div className="grid gap-2">
 						<Label htmlFor="org-name">Name</Label>
 						<Input
@@ -109,12 +108,13 @@ export function OrganizationCard() {
 						</Button>
 					</div>
 				</form>
+			</SettingsSection>
 
-				<form onSubmit={onBrandingSubmit} className="grid max-w-sm gap-4 border-t pt-6">
-					<div className="flex items-center gap-2 text-sm font-medium">
-						<Palette className="size-4 text-muted-foreground" />
-						White-label branding
-					</div>
+			<SettingsSection
+				title="White-label branding"
+				description="Customize how your organization appears in the shell."
+			>
+				<form onSubmit={onBrandingSubmit} className="grid gap-4">
 					<div className="grid gap-2">
 						<Label htmlFor="org-display-name">Display name</Label>
 						<Input
@@ -162,7 +162,7 @@ export function OrganizationCard() {
 						</Button>
 					</div>
 				</form>
-			</CardContent>
-		</Card>
+			</SettingsSection>
+		</>
 	);
 }

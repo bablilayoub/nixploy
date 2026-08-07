@@ -25,6 +25,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { useTRPC } from "@/lib/trpc";
 
 const PAGE_SIZE = 50;
@@ -176,7 +177,7 @@ export function ActivityView() {
 					</div>
 				}
 			>
-				<div className="overflow-x-auto rounded-lg border border-border">
+				<TableCard>
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -212,7 +213,7 @@ export function ActivityView() {
 							))}
 						</TableBody>
 					</Table>
-				</div>
+				</TableCard>
 			</QueryState>
 
 			{pageCount > 1 && (

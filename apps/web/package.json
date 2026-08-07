@@ -18,6 +18,7 @@
 		"@lezer/highlight": "^1.2.3",
 		"@nixploy/server": "workspace:*",
 		"@tanstack/react-query": "^5.90.20",
+		"@tanstack/react-table": "^8.21.3",
 		"@trpc/client": "^11.18.0",
 		"@trpc/server": "^11.18.0",
 		"@trpc/tanstack-react-query": "^11.18.0",

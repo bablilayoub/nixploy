@@ -47,6 +47,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { Textarea } from "@/components/ui/textarea";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -225,7 +226,7 @@ export function SchedulesView() {
 		<div className="flex flex-col gap-6">
 			<PageHeader
 				title="Schedules"
-				description="Cron jobs across services, managed servers, and this Nixploy host. Per-service schedules also live on each service’s Schedules tab."
+				description="Cron jobs for services, servers, and this host."
 				actions={
 					<Button size="sm" onClick={() => setDialogOpen(true)}>
 						<Plus className="size-4" />
@@ -258,7 +259,7 @@ export function SchedulesView() {
 					</div>
 				}
 			>
-				<div className="rounded-lg border">
+				<TableCard>
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -340,7 +341,7 @@ export function SchedulesView() {
 							))}
 						</TableBody>
 					</Table>
-				</div>
+				</TableCard>
 			</QueryState>
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

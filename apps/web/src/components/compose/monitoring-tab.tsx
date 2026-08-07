@@ -3,23 +3,19 @@
 import type { ComposeService } from "@/components/compose/compose-detail";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
 import { ServiceAlertRulesCard } from "@/components/services/service-alert-rules-card";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 
 export function MonitoringTab({ compose }: { compose: ComposeService }) {
 	return (
-		<div className="flex flex-col gap-6">
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-sm font-medium">Monitoring</CardTitle>
-					<CardDescription>
-						Live CPU, memory and network usage of the compose containers.
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<MonitoringCharts appName={compose.appName} serverId={compose.serverId} />
-				</CardContent>
-			</Card>
+		<SettingsStack>
+			<SettingsSection
+				title="Monitoring"
+				description="CPU, memory, and network."
+				bare
+			>
+				<MonitoringCharts appName={compose.appName} serverId={compose.serverId} />
+			</SettingsSection>
 			<ServiceAlertRulesCard composeId={compose.composeId} />
-		</div>
+		</SettingsStack>
 	);
 }

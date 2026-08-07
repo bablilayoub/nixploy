@@ -12,9 +12,9 @@ import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog
 import { CreateServerDialog } from "@/components/settings/servers/create-server-dialog";
 import { ServerCapacityCell } from "@/components/settings/servers/server-capacity-cell";
 import { ServerStatsPopover } from "@/components/settings/servers/server-stats-popover";
+import { SettingsSection } from "@/components/settings/settings-section";
 import { PageHeader, StatusDot } from "@/components/shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -131,7 +131,7 @@ export function ServersView() {
 	);
 
 	return (
-		<div className="flex flex-col gap-4">
+		<div className="flex flex-col gap-8">
 			<PageHeader
 				title="Servers"
 				description={
@@ -143,164 +143,164 @@ export function ServersView() {
 						. Pin apps with Advanced → Placement constraints.
 					</span>
 				}
-				actions={<CreateServerDialog />}
 			/>
-			<Card>
-				<CardContent>
-					<QueryState
-						isPending={isPending}
-						isError={isError}
-						error={error}
-						onRetry={() => refetch()}
-						isEmpty={!servers || servers.length === 0}
-						skeleton={
-							<div className="grid gap-2">
-								<Skeleton className="h-10 w-full" />
-								<Skeleton className="h-10 w-full" />
-							</div>
-						}
-						empty={
-							<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-								<Server className="size-8 text-muted-foreground" />
-								<p className="text-sm text-muted-foreground">
-									No servers yet. Add one to deploy workloads on remote hosts.
-								</p>
-							</div>
-						}
-					>
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Name</TableHead>
-									<TableHead className="hidden md:table-cell">Address</TableHead>
-									<TableHead className="hidden sm:table-cell">Role</TableHead>
-									<TableHead>Status</TableHead>
-									<TableHead className="hidden lg:table-cell">Capacity</TableHead>
-									<TableHead className="hidden md:table-cell">Added</TableHead>
-									<TableHead className="w-36 text-right">Actions</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{(servers ?? []).map((server) => (
-									<TableRow key={server.serverId}>
-										<TableCell>
-											<div className="grid">
-												<span className="font-medium">{server.name}</span>
-												{server.description && (
-													<span className="text-xs text-muted-foreground">
-														{server.description}
-													</span>
-												)}
-											</div>
-										</TableCell>
-										<TableCell className="hidden md:table-cell">
-											<code className="text-xs text-muted-foreground">
-												{server.username}@{server.ipAddress}:{server.port}
-											</code>
-										</TableCell>
-										<TableCell className="hidden text-sm capitalize sm:table-cell">
-											{server.swarmRole}
-										</TableCell>
-										<TableCell>
-											<span className="flex items-center gap-2 text-sm">
-												<StatusDot
-													status={server.serverStatus === "active" ? "success" : "neutral"}
-												/>
-												{server.serverStatus}
-											</span>
-										</TableCell>
-										<TableCell className="hidden lg:table-cell">
-											<ServerCapacityCell
-												stats={statsByServerId?.[server.serverId]}
-												isPending={serverIds.length > 0 && statsPending}
+			<SettingsSection
+				title="Servers"
+				description="Remote Docker hosts connected over SSH."
+				wide
+				actions={<CreateServerDialog />}
+			>
+				<QueryState
+					isPending={isPending}
+					isError={isError}
+					error={error}
+					onRetry={() => refetch()}
+					isEmpty={!servers || servers.length === 0}
+					skeleton={
+						<div className="grid gap-2">
+							<Skeleton className="h-10 w-full" />
+							<Skeleton className="h-10 w-full" />
+						</div>
+					}
+					empty={
+						<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
+							<Server className="size-8 text-muted-foreground" />
+							<p className="text-sm text-muted-foreground">
+								No servers yet. Add one to deploy workloads on remote hosts.
+							</p>
+						</div>
+					}
+				>
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>Name</TableHead>
+								<TableHead className="hidden md:table-cell">Address</TableHead>
+								<TableHead className="hidden sm:table-cell">Role</TableHead>
+								<TableHead>Status</TableHead>
+								<TableHead className="hidden lg:table-cell">Capacity</TableHead>
+								<TableHead className="hidden md:table-cell">Added</TableHead>
+								<TableHead className="w-36 text-right">Actions</TableHead>
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{(servers ?? []).map((server) => (
+								<TableRow key={server.serverId}>
+									<TableCell>
+										<div className="grid">
+											<span className="font-medium">{server.name}</span>
+											{server.description && (
+												<span className="text-xs text-muted-foreground">{server.description}</span>
+											)}
+										</div>
+									</TableCell>
+									<TableCell className="hidden md:table-cell">
+										<code className="text-xs text-muted-foreground">
+											{server.username}@{server.ipAddress}:{server.port}
+										</code>
+									</TableCell>
+									<TableCell className="hidden text-sm capitalize sm:table-cell">
+										{server.swarmRole}
+									</TableCell>
+									<TableCell>
+										<span className="flex items-center gap-2 text-sm">
+											<StatusDot
+												status={server.serverStatus === "active" ? "success" : "neutral"}
 											/>
-										</TableCell>
-										<TableCell className="hidden text-muted-foreground md:table-cell">
-											{format(new Date(server.createdAt), "MMM d, yyyy")}
-										</TableCell>
-										<TableCell>
-											<div className="flex items-center justify-end">
-												<ServerStatsPopover serverId={server.serverId} />
-												<Tooltip>
-													<TooltipTrigger asChild>
-														<Button
-															variant="ghost"
-															size="icon"
-															disabled={
-																testMutation.isPending &&
-																testMutation.variables?.serverId === server.serverId
-															}
-															onClick={() =>
-																testMutation.mutate({
-																	serverId: server.serverId,
-																})
-															}
-														>
-															{testMutation.isPending &&
-															testMutation.variables?.serverId === server.serverId ? (
-																<Loader2 className="size-4 animate-spin" />
-															) : (
-																<Plug className="size-4" />
-															)}
-															<span className="sr-only">Test connection</span>
-														</Button>
-													</TooltipTrigger>
-													<TooltipContent>Test connection</TooltipContent>
-												</Tooltip>
-												<Tooltip>
-													<TooltipTrigger asChild>
-														<Button
-															variant="ghost"
-															size="icon"
-															disabled={
-																setupMutation.isPending &&
-																setupMutation.variables?.serverId === server.serverId
-															}
-															onClick={() =>
-																setupMutation.mutate({
-																	serverId: server.serverId,
-																})
-															}
-														>
-															{setupMutation.isPending &&
-															setupMutation.variables?.serverId === server.serverId ? (
-																<Loader2 className="size-4 animate-spin" />
-															) : (
-																<Wrench className="size-4" />
-															)}
-															<span className="sr-only">Run setup</span>
-														</Button>
-													</TooltipTrigger>
-													<TooltipContent>Run setup (Docker + Swarm join)</TooltipContent>
-												</Tooltip>
-												<Tooltip>
-													<TooltipTrigger asChild>
-														<Button variant="ghost" size="icon" onClick={() => setEditing(server)}>
-															<Pencil className="size-4" />
-															<span className="sr-only">Edit server</span>
-														</Button>
-													</TooltipTrigger>
-													<TooltipContent>Edit server</TooltipContent>
-												</Tooltip>
-												<ConfirmDeleteDialog
-													title="Remove server"
-													description={`Remove "${server.name}" from this organization? The host itself is not touched.`}
-													isPending={removeMutation.isPending}
-													onConfirm={() =>
-														removeMutation.mutate({
-															serverId: server.serverId,
-														})
-													}
-												/>
-											</div>
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					</QueryState>
-				</CardContent>
-			</Card>
+											{server.serverStatus}
+										</span>
+									</TableCell>
+									<TableCell className="hidden lg:table-cell">
+										<ServerCapacityCell
+											stats={statsByServerId?.[server.serverId]}
+											isPending={serverIds.length > 0 && statsPending}
+										/>
+									</TableCell>
+									<TableCell className="hidden text-muted-foreground md:table-cell">
+										{format(new Date(server.createdAt), "MMM d, yyyy")}
+									</TableCell>
+									<TableCell>
+										<div className="flex items-center justify-end">
+											<ServerStatsPopover serverId={server.serverId} />
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<Button
+														variant="ghost"
+														size="icon"
+														disabled={
+															testMutation.isPending &&
+															testMutation.variables?.serverId === server.serverId
+														}
+														onClick={() =>
+															testMutation.mutate({
+																serverId: server.serverId,
+															})
+														}
+													>
+														{testMutation.isPending &&
+														testMutation.variables?.serverId === server.serverId ? (
+															<Loader2 className="size-4 animate-spin" />
+														) : (
+															<Plug className="size-4" />
+														)}
+														<span className="sr-only">Test connection</span>
+													</Button>
+												</TooltipTrigger>
+												<TooltipContent>Test connection</TooltipContent>
+											</Tooltip>
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<Button
+														variant="ghost"
+														size="icon"
+														disabled={
+															setupMutation.isPending &&
+															setupMutation.variables?.serverId === server.serverId
+														}
+														onClick={() =>
+															setupMutation.mutate({
+																serverId: server.serverId,
+															})
+														}
+													>
+														{setupMutation.isPending &&
+														setupMutation.variables?.serverId === server.serverId ? (
+															<Loader2 className="size-4 animate-spin" />
+														) : (
+															<Wrench className="size-4" />
+														)}
+														<span className="sr-only">Run setup</span>
+													</Button>
+												</TooltipTrigger>
+												<TooltipContent>Run setup (Docker + Swarm join)</TooltipContent>
+											</Tooltip>
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<Button variant="ghost" size="icon" onClick={() => setEditing(server)}>
+														<Pencil className="size-4" />
+														<span className="sr-only">Edit server</span>
+													</Button>
+												</TooltipTrigger>
+												<TooltipContent>Edit server</TooltipContent>
+											</Tooltip>
+											<ConfirmDeleteDialog
+												title="Remove server"
+												description={`Remove "${server.name}" from this organization? The host itself is not touched.`}
+												isPending={removeMutation.isPending}
+												onConfirm={() =>
+													removeMutation.mutate({
+														serverId: server.serverId,
+													})
+												}
+											/>
+										</div>
+									</TableCell>
+								</TableRow>
+							))}
+						</TableBody>
+					</Table>
+				</QueryState>
+			</SettingsSection>
 			<Dialog open={editing !== null} onOpenChange={(isOpen) => !isOpen && setEditing(null)}>
 				<DialogContent>
 					<DialogHeader>

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
+import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -16,7 +16,6 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
@@ -59,12 +58,9 @@ export function SystemTab({ serverId }: DockerTabProps) {
 	const server = info?.version?.Server;
 
 	return (
-		<div className="grid gap-4 pt-4 lg:grid-cols-2">
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-sm font-medium">Engine</CardTitle>
-				</CardHeader>
-				<CardContent className="space-y-2 text-sm">
+		<SettingsStack className="pt-4 lg:grid lg:grid-cols-2">
+			<SettingsSection title="Engine">
+				<div className="space-y-2 text-sm">
 					<div className="flex justify-between">
 						<span className="text-muted-foreground">Server version</span>
 						<span className="font-mono text-xs">{server?.Version ?? "—"}</span>
@@ -75,17 +71,13 @@ export function SystemTab({ serverId }: DockerTabProps) {
 							{server?.Os ?? "—"} / {server?.Arch ?? "—"}
 						</span>
 					</div>
-				</CardContent>
-			</Card>
+				</div>
+			</SettingsSection>
 
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-sm font-medium">Cleanup</CardTitle>
-				</CardHeader>
-				<CardContent className="space-y-2">
-					<p className="text-xs text-muted-foreground">
-						Remove stopped containers, unused networks and dangling images.
-					</p>
+			<SettingsSection
+				title="Cleanup"
+				description="Remove stopped containers, unused networks and dangling images."
+				actions={
 					<div className="flex gap-2">
 						<Button variant="outline" size="sm" onClick={() => setPruneOpen("simple")}>
 							System prune
@@ -94,38 +86,33 @@ export function SystemTab({ serverId }: DockerTabProps) {
 							Prune incl. volumes
 						</Button>
 					</div>
-				</CardContent>
-			</Card>
+				}
+			/>
 
-			<Card className="lg:col-span-2">
-				<CardHeader>
-					<CardTitle className="text-sm font-medium">Disk usage</CardTitle>
-				</CardHeader>
-				<CardContent>
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead>Type</TableHead>
-								<TableHead>Total</TableHead>
-								<TableHead>Active</TableHead>
-								<TableHead>Size</TableHead>
-								<TableHead>Reclaimable</TableHead>
+			<SettingsSection title="Disk usage" className="lg:col-span-2">
+				<Table>
+					<TableHeader>
+						<TableRow>
+							<TableHead>Type</TableHead>
+							<TableHead>Total</TableHead>
+							<TableHead>Active</TableHead>
+							<TableHead>Size</TableHead>
+							<TableHead>Reclaimable</TableHead>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{(info?.df ?? []).map((row) => (
+							<TableRow key={row.Type}>
+								<TableCell className="text-xs font-medium">{row.Type}</TableCell>
+								<TableCell className="text-xs">{row.TotalCount}</TableCell>
+								<TableCell className="text-xs">{row.Active}</TableCell>
+								<TableCell className="font-mono text-xs">{row.Size}</TableCell>
+								<TableCell className="font-mono text-xs">{row.Reclaimable}</TableCell>
 							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{(info?.df ?? []).map((row) => (
-								<TableRow key={row.Type}>
-									<TableCell className="text-xs font-medium">{row.Type}</TableCell>
-									<TableCell className="text-xs">{row.TotalCount}</TableCell>
-									<TableCell className="text-xs">{row.Active}</TableCell>
-									<TableCell className="font-mono text-xs">{row.Size}</TableCell>
-									<TableCell className="font-mono text-xs">{row.Reclaimable}</TableCell>
-								</TableRow>
-							))}
-						</TableBody>
-					</Table>
-				</CardContent>
-			</Card>
+						))}
+					</TableBody>
+				</Table>
+			</SettingsSection>
 
 			<AlertDialog open={pruneOpen !== null} onOpenChange={(open) => !open && setPruneOpen(null)}>
 				<AlertDialogContent>
@@ -159,6 +146,6 @@ export function SystemTab({ serverId }: DockerTabProps) {
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
-		</div>
+		</SettingsStack>
 	);
 }

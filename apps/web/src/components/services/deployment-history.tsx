@@ -26,6 +26,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { useTRPC } from "@/lib/trpc";
 
 const PAGE_SIZE = 10;
@@ -238,7 +239,7 @@ export function DeploymentHistory({
 					No deployments yet. Hit Deploy to ship the first one.
 				</p>
 			) : (
-				<div className="rounded-lg border">
+				<TableCard>
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -316,7 +317,7 @@ export function DeploymentHistory({
 							))}
 						</TableBody>
 					</Table>
-				</div>
+				</TableCard>
 			)}
 
 			{deploymentsQuery.hasNextPage && (

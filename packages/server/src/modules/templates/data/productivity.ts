@@ -190,7 +190,7 @@ volumes:
 		name: "Stirling PDF",
 		description:
 			"Self-hosted PDF toolbox — merge, split, convert, compress, OCR and sign PDFs from a web UI.",
-		logo: "",
+		logo: "https://raw.githubusercontent.com/Stirling-Tools/Stirling-PDF/main/docs/stirling.png",
 		tags: ["tools", "pdf"],
 		links: {
 			website: "https://www.stirlingpdf.com",
@@ -320,7 +320,7 @@ volumes:
 		name: "Focalboard",
 		description:
 			"Open-source project management — a self-hosted Trello/Notion-boards alternative by Mattermost.",
-		logo: "",
+		logo: "mattermost",
 		tags: ["tasks", "kanban", "project-management"],
 		links: {
 			website: "https://www.focalboard.com",
@@ -343,7 +343,7 @@ volumes:
 		name: "Kimai",
 		description:
 			"Professional time-tracking for freelancers and teams — projects, customers, invoices and reports.",
-		logo: "",
+		logo: "https://raw.githubusercontent.com/kimai/www.kimai.org/master/images/kimai_logo.png",
 		tags: ["time-tracking", "invoicing", "productivity"],
 		links: {
 			website: "https://www.kimai.org",

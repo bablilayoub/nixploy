@@ -186,7 +186,7 @@ volumes:
 		name: "IT Tools",
 		description:
 			"Handy collection of online tools for developers — converters, encoders, generators and formatters.",
-		logo: "",
+		logo: "https://raw.githubusercontent.com/CorentinTh/it-tools/main/public/android-chrome-192x192.png",
 		tags: ["dev-tools", "utilities"],
 		links: {
 			github: "https://github.com/CorentinTh/it-tools",

@@ -7,6 +7,8 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { QueryState } from "@/components/query-state";
+import { EmptyState } from "@/components/services/empty-state";
+import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -18,7 +20,6 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -232,27 +233,23 @@ export function VolumeBackupsTab({
 	const noDestinations = destinations !== undefined && destinations.length === 0;
 
 	return (
-		<Card>
-			<CardHeader className="flex flex-row items-center justify-between space-y-0">
-				<div className="flex flex-col gap-1.5">
-					<CardTitle className="text-sm font-medium">Volume Backups</CardTitle>
-					<CardDescription>
-						Archive a Docker volume to an S3 destination on a cron schedule.
-					</CardDescription>
-				</div>
-				<Button size="sm" disabled={noDestinations} onClick={() => setDialogOpen(true)}>
-					<Plus className="size-4" />
-					Add Backup
-				</Button>
-			</CardHeader>
-			<CardContent>
+		<>
+			<SettingsSection
+				title="Volume Backups"
+				description="Volume archives to S3 on a cron."
+				actions={
+					<Button size="sm" disabled={noDestinations} onClick={() => setDialogOpen(true)}>
+						<Plus className="size-4" />
+						Add Backup
+					</Button>
+				}
+			>
 				{noDestinations ? (
-					<div className="flex flex-col items-center gap-2 py-10 text-center">
-						<DatabaseBackup className="size-8 text-muted-foreground" />
-						<p className="text-sm text-muted-foreground">
-							Add an S3 destination in Settings → Backup storage first.
-						</p>
-					</div>
+					<EmptyState
+						icon={DatabaseBackup}
+						title="No backup storage"
+						description="Add an S3 destination in Settings → Backup storage first."
+					/>
 				) : (
 					<QueryState
 						isPending={isPending}
@@ -267,10 +264,11 @@ export function VolumeBackupsTab({
 							</div>
 						}
 						empty={
-							<div className="flex flex-col items-center gap-2 py-10 text-center">
-								<DatabaseBackup className="size-8 text-muted-foreground" />
-								<p className="text-sm text-muted-foreground">No volume backups configured.</p>
-							</div>
+							<EmptyState
+								icon={DatabaseBackup}
+								title="No volume backups"
+								description="Schedule a volume archive to an S3 destination."
+							/>
 						}
 					>
 						<Table>
@@ -355,7 +353,7 @@ export function VolumeBackupsTab({
 						</Table>
 					</QueryState>
 				)}
-			</CardContent>
+			</SettingsSection>
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>
@@ -567,6 +565,6 @@ export function VolumeBackupsTab({
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
-		</Card>
+		</>
 	);
 }

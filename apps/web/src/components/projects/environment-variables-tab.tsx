@@ -2,8 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-
 import { EnvEditor } from "@/components/services/env-editor";
+import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
 
@@ -11,26 +11,6 @@ interface EnvironmentInfo {
 	environmentId: string;
 	name: string;
 	env?: string | null;
-}
-
-function Section({
-	title,
-	description,
-	children,
-}: {
-	title: string;
-	description: string;
-	children: React.ReactNode;
-}) {
-	return (
-		<section className="flex flex-col gap-3">
-			<div className="flex flex-col gap-1">
-				<h2 className="text-base font-medium">{title}</h2>
-				<p className="text-sm text-muted-foreground">{description}</p>
-			</div>
-			{children}
-		</section>
-	);
 }
 
 /**
@@ -93,22 +73,24 @@ export function EnvironmentVariablesTab({
 	);
 
 	return (
-		<div className="flex flex-col gap-8">
-			<Section
+		<SettingsStack>
+			<SettingsSection
 				title="Project variables"
 				description="Shared by every environment in this project. Deeper levels override these values."
+				wide
 			>
 				<EnvEditor
 					value={projectEnv ?? ""}
 					loading={saveProjectEnv.isPending}
 					onSave={(env) => saveProjectEnv.mutate({ projectId, env })}
 				/>
-			</Section>
+			</SettingsSection>
 
 			{environment && (
-				<Section
+				<SettingsSection
 					title={`Environment overrides — ${environment.name}`}
 					description="Only apply to this environment. Override project variables on key conflicts."
+					wide
 				>
 					<EnvEditor
 						key={environment.environmentId}
@@ -121,13 +103,14 @@ export function EnvironmentVariablesTab({
 							})
 						}
 					/>
-				</Section>
+				</SettingsSection>
 			)}
 
 			{environment && (
-				<Section
+				<SettingsSection
 					title="Resolved preview"
 					description={`Effective variables for "${environment.name}" after merging organization, project and environment levels. Read-only.`}
+					wide
 				>
 					{resolvedQuery.isPending ? (
 						<Skeleton className="h-64 rounded-lg" />
@@ -136,8 +119,8 @@ export function EnvironmentVariablesTab({
 							{resolvedQuery.data?.env || "# No variables defined"}
 						</pre>
 					)}
-				</Section>
+				</SettingsSection>
 			)}
-		</div>
+		</SettingsStack>
 	);
 }

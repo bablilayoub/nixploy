@@ -8,10 +8,10 @@ import { toast } from "sonner";
 import { CopyButton } from "@/components/services/copy-button";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { MemberCapabilitiesDialog } from "@/components/settings/organization/member-capabilities-dialog";
+import { SettingsSection } from "@/components/settings/settings-section";
 import { StatusDot } from "@/components/shell";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -39,6 +39,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { authClient, useSession } from "@/lib/auth-client";
 import { useTRPC } from "@/lib/trpc";
 
@@ -184,147 +185,141 @@ export function MembersCard() {
 		await loadMembers();
 	}
 
-	return (
-		<Card>
-			<CardHeader>
-				<div className="flex items-center justify-between">
-					<div>
-						<CardTitle className="flex items-center gap-2">
-							<Users className="size-4 text-muted-foreground" />
-							Members
-						</CardTitle>
-						<CardDescription>People with access to this organization.</CardDescription>
-					</div>
-					<Dialog
-						open={inviteOpen}
-						onOpenChange={(open) => {
-							setInviteOpen(open);
-							if (!open) setCreatedLink(null);
-						}}
-					>
-						<DialogTrigger asChild>
-							<Button size="sm">
-								<Plus className="size-4" />
-								Invite Member
+	const inviteDialog = (
+		<Dialog
+			open={inviteOpen}
+			onOpenChange={(open) => {
+				setInviteOpen(open);
+				if (!open) setCreatedLink(null);
+			}}
+		>
+			<DialogTrigger asChild>
+				<Button size="sm">
+					<Plus className="size-4" />
+					Invite Member
+				</Button>
+			</DialogTrigger>
+			<DialogContent>
+				{createdLink ? (
+					<>
+						<DialogHeader>
+							<DialogTitle>Share invite link</DialogTitle>
+							<DialogDescription>
+								No email is sent. Copy this link and give it to the invitee so they can create their
+								account and join.
+							</DialogDescription>
+						</DialogHeader>
+						<div className="grid gap-3">
+							<div className="flex gap-2">
+								<Input value={createdLink} readOnly className="font-mono text-xs" />
+								<CopyButton value={createdLink} label="Copy" />
+							</div>
+						</div>
+						<DialogFooter>
+							<Button
+								onClick={() => {
+									setInviteOpen(false);
+									setCreatedLink(null);
+								}}
+							>
+								Done
 							</Button>
-						</DialogTrigger>
-						<DialogContent>
-							{createdLink ? (
-								<>
-									<DialogHeader>
-										<DialogTitle>Share invite link</DialogTitle>
-										<DialogDescription>
-											No email is sent. Copy this link and give it to the invitee so they can create
-											their account and join.
-										</DialogDescription>
-									</DialogHeader>
-									<div className="grid gap-3">
-										<div className="flex gap-2">
-											<Input value={createdLink} readOnly className="font-mono text-xs" />
-											<CopyButton value={createdLink} label="Copy" />
-										</div>
-									</div>
-									<DialogFooter>
-										<Button
-											onClick={() => {
-												setInviteOpen(false);
-												setCreatedLink(null);
-											}}
-										>
-											Done
-										</Button>
-									</DialogFooter>
-								</>
-							) : (
-								<>
-									<DialogHeader>
-										<DialogTitle>Invite member</DialogTitle>
-										<DialogDescription>
-											Create a unique invite link. Share it yourself — Nixploy does not send email.
-										</DialogDescription>
-									</DialogHeader>
-									<div className="grid gap-4">
-										<div className="grid gap-2">
-											<Label htmlFor="invite-email">Email</Label>
-											<Input
-												id="invite-email"
-												type="email"
-												placeholder="teammate@example.com"
-												value={email}
-												onChange={(e) => setEmail(e.target.value)}
-											/>
-											<p className="text-xs text-muted-foreground">
-												The invitee must sign up with this exact email.
-											</p>
-										</div>
-										<div className="grid gap-2">
-											<Label>Role</Label>
-											<Select
-												value={role}
-												onValueChange={(value) => setRole(value as InvitableRole)}
-											>
-												<SelectTrigger>
-													<SelectValue />
-												</SelectTrigger>
-												<SelectContent>
-													{INVITABLE_ROLES.map((item) => (
-														<SelectItem key={item.value} value={item.value}>
-															{item.label}
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-										</div>
-										<div className="grid gap-2">
-											<Label>Expires in</Label>
-											<Select
-												value={expiryDays}
-												onValueChange={(value) => setExpiryDays(value as "1" | "7" | "30")}
-											>
-												<SelectTrigger>
-													<SelectValue />
-												</SelectTrigger>
-												<SelectContent>
-													<SelectItem value="1">1 day</SelectItem>
-													<SelectItem value="7">7 days</SelectItem>
-													<SelectItem value="30">30 days</SelectItem>
-												</SelectContent>
-											</Select>
-										</div>
-									</div>
-									<DialogFooter>
-										<Button
-											disabled={inviteMember.isPending || !email}
-											onClick={() =>
-												inviteMember.mutate({
-													email,
-													role,
-													expiryDays: Number.parseInt(expiryDays, 10) as 1 | 7 | 30,
-												})
-											}
-										>
-											{inviteMember.isPending && <Loader2 className="size-4 animate-spin" />}
-											Create invite link
-										</Button>
-									</DialogFooter>
-								</>
-							)}
-						</DialogContent>
-					</Dialog>
-				</div>
-			</CardHeader>
-			<CardContent>
-				{isLoading || isOrgPending ? (
-					<div className="grid gap-2">
-						<Skeleton className="h-10 w-full" />
-						<Skeleton className="h-10 w-full" />
-					</div>
-				) : members.length === 0 ? (
-					<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-						<Users className="size-8 text-muted-foreground" />
-						<p className="text-sm text-muted-foreground">No members found for this organization.</p>
-					</div>
+						</DialogFooter>
+					</>
 				) : (
+					<>
+						<DialogHeader>
+							<DialogTitle>Invite member</DialogTitle>
+							<DialogDescription>
+								Create a unique invite link. Share it yourself — Nixploy does not send email.
+							</DialogDescription>
+						</DialogHeader>
+						<div className="grid gap-4">
+							<div className="grid gap-2">
+								<Label htmlFor="invite-email">Email</Label>
+								<Input
+									id="invite-email"
+									type="email"
+									placeholder="teammate@example.com"
+									value={email}
+									onChange={(e) => setEmail(e.target.value)}
+								/>
+								<p className="text-xs text-muted-foreground">
+									The invitee must sign up with this exact email.
+								</p>
+							</div>
+							<div className="grid gap-2">
+								<Label>Role</Label>
+								<Select value={role} onValueChange={(value) => setRole(value as InvitableRole)}>
+									<SelectTrigger>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										{INVITABLE_ROLES.map((item) => (
+											<SelectItem key={item.value} value={item.value}>
+												{item.label}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+							<div className="grid gap-2">
+								<Label>Expires in</Label>
+								<Select
+									value={expiryDays}
+									onValueChange={(value) => setExpiryDays(value as "1" | "7" | "30")}
+								>
+									<SelectTrigger>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="1">1 day</SelectItem>
+										<SelectItem value="7">7 days</SelectItem>
+										<SelectItem value="30">30 days</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+						</div>
+						<DialogFooter>
+							<Button
+								disabled={inviteMember.isPending || !email}
+								onClick={() =>
+									inviteMember.mutate({
+										email,
+										role,
+										expiryDays: Number.parseInt(expiryDays, 10) as 1 | 7 | 30,
+									})
+								}
+							>
+								{inviteMember.isPending && <Loader2 className="size-4 animate-spin" />}
+								Create invite link
+							</Button>
+						</DialogFooter>
+					</>
+				)}
+			</DialogContent>
+		</Dialog>
+	);
+
+	return (
+		<SettingsSection
+			title="Members"
+			description="People with access to this organization."
+			wide
+			actions={inviteDialog}
+		>
+			{isLoading || isOrgPending ? (
+				<div className="grid gap-2">
+					<Skeleton className="h-10 w-full" />
+					<Skeleton className="h-10 w-full" />
+				</div>
+			) : members.length === 0 ? (
+				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
+					<Users className="size-8 text-muted-foreground" />
+					<p className="text-sm text-muted-foreground">No members found for this organization.</p>
+				</div>
+			) : (
+				<TableCard>
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -411,31 +406,31 @@ export function MembersCard() {
 							})}
 						</TableBody>
 					</Table>
-				)}
-				{!isLoading && !isOrgPending && invitations.length > 0 && (
-					<div className="mt-6 flex flex-col gap-3">
-						<p className="text-sm font-medium text-muted-foreground">Pending invitations</p>
-						<div className="divide-y rounded-lg border">
-							{invitations.map((invitation) => (
-								<div key={invitation.id} className="flex items-center gap-3 px-4 py-3">
-									<Link2 className="size-4 shrink-0 text-muted-foreground" />
-									<div className="flex min-w-0 flex-1 flex-col">
-										<span className="truncate text-sm font-medium">{invitation.email}</span>
-										<span className="text-xs text-muted-foreground capitalize">
-											{invitation.role} · expires{" "}
-											{format(new Date(invitation.expiresAt), "MMM d, yyyy 'at' h:mm a")}
-										</span>
-									</div>
-									<CopyButton value={invitationLink(invitation.id)} label="Copy link" />
-									<Button variant="ghost" size="sm" onClick={() => cancelInvitation(invitation)}>
-										Cancel
-									</Button>
+				</TableCard>
+			)}
+			{!isLoading && !isOrgPending && invitations.length > 0 && (
+				<div className="mt-6 flex flex-col gap-3">
+					<p className="text-sm font-medium text-muted-foreground">Pending invitations</p>
+					<div className="divide-y rounded-lg border">
+						{invitations.map((invitation) => (
+							<div key={invitation.id} className="flex items-center gap-3 px-4 py-3">
+								<Link2 className="size-4 shrink-0 text-muted-foreground" />
+								<div className="flex min-w-0 flex-1 flex-col">
+									<span className="truncate text-sm font-medium">{invitation.email}</span>
+									<span className="text-xs text-muted-foreground capitalize">
+										{invitation.role} · expires{" "}
+										{format(new Date(invitation.expiresAt), "MMM d, yyyy 'at' h:mm a")}
+									</span>
 								</div>
-							))}
-						</div>
+								<CopyButton value={invitationLink(invitation.id)} label="Copy link" />
+								<Button variant="ghost" size="sm" onClick={() => cancelInvitation(invitation)}>
+									Cancel
+								</Button>
+							</div>
+						))}
 					</div>
-				)}
-			</CardContent>
-		</Card>
+				</div>
+			)}
+		</SettingsSection>
 	);
 }

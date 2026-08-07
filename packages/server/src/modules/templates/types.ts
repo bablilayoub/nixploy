@@ -19,7 +19,7 @@ export interface Template {
 	id: string;
 	name: string;
 	description: string;
-	/** simple-icons slug used with https://cdn.simpleicons.org/<slug>. */
+	/** Brand mark: simple-icons slug (`cdn.simpleicons.org/<slug>`) or absolute image URL. */
 	logo: string;
 	/** Display category used for filtering (e.g. "Monitoring"). */
 	category: string;

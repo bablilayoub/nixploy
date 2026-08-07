@@ -8,9 +8,9 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { QueryState } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
+import { SettingsSection } from "@/components/settings/settings-section";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -130,209 +130,203 @@ export function DestinationsView() {
 				title="Backup storage"
 				description="S3-compatible storage for database and volume backups."
 			/>
-			<Card>
-				<CardHeader>
-					<div className="flex items-center justify-between">
-						<div>
-							<CardTitle className="flex items-center gap-2">
-								<HardDrive className="size-4 text-muted-foreground" />
-								Backup storage
-							</CardTitle>
-							<CardDescription>
-								S3-compatible buckets used for database and volume backups.
-							</CardDescription>
-						</div>
-						<Dialog open={open} onOpenChange={setOpen}>
-							<DialogTrigger asChild>
-								<Button size="sm">
-									<Plus className="size-4" />
-									Add backup destination
-								</Button>
-							</DialogTrigger>
-							<DialogContent>
-								<DialogHeader>
-									<DialogTitle>Add backup destination</DialogTitle>
-									<DialogDescription>
-										Connect an S3-compatible bucket for backups.
-									</DialogDescription>
-								</DialogHeader>
-								<div className="grid gap-4">
+			<SettingsSection
+				title={
+					<span className="flex items-center gap-2">
+						<HardDrive className="size-4 text-muted-foreground" />
+						Backup storage
+					</span>
+				}
+				description="S3-compatible buckets used for database and volume backups."
+				wide
+				actions={
+					<Dialog open={open} onOpenChange={setOpen}>
+						<DialogTrigger asChild>
+							<Button size="sm">
+								<Plus className="size-4" />
+								Add backup destination
+							</Button>
+						</DialogTrigger>
+						<DialogContent>
+							<DialogHeader>
+								<DialogTitle>Add backup destination</DialogTitle>
+								<DialogDescription>Connect an S3-compatible bucket for backups.</DialogDescription>
+							</DialogHeader>
+							<div className="grid gap-4">
+								<div className="grid gap-2">
+									<Label htmlFor="dest-name">Name</Label>
+									<Input
+										id="dest-name"
+										placeholder="e.g. backups-s3"
+										value={name}
+										onChange={(e) => setName(e.target.value)}
+									/>
+								</div>
+								<div className="grid grid-cols-2 gap-4">
 									<div className="grid gap-2">
-										<Label htmlFor="dest-name">Name</Label>
+										<Label htmlFor="dest-bucket">Bucket</Label>
 										<Input
-											id="dest-name"
-											placeholder="e.g. backups-s3"
-											value={name}
-											onChange={(e) => setName(e.target.value)}
-										/>
-									</div>
-									<div className="grid grid-cols-2 gap-4">
-										<div className="grid gap-2">
-											<Label htmlFor="dest-bucket">Bucket</Label>
-											<Input
-												id="dest-bucket"
-												value={bucket}
-												onChange={(e) => setBucket(e.target.value)}
-											/>
-										</div>
-										<div className="grid gap-2">
-											<Label htmlFor="dest-region">Region</Label>
-											<Input
-												id="dest-region"
-												placeholder="us-east-1"
-												value={region}
-												onChange={(e) => setRegion(e.target.value)}
-											/>
-										</div>
-									</div>
-									<div className="grid gap-2">
-										<Label htmlFor="dest-endpoint">Endpoint</Label>
-										<Input
-											id="dest-endpoint"
-											placeholder="https://s3.us-east-1.amazonaws.com"
-											value={endpoint}
-											onChange={(e) => setEndpoint(e.target.value)}
+											id="dest-bucket"
+											value={bucket}
+											onChange={(e) => setBucket(e.target.value)}
 										/>
 									</div>
 									<div className="grid gap-2">
-										<Label htmlFor="dest-access-key">Access key ID</Label>
+										<Label htmlFor="dest-region">Region</Label>
 										<Input
-											id="dest-access-key"
-											value={accessKey}
-											onChange={(e) => setAccessKey(e.target.value)}
-										/>
-									</div>
-									<div className="grid gap-2">
-										<Label htmlFor="dest-secret-key">Secret access key</Label>
-										<Input
-											id="dest-secret-key"
-											type="password"
-											value={secretAccessKey}
-											onChange={(e) => setSecretAccessKey(e.target.value)}
+											id="dest-region"
+											placeholder="us-east-1"
+											value={region}
+											onChange={(e) => setRegion(e.target.value)}
 										/>
 									</div>
 								</div>
-								<DialogFooter>
-									<Button
-										disabled={
-											createMutation.isPending ||
-											!name ||
-											!bucket ||
-											!region ||
-											!endpoint ||
-											!accessKey ||
-											!secretAccessKey
-										}
-										onClick={() =>
-											createMutation.mutate({
-												name,
-												bucket,
-												region,
-												endpoint,
-												accessKey,
-												secretAccessKey,
-											})
-										}
-									>
-										{createMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-										Add backup destination
-									</Button>
-								</DialogFooter>
-							</DialogContent>
-						</Dialog>
-					</div>
-				</CardHeader>
-				<CardContent>
-					<QueryState
-						isPending={isPending}
-						isError={isError}
-						error={error}
-						onRetry={() => refetch()}
-						isEmpty={!destinations || destinations.length === 0}
-						skeleton={
-							<div className="grid gap-2">
-								<Skeleton className="h-10 w-full" />
-								<Skeleton className="h-10 w-full" />
+								<div className="grid gap-2">
+									<Label htmlFor="dest-endpoint">Endpoint</Label>
+									<Input
+										id="dest-endpoint"
+										placeholder="https://s3.us-east-1.amazonaws.com"
+										value={endpoint}
+										onChange={(e) => setEndpoint(e.target.value)}
+									/>
+								</div>
+								<div className="grid gap-2">
+									<Label htmlFor="dest-access-key">Access key ID</Label>
+									<Input
+										id="dest-access-key"
+										value={accessKey}
+										onChange={(e) => setAccessKey(e.target.value)}
+									/>
+								</div>
+								<div className="grid gap-2">
+									<Label htmlFor="dest-secret-key">Secret access key</Label>
+									<Input
+										id="dest-secret-key"
+										type="password"
+										value={secretAccessKey}
+										onChange={(e) => setSecretAccessKey(e.target.value)}
+									/>
+								</div>
 							</div>
-						}
-						empty={
-							<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-								<HardDrive className="size-8 text-muted-foreground" />
-								<p className="text-sm text-muted-foreground">
-									No backup destinations yet. Add one to enable backups.
-								</p>
-							</div>
-						}
-					>
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Name</TableHead>
-									<TableHead>Bucket</TableHead>
-									<TableHead>Region</TableHead>
-									<TableHead>Endpoint</TableHead>
-									<TableHead>Created</TableHead>
-									<TableHead className="w-24 text-right">Actions</TableHead>
+							<DialogFooter>
+								<Button
+									disabled={
+										createMutation.isPending ||
+										!name ||
+										!bucket ||
+										!region ||
+										!endpoint ||
+										!accessKey ||
+										!secretAccessKey
+									}
+									onClick={() =>
+										createMutation.mutate({
+											name,
+											bucket,
+											region,
+											endpoint,
+											accessKey,
+											secretAccessKey,
+										})
+									}
+								>
+									{createMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+									Add backup destination
+								</Button>
+							</DialogFooter>
+						</DialogContent>
+					</Dialog>
+				}
+			>
+				<QueryState
+					isPending={isPending}
+					isError={isError}
+					error={error}
+					onRetry={() => refetch()}
+					isEmpty={!destinations || destinations.length === 0}
+					skeleton={
+						<div className="grid gap-2">
+							<Skeleton className="h-10 w-full" />
+							<Skeleton className="h-10 w-full" />
+						</div>
+					}
+					empty={
+						<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
+							<HardDrive className="size-8 text-muted-foreground" />
+							<p className="text-sm text-muted-foreground">
+								No backup destinations yet. Add one to enable backups.
+							</p>
+						</div>
+					}
+				>
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>Name</TableHead>
+								<TableHead>Bucket</TableHead>
+								<TableHead>Region</TableHead>
+								<TableHead>Endpoint</TableHead>
+								<TableHead>Created</TableHead>
+								<TableHead className="w-24 text-right">Actions</TableHead>
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{(destinations ?? []).map((destination) => (
+								<TableRow key={destination.destinationId}>
+									<TableCell className="font-medium">{destination.name}</TableCell>
+									<TableCell className="text-muted-foreground">{destination.bucket}</TableCell>
+									<TableCell className="text-muted-foreground">{destination.region}</TableCell>
+									<TableCell className="max-w-48 truncate text-muted-foreground">
+										{destination.endpoint}
+									</TableCell>
+									<TableCell className="text-muted-foreground">
+										{format(new Date(destination.createdAt), "MMM d, yyyy")}
+									</TableCell>
+									<TableCell>
+										<div className="flex items-center justify-end">
+											<Button
+												variant="ghost"
+												size="icon"
+												disabled={
+													testMutation.isPending &&
+													testMutation.variables?.destinationId === destination.destinationId
+												}
+												onClick={() =>
+													testMutation.mutate({
+														destinationId: destination.destinationId,
+													})
+												}
+											>
+												{testMutation.isPending &&
+												testMutation.variables?.destinationId === destination.destinationId ? (
+													<Loader2 className="size-4 animate-spin" />
+												) : (
+													<Plug className="size-4" />
+												)}
+												<span className="sr-only">Test connection</span>
+											</Button>
+											<Button variant="ghost" size="icon" onClick={() => setEditing(destination)}>
+												<Pencil className="size-4" />
+												<span className="sr-only">Edit destination</span>
+											</Button>
+											<ConfirmDeleteDialog
+												title="Remove destination"
+												description={`Remove "${destination.name}"? Backups pointing at it will be deleted too.`}
+												isPending={removeMutation.isPending}
+												onConfirm={() =>
+													removeMutation.mutate({
+														destinationId: destination.destinationId,
+													})
+												}
+											/>
+										</div>
+									</TableCell>
 								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{(destinations ?? []).map((destination) => (
-									<TableRow key={destination.destinationId}>
-										<TableCell className="font-medium">{destination.name}</TableCell>
-										<TableCell className="text-muted-foreground">{destination.bucket}</TableCell>
-										<TableCell className="text-muted-foreground">{destination.region}</TableCell>
-										<TableCell className="max-w-48 truncate text-muted-foreground">
-											{destination.endpoint}
-										</TableCell>
-										<TableCell className="text-muted-foreground">
-											{format(new Date(destination.createdAt), "MMM d, yyyy")}
-										</TableCell>
-										<TableCell>
-											<div className="flex items-center justify-end">
-												<Button
-													variant="ghost"
-													size="icon"
-													disabled={
-														testMutation.isPending &&
-														testMutation.variables?.destinationId === destination.destinationId
-													}
-													onClick={() =>
-														testMutation.mutate({
-															destinationId: destination.destinationId,
-														})
-													}
-												>
-													{testMutation.isPending &&
-													testMutation.variables?.destinationId === destination.destinationId ? (
-														<Loader2 className="size-4 animate-spin" />
-													) : (
-														<Plug className="size-4" />
-													)}
-													<span className="sr-only">Test connection</span>
-												</Button>
-												<Button variant="ghost" size="icon" onClick={() => setEditing(destination)}>
-													<Pencil className="size-4" />
-													<span className="sr-only">Edit destination</span>
-												</Button>
-												<ConfirmDeleteDialog
-													title="Remove destination"
-													description={`Remove "${destination.name}"? Backups pointing at it will be deleted too.`}
-													isPending={removeMutation.isPending}
-													onConfirm={() =>
-														removeMutation.mutate({
-															destinationId: destination.destinationId,
-														})
-													}
-												/>
-											</div>
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					</QueryState>
-				</CardContent>
-			</Card>
+							))}
+						</TableBody>
+					</Table>
+				</QueryState>
+			</SettingsSection>
 			<Dialog open={editing !== null} onOpenChange={(isOpen) => !isOpen && setEditing(null)}>
 				<DialogContent>
 					<DialogHeader>

@@ -4,6 +4,7 @@ import { DangerZoneCard } from "@/components/settings/organization/danger-zone-c
 import { MembersCard } from "@/components/settings/organization/members-card";
 import { OrganizationCard } from "@/components/settings/organization/organization-card";
 import { QuotasCard } from "@/components/settings/organization/quotas-card";
+import { SettingsStack } from "@/components/settings/settings-section";
 import { PageHeader } from "@/components/shell";
 
 export const metadata: Metadata = {
@@ -12,12 +13,14 @@ export const metadata: Metadata = {
 
 export default function OrganizationSettingsPage() {
 	return (
-		<div className="flex flex-col gap-6">
+		<div className="flex flex-col gap-8">
 			<PageHeader title="Organization" description="Name, members, roles, and capabilities." />
-			<OrganizationCard />
-			<QuotasCard />
-			<MembersCard />
-			<DangerZoneCard />
+			<SettingsStack>
+				<OrganizationCard />
+				<QuotasCard />
+				<MembersCard />
+				<DangerZoneCard />
+			</SettingsStack>
 		</div>
 	);
 }

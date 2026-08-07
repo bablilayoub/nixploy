@@ -30,9 +30,14 @@ export const settingsNavGroups: SubNavGroup[] = [
 		label: "Organization",
 		items: [
 			{ label: "General", href: "/dashboard/settings/organization", icon: Building2 },
-			{ label: "Audit log", href: "/dashboard/settings/activity", icon: Activity },
-			{ label: "Incidents", href: "/dashboard/settings/incidents", icon: TriangleAlert },
 			{ label: "Notifications", href: "/dashboard/settings/notifications", icon: Bell },
+		],
+	},
+	{
+		label: "Observability",
+		items: [
+			{ label: "Incidents", href: "/dashboard/settings/incidents", icon: TriangleAlert },
+			{ label: "Audit log", href: "/dashboard/settings/activity", icon: Activity },
 		],
 	},
 	{
@@ -40,8 +45,8 @@ export const settingsNavGroups: SubNavGroup[] = [
 		items: [
 			{ label: "Servers", href: "/dashboard/settings/servers", icon: Server },
 			{ label: "SSH keys", href: "/dashboard/settings/ssh-keys", icon: KeyRound },
-			{ label: "Platform", href: "/dashboard/settings/server", icon: ServerCog },
 			{ label: "Certificates", href: "/dashboard/settings/certificates", icon: ShieldCheck },
+			{ label: "Platform", href: "/dashboard/settings/server", icon: ServerCog },
 		],
 	},
 	{

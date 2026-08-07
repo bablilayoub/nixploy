@@ -1,11 +1,11 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -46,176 +46,180 @@ export function AiSettingsCard() {
 	const save = useMutation({
 		...trpc.ai.updateSettings.mutationOptions(),
 		onSuccess: async () => {
-			toast.success("AI Copilot settings saved");
+			toast.success("Copilot settings saved");
 			setApiKey("");
 			await queryClient.invalidateQueries({ queryKey: trpc.ai.getSettings.queryKey() });
 		},
 		onError: (error) => toast.error(error.message),
 	});
 
+	const persist = (next?: { enabled?: boolean }) => {
+		const nextEnabled = next?.enabled ?? enabled;
+		save.mutate({
+			enabled: nextEnabled,
+			provider,
+			baseUrl: baseUrl.trim() || null,
+			model: model.trim(),
+			apiKey: apiKey.trim() || null,
+			autoExplainOnFailure: autoExplain,
+		});
+	};
+
 	if (statusQuery.isPending) {
 		return (
-			<Card>
-				<CardHeader>
-					<Skeleton className="h-5 w-40" />
-					<Skeleton className="h-4 w-64" />
-				</CardHeader>
-				<CardContent>
-					<Skeleton className="h-24 w-full" />
-				</CardContent>
-			</Card>
+			<SettingsSection
+				id="copilot"
+				title="Deploy Copilot"
+				description="Explain failed builds with an LLM. Keys stay encrypted."
+			>
+				<Skeleton className="h-10 w-full" />
+			</SettingsSection>
 		);
 	}
 
 	if (statusQuery.isError) {
 		return (
-			<Card>
-				<CardHeader>
-					<CardTitle className="flex items-center gap-2">
-						<Bot className="size-4" />
-						Deploy Copilot
-					</CardTitle>
-					<CardDescription>
-						Optional LLM that explains failed builds and answers questions about a service. Keys
-						stay encrypted at rest.
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="flex flex-col items-center gap-2 py-8 text-center">
-						<p className="text-sm font-medium">Could not load AI settings</p>
-						<p className="text-sm text-muted-foreground">
-							{statusQuery.error.message || "Try again in a moment."}
-						</p>
-						<Button variant="outline" size="sm" onClick={() => void statusQuery.refetch()}>
-							Retry
-						</Button>
-					</div>
-				</CardContent>
-			</Card>
+			<SettingsSection
+				id="copilot"
+				title="Deploy Copilot"
+				description="Explain failed builds with an LLM. Keys stay encrypted."
+			>
+				<div className="flex flex-col gap-2">
+					<p className="text-sm text-muted-foreground">
+						{statusQuery.error.message || "Could not load AI settings."}
+					</p>
+					<Button
+						variant="outline"
+						size="sm"
+						className="w-fit"
+						onClick={() => void statusQuery.refetch()}
+					>
+						Retry
+					</Button>
+				</div>
+			</SettingsSection>
 		);
 	}
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="flex items-center gap-2">
-					<Bot className="size-4" />
-					Deploy Copilot
-				</CardTitle>
-				<CardDescription>
-					Optional LLM that explains failed builds and answers questions about a service. Keys stay
-					encrypted at rest.
-				</CardDescription>
-			</CardHeader>
-			<CardContent className="grid gap-5">
-				<div className="flex items-center justify-between gap-4">
-					<div>
-						<Label htmlFor="ai-enabled">Enable Copilot</Label>
-						<p className="text-xs text-muted-foreground">Shows Explain on failed deployments</p>
-					</div>
-					<Switch id="ai-enabled" checked={enabled} onCheckedChange={setEnabled} />
-				</div>
-
-				<div className="grid gap-2 sm:grid-cols-2">
-					<div className="grid gap-2">
-						<Label>Provider</Label>
-						<Select value={provider} onValueChange={(v) => setProvider(v as Provider)}>
-							<SelectTrigger>
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="openai">OpenAI</SelectItem>
-								<SelectItem value="anthropic">Anthropic</SelectItem>
-								<SelectItem value="openai-compatible">OpenAI-compatible</SelectItem>
-								<SelectItem value="ollama">Ollama</SelectItem>
-							</SelectContent>
-						</Select>
-					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="ai-model">Model</Label>
-						<Input
-							id="ai-model"
-							value={model}
-							onChange={(e) => setModel(e.target.value)}
-							placeholder="gpt-4o-mini"
-						/>
-					</div>
-				</div>
-
-				{(provider === "openai-compatible" || provider === "ollama") && (
-					<div className="grid gap-2">
-						<Label htmlFor="ai-base">Base URL</Label>
-						<Input
-							id="ai-base"
-							value={baseUrl}
-							onChange={(e) => setBaseUrl(e.target.value)}
-							placeholder={
-								provider === "ollama" ? "http://127.0.0.1:11434/v1" : "https://api.example.com/v1"
-							}
-						/>
-					</div>
-				)}
-
-				<div className="grid gap-2">
-					<Label htmlFor="ai-key">
-						API key
-						{statusQuery.data?.apiKeyConfigured ? (
-							<span className="ml-2 text-xs font-normal text-muted-foreground">(configured)</span>
-						) : null}
-					</Label>
-					<Input
-						id="ai-key"
-						type="password"
-						value={apiKey}
-						onChange={(e) => setApiKey(e.target.value)}
-						placeholder={
-							statusQuery.data?.apiKeyConfigured ? "•••••••• (leave blank to keep)" : "sk-…"
-						}
-						autoComplete="off"
-					/>
-				</div>
-
-				<div className="flex items-center justify-between gap-4">
-					<div>
-						<Label htmlFor="ai-auto">Auto-explain on failure</Label>
-						<p className="text-xs text-muted-foreground">
-							When a deploy fails, Copilot analyzes the logs and shows the result on the Deployments
-							tab
-						</p>
-					</div>
-					<Switch id="ai-auto" checked={autoExplain} onCheckedChange={setAutoExplain} />
-				</div>
-
-				<div className="flex flex-wrap gap-2">
-					<Button
-						type="button"
+		<SettingsSection
+			id="copilot"
+			title="Deploy Copilot"
+			description="Explain failed builds with an LLM. Keys stay encrypted."
+			actions={
+				<div className="flex items-center gap-3">
+					<span className="text-sm text-muted-foreground">{enabled ? "On" : "Off"}</span>
+					<Switch
+						id="ai-enabled"
+						checked={enabled}
 						disabled={save.isPending}
-						onClick={() =>
+						onCheckedChange={(checked) => {
+							setEnabled(checked);
 							save.mutate({
-								enabled,
+								enabled: checked,
 								provider,
 								baseUrl: baseUrl.trim() || null,
 								model: model.trim(),
 								apiKey: apiKey.trim() || null,
 								autoExplainOnFailure: autoExplain,
-							})
-						}
-					>
-						{save.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-						Save
-					</Button>
-					{statusQuery.data?.apiKeyConfigured && (
-						<Button
-							type="button"
-							variant="outline"
-							disabled={save.isPending}
-							onClick={() => save.mutate({ clearApiKey: true })}
-						>
-							Clear API key
-						</Button>
-					)}
+							});
+						}}
+					/>
 				</div>
-			</CardContent>
-		</Card>
+			}
+		>
+			{enabled ? (
+				<>
+					<div className="grid gap-3 sm:grid-cols-2">
+						<div className="grid gap-2">
+							<Label>Provider</Label>
+							<Select value={provider} onValueChange={(v) => setProvider(v as Provider)}>
+								<SelectTrigger>
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="openai">OpenAI</SelectItem>
+									<SelectItem value="anthropic">Anthropic</SelectItem>
+									<SelectItem value="openai-compatible">OpenAI-compatible</SelectItem>
+									<SelectItem value="ollama">Ollama</SelectItem>
+								</SelectContent>
+							</Select>
+						</div>
+						<div className="grid gap-2">
+							<Label htmlFor="ai-model">Model</Label>
+							<Input
+								id="ai-model"
+								value={model}
+								onChange={(e) => setModel(e.target.value)}
+								placeholder="gpt-4o-mini"
+							/>
+						</div>
+					</div>
+
+					{(provider === "openai-compatible" || provider === "ollama") && (
+						<div className="grid gap-2">
+							<Label htmlFor="ai-base">Base URL</Label>
+							<Input
+								id="ai-base"
+								value={baseUrl}
+								onChange={(e) => setBaseUrl(e.target.value)}
+								placeholder={
+									provider === "ollama" ? "http://127.0.0.1:11434/v1" : "https://api.example.com/v1"
+								}
+							/>
+						</div>
+					)}
+
+					<div className="grid gap-2">
+						<Label htmlFor="ai-key">
+							API key
+							{statusQuery.data?.apiKeyConfigured ? (
+								<span className="ml-2 text-xs font-normal text-muted-foreground">(configured)</span>
+							) : null}
+						</Label>
+						<Input
+							id="ai-key"
+							type="password"
+							value={apiKey}
+							onChange={(e) => setApiKey(e.target.value)}
+							placeholder={statusQuery.data?.apiKeyConfigured ? "Leave blank to keep" : "sk-…"}
+							autoComplete="off"
+						/>
+					</div>
+
+					<div className="flex items-center justify-between gap-4">
+						<div className="grid gap-0.5">
+							<Label htmlFor="ai-auto">Auto-explain failures</Label>
+							<p className="text-xs text-muted-foreground">
+								Analyze deploy logs when a build fails.
+							</p>
+						</div>
+						<Switch id="ai-auto" checked={autoExplain} onCheckedChange={setAutoExplain} />
+					</div>
+
+					<div className="flex flex-wrap gap-2">
+						<Button type="button" size="sm" disabled={save.isPending} onClick={() => persist()}>
+							{save.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+							Save
+						</Button>
+						{statusQuery.data?.apiKeyConfigured && (
+							<Button
+								type="button"
+								size="sm"
+								variant="outline"
+								disabled={save.isPending}
+								onClick={() => save.mutate({ clearApiKey: true })}
+							>
+								Clear API key
+							</Button>
+						)}
+					</div>
+				</>
+			) : (
+				<p className="text-sm text-muted-foreground">
+					Turn on to configure a provider and API key.
+				</p>
+			)}
+		</SettingsSection>
 	);
 }

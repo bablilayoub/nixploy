@@ -1,10 +1,11 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpCircle, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -18,22 +19,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useTRPC } from "@/lib/trpc";
 
-function shortDigest(digest: string | null | undefined): string {
-	if (!digest) return "—";
-	const bare = digest.replace(/^sha256:/, "");
-	return `${bare.slice(0, 12)}…`;
-}
-
 function formatWhen(iso: string | null | undefined): string {
-	if (!iso) return "Never";
+	if (!iso) return "Never checked";
 	try {
-		return new Date(iso).toLocaleString();
+		return `Checked ${new Date(iso).toLocaleString()}`;
 	} catch {
 		return iso;
 	}
@@ -106,129 +100,27 @@ export function UpdatesCard() {
 	const data = statusQuery.data;
 	const busy = settingsMutation.isPending || checkMutation.isPending || applyMutation.isPending;
 
+	const statusBadge = data?.updateInProgress ? (
+		<Badge variant="secondary" className="gap-1.5">
+			<Loader2 className="size-3 animate-spin" />
+			Updating…
+		</Badge>
+	) : data?.updateAvailable ? (
+		<Badge>Update available</Badge>
+	) : data ? (
+		<Badge variant="outline">Up to date</Badge>
+	) : null;
+
 	return (
-		<Card>
-			<CardHeader>
-				<div className="flex flex-wrap items-start justify-between gap-3">
-					<div className="grid gap-1.5">
-						<CardTitle className="flex items-center gap-2">
-							<ArrowUpCircle className="size-4" />
-							Updates
-						</CardTitle>
-						<CardDescription>
-							Check GitHub Container Registry for a newer Nixploy image and roll this host.
-						</CardDescription>
-					</div>
-					{data?.updateInProgress ? (
-						<Badge variant="secondary" className="gap-1.5">
-							<Loader2 className="size-3 animate-spin" />
-							Updating…
-						</Badge>
-					) : data?.updateAvailable ? (
-						<Badge>Update available</Badge>
-					) : data ? (
-						<Badge variant="outline" className="gap-1.5">
-							<CheckCircle2 className="size-3" />
-							Up to date
-						</Badge>
-					) : null}
-				</div>
-			</CardHeader>
-			<CardContent>
-				{statusQuery.isPending ? (
-					<div className="grid gap-4">
-						<Skeleton className="h-16 w-full" />
-						<Skeleton className="h-9 w-48" />
-					</div>
-				) : statusQuery.error && !data ? (
-					<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-6 text-center">
-						<p className="text-sm text-muted-foreground">{statusQuery.error.message}</p>
-						<Button size="sm" variant="outline" onClick={() => statusQuery.refetch()}>
-							Retry
-						</Button>
-					</div>
-				) : data ? (
-					<div className="grid gap-5">
-						{data.updateInProgress && (
-							<p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
-								Applying the update — the dashboard restarts and reconnects automatically. This
-								usually takes under a minute.
-							</p>
-						)}
-						<div className="grid gap-2 rounded-lg border p-3 text-sm sm:grid-cols-2">
-							<div className="flex justify-between gap-4 sm:block">
-								<p className="text-muted-foreground">Version</p>
-								<p className="font-medium tabular-nums">{data.appVersion}</p>
-							</div>
-							<div className="flex justify-between gap-4 sm:block">
-								<p className="text-muted-foreground">Tracked image</p>
-								<p className="truncate font-mono text-xs">{data.image}</p>
-							</div>
-							<div className="flex justify-between gap-4 sm:block">
-								<p className="text-muted-foreground">Running digest</p>
-								<p className="font-mono text-xs">{shortDigest(data.currentDigest)}</p>
-							</div>
-							<div className="flex justify-between gap-4 sm:block">
-								<p className="text-muted-foreground">Latest digest</p>
-								<p className="font-mono text-xs">{shortDigest(data.latestDigest)}</p>
-							</div>
-							<div className="flex justify-between gap-4 sm:col-span-2 sm:block">
-								<p className="text-muted-foreground">Last checked</p>
-								<p>{formatWhen(data.lastCheckedAt)}</p>
-							</div>
-							{data.lastUpdateAt && (
-								<div className="flex justify-between gap-4 sm:col-span-2 sm:block">
-									<p className="text-muted-foreground">Last update</p>
-									<p>{formatWhen(data.lastUpdateAt)}</p>
-								</div>
-							)}
-							{data.lastError && (
-								<p className="sm:col-span-2 text-xs text-warning">{data.lastError}</p>
-							)}
-						</div>
-
-						<div className="grid gap-4">
-							<div className="flex items-center justify-between gap-4">
-								<div className="grid gap-0.5">
-									<Label htmlFor="auto-check">Automatic checks</Label>
-									<p className="text-xs text-muted-foreground">
-										Look for a newer image on a schedule ({data.checkCron}).
-									</p>
-								</div>
-								<Switch
-									id="auto-check"
-									checked={autoCheck}
-									disabled={busy}
-									onCheckedChange={(checked) => {
-										setAutoCheck(checked);
-										if (!checked) setAutoUpdate(false);
-										settingsMutation.mutate({
-											autoCheckEnabled: checked,
-											...(checked ? {} : { autoUpdateEnabled: false }),
-										});
-									}}
-								/>
-							</div>
-							<div className="flex items-center justify-between gap-4">
-								<div className="grid gap-0.5">
-									<Label htmlFor="auto-update">Automatic updates</Label>
-									<p className="text-xs text-muted-foreground">
-										When a newer image is found, pull it and restart Nixploy automatically.
-									</p>
-								</div>
-								<Switch
-									id="auto-update"
-									checked={autoUpdate}
-									disabled={busy || !autoCheck}
-									onCheckedChange={(checked) => {
-										setAutoUpdate(checked);
-										settingsMutation.mutate({ autoUpdateEnabled: checked });
-									}}
-								/>
-							</div>
-						</div>
-
-						<div className="flex flex-wrap gap-2">
+		<SettingsSection
+			id="updates"
+			title="Updates"
+			description="Keep this Nixploy host on the latest image."
+			actions={
+				<div className="flex flex-wrap items-center gap-2">
+					{statusBadge}
+					{data ? (
+						<>
 							<Button
 								type="button"
 								variant="outline"
@@ -241,9 +133,8 @@ export function UpdatesCard() {
 								) : (
 									<RefreshCw className="size-4" />
 								)}
-								Check now
+								Check
 							</Button>
-
 							<AlertDialog>
 								<AlertDialogTrigger asChild>
 									<Button
@@ -254,10 +145,8 @@ export function UpdatesCard() {
 									>
 										{applyMutation.isPending || data.updateInProgress ? (
 											<Loader2 className="size-4 animate-spin" />
-										) : (
-											<ArrowUpCircle className="size-4" />
-										)}
-										{data.updateAvailable ? "Update now" : "Reinstall image"}
+										) : null}
+										{data.updateAvailable ? "Update" : "Reinstall"}
 									</Button>
 								</AlertDialogTrigger>
 								<AlertDialogContent>
@@ -284,10 +173,83 @@ export function UpdatesCard() {
 									</AlertDialogFooter>
 								</AlertDialogContent>
 							</AlertDialog>
+						</>
+					) : null}
+				</div>
+			}
+		>
+			{statusQuery.isPending ? (
+				<Skeleton className="h-16 w-full" />
+			) : statusQuery.error && !data ? (
+				<div className="flex flex-col gap-2">
+					<p className="text-sm text-muted-foreground">{statusQuery.error.message}</p>
+					<Button
+						size="sm"
+						variant="outline"
+						className="w-fit"
+						onClick={() => statusQuery.refetch()}
+					>
+						Retry
+					</Button>
+				</div>
+			) : data ? (
+				<>
+					{data.updateInProgress ? (
+						<p className="text-sm text-muted-foreground">
+							Applying update — the dashboard reconnects automatically.
+						</p>
+					) : (
+						<p className="text-sm text-muted-foreground">
+							<span className="font-medium text-foreground">v{data.appVersion}</span>
+							<span className="mx-1.5 text-border">·</span>
+							{formatWhen(data.lastCheckedAt)}
+							{data.lastError ? (
+								<>
+									<span className="mx-1.5 text-border">·</span>
+									<span className="text-warning">{data.lastError}</span>
+								</>
+							) : null}
+						</p>
+					)}
+
+					<div className="flex items-center justify-between gap-4">
+						<div className="grid gap-0.5">
+							<Label htmlFor="auto-check">Automatic checks</Label>
+							<p className="text-xs text-muted-foreground">Periodically look for a newer image.</p>
 						</div>
+						<Switch
+							id="auto-check"
+							checked={autoCheck}
+							disabled={busy}
+							onCheckedChange={(checked) => {
+								setAutoCheck(checked);
+								if (!checked) setAutoUpdate(false);
+								settingsMutation.mutate({
+									autoCheckEnabled: checked,
+									...(checked ? {} : { autoUpdateEnabled: false }),
+								});
+							}}
+						/>
 					</div>
-				) : null}
-			</CardContent>
-		</Card>
+					<div className="flex items-center justify-between gap-4">
+						<div className="grid gap-0.5">
+							<Label htmlFor="auto-update">Automatic updates</Label>
+							<p className="text-xs text-muted-foreground">
+								Pull and restart when a newer image is found.
+							</p>
+						</div>
+						<Switch
+							id="auto-update"
+							checked={autoUpdate}
+							disabled={busy || !autoCheck}
+							onCheckedChange={(checked) => {
+								setAutoUpdate(checked);
+								settingsMutation.mutate({ autoUpdateEnabled: checked });
+							}}
+						/>
+					</div>
+				</>
+			) : null}
+		</SettingsSection>
 	);
 }

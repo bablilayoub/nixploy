@@ -26,6 +26,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps } from "./docker-view";
@@ -91,7 +92,7 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 				</div>
 			</div>
 
-			<div className="overflow-x-auto rounded-lg border border-border">
+			<TableCard>
 				<Table>
 					<TableHeader>
 						<TableRow>
@@ -141,7 +142,7 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 						)}
 					</TableBody>
 				</Table>
-			</div>
+			</TableCard>
 
 			<AlertDialog open={removing !== null} onOpenChange={(open) => !open && setRemoving(null)}>
 				<AlertDialogContent>

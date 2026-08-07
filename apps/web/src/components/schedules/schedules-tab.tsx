@@ -7,6 +7,8 @@ import { CalendarClock, Loader2, Pencil, Play, Plus, Trash2 } from "lucide-react
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { QueryState } from "@/components/query-state";
+import { EmptyState } from "@/components/services/empty-state";
+import { SettingsSection } from "@/components/settings/settings-section";
 import { StatusDot, type StatusDotStatus } from "@/components/shell";
 import {
 	AlertDialog,
@@ -19,7 +21,6 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -47,6 +48,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { Textarea } from "@/components/ui/textarea";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -216,24 +218,23 @@ export function SchedulesTab({
 	};
 
 	return (
-		<Card>
-			<CardHeader className="flex flex-row items-center justify-between space-y-0">
-				<div className="flex flex-col gap-1.5">
-					<CardTitle className="text-sm font-medium">Schedules</CardTitle>
-					<CardDescription>
-						{serviceType === "nixploy-server"
-							? "Run shell commands on this Nixploy host on a cron schedule."
-							: serviceType === "server"
-								? "Run shell commands on the managed server over SSH on a cron schedule."
-								: "Run shell commands inside the service container on a cron schedule."}
-					</CardDescription>
-				</div>
-				<Button size="sm" onClick={() => setDialogOpen(true)}>
-					<Plus className="size-4" />
-					Add Schedule
-				</Button>
-			</CardHeader>
-			<CardContent>
+		<>
+			<SettingsSection
+				title="Schedules"
+				description={
+					serviceType === "nixploy-server"
+						? "Cron shell jobs on this Nixploy host."
+						: serviceType === "server"
+							? "Cron shell jobs over SSH on the managed server."
+							: "Cron shell jobs inside the service container."
+				}
+				actions={
+					<Button size="sm" onClick={() => setDialogOpen(true)}>
+						<Plus className="size-4" />
+						Add Schedule
+					</Button>
+				}
+			>
 				<QueryState
 					isPending={isPending}
 					isError={isError}
@@ -247,93 +248,96 @@ export function SchedulesTab({
 						</div>
 					}
 					empty={
-						<div className="flex flex-col items-center gap-2 py-10 text-center">
-							<CalendarClock className="size-8 text-muted-foreground" />
-							<p className="text-sm text-muted-foreground">No schedules configured.</p>
-						</div>
+						<EmptyState
+							icon={CalendarClock}
+							title="No schedules"
+							description="Add a cron job to run a command on a schedule."
+						/>
 					}
 				>
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead>Name</TableHead>
-								<TableHead>Schedule</TableHead>
-								<TableHead>Command</TableHead>
-								<TableHead>Last Run</TableHead>
-								<TableHead>Enabled</TableHead>
-								<TableHead className="text-right">Actions</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{(schedules ?? []).map((schedule) => (
-								<TableRow key={schedule.scheduleId}>
-									<TableCell className="max-w-40 truncate font-medium">{schedule.name}</TableCell>
-									<TableCell className="font-mono text-xs">{schedule.cronExpression}</TableCell>
-									<TableCell className="max-w-56 truncate font-mono text-xs text-muted-foreground">
-										{schedule.command}
-									</TableCell>
-									<TableCell>
-										{schedule.lastStatus ? (
-											<span
-												className="flex items-center gap-2 text-sm"
-												title={schedule.lastError ?? undefined}
-											>
-												<StatusDot status={runStatusDot[schedule.lastStatus] ?? "neutral"} />
-												{schedule.lastRunAt
-													? formatDistanceToNow(new Date(schedule.lastRunAt), { addSuffix: true })
-													: schedule.lastStatus}
-											</span>
-										) : (
-											<span className="text-sm text-muted-foreground">Never</span>
-										)}
-									</TableCell>
-									<TableCell>
-										<Switch
-											checked={schedule.enabled}
-											disabled={setEnabled.isPending || setDisabled.isPending}
-											onCheckedChange={(checked) =>
-												checked
-													? setEnabled.mutate({ scheduleId: schedule.scheduleId })
-													: setDisabled.mutate({ scheduleId: schedule.scheduleId })
-											}
-										/>
-									</TableCell>
-									<TableCell className="text-right">
-										<div className="flex justify-end gap-1">
-											<Button
-												variant="ghost"
-												size="sm"
-												aria-label="Run schedule now"
-												title="Run now"
-												disabled={runNow.isPending}
-												onClick={() => runNow.mutate({ scheduleId: schedule.scheduleId })}
-											>
-												<Play className="size-4" />
-											</Button>
-											<Button
-												variant="ghost"
-												size="sm"
-												aria-label="Edit schedule"
-												onClick={() => openEdit(schedule)}
-											>
-												<Pencil className="size-4" />
-											</Button>
-											<Button
-												variant="ghost"
-												size="sm"
-												aria-label="Delete schedule"
-												onClick={() => setDeleteTarget(schedule)}
-											>
-												<Trash2 className="size-4 text-destructive" />
-											</Button>
-										</div>
-									</TableCell>
+					<TableCard framed={false}>
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>Name</TableHead>
+									<TableHead>Schedule</TableHead>
+									<TableHead>Command</TableHead>
+									<TableHead>Last Run</TableHead>
+									<TableHead>Enabled</TableHead>
+									<TableHead className="text-right">Actions</TableHead>
 								</TableRow>
-							))}
-						</TableBody>
-					</Table>
+							</TableHeader>
+							<TableBody>
+								{(schedules ?? []).map((schedule) => (
+									<TableRow key={schedule.scheduleId}>
+										<TableCell className="max-w-40 truncate font-medium">{schedule.name}</TableCell>
+										<TableCell className="font-mono text-xs">{schedule.cronExpression}</TableCell>
+										<TableCell className="max-w-56 truncate font-mono text-xs text-muted-foreground">
+											{schedule.command}
+										</TableCell>
+										<TableCell>
+											{schedule.lastStatus ? (
+												<span
+													className="flex items-center gap-2 text-sm"
+													title={schedule.lastError ?? undefined}
+												>
+													<StatusDot status={runStatusDot[schedule.lastStatus] ?? "neutral"} />
+													{schedule.lastRunAt
+														? formatDistanceToNow(new Date(schedule.lastRunAt), { addSuffix: true })
+														: schedule.lastStatus}
+												</span>
+											) : (
+												<span className="text-sm text-muted-foreground">Never</span>
+											)}
+										</TableCell>
+										<TableCell>
+											<Switch
+												checked={schedule.enabled}
+												disabled={setEnabled.isPending || setDisabled.isPending}
+												onCheckedChange={(checked) =>
+													checked
+														? setEnabled.mutate({ scheduleId: schedule.scheduleId })
+														: setDisabled.mutate({ scheduleId: schedule.scheduleId })
+												}
+											/>
+										</TableCell>
+										<TableCell className="text-right">
+											<div className="flex justify-end gap-1">
+												<Button
+													variant="ghost"
+													size="sm"
+													aria-label="Run schedule now"
+													title="Run now"
+													disabled={runNow.isPending}
+													onClick={() => runNow.mutate({ scheduleId: schedule.scheduleId })}
+												>
+													<Play className="size-4" />
+												</Button>
+												<Button
+													variant="ghost"
+													size="sm"
+													aria-label="Edit schedule"
+													onClick={() => openEdit(schedule)}
+												>
+													<Pencil className="size-4" />
+												</Button>
+												<Button
+													variant="ghost"
+													size="sm"
+													aria-label="Delete schedule"
+													onClick={() => setDeleteTarget(schedule)}
+												>
+													<Trash2 className="size-4 text-destructive" />
+												</Button>
+											</div>
+										</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
+					</TableCard>
 				</QueryState>
-			</CardContent>
+			</SettingsSection>
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>
@@ -467,6 +471,6 @@ export function SchedulesTab({
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
-		</Card>
+		</>
 	);
 }

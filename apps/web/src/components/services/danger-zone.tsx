@@ -1,8 +1,9 @@
 "use client";
 
-import { Loader2, TriangleAlert } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
 
+import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -15,7 +16,6 @@ import {
 	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -51,15 +51,11 @@ export function DangerZone({
 	};
 
 	return (
-		<Card className="border-destructive/40">
-			<CardHeader>
-				<CardTitle className="flex items-center gap-2 text-destructive">
-					<TriangleAlert className="size-4" />
-					{title}
-				</CardTitle>
-				<CardDescription>{description}</CardDescription>
-			</CardHeader>
-			<CardContent>
+		<SettingsSection
+			danger
+			title={title}
+			description={description}
+			actions={
 				<AlertDialog
 					open={open}
 					onOpenChange={(next) => {
@@ -68,7 +64,11 @@ export function DangerZone({
 					}}
 				>
 					<AlertDialogTrigger asChild>
-						<Button variant="destructive" size="sm">
+						<Button
+							variant="outline"
+							size="sm"
+							className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+						>
 							{actionLabel}
 						</Button>
 					</AlertDialogTrigger>
@@ -77,7 +77,7 @@ export function DangerZone({
 							<AlertDialogTitle>{title}</AlertDialogTitle>
 							<AlertDialogDescription>{description}</AlertDialogDescription>
 						</AlertDialogHeader>
-						{requireText && (
+						{requireText ? (
 							<div className="space-y-1.5">
 								<Label htmlFor="danger-zone-confirm">
 									Type <span className="font-mono font-semibold">{requireText}</span> to confirm
@@ -90,7 +90,7 @@ export function DangerZone({
 									autoComplete="off"
 								/>
 							</div>
-						)}
+						) : null}
 						<AlertDialogFooter>
 							<AlertDialogCancel>Cancel</AlertDialogCancel>
 							<AlertDialogAction
@@ -107,7 +107,7 @@ export function DangerZone({
 						</AlertDialogFooter>
 					</AlertDialogContent>
 				</AlertDialog>
-			</CardContent>
-		</Card>
+			}
+		/>
 	);
 }

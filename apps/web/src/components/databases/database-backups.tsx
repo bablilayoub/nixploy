@@ -6,6 +6,7 @@ import { DatabaseBackup, Loader2, Pencil, Play, Plus, RotateCcw, Trash2 } from "
 import { useState } from "react";
 import { toast } from "sonner";
 import type { BackupDatabaseType } from "@/components/databases/database-types";
+import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -19,7 +20,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -142,20 +142,18 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 	};
 
 	return (
-		<Card>
-			<CardHeader className="flex flex-row items-center justify-between gap-2">
-				<div>
-					<CardTitle className="text-sm font-medium">Backups</CardTitle>
-					<CardDescription>
-						Scheduled dumps uploaded to an S3 destination. Restore from any stored dump.
-					</CardDescription>
-				</div>
-				<Button size="sm" onClick={openCreate} disabled={destinations.length === 0}>
-					<Plus className="size-4" />
-					Create backup
-				</Button>
-			</CardHeader>
-			<CardContent>
+		<>
+			<SettingsSection
+				title="Backups"
+				description="Scheduled dumps uploaded to an S3 destination. Restore from any stored dump."
+				wide
+				actions={
+					<Button size="sm" onClick={openCreate} disabled={destinations.length === 0}>
+						<Plus className="size-4" />
+						Create backup
+					</Button>
+				}
+			>
 				{backupsQuery.isLoading ? (
 					<div className="space-y-2">
 						<Skeleton className="h-10 w-full" />
@@ -291,7 +289,7 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 						</TableBody>
 					</Table>
 				)}
-			</CardContent>
+			</SettingsSection>
 
 			<BackupFormDialog
 				open={dialogOpen}
@@ -304,7 +302,7 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 				destinations={destinations}
 				onSaved={invalidate}
 			/>
-		</Card>
+		</>
 	);
 }
 

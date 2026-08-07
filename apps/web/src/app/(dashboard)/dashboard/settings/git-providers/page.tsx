@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 import { GitProvidersView } from "@/components/settings/git-providers/git-providers-view";
 
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 };
 
 export default function GitProvidersSettingsPage() {
-	return <GitProvidersView />;
+	return (
+		<Suspense>
+			<GitProvidersView />
+		</Suspense>
+	);
 }

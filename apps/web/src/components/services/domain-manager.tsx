@@ -15,6 +15,7 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/services/empty-state";
+import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -53,6 +54,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 
 type CertificateType = "letsencrypt" | "none" | "custom";
@@ -270,132 +272,132 @@ export function DomainManager({
 	const domains = domainsQuery.data ?? [];
 
 	return (
-		<div className="space-y-4">
-			<div className="flex items-center justify-between">
-				<div>
-					<h3 className="text-sm font-medium">Domains</h3>
-					<p className="text-xs text-muted-foreground">
-						Route traffic to this service through Traefik.
-					</p>
-				</div>
-				<Button size="sm" onClick={openCreate}>
-					<Plus className="size-4" />
-					Add Domain
-				</Button>
-			</div>
-
-			{domainsQuery.isLoading ? (
-				<div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
-					<Loader2 className="mr-2 size-4 animate-spin" /> Loading domains…
-				</div>
-			) : domainsQuery.isError ? (
-				<div className="flex h-24 flex-col items-center justify-center gap-2 text-sm">
-					<p className="text-muted-foreground">
-						{domainsQuery.error.message || "Failed to load domains"}
-					</p>
-					<Button size="sm" variant="outline" onClick={() => domainsQuery.refetch()}>
-						Retry
+		<>
+			<SettingsSection
+				title="Domains"
+				description="Route traffic to this service through Traefik."
+				actions={
+					<Button size="sm" onClick={openCreate}>
+						<Plus className="size-4" />
+						Add Domain
 					</Button>
-				</div>
-			) : domains.length === 0 ? (
-				<EmptyState
-					icon={Globe}
-					title="No domains yet"
-					description="Add a domain to expose this service over HTTP(S)."
-					action={
-						<Button size="sm" variant="outline" onClick={openCreate}>
-							<Plus className="size-4" />
-							Add Domain
+				}
+			>
+				{domainsQuery.isLoading ? (
+					<div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
+						<Loader2 className="mr-2 size-4 animate-spin" /> Loading domains…
+					</div>
+				) : domainsQuery.isError ? (
+					<div className="flex h-24 flex-col items-center justify-center gap-2 text-sm">
+						<p className="text-muted-foreground">
+							{domainsQuery.error.message || "Failed to load domains"}
+						</p>
+						<Button size="sm" variant="outline" onClick={() => domainsQuery.refetch()}>
+							Retry
 						</Button>
-					}
-				/>
-			) : (
-				<div className="rounded-lg border border-border">
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead>Host</TableHead>
-								<TableHead>Path</TableHead>
-								<TableHead>Port</TableHead>
-								{serviceType === "compose" && <TableHead>Service</TableHead>}
-								<TableHead>Certificate</TableHead>
-								<TableHead>Uptime</TableHead>
-								<TableHead className="w-24 text-right">Actions</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{domains.map((domain) => (
-								<TableRow key={domain.domainId}>
-									<TableCell>
-										<a
-											href={`${domain.https ? "https" : "http"}://${domain.host}`}
-											target="_blank"
-											rel="noreferrer"
-											className="inline-flex items-center gap-1.5 font-mono text-xs hover:underline"
-										>
-											{domain.https && <Lock className="size-3 text-success" />}
-											{domain.host}
-										</a>
-									</TableCell>
-									<TableCell className="font-mono text-xs">{domain.path ?? "/"}</TableCell>
-									<TableCell className="font-mono text-xs">{domain.port ?? "—"}</TableCell>
-									{serviceType === "compose" && (
-										<TableCell className="font-mono text-xs">{domain.serviceName ?? "—"}</TableCell>
-									)}
-									<TableCell>
-										<Badge variant="outline" className="text-xs capitalize">
-											{domain.certificateType === "letsencrypt"
-												? "Let's Encrypt"
-												: domain.certificateType}
-										</Badge>
-									</TableCell>
-									<TableCell>
-										{(() => {
-											const probe = (probesQuery.data ?? []).find(
-												(row) => row.domainId === domain.domainId,
-											);
-											return (
-												<div className="flex items-center gap-2">
-													<Switch
-														checked={Boolean(probe?.enabled)}
-														disabled={setProbe.isPending}
-														onCheckedChange={(enabled) =>
-															setProbe.mutate({ domainId: domain.domainId, enabled })
-														}
-													/>
-													<span className="text-xs text-muted-foreground capitalize">
-														{probe?.status ?? "off"}
-													</span>
-												</div>
-											);
-										})()}
-									</TableCell>
-									<TableCell className="text-right">
-										<div className="flex justify-end gap-1">
-											<Button
-												variant="ghost"
-												size="icon-sm"
-												aria-label={`Edit domain ${domain.host}`}
-												onClick={() => openEdit(domain)}
-											>
-												<Pencil className="size-3.5" />
-											</Button>
-											<Button
-												variant="ghost"
-												size="icon-sm"
-												aria-label={`Delete domain ${domain.host}`}
-												onClick={() => setDeleting(domain)}
-											>
-												<Trash2 className="size-3.5 text-destructive" />
-											</Button>
-										</div>
-									</TableCell>
+					</div>
+				) : domains.length === 0 ? (
+					<EmptyState
+						icon={Globe}
+						title="No domains yet"
+						description="Add a domain to expose this service over HTTP(S)."
+						action={
+							<Button size="sm" variant="outline" onClick={openCreate}>
+								<Plus className="size-4" />
+								Add Domain
+							</Button>
+						}
+					/>
+				) : (
+					<TableCard framed={false}>
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>Host</TableHead>
+									<TableHead>Path</TableHead>
+									<TableHead>Port</TableHead>
+									{serviceType === "compose" && <TableHead>Service</TableHead>}
+									<TableHead>Certificate</TableHead>
+									<TableHead>Uptime</TableHead>
+									<TableHead className="w-24 text-right">Actions</TableHead>
 								</TableRow>
-							))}
-						</TableBody>
-					</Table>
-				</div>
-			)}
+							</TableHeader>
+							<TableBody>
+								{domains.map((domain) => (
+									<TableRow key={domain.domainId}>
+										<TableCell>
+											<a
+												href={`${domain.https ? "https" : "http"}://${domain.host}`}
+												target="_blank"
+												rel="noreferrer"
+												className="inline-flex items-center gap-1.5 font-mono text-xs hover:underline"
+											>
+												{domain.https && <Lock className="size-3 text-success" />}
+												{domain.host}
+											</a>
+										</TableCell>
+										<TableCell className="font-mono text-xs">{domain.path ?? "/"}</TableCell>
+										<TableCell className="font-mono text-xs">{domain.port ?? "—"}</TableCell>
+										{serviceType === "compose" && (
+											<TableCell className="font-mono text-xs">
+												{domain.serviceName ?? "—"}
+											</TableCell>
+										)}
+										<TableCell>
+											<Badge variant="outline" className="text-xs capitalize">
+												{domain.certificateType === "letsencrypt"
+													? "Let's Encrypt"
+													: domain.certificateType}
+											</Badge>
+										</TableCell>
+										<TableCell>
+											{(() => {
+												const probe = (probesQuery.data ?? []).find(
+													(row) => row.domainId === domain.domainId,
+												);
+												return (
+													<div className="flex items-center gap-2">
+														<Switch
+															checked={Boolean(probe?.enabled)}
+															disabled={setProbe.isPending}
+															onCheckedChange={(enabled) =>
+																setProbe.mutate({ domainId: domain.domainId, enabled })
+															}
+														/>
+														<span className="text-xs text-muted-foreground capitalize">
+															{probe?.status ?? "off"}
+														</span>
+													</div>
+												);
+											})()}
+										</TableCell>
+										<TableCell className="text-right">
+											<div className="flex justify-end gap-1">
+												<Button
+													variant="ghost"
+													size="icon-sm"
+													aria-label={`Edit domain ${domain.host}`}
+													onClick={() => openEdit(domain)}
+												>
+													<Pencil className="size-3.5" />
+												</Button>
+												<Button
+													variant="ghost"
+													size="icon-sm"
+													aria-label={`Delete domain ${domain.host}`}
+													onClick={() => setDeleting(domain)}
+												>
+													<Trash2 className="size-3.5 text-destructive" />
+												</Button>
+											</div>
+										</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
+					</TableCard>
+				)}
+			</SettingsSection>
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent className="sm:max-w-md">
@@ -591,6 +593,6 @@ export function DomainManager({
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
-		</div>
+		</>
 	);
 }

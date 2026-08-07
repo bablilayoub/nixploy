@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { History, Loader2, Trash2, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
+import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -17,7 +17,6 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
@@ -81,15 +80,12 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 	);
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="text-sm font-medium">Rollbacks</CardTitle>
-				<CardDescription>
-					Images pinned by previous successful deployments. Rolling back points the service at the
-					selected image without a rebuild.
-				</CardDescription>
-			</CardHeader>
-			<CardContent>
+		<>
+			<SettingsSection
+				title="Rollbacks"
+				description="Images from past successful deploys. Roll back without rebuilding."
+				wide
+			>
 				{isLoading ? (
 					<div className="flex flex-col gap-2">
 						{["one", "two"].map((row) => (
@@ -158,7 +154,7 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 						</TableBody>
 					</Table>
 				)}
-			</CardContent>
+			</SettingsSection>
 
 			<AlertDialog
 				open={rollbackTarget !== null}
@@ -213,6 +209,6 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
-		</Card>
+		</>
 	);
 }

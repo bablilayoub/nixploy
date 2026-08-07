@@ -9,6 +9,7 @@ import { StatusDot, type StatusDotStatus } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { useTRPC } from "@/lib/trpc";
 
 const deploymentStatusDot: Record<string, StatusDotStatus> = {
@@ -106,7 +107,7 @@ export function DeploymentsTab({ projectId }: { projectId: string }) {
 				</div>
 			) : deployments.length > 0 ? (
 				<>
-					<div className="overflow-hidden rounded-lg border">
+					<TableCard>
 						<Table>
 							<TableBody>
 								{deployments.map((deployment) => {
@@ -166,7 +167,7 @@ export function DeploymentsTab({ projectId }: { projectId: string }) {
 								})}
 							</TableBody>
 						</Table>
-					</div>
+					</TableCard>
 					{deploymentsQuery.hasNextPage && (
 						<div className="flex justify-center">
 							<Button

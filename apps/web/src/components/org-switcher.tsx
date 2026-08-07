@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth-client";
 import { useTRPC } from "@/lib/trpc";
+import { cn } from "@/lib/utils";
 
 function slugify(name: string) {
 	return (
@@ -37,7 +38,8 @@ function slugify(name: string) {
 	);
 }
 
-export function OrgSwitcher() {
+/** Compact org switcher for the top bar (Vercel-style team menu). */
+export function OrgSwitcher({ className }: { className?: string }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const { data: organizations, isPending } = authClient.useListOrganizations();
@@ -55,7 +57,6 @@ export function OrgSwitcher() {
 		if (organizationId === active?.id) return;
 		try {
 			await authClient.organization.setActive({ organizationId });
-			// Every tRPC query is scoped to the active organization.
 			await queryClient.invalidateQueries();
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : "Failed to switch organization");
@@ -90,30 +91,29 @@ export function OrgSwitcher() {
 		<>
 			<DropdownMenu>
 				<DropdownMenuTrigger asChild>
-					<button
-						type="button"
-						className="flex h-8 max-w-48 items-center gap-2 rounded-md px-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-					>
+					<Button variant="ghost" size="sm" className={cn("h-8 gap-2 px-2 font-normal", className)}>
 						{isPending ? (
 							<>
-								<Skeleton className="size-5 rounded-full" />
+								<Skeleton className="size-5 rounded" />
 								<Skeleton className="h-3.5 w-20" />
 							</>
 						) : (
 							<>
 								{logoUrl ? (
 									// biome-ignore lint/performance/noImgElement: user-supplied white-label URL
-									<img src={logoUrl} alt="" className="size-5 shrink-0 rounded-full object-cover" />
+									<img src={logoUrl} alt="" className="size-5 shrink-0 rounded object-cover" />
 								) : (
-									<span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+									<span className="flex size-5 shrink-0 items-center justify-center rounded bg-foreground text-[10px] font-semibold text-background">
 										{displayName?.charAt(0).toUpperCase() ?? "?"}
 									</span>
 								)}
-								<span className="truncate">{displayName ?? "No organization"}</span>
+								<span className="max-w-36 truncate text-sm font-medium">
+									{displayName ?? "Organization"}
+								</span>
 								<ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
 							</>
 						)}
-					</button>
+					</Button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent className="min-w-56" align="start" sideOffset={6}>
 					<DropdownMenuLabel className="text-xs text-muted-foreground">
@@ -125,16 +125,16 @@ export function OrgSwitcher() {
 							onSelect={() => switchOrganization(org.id)}
 							className="gap-2"
 						>
-							<span className="flex size-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold">
+							<span className="flex size-5 shrink-0 items-center justify-center rounded border text-[10px] font-semibold">
 								{org.name.charAt(0).toUpperCase()}
 							</span>
 							<span className="truncate">{org.name}</span>
-							{org.id === active?.id && <Check className="ml-auto size-4" />}
+							{org.id === active?.id ? <Check className="ms-auto size-4" /> : null}
 						</DropdownMenuItem>
 					))}
 					<DropdownMenuSeparator />
 					<DropdownMenuItem className="gap-2" onSelect={() => setCreateOpen(true)}>
-						<span className="flex size-5 shrink-0 items-center justify-center rounded-full border bg-transparent">
+						<span className="flex size-5 shrink-0 items-center justify-center rounded border">
 							<Plus className="size-3.5" />
 						</span>
 						<span className="text-muted-foreground">Create organization</span>

@@ -23,8 +23,8 @@ import {
 	YAxis,
 } from "recharts";
 
+import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
@@ -161,7 +161,7 @@ function KpiCard({
 	meter?: number;
 }) {
 	return (
-		<div className="overflow-hidden rounded-lg border border-border bg-card px-3 py-3">
+		<div className="overflow-hidden rounded-lg border border-border px-3 py-3">
 			<div className="flex items-center justify-between gap-2">
 				<div
 					className="flex size-7 items-center justify-center rounded-md"
@@ -217,95 +217,90 @@ function MetricChart({
 		}, 0),
 	}));
 	return (
-		<Card>
-			<CardContent className="space-y-3 pt-4">
-				<div className="flex items-center justify-between">
-					<p className="text-sm font-medium">{title}</p>
-					{latest ? (
-						<span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-xs tabular-nums">
-							{latest}
-						</span>
-					) : null}
-				</div>
-				<div className="h-44">
-					<ResponsiveContainer width="100%" height="100%">
-						<AreaChart
-							data={data}
-							margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
-							syncId="service-metrics"
-						>
-							<defs>
-								{series.map((item) => (
-									<SeriesGradient key={item.key} id={item.gradientId} color={item.color} />
-								))}
-							</defs>
-							<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-							<XAxis
-								dataKey="time"
-								stroke="var(--muted-foreground)"
-								fontSize={10}
-								fontFamily="var(--font-jetbrains-mono), ui-monospace, monospace"
-								tickLine={false}
-								axisLine={false}
-								minTickGap={40}
-							/>
-							<YAxis
-								stroke="var(--muted-foreground)"
-								fontSize={10}
-								fontFamily="var(--font-jetbrains-mono), ui-monospace, monospace"
-								tickLine={false}
-								axisLine={false}
-								width={52}
-								tickFormatter={(value: number) => formatValue(value)}
-							/>
-							<Tooltip
-								contentStyle={tooltipStyle}
-								labelStyle={{ color: "var(--muted-foreground)" }}
-								formatter={(value, name) => [
-									formatValue(typeof value === "number" ? value : Number(value)),
-									String(name),
-								]}
-							/>
+		<div className="space-y-3 rounded-lg border border-border p-4">
+			<div className="flex items-center justify-between">
+				<p className="text-sm font-medium">{title}</p>
+				{latest ? (
+					<span className="rounded-md bg-secondary px-2 py-0.5 font-mono text-xs tabular-nums">
+						{latest}
+					</span>
+				) : null}
+			</div>
+			<div className="h-44">
+				<ResponsiveContainer width="100%" height="100%">
+					<AreaChart
+						data={data}
+						margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
+						syncId="service-metrics"
+					>
+						<defs>
 							{series.map((item) => (
-								<Area
-									key={item.key}
-									type="monotone"
-									dataKey={item.key}
-									name={item.label}
-									stroke={item.color}
-									fill={`url(#${item.gradientId})`}
-									strokeWidth={1.5}
-									isAnimationActive={false}
-								/>
+								<SeriesGradient key={item.key} id={item.gradientId} color={item.color} />
 							))}
-							{peaks.map(
-								(peak) =>
-									peak.value > 0 && (
-										<ReferenceLine
-											key={peak.key}
-											y={peak.value}
-											stroke={peak.color}
-											strokeDasharray="4 4"
-											strokeOpacity={0.4}
-										/>
-									),
-							)}
-						</AreaChart>
-					</ResponsiveContainer>
-				</div>
-				<div className="flex items-center gap-4">
-					{series.map((item) => (
-						<span
-							key={item.key}
-							className="flex items-center gap-1.5 text-xs text-muted-foreground"
-						>
-							<span className="size-2 rounded-full" style={{ backgroundColor: item.color }} />
-							{item.label}
-						</span>
-					))}
-				</div>
-			</CardContent>
-		</Card>
+						</defs>
+						<CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+						<XAxis
+							dataKey="time"
+							stroke="var(--muted-foreground)"
+							fontSize={10}
+							fontFamily="var(--font-jetbrains-mono), ui-monospace, monospace"
+							tickLine={false}
+							axisLine={false}
+							minTickGap={40}
+						/>
+						<YAxis
+							stroke="var(--muted-foreground)"
+							fontSize={10}
+							fontFamily="var(--font-jetbrains-mono), ui-monospace, monospace"
+							tickLine={false}
+							axisLine={false}
+							width={52}
+							tickFormatter={(value: number) => formatValue(value)}
+						/>
+						<Tooltip
+							contentStyle={tooltipStyle}
+							labelStyle={{ color: "var(--muted-foreground)" }}
+							formatter={(value, name) => [
+								formatValue(typeof value === "number" ? value : Number(value)),
+								String(name),
+							]}
+						/>
+						{series.map((item) => (
+							<Area
+								key={item.key}
+								type="monotone"
+								dataKey={item.key}
+								name={item.label}
+								stroke={item.color}
+								fill={`url(#${item.gradientId})`}
+								strokeWidth={1.5}
+								isAnimationActive={false}
+							/>
+						))}
+						{peaks.map(
+							(peak) =>
+								peak.value > 0 && (
+									<ReferenceLine
+										key={peak.key}
+										y={peak.value}
+										stroke={peak.color}
+										strokeDasharray="4 4"
+										strokeOpacity={0.4}
+									/>
+								),
+						)}
+					</AreaChart>
+				</ResponsiveContainer>
+			</div>
+			<div className="flex items-center gap-4">
+				{series.map((item) => (
+					<span key={item.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+						<span className="size-2 rounded-full" style={{ backgroundColor: item.color }} />
+						{item.label}
+					</span>
+				))}
+			</div>
+		</div>
 	);
 }
 
@@ -609,63 +604,56 @@ export function MonitoringCharts({
 			</div>
 
 			{replicas.length > 1 && (
-				<Card>
-					<CardContent className="pt-4">
-						<p className="mb-3 text-sm font-medium">Replicas · {replicas.length}</p>
-						<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-							{replicas.map((replica) => (
-								<div
-									key={replica.id}
-									className="flex items-center justify-between rounded-lg border border-border px-3 py-2"
-								>
-									<div className="flex items-center gap-2">
-										<span
-											className={cn(
-												"size-1.5 rounded-full",
-												replica.state === "running" ? "bg-emerald-500" : "bg-amber-500",
-											)}
-										/>
-										<span className="max-w-40 truncate font-mono text-xs">{replica.name}</span>
-									</div>
-									<span className="text-xs text-muted-foreground tabular-nums">
-										{replica.cpu.toFixed(1)}% · {formatBytes(replica.memoryUsed)} · {replica.pids}{" "}
-										pids
-									</span>
+				<SettingsSection title={`Replicas · ${replicas.length}`}>
+					<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+						{replicas.map((replica) => (
+							<div
+								key={replica.id}
+								className="flex items-center justify-between rounded-lg border border-border px-3 py-2"
+							>
+								<div className="flex items-center gap-2">
+									<span
+										className={cn(
+											"size-1.5 rounded-full",
+											replica.state === "running" ? "bg-emerald-500" : "bg-amber-500",
+										)}
+									/>
+									<span className="max-w-40 truncate font-mono text-xs">{replica.name}</span>
 								</div>
-							))}
-						</div>
-					</CardContent>
-				</Card>
+								<span className="text-xs text-muted-foreground tabular-nums">
+									{replica.cpu.toFixed(1)}% · {formatBytes(replica.memoryUsed)} · {replica.pids}{" "}
+									pids
+								</span>
+							</div>
+						))}
+					</div>
+				</SettingsSection>
 			)}
 
 			{notRunningMessage && range === "live" ? (
-				<Card>
-					<CardContent className="flex h-40 flex-col items-center justify-center gap-3 text-center">
-						<p className="text-sm font-medium">Service is not running</p>
-						<p className="max-w-sm text-xs text-muted-foreground">
-							Metrics appear once a container is up. Deploy or start the service first.
-						</p>
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={() => {
-								setNotRunningMessage(null);
-								setRetryNonce((value) => value + 1);
-							}}
-						>
-							<RefreshCw className="size-3.5" />
-							Retry
-						</Button>
-					</CardContent>
-				</Card>
+				<div className="flex h-40 flex-col items-center justify-center gap-3 rounded-lg border border-border p-4 text-center">
+					<p className="text-sm font-medium">Service is not running</p>
+					<p className="max-w-sm text-xs text-muted-foreground">
+						Metrics appear once a container is up. Deploy or start the service first.
+					</p>
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={() => {
+							setNotRunningMessage(null);
+							setRetryNonce((value) => value + 1);
+						}}
+					>
+						<RefreshCw className="size-3.5" />
+						Retry
+					</Button>
+				</div>
 			) : ((range === "live" && !connected) || (range !== "live" && historyQuery.isLoading)) &&
 				samples.length === 0 ? (
-				<Card>
-					<CardContent className="flex h-40 items-center justify-center gap-2 text-sm text-muted-foreground">
-						<Activity className="size-4 animate-pulse" />
-						{range === "live" ? "Connecting to metrics stream…" : "Loading metrics history…"}
-					</CardContent>
-				</Card>
+				<div className="flex h-40 items-center justify-center gap-2 rounded-lg border border-border p-4 text-sm text-muted-foreground">
+					<Activity className="size-4 animate-pulse" />
+					{range === "live" ? "Connecting to metrics stream…" : "Loading metrics history…"}
+				</div>
 			) : (
 				<div className="grid gap-4 lg:grid-cols-2">
 					<MetricChart

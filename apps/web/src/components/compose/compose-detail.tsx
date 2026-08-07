@@ -6,6 +6,7 @@ import { Layers, Loader2, Play, RefreshCw, Rocket, Square } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
+import { UnderlineTabsList, UnderlineTabsTrigger } from "@/components/application/underline-tabs";
 import { VolumeBackupsTab } from "@/components/backups/volume-backups-tab";
 import { ComposeFileTab } from "@/components/compose/compose-file-tab";
 import { DeploymentsTab } from "@/components/compose/deployments-tab";
@@ -19,10 +20,11 @@ import { TerminalTab } from "@/components/compose/terminal-tab";
 import { SchedulesTab } from "@/components/schedules/schedules-tab";
 import { CopilotChatDrawer } from "@/components/services/copilot-chat-drawer";
 import { ServiceStatusBadge } from "@/components/services/status-badge";
+import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -154,6 +156,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 						</Button>
 						<Button
 							variant="outline"
+							className="hidden sm:inline-flex"
 							disabled={anyActionPending}
 							onClick={() => redeployMutation.mutate({ composeId })}
 						>
@@ -167,6 +170,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 						{isRunning ? (
 							<Button
 								variant="outline"
+								className="hidden sm:inline-flex"
 								disabled={anyActionPending}
 								onClick={() => stopMutation.mutate({ composeId })}
 							>
@@ -180,6 +184,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 						) : (
 							<Button
 								variant="outline"
+								className="hidden sm:inline-flex"
 								disabled={anyActionPending}
 								onClick={() => startMutation.mutate({ composeId })}
 							>
@@ -196,50 +201,64 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 			/>
 
 			<Tabs value={tab} onValueChange={setTab}>
-				<TabsList variant="line" className="w-full justify-start overflow-x-auto border-b">
-					<TabsTrigger value="general">General</TabsTrigger>
-					<TabsTrigger value="compose-file">Compose File</TabsTrigger>
-					<TabsTrigger value="environment">Environment</TabsTrigger>
-					<TabsTrigger value="domains">Domains</TabsTrigger>
-					<TabsTrigger value="deployments">Deployments</TabsTrigger>
-					<TabsTrigger value="logs">Logs</TabsTrigger>
-					<TabsTrigger value="monitoring">Monitoring</TabsTrigger>
-					<TabsTrigger value="terminal">Terminal</TabsTrigger>
-					<TabsTrigger value="schedules">Schedules</TabsTrigger>
-					<TabsTrigger value="backups">Volume Backups</TabsTrigger>
-					<TabsTrigger value="settings">Settings</TabsTrigger>
-				</TabsList>
-				<TabsContent value="general">
+				<UnderlineTabsList>
+					<UnderlineTabsTrigger value="general">General</UnderlineTabsTrigger>
+					<UnderlineTabsTrigger value="compose-file">Compose File</UnderlineTabsTrigger>
+					<UnderlineTabsTrigger value="deploy">Deploy</UnderlineTabsTrigger>
+					<UnderlineTabsTrigger value="runtime">Runtime</UnderlineTabsTrigger>
+					<UnderlineTabsTrigger value="domains">Domains</UnderlineTabsTrigger>
+					<UnderlineTabsTrigger value="environment">Environment</UnderlineTabsTrigger>
+					<UnderlineTabsTrigger value="settings">Settings</UnderlineTabsTrigger>
+				</UnderlineTabsList>
+				<TabsContent value="general" className="mt-6">
 					<GeneralTab compose={compose} />
 				</TabsContent>
-				<TabsContent value="compose-file">
+				<TabsContent value="compose-file" className="mt-6">
 					<ComposeFileTab compose={compose} />
 				</TabsContent>
-				<TabsContent value="environment">
-					<EnvironmentTab compose={compose} />
+				<TabsContent value="deploy" className="mt-6">
+					<Tabs defaultValue="deployments" className="w-full gap-4">
+						<SubTabsList>
+							<SubTabsTrigger value="deployments">Deployments</SubTabsTrigger>
+							<SubTabsTrigger value="schedules">Schedules</SubTabsTrigger>
+							<SubTabsTrigger value="backups">Backups</SubTabsTrigger>
+						</SubTabsList>
+						<TabsContent value="deployments" className="mt-0">
+							<DeploymentsTab compose={compose} />
+						</TabsContent>
+						<TabsContent value="schedules" className="mt-0">
+							<SchedulesTab serviceType="compose" serviceId={compose.composeId} />
+						</TabsContent>
+						<TabsContent value="backups" className="mt-0">
+							<VolumeBackupsTab serviceType="compose" serviceId={compose.composeId} />
+						</TabsContent>
+					</Tabs>
 				</TabsContent>
-				<TabsContent value="domains">
+				<TabsContent value="runtime" className="mt-6">
+					<Tabs defaultValue="logs" className="w-full gap-4">
+						<SubTabsList>
+							<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
+							<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>
+							<SubTabsTrigger value="terminal">Terminal</SubTabsTrigger>
+						</SubTabsList>
+						<TabsContent value="logs" className="mt-0">
+							<LogsTab compose={compose} />
+						</TabsContent>
+						<TabsContent value="monitoring" className="mt-0">
+							<MonitoringTab compose={compose} />
+						</TabsContent>
+						<TabsContent value="terminal" className="mt-0">
+							<TerminalTab compose={compose} />
+						</TabsContent>
+					</Tabs>
+				</TabsContent>
+				<TabsContent value="domains" className="mt-6">
 					<DomainsTab compose={compose} />
 				</TabsContent>
-				<TabsContent value="deployments">
-					<DeploymentsTab compose={compose} />
+				<TabsContent value="environment" className="mt-6">
+					<EnvironmentTab compose={compose} />
 				</TabsContent>
-				<TabsContent value="logs">
-					<LogsTab compose={compose} />
-				</TabsContent>
-				<TabsContent value="monitoring">
-					<MonitoringTab compose={compose} />
-				</TabsContent>
-				<TabsContent value="terminal">
-					<TerminalTab compose={compose} />
-				</TabsContent>
-				<TabsContent value="schedules">
-					<SchedulesTab serviceType="compose" serviceId={compose.composeId} />
-				</TabsContent>
-				<TabsContent value="backups">
-					<VolumeBackupsTab serviceType="compose" serviceId={compose.composeId} />
-				</TabsContent>
-				<TabsContent value="settings">
+				<TabsContent value="settings" className="mt-6">
 					<SettingsTab projectId={projectId} compose={compose} />
 				</TabsContent>
 			</Tabs>

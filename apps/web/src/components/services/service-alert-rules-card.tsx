@@ -5,8 +5,8 @@ import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -59,15 +59,12 @@ export function ServiceAlertRulesCard({
 	);
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="text-sm font-medium">Alert rules</CardTitle>
-				<CardDescription>
-					Per-service CPU, memory, restart, and deploy-failure thresholds. Notify via Settings →
-					Notifications (Service alerts).
-				</CardDescription>
-			</CardHeader>
-			<CardContent className="flex flex-col gap-4">
+		<SettingsSection
+			title="Alert rules"
+			description="CPU, memory, restart, and deploy-failure thresholds."
+			wide
+		>
+			<div className="flex flex-col gap-4">
 				{rules.isLoading ? (
 					<Skeleton className="h-12 w-full" />
 				) : rules.isError ? (
@@ -167,7 +164,7 @@ export function ServiceAlertRulesCard({
 						Add
 					</Button>
 				</div>
-			</CardContent>
-		</Card>
+			</div>
+		</SettingsSection>
 	);
 }

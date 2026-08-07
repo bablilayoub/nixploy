@@ -2,42 +2,71 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { Info, LayoutGrid, Search } from "lucide-react";
+import { ArrowDownAZ, ArrowUpAZ, LayoutGrid } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { EmptyState } from "@/components/services/empty-state";
 import { PageHeader } from "@/components/shell";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
-import { cn } from "@/lib/utils";
 
 import { DeployTemplateDialog } from "./deploy-template-dialog";
 import { TemplateDetailsDialog } from "./template-details-dialog";
+import { TemplateLogo } from "./template-logo";
 
 export type TemplateSummary = inferRouterOutputs<AppRouter>["template"]["all"][number];
 
-const ALL_CATEGORIES = "All";
+const ALL_CATEGORIES = "all";
 
-function TemplateLogo({ template }: { template: TemplateSummary }) {
-	const [failed, setFailed] = useState(false);
-	if (failed || !template.logo) {
-		return (
-			<div className="flex size-9 items-center justify-center rounded-md bg-secondary text-base font-semibold uppercase">
-				{template.name.charAt(0)}
-			</div>
-		);
-	}
+function TemplateCard({
+	template,
+	onInspect,
+	onDeploy,
+}: {
+	template: TemplateSummary;
+	onInspect: () => void;
+	onDeploy: () => void;
+}) {
 	return (
-		// biome-ignore lint/performance/noImgElement: remote simple-icons CDN logo with a local fallback; next/image would need remotePatterns config
-		<img
-			src={`https://cdn.simpleicons.org/${template.logo}`}
-			alt={`${template.name} logo`}
-			className="size-9 rounded-md"
-			onError={() => setFailed(true)}
-		/>
+		<article className="group flex h-full flex-col rounded-lg border border-border transition-colors hover:border-foreground/20">
+			<button type="button" onClick={onInspect} className="flex flex-1 flex-col p-4 text-left">
+				<div className="flex items-start gap-3">
+					<div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border">
+						<TemplateLogo name={template.name} logo={template.logo} />
+					</div>
+					<div className="min-w-0 flex-1">
+						<div className="flex items-start justify-between gap-2">
+							<h2 className="truncate text-sm font-medium text-foreground">{template.name}</h2>
+							{/* Badge only when browsing a single category — category headers cover "all" */}
+							<span className="sr-only">{template.category}</span>
+						</div>
+						<p className="mt-1.5 line-clamp-2 text-sm text-muted-foreground">
+							{template.description}
+						</p>
+					</div>
+				</div>
+			</button>
+			<div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
+				<Button variant="ghost" size="sm" className="text-muted-foreground" onClick={onInspect}>
+					Details
+				</Button>
+				<Button size="sm" onClick={onDeploy}>
+					Deploy
+				</Button>
+			</div>
+		</article>
 	);
 }
 
@@ -45,17 +74,15 @@ export function TemplatesView() {
 	const trpc = useTRPC();
 	const [search, setSearch] = useState("");
 	const [category, setCategory] = useState(ALL_CATEGORIES);
+	const [sort, setSort] = useState<"asc" | "desc">("asc");
 	const [selected, setSelected] = useState<TemplateSummary | null>(null);
 	const [inspecting, setInspecting] = useState<TemplateSummary | null>(null);
 
-	// The catalog is static, so cache it forever.
 	const { data: templates, isPending } = useQuery({
 		...trpc.template.all.queryOptions(),
 		staleTime: Number.POSITIVE_INFINITY,
 	});
 
-	// Deep link (e.g. from the command palette): ?template=<id> opens the
-	// deploy dialog for that template once the catalog has loaded.
 	const searchParams = useSearchParams();
 	const preselectId = searchParams.get("template");
 	useEffect(() => {
@@ -64,130 +91,142 @@ export function TemplatesView() {
 		if (match) setSelected(match);
 	}, [preselectId, templates]);
 
-	// Categories in catalog order, with their template counts.
-	const categories: { name: string; count: number }[] = [];
-	for (const template of templates ?? []) {
-		const existing = categories.find((entry) => entry.name === template.category);
-		if (existing) {
-			existing.count += 1;
-		} else {
-			categories.push({ name: template.category, count: 1 });
+	const categories = useMemo(() => {
+		const names: string[] = [];
+		for (const template of templates ?? []) {
+			if (!names.includes(template.category)) names.push(template.category);
 		}
-	}
+		return names.sort((a, b) => a.localeCompare(b));
+	}, [templates]);
 
-	const query = search.trim().toLowerCase();
-	const filtered = templates?.filter(
-		(template) =>
-			(category === ALL_CATEGORIES || template.category === category) &&
-			(template.name.toLowerCase().includes(query) ||
-				template.description.toLowerCase().includes(query) ||
-				template.tags.some((tag) => tag.toLowerCase().includes(query))),
-	);
+	const filtered = useMemo(() => {
+		const query = search.trim().toLowerCase();
+		const rows = (templates ?? []).filter(
+			(template) =>
+				(category === ALL_CATEGORIES || template.category === category) &&
+				(template.name.toLowerCase().includes(query) ||
+					template.description.toLowerCase().includes(query) ||
+					template.tags.some((tag) => tag.toLowerCase().includes(query))),
+		);
+		return rows.sort((a, b) =>
+			sort === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name),
+		);
+	}, [templates, category, search, sort]);
+
+	const grouped = useMemo(() => {
+		if (category !== ALL_CATEGORIES) return null;
+		const map = new Map<string, TemplateSummary[]>();
+		for (const template of filtered) {
+			const list = map.get(template.category) ?? [];
+			list.push(template);
+			map.set(template.category, list);
+		}
+		return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+	}, [filtered, category]);
 
 	return (
 		<div className="flex flex-col gap-6">
-			<PageHeader
-				title="Templates"
-				description="One-click deployments of popular self-hosted apps."
-				actions={
-					<div className="relative">
-						<Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-						<Input
-							placeholder="Search templates..."
-							value={search}
-							onChange={(event) => setSearch(event.target.value)}
-							className="h-8 w-full pl-8 sm:w-56"
-						/>
-					</div>
-				}
-			/>
+			<PageHeader title="Templates" description="One-click deploys for popular self-hosted apps." />
 
-			{!isPending && categories.length > 0 && (
-				<div className="flex flex-wrap gap-2">
-					{[ALL_CATEGORIES, ...categories.map((entry) => entry.name)].map((name) => {
-						const count =
-							name === ALL_CATEGORIES
-								? (templates?.length ?? 0)
-								: (categories.find((entry) => entry.name === name)?.count ?? 0);
-						const active = category === name;
-						return (
-							<button
-								key={name}
-								type="button"
-								onClick={() => setCategory(name)}
-								className={cn(
-									"flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-									active
-										? "border-foreground bg-foreground text-background"
-										: "border-border bg-background text-muted-foreground hover:bg-secondary hover:text-foreground",
-								)}
-							>
-								{name}
-								<span className={cn("tabular-nums", active ? "opacity-70" : "opacity-50")}>
-									{count}
-								</span>
-							</button>
-						);
-					})}
+			<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+				<div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+					<Input
+						placeholder="Search templates…"
+						className="h-9 w-full sm:max-w-xs"
+						value={search}
+						onChange={(event) => setSearch(event.target.value)}
+					/>
+					<Select value={category} onValueChange={setCategory}>
+						<SelectTrigger className="h-9 w-full sm:w-44">
+							<SelectValue placeholder="Category" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value={ALL_CATEGORIES}>All categories</SelectItem>
+							{categories.map((name) => (
+								<SelectItem key={name} value={name}>
+									{name}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
 				</div>
-			)}
+				<Select value={sort} onValueChange={(value) => setSort(value as "asc" | "desc")}>
+					<SelectTrigger className="h-9 w-full sm:w-40">
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent align="end">
+						<SelectItem value="asc">
+							<span className="flex items-center gap-2">
+								<ArrowUpAZ className="size-4" />
+								A–Z
+							</span>
+						</SelectItem>
+						<SelectItem value="desc">
+							<span className="flex items-center gap-2">
+								<ArrowDownAZ className="size-4" />
+								Z–A
+							</span>
+						</SelectItem>
+					</SelectContent>
+				</Select>
+			</div>
 
 			{isPending ? (
-				<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-					{["one", "two", "three", "four", "five", "six", "seven", "eight"].map((row) => (
-						<div key={row} className="flex flex-col gap-3 rounded-lg border p-4">
-							<Skeleton className="size-9 rounded-md" />
-							<Skeleton className="h-4 w-32" />
-							<Skeleton className="h-4 w-full" />
-						</div>
-					))}
-				</div>
-			) : filtered && filtered.length > 0 ? (
-				<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-					{filtered.map((template) => (
-						<div
-							key={template.id}
-							className="flex flex-col gap-3 rounded-lg border p-4 transition-colors hover:bg-secondary"
-						>
-							<div className="flex items-center gap-3">
-								<TemplateLogo template={template} />
-								<div className="flex min-w-0 flex-col">
-									<span className="truncate text-sm font-medium">{template.name}</span>
-									<span className="truncate text-xs text-muted-foreground">
-										{template.tags.join(" · ")}
-									</span>
+				<ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+					{["one", "two", "three", "four", "five", "six"].map((row) => (
+						<li key={row} className="rounded-lg border p-4">
+							<div className="flex gap-3">
+								<Skeleton className="size-10 shrink-0 rounded-md" />
+								<div className="min-w-0 flex-1 space-y-2">
+									<Skeleton className="h-4 w-28" />
+									<Skeleton className="h-3 w-full" />
 								</div>
 							</div>
-							<p className="line-clamp-2 flex-1 text-sm text-muted-foreground">
-								{template.description}
-							</p>
-							<div className="flex gap-2">
-								<Button
-									size="sm"
-									variant="outline"
-									className="flex-1"
-									onClick={() => setSelected(template)}
-								>
-									Deploy
-								</Button>
-								<Button
-									size="sm"
-									variant="outline"
-									aria-label={`Details for ${template.name}`}
-									title="Details"
-									onClick={() => setInspecting(template)}
-								>
-									<Info className="size-4" />
-								</Button>
+						</li>
+					))}
+				</ul>
+			) : filtered.length === 0 ? (
+				<EmptyState
+					icon={LayoutGrid}
+					title="No templates match"
+					description="Try a different search or category."
+				/>
+			) : grouped ? (
+				<div className="flex flex-col gap-8">
+					{grouped.map(([categoryName, rows]) => (
+						<section key={categoryName} className="space-y-3">
+							<div className="flex items-center gap-2">
+								<h3 className="text-sm font-medium capitalize">{categoryName}</h3>
+								<Badge variant="secondary" className="font-normal tabular-nums">
+									{rows.length}
+								</Badge>
 							</div>
-						</div>
+							<ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+								{rows.map((template) => (
+									<li key={template.id}>
+										<TemplateCard
+											template={template}
+											onInspect={() => setInspecting(template)}
+											onDeploy={() => setSelected(template)}
+										/>
+									</li>
+								))}
+							</ul>
+						</section>
 					))}
 				</div>
 			) : (
-				<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-16 text-center">
-					<LayoutGrid className="size-8 text-muted-foreground" />
-					<p className="text-sm text-muted-foreground">No templates match your filters.</p>
-				</div>
+				<ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+					{filtered.map((template) => (
+						<li key={template.id}>
+							<TemplateCard
+								template={template}
+								onInspect={() => setInspecting(template)}
+								onDeploy={() => setSelected(template)}
+							/>
+						</li>
+					))}
+				</ul>
 			)}
 
 			<TemplateDetailsDialog

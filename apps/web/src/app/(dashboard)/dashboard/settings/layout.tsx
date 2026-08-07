@@ -7,7 +7,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 			<SubNav
 				orientation="vertical"
 				groups={settingsNavGroups}
-				className="md:sticky md:top-20 md:w-52 md:shrink-0"
+				className="md:sticky md:top-16 md:w-52 md:shrink-0"
 			/>
 			<div className="min-w-0 flex-1">{children}</div>
 		</div>

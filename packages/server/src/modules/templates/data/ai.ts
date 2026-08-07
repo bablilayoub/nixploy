@@ -32,7 +32,7 @@ volumes:
 		name: "Open WebUI",
 		description:
 			"Feature-rich ChatGPT-style interface for local models — ships with an Ollama backend, supports RAG and tools.",
-		logo: "",
+		logo: "https://raw.githubusercontent.com/open-webui/open-webui/main/static/static/favicon.svg",
 		tags: ["ai", "llm", "chat"],
 		links: {
 			website: "https://openwebui.com",
@@ -67,7 +67,7 @@ volumes:
 		name: "Flowise",
 		description:
 			"Drag-and-drop builder for LLM apps — chain prompts, tools, vector stores and agents visually.",
-		logo: "",
+		logo: "langchain",
 		tags: ["ai", "llm", "low-code"],
 		links: {
 			website: "https://flowiseai.com",
@@ -105,7 +105,7 @@ volumes:
 		name: "AnythingLLM",
 		description:
 			"All-in-one private ChatGPT — chat with documents, manage workspaces, use local or hosted models.",
-		logo: "",
+		logo: "https://raw.githubusercontent.com/Mintplex-Labs/anything-llm/master/frontend/public/favicon.png",
 		tags: ["ai", "llm", "rag"],
 		links: {
 			website: "https://anythingllm.com",

@@ -1,8 +1,17 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Copy, CopyPlus, Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+	Copy,
+	CopyPlus,
+	Download,
+	Loader2,
+	MoreHorizontal,
+	Pencil,
+	Trash2,
+	Upload,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -28,12 +37,15 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useTRPC } from "@/lib/trpc";
+
+import { GitopsCard, type GitopsCardHandle } from "./gitops-card";
 
 export interface EnvironmentRow {
 	environmentId: string;
@@ -67,6 +79,8 @@ export function EnvironmentActions({
 	const [duplicateOpen, setDuplicateOpen] = useState(false);
 	const [cloneOpen, setCloneOpen] = useState(false);
 	const [deleteOpen, setDeleteOpen] = useState(false);
+	const [gitopsImportOpen, setGitopsImportOpen] = useState(false);
+	const gitopsRef = useRef<GitopsCardHandle>(null);
 	const [name, setName] = useState(environment.name);
 	const [description, setDescription] = useState(environment.description ?? "");
 	const [duplicateName, setDuplicateName] = useState(`${environment.name} copy`);
@@ -170,6 +184,21 @@ export function EnvironmentActions({
 						<CopyPlus className="size-4" />
 						Clone with services
 					</DropdownMenuItem>
+					<DropdownMenuSeparator />
+					<DropdownMenuItem
+						onSelect={(event) => {
+							event.preventDefault();
+							void gitopsRef.current?.exportStack();
+						}}
+					>
+						<Download className="size-4" />
+						Export stack
+					</DropdownMenuItem>
+					<DropdownMenuItem onSelect={() => setGitopsImportOpen(true)}>
+						<Upload className="size-4" />
+						Import stack
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
 					<DropdownMenuItem
 						variant="destructive"
 						disabled={isOnlyEnvironment}
@@ -180,6 +209,14 @@ export function EnvironmentActions({
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
+
+			<GitopsCard
+				ref={gitopsRef}
+				projectId={projectId}
+				environmentName={environment.name}
+				importOpen={gitopsImportOpen}
+				onImportOpenChange={setGitopsImportOpen}
+			/>
 
 			<Dialog open={renameOpen} onOpenChange={setRenameOpen}>
 				<DialogContent className="sm:max-w-md">

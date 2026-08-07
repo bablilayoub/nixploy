@@ -11,6 +11,7 @@ const GITHUB_APP_CREATION_URL = "https://github.com/settings/apps/new";
 /** State payload round-tripped through the GitHub App manifest flow. */
 export type GithubAppState = {
 	gitProviderId: string;
+	githubId: string;
 	nonce: string;
 };
 
@@ -75,6 +76,24 @@ export type GithubAppManifestInput = {
 	webhookPath?: string;
 };
 
+/** Require an absolute http(s) URL; throw otherwise so manifests never ship relative redirects. */
+export function assertPublicBaseUrl(value: string): string {
+	const trimmed = value.trim().replace(/\/$/, "");
+	if (!trimmed) {
+		throw new Error("Public base URL is required for GitHub App setup");
+	}
+	let parsed: URL;
+	try {
+		parsed = new URL(trimmed);
+	} catch {
+		throw new Error(`Invalid public base URL: ${value}`);
+	}
+	if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+		throw new Error(`Public base URL must be http(s): ${value}`);
+	}
+	return trimmed;
+}
+
 /**
  * Build the GitHub App manifest flow payload. The UI auto-submits a hidden
  * POST form to `url` with fields `manifest` (stringified) and `state`;
@@ -87,8 +106,12 @@ export async function getGithubAppManifest(input: GithubAppManifestInput) {
 	if (!row) {
 		throw new Error(`GitHub provider not found: ${input.githubId}`);
 	}
-	const baseUrl = input.baseUrl.replace(/\/$/, "");
-	const state = encodeGithubAppState({ gitProviderId: row.gitProviderId, nonce: randomUUID() });
+	const baseUrl = assertPublicBaseUrl(input.baseUrl);
+	const state = encodeGithubAppState({
+		gitProviderId: row.gitProviderId,
+		githubId: row.githubId,
+		nonce: randomUUID(),
+	});
 	const webhookSecret = randomBytes(32).toString("hex");
 
 	await db
@@ -96,25 +119,36 @@ export async function getGithubAppManifest(input: GithubAppManifestInput) {
 		.set({ githubWebhookSecret: webhookSecret })
 		.where(eq(github.githubId, row.githubId));
 
+	const redirectPath = input.redirectPath ?? "/api/github/callback";
+	const webhookPath = input.webhookPath ?? `/api/webhooks/github/${row.githubId}`;
+
+	// GitHub validates redirect_url as an absolute URL without relying on query
+	// params — pass `state` as a separate form field (see GitHub App Manifest docs).
 	const manifest = {
 		name: input.appName || `Nixploy-${randomBytes(3).toString("hex")}`,
 		url: baseUrl,
 		hook_attributes: {
-			url: `${baseUrl}${input.webhookPath ?? "/api/webhook/github"}`,
+			url: `${baseUrl}${webhookPath.startsWith("/") ? webhookPath : `/${webhookPath}`}`,
 			active: true,
 		},
-		redirect_url: `${baseUrl}${input.redirectPath ?? "/api/github/callback"}?state=${state}`,
-		callback_urls: [baseUrl],
+		redirect_url: `${baseUrl}${redirectPath.startsWith("/") ? redirectPath : `/${redirectPath}`}`,
+		callback_urls: [`${baseUrl}/api/github/callback`],
+		setup_url: `${baseUrl}/dashboard/settings/git-providers`,
 		public: false,
 		default_permissions: {
 			contents: "read",
 			metadata: "read",
 			emails: "read",
+			pull_requests: "read",
 		},
-		default_events: ["push"],
+		default_events: ["push", "pull_request"],
 	};
 
-	return { url: GITHUB_APP_CREATION_URL, manifest: JSON.stringify(manifest), state };
+	return {
+		url: GITHUB_APP_CREATION_URL,
+		manifest: JSON.stringify(manifest),
+		state,
+	};
 }
 
 type GithubAppConversion = {
@@ -144,7 +178,10 @@ export async function setupGithubApp(input: {
 	}
 	if (input.state) {
 		const state = decodeGithubAppState(input.state);
-		if (state.gitProviderId !== row.gitProviderId) {
+		if (
+			state.gitProviderId !== row.gitProviderId ||
+			(state.githubId && state.githubId !== row.githubId)
+		) {
 			throw new Error("GitHub App state mismatch");
 		}
 	}

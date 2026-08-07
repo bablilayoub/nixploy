@@ -1,13 +1,13 @@
 "use client";
 
 import { format } from "date-fns";
-import { Loader2, Monitor, MonitorSmartphone, Smartphone } from "lucide-react";
+import { Loader2, Monitor, Smartphone } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { SettingsSection } from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient, useSession } from "@/lib/auth-client";
 
@@ -91,57 +91,52 @@ export function SessionsCard() {
 	);
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="flex items-center gap-2">
-					<MonitorSmartphone className="size-4 text-muted-foreground" />
-					Active Sessions
-				</CardTitle>
-				<CardDescription>Devices currently signed in to your account.</CardDescription>
-			</CardHeader>
-			<CardContent>
-				{isLoading ? (
-					<div className="flex flex-col gap-2">
-						<Skeleton className="h-10 w-full" />
-						<Skeleton className="h-10 w-full" />
-					</div>
-				) : sortedSessions.length === 0 ? (
-					<p className="py-6 text-center text-sm text-muted-foreground">No active sessions.</p>
-				) : (
-					<div className="divide-y rounded-lg border">
-						{sortedSessions.map((session) => {
-							const isCurrent = session.token === currentToken;
-							const DeviceIcon = isMobile(session.userAgent) ? Smartphone : Monitor;
-							return (
-								<div key={session.id} className="flex items-center gap-3 px-4 py-3">
-									<DeviceIcon className="size-4 shrink-0 text-muted-foreground" />
-									<div className="flex min-w-0 flex-1 flex-col">
-										<span className="flex items-center gap-2 text-sm font-medium">
-											{describeUserAgent(session.userAgent)}
-											{isCurrent && <Badge variant="secondary">Current</Badge>}
-										</span>
-										<span className="text-xs text-muted-foreground">
-											{format(new Date(session.createdAt), "MMM d, yyyy HH:mm")}
-											{session.ipAddress ? ` · ${session.ipAddress}` : ""}
-										</span>
-									</div>
-									{!isCurrent && (
-										<Button
-											variant="ghost"
-											size="sm"
-											disabled={revoking === session.id}
-											onClick={() => revoke(session)}
-										>
-											{revoking === session.id && <Loader2 className="size-4 animate-spin" />}
-											Revoke
-										</Button>
-									)}
+		<SettingsSection
+			title="Active sessions"
+			description="Devices currently signed in to your account."
+			wide
+		>
+			{isLoading ? (
+				<div className="flex flex-col gap-2">
+					<Skeleton className="h-10 w-full" />
+					<Skeleton className="h-10 w-full" />
+				</div>
+			) : sortedSessions.length === 0 ? (
+				<p className="text-sm text-muted-foreground">No active sessions.</p>
+			) : (
+				<div className="divide-y rounded-lg border">
+					{sortedSessions.map((session) => {
+						const isCurrent = session.token === currentToken;
+						const DeviceIcon = isMobile(session.userAgent) ? Smartphone : Monitor;
+						return (
+							<div key={session.id} className="flex items-center gap-3 px-4 py-3">
+								<DeviceIcon className="size-4 shrink-0 text-muted-foreground" />
+								<div className="flex min-w-0 flex-1 flex-col">
+									<span className="flex items-center gap-2 text-sm font-medium">
+										{describeUserAgent(session.userAgent)}
+										{isCurrent && <Badge variant="secondary">Current</Badge>}
+									</span>
+									<span className="text-xs text-muted-foreground">
+										{format(new Date(session.createdAt), "MMM d, yyyy HH:mm")}
+										{session.ipAddress ? ` · ${session.ipAddress}` : ""}
+									</span>
 								</div>
-							);
-						})}
-					</div>
-				)}
-			</CardContent>
-		</Card>
+								{!isCurrent && (
+									<Button
+										variant="ghost"
+										size="sm"
+										disabled={revoking === session.id}
+										onClick={() => revoke(session)}
+									>
+										{revoking === session.id && <Loader2 className="size-4 animate-spin" />}
+										Revoke
+									</Button>
+								)}
+							</div>
+						);
+					})}
+				</div>
+			)}
+		</SettingsSection>
 	);
 }

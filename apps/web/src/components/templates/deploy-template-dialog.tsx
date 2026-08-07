@@ -37,7 +37,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
-
+import { TemplateLogo } from "./template-logo";
 import type { TemplateSummary } from "./templates-view";
 
 /** Env defaults containing this placeholder are generated server-side. */
@@ -61,22 +61,15 @@ export function DeployTemplateDialog({
 }
 
 function TemplateMark({ template }: { template: Pick<TemplateSummary, "name" | "logo"> }) {
-	const [failed, setFailed] = useState(false);
-	if (failed || !template.logo) {
-		return (
-			<div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-secondary text-sm font-semibold uppercase">
-				{template.name.charAt(0)}
-			</div>
-		);
-	}
 	return (
-		// biome-ignore lint/performance/noImgElement: remote simple-icons CDN logo with a local fallback
-		<img
-			src={`https://cdn.simpleicons.org/${template.logo}`}
-			alt=""
-			className="size-10 shrink-0 rounded-md"
-			onError={() => setFailed(true)}
-		/>
+		<div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border">
+			<TemplateLogo
+				name={template.name}
+				logo={template.logo}
+				className="size-6"
+				fallbackClassName="bg-secondary"
+			/>
+		</div>
 	);
 }
 

@@ -1,13 +1,12 @@
 "use client";
 
-import { Check, Copy, Loader2, ShieldCheck } from "lucide-react";
+import { Check, Copy, Loader2 } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
+import { SettingsSection } from "@/components/settings/settings-section";
 import { StatusDot } from "@/components/shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -104,137 +103,140 @@ export function TwoFactorCard() {
 	}
 
 	return (
-		<Card>
-			<CardHeader>
-				<div className="flex items-center justify-between">
-					<div>
-						<CardTitle className="flex items-center gap-2">
-							<ShieldCheck className="size-4 text-muted-foreground" />
-							Two-factor authentication
-						</CardTitle>
-						<CardDescription>Secure your account with a TOTP authenticator app.</CardDescription>
+		<>
+			<SettingsSection
+				title="Two-factor authentication"
+				description="Secure your account with a TOTP authenticator app."
+				actions={
+					<div className="flex items-center gap-3">
+						<span className="flex items-center gap-2 text-sm text-muted-foreground">
+							<StatusDot status={enabled ? "success" : "neutral"} />
+							{enabled ? "Enabled" : "Disabled"}
+						</span>
+						<Button
+							size="sm"
+							variant={enabled ? "outline" : "default"}
+							className={
+								enabled
+									? "border-destructive/40 text-destructive hover:bg-destructive/10"
+									: undefined
+							}
+							onClick={() => setDialogOpen(true)}
+						>
+							{enabled ? "Disable 2FA" : "Enable 2FA"}
+						</Button>
 					</div>
-					<span className="flex items-center gap-2 text-sm">
-						<StatusDot status={enabled ? "success" : "neutral"} />
-						{enabled ? "Enabled" : "Disabled"}
-					</span>
-				</div>
-			</CardHeader>
-			<CardContent>
-				<Button variant={enabled ? "destructive" : "default"} onClick={() => setDialogOpen(true)}>
-					{enabled ? "Disable 2FA" : "Enable 2FA"}
-				</Button>
+				}
+			/>
+			<Dialog
+				open={dialogOpen}
+				onOpenChange={(open) => {
+					setDialogOpen(open);
+					if (!open) reset();
+				}}
+			>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>{enabled ? "Disable" : "Enable"} two-factor authentication</DialogTitle>
+						<DialogDescription>
+							{enabled
+								? "Enter your password to disable two-factor authentication."
+								: totpURI
+									? "Scan the QR code with your authenticator app, then enter the 6-digit code."
+									: "Enter your password to generate a TOTP secret."}
+						</DialogDescription>
+					</DialogHeader>
 
-				<Dialog
-					open={dialogOpen}
-					onOpenChange={(open) => {
-						setDialogOpen(open);
-						if (!open) reset();
-					}}
-				>
-					<DialogContent>
-						<DialogHeader>
-							<DialogTitle>{enabled ? "Disable" : "Enable"} two-factor authentication</DialogTitle>
-							<DialogDescription>
-								{enabled
-									? "Enter your password to disable two-factor authentication."
-									: totpURI
-										? "Scan the QR code with your authenticator app, then enter the 6-digit code."
-										: "Enter your password to generate a TOTP secret."}
-							</DialogDescription>
-						</DialogHeader>
+					{!totpURI && (
+						<div className="grid gap-2">
+							<Label htmlFor="twofa-password">Password</Label>
+							<Input
+								id="twofa-password"
+								type="password"
+								value={password}
+								onChange={(e) => setPassword(e.target.value)}
+							/>
+						</div>
+					)}
 
-						{!totpURI && (
-							<div className="grid gap-2">
-								<Label htmlFor="twofa-password">Password</Label>
-								<Input
-									id="twofa-password"
-									type="password"
-									value={password}
-									onChange={(e) => setPassword(e.target.value)}
-								/>
-							</div>
-						)}
-
-						{totpURI && !enabled && (
-							<div className="grid min-w-0 gap-4">
-								{qrDataUrl && (
-									<div className="flex min-w-0 justify-center">
-										{/* biome-ignore lint/performance/noImgElement: data-URL QR generated locally, next/image gains nothing */}
-										<img
-											src={qrDataUrl}
-											alt="TOTP QR code"
-											className="size-48 rounded-lg border bg-white p-2"
-										/>
-									</div>
-								)}
-								<div className="grid min-w-0 gap-2">
-									<Label>Authenticator URI</Label>
-									<div className="flex min-w-0 items-center gap-2">
-										<code className="min-w-0 flex-1 truncate rounded-md border bg-muted px-3 py-2 text-xs">
-											{totpURI}
-										</code>
-										<Button
-											type="button"
-											variant="outline"
-											size="icon"
-											aria-label="Copy authenticator URI"
-											onClick={copyUri}
-										>
-											{copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-										</Button>
-									</div>
+					{totpURI && !enabled && (
+						<div className="grid min-w-0 gap-4">
+							{qrDataUrl && (
+								<div className="flex min-w-0 justify-center">
+									{/* biome-ignore lint/performance/noImgElement: data-URL QR generated locally, next/image gains nothing */}
+									<img
+										src={qrDataUrl}
+										alt="TOTP QR code"
+										className="size-48 rounded-lg border bg-white p-2"
+									/>
 								</div>
-								{backupCodes.length > 0 && (
-									<div className="grid min-w-0 gap-2">
-										<Label>Backup codes</Label>
-										<div className="grid grid-cols-2 gap-1 rounded-md border bg-muted p-3 font-mono text-xs">
-											{backupCodes.map((backupCode) => (
-												<span key={backupCode}>{backupCode}</span>
-											))}
-										</div>
-										<p className="text-xs text-muted-foreground">
-											Store these somewhere safe — they will not be shown again.
-										</p>
-									</div>
-								)}
-								<div className="grid min-w-0 gap-2">
-									<Label>Verification code</Label>
-									<InputOTP maxLength={6} value={code} onChange={(value) => setCode(value)}>
-										<InputOTPGroup>
-											<InputOTPSlot index={0} />
-											<InputOTPSlot index={1} />
-											<InputOTPSlot index={2} />
-											<InputOTPSlot index={3} />
-											<InputOTPSlot index={4} />
-											<InputOTPSlot index={5} />
-										</InputOTPGroup>
-									</InputOTP>
-								</div>
-							</div>
-						)}
-
-						<DialogFooter>
-							{enabled ? (
-								<Button variant="destructive" disabled={isPending || !password} onClick={disable}>
-									{isPending && <Loader2 className="size-4 animate-spin" />}
-									Disable
-								</Button>
-							) : totpURI ? (
-								<Button disabled={isPending || code.length !== 6} onClick={verify}>
-									{isPending && <Loader2 className="size-4 animate-spin" />}
-									Verify & enable
-								</Button>
-							) : (
-								<Button disabled={isPending || !password} onClick={enable}>
-									{isPending && <Loader2 className="size-4 animate-spin" />}
-									Continue
-								</Button>
 							)}
-						</DialogFooter>
-					</DialogContent>
-				</Dialog>
-			</CardContent>
-		</Card>
+							<div className="grid min-w-0 gap-2">
+								<Label>Authenticator URI</Label>
+								<div className="flex min-w-0 items-center gap-2">
+									<code className="min-w-0 flex-1 truncate rounded-md border bg-muted px-3 py-2 text-xs">
+										{totpURI}
+									</code>
+									<Button
+										type="button"
+										variant="outline"
+										size="icon"
+										aria-label="Copy authenticator URI"
+										onClick={copyUri}
+									>
+										{copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+									</Button>
+								</div>
+							</div>
+							{backupCodes.length > 0 && (
+								<div className="grid min-w-0 gap-2">
+									<Label>Backup codes</Label>
+									<div className="grid grid-cols-2 gap-1 rounded-md border bg-muted p-3 font-mono text-xs">
+										{backupCodes.map((backupCode) => (
+											<span key={backupCode}>{backupCode}</span>
+										))}
+									</div>
+									<p className="text-xs text-muted-foreground">
+										Store these somewhere safe — they will not be shown again.
+									</p>
+								</div>
+							)}
+							<div className="grid min-w-0 gap-2">
+								<Label>Verification code</Label>
+								<InputOTP maxLength={6} value={code} onChange={(value) => setCode(value)}>
+									<InputOTPGroup>
+										<InputOTPSlot index={0} />
+										<InputOTPSlot index={1} />
+										<InputOTPSlot index={2} />
+										<InputOTPSlot index={3} />
+										<InputOTPSlot index={4} />
+										<InputOTPSlot index={5} />
+									</InputOTPGroup>
+								</InputOTP>
+							</div>
+						</div>
+					)}
+
+					<DialogFooter>
+						{enabled ? (
+							<Button variant="destructive" disabled={isPending || !password} onClick={disable}>
+								{isPending && <Loader2 className="size-4 animate-spin" />}
+								Disable
+							</Button>
+						) : totpURI ? (
+							<Button disabled={isPending || code.length !== 6} onClick={verify}>
+								{isPending && <Loader2 className="size-4 animate-spin" />}
+								Verify & enable
+							</Button>
+						) : (
+							<Button disabled={isPending || !password} onClick={enable}>
+								{isPending && <Loader2 className="size-4 animate-spin" />}
+								Continue
+							</Button>
+						)}
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+		</>
 	);
 }

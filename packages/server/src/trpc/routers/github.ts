@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import { gitProviders } from "../../db/schema";
 import {
+	assertPublicBaseUrl,
 	createGithub,
 	findGithubById,
 	getGithubAppManifest,
@@ -28,9 +29,25 @@ const githubIdInput = z.object({ githubId: z.string().min(1) });
 
 /** Public base URL of this instance (used for GitHub App manifest URLs). */
 function getBaseUrl(input?: string): string {
-	const baseUrl =
-		input ?? process.env.NIXPLOY_BASE_URL ?? process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
-	return baseUrl.replace(/\/$/, "");
+	const candidates = [
+		input,
+		process.env.NIXPLOY_BASE_URL,
+		process.env.BETTER_AUTH_URL,
+		"http://localhost:3000",
+	];
+	for (const candidate of candidates) {
+		if (!candidate?.trim()) continue;
+		try {
+			return assertPublicBaseUrl(candidate);
+		} catch {
+			// try next candidate
+		}
+	}
+	throw new TRPCError({
+		code: "BAD_REQUEST",
+		message:
+			"Could not determine a public base URL for GitHub App setup. Set BETTER_AUTH_URL or open Nixploy via a real http(s) origin.",
+	});
 }
 
 /**

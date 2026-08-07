@@ -7,9 +7,9 @@ import { useEffect, useState } from "react";
 import type { ComposeService } from "@/components/compose/compose-detail";
 import { LogViewer } from "@/components/services/log-viewer";
 import { ServiceTerminal } from "@/components/services/service-terminal";
+import { SettingsSection } from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
 	Select,
 	SelectContent,
@@ -63,12 +63,11 @@ export function ComposeRuntimeTab({ compose, mode }: { compose: ComposeService; 
 			: "Real-time logs from a container in this compose stack.";
 
 	return (
-		<Card>
-			<CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
-				<div className="space-y-1.5">
-					<CardTitle className="text-sm font-medium">{title}</CardTitle>
-					<CardDescription>{description}</CardDescription>
-				</div>
+		<SettingsSection
+			title={title}
+			description={description}
+			bare
+			actions={
 				<div className="flex flex-wrap items-center gap-2">
 					{containersQuery.isLoading ? (
 						<Skeleton className="h-9 w-56" />
@@ -106,41 +105,40 @@ export function ComposeRuntimeTab({ compose, mode }: { compose: ComposeService; 
 						Refresh
 					</Button>
 				</div>
-			</CardHeader>
-			<CardContent>
-				{containersQuery.isError ? (
-					<p className="py-10 text-center text-sm text-muted-foreground">
-						Could not list containers for this compose service.
+			}
+		>
+			{containersQuery.isError ? (
+				<p className="py-10 text-center text-sm text-muted-foreground">
+					Could not list containers for this compose service.
+				</p>
+			) : options.length === 0 && !containersQuery.isLoading ? (
+				<div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+					<p className="text-sm font-medium text-foreground">No containers yet</p>
+					<p className="max-w-sm text-sm text-muted-foreground">
+						Deploy the compose stack first, then pick a service container here.
 					</p>
-				) : options.length === 0 && !containersQuery.isLoading ? (
-					<div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
-						<p className="text-sm font-medium text-foreground">No containers yet</p>
-						<p className="max-w-sm text-sm text-muted-foreground">
-							Deploy the compose stack first, then pick a service container here.
-						</p>
-					</div>
-				) : selected && selected.state === "running" ? (
-					mode === "terminal" ? (
-						<ServiceTerminal
-							appName={compose.appName}
-							containerId={selected.id}
-							serverId={compose.serverId}
-						/>
-					) : (
-						<LogViewer
-							appName={compose.appName}
-							containerId={selected.id}
-							serverId={compose.serverId}
-						/>
-					)
-				) : selected ? (
-					<p className="py-10 text-center text-sm text-muted-foreground">
-						Container “{selected.name}” is not running ({selected.state}). Start it or pick another.
-					</p>
+				</div>
+			) : selected && selected.state === "running" ? (
+				mode === "terminal" ? (
+					<ServiceTerminal
+						appName={compose.appName}
+						containerId={selected.id}
+						serverId={compose.serverId}
+					/>
 				) : (
-					<Skeleton className="h-[26rem] w-full rounded-lg" />
-				)}
-			</CardContent>
-		</Card>
+					<LogViewer
+						appName={compose.appName}
+						containerId={selected.id}
+						serverId={compose.serverId}
+					/>
+				)
+			) : selected ? (
+				<p className="py-10 text-center text-sm text-muted-foreground">
+					Container “{selected.name}” is not running ({selected.state}). Start it or pick another.
+				</p>
+			) : (
+				<Skeleton className="h-[26rem] w-full rounded-lg" />
+			)}
+		</SettingsSection>
 	);
 }

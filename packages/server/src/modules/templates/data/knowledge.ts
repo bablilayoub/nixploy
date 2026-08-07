@@ -539,7 +539,7 @@ volumes:
 		name: "DokuWiki",
 		description:
 			"Simple, versatile wiki that stores everything in plain text files — no database required.",
-		logo: "",
+		logo: "https://www.dokuwiki.org/_media/wiki:dokuwiki-128.png",
 		tags: ["wiki", "docs", "lightweight"],
 		links: {
 			website: "https://www.dokuwiki.org",

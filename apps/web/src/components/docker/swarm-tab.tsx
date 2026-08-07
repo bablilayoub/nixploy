@@ -22,6 +22,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps } from "./docker-view";
@@ -88,7 +89,7 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 						Refresh
 					</Button>
 				</div>
-				<div className="overflow-x-auto rounded-lg border border-border">
+				<TableCard>
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -157,12 +158,12 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 							)}
 						</TableBody>
 					</Table>
-				</div>
+				</TableCard>
 			</div>
 
 			<div className="space-y-3">
 				<h3 className="text-sm font-medium">Services</h3>
-				<div className="overflow-x-auto rounded-lg border border-border">
+				<TableCard>
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -207,7 +208,7 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 							)}
 						</TableBody>
 					</Table>
-				</div>
+				</TableCard>
 			</div>
 		</div>
 	);

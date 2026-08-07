@@ -18,24 +18,10 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
-
+import { TemplateLogo } from "./template-logo";
 import type { TemplateSummary } from "./templates-view";
 
 type TemplateDetails = inferRouterOutputs<AppRouter>["template"]["one"];
-
-function TemplateLogo({ template }: { template: Pick<TemplateSummary, "name" | "logo"> }) {
-	return (
-		// biome-ignore lint/performance/noImgElement: remote simple-icons CDN logo; next/image would need remotePatterns
-		<img
-			src={`https://cdn.simpleicons.org/${template.logo}`}
-			alt=""
-			className="size-10 rounded-md"
-			onError={(event) => {
-				event.currentTarget.style.display = "none";
-			}}
-		/>
-	);
-}
 
 function LinkChip({ href, label }: { href: string; label: string }) {
 	return (
@@ -115,7 +101,7 @@ function DetailsBody({ template, onDeploy }: { template: TemplateDetails; onDepl
 	return (
 		<>
 			<div className="flex items-start gap-3">
-				<TemplateLogo template={template} />
+				<TemplateLogo name={template.name} logo={template.logo} className="size-10" />
 				<div className="flex min-w-0 flex-col gap-1">
 					<p className="text-sm text-muted-foreground">{template.description}</p>
 					<div className="flex flex-wrap gap-1.5 pt-1">

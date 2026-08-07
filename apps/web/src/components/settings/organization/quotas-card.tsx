@@ -1,12 +1,12 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Gauge, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -61,43 +61,31 @@ export function QuotasCard() {
 
 	if (settingsQuery.isPending) {
 		return (
-			<Card>
-				<CardHeader>
-					<Skeleton className="h-5 w-32" />
-					<Skeleton className="h-4 w-64" />
-				</CardHeader>
-				<CardContent>
-					<Skeleton className="h-24 w-full" />
-				</CardContent>
-			</Card>
+			<SettingsSection
+				title="Quotas"
+				description="Resource limits for this organization. Leave blank for unlimited. Owner or admin required to edit."
+			>
+				<Skeleton className="h-24 w-full" />
+			</SettingsSection>
 		);
 	}
 
 	if (settingsQuery.isError) {
 		return (
-			<Card>
-				<CardHeader>
-					<CardTitle className="flex items-center gap-2">
-						<Gauge className="size-4 text-muted-foreground" />
-						Quotas
-					</CardTitle>
-					<CardDescription>
-						Resource limits for this organization. Leave blank for unlimited. Owner or admin
-						required to edit.
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<div className="flex flex-col items-center gap-2 py-8 text-center">
-						<p className="text-sm font-medium">Could not load quotas</p>
-						<p className="text-sm text-muted-foreground">
-							{settingsQuery.error.message || "Try again in a moment."}
-						</p>
-						<Button variant="outline" size="sm" onClick={() => void settingsQuery.refetch()}>
-							Retry
-						</Button>
-					</div>
-				</CardContent>
-			</Card>
+			<SettingsSection
+				title="Quotas"
+				description="Resource limits for this organization. Leave blank for unlimited. Owner or admin required to edit."
+			>
+				<div className="flex flex-col items-center gap-2 py-8 text-center">
+					<p className="text-sm font-medium">Could not load quotas</p>
+					<p className="text-sm text-muted-foreground">
+						{settingsQuery.error.message || "Try again in a moment."}
+					</p>
+					<Button variant="outline" size="sm" onClick={() => void settingsQuery.refetch()}>
+						Retry
+					</Button>
+				</div>
+			</SettingsSection>
 		);
 	}
 
@@ -106,74 +94,65 @@ export function QuotasCard() {
 	const { usage } = settingsQuery.data;
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle className="flex items-center gap-2">
-					<Gauge className="size-4 text-muted-foreground" />
-					Quotas
-				</CardTitle>
-				<CardDescription>
-					Resource limits for this organization. Leave blank for unlimited. Owner or admin required
-					to edit.
-				</CardDescription>
-			</CardHeader>
-			<CardContent>
-				<form onSubmit={onSubmit} className="grid max-w-md gap-4">
-					<p className="text-sm text-muted-foreground">
-						Current usage: {usage.projects} projects, {usage.services} services
-					</p>
-					<div className="grid gap-2">
-						<Label htmlFor="max-projects">Max projects</Label>
-						<Input
-							id="max-projects"
-							type="number"
-							min={0}
-							placeholder="Unlimited"
-							value={maxProjects}
-							onChange={(e) => setMaxProjects(e.target.value)}
-						/>
-					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="max-services">Max services</Label>
-						<Input
-							id="max-services"
-							type="number"
-							min={0}
-							placeholder="Unlimited"
-							value={maxServices}
-							onChange={(e) => setMaxServices(e.target.value)}
-						/>
-					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="max-cpu">Max CPU shares</Label>
-						<Input
-							id="max-cpu"
-							type="number"
-							min={0}
-							placeholder="Unlimited"
-							value={maxCpuShares}
-							onChange={(e) => setMaxCpuShares(e.target.value)}
-						/>
-					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="max-memory">Max memory (MB)</Label>
-						<Input
-							id="max-memory"
-							type="number"
-							min={0}
-							placeholder="Unlimited"
-							value={maxMemoryMb}
-							onChange={(e) => setMaxMemoryMb(e.target.value)}
-						/>
-					</div>
-					<div>
-						<Button type="submit" disabled={save.isPending}>
-							{save.isPending && <Loader2 className="size-4 animate-spin" />}
-							Save quotas
-						</Button>
-					</div>
-				</form>
-			</CardContent>
-		</Card>
+		<SettingsSection
+			title="Quotas"
+			description="Resource limits for this organization. Leave blank for unlimited. Owner or admin required to edit."
+		>
+			<form onSubmit={onSubmit} className="grid gap-4">
+				<p className="text-sm text-muted-foreground">
+					Current usage: {usage.projects} projects, {usage.services} services
+				</p>
+				<div className="grid gap-2">
+					<Label htmlFor="max-projects">Max projects</Label>
+					<Input
+						id="max-projects"
+						type="number"
+						min={0}
+						placeholder="Unlimited"
+						value={maxProjects}
+						onChange={(e) => setMaxProjects(e.target.value)}
+					/>
+				</div>
+				<div className="grid gap-2">
+					<Label htmlFor="max-services">Max services</Label>
+					<Input
+						id="max-services"
+						type="number"
+						min={0}
+						placeholder="Unlimited"
+						value={maxServices}
+						onChange={(e) => setMaxServices(e.target.value)}
+					/>
+				</div>
+				<div className="grid gap-2">
+					<Label htmlFor="max-cpu">Max CPU shares</Label>
+					<Input
+						id="max-cpu"
+						type="number"
+						min={0}
+						placeholder="Unlimited"
+						value={maxCpuShares}
+						onChange={(e) => setMaxCpuShares(e.target.value)}
+					/>
+				</div>
+				<div className="grid gap-2">
+					<Label htmlFor="max-memory">Max memory (MB)</Label>
+					<Input
+						id="max-memory"
+						type="number"
+						min={0}
+						placeholder="Unlimited"
+						value={maxMemoryMb}
+						onChange={(e) => setMaxMemoryMb(e.target.value)}
+					/>
+				</div>
+				<div>
+					<Button type="submit" disabled={save.isPending}>
+						{save.isPending && <Loader2 className="size-4 animate-spin" />}
+						Save quotas
+					</Button>
+				</div>
+			</form>
+		</SettingsSection>
 	);
 }

@@ -11,8 +11,8 @@ import {
 	type GitProviderSourceType,
 	splitRepoSelection,
 } from "@/components/git-provider-repo-picker";
+import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -163,13 +163,9 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 	};
 
 	return (
-		<div className="flex flex-col gap-4">
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-sm font-medium">General</CardTitle>
-					<CardDescription>How this compose file is deployed.</CardDescription>
-				</CardHeader>
-				<CardContent className="flex flex-col gap-6">
+		<SettingsStack>
+			<SettingsSection title="General" description="How this compose file is deployed.">
+				<div className="flex flex-col gap-6">
 					<div className="flex flex-col gap-2">
 						<Label htmlFor="compose-type">Compose Type</Label>
 						<Select
@@ -212,15 +208,11 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 						</div>
 						<Switch id="auto-deploy" checked={autoDeploy} onCheckedChange={setAutoDeploy} />
 					</div>
-				</CardContent>
-			</Card>
+				</div>
+			</SettingsSection>
 
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-sm font-medium">Source</CardTitle>
-					<CardDescription>Where the compose file comes from.</CardDescription>
-				</CardHeader>
-				<CardContent className="flex flex-col gap-4">
+			<SettingsSection title="Source" description="Where the compose file comes from.">
+				<div className="flex flex-col gap-4">
 					<div className="flex flex-col gap-2">
 						<Label htmlFor="source-type">Source Type</Label>
 						<Select
@@ -324,8 +316,8 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 							{updateMutation.isPending ? "Saving…" : "Save"}
 						</Button>
 					</div>
-				</CardContent>
-			</Card>
-		</div>
+				</div>
+			</SettingsSection>
+		</SettingsStack>
 	);
 }

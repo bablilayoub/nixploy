@@ -32,7 +32,7 @@ deployable as compose services. Catalog code lives in
      name: "Plausible",
      description: "…",
      // `category` comes from the file wrapper in catalog.ts — do NOT set it here
-     logo: "plausible",                  // simpleicons.org slug
+     logo: "plausible",                  // simpleicons.org slug, or absolute image URL
      links: { github: "…", website: "…", docs: "…" },
      tags: ["analytics"],
      env: [
