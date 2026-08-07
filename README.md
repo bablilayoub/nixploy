@@ -15,10 +15,6 @@ Nixploy is a free, self-hostable Platform as a Service. Deploy applications, dat
 ![pnpm](https://img.shields.io/badge/pnpm-%3E%3D10-orange)
 ![Docker](https://img.shields.io/badge/docker-swarm-blue)
 
-<p align="center">
-  <img src="docs/images/dashboard.png" alt="Nixploy dashboard" width="900" />
-</p>
-
 ## Install
 
 ```bash
@@ -49,23 +45,38 @@ Full installer options: [`docs/install.md`](./docs/install.md). Update with [`up
 
 ## Screenshots
 
-<p align="center">
-  <img src="docs/images/dashboard.png" alt="Projects dashboard" width="420" />
-  &nbsp;
-  <img src="docs/images/templates.png" alt="Template catalog" width="420" />
-</p>
-
-<p align="center">
-  <img src="docs/images/project.png" alt="Project services" width="420" />
-  &nbsp;
-  <img src="docs/images/docker.png" alt="Docker control center" width="420" />
-</p>
-
-<p align="center">
-  <img src="docs/images/service.png" alt="Application service" width="420" />
-  &nbsp;
-  <img src="docs/images/monitoring.png" alt="Service monitoring" width="420" />
-</p>
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <strong>Dashboard</strong><br />
+      <img src="docs/images/dashboard.png" alt="Projects dashboard" />
+    </td>
+    <td width="50%" align="center" valign="top">
+      <strong>Templates</strong><br />
+      <img src="docs/images/templates.png" alt="Template catalog" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <strong>Project</strong><br />
+      <img src="docs/images/project.png" alt="Project services" />
+    </td>
+    <td width="50%" align="center" valign="top">
+      <strong>Docker</strong><br />
+      <img src="docs/images/docker.png" alt="Docker control center" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <strong>Application</strong><br />
+      <img src="docs/images/service.png" alt="Application service" />
+    </td>
+    <td width="50%" align="center" valign="top">
+      <strong>Monitoring</strong><br />
+      <img src="docs/images/monitoring.png" alt="Service monitoring" />
+    </td>
+  </tr>
+</table>
 
 ## Architecture
 
