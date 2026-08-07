@@ -17,7 +17,7 @@ import {
 	teamsConfigSchema,
 	telegramConfigSchema,
 } from "../../modules/notifications";
-import { assertOrgRole, hasOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, assertOrgRole, hasOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 /** Caller organization; falls back to first membership when the session has none active. */
@@ -165,7 +165,7 @@ export const notificationRouter = router({
 
 	create: protectedProcedure.input(createNotificationSchema).mutation(async ({ ctx, input }) => {
 		const orgId = await organizationId(ctx);
-		await assertOrgRole(ctx.session.user.id, orgId, "admin");
+		await assertCapability(ctx.session.user.id, orgId, "notifications.manage");
 		const [row] = await db
 			.insert(notifications)
 			.values({ ...input, organizationId: orgId })
@@ -175,7 +175,7 @@ export const notificationRouter = router({
 
 	update: protectedProcedure.input(updateNotificationSchema).mutation(async ({ ctx, input }) => {
 		const orgId = await organizationId(ctx);
-		await assertOrgRole(ctx.session.user.id, orgId, "admin");
+		await assertCapability(ctx.session.user.id, orgId, "notifications.manage");
 		await findNotificationInOrg(input.notificationId, orgId);
 		const { notificationId, ...values } = input;
 		const [row] = await db
@@ -190,7 +190,7 @@ export const notificationRouter = router({
 		.input(z.object({ notificationId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const orgId = await organizationId(ctx);
-			await assertOrgRole(ctx.session.user.id, orgId, "admin");
+			await assertCapability(ctx.session.user.id, orgId, "notifications.manage");
 			await findNotificationInOrg(input.notificationId, orgId);
 			await db.delete(notifications).where(eq(notifications.notificationId, input.notificationId));
 			return true;
@@ -198,7 +198,7 @@ export const notificationRouter = router({
 
 	test: protectedProcedure.input(testNotificationSchema).mutation(async ({ ctx, input }) => {
 		const orgId = await organizationId(ctx);
-		await assertOrgRole(ctx.session.user.id, orgId, "admin");
+		await assertCapability(ctx.session.user.id, orgId, "notifications.manage");
 		if (input.notificationId) {
 			await findNotificationInOrg(input.notificationId, orgId);
 			await sendTestNotification({ notificationId: input.notificationId });

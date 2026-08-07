@@ -12,7 +12,10 @@ import {
 	testConnection,
 	updateServerById,
 } from "../../modules/cluster";
-import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import {
+	assertCapability,
+	resolveCallerOrganizationId,
+} from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -59,7 +62,7 @@ export const serverRouter = router({
 	/** Register a new managed server (does not provision it; use `setup`). */
 	create: protectedProcedure.input(createServerInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "servers.manage");
 		const created = await createServer(
 			{
 				name: input.name,
@@ -92,7 +95,7 @@ export const serverRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "servers.manage");
 			await findServerOrThrow(input.serverId, organizationId);
 			const { serverId, ...values } = input;
 			return await updateServerById(serverId, values, organizationId);
@@ -101,7 +104,7 @@ export const serverRouter = router({
 	/** Detach a server from the organization (does not touch the host). */
 	remove: protectedProcedure.input(serverIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "servers.manage");
 		const server = await findServerOrThrow(input.serverId, organizationId);
 		const removed = await removeServer(input.serverId, organizationId);
 		await auditFromSession(ctx, organizationId, {
@@ -116,7 +119,7 @@ export const serverRouter = router({
 	/** Verify SSH reachability and remote Docker availability. */
 	testConnection: protectedProcedure.input(serverIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "servers.manage");
 		await findServerOrThrow(input.serverId, organizationId);
 		return await testConnection(input.serverId);
 	}),
@@ -128,7 +131,7 @@ export const serverRouter = router({
 	 */
 	setup: protectedProcedure.input(serverIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "servers.manage");
 		await findServerOrThrow(input.serverId, organizationId);
 		const command = await setupServer(input.serverId);
 		return { command };

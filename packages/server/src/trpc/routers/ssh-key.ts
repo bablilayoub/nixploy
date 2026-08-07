@@ -8,7 +8,7 @@ import {
 	removeSshKey,
 	updateSshKeyById,
 } from "../../modules/cluster";
-import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -59,7 +59,7 @@ export const sshKeyRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "ssh_keys.manage");
 			const created = await createSshKey(
 				{
 					name: input.name,
@@ -89,7 +89,7 @@ export const sshKeyRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "ssh_keys.manage");
 			const { sshKeyId, ...values } = input;
 			const updated = await updateSshKeyById(sshKeyId, values, organizationId);
 			if (!updated) {
@@ -101,7 +101,7 @@ export const sshKeyRouter = router({
 	/** Delete an SSH key (servers referencing it keep working until edited). */
 	remove: protectedProcedure.input(sshKeyIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "ssh_keys.manage");
 		const removed = await removeSshKey(input.sshKeyId, organizationId);
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "SSH key not found" });
@@ -117,7 +117,7 @@ export const sshKeyRouter = router({
 		.input(z.object({ name: z.string().min(1).optional() }).optional())
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "ssh_keys.manage");
 			return await generateSshKeyPair(input?.name);
 		}),
 });

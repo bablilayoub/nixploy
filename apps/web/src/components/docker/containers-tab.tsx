@@ -269,7 +269,7 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 						<DialogTitle>Logs — {logsOf?.Names}</DialogTitle>
 						<DialogDescription>Live container log stream.</DialogDescription>
 					</DialogHeader>
-					{logsOf && <LogViewer appName={logsOf.Names} serverId={serverId} />}
+					{logsOf && <LogViewer containerId={logsOf.ID} serverId={serverId} />}
 				</DialogContent>
 			</Dialog>
 
@@ -279,7 +279,7 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 						<DialogTitle>Terminal — {terminalOf?.Names}</DialogTitle>
 						<DialogDescription>Interactive shell inside the container.</DialogDescription>
 					</DialogHeader>
-					{terminalOf && <ServiceTerminal appName={terminalOf.Names} serverId={serverId} />}
+					{terminalOf && <ServiceTerminal containerId={terminalOf.ID} serverId={serverId} />}
 				</DialogContent>
 			</Dialog>
 

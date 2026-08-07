@@ -52,6 +52,42 @@ live in `packages/server/src/modules/auth/setup.ts`.
   (usually via `service → environment → project → organizationId`; helpers
   like `assertApplicationAccess` do this).
 
+## Organization roles & capabilities
+
+Org membership uses a role ladder (`viewer` < `member` < `deployer` <
+`admin` < `owner`) plus an optional **capability overlay** per member
+(`member.capability_overrides` JSON: `{ grant?, revoke? }`).
+
+Effective set = role defaults ∪ grant − revoke. Mutations should call
+`assertCapability(userId, orgId, capability)` (use `hasCapability` for soft
+gates such as masking secrets). Roles still feed better-auth AC and coarse UI;
+capabilities are the fine-grained gate.
+
+### Catalog (grouped)
+
+| Group | Capabilities |
+| --- | --- |
+| Projects | `project.write`, `project.delete` |
+| Services | `service.create`, `service.write`, `service.delete`, `service.deploy`, `service.runtime`, `tags.manage`, `templates.deploy` |
+| Secrets & domains | `secrets.read`, `secrets.write`, `domains.manage` |
+| Automation | `backups.manage`, `schedules.manage`, `gitops.manage`, `ai.use` |
+| Infrastructure | `servers.manage`, `registries.manage`, `destinations.manage`, `certificates.manage`, `ssh_keys.manage`, `git_providers.manage`, `docker.manage`, `notifications.manage` |
+| Organization | `members.manage`, `settings.manage`, `audit.read` |
+
+Labels and descriptions live in `CAPABILITY_CATALOG`
+(`modules/projects/capabilities.ts`). Settings → Organization → Members
+(shield) edits overlays; `organization.capabilityCatalog` /
+`organization.myCapabilities` power the UI.
+
+### Role defaults
+
+| Role | Baseline |
+| --- | --- |
+| `viewer` | `audit.read` |
+| `member` | project/service write (no deploy/delete), secrets, domains, tags, AI, audit |
+| `deployer` | member + deploy/runtime, templates, backups, schedules |
+| `admin` / `owner` | full catalog |
+
 ## Two-factor authentication (TOTP)
 
 - Profile → security card: enable requires the password, shows a QR code

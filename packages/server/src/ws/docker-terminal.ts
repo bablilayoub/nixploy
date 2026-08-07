@@ -1,14 +1,23 @@
 import type { IncomingMessage } from "node:http";
+import type Docker from "dockerode";
 import type { WebSocket } from "ws";
-import { assertWsContainerAccess } from "./access";
+import { assertComposeContainerOwnership } from "../modules/compose/containers";
+import { assertWsContainerAccess, assertWsDockerContainerAccess } from "./access";
 import type { WsSession } from "./auth";
 import {
 	connectToServer,
 	resolveLocalContainer,
+	resolveLocalContainerById,
 	resolveRemoteContainerId,
 	SHELL_FALLBACK_COMMAND,
 } from "./docker";
-import { closeWithError, isValidAppName, safeSend, upgradeSearchParams } from "./utils";
+import {
+	closeWithError,
+	isValidAppName,
+	isValidContainerId,
+	safeSend,
+	upgradeSearchParams,
+} from "./utils";
 
 interface TerminalInput {
 	type: "stdin" | "resize";
@@ -22,8 +31,10 @@ const DEFAULT_ROWS = 24;
 
 /**
  * /ws/terminal?appName=<name>&serverId=<id?>
+ * /ws/terminal?appName=<name>&containerId=<id>&serverId=<id?>  (compose service pick)
+ * /ws/terminal?containerId=<id>&serverId=<id?>                 (Docker control center)
  *
- * Interactive shell inside the app's container (bash with sh fallback).
+ * Interactive shell inside a container (bash with sh fallback).
  * Client → server frames are JSON: { type: "stdin", data } and
  * { type: "resize", cols, rows }. Server → client frames are raw binary
  * terminal output.
@@ -35,7 +46,47 @@ export async function handleDockerTerminal(
 ): Promise<void> {
 	const params = upgradeSearchParams(req);
 	const appName = params.get("appName");
+	const containerId = params.get("containerId");
 	const serverId = params.get("serverId");
+
+	if (containerId) {
+		if (!isValidContainerId(containerId)) {
+			closeWithError(ws, "Missing or invalid containerId query parameter");
+			return;
+		}
+
+		// Service-scoped: caller owns the Nixploy app and the container is part of it.
+		if (appName) {
+			if (!isValidAppName(appName)) {
+				closeWithError(ws, "Missing or invalid appName query parameter");
+				return;
+			}
+			try {
+				await assertWsContainerAccess(session, appName, serverId);
+				await assertComposeContainerOwnership(appName, containerId, serverId);
+				if (serverId) {
+					await attachRemoteTerminalById(ws, serverId, containerId);
+				} else {
+					await attachLocalTerminalById(ws, containerId);
+				}
+			} catch (error) {
+				closeWithError(ws, error instanceof Error ? error.message : "Failed to open terminal");
+			}
+			return;
+		}
+
+		try {
+			await assertWsDockerContainerAccess(session, serverId);
+			if (serverId) {
+				await attachRemoteTerminalById(ws, serverId, containerId);
+			} else {
+				await attachLocalTerminalById(ws, containerId);
+			}
+		} catch (error) {
+			closeWithError(ws, error instanceof Error ? error.message : "Failed to open terminal");
+		}
+		return;
+	}
 
 	if (!appName || !isValidAppName(appName)) {
 		closeWithError(ws, "Missing or invalid appName query parameter");
@@ -74,10 +125,22 @@ function parseInput(raw: Buffer | string): TerminalInput | null {
 async function attachLocalTerminal(ws: WebSocket, appName: string): Promise<void> {
 	const container = await resolveLocalContainer(appName);
 	if (!container) {
-		closeWithError(ws, `No running container found for app "${appName}"`);
+		closeWithError(ws, `No running container found for "${appName}" — deploy the service first`);
 		return;
 	}
+	await pipeLocalExec(ws, container);
+}
 
+async function attachLocalTerminalById(ws: WebSocket, containerId: string): Promise<void> {
+	const container = await resolveLocalContainerById(containerId);
+	if (!container) {
+		closeWithError(ws, `No running container found for id "${containerId}"`);
+		return;
+	}
+	await pipeLocalExec(ws, container);
+}
+
+async function pipeLocalExec(ws: WebSocket, container: Docker.Container): Promise<void> {
 	const exec = await container.exec({
 		Cmd: ["sh", "-c", SHELL_FALLBACK_COMMAND],
 		AttachStdin: true,
@@ -124,10 +187,31 @@ async function attachRemoteTerminal(
 	const containerId = await resolveRemoteContainerId(conn, appName);
 	if (!containerId) {
 		conn.end();
-		closeWithError(ws, `No running container found for app "${appName}" on the remote server`);
+		closeWithError(
+			ws,
+			`No running container found for "${appName}" on the remote server — deploy first`,
+		);
 		return;
 	}
 
+	pipeRemoteExec(ws, conn, containerId);
+}
+
+async function attachRemoteTerminalById(
+	ws: WebSocket,
+	serverId: string,
+	containerId: string,
+): Promise<void> {
+	const conn = await connectToServer(serverId);
+	ws.on("close", () => conn.end());
+	pipeRemoteExec(ws, conn, containerId);
+}
+
+function pipeRemoteExec(
+	ws: WebSocket,
+	conn: Awaited<ReturnType<typeof connectToServer>>,
+	containerId: string,
+): void {
 	conn.exec(
 		`docker exec -it ${containerId} sh -c '${SHELL_FALLBACK_COMMAND}'`,
 		{ pty: { cols: DEFAULT_COLS, rows: DEFAULT_ROWS, term: "xterm-256color" } },

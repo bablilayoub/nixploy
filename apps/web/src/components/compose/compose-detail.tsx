@@ -2,8 +2,9 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { Layers, RefreshCw, Rocket, Square } from "lucide-react";
+import { Layers, Play, RefreshCw, Rocket, Square } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 import { toast } from "sonner";
 import { VolumeBackupsTab } from "@/components/backups/volume-backups-tab";
 import { ComposeFileTab } from "@/components/compose/compose-file-tab";
@@ -14,7 +15,9 @@ import { GeneralTab } from "@/components/compose/general-tab";
 import { LogsTab } from "@/components/compose/logs-tab";
 import { MonitoringTab } from "@/components/compose/monitoring-tab";
 import { SettingsTab } from "@/components/compose/settings-tab";
+import { TerminalTab } from "@/components/compose/terminal-tab";
 import { SchedulesTab } from "@/components/schedules/schedules-tab";
+import { CopilotChatDrawer } from "@/components/services/copilot-chat-drawer";
 import { ServiceStatusBadge } from "@/components/services/status-badge";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
@@ -28,6 +31,7 @@ export type ComposeService = inferRouterOutputs<AppRouter>["compose"]["one"];
 export function ComposeDetail({ projectId, composeId }: { projectId: string; composeId: string }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const [tab, setTab] = useState("general");
 
 	const { data, isLoading, isError } = useQuery(trpc.compose.one.queryOptions({ composeId }));
 
@@ -66,6 +70,15 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 			onError: onActionError,
 		}),
 	);
+	const startMutation = useMutation(
+		trpc.compose.start.mutationOptions({
+			onSuccess: () => {
+				toast.success("Compose service started");
+				invalidate();
+			},
+			onError: onActionError,
+		}),
+	);
 
 	if (isLoading) {
 		return (
@@ -97,7 +110,11 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 
 	const compose = data;
 	const anyActionPending =
-		deployMutation.isPending || redeployMutation.isPending || stopMutation.isPending;
+		deployMutation.isPending ||
+		redeployMutation.isPending ||
+		stopMutation.isPending ||
+		startMutation.isPending;
+	const isRunning = compose.status === "running";
 
 	return (
 		<div className="flex flex-col gap-6">
@@ -123,8 +140,8 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 				description={compose.description ?? compose.appName}
 				actions={
 					<>
+						<CopilotChatDrawer target={{ type: "compose", id: composeId, name: compose.name }} />
 						<Button
-							size="sm"
 							disabled={anyActionPending}
 							onClick={() => deployMutation.mutate({ composeId })}
 						>
@@ -132,7 +149,6 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 							Deploy
 						</Button>
 						<Button
-							size="sm"
 							variant="outline"
 							disabled={anyActionPending}
 							onClick={() => redeployMutation.mutate({ composeId })}
@@ -140,20 +156,30 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 							<RefreshCw className="size-4" />
 							Redeploy
 						</Button>
-						<Button
-							size="sm"
-							variant="outline"
-							disabled={anyActionPending}
-							onClick={() => stopMutation.mutate({ composeId })}
-						>
-							<Square className="size-4" />
-							Stop
-						</Button>
+						{isRunning ? (
+							<Button
+								variant="outline"
+								disabled={anyActionPending}
+								onClick={() => stopMutation.mutate({ composeId })}
+							>
+								<Square className="size-4" />
+								Stop
+							</Button>
+						) : (
+							<Button
+								variant="outline"
+								disabled={anyActionPending}
+								onClick={() => startMutation.mutate({ composeId })}
+							>
+								<Play className="size-4" />
+								Start
+							</Button>
+						)}
 					</>
 				}
 			/>
 
-			<Tabs defaultValue="general">
+			<Tabs value={tab} onValueChange={setTab}>
 				<TabsList variant="line" className="w-full justify-start overflow-x-auto border-b">
 					<TabsTrigger value="general">General</TabsTrigger>
 					<TabsTrigger value="compose-file">Compose File</TabsTrigger>
@@ -162,6 +188,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 					<TabsTrigger value="deployments">Deployments</TabsTrigger>
 					<TabsTrigger value="logs">Logs</TabsTrigger>
 					<TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+					<TabsTrigger value="terminal">Terminal</TabsTrigger>
 					<TabsTrigger value="schedules">Schedules</TabsTrigger>
 					<TabsTrigger value="backups">Volume Backups</TabsTrigger>
 					<TabsTrigger value="settings">Settings</TabsTrigger>
@@ -186,6 +213,9 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 				</TabsContent>
 				<TabsContent value="monitoring">
 					<MonitoringTab compose={compose} />
+				</TabsContent>
+				<TabsContent value="terminal">
+					<TerminalTab compose={compose} />
 				</TabsContent>
 				<TabsContent value="schedules">
 					<SchedulesTab serviceType="compose" serviceId={compose.composeId} />

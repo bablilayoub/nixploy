@@ -11,7 +11,7 @@ import {
 	updateGitlabById,
 	updateGitlabProviderName,
 } from "../../modules/git";
-import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -76,7 +76,7 @@ export const gitlabRouter = router({
 	/** Add a GitLab provider (PAT and/or OAuth app credentials). */
 	create: protectedProcedure.input(createGitlabInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 		return await createGitlab(input, organizationId);
 	}),
 
@@ -91,7 +91,7 @@ export const gitlabRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 			const { gitlabId, name, ...values } = input;
 			if (name) {
 				await updateGitlabProviderName(gitlabId, name, organizationId);
@@ -106,7 +106,7 @@ export const gitlabRouter = router({
 	/** Remove the provider (cascades to the gitlab credentials row). */
 	remove: protectedProcedure.input(gitlabIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 		const removed = await removeGitlab(input.gitlabId, organizationId);
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "GitLab provider not found" });
@@ -135,7 +135,7 @@ export const gitlabRouter = router({
 	/** Verify the configured token against the GitLab API. */
 	testConnection: protectedProcedure.input(gitlabIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 		return await testGitlabConnection(input.gitlabId, organizationId);
 	}),
 });

@@ -21,6 +21,7 @@ export interface ServiceEntry {
 	name: string;
 	description?: string | null;
 	status: string;
+	tags?: Array<{ tagId: string; name: string; color: string }>;
 }
 
 const serviceStatusDot: Record<string, StatusDotStatus> = {
@@ -171,12 +172,30 @@ export function ServicesTable({
 												</span>
 											</TableCell>
 											<TableCell>
-												<Link
-													href={href}
-													className="text-sm font-medium after:absolute after:inset-0 hover:underline"
-												>
-													{service.name}
-												</Link>
+												<div className="flex flex-col gap-1">
+													<Link
+														href={href}
+														className="text-sm font-medium after:absolute after:inset-0 hover:underline"
+													>
+														{service.name}
+													</Link>
+													{(service.tags?.length ?? 0) > 0 && (
+														<div className="relative z-10 flex flex-wrap gap-1">
+															{service.tags?.map((tag) => (
+																<span
+																	key={tag.tagId}
+																	className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+																	style={{
+																		backgroundColor: `${tag.color}22`,
+																		color: tag.color,
+																	}}
+																>
+																	{tag.name}
+																</span>
+															))}
+														</div>
+													)}
+												</div>
 											</TableCell>
 											<TableCell className="max-w-64 truncate text-sm text-muted-foreground">
 												{service.description || "—"}

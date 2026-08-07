@@ -138,10 +138,12 @@ function wsUrl(path: string, params: Record<string, string | null | undefined>) 
 
 export function LogViewer({
 	appName,
+	containerId,
 	serverId,
 	deploymentId,
 }: {
 	appName?: string;
+	containerId?: string;
 	serverId?: string | null;
 	deploymentId?: string;
 }) {
@@ -178,7 +180,7 @@ export function LogViewer({
 	}, []);
 
 	const connect = useCallback(() => {
-		if (!deploymentId && !appName) return;
+		if (!deploymentId && !appName && !containerId) return;
 
 		// emptyMessage is intentionally NOT cleared here: background retries
 		// from the empty state stay invisible until log data actually arrives.
@@ -187,7 +189,11 @@ export function LogViewer({
 
 		const url = deploymentId
 			? wsUrl("/ws/deployment", { deploymentId })
-			: wsUrl("/ws/logs", { appName, serverId });
+			: wsUrl("/ws/logs", {
+					appName,
+					containerId,
+					serverId,
+				});
 
 		const ws = new WebSocket(url);
 		wsRef.current = ws;
@@ -268,7 +274,7 @@ export function LogViewer({
 		ws.onerror = () => {
 			ws.close();
 		};
-	}, [appName, serverId, deploymentId, appendChunk]);
+	}, [appName, containerId, serverId, deploymentId, appendChunk]);
 
 	useEffect(() => {
 		setLines([]);
@@ -328,7 +334,7 @@ export function LogViewer({
 	};
 
 	const downloadLogs = () => {
-		const name = appName ?? deploymentId ?? "service";
+		const name = appName ?? containerId ?? deploymentId ?? "service";
 		const blob = new Blob([visibleLines.join("\n")], { type: "text/plain" });
 		const url = URL.createObjectURL(blob);
 		const anchor = document.createElement("a");
@@ -348,7 +354,7 @@ export function LogViewer({
 		connect();
 	};
 
-	if (!deploymentId && !appName) {
+	if (!deploymentId && !appName && !containerId) {
 		return (
 			<div className="flex h-64 items-center justify-center rounded-lg border border-border bg-card text-sm text-muted-foreground">
 				Select a service to view its logs.

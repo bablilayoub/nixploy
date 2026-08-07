@@ -14,12 +14,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
 
 import { CreateProjectDialog } from "./create-project-dialog";
-import {
-	DeploymentsChart,
-	DockerHealthCard,
-	OverviewCards,
-	RecentDeployments,
-} from "./overview-section";
+import { DeploymentsChart } from "./deployments-chart";
+import { DockerHealthCard, OverviewCards, RecentDeployments } from "./overview-section";
 
 export function DashboardView() {
 	const trpc = useTRPC();

@@ -59,7 +59,8 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 						<CardDescription>
 							{compose.sourceType === "raw"
 								? "This file is stored directly on the service."
-								: "Overwrites the compose file inside the local clone of the source."}
+								: "Overwrites the compose file inside the local clone of the source."}{" "}
+							Use Copilot in the header to draft or rewrite YAML.
 						</CardDescription>
 					</div>
 					{!locked && (

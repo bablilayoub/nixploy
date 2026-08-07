@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import { destinations } from "../../db/schema";
 import { testDestination } from "../../modules/backups/runner";
-import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -71,7 +71,7 @@ export const destinationRouter = router({
 	/** Add an S3-compatible destination (secret key is encrypted at rest). */
 	create: protectedProcedure.input(createDestinationInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "destinations.manage");
 		const [row] = await db
 			.insert(destinations)
 			.values({ ...input, organizationId })
@@ -87,7 +87,7 @@ export const destinationRouter = router({
 		.input(createDestinationInput.partial().extend({ destinationId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "destinations.manage");
 			const { destinationId, ...values } = input;
 			await findDestinationOrThrow(destinationId, organizationId);
 			const [row] = await db
@@ -106,7 +106,7 @@ export const destinationRouter = router({
 	/** Remove a destination (backups pointing at it cascade-delete). */
 	remove: protectedProcedure.input(destinationIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "destinations.manage");
 		const row = publicDestination(
 			await findDestinationOrThrow(input.destinationId, organizationId),
 		);
@@ -124,7 +124,7 @@ export const destinationRouter = router({
 	/** Verify bucket access with the stored credentials (ListObjects probe). */
 	testConnection: protectedProcedure.input(destinationIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "member");
+		await assertCapability(ctx.session.user.id, organizationId, "destinations.manage");
 		const row = await findDestinationOrThrow(input.destinationId, organizationId);
 		return await testDestination(row);
 	}),

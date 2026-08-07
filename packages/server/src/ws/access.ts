@@ -11,7 +11,7 @@ import {
 	redis,
 } from "../db/schema";
 import { findServerById } from "../modules/cluster/servers";
-import { resolveCallerOrganizationId } from "../modules/projects";
+import { hasCapability, resolveCallerOrganizationId } from "../modules/projects";
 import type { WsSession } from "./auth";
 
 const withTenancy = {
@@ -116,5 +116,21 @@ export async function assertWsContainerAccess(
 ): Promise<void> {
 	const organizationId = await resolveWsOrganizationId(session);
 	await assertWsAppAccess(appName, organizationId);
+	await assertWsServerAccess(serverId, organizationId);
+}
+
+/**
+ * Gate for Docker control-center terminals/logs by raw container ID.
+ * Requires `docker.manage` (same as the Docker UI mutations).
+ */
+export async function assertWsDockerContainerAccess(
+	session: WsSession,
+	serverId: string | null | undefined,
+): Promise<void> {
+	const organizationId = await resolveWsOrganizationId(session);
+	const allowed = await hasCapability(session.user.id, organizationId, "docker.manage");
+	if (!allowed) {
+		throw new Error('This action requires the "docker.manage" capability');
+	}
 	await assertWsServerAccess(serverId, organizationId);
 }

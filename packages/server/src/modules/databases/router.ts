@@ -6,7 +6,7 @@ import { environments, projects } from "../../db/schema";
 import type { TRPCContext } from "../../trpc/init";
 import { protectedProcedure, router } from "../../trpc/init";
 import { auditFromSession } from "../audit";
-import { assertOrgRole, hasOrgRole, resolveCallerOrganizationId } from "../projects";
+import { assertCapability, hasCapability, resolveCallerOrganizationId } from "../projects";
 import {
 	buildConnectionUrl,
 	DATABASE_CONFIGS,
@@ -154,7 +154,11 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 							envs.map((e) => e.environmentId),
 						),
 					)) as Row[];
-				const canSeePassword = await hasOrgRole(ctx.session.user.id, organizationId, "member");
+				const canSeePassword = await hasCapability(
+					ctx.session.user.id,
+					organizationId,
+					"secrets.read",
+				);
 				if (canSeePassword) return rows;
 				return rows.map((row) => ({ ...row, databasePassword: null }));
 			}),
@@ -163,7 +167,11 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 		one: protectedProcedure.input(idSchema).query(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx);
 			const row = await findRowOrThrow(input[idField] as string, organizationId);
-			const canSeePassword = await hasOrgRole(ctx.session.user.id, organizationId, "member");
+			const canSeePassword = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
 			if (canSeePassword) return row;
 			return { ...row, databasePassword: null };
 		}),
@@ -171,7 +179,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 		/** Create the database row (does not start the container; use `start`). */
 		create: protectedProcedure.input(createSchema).mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.create");
 			await assertEnvironmentAccess(input.environmentId, organizationId);
 			const appName = input.appName ?? generateDatabaseAppName(input.name);
 			try {
@@ -205,7 +213,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 		/** Update database settings (redeploy with `reload` to apply them). */
 		update: protectedProcedure.input(updateSchema).mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const id = input[idField] as string;
 			const existing = await findRowOrThrow(id, organizationId);
 			if (input.environmentId && input.environmentId !== existing.environmentId) {
@@ -223,7 +231,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			.input(z.object({ [idField]: z.string().min(1), environmentId: z.string().optional() }))
 			.mutation(async ({ ctx, input }) => {
 				const organizationId = await getOrganizationId(ctx);
-				await assertOrgRole(ctx.session.user.id, organizationId, "member");
+				await assertCapability(ctx.session.user.id, organizationId, "service.write");
 				const row = await findRowOrThrow(input[idField] as string, organizationId);
 				const targetEnvironmentId =
 					(input.environmentId as string | undefined) ?? row.environmentId;
@@ -246,7 +254,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			.input(z.object({ [idField]: z.string().min(1), environmentId: z.string().min(1) }))
 			.mutation(async ({ ctx, input }) => {
 				const organizationId = await getOrganizationId(ctx);
-				await assertOrgRole(ctx.session.user.id, organizationId, "member");
+				await assertCapability(ctx.session.user.id, organizationId, "service.write");
 				const id = input[idField] as string;
 				const row = await findRowOrThrow(id, organizationId);
 				await assertEnvironmentAccess(input.environmentId as string, organizationId);
@@ -264,7 +272,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 		/** Remove the database row, its swarm service and its data volume. */
 		remove: protectedProcedure.input(idSchema).mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "service.delete");
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
 			await removeDatabase(row.appName, row.serverId);
@@ -281,7 +289,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 		/** Deploy (create/update) the swarm service and scale it to 1 replica. */
 		start: protectedProcedure.input(idSchema).mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
 			await startDatabase(kind, row);
@@ -291,7 +299,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 		/** Scale the swarm service to 0 replicas. */
 		stop: protectedProcedure.input(idSchema).mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
 			await stopDatabase(row.appName, row.serverId);
@@ -303,7 +311,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			.input(z.object({ [idField]: z.string().min(1), env: z.string() }))
 			.mutation(async ({ ctx, input }) => {
 				const organizationId = await getOrganizationId(ctx);
-				await assertOrgRole(ctx.session.user.id, organizationId, "member");
+				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 				const id = input[idField] as string;
 				await findRowOrThrow(id, organizationId);
 				return updateRow(id, { env: input.env });
@@ -322,7 +330,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			)
 			.mutation(async ({ ctx, input }) => {
 				const organizationId = await getOrganizationId(ctx);
-				await assertOrgRole(ctx.session.user.id, organizationId, "member");
+				await assertCapability(ctx.session.user.id, organizationId, "service.write");
 				const id = input[idField] as string;
 				await findRowOrThrow(id, organizationId);
 				const row = await updateRow(id, { externalPort: input.externalPort });
@@ -335,7 +343,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 		/** Force a rolling re-creation of the service's tasks. */
 		reload: protectedProcedure.input(idSchema).mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
 			if (!(await databaseServiceExists(row.appName, row.serverId))) {
@@ -355,7 +363,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 		 */
 		getConnectionUrl: protectedProcedure.input(idSchema).query(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.read");
 			const row = await findRowOrThrow(input[idField] as string, organizationId);
 			const internal = await buildConnectionUrl(kind, row);
 			const external = row.externalPort

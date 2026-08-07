@@ -16,8 +16,13 @@ import {
 import { deleteApplication } from "../application/service";
 import { deleteCompose } from "../compose/service";
 import { removeDatabase } from "../databases/engine";
+import type { OrgRole } from "./roles";
+import { ORG_ROLE_RANK, orgRoleRank } from "./roles";
 
 export * from "./env-resolution";
+export * from "./capabilities";
+export type { OrgRole } from "./roles";
+export { ORG_ROLE_RANK, orgRoleRank } from "./roles";
 
 // ── organization resolution ─────────────────────────────────────────────────
 
@@ -70,35 +75,6 @@ export async function userHasOrganization(userId: string): Promise<boolean> {
 }
 
 // ── role checks ─────────────────────────────────────────────────────────────
-
-export type OrgRole = "viewer" | "member" | "deployer" | "admin" | "owner";
-
-export const ORG_ROLE_RANK: Record<OrgRole, number> = {
-	viewer: 0,
-	member: 1,
-	deployer: 2,
-	admin: 3,
-	owner: 4,
-};
-
-/** Rank for a stored member role string; unknown values fall back to viewer. */
-export function orgRoleRank(role: string): number {
-	const parts = role
-		.split(",")
-		.map((part) => part.trim())
-		.filter(Boolean);
-	let max = ORG_ROLE_RANK.viewer;
-	let matched = false;
-	for (const part of parts) {
-		const rank = ORG_ROLE_RANK[part as OrgRole];
-		if (rank !== undefined) {
-			matched = true;
-			if (rank > max) max = rank;
-		}
-	}
-	// Unknown custom roles: treat as viewer (never elevate).
-	return matched ? max : ORG_ROLE_RANK.viewer;
-}
 
 /**
  * Require the caller's role in `organizationId` to be at least `minRole`

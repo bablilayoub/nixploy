@@ -2,7 +2,7 @@ import { and, desc, eq, ilike, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import { auditLogs } from "../../db/schema";
-import { resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 /** Org audit trail, newest first, with optional filters. */
@@ -22,6 +22,7 @@ export const auditRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			await assertCapability(ctx.session.user.id, organizationId, "audit.read");
 			const conditions = [eq(auditLogs.organizationId, organizationId)];
 			if (input.action) conditions.push(eq(auditLogs.action, input.action));
 			if (input.targetType) conditions.push(eq(auditLogs.targetType, input.targetType));
@@ -49,6 +50,7 @@ export const auditRouter = router({
 			ctx.session.user.id,
 			ctx.session.session.activeOrganizationId,
 		);
+		await assertCapability(ctx.session.user.id, organizationId, "audit.read");
 		const [actions, targetTypes] = await Promise.all([
 			db
 				.selectDistinct({ action: auditLogs.action })

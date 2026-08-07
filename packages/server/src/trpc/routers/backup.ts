@@ -11,7 +11,7 @@ import {
 	runBackupNow,
 	unregisterBackupSchedule,
 } from "../../modules/backups/scheduler";
-import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -110,7 +110,7 @@ export const backupRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 			if (!isValidBackupCron(input.schedule)) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
@@ -161,7 +161,7 @@ export const backupRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 			await findBackupOrThrow(input.backupId, organizationId);
 			if (input.schedule && !isValidBackupCron(input.schedule)) {
 				throw new TRPCError({
@@ -188,7 +188,7 @@ export const backupRouter = router({
 	/** Delete a backup and cancel its cron job (stored dumps are kept). */
 	remove: protectedProcedure.input(backupIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 		const row = await findBackupOrThrow(input.backupId, organizationId);
 		unregisterBackupSchedule(row.backupId);
 		await db.delete(backups).where(eq(backups.backupId, row.backupId));
@@ -198,7 +198,7 @@ export const backupRouter = router({
 	/** Run the dump + upload immediately. */
 	runManually: protectedProcedure.input(backupIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+		await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 		const row = await findBackupOrThrow(input.backupId, organizationId);
 		await runBackupNow(row);
 		return { success: true };
@@ -216,7 +216,7 @@ export const backupRouter = router({
 		.input(backupIdInput.extend({ key: z.string().min(1).optional() }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 			const row = await findBackupOrThrow(input.backupId, organizationId);
 			return await restoreBackup(row, input.key);
 		}),

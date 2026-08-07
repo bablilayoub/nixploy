@@ -174,9 +174,11 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 					<AlertDialogHeader>
 						<AlertDialogTitle>Prune unused volumes</AlertDialogTitle>
 						<AlertDialogDescription>
-							Remove every volume not referenced by any container.{" "}
+							Remove every volume not referenced by any container (including named volumes).
+							Platform volumes such as <span className="font-mono">nixploy-postgres-data</span> are
+							kept.{" "}
 							<strong className="text-foreground">
-								Data in anonymous and orphaned volumes is permanently lost.
+								Data in orphaned volumes is permanently lost.
 							</strong>
 						</AlertDialogDescription>
 					</AlertDialogHeader>

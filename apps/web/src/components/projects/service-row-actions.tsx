@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRightLeft, Copy, Loader2, MoreHorizontal } from "lucide-react";
+import { ArrowRightLeft, Copy, Loader2, MoreHorizontal, Tag } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -29,6 +29,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
+import { ServiceTagsDialog } from "./service-tags-dialog";
 import type { ServiceType } from "./service-types";
 import type { ServiceEntry } from "./services-table";
 
@@ -54,6 +55,7 @@ export function ServiceRowActions({
 	const trpcClient = useTRPCClient();
 	const queryClient = useQueryClient();
 	const [moveOpen, setMoveOpen] = useState(false);
+	const [tagsOpen, setTagsOpen] = useState(false);
 	const [targetEnvironmentId, setTargetEnvironmentId] = useState("");
 
 	const projectsQuery = useQuery({
@@ -123,12 +125,18 @@ export function ServiceRowActions({
 						<Copy className="size-4" />
 						Duplicate
 					</DropdownMenuItem>
+					<DropdownMenuItem onClick={() => setTagsOpen(true)}>
+						<Tag className="size-4" />
+						Tags…
+					</DropdownMenuItem>
 					<DropdownMenuItem onClick={() => setMoveOpen(true)}>
 						<ArrowRightLeft className="size-4" />
 						Move to environment…
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
+
+			<ServiceTagsDialog service={service} open={tagsOpen} onOpenChange={setTagsOpen} />
 
 			<Dialog open={moveOpen} onOpenChange={setMoveOpen}>
 				<DialogContent className="sm:max-w-md">

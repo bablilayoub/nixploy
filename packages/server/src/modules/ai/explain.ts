@@ -1,9 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { desc, eq } from "drizzle-orm";
 import { db } from "../../db";
-import { applications, deployments, domains } from "../../db/schema";
+import { applications, compose, deployments, domains } from "../../db/schema";
 import { completeChat } from "./client";
 import { writeCachedExplanation } from "./explanation-cache";
+import { validateComposeYaml } from "./generate-compose";
 import { getAiSettings } from "./settings";
 
 const MAX_LOG_CHARS = 24_000;
@@ -172,37 +173,71 @@ export type ProposedAction =
 	| { type: "redeploy"; label: string }
 	| { type: "deploy"; label: string }
 	| { type: "start"; label: string }
-	| { type: "stop"; label: string };
+	| { type: "stop"; label: string }
+	| { type: "applyComposeDraft"; label: string; composeFile: string };
 
-/** Lightweight org-scoped chat about a service (mutations require UI confirm). */
-export async function chatAboutApplication(
-	applicationId: string,
+const ACTION_TYPES = new Set(["redeploy", "deploy", "start", "stop", "applyComposeDraft"]);
+
+function parseProposedActions(raw: unknown): ProposedAction[] {
+	if (!Array.isArray(raw)) return [];
+	const out: ProposedAction[] = [];
+	for (const item of raw) {
+		if (!item || typeof item !== "object") continue;
+		const action = item as Record<string, unknown>;
+		const type = action.type;
+		const label = action.label;
+		if (typeof type !== "string" || !ACTION_TYPES.has(type) || typeof label !== "string") {
+			continue;
+		}
+		if (type === "applyComposeDraft") {
+			const composeFile = action.composeFile;
+			if (typeof composeFile !== "string" || composeFile.trim().length < 8) continue;
+			const validation = validateComposeYaml(composeFile);
+			if (!validation.ok) continue;
+			out.push({ type, label, composeFile: composeFile.trim() });
+			continue;
+		}
+		out.push({ type: type as "redeploy" | "deploy" | "start" | "stop", label });
+	}
+	return out;
+}
+
+export type CopilotTarget =
+	| { type: "application"; applicationId: string }
+	| { type: "compose"; composeId: string };
+
+/** Lightweight org-scoped chat about an application or compose service. */
+export async function chatAboutService(
+	target: CopilotTarget,
 	organizationId: string,
 	messages: Array<{ role: "user" | "assistant"; content: string }>,
 ): Promise<{ reply: string; model: string; proposedActions: ProposedAction[] }> {
 	const settings = await getAiSettings();
-	const app = await db.query.applications.findFirst({
-		where: eq(applications.applicationId, applicationId),
-		with: {
-			environment: { with: { project: true } },
-		},
-	});
-	if (!app || app.environment.project.organizationId !== organizationId) {
-		throw new Error("Application not found");
-	}
 
-	const appDomains = await db
-		.select({ host: domains.host })
-		.from(domains)
-		.where(eq(domains.applicationId, applicationId));
+	let system: string;
+	if (target.type === "application") {
+		const app = await db.query.applications.findFirst({
+			where: eq(applications.applicationId, target.applicationId),
+			with: {
+				environment: { with: { project: true } },
+			},
+		});
+		if (!app || app.environment.project.organizationId !== organizationId) {
+			throw new Error("Application not found");
+		}
 
-	const recent = await db.query.deployments.findMany({
-		where: eq(deployments.applicationId, applicationId),
-		orderBy: [desc(deployments.createdAt)],
-		limit: 5,
-	});
+		const appDomains = await db
+			.select({ host: domains.host })
+			.from(domains)
+			.where(eq(domains.applicationId, target.applicationId));
 
-	const context = `Application "${app.name}" (${app.appName})
+		const recent = await db.query.deployments.findMany({
+			where: eq(deployments.applicationId, target.applicationId),
+			orderBy: [desc(deployments.createdAt)],
+			limit: 5,
+		});
+
+		const context = `Application "${app.name}" (${app.appName})
 Status: ${app.status}
 Source: ${app.sourceType}
 Build: ${app.buildType}
@@ -211,19 +246,70 @@ Domains: ${appDomains.map((d) => d.host).join(", ") || "(none)"}
 Recent deploys: ${recent.map((d) => `${d.status}@${d.createdAt.toISOString()}`).join("; ") || "(none)"}
 CPU limit: ${app.cpuLimit ?? "unset"}, Memory limit: ${app.memoryLimit ?? "unset"}`;
 
-	const system = `You are Nixploy Deploy Copilot. Help the operator manage this application.
+		system = `You are Nixploy Deploy Copilot helping with an application.
 Respond in JSON only:
 {"reply":"markdown-friendly answer","proposedActions":[{"type":"redeploy|deploy|start|stop","label":"short confirm button label"}]}
 proposedActions may be empty. Never claim you already applied a mutation — the UI confirms first.
 Be concise. Context:
 ${context}`;
+	} else {
+		const row = await db.query.compose.findFirst({
+			where: eq(compose.composeId, target.composeId),
+			with: {
+				environment: { with: { project: true } },
+			},
+		});
+		if (!row || row.environment.project.organizationId !== organizationId) {
+			throw new Error("Compose service not found");
+		}
+
+		const composeDomains = await db
+			.select({ host: domains.host, serviceName: domains.serviceName })
+			.from(domains)
+			.where(eq(domains.composeId, target.composeId));
+
+		const recent = await db.query.deployments.findMany({
+			where: eq(deployments.composeId, target.composeId),
+			orderBy: [desc(deployments.createdAt)],
+			limit: 5,
+		});
+
+		const filePreview = (row.composeFile ?? "").trim();
+		const fileSnippet =
+			filePreview.length > 6_000
+				? `${filePreview.slice(0, 6_000)}\n…(truncated)`
+				: filePreview || "(empty — help the operator draft one)";
+
+		const context = `Compose "${row.name}" (${row.appName})
+Status: ${row.status}
+Type: ${row.composeType}
+Source: ${row.sourceType}
+Domains: ${
+			composeDomains
+				.map((d) => `${d.host}${d.serviceName ? `→${d.serviceName}` : ""}`)
+				.join(", ") || "(none)"
+		}
+Recent deploys: ${recent.map((d) => `${d.status}@${d.createdAt.toISOString()}`).join("; ") || "(none)"}
+Current compose file:
+\`\`\`yaml
+${fileSnippet}
+\`\`\``;
+
+		system = `You are Nixploy Deploy Copilot helping with a Docker Compose / Swarm stack.
+Respond in JSON only:
+{"reply":"markdown-friendly answer","proposedActions":[{"type":"redeploy|deploy|start|stop|applyComposeDraft","label":"short confirm button label","composeFile":"…only when type is applyComposeDraft…"}]}
+When the operator asks to generate or rewrite the compose file, include one applyComposeDraft action with a full valid docker-compose YAML in composeFile (services: required). Do not wrap YAML in markdown fences inside composeFile.
+proposedActions may be empty. Never claim you already saved or deployed — the UI confirms first.
+Be concise. Context:
+${context}`;
+	}
 
 	const completion = await completeChat(settings, [
 		{ role: "system", content: system },
 		...messages.map((m) => ({ role: m.role, content: m.content })),
 	]);
 
-	let parsed: { reply?: string; proposedActions?: ProposedAction[] };
+	let parsed: { reply?: string; proposedActions?: unknown };
 	try {
 		const jsonMatch = completion.content.match(/\{[\s\S]*\}/);
 		parsed = JSON.parse(jsonMatch?.[0] ?? completion.content) as typeof parsed;
@@ -231,18 +317,18 @@ ${context}`;
 		parsed = { reply: completion.content, proposedActions: [] };
 	}
 
-	const allowed = new Set(["redeploy", "deploy", "start", "stop"]);
-	const proposedActions = (parsed.proposedActions ?? []).filter(
-		(action): action is ProposedAction =>
-			Boolean(action) &&
-			typeof action === "object" &&
-			allowed.has((action as ProposedAction).type) &&
-			typeof (action as ProposedAction).label === "string",
-	);
-
 	return {
 		reply: parsed.reply?.trim() || completion.content,
 		model: completion.model,
-		proposedActions,
+		proposedActions: parseProposedActions(parsed.proposedActions),
 	};
+}
+
+/** @deprecated Prefer chatAboutService — kept for call-site clarity on apps. */
+export async function chatAboutApplication(
+	applicationId: string,
+	organizationId: string,
+	messages: Array<{ role: "user" | "assistant"; content: string }>,
+) {
+	return chatAboutService({ type: "application", applicationId }, organizationId, messages);
 }

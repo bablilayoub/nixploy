@@ -8,7 +8,8 @@ import {
 	PROTECTED_NETWORKS,
 	PROTECTED_VOLUMES,
 } from "../../modules/docker/protected";
-import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { pruneUnusedVolumes } from "../../modules/docker/prune";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { protectedProcedure, router } from "../init";
 
@@ -70,7 +71,7 @@ async function assertAdmin(ctx: {
 	session: { user: { id: string }; session: { activeOrganizationId?: string | null } };
 }) {
 	const organizationId = await resolveOrg(ctx);
-	await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+	await assertCapability(ctx.session.user.id, organizationId, "docker.manage");
 	return organizationId;
 }
 
@@ -278,7 +279,9 @@ export const dockerRouter = router({
 
 	volumesPrune: protectedProcedure.input(serverInput).mutation(async ({ ctx, input }) => {
 		await assertAdmin(ctx);
-		return await runOn(ctx, input.serverId, `docker volume prune -f`);
+		// Docker 23+ `volume prune -f` only removes anonymous volumes; remove
+		// named unused volumes too while keeping platform volumes safe.
+		return await pruneUnusedVolumes((command) => runOn(ctx, input.serverId, command));
 	}),
 
 	// ── System ────────────────────────────────────────────────────────────────
@@ -307,15 +310,16 @@ export const dockerRouter = router({
 		.input(serverInput.extend({ volumes: z.boolean().default(false) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await assertAdmin(ctx);
-			const output = await runOn(
-				ctx,
-				input.serverId,
-				`docker system prune -f ${input.volumes ? "--volumes" : ""}`.trim(),
+			const run = (command: string) => runOn(ctx, input.serverId, command);
+			// system prune --volumes still skips named volumes on Docker 23+.
+			const systemOut = await run(
+				input.volumes ? "docker system prune -f --volumes" : "docker system prune -f",
 			);
+			const volumeOut = input.volumes ? await pruneUnusedVolumes(run) : "";
 			await auditFromSession(ctx, organizationId, {
 				action: "docker.system.prune",
 				metadata: { volumes: input.volumes },
 			});
-			return output;
+			return [systemOut, volumeOut].filter(Boolean).join("\n");
 		}),
 });

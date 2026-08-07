@@ -6,7 +6,7 @@ import { schedules } from "../../db/schema";
 import { assertApplicationAccess } from "../../modules/application";
 import { findServerById } from "../../modules/cluster";
 import { findComposeForOrg } from "../../modules/compose/service";
-import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import {
 	getScheduleRunState,
 	isValidCron,
@@ -68,14 +68,14 @@ async function assertTargetAccess(
 				throw new TRPCError({ code: "NOT_FOUND", message: "Server not found" });
 			}
 			// Runs arbitrary shell on the host over SSH — infrastructure-level.
-			await assertOrgRole(session.user.id, organizationId, "admin");
+			await assertCapability(session.user.id, organizationId, "schedules.manage");
 			return;
 		}
 		case "nixploy-server": {
 			// Runs arbitrary shell inside the Nixploy process itself, so it is
 			// effectively instance root: admins only, ownership by userId below.
 			const organizationId = await getOrganizationId(session);
-			await assertOrgRole(session.user.id, organizationId, "admin");
+			await assertCapability(session.user.id, organizationId, "schedules.manage");
 			return;
 		}
 	}
@@ -89,7 +89,7 @@ async function assertScheduleAccess(session: Session, row: ScheduleRow): Promise
 		}
 		// Still admin-only: a demoted member keeps no host-shell access.
 		const organizationId = await getOrganizationId(session);
-		await assertOrgRole(session.user.id, organizationId, "admin");
+		await assertCapability(session.user.id, organizationId, "schedules.manage");
 		return;
 	}
 	await assertTargetAccess(session, row);
@@ -189,7 +189,7 @@ export const scheduleRouter = router({
 				});
 			}
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "schedules.manage");
 			await assertTargetAccess(ctx.session, input);
 			const [row] = await db
 				.insert(schedules)
@@ -230,7 +230,7 @@ export const scheduleRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "schedules.manage");
 			const row = await findScheduleOrThrow(input.scheduleId);
 			await assertScheduleAccess(ctx.session, row);
 			if (input.cronExpression && !isValidCron(input.cronExpression)) {
@@ -257,7 +257,7 @@ export const scheduleRouter = router({
 		.input(z.object({ scheduleId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "schedules.manage");
 			const row = await findScheduleOrThrow(input.scheduleId);
 			await assertScheduleAccess(ctx.session, row);
 			unregisterSchedule(row.scheduleId);
@@ -270,7 +270,7 @@ export const scheduleRouter = router({
 		.input(z.object({ scheduleId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "schedules.manage");
 			const row = await findScheduleOrThrow(input.scheduleId);
 			await assertScheduleAccess(ctx.session, row);
 			return await runSchedule(row, "manual");
@@ -281,7 +281,7 @@ export const scheduleRouter = router({
 		.input(z.object({ scheduleId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "schedules.manage");
 			const row = await findScheduleOrThrow(input.scheduleId);
 			await assertScheduleAccess(ctx.session, row);
 			const [updated] = await db
@@ -301,7 +301,7 @@ export const scheduleRouter = router({
 		.input(z.object({ scheduleId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "schedules.manage");
 			const row = await findScheduleOrThrow(input.scheduleId);
 			await assertScheduleAccess(ctx.session, row);
 			unregisterSchedule(row.scheduleId);

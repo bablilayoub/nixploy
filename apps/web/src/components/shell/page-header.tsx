@@ -20,15 +20,24 @@ export function PageHeader({
 	breadcrumb?: ReactNode;
 	className?: string;
 }) {
+	const descriptionTitle =
+		typeof description === "string" && description.length > 0 ? description : undefined;
+
 	return (
 		<div className={cn("flex flex-col gap-1.5", className)}>
 			{breadcrumb && <div className="text-sm text-muted-foreground">{breadcrumb}</div>}
-			<div className="flex flex-wrap items-center justify-between gap-4">
-				<div className="flex min-w-0 flex-col gap-1">
+			<div className="flex items-start justify-between gap-4">
+				<div className="flex min-w-0 flex-1 flex-col gap-1">
 					<h1 className="truncate text-2xl font-semibold tracking-tight">{title}</h1>
-					{description && <p className="text-sm text-muted-foreground">{description}</p>}
+					{description ? (
+						<p className="truncate text-sm text-muted-foreground" title={descriptionTitle}>
+							{description}
+						</p>
+					) : null}
 				</div>
-				{actions && <div className="flex items-center gap-2">{actions}</div>}
+				{actions ? (
+					<div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div>
+				) : null}
 			</div>
 		</div>
 	);

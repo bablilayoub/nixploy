@@ -11,7 +11,7 @@ import {
 	updateGiteaById,
 	updateGiteaProviderName,
 } from "../../modules/git";
-import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -71,7 +71,7 @@ export const giteaRouter = router({
 	/** Add a Gitea provider (access token). */
 	create: protectedProcedure.input(createGiteaInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 		return await createGitea(input, organizationId);
 	}),
 
@@ -86,7 +86,7 @@ export const giteaRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 			const { giteaId, name, ...values } = input;
 			if (name) {
 				await updateGiteaProviderName(giteaId, name, organizationId);
@@ -101,7 +101,7 @@ export const giteaRouter = router({
 	/** Remove the provider (cascades to the gitea credentials row). */
 	remove: protectedProcedure.input(giteaIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 		const removed = await removeGitea(input.giteaId, organizationId);
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Gitea provider not found" });
@@ -131,7 +131,7 @@ export const giteaRouter = router({
 	/** Verify the configured token against the Gitea API. */
 	testConnection: protectedProcedure.input(giteaIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 		return await testGiteaConnection(input.giteaId, organizationId);
 	}),
 });

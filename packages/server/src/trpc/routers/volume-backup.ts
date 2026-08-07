@@ -15,7 +15,7 @@ import {
 	runVolumeBackupNow,
 	unregisterVolumeBackupSchedule,
 } from "../../modules/backups/scheduler";
-import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -110,7 +110,7 @@ export const volumeBackupRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 			if (!isValidBackupCron(input.cronExpression)) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
@@ -156,7 +156,7 @@ export const volumeBackupRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 			await findVolumeBackupOrThrow(input.volumeBackupId, organizationId);
 			if (input.cronExpression && !isValidBackupCron(input.cronExpression)) {
 				throw new TRPCError({
@@ -183,7 +183,7 @@ export const volumeBackupRouter = router({
 	/** Delete a volume backup and cancel its cron job (archives are kept). */
 	remove: protectedProcedure.input(volumeBackupIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 		const row = await findVolumeBackupOrThrow(input.volumeBackupId, organizationId);
 		unregisterVolumeBackupSchedule(row.volumeBackupId);
 		await db.delete(volumeBackups).where(eq(volumeBackups.volumeBackupId, row.volumeBackupId));
@@ -193,7 +193,7 @@ export const volumeBackupRouter = router({
 	/** Run the archive + upload immediately. */
 	runManually: protectedProcedure.input(volumeBackupIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+		await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 		const row = await findVolumeBackupOrThrow(input.volumeBackupId, organizationId);
 		await runVolumeBackupNow(row);
 		return { success: true };
@@ -211,7 +211,7 @@ export const volumeBackupRouter = router({
 		.input(volumeBackupIdInput.extend({ key: z.string().min(1).optional() }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 			const row = await findVolumeBackupOrThrow(input.volumeBackupId, organizationId);
 			return await restoreVolumeBackup(row, input.key);
 		}),

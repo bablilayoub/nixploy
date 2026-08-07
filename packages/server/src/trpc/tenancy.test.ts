@@ -115,6 +115,19 @@ describe.skipIf(!testUrl)("tenant isolation", () => {
 		await expectDenied(callerA.postgres.all({ projectId: b.projectId }));
 		await expectDenied(callerA.postgres.one({ postgresId: b.postgresId }));
 	});
+
+	it("tag.all returns only the caller's org tags", async () => {
+		const tagA = await callerA.tag.create({ name: `a-${Date.now()}`, color: "#112233" });
+		const tagB = await callerB.tag.create({ name: `b-${Date.now()}`, color: "#445566" });
+		expect(tagA?.tagId).toBeTruthy();
+		expect(tagB?.tagId).toBeTruthy();
+		const listA = await callerA.tag.all();
+		const listB = await callerB.tag.all();
+		expect(listA.map((row) => row.tagId)).toContain(tagA!.tagId);
+		expect(listA.map((row) => row.tagId)).not.toContain(tagB!.tagId);
+		expect(listB.map((row) => row.tagId)).toContain(tagB!.tagId);
+		expect(listB.map((row) => row.tagId)).not.toContain(tagA!.tagId);
+	});
 });
 
 describe("tenancy coverage registry", () => {

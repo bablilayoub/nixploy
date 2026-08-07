@@ -19,6 +19,7 @@ import { DeploymentsTab } from "./deployments-tab";
 import { EnvironmentActions } from "./environment-actions";
 import { EnvironmentVariablesTab } from "./environment-variables-tab";
 import { GitopsCard } from "./gitops-card";
+import { ManageTagsDialog } from "./manage-tags-dialog";
 import { ProjectActions } from "./project-actions";
 import { DATABASE_TYPES, type DatabaseType } from "./service-types";
 import { type ServiceEntry, ServicesTable } from "./services-table";
@@ -92,6 +93,7 @@ export function ProjectDetail({
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const [search, setSearch] = useState("");
+	const [tagFilter, setTagFilter] = useState<string | null>(null);
 	const [environmentName, setEnvironmentName] = useState(initialEnvironment || "production");
 	const [tab, setTab] = useState<ProjectTab>(isProjectTab(initialTab) ? initialTab : "services");
 	// Deep link (?new=application|compose|<db>) opens the matching create dialog once.
@@ -154,6 +156,45 @@ export function ProjectDetail({
 		enabled: tab === "services",
 	});
 
+	const tagsCatalogQuery = useQuery({
+		...trpc.tag.all.queryOptions(),
+		enabled: tab === "services",
+	});
+
+	const serviceRefs = useMemo(
+		() => [
+			...(applicationsQuery.data ?? []).map((row) => ({
+				type: "application" as const,
+				id: row.applicationId,
+			})),
+			...(composeQuery.data ?? []).map((row) => ({ type: "compose" as const, id: row.composeId })),
+			...(postgresQuery.data ?? []).map((row) => ({
+				type: "postgres" as const,
+				id: row.postgresId,
+			})),
+			...(mysqlQuery.data ?? []).map((row) => ({ type: "mysql" as const, id: row.mysqlId })),
+			...(mariadbQuery.data ?? []).map((row) => ({ type: "mariadb" as const, id: row.mariadbId })),
+			...(mongoQuery.data ?? []).map((row) => ({ type: "mongo" as const, id: row.mongoId })),
+			...(redisQuery.data ?? []).map((row) => ({ type: "redis" as const, id: row.redisId })),
+		],
+		[
+			applicationsQuery.data,
+			composeQuery.data,
+			postgresQuery.data,
+			mysqlQuery.data,
+			mariadbQuery.data,
+			mongoQuery.data,
+			redisQuery.data,
+		],
+	);
+
+	const serviceTagsQuery = useQuery({
+		...trpc.tag.forServices.queryOptions({ services: serviceRefs }),
+		enabled: tab === "services" && serviceRefs.length > 0,
+	});
+
+	const tagsByService = serviceTagsQuery.data ?? {};
+
 	const services: ServiceEntry[] = [
 		...(applicationsQuery.data ?? []).map((row) => ({
 			type: "application" as const,
@@ -161,6 +202,7 @@ export function ProjectDetail({
 			name: row.name,
 			description: row.description,
 			status: row.status,
+			tags: tagsByService[`application:${row.applicationId}`],
 		})),
 		...(composeQuery.data ?? []).map((row) => ({
 			type: "compose" as const,
@@ -168,6 +210,7 @@ export function ProjectDetail({
 			name: row.name,
 			description: row.description,
 			status: row.status,
+			tags: tagsByService[`compose:${row.composeId}`],
 		})),
 		...(postgresQuery.data ?? []).map((row) => ({
 			type: "postgres" as const,
@@ -175,6 +218,7 @@ export function ProjectDetail({
 			name: row.name,
 			description: row.description,
 			status: row.status,
+			tags: tagsByService[`postgres:${row.postgresId}`],
 		})),
 		...(mysqlQuery.data ?? []).map((row) => ({
 			type: "mysql" as const,
@@ -182,6 +226,7 @@ export function ProjectDetail({
 			name: row.name,
 			description: row.description,
 			status: row.status,
+			tags: tagsByService[`mysql:${row.mysqlId}`],
 		})),
 		...(mariadbQuery.data ?? []).map((row) => ({
 			type: "mariadb" as const,
@@ -189,6 +234,7 @@ export function ProjectDetail({
 			name: row.name,
 			description: row.description,
 			status: row.status,
+			tags: tagsByService[`mariadb:${row.mariadbId}`],
 		})),
 		...(mongoQuery.data ?? []).map((row) => ({
 			type: "mongo" as const,
@@ -196,6 +242,7 @@ export function ProjectDetail({
 			name: row.name,
 			description: row.description,
 			status: row.status,
+			tags: tagsByService[`mongo:${row.mongoId}`],
 		})),
 		...(redisQuery.data ?? []).map((row) => ({
 			type: "redis" as const,
@@ -203,6 +250,7 @@ export function ProjectDetail({
 			name: row.name,
 			description: row.description,
 			status: row.status,
+			tags: tagsByService[`redis:${row.redisId}`],
 		})),
 	];
 
@@ -215,9 +263,11 @@ export function ProjectDetail({
 		mongoQuery.isPending ||
 		redisQuery.isPending;
 
-	const filteredServices = services.filter((service) =>
-		service.name.toLowerCase().includes(search.trim().toLowerCase()),
-	);
+	const filteredServices = services.filter((service) => {
+		const matchesSearch = service.name.toLowerCase().includes(search.trim().toLowerCase());
+		const matchesTag = !tagFilter || service.tags?.some((tag) => tag.tagId === tagFilter);
+		return matchesSearch && matchesTag;
+	});
 
 	const syncUrl = (env: string, nextTab: ProjectTab) => {
 		const params = new URLSearchParams({ env });
@@ -331,13 +381,47 @@ export function ProjectDetail({
 									className="h-8 w-full pl-8 sm:w-56"
 								/>
 							</div>
+							{(tagsCatalogQuery.data?.length ?? 0) > 0 && (
+								<div className="flex flex-wrap items-center gap-1">
+									<Button
+										type="button"
+										size="sm"
+										variant={tagFilter === null ? "secondary" : "ghost"}
+										className="h-8"
+										onClick={() => setTagFilter(null)}
+									>
+										All tags
+									</Button>
+									{tagsCatalogQuery.data?.map((tag) => (
+										<Button
+											key={tag.tagId}
+											type="button"
+											size="sm"
+											variant={tagFilter === tag.tagId ? "secondary" : "ghost"}
+											className="h-8"
+											onClick={() =>
+												setTagFilter((current) => (current === tag.tagId ? null : tag.tagId))
+											}
+										>
+											<span
+												className="mr-1.5 size-2 rounded-full"
+												style={{ backgroundColor: tag.color }}
+											/>
+											{tag.name}
+										</Button>
+									))}
+								</div>
+							)}
 							{activeEnvironment && (
-								<AddServiceMenu
-									projectId={projectId}
-									environmentId={activeEnvironment.environmentId}
-									environmentName={activeEnvironment.name}
-									initialDialog={initialDialog ?? undefined}
-								/>
+								<>
+									<ManageTagsDialog />
+									<AddServiceMenu
+										projectId={projectId}
+										environmentId={activeEnvironment.environmentId}
+										environmentName={activeEnvironment.name}
+										initialDialog={initialDialog ?? undefined}
+									/>
+								</>
 							)}
 						</div>
 					)}

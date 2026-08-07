@@ -150,6 +150,7 @@ export const deploymentRouter = router({
 			z.object({
 				deploymentId: z.string().min(1).optional(),
 				applicationId: z.string().min(1).optional(),
+				composeId: z.string().min(1).optional(),
 				offset: z.number().int().min(0).optional(),
 			}),
 		)
@@ -162,6 +163,12 @@ export const deploymentRouter = router({
 			let deploymentId = input.deploymentId;
 			if (!deploymentId && input.applicationId) {
 				const page = await listDeploymentsByApplication(input.applicationId, organizationId, {
+					limit: 1,
+				});
+				deploymentId = page.deployments[0]?.deploymentId;
+			}
+			if (!deploymentId && input.composeId) {
+				const page = await listDeploymentsByCompose(input.composeId, organizationId, {
 					limit: 1,
 				});
 				deploymentId = page.deployments[0]?.deploymentId;

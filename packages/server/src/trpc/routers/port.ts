@@ -8,7 +8,7 @@ import {
 	getOrganizationId,
 	upsertApplicationSwarmService,
 } from "../../modules/application";
-import { assertOrgRole } from "../../modules/projects";
+import { assertCapability, assertOrgRole } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 const portFields = {
@@ -54,7 +54,7 @@ export const portRouter = router({
 		.input(z.object({ applicationId: z.string().min(1), ...portFields }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 
 			const [port] = await db
@@ -90,7 +90,7 @@ export const portRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const { port, application } = await findApplicationPort(input.portId, organizationId);
 
 			const [updated] = await db
@@ -112,7 +112,7 @@ export const portRouter = router({
 		.input(z.object({ portId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const { port, application } = await findApplicationPort(input.portId, organizationId);
 
 			await db.delete(ports).where(eq(ports.portId, port.portId));

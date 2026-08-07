@@ -8,7 +8,7 @@ import { db } from "../../db";
 import { applications, compose, mariadb, mongo, mysql, postgres, redis } from "../../db/schema";
 import { findServerById, getServerStatsCached, type ServerStats } from "../../modules/cluster";
 import { readMetricsHistory } from "../../modules/monitoring/history";
-import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { mapDockerStats } from "../../ws/docker-stats";
 import type { TRPCContext } from "../init";
@@ -204,7 +204,7 @@ export const monitoringRouter = router({
 			const serverId = input?.serverId ?? null;
 			// Prune is destructive and host-wide, like the Docker control center.
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "settings.manage");
 			if (serverId) {
 				await findServerOrThrow(serverId, organizationId);
 			}

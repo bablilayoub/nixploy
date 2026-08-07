@@ -10,7 +10,9 @@ A free, self-hostable PaaS that simplifies deployment and management of applicat
 
 **Phase 8 is shipped** — reliability (template image CI + Traefik golden-path smoke), Deploy Copilot close-the-loop (explain → apply env → redeploy, auto-explain on failure), multi-server placement + capacity, and GitOps-lite (URL sync + apply with redeploy).
 
-**Phase 9 is complete — polish only (no new features).** Working checklist: [`docs/next.md`](docs/next.md). Technical evidence/acceptance: [`docs/hardening.md`](docs/hardening.md). Docs index: [`docs/README.md`](docs/README.md).
+**Phase 9 is complete — polish only (no new features).** Checklist archive: [`docs/hardening.md`](docs/hardening.md). Docs index: [`docs/README.md`](docs/README.md).
+
+**Phase 10 is done** — permissions, tags, AI compose, CLI depth. Checklist: [`docs/next.md`](docs/next.md). Deferred: SSO/SCIM, Stripe, build-server role, Redis, K8s.
 
 ## 1. Tech Stack (decided)
 
@@ -135,14 +137,24 @@ Wins on **trust + speed + sharp edges**, not feature checklists.
 
 ### Phase 9 — Polish (organize / harden / optimize) — DONE
 
-No new features. Checklist: [`docs/next.md`](docs/next.md). Specs: [`docs/hardening.md`](docs/hardening.md).
+No new features. Specs: [`docs/hardening.md`](docs/hardening.md).
 
 Sprints: **A** DB indexes + org cache → **B** tenancy tests → **C** servers batch stats → **D** structure dedupe → **E** logger / landing typecheck / polling → **F** docs index + UX consistency.
 
+### Phase 10 — Permissions, tags, AI compose, CLI — DONE
+
+Checklist: [`docs/next.md`](docs/next.md).
+
+- **A** Granular org capabilities (overrides on members; hot-path gates)
+- **B** Tags UI (M2M + filter + manage/assign)
+- **C** AI compose generation (draft only; user saves)
+- **D** CLI compose/template depth + docs
+
 **Still deferred / out of scope**
-- Stripe billing, SSO/SCIM, granular member permission toggles, libsql, AI compose generation
+- Stripe billing, SSO/SCIM, libsql
 - Dedicated build-server role beyond manager/worker (use placement constraints for affinity)
-- CLI compose/template commands; remote builder auto-provision; tags UI
+- Redis queue, Kubernetes; remote builder auto-provision
+- New notification providers / template categories
 
 ## 6. UI Map (pages)
 

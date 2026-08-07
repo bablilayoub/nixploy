@@ -5,6 +5,7 @@ import { db } from "../../db";
 import { compose, environments, projects } from "../../db/schema";
 import { assertEnvironmentAccess } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
+import { listComposeContainers } from "../../modules/compose/containers";
 import {
 	createCompose,
 	deleteCompose,
@@ -19,7 +20,7 @@ import {
 } from "../../modules/compose/service";
 import { queueDeployment } from "../../modules/deployment";
 import {
-	assertOrgRole,
+	assertCapability,
 	assertWithinQuota,
 	hasOrgRole,
 	resolveCallerOrganizationId,
@@ -98,7 +99,7 @@ export const composeRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.create");
 			await assertWithinQuota(organizationId, { services: true });
 			await assertEnvironmentAccess(input.environmentId, organizationId);
 			const created = await createCompose({
@@ -153,7 +154,7 @@ export const composeRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			await findComposeForOrg(input.composeId, organizationId);
 			const { composeId, ...values } = input;
 			return await updateComposeById(composeId, values);
@@ -171,7 +172,7 @@ export const composeRouter = router({
 		.input(composeIdInput.extend({ environmentId: z.string().optional() }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const row = await findComposeForOrg(input.composeId, organizationId);
 			const targetEnvironmentId = input.environmentId ?? row.environmentId;
 			if (targetEnvironmentId !== row.environmentId) {
@@ -193,7 +194,7 @@ export const composeRouter = router({
 		.input(composeIdInput.extend({ environmentId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const row = await findComposeForOrg(input.composeId, organizationId);
 			await assertEnvironmentAccess(input.environmentId, organizationId);
 			const [updated] = await db
@@ -213,7 +214,7 @@ export const composeRouter = router({
 
 	delete: protectedProcedure.input(composeIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "service.delete");
 		const row = await findComposeForOrg(input.composeId, organizationId);
 		await deleteCompose(row);
 		await auditFromSession(ctx, organizationId, {
@@ -228,7 +229,7 @@ export const composeRouter = router({
 	/** Enqueue a deployment (clone/pull + `compose up` / `stack deploy`). */
 	deploy: protectedProcedure.input(composeIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+		await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 		await findComposeForOrg(input.composeId, organizationId);
 		const deploymentId = await queueDeployment({ composeId: input.composeId, type: "deploy" });
 		await auditFromSession(ctx, organizationId, {
@@ -243,7 +244,7 @@ export const composeRouter = router({
 	/** Enqueue a redeployment of the current source. */
 	redeploy: protectedProcedure.input(composeIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+		await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 		await findComposeForOrg(input.composeId, organizationId);
 		const deploymentId = await queueDeployment({
 			composeId: input.composeId,
@@ -255,7 +256,7 @@ export const composeRouter = router({
 	/** Start a stopped deployment (`compose up -d` / `stack deploy`). */
 	start: protectedProcedure.input(composeIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+		await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 		const row = await findComposeForOrg(input.composeId, organizationId);
 		await startCompose(row);
 		return true;
@@ -264,7 +265,7 @@ export const composeRouter = router({
 	/** Stop the deployment (`compose stop` / `stack rm`), keeping the row. */
 	stop: protectedProcedure.input(composeIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+		await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 		const row = await findComposeForOrg(input.composeId, organizationId);
 		await stopCompose(row);
 		return true;
@@ -275,7 +276,7 @@ export const composeRouter = router({
 		.input(composeIdInput.extend({ env: z.string() }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			await findComposeForOrg(input.composeId, organizationId);
 			await saveEnvironment(input.composeId, input.env);
 			return true;
@@ -289,7 +290,7 @@ export const composeRouter = router({
 		.input(composeIdInput.extend({ composeFile: z.string() }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const row = await findComposeForOrg(input.composeId, organizationId);
 			await saveComposeFile(row, input.composeFile);
 			return true;
@@ -300,5 +301,12 @@ export const composeRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		const row = await findComposeForOrg(input.composeId, organizationId);
 		return await loadServices(row);
+	}),
+
+	/** Running containers for this compose project (for terminal/log targeting). */
+	containers: protectedProcedure.input(composeIdInput).query(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		const row = await findComposeForOrg(input.composeId, organizationId);
+		return await listComposeContainers(row.appName, row.serverId);
 	}),
 });

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import { certificates, generateId, servers } from "../../db/schema";
 import { getOrganizationId } from "../../modules/application";
-import { assertOrgRole } from "../../modules/projects";
+import { assertCapability, assertOrgRole } from "../../modules/projects";
 import {
 	getCertificatesDir,
 	REMOTE_TRAEFIK_DIR,
@@ -127,7 +127,7 @@ export const certificateRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "certificates.manage");
 			const serverId = input.serverId ?? null;
 			if (serverId) {
 				await assertServerAccess(serverId, organizationId);
@@ -177,7 +177,7 @@ export const certificateRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "certificates.manage");
 			const existing = await assertCertificateAccess(input.certificateId, organizationId);
 
 			const nextServerId = input.serverId !== undefined ? input.serverId : existing.serverId;
@@ -219,7 +219,7 @@ export const certificateRouter = router({
 
 	delete: protectedProcedure.input(certificateIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "certificates.manage");
 		const certificate = await assertCertificateAccess(input.certificateId, organizationId);
 
 		await db.delete(certificates).where(eq(certificates.certificateId, input.certificateId));

@@ -43,6 +43,23 @@ nixploy app deploy <applicationId>
 nixploy app redeploy <applicationId>
 nixploy app logs <applicationId>
 
+# Compose stacks
+nixploy compose list --project-id <id> [--env <name>] [--json]
+nixploy compose create --project-id <id> --name my-stack [--env <name>] [--type docker-compose|stack]
+nixploy compose one <composeId>
+nixploy compose deploy <composeId>
+nixploy compose redeploy <composeId>
+nixploy compose logs <composeId> [-f]
+nixploy compose env <composeId> [--set "..."]
+nixploy compose pull <composeId>
+nixploy compose save <composeId> --file ./docker-compose.yml
+
+# Templates
+nixploy template list [--json]
+nixploy template one <templateId>
+nixploy template deploy <templateId> --project-id <id> --env <name> \
+  [--var KEY=VALUE ...] [--domain host:service:port ...]
+
 # Databases (postgres, mysql, mariadb, mongo, redis)
 nixploy db list --project-id <id> [--env <name>] [--json]
 

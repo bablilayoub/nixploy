@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import { rollbacks } from "../../db/schema";
 import { assertApplicationAccess, getOrganizationId } from "../../modules/application";
-import { assertOrgRole } from "../../modules/projects";
+import { assertCapability, assertOrgRole } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 /** Load an application-owned rollback row and verify org ownership. */
@@ -45,7 +45,7 @@ export const rollbackRouter = router({
 		.input(z.object({ rollbackId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 			const { rollback } = await findApplicationRollback(input.rollbackId, organizationId);
 			await db.delete(rollbacks).where(eq(rollbacks.rollbackId, rollback.rollbackId));
 			return { rollbackId: rollback.rollbackId };

@@ -1,15 +1,21 @@
 import { TRPCError } from "@trpc/server";
-import { count, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { invitations, organizations, projects } from "../../db/schema";
+import { invitations, members, organizations, projects } from "../../db/schema";
 import { auth } from "../../lib/auth";
 import { auditFromSession } from "../../modules/audit";
 import {
-	assertOrgRole,
+	assertCapability,
+	capabilitySchemaValues,
+	effectiveCapabilities,
 	getOrganizationServiceStatusCounts,
+	type OrgCapability,
+	parseCapabilityOverrides,
 	parseOrgMetadata,
+	publicCapabilityCatalog,
 	resolveCallerOrganizationId,
+	roleDefaultCapabilities,
 	serializeOrgMetadata,
 } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
@@ -89,7 +95,7 @@ export const organizationRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "settings.manage");
 
 			const org = await db.query.organizations.findFirst({
 				where: eq(organizations.id, organizationId),
@@ -142,7 +148,7 @@ export const organizationRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "members.manage");
 
 			const invitation = await auth.api.createInvitation({
 				body: {
@@ -164,5 +170,111 @@ export const organizationRouter = router({
 			await db.update(invitations).set({ expiresAt }).where(eq(invitations.id, invitation.id));
 
 			return { ...invitation, expiresAt };
+		}),
+
+	/** Catalog of capabilities and role defaults (for the members UI). */
+	capabilityCatalog: protectedProcedure.query(async ({ ctx }) => {
+		await resolveCallerOrganizationId(
+			ctx.session.user.id,
+			ctx.session.session.activeOrganizationId,
+		);
+		return publicCapabilityCatalog();
+	}),
+
+	/** Effective capabilities for the signed-in member (UI gating). */
+	myCapabilities: protectedProcedure.query(async ({ ctx }) => {
+		const organizationId = await resolveCallerOrganizationId(
+			ctx.session.user.id,
+			ctx.session.session.activeOrganizationId,
+		);
+		const membership = await db.query.members.findFirst({
+			where: and(
+				eq(members.organizationId, organizationId),
+				eq(members.userId, ctx.session.user.id),
+			),
+		});
+		if (!membership) {
+			throw new TRPCError({ code: "FORBIDDEN", message: "Not a member of this organization" });
+		}
+		const overrides = parseCapabilityOverrides(membership.capabilityOverrides);
+		return {
+			organizationId,
+			role: membership.role,
+			capabilities: [...effectiveCapabilities(membership.role, overrides)].sort(),
+			defaults: [...roleDefaultCapabilities(membership.role)],
+			overrides,
+		};
+	}),
+
+	/** Effective capabilities + overrides for one member. */
+	memberCapabilities: protectedProcedure
+		.input(z.object({ memberId: z.string().min(1) }))
+		.query(async ({ ctx, input }) => {
+			const organizationId = await resolveCallerOrganizationId(
+				ctx.session.user.id,
+				ctx.session.session.activeOrganizationId,
+			);
+			await assertCapability(ctx.session.user.id, organizationId, "members.manage");
+			const membership = await db.query.members.findFirst({
+				where: and(eq(members.id, input.memberId), eq(members.organizationId, organizationId)),
+			});
+			if (!membership) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Member not found" });
+			}
+			const overrides = parseCapabilityOverrides(membership.capabilityOverrides);
+			return {
+				memberId: membership.id,
+				userId: membership.userId,
+				role: membership.role,
+				overrides,
+				effective: [...effectiveCapabilities(membership.role, overrides)].sort(),
+				defaults: [...roleDefaultCapabilities(membership.role)],
+			};
+		}),
+
+	/** Set grant/revoke overlays for a member (admin+ with members.manage). */
+	setMemberCapabilities: protectedProcedure
+		.input(
+			z.object({
+				memberId: z.string().min(1),
+				grant: z.array(z.enum(capabilitySchemaValues)).default([]),
+				revoke: z.array(z.enum(capabilitySchemaValues)).default([]),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await resolveCallerOrganizationId(
+				ctx.session.user.id,
+				ctx.session.session.activeOrganizationId,
+			);
+			await assertCapability(ctx.session.user.id, organizationId, "members.manage");
+
+			const membership = await db.query.members.findFirst({
+				where: and(eq(members.id, input.memberId), eq(members.organizationId, organizationId)),
+			});
+			if (!membership) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Member not found" });
+			}
+
+			const overrides = {
+				grant: input.grant as OrgCapability[],
+				revoke: input.revoke as OrgCapability[],
+			};
+			await db
+				.update(members)
+				.set({ capabilityOverrides: overrides })
+				.where(eq(members.id, membership.id));
+
+			await auditFromSession(ctx, organizationId, {
+				action: "member.capabilities",
+				targetType: "member",
+				targetId: membership.id,
+				metadata: overrides,
+			});
+
+			return {
+				memberId: membership.id,
+				overrides,
+				effective: [...effectiveCapabilities(membership.role, overrides)].sort(),
+			};
 		}),
 });

@@ -36,7 +36,12 @@ import {
 	cancelDeployment as cancelQueuedDeployment,
 	queueDeployment,
 } from "../../modules/deployment";
-import { assertOrgRole, assertWithinQuota, hasOrgRole } from "../../modules/projects";
+import {
+	assertCapability,
+	assertOrgRole,
+	assertWithinQuota,
+	hasOrgRole,
+} from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { protectedProcedure, router } from "../init";
 
@@ -190,7 +195,7 @@ export const applicationRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.create");
 			await assertWithinQuota(organizationId, { services: true });
 
 			let environmentId = input.environmentId;
@@ -257,7 +262,7 @@ export const applicationRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			await assertApplicationAccess(input.applicationId, organizationId);
 
 			const { applicationId, ...data } = input;
@@ -280,7 +285,7 @@ export const applicationRouter = router({
 		.input(applicationIdInput.extend({ environmentId: z.string().optional() }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 			const targetEnvironmentId = input.environmentId ?? application.environmentId;
 			if (targetEnvironmentId !== application.environmentId) {
@@ -302,7 +307,7 @@ export const applicationRouter = router({
 		.input(applicationIdInput.extend({ environmentId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 			const environment = await assertEnvironmentAccess(input.environmentId, organizationId);
 			const updated = await updateApplication(input.applicationId, {
@@ -320,7 +325,7 @@ export const applicationRouter = router({
 
 	delete: protectedProcedure.input(applicationIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "service.delete");
 		const application = await assertApplicationAccess(input.applicationId, organizationId);
 		await deleteApplication(application);
 		await auditFromSession(ctx, organizationId, {
@@ -336,7 +341,7 @@ export const applicationRouter = router({
 		.input(applicationIdInput.extend({ title: z.string().optional() }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 			await assertApplicationAccess(input.applicationId, organizationId);
 			const deploymentId = await queueDeployment({
 				applicationId: input.applicationId,
@@ -353,7 +358,7 @@ export const applicationRouter = router({
 
 	redeploy: protectedProcedure.input(applicationIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+		await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 		await assertApplicationAccess(input.applicationId, organizationId);
 		const deploymentId = await queueDeployment({
 			applicationId: input.applicationId,
@@ -366,7 +371,7 @@ export const applicationRouter = router({
 		.input(z.object({ deploymentId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 			const deployment = await db.query.deployments.findFirst({
 				where: eq(deployments.deploymentId, input.deploymentId),
 				with: { application: { with: { environment: { with: { project: true } } } } },
@@ -390,7 +395,7 @@ export const applicationRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			await assertApplicationAccess(input.applicationId, organizationId);
 			const application = await saveEnvironment(input.applicationId, input.env, input.buildArgs);
 			await upsertApplicationSwarmService(application);
@@ -418,7 +423,7 @@ export const applicationRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			await assertApplicationAccess(input.applicationId, organizationId);
 			const { applicationId, ...data } = input;
 			return updateApplication(applicationId, data);
@@ -454,7 +459,7 @@ export const applicationRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			await assertApplicationAccess(input.applicationId, organizationId);
 
 			// Cross-org reference checks.
@@ -551,7 +556,7 @@ export const applicationRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			await assertApplicationAccess(input.applicationId, organizationId);
 			if (input.registryId) {
 				const reg = await db.query.registry.findFirst({
@@ -573,7 +578,7 @@ export const applicationRouter = router({
 	/** Force-restart every task of the swarm service (`docker service update --force`). */
 	reload: protectedProcedure.input(applicationIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+		await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 		const application = await assertApplicationAccess(input.applicationId, organizationId);
 		await reloadSwarmService(application.appName, application.serverId);
 		return updateApplication(application.applicationId, { status: "running" });
@@ -582,7 +587,7 @@ export const applicationRouter = router({
 	/** Scale the swarm service back to the configured replica count. */
 	start: protectedProcedure.input(applicationIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+		await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 		const application = await assertApplicationAccess(input.applicationId, organizationId);
 		if (!(await inspectSwarmService(application.appName, application.serverId))) {
 			throw new TRPCError({
@@ -597,7 +602,7 @@ export const applicationRouter = router({
 	/** Scale the swarm service to 0, keeping config, image and volumes. */
 	stop: protectedProcedure.input(applicationIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+		await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 		const application = await assertApplicationAccess(input.applicationId, organizationId);
 		await stopApplication(application);
 		return { applicationId: application.applicationId };
@@ -606,7 +611,7 @@ export const applicationRouter = router({
 	/** Best-effort kill of any in-flight build processes for this app. */
 	killBuild: protectedProcedure.input(applicationIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+		await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 		const application = await assertApplicationAccess(input.applicationId, organizationId);
 		const command = `pkill -9 -f '${application.appName}' || true`;
 		try {
@@ -662,7 +667,7 @@ export const applicationRouter = router({
 		.input(applicationIdInput.extend({ rollbackId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 
 			const rollback = await db.query.rollbacks.findFirst({

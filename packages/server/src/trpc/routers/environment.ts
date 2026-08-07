@@ -17,13 +17,13 @@ import { auditFromSession } from "../../modules/audit";
 import { duplicateCompose } from "../../modules/compose/service";
 import { duplicateDatabase } from "../../modules/databases/engine";
 import {
-	assertOrgRole,
+	assertCapability,
 	deleteEnvironmentCascade,
 	emptyServiceCounts,
 	findEnvironmentById,
 	findProjectById,
 	getServiceCountsByEnvironment,
-	hasOrgRole,
+	hasCapability,
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
@@ -67,7 +67,11 @@ export const environmentRouter = router({
 			const countsByEnvironment = await getServiceCountsByEnvironment(
 				environmentList.map((environment) => environment.environmentId),
 			);
-			const canSeeSecrets = await hasOrgRole(ctx.session.user.id, organizationId, "member");
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
 			return environmentList.map((environment) => ({
 				...(canSeeSecrets ? environment : { ...environment, env: null }),
 				services: countsByEnvironment.get(environment.environmentId) ?? emptyServiceCounts(),
@@ -89,7 +93,7 @@ export const environmentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "project.write");
 			const project = await findProjectById(input.projectId, organizationId);
 			await assertEnvironmentNameAvailable(project.projectId, input.name);
 			const [environment] = await db
@@ -119,7 +123,7 @@ export const environmentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "project.write");
 			const current = await findEnvironmentById(input.environmentId, organizationId);
 			if (input.name !== undefined) {
 				await assertEnvironmentNameAvailable(current.projectId, input.name, input.environmentId);
@@ -147,7 +151,7 @@ export const environmentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "project.delete");
 			const environment = await findEnvironmentById(input.environmentId, organizationId);
 			await deleteEnvironmentCascade(environment.environmentId);
 			return environment;
@@ -169,7 +173,7 @@ export const environmentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "project.write");
 			const source = await findEnvironmentById(input.environmentId, organizationId);
 			await assertEnvironmentNameAvailable(source.projectId, input.name ?? `${source.name} copy`);
 			const [duplicate] = await db
@@ -201,7 +205,7 @@ export const environmentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "project.write");
 			const source = await findEnvironmentById(input.environmentId, organizationId);
 			await assertEnvironmentNameAvailable(source.projectId, input.name);
 			const [environment] = await db
@@ -300,7 +304,7 @@ export const environmentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			await findEnvironmentById(input.environmentId, organizationId);
 			const [updated] = await db
 				.update(environments)

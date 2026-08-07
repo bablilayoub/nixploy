@@ -29,6 +29,7 @@ export const COVERED = [
 	"notification.one",
 	"postgres.all",
 	"postgres.one",
+	"tag.all",
 ] as const;
 
 /**

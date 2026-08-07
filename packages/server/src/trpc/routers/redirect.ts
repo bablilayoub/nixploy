@@ -8,7 +8,7 @@ import {
 	getOrganizationId,
 	syncApplicationTraefik,
 } from "../../modules/application";
-import { assertOrgRole } from "../../modules/projects";
+import { assertCapability, assertOrgRole } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 /** Load an application-owned redirect row and verify org ownership. */
@@ -54,7 +54,7 @@ export const redirectRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 
 			const [redirect] = await db
@@ -88,7 +88,7 @@ export const redirectRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const { redirect, application } = await findApplicationRedirect(
 				input.redirectId,
 				organizationId,
@@ -112,7 +112,7 @@ export const redirectRouter = router({
 		.input(z.object({ redirectId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const { redirect, application } = await findApplicationRedirect(
 				input.redirectId,
 				organizationId,

@@ -9,8 +9,8 @@ host or any managed server (selector in the header).
 | Images | List with size/age, pull by reference, remove, prune dangling. |
 | Swarm | Nodes (status, role, engine) with availability switch (active/pause/drain), and all swarm services with replica counts. |
 | Networks | List with driver/scope; removal blocked for `bridge`, `host`, `none`, `ingress` and `nixploy-network`. |
-| Volumes | List with mountpoints; remove (docker rejects in-use), prune unused (data-loss confirm). |
-| System | Engine version/OS, `docker system df` disk usage, system prune (with/without volumes). |
+| Volumes | List with mountpoints; remove (docker rejects in-use), prune unused named + anonymous volumes (skips `nixploy-postgres-data`). |
+| System | Engine version/OS, `docker system df` disk usage, system prune (with/without volumes; volume pass also clears named unused). |
 
 ## Server side
 

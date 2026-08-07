@@ -5,8 +5,9 @@ import { db } from "../../db";
 import { deployments, members } from "../../db/schema";
 import {
 	applySuggestedEnvPatch,
-	chatAboutApplication,
+	chatAboutService,
 	explainAndCacheDeploymentFailure,
+	generateComposeYaml,
 	getAiSettings,
 	isEnvLikePatch,
 	patchAiSettings,
@@ -14,7 +15,7 @@ import {
 	readCachedExplanation,
 } from "../../modules/ai";
 import { auditFromSession } from "../../modules/audit";
-import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -43,15 +44,16 @@ async function requireMember(session: Session): Promise<string> {
 		session.user.id,
 		session.session.activeOrganizationId,
 	);
-	await assertOrgRole(session.user.id, organizationId, "member");
+	await assertCapability(session.user.id, organizationId, "ai.use");
 	return organizationId;
 }
 
 const providerSchema = z.enum(["openai", "anthropic", "openai-compatible", "ollama"]);
 
 export const aiRouter = router({
+	/** Public-ish status for Copilot UI (no secrets). Admins use updateSettings to change. */
 	getSettings: protectedProcedure.query(async ({ ctx }) => {
-		await requireOwnerOrAdmin(ctx.session);
+		await requireMember(ctx.session);
 		return publicAiSettings(await getAiSettings());
 	}),
 
@@ -157,7 +159,7 @@ export const aiRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await requireMember(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "ai.use");
 			const patch = input.patch?.trim();
 			if (patch && !isEnvLikePatch(patch)) {
 				throw new TRPCError({
@@ -193,28 +195,56 @@ export const aiRouter = router({
 
 	chat: protectedProcedure
 		.input(
-			z.object({
-				applicationId: z.string().min(1),
-				messages: z
-					.array(
-						z.object({
-							role: z.enum(["user", "assistant"]),
-							content: z.string().min(1).max(8_000),
-						}),
-					)
-					.min(1)
-					.max(20),
-			}),
+			z
+				.object({
+					applicationId: z.string().min(1).optional(),
+					composeId: z.string().min(1).optional(),
+					messages: z
+						.array(
+							z.object({
+								role: z.enum(["user", "assistant"]),
+								content: z.string().min(1).max(8_000),
+							}),
+						)
+						.min(1)
+						.max(20),
+				})
+				.refine((value) => Boolean(value.applicationId) !== Boolean(value.composeId), {
+					message: "Provide exactly one of applicationId or composeId",
+				}),
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await requireMember(ctx.session);
 			try {
-				return await chatAboutApplication(input.applicationId, organizationId, input.messages);
+				const target = input.applicationId
+					? { type: "application" as const, applicationId: input.applicationId }
+					: { type: "compose" as const, composeId: input.composeId as string };
+				return await chatAboutService(target, organizationId, input.messages);
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				if (message.includes("not found")) {
 					throw new TRPCError({ code: "NOT_FOUND", message });
 				}
+				throw new TRPCError({ code: "BAD_REQUEST", message });
+			}
+		}),
+
+	/** Draft a docker-compose.yml from a prompt. Does not save or deploy. */
+	generateCompose: protectedProcedure
+		.input(z.object({ prompt: z.string().min(8).max(4_000) }))
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await requireMember(ctx.session);
+			await assertCapability(ctx.session.user.id, organizationId, "ai.use");
+			try {
+				const result = await generateComposeYaml(input.prompt);
+				void auditFromSession(ctx, organizationId, {
+					action: "ai.generateCompose",
+					targetType: "compose",
+					metadata: { model: result.model, promptChars: input.prompt.length },
+				});
+				return result;
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
 				throw new TRPCError({ code: "BAD_REQUEST", message });
 			}
 		}),

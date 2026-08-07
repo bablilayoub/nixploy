@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import {
 	deployTemplate,
 	findTemplateById,
@@ -53,7 +53,7 @@ export const templateRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "templates.deploy");
 			return await deployTemplate(organizationId, input);
 		}),
 });

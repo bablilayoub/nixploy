@@ -10,7 +10,7 @@ import {
 	removeFileMount,
 	upsertApplicationSwarmService,
 } from "../../modules/application";
-import { assertOrgRole } from "../../modules/projects";
+import { assertCapability, assertOrgRole } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 const mountFields = {
@@ -118,7 +118,7 @@ export const mountRouter = router({
 		.input(z.object({ applicationId: z.string().min(1), ...mountFields }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 			validateMountFields(input);
 			if (input.type === "bind") assertSafeHostPath(input.hostPath);
@@ -166,7 +166,7 @@ export const mountRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const { mount, application } = await findApplicationMount(input.mountId, organizationId);
 
 			const next = {
@@ -214,7 +214,7 @@ export const mountRouter = router({
 		.input(z.object({ mountId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const { mount, application } = await findApplicationMount(input.mountId, organizationId);
 
 			await db.delete(mounts).where(eq(mounts.mountId, mount.mountId));

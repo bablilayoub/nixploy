@@ -14,7 +14,7 @@ import {
 	setUptimeProbe,
 	upsertAlertRule,
 } from "../../modules/observability";
-import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 const metricSchema = z.enum(["cpu", "memory", "restarts", "deploy_failure_streak"]);
@@ -99,7 +99,7 @@ export const observabilityRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "project.write");
 			if (!input.applicationId && !input.composeId && !input.alertRuleId) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
@@ -122,7 +122,7 @@ export const observabilityRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "project.write");
 			await deleteAlertRule(input.alertRuleId, organizationId);
 			return { ok: true };
 		}),
@@ -157,7 +157,7 @@ export const observabilityRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "settings.manage");
 			const service = await getServiceContext(input.serviceType, input.serviceId);
 			if (service.organizationId !== organizationId) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Service not found" });
@@ -189,7 +189,7 @@ export const observabilityRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "project.write");
 			await assertDomainAccess(input.domainId, organizationId);
 			return setUptimeProbe({ organizationId, ...input });
 		}),

@@ -11,7 +11,7 @@ import {
 	PreviewNotFoundError,
 	withPreviewDomain,
 } from "../../modules/preview";
-import { assertOrgRole } from "../../modules/projects";
+import { assertCapability, assertOrgRole } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 /** Load an application-owned preview deployment and verify org ownership. */
@@ -65,7 +65,7 @@ export const previewDeploymentRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 			await assertApplicationAccess(input.applicationId, organizationId);
 
 			try {
@@ -86,7 +86,7 @@ export const previewDeploymentRouter = router({
 		.input(z.object({ previewDeploymentId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "deployer");
+			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 			await findApplicationPreview(input.previewDeploymentId, organizationId);
 
 			try {

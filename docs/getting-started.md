@@ -38,6 +38,8 @@ npm i -g @nixploy/cli
 nixploy auth login --url https://panel.yourdomain.com --api-key nxlp_...
 nixploy doctor
 nixploy app list --project-id <id>
+nixploy compose list --project-id <id>
+nixploy template list
 ```
 
 Swagger lives at `/swagger` on your panel.

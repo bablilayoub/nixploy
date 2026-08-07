@@ -1,12 +1,13 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Link2, Loader2, Plus, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CopyButton } from "@/components/services/copy-button";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
+import { MemberCapabilitiesDialog } from "@/components/settings/organization/member-capabilities-dialog";
 import { StatusDot } from "@/components/shell";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -73,6 +74,7 @@ function invitationLink(invitationId: string): string {
 
 export function MembersCard() {
 	const trpc = useTRPC();
+	const queryClient = useQueryClient();
 	const { data: session } = useSession();
 	const { data: activeOrganization, isPending: isOrgPending } = authClient.useActiveOrganization();
 	const organizationId = activeOrganization?.id;
@@ -161,6 +163,13 @@ export function MembersCard() {
 		}
 		toast.success("Role updated");
 		await loadMembers();
+		// Capabilities defaults follow the role — refresh any open/cached matrix.
+		await queryClient.invalidateQueries({
+			queryKey: trpc.organization.memberCapabilities.queryKey({ memberId: member.id }),
+		});
+		await queryClient.invalidateQueries({
+			queryKey: trpc.organization.myCapabilities.queryKey(),
+		});
 	}
 
 	async function cancelInvitation(invitation: InvitationRow) {
@@ -380,13 +389,22 @@ export function MembersCard() {
 											)}
 										</TableCell>
 										<TableCell>
-											{!isOwner && !isSelf && (
-												<ConfirmDeleteDialog
-													title="Remove member"
-													description={`Remove ${displayName} from this organization?`}
-													onConfirm={() => removeMember(member)}
-												/>
-											)}
+											<div className="flex items-center justify-end gap-1">
+												{!isOwner && (
+													<MemberCapabilitiesDialog
+														memberId={member.id}
+														memberName={displayName}
+														memberRole={member.role}
+													/>
+												)}
+												{!isOwner && !isSelf && (
+													<ConfirmDeleteDialog
+														title="Remove member"
+														description={`Remove ${displayName} from this organization?`}
+														onConfirm={() => removeMember(member)}
+													/>
+												)}
+											</div>
 										</TableCell>
 									</TableRow>
 								);

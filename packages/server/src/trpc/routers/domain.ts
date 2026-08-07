@@ -12,7 +12,7 @@ import {
 } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
 import { resyncComposeDomains } from "../../modules/compose/service";
-import { assertOrgRole } from "../../modules/projects";
+import { assertCapability, assertOrgRole } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 const domainIdInput = z.object({ domainId: z.string().min(1) });
@@ -226,7 +226,7 @@ export const domainRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "domains.manage");
 
 			if (input.applicationId) {
 				await assertApplicationAccess(input.applicationId, organizationId);
@@ -305,7 +305,7 @@ export const domainRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "domains.manage");
 			const existing = await assertDomainAccess(input.domainId, organizationId);
 
 			const certificateType = input.certificateType ?? existing.certificateType;
@@ -353,7 +353,7 @@ export const domainRouter = router({
 
 	delete: protectedProcedure.input(domainIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "domains.manage");
 		const domain = await assertDomainAccess(input.domainId, organizationId);
 
 		await db.delete(domains).where(eq(domains.domainId, input.domainId));

@@ -11,7 +11,7 @@ import {
 	updateBitbucketById,
 	updateBitbucketProviderName,
 } from "../../modules/git";
-import { assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -72,7 +72,7 @@ export const bitbucketRouter = router({
 	/** Add a Bitbucket Cloud provider (API token or username + app password). */
 	create: protectedProcedure.input(createBitbucketInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 		return await createBitbucket(input, organizationId);
 	}),
 
@@ -81,7 +81,7 @@ export const bitbucketRouter = router({
 		.input(createBitbucketInput.partial().extend({ bitbucketId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 			const { bitbucketId, name, ...values } = input;
 			if (name) {
 				await updateBitbucketProviderName(bitbucketId, name, organizationId);
@@ -96,7 +96,7 @@ export const bitbucketRouter = router({
 	/** Remove the provider (cascades to the bitbucket credentials row). */
 	remove: protectedProcedure.input(bitbucketIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 		const removed = await removeBitbucket(input.bitbucketId, organizationId);
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Bitbucket provider not found" });
@@ -126,7 +126,7 @@ export const bitbucketRouter = router({
 	/** Verify the configured credentials against the Bitbucket API. */
 	testConnection: protectedProcedure.input(bitbucketIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 		return await testBitbucketConnection(input.bitbucketId, organizationId);
 	}),
 });

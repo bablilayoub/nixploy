@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { boolean, index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { createdAt, updatedAt } from "./utils";
 
 // ── better-auth core tables ─────────────────────────────────────────────────
@@ -91,6 +91,11 @@ export const members = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		role: text("role").notNull(),
+		/** Optional grant/revoke overlays on top of the role's default capabilities. */
+		capabilityOverrides: jsonb("capability_overrides").$type<{
+			grant?: string[];
+			revoke?: string[];
+		}>(),
 		createdAt: createdAt(),
 	},
 	(table) => [index("member_user_org_idx").on(table.userId, table.organizationId)],

@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 	AppWindow,
+	Bot,
 	Boxes,
 	Container,
 	FolderGit2,
@@ -13,7 +14,9 @@ import {
 	Plus,
 	Search,
 	Settings,
+	Shield,
 	Sun,
+	Tags,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -119,6 +122,10 @@ export function CommandPalette() {
 
 	const projectMatch = pathname.match(/^\/dashboard\/projects\/([^/]+)/);
 	const projectId = projectMatch?.[1];
+	const applicationMatch = pathname.match(/\/services\/application\/([^/]+)/);
+	const applicationId = applicationMatch?.[1];
+	const composeMatch = pathname.match(/\/services\/compose\/([^/]+)/);
+	const composeId = composeMatch?.[1];
 	// No environmentName scope: search services across all environments.
 	const serviceInput = useMemo(() => ({ projectId: projectId ?? "" }), [projectId]);
 	const inProject = Boolean(open && projectId);
@@ -270,10 +277,43 @@ export function CommandPalette() {
 					hint: currentProjectQuery.data?.name,
 					group: "This Project",
 					icon: Boxes,
-					keywords: ["create", "docker", "service"],
+					keywords: ["create", "docker", "service", "stack"],
 					run: go(`/dashboard/projects/${projectId}?new=compose`),
 				},
+				{
+					id: "project:manage-tags",
+					label: "Manage Tags",
+					hint: currentProjectQuery.data?.name,
+					group: "This Project",
+					icon: Tags,
+					keywords: ["label", "filter", "tag", "tags"],
+					run: go(`/dashboard/projects/${projectId}`),
+				},
 			);
+
+			if (composeId) {
+				list.push({
+					id: "compose:copilot",
+					label: "Open Deploy Copilot",
+					hint: "Compose",
+					group: "This Project",
+					icon: Bot,
+					keywords: ["ai", "chat", "generate", "compose", "yaml", "assistant"],
+					run: go(`/dashboard/projects/${projectId}/services/compose/${composeId}`),
+				});
+			}
+
+			if (applicationId) {
+				list.push({
+					id: "app:copilot",
+					label: "Open Deploy Copilot",
+					hint: "Application",
+					group: "This Project",
+					icon: Bot,
+					keywords: ["ai", "chat", "explain", "assistant"],
+					run: go(`/dashboard/projects/${projectId}/services/application/${applicationId}`),
+				});
+			}
 		}
 
 		list.push(
@@ -300,6 +340,32 @@ export function CommandPalette() {
 				icon: Container,
 				keywords: ["containers", "images", "swarm", "volumes", "daemon"],
 				run: go("/dashboard/docker"),
+			},
+			{
+				id: "page:member-capabilities",
+				label: "Member capabilities",
+				hint: "Permissions",
+				group: "Pages",
+				icon: Shield,
+				keywords: [
+					"permissions",
+					"capabilities",
+					"roles",
+					"members",
+					"acl",
+					"rbac",
+					"organization",
+				],
+				run: go("/dashboard/settings/organization"),
+			},
+			{
+				id: "page:ai-settings",
+				label: "AI / Deploy Copilot settings",
+				hint: "Server",
+				group: "Pages",
+				icon: Bot,
+				keywords: ["ai", "openai", "ollama", "anthropic", "copilot", "llm"],
+				run: go("/dashboard/settings/server"),
 			},
 		);
 		for (const item of settingsNavItems) {
@@ -369,6 +435,8 @@ export function CommandPalette() {
 		mongoQuery.data,
 		redisQuery.data,
 		templatesQuery.data,
+		applicationId,
+		composeId,
 	]);
 
 	// Live org-wide service matches while typing (debounced server search).

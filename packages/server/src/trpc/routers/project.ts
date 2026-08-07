@@ -16,6 +16,7 @@ import {
 import { auditFromSession } from "../../modules/audit";
 import { getDeploymentStatsSince } from "../../modules/deployment/queries";
 import {
+	assertCapability,
 	assertOrgRole,
 	assertWithinQuota,
 	deleteProjectCascade,
@@ -235,7 +236,7 @@ export const projectRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "project.write");
 			await assertWithinQuota(organizationId, { projects: true });
 			const [project] = await db
 				.insert(projects)
@@ -280,7 +281,7 @@ export const projectRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "project.write");
 			await findProjectById(input.projectId, organizationId);
 			const [updated] = await db
 				.update(projects)
@@ -304,7 +305,7 @@ export const projectRouter = router({
 			ctx.session.user.id,
 			ctx.session.session.activeOrganizationId,
 		);
-		await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+		await assertCapability(ctx.session.user.id, organizationId, "project.delete");
 		const project = await findProjectById(input.projectId, organizationId);
 		await deleteProjectCascade(project.projectId);
 		await auditFromSession(ctx, organizationId, {
@@ -333,7 +334,7 @@ export const projectRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			await findProjectById(input.projectId, organizationId);
 			const [updated] = await db
 				.update(projects)
@@ -360,7 +361,7 @@ export const projectRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertOrgRole(ctx.session.user.id, organizationId, "member");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.read");
 			const project = await findProjectById(input.projectId, organizationId);
 			const environment = await db.query.environments.findFirst({
 				where: and(

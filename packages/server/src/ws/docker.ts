@@ -34,6 +34,21 @@ export async function resolveLocalContainer(appName: string): Promise<Docker.Con
 	return first ? docker.getContainer(first.Id) : null;
 }
 
+/** Resolve a local container by exact Docker ID (short or full). */
+export async function resolveLocalContainerById(
+	containerId: string,
+): Promise<Docker.Container | null> {
+	const docker = getDocker();
+	try {
+		const container = docker.getContainer(containerId);
+		const info = await container.inspect();
+		if (!info.State?.Running) return null;
+		return container;
+	} catch {
+		return null;
+	}
+}
+
 /** Open an SSH connection to a managed remote server (same lookup as execAsyncRemote). */
 export async function connectToServer(serverId: string): Promise<Client> {
 	const server = await db.query.servers.findFirst({

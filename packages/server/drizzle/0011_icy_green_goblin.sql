@@ -1,0 +1,1 @@
+ALTER TABLE "member" ADD COLUMN "capability_overrides" jsonb;

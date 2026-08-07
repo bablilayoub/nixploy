@@ -36,6 +36,7 @@ import { securityRouter } from "./routers/security";
 import { serverRouter } from "./routers/server";
 import { setupRouter } from "./routers/setup";
 import { sshKeyRouter } from "./routers/ssh-key";
+import { tagRouter } from "./routers/tag";
 import { templateRouter } from "./routers/template";
 import { updatesRouter } from "./routers/updates";
 import { volumeBackupRouter } from "./routers/volume-backup";
@@ -79,6 +80,7 @@ export const appRouter = router({
 	server: serverRouter,
 	setup: setupRouter,
 	sshKey: sshKeyRouter,
+	tag: tagRouter,
 	template: templateRouter,
 	updates: updatesRouter,
 	volumeBackup: volumeBackupRouter,
