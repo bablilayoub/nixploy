@@ -141,9 +141,12 @@ export function UpdatesCard() {
 						<Skeleton className="h-9 w-48" />
 					</div>
 				) : statusQuery.error && !data ? (
-					<p className="rounded-md border border-dashed py-6 text-center text-sm text-muted-foreground">
-						{statusQuery.error.message}
-					</p>
+					<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-6 text-center">
+						<p className="text-sm text-muted-foreground">{statusQuery.error.message}</p>
+						<Button size="sm" variant="outline" onClick={() => statusQuery.refetch()}>
+							Retry
+						</Button>
+					</div>
 				) : data ? (
 					<div className="grid gap-5">
 						{data.updateInProgress && (

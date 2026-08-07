@@ -448,6 +448,7 @@ export function LogViewer({
 							<Button
 								variant="outline"
 								size="icon-sm"
+								aria-label="Clear logs"
 								onClick={() => {
 									setLines([]);
 									bufferRef.current = "";

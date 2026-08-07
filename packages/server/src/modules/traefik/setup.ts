@@ -94,14 +94,10 @@ const ensureDefaultTlsCert = async (serverId?: string | null): Promise<void> => 
 	const command = [
 		`mkdir -p ${shq(dynamicDir)}`,
 		`if [ ! -f ${shq(certPath)} ] || [ ! -f ${shq(keyPath)} ]; then`,
-		// Prefer a fixed SAN; probing the host IP is nice-to-have and must not block.
 		`  SAN="DNS:localhost,IP:127.0.0.1"`,
-		`  openssl req -x509 -newkey rsa:2048 -nodes -days 825`,
-		`    -keyout ${shq(keyPath)} -out ${shq(certPath)}`,
-		`    -subj "/CN=nixploy" -addext "subjectAltName=\${SAN}" 2>/dev/null`,
-		`  || openssl req -x509 -newkey rsa:2048 -nodes -days 825`,
-		`    -keyout ${shq(keyPath)} -out ${shq(certPath)}`,
-		`    -subj "/CN=nixploy"`,
+		`  if ! openssl req -x509 -newkey rsa:2048 -nodes -days 825 -keyout ${shq(keyPath)} -out ${shq(certPath)} -subj "/CN=nixploy" -addext "subjectAltName=\${SAN}" 2>/dev/null; then`,
+		`    openssl req -x509 -newkey rsa:2048 -nodes -days 825 -keyout ${shq(keyPath)} -out ${shq(certPath)} -subj "/CN=nixploy"`,
+		`  fi`,
 		`  chmod 600 ${shq(keyPath)} ${shq(certPath)}`,
 		`fi`,
 	].join("\n");

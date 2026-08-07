@@ -2,13 +2,10 @@ import { describe, expect, it } from "vitest";
 import { reconcileStatus } from "./reconciler";
 
 describe("reconcileStatus", () => {
-	it("upgrades error/idle to running when tasks are live", () => {
+	it("normalizes done/error/idle to running when tasks are live", () => {
 		expect(reconcileStatus("error", "running")).toBe("running");
 		expect(reconcileStatus("idle", "running")).toBe("running");
-	});
-
-	it("keeps done and running when tasks are live", () => {
-		expect(reconcileStatus("done", "running")).toBe("done");
+		expect(reconcileStatus("done", "running")).toBe("running");
 		expect(reconcileStatus("running", "running")).toBe("running");
 	});
 

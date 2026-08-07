@@ -32,16 +32,15 @@ deployable as compose services. Catalog code lives in
      name: "Plausible",
      description: "…",
      // `category` comes from the file wrapper in catalog.ts — do NOT set it here
-     version: "v2.1.0",
      logo: "plausible",                  // simpleicons.org slug
      links: { github: "…", website: "…", docs: "…" },
      tags: ["analytics"],
-     env: [                              // variables the deploy dialog asks for
-       { key: "BASE_URL", description: "…", defaultValue: "http://localhost:8000" },
-       { key: "SECRET_KEY_BASE", description: "…", generate: true }, // random on deploy
+     env: [
+       { key: "BASE_URL", description: "…", default: "http://localhost:8000" },
+       { key: "SECRET_KEY_BASE", description: "…", default: "{{generateSecret}}" },
      ],
-     compose: `services:\n  plausible:\n    image: …`,   // YAML, no host ports
-     suggestedDomain: { service: "plausible", port: 8000 },
+     compose: `services:\n  plausible:\n    image: …`,
+     suggestedDomain: { serviceName: "plausible", port: 8000 },
    }
    ```
 

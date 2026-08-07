@@ -42,7 +42,7 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 				await writeFile(keyPath, key.privateKey, { mode: 0o600 });
 				await chmod(keyPath, 0o600);
 				source.env = {
-					GIT_SSH_COMMAND: `ssh -i ${keyPath} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null`,
+					GIT_SSH_COMMAND: `ssh -i ${shellQuote(keyPath)} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null`,
 				};
 			}
 			return source;

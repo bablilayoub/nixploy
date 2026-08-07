@@ -250,7 +250,7 @@ export function VolumeBackupsTab({
 					<div className="flex flex-col items-center gap-2 py-10 text-center">
 						<DatabaseBackup className="size-8 text-muted-foreground" />
 						<p className="text-sm text-muted-foreground">
-							Add an S3 destination in Settings → Destinations first.
+							Add an S3 destination in Settings → Backup storage first.
 						</p>
 					</div>
 				) : (
@@ -312,6 +312,7 @@ export function VolumeBackupsTab({
 												<Button
 													variant="ghost"
 													size="sm"
+													aria-label="Back up now"
 													title="Back up now"
 													disabled={runNow.isPending}
 													onClick={() => runNow.mutate({ volumeBackupId: backup.volumeBackupId })}
@@ -321,6 +322,7 @@ export function VolumeBackupsTab({
 												<Button
 													variant="ghost"
 													size="sm"
+													aria-label="Restore volume backup"
 													title="Restore"
 													onClick={() => {
 														setRestoreKey("");
@@ -329,10 +331,20 @@ export function VolumeBackupsTab({
 												>
 													<ArchiveRestore className="size-4" />
 												</Button>
-												<Button variant="ghost" size="sm" onClick={() => openEdit(backup)}>
+												<Button
+													variant="ghost"
+													size="sm"
+													aria-label="Edit volume backup"
+													onClick={() => openEdit(backup)}
+												>
 													<Pencil className="size-4" />
 												</Button>
-												<Button variant="ghost" size="sm" onClick={() => setDeleteTarget(backup)}>
+												<Button
+													variant="ghost"
+													size="sm"
+													aria-label="Delete volume backup"
+													onClick={() => setDeleteTarget(backup)}
+												>
 													<Trash2 className="size-4 text-destructive" />
 												</Button>
 											</div>

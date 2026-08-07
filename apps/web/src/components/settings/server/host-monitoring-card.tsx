@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Cpu, Database, HardDrive, MemoryStick } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
@@ -69,7 +70,7 @@ export function HostMonitoringCard() {
 			<CardHeader>
 				<CardTitle>Host monitoring</CardTitle>
 				<CardDescription>
-					Live metrics from this Nixploy host. Refreshes every 10 seconds.
+					Live metrics from this Nixploy host. Refreshes every 30 seconds.
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="grid gap-4">
@@ -80,10 +81,15 @@ export function HostMonitoringCard() {
 						<Skeleton className="h-28 w-full" />
 					</div>
 				) : !stats ? (
-					<p className="rounded-md border border-dashed py-6 text-center text-sm text-muted-foreground">
-						Unable to read host metrics
-						{statsQuery.error ? `: ${statsQuery.error.message}` : "."}
-					</p>
+					<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-6 text-center">
+						<p className="text-sm text-muted-foreground">
+							Unable to read host metrics
+							{statsQuery.error ? `: ${statsQuery.error.message}` : "."}
+						</p>
+						<Button size="sm" variant="outline" onClick={() => statsQuery.refetch()}>
+							Retry
+						</Button>
+					</div>
 				) : (
 					<>
 						<div className="grid gap-4 sm:grid-cols-3">

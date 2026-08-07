@@ -60,14 +60,10 @@ type ContainerRow = {
 };
 
 function StateBadge({ state }: { state: string }) {
-	const color =
-		state === "running"
-			? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-			: state === "restarting"
-				? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-				: "text-muted-foreground";
+	const variant =
+		state === "running" ? "success" : state === "restarting" ? "warning" : "secondary";
 	return (
-		<Badge variant="outline" className={color}>
+		<Badge variant={variant} className="capitalize">
 			{state}
 		</Badge>
 	);

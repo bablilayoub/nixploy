@@ -60,6 +60,11 @@ nixploy template one <templateId>
 nixploy template deploy <templateId> --project-id <id> --env <name> \
   [--var KEY=VALUE ...] [--domain host:service:port ...]
 
+# Tags
+nixploy tag list [--json]
+nixploy tag create --name production [--color "#22c55e"] [--json]
+nixploy tag set --service-type application --service-id <id> --tag-id <id> [<id>...]
+
 # Databases (postgres, mysql, mariadb, mongo, redis)
 nixploy db list --project-id <id> [--env <name>] [--json]
 

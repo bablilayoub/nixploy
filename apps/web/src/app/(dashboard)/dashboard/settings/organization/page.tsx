@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export default function OrganizationSettingsPage() {
 	return (
 		<div className="flex flex-col gap-6">
-			<PageHeader title="Organization" description="Manage your organization and its members." />
+			<PageHeader title="Organization" description="Name, members, roles, and capabilities." />
 			<OrganizationCard />
 			<QuotasCard />
 			<MembersCard />

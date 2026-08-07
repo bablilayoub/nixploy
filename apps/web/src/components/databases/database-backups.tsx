@@ -161,12 +161,31 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 						<Skeleton className="h-10 w-full" />
 						<Skeleton className="h-10 w-full" />
 					</div>
+				) : backupsQuery.isError || destinationsQuery.isError ? (
+					<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-10 text-center">
+						<p className="text-sm font-medium">Could not load backups</p>
+						<p className="text-sm text-muted-foreground">
+							{backupsQuery.error?.message ??
+								destinationsQuery.error?.message ??
+								"Try again in a moment."}
+						</p>
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={() => {
+								void backupsQuery.refetch();
+								void destinationsQuery.refetch();
+							}}
+						>
+							Retry
+						</Button>
+					</div>
 				) : destinations.length === 0 ? (
 					<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-10 text-center">
 						<DatabaseBackup className="size-8 text-muted-foreground" />
 						<p className="text-sm font-medium">No S3 destinations configured</p>
 						<p className="text-sm text-muted-foreground">
-							Add a destination under Settings → Destinations before creating backups.
+							Add a destination under Settings → Backup storage before creating backups.
 						</p>
 					</div>
 				) : backups.length === 0 ? (
@@ -491,7 +510,13 @@ function RestoreDialog({ backupId }: { backupId: string }) {
 				if (!next) setKey("");
 			}}
 		>
-			<Button variant="ghost" size="icon-sm" title="Restore" onClick={() => setOpen(true)}>
+			<Button
+				variant="ghost"
+				size="icon-sm"
+				aria-label="Restore backup"
+				title="Restore"
+				onClick={() => setOpen(true)}
+			>
 				<RotateCcw className="size-4" />
 			</Button>
 			<DialogContent>

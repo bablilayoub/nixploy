@@ -162,7 +162,7 @@ First-boot `/setup` → Login → Dashboard → Project → Environment →
 - Application tabs: General, Domains, Deployments, Preview Deployments, Logs, Monitoring, Advanced, Settings
 - Database tabs: General, Backups, Logs, Monitoring, Settings
 - Compose tabs: General, Domains, Logs, Monitoring, Settings
-→ Settings: Profile, Organization, Servers, SSH Keys, Git Providers, Registries, Destinations, Notifications, Certificates, Web Server, Activity
+→ Settings: Profile, Organization (General/Audit log/Incidents/Notifications), Servers, SSH keys, Platform, Certificates, Git providers, Registries, Backup storage
 → Templates, Docker control center, Swagger
 
 ## 7. Hardest Parts

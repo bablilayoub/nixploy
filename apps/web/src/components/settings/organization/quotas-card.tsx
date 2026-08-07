@@ -73,7 +73,35 @@ export function QuotasCard() {
 		);
 	}
 
-	if (settingsQuery.error || !settingsQuery.data) return null;
+	if (settingsQuery.isError) {
+		return (
+			<Card>
+				<CardHeader>
+					<CardTitle className="flex items-center gap-2">
+						<Gauge className="size-4 text-muted-foreground" />
+						Quotas
+					</CardTitle>
+					<CardDescription>
+						Resource limits for this organization. Leave blank for unlimited. Owner or admin
+						required to edit.
+					</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<div className="flex flex-col items-center gap-2 py-8 text-center">
+						<p className="text-sm font-medium">Could not load quotas</p>
+						<p className="text-sm text-muted-foreground">
+							{settingsQuery.error.message || "Try again in a moment."}
+						</p>
+						<Button variant="outline" size="sm" onClick={() => void settingsQuery.refetch()}>
+							Retry
+						</Button>
+					</div>
+				</CardContent>
+			</Card>
+		);
+	}
+
+	if (!settingsQuery.data) return null;
 
 	const { usage } = settingsQuery.data;
 

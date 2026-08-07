@@ -602,7 +602,7 @@ print_summary() {
 		printf '   %sMake sure the DNS A record of %s points here.%s\n' "${C_DIM}" "${DASHBOARD_DOMAIN}" "${C_RESET}"
 	else
 		printf '   %sThe certificate is self-signed — accept the browser warning once.%s\n' "${C_DIM}" "${C_RESET}"
-		printf '   %sAdd a real domain later in Settings → Server → Dashboard domain.%s\n' "${C_DIM}" "${C_RESET}"
+		printf '   %sAdd a real domain later in Settings → Platform → Dashboard domain.%s\n' "${C_DIM}" "${C_RESET}"
 	fi
 	printf '\n'
 	printf '   %sConfig%s   %s\n' "${C_DIM}" "${C_RESET}" "${NIXPLOY_CONFIG_DIR}"

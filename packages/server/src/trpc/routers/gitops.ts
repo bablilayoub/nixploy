@@ -11,7 +11,7 @@ import {
 	serializeStackYaml,
 } from "../../modules/gitops";
 import {
-	assertCapability, assertOrgRole,
+	assertCapability,
 	findProjectById,
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
@@ -43,6 +43,7 @@ export const gitopsRouter = router({
 				ctx.session.session.activeOrganizationId,
 			);
 			await findProjectById(input.projectId, organizationId);
+			await assertCapability(ctx.session.user.id, organizationId, "gitops.manage");
 			const stack = await exportStack(input.projectId, input.environmentName, organizationId);
 			if (input.asYaml) {
 				return { stack, yaml: serializeStackYaml(stack) };
@@ -62,6 +63,7 @@ export const gitopsRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			await assertCapability(ctx.session.user.id, organizationId, "gitops.manage");
 			const stack = parseStackInput(input);
 			if (input.projectId) {
 				await findProjectById(input.projectId, organizationId);

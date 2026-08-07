@@ -174,7 +174,13 @@ export function TwoFactorCard() {
 										<code className="min-w-0 flex-1 truncate rounded-md border bg-muted px-3 py-2 text-xs">
 											{totpURI}
 										</code>
-										<Button type="button" variant="outline" size="icon" onClick={copyUri}>
+										<Button
+											type="button"
+											variant="outline"
+											size="icon"
+											aria-label="Copy authenticator URI"
+											onClick={copyUri}
+										>
 											{copied ? <Check className="size-4" /> : <Copy className="size-4" />}
 										</Button>
 									</div>

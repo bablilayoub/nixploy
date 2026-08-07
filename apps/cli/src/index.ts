@@ -11,6 +11,7 @@ import { envCommand } from "./commands/env.js";
 import { gitopsCommand, registerGitopsTopLevelCommands } from "./commands/gitops.js";
 import { projectCommand } from "./commands/project.js";
 import { serverCommand } from "./commands/server.js";
+import { tagCommand } from "./commands/tag.js";
 import { templateCommand } from "./commands/template.js";
 
 const program = new Command();
@@ -36,6 +37,7 @@ program.addCommand(projectCommand());
 program.addCommand(appCommand());
 program.addCommand(composeCommand());
 program.addCommand(templateCommand());
+program.addCommand(tagCommand());
 program.addCommand(domainCommand());
 program.addCommand(serverCommand());
 program.addCommand(deployCommand());

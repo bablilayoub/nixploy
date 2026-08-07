@@ -2,13 +2,23 @@ import { readFile } from "node:fs/promises";
 import { freemem, loadavg, totalmem } from "node:os";
 import { TRPCError } from "@trpc/server";
 import Docker from "dockerode";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { applications, compose, mariadb, mongo, mysql, postgres, redis } from "../../db/schema";
+import {
+	applications,
+	compose,
+	environments,
+	mariadb,
+	mongo,
+	mysql,
+	postgres,
+	projects,
+	redis,
+} from "../../db/schema";
 import { findServerById, getServerStatsCached, type ServerStats } from "../../modules/cluster";
-import { readMetricsHistory } from "../../modules/monitoring/history";
-import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { readLatestMetricsSample, readMetricsHistory } from "../../modules/monitoring/history";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { mapDockerStats } from "../../ws/docker-stats";
 import type { TRPCContext } from "../init";
@@ -339,4 +349,208 @@ export const monitoringRouter = router({
 			}
 			return await readMetricsHistory(input.appName, input.hours);
 		}),
+
+	/**
+	 * Org-wide fleet: every service with status + latest local metrics sample
+	 * (remote-hosted services omit metrics; charts stay live-only for them).
+	 */
+	fleetOverview: protectedProcedure.query(async ({ ctx }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		const orgProjects = await db.query.projects.findMany({
+			where: eq(projects.organizationId, organizationId),
+			columns: { projectId: true, name: true },
+		});
+		if (orgProjects.length === 0) return [];
+		const projectNameById = new Map(orgProjects.map((row) => [row.projectId, row.name]));
+		const environmentRows = await db.query.environments.findMany({
+			where: inArray(
+				environments.projectId,
+				orgProjects.map((row) => row.projectId),
+			),
+			columns: { environmentId: true, name: true, projectId: true },
+		});
+		if (environmentRows.length === 0) return [];
+		const envIds = environmentRows.map((row) => row.environmentId);
+		const envById = new Map(environmentRows.map((row) => [row.environmentId, row]));
+
+		const [appRows, composeRows, postgresRows, mysqlRows, mariadbRows, mongoRows, redisRows] =
+			await Promise.all([
+				db.query.applications.findMany({
+					where: inArray(applications.environmentId, envIds),
+					columns: {
+						applicationId: true,
+						name: true,
+						appName: true,
+						status: true,
+						serverId: true,
+						environmentId: true,
+					},
+				}),
+				db.query.compose.findMany({
+					where: inArray(compose.environmentId, envIds),
+					columns: {
+						composeId: true,
+						name: true,
+						appName: true,
+						status: true,
+						serverId: true,
+						environmentId: true,
+					},
+				}),
+				db.query.postgres.findMany({
+					where: inArray(postgres.environmentId, envIds),
+					columns: {
+						postgresId: true,
+						name: true,
+						appName: true,
+						status: true,
+						serverId: true,
+						environmentId: true,
+					},
+				}),
+				db.query.mysql.findMany({
+					where: inArray(mysql.environmentId, envIds),
+					columns: {
+						mysqlId: true,
+						name: true,
+						appName: true,
+						status: true,
+						serverId: true,
+						environmentId: true,
+					},
+				}),
+				db.query.mariadb.findMany({
+					where: inArray(mariadb.environmentId, envIds),
+					columns: {
+						mariadbId: true,
+						name: true,
+						appName: true,
+						status: true,
+						serverId: true,
+						environmentId: true,
+					},
+				}),
+				db.query.mongo.findMany({
+					where: inArray(mongo.environmentId, envIds),
+					columns: {
+						mongoId: true,
+						name: true,
+						appName: true,
+						status: true,
+						serverId: true,
+						environmentId: true,
+					},
+				}),
+				db.query.redis.findMany({
+					where: inArray(redis.environmentId, envIds),
+					columns: {
+						redisId: true,
+						name: true,
+						appName: true,
+						status: true,
+						serverId: true,
+						environmentId: true,
+					},
+				}),
+			]);
+
+		type FleetKind =
+			| "application"
+			| "compose"
+			| "postgres"
+			| "mysql"
+			| "mariadb"
+			| "mongo"
+			| "redis";
+
+		const base = [
+			...appRows.map((row) => ({
+				kind: "application" as FleetKind,
+				serviceId: row.applicationId,
+				name: row.name,
+				appName: row.appName,
+				status: row.status,
+				serverId: row.serverId,
+				environmentId: row.environmentId,
+			})),
+			...composeRows.map((row) => ({
+				kind: "compose" as FleetKind,
+				serviceId: row.composeId,
+				name: row.name,
+				appName: row.appName,
+				status: row.status,
+				serverId: row.serverId,
+				environmentId: row.environmentId,
+			})),
+			...postgresRows.map((row) => ({
+				kind: "postgres" as FleetKind,
+				serviceId: row.postgresId,
+				name: row.name,
+				appName: row.appName,
+				status: row.status,
+				serverId: row.serverId,
+				environmentId: row.environmentId,
+			})),
+			...mysqlRows.map((row) => ({
+				kind: "mysql" as FleetKind,
+				serviceId: row.mysqlId,
+				name: row.name,
+				appName: row.appName,
+				status: row.status,
+				serverId: row.serverId,
+				environmentId: row.environmentId,
+			})),
+			...mariadbRows.map((row) => ({
+				kind: "mariadb" as FleetKind,
+				serviceId: row.mariadbId,
+				name: row.name,
+				appName: row.appName,
+				status: row.status,
+				serverId: row.serverId,
+				environmentId: row.environmentId,
+			})),
+			...mongoRows.map((row) => ({
+				kind: "mongo" as FleetKind,
+				serviceId: row.mongoId,
+				name: row.name,
+				appName: row.appName,
+				status: row.status,
+				serverId: row.serverId,
+				environmentId: row.environmentId,
+			})),
+			...redisRows.map((row) => ({
+				kind: "redis" as FleetKind,
+				serviceId: row.redisId,
+				name: row.name,
+				appName: row.appName,
+				status: row.status,
+				serverId: row.serverId,
+				environmentId: row.environmentId,
+			})),
+		];
+
+		return await Promise.all(
+			base.map(async (row) => {
+				const environment = envById.get(row.environmentId);
+				const projectId = environment?.projectId ?? "";
+				const metrics = row.serverId == null ? await readLatestMetricsSample(row.appName) : null;
+				return {
+					...row,
+					projectId,
+					projectName: projectNameById.get(projectId) ?? "Unknown",
+					environmentName: environment?.name ?? "Unknown",
+					metrics: metrics
+						? {
+								t: metrics.t,
+								cpu: metrics.cpu,
+								memoryPercent:
+									metrics.memoryTotal > 0 ? (metrics.memoryUsed / metrics.memoryTotal) * 100 : 0,
+								memoryUsed: metrics.memoryUsed,
+								memoryTotal: metrics.memoryTotal,
+							}
+						: null,
+				};
+			}),
+		);
+	}),
 });

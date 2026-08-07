@@ -11,7 +11,7 @@ import {
 	updateGiteaById,
 	updateGiteaProviderName,
 } from "../../modules/git";
-import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -72,7 +72,14 @@ export const giteaRouter = router({
 	create: protectedProcedure.input(createGiteaInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
-		return await createGitea(input, organizationId);
+		const created = await createGitea(input, organizationId);
+		if (!created.gitea) {
+			throw new TRPCError({
+				code: "INTERNAL_SERVER_ERROR",
+				message: "Failed to create Gitea provider",
+			});
+		}
+		return { gitProvider: created.gitProvider, gitea: publicGitea(created.gitea) };
 	}),
 
 	/** Update credentials and/or the provider name. */
@@ -95,7 +102,7 @@ export const giteaRouter = router({
 			if (!updated) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Gitea provider not found" });
 			}
-			return updated;
+			return publicGitea(updated);
 		}),
 
 	/** Remove the provider (cascades to the gitea credentials row). */
@@ -106,7 +113,7 @@ export const giteaRouter = router({
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Gitea provider not found" });
 		}
-		return removed;
+		return publicGitea(removed);
 	}),
 
 	/** Repositories visible to the configured token. */

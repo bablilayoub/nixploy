@@ -37,7 +37,13 @@ export function GithubPanel() {
 	const [open, setOpen] = useState(false);
 	const [name, setName] = useState("");
 
-	const { data: providers, isPending } = useQuery(trpc.github.all.queryOptions());
+	const {
+		data: providers,
+		isPending,
+		isError,
+		error,
+		refetch,
+	} = useQuery(trpc.github.all.queryOptions());
 
 	const invalidate = () => queryClient.invalidateQueries({ queryKey: trpc.github.all.queryKey() });
 
@@ -144,6 +150,16 @@ export function GithubPanel() {
 					<div className="grid gap-2">
 						<Skeleton className="h-10 w-full" />
 						<Skeleton className="h-10 w-full" />
+					</div>
+				) : isError ? (
+					<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
+						<p className="text-sm font-medium">Could not load GitHub providers</p>
+						<p className="text-sm text-muted-foreground">
+							{error.message || "Try again in a moment."}
+						</p>
+						<Button variant="outline" size="sm" onClick={() => void refetch()}>
+							Retry
+						</Button>
 					</div>
 				) : !providers || providers.length === 0 ? (
 					<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">

@@ -94,6 +94,9 @@ export const environmentRouter = router({
 				ctx.session.session.activeOrganizationId,
 			);
 			await assertCapability(ctx.session.user.id, organizationId, "project.write");
+			if (input.env) {
+				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			}
 			const project = await findProjectById(input.projectId, organizationId);
 			await assertEnvironmentNameAvailable(project.projectId, input.name);
 			const [environment] = await db
@@ -124,6 +127,9 @@ export const environmentRouter = router({
 				ctx.session.session.activeOrganizationId,
 			);
 			await assertCapability(ctx.session.user.id, organizationId, "project.write");
+			if (input.env !== undefined) {
+				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			}
 			const current = await findEnvironmentById(input.environmentId, organizationId);
 			if (input.name !== undefined) {
 				await assertEnvironmentNameAvailable(current.projectId, input.name, input.environmentId);
@@ -174,6 +180,7 @@ export const environmentRouter = router({
 				ctx.session.session.activeOrganizationId,
 			);
 			await assertCapability(ctx.session.user.id, organizationId, "project.write");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			const source = await findEnvironmentById(input.environmentId, organizationId);
 			await assertEnvironmentNameAvailable(source.projectId, input.name ?? `${source.name} copy`);
 			const [duplicate] = await db
@@ -206,6 +213,7 @@ export const environmentRouter = router({
 				ctx.session.session.activeOrganizationId,
 			);
 			await assertCapability(ctx.session.user.id, organizationId, "project.write");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			const source = await findEnvironmentById(input.environmentId, organizationId);
 			await assertEnvironmentNameAvailable(source.projectId, input.name);
 			const [environment] = await db

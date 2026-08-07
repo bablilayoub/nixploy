@@ -145,7 +145,13 @@ export function ApiKeysCard() {
 										<code className="flex-1 truncate rounded-md border bg-muted px-3 py-2 text-xs">
 											{createdKey}
 										</code>
-										<Button type="button" variant="outline" size="icon" onClick={copyKey}>
+										<Button
+											type="button"
+											variant="outline"
+											size="icon"
+											aria-label="Copy API key"
+											onClick={copyKey}
+										>
 											{copied ? <Check className="size-4" /> : <Copy className="size-4" />}
 										</Button>
 									</div>

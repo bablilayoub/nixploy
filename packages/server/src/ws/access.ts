@@ -107,7 +107,7 @@ export async function assertWsDeploymentAccess(
 }
 
 /**
- * Combined gate for /ws/{logs,stats,terminal}: org membership + app + optional server.
+ * Combined gate for /ws/{logs,stats}: org membership + app + optional server.
  */
 export async function assertWsContainerAccess(
 	session: WsSession,
@@ -115,6 +115,24 @@ export async function assertWsContainerAccess(
 	serverId: string | null | undefined,
 ): Promise<void> {
 	const organizationId = await resolveWsOrganizationId(session);
+	await assertWsAppAccess(appName, organizationId);
+	await assertWsServerAccess(serverId, organizationId);
+}
+
+/**
+ * Gate for /ws/terminal into a Nixploy service container.
+ * Requires `service.runtime` so viewers cannot open shells.
+ */
+export async function assertWsTerminalAccess(
+	session: WsSession,
+	appName: string,
+	serverId: string | null | undefined,
+): Promise<void> {
+	const organizationId = await resolveWsOrganizationId(session);
+	const allowed = await hasCapability(session.user.id, organizationId, "service.runtime");
+	if (!allowed) {
+		throw new Error('This action requires the "service.runtime" capability');
+	}
 	await assertWsAppAccess(appName, organizationId);
 	await assertWsServerAccess(serverId, organizationId);
 }

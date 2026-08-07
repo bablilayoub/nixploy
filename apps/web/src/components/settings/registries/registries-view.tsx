@@ -134,7 +134,7 @@ export function RegistriesView() {
 		<div className="flex flex-col gap-6">
 			<PageHeader
 				title="Registries"
-				description="Docker registry credentials for private images and builds."
+				description="Credentials for private Docker registries used when pulling images and building applications. Nixploy does not host a registry — connect Hub, GHCR, or your own."
 			/>
 			<Card>
 				<CardHeader>
@@ -145,7 +145,8 @@ export function RegistriesView() {
 								Registries
 							</CardTitle>
 							<CardDescription>
-								Docker registry credentials for private images and builds.
+								Store registry usernames and passwords (encrypted). Attach a registry on an
+								application’s source when deploying private images.
 							</CardDescription>
 						</div>
 						<Dialog open={open} onOpenChange={setOpen}>
@@ -263,7 +264,8 @@ export function RegistriesView() {
 							<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
 								<Database className="size-8 text-muted-foreground" />
 								<p className="text-sm text-muted-foreground">
-									No registries yet. Add one to pull or push private images.
+									No registries yet. Add credentials for Docker Hub, GHCR, or a private registry to
+									pull (and push) private images.
 								</p>
 							</div>
 						}

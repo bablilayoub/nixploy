@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { auditFromSession } from "../../modules/audit";
-import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import {
 	createTag,
 	deleteTag,

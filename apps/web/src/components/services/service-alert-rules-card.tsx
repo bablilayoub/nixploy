@@ -70,6 +70,15 @@ export function ServiceAlertRulesCard({
 			<CardContent className="flex flex-col gap-4">
 				{rules.isLoading ? (
 					<Skeleton className="h-12 w-full" />
+				) : rules.isError ? (
+					<div className="flex flex-col gap-2">
+						<p className="text-sm text-muted-foreground">
+							{rules.error.message || "Failed to load alert rules"}
+						</p>
+						<Button size="sm" variant="outline" className="w-fit" onClick={() => rules.refetch()}>
+							Retry
+						</Button>
+					</div>
 				) : (rules.data ?? []).length === 0 ? (
 					<p className="text-sm text-muted-foreground">No rules yet.</p>
 				) : (
@@ -103,6 +112,7 @@ export function ServiceAlertRulesCard({
 									<Button
 										variant="ghost"
 										size="icon"
+										aria-label="Remove alert rule"
 										onClick={() => remove.mutate({ alertRuleId: rule.alertRuleId })}
 									>
 										<Trash2 className="size-4 text-destructive" />

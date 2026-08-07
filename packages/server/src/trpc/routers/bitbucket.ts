@@ -11,7 +11,7 @@ import {
 	updateBitbucketById,
 	updateBitbucketProviderName,
 } from "../../modules/git";
-import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -73,7 +73,14 @@ export const bitbucketRouter = router({
 	create: protectedProcedure.input(createBitbucketInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
-		return await createBitbucket(input, organizationId);
+		const created = await createBitbucket(input, organizationId);
+		if (!created.bitbucket) {
+			throw new TRPCError({
+				code: "INTERNAL_SERVER_ERROR",
+				message: "Failed to create Bitbucket provider",
+			});
+		}
+		return { gitProvider: created.gitProvider, bitbucket: publicBitbucket(created.bitbucket) };
 	}),
 
 	/** Update credentials and/or the provider name. */
@@ -90,7 +97,7 @@ export const bitbucketRouter = router({
 			if (!updated) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Bitbucket provider not found" });
 			}
-			return updated;
+			return publicBitbucket(updated);
 		}),
 
 	/** Remove the provider (cascades to the bitbucket credentials row). */
@@ -101,7 +108,7 @@ export const bitbucketRouter = router({
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Bitbucket provider not found" });
 		}
-		return removed;
+		return publicBitbucket(removed);
 	}),
 
 	/** Repositories visible to the configured credentials. */

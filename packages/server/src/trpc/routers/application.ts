@@ -4,16 +4,11 @@ import { z } from "zod";
 import { db } from "../../db";
 import {
 	applications,
-	bitbucket,
 	deployments,
 	environments,
-	gitea,
-	github,
-	gitlab,
 	projects,
 	registry,
 	rollbacks,
-	sshKeys,
 } from "../../db/schema";
 import {
 	assertApplicationAccess,
@@ -36,14 +31,15 @@ import {
 	cancelDeployment as cancelQueuedDeployment,
 	queueDeployment,
 } from "../../modules/deployment";
-import {
-	assertCapability,
-	assertOrgRole,
-	assertWithinQuota,
-	hasOrgRole,
-} from "../../modules/projects";
+import { assertCapability, assertWithinQuota, hasCapability } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import {
+	assertGitProviderInOrganization,
+	assertServerInOrganization,
+	assertSshKeyInOrganization,
+} from "../assert-org-refs";
 import { protectedProcedure, router } from "../init";
+import { redactApplicationSecrets } from "../redact-secrets";
 
 const applicationIdInput = z.object({ applicationId: z.string().min(1) });
 
@@ -66,46 +62,7 @@ const swarmSpecFields = {
 } as const;
 
 /** Verify a git provider connection (github/gitlab/bitbucket/gitea row) belongs to the org. */
-const assertGitProviderAccess = async (
-	provider: "github" | "gitlab" | "bitbucket" | "gitea",
-	providerId: string,
-	organizationId: string,
-) => {
-	// Queryed per-branch: a dynamic `db.query[provider]` union is not callable.
-	let row: { gitProvider: { organizationId: string } } | undefined;
-	switch (provider) {
-		case "github":
-			row = await db.query.github.findFirst({
-				where: eq(github.githubId, providerId),
-				with: { gitProvider: true },
-			});
-			break;
-		case "gitlab":
-			row = await db.query.gitlab.findFirst({
-				where: eq(gitlab.gitlabId, providerId),
-				with: { gitProvider: true },
-			});
-			break;
-		case "bitbucket":
-			row = await db.query.bitbucket.findFirst({
-				where: eq(bitbucket.bitbucketId, providerId),
-				with: { gitProvider: true },
-			});
-			break;
-		case "gitea":
-			row = await db.query.gitea.findFirst({
-				where: eq(gitea.giteaId, providerId),
-				with: { gitProvider: true },
-			});
-			break;
-	}
-	if (!row || row.gitProvider.organizationId !== organizationId) {
-		throw new TRPCError({
-			code: "NOT_FOUND",
-			message: `${provider} provider not found`,
-		});
-	}
-};
+const assertGitProviderAccess = assertGitProviderInOrganization;
 
 export const applicationRouter = router({
 	/** All applications of a project (optionally one environment). */
@@ -128,13 +85,20 @@ export const applicationRouter = router({
 					: eq(environments.projectId, input.projectId),
 			});
 			if (envs.length === 0) return [];
-			return db.query.applications.findMany({
+			const rows = await db.query.applications.findMany({
 				where: inArray(
 					applications.environmentId,
 					envs.map((environment) => environment.environmentId),
 				),
 				orderBy: desc(applications.createdAt),
 			});
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			if (canSeeSecrets) return rows;
+			return rows.map((row) => ({ ...row, password: null, env: null, buildArgs: null }));
 		}),
 
 	one: protectedProcedure.input(applicationIdInput).query(async ({ ctx, input }) => {
@@ -173,9 +137,9 @@ export const applicationRouter = router({
 		if (!application || application.environment.project.organizationId !== organizationId) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
 		}
-		const canSeeSecrets = await hasOrgRole(ctx.session.user.id, organizationId, "member");
+		const canSeeSecrets = await hasCapability(ctx.session.user.id, organizationId, "secrets.read");
 		if (canSeeSecrets) return application;
-		return { ...application, env: null, buildArgs: null };
+		return { ...application, env: null, buildArgs: null, password: null };
 	}),
 
 	create: protectedProcedure
@@ -231,6 +195,8 @@ export const applicationRouter = router({
 				environmentId = environment.environmentId;
 			}
 
+			await assertServerInOrganization(input.serverId, organizationId);
+
 			const created = await createApplication({
 				name: input.name,
 				description: input.description ?? null,
@@ -263,7 +229,11 @@ export const applicationRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
+			if (input.buildArgs !== undefined) {
+				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			}
 			await assertApplicationAccess(input.applicationId, organizationId);
+			await assertServerInOrganization(input.serverId, organizationId);
 
 			const { applicationId, ...data } = input;
 			const application = await updateApplication(applicationId, data);
@@ -274,7 +244,12 @@ export const applicationRouter = router({
 			if (specChanged) {
 				await upsertApplicationSwarmService(application);
 			}
-			return application;
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? application : redactApplicationSecrets(application);
 		}),
 
 	/**
@@ -286,6 +261,7 @@ export const applicationRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 			const targetEnvironmentId = input.environmentId ?? application.environmentId;
 			if (targetEnvironmentId !== application.environmentId) {
@@ -299,7 +275,12 @@ export const applicationRouter = router({
 				targetName: created.name,
 				metadata: { sourceId: input.applicationId },
 			});
-			return created;
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? created : redactApplicationSecrets(created);
 		}),
 
 	/** Move this application to another environment (any project in the org). */
@@ -399,7 +380,12 @@ export const applicationRouter = router({
 			await assertApplicationAccess(input.applicationId, organizationId);
 			const application = await saveEnvironment(input.applicationId, input.env, input.buildArgs);
 			await upsertApplicationSwarmService(application);
-			return application;
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? application : redactApplicationSecrets(application);
 		}),
 
 	saveBuildType: protectedProcedure
@@ -470,12 +456,7 @@ export const applicationRouter = router({
 				}
 			}
 			if (input.customGitSSHKeyId) {
-				const key = await db.query.sshKeys.findFirst({
-					where: eq(sshKeys.sshKeyId, input.customGitSSHKeyId),
-				});
-				if (!key || key.organizationId !== organizationId) {
-					throw new TRPCError({ code: "NOT_FOUND", message: "SSH key not found" });
-				}
+				await assertSshKeyInOrganization(input.customGitSSHKeyId, organizationId);
 			}
 			if (input.registryId) {
 				const reg = await db.query.registry.findFirst({
@@ -557,6 +538,9 @@ export const applicationRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
+			if (input.password !== undefined) {
+				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			}
 			await assertApplicationAccess(input.applicationId, organizationId);
 			if (input.registryId) {
 				const reg = await db.query.registry.findFirst({
@@ -566,13 +550,19 @@ export const applicationRouter = router({
 					throw new TRPCError({ code: "NOT_FOUND", message: "Registry not found" });
 				}
 			}
-			return updateApplication(input.applicationId, {
+			const application = await updateApplication(input.applicationId, {
 				sourceType: "docker",
 				dockerImage: input.dockerImage,
 				username: input.username ?? null,
 				password: input.password ?? null,
 				registryId: input.registryId ?? null,
 			});
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? application : redactApplicationSecrets(application);
 		}),
 
 	/** Force-restart every task of the swarm service (`docker service update --force`). */

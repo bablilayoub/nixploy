@@ -111,9 +111,14 @@ function Sparkline({
 	color: string;
 	id: string;
 }) {
-	if (data.length < 2) return <div className="h-8" />;
+	if (data.length < 2) return null;
+	const values = data.map((sample) => Number(sample[dataKey]));
+	const min = Math.min(...values);
+	const max = Math.max(...values);
+	// Flat series (idle service) — skip the empty-looking line.
+	if (max - min < 1e-9) return null;
 	return (
-		<div className="h-8">
+		<div className="h-7">
 			<ResponsiveContainer width="100%" height="100%">
 				<AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
 					<defs>
@@ -156,21 +161,23 @@ function KpiCard({
 	meter?: number;
 }) {
 	return (
-		<Card className="overflow-hidden">
-			<CardContent className="space-y-3 pt-4">
-				<div className="flex items-center justify-between">
-					<div
-						className="flex size-8 items-center justify-center rounded-md"
-						style={{ backgroundColor: `${color}1f`, color }}
-					>
-						<Icon className="size-4" />
-					</div>
-					<span className="text-xs font-medium text-muted-foreground">{label}</span>
+		<div className="overflow-hidden rounded-lg border border-border bg-card px-3 py-3">
+			<div className="flex items-center justify-between gap-2">
+				<div
+					className="flex size-7 items-center justify-center rounded-md"
+					style={{ backgroundColor: `${color}1f`, color }}
+				>
+					<Icon className="size-3.5" />
 				</div>
-				<div>
-					<p className="text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
-					{sub ? <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">{sub}</p> : null}
-				</div>
+				<span className="text-[11px] font-medium text-muted-foreground">{label}</span>
+			</div>
+			<div className="mt-2">
+				<p className="text-lg font-semibold tracking-tight tabular-nums">{value}</p>
+				{sub ? (
+					<p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">{sub}</p>
+				) : null}
+			</div>
+			<div className="mt-2">
 				{meter != null ? (
 					<div className="h-1 overflow-hidden rounded-full bg-secondary">
 						<div
@@ -181,8 +188,8 @@ function KpiCard({
 				) : (
 					<Sparkline data={samples} dataKey={dataKey} color={color} id={gradientId} />
 				)}
-			</CardContent>
-		</Card>
+			</div>
+		</div>
 	);
 }
 

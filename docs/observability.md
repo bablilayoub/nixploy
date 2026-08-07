@@ -36,7 +36,7 @@ download-as-`.txt`.
 
 ## Threshold alerts
 
-- Org-level CPU/memory thresholds live in Settings → Web Server
+- Org-level CPU/memory thresholds live in Settings → Platform
   (`webServerSettings.metricsConfig.webServer.{cpuAlertPercent,
   memoryAlertPercent}` — empty = disabled).
 - The metrics-history pass keeps a rolling 5-sample window (~2.5 min) per

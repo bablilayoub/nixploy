@@ -78,7 +78,7 @@ export function ApplicationHeader({
 		}),
 	);
 
-	const isRunning = application.status === "running";
+	const isRunning = application.status === "running" || application.status === "done";
 	const isBusy = deploy.isPending || redeploy.isPending || start.isPending || stop.isPending;
 	const statusConfig = STATUS_CONFIG[application.status ?? "idle"] ?? STATUS_CONFIG.idle;
 

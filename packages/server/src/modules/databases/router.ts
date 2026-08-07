@@ -3,8 +3,10 @@ import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import { environments, projects } from "../../db/schema";
+import { assertServerInOrganization } from "../../trpc/assert-org-refs";
 import type { TRPCContext } from "../../trpc/init";
 import { protectedProcedure, router } from "../../trpc/init";
+import { redactDatabaseSecrets } from "../../trpc/redact-secrets";
 import { auditFromSession } from "../audit";
 import { assertCapability, hasCapability, resolveCallerOrganizationId } from "../projects";
 import {
@@ -160,7 +162,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 					"secrets.read",
 				);
 				if (canSeePassword) return rows;
-				return rows.map((row) => ({ ...row, databasePassword: null }));
+				return rows.map((row) => redactDatabaseSecrets(row as Record<string, unknown>) as Row);
 			}),
 
 		/** Fetch a single database by id. */
@@ -173,7 +175,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 				"secrets.read",
 			);
 			if (canSeePassword) return row;
-			return { ...row, databasePassword: null };
+			return redactDatabaseSecrets(row as Record<string, unknown>) as Row;
 		}),
 
 		/** Create the database row (does not start the container; use `start`). */
@@ -181,6 +183,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			const organizationId = await getOrganizationId(ctx);
 			await assertCapability(ctx.session.user.id, organizationId, "service.create");
 			await assertEnvironmentAccess(input.environmentId, organizationId);
+			await assertServerInOrganization(input.serverId, organizationId);
 			const appName = input.appName ?? generateDatabaseAppName(input.name);
 			try {
 				const inserted = (await db
@@ -219,8 +222,24 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			if (input.environmentId && input.environmentId !== existing.environmentId) {
 				await assertEnvironmentAccess(input.environmentId, organizationId);
 			}
+			await assertServerInOrganization(input.serverId, organizationId);
 			const { [idField]: _id, ...values } = input as Record<string, unknown>;
-			return updateRow(id, values);
+			const touchesSecrets =
+				values.databasePassword !== undefined ||
+				values.databaseRootPassword !== undefined ||
+				values.env !== undefined;
+			if (touchesSecrets) {
+				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			}
+			const updated = await updateRow(id, values);
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets
+				? updated
+				: (redactDatabaseSecrets(updated as Record<string, unknown>) as Row);
 		}),
 
 		/**
@@ -232,6 +251,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			.mutation(async ({ ctx, input }) => {
 				const organizationId = await getOrganizationId(ctx);
 				await assertCapability(ctx.session.user.id, organizationId, "service.write");
+				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 				const row = await findRowOrThrow(input[idField] as string, organizationId);
 				const targetEnvironmentId =
 					(input.environmentId as string | undefined) ?? row.environmentId;
@@ -246,7 +266,14 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 					targetName: created.name,
 					metadata: { sourceId: input[idField] as string },
 				});
-				return created;
+				const canSeeSecrets = await hasCapability(
+					ctx.session.user.id,
+					organizationId,
+					"secrets.read",
+				);
+				return canSeeSecrets
+					? created
+					: (redactDatabaseSecrets(created as Record<string, unknown>) as Row);
 			}),
 
 		/** Move this database to another environment (any project in the org). */
@@ -289,7 +316,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 		/** Deploy (create/update) the swarm service and scale it to 1 replica. */
 		start: protectedProcedure.input(idSchema).mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx);
-			await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
+			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
 			await startDatabase(kind, row);

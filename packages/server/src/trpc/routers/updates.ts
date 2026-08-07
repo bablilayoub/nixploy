@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import { members } from "../../db/schema";
 import { auditFromSession } from "../../modules/audit";
-import { resolveCallerOrganizationId } from "../../modules/projects";
+import { hasOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
 import {
 	applyUpdate,
 	checkForUpdates,
@@ -47,6 +47,24 @@ const settingsInput = z.object({
 });
 
 export const updatesRouter = router({
+	/**
+	 * Lightweight banner for every authenticated member: current version and
+	 * whether an update was detected. Check/apply stay admin-only via getStatus.
+	 */
+	banner: protectedProcedure.query(async ({ ctx }) => {
+		const organizationId = await resolveCallerOrganizationId(
+			ctx.session.user.id,
+			ctx.session.session.activeOrganizationId,
+		);
+		const settings = await getUpdateSettings();
+		const canManageUpdate = await hasOrgRole(ctx.session.user.id, organizationId, "admin");
+		return {
+			appVersion: getAppVersion(),
+			updateAvailable: settings.updateAvailable,
+			canManageUpdate,
+		};
+	}),
+
 	/** Current version, digests and auto-update preferences. */
 	getStatus: protectedProcedure.query(async ({ ctx }) => {
 		await requireOwnerOrAdmin(ctx.session);

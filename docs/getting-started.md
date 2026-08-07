@@ -48,7 +48,7 @@ Swagger lives at `/swagger` on your panel.
 
 | Feature | Where |
 | --- | --- |
-| Deploy Copilot | Settings → Server → AI; explain on Deployments |
+| Deploy Copilot | Settings → Platform → AI; explain on Deployments |
 | Placement | Application → Advanced → Placement |
 | GitOps | Project → GitOps (export / URL sync) |
 | Notifications | Settings → Notifications |

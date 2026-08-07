@@ -1,12 +1,12 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { schedules } from "../../db/schema";
+import { applications, compose, environments, projects, schedules, servers } from "../../db/schema";
 import { assertApplicationAccess } from "../../modules/application";
 import { findServerById } from "../../modules/cluster";
 import { findComposeForOrg } from "../../modules/compose/service";
-import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import {
 	getScheduleRunState,
 	isValidCron,
@@ -121,6 +121,85 @@ const targetInput = {
 };
 
 export const scheduleRouter = router({
+	/**
+	 * Every schedule visible in the caller's organization (service/server
+	 * targets) plus this user's nixploy-server schedules.
+	 */
+	all: protectedProcedure.query(async ({ ctx }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		const orgProjects = await db.query.projects.findMany({
+			where: eq(projects.organizationId, organizationId),
+			columns: { projectId: true },
+		});
+		const projectIds = orgProjects.map((row) => row.projectId);
+		const environmentRows =
+			projectIds.length > 0
+				? await db.query.environments.findMany({
+						where: inArray(environments.projectId, projectIds),
+						columns: { environmentId: true },
+					})
+				: [];
+		const envIds = environmentRows.map((row) => row.environmentId);
+
+		const [applicationIds, composeIds, orgServers] = await Promise.all([
+			envIds.length > 0
+				? db.query.applications.findMany({
+						where: inArray(applications.environmentId, envIds),
+						columns: { applicationId: true, name: true, appName: true },
+					})
+				: Promise.resolve([]),
+			envIds.length > 0
+				? db.query.compose.findMany({
+						where: inArray(compose.environmentId, envIds),
+						columns: { composeId: true, name: true, appName: true },
+					})
+				: Promise.resolve([]),
+			db.query.servers.findMany({
+				where: eq(servers.organizationId, organizationId),
+				columns: { serverId: true, name: true },
+			}),
+		]);
+
+		const appIdSet = new Set(applicationIds.map((row) => row.applicationId));
+		const composeIdSet = new Set(composeIds.map((row) => row.composeId));
+		const serverIdSet = new Set(orgServers.map((row) => row.serverId));
+		const appNameById = new Map(applicationIds.map((row) => [row.applicationId, row.name]));
+		const composeNameById = new Map(composeIds.map((row) => [row.composeId, row.name]));
+		const serverNameById = new Map(orgServers.map((row) => [row.serverId, row.name]));
+
+		const rows = await db.query.schedules.findMany({
+			orderBy: (table, { desc }) => [desc(table.createdAt)],
+		});
+
+		return rows
+			.filter((row) => {
+				if (row.scheduleType === "nixploy-server") {
+					return row.userId === ctx.session.user.id;
+				}
+				if (row.scheduleType === "application" && row.applicationId) {
+					return appIdSet.has(row.applicationId);
+				}
+				if (row.scheduleType === "compose" && row.composeId) {
+					return composeIdSet.has(row.composeId);
+				}
+				if (row.scheduleType === "server" && row.serverId) {
+					return serverIdSet.has(row.serverId);
+				}
+				return false;
+			})
+			.map((row) => ({
+				...withRunState(row),
+				targetName:
+					row.scheduleType === "application" && row.applicationId
+						? (appNameById.get(row.applicationId) ?? row.appName ?? row.applicationId)
+						: row.scheduleType === "compose" && row.composeId
+							? (composeNameById.get(row.composeId) ?? row.appName ?? row.composeId)
+							: row.scheduleType === "server" && row.serverId
+								? (serverNameById.get(row.serverId) ?? row.serverId)
+								: "This Nixploy host",
+			}));
+	}),
+
 	/** Schedules of one target service/server (with live run state). */
 	byService: protectedProcedure
 		.input(

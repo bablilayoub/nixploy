@@ -40,7 +40,13 @@ export function BitbucketPanel() {
 	const [appPassword, setAppPassword] = useState("");
 	const [apiToken, setApiToken] = useState("");
 
-	const { data: providers, isPending } = useQuery(trpc.bitbucket.all.queryOptions());
+	const {
+		data: providers,
+		isPending,
+		isError,
+		error,
+		refetch,
+	} = useQuery(trpc.bitbucket.all.queryOptions());
 
 	const invalidate = () =>
 		queryClient.invalidateQueries({
@@ -172,6 +178,16 @@ export function BitbucketPanel() {
 					<div className="grid gap-2">
 						<Skeleton className="h-10 w-full" />
 						<Skeleton className="h-10 w-full" />
+					</div>
+				) : isError ? (
+					<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
+						<p className="text-sm font-medium">Could not load Bitbucket providers</p>
+						<p className="text-sm text-muted-foreground">
+							{error.message || "Try again in a moment."}
+						</p>
+						<Button variant="outline" size="sm" onClick={() => void refetch()}>
+							Retry
+						</Button>
 					</div>
 				) : !providers || providers.length === 0 ? (
 					<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">

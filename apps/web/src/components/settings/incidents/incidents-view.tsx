@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { useState } from "react";
-
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -54,6 +54,16 @@ export function IncidentsView() {
 				<CardContent className="flex flex-col gap-3">
 					{incidents.isLoading ? (
 						["a", "b", "c"].map((key) => <Skeleton key={key} className="h-16 w-full" />)
+					) : incidents.isError ? (
+						<div className="flex flex-col items-center gap-2 py-8 text-center">
+							<p className="text-sm font-medium">Could not load incidents</p>
+							<p className="text-sm text-muted-foreground">
+								{incidents.error.message || "Try again in a moment."}
+							</p>
+							<Button variant="outline" size="sm" onClick={() => void incidents.refetch()}>
+								Retry
+							</Button>
+						</div>
 					) : (incidents.data ?? []).length === 0 ? (
 						<p className="py-8 text-center text-sm text-muted-foreground">
 							No incidents yet. Alerts and failed deploys will appear here.

@@ -30,19 +30,22 @@ import { useTRPC } from "@/lib/trpc";
 const PAGE_SIZE = 50;
 const ALL = "__all__";
 
-const ACTION_COLORS: Record<string, string> = {
-	create: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-	deploy: "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400",
-	delete: "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400",
-	remove: "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400",
-	prune: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+const ACTION_VARIANTS: Record<
+	string,
+	"success" | "info" | "destructive" | "warning" | "secondary"
+> = {
+	create: "success",
+	deploy: "info",
+	delete: "destructive",
+	remove: "destructive",
+	prune: "warning",
 };
 
 function ActionBadge({ action }: { action: string }) {
 	const verb = action.split(".").pop() ?? action;
-	const color = ACTION_COLORS[verb] ?? "border-border bg-secondary text-muted-foreground";
+	const variant = ACTION_VARIANTS[verb] ?? "secondary";
 	return (
-		<Badge variant="outline" className={`font-mono text-[11px] ${color}`}>
+		<Badge variant={variant} className="font-mono text-[11px]">
 			{action}
 		</Badge>
 	);
@@ -90,7 +93,7 @@ export function ActivityView() {
 	return (
 		<div className="flex flex-col gap-6">
 			<PageHeader
-				title="Activity"
+				title="Audit log"
 				description="Audit trail of everything that happens in this organization."
 			/>
 
@@ -157,7 +160,7 @@ export function ActivityView() {
 				empty={
 					<div className="flex h-48 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border text-center">
 						<History className="size-6 text-muted-foreground" />
-						<p className="text-sm font-medium">No activity yet</p>
+						<p className="text-sm font-medium">No audit events yet</p>
 						<p className="text-xs text-muted-foreground">
 							{action !== ALL || targetType !== ALL || search ? (
 								<>

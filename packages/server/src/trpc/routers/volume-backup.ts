@@ -4,20 +4,17 @@ import { z } from "zod";
 import { db } from "../../db";
 import { destinations, volumeBackups } from "../../db/schema";
 import { getServiceContext } from "../../modules/application";
-import {
-	listVolumeBackupKeys,
-	restoreVolumeBackup,
-	type VolumeBackupRow,
-} from "../../modules/backups/runner";
+import { listVolumeBackupKeys, restoreVolumeBackup } from "../../modules/backups/runner";
 import {
 	isValidBackupCron,
 	registerVolumeBackupSchedule,
 	runVolumeBackupNow,
 	unregisterVolumeBackupSchedule,
 } from "../../modules/backups/scheduler";
-import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
+import { redactDestinationSecrets } from "../redact-secrets";
 
 type Session = NonNullable<TRPCContext["session"]>;
 
@@ -28,10 +25,7 @@ async function getOrganizationId(session: Session): Promise<string> {
 const volumeServiceTypeSchema = z.enum(["application", "compose"]);
 
 /** Org scope travels through the destination (and the linked service). */
-async function findVolumeBackupOrThrow(
-	volumeBackupId: string,
-	organizationId: string,
-): Promise<VolumeBackupRow> {
+async function findVolumeBackupOrThrow(volumeBackupId: string, organizationId: string) {
 	const row = await db.query.volumeBackups.findFirst({
 		where: eq(volumeBackups.volumeBackupId, volumeBackupId),
 		with: { destination: true },
@@ -90,7 +84,11 @@ export const volumeBackupRouter = router({
 	/** A single volume backup by id. */
 	one: protectedProcedure.input(volumeBackupIdInput).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		return await findVolumeBackupOrThrow(input.volumeBackupId, organizationId);
+		const row = await findVolumeBackupOrThrow(input.volumeBackupId, organizationId);
+		return {
+			...row,
+			destination: redactDestinationSecrets(row.destination),
+		};
 	}),
 
 	/** Create a scheduled volume archive → S3 backup. */

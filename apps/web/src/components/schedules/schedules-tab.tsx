@@ -51,7 +51,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
-type ServiceType = "application" | "compose";
+type ServiceType = "application" | "compose" | "server" | "nixploy-server";
 type ScheduleEntry = inferRouterOutputs<AppRouter>["schedule"]["byService"][number];
 
 const CRON_PRESETS = [
@@ -210,6 +210,7 @@ export function SchedulesTab({
 				scheduleType: serviceType,
 				applicationId: serviceType === "application" ? serviceId : null,
 				composeId: serviceType === "compose" ? serviceId : null,
+				serverId: serviceType === "server" ? serviceId : null,
 			});
 		}
 	};
@@ -220,7 +221,11 @@ export function SchedulesTab({
 				<div className="flex flex-col gap-1.5">
 					<CardTitle className="text-sm font-medium">Schedules</CardTitle>
 					<CardDescription>
-						Run shell commands inside the service container on a cron schedule.
+						{serviceType === "nixploy-server"
+							? "Run shell commands on this Nixploy host on a cron schedule."
+							: serviceType === "server"
+								? "Run shell commands on the managed server over SSH on a cron schedule."
+								: "Run shell commands inside the service container on a cron schedule."}
 					</CardDescription>
 				</div>
 				<Button size="sm" onClick={() => setDialogOpen(true)}>
@@ -298,16 +303,27 @@ export function SchedulesTab({
 											<Button
 												variant="ghost"
 												size="sm"
+												aria-label="Run schedule now"
 												title="Run now"
 												disabled={runNow.isPending}
 												onClick={() => runNow.mutate({ scheduleId: schedule.scheduleId })}
 											>
 												<Play className="size-4" />
 											</Button>
-											<Button variant="ghost" size="sm" onClick={() => openEdit(schedule)}>
+											<Button
+												variant="ghost"
+												size="sm"
+												aria-label="Edit schedule"
+												onClick={() => openEdit(schedule)}
+											>
 												<Pencil className="size-4" />
 											</Button>
-											<Button variant="ghost" size="sm" onClick={() => setDeleteTarget(schedule)}>
+											<Button
+												variant="ghost"
+												size="sm"
+												aria-label="Delete schedule"
+												onClick={() => setDeleteTarget(schedule)}
+											>
 												<Trash2 className="size-4 text-destructive" />
 											</Button>
 										</div>

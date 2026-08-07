@@ -206,7 +206,7 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 						</span>
 					</TooltipTrigger>
 					<TooltipContent side="bottom" className="max-w-xs">
-						Deploy Copilot is off — enable it in Settings → Server (BYO API key).
+						Deploy Copilot is off — enable it in Settings → Platform (BYO API key).
 					</TooltipContent>
 				</Tooltip>
 			</TooltipProvider>
@@ -323,7 +323,12 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 						}
 						disabled={chat.isPending}
 					/>
-					<Button type="submit" size="icon" disabled={chat.isPending || !input.trim()}>
+					<Button
+						type="submit"
+						size="icon"
+						aria-label="Send message"
+						disabled={chat.isPending || !input.trim()}
+					>
 						<Send className="size-4" />
 					</Button>
 				</form>

@@ -54,6 +54,7 @@ export const EXEMPT = [
 	"rollback.one",
 	"previewDeployment.one",
 	"schedule.one",
+	"schedule.all",
 	"security.one",
 	"redirect.one",
 	"port.one",

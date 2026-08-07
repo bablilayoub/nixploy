@@ -2,23 +2,35 @@
 
 import { Menu } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { CommandPalette } from "@/components/command-palette";
 import { ModeToggle } from "@/components/mode-toggle";
-import { mainNavItems, NavMain } from "@/components/nav-projects";
+import { isMainNavActive, mainNavItems } from "@/components/nav-projects";
 import { OrgSwitcher } from "@/components/org-switcher";
 import { Logo, LogoMark } from "@/components/shell/logo";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { UserMenu } from "@/components/user-menu";
+import { cn } from "@/lib/utils";
 
-/** Dashboard shell top navigation: logo, org switcher, pill nav, utilities. */
+/** Slim dashboard top bar: logo, org switcher, utilities (main nav lives in the side rail). */
 export function TopNav() {
+	const pathname = usePathname();
+	const [mobileOpen, setMobileOpen] = useState(false);
+
+	// Close the sheet after client navigations (Link click → route change).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: pathname is the navigation signal
+	useEffect(() => {
+		setMobileOpen(false);
+	}, [pathname]);
+
 	return (
-		<header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
+		<header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
 			<div className="flex h-14 items-center gap-3 px-4 md:px-6">
 				{/* Mobile: hamburger menu */}
-				<Sheet>
+				<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
 					<SheetTrigger asChild>
 						<Button
 							variant="ghost"
@@ -32,21 +44,38 @@ export function TopNav() {
 					<SheetContent side="left" className="w-72 gap-6 p-6">
 						<SheetHeader className="p-0">
 							<SheetTitle asChild>
-								<Link href="/dashboard">
+								<Link href="/dashboard" onClick={() => setMobileOpen(false)}>
 									<Logo />
 								</Link>
 							</SheetTitle>
 						</SheetHeader>
-						<nav className="flex flex-col gap-1">
-							{mainNavItems.map((item) => (
-								<Link
-									key={item.href}
-									href={item.href}
-									className="rounded-lg px-2 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-								>
-									{item.label}
-								</Link>
-							))}
+						<nav className="flex flex-col gap-1" aria-label="Main">
+							{mainNavItems.map((item) => {
+								const Icon = item.icon;
+								const active = isMainNavActive(pathname, item.href);
+								return (
+									<Link
+										key={item.href}
+										href={item.href}
+										onClick={() => setMobileOpen(false)}
+										className={cn(
+											"flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
+											active
+												? "bg-secondary font-medium text-foreground"
+												: "text-muted-foreground hover:bg-accent hover:text-foreground",
+										)}
+									>
+										<Icon
+											className={cn(
+												"size-4 shrink-0",
+												active ? "text-foreground" : "text-muted-foreground",
+											)}
+											aria-hidden
+										/>
+										{item.label}
+									</Link>
+								);
+							})}
 						</nav>
 					</SheetContent>
 				</Sheet>
@@ -59,8 +88,6 @@ export function TopNav() {
 					<LogoMark className="size-5" />
 				</Link>
 				<OrgSwitcher />
-
-				<NavMain className="ml-4 hidden md:flex" />
 
 				<div className="ml-auto flex items-center gap-2">
 					<CommandPalette />

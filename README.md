@@ -35,7 +35,7 @@ Inspired by Dokploy and Coolify — built to be better.
 - **API, CLI & Swagger** — every tRPC procedure is also exposed as a REST endpoint authenticated with `x-api-key`, documented at `/swagger`, and drivable from the `@nixploy/cli`.
 - **Templates** — one-click gallery of 86 compose-based templates in 16 categories for popular open-source tools.
 - **Web server settings** — manage Traefik, Let's Encrypt email, dashboard domain and scheduled Docker cleanup from the UI.
-- **In-app updates** — Settings → Server checks GHCR for a newer image, with optional automatic checks and auto-update.
+- **In-app updates** — Settings → Platform checks GHCR for a newer image, with optional automatic checks and auto-update.
 
 ## Architecture
 
@@ -80,7 +80,7 @@ NIXPLOY_DOMAIN=panel.nixploy.com NIXPLOY_LETSENCRYPT_EMAIL=you@nixploy.com \
 
 The script is **idempotent**. It detects the OS, installs Docker if needed, initializes a single-node Swarm, creates the `nixploy-network` overlay, generates secrets under `/etc/nixploy/.env`, and starts three services: `nixploy` (the app), `nixploy-postgres` and `nixploy-traefik`. All HTTP traffic redirects to HTTPS; without a domain the dashboard is served at `https://<server-ip>` with a self-signed certificate (accept the browser warning once). When it finishes, open the printed **Setup** URL and create the owner account — public `/register` is disabled after that.
 
-A domain can also be linked later from the UI: **Settings → Server → Dashboard domain** (with DNS preflight check and automatic Let's Encrypt certificates).
+A domain can also be linked later from the UI: **Settings → Platform → Dashboard domain** (with DNS preflight check and automatic Let's Encrypt certificates).
 
 Useful overrides: see [`docs/install.md`](./docs/install.md) (source of truth
 for installer/updater env knobs). Examples: `NIXPLOY_VERSION`, `NIXPLOY_IMAGE`,

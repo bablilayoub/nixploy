@@ -206,7 +206,8 @@ function pipeRemoteLogs(
 	containerId: string,
 	tail: number,
 ): void {
-	conn.exec(`docker logs --follow --tail ${tail} ${containerId} 2>&1`, (err, stream) => {
+	const id = `'${containerId.replace(/'/g, `'\\''`)}'`;
+	conn.exec(`docker logs --follow --tail ${tail} ${id} 2>&1`, (err, stream) => {
 		if (err) {
 			conn.end();
 			closeWithError(ws, err.message);

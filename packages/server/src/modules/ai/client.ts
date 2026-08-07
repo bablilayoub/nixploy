@@ -101,7 +101,7 @@ export async function completeChat(
 	messages: ChatMessage[],
 ): Promise<LlmCompletion> {
 	if (!settings.enabled) {
-		throw new Error("AI Copilot is disabled — enable it in Settings → Server");
+		throw new Error("AI Copilot is disabled — enable it in Settings → Platform");
 	}
 	const needsKey: AiProvider[] = ["openai", "anthropic", "openai-compatible"];
 	if (needsKey.includes(settings.provider) && !settings.apiKey && settings.provider !== "ollama") {

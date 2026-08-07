@@ -124,8 +124,8 @@ export const CAPABILITY_CATALOG = [
 	{
 		id: "destinations.manage",
 		group: "Infrastructure",
-		label: "Manage destinations",
-		description: "Configure S3-compatible backup destinations.",
+		label: "Manage backup storage",
+		description: "Configure S3-compatible backup storage destinations.",
 	},
 	{
 		id: "certificates.manage",

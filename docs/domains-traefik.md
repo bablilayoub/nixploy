@@ -26,7 +26,7 @@ internet ─► :80  ─► redirect → :443
   (`dynamic/default.crt`) plus a low-priority catch-all router
   (`00-nixploy-dashboard.yml`) expose the dashboard at `https://<server-ip>`.
   Browsers show a one-time warning — accept it, or link a real domain.
-- **Dashboard domain:** Settings → Server → Dashboard domain (or
+- **Dashboard domain:** Settings → Platform → Dashboard domain (or
   `NIXPLOY_DOMAIN` at install time) adds a `Host()` router with
   `certResolver: letsencrypt` to `00-nixploy-dashboard.yml`
   (`modules/traefik/dashboard.ts`). The DNS preflight
@@ -84,7 +84,7 @@ host:port in `servers[].url` → container running and listening on that port
 
 1. Point the domain's **DNS A record** at the server's public IP (AAAA for
    IPv6). Ports 80 and 443 must be reachable from the internet.
-2. Set a **Let's Encrypt email** in Settings → Web Server (rewrites the ACME
+2. Set a **Let's Encrypt email** in Settings → Platform (rewrites the ACME
    section of `traefik.yml`).
 3. Add the domain in the service's Domains tab, set the container port,
    enable **HTTPS** and pick certificate **Let's Encrypt**. Traefik solves

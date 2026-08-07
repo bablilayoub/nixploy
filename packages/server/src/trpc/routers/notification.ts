@@ -17,7 +17,11 @@ import {
 	teamsConfigSchema,
 	telegramConfigSchema,
 } from "../../modules/notifications";
-import { assertCapability, assertOrgRole, hasOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import {
+	assertCapability,
+	hasCapability,
+	resolveCallerOrganizationId,
+} from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 /** Caller organization; falls back to first membership when the session has none active. */
@@ -144,7 +148,7 @@ const testNotificationSchema = z
 export const notificationRouter = router({
 	all: protectedProcedure.query(async ({ ctx }) => {
 		const orgId = await organizationId(ctx);
-		const canSeeSecrets = await hasOrgRole(ctx.session.user.id, orgId, "member");
+		const canSeeSecrets = await hasCapability(ctx.session.user.id, orgId, "secrets.read");
 		const rows = await db.query.notifications.findMany({
 			where: eq(notifications.organizationId, orgId),
 			orderBy: (n, { desc }) => [desc(n.createdAt)],
@@ -156,7 +160,7 @@ export const notificationRouter = router({
 		.input(z.object({ notificationId: z.string().min(1) }))
 		.query(async ({ ctx, input }) => {
 			const orgId = await organizationId(ctx);
-			const canSeeSecrets = await hasOrgRole(ctx.session.user.id, orgId, "member");
+			const canSeeSecrets = await hasCapability(ctx.session.user.id, orgId, "secrets.read");
 			return publicNotification(
 				await findNotificationInOrg(input.notificationId, orgId),
 				canSeeSecrets,

@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray } from "drizzle-orm";
 import schedule from "node-schedule";
 import { db } from "../../db";
 import {
@@ -14,10 +14,14 @@ import {
 } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { shellQuote } from "../compose/paths";
 import { inspectServiceState, statusFromServiceState } from "../databases/engine";
 import { notifyEvent } from "../notifications";
 
 const log = createLogger("status-reconciler");
+
+/** Don't flip freshly-deployed services to idle while Swarm tasks are still starting. */
+const RECENT_DEPLOY_GRACE_MS = 3 * 60 * 1000;
 
 /**
  * Status reconciler: periodically compares every service's stored status
@@ -42,14 +46,14 @@ export interface StatusCorrection {
 
 /**
  * Pure mapping of (stored status, live probe) → corrected status:
- * - live running: error/idle become running; done stays done (both healthy).
+ * - live running: anything healthy becomes running (including legacy "done").
  * - live error (crash loop): anything becomes error.
  * - live idle (no service / scaled to zero): running/done become idle;
  *   error is kept — it records a failed deploy, not a running state.
  */
 export function reconcileStatus(current: StoredStatus, live: LiveStatus): StoredStatus {
 	if (live === "running") {
-		return current === "error" || current === "idle" ? "running" : current;
+		return "running";
 	}
 	if (live === "error") {
 		return "error";
@@ -69,7 +73,7 @@ async function probeComposeState(row: {
 	if (row.composeType === "stack") {
 		const out = await runOn(
 			row.serverId,
-			`docker service ls --filter label=com.docker.stack.namespace=${row.appName} --format '{{.Name}}'`,
+			`docker service ls --filter ${shellQuote(`label=com.docker.stack.namespace=${row.appName}`)} --format '{{.Name}}'`,
 		);
 		const names = out
 			.split("\n")
@@ -90,7 +94,7 @@ async function probeComposeState(row: {
 	// Plain docker compose: containers are named <appName>-<service>-<n>.
 	const out = await runOn(
 		row.serverId,
-		`docker ps -a --filter name=^${row.appName}- --format '{{.State}} {{.Status}}'`,
+		`docker ps -a --filter ${shellQuote(`name=^${row.appName}-`)} --format '{{.State}} {{.Status}}'`,
 	);
 	const lines = out
 		.split("\n")
@@ -209,6 +213,14 @@ export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 	const busyApplications = new Set(busyDeployments.map((row) => row.applicationId).filter(Boolean));
 	const busyCompose = new Set(busyDeployments.map((row) => row.composeId).filter(Boolean));
 
+	const graceSince = new Date(Date.now() - RECENT_DEPLOY_GRACE_MS);
+	const recentDone = await db.query.deployments.findMany({
+		where: and(eq(deployments.status, "done"), gte(deployments.finishedAt, graceSince)),
+		columns: { applicationId: true, composeId: true },
+	});
+	const graceApplications = new Set(recentDone.map((row) => row.applicationId).filter(Boolean));
+	const graceCompose = new Set(recentDone.map((row) => row.composeId).filter(Boolean));
+
 	for (const descriptor of SWARM_BACKED) {
 		const rows = await descriptor.load();
 		for (const row of rows) {
@@ -219,7 +231,15 @@ export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 				);
 				// statusFromServiceState never yields "done" today; keep the cast honest.
 				const live: LiveStatus = liveState === "done" ? "running" : liveState;
-				const next = reconcileStatus(row.status, live);
+				let next = reconcileStatus(row.status, live);
+				if (
+					next === "idle" &&
+					(row.status === "running" || row.status === "done") &&
+					descriptor.kind === "application" &&
+					graceApplications.has(row.id)
+				) {
+					next = "running";
+				}
 				if (next !== row.status) {
 					await descriptor.update(row.id, next);
 					corrections.push({
@@ -251,7 +271,14 @@ export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 		if (busyCompose.has(row.composeId)) continue;
 		try {
 			const live = await probeComposeState(row);
-			const next = reconcileStatus(row.status, live);
+			let next = reconcileStatus(row.status, live);
+			if (
+				next === "idle" &&
+				(row.status === "running" || row.status === "done") &&
+				graceCompose.has(row.composeId)
+			) {
+				next = "running";
+			}
 			if (next !== row.status) {
 				await db.update(compose).set({ status: next }).where(eq(compose.composeId, row.composeId));
 				corrections.push({

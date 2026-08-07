@@ -2,9 +2,11 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+	Activity,
 	AppWindow,
 	Bot,
 	Boxes,
+	CalendarClock,
 	Container,
 	FolderGit2,
 	LayoutTemplate,
@@ -342,6 +344,22 @@ export function CommandPalette() {
 				run: go("/dashboard/docker"),
 			},
 			{
+				id: "page:monitoring",
+				label: "Monitoring",
+				group: "Pages",
+				icon: Activity,
+				keywords: ["metrics", "charts", "cpu", "memory", "fleet", "observability"],
+				run: go("/dashboard/monitoring"),
+			},
+			{
+				id: "page:schedules",
+				label: "Schedules",
+				group: "Pages",
+				icon: CalendarClock,
+				keywords: ["cron", "jobs", "scheduled", "tasks"],
+				run: go("/dashboard/schedules"),
+			},
+			{
 				id: "page:member-capabilities",
 				label: "Member capabilities",
 				hint: "Permissions",
@@ -361,7 +379,7 @@ export function CommandPalette() {
 			{
 				id: "page:ai-settings",
 				label: "AI / Deploy Copilot settings",
-				hint: "Server",
+				hint: "Platform",
 				group: "Pages",
 				icon: Bot,
 				keywords: ["ai", "openai", "ollama", "anthropic", "copilot", "llm"],
@@ -373,8 +391,16 @@ export function CommandPalette() {
 				id: `page:settings:${item.href}`,
 				label: `Settings — ${item.label}`,
 				group: "Pages",
-				icon: Settings,
-				keywords: ["settings", item.label],
+				icon: item.icon ?? Settings,
+				keywords: [
+					"settings",
+					item.label,
+					// Legacy names users still search for
+					...(item.href.endsWith("/activity") ? ["activity", "audit"] : []),
+					...(item.href.endsWith("/server") ? ["web server", "host", "traefik", "ai"] : []),
+					...(item.href.endsWith("/destinations") ? ["destinations", "s3", "backups"] : []),
+					...(item.href.endsWith("/organization") ? ["organization", "members", "roles"] : []),
+				],
 				run: go(item.href),
 			});
 		}

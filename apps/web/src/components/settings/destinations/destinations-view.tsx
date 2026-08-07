@@ -63,7 +63,7 @@ export function DestinationsView() {
 	const createMutation = useMutation(
 		trpc.destination.create.mutationOptions({
 			onSuccess: async () => {
-				toast.success("Destination added");
+				toast.success("Backup destination added");
 				await invalidate();
 				setOpen(false);
 				setName("");
@@ -87,7 +87,7 @@ export function DestinationsView() {
 	const removeMutation = useMutation(
 		trpc.destination.remove.mutationOptions({
 			onSuccess: async () => {
-				toast.success("Destination removed");
+				toast.success("Backup destination removed");
 				await invalidate();
 			},
 			onError: (error) => toast.error(error.message),
@@ -116,7 +116,7 @@ export function DestinationsView() {
 	const updateMutation = useMutation(
 		trpc.destination.update.mutationOptions({
 			onSuccess: async () => {
-				toast.success("Destination updated");
+				toast.success("Backup destination updated");
 				await invalidate();
 				setEditing(null);
 			},
@@ -127,7 +127,7 @@ export function DestinationsView() {
 	return (
 		<div className="flex flex-col gap-6">
 			<PageHeader
-				title="Destinations"
+				title="Backup storage"
 				description="S3-compatible storage for database and volume backups."
 			/>
 			<Card>
@@ -136,7 +136,7 @@ export function DestinationsView() {
 						<div>
 							<CardTitle className="flex items-center gap-2">
 								<HardDrive className="size-4 text-muted-foreground" />
-								Destinations
+								Backup storage
 							</CardTitle>
 							<CardDescription>
 								S3-compatible buckets used for database and volume backups.
@@ -146,12 +146,12 @@ export function DestinationsView() {
 							<DialogTrigger asChild>
 								<Button size="sm">
 									<Plus className="size-4" />
-									Add Destination
+									Add backup destination
 								</Button>
 							</DialogTrigger>
 							<DialogContent>
 								<DialogHeader>
-									<DialogTitle>Add destination</DialogTitle>
+									<DialogTitle>Add backup destination</DialogTitle>
 									<DialogDescription>
 										Connect an S3-compatible bucket for backups.
 									</DialogDescription>
@@ -235,7 +235,7 @@ export function DestinationsView() {
 										}
 									>
 										{createMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-										Add destination
+										Add backup destination
 									</Button>
 								</DialogFooter>
 							</DialogContent>
@@ -259,7 +259,7 @@ export function DestinationsView() {
 							<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
 								<HardDrive className="size-8 text-muted-foreground" />
 								<p className="text-sm text-muted-foreground">
-									No destinations yet. Add one to enable backups.
+									No backup destinations yet. Add one to enable backups.
 								</p>
 							</div>
 						}

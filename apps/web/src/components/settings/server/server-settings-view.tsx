@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { SchedulesTab } from "@/components/schedules/schedules-tab";
 import { AiSettingsCard } from "@/components/settings/server/ai-settings-card";
 import { HostMonitoringCard } from "@/components/settings/server/host-monitoring-card";
 import { UpdatesCard } from "@/components/settings/server/updates-card";
@@ -376,8 +377,8 @@ export function ServerSettingsView() {
 		return (
 			<div className="flex flex-col gap-6">
 				<PageHeader
-					title="Server"
-					description="Platform web server, TLS and maintenance settings."
+					title="Platform"
+					description="Nixploy host settings — Traefik, TLS, AI, and maintenance."
 				/>
 				<Card>
 					<CardContent className="flex flex-col items-center gap-2 py-10 text-center">
@@ -387,7 +388,7 @@ export function ServerSettingsView() {
 						</p>
 						<p className="text-sm text-muted-foreground">
 							{forbidden
-								? "Web server settings are only available to organization owners and admins."
+								? "Platform settings are only available to organization owners and admins."
 								: (settingsQuery.error?.message ?? traefikQuery.error?.message)}
 						</p>
 					</CardContent>
@@ -400,7 +401,10 @@ export function ServerSettingsView() {
 
 	return (
 		<div className="flex flex-col gap-6">
-			<PageHeader title="Server" description="Platform web server, TLS and maintenance settings." />
+			<PageHeader
+				title="Platform"
+				description="Nixploy host settings — Traefik, TLS, AI, and maintenance."
+			/>
 
 			<DashboardDomainCard
 				savedDomain={settingsQuery.data?.host ?? null}
@@ -413,6 +417,7 @@ export function ServerSettingsView() {
 			<HostMonitoringCard />
 			<AiSettingsCard />
 			<UpdatesCard />
+			<SchedulesTab serviceType="nixploy-server" serviceId="nixploy" />
 
 			<Card>
 				<CardHeader>

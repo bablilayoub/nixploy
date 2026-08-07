@@ -116,12 +116,16 @@ export async function resolveRemoteContainerId(
 	conn: Client,
 	appName: string,
 ): Promise<string | null> {
+	const shq = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 	let id = await execOnConnection(
 		conn,
-		`docker ps -q --filter "label=com.docker.swarm.service.name=${appName}" | head -n 1`,
+		`docker ps -q --filter ${shq(`label=com.docker.swarm.service.name=${appName}`)} | head -n 1`,
 	);
 	if (!id) {
-		id = await execOnConnection(conn, `docker ps -q --filter "name=${appName}" | head -n 1`);
+		id = await execOnConnection(
+			conn,
+			`docker ps -q --filter ${shq(`name=${appName}`)} | head -n 1`,
+		);
 	}
 	return id || null;
 }

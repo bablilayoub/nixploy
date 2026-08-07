@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 /**
  * Page header — title + optional description on the left,
  * actions on the right, optional breadcrumb row above. Pair with <SubNav>
- * for pages that need tabs.
+ * for pages that need secondary navigation.
  */
 export function PageHeader({
 	title,

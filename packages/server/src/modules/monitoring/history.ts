@@ -23,7 +23,7 @@ const log = createLogger("metrics-history");
 export const METRICS_RETENTION_MS = 48 * 60 * 60 * 1000;
 
 // ── threshold alerts ────────────────────────────────────────────────────────
-// Org-level CPU/memory thresholds (Settings → Web Server). When a service's
+// Org-level CPU/memory thresholds (Settings → Platform). When a service's
 // rolling average over ALERT_WINDOW samples crosses a threshold, a
 // `serverThreshold` notification fires (once per ALERT_COOLDOWN_MS per
 // service + metric).
@@ -275,6 +275,19 @@ export async function readMetricsHistory(appName: string, hours: number): Promis
 		if (point) sampled.push(point);
 	}
 	return sampled.map(toSample);
+}
+
+/** Most recent metrics sample for a service, or null when no history exists. */
+export async function readLatestMetricsSample(appName: string): Promise<HistorySample | null> {
+	try {
+		const text = await readFile(metricsFile(appName), "utf8");
+		const lines = text.split("\n").filter(Boolean);
+		const last = lines[lines.length - 1];
+		if (!last) return null;
+		return toSample(JSON.parse(last) as HistoryPoint);
+	} catch {
+		return null;
+	}
 }
 
 const toSample = (point: HistoryPoint): HistorySample => ({

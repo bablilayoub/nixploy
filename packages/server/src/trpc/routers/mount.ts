@@ -10,7 +10,7 @@ import {
 	removeFileMount,
 	upsertApplicationSwarmService,
 } from "../../modules/application";
-import { assertCapability, assertOrgRole } from "../../modules/projects";
+import { assertCapability, hasCapability } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 const mountFields = {
@@ -97,13 +97,20 @@ export const mountRouter = router({
 		.query(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertApplicationAccess(input.applicationId, organizationId);
-			return db.query.mounts.findMany({
+			const rows = await db.query.mounts.findMany({
 				where: and(
 					eq(mounts.applicationId, input.applicationId),
 					eq(mounts.serviceType, "application"),
 				),
 				orderBy: mounts.createdAt,
 			});
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			if (canSeeSecrets) return rows;
+			return rows.map((row) => ({ ...row, content: null }));
 		}),
 
 	one: protectedProcedure
@@ -111,7 +118,12 @@ export const mountRouter = router({
 		.query(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			const { mount } = await findApplicationMount(input.mountId, organizationId);
-			return mount;
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? mount : { ...mount, content: null };
 		}),
 
 	create: protectedProcedure
@@ -119,6 +131,9 @@ export const mountRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
+			if (input.type === "file" && input.content !== undefined) {
+				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			}
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 			validateMountFields(input);
 			if (input.type === "bind") assertSafeHostPath(input.hostPath);
@@ -167,6 +182,9 @@ export const mountRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
+			if (input.content !== undefined) {
+				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			}
 			const { mount, application } = await findApplicationMount(input.mountId, organizationId);
 
 			const next = {

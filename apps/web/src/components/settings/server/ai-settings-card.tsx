@@ -67,8 +67,32 @@ export function AiSettingsCard() {
 		);
 	}
 
-	if (statusQuery.error) {
-		return null;
+	if (statusQuery.isError) {
+		return (
+			<Card>
+				<CardHeader>
+					<CardTitle className="flex items-center gap-2">
+						<Bot className="size-4" />
+						Deploy Copilot
+					</CardTitle>
+					<CardDescription>
+						Optional LLM that explains failed builds and answers questions about a service. Keys
+						stay encrypted at rest.
+					</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<div className="flex flex-col items-center gap-2 py-8 text-center">
+						<p className="text-sm font-medium">Could not load AI settings</p>
+						<p className="text-sm text-muted-foreground">
+							{statusQuery.error.message || "Try again in a moment."}
+						</p>
+						<Button variant="outline" size="sm" onClick={() => void statusQuery.refetch()}>
+							Retry
+						</Button>
+					</div>
+				</CardContent>
+			</Card>
+		);
 	}
 
 	return (

@@ -21,8 +21,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { signOut, useSession } from "@/lib/auth-client";
 
 const settingsItems = [
-	{ label: "Profile", icon: User, href: "/dashboard/settings" },
-	{ label: "SSH Keys", icon: KeyRound, href: "/dashboard/settings/ssh-keys" },
+	{ label: "Profile", icon: User, href: "/dashboard/settings/profile" },
+	{ label: "SSH keys", icon: KeyRound, href: "/dashboard/settings/ssh-keys" },
 	{
 		label: "Notifications",
 		icon: Bell,

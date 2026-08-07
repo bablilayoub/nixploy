@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { Layers, Play, RefreshCw, Rocket, Square } from "lucide-react";
+import { Layers, Loader2, Play, RefreshCw, Rocket, Square } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -114,7 +114,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 		redeployMutation.isPending ||
 		stopMutation.isPending ||
 		startMutation.isPending;
-	const isRunning = compose.status === "running";
+	const isRunning = compose.status === "running" || compose.status === "done";
 
 	return (
 		<div className="flex flex-col gap-6">
@@ -145,7 +145,11 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 							disabled={anyActionPending}
 							onClick={() => deployMutation.mutate({ composeId })}
 						>
-							<Rocket className="size-4" />
+							{deployMutation.isPending ? (
+								<Loader2 className="size-4 animate-spin" />
+							) : (
+								<Rocket className="size-4" />
+							)}
 							Deploy
 						</Button>
 						<Button
@@ -153,7 +157,11 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 							disabled={anyActionPending}
 							onClick={() => redeployMutation.mutate({ composeId })}
 						>
-							<RefreshCw className="size-4" />
+							{redeployMutation.isPending ? (
+								<Loader2 className="size-4 animate-spin" />
+							) : (
+								<RefreshCw className="size-4" />
+							)}
 							Redeploy
 						</Button>
 						{isRunning ? (
@@ -162,7 +170,11 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 								disabled={anyActionPending}
 								onClick={() => stopMutation.mutate({ composeId })}
 							>
-								<Square className="size-4" />
+								{stopMutation.isPending ? (
+									<Loader2 className="size-4 animate-spin" />
+								) : (
+									<Square className="size-4" />
+								)}
 								Stop
 							</Button>
 						) : (
@@ -171,7 +183,11 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 								disabled={anyActionPending}
 								onClick={() => startMutation.mutate({ composeId })}
 							>
-								<Play className="size-4" />
+								{startMutation.isPending ? (
+									<Loader2 className="size-4 animate-spin" />
+								) : (
+									<Play className="size-4" />
+								)}
 								Start
 							</Button>
 						)}

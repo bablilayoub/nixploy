@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
-import { deployments } from "../../db/schema";
+import { applications, compose, deployments } from "../../db/schema";
 import { deploymentEvents } from "./events";
 
 /**
@@ -24,7 +24,32 @@ export async function recoverInterruptedDeployments(): Promise<number> {
 			finishedAt: new Date(),
 		})
 		.where(eq(deployments.status, "running"))
-		.returning({ deploymentId: deployments.deploymentId });
+		.returning({
+			deploymentId: deployments.deploymentId,
+			applicationId: deployments.applicationId,
+			composeId: deployments.composeId,
+		});
+
+	const applicationIds = [
+		...new Set(
+			interrupted.map((row) => row.applicationId).filter((id): id is string => Boolean(id)),
+		),
+	];
+	const composeIds = [
+		...new Set(interrupted.map((row) => row.composeId).filter((id): id is string => Boolean(id))),
+	];
+
+	await Promise.all([
+		applicationIds.length > 0
+			? db
+					.update(applications)
+					.set({ status: "error" })
+					.where(inArray(applications.applicationId, applicationIds))
+			: Promise.resolve(),
+		composeIds.length > 0
+			? db.update(compose).set({ status: "error" }).where(inArray(compose.composeId, composeIds))
+			: Promise.resolve(),
+	]);
 
 	for (const { deploymentId } of interrupted) {
 		deploymentEvents.emit("finish", { deploymentId, status: "error" });

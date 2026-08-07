@@ -285,13 +285,16 @@ async function processJob(job: QueueJob): Promise<void> {
 			.set({ errorMessage: cancelled ? null : message })
 			.where(eq(deployments.deploymentId, job.deploymentId));
 	} finally {
+		if (terminalStatus === "done" && isDeploymentCancelled(job.deploymentId)) {
+			terminalStatus = "cancelled";
+		}
 		await db
 			.update(deployments)
 			.set({ status: terminalStatus, finishedAt: new Date() })
 			.where(eq(deployments.deploymentId, job.deploymentId));
 		await setServiceStatus(
 			job,
-			terminalStatus === "done" ? "done" : terminalStatus === "cancelled" ? "idle" : "error",
+			terminalStatus === "done" ? "running" : terminalStatus === "cancelled" ? "idle" : "error",
 		).catch(() => {});
 		logger.close();
 		deploymentEvents.emit("finish", { deploymentId: job.deploymentId, status: terminalStatus });

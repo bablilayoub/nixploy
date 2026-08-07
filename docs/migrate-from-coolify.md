@@ -49,7 +49,7 @@ automatic Coolify import** — recreate services and flip DNS when ready.
 
 ## Backups
 
-Recreate S3-compatible destinations under **Settings → Destinations**, then
+Recreate S3-compatible destinations under **Settings → Backup storage**, then
 attach backup schedules on each database. Do a manual backup/restore drill
 before deleting Coolify volumes.
 

@@ -17,7 +17,6 @@ import { auditFromSession } from "../../modules/audit";
 import { getDeploymentStatsSince } from "../../modules/deployment/queries";
 import {
 	assertCapability,
-	assertOrgRole,
 	assertWithinQuota,
 	deleteProjectCascade,
 	emptyServiceCounts,
@@ -25,12 +24,13 @@ import {
 	getEnvironmentServices,
 	getOrganizationServiceStatusCounts,
 	getServiceCountsByEnvironment,
-	hasOrgRole,
+	hasCapability,
 	resolveCallerOrganizationId,
 	resolveEnvironmentVariables,
 	toEnvString,
 } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
+import { redactEnvironmentServicesSecrets } from "../redact-secrets";
 
 const projectIdInput = z.object({ projectId: z.string().min(1) });
 
@@ -62,10 +62,11 @@ export const projectRouter = router({
 			project.environments.map((environment) => environment.environmentId),
 		);
 		const countsByEnvironment = await getServiceCountsByEnvironment(environmentIds);
+		const canSeeSecrets = await hasCapability(ctx.session.user.id, organizationId, "secrets.read");
 		return projectList.map((project) => ({
-			...project,
+			...(canSeeSecrets ? project : { ...project, env: null }),
 			environments: project.environments.map((environment) => ({
-				...environment,
+				...(canSeeSecrets ? environment : { ...environment, env: null }),
 				services: countsByEnvironment.get(environment.environmentId) ?? emptyServiceCounts(),
 			})),
 		}));
@@ -106,12 +107,15 @@ export const projectRouter = router({
 			where: eq(environments.projectId, project.projectId),
 			orderBy: asc(environments.createdAt),
 		});
-		const canSeeSecrets = await hasOrgRole(ctx.session.user.id, organizationId, "member");
+		const canSeeSecrets = await hasCapability(ctx.session.user.id, organizationId, "secrets.read");
 		const environmentsWithServices = await Promise.all(
-			environmentList.map(async (environment) => ({
-				...(canSeeSecrets ? environment : { ...environment, env: null }),
-				services: await getEnvironmentServices(environment.environmentId),
-			})),
+			environmentList.map(async (environment) => {
+				const services = await getEnvironmentServices(environment.environmentId);
+				return {
+					...(canSeeSecrets ? environment : { ...environment, env: null }),
+					services: canSeeSecrets ? services : redactEnvironmentServicesSecrets(services),
+				};
+			}),
 		);
 		return {
 			...(canSeeSecrets ? project : { ...project, env: null }),
@@ -282,6 +286,9 @@ export const projectRouter = router({
 				ctx.session.session.activeOrganizationId,
 			);
 			await assertCapability(ctx.session.user.id, organizationId, "project.write");
+			if (input.env !== undefined) {
+				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			}
 			await findProjectById(input.projectId, organizationId);
 			const [updated] = await db
 				.update(projects)

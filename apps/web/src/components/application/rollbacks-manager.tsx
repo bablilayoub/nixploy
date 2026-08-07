@@ -39,9 +39,13 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 	const [rollbackTarget, setRollbackTarget] = useState<RollbackEntry | null>(null);
 	const [deleteTarget, setDeleteTarget] = useState<RollbackEntry | null>(null);
 
-	const { data: rollbacks, isLoading } = useQuery(
-		trpc.rollback.all.queryOptions({ applicationId }),
-	);
+	const {
+		data: rollbacks,
+		isLoading,
+		isError,
+		error,
+		refetch,
+	} = useQuery(trpc.rollback.all.queryOptions({ applicationId }));
 
 	const invalidate = () =>
 		queryClient.invalidateQueries({
@@ -92,6 +96,15 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 							<Skeleton key={row} className="h-10 w-full" />
 						))}
 					</div>
+				) : isError ? (
+					<div className="flex flex-col items-center gap-2 py-10 text-center">
+						<p className="text-sm text-muted-foreground">
+							{error.message || "Failed to load rollbacks"}
+						</p>
+						<Button size="sm" variant="outline" onClick={() => refetch()}>
+							Retry
+						</Button>
+					</div>
 				) : !rollbacks || rollbacks.length === 0 ? (
 					<div className="flex flex-col items-center gap-2 py-10 text-center">
 						<History className="size-8 text-muted-foreground" />
@@ -130,7 +143,12 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 												<Undo2 className="size-4" />
 												Rollback
 											</Button>
-											<Button variant="ghost" size="sm" onClick={() => setDeleteTarget(entry)}>
+											<Button
+												variant="ghost"
+												size="sm"
+												aria-label="Delete rollback image"
+												onClick={() => setDeleteTarget(entry)}
+											>
 												<Trash2 className="size-4 text-destructive" />
 											</Button>
 										</div>

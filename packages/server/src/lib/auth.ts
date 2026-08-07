@@ -18,7 +18,7 @@ const BCRYPT_ROUNDS = 10;
 
 /**
  * Trusted origins must include the dashboard domain configured at runtime in
- * web-server settings (Settings → Server), otherwise sign-in from that
+ * web-server settings (Settings → Platform), otherwise sign-in from that
  * domain fails better-auth's origin check. Cached briefly — a settings save
  * becomes effective within seconds without a restart.
  */

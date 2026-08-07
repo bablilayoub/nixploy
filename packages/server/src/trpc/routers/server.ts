@@ -12,10 +12,8 @@ import {
 	testConnection,
 	updateServerById,
 } from "../../modules/cluster";
-import {
-	assertCapability,
-	resolveCallerOrganizationId,
-} from "../../modules/projects";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertSshKeyInOrganization } from "../assert-org-refs";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -63,6 +61,7 @@ export const serverRouter = router({
 	create: protectedProcedure.input(createServerInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "servers.manage");
+		await assertSshKeyInOrganization(input.sshKeyId, organizationId);
 		const created = await createServer(
 			{
 				name: input.name,
@@ -97,6 +96,7 @@ export const serverRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "servers.manage");
 			await findServerOrThrow(input.serverId, organizationId);
+			await assertSshKeyInOrganization(input.sshKeyId, organizationId);
 			const { serverId, ...values } = input;
 			return await updateServerById(serverId, values, organizationId);
 		}),

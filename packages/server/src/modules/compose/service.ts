@@ -276,7 +276,7 @@ export async function startCompose(composeRow: ComposeRow): Promise<void> {
 	try {
 		const files = await prepareComposeFiles(composeRow);
 		await runComposeCommand(composeRow, upCommand(composeRow, files), { cwd: files.workDir });
-		await updateStatus(composeRow.composeId, "done");
+		await updateStatus(composeRow.composeId, "running");
 	} catch (error) {
 		await updateStatus(composeRow.composeId, "error");
 		throw error;

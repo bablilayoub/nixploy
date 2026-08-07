@@ -244,7 +244,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 				description={`${cfg.label} · ${db.appName}`}
 				actions={
 					<>
-						{status === "running" ? (
+						{status === "running" || status === "done" ? (
 							<Button
 								variant="outline"
 								size="sm"
@@ -276,7 +276,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 						<Button
 							variant="outline"
 							size="sm"
-							disabled={actionPending || status !== "running"}
+							disabled={actionPending || (status !== "running" && status !== "done")}
 							onClick={() => reloadMutation.mutate(idInput)}
 						>
 							{reloadMutation.isPending ? (

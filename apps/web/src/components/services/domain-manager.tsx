@@ -288,6 +288,15 @@ export function DomainManager({
 				<div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
 					<Loader2 className="mr-2 size-4 animate-spin" /> Loading domains…
 				</div>
+			) : domainsQuery.isError ? (
+				<div className="flex h-24 flex-col items-center justify-center gap-2 text-sm">
+					<p className="text-muted-foreground">
+						{domainsQuery.error.message || "Failed to load domains"}
+					</p>
+					<Button size="sm" variant="outline" onClick={() => domainsQuery.refetch()}>
+						Retry
+					</Button>
+				</div>
 			) : domains.length === 0 ? (
 				<EmptyState
 					icon={Globe}
@@ -519,7 +528,7 @@ export function DomainManager({
 							{certificateType === "letsencrypt" && (
 								<p className="text-xs text-muted-foreground">
 									Point the domain's DNS A record to this server's public IP and make sure a Let's
-									Encrypt email is set in Settings → Server. HTTP-01 challenge requires port 80
+									Encrypt email is set in Settings → Platform. HTTP-01 challenge requires port 80
 									reachable from the internet.
 								</p>
 							)}

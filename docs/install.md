@@ -45,7 +45,7 @@ The script is **idempotent** — safe to re-run.
 ## After install (first hour)
 
 1. **Setup** — create owner + org
-2. **Settings → Server** — confirm dashboard domain / Let's Encrypt email
+2. **Settings → Platform** — confirm dashboard domain / Let's Encrypt email
 3. **Templates** or **New application** — deploy `traefik/whoami` or a template
 4. **Domains** — add a host (custom DNS or `*.traefik.me` for local smoke)
 5. **Settings → Profile** — create an API key for the CLI
@@ -82,7 +82,7 @@ curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/update.sh 
 ```
 
 Keeps secrets, Postgres data, ACME certs, and Traefik routes. Migrations run on
-boot. Or use **Settings → Server → Updates** in the UI.
+boot. Or use **Settings → Platform → Updates** in the UI.
 
 ### Update overrides
 

@@ -40,7 +40,7 @@ export function CopyButton({ value, label }: { value: string; label?: string }) 
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<Button variant="ghost" size="icon-sm" onClick={copy}>
+				<Button variant="ghost" size="icon-sm" aria-label="Copy to clipboard" onClick={copy}>
 					{copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
 				</Button>
 			</TooltipTrigger>

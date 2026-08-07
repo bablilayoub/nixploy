@@ -93,13 +93,14 @@ export async function fetchStackYamlFromUrl(url: string): Promise<string> {
 	if (parsed.protocol !== "https:") {
 		throw new Error("Stack URL must be https");
 	}
+	assertPublicHttpsHost(parsed.hostname);
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), 30_000);
 	try {
 		const res = await fetch(url, {
 			signal: controller.signal,
 			headers: { Accept: "text/plain, text/yaml, application/yaml, */*" },
-			redirect: "follow",
+			redirect: "error",
 		});
 		if (!res.ok) {
 			throw new Error(`Failed to fetch stack YAML (${res.status})`);
@@ -111,5 +112,48 @@ export async function fetchStackYamlFromUrl(url: string): Promise<string> {
 		return text;
 	} finally {
 		clearTimeout(timer);
+	}
+}
+
+/** Block obvious SSRF targets (loopback / link-local / private IPv4 / metadata). */
+function assertPublicHttpsHost(hostname: string): void {
+	const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+	if (
+		host === "localhost" ||
+		host === "metadata.google.internal" ||
+		host.endsWith(".localhost") ||
+		host.endsWith(".local") ||
+		host.endsWith(".internal")
+	) {
+		throw new Error("Stack URL host is not allowed");
+	}
+	// IPv4 literal
+	if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) {
+		const [a = -1, b = -1] = host.split(".").map(Number);
+		if (
+			a === 0 ||
+			a === 10 ||
+			a === 127 ||
+			(a === 169 && b === 254) ||
+			(a === 172 && b >= 16 && b <= 31) ||
+			(a === 192 && b === 168) ||
+			(a === 100 && b >= 64 && b <= 127)
+		) {
+			throw new Error("Stack URL host is not allowed");
+		}
+	}
+	// IPv6 literal (very coarse: block loopback / ULA / link-local)
+	if (host.includes(":")) {
+		if (
+			host === "::1" ||
+			host.startsWith("fc") ||
+			host.startsWith("fd") ||
+			host.startsWith("fe80") ||
+			host.startsWith("::ffff:127.") ||
+			host.startsWith("::ffff:10.") ||
+			host.startsWith("::ffff:192.168.")
+		) {
+			throw new Error("Stack URL host is not allowed");
+		}
 	}
 }

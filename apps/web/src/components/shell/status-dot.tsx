@@ -7,7 +7,7 @@ const statusColors: Record<StatusDotStatus, string> = {
 	warning: "bg-warning",
 	error: "bg-destructive",
 	info: "bg-info",
-	neutral: "bg-muted-foreground/40",
+	neutral: "bg-muted-foreground/50",
 };
 
 /**
@@ -18,7 +18,11 @@ export function StatusDot({ status, className }: { status: StatusDotStatus; clas
 	return (
 		<span
 			aria-hidden
-			className={cn("inline-block size-2 shrink-0 rounded-full", statusColors[status], className)}
+			className={cn(
+				"inline-block size-1.5 shrink-0 rounded-full ring-2 ring-background",
+				statusColors[status],
+				className,
+			)}
 		/>
 	);
 }

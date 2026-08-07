@@ -91,18 +91,18 @@ function StepRail({
 }) {
 	const currentIndex = steps.findIndex((step) => step.id === current);
 	return (
-		<ol className="flex items-center gap-1 px-4 pb-3">
+		<ol className="flex items-center gap-0.5">
 			{steps.map((step, index) => {
 				const done = index < currentIndex;
 				const active = step.id === current;
 				return (
-					<li key={step.id} className="flex min-w-0 flex-1 items-center gap-1">
+					<li key={step.id} className="flex min-w-0 flex-1 items-center gap-0.5">
 						<button
 							type="button"
 							disabled={index > currentIndex}
 							onClick={() => onSelect(step.id)}
 							className={cn(
-								"flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+								"flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs transition-colors",
 								active && "bg-secondary text-foreground",
 								done && "text-foreground hover:bg-secondary/60",
 								!active && !done && "text-muted-foreground",
@@ -240,7 +240,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 
 	return (
 		<SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-xl">
-			<SheetHeader className="space-y-3 border-b px-4 pt-4 pb-0 pr-12 text-left">
+			<SheetHeader className="gap-2.5 space-y-0 border-b p-4 pr-12 text-left">
 				<div className="flex items-start gap-3">
 					<TemplateMark template={template} />
 					<div className="min-w-0 flex-1">

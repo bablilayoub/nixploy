@@ -22,11 +22,17 @@ import { queueDeployment } from "../../modules/deployment";
 import {
 	assertCapability,
 	assertWithinQuota,
-	hasOrgRole,
+	hasCapability,
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
+import {
+	assertGitProviderInOrganization,
+	assertServerInOrganization,
+	assertSshKeyInOrganization,
+} from "../assert-org-refs";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
+import { redactComposeSecrets } from "../redact-secrets";
 
 type Session = NonNullable<TRPCContext["session"]>;
 
@@ -62,21 +68,28 @@ export const composeRouter = router({
 					: eq(environments.projectId, input.projectId),
 			});
 			if (envs.length === 0) return [];
-			return await db.query.compose.findMany({
+			const rows = await db.query.compose.findMany({
 				where: inArray(
 					compose.environmentId,
 					envs.map((e) => e.environmentId),
 				),
 			});
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			if (canSeeSecrets) return rows;
+			return rows.map(redactComposeSecrets);
 		}),
 
 	/** A single compose service by id. */
 	one: protectedProcedure.input(composeIdInput).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		const row = await findComposeForOrg(input.composeId, organizationId);
-		const canSeeSecrets = await hasOrgRole(ctx.session.user.id, organizationId, "member");
+		const canSeeSecrets = await hasCapability(ctx.session.user.id, organizationId, "secrets.read");
 		if (canSeeSecrets) return row;
-		return { ...row, env: null };
+		return redactComposeSecrets(row);
 	}),
 
 	/** Create a compose service (raw paste or git-backed source). */
@@ -102,6 +115,7 @@ export const composeRouter = router({
 			await assertCapability(ctx.session.user.id, organizationId, "service.create");
 			await assertWithinQuota(organizationId, { services: true });
 			await assertEnvironmentAccess(input.environmentId, organizationId);
+			await assertServerInOrganization(input.serverId, organizationId);
 			const created = await createCompose({
 				name: input.name,
 				description: input.description ?? null,
@@ -156,6 +170,16 @@ export const composeRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			await findComposeForOrg(input.composeId, organizationId);
+
+			await assertServerInOrganization(input.serverId, organizationId);
+			await assertSshKeyInOrganization(input.customGitSSHKeyId, organizationId);
+			for (const provider of ["github", "gitlab", "bitbucket", "gitea"] as const) {
+				const providerId = input[`${provider}Id`];
+				if (providerId) {
+					await assertGitProviderInOrganization(provider, providerId, organizationId);
+				}
+			}
+
 			const { composeId, ...values } = input;
 			return await updateComposeById(composeId, values);
 		}),
@@ -173,6 +197,7 @@ export const composeRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			const row = await findComposeForOrg(input.composeId, organizationId);
 			const targetEnvironmentId = input.environmentId ?? row.environmentId;
 			if (targetEnvironmentId !== row.environmentId) {
@@ -186,7 +211,12 @@ export const composeRouter = router({
 				targetName: created.name,
 				metadata: { sourceId: input.composeId },
 			});
-			return created;
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? created : redactComposeSecrets(created);
 		}),
 
 	/** Move this compose service to another environment (any project in the org). */

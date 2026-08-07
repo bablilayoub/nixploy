@@ -2,11 +2,13 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { servers, webServerSettings } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { getTraefikDir } from "../traefik/paths";
 
 export const NIXPLOY_NETWORK = "nixploy-network";
 export const TRAEFIK_SERVICE_NAME = "nixploy-traefik";
 export const TRAEFIK_IMAGE = "traefik:v3.5.0";
-export const TRAEFIK_CONFIG_DIR = "/etc/nixploy/traefik";
+/** Resolved via `NIXPLOY_CONFIG_DIR` (default `/etc/nixploy/traefik`). */
+export const TRAEFIK_CONFIG_DIR = getTraefikDir();
 
 export type SwarmRole = "worker" | "manager";
 

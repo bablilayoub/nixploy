@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ActivityView } from "@/components/settings/activity/activity-view";
 
 export const metadata: Metadata = {
-	title: "Activity",
+	title: "Audit log",
 };
 
 export default function ActivityPage() {

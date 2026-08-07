@@ -1,9 +1,16 @@
 import { randomBytes } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { applications, certificates, domains } from "../../db/schema";
+import {
+	applications,
+	certificates,
+	compose,
+	domains,
+	environments,
+	projects,
+} from "../../db/schema";
 import {
 	assertApplicationAccess,
 	getOrganizationId,
@@ -12,7 +19,7 @@ import {
 } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
 import { resyncComposeDomains } from "../../modules/compose/service";
-import { assertCapability, assertOrgRole } from "../../modules/projects";
+import { assertCapability } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 const domainIdInput = z.object({ domainId: z.string().min(1) });
@@ -147,24 +154,39 @@ export const domainRouter = router({
 				});
 			}
 			if (input.projectId) {
-				const rows = await db.query.domains.findMany({
-					with: {
-						application: { with: { environment: { with: { project: true } } } },
-						compose: { with: { environment: { with: { project: true } } } },
-					},
+				const project = await db.query.projects.findFirst({
+					where: eq(projects.projectId, input.projectId),
+				});
+				if (!project || project.organizationId !== organizationId) {
+					throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
+				}
+				const environmentRows = await db.query.environments.findMany({
+					where: eq(environments.projectId, input.projectId),
+					columns: { environmentId: true },
+				});
+				const environmentIds = environmentRows.map((row) => row.environmentId);
+				if (environmentIds.length === 0) return [];
+				const [applicationRows, composeRows] = await Promise.all([
+					db.query.applications.findMany({
+						where: inArray(applications.environmentId, environmentIds),
+						columns: { applicationId: true },
+					}),
+					db.query.compose.findMany({
+						where: inArray(compose.environmentId, environmentIds),
+						columns: { composeId: true },
+					}),
+				]);
+				const applicationIds = applicationRows.map((row) => row.applicationId);
+				const composeIds = composeRows.map((row) => row.composeId);
+				const filters = [
+					...(applicationIds.length > 0 ? [inArray(domains.applicationId, applicationIds)] : []),
+					...(composeIds.length > 0 ? [inArray(domains.composeId, composeIds)] : []),
+				];
+				if (filters.length === 0) return [];
+				return db.query.domains.findMany({
+					where: or(...filters),
 					orderBy: desc(domains.createdAt),
 				});
-				return rows
-					.filter((row) => {
-						const projectId =
-							row.application?.environment.project.projectId ??
-							row.compose?.environment.project.projectId;
-						const orgId =
-							row.application?.environment.project.organizationId ??
-							row.compose?.environment.project.organizationId;
-						return projectId === input.projectId && orgId === organizationId;
-					})
-					.map(({ application: _a, compose: _c, ...row }) => row);
 			}
 			throw new TRPCError({
 				code: "BAD_REQUEST",

@@ -11,7 +11,7 @@ import {
 	updateGitlabById,
 	updateGitlabProviderName,
 } from "../../modules/git";
-import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -77,7 +77,14 @@ export const gitlabRouter = router({
 	create: protectedProcedure.input(createGitlabInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
-		return await createGitlab(input, organizationId);
+		const created = await createGitlab(input, organizationId);
+		if (!created.gitlab) {
+			throw new TRPCError({
+				code: "INTERNAL_SERVER_ERROR",
+				message: "Failed to create GitLab provider",
+			});
+		}
+		return { gitProvider: created.gitProvider, gitlab: publicGitlab(created.gitlab) };
 	}),
 
 	/** Update credentials and/or the provider name. */
@@ -100,7 +107,7 @@ export const gitlabRouter = router({
 			if (!updated) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "GitLab provider not found" });
 			}
-			return updated;
+			return publicGitlab(updated);
 		}),
 
 	/** Remove the provider (cascades to the gitlab credentials row). */
@@ -111,7 +118,7 @@ export const gitlabRouter = router({
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "GitLab provider not found" });
 		}
-		return removed;
+		return publicGitlab(removed);
 	}),
 
 	/** Repositories visible to the configured token (group or membership). */

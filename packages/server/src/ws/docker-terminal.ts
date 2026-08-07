@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import type Docker from "dockerode";
 import type { WebSocket } from "ws";
 import { assertComposeContainerOwnership } from "../modules/compose/containers";
-import { assertWsContainerAccess, assertWsDockerContainerAccess } from "./access";
+import { assertWsDockerContainerAccess, assertWsTerminalAccess } from "./access";
 import type { WsSession } from "./auth";
 import {
 	connectToServer,
@@ -62,7 +62,7 @@ export async function handleDockerTerminal(
 				return;
 			}
 			try {
-				await assertWsContainerAccess(session, appName, serverId);
+				await assertWsTerminalAccess(session, appName, serverId);
 				await assertComposeContainerOwnership(appName, containerId, serverId);
 				if (serverId) {
 					await attachRemoteTerminalById(ws, serverId, containerId);
@@ -94,7 +94,7 @@ export async function handleDockerTerminal(
 	}
 
 	try {
-		await assertWsContainerAccess(session, appName, serverId);
+		await assertWsTerminalAccess(session, appName, serverId);
 		if (serverId) {
 			await attachRemoteTerminal(ws, serverId, appName);
 		} else {
@@ -212,8 +212,9 @@ function pipeRemoteExec(
 	conn: Awaited<ReturnType<typeof connectToServer>>,
 	containerId: string,
 ): void {
+	const id = `'${containerId.replace(/'/g, `'\\''`)}'`;
 	conn.exec(
-		`docker exec -it ${containerId} sh -c '${SHELL_FALLBACK_COMMAND}'`,
+		`docker exec -it ${id} sh -c '${SHELL_FALLBACK_COMMAND}'`,
 		{ pty: { cols: DEFAULT_COLS, rows: DEFAULT_ROWS, term: "xterm-256color" } },
 		(err, stream) => {
 			if (err) {

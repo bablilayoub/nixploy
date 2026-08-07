@@ -153,6 +153,7 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 									<Button
 										variant="ghost"
 										size="icon-sm"
+										aria-label="Remove image"
 										title="Remove image"
 										disabled={removeMutation.isPending}
 										onClick={() => removeMutation.mutate({ serverId, imageId: image.ID })}

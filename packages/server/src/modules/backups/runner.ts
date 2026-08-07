@@ -19,6 +19,7 @@ import {
 	type volumeBackups,
 } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { shellQuote } from "../compose/paths";
 import { notifyEvent } from "../notifications";
 import { DB_DUMP_CONFIG, type DumpCommandParams } from "./dump-commands";
 
@@ -183,7 +184,10 @@ async function findLinkedDatabase(backupRow: BackupRow): Promise<LinkedDatabaseR
 }
 
 async function findContainerId(appName: string, serverId: string | null): Promise<string> {
-	const output = await run(serverId, `docker ps -q --filter "name=${appName}" | head -n 1`);
+	const output = await run(
+		serverId,
+		`docker ps -q --filter ${shellQuote(`name=${appName}`)} | head -n 1`,
+	);
 	const containerId = output.trim().split("\n")[0]?.trim();
 	if (!containerId) {
 		throw new Error(`No running container found for ${appName}`);

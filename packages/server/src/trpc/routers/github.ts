@@ -14,7 +14,7 @@ import {
 	setupGithubApp,
 	syncGithubInstallation,
 } from "../../modules/git";
-import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -82,7 +82,14 @@ export const githubRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
-			return await createGithub(input.name, organizationId);
+			const created = await createGithub(input.name, organizationId);
+			if (!created.github) {
+				throw new TRPCError({
+					code: "INTERNAL_SERVER_ERROR",
+					message: "Failed to create GitHub provider",
+				});
+			}
+			return { gitProvider: created.gitProvider, github: publicGithub(created.github) };
 		}),
 
 	/** Rename the provider. */
@@ -100,7 +107,7 @@ export const githubRouter = router({
 				.set({ name: input.name })
 				.where(eq(gitProviders.gitProviderId, row.gitProviderId))
 				.returning();
-			return { gitProvider: provider, github: row };
+			return { gitProvider: provider, github: publicGithub(row) };
 		}),
 
 	/** Remove the provider (cascades to the github credentials row). */
@@ -111,7 +118,7 @@ export const githubRouter = router({
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "GitHub provider not found" });
 		}
-		return removed;
+		return publicGithub(removed);
 	}),
 
 	/** Repositories accessible to the GitHub App installation. */
@@ -174,12 +181,16 @@ export const githubRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
-			return await setupGithubApp({
+			const updated = await setupGithubApp({
 				githubId: input.githubId,
 				organizationId,
 				code: input.code,
 				state: input.state,
 			});
+			if (!updated) {
+				throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "GitHub App setup failed" });
+			}
+			return publicGithub(updated);
 		}),
 
 	/** Re-fetch the App installation id (after installing on a new account). */

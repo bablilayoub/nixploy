@@ -1,23 +1,63 @@
 "use client";
 
-import { SubNav, type SubNavItem } from "@/components/shell/sub-nav";
+import {
+	Activity,
+	Archive,
+	Bell,
+	Building2,
+	GitBranch,
+	KeyRound,
+	Package,
+	Server,
+	ServerCog,
+	ShieldCheck,
+	TriangleAlert,
+	User,
+} from "lucide-react";
 
-export const settingsNavItems: SubNavItem[] = [
-	{ label: "Profile", href: "/dashboard/settings/profile" },
-	{ label: "Organization", href: "/dashboard/settings/organization" },
-	{ label: "Activity", href: "/dashboard/settings/activity" },
-	{ label: "Incidents", href: "/dashboard/settings/incidents" },
-	{ label: "Servers", href: "/dashboard/settings/servers" },
-	{ label: "Web Server", href: "/dashboard/settings/server" },
-	{ label: "SSH Keys", href: "/dashboard/settings/ssh-keys" },
-	{ label: "Certificates", href: "/dashboard/settings/certificates" },
-	{ label: "Git Providers", href: "/dashboard/settings/git-providers" },
-	{ label: "Registries", href: "/dashboard/settings/registries" },
-	{ label: "Destinations", href: "/dashboard/settings/destinations" },
-	{ label: "Notifications", href: "/dashboard/settings/notifications" },
+import { SubNav, type SubNavGroup, type SubNavItem } from "@/components/shell/sub-nav";
+
+/**
+ * Settings side menu — grouped so related pages sit together.
+ * Routes stay stable; labels prefer findability over historical names.
+ */
+export const settingsNavGroups: SubNavGroup[] = [
+	{
+		label: "Account",
+		items: [{ label: "Profile", href: "/dashboard/settings/profile", icon: User }],
+	},
+	{
+		label: "Organization",
+		items: [
+			{ label: "General", href: "/dashboard/settings/organization", icon: Building2 },
+			{ label: "Audit log", href: "/dashboard/settings/activity", icon: Activity },
+			{ label: "Incidents", href: "/dashboard/settings/incidents", icon: TriangleAlert },
+			{ label: "Notifications", href: "/dashboard/settings/notifications", icon: Bell },
+		],
+	},
+	{
+		label: "Infrastructure",
+		items: [
+			{ label: "Servers", href: "/dashboard/settings/servers", icon: Server },
+			{ label: "SSH keys", href: "/dashboard/settings/ssh-keys", icon: KeyRound },
+			{ label: "Platform", href: "/dashboard/settings/server", icon: ServerCog },
+			{ label: "Certificates", href: "/dashboard/settings/certificates", icon: ShieldCheck },
+		],
+	},
+	{
+		label: "Integrations",
+		items: [
+			{ label: "Git providers", href: "/dashboard/settings/git-providers", icon: GitBranch },
+			{ label: "Registries", href: "/dashboard/settings/registries", icon: Package },
+			{ label: "Backup storage", href: "/dashboard/settings/destinations", icon: Archive },
+		],
+	},
 ];
 
-/** Settings sub-navigation rendered as horizontal tabs under the top navbar. */
+/** Flat list for command palette and any consumer that does not need groups. */
+export const settingsNavItems: SubNavItem[] = settingsNavGroups.flatMap((group) => group.items);
+
+/** Settings sub-navigation — vertical side menu on settings pages. */
 export function NavSettings() {
-	return <SubNav items={settingsNavItems} />;
+	return <SubNav orientation="vertical" groups={settingsNavGroups} />;
 }

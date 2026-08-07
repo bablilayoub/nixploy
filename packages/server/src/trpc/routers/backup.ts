@@ -4,16 +4,17 @@ import { z } from "zod";
 import { db } from "../../db";
 import { backups, destinations } from "../../db/schema";
 import { getServiceContext } from "../../modules/application";
-import { type BackupRow, listBackupKeys, restoreBackup } from "../../modules/backups/runner";
+import { listBackupKeys, restoreBackup } from "../../modules/backups/runner";
 import {
 	isValidBackupCron,
 	registerBackupSchedule,
 	runBackupNow,
 	unregisterBackupSchedule,
 } from "../../modules/backups/scheduler";
-import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
+import { redactDestinationSecrets } from "../redact-secrets";
 
 type Session = NonNullable<TRPCContext["session"]>;
 
@@ -24,7 +25,7 @@ async function getOrganizationId(session: Session): Promise<string> {
 const backupDatabaseTypeSchema = z.enum(["postgres", "mysql", "mariadb", "mongo"]);
 
 /** Org scope travels through the destination (and the linked DB service). */
-async function findBackupOrThrow(backupId: string, organizationId: string): Promise<BackupRow> {
+async function findBackupOrThrow(backupId: string, organizationId: string) {
 	const row = await db.query.backups.findFirst({
 		where: eq(backups.backupId, backupId),
 		with: { destination: true },
@@ -91,7 +92,11 @@ export const backupRouter = router({
 	/** A single backup by id. */
 	one: protectedProcedure.input(backupIdInput).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		return await findBackupOrThrow(input.backupId, organizationId);
+		const row = await findBackupOrThrow(input.backupId, organizationId);
+		return {
+			...row,
+			destination: redactDestinationSecrets(row.destination),
+		};
 	}),
 
 	/** Create a scheduled dump → S3 backup for a database service. */

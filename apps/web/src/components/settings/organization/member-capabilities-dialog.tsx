@@ -166,7 +166,12 @@ export function MemberCapabilitiesDialog({
 						<Loader2 className="size-5 animate-spin text-muted-foreground" />
 					</div>
 				) : capsQuery.isError ? (
-					<p className="px-5 py-8 text-sm text-muted-foreground">{capsQuery.error.message}</p>
+					<div className="flex flex-col items-center gap-2 px-5 py-8 text-center">
+						<p className="text-sm text-muted-foreground">{capsQuery.error.message}</p>
+						<Button size="sm" variant="outline" onClick={() => capsQuery.refetch()}>
+							Retry
+						</Button>
+					</div>
 				) : (
 					<div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
 						{groups.map(({ group, entries }) => (
