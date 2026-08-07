@@ -6,8 +6,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -19,6 +17,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UserAvatar } from "@/components/user-avatar";
 import { signOut, useSession } from "@/lib/auth-client";
 
 const settingsItems = [
@@ -36,11 +35,6 @@ export function ProfileDropdown() {
 	useEffect(() => setMounted(true), []);
 
 	const user = session?.user;
-	const initials = (user?.name || user?.email || "?")
-		.split(/\s+/)
-		.map((part) => part.charAt(0).toUpperCase())
-		.slice(0, 2)
-		.join("");
 
 	const handleSignOut = async () => {
 		try {
@@ -61,9 +55,7 @@ export function ProfileDropdown() {
 		<DropdownMenu modal={false}>
 			<DropdownMenuTrigger asChild>
 				<Button variant="ghost" className="relative size-8 rounded-full">
-					<Avatar className="size-8">
-						<AvatarFallback className="text-xs">{initials}</AvatarFallback>
-					</Avatar>
+					<UserAvatar user={user} className="size-8" fallbackClassName="text-xs" size={64} />
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent className="w-56" align="end" forceMount>

@@ -6,8 +6,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -18,6 +16,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UserAvatar } from "@/components/user-avatar";
 import { signOut, useSession } from "@/lib/auth-client";
 
 const settingsItems = [
@@ -41,11 +40,6 @@ export function UserMenu() {
 	useEffect(() => setMounted(true), []);
 
 	const user = session?.user;
-	const initials = (user?.name || user?.email || "?")
-		.split(/\s+/)
-		.map((part) => part.charAt(0).toUpperCase())
-		.slice(0, 2)
-		.join("");
 
 	const handleSignOut = async () => {
 		try {
@@ -69,18 +63,14 @@ export function UserMenu() {
 					type="button"
 					className="rounded-full outline-none ring-offset-background transition-opacity hover:opacity-80 focus-visible:ring-[3px] focus-visible:ring-ring/50"
 				>
-					<Avatar className="size-7">
-						<AvatarFallback className="text-xs">{initials}</AvatarFallback>
-					</Avatar>
+					<UserAvatar user={user} className="size-7" fallbackClassName="text-xs" size={56} />
 					<span className="sr-only">Account menu</span>
 				</button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent className="min-w-56" align="end" sideOffset={6}>
 				<DropdownMenuLabel className="p-0 font-normal">
 					<div className="flex items-center gap-2 px-1.5 py-1.5 text-left text-sm">
-						<Avatar className="size-8">
-							<AvatarFallback>{initials}</AvatarFallback>
-						</Avatar>
+						<UserAvatar user={user} className="size-8" size={64} />
 						<div className="grid flex-1 text-left text-sm leading-tight">
 							<span className="truncate font-semibold">{user?.name ?? "User"}</span>
 							<span className="truncate text-xs text-muted-foreground">{user?.email}</span>

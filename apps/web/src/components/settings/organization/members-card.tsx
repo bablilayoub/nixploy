@@ -10,7 +10,6 @@ import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog
 import { MemberCapabilitiesDialog } from "@/components/settings/organization/member-capabilities-dialog";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { StatusDot } from "@/components/shell";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -40,6 +39,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { UserAvatar } from "@/components/user-avatar";
 import { authClient, useSession } from "@/lib/auth-client";
 import { useTRPC } from "@/lib/trpc";
 
@@ -338,11 +338,12 @@ export function MembersCard() {
 									<TableRow key={member.id}>
 										<TableCell>
 											<div className="flex items-center gap-3">
-												<Avatar className="size-8">
-													<AvatarFallback className="text-xs font-semibold">
-														{displayName.charAt(0).toUpperCase()}
-													</AvatarFallback>
-												</Avatar>
+												<UserAvatar
+													user={member.user}
+													className="size-8"
+													fallbackClassName="text-xs font-semibold"
+													size={64}
+												/>
 												<div className="grid">
 													<span className="text-sm font-medium">
 														{displayName}
