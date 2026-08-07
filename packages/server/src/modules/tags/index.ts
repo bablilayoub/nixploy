@@ -43,10 +43,7 @@ export async function listTags(organizationId: string) {
 	});
 }
 
-export async function createTag(
-	organizationId: string,
-	input: { name: string; color?: string },
-) {
+export async function createTag(organizationId: string, input: { name: string; color?: string }) {
 	const name = input.name.trim();
 	if (!name) {
 		throw new TRPCError({ code: "BAD_REQUEST", message: "Name is required" });
@@ -174,9 +171,7 @@ export async function setServiceTags(
 	} else if (type === "mariadb") {
 		await db.delete(mariadbTags).where(eq(mariadbTags.mariadbId, serviceId));
 		if (tagIds.length) {
-			await db
-				.insert(mariadbTags)
-				.values(tagIds.map((tagId) => ({ mariadbId: serviceId, tagId })));
+			await db.insert(mariadbTags).values(tagIds.map((tagId) => ({ mariadbId: serviceId, tagId })));
 		}
 	} else if (type === "mongo") {
 		await db.delete(mongoTags).where(eq(mongoTags.mongoId, serviceId));
@@ -211,11 +206,16 @@ export async function tagsForServices(
 			.from(applicationTags)
 			.innerJoin(tags, eq(applicationTags.tagId, tags.tagId))
 			.where(
-				and(eq(tags.organizationId, organizationId), inArray(applicationTags.applicationId, appIds)),
+				and(
+					eq(tags.organizationId, organizationId),
+					inArray(applicationTags.applicationId, appIds),
+				),
 			);
 		for (const row of rows) {
 			const key = `application:${row.applicationId}`;
-			(byKey[key] ??= []).push({ tagId: row.tagId, name: row.name, color: row.color });
+			const list = byKey[key] ?? [];
+			list.push({ tagId: row.tagId, name: row.name, color: row.color });
+			byKey[key] = list;
 		}
 	}
 	if (composeIds.length) {
@@ -233,7 +233,9 @@ export async function tagsForServices(
 			);
 		for (const row of rows) {
 			const key = `compose:${row.composeId}`;
-			(byKey[key] ??= []).push({ tagId: row.tagId, name: row.name, color: row.color });
+			const list = byKey[key] ?? [];
+			list.push({ tagId: row.tagId, name: row.name, color: row.color });
+			byKey[key] = list;
 		}
 	}
 
@@ -284,7 +286,9 @@ export async function tagsForServices(
 			.where(and(eq(tags.organizationId, organizationId), inArray(kind.idCol, kind.ids)));
 		for (const row of rows) {
 			const key = `${kind.type}:${row.serviceId}`;
-			(byKey[key] ??= []).push({ tagId: row.tagId, name: row.name, color: row.color });
+			const list = byKey[key] ?? [];
+			list.push({ tagId: row.tagId, name: row.name, color: row.color });
+			byKey[key] = list;
 		}
 	}
 

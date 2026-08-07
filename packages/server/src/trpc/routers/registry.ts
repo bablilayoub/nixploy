@@ -9,7 +9,7 @@ import {
 	testRegistry,
 	updateRegistryById,
 } from "../../modules/cluster";
-import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 

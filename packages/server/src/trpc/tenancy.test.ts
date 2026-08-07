@@ -123,10 +123,10 @@ describe.skipIf(!testUrl)("tenant isolation", () => {
 		expect(tagB?.tagId).toBeTruthy();
 		const listA = await callerA.tag.all();
 		const listB = await callerB.tag.all();
-		expect(listA.map((row) => row.tagId)).toContain(tagA!.tagId);
-		expect(listA.map((row) => row.tagId)).not.toContain(tagB!.tagId);
-		expect(listB.map((row) => row.tagId)).toContain(tagB!.tagId);
-		expect(listB.map((row) => row.tagId)).not.toContain(tagA!.tagId);
+		expect(listA.map((row) => row.tagId)).toContain(tagA?.tagId);
+		expect(listA.map((row) => row.tagId)).not.toContain(tagB?.tagId);
+		expect(listB.map((row) => row.tagId)).toContain(tagB?.tagId);
+		expect(listB.map((row) => row.tagId)).not.toContain(tagA?.tagId);
 	});
 });
 

@@ -21,7 +21,7 @@
 .swagger-explorer .swagger-ui textarea,
 .swagger-explorer .swagger-ui table,
 .swagger-explorer .swagger-ui .dialog-ux {
-	font-family: var(--sw-font) !important;
+	font-family: var(--sw-font);
 }
 
 .swagger-explorer .swagger-ui code,
@@ -29,7 +29,7 @@
 .swagger-explorer .swagger-ui .microlight,
 .swagger-explorer .swagger-ui .opblock-summary-path,
 .swagger-explorer .swagger-ui .opblock-summary-path span {
-	font-family: var(--sw-mono) !important;
+	font-family: var(--sw-mono);
 }
 
 .swagger-explorer .swagger-ui {
@@ -39,7 +39,7 @@
 
 .swagger-explorer .swagger-ui .topbar,
 .swagger-explorer .swagger-ui .information-container {
-	display: none !important;
+	display: none;
 }
 
 .swagger-explorer .swagger-ui .wrapper {
@@ -108,7 +108,7 @@
 	background-position: right 0.5rem center;
 	color: var(--foreground);
 	font-size: 0.8125rem;
-	font-family: var(--sw-mono) !important;
+	font-family: var(--sw-mono);
 	box-shadow: none;
 	outline: none;
 	cursor: pointer;
@@ -203,7 +203,7 @@
 .swagger-explorer .swagger-ui .opblock-tag a.nostyle,
 .swagger-explorer .swagger-ui .opblock-tag a.nostyle:visited,
 .swagger-explorer .swagger-ui .opblock-tag a.nostyle span {
-	color: var(--foreground) !important;
+	color: var(--foreground);
 	font-size: 0.875rem;
 	font-weight: 500;
 	letter-spacing: -0.01em;
@@ -259,7 +259,7 @@
 
 .swagger-explorer .swagger-ui .opblock .opblock-summary {
 	padding: 0.55rem 0.85rem;
-	border: 0 !important;
+	border: 0;
 	align-items: center;
 }
 
@@ -278,56 +278,56 @@
 	min-width: 3.75rem;
 	margin-right: 0.65rem;
 	padding: 0.2rem 0.45rem;
-	border: 0 !important;
+	border: 0;
 	border-radius: 0.3rem;
-	font-family: var(--sw-mono) !important;
+	font-family: var(--sw-mono);
 	font-size: 0.625rem;
 	font-weight: 600;
 	letter-spacing: 0.05em;
 	text-align: center;
 	line-height: 1.4;
-	color: #fff !important;
-	background: var(--muted-foreground) !important;
+	color: #fff;
+	background: var(--muted-foreground);
 }
 
 .swagger-explorer .swagger-ui .opblock.opblock-get .opblock-summary-method {
-	background: #2563eb !important;
+	background: #2563eb;
 }
 
 .swagger-explorer .swagger-ui .opblock.opblock-post .opblock-summary-method {
-	background: #16a34a !important;
+	background: #16a34a;
 }
 
 .swagger-explorer .swagger-ui .opblock.opblock-put .opblock-summary-method {
-	background: #d97706 !important;
+	background: #d97706;
 }
 
 .swagger-explorer .swagger-ui .opblock.opblock-delete .opblock-summary-method {
-	background: #dc2626 !important;
+	background: #dc2626;
 }
 
 .swagger-explorer .swagger-ui .opblock.opblock-patch .opblock-summary-method {
-	background: #7c3aed !important;
+	background: #7c3aed;
 }
 
 .dark .swagger-explorer .swagger-ui .opblock.opblock-get .opblock-summary-method {
-	background: #3b82f6 !important;
+	background: #3b82f6;
 }
 
 .dark .swagger-explorer .swagger-ui .opblock.opblock-post .opblock-summary-method {
-	background: #22c55e !important;
+	background: #22c55e;
 }
 
 .dark .swagger-explorer .swagger-ui .opblock.opblock-put .opblock-summary-method {
-	background: #f59e0b !important;
+	background: #f59e0b;
 }
 
 .dark .swagger-explorer .swagger-ui .opblock.opblock-delete .opblock-summary-method {
-	background: #f87171 !important;
+	background: #f87171;
 }
 
 .dark .swagger-explorer .swagger-ui .opblock.opblock-patch .opblock-summary-method {
-	background: #a78bfa !important;
+	background: #a78bfa;
 }
 
 .swagger-explorer .swagger-ui .opblock .opblock-summary-path,
@@ -336,13 +336,13 @@
 .swagger-explorer .swagger-ui .opblock .opblock-summary-path span {
 	font-size: 0.8125rem;
 	font-weight: 500;
-	color: var(--foreground) !important;
+	color: var(--foreground);
 }
 
 .swagger-explorer .swagger-ui .opblock .opblock-summary-description {
 	font-size: 0.8125rem;
 	font-weight: 400;
-	color: var(--muted-foreground) !important;
+	color: var(--muted-foreground);
 }
 
 .swagger-explorer .swagger-ui .opblock .authorization__btn,
@@ -398,13 +398,13 @@
 	border-radius: calc(var(--sw-radius) - 2px);
 	/* Swagger paints string spans in light green — keep a dark code surface
 	   in both themes so those colors stay readable. */
-	background: #18181b !important;
-	color: #fafafa !important;
+	background: #18181b;
+	color: #fafafa;
 }
 
 .swagger-explorer .swagger-ui pre.curl.microlight code,
 .swagger-explorer .swagger-ui pre.curl.microlight span {
-	background: transparent !important;
+	background: transparent;
 }
 
 .swagger-explorer .swagger-ui .copy-to-clipboard {
@@ -424,12 +424,12 @@
 .swagger-explorer .swagger-ui input[type="email"],
 .swagger-explorer .swagger-ui textarea,
 .swagger-explorer .swagger-ui select {
-	border: 1px solid var(--input) !important;
-	border-radius: calc(var(--sw-radius) - 2px) !important;
-	background: var(--background) !important;
-	color: var(--foreground) !important;
-	box-shadow: none !important;
-	font-family: var(--sw-font) !important;
+	border: 1px solid var(--input);
+	border-radius: calc(var(--sw-radius) - 2px);
+	background: var(--background);
+	color: var(--foreground);
+	box-shadow: none;
+	font-family: var(--sw-font);
 }
 
 .swagger-explorer .swagger-ui section.models {
@@ -454,7 +454,7 @@
 /* ─── Authorize modal (dialog-ux) ─────────────────────────────── */
 
 .swagger-explorer .swagger-ui .dialog-ux {
-	font-family: var(--sw-font) !important;
+	font-family: var(--sw-font);
 }
 
 .swagger-explorer .swagger-ui .dialog-ux .backdrop-ux {
@@ -558,7 +558,7 @@
 	border-radius: 0.25rem;
 	background: var(--muted);
 	color: var(--foreground);
-	font-family: var(--sw-mono) !important;
+	font-family: var(--sw-mono);
 	font-size: 0.75rem;
 	font-weight: 500;
 }
@@ -590,21 +590,21 @@
 	width: 100%;
 	height: 2.25rem;
 	margin: 0;
-	padding: 0 0.75rem !important;
-	border: 1px solid var(--input) !important;
-	border-radius: calc(var(--sw-radius) - 2px) !important;
-	background: var(--background) !important;
-	color: var(--foreground) !important;
-	font-family: var(--sw-mono) !important;
-	font-size: 0.8125rem !important;
-	box-shadow: none !important;
+	padding: 0 0.75rem;
+	border: 1px solid var(--input);
+	border-radius: calc(var(--sw-radius) - 2px);
+	background: var(--background);
+	color: var(--foreground);
+	font-family: var(--sw-mono);
+	font-size: 0.8125rem;
+	box-shadow: none;
 	outline: none;
 }
 
 .swagger-explorer .swagger-ui .auth-container input:focus,
 .swagger-explorer .swagger-ui #api_key_value:focus {
-	border-color: var(--ring) !important;
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 28%, transparent) !important;
+	border-color: var(--ring);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 28%, transparent);
 }
 
 .swagger-explorer .swagger-ui .auth-btn-wrapper {

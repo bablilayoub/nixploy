@@ -9,7 +9,7 @@ import {
 	getOrganizationId,
 	syncApplicationTraefik,
 } from "../../modules/application";
-import { assertCapability, assertOrgRole } from "../../modules/projects";
+import { assertCapability } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 const BCRYPT_ROUNDS = 10;

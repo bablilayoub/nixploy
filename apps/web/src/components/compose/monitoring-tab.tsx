@@ -8,11 +8,7 @@ import { SettingsSection, SettingsStack } from "@/components/settings/settings-s
 export function MonitoringTab({ compose }: { compose: ComposeService }) {
 	return (
 		<SettingsStack>
-			<SettingsSection
-				title="Monitoring"
-				description="CPU, memory, and network."
-				bare
-			>
+			<SettingsSection title="Monitoring" description="CPU, memory, and network." bare>
 				<MonitoringCharts appName={compose.appName} serverId={compose.serverId} />
 			</SettingsSection>
 			<ServiceAlertRulesCard composeId={compose.composeId} />

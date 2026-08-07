@@ -99,33 +99,48 @@ jobs:
 
       - name: Traefik dynamic config
         run: |
-          mkdir -p /tmp/nixploy-smoke/traefik/dynamic
-          cat > /tmp/nixploy-smoke/traefik/traefik.yml <<'EOF'
-          entryPoints:
-            web:
-              address: ":80"
-          providers:
-            file:
-              directory: /etc/traefik/dynamic
-              watch: true
-          EOF
-          # Strip workflow indentation from heredoc content
-          sed -i 's/^          //' /tmp/nixploy-smoke/traefik/traefik.yml
-          cat > /tmp/nixploy-smoke/traefik/dynamic/whoami.yml <<'EOF'
-          http:
-            routers:
-              whoami:
-                rule: Host(`whoami.localhost`)
-                entryPoints:
-                  - web
-                service: whoami
-            services:
-              whoami:
-                loadBalancer:
-                  servers:
-                    - url: http://nixploy-smoke-whoami:80
-          EOF
-          sed -i 's/^          //' /tmp/nixploy-smoke/traefik/dynamic/whoami.yml
+          python3 <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          root = Path("/tmp/nixploy-smoke/traefik")
+          (root / "dynamic").mkdir(parents=True, exist_ok=True)
+          (root / "traefik.yml").write_text(
+              textwrap.dedent(
+                  """\
+                  entryPoints:
+                    web:
+                      address: ":80"
+                  providers:
+                    file:
+                      directory: /etc/traefik/dynamic
+                      watch: true
+                  """
+              ),
+              encoding="utf-8",
+          )
+          (root / "dynamic" / "whoami.yml").write_text(
+              textwrap.dedent(
+                  """\
+                  http:
+                    routers:
+                      whoami:
+                        rule: Host(`whoami.localhost`)
+                        entryPoints:
+                          - web
+                        service: whoami
+                    services:
+                      whoami:
+                        loadBalancer:
+                          servers:
+                            - url: http://nixploy-smoke-whoami:80
+                  """
+              ),
+              encoding="utf-8",
+          )
+          print("--- whoami.yml ---")
+          print((root / "dynamic" / "whoami.yml").read_text())
+          PY
 
       - name: Deploy whoami + Traefik
         run: |
@@ -156,6 +171,8 @@ jobs:
             sleep 2
           done
           echo "traefik routing never became ready"
+          echo "--- whoami.yml ---"
+          cat /tmp/nixploy-smoke/traefik/dynamic/whoami.yml || true
           docker service ps nixploy-smoke-whoami nixploy-smoke-traefik
           docker service logs nixploy-smoke-traefik || true
           docker service logs nixploy-smoke-whoami || true

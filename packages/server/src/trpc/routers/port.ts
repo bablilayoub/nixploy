@@ -8,7 +8,7 @@ import {
 	getOrganizationId,
 	upsertApplicationSwarmService,
 } from "../../modules/application";
-import { assertCapability, assertOrgRole } from "../../modules/projects";
+import { assertCapability } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 const portFields = {

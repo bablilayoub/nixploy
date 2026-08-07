@@ -19,8 +19,8 @@ import { removeDatabase } from "../databases/engine";
 import type { OrgRole } from "./roles";
 import { ORG_ROLE_RANK, orgRoleRank } from "./roles";
 
-export * from "./env-resolution";
 export * from "./capabilities";
+export * from "./env-resolution";
 export type { OrgRole } from "./roles";
 export { ORG_ROLE_RANK, orgRoleRank } from "./roles";
 

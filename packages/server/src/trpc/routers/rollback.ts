@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import { rollbacks } from "../../db/schema";
 import { assertApplicationAccess, getOrganizationId } from "../../modules/application";
-import { assertCapability, assertOrgRole } from "../../modules/projects";
+import { assertCapability } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 /** Load an application-owned rollback row and verify org ownership. */

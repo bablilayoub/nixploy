@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import { destinations } from "../../db/schema";
 import { testDestination } from "../../modules/backups/runner";
-import { assertCapability, assertOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 

@@ -77,7 +77,9 @@ export function SettingsSection({
 					<div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
 				) : null}
 			</div>
-			{children ? <div className={cn("w-full space-y-4", bare ? "mt-4" : "mt-5")}>{children}</div> : null}
+			{children ? (
+				<div className={cn("w-full space-y-4", bare ? "mt-4" : "mt-5")}>{children}</div>
+			) : null}
 		</section>
 	);
 }

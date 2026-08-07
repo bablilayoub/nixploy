@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import { certificates, generateId, servers } from "../../db/schema";
 import { getOrganizationId } from "../../modules/application";
-import { assertCapability, assertOrgRole } from "../../modules/projects";
+import { assertCapability } from "../../modules/projects";
 import {
 	getCertificatesDir,
 	REMOTE_TRAEFIK_DIR,

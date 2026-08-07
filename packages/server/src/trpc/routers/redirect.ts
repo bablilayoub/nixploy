@@ -8,7 +8,7 @@ import {
 	getOrganizationId,
 	syncApplicationTraefik,
 } from "../../modules/application";
-import { assertCapability, assertOrgRole } from "../../modules/projects";
+import { assertCapability } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 /** Load an application-owned redirect row and verify org ownership. */

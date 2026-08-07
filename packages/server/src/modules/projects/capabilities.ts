@@ -196,7 +196,11 @@ export function isOrgCapability(value: string): value is OrgCapability {
 }
 
 export function capabilityMeta(id: OrgCapability) {
-	return CAPABILITY_CATALOG.find((entry) => entry.id === id)!;
+	const entry = CAPABILITY_CATALOG.find((item) => item.id === id);
+	if (!entry) {
+		throw new Error(`Unknown capability: ${id}`);
+	}
+	return entry;
 }
 
 /** Baseline capabilities implied by each org role (before member overrides). */

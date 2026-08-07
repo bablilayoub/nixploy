@@ -11,7 +11,7 @@ import {
 	PreviewNotFoundError,
 	withPreviewDomain,
 } from "../../modules/preview";
-import { assertCapability, assertOrgRole } from "../../modules/projects";
+import { assertCapability } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
 /** Load an application-owned preview deployment and verify org ownership. */
