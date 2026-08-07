@@ -17,6 +17,10 @@ export const metadata: Metadata = {
 	},
 	description:
 		"Nixploy — a free, self-hostable PaaS. Deploy applications and databases with Docker Swarm and Traefik.",
+	icons: {
+		icon: [{ url: "/brand/nixploy-mark.png", type: "image/png" }],
+		apple: [{ url: "/apple-icon.png", type: "image/png" }],
+	},
 };
 
 export default function RootLayout({

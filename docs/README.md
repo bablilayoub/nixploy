@@ -8,6 +8,7 @@ Guides for running and developing Nixploy. Start here, then dive deep.
 | --- | --- | --- |
 | [install.md](./install.md) | Operators | Production one-liner, env overrides, update, first-hour troubleshooting |
 | [getting-started.md](./getting-started.md) | Operators | First deploy (whoami / template), Git, CLI |
+| [api.md](./api.md) | Operators / CI | REST conventions, `x-api-key`, CLI, panel Swagger |
 | [migrate-from-coolify.md](./migrate-from-coolify.md) | Operators | Concept map + cutover from Coolify |
 | [migrate-from-dokploy.md](./migrate-from-dokploy.md) | Operators | Concept map + cutover from Dokploy |
 
@@ -37,3 +38,4 @@ Guides for running and developing Nixploy. Start here, then dive deep.
 - Product blueprint: [`../PLAN.md`](../PLAN.md)
 - Agent / contributor conventions: [`../AGENTS.md`](../AGENTS.md)
 - Marketing site docs entry: [nixploy.com/docs](https://nixploy.com/docs)
+- API overview: [nixploy.com/api](https://nixploy.com/api)

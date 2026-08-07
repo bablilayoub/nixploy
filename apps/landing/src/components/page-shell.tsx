@@ -1,10 +1,13 @@
 import Link from "next/link";
-import { Cta, Footer } from "@/components/cta";
+
+import { Footer } from "@/components/footer";
 import { Navbar } from "@/components/navbar";
+import { site } from "@/lib/site";
 
 export function ProseLink({ href, children }: { href: string; children: React.ReactNode }) {
 	const external = href.startsWith("http");
-	const className = "text-white underline decoration-white/30 underline-offset-4 hover:decoration-white";
+	const className =
+		"text-amber-soft underline decoration-amber/40 underline-offset-4 transition-colors hover:decoration-amber";
 	if (external) {
 		return (
 			<a href={href} target="_blank" rel="noreferrer" className={className}>
@@ -24,36 +27,66 @@ export function PageShell({
 	eyebrow,
 	title,
 	description,
+	wide = false,
 }: {
 	children: React.ReactNode;
 	eyebrow?: string;
 	title?: string;
 	description?: string;
+	wide?: boolean;
 }) {
 	return (
-		<div className="flex min-h-screen flex-col bg-[#050505]">
+		<div className="relative flex min-h-screen flex-col bg-atmosphere">
+			<div className="bg-grain pointer-events-none absolute inset-0" aria-hidden />
 			<Navbar />
-			<main className="relative flex-1 pb-16">
-				<div className="relative mx-auto max-w-3xl px-5 pt-28 sm:px-6 sm:pt-36">
-					{title && (
+			<main className="relative flex-1 pb-20">
+				<div
+					className={`relative mx-auto px-5 pt-28 sm:px-6 sm:pt-36 ${wide ? "max-w-5xl" : "max-w-3xl"}`}
+				>
+					{title ? (
 						<div className="mb-12">
-							{eyebrow && (
-								<p className="mb-3 font-mono text-xs tracking-[0.2em] text-neutral-500 uppercase">
+							{eyebrow ? (
+								<p className="mb-3 font-mono text-xs tracking-[0.18em] text-amber uppercase">
 									{eyebrow}
 								</p>
-							)}
-							<h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+							) : null}
+							<h1 className="font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
 								{title}
 							</h1>
-							{description && (
-								<p className="mt-4 max-w-2xl text-lg text-neutral-400">{description}</p>
-							)}
+							{description ? (
+								<p className="mt-4 max-w-2xl text-lg leading-relaxed text-muted">{description}</p>
+							) : null}
 						</div>
-					)}
+					) : null}
 					{children}
 				</div>
 			</main>
-			<Cta />
+			<section className="relative border-t border-border">
+				<div className="mx-auto max-w-6xl px-5 py-16 text-center sm:px-6 sm:py-20">
+					<h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+						Install Nixploy on your metal
+					</h2>
+					<p className="mx-auto mt-3 max-w-lg text-muted">
+						One command. Docker Swarm, Traefik, and the panel — yours.
+					</p>
+					<div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+						<Link
+							href="/install"
+							className="inline-flex h-11 items-center rounded-md bg-amber px-5 text-sm font-medium text-background transition-colors hover:bg-amber-soft"
+						>
+							Install guide
+						</Link>
+						<a
+							href={site.github}
+							target="_blank"
+							rel="noreferrer"
+							className="inline-flex h-11 items-center rounded-md border border-border px-5 text-sm font-medium text-foreground transition-colors hover:bg-surface"
+						>
+							Star on GitHub
+						</a>
+					</div>
+				</div>
+			</section>
 			<Footer />
 		</div>
 	);

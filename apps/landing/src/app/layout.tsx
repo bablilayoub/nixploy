@@ -1,15 +1,22 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { IBM_Plex_Sans, JetBrains_Mono, Syne } from "next/font/google";
 import { site } from "@/lib/site";
 import "./globals.css";
 
-const geist = Geist({
+const syne = Syne({
 	subsets: ["latin"],
-	variable: "--font-geist",
+	variable: "--font-syne",
 	display: "swap",
 });
 
-const mono = Geist_Mono({
+const plex = IBM_Plex_Sans({
+	subsets: ["latin"],
+	weight: ["400", "500", "600"],
+	variable: "--font-plex",
+	display: "swap",
+});
+
+const mono = JetBrains_Mono({
 	subsets: ["latin"],
 	variable: "--font-mono",
 	display: "swap",
@@ -19,10 +26,14 @@ export const metadata: Metadata = {
 	metadataBase: new URL(site.url),
 	title: {
 		default: "Nixploy — Self-hostable PaaS for applications & databases",
-		template: "%s · Nixploy",
+		template: `%s · ${site.name}`,
 	},
 	description: site.description,
 	alternates: { canonical: "/" },
+	icons: {
+		icon: [{ url: "/brand/nixploy-mark.png", type: "image/png" }],
+		apple: [{ url: "/apple-icon.png", type: "image/png" }],
+	},
 	openGraph: {
 		title: "Nixploy — Ship anything. Own everything.",
 		description: site.description,
@@ -40,13 +51,13 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-	themeColor: "#050505",
+	themeColor: "#0c0b0a",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
 	return (
-		<html lang="en" className={`dark ${geist.variable} ${mono.variable}`}>
-			<body className="bg-[#050505] font-sans text-white antialiased">{children}</body>
+		<html lang="en" className={`dark ${syne.variable} ${plex.variable} ${mono.variable}`}>
+			<body className="bg-background font-sans text-foreground antialiased">{children}</body>
 		</html>
 	);
 }

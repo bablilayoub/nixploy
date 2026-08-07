@@ -102,8 +102,9 @@ Labels and descriptions live in `CAPABILITY_CATALOG`
 
 ## API keys (REST & CLI)
 
-- Every tRPC procedure is also exposed as REST under `/api/v1/*` (documented
-  at `/swagger`) and is reachable from `@nixploy/cli`.
+- Every tRPC procedure is also exposed as REST under `/api/<router>.<procedure>`
+  (documented at `/swagger`; see [api.md](./api.md)) and is reachable from
+  `@nixploy/cli`.
 - Authentication: `x-api-key` header. Keys are created in Settings → Profile →
   API keys, stored hashed via the `@better-auth/api-key` plugin, and resolve
   to the owning user (org resolution then follows the same rules as sessions).

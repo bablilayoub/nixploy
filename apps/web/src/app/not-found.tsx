@@ -1,6 +1,6 @@
-import { FileQuestion } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { LogoMark } from "@/components/shell/logo";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
@@ -10,9 +10,7 @@ export const metadata: Metadata = {
 export default function NotFound() {
 	return (
 		<div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
-			<div className="flex size-12 items-center justify-center rounded-full bg-muted">
-				<FileQuestion className="size-6 text-muted-foreground" />
-			</div>
+			<LogoMark className="size-12 rounded-xl" />
 			<div className="flex flex-col gap-1">
 				<h1 className="text-lg font-semibold">Page not found</h1>
 				<p className="max-w-md text-sm text-muted-foreground">

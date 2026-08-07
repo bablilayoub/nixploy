@@ -1,26 +1,30 @@
-import { Cta, Footer } from "@/components/cta";
-import { Faq } from "@/components/faq";
-import { Features } from "@/components/features";
+import { Capabilities } from "@/components/capabilities";
+import { Cta } from "@/components/cta";
+import { Footer } from "@/components/footer";
 import { Hero } from "@/components/hero";
 import { HowItWorks } from "@/components/how-it-works";
+import { InstallSection } from "@/components/install-section";
 import { Navbar } from "@/components/navbar";
 import { Showcase } from "@/components/showcase";
-import { Stats } from "@/components/stats";
 import { Templates } from "@/components/templates";
 
 export default function Home() {
 	return (
-		<main className="relative bg-[#050505]">
-			<Navbar />
-			<Hero />
-			<Stats />
-			<HowItWorks />
-			<Features />
-			<Showcase />
-			<Templates />
-			<Faq />
-			<Cta />
-			<Footer />
-		</main>
+		<div className="relative min-h-screen bg-atmosphere">
+			<div className="bg-grain pointer-events-none absolute inset-0" aria-hidden />
+			<div className="relative">
+				<Navbar />
+				<main>
+					<Hero />
+					<HowItWorks />
+					<Capabilities />
+					<Showcase />
+					<InstallSection />
+					<Templates />
+					<Cta />
+				</main>
+				<Footer />
+			</div>
+		</div>
 	);
 }

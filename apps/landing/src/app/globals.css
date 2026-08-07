@@ -1,12 +1,17 @@
 @import "tailwindcss";
 
 @theme {
-	--font-sans: var(--font-geist), "Geist", ui-sans-serif, system-ui, sans-serif;
-	--font-mono: var(--font-mono), "Geist Mono", ui-monospace, monospace;
-	--color-background: #050505;
-	--color-foreground: #fafafa;
-	--color-border: #262626;
-	--color-muted: #a3a3a3;
+	--font-sans: var(--font-plex), "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+	--font-display: var(--font-syne), "Syne", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+
+	--color-background: #0c0b0a;
+	--color-foreground: #f5f2eb;
+	--color-muted: #a39e93;
+	--color-border: #2a2723;
+	--color-surface: #161412;
+	--color-amber: #e8a317;
+	--color-amber-soft: #f0c45a;
 }
 
 html {
@@ -14,29 +19,38 @@ html {
 }
 
 body {
-	background: #050505;
-	color: #fafafa;
+	background: var(--color-background);
+	color: var(--color-foreground);
 	font-family: var(--font-sans);
 	overflow-x: hidden;
 	-webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-	background: #fff;
-	color: #000;
+	background: color-mix(in srgb, var(--color-amber) 80%, white);
+	color: #0c0b0a;
 }
 
-/* Magic UI animations */
-@keyframes shiny-text {
-	0%,
-	90%,
-	100% {
-		background-position: calc(-100% - var(--shiny-width)) 0;
-	}
-	30%,
-	60% {
-		background-position: calc(100% + var(--shiny-width)) 0;
-	}
+.font-display {
+	font-family: var(--font-display);
+}
+
+/* Soft grain over the charcoal base */
+.bg-atmosphere {
+	background-color: var(--color-background);
+	background-image:
+		radial-gradient(ellipse 80% 50% at 50% -20%, rgba(232, 163, 23, 0.12), transparent 55%),
+		radial-gradient(ellipse 60% 40% at 100% 0%, rgba(255, 255, 255, 0.04), transparent 50%),
+		radial-gradient(ellipse 50% 30% at 0% 100%, rgba(232, 163, 23, 0.05), transparent 45%);
+}
+
+.bg-grain::before {
+	content: "";
+	pointer-events: none;
+	position: absolute;
+	inset: 0;
+	opacity: 0.035;
+	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 @keyframes marquee {
@@ -44,104 +58,22 @@ body {
 		transform: translateX(0);
 	}
 	to {
-		transform: translateX(calc(-100% - var(--gap)));
+		transform: translateX(calc(-100% - var(--gap, 1rem)));
 	}
-}
-
-@keyframes marquee-vertical {
-	from {
-		transform: translateY(0);
-	}
-	to {
-		transform: translateY(calc(-100% - var(--gap)));
-	}
-}
-
-@keyframes meteor {
-	0% {
-		transform: rotate(var(--angle)) translateX(0);
-		opacity: 1;
-	}
-	70% {
-		opacity: 1;
-	}
-	100% {
-		transform: rotate(var(--angle)) translateX(-500px);
-		opacity: 0;
-	}
-}
-
-@keyframes shimmer-slide {
-	to {
-		transform: translate(calc(100cqw - 100%), 0);
-	}
-}
-
-@keyframes spin-around {
-	0% {
-		transform: translateZ(0) rotate(0);
-	}
-	15%,
-	35% {
-		transform: translateZ(0) rotate(90deg);
-	}
-	65%,
-	85% {
-		transform: translateZ(0) rotate(270deg);
-	}
-	100% {
-		transform: translateZ(0) rotate(360deg);
-	}
-}
-
-@keyframes shine {
-	0% {
-		background-position: 0% 0%;
-	}
-	50% {
-		background-position: 100% 100%;
-	}
-	to {
-		background-position: 0% 0%;
-	}
-}
-
-.animate-shiny-text {
-	animation: shiny-text 8s infinite;
 }
 
 .animate-marquee {
-	animation: marquee var(--duration) infinite linear;
-}
-
-.animate-marquee-vertical {
-	animation: marquee-vertical var(--duration) linear infinite;
-}
-
-.animate-meteor {
-	animation: meteor 5s linear infinite;
-}
-
-.animate-shimmer-slide {
-	animation: shimmer-slide var(--speed) ease-in-out infinite alternate;
-}
-
-.animate-spin-around {
-	animation: spin-around calc(var(--speed) * 2) infinite linear;
-}
-
-.animate-shine {
-	animation: shine var(--duration) infinite linear;
+	animation: marquee var(--duration, 40s) infinite linear;
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.animate-marquee,
-	.animate-marquee-vertical,
-	.animate-shiny-text,
-	.animate-meteor,
-	.animate-shimmer-slide,
-	.animate-spin-around,
-	.animate-shine {
-		animation: none !important;
+	.animate-marquee {
+		/* Prefer no motion; override duration animation from utility class */
+		animation-name: none;
+		animation-duration: 0s;
+	}
+
+	html {
+		scroll-behavior: auto;
 	}
 }

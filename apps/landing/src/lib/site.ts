@@ -5,20 +5,32 @@ export const site = {
 	description:
 		"Nixploy is a free, self-hostable Platform as a Service. Deploy apps, databases, and compose stacks on infrastructure you control — with Git deploys, Traefik TLS, monitoring, and a first-class CLI.",
 	github: "https://github.com/bablilayoub/nixploy",
+	githubDocs: "https://github.com/bablilayoub/nixploy/tree/main/docs",
+	githubApiDocs: "https://github.com/bablilayoub/nixploy/blob/main/docs/api.md",
 	docs: "/docs",
+	api: "/api",
 	email: "hello@nixploy.com",
-	twitter: "https://x.com/nixploy",
 	install:
 		"curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash",
 	installWithDomain:
-		"NIXPLOY_DOMAIN=panel.nixploy.com NIXPLOY_LETSENCRYPT_EMAIL=you@nixploy.com curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash",
-	/** Short credit — not a product comparison. */
+		"NIXPLOY_DOMAIN=panel.example.com NIXPLOY_LETSENCRYPT_EMAIL=you@example.com curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash",
+	/** Short credit — About page only. */
 	inspiredBy: "Inspired by Dokploy and Coolify — built to be better.",
 } as const;
 
 export const navLinks = [
 	{ href: "/features", label: "Features" },
 	{ href: "/docs", label: "Docs" },
+	{ href: "/api", label: "API" },
+	{ href: "/install", label: "Install" },
+] as const;
+
+export const footerLinks = [
+	{ href: "/features", label: "Features" },
+	{ href: "/docs", label: "Docs" },
+	{ href: "/api", label: "API" },
+	{ href: "/install", label: "Install" },
 	{ href: "/pricing", label: "Pricing" },
 	{ href: "/about", label: "About" },
+	{ href: "/privacy", label: "Privacy" },
 ] as const;

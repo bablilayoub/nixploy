@@ -1,82 +1,80 @@
 "use client";
 
-import { ArrowRight, Check } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import { motion } from "motion/react";
+import Image from "next/image";
 import Link from "next/link";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { BorderBeam } from "@/components/magicui/border-beam";
-import { Safari } from "@/components/magicui/safari";
+
+import { LogoMark } from "@/components/logo";
 import { site } from "@/lib/site";
 
 export function Hero() {
 	return (
-		<section className="relative overflow-hidden pt-32 pb-12 sm:pt-40 sm:pb-20">
-			<div
-				className="pointer-events-none absolute inset-x-0 top-0 h-152 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.09),transparent_62%)]"
-				aria-hidden
-			/>
-			<div className="relative mx-auto max-w-6xl px-5 text-center sm:px-6">
-				<BlurFade delay={0.05}>
-					<div className="mx-auto mb-7 flex max-w-fit items-center gap-2 rounded-full border border-white/10 bg-white/3 px-3 py-1.5 text-xs text-neutral-400">
-						<span className="size-1.5 rounded-full bg-emerald-400" />
-						Open source · Self-hosted PaaS
+		<section className="relative overflow-hidden pt-28 pb-16 sm:pt-36 sm:pb-24">
+			<div className="relative mx-auto max-w-6xl px-5 sm:px-6">
+				<motion.div
+					initial={{ opacity: 0, y: 12 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+					className="mx-auto max-w-3xl text-center"
+				>
+					<div className="mb-8 flex flex-col items-center gap-4">
+						<LogoMark className="size-14 rounded-xl sm:size-16" />
+						<p className="font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+							Nixploy
+						</p>
 					</div>
-				</BlurFade>
 
-				<BlurFade delay={0.1}>
-					<h1 className="mx-auto max-w-4xl text-balance text-5xl font-semibold tracking-[-0.06em] text-white sm:text-7xl">
-						Your servers. <span className="text-neutral-500">Your PaaS.</span>
+					<h1 className="font-display text-balance text-4xl font-semibold tracking-tight text-foreground sm:text-6xl">
+						Your servers. <span className="text-muted">Your PaaS.</span>
 					</h1>
-				</BlurFade>
 
-				<BlurFade delay={0.2}>
-					<p className="mx-auto mt-6 max-w-xl text-balance text-lg leading-relaxed text-neutral-400">
-						Nixploy makes it simple to deploy applications, databases, and Docker Compose on
-						infrastructure you already own.
+					<p className="mx-auto mt-5 max-w-xl text-balance text-lg leading-relaxed text-muted">
+						Deploy apps, databases, and compose stacks on infrastructure you control — with Git
+						deploys, Traefik TLS, and a first-class CLI.
 					</p>
-				</BlurFade>
 
-				<BlurFade delay={0.3}>
 					<div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
 						<Link
 							href="/install"
-							className="inline-flex h-11 items-center gap-2 rounded-md bg-white px-5 text-sm font-medium text-black transition-colors hover:bg-neutral-200"
+							className="inline-flex h-11 items-center gap-2 rounded-md bg-amber px-5 text-sm font-medium text-background transition-colors hover:bg-amber-soft"
 						>
-							Get started <ArrowRight className="size-4" />
+							Install <ArrowRight className="size-4" />
 						</Link>
-						<a
-							href={site.github}
-							target="_blank"
-							rel="noreferrer"
-							className="inline-flex h-11 items-center rounded-md border border-white/15 px-5 text-sm font-medium text-white transition-colors hover:bg-white/5"
+						<Link
+							href="/docs"
+							className="inline-flex h-11 items-center rounded-md border border-border px-5 text-sm font-medium text-foreground transition-colors hover:bg-surface"
 						>
-							View on GitHub
-						</a>
+							Docs
+						</Link>
 					</div>
-				</BlurFade>
+				</motion.div>
 
-				<BlurFade delay={0.4}>
-					<div className="mt-7 flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-neutral-500">
-						{["Git-based deploys", "Automatic SSL", "Docker native"].map((item) => (
-							<span key={item} className="flex items-center gap-1.5">
-								<Check className="size-3.5 text-neutral-300" />
-								{item}
+				<motion.div
+					initial={{ opacity: 0, y: 24 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.6, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+					className="relative mx-auto mt-16 max-w-5xl"
+				>
+					<div className="overflow-hidden rounded-lg border border-border bg-surface shadow-[0_40px_80px_-40px_rgba(232,163,23,0.25)]">
+						<div className="flex items-center gap-2 border-b border-border px-4 py-3">
+							<span className="size-2 rounded-full bg-border" />
+							<span className="size-2 rounded-full bg-border" />
+							<span className="size-2 rounded-full bg-border" />
+							<span className="ml-3 font-mono text-[11px] text-muted">
+								{site.url.replace("https://", "panel.")}
 							</span>
-						))}
-					</div>
-				</BlurFade>
-
-				<BlurFade delay={0.45}>
-					<div className="relative mx-auto mt-16 max-w-6xl">
-						<div className="relative overflow-hidden rounded-lg border border-white/10 bg-[#101010] shadow-[0_25px_90px_-30px_rgba(255,255,255,0.22)]">
-							<BorderBeam size={90} duration={14} colorFrom="#ffffff" colorTo="#404040" />
-							<Safari
-								url="panel.nixploy.com"
-								imageSrc="/screenshots/02-dashboard.png"
-								className="size-full"
-							/>
 						</div>
+						<Image
+							src="/screenshots/02-dashboard.png"
+							alt="Nixploy dashboard"
+							width={1600}
+							height={1000}
+							priority
+							className="h-auto w-full"
+						/>
 					</div>
-				</BlurFade>
+				</motion.div>
 			</div>
 		</section>
 	);

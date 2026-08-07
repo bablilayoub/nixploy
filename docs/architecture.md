@@ -23,7 +23,7 @@ Browser ──► apps/web (Next.js App Router)              UI
    │
    ├────► /api/trpc/*        tRPC fetch handler ──► packages/server routers
    ├────► /api/auth/*        better-auth handler
-   ├────► /api/v1/*          REST/OpenAPI wrapper over the same root router (x-api-key)
+   ├────► /api/<router>.<proc>  REST/OpenAPI wrapper over the same root router (x-api-key)
    ├────► /swagger           generated OpenAPI docs
    └────► /ws/{logs,deployment,stats,terminal}   WebSocket streams (server.ts)
 ```

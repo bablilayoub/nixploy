@@ -11,6 +11,7 @@ import { ProfileDropdown } from "@/components/layout/profile-dropdown";
 import { isSidebarNavActive, sidebarNavGroups } from "@/components/layout/sidebar-data";
 import { ModeToggle } from "@/components/mode-toggle";
 import { OrgSwitcher } from "@/components/org-switcher";
+import { Logo, LogoMark } from "@/components/shell/logo";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -74,11 +75,11 @@ export function TopNav() {
 		<header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-md">
 			<div className="mx-auto flex h-14 w-full max-w-[1400px] items-center gap-3 px-4 sm:px-6">
 				<div className="flex min-w-0 items-center gap-2">
-					<Link
-						href="/dashboard"
-						className="hidden shrink-0 text-sm font-semibold tracking-tight sm:inline"
-					>
-						Nixploy
+					<Link href="/dashboard" className="hidden shrink-0 sm:inline-flex">
+						<Logo />
+					</Link>
+					<Link href="/dashboard" className="inline-flex shrink-0 sm:hidden" aria-label="Nixploy">
+						<LogoMark className="size-7" />
 					</Link>
 					<Separator orientation="vertical" className="hidden h-4 sm:block" />
 					<OrgSwitcher />
@@ -122,7 +123,10 @@ export function TopNav() {
 						</SheetTrigger>
 						<SheetContent side="left" className="w-72 p-0">
 							<SheetHeader className="border-b px-4 py-3 text-start">
-								<SheetTitle>Nixploy</SheetTitle>
+								<SheetTitle className="flex items-center gap-2">
+									<LogoMark className="size-5" />
+									Nixploy
+								</SheetTitle>
 							</SheetHeader>
 							<nav className="flex flex-col gap-1 p-3">
 								{navItems.map((item) => {

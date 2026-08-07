@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+
 import { PageShell } from "@/components/page-shell";
 import { site } from "@/lib/site";
 
@@ -58,15 +59,18 @@ export default function FeaturesPage() {
 			eyebrow="Features"
 			title="Everything you need to run production on your own metal."
 			description="Nixploy covers the full loop: build, ship, observe, alert, and recover."
+			wide
 		>
 			<div className="grid gap-10 sm:grid-cols-2">
 				{groups.map((group) => (
-					<section key={group.title} className="border-t border-white/10 pt-6">
-						<h2 className="mb-4 text-lg font-semibold tracking-tight text-white">{group.title}</h2>
-						<ul className="space-y-2.5 text-sm leading-relaxed text-neutral-400">
+					<section key={group.title} className="border-t border-border pt-6">
+						<h2 className="mb-4 font-display text-lg font-semibold tracking-tight text-foreground">
+							{group.title}
+						</h2>
+						<ul className="space-y-2.5 text-sm leading-relaxed text-muted">
 							{group.items.map((item) => (
 								<li key={item} className="flex gap-2">
-									<span className="mt-2 size-1 shrink-0 rounded-full bg-white/50" aria-hidden />
+									<span className="mt-2 size-1 shrink-0 rounded-full bg-amber" aria-hidden />
 									{item}
 								</li>
 							))}
@@ -74,17 +78,20 @@ export default function FeaturesPage() {
 					</section>
 				))}
 			</div>
-			<p className="mt-14 text-sm text-neutral-500">
+			<p className="mt-14 text-sm text-muted">
 				Ready to try it?{" "}
-				<Link href="/install" className="text-white underline underline-offset-4">
+				<Link
+					href="/install"
+					className="text-amber-soft underline decoration-amber/40 underline-offset-4"
+				>
 					Install guide
-				</Link>{" "}
-				·{" "}
+				</Link>
+				{" · "}
 				<a
 					href={site.github}
-					className="text-white underline underline-offset-4"
 					target="_blank"
 					rel="noreferrer"
+					className="text-amber-soft underline decoration-amber/40 underline-offset-4"
 				>
 					GitHub
 				</a>

@@ -92,7 +92,7 @@ through `modules/backups` to S3 destinations on schedules.
 
 ## Webhooks & rollbacks
 
-- Git push webhooks (`/api/v1/...` hooks per provider, signature-verified,
+- Git push webhooks (`/api/webhooks/<provider>/...`, signature-verified,
   watch-path filtered) and the generic API-key deploy hook all end at the
   same `queueDeployment`.
 - `pull_request` deliveries go to `handlePreviewWebhookForApplication`, which
