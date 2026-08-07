@@ -1,12 +1,14 @@
 import { Capabilities } from "@/components/capabilities";
 import { Cta } from "@/components/cta";
+import { DeployBeam } from "@/components/deploy-beam";
+import { Faq } from "@/components/faq";
 import { Footer } from "@/components/footer";
 import { Hero } from "@/components/hero";
-import { HowItWorks } from "@/components/how-it-works";
-import { InstallSection } from "@/components/install-section";
+import { IntegrationsOrbit } from "@/components/integrations-orbit";
 import { Navbar } from "@/components/navbar";
-import { Showcase } from "@/components/showcase";
-import { Templates } from "@/components/templates";
+import { ProductPanels } from "@/components/product-panels";
+import { SocialProof } from "@/components/social-proof";
+import { Stats } from "@/components/stats";
 
 export default function Home() {
 	return (
@@ -16,11 +18,13 @@ export default function Home() {
 				<Navbar />
 				<main>
 					<Hero />
-					<HowItWorks />
 					<Capabilities />
-					<Showcase />
-					<InstallSection />
-					<Templates />
+					<IntegrationsOrbit />
+					<DeployBeam />
+					<ProductPanels />
+					<Stats />
+					<SocialProof />
+					<Faq />
 					<Cta />
 				</main>
 				<Footer />

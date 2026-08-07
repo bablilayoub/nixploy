@@ -1,80 +1,102 @@
 "use client";
 
 import { ArrowRight } from "lucide-react";
-import { motion } from "motion/react";
-import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
+import { InstallCommand } from "@/components/install-command";
 import { LogoMark } from "@/components/logo";
-import { site } from "@/lib/site";
+import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
+import { BlurFade } from "@/components/magicui/blur-fade";
+import { BorderBeam } from "@/components/magicui/border-beam";
+import { Particles } from "@/components/magicui/particles";
+import { RippleButton } from "@/components/magicui/ripple-button";
+import { Safari } from "@/components/magicui/safari";
+import { ShimmerButton } from "@/components/magicui/shimmer-button";
+import { TextAnimate } from "@/components/magicui/text-animate";
+import { WordRotate } from "@/components/magicui/word-rotate";
 
 export function Hero() {
+	const router = useRouter();
+
 	return (
-		<section className="relative overflow-hidden pt-28 pb-16 sm:pt-36 sm:pb-24">
+		<section className="relative overflow-hidden pt-28 pb-16 sm:pt-32 sm:pb-24">
+			<Particles className="absolute inset-0" quantity={90} ease={80} color="#ffffff" refresh />
+
 			<div className="relative mx-auto max-w-6xl px-5 sm:px-6">
-				<motion.div
-					initial={{ opacity: 0, y: 12 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-					className="mx-auto max-w-3xl text-center"
-				>
-					<div className="mb-8 flex flex-col items-center gap-4">
-						<LogoMark className="size-14 rounded-xl sm:size-16" />
-						<p className="font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-							Nixploy
-						</p>
+				<div className="mx-auto max-w-3xl text-center">
+					<BlurFade delay={0.05}>
+						<div className="mb-7 flex flex-col items-center gap-4">
+							<LogoMark className="size-14 rounded-xl sm:size-16" />
+							<div className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1">
+								<AnimatedShinyText className="mx-0 text-xs font-medium tracking-wide text-neutral-300">
+									Self-hosted PaaS · open source
+								</AnimatedShinyText>
+							</div>
+						</div>
+					</BlurFade>
+
+					<TextAnimate
+						as="h1"
+						by="character"
+						animation="blurInUp"
+						startOnView={false}
+						className="font-display text-balance text-4xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl"
+					>
+						Nixploy
+					</TextAnimate>
+
+					<div className="mt-4 flex flex-wrap items-center justify-center gap-x-2 font-display text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+						<span>Ship</span>
+						<WordRotate
+							className="text-neutral-400"
+							words={["apps", "databases", "compose", "anything"]}
+						/>
+						<span>on your metal.</span>
 					</div>
 
-					<h1 className="font-display text-balance text-4xl font-semibold tracking-tight text-foreground sm:text-6xl">
-						Your servers. <span className="text-muted">Your PaaS.</span>
-					</h1>
-
-					<p className="mx-auto mt-5 max-w-xl text-balance text-lg leading-relaxed text-muted">
+					<TextAnimate
+						as="p"
+						by="word"
+						animation="fadeIn"
+						delay={0.2}
+						startOnView={false}
+						className="mx-auto mt-5 max-w-2xl text-balance text-lg leading-relaxed text-neutral-400 sm:text-xl"
+					>
 						Deploy apps, databases, and compose stacks on infrastructure you control — with Git
 						deploys, Traefik TLS, and a first-class CLI.
-					</p>
+					</TextAnimate>
 
-					<div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-						<Link
-							href="/install"
-							className="inline-flex h-11 items-center gap-2 rounded-md bg-amber px-5 text-sm font-medium text-background transition-colors hover:bg-amber-soft"
-						>
-							Install <ArrowRight className="size-4" />
-						</Link>
-						<Link
-							href="/docs"
-							className="inline-flex h-11 items-center rounded-md border border-border px-5 text-sm font-medium text-foreground transition-colors hover:bg-surface"
-						>
-							Docs
-						</Link>
-					</div>
-				</motion.div>
-
-				<motion.div
-					initial={{ opacity: 0, y: 24 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.6, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
-					className="relative mx-auto mt-16 max-w-5xl"
-				>
-					<div className="overflow-hidden rounded-lg border border-border bg-surface shadow-[0_40px_80px_-40px_rgba(232,163,23,0.25)]">
-						<div className="flex items-center gap-2 border-b border-border px-4 py-3">
-							<span className="size-2 rounded-full bg-border" />
-							<span className="size-2 rounded-full bg-border" />
-							<span className="size-2 rounded-full bg-border" />
-							<span className="ml-3 font-mono text-[11px] text-muted">
-								{site.url.replace("https://", "panel.")}
-							</span>
+					<BlurFade delay={0.28}>
+						<div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+							<Link href="/install">
+								<ShimmerButton className="h-11 gap-2 px-6 text-sm font-medium">
+									Get started <ArrowRight className="size-4" />
+								</ShimmerButton>
+							</Link>
+							<RippleButton
+								className="h-11 px-5 text-sm font-medium"
+								rippleColor="#ffffff"
+								onClick={() => router.push("/docs")}
+							>
+								Documentation
+							</RippleButton>
 						</div>
-						<Image
-							src="/screenshots/02-dashboard.png"
-							alt="Nixploy dashboard"
-							width={1600}
-							height={1000}
-							priority
-							className="h-auto w-full"
-						/>
+					</BlurFade>
+
+					<BlurFade delay={0.34}>
+						<div className="mx-auto mt-8 max-w-2xl">
+							<InstallCommand className="w-full" />
+						</div>
+					</BlurFade>
+				</div>
+
+				<BlurFade delay={0.4} className="relative mx-auto mt-16 max-w-5xl">
+					<div className="relative">
+						<Safari imageSrc="/screenshots/02-dashboard.png" url="panel.nixploy.local" />
+						<BorderBeam size={120} duration={10} colorFrom="#ffffff" colorTo="#525252" />
 					</div>
-				</motion.div>
+				</BlurFade>
 			</div>
 		</section>
 	);

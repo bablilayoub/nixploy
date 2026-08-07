@@ -31,7 +31,7 @@ export const metadata: Metadata = {
 	description: site.description,
 	alternates: { canonical: "/" },
 	icons: {
-		icon: [{ url: "/brand/nixploy-mark.png", type: "image/png" }],
+		icon: [{ url: "/brand/nixploy-mark-light.png", type: "image/png" }],
 		apple: [{ url: "/apple-icon.png", type: "image/png" }],
 	},
 	openGraph: {
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-	themeColor: "#0c0b0a",
+	themeColor: "#000000",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

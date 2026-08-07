@@ -68,7 +68,7 @@ export function Navbar() {
 					</a>
 					<Link
 						href="/install"
-						className="hidden rounded-md bg-amber px-3.5 py-1.5 text-sm font-medium text-background transition-colors hover:bg-amber-soft sm:inline-flex"
+						className="hidden rounded-md bg-foreground px-3.5 py-1.5 text-sm font-medium text-background transition-colors hover:bg-foreground/90 sm:inline-flex"
 					>
 						Get started
 					</Link>

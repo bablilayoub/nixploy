@@ -7,7 +7,7 @@ import { site } from "@/lib/site";
 export function ProseLink({ href, children }: { href: string; children: React.ReactNode }) {
 	const external = href.startsWith("http");
 	const className =
-		"text-amber-soft underline decoration-amber/40 underline-offset-4 transition-colors hover:decoration-amber";
+		"text-foreground underline decoration-foreground/40 underline-offset-4 transition-colors hover:decoration-foreground";
 	if (external) {
 		return (
 			<a href={href} target="_blank" rel="noreferrer" className={className}>
@@ -46,7 +46,7 @@ export function PageShell({
 					{title ? (
 						<div className="mb-12">
 							{eyebrow ? (
-								<p className="mb-3 font-mono text-xs tracking-[0.18em] text-amber uppercase">
+								<p className="mb-3 font-mono text-xs tracking-[0.18em] text-muted uppercase">
 									{eyebrow}
 								</p>
 							) : null}
@@ -72,7 +72,7 @@ export function PageShell({
 					<div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
 						<Link
 							href="/install"
-							className="inline-flex h-11 items-center rounded-md bg-amber px-5 text-sm font-medium text-background transition-colors hover:bg-amber-soft"
+							className="inline-flex h-11 items-center rounded-md bg-foreground px-5 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
 						>
 							Install guide
 						</Link>

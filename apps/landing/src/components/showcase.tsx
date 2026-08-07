@@ -39,7 +39,7 @@ export function Showcase() {
 		<section id="showcase" className="border-t border-border py-20 sm:py-28">
 			<div className="mx-auto max-w-6xl px-5 sm:px-6">
 				<div className="max-w-xl">
-					<p className="font-mono text-xs tracking-[0.18em] text-amber uppercase">Product</p>
+					<p className="font-mono text-xs tracking-[0.18em] text-muted uppercase">Product</p>
 					<h2 className="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
 						Know what’s running.
 					</h2>
@@ -56,7 +56,7 @@ export function Showcase() {
 							onClick={() => setActive(i)}
 							className={`border-b-2 px-3.5 py-3 text-sm transition-colors ${
 								i === active
-									? "border-amber text-foreground"
+									? "border-foreground text-foreground"
 									: "border-transparent text-muted hover:text-foreground"
 							}`}
 						>

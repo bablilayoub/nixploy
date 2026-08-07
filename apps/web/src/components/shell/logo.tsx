@@ -2,12 +2,15 @@ import Image from "next/image";
 
 import { cn } from "@/lib/utils";
 
-/** Public path for the Nixploy cheetah mark (apps/web/public/brand). */
+/** Dark mark (for light UI backgrounds). */
+export const NIXPLOY_MARK_DARK_SRC = "/brand/nixploy-mark-dark.png";
+/** Light mark (for dark UI backgrounds). */
+export const NIXPLOY_MARK_LIGHT_SRC = "/brand/nixploy-mark-light.png";
+/** Default / favicon: light mark on dark square. */
 export const NIXPLOY_MARK_SRC = "/brand/nixploy-mark.png";
 
 /**
- * Nixploy mark: amber cheetah head — speed / precise deploys.
- * Raster brand asset; use with the wordmark via `<Logo />`.
+ * Nixploy cheetah mark — theme-aware (dark mark in light mode, light mark in dark mode).
  */
 export function LogoMark({ className }: { className?: string }) {
 	return (
@@ -15,12 +18,21 @@ export function LogoMark({ className }: { className?: string }) {
 			className={cn("relative inline-flex size-5 shrink-0 overflow-hidden rounded-md", className)}
 		>
 			<Image
-				src={NIXPLOY_MARK_SRC}
+				src={NIXPLOY_MARK_DARK_SRC}
 				alt="Nixploy"
 				width={80}
 				height={80}
-				className="size-full object-cover"
+				className="size-full object-cover dark:hidden"
 				priority
+			/>
+			<Image
+				src={NIXPLOY_MARK_LIGHT_SRC}
+				alt=""
+				width={80}
+				height={80}
+				className="hidden size-full object-cover dark:block"
+				priority
+				aria-hidden
 			/>
 		</span>
 	);

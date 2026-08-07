@@ -24,7 +24,7 @@ export function InstallCommand({ className }: { className?: string }) {
 			type="button"
 			onClick={copy}
 			className={cn(
-				"group flex max-w-full items-center justify-between gap-4 rounded-lg border border-border bg-surface px-4 py-3 font-mono text-[13px] text-foreground/90 transition-colors hover:border-amber/40",
+				"group flex max-w-full items-center justify-between gap-4 rounded-lg border border-border bg-surface px-4 py-3 font-mono text-[13px] text-foreground/90 transition-colors hover:border-foreground/40",
 				className,
 			)}
 		>
@@ -34,7 +34,7 @@ export function InstallCommand({ className }: { className?: string }) {
 				<span className="sm:hidden">curl …/install.sh | sudo bash</span>
 			</span>
 			{copied ? (
-				<Check className="size-4 shrink-0 text-amber" />
+				<Check className="size-4 shrink-0 text-muted" />
 			) : (
 				<Copy className="size-4 shrink-0 text-muted group-hover:text-foreground" />
 			)}

@@ -3,8 +3,8 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
-/** Public path for the Nixploy cheetah mark. */
-export const NIXPLOY_MARK_SRC = "/brand/nixploy-mark.png";
+/** Landing is always dark charcoal — use the light mark. */
+export const NIXPLOY_MARK_SRC = "/brand/nixploy-mark-light.png";
 
 export function LogoMark({ className }: { className?: string }) {
 	return (

@@ -70,7 +70,7 @@ export default function FeaturesPage() {
 						<ul className="space-y-2.5 text-sm leading-relaxed text-muted">
 							{group.items.map((item) => (
 								<li key={item} className="flex gap-2">
-									<span className="mt-2 size-1 shrink-0 rounded-full bg-amber" aria-hidden />
+									<span className="mt-2 size-1 shrink-0 rounded-full bg-foreground" aria-hidden />
 									{item}
 								</li>
 							))}
@@ -82,7 +82,7 @@ export default function FeaturesPage() {
 				Ready to try it?{" "}
 				<Link
 					href="/install"
-					className="text-amber-soft underline decoration-amber/40 underline-offset-4"
+					className="text-foreground underline decoration-foreground/40 underline-offset-4"
 				>
 					Install guide
 				</Link>
@@ -91,7 +91,7 @@ export default function FeaturesPage() {
 					href={site.github}
 					target="_blank"
 					rel="noreferrer"
-					className="text-amber-soft underline decoration-amber/40 underline-offset-4"
+					className="text-foreground underline decoration-foreground/40 underline-offset-4"
 				>
 					GitHub
 				</a>

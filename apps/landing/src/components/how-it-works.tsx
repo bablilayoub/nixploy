@@ -21,7 +21,7 @@ export function HowItWorks() {
 		<section id="how" className="border-t border-border py-20 sm:py-28">
 			<div className="mx-auto max-w-6xl px-5 sm:px-6">
 				<div className="max-w-xl">
-					<p className="font-mono text-xs tracking-[0.18em] text-amber uppercase">How it works</p>
+					<p className="font-mono text-xs tracking-[0.18em] text-muted uppercase">How it works</p>
 					<h2 className="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
 						From bare metal to production.
 					</h2>
@@ -29,7 +29,7 @@ export function HowItWorks() {
 				<ol className="mt-14 grid gap-10 sm:grid-cols-3 sm:gap-8">
 					{steps.map((step) => (
 						<li key={step.n}>
-							<p className="font-mono text-xs text-amber">{step.n}</p>
+							<p className="font-mono text-xs text-muted">{step.n}</p>
 							<h3 className="mt-3 font-display text-lg font-semibold tracking-tight">
 								{step.title}
 							</h3>

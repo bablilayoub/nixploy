@@ -36,7 +36,7 @@ export function Templates() {
 	return (
 		<section id="templates" className="overflow-hidden border-t border-border py-20 sm:py-28">
 			<div className="mx-auto mb-12 max-w-6xl px-5 text-center sm:px-6">
-				<p className="font-mono text-xs tracking-[0.18em] text-amber uppercase">Templates</p>
+				<p className="font-mono text-xs tracking-[0.18em] text-muted uppercase">Templates</p>
 				<h2 className="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
 					One-click stacks
 				</h2>

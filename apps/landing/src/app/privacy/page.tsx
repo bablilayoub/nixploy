@@ -38,7 +38,7 @@ export default function PrivacyPage() {
 						Questions:{" "}
 						<a
 							href={`mailto:${site.email}`}
-							className="text-amber-soft underline decoration-amber/40 underline-offset-4"
+							className="text-foreground underline decoration-foreground/40 underline-offset-4"
 						>
 							{site.email}
 						</a>

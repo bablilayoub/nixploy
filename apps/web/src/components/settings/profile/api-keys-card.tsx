@@ -2,7 +2,8 @@
 
 import type { ApiKey } from "@better-auth/api-key";
 import { format } from "date-fns";
-import { Check, Copy, Loader2, Plus } from "lucide-react";
+import { Check, Copy, ExternalLink, Loader2, Plus } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
@@ -112,93 +113,101 @@ export function ApiKeysCard() {
 	return (
 		<SettingsSection
 			title="API keys"
-			description="Personal API keys for the REST API and CLI."
+			description="Personal API keys for the REST API and CLI. Use them with x-api-key or try endpoints in Swagger."
 			wide
 			actions={
-				<Dialog
-					open={createOpen}
-					onOpenChange={(open) => {
-						setCreateOpen(open);
-						if (!open) setCreatedKey(null);
-					}}
-				>
-					<DialogTrigger asChild>
-						<Button size="sm">
-							<Plus className="size-4" />
-							Create API Key
-						</Button>
-					</DialogTrigger>
-					<DialogContent>
-						{createdKey ? (
-							<>
-								<DialogHeader>
-									<DialogTitle>API key created</DialogTitle>
-									<DialogDescription>
-										Copy this key now — it will not be shown again.
-									</DialogDescription>
-								</DialogHeader>
-								<div className="flex items-center gap-2">
-									<code className="flex-1 truncate rounded-md border bg-muted px-3 py-2 text-xs">
-										{createdKey}
-									</code>
-									<Button
-										type="button"
-										variant="outline"
-										size="icon"
-										aria-label="Copy API key"
-										onClick={copyKey}
-									>
-										{copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-									</Button>
-								</div>
-								<DialogFooter>
-									<Button onClick={() => setCreateOpen(false)}>Done</Button>
-								</DialogFooter>
-							</>
-						) : (
-							<>
-								<DialogHeader>
-									<DialogTitle>Create API key</DialogTitle>
-									<DialogDescription>
-										Give the key a name and an optional expiration.
-									</DialogDescription>
-								</DialogHeader>
-								<div className="grid gap-4">
-									<div className="grid gap-2">
-										<Label htmlFor="api-key-name">Name</Label>
-										<Input
-											id="api-key-name"
-											placeholder="e.g. CLI on my laptop"
-											value={name}
-											onChange={(e) => setName(e.target.value)}
-										/>
+				<div className="flex flex-wrap items-center gap-2">
+					<Button variant="outline" size="sm" asChild>
+						<Link href="/swagger" target="_blank" rel="noreferrer">
+							Swagger
+							<ExternalLink className="size-3.5" />
+						</Link>
+					</Button>
+					<Dialog
+						open={createOpen}
+						onOpenChange={(open) => {
+							setCreateOpen(open);
+							if (!open) setCreatedKey(null);
+						}}
+					>
+						<DialogTrigger asChild>
+							<Button size="sm">
+								<Plus className="size-4" />
+								Create API Key
+							</Button>
+						</DialogTrigger>
+						<DialogContent>
+							{createdKey ? (
+								<>
+									<DialogHeader>
+										<DialogTitle>API key created</DialogTitle>
+										<DialogDescription>
+											Copy this key now — it will not be shown again.
+										</DialogDescription>
+									</DialogHeader>
+									<div className="flex items-center gap-2">
+										<code className="flex-1 truncate rounded-md border bg-muted px-3 py-2 text-xs">
+											{createdKey}
+										</code>
+										<Button
+											type="button"
+											variant="outline"
+											size="icon"
+											aria-label="Copy API key"
+											onClick={copyKey}
+										>
+											{copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+										</Button>
 									</div>
-									<div className="grid gap-2">
-										<Label>Expires</Label>
-										<Select value={expiration} onValueChange={setExpiration}>
-											<SelectTrigger>
-												<SelectValue />
-											</SelectTrigger>
-											<SelectContent>
-												{EXPIRATION_OPTIONS.map((option) => (
-													<SelectItem key={option.value} value={option.value}>
-														{option.label}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
+									<DialogFooter>
+										<Button onClick={() => setCreateOpen(false)}>Done</Button>
+									</DialogFooter>
+								</>
+							) : (
+								<>
+									<DialogHeader>
+										<DialogTitle>Create API key</DialogTitle>
+										<DialogDescription>
+											Give the key a name and an optional expiration.
+										</DialogDescription>
+									</DialogHeader>
+									<div className="grid gap-4">
+										<div className="grid gap-2">
+											<Label htmlFor="api-key-name">Name</Label>
+											<Input
+												id="api-key-name"
+												placeholder="e.g. CLI on my laptop"
+												value={name}
+												onChange={(e) => setName(e.target.value)}
+											/>
+										</div>
+										<div className="grid gap-2">
+											<Label>Expires</Label>
+											<Select value={expiration} onValueChange={setExpiration}>
+												<SelectTrigger>
+													<SelectValue />
+												</SelectTrigger>
+												<SelectContent>
+													{EXPIRATION_OPTIONS.map((option) => (
+														<SelectItem key={option.value} value={option.value}>
+															{option.label}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
+										</div>
 									</div>
-								</div>
-								<DialogFooter>
-									<Button disabled={isPending || !name} onClick={createKey}>
-										{isPending && <Loader2 className="size-4 animate-spin" />}
-										Create
-									</Button>
-								</DialogFooter>
-							</>
-						)}
-					</DialogContent>
-				</Dialog>
+									<DialogFooter>
+										<Button disabled={isPending || !name} onClick={createKey}>
+											{isPending && <Loader2 className="size-4 animate-spin" />}
+											Create
+										</Button>
+									</DialogFooter>
+								</>
+							)}
+						</DialogContent>
+					</Dialog>
+				</div>
 			}
 		>
 			{isLoading ? (

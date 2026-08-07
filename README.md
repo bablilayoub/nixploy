@@ -1,7 +1,7 @@
 # Nixploy
 
 <p align="center">
-  <img src="apps/web/public/brand/nixploy-mark.png" alt="Nixploy" width="96" height="96" />
+  <img src="apps/web/public/brand/nixploy-mark-light.png" alt="Nixploy" width="96" height="96" />
 </p>
 
 **Ship anything. Own everything.**
