@@ -15,19 +15,19 @@ const panels = [
 		reverse: false,
 	},
 	{
-		eyebrow: "Runtime",
-		title: "Logs, deploys, and metrics where you need them.",
-		body: "Watch builds, stream logs, and keep an eye on resource history without bolting on another stack.",
-		imageSrc: "/screenshots/05-tab-monitoring.png",
-		url: "panel.nixploy.local/monitoring",
-		reverse: true,
-	},
-	{
 		eyebrow: "Templates",
 		title: "One-click stacks when you want speed.",
 		body: "Spin up common apps and databases from the catalog, then own the compose and env from day one.",
 		imageSrc: "/screenshots/06-templates.png",
 		url: "panel.nixploy.local/templates",
+		reverse: true,
+	},
+	{
+		eyebrow: "Control center",
+		title: "Docker visibility without leaving the panel.",
+		body: "Inspect containers, images, and networks on the host — the same Swarm your deploys land on.",
+		imageSrc: "/screenshots/07-docker.png",
+		url: "panel.nixploy.local/docker",
 		reverse: false,
 	},
 ] as const;

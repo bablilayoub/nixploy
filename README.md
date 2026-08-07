@@ -15,6 +15,10 @@ Nixploy is a free, self-hostable Platform as a Service. Deploy applications, dat
 ![pnpm](https://img.shields.io/badge/pnpm-%3E%3D10-orange)
 ![Docker](https://img.shields.io/badge/docker-swarm-blue)
 
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="Nixploy dashboard" width="900" />
+</p>
+
 ## Install
 
 ```bash
@@ -42,6 +46,26 @@ Full installer options: [`docs/install.md`](./docs/install.md). Update with [`up
 | **Team** | Orgs & roles, audit log, notifications, quotas |
 | **Automate** | REST API (`x-api-key`), `/swagger` on your panel, `@nixploy/cli`, GitOps (`nixploy.yaml`) |
 | **Catalog** | 86+ one-click templates |
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="Projects dashboard" width="420" />
+  &nbsp;
+  <img src="docs/images/templates.png" alt="Template catalog" width="420" />
+</p>
+
+<p align="center">
+  <img src="docs/images/project.png" alt="Project services" width="420" />
+  &nbsp;
+  <img src="docs/images/docker.png" alt="Docker control center" width="420" />
+</p>
+
+<p align="center">
+  <img src="docs/images/service.png" alt="Application service" width="420" />
+  &nbsp;
+  <img src="docs/images/monitoring.png" alt="Service monitoring" width="420" />
+</p>
 
 ## Architecture
 
