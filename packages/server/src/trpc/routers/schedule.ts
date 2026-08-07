@@ -6,7 +6,11 @@ import { applications, compose, environments, projects, schedules, servers } fro
 import { assertApplicationAccess } from "../../modules/application";
 import { findServerById } from "../../modules/cluster";
 import { findComposeForOrg } from "../../modules/compose/service";
-import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
+import {
+	assertCapability,
+	assertOrgRole,
+	resolveCallerOrganizationId,
+} from "../../modules/projects";
 import {
 	getScheduleRunState,
 	isValidCron,
@@ -29,6 +33,40 @@ type Session = NonNullable<TRPCContext["session"]>;
 
 async function getOrganizationId(session: Session): Promise<string> {
 	return await resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
+}
+
+/**
+ * Canonical Swarm/compose project name for a schedule target.
+ * Never trust client-supplied `appName` — it can point at another tenant's container.
+ */
+async function resolveCanonicalAppName(target: {
+	scheduleType: "application" | "compose" | "server" | "nixploy-server";
+	applicationId?: string | null;
+	composeId?: string | null;
+}): Promise<string | null> {
+	if (target.scheduleType === "application") {
+		if (!target.applicationId) return null;
+		const app = await db.query.applications.findFirst({
+			where: eq(applications.applicationId, target.applicationId),
+			columns: { appName: true },
+		});
+		if (!app) {
+			throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
+		}
+		return app.appName;
+	}
+	if (target.scheduleType === "compose") {
+		if (!target.composeId) return null;
+		const stack = await db.query.compose.findFirst({
+			where: eq(compose.composeId, target.composeId),
+			columns: { appName: true },
+		});
+		if (!stack) {
+			throw new TRPCError({ code: "NOT_FOUND", message: "Compose stack not found" });
+		}
+		return stack.appName;
+	}
+	return null;
 }
 
 /** Verify the caller may manage a schedule targeting the given resource. */
@@ -67,15 +105,14 @@ async function assertTargetAccess(
 			if (!server) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Server not found" });
 			}
-			// Runs arbitrary shell on the host over SSH — infrastructure-level.
-			await assertCapability(session.user.id, organizationId, "schedules.manage");
+			// Arbitrary shell on a managed host — org admins only (not deployer).
+			await assertOrgRole(session.user.id, organizationId, "admin");
 			return;
 		}
 		case "nixploy-server": {
-			// Runs arbitrary shell inside the Nixploy process itself, so it is
-			// effectively instance root: admins only, ownership by userId below.
+			// Shell inside the Nixploy process (docker.sock) — instance admins only.
 			const organizationId = await getOrganizationId(session);
-			await assertCapability(session.user.id, organizationId, "schedules.manage");
+			await assertOrgRole(session.user.id, organizationId, "admin");
 			return;
 		}
 	}
@@ -89,7 +126,7 @@ async function assertScheduleAccess(session: Session, row: ScheduleRow): Promise
 		}
 		// Still admin-only: a demoted member keeps no host-shell access.
 		const organizationId = await getOrganizationId(session);
-		await assertCapability(session.user.id, organizationId, "schedules.manage");
+		await assertOrgRole(session.user.id, organizationId, "admin");
 		return;
 	}
 	await assertTargetAccess(session, row);
@@ -270,6 +307,7 @@ export const scheduleRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "schedules.manage");
 			await assertTargetAccess(ctx.session, input);
+			const appName = await resolveCanonicalAppName(input);
 			const [row] = await db
 				.insert(schedules)
 				.values({
@@ -280,7 +318,7 @@ export const scheduleRouter = router({
 					script: input.script ?? null,
 					enabled: input.enabled ?? true,
 					scheduleType: input.scheduleType,
-					appName: input.appName ?? null,
+					appName,
 					applicationId: input.applicationId ?? null,
 					composeId: input.composeId ?? null,
 					serverId: input.serverId ?? null,
@@ -318,7 +356,12 @@ export const scheduleRouter = router({
 					message: `Invalid cron expression: ${input.cronExpression}`,
 				});
 			}
-			const { scheduleId, ...values } = input;
+			const { scheduleId, appName: _ignoredAppName, ...rest } = input;
+			const values = {
+				...rest,
+				// Keep appName canonical — never accept a client override on update.
+				appName: await resolveCanonicalAppName(row),
+			};
 			const [updated] = await db
 				.update(schedules)
 				.set(values)

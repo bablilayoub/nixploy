@@ -1,3 +1,4 @@
+import path from "node:path";
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -10,6 +11,7 @@ import {
 	removeFileMount,
 	upsertApplicationSwarmService,
 } from "../../modules/application";
+import { getConfigDir, resolveFileMountPath } from "../../modules/application/paths";
 import { assertCapability, hasCapability } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
@@ -30,7 +32,6 @@ const mountFields = {
 const BLOCKED_HOST_PATH_PREFIXES = [
 	"/var/run/docker.sock",
 	"/run/docker.sock",
-	"/etc/nixploy",
 	"/etc/shadow",
 	"/etc/passwd",
 	"/root",
@@ -38,15 +39,32 @@ const BLOCKED_HOST_PATH_PREFIXES = [
 	"/sys",
 ] as const;
 
-/** Reject bind mounts that would expose host secrets or the Docker socket. */
+/**
+ * Reject bind mounts that would expose host secrets or the Docker socket.
+ * Resolve `.` / `..` before prefix checks so `/etc/nixploy/../shadow` cannot bypass.
+ */
 const assertSafeHostPath = (hostPath: string | null | undefined) => {
 	if (!hostPath) return;
-	const normalized = hostPath.replace(/\/+$/, "") || "/";
-	for (const blocked of BLOCKED_HOST_PATH_PREFIXES) {
-		if (normalized === blocked || normalized.startsWith(`${blocked}/`)) {
+	if (hostPath.includes("\0")) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "hostPath must not contain null bytes",
+		});
+	}
+	if (!path.isAbsolute(hostPath)) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "hostPath must be an absolute path",
+		});
+	}
+	const normalized = path.resolve(hostPath).replace(/\/+$/, "") || "/";
+	const blockedPrefixes = [...BLOCKED_HOST_PATH_PREFIXES, path.resolve(getConfigDir())];
+	for (const blocked of blockedPrefixes) {
+		const blockedNorm = path.resolve(blocked).replace(/\/+$/, "") || "/";
+		if (normalized === blockedNorm || normalized.startsWith(`${blockedNorm}/`)) {
 			throw new TRPCError({
 				code: "BAD_REQUEST",
-				message: `Bind mount hostPath is not allowed: ${blocked}`,
+				message: `Bind mount hostPath is not allowed: ${blockedNorm}`,
 			});
 		}
 	}
@@ -75,6 +93,19 @@ const validateMountFields = (input: {
 		throw new TRPCError({
 			code: "BAD_REQUEST",
 			message: "filePath is required for file mounts",
+		});
+	}
+};
+
+/** Reject file mount paths that escape the application's files directory. */
+const assertSafeFilePath = (appName: string, filePath: string | null | undefined) => {
+	if (!filePath) return;
+	try {
+		resolveFileMountPath(appName, filePath);
+	} catch {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: `Invalid file mount path: ${filePath}`,
 		});
 	}
 };
@@ -137,6 +168,7 @@ export const mountRouter = router({
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 			validateMountFields(input);
 			if (input.type === "bind") assertSafeHostPath(input.hostPath);
+			if (input.type === "file") assertSafeFilePath(application.appName, input.filePath);
 
 			const [mount] = await db
 				.insert(mounts)
@@ -197,6 +229,7 @@ export const mountRouter = router({
 			};
 			validateMountFields(next);
 			if (next.type === "bind") assertSafeHostPath(next.hostPath);
+			if (next.type === "file") assertSafeFilePath(application.appName, next.filePath);
 
 			const [updated] = await db
 				.update(mounts)

@@ -95,9 +95,7 @@ function spawnLocal(command: string, options: SpawnOptions): TargetedProcess {
 			} else {
 				reject(
 					new CommandError(
-						killed
-							? `Command was cancelled: ${command}`
-							: `Command failed (exit ${code}): ${command}`,
+						killed ? "Command was cancelled" : `Command failed (exit ${code})`,
 						code,
 						killed,
 					),
@@ -162,7 +160,7 @@ async function spawnRemote(
 			conn.end();
 			if (code === 0 || (code === null && killed)) {
 				if (code === null && killed) {
-					reject(new CommandError(`Command was cancelled: ${command}`, code, true));
+					reject(new CommandError("Command was cancelled", code, true));
 					return;
 				}
 				resolve();
@@ -170,8 +168,8 @@ async function spawnRemote(
 				reject(
 					new CommandError(
 						killed
-							? `Command was cancelled: ${command}`
-							: `Remote command failed (exit ${code}) on server ${server.name}: ${command}`,
+							? "Command was cancelled"
+							: `Remote command failed (exit ${code}) on server ${server.name}`,
 						code,
 						killed,
 					),

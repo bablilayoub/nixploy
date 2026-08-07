@@ -9,7 +9,6 @@ import { readCachedExplanation } from "./explanation-cache";
 
 export type ApplyPatchResult = {
 	appliedKeys: string[];
-	env: string;
 	deploymentId: string | null;
 };
 
@@ -61,7 +60,7 @@ export async function applySuggestedEnvPatch(options: {
 						applicationId: deployment.application.applicationId,
 						type: "redeploy",
 					});
-		return { appliedKeys: keys, env: next, deploymentId };
+		return { appliedKeys: keys, deploymentId };
 	}
 
 	if (deployment.compose) {
@@ -74,7 +73,7 @@ export async function applySuggestedEnvPatch(options: {
 						composeId: deployment.compose.composeId,
 						type: "redeploy",
 					});
-		return { appliedKeys: keys, env: next, deploymentId };
+		return { appliedKeys: keys, deploymentId };
 	}
 
 	throw new Error("Deployment is not linked to an application or compose service");

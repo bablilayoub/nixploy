@@ -22,6 +22,7 @@ test-results/
 
 # local Nixploy runtime (Traefik YAML, compose files, logs, metrics, ACME)
 .nixploy-data/
+dev.sh
 
 # logs
 *.log

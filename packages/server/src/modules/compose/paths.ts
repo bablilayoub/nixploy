@@ -1,4 +1,4 @@
-import { join, normalize } from "node:path";
+import { join, normalize, sep } from "node:path";
 
 /**
  * Root of all Nixploy-managed on-disk state (compose files, clones, logs).
@@ -37,7 +37,7 @@ export const resolveComposeFilePath = (
 	}
 	const codeDir = getComposeCodeDir(appName);
 	const resolved = normalize(join(codeDir, composePath));
-	if (!resolved.startsWith(codeDir)) {
+	if (resolved !== codeDir && !resolved.startsWith(codeDir + sep)) {
 		throw new Error(`composePath escapes the code directory: ${composePath}`);
 	}
 	return resolved;

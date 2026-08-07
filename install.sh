@@ -12,7 +12,8 @@
 # Environment overrides:
 #   NIXPLOY_DOMAIN               Dashboard domain (A record → this server)
 #   NIXPLOY_LETSENCRYPT_EMAIL    ACME email for certificates
-#   NIXPLOY_VERSION              App image tag                  (default: latest)
+#   NIXPLOY_VERSION              App image tag (prefer a release tag, e.g. v0.1.0;
+#                                default latest is convenient but not supply-chain pinned)
 #   NIXPLOY_IMAGE                Full image ref (overrides tag)
 #   NIXPLOY_PORT                 Host port for direct app access (default: 3000)
 #   NIXPLOY_CONFIG_DIR           Host config directory          (default: /etc/nixploy)

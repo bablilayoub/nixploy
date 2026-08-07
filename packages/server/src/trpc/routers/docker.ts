@@ -79,6 +79,7 @@ export const dockerRouter = router({
 	// ── Containers ────────────────────────────────────────────────────────────
 
 	containers: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
+		await assertAdmin(ctx);
 		const out = await runOn(ctx, input.serverId, `docker ps -a --format '{{json .}}'`);
 		return parseJsonLines<{
 			ID: string;
@@ -137,6 +138,7 @@ export const dockerRouter = router({
 	// ── Images ────────────────────────────────────────────────────────────────
 
 	images: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
+		await assertAdmin(ctx);
 		const out = await runOn(ctx, input.serverId, `docker images --format '{{json .}}'`);
 		return parseJsonLines<{
 			Repository: string;
@@ -176,6 +178,7 @@ export const dockerRouter = router({
 	// ── Swarm ─────────────────────────────────────────────────────────────────
 
 	swarmServices: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
+		await assertAdmin(ctx);
 		const out = await runOn(ctx, input.serverId, `docker service ls --format '{{json .}}'`);
 		return parseJsonLines<{
 			ID: string;
@@ -191,6 +194,7 @@ export const dockerRouter = router({
 	}),
 
 	nodes: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
+		await assertAdmin(ctx);
 		const out = await runOn(ctx, input.serverId, `docker node ls --format '{{json .}}'`);
 		return parseJsonLines<{
 			ID: string;
@@ -222,6 +226,7 @@ export const dockerRouter = router({
 	// ── Networks ──────────────────────────────────────────────────────────────
 
 	networks: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
+		await assertAdmin(ctx);
 		const out = await runOn(ctx, input.serverId, `docker network ls --format '{{json .}}'`);
 		return parseJsonLines<{
 			ID: string;
@@ -251,6 +256,7 @@ export const dockerRouter = router({
 	// ── Volumes ───────────────────────────────────────────────────────────────
 
 	volumes: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
+		await assertAdmin(ctx);
 		const out = await runOn(ctx, input.serverId, `docker volume ls --format '{{json .}}'`);
 		return parseJsonLines<{
 			Name: string;
@@ -287,6 +293,7 @@ export const dockerRouter = router({
 	// ── System ────────────────────────────────────────────────────────────────
 
 	systemInfo: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
+		await assertAdmin(ctx);
 		const [version, df] = await Promise.all([
 			runOn(ctx, input.serverId, `docker version --format '{{json .}}'`),
 			runOn(ctx, input.serverId, `docker system df --format '{{json .}}'`),

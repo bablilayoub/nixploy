@@ -239,7 +239,15 @@ export const composeRouter = router({
 				targetName: row.name,
 				metadata: { environmentId: input.environmentId },
 			});
-			return updated;
+			if (!updated) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Compose not found" });
+			}
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? updated : redactComposeSecrets(updated);
 		}),
 
 	delete: protectedProcedure.input(composeIdInput).mutation(async ({ ctx, input }) => {

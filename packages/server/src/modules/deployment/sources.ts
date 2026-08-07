@@ -49,7 +49,7 @@ async function resolveGitSource(application: ApplicationRow): Promise<GitSource>
 				const keyPath = `${getSshKeysPath()}/${key.sshKeyId}.pem`;
 				await writeFileTargeted(null, keyPath, key.privateKey, "600");
 				source.env = {
-					GIT_SSH_COMMAND: `ssh -i ${shellQuote(keyPath)} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null`,
+					GIT_SSH_COMMAND: `ssh -i ${shellQuote(keyPath)} -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${shellQuote(`${getSshKeysPath()}/known_hosts`)}`,
 				};
 			}
 			return source;
@@ -217,8 +217,7 @@ export async function cloneGitSource(
 
 /**
  * Unpack the uploaded drop archive (`<configDir>/applications/<appName>/code.zip`)
- * into the code directory. Local extracts use adm-zip; remote servers receive
- * the zip over SSH and unpack it with `unzip` (python3 fallback).
+ * into the code directory. Rejects Zip-Slip entries locally and on remote hosts.
  */
 export async function extractDropSource(
 	ctx: DeploymentContext,
@@ -235,21 +234,57 @@ export async function extractDropSource(
 		});
 		await writeFileTargeted(ctx.serverId, zipPath, zip);
 		const dir = shellQuote(codeDir);
-		const zipQ = shellQuote(zipPath);
+		// Prefer Python zipfile with path checks — unzip(1) does not block Zip-Slip.
 		await ctx.run(
-			`rm -rf ${dir} && mkdir -p ${dir} && ` +
-				`(if command -v unzip >/dev/null 2>&1; then unzip -o -q ${zipQ} -d ${dir}; ` +
-				`else python3 -m zipfile -e ${zipQ} ${dir}; fi)`,
+			`rm -rf ${dir} && mkdir -p ${dir} && python3 - <<'PY'\n` +
+				`import os, zipfile\n` +
+				`code_dir = ${JSON.stringify(codeDir)}\n` +
+				`zip_path = ${JSON.stringify(zipPath)}\n` +
+				`code_dir = os.path.realpath(code_dir)\n` +
+				`with zipfile.ZipFile(zip_path) as zf:\n` +
+				`    for info in zf.infolist():\n` +
+				`        name = info.filename\n` +
+				`        parts = name.replace('\\\\', '/').split('/')\n` +
+				`        if name.startswith('/') or name.startswith('\\\\') or '..' in parts:\n` +
+				`            raise SystemExit(f'unsafe zip entry: {name}')\n` +
+				`        dest = os.path.realpath(os.path.join(code_dir, name))\n` +
+				`        if dest != code_dir and not dest.startswith(code_dir + os.sep):\n` +
+				`            raise SystemExit(f'zip slip: {name}')\n` +
+				`        if info.is_dir():\n` +
+				`            os.makedirs(dest, exist_ok=True)\n` +
+				`            continue\n` +
+				`        os.makedirs(os.path.dirname(dest) or code_dir, exist_ok=True)\n` +
+				`        with zf.open(info) as src, open(dest, 'wb') as out:\n` +
+				`            out.write(src.read())\n` +
+				`PY`,
 		);
 		return codeDir;
 	}
 
 	const { default: AdmZip } = await import("adm-zip");
 	const fs = await import("node:fs/promises");
+	const path = await import("node:path");
 	await fs.rm(codeDir, { recursive: true, force: true });
 	await fs.mkdir(codeDir, { recursive: true });
 	try {
-		new AdmZip(zipPath).extractAllTo(codeDir, true);
+		const zip = new AdmZip(zipPath);
+		const base = path.resolve(codeDir);
+		for (const entry of zip.getEntries()) {
+			const name = entry.entryName;
+			if (name.startsWith("/") || name.startsWith("\\") || name.split(/[/\\]/).includes("..")) {
+				throw new Error(`Unsafe zip entry: ${name}`);
+			}
+			const dest = path.resolve(base, name);
+			if (dest !== base && !dest.startsWith(base + path.sep)) {
+				throw new Error(`Zip slip blocked: ${name}`);
+			}
+			if (entry.isDirectory) {
+				await fs.mkdir(dest, { recursive: true });
+				continue;
+			}
+			await fs.mkdir(path.dirname(dest), { recursive: true });
+			await fs.writeFile(dest, entry.getData());
+		}
 	} catch (error) {
 		throw new Error(
 			`Failed to extract drop archive at ${zipPath}: ${error instanceof Error ? error.message : String(error)}`,

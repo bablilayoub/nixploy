@@ -143,7 +143,12 @@ export const environmentRouter = router({
 				})
 				.where(eq(environments.environmentId, input.environmentId))
 				.returning();
-			return updated;
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? updated : { ...updated, env: null };
 		}),
 
 	/**

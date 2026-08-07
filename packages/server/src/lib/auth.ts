@@ -1,5 +1,5 @@
 import { apiKey } from "@better-auth/api-key";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";

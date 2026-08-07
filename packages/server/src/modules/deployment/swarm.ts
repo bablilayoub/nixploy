@@ -2,10 +2,10 @@ import type Docker from "dockerode";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { environments, mounts, ports } from "../../db/schema";
+import { resolveFileMountPath } from "../application/paths";
 import type { DeploymentContext } from "./context";
 import { getDocker } from "./docker";
 import { envToArray, mergeEnv } from "./env";
-import { getFilesPath } from "./paths";
 import type { ApplicationRow } from "./sources";
 
 /** Attachable overlay network every swarm service joins (Traefik routing). */
@@ -80,7 +80,7 @@ export async function upsertSwarmService(
 			}
 			const source =
 				mount.type === "file"
-					? `${getFilesPath(application.appName)}/${mount.filePath ?? ""}`
+					? resolveFileMountPath(application.appName, mount.filePath ?? "")
 					: (mount.hostPath ?? "");
 			return {
 				Type: "bind",

@@ -1,5 +1,7 @@
 # Development setup
 
+Contributor overview (clone → PR): [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
+
 ## Prerequisites
 
 - Node ≥ 22, pnpm ≥ 10 (`corepack enable` gives you the pinned pnpm).
@@ -28,6 +30,13 @@ app in containers — useful for smoke-testing the production image.)
 | `NIXPLOY_CONFIG_DIR` | Where app code, compose files, logs and Traefik dynamic YAML live. Dev default: `.nixploy-data/` at the repo root; production: `/etc/nixploy` |
 | `NIXPLOY_NETWORK` | Shared overlay network name (default `nixploy-network`) |
 
+Generate secrets once:
+
+```bash
+openssl rand -hex 24   # BETTER_AUTH_SECRET
+openssl rand -hex 16   # ENCRYPTION_KEY
+```
+
 ## Run
 
 ```bash
@@ -35,6 +44,8 @@ pnpm install
 pnpm db:migrate                 # apply Drizzle migrations to DATABASE_URL
 cd apps/web && pnpm dev         # http://localhost:3000 (loads .env itself)
 ```
+
+Optional landing site: `cd apps/landing && pnpm dev` → http://localhost:3001.
 
 First run: open `/setup` on a fresh database to create the owner account
 (public `/register` is removed). An organization `<name>'s Org` is created

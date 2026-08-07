@@ -29,12 +29,15 @@ Guides for running and developing Nixploy. Start here, then dive deep.
 
 | Guide | What it’s for |
 | --- | --- |
+| [**CONTRIBUTING.md**](../CONTRIBUTING.md) | Clone → run → PR checklist (start here) |
 | [development.md](./development.md) | Local setup, env, verification loop |
 | [next.md](./next.md) | **What we do next** — polish / organize / optimize (no new features) |
 | [hardening.md](./hardening.md) | Phase 9 technical backlog with evidence + acceptance criteria |
+| [AGENTS.md](../AGENTS.md) | Repo conventions (tenancy, routers, secrets) |
 
 ## Also see
 
+- **Contributing:** [`../CONTRIBUTING.md`](../CONTRIBUTING.md)
 - Product blueprint: [`../PLAN.md`](../PLAN.md)
 - Agent / contributor conventions: [`../AGENTS.md`](../AGENTS.md)
 - Marketing site docs entry: [nixploy.com/docs](https://nixploy.com/docs)

@@ -174,7 +174,13 @@ export const notificationRouter = router({
 			.insert(notifications)
 			.values({ ...input, organizationId: orgId })
 			.returning();
-		return row;
+		if (!row) {
+			throw new TRPCError({
+				code: "INTERNAL_SERVER_ERROR",
+				message: "Failed to create notification",
+			});
+		}
+		return publicNotification(row, false);
 	}),
 
 	update: protectedProcedure.input(updateNotificationSchema).mutation(async ({ ctx, input }) => {
@@ -187,7 +193,10 @@ export const notificationRouter = router({
 			.set(values)
 			.where(eq(notifications.notificationId, notificationId))
 			.returning();
-		return row;
+		if (!row) {
+			throw new TRPCError({ code: "NOT_FOUND", message: "Notification not found" });
+		}
+		return publicNotification(row, false);
 	}),
 
 	remove: protectedProcedure

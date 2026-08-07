@@ -160,6 +160,10 @@ export const aiRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await requireMember(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "ai.use");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			if (input.redeploy !== false) {
+				await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
+			}
 			const patch = input.patch?.trim();
 			if (patch && !isEnvLikePatch(patch)) {
 				throw new TRPCError({

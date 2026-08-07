@@ -37,7 +37,7 @@ function buildInnerCommand(target: ScheduleTarget): string {
 }
 
 async function resolveAppName(target: ScheduleTarget): Promise<string> {
-	if (target.appName) return target.appName;
+	// Prefer IDs over stored appName so a stale/tampered name cannot retarget exec.
 	if (target.applicationId) {
 		const app = await db.query.applications.findFirst({
 			where: eq(applications.applicationId, target.applicationId),
@@ -50,6 +50,7 @@ async function resolveAppName(target: ScheduleTarget): Promise<string> {
 		});
 		if (stack) return stack.appName;
 	}
+	if (target.appName) return target.appName;
 	throw new Error("Schedule has no appName and its target service could not be resolved");
 }
 

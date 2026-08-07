@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { z } from "zod";
+import { assertPublicHttpsUrl } from "../../utils/public-url";
 
 /**
  * Notification channel providers.
@@ -118,6 +119,7 @@ async function postJson(
 		headers: { "Content-Type": "application/json", ...headers },
 		body: JSON.stringify(body),
 		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+		redirect: "error",
 	});
 	if (!response.ok) {
 		const text = await response.text().catch(() => "");
@@ -417,6 +419,8 @@ export async function sendCustomNotification(
 	config: CustomConfig,
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
+	// Custom endpoints are attacker-controlled — block private/metadata SSRF.
+	await assertPublicHttpsUrl(config.endpoint);
 	await postJson(
 		config.endpoint,
 		{

@@ -102,23 +102,35 @@ Remote servers join the primary Swarm over SSH. Details: [`docs/architecture.md`
 
 ## Quick start (local development)
 
-Prerequisites: **Node.js ≥ 22**, **pnpm ≥ 10**, **Docker**.
+Prerequisites: **Node.js ≥ 22**, **pnpm ≥ 10**, **Docker** (Swarm active: `docker swarm init` if needed).
 
 ```bash
 pnpm install
 
-docker run -d --name nixploy-postgres \
+docker run -d --name nixploy-dev-pg \
   -e POSTGRES_USER=nixploy -e POSTGRES_PASSWORD=nixploy -e POSTGRES_DB=nixploy \
-  -p 5432:5432 postgres:17-alpine
+  -p 54329:5432 postgres:17-alpine
 
 cp apps/web/.env.example apps/web/.env
-# Set BETTER_AUTH_SECRET and ENCRYPTION_KEY (openssl rand -hex 32 each)
+```
 
-pnpm -F @nixploy/server db:migrate
+Set in `apps/web/.env`:
+
+```bash
+DATABASE_URL=postgres://nixploy:nixploy@127.0.0.1:54329/nixploy
+BETTER_AUTH_SECRET=$(openssl rand -hex 24)   # paste the output
+ENCRYPTION_KEY=$(openssl rand -hex 16)
+BETTER_AUTH_URL=http://localhost:3000
+```
+
+```bash
+pnpm db:migrate
 cd apps/web && pnpm dev
 ```
 
-Open <http://localhost:3000> and complete `/setup`. More: [`docs/development.md`](./docs/development.md) · [`docs/getting-started.md`](./docs/getting-started.md).
+Open <http://localhost:3000/setup>. Optional landing: `cd apps/landing && pnpm dev` → <http://localhost:3001>.
+
+Full contributor guide: [`CONTRIBUTING.md`](./CONTRIBUTING.md) · deeper setup: [`docs/development.md`](./docs/development.md).
 
 ### CLI & API
 
@@ -134,6 +146,7 @@ REST paths are `GET|POST /api/<router>.<procedure>` with an `x-api-key` header. 
 
 | Guide | Link |
 | --- | --- |
+| **Contributing** | [`CONTRIBUTING.md`](./CONTRIBUTING.md) |
 | Docs index | [`docs/README.md`](./docs/README.md) |
 | Install | [`docs/install.md`](./docs/install.md) |
 | Getting started | [`docs/getting-started.md`](./docs/getting-started.md) |
@@ -155,4 +168,4 @@ REST paths are `GET|POST /api/<router>.<procedure>` with an `x-api-key` header. 
 
 ## License
 
-Apache-2.0
+Apache-2.0 — contributions welcome under the same license. See [`CONTRIBUTING.md`](./CONTRIBUTING.md).

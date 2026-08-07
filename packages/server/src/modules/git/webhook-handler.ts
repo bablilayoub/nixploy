@@ -228,14 +228,29 @@ async function verifyAndExtractBitbucket(
 	rawBody: string,
 	providerId?: string,
 ): Promise<ExtractedWebhook> {
-	// Bitbucket Cloud has no payload signature; the event key is the only
-	// routing signal. When the webhook URL names a provider, that row must
-	// exist (the unguessable URL is the credential).
+	// Bitbucket Cloud has no standard HMAC for all plans. Require a Bearer token
+	// matching the provider's API token (or app password) so the webhook URL alone
+	// is not enough to forge deploys. Configure the same value as a custom header
+	// in Bitbucket: Authorization: Bearer <token>.
 	if (providerId) {
 		const rows = await db.select().from(bitbucket).where(eq(bitbucket.bitbucketId, providerId));
 		if (rows.length === 0) {
 			throw new WebhookUnauthorized(`unknown bitbucket provider: ${providerId}`);
 		}
+		const row = rows[0];
+		const expected = row?.apiToken || row?.appPassword;
+		if (!expected) {
+			throw new WebhookUnauthorized(
+				"bitbucket provider has no api token/app password configured for webhook auth",
+			);
+		}
+		const auth = header(headers, "authorization") ?? "";
+		const presented = auth.replace(/^Bearer\s+/i, "").trim();
+		if (!presented || !safeEqual(presented, expected)) {
+			throw new WebhookUnauthorized("bitbucket webhook authorization failed");
+		}
+	} else {
+		throw new WebhookUnauthorized("bitbucket webhooks require a provider id in the URL");
 	}
 	const event = header(headers, "x-event-key") ?? "";
 	const payload = JSON.parse(rawBody);

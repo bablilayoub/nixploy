@@ -31,6 +31,7 @@ import {
 	cancelDeployment as cancelQueuedDeployment,
 	queueDeployment,
 } from "../../modules/deployment";
+import { shellQuote } from "../../modules/deployment/paths";
 import { assertCapability, assertWithinQuota, hasCapability } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import {
@@ -301,7 +302,12 @@ export const applicationRouter = router({
 				targetName: application.name,
 				metadata: { environmentId: environment.environmentId },
 			});
-			return updated;
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? updated : redactApplicationSecrets(updated);
 		}),
 
 	delete: protectedProcedure.input(applicationIdInput).mutation(async ({ ctx, input }) => {
@@ -603,7 +609,7 @@ export const applicationRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 		const application = await assertApplicationAccess(input.applicationId, organizationId);
-		const command = `pkill -9 -f '${application.appName}' || true`;
+		const command = `pkill -9 -f ${shellQuote(application.appName)} || true`;
 		try {
 			if (application.serverId) {
 				await execAsyncRemote(application.serverId, command);
