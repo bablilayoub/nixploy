@@ -9,6 +9,7 @@ import {
 	upsertApplicationSwarmService,
 } from "../../modules/application";
 import { assertCapability } from "../../modules/projects";
+import { assertSafePublishedPort } from "../../utils/validators";
 import { protectedProcedure, router } from "../init";
 
 const portFields = {
@@ -56,6 +57,7 @@ export const portRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
+			assertSafePublishedPort(input.publishedPort);
 
 			const [port] = await db
 				.insert(ports)
@@ -92,11 +94,13 @@ export const portRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const { port, application } = await findApplicationPort(input.portId, organizationId);
+			const publishedPort = input.publishedPort ?? port.publishedPort;
+			assertSafePublishedPort(publishedPort);
 
 			const [updated] = await db
 				.update(ports)
 				.set({
-					publishedPort: input.publishedPort ?? port.publishedPort,
+					publishedPort,
 					targetPort: input.targetPort ?? port.targetPort,
 					protocol: input.protocol ?? port.protocol,
 					publishMode: input.publishMode ?? port.publishMode,

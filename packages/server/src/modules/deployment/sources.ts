@@ -49,7 +49,7 @@ async function resolveGitSource(application: ApplicationRow): Promise<GitSource>
 				const keyPath = `${getSshKeysPath()}/${key.sshKeyId}.pem`;
 				await writeFileTargeted(null, keyPath, key.privateKey, "600");
 				source.env = {
-					GIT_SSH_COMMAND: `ssh -i ${shellQuote(keyPath)} -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${shellQuote(`${getSshKeysPath()}/known_hosts`)}`,
+					GIT_SSH_COMMAND: `ssh -i ${shellQuote(keyPath)} -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${shellQuote(`${getSshKeysPath()}/known_hosts`)}`,
 				};
 			}
 			return source;

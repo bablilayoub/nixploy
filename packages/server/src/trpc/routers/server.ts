@@ -7,12 +7,14 @@ import {
 	getServerStatsBatch,
 	getServerStatsCached,
 	listServersByOrganization,
+	redactServerCommandLog,
 	removeServer,
 	setupServer,
 	testConnection,
 	updateServerById,
 } from "../../modules/cluster";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
+import { clearRemoteHostKey } from "../../utils/exec";
 import { assertSshKeyInOrganization } from "../assert-org-refs";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
@@ -44,17 +46,26 @@ const createServerInput = z.object({
 	swarmRole: z.enum(["worker", "manager"]).optional(),
 });
 
+/** Strip secrets from a server row before returning it to clients. */
+function publicServer<T extends { command?: string | null }>(server: T): T {
+	return {
+		...server,
+		command: redactServerCommandLog(server.command),
+	};
+}
+
 export const serverRouter = router({
 	/** All managed servers of the caller's organization. */
 	all: protectedProcedure.query(async ({ ctx }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		return await listServersByOrganization(organizationId);
+		const rows = await listServersByOrganization(organizationId);
+		return rows.map(publicServer);
 	}),
 
 	/** A single server by id. */
 	one: protectedProcedure.input(serverIdInput).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		return await findServerOrThrow(input.serverId, organizationId);
+		return publicServer(await findServerOrThrow(input.serverId, organizationId));
 	}),
 
 	/** Register a new managed server (does not provision it; use `setup`). */
@@ -80,7 +91,7 @@ export const serverRouter = router({
 			targetId: created?.serverId,
 			targetName: created?.name ?? input.name,
 		});
-		return created;
+		return created ? publicServer(created) : created;
 	}),
 
 	/** Update connection details, status or the docker-cleanup toggle. */
@@ -98,7 +109,8 @@ export const serverRouter = router({
 			await findServerOrThrow(input.serverId, organizationId);
 			await assertSshKeyInOrganization(input.sshKeyId, organizationId);
 			const { serverId, ...values } = input;
-			return await updateServerById(serverId, values, organizationId);
+			const updated = await updateServerById(serverId, values, organizationId);
+			return updated ? publicServer(updated) : updated;
 		}),
 
 	/** Detach a server from the organization (does not touch the host). */
@@ -107,13 +119,14 @@ export const serverRouter = router({
 		await assertCapability(ctx.session.user.id, organizationId, "servers.manage");
 		const server = await findServerOrThrow(input.serverId, organizationId);
 		const removed = await removeServer(input.serverId, organizationId);
+		clearRemoteHostKey(input.serverId);
 		await auditFromSession(ctx, organizationId, {
 			action: "server.delete",
 			targetType: "server",
 			targetId: input.serverId,
 			targetName: server.name,
 		});
-		return removed;
+		return removed ? publicServer(removed) : removed;
 	}),
 
 	/** Verify SSH reachability and remote Docker availability. */
@@ -134,7 +147,7 @@ export const serverRouter = router({
 		await assertCapability(ctx.session.user.id, organizationId, "servers.manage");
 		await findServerOrThrow(input.serverId, organizationId);
 		const command = await setupServer(input.serverId);
-		return { command };
+		return { command: redactServerCommandLog(command) };
 	}),
 
 	/** Live node metrics (docker, cpu, memory, disk, load) collected over SSH. */

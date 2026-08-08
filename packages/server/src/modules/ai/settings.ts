@@ -2,6 +2,11 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { webServerSettings } from "../../db/schema";
 import { decrypt, encrypt } from "../../lib/encryption";
+import {
+	assertPublicHttpsUrl,
+	isCloudMetadataHostname,
+	isLoopbackHostname,
+} from "../../utils/public-url";
 
 const EXTRAS_KEY = "webServer";
 
@@ -29,11 +34,14 @@ const defaults: AiSettings = {
 };
 
 /**
- * Block AI provider base URLs that would SSRF into link-local / private ranges
- * when the provider is a public cloud API. Ollama / openai-compatible may use
- * localhost for local models.
+ * Block AI provider base URLs that would SSRF into link-local / private ranges.
+ * Ollama may use loopback only. openai-compatible may use loopback or public https
+ * (DNS-resolved). Cloud providers must be public https.
  */
-function assertSafeAiBaseUrl(baseUrl: string | null, provider: AiProvider): void {
+export async function assertSafeAiBaseUrl(
+	baseUrl: string | null,
+	provider: AiProvider,
+): Promise<void> {
 	if (!baseUrl?.trim()) return;
 	let parsed: URL;
 	try {
@@ -44,23 +52,44 @@ function assertSafeAiBaseUrl(baseUrl: string | null, provider: AiProvider): void
 	if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
 		throw new Error("AI base URL must be http(s)");
 	}
-	if (provider === "ollama" || provider === "openai-compatible") {
-		return;
+	if (isCloudMetadataHostname(parsed.hostname)) {
+		throw new Error("AI base URL must not target cloud metadata");
 	}
-	const host = parsed.hostname.toLowerCase();
-	if (
-		host === "localhost" ||
-		host === "127.0.0.1" ||
-		host === "::1" ||
-		host.endsWith(".local") ||
-		host.startsWith("10.") ||
-		host.startsWith("192.168.") ||
-		/^172\.(1[6-9]|2\d|3[0-1])\./.test(host) ||
-		host.startsWith("169.254.") ||
-		host.startsWith("metadata.")
-	) {
-		throw new Error("AI base URL must not target private or link-local addresses");
+	if (isLoopbackHostname(parsed.hostname)) {
+		if (provider === "ollama" || provider === "openai-compatible") {
+			return;
+		}
+		throw new Error("AI base URL must not target loopback for cloud providers");
 	}
+	if (provider === "ollama") {
+		throw new Error("Ollama base URL must be loopback (127.0.0.1 / localhost)");
+	}
+	await assertPublicHttpsUrl(baseUrl);
+}
+
+/** Re-validate before every outbound LLM call (defense in depth). */
+export async function assertAiFetchBaseUrl(settings: AiSettings): Promise<string> {
+	if (settings.provider === "ollama") {
+		const base = (settings.baseUrl ?? "http://127.0.0.1:11434/v1").replace(/\/$/, "");
+		await assertSafeAiBaseUrl(base, "ollama");
+		return base;
+	}
+	if (settings.provider === "openai-compatible") {
+		if (!settings.baseUrl?.trim()) {
+			throw new Error("Base URL is required for OpenAI-compatible providers");
+		}
+		const base = settings.baseUrl.replace(/\/$/, "");
+		await assertSafeAiBaseUrl(base, "openai-compatible");
+		return base;
+	}
+	if (settings.provider === "anthropic") {
+		const base = (settings.baseUrl ?? "https://api.anthropic.com").replace(/\/$/, "");
+		await assertSafeAiBaseUrl(base, "anthropic");
+		return base;
+	}
+	const base = (settings.baseUrl ?? "https://api.openai.com/v1").replace(/\/$/, "");
+	await assertSafeAiBaseUrl(base, "openai");
+	return base;
 }
 
 function readExtras(metricsConfig: unknown): Record<string, unknown> {
@@ -155,7 +184,15 @@ export async function patchAiSettings(
 	}
 
 	const nextBaseUrl = patch.baseUrl !== undefined ? patch.baseUrl : current.baseUrl;
-	assertSafeAiBaseUrl(nextBaseUrl, patch.provider ?? current.provider);
+	await assertSafeAiBaseUrl(nextBaseUrl, patch.provider ?? current.provider);
+
+	// Changing baseUrl without supplying a new key drops the old key so it cannot
+	// be silently replayed against an attacker-controlled endpoint.
+	const baseUrlChanged =
+		patch.baseUrl !== undefined && (patch.baseUrl ?? null) !== (current.baseUrl ?? null);
+	if (baseUrlChanged && !(typeof patch.apiKey === "string" && patch.apiKey.trim())) {
+		nextKey = null;
+	}
 
 	const next: AiSettings = {
 		enabled: patch.enabled ?? current.enabled,

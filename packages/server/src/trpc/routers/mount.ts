@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
@@ -11,8 +12,12 @@ import {
 	removeFileMount,
 	upsertApplicationSwarmService,
 } from "../../modules/application";
-import { getConfigDir, resolveFileMountPath } from "../../modules/application/paths";
+import { resolveFileMountPath } from "../../modules/application/paths";
+import { auditFromSession } from "../../modules/audit";
+import { PROTECTED_VOLUMES } from "../../modules/docker/protected";
 import { assertCapability, hasCapability } from "../../modules/projects";
+import { getConfigDir } from "../../modules/traefik/paths";
+import { assertDockerVolumeName } from "../../utils/validators";
 import { protectedProcedure, router } from "../init";
 
 const mountFields = {
@@ -32,18 +37,30 @@ const mountFields = {
 const BLOCKED_HOST_PATH_PREFIXES = [
 	"/var/run/docker.sock",
 	"/run/docker.sock",
-	"/etc/shadow",
-	"/etc/passwd",
+	"/etc",
 	"/root",
 	"/proc",
 	"/sys",
+	"/boot",
+	"/dev",
+	"/tmp",
+	"/var",
+	"/run",
+	"/home",
+	"/Users",
+	"/usr",
+	"/opt",
+	"/srv",
+	"/mnt",
+	"/media",
 ] as const;
 
 /**
  * Reject bind mounts that would expose host secrets or the Docker socket.
- * Resolve `.` / `..` before prefix checks so `/etc/nixploy/../shadow` cannot bypass.
+ * Resolve symlinks via realpath (when the path exists) so `/tmp/sock → docker.sock`
+ * cannot bypass the prefix denylist.
  */
-const assertSafeHostPath = (hostPath: string | null | undefined) => {
+const assertSafeHostPath = async (hostPath: string | null | undefined) => {
 	if (!hostPath) return;
 	if (hostPath.includes("\0")) {
 		throw new TRPCError({
@@ -57,7 +74,34 @@ const assertSafeHostPath = (hostPath: string | null | undefined) => {
 			message: "hostPath must be an absolute path",
 		});
 	}
-	const normalized = path.resolve(hostPath).replace(/\/+$/, "") || "/";
+
+	let candidate = path.resolve(hostPath);
+	const missing: string[] = [];
+	while (candidate !== "/") {
+		try {
+			candidate = await realpath(candidate);
+			break;
+		} catch {
+			missing.unshift(path.basename(candidate));
+			const parent = path.dirname(candidate);
+			if (parent === candidate) break;
+			candidate = parent;
+		}
+	}
+	if (missing.length > 0) {
+		try {
+			candidate = path.join(await realpath(candidate), ...missing);
+		} catch {
+			candidate = path.join(candidate, ...missing);
+		}
+	}
+	const normalized = path.resolve(candidate).replace(/\/+$/, "") || "/";
+	if (normalized === "/") {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Bind mount hostPath cannot be the filesystem root",
+		});
+	}
 	const blockedPrefixes = [...BLOCKED_HOST_PATH_PREFIXES, path.resolve(getConfigDir())];
 	for (const blocked of blockedPrefixes) {
 		const blockedNorm = path.resolve(blocked).replace(/\/+$/, "") || "/";
@@ -93,6 +137,24 @@ const validateMountFields = (input: {
 		throw new TRPCError({
 			code: "BAD_REQUEST",
 			message: "filePath is required for file mounts",
+		});
+	}
+};
+
+const assertSafeVolumeName = (volumeName: string | null | undefined) => {
+	if (!volumeName) return;
+	try {
+		assertDockerVolumeName(volumeName);
+	} catch (error) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: error instanceof Error ? error.message : "Invalid volume name",
+		});
+	}
+	if (PROTECTED_VOLUMES.has(volumeName)) {
+		throw new TRPCError({
+			code: "FORBIDDEN",
+			message: `Volume "${volumeName}" is a Nixploy platform volume and cannot be mounted`,
 		});
 	}
 };
@@ -167,7 +229,8 @@ export const mountRouter = router({
 			}
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 			validateMountFields(input);
-			if (input.type === "bind") assertSafeHostPath(input.hostPath);
+			if (input.type === "bind") await assertSafeHostPath(input.hostPath);
+			if (input.type === "volume") assertSafeVolumeName(input.volumeName);
 			if (input.type === "file") assertSafeFilePath(application.appName, input.filePath);
 
 			const [mount] = await db
@@ -196,7 +259,18 @@ export const mountRouter = router({
 				await materializeFileMount(application.appName, mount.filePath, mount.content ?? "");
 			}
 			await upsertApplicationSwarmService(application);
-			return mount;
+			await auditFromSession(ctx, organizationId, {
+				action: "mount.create",
+				targetType: "mount",
+				targetId: mount.mountId,
+				targetName: mount.mountPath,
+			});
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? mount : { ...mount, content: null };
 		}),
 
 	update: protectedProcedure
@@ -228,7 +302,8 @@ export const mountRouter = router({
 				content: input.content !== undefined ? input.content : mount.content,
 			};
 			validateMountFields(next);
-			if (next.type === "bind") assertSafeHostPath(next.hostPath);
+			if (next.type === "bind") await assertSafeHostPath(next.hostPath);
+			if (next.type === "volume") assertSafeVolumeName(next.volumeName);
 			if (next.type === "file") assertSafeFilePath(application.appName, next.filePath);
 
 			const [updated] = await db
@@ -258,7 +333,18 @@ export const mountRouter = router({
 				}
 			}
 			await upsertApplicationSwarmService(application);
-			return updated;
+			await auditFromSession(ctx, organizationId, {
+				action: "mount.update",
+				targetType: "mount",
+				targetId: mount.mountId,
+				targetName: next.mountPath,
+			});
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets || !updated ? updated : { ...updated, content: null };
 		}),
 
 	delete: protectedProcedure
@@ -274,6 +360,12 @@ export const mountRouter = router({
 				await removeFileMount(application.appName, mount.filePath);
 			}
 			await upsertApplicationSwarmService(application);
+			await auditFromSession(ctx, organizationId, {
+				action: "mount.delete",
+				targetType: "mount",
+				targetId: mount.mountId,
+				targetName: mount.mountPath,
+			});
 			return { mountId: mount.mountId };
 		}),
 });

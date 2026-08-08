@@ -10,6 +10,7 @@ import {
 	postgres,
 	redis,
 } from "../db/schema";
+import { assertInstanceAdmin } from "../modules/auth/instance-admin";
 import { findServerById } from "../modules/cluster/servers";
 import { hasCapability, resolveCallerOrganizationId } from "../modules/projects";
 import type { WsSession } from "./auth";
@@ -149,6 +150,9 @@ export async function assertWsDockerContainerAccess(
 	const allowed = await hasCapability(session.user.id, organizationId, "docker.manage");
 	if (!allowed) {
 		throw new Error('This action requires the "docker.manage" capability');
+	}
+	if (!serverId) {
+		await assertInstanceAdmin(session);
 	}
 	await assertWsServerAccess(serverId, organizationId);
 }

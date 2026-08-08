@@ -12,10 +12,22 @@ import {
 	updateGitlabProviderName,
 } from "../../modules/git";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertSafeOutboundUrl } from "../../utils/public-url";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
 type Session = NonNullable<TRPCContext["session"]>;
+
+async function assertSafeGitHostUrl(url: string, label: string): Promise<void> {
+	try {
+		await assertSafeOutboundUrl(url, { allowPrivate: true, allowHttp: true });
+	} catch (error) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: error instanceof Error ? `${label}: ${error.message}` : `Invalid ${label}`,
+		});
+	}
+}
 
 async function getOrganizationId(session: Session): Promise<string> {
 	return await resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
@@ -77,6 +89,9 @@ export const gitlabRouter = router({
 	create: protectedProcedure.input(createGitlabInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
+		if (input.gitlabUrl) {
+			await assertSafeGitHostUrl(input.gitlabUrl, "GitLab URL");
+		}
 		const created = await createGitlab(input, organizationId);
 		if (!created.gitlab) {
 			throw new TRPCError({
@@ -100,6 +115,9 @@ export const gitlabRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 			const { gitlabId, name, ...values } = input;
+			if (values.gitlabUrl) {
+				await assertSafeGitHostUrl(values.gitlabUrl, "GitLab URL");
+			}
 			if (name) {
 				await updateGitlabProviderName(gitlabId, name, organizationId);
 			}
@@ -124,6 +142,7 @@ export const gitlabRouter = router({
 	/** Repositories visible to the configured token (group or membership). */
 	listRepositories: protectedProcedure.input(gitlabIdInput).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertCapability(ctx.session.user.id, organizationId, "service.create");
 		return await getGitlabRepositories(input.gitlabId, organizationId);
 	}),
 
@@ -132,6 +151,7 @@ export const gitlabRouter = router({
 		.input(gitlabIdInput.extend({ projectId: z.string().min(1) }))
 		.query(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertCapability(ctx.session.user.id, organizationId, "service.create");
 			return await getGitlabBranches({
 				gitlabId: input.gitlabId,
 				organizationId,

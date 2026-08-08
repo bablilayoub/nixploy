@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { auditFromSession } from "../../modules/audit";
+import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { findServerById } from "../../modules/cluster/servers";
 import {
 	isProtectedContainerNames,
@@ -67,11 +68,21 @@ async function resolveOrg(ctx: {
 	);
 }
 
-async function assertAdmin(ctx: {
-	session: { user: { id: string }; session: { activeOrganizationId?: string | null } };
-}) {
+async function assertAdmin(
+	ctx: {
+		session: {
+			user: { id: string; role?: string | null };
+			session: { activeOrganizationId?: string | null };
+		};
+	},
+	serverId?: string | null,
+) {
 	const organizationId = await resolveOrg(ctx);
 	await assertCapability(ctx.session.user.id, organizationId, "docker.manage");
+	if (!serverId) {
+		// Local docker.sock sees every org's containers — instance admins only.
+		await assertInstanceAdmin(ctx.session);
+	}
 	return organizationId;
 }
 
@@ -79,7 +90,7 @@ export const dockerRouter = router({
 	// ── Containers ────────────────────────────────────────────────────────────
 
 	containers: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
-		await assertAdmin(ctx);
+		await assertAdmin(ctx, input?.serverId);
 		const out = await runOn(ctx, input.serverId, `docker ps -a --format '{{json .}}'`);
 		return parseJsonLines<{
 			ID: string;
@@ -104,7 +115,7 @@ export const dockerRouter = router({
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
-			const organizationId = await assertAdmin(ctx);
+			const organizationId = await assertAdmin(ctx, input.serverId);
 			// Resolve the live name — the client only sends an ID, and a
 			// protected container must not be stoppable/removable from the UI.
 			const inspected = (
@@ -138,7 +149,7 @@ export const dockerRouter = router({
 	// ── Images ────────────────────────────────────────────────────────────────
 
 	images: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
-		await assertAdmin(ctx);
+		await assertAdmin(ctx, input?.serverId);
 		const out = await runOn(ctx, input.serverId, `docker images --format '{{json .}}'`);
 		return parseJsonLines<{
 			Repository: string;
@@ -152,14 +163,14 @@ export const dockerRouter = router({
 	imagePull: protectedProcedure
 		.input(serverInput.extend({ reference: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
-			await assertAdmin(ctx);
+			await assertAdmin(ctx, input?.serverId);
 			return await runOn(ctx, input.serverId, `docker pull ${shq(input.reference)}`);
 		}),
 
 	imageRemove: protectedProcedure
 		.input(serverInput.extend({ imageId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
-			await assertAdmin(ctx);
+			await assertAdmin(ctx, input?.serverId);
 			await runOn(ctx, input.serverId, `docker rmi ${shq(input.imageId)}`);
 			return true;
 		}),
@@ -167,7 +178,7 @@ export const dockerRouter = router({
 	imagesPrune: protectedProcedure
 		.input(serverInput.extend({ all: z.boolean().default(false) }))
 		.mutation(async ({ ctx, input }) => {
-			await assertAdmin(ctx);
+			await assertAdmin(ctx, input?.serverId);
 			return await runOn(
 				ctx,
 				input.serverId,
@@ -178,7 +189,7 @@ export const dockerRouter = router({
 	// ── Swarm ─────────────────────────────────────────────────────────────────
 
 	swarmServices: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
-		await assertAdmin(ctx);
+		await assertAdmin(ctx, input?.serverId);
 		const out = await runOn(ctx, input.serverId, `docker service ls --format '{{json .}}'`);
 		return parseJsonLines<{
 			ID: string;
@@ -194,7 +205,7 @@ export const dockerRouter = router({
 	}),
 
 	nodes: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
-		await assertAdmin(ctx);
+		await assertAdmin(ctx, input?.serverId);
 		const out = await runOn(ctx, input.serverId, `docker node ls --format '{{json .}}'`);
 		return parseJsonLines<{
 			ID: string;
@@ -214,7 +225,7 @@ export const dockerRouter = router({
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
-			await assertAdmin(ctx);
+			await assertAdmin(ctx, input?.serverId);
 			await runOn(
 				ctx,
 				input.serverId,
@@ -226,7 +237,7 @@ export const dockerRouter = router({
 	// ── Networks ──────────────────────────────────────────────────────────────
 
 	networks: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
-		await assertAdmin(ctx);
+		await assertAdmin(ctx, input?.serverId);
 		const out = await runOn(ctx, input.serverId, `docker network ls --format '{{json .}}'`);
 		return parseJsonLines<{
 			ID: string;
@@ -242,7 +253,7 @@ export const dockerRouter = router({
 	networkRemove: protectedProcedure
 		.input(serverInput.extend({ name: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
-			await assertAdmin(ctx);
+			await assertAdmin(ctx, input?.serverId);
 			if (PROTECTED_NETWORKS.has(input.name)) {
 				throw new TRPCError({
 					code: "FORBIDDEN",
@@ -256,7 +267,7 @@ export const dockerRouter = router({
 	// ── Volumes ───────────────────────────────────────────────────────────────
 
 	volumes: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
-		await assertAdmin(ctx);
+		await assertAdmin(ctx, input?.serverId);
 		const out = await runOn(ctx, input.serverId, `docker volume ls --format '{{json .}}'`);
 		return parseJsonLines<{
 			Name: string;
@@ -271,7 +282,7 @@ export const dockerRouter = router({
 	volumeRemove: protectedProcedure
 		.input(serverInput.extend({ name: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
-			await assertAdmin(ctx);
+			await assertAdmin(ctx, input?.serverId);
 			if (PROTECTED_VOLUMES.has(input.name)) {
 				throw new TRPCError({
 					code: "FORBIDDEN",
@@ -284,7 +295,7 @@ export const dockerRouter = router({
 		}),
 
 	volumesPrune: protectedProcedure.input(serverInput).mutation(async ({ ctx, input }) => {
-		await assertAdmin(ctx);
+		await assertAdmin(ctx, input?.serverId);
 		// Docker 23+ `volume prune -f` only removes anonymous volumes; remove
 		// named unused volumes too while keeping platform volumes safe.
 		return await pruneUnusedVolumes((command) => runOn(ctx, input.serverId, command));
@@ -293,7 +304,7 @@ export const dockerRouter = router({
 	// ── System ────────────────────────────────────────────────────────────────
 
 	systemInfo: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
-		await assertAdmin(ctx);
+		await assertAdmin(ctx, input?.serverId);
 		const [version, df] = await Promise.all([
 			runOn(ctx, input.serverId, `docker version --format '{{json .}}'`),
 			runOn(ctx, input.serverId, `docker system df --format '{{json .}}'`),
@@ -316,7 +327,7 @@ export const dockerRouter = router({
 	systemPrune: protectedProcedure
 		.input(serverInput.extend({ volumes: z.boolean().default(false) }))
 		.mutation(async ({ ctx, input }) => {
-			const organizationId = await assertAdmin(ctx);
+			const organizationId = await assertAdmin(ctx, input.serverId);
 			const run = (command: string) => runOn(ctx, input.serverId, command);
 			// system prune --volumes still skips named volumes on Docker 23+.
 			const systemOut = await run(

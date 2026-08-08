@@ -149,9 +149,11 @@ volumes:
 	{
 		id: "wg-easy",
 		name: "WireGuard Easy",
-		description: "The easiest way to run WireGuard VPN — web UI for clients, QR codes and stats.",
+		description:
+			"The easiest way to run WireGuard VPN — web UI for clients, QR codes and stats. Requires instance admin (NET_ADMIN / SYS_MODULE).",
 		logo: "wireguard",
-		tags: ["vpn", "network", "privacy"],
+		tags: ["vpn", "network", "privacy", "privileged"],
+		hostPrivileged: true,
 		links: {
 			github: "https://github.com/wg-easy/wg-easy",
 			docs: "https://github.com/wg-easy/wg-easy",

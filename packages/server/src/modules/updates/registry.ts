@@ -3,6 +3,8 @@
  * fetch the remote content digest from an OCI registry (GHCR by default).
  */
 
+import { assertPublicHostname } from "../../utils/public-url";
+
 export interface ParsedImageRef {
 	registry: string;
 	repository: string;
@@ -92,6 +94,7 @@ function registryEndpoints(ref: ParsedImageRef): { tokenUrl: string; manifestHos
 /**
  * Ask the registry for the content digest of a tag without pulling layers.
  * Works for public Docker Hub / GHCR / lscr.io packages (anonymous token).
+ * Private/LAN registries are rejected to prevent SSRF via crafted image refs.
  */
 export async function fetchRemoteDigest(image: string): Promise<string | null> {
 	const ref = parseImageRef(image);
@@ -99,6 +102,12 @@ export async function fetchRemoteDigest(image: string): Promise<string | null> {
 	if (!ref.tag) return null;
 
 	const { tokenUrl, manifestHost } = registryEndpoints(ref);
+	try {
+		assertPublicHostname(manifestHost.replace(/:\d+$/, ""));
+		assertPublicHostname(new URL(tokenUrl).hostname);
+	} catch {
+		return null;
+	}
 
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), 15_000);
@@ -116,6 +125,11 @@ export async function fetchRemoteDigest(image: string): Promise<string | null> {
 		}
 
 		const manifestUrl = `https://${manifestHost}/v2/${ref.repository}/manifests/${encodeURIComponent(ref.tag)}`;
+		try {
+			assertPublicHostname(new URL(manifestUrl).hostname.replace(/:\d+$/, ""));
+		} catch {
+			return null;
+		}
 		const accept = [
 			"application/vnd.oci.image.index.v1+json",
 			"application/vnd.docker.distribution.manifest.list.v2+json",
@@ -139,18 +153,29 @@ export async function fetchRemoteDigest(image: string): Promise<string | null> {
 			const service = /service="([^"]+)"/.exec(www)?.[1];
 			const scope = /scope="([^"]+)"/.exec(www)?.[1] ?? `repository:${ref.repository}:pull`;
 			if (realm) {
-				const challengeUrl = `${realm}?service=${encodeURIComponent(service ?? ref.registry)}&scope=${encodeURIComponent(scope)}`;
-				const tokenRes = await fetch(challengeUrl, { signal: controller.signal });
-				if (tokenRes.ok) {
-					const body = (await tokenRes.json()) as { token?: string; access_token?: string };
-					const token = body.token ?? body.access_token;
-					if (token) {
-						res = await fetch(manifestUrl, {
-							method: "GET",
-							signal: controller.signal,
-							headers: { Authorization: `Bearer ${token}`, Accept: accept },
-						});
+				try {
+					// Realm is attacker-influenced via a malicious registry — never
+					// follow it to loopback / metadata / private hosts or non-HTTPS.
+					const realmUrl = new URL(realm);
+					if (realmUrl.protocol !== "https:") {
+						throw new Error("realm must be https");
 					}
+					assertPublicHostname(realmUrl.hostname.replace(/:\d+$/, ""));
+					const challengeUrl = `${realm}?service=${encodeURIComponent(service ?? ref.registry)}&scope=${encodeURIComponent(scope)}`;
+					const tokenRes = await fetch(challengeUrl, { signal: controller.signal });
+					if (tokenRes.ok) {
+						const body = (await tokenRes.json()) as { token?: string; access_token?: string };
+						const token = body.token ?? body.access_token;
+						if (token) {
+							res = await fetch(manifestUrl, {
+								method: "GET",
+								signal: controller.signal,
+								headers: { Authorization: `Bearer ${token}`, Accept: accept },
+							});
+						}
+					}
+				} catch {
+					// Invalid realm or private host — ignore challenge.
 				}
 			}
 		}

@@ -80,12 +80,11 @@ export async function listComposeContainers(
 	serverId: string | null | undefined,
 ): Promise<ComposeContainerRow[]> {
 	const project = shq(appName);
-	// Compose project label and swarm stack namespace cover both composeTypes;
-	// name prefix catches oddball naming without those labels.
+	// Label filters only — Docker `name=` is a substring match and leaks across tenants.
 	const commands = [
 		`docker ps -a --filter label=com.docker.compose.project=${project} --format '{{json .}}'`,
 		`docker ps -a --filter label=com.docker.stack.namespace=${project} --format '{{json .}}'`,
-		`docker ps -a --filter name=${project} --format '{{json .}}'`,
+		`docker ps -a --filter label=com.docker.swarm.service.name=${project} --format '{{json .}}'`,
 	];
 
 	const chunks = await Promise.all(commands.map((command) => run(serverId, command)));
@@ -94,14 +93,13 @@ export async function listComposeContainers(
 	for (const chunk of chunks) {
 		for (const row of parseJsonLines<DockerPsRow>(chunk)) {
 			const name = (row.Names ?? "").split(",")[0]?.replace(/^\//, "") ?? row.ID;
-			// Name filter is substring-ish — keep only rows that clearly belong.
-			const labels = row.Labels ?? "";
-			const labeled =
-				labels.includes(`com.docker.compose.project=${appName}`) ||
-				labels.includes(`com.docker.stack.namespace=${appName}`);
-			const named =
-				name === appName || name.startsWith(`${appName}-`) || name.startsWith(`${appName}_`);
-			if (!labeled && !named) continue;
+			const labelMap: Record<string, string> = {};
+			for (const part of (row.Labels ?? "").split(",")) {
+				const eqIdx = part.indexOf("=");
+				if (eqIdx <= 0) continue;
+				labelMap[part.slice(0, eqIdx)] = part.slice(eqIdx + 1);
+			}
+			if (!containerBelongsToApp({ appName, name, labels: labelMap })) continue;
 
 			byId.set(row.ID, {
 				id: row.ID,
@@ -119,6 +117,8 @@ export async function listComposeContainers(
 
 /**
  * Whether a docker inspect payload (or label map + name) belongs to `appName`.
+ * Prefer exact compose/stack/swarm labels. Name matching is limited to exact
+ * and Swarm task patterns so `api` never matches `api-gateway` / `api_gateway`.
  */
 export function containerBelongsToApp(input: {
 	appName: string;
@@ -130,9 +130,12 @@ export function containerBelongsToApp(input: {
 	if (labels["com.docker.compose.project"] === appName) return true;
 	if (labels["com.docker.stack.namespace"] === appName) return true;
 	const swarm = labels["com.docker.swarm.service.name"];
-	if (swarm === appName || swarm?.startsWith(`${appName}_`)) return true;
+	if (swarm === appName) return true;
 	const name = (input.name ?? "").replace(/^\//, "");
-	return name === appName || name.startsWith(`${appName}-`) || name.startsWith(`${appName}_`);
+	if (name === appName) return true;
+	// Swarm task: `<service>.<slot>.<taskid>`
+	if (name.startsWith(`${appName}.`)) return true;
+	return false;
 }
 
 /** Confirm a container ID is part of the given compose/stack project. */

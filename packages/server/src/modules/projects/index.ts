@@ -3,6 +3,7 @@ import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
 import {
 	applications,
+	certificates,
 	compose,
 	environments,
 	mariadb,
@@ -16,6 +17,7 @@ import {
 import { deleteApplication } from "../application/service";
 import { deleteCompose } from "../compose/service";
 import { removeDatabase } from "../databases/engine";
+import { getCertificatesDir, REMOTE_TRAEFIK_DIR, removeFileOnServer } from "../traefik";
 import type { OrgRole } from "./roles";
 import { ORG_ROLE_RANK, orgRoleRank } from "./roles";
 
@@ -492,6 +494,15 @@ export async function deleteProjectCascade(projectId: string): Promise<void> {
  * containers, volumes or files on disk.
  */
 export async function deleteOrganizationCascade(organizationId: string): Promise<void> {
+	const certRows = await db.query.certificates.findMany({
+		where: eq(certificates.organizationId, organizationId),
+	});
+	for (const cert of certRows) {
+		const dir = cert.serverId ? `${REMOTE_TRAEFIK_DIR}/dynamic/certificates` : getCertificatesDir();
+		await removeFileOnServer(`${dir}/${cert.certificateId}.crt`, cert.serverId).catch(() => {});
+		await removeFileOnServer(`${dir}/${cert.certificateId}.key`, cert.serverId).catch(() => {});
+	}
+
 	const projectList = await db.query.projects.findMany({
 		where: eq(projects.organizationId, organizationId),
 	});

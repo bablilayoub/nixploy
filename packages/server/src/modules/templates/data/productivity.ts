@@ -215,9 +215,10 @@ volumes:
 		id: "portainer",
 		name: "Portainer",
 		description:
-			"Container management UI — inspect and manage Docker/Swarm containers, images, networks and volumes.",
+			"Container management UI — inspect and manage Docker/Swarm containers, images, networks and volumes. Requires instance admin (Docker socket).",
 		logo: "portainer",
-		tags: ["docker", "ops", "management"],
+		tags: ["docker", "ops", "management", "privileged"],
+		hostPrivileged: true,
 		links: {
 			website: "https://www.portainer.io",
 			github: "https://github.com/portainer/portainer",

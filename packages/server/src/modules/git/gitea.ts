@@ -95,7 +95,7 @@ async function giteaApi(row: GiteaRow, path: string) {
 		headers: { Authorization: `token ${row.accessToken ?? ""}` },
 	});
 	if (!response.ok) {
-		throw new Error(`Gitea API request failed: ${response.status} ${await response.text()}`);
+		throw new Error(`Gitea API request failed: ${response.status}`);
 	}
 	return response;
 }

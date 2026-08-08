@@ -13,6 +13,8 @@ export type ComposeRow = typeof compose.$inferSelect;
 interface GitSource {
 	cloneUrl: string;
 	branch: string;
+	/** Tokens embedded in cloneUrl — register with the deployment logger. */
+	secrets?: string[];
 	/** Extra environment for git (e.g. GIT_SSH_COMMAND for custom keys). */
 	env?: Record<string, string>;
 }
@@ -42,7 +44,7 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 				await writeFile(keyPath, key.privateKey, { mode: 0o600 });
 				await chmod(keyPath, 0o600);
 				source.env = {
-					GIT_SSH_COMMAND: `ssh -i ${shellQuote(keyPath)} -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${shellQuote(join(NIXPLOY_CONFIG_DIR, "ssh", "known_hosts"))}`,
+					GIT_SSH_COMMAND: `ssh -i ${shellQuote(keyPath)} -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${shellQuote(join(NIXPLOY_CONFIG_DIR, "ssh", "known_hosts"))}`,
 				};
 			}
 			return source;
@@ -66,6 +68,7 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 						});
 						const { token } = (await appAuth({ type: "installation" })) as { token: string };
 						cloneUrl = `https://x-access-token:${token}@github.com/${composeRow.owner}/${composeRow.repository}.git`;
+						return { cloneUrl, branch: composeRow.branch ?? "main", secrets: [token] };
 					} catch {
 						// fall through to the unauthenticated URL (public repos)
 					}
@@ -92,6 +95,7 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 			return {
 				cloneUrl: `https://${auth}${host}/${composeRow.owner}/${composeRow.repository}.git`,
 				branch: composeRow.branch ?? "main",
+				secrets: token ? [token] : undefined,
 			};
 		}
 		case "bitbucket": {
@@ -99,19 +103,23 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 				throw new Error("Bitbucket source requires owner and repository");
 			}
 			let auth = "";
+			const secrets: string[] = [];
 			if (composeRow.bitbucketId) {
 				const bb = await db.query.bitbucket.findFirst({
 					where: eq(bitbucket.bitbucketId, composeRow.bitbucketId),
 				});
 				if (bb?.apiToken) {
 					auth = `x-token-auth:${bb.apiToken}@`;
+					secrets.push(bb.apiToken);
 				} else if (bb?.bitbucketUsername && bb.appPassword) {
 					auth = `${encodeURIComponent(bb.bitbucketUsername)}:${bb.appPassword}@`;
+					secrets.push(bb.appPassword);
 				}
 			}
 			return {
 				cloneUrl: `https://${auth}bitbucket.org/${composeRow.owner}/${composeRow.repository}.git`,
 				branch: composeRow.branch ?? "main",
+				secrets: secrets.length > 0 ? secrets : undefined,
 			};
 		}
 		case "gitea": {
@@ -133,6 +141,7 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 			return {
 				cloneUrl: `https://${auth}${host}/${composeRow.owner}/${composeRow.repository}.git`,
 				branch: composeRow.branch ?? "main",
+				secrets: token ? [token] : undefined,
 			};
 		}
 		default:
@@ -145,9 +154,20 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
  * `<configDir>/compose/<appName>/code`. Local rows use simple-git; rows
  * pinned to a remote server are cloned over SSH with the system git client.
  */
-export async function cloneComposeSource(composeRow: ComposeRow): Promise<string> {
+export async function cloneComposeSource(composeRow: ComposeRow): Promise<{
+	codeDir: string;
+	secrets: string[];
+}> {
 	const source = await resolveGitSource(composeRow);
 	const codeDir = getComposeCodeDir(composeRow.appName);
+	const secrets = [...(source.secrets ?? [])];
+	try {
+		const parsed = new URL(source.cloneUrl);
+		if (parsed.password) secrets.push(parsed.password);
+		if (parsed.username && parsed.password) secrets.push(`${parsed.username}:${parsed.password}`);
+	} catch {
+		// SSH URLs are not WHATWG URLs — fine.
+	}
 
 	if (composeRow.serverId) {
 		const dir = shellQuote(codeDir);
@@ -160,7 +180,7 @@ export async function cloneComposeSource(composeRow: ComposeRow): Promise<string
 				`git -C ${dir} fetch --depth 1 origin ${branch} && git -C ${dir} reset --hard FETCH_HEAD; ` +
 				`else git clone --branch ${branch} --depth 1 --single-branch ${url} ${dir}; fi)`,
 		);
-		return codeDir;
+		return { codeDir, secrets };
 	}
 
 	await mkdir(codeDir, { recursive: true });
@@ -181,7 +201,7 @@ export async function cloneComposeSource(composeRow: ComposeRow): Promise<string
 			"--single-branch",
 		]);
 	}
-	return codeDir;
+	return { codeDir, secrets };
 }
 
 /** Run a compose lifecycle command locally or on the row's remote server. */

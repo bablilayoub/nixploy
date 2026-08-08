@@ -12,13 +12,15 @@ import {
 	redirects,
 	security,
 } from "../../db/schema";
+import { assertSafeAppName, assertSafePublishedPort } from "../../utils/validators";
 import { removeServiceLogs } from "../deployment/maintenance";
+import { sanitizeNetworkAttachments, sanitizeSwarmLabels } from "../deployment/swarm";
 import { deletePreviewDeployment } from "../preview";
 import { removeTraefikConfig, writeAppTraefikConfig } from "../traefik";
 import { generateAppName, isAppNameTaken } from "./app-name";
 import type { ServiceInspectInfo } from "./docker";
 import { getDocker, inspectSwarmService, removeSwarmService, scaleSwarmService } from "./docker";
-import { getApplicationDir, getSwarmNetwork, resolveFileMountPath } from "./paths";
+import { getApplicationDir, resolveFileMountPath } from "./paths";
 
 export type Application = typeof applications.$inferSelect;
 
@@ -150,12 +152,15 @@ const buildSwarmSpec = (
 		},
 	);
 
-	const portSpecs: Docker.PortConfig[] = applicationPorts.map((port) => ({
-		Protocol: port.protocol,
-		PublishedPort: port.publishedPort,
-		TargetPort: port.targetPort,
-		PublishMode: port.publishMode,
-	}));
+	const portSpecs: Docker.PortConfig[] = applicationPorts.map((port) => {
+		assertSafePublishedPort(port.publishedPort);
+		return {
+			Protocol: port.protocol,
+			PublishedPort: port.publishedPort,
+			TargetPort: port.targetPort,
+			PublishMode: port.publishMode,
+		};
+	});
 
 	const limits: Docker.ResourceLimits = {};
 	const memoryLimit = parseMemoryBytes(application.memoryLimit);
@@ -171,7 +176,7 @@ const buildSwarmSpec = (
 
 	return {
 		Name: application.appName,
-		Labels: (application.labelsSwarm as Record<string, string> | null) ?? undefined,
+		Labels: sanitizeSwarmLabels(application.labelsSwarm),
 		TaskTemplate: {
 			ContainerSpec: {
 				Image: image,
@@ -191,9 +196,7 @@ const buildSwarmSpec = (
 			RestartPolicy:
 				(application.restartPolicySwarm as Docker.TaskRestartPolicy | null) ?? undefined,
 			Placement: (application.placementSwarm as Docker.Placement | null) ?? undefined,
-			Networks: (application.networkSwarm as Docker.NetworkAttachmentConfig[] | null) ?? [
-				{ Target: getSwarmNetwork() },
-			],
+			Networks: sanitizeNetworkAttachments(application.networkSwarm),
 		},
 		Mode: (application.modeSwarm as Docker.ServiceMode | null) ?? {
 			Replicated: { Replicas: application.replicas },
@@ -298,14 +301,16 @@ export const syncApplicationTraefik = async (
 	await writeAppTraefikConfig({
 		appName: application.appName,
 		serverId: application.serverId,
-		domains: appDomains.map((domain) => ({
-			host: domain.host,
-			port: domain.port ?? DEFAULT_CONTAINER_PORT,
-			path: domain.path,
-			https: domain.https,
-			certificateType: domain.certificateType,
-			certificateId: domain.certificateId,
-		})),
+		domains: appDomains
+			.filter((domain) => domain.domainType !== "preview" && !domain.previewDeploymentId)
+			.map((domain) => ({
+				host: domain.host,
+				port: domain.port ?? DEFAULT_CONTAINER_PORT,
+				path: domain.path,
+				https: domain.https,
+				certificateType: domain.certificateType,
+				certificateId: domain.certificateId,
+			})),
 		redirects: appRedirects.map((redirect) => ({
 			regex: redirect.regex,
 			replacement: redirect.replacement,
@@ -332,7 +337,9 @@ export interface CreateApplicationInput {
 }
 
 export const createApplication = async (input: CreateApplicationInput): Promise<Application> => {
-	const appName = input.appName ?? (await generateAppName(input.name));
+	const appName = input.appName
+		? assertSafeAppName(input.appName)
+		: await generateAppName(input.name);
 	if (await isAppNameTaken(appName)) {
 		throw new Error(`appName "${appName}" is already in use`);
 	}

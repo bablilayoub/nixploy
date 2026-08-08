@@ -11,11 +11,24 @@ import {
 	updateGiteaById,
 	updateGiteaProviderName,
 } from "../../modules/git";
+import { derivedWebhookSecret } from "../../modules/git/webhook-secret";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertSafeOutboundUrl } from "../../utils/public-url";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
 type Session = NonNullable<TRPCContext["session"]>;
+
+async function assertSafeGitHostUrl(url: string, label: string): Promise<void> {
+	try {
+		await assertSafeOutboundUrl(url, { allowPrivate: true, allowHttp: true });
+	} catch (error) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: error instanceof Error ? `${label}: ${error.message}` : `Invalid ${label}`,
+		});
+	}
+}
 
 async function getOrganizationId(session: Session): Promise<string> {
 	return await resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
@@ -33,6 +46,7 @@ const createGiteaInput = z.object({
 /** Response shape: access / refresh tokens are write-only. */
 const publicGitea = <
 	T extends {
+		giteaId: string;
 		accessToken: string | null;
 		refreshToken: string | null;
 	},
@@ -44,6 +58,8 @@ const publicGitea = <
 		...rest,
 		accessTokenConfigured: Boolean(accessToken),
 		refreshTokenConfigured: Boolean(refreshToken),
+		/** Dedicated HMAC webhook secret — never the access token. */
+		webhookSecret: derivedWebhookSecret("gitea", row.giteaId),
 	};
 };
 
@@ -72,6 +88,9 @@ export const giteaRouter = router({
 	create: protectedProcedure.input(createGiteaInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
+		if (input.giteaUrl) {
+			await assertSafeGitHostUrl(input.giteaUrl, "Gitea URL");
+		}
 		const created = await createGitea(input, organizationId);
 		if (!created.gitea) {
 			throw new TRPCError({
@@ -95,6 +114,9 @@ export const giteaRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 			const { giteaId, name, ...values } = input;
+			if (values.giteaUrl) {
+				await assertSafeGitHostUrl(values.giteaUrl, "Gitea URL");
+			}
 			if (name) {
 				await updateGiteaProviderName(giteaId, name, organizationId);
 			}
@@ -119,6 +141,7 @@ export const giteaRouter = router({
 	/** Repositories visible to the configured token. */
 	listRepositories: protectedProcedure.input(giteaIdInput).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertCapability(ctx.session.user.id, organizationId, "service.create");
 		return await getGiteaRepositories(input.giteaId, organizationId);
 	}),
 
@@ -127,6 +150,7 @@ export const giteaRouter = router({
 		.input(giteaIdInput.extend({ owner: z.string().min(1), repo: z.string().min(1) }))
 		.query(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertCapability(ctx.session.user.id, organizationId, "service.create");
 			return await getGiteaBranches({
 				giteaId: input.giteaId,
 				organizationId,

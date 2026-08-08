@@ -11,6 +11,36 @@ import {
 import { assertCapability } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
+const REDIRECT_REGEX_MAX = 256;
+const REDIRECT_REPLACEMENT_MAX = 512;
+
+function assertSafeRedirectRule(regex: string, replacement: string): void {
+	if (regex.length > REDIRECT_REGEX_MAX || replacement.length > REDIRECT_REPLACEMENT_MAX) {
+		throw new TRPCError({ code: "BAD_REQUEST", message: "Redirect pattern is too long" });
+	}
+	if (/[()]/.test(regex) || /\\[0-9]/.test(regex)) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Redirect regex must not use capturing groups or backreferences",
+		});
+	}
+	if (!/^[\w\-./*?^$|[\]{}+\\: =@%&]+$/.test(regex)) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Redirect regex contains invalid characters",
+		});
+	}
+	if (replacement.includes("://") && !/^https?:\/\/[^\s]+$/i.test(replacement)) {
+		throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid redirect replacement URL" });
+	}
+	if (!replacement.includes("://") && !replacement.startsWith("/")) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Redirect replacement must be a path or http(s) URL",
+		});
+	}
+}
+
 /** Load an application-owned redirect row and verify org ownership. */
 const findApplicationRedirect = async (redirectId: string, organizationId: string) => {
 	const redirect = await db.query.redirects.findFirst({
@@ -56,6 +86,7 @@ export const redirectRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
+			assertSafeRedirectRule(input.regex, input.replacement);
 
 			const [redirect] = await db
 				.insert(redirects)
@@ -93,12 +124,15 @@ export const redirectRouter = router({
 				input.redirectId,
 				organizationId,
 			);
+			const regex = input.regex ?? redirect.regex;
+			const replacement = input.replacement ?? redirect.replacement;
+			assertSafeRedirectRule(regex, replacement);
 
 			const [updated] = await db
 				.update(redirects)
 				.set({
-					regex: input.regex ?? redirect.regex,
-					replacement: input.replacement ?? redirect.replacement,
+					regex,
+					replacement,
 					permanent: input.permanent ?? redirect.permanent,
 				})
 				.where(eq(redirects.redirectId, redirect.redirectId))

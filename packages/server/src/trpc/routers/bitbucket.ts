@@ -11,6 +11,7 @@ import {
 	updateBitbucketById,
 	updateBitbucketProviderName,
 } from "../../modules/git";
+import { derivedWebhookSecret } from "../../modules/git/webhook-secret";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
@@ -34,6 +35,7 @@ const createBitbucketInput = z.object({
 /** Response shape: app password and API token are write-only. */
 const publicBitbucket = <
 	T extends {
+		bitbucketId: string;
 		appPassword: string | null;
 		apiToken: string | null;
 	},
@@ -45,6 +47,8 @@ const publicBitbucket = <
 		...rest,
 		appPasswordConfigured: Boolean(appPassword),
 		apiTokenConfigured: Boolean(apiToken),
+		/** Dedicated webhook Bearer secret — never the API token. */
+		webhookSecret: derivedWebhookSecret("bitbucket", row.bitbucketId),
 	};
 };
 
@@ -114,6 +118,7 @@ export const bitbucketRouter = router({
 	/** Repositories visible to the configured credentials. */
 	listRepositories: protectedProcedure.input(bitbucketIdInput).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertCapability(ctx.session.user.id, organizationId, "service.create");
 		return await getBitbucketRepositories(input.bitbucketId, organizationId);
 	}),
 
@@ -122,6 +127,7 @@ export const bitbucketRouter = router({
 		.input(bitbucketIdInput.extend({ workspace: z.string().min(1), repoSlug: z.string().min(1) }))
 		.query(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertCapability(ctx.session.user.id, organizationId, "service.create");
 			return await getBitbucketBranches({
 				bitbucketId: input.bitbucketId,
 				organizationId,

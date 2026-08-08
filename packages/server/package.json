@@ -15,6 +15,7 @@
 		"./trpc/*": "./src/trpc/*.ts",
 		"./modules/*": "./src/modules/*.ts",
 		"./modules/*/*": "./src/modules/*/*.ts",
+		"./utils/*": "./src/utils/*.ts",
 		"./ws": "./src/ws/index.ts"
 	},
 	"scripts": {

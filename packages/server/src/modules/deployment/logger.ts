@@ -35,6 +35,16 @@ export class DeploymentLogger {
 		return out;
 	}
 
+	/** Same redaction as the log stream — use before storing errorMessage / notifying. */
+	redactForStorage(chunk: string): string {
+		return this.redact(chunk);
+	}
+
+	/** Registered secrets (for combining with generic URL scrubbing). */
+	listSecrets(): readonly string[] {
+		return this.secrets;
+	}
+
 	write(chunk: string): void {
 		if (this.closed) return;
 		const out = this.redact(chunk);

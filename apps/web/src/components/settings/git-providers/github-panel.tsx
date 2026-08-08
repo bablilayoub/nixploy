@@ -217,7 +217,6 @@ export function GithubPanel() {
 												onClick={() =>
 													manifestMutation.mutate({
 														githubId: github.githubId,
-														baseUrl: window.location.origin,
 													})
 												}
 											>

@@ -49,8 +49,13 @@ function TemplateCard({
 					<div className="min-w-0 flex-1">
 						<div className="flex items-start justify-between gap-2">
 							<h2 className="truncate text-sm font-medium text-foreground">{template.name}</h2>
-							{/* Badge only when browsing a single category — category headers cover "all" */}
-							<span className="sr-only">{template.category}</span>
+							{template.hostPrivileged ? (
+								<Badge variant="outline" className="shrink-0 text-[10px] font-normal">
+									Instance admin
+								</Badge>
+							) : (
+								<span className="sr-only">{template.category}</span>
+							)}
 						</div>
 						<p className="mt-1.5 line-clamp-2 text-sm text-muted-foreground">
 							{template.description}

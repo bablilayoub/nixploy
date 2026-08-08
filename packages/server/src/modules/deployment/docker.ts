@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { Client as SshClient } from "ssh2";
 import { db } from "../../db";
 import { servers } from "../../db/schema";
-import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { execAsync, execAsyncRemote, verifyRemoteHostKey } from "../../utils/exec";
 import { shellQuote } from "./paths";
 
 /**
@@ -34,7 +34,10 @@ export async function getDocker(serverId?: string | null): Promise<Docker> {
 		host: server.ipAddress,
 		port: server.port,
 		username: server.username,
-		sshOptions: { privateKey: sshKey.privateKey },
+		sshOptions: {
+			privateKey: sshKey.privateKey,
+			hostVerifier: (key: Buffer) => verifyRemoteHostKey(serverId, key),
+		},
 	});
 }
 
@@ -144,6 +147,7 @@ async function spawnRemote(
 				username: server.username,
 				privateKey: sshKey.privateKey,
 				readyTimeout: 30_000,
+				hostVerifier: (key: Buffer) => verifyRemoteHostKey(serverId, key),
 			});
 	});
 

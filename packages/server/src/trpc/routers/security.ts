@@ -9,7 +9,9 @@ import {
 	getOrganizationId,
 	syncApplicationTraefik,
 } from "../../modules/application";
+import { auditFromSession } from "../../modules/audit";
 import { assertCapability } from "../../modules/projects";
+import { assertBasicAuthUsername } from "../../utils/validators";
 import { protectedProcedure, router } from "../init";
 
 const BCRYPT_ROUNDS = 10;
@@ -65,6 +67,14 @@ export const securityRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
+			try {
+				assertBasicAuthUsername(input.username);
+			} catch (error) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: error instanceof Error ? error.message : "Invalid username",
+				});
+			}
 
 			// Traefik's basicAuth middleware expects bcrypt-hashed passwords.
 			const hashed = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
@@ -84,6 +94,12 @@ export const securityRouter = router({
 			}
 
 			await syncApplicationTraefik(application);
+			await auditFromSession(ctx, organizationId, {
+				action: "security.create",
+				targetType: "security",
+				targetId: entry.securityId,
+				targetName: entry.username,
+			});
 			return redact(entry);
 		}),
 
@@ -103,6 +119,16 @@ export const securityRouter = router({
 				input.securityId,
 				organizationId,
 			);
+			if (input.username) {
+				try {
+					assertBasicAuthUsername(input.username);
+				} catch (error) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: error instanceof Error ? error.message : "Invalid username",
+					});
+				}
+			}
 
 			const [updated] = await db
 				.update(security)
@@ -114,6 +140,12 @@ export const securityRouter = router({
 				.returning();
 
 			await syncApplicationTraefik(application);
+			await auditFromSession(ctx, organizationId, {
+				action: "security.update",
+				targetType: "security",
+				targetId: entry.securityId,
+				targetName: input.username ?? entry.username,
+			});
 			return updated ? redact(updated) : updated;
 		}),
 
@@ -129,6 +161,12 @@ export const securityRouter = router({
 
 			await db.delete(security).where(eq(security.securityId, entry.securityId));
 			await syncApplicationTraefik(application);
+			await auditFromSession(ctx, organizationId, {
+				action: "security.delete",
+				targetType: "security",
+				targetId: entry.securityId,
+				targetName: entry.username,
+			});
 			return { securityId: entry.securityId };
 		}),
 });

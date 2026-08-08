@@ -91,10 +91,13 @@ async function probeComposeState(row: {
 		return failed > 0 ? "error" : "idle";
 	}
 
-	// Plain docker compose: containers are named <appName>-<service>-<n>.
+	// Plain docker compose: prefer project/stack labels (never name= prefix).
 	const out = await runOn(
 		row.serverId,
-		`docker ps -a --filter ${shellQuote(`name=^${row.appName}-`)} --format '{{.State}} {{.Status}}'`,
+		[
+			`docker ps -a --filter ${shellQuote(`label=com.docker.compose.project=${row.appName}`)} --format '{{.State}} {{.Status}}'`,
+			`docker ps -a --filter ${shellQuote(`label=com.docker.stack.namespace=${row.appName}`)} --format '{{.State}} {{.Status}}'`,
+		].join("; "),
 	);
 	const lines = out
 		.split("\n")

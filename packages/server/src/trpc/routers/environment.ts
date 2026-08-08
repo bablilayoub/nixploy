@@ -108,7 +108,12 @@ export const environmentRouter = router({
 					projectId: project.projectId,
 				})
 				.returning();
-			return environment;
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? environment : { ...environment, env: null };
 		}),
 
 	/** Update name/description and/or environment-level env vars (dotenv string). */
@@ -165,7 +170,7 @@ export const environmentRouter = router({
 			await assertCapability(ctx.session.user.id, organizationId, "project.delete");
 			const environment = await findEnvironmentById(input.environmentId, organizationId);
 			await deleteEnvironmentCascade(environment.environmentId);
-			return environment;
+			return { ...environment, env: null };
 		}),
 
 	/**
@@ -197,7 +202,12 @@ export const environmentRouter = router({
 					projectId: source.projectId,
 				})
 				.returning();
-			return duplicate;
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? duplicate : { ...duplicate, env: null };
 		}),
 
 	/**
@@ -298,7 +308,7 @@ export const environmentRouter = router({
 				targetName: environment.name,
 				metadata: { sourceId: source.environmentId, servicesCloned: cloned },
 			});
-			return { ...environment, servicesCloned: cloned };
+			return { ...environment, env: null, servicesCloned: cloned };
 		}),
 
 	/**
@@ -324,6 +334,11 @@ export const environmentRouter = router({
 				.set({ env: input.env })
 				.where(eq(environments.environmentId, input.environmentId))
 				.returning();
-			return updated;
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? updated : { ...updated, env: null };
 		}),
 });

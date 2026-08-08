@@ -16,6 +16,7 @@ export interface QueueJob {
 	deploymentId: string;
 	applicationId?: string;
 	composeId?: string;
+	previewDeploymentId?: string;
 	type: "deploy" | "redeploy";
 	serverId: string | null;
 }

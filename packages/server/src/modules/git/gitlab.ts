@@ -103,7 +103,7 @@ function gitlabApi(row: GitlabRow, path: string) {
 
 async function assertOk(response: Response, what: string) {
 	if (!response.ok) {
-		throw new Error(`GitLab ${what} failed: ${response.status} ${await response.text()}`);
+		throw new Error(`GitLab ${what} failed: ${response.status}`);
 	}
 	return response;
 }

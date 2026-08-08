@@ -22,21 +22,29 @@ describe("containerBelongsToApp", () => {
 		).toBe(true);
 	});
 
-	it("matches swarm service name prefix", () => {
+	it("matches exact swarm service name", () => {
 		expect(
 			containerBelongsToApp({
 				appName: "myapp",
-				labels: { "com.docker.swarm.service.name": "myapp_api" },
+				labels: { "com.docker.swarm.service.name": "myapp" },
 			}),
 		).toBe(true);
 	});
 
-	it("matches name prefixes", () => {
-		expect(containerBelongsToApp({ appName: "myapp", name: "myapp-db-1" })).toBe(true);
-		expect(containerBelongsToApp({ appName: "myapp", name: "myapp_redis.1" })).toBe(true);
+	it("matches swarm task names and exact names only", () => {
+		expect(containerBelongsToApp({ appName: "myapp", name: "myapp" })).toBe(true);
+		expect(containerBelongsToApp({ appName: "myapp", name: "myapp.1.taskid" })).toBe(true);
 	});
 
-	it("rejects unrelated containers", () => {
+	it("rejects prefix collisions across tenants", () => {
+		expect(containerBelongsToApp({ appName: "api", name: "api-gateway" })).toBe(false);
+		expect(
+			containerBelongsToApp({
+				appName: "api",
+				labels: { "com.docker.swarm.service.name": "api_gateway" },
+			}),
+		).toBe(false);
+		expect(containerBelongsToApp({ appName: "myapp", name: "myapplication-1" })).toBe(false);
 		expect(
 			containerBelongsToApp({
 				appName: "myapp",
@@ -44,6 +52,5 @@ describe("containerBelongsToApp", () => {
 				labels: { "com.docker.compose.project": "other" },
 			}),
 		).toBe(false);
-		expect(containerBelongsToApp({ appName: "myapp", name: "myapplication-1" })).toBe(false);
 	});
 });

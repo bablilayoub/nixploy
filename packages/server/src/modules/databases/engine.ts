@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { mariadb, mongo, mysql, postgres, redis, servers } from "../../db/schema";
 import { execAsyncRemote } from "../../utils/exec";
+import { assertSafePublishedPort } from "../../utils/validators";
 
 /**
  * Shared engine for the five one-click database services (postgres, mysql,
@@ -187,13 +188,13 @@ export const DATABASE_CONFIGS: { [K in DatabaseKind]: DatabaseTypeConfig<Databas
 		defaultImage: "redis:8-alpine",
 		internalPort: 6379,
 		dataDir: "/data",
-		containerEnv: () => ({}),
-		defaultArgs: (row) => [
-			"redis-server",
-			"--requirepass",
-			row.databasePassword,
-			"--appendonly",
-			"yes",
+		// Password stays in Env (not Args) so `docker inspect` / `ps` do not
+		// print `--requirepass <secret>` on the process argv surface.
+		containerEnv: (row) => ({ REDIS_PASSWORD: row.databasePassword }),
+		defaultArgs: () => [
+			"sh",
+			"-c",
+			'exec redis-server --requirepass "$REDIS_PASSWORD" --appendonly yes',
 		],
 		connectionUrl: (row, host, port) =>
 			`redis://:${encode(row.databasePassword)}@${host}:${port}/0`,
@@ -336,6 +337,9 @@ function buildServiceDefinition<K extends DatabaseKind>(
 	const base = row as BaseRow;
 	const credentialEnv = Object.entries(config.containerEnv(row)).map(([k, v]) => `${k}=${v}`);
 	const args = base.command ? splitArgs(base.command) : config.defaultArgs(row);
+	if (base.externalPort != null) {
+		assertSafePublishedPort(base.externalPort, "externalPort");
+	}
 
 	return {
 		name: base.appName,

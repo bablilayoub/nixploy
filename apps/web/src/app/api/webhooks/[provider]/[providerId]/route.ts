@@ -7,6 +7,7 @@ import {
 	WebhookIgnored,
 	WebhookUnauthorized,
 } from "@nixploy/server/modules/git/webhook-handler";
+import { clientIpFromRequest, takeRateLimitToken } from "@nixploy/server/utils/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,15 @@ export async function POST(req: Request, { params }: RouteParams) {
 	const { provider, providerId } = await params;
 	if (!PROVIDERS.has(provider as GitWebhookProvider)) {
 		return Response.json({ message: `Unknown provider: ${provider}` }, { status: 404 });
+	}
+
+	const ip = clientIpFromRequest(req);
+	// Rate-limit by provider id (unspoofable) and by IP (when trusted proxy is set).
+	if (
+		!takeRateLimitToken(`webhook:${provider}:${providerId}`, { windowMs: 60_000, max: 120 }) ||
+		!takeRateLimitToken(`webhook:${provider}:${providerId}:${ip}`, { windowMs: 60_000, max: 60 })
+	) {
+		return Response.json({ message: "Too many requests" }, { status: 429 });
 	}
 
 	// Signature verification needs the exact raw body and lowercase headers.

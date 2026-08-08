@@ -20,6 +20,11 @@ import {
 import { auditFromSession } from "../../modules/audit";
 import { resyncComposeDomains } from "../../modules/compose/service";
 import { assertCapability } from "../../modules/projects";
+import {
+	assertComposeServiceName,
+	assertTraefikHost,
+	assertTraefikPath,
+} from "../../utils/validators";
 import { protectedProcedure, router } from "../init";
 
 const domainIdInput = z.object({ domainId: z.string().min(1) });
@@ -263,7 +268,30 @@ export const domainRouter = router({
 			}
 
 			const certificateType = input.certificateType ?? "none";
-			assertCertificateAllowedForHost(input.host, certificateType);
+			let host: string;
+			let path: string;
+			let internalPath: string | null;
+			try {
+				host = assertTraefikHost(input.host);
+				path = assertTraefikPath(input.path ?? "/") ?? "/";
+				internalPath = assertTraefikPath(input.internalPath);
+			} catch (error) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: error instanceof Error ? error.message : "Invalid domain host/path",
+				});
+			}
+			if (input.serviceName) {
+				try {
+					assertComposeServiceName(input.serviceName);
+				} catch (error) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: error instanceof Error ? error.message : "Invalid serviceName",
+					});
+				}
+			}
+			assertCertificateAllowedForHost(host, certificateType);
 			if (certificateType === "custom") {
 				if (!input.certificateId) {
 					throw new TRPCError({
@@ -275,9 +303,9 @@ export const domainRouter = router({
 			}
 
 			const values = {
-				host: input.host,
-				path: input.path ?? "/",
-				internalPath: input.internalPath ?? null,
+				host,
+				path,
+				internalPath,
 				port: input.port ?? null,
 				https: input.https ?? false,
 				certificateType,
@@ -331,7 +359,24 @@ export const domainRouter = router({
 			const existing = await assertDomainAccess(input.domainId, organizationId);
 
 			const certificateType = input.certificateType ?? existing.certificateType;
-			const nextHost = input.host ?? existing.host;
+			let nextHost: string;
+			try {
+				nextHost = input.host !== undefined ? assertTraefikHost(input.host) : existing.host;
+				if (input.path !== undefined) {
+					assertTraefikPath(input.path);
+				}
+				if (input.internalPath !== undefined) {
+					assertTraefikPath(input.internalPath);
+				}
+				if (input.serviceName) {
+					assertComposeServiceName(input.serviceName);
+				}
+			} catch (error) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: error instanceof Error ? error.message : "Invalid domain host/path",
+				});
+			}
 			assertCertificateAllowedForHost(nextHost, certificateType);
 			const certificateId =
 				certificateType === "custom" ? (input.certificateId ?? existing.certificateId) : null;
@@ -348,6 +393,11 @@ export const domainRouter = router({
 			const { domainId, ...fields } = input;
 			const data: Partial<typeof domains.$inferInsert> = {
 				...fields,
+				...(input.host !== undefined ? { host: nextHost } : {}),
+				...(input.path !== undefined ? { path: assertTraefikPath(input.path) ?? "/" } : {}),
+				...(input.internalPath !== undefined
+					? { internalPath: assertTraefikPath(input.internalPath) }
+					: {}),
 				certificateType,
 				certificateId,
 			};
@@ -408,8 +458,8 @@ export const domainRouter = router({
 
 	/**
 	 * Host uniqueness check across the whole platform — Traefik routing is a
-	 * shared resource, so a host claimed by any org (or by this domain
-	 * itself, when `domainId` is passed for edit forms) is unavailable.
+	 * shared resource. Returns whether the host is available to the caller
+	 * without revealing whether a conflict is same-org or cross-tenant.
 	 */
 	validateHost: protectedProcedure
 		.input(z.object({ host: z.string().min(1), domainId: z.string().optional() }))
@@ -421,6 +471,7 @@ export const domainRouter = router({
 			const existing = await db.query.domains.findFirst({
 				where: and(...conditions),
 			});
+			// Always a boolean — never leak which org owns a conflicting host.
 			return !existing;
 		}),
 });

@@ -10,6 +10,7 @@ import {
 	RefreshCw,
 	Rocket,
 	Server,
+	ShieldAlert,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -252,6 +253,15 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 			</SheetHeader>
 
 			<div className="flex-1 overflow-y-auto px-4 py-4">
+				{template.hostPrivileged && (
+					<div className="mb-5 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+						<ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+						<p className="text-sm text-muted-foreground">
+							This template needs elevated host access (Docker socket and/or Linux capabilities).
+							Only the instance admin can deploy it.
+						</p>
+					</div>
+				)}
 				{step === "destination" && (
 					<div className="flex flex-col gap-5">
 						<div className="flex items-start gap-3 rounded-lg border bg-secondary/40 p-3">

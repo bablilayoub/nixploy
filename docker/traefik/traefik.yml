@@ -39,8 +39,8 @@ entryPoints:
     # defaultCertificate from 00-default-tls.yml.
 
 providers:
-  docker:
-    exposedByDefault: false
+  # File provider only — docker provider would let compose Traefik labels
+  # hijack Host() rules on the shared edge. Nixploy writes dynamic YAML.
   file:
     directory: /etc/nixploy/traefik/dynamic
     watch: true

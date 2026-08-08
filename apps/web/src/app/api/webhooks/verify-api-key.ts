@@ -1,4 +1,7 @@
 import { auth } from "@nixploy/server/auth";
+import { db } from "@nixploy/server/db";
+import { users } from "@nixploy/server/schema";
+import { eq } from "drizzle-orm";
 
 /**
  * Verify the caller's API key — `x-api-key` header or
@@ -31,5 +34,19 @@ export async function authenticateApiKey(req: Request): Promise<{ userId: string
 	if (!userId) {
 		return Response.json({ message: "Unknown API key owner" }, { status: 401 });
 	}
+
+	const user = await db.query.users.findFirst({
+		where: eq(users.id, userId),
+		columns: { id: true, banned: true, banExpires: true },
+	});
+	if (!user) {
+		return Response.json({ message: "Unknown API key owner" }, { status: 401 });
+	}
+	const banned =
+		user.banned === true && (user.banExpires == null || user.banExpires.getTime() > Date.now());
+	if (banned) {
+		return Response.json({ message: "User is banned" }, { status: 403 });
+	}
+
 	return { userId };
 }

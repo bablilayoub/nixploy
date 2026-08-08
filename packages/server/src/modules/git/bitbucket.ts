@@ -110,7 +110,7 @@ async function bitbucketApi(row: BitbucketRow, path: string) {
 		headers: { Authorization: bitbucketAuthHeader(row) },
 	});
 	if (!response.ok) {
-		throw new Error(`Bitbucket API request failed: ${response.status} ${await response.text()}`);
+		throw new Error(`Bitbucket API request failed: ${response.status}`);
 	}
 	return response;
 }
@@ -143,9 +143,7 @@ export async function getBitbucketRepositories(bitbucketId: string, organization
 			headers: { Authorization: bitbucketAuthHeader(row) },
 		});
 		if (!response.ok) {
-			throw new Error(
-				`Bitbucket list repositories failed: ${response.status} ${await response.text()}`,
-			);
+			throw new Error(`Bitbucket list repositories failed: ${response.status}`);
 		}
 		const data = (await response.json()) as {
 			values: Array<Record<string, unknown>>;

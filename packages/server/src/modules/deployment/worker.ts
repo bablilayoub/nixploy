@@ -1,7 +1,16 @@
 import { normalize } from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
-import { applications, compose, deployments, domains, redirects, security } from "../../db/schema";
+import {
+	applications,
+	compose,
+	deployments,
+	domains,
+	previewDeployments,
+	redirects,
+	security,
+} from "../../db/schema";
+import { redactSensitiveText } from "../../utils/public-url";
 import { shellQuote as composeShellQuote } from "../compose/paths";
 import { prepareComposeFiles, resyncComposeDomains } from "../compose/service";
 import { buildImage } from "./builders";
@@ -74,14 +83,16 @@ async function syncApplicationTraefik(application: ApplicationRow): Promise<void
 	await traefik.writeAppTraefikConfig({
 		appName: application.appName,
 		serverId: application.serverId,
-		domains: appDomains.map((domain) => ({
-			host: domain.host,
-			port: domain.port ?? 80,
-			path: domain.path,
-			https: domain.https,
-			certificateType: domain.certificateType,
-			certificateId: domain.certificateId,
-		})),
+		domains: appDomains
+			.filter((domain) => domain.domainType !== "preview" && !domain.previewDeploymentId)
+			.map((domain) => ({
+				host: domain.host,
+				port: domain.port ?? 80,
+				path: domain.path,
+				https: domain.https,
+				certificateType: domain.certificateType,
+				certificateId: domain.certificateId,
+			})),
 		redirects: appRedirects.map((redirect) => ({
 			regex: redirect.regex,
 			replacement: redirect.replacement,
@@ -119,6 +130,29 @@ async function runApplicationJob(ctx: DeploymentContext, job: QueueJob): Promise
 		throw new Error(`Application not found: ${job.applicationId}`);
 	}
 
+	const preview = job.previewDeploymentId
+		? await db.query.previewDeployments.findFirst({
+				where: eq(previewDeployments.previewDeploymentId, job.previewDeploymentId),
+			})
+		: null;
+	if (job.previewDeploymentId && !preview) {
+		throw new Error(`Preview deployment not found: ${job.previewDeploymentId}`);
+	}
+	if (preview && preview.applicationId !== application.applicationId) {
+		throw new Error("Preview deployment does not belong to this application");
+	}
+
+	// Preview deploys an isolated Swarm service under preview.appName and
+	// clones the PR branch — never mutate the production service.
+	const deployTarget: ApplicationRow = preview
+		? {
+				...application,
+				appName: preview.appName,
+				branch: preview.branch ?? application.branch,
+				gitBranch: preview.branch ?? application.gitBranch,
+			}
+		: application;
+
 	// Register every secret that could leak into command output.
 	for (const [, value] of parseEnv(application.env)) ctx.logger.addSecret(value);
 	const registryAuth =
@@ -132,8 +166,8 @@ async function runApplicationJob(ctx: DeploymentContext, job: QueueJob): Promise
 	} else {
 		const codeDir =
 			application.sourceType === "drop"
-				? await extractDropSource(ctx, application)
-				: await cloneGitSource(ctx, application);
+				? await extractDropSource(ctx, deployTarget)
+				: await cloneGitSource(ctx, deployTarget);
 		throwIfCancelled(job.deploymentId);
 
 		const buildDir = resolveBuildDir(codeDir, application.buildPath || "/");
@@ -144,22 +178,49 @@ async function runApplicationJob(ctx: DeploymentContext, job: QueueJob): Promise
 		);
 		imageTag = await buildImage({
 			ctx,
-			application,
+			application: deployTarget,
 			buildDir,
 			env: parseEnv(mergedEnv).map(([k, v]) => `${k}=${v}`),
 		});
 	}
 	throwIfCancelled(job.deploymentId);
 
-	await upsertSwarmService(ctx, application, imageTag);
+	await upsertSwarmService(ctx, deployTarget, imageTag);
 	throwIfCancelled(job.deploymentId);
 
-	// Traefik routing — best effort, the domain router re-syncs anyway.
-	await syncApplicationTraefik(application).catch((error) => {
-		ctx.logger.line(
-			`Warning: failed to sync Traefik config: ${error instanceof Error ? error.message : String(error)}`,
-		);
-	});
+	if (preview) {
+		const domain = await db.query.domains.findFirst({
+			where: eq(domains.previewDeploymentId, preview.previewDeploymentId),
+		});
+		const traefik = await getTraefik();
+		if (traefik && domain) {
+			await traefik.writeAppTraefikConfig({
+				appName: preview.appName,
+				serverId: application.serverId,
+				domains: [
+					{
+						host: domain.host,
+						port: domain.port ?? 3000,
+						path: domain.path,
+						https: domain.https,
+						certificateType: domain.certificateType,
+						certificateId: domain.certificateId,
+					},
+				],
+			});
+		}
+		await db
+			.update(previewDeployments)
+			.set({ previewStatus: "done" })
+			.where(eq(previewDeployments.previewDeploymentId, preview.previewDeploymentId));
+	} else {
+		// Traefik routing — best effort, the domain router re-syncs anyway.
+		await syncApplicationTraefik(application).catch((error) => {
+			ctx.logger.line(
+				`Warning: failed to sync Traefik config: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		});
+	}
 
 	ctx.logger.line("Deployment successful");
 }
@@ -181,6 +242,7 @@ async function runComposeJob(ctx: DeploymentContext, job: QueueJob): Promise<voi
 	// Materialize compose file + merged env file (clones git sources too).
 	ctx.logger.line("Preparing compose files...");
 	const files = await prepareComposeFiles(row);
+	for (const secret of files.secrets) ctx.logger.addSecret(secret);
 	throwIfCancelled(job.deploymentId);
 
 	const f = composeShellQuote(files.composeFilePath);
@@ -278,7 +340,8 @@ async function processJob(job: QueueJob): Promise<void> {
 			isDeploymentCancelled(job.deploymentId) ||
 			(error instanceof CommandError && error.killed);
 		terminalStatus = cancelled ? "cancelled" : "error";
-		const message = error instanceof Error ? error.message : String(error);
+		const rawMessage = error instanceof Error ? error.message : String(error);
+		const message = redactSensitiveText(rawMessage, logger.listSecrets());
 		logger.line(cancelled ? "Deployment cancelled" : `Deployment failed: ${message}`);
 		await db
 			.update(deployments)

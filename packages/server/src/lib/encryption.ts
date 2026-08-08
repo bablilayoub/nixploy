@@ -6,9 +6,10 @@ const VERSION_PREFIX = "v1";
 
 /**
  * Resolve the 32-byte encryption key from the `ENCRYPTION_KEY` env var.
- * Accepts either a 64-char hex string (raw 32 bytes) or any passphrase,
- * which is stretched with SHA-256. Resolved lazily so importing modules
- * never fails — only actual encrypt/decrypt calls require the key.
+ * Prefer a 64-char hex string (`openssl rand -hex 32`). Passphrases are
+ * accepted only when at least 32 characters (stretched with SHA-256).
+ * Resolved lazily so importing modules never fails — only encrypt/decrypt
+ * calls require the key.
  */
 function getKey(): Buffer {
 	const raw = process.env.ENCRYPTION_KEY;
@@ -20,6 +21,12 @@ function getKey(): Buffer {
 	}
 	if (/^[0-9a-fA-F]{64}$/.test(raw)) {
 		return Buffer.from(raw, "hex");
+	}
+	if (raw.length < 32) {
+		throw new Error(
+			"ENCRYPTION_KEY is too weak. Use a 64-char hex string (openssl rand -hex 32) " +
+				"or a passphrase of at least 32 characters.",
+		);
 	}
 	return createHash("sha256").update(raw, "utf8").digest();
 }

@@ -12,10 +12,13 @@
 # Environment overrides:
 #   NIXPLOY_DOMAIN               Dashboard domain (A record → this server)
 #   NIXPLOY_LETSENCRYPT_EMAIL    ACME email for certificates
-#   NIXPLOY_VERSION              App image tag (prefer a release tag, e.g. v0.1.0;
-#                                default latest is convenient but not supply-chain pinned)
+#   NIXPLOY_VERSION              App image tag. Prefer a release tag (e.g. v0.1.0).
+#                                Default is the current release tag (not floating "latest").
 #   NIXPLOY_IMAGE                Full image ref (overrides tag)
-#   NIXPLOY_PORT                 Host port for direct app access (default: 3000)
+#   NIXPLOY_PORT                 Host port for direct app access. When unset:
+#                                  - with NIXPLOY_DOMAIN → no host publish (Traefik only)
+#                                  - without domain → 3000
+#                                Set NIXPLOY_PORT=3000 explicitly to keep :3000 with a domain.
 #   NIXPLOY_CONFIG_DIR           Host config directory          (default: /etc/nixploy)
 #   POSTGRES_VERSION             Postgres image tag             (default: 17-alpine)
 #   TRAEFIK_VERSION              Traefik image tag              (default: v3.5.0)
@@ -26,13 +29,14 @@
 #
 set -euo pipefail
 
-NIXPLOY_VERSION="${NIXPLOY_VERSION:-latest}"
-NIXPLOY_PORT="${NIXPLOY_PORT:-3000}"
+NIXPLOY_VERSION="${NIXPLOY_VERSION:-v0.1.0}"
+# NIXPLOY_PORT left unset unless the operator exports it (see create_app publish logic).
 NIXPLOY_CONFIG_DIR="${NIXPLOY_CONFIG_DIR:-/etc/nixploy}"
 POSTGRES_VERSION="${POSTGRES_VERSION:-17-alpine}"
 TRAEFIK_VERSION="${TRAEFIK_VERSION:-v3.5.0}"
 NIXPLOY_REPO="${NIXPLOY_REPO:-bablilayoub/nixploy}"
-NIXPLOY_BRANCH="${NIXPLOY_BRANCH:-main}"
+# Pin assets to the same release tag as the image unless overridden.
+NIXPLOY_BRANCH="${NIXPLOY_BRANCH:-$NIXPLOY_VERSION}"
 
 NETWORK_NAME="nixploy-network"
 APP_IMAGE="${NIXPLOY_IMAGE:-ghcr.io/bablilayoub/nixploy:${NIXPLOY_VERSION}}"
@@ -201,6 +205,7 @@ install_docker() {
 		return
 	fi
 	[ "${NIXPLOY_SKIP_DOCKER_INSTALL:-0}" = "1" ] && die "Docker missing and NIXPLOY_SKIP_DOCKER_INSTALL=1"
+	[ "${NIXPLOY_ALLOW_DOCKER_INSTALL:-0}" = "1" ] || die "Docker missing. Install Docker manually, or re-run with NIXPLOY_ALLOW_DOCKER_INSTALL=1 to permit curl|sh from get.docker.com"
 	run_quiet "Installing Docker Engine" bash -c "curl -fsSL https://get.docker.com | sh"
 	need_cmd docker || die "Docker install failed"
 	systemctl enable --now docker 2>/dev/null || service docker start 2>/dev/null || true
@@ -512,8 +517,15 @@ create_traefik() {
 }
 
 create_app() {
+	local publish_args=()
+	if [ -n "${NIXPLOY_PORT:-}" ]; then
+		publish_args=(--publish "mode=host,target=3000,published=${NIXPLOY_PORT}")
+	elif [ -z "${DASHBOARD_DOMAIN}" ]; then
+		publish_args=(--publish "mode=host,target=3000,published=3000")
+	fi
+
 	if docker service inspect nixploy >/dev/null 2>&1; then
-		# stop-first: port 3000 is host-published, a second task can never bind
+		# stop-first: when port 3000 is host-published, a second task can never bind
 		# it while the old one runs (start-first deadlocks the update).
 		docker service update \
 			--detach --force --no-resolve-image \
@@ -531,7 +543,7 @@ create_app() {
 		--replicas 1 \
 		--detach \
 		--no-resolve-image \
-		--publish "mode=host,target=3000,published=${NIXPLOY_PORT}" \
+		"${publish_args[@]}" \
 		--env-file "${ENV_FILE}" \
 		--env DATABASE_URL --env BETTER_AUTH_SECRET --env BETTER_AUTH_URL \
 		--env ENCRYPTION_KEY \
@@ -546,14 +558,22 @@ create_app() {
 }
 
 wait_for_app() {
-	local url
+	local url probe
 	url="${BETTER_AUTH_URL:-$(detect_public_url)}"
+	if [ -n "${NIXPLOY_PORT:-}" ]; then
+		probe="http://127.0.0.1:${NIXPLOY_PORT}/setup"
+	elif [ -z "${DASHBOARD_DOMAIN}" ]; then
+		probe="http://127.0.0.1:3000/setup"
+	else
+		# Domain installs do not publish :3000 — probe via Traefik / public URL.
+		probe="${url}/setup"
+	fi
 	local i code
 	if [ "${IS_TTY}" = "1" ]; then
 		local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 		for i in $(seq 1 90); do
-			code="$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 \
-				"http://127.0.0.1:${NIXPLOY_PORT}/setup" 2>/dev/null || true)"
+			code="$(curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 2 \
+				"${probe}" 2>/dev/null || true)"
 			case "${code}" in
 				200|302|307|308) printf '\r\033[K'; ok "App is up"; break ;;
 			esac
@@ -565,8 +585,8 @@ wait_for_app() {
 		[ -n "${code}" ] || printf '\r\033[K'
 	else
 		for i in $(seq 1 90); do
-			code="$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 \
-				"http://127.0.0.1:${NIXPLOY_PORT}/setup" 2>/dev/null || true)"
+			code="$(curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 2 \
+				"${probe}" 2>/dev/null || true)"
 			case "${code}" in
 				200|302|307|308) ok "App is up"; break ;;
 			esac

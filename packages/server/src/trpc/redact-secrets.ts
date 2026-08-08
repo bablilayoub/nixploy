@@ -4,18 +4,41 @@
  * missing keys.
  */
 
-export function redactApplicationSecrets<
-	T extends {
-		env?: string | null;
-		buildArgs?: string | null;
-		password?: string | null;
-	},
->(row: T): T {
-	return { ...row, env: null, buildArgs: null, password: null };
+export function redactApplicationSecrets<T>(row: T): T {
+	const source = row as Record<string, unknown>;
+	const next: Record<string, unknown> = {
+		...source,
+		env: null,
+		buildArgs: null,
+		password: null,
+	};
+	const environment = source.environment as
+		| ({ env?: string | null; project?: Record<string, unknown> } & Record<string, unknown>)
+		| null
+		| undefined;
+	if (environment && typeof environment === "object") {
+		const project = environment.project
+			? { ...environment.project, env: null }
+			: environment.project;
+		next.environment = { ...environment, env: null, project };
+	}
+	return next as T;
 }
 
-export function redactComposeSecrets<T extends { env?: string | null }>(row: T): T {
-	return { ...row, env: null };
+export function redactComposeSecrets<T>(row: T): T {
+	const source = row as Record<string, unknown>;
+	const next: Record<string, unknown> = { ...source, env: null };
+	const environment = source.environment as
+		| ({ env?: string | null; project?: Record<string, unknown> } & Record<string, unknown>)
+		| null
+		| undefined;
+	if (environment && typeof environment === "object") {
+		const project = environment.project
+			? { ...environment.project, env: null }
+			: environment.project;
+		next.environment = { ...environment, env: null, project };
+	}
+	return next as T;
 }
 
 export function redactDatabaseSecrets<T extends Record<string, unknown>>(row: T): T {

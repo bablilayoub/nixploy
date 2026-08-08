@@ -3,7 +3,17 @@ import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { compose, domains, environments } from "../../db/schema";
-import { listComposeServices } from "../compose/compose-file";
+import {
+	assertComposeServiceName,
+	assertTraefikHost,
+	assertTraefikPath,
+} from "../../utils/validators";
+import {
+	assertSafeComposeSpec,
+	hostPrivilegedComposeSafety,
+	listComposeServices,
+	parseComposeFile,
+} from "../compose/compose-file";
 import { createCompose, resyncComposeDomains, updateComposeById } from "../compose/service";
 import { queueDeployment } from "../deployment";
 import { findProjectById } from "../projects";
@@ -46,6 +56,9 @@ function resolveDefault(value: string): string {
  * keeps the template's `${VAR}` placeholders and whose `.env` carries the
  * resolved values (provided values over schema defaults), optionally attach
  * domains, then enqueue the first deployment.
+ *
+ * Host-privileged templates (Docker socket / elevated caps) must only be
+ * called after the router has asserted instance admin.
  */
 export async function deployTemplate(
 	organizationId: string,
@@ -72,14 +85,36 @@ export async function deployTemplate(
 		});
 	}
 
+	const safety = template.hostPrivileged ? hostPrivilegedComposeSafety() : undefined;
 	// Validate requested domains against the compose services up front so a
 	// bad serviceName never leaves a half-configured service behind.
+	try {
+		assertSafeComposeSpec(parseComposeFile(template.compose), safety);
+	} catch (error) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message:
+				error instanceof Error
+					? `Template "${template.name}" failed safety checks: ${error.message}`
+					: `Template "${template.name}" failed safety checks`,
+		});
+	}
 	const serviceNames = listComposeServices(template.compose);
 	for (const domain of input.domains ?? []) {
 		if (!serviceNames.includes(domain.serviceName)) {
 			throw new TRPCError({
 				code: "BAD_REQUEST",
 				message: `Service "${domain.serviceName}" is not defined by the ${template.name} compose file`,
+			});
+		}
+		try {
+			assertTraefikHost(domain.host);
+			assertTraefikPath("/");
+			assertComposeServiceName(domain.serviceName);
+		} catch (error) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: error instanceof Error ? error.message : "Invalid domain",
 			});
 		}
 	}
@@ -98,6 +133,7 @@ export async function deployTemplate(
 		environmentId: environment.environmentId,
 		composeType: "docker-compose",
 		sourceType: "raw",
+		hostPrivileged: Boolean(template.hostPrivileged),
 	});
 
 	try {
@@ -106,7 +142,7 @@ export async function deployTemplate(
 		if (input.domains && input.domains.length > 0) {
 			await db.insert(domains).values(
 				input.domains.map((domain) => ({
-					host: domain.host,
+					host: assertTraefikHost(domain.host),
 					path: "/",
 					port: domain.port,
 					https: false,

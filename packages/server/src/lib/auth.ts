@@ -4,15 +4,25 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
 import { admin, organization, twoFactor } from "better-auth/plugins";
+import { sql } from "drizzle-orm";
 import { db, schema } from "../db";
 import type { invitations, members } from "../db/schema";
 import { recordAudit } from "../modules/audit";
+import { isInstanceAdminRole } from "../modules/auth/instance-admin";
+import {
+	assertInviteRoleBelowCaller,
+	assertMemberActionRank,
+	loadCallerMembership,
+} from "../modules/auth/org-rank";
 import { canSignUpEmail, hasAnyUsers } from "../modules/auth/setup";
-import { deleteOrganizationCascade } from "../modules/projects";
+import { deleteOrganizationCascade, hasCapability } from "../modules/projects";
 import { orgAc, orgPluginRoles } from "./org-roles";
 
 type MemberRow = typeof members.$inferSelect;
 type InvitationRow = typeof invitations.$inferSelect;
+
+/** Postgres advisory lock id for serializing first-admin signup (TOCTOU). */
+const FIRST_USER_LOCK_KEY = 872_314_01;
 
 const BCRYPT_ROUNDS = 10;
 
@@ -24,6 +34,14 @@ const BCRYPT_ROUNDS = 10;
  */
 const envOrigins = process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : [];
 let originsCache: { at: number; origins: string[] } = { at: 0, origins: [] };
+
+const isLoopbackHost = (host: string): boolean =>
+	host === "localhost" ||
+	host === "127.0.0.1" ||
+	host === "[::1]" ||
+	host.startsWith("127.") ||
+	host.endsWith(".localhost");
+
 const trustedOriginsWithDashboardDomain = async (): Promise<string[]> => {
 	if (Date.now() - originsCache.at > 15_000) {
 		let origins: string[] = [];
@@ -31,7 +49,11 @@ const trustedOriginsWithDashboardDomain = async (): Promise<string[]> => {
 			const [row] = await db.select().from(schema.webServerSettings).limit(1);
 			const host = row?.host?.trim().toLowerCase();
 			if (host) {
-				origins = [`https://${host}`, `http://${host}`];
+				origins = [`https://${host}`];
+				// Allow plain HTTP only for loopback or explicit development.
+				if (isLoopbackHost(host) || process.env.NODE_ENV === "development") {
+					origins.push(`http://${host}`);
+				}
 			}
 		} catch {
 			// Table may not exist yet (first migration run) — fall back to env.
@@ -91,6 +113,9 @@ export const auth = betterAuth({
 		organization({
 			ac: orgAc,
 			roles: orgPluginRoles,
+			// Only instance admins may create additional orgs on a shared host
+			// (invited viewers must not self-escalate to a new owner tenant).
+			allowUserToCreateOrganization: async (user) => isInstanceAdminRole(user.role),
 			organizationHooks: {
 				// Real infra (Swarm services, Traefik configs, volumes, on-disk
 				// state) must be torn down while rows still exist — Postgres FK
@@ -103,12 +128,51 @@ export const auth = betterAuth({
 					);
 					await deleteOrganizationCascade(organization.id);
 				},
+				beforeCreateInvitation: async ({ invitation, inviter, organization }) => {
+					if (!(await hasCapability(inviter.id, organization.id, "members.manage"))) {
+						throw new APIError("FORBIDDEN", {
+							message: 'This action requires the "members.manage" capability',
+						});
+					}
+					const caller = await loadCallerMembership(inviter.id, organization.id);
+					assertInviteRoleBelowCaller(caller.role, String(invitation.role ?? "member"));
+				},
+				beforeUpdateMemberRole: async ({ member, newRole, user, organization }) => {
+					if (!(await hasCapability(user.id, organization.id, "members.manage"))) {
+						throw new APIError("FORBIDDEN", {
+							message: 'This action requires the "members.manage" capability',
+						});
+					}
+					await assertMemberActionRank({
+						actorUserId: user.id,
+						organizationId: organization.id,
+						targetMemberRole: String(member.role),
+						newRole: String(newRole),
+					});
+				},
+				beforeRemoveMember: async ({ member, user, organization }) => {
+					if (!(await hasCapability(user.id, organization.id, "members.manage"))) {
+						throw new APIError("FORBIDDEN", {
+							message: 'This action requires the "members.manage" capability',
+						});
+					}
+					await assertMemberActionRank({
+						actorUserId: user.id,
+						organizationId: organization.id,
+						targetMemberRole: String(member.role),
+					});
+				},
 			},
 		}),
 		admin(),
 		twoFactor(),
 		apiKey({
 			enableMetadata: true,
+			rateLimit: {
+				enabled: true,
+				timeWindow: 60_000,
+				maxRequests: 120,
+			},
 		}),
 	],
 	trustedOrigins: () => trustedOriginsWithDashboardDomain(),
@@ -117,18 +181,23 @@ export const auth = betterAuth({
 			create: {
 				before: async (user) => {
 					const email = typeof user.email === "string" ? user.email : "";
-					if (!(await canSignUpEmail(email))) {
-						throw new APIError("FORBIDDEN", {
-							message: "Registration is disabled. Ask an admin to invite you, or sign in.",
-						});
+					await db.execute(sql`SELECT pg_advisory_lock(${FIRST_USER_LOCK_KEY})`);
+					try {
+						if (!(await canSignUpEmail(email))) {
+							throw new APIError("FORBIDDEN", {
+								message: "Registration is disabled. Ask an admin to invite you, or sign in.",
+							});
+						}
+						const isFirst = !(await hasAnyUsers());
+						return {
+							data: {
+								...user,
+								...(isFirst ? { role: "admin" } : {}),
+							},
+						};
+					} finally {
+						await db.execute(sql`SELECT pg_advisory_unlock(${FIRST_USER_LOCK_KEY})`);
 					}
-					const isFirst = !(await hasAnyUsers());
-					return {
-						data: {
-							...user,
-							...(isFirst ? { role: "admin" } : {}),
-						},
-					};
 				},
 			},
 		},

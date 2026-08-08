@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeDigest, parseImageRef } from "./registry";
+import { fetchRemoteDigest, normalizeDigest, parseImageRef } from "./registry";
 import { parseUpdateSettings } from "./settings";
 
 describe("parseImageRef", () => {
@@ -32,6 +32,14 @@ describe("parseImageRef", () => {
 		expect(ref.repository).toBe("library/nginx");
 		expect(ref.tag).toBe("1.27");
 		expect(ref.canonical).toBe("docker.io/library/nginx:1.27");
+	});
+});
+
+describe("fetchRemoteDigest", () => {
+	it("refuses private / loopback registries (SSRF)", async () => {
+		expect(await fetchRemoteDigest("localhost:5000/evil:latest")).toBeNull();
+		expect(await fetchRemoteDigest("127.0.0.1/evil:latest")).toBeNull();
+		expect(await fetchRemoteDigest("169.254.169.254/evil:latest")).toBeNull();
 	});
 });
 

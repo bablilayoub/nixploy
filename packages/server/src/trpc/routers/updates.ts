@@ -1,10 +1,8 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "../../db";
-import { members } from "../../db/schema";
 import { auditFromSession } from "../../modules/audit";
-import { hasOrgRole, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertInstanceAdmin, isInstanceAdminRole } from "../../modules/auth/instance-admin";
+import { resolveCallerOrganizationId } from "../../modules/projects";
 import {
 	applyUpdate,
 	checkForUpdates,
@@ -21,22 +19,24 @@ import { protectedProcedure, router } from "../init";
 
 type Session = NonNullable<TRPCContext["session"]>;
 
-async function requireOwnerOrAdmin(session: Session): Promise<string> {
-	const organizationId = await resolveCallerOrganizationId(
-		session.user.id,
-		session.session.activeOrganizationId,
-	);
-	const membership = await db.query.members.findFirst({
-		where: and(eq(members.organizationId, organizationId), eq(members.userId, session.user.id)),
-	});
-	const roles = (membership?.role ?? "").split(",").map((role) => role.trim());
-	if (!roles.includes("owner") && !roles.includes("admin")) {
+async function requireInstanceAdmin(session: Session): Promise<string> {
+	await assertInstanceAdmin(session);
+	return await resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
+}
+
+/** Only official GHCR image refs — blocks rolling an arbitrary attacker image. */
+function assertAllowedUpdateImage(image: string): void {
+	const trimmed = image.trim();
+	const allowed =
+		trimmed === DEFAULT_UPDATE_IMAGE ||
+		trimmed.startsWith("ghcr.io/bablilayoub/nixploy:") ||
+		trimmed.startsWith("ghcr.io/bablilayoub/nixploy@");
+	if (!allowed) {
 		throw new TRPCError({
-			code: "FORBIDDEN",
-			message: "Platform updates require an owner or admin role",
+			code: "BAD_REQUEST",
+			message: `Update image must be under ghcr.io/bablilayoub/nixploy (got ${trimmed})`,
 		});
 	}
-	return organizationId;
 }
 
 const settingsInput = z.object({
@@ -52,22 +52,21 @@ export const updatesRouter = router({
 	 * whether an update was detected. Check/apply stay admin-only via getStatus.
 	 */
 	banner: protectedProcedure.query(async ({ ctx }) => {
-		const organizationId = await resolveCallerOrganizationId(
+		await resolveCallerOrganizationId(
 			ctx.session.user.id,
 			ctx.session.session.activeOrganizationId,
 		);
 		const settings = await getUpdateSettings();
-		const canManageUpdate = await hasOrgRole(ctx.session.user.id, organizationId, "admin");
 		return {
 			appVersion: getAppVersion(),
 			updateAvailable: settings.updateAvailable,
-			canManageUpdate,
+			canManageUpdate: isInstanceAdminRole(ctx.session.user.role),
 		};
 	}),
 
 	/** Current version, digests and auto-update preferences. */
 	getStatus: protectedProcedure.query(async ({ ctx }) => {
-		await requireOwnerOrAdmin(ctx.session);
+		await requireInstanceAdmin(ctx.session);
 		// Un-stick rolls that never converged so the UI doesn't spin forever.
 		await resolveStuckUpdate();
 		const settings = await getUpdateSettings();
@@ -81,13 +80,13 @@ export const updatesRouter = router({
 
 	/** Hit the registry now and compare digests. */
 	check: protectedProcedure.mutation(async ({ ctx }) => {
-		await requireOwnerOrAdmin(ctx.session);
+		await requireInstanceAdmin(ctx.session);
 		return checkForUpdates({ persist: true });
 	}),
 
 	/** Pull + roll the nixploy Swarm service. The process will restart shortly after. */
 	runUpdate: protectedProcedure.mutation(async ({ ctx }) => {
-		const organizationId = await requireOwnerOrAdmin(ctx.session);
+		const organizationId = await requireInstanceAdmin(ctx.session);
 		const settings = await getUpdateSettings();
 		const result = await applyUpdate();
 		void auditFromSession(ctx, organizationId, {
@@ -102,7 +101,10 @@ export const updatesRouter = router({
 
 	/** Toggle auto-check / auto-update and optionally the cron / image. */
 	updateSettings: protectedProcedure.input(settingsInput).mutation(async ({ ctx, input }) => {
-		await requireOwnerOrAdmin(ctx.session);
+		await requireInstanceAdmin(ctx.session);
+		if (input.image !== undefined) {
+			assertAllowedUpdateImage(input.image);
+		}
 		const next = await patchUpdateSettings({
 			...(input.autoCheckEnabled !== undefined && {
 				autoCheckEnabled: input.autoCheckEnabled,

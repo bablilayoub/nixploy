@@ -64,11 +64,21 @@ describe("encryption", () => {
 		expect(isEncrypted("v2:abc")).toBe(false);
 	});
 
-	it("derives a key from a non-hex passphrase", () => {
+	it("derives a key from a non-hex passphrase of sufficient length", () => {
 		const original = process.env.ENCRYPTION_KEY;
-		process.env.ENCRYPTION_KEY = "a-human-passphrase";
+		process.env.ENCRYPTION_KEY = "a-human-passphrase-at-least-32-chars!!";
 		try {
 			expect(decrypt(encrypt("passphrase round-trip"))).toBe("passphrase round-trip");
+		} finally {
+			process.env.ENCRYPTION_KEY = original;
+		}
+	});
+
+	it("rejects weak short passphrases", () => {
+		const original = process.env.ENCRYPTION_KEY;
+		process.env.ENCRYPTION_KEY = "too-short";
+		try {
+			expect(() => encrypt("x")).toThrow(/too weak/);
 		} finally {
 			process.env.ENCRYPTION_KEY = original;
 		}

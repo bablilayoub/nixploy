@@ -5,6 +5,7 @@ import { db } from "../../db";
 import { compose, environments, projects } from "../../db/schema";
 import { assertEnvironmentAccess } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
+import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { listComposeContainers } from "../../modules/compose/containers";
 import {
 	createCompose,
@@ -25,6 +26,8 @@ import {
 	hasCapability,
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
+import { assertSafeGitCloneUrl } from "../../utils/public-url";
+import { appNameSchema } from "../../utils/validators";
 import {
 	assertGitProviderInOrganization,
 	assertServerInOrganization,
@@ -101,12 +104,7 @@ export const composeRouter = router({
 				environmentId: z.string().min(1),
 				composeType: z.enum(["docker-compose", "stack"]),
 				sourceType: z.enum(["raw", "git", "github", "gitlab", "bitbucket", "gitea"]),
-				appName: z
-					.string()
-					.min(3)
-					.max(63)
-					.regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/)
-					.optional(),
+				appName: appNameSchema.optional(),
 				serverId: z.string().nullish(),
 			}),
 		)
@@ -140,12 +138,7 @@ export const composeRouter = router({
 			composeIdInput.extend({
 				name: z.string().min(1).optional(),
 				description: z.string().nullish(),
-				appName: z
-					.string()
-					.min(3)
-					.max(63)
-					.regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/)
-					.optional(),
+				appName: appNameSchema.optional(),
 				composeType: z.enum(["docker-compose", "stack"]).optional(),
 				sourceType: z.enum(["raw", "git", "github", "gitlab", "bitbucket", "gitea"]).optional(),
 				repository: z.string().nullish(),
@@ -171,6 +164,17 @@ export const composeRouter = router({
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			await findComposeForOrg(input.composeId, organizationId);
 
+			if (input.gitUrl) {
+				try {
+					await assertSafeGitCloneUrl(input.gitUrl);
+				} catch (error) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: error instanceof Error ? error.message : "Invalid git URL",
+					});
+				}
+			}
+
 			await assertServerInOrganization(input.serverId, organizationId);
 			await assertSshKeyInOrganization(input.customGitSSHKeyId, organizationId);
 			for (const provider of ["github", "gitlab", "bitbucket", "gitea"] as const) {
@@ -181,7 +185,13 @@ export const composeRouter = router({
 			}
 
 			const { composeId, ...values } = input;
-			return await updateComposeById(composeId, values);
+			const updated = await updateComposeById(composeId, values);
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? updated : redactComposeSecrets(updated);
 		}),
 
 	/**
@@ -330,6 +340,9 @@ export const composeRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const row = await findComposeForOrg(input.composeId, organizationId);
+			if (row.hostPrivileged) {
+				await assertInstanceAdmin(ctx.session);
+			}
 			await saveComposeFile(row, input.composeFile);
 			return true;
 		}),

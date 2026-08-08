@@ -7,6 +7,7 @@ import { assertServerInOrganization } from "../../trpc/assert-org-refs";
 import type { TRPCContext } from "../../trpc/init";
 import { protectedProcedure, router } from "../../trpc/init";
 import { redactDatabaseSecrets } from "../../trpc/redact-secrets";
+import { assertSafePublishedPort } from "../../utils/validators";
 import { auditFromSession } from "../audit";
 import { assertCapability, hasCapability, resolveCallerOrganizationId } from "../projects";
 import {
@@ -184,6 +185,9 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			await assertCapability(ctx.session.user.id, organizationId, "service.create");
 			await assertEnvironmentAccess(input.environmentId, organizationId);
 			await assertServerInOrganization(input.serverId, organizationId);
+			if (input.externalPort != null) {
+				assertSafePublishedPort(input.externalPort, "externalPort");
+			}
 			const appName = input.appName ?? generateDatabaseAppName(input.name);
 			try {
 				const inserted = (await db
@@ -197,7 +201,14 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 					targetId: (createdRow as unknown as Record<string, unknown>)[idField] as string,
 					targetName: createdRow.name,
 				});
-				return createdRow;
+				const canSeeSecrets = await hasCapability(
+					ctx.session.user.id,
+					organizationId,
+					"secrets.read",
+				);
+				return canSeeSecrets
+					? createdRow
+					: (redactDatabaseSecrets(createdRow as Record<string, unknown>) as Row);
 			} catch (error) {
 				if (
 					typeof error === "object" &&
@@ -224,6 +235,9 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			}
 			await assertServerInOrganization(input.serverId, organizationId);
 			const { [idField]: _id, ...values } = input as Record<string, unknown>;
+			if (typeof values.externalPort === "number") {
+				assertSafePublishedPort(values.externalPort, "externalPort");
+			}
 			const touchesSecrets =
 				values.databasePassword !== undefined ||
 				values.databaseRootPassword !== undefined ||
@@ -293,7 +307,14 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 					targetName: row.name as string,
 					metadata: { environmentId: input.environmentId as string },
 				});
-				return updated;
+				const canSeeSecrets = await hasCapability(
+					ctx.session.user.id,
+					organizationId,
+					"secrets.read",
+				);
+				return canSeeSecrets
+					? updated
+					: (redactDatabaseSecrets(updated as Record<string, unknown>) as Row);
 			}),
 
 		/** Remove the database row, its swarm service and its data volume. */
@@ -320,7 +341,15 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
 			await startDatabase(kind, row);
-			return updateRow(id, { status: "running" });
+			const updated = await updateRow(id, { status: "running" });
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets
+				? updated
+				: (redactDatabaseSecrets(updated as Record<string, unknown>) as Row);
 		}),
 
 		/** Scale the swarm service to 0 replicas. */
@@ -330,7 +359,15 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
 			await stopDatabase(row.appName, row.serverId);
-			return updateRow(id, { status: "idle" });
+			const updated = await updateRow(id, { status: "idle" });
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets
+				? updated
+				: (redactDatabaseSecrets(updated as Record<string, unknown>) as Row);
 		}),
 
 		/** Save service-level env vars (multi-line `KEY=VALUE`). */
@@ -341,7 +378,15 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 				const id = input[idField] as string;
 				await findRowOrThrow(id, organizationId);
-				return updateRow(id, { env: input.env });
+				const updated = await updateRow(id, { env: input.env });
+				const canSeeSecrets = await hasCapability(
+					ctx.session.user.id,
+					organizationId,
+					"secrets.read",
+				);
+				return canSeeSecrets
+					? updated
+					: (redactDatabaseSecrets(updated as Record<string, unknown>) as Row);
 			}),
 
 		/**
@@ -360,11 +405,20 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 				await assertCapability(ctx.session.user.id, organizationId, "service.write");
 				const id = input[idField] as string;
 				await findRowOrThrow(id, organizationId);
-				const row = await updateRow(id, { externalPort: input.externalPort });
+				const externalPort = input.externalPort;
+				if (typeof externalPort === "number") {
+					assertSafePublishedPort(externalPort, "externalPort");
+				}
+				const row = await updateRow(id, { externalPort });
 				if (await databaseServiceExists(row.appName, row.serverId)) {
 					await deployDatabase(kind, row);
 				}
-				return row;
+				const canSeeSecrets = await hasCapability(
+					ctx.session.user.id,
+					organizationId,
+					"secrets.read",
+				);
+				return canSeeSecrets ? row : (redactDatabaseSecrets(row as Record<string, unknown>) as Row);
 			}),
 
 		/** Force a rolling re-creation of the service's tasks. */
@@ -380,7 +434,15 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 				});
 			}
 			await reloadDatabase(row.appName, row.serverId);
-			return updateRow(id, { status: "running" });
+			const updated = await updateRow(id, { status: "running" });
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets
+				? updated
+				: (redactDatabaseSecrets(updated as Record<string, unknown>) as Row);
 		}),
 
 		/**

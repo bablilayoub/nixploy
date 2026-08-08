@@ -1,4 +1,4 @@
-import type { AiProvider, AiSettings } from "./settings";
+import { type AiProvider, type AiSettings, assertAiFetchBaseUrl } from "./settings";
 
 export interface ChatMessage {
 	role: "system" | "user" | "assistant";
@@ -10,27 +10,11 @@ export interface LlmCompletion {
 	model: string;
 }
 
-function resolveBaseUrl(settings: AiSettings): string {
-	if (settings.provider === "ollama") {
-		return (settings.baseUrl ?? "http://127.0.0.1:11434/v1").replace(/\/$/, "");
-	}
-	if (settings.provider === "openai-compatible") {
-		if (!settings.baseUrl?.trim()) {
-			throw new Error("Base URL is required for OpenAI-compatible providers");
-		}
-		return settings.baseUrl.replace(/\/$/, "");
-	}
-	if (settings.provider === "anthropic") {
-		return (settings.baseUrl ?? "https://api.anthropic.com").replace(/\/$/, "");
-	}
-	return (settings.baseUrl ?? "https://api.openai.com/v1").replace(/\/$/, "");
-}
-
 async function completeOpenAiCompatible(
 	settings: AiSettings,
 	messages: ChatMessage[],
 ): Promise<LlmCompletion> {
-	const base = resolveBaseUrl(settings);
+	const base = await assertAiFetchBaseUrl(settings);
 	const headers: Record<string, string> = {
 		"Content-Type": "application/json",
 	};
@@ -46,10 +30,11 @@ async function completeOpenAiCompatible(
 			messages,
 			temperature: 0.2,
 		}),
+		redirect: "error",
+		signal: AbortSignal.timeout(60_000),
 	});
 	if (!res.ok) {
-		const body = await res.text().catch(() => "");
-		throw new Error(`LLM request failed (${res.status}): ${body.slice(0, 400)}`);
+		throw new Error(`LLM request failed (${res.status})`);
 	}
 	const data = (await res.json()) as {
 		choices?: Array<{ message?: { content?: string } }>;
@@ -65,7 +50,7 @@ async function completeAnthropic(
 	messages: ChatMessage[],
 ): Promise<LlmCompletion> {
 	if (!settings.apiKey) throw new Error("Anthropic API key is required");
-	const base = resolveBaseUrl(settings);
+	const base = await assertAiFetchBaseUrl(settings);
 	const system = messages.find((m) => m.role === "system")?.content;
 	const rest = messages.filter((m) => m.role !== "system");
 
@@ -82,10 +67,11 @@ async function completeAnthropic(
 			system: system || undefined,
 			messages: rest.map((m) => ({ role: m.role, content: m.content })),
 		}),
+		redirect: "error",
+		signal: AbortSignal.timeout(60_000),
 	});
 	if (!res.ok) {
-		const body = await res.text().catch(() => "");
-		throw new Error(`Anthropic request failed (${res.status}): ${body.slice(0, 400)}`);
+		throw new Error(`Anthropic request failed (${res.status})`);
 	}
 	const data = (await res.json()) as {
 		content?: Array<{ type?: string; text?: string }>;

@@ -1,8 +1,8 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { deployments, members } from "../../db/schema";
+import { deployments } from "../../db/schema";
 import {
 	applySuggestedEnvPatch,
 	chatAboutService,
@@ -15,28 +15,16 @@ import {
 	readCachedExplanation,
 } from "../../modules/ai";
 import { auditFromSession } from "../../modules/audit";
+import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
 type Session = NonNullable<TRPCContext["session"]>;
 
-async function requireOwnerOrAdmin(session: Session): Promise<string> {
-	const organizationId = await resolveCallerOrganizationId(
-		session.user.id,
-		session.session.activeOrganizationId,
-	);
-	const membership = await db.query.members.findFirst({
-		where: and(eq(members.organizationId, organizationId), eq(members.userId, session.user.id)),
-	});
-	const roles = (membership?.role ?? "").split(",").map((role) => role.trim());
-	if (!roles.includes("owner") && !roles.includes("admin")) {
-		throw new TRPCError({
-			code: "FORBIDDEN",
-			message: "AI Copilot settings require an owner or admin role",
-		});
-	}
-	return organizationId;
+async function requireInstanceAdmin(session: Session): Promise<string> {
+	await assertInstanceAdmin(session);
+	return await resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
 }
 
 async function requireMember(session: Session): Promise<string> {
@@ -70,7 +58,7 @@ export const aiRouter = router({
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
-			const organizationId = await requireOwnerOrAdmin(ctx.session);
+			const organizationId = await requireInstanceAdmin(ctx.session);
 			const next = await patchAiSettings(input);
 			void auditFromSession(ctx, organizationId, {
 				action: "ai.settings.update",

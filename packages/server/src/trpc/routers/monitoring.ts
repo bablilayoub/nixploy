@@ -17,10 +17,12 @@ import {
 	redis,
 } from "../../db/schema";
 import { findServerById, getServerStatsCached, type ServerStats } from "../../modules/cluster";
+import { shellQuote } from "../../modules/compose/paths";
 import { readLatestMetricsSample, readMetricsHistory } from "../../modules/monitoring/history";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { mapDockerStats } from "../../ws/docker-stats";
+import { isValidContainerId } from "../../ws/utils";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -151,9 +153,12 @@ async function getRemoteContainerStats(
 	serverId: string,
 	containerId: string,
 ): Promise<ContainerStats> {
+	if (!isValidContainerId(containerId)) {
+		throw new Error("Invalid container id");
+	}
 	const raw = await execAsyncRemote(
 		serverId,
-		`docker stats --no-stream --format '{{json .Stats}}' '${containerId.replace(/'/g, `'\\''`)}'`,
+		`docker stats --no-stream --format '{{json .Stats}}' ${shellQuote(containerId)}`,
 	);
 	// The CLI's pre-computed format differs from the Engine API; parse what it
 	// exposes (CPUPerc/MemPerc are strings like "1.23%").
@@ -193,7 +198,12 @@ export const monitoringRouter = router({
 
 	/** One-shot container stats (locally via dockerode, remotely via SSH). */
 	containerStats: protectedProcedure
-		.input(z.object({ containerId: z.string().min(1), serverId: z.string().nullish() }))
+		.input(
+			z.object({
+				containerId: z.string().min(1).refine(isValidContainerId, "Invalid container id"),
+				serverId: z.string().nullish(),
+			}),
+		)
 		.query(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			if (input.serverId) {
@@ -276,7 +286,14 @@ export const monitoringRouter = router({
 				filters: { label: [`com.docker.swarm.service.name=${input.appName}`] },
 			});
 			if (containers.length === 0) {
-				containers = await docker.listContainers({ filters: { name: [input.appName] } });
+				containers = await docker.listContainers({
+					filters: { label: [`com.docker.compose.project=${input.appName}`] },
+				});
+			}
+			if (containers.length === 0) {
+				containers = await docker.listContainers({
+					filters: { label: [`com.docker.stack.namespace=${input.appName}`] },
+				});
 			}
 			const stats = await Promise.all(
 				containers.map(async (container) => {

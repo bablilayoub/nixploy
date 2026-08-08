@@ -1,6 +1,7 @@
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "../../db";
 import { alertRules, incidents, serviceLogs, uptimeProbes } from "../../db/schema";
+import { assertSafeOutboundUrl } from "../../utils/public-url";
 import { notifyEvent } from "../notifications";
 
 export async function recordIncident(input: {
@@ -335,6 +336,20 @@ export async function runUptimeProbes(): Promise<void> {
 		const scheme = probe.domain.https ? "https" : "http";
 		const path = probe.path.startsWith("/") ? probe.path : `/${probe.path}`;
 		const url = `${scheme}://${host}${path}`;
+		try {
+			await assertSafeOutboundUrl(url, { allowHttp: !probe.domain.https });
+		} catch {
+			await db
+				.update(uptimeProbes)
+				.set({
+					lastCheckedAt: new Date(),
+					status: "down",
+					lastStatusChangeAt: new Date(),
+					lastError: "Probe host is not allowed (private/link-local/metadata)",
+				})
+				.where(eq(uptimeProbes.uptimeProbeId, probe.uptimeProbeId));
+			continue;
+		}
 
 		let nextStatus: "up" | "down" = "down";
 		let lastError: string | null = null;
@@ -343,7 +358,7 @@ export async function runUptimeProbes(): Promise<void> {
 			const timer = setTimeout(() => controller.abort(), probe.timeoutMs);
 			const res = await fetch(url, {
 				method: "GET",
-				redirect: "follow",
+				redirect: "error",
 				signal: controller.signal,
 				headers: { "user-agent": "nixploy-uptime/1.0" },
 			});

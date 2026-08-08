@@ -11,6 +11,32 @@ import type { ApplicationRow } from "./sources";
 /** Attachable overlay network every swarm service joins (Traefik routing). */
 export const getSwarmNetwork = (): string => process.env.NIXPLOY_NETWORK ?? "nixploy-network";
 
+/** Drop Traefik/hijack labels from user-supplied swarm label maps. */
+export function sanitizeSwarmLabels(raw: unknown): Record<string, string> | undefined {
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+	const out: Record<string, string> = {};
+	for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+		if (!key || key.toLowerCase().startsWith("traefik.")) continue;
+		if (typeof value === "string") out[key] = value;
+		else if (value != null) out[key] = String(value);
+	}
+	return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** Only allow the shared overlay (plus explicit attachable targets named nixploy-*). */
+export function sanitizeNetworkAttachments(raw: unknown): Docker.NetworkAttachmentConfig[] {
+	const fallback: Docker.NetworkAttachmentConfig[] = [{ Target: getSwarmNetwork() }];
+	if (!Array.isArray(raw) || raw.length === 0) return fallback;
+	const allowed = raw.filter((entry): entry is Docker.NetworkAttachmentConfig => {
+		if (!entry || typeof entry !== "object") return false;
+		const target = (entry as { Target?: unknown }).Target;
+		return (
+			typeof target === "string" && (target === getSwarmNetwork() || target.startsWith("nixploy-"))
+		);
+	});
+	return allowed.length > 0 ? allowed : fallback;
+}
+
 /** Parse `"512m"` / `"1g"` / `"1024"` (bytes) into bytes. */
 const parseMemoryBytes = (value: string | null): number | undefined => {
 	if (!value) return undefined;
@@ -115,7 +141,7 @@ export async function upsertSwarmService(
 
 	const spec: Docker.ServiceSpec = {
 		Name: application.appName,
-		Labels: (application.labelsSwarm as Record<string, string> | null) ?? undefined,
+		Labels: sanitizeSwarmLabels(application.labelsSwarm),
 		TaskTemplate: {
 			ContainerSpec: {
 				Image: imageTag,
@@ -131,9 +157,7 @@ export async function upsertSwarmService(
 			RestartPolicy:
 				(application.restartPolicySwarm as Docker.TaskRestartPolicy | null) ?? undefined,
 			Placement: (application.placementSwarm as Docker.Placement | null) ?? undefined,
-			Networks: (application.networkSwarm as Docker.NetworkAttachmentConfig[] | null) ?? [
-				{ Target: getSwarmNetwork() },
-			],
+			Networks: sanitizeNetworkAttachments(application.networkSwarm),
 		},
 		Mode: (application.modeSwarm as Docker.ServiceMode | null) ?? {
 			Replicated: { Replicas: application.replicas },

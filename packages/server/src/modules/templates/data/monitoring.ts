@@ -152,9 +152,10 @@ volumes:
 		id: "dozzle",
 		name: "Dozzle",
 		description:
-			"Lightweight real-time log viewer for Docker containers — simple web UI with search and live streaming.",
+			"Lightweight real-time log viewer for Docker containers — simple web UI with search and live streaming. Requires instance admin (Docker socket).",
 		logo: "docker",
-		tags: ["monitoring", "logs", "docker"],
+		tags: ["monitoring", "logs", "docker", "privileged"],
+		hostPrivileged: true,
 		links: {
 			website: "https://dozzle.dev",
 			github: "https://github.com/amir20/dozzle",

@@ -52,6 +52,12 @@ export const compose = pgTable(
 		isolatedDeployment: boolean("isolated_deployment").notNull().default(false),
 		suffix: text("suffix").notNull().default(""),
 
+		/**
+		 * Instance-admin-only templates (Docker socket / elevated caps). When set,
+		 * compose safety allows a narrow allowlist; never settable via public APIs.
+		 */
+		hostPrivileged: boolean("host_privileged").notNull().default(false),
+
 		environmentId: text("environment_id")
 			.notNull()
 			.references(() => environments.environmentId, { onDelete: "cascade" }),

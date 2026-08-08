@@ -55,11 +55,15 @@ export const previewDeploymentRouter = router({
 		.input(
 			z.object({
 				applicationId: z.string().min(1),
-				pullRequestNumber: z.string().min(1),
+				pullRequestNumber: z
+					.string()
+					.min(1)
+					.max(16)
+					.regex(/^\d+$/, "pullRequestNumber must be numeric"),
 				branch: z.string().nullable().optional(),
 				pullRequestId: z.string().nullable().optional(),
-				pullRequestTitle: z.string().nullable().optional(),
-				pullRequestURL: z.string().nullable().optional(),
+				pullRequestTitle: z.string().max(500).nullable().optional(),
+				pullRequestURL: z.string().url().nullable().optional(),
 				expiresAt: z.date().nullable().optional(),
 			}),
 		)

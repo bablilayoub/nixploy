@@ -19,7 +19,9 @@ import {
 	type volumeBackups,
 } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { assertDockerVolumeName } from "../../utils/validators";
 import { shellQuote } from "../compose/paths";
+import { PROTECTED_VOLUMES } from "../docker/protected";
 import { notifyEvent } from "../notifications";
 import { DB_DUMP_CONFIG, type DumpCommandParams } from "./dump-commands";
 
@@ -184,15 +186,17 @@ async function findLinkedDatabase(backupRow: BackupRow): Promise<LinkedDatabaseR
 }
 
 async function findContainerId(appName: string, serverId: string | null): Promise<string> {
-	const output = await run(
-		serverId,
-		`docker ps -q --filter ${shellQuote(`name=${appName}`)} | head -n 1`,
-	);
-	const containerId = output.trim().split("\n")[0]?.trim();
-	if (!containerId) {
-		throw new Error(`No running container found for ${appName}`);
+	const filters = [
+		`--filter ${shellQuote(`label=com.docker.swarm.service.name=${appName}`)}`,
+		`--filter ${shellQuote(`label=com.docker.compose.project=${appName}`)}`,
+		`--filter ${shellQuote(`label=com.docker.stack.namespace=${appName}`)}`,
+	];
+	for (const filter of filters) {
+		const output = await run(serverId, `docker ps -q ${filter} | head -n 1`);
+		const containerId = output.trim().split("\n")[0]?.trim();
+		if (containerId) return containerId;
 	}
-	return containerId;
+	throw new Error(`No running container found for ${appName}`);
 }
 
 function dumpParams(backupRow: BackupRow, linked: LinkedDatabaseRow): DumpCommandParams {
@@ -224,7 +228,10 @@ export async function runBackup(backupRow: BackupRow): Promise<{ key: string }> 
 	const containerId = await findContainerId(backupRow.appName, linked.serverId);
 
 	const dumpCommand = engine.dumpCommand(dumpParams(backupRow, linked));
-	const pipeline = `docker exec ${containerId} sh -c ${sq(dumpCommand)} | gzip | base64`;
+	if (!/^[a-f0-9]{12,64}$/i.test(containerId)) {
+		throw new Error(`Unexpected container id for ${backupRow.appName}`);
+	}
+	const pipeline = `docker exec ${shellQuote(containerId)} sh -c ${sq(dumpCommand)} | gzip | base64`;
 	const encoded = await run(linked.serverId, pipeline);
 	const archive = Buffer.from(encoded.replace(/\s+/g, ""), "base64");
 	if (archive.length === 0) {
@@ -283,8 +290,11 @@ export async function restoreBackup(backupRow: BackupRow, key?: string): Promise
 	const containerId = await findContainerId(backupRow.appName, linked.serverId);
 
 	const restoreCommand = engine.restoreCommand(dumpParams(backupRow, linked));
+	if (!/^[a-f0-9]{12,64}$/i.test(containerId)) {
+		throw new Error(`Unexpected container id for ${backupRow.appName}`);
+	}
 	// base64 contains no shell-special characters, so it can be inlined safely.
-	const pipeline = `echo ${archive.toString("base64")} | base64 -d | gunzip | docker exec -i ${containerId} sh -c ${sq(restoreCommand)}`;
+	const pipeline = `echo ${archive.toString("base64")} | base64 -d | gunzip | docker exec -i ${shellQuote(containerId)} sh -c ${sq(restoreCommand)}`;
 	await run(linked.serverId, pipeline);
 	return { key: targetKey };
 }
@@ -315,6 +325,10 @@ const VOLUME_MOUNT = "/volume-data";
  * and upload it to the row's destination.
  */
 export async function runVolumeBackup(volumeBackup: VolumeBackupRow): Promise<{ key: string }> {
+	assertDockerVolumeName(volumeBackup.volumeName);
+	if (PROTECTED_VOLUMES.has(volumeBackup.volumeName)) {
+		throw new Error(`Refusing to back up platform volume: ${volumeBackup.volumeName}`);
+	}
 	const destination = await db.query.destinations.findFirst({
 		where: eq(destinations.destinationId, volumeBackup.destinationId),
 	});
@@ -359,6 +373,10 @@ export async function restoreVolumeBackup(
 	volumeBackup: VolumeBackupRow,
 	key?: string,
 ): Promise<{ key: string }> {
+	assertDockerVolumeName(volumeBackup.volumeName);
+	if (PROTECTED_VOLUMES.has(volumeBackup.volumeName)) {
+		throw new Error(`Refusing to restore into platform volume: ${volumeBackup.volumeName}`);
+	}
 	const destination = await db.query.destinations.findFirst({
 		where: eq(destinations.destinationId, volumeBackup.destinationId),
 	});

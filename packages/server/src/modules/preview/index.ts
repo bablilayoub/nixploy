@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, domains, previewDeployments } from "../../db/schema";
 import { removeSwarmService } from "../application/docker";
@@ -37,12 +37,20 @@ export class PreviewNotFoundError extends Error {
 
 /** Variant swarm/traefik name for a PR preview: `<appName>-pr-<n>`. */
 export function previewAppName(appName: string, pullRequestNumber: string): string {
+	assertNumericPullRequest(pullRequestNumber);
 	return `${appName}-pr-${pullRequestNumber}`;
 }
 
 /** Wildcard host for a PR preview: `pr-<n>-<appName>.<wildcardDomain>`. */
 export function previewHost(appName: string, pullRequestNumber: string): string {
+	assertNumericPullRequest(pullRequestNumber);
 	return `pr-${pullRequestNumber}-${appName}.${getWildcardDomain()}`;
+}
+
+function assertNumericPullRequest(pullRequestNumber: string): void {
+	if (!/^\d{1,10}$/.test(pullRequestNumber)) {
+		throw new Error(`Invalid pull request number: ${pullRequestNumber}`);
+	}
 }
 
 /** Attach the preview's domain row (1:1) if present. */
@@ -57,7 +65,7 @@ export async function withPreviewDomain<T extends { previewDeploymentId: string 
 
 /**
  * Spin up a per-PR variant: insert preview + domain rows, write Traefik
- * config, and enqueue a deploy of the parent application.
+ * config, and enqueue a deploy of the isolated preview service (not production).
  */
 export async function createPreviewDeployment(
 	input: CreatePreviewInput,
@@ -80,6 +88,17 @@ export async function createPreviewDeployment(
 	}
 
 	const host = previewHost(application.appName, input.pullRequestNumber);
+	// Prefer parent app's first production domain TLS settings when available.
+	const parentDomain = await db.query.domains.findFirst({
+		where: and(
+			eq(domains.applicationId, application.applicationId),
+			eq(domains.domainType, "application"),
+		),
+	});
+	const https = Boolean(parentDomain?.https);
+	const certificateType = https
+		? (parentDomain?.certificateType ?? "letsencrypt")
+		: ("none" as const);
 
 	const [preview] = await db
 		.insert(previewDeployments)
@@ -106,8 +125,9 @@ export async function createPreviewDeployment(
 			host,
 			path: "/",
 			port: null,
-			https: false,
-			certificateType: "none",
+			https,
+			certificateType,
+			certificateId: https ? (parentDomain?.certificateId ?? null) : null,
 			domainType: "preview",
 			applicationId: application.applicationId,
 			previewDeploymentId: preview.previewDeploymentId,
@@ -129,14 +149,16 @@ export async function createPreviewDeployment(
 				host,
 				port: 3000,
 				path: "/",
-				https: false,
-				certificateType: "none",
+				https,
+				certificateType,
+				certificateId: https ? (parentDomain?.certificateId ?? null) : null,
 			},
 		],
 	});
 
 	const deploymentId = await queueDeployment({
 		applicationId: application.applicationId,
+		previewDeploymentId: preview.previewDeploymentId,
 		type: "deploy",
 	});
 
@@ -148,7 +170,7 @@ export async function createPreviewDeployment(
 	};
 }
 
-/** Redeploy an existing preview by enqueueing a parent-app redeploy. */
+/** Redeploy an existing preview by enqueueing an isolated preview deploy. */
 export async function redeployPreviewDeployment(
 	previewDeploymentId: string,
 ): Promise<{ previewDeploymentId: string; deploymentId: string }> {
@@ -166,6 +188,7 @@ export async function redeployPreviewDeployment(
 
 	const deploymentId = await queueDeployment({
 		applicationId: preview.applicationId,
+		previewDeploymentId: preview.previewDeploymentId,
 		type: "redeploy",
 	});
 

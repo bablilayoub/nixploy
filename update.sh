@@ -8,26 +8,26 @@
 # dynamic routes. Migrations run automatically when the new container starts.
 #
 # Environment overrides:
-#   NIXPLOY_VERSION              App image tag                 (default: latest)
+#   NIXPLOY_VERSION              App image tag                 (default: v0.1.0)
 #   NIXPLOY_IMAGE                Full image ref (overrides tag)
 #   NIXPLOY_CONFIG_DIR           Host config directory         (default: /etc/nixploy)
-#   NIXPLOY_PORT                 Published app port            (default: 3000)
+#   NIXPLOY_PORT                 Published app port (optional; ignored if unset)
 #   TRAEFIK_VERSION              Traefik image tag             (default: v3.5.0)
 #   NIXPLOY_UPDATE_TRAEFIK        1 = also pull & force Traefik  (default: 1)
 #   NIXPLOY_REFRESH_TRAEFIK_YML  1 = rewrite static traefik.yml (default: 1)
 #   NIXPLOY_PRUNE                1 = prune dangling images     (default: 1)
-#   NIXPLOY_BUILD_FROM_SOURCE    1 = build locally instead of pull
+#   NIXPLOY_BUILD_FROM_SOURCE    1 = build locally instead of pull (opt-in only)
 #   NIXPLOY_REPO                 GitHub org/repo               (default: bablilayoub/nixploy)
 #   NIXPLOY_BRANCH               Branch for assets/source      (default: main)
 #
 set -euo pipefail
 
-NIXPLOY_VERSION="${NIXPLOY_VERSION:-latest}"
-NIXPLOY_PORT="${NIXPLOY_PORT:-3000}"
+NIXPLOY_VERSION="${NIXPLOY_VERSION:-v0.1.0}"
 NIXPLOY_CONFIG_DIR="${NIXPLOY_CONFIG_DIR:-/etc/nixploy}"
 TRAEFIK_VERSION="${TRAEFIK_VERSION:-v3.5.0}"
 NIXPLOY_REPO="${NIXPLOY_REPO:-bablilayoub/nixploy}"
-NIXPLOY_BRANCH="${NIXPLOY_BRANCH:-main}"
+# Pin assets to the same release tag as the image unless overridden.
+NIXPLOY_BRANCH="${NIXPLOY_BRANCH:-$NIXPLOY_VERSION}"
 NIXPLOY_UPDATE_TRAEFIK="${NIXPLOY_UPDATE_TRAEFIK:-1}"
 NIXPLOY_REFRESH_TRAEFIK_YML="${NIXPLOY_REFRESH_TRAEFIK_YML:-1}"
 NIXPLOY_PRUNE="${NIXPLOY_PRUNE:-1}"
@@ -173,8 +173,7 @@ pull_app_image() {
 	if run_quiet "Pulling ${APP_IMAGE}" docker pull "${APP_IMAGE}"; then
 		return
 	fi
-	warn "Pull failed — building from source instead"
-	build_app_image
+	die "Pull failed for ${APP_IMAGE}. Set NIXPLOY_BUILD_FROM_SOURCE=1 to build from git, or pin NIXPLOY_VERSION / NIXPLOY_IMAGE."
 }
 
 # ── config ───────────────────────────────────────────────────────────────────

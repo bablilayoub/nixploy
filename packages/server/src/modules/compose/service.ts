@@ -5,9 +5,17 @@ import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, compose, domains, environments, mounts } from "../../db/schema";
+import { assertSafeAppName } from "../../utils/validators";
 import { removeServiceLogs } from "../deployment/maintenance";
 import { getTraefik } from "./adapters";
-import { buildDeployComposeFile, listComposeServices, mergeEnvVars } from "./compose-file";
+import {
+	assertSafeComposeSpec,
+	buildDeployComposeFile,
+	hostPrivilegedComposeSafety,
+	listComposeServices,
+	mergeEnvVars,
+	parseComposeFile,
+} from "./compose-file";
 import { getComposeBaseDir, getComposeEnvPath, resolveComposeFilePath, shellQuote } from "./paths";
 import {
 	type ComposeRow,
@@ -73,6 +81,8 @@ export interface CreateComposeInput {
 	sourceType: "raw" | "git" | "github" | "gitlab" | "bitbucket" | "gitea";
 	appName?: string;
 	serverId?: string | null;
+	/** Instance-admin privileged templates only — never expose on public create APIs. */
+	hostPrivileged?: boolean;
 }
 
 export async function createCompose(input: CreateComposeInput): Promise<ComposeRow> {
@@ -83,7 +93,18 @@ export async function createCompose(input: CreateComposeInput): Promise<ComposeR
 	if (!environment) {
 		throw new TRPCError({ code: "NOT_FOUND", message: "Environment not found" });
 	}
-	const appName = input.appName ?? (await generateUniqueAppName(input.name));
+	const appName = input.appName
+		? (() => {
+				try {
+					return assertSafeAppName(input.appName);
+				} catch (error) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: error instanceof Error ? error.message : "Invalid appName",
+					});
+				}
+			})()
+		: await generateUniqueAppName(input.name);
 	if (await isAppNameTaken(appName)) {
 		throw new TRPCError({ code: "CONFLICT", message: `appName "${appName}" is already in use` });
 	}
@@ -97,6 +118,7 @@ export async function createCompose(input: CreateComposeInput): Promise<ComposeR
 			sourceType: input.sourceType,
 			appName,
 			serverId: input.serverId ?? null,
+			hostPrivileged: input.hostPrivileged ?? false,
 		})
 		.returning();
 	if (!created) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
@@ -122,7 +144,7 @@ export async function duplicateCompose(
 	} = source;
 	const [created] = await db
 		.insert(compose)
-		.values({ ...rest, appName, environmentId, status: "idle" })
+		.values({ ...rest, appName, environmentId, status: "idle", hostPrivileged: false })
 		.returning();
 	if (!created) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
@@ -149,7 +171,12 @@ export async function duplicateCompose(
 
 export async function updateComposeById(
 	composeId: string,
-	input: Partial<Omit<typeof compose.$inferInsert, "composeId" | "environmentId" | "createdAt">>,
+	input: Partial<
+		Omit<
+			typeof compose.$inferInsert,
+			"composeId" | "environmentId" | "createdAt" | "hostPrivileged"
+		>
+	>,
 ): Promise<ComposeRow> {
 	if (input.appName && (await isAppNameTaken(input.appName))) {
 		const existing = await db.query.compose.findFirst({
@@ -180,6 +207,8 @@ export interface PreparedComposeFiles {
 	composeFilePath: string;
 	/** Merged env file passed with `--env-file`. */
 	envFilePath: string;
+	/** Git tokens / passwords to scrub from logs and errorMessage. */
+	secrets: string[];
 }
 
 /**
@@ -193,6 +222,7 @@ export async function prepareComposeFiles(composeRow: ComposeRow): Promise<Prepa
 	const envFilePath = getComposeEnvPath(appName);
 	let composeFilePath: string;
 	let rawContent: string;
+	let secrets: string[] = [];
 
 	if (composeRow.sourceType === "raw") {
 		composeFilePath = resolveComposeFilePath(appName, "raw", composeRow.composePath);
@@ -201,7 +231,8 @@ export async function prepareComposeFiles(composeRow: ComposeRow): Promise<Prepa
 			throw new Error("Compose file is empty — save a compose file before deploying");
 		}
 	} else {
-		await cloneComposeSource(composeRow);
+		const cloned = await cloneComposeSource(composeRow);
+		secrets = cloned.secrets;
 		composeFilePath = resolveComposeFilePath(
 			appName,
 			composeRow.sourceType,
@@ -210,11 +241,15 @@ export async function prepareComposeFiles(composeRow: ComposeRow): Promise<Prepa
 		rawContent = await readComposeFile(composeRow, composeFilePath);
 	}
 
-	const transformed = buildDeployComposeFile(rawContent, {
-		appName,
-		composeType: composeRow.composeType,
-		suffix: composeRow.isolatedDeployment ? composeRow.suffix : null,
-	});
+	const transformed = buildDeployComposeFile(
+		rawContent,
+		{
+			appName,
+			composeType: composeRow.composeType,
+			suffix: composeRow.isolatedDeployment ? composeRow.suffix : null,
+		},
+		composeRow.hostPrivileged ? hostPrivilegedComposeSafety() : undefined,
+	);
 	await writeComposeFile(composeRow, composeFilePath, transformed);
 
 	// Env inheritance: project → environment → service (service wins).
@@ -226,7 +261,7 @@ export async function prepareComposeFiles(composeRow: ComposeRow): Promise<Prepa
 	);
 	await writeComposeFile(composeRow, envFilePath, `${mergedEnv}\n`);
 
-	return { workDir: dirname(composeFilePath), composeFilePath, envFilePath };
+	return { workDir: dirname(composeFilePath), composeFilePath, envFilePath, secrets };
 }
 
 // ── lifecycle commands ──────────────────────────────────────────────────────
@@ -263,6 +298,7 @@ export function getDefaultCommand(row: ComposeRow): string {
 		workDir: dirname(composeFilePath),
 		composeFilePath,
 		envFilePath: getComposeEnvPath(row.appName),
+		secrets: [],
 	});
 }
 
@@ -444,8 +480,12 @@ export async function saveEnvironment(composeId: string, env: string): Promise<v
  * column; for git sources it overwrites the file inside the local clone.
  */
 export async function saveComposeFile(composeRow: ComposeRow, composeFile: string): Promise<void> {
-	// validate before persisting so a broken file is rejected early
+	// validate before persisting so a broken / unsafe file is rejected early
 	listComposeServices(composeFile);
+	assertSafeComposeSpec(
+		parseComposeFile(composeFile),
+		composeRow.hostPrivileged ? hostPrivilegedComposeSafety() : undefined,
+	);
 	if (composeRow.sourceType === "raw") {
 		await db
 			.update(compose)

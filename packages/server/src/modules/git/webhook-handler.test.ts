@@ -256,10 +256,12 @@ describe("provider webhook verification", () => {
 		).rejects.toBeInstanceOf(WebhookUnauthorized);
 	});
 
-	it("accepts a gitea delivery signed with the provider's token", async () => {
+	it("accepts a gitea delivery signed with the dedicated webhook secret", async () => {
 		mockSelects([{ giteaId: "gt1", accessToken: "tok" }]);
 		const body = JSON.stringify({ some: "payload" });
-		const signature = createHmac("sha256", "tok").update(body).digest("hex");
+		const { derivedWebhookSecret } = await import("./webhook-secret");
+		const secret = derivedWebhookSecret("gitea", "gt1");
+		const signature = createHmac("sha256", secret).update(body).digest("hex");
 		await expect(
 			handleGitWebhook(
 				"gitea",

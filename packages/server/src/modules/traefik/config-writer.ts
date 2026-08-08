@@ -89,8 +89,14 @@ const shq = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 /** Traefik object names must be alphanumeric + dashes. */
 const sanitizeName = (value: string): string => value.replace(/[^a-zA-Z0-9-]/g, "-");
 
-/** Strip backticks so a malicious host/path can't break out of the rule. */
-const sanitizeRuleValue = (value: string): string => value.replace(/`/g, "");
+/** Strip backticks and reject Traefik rule metacharacters in Host/Path values. */
+const sanitizeRuleValue = (value: string): string => {
+	const cleaned = value.replace(/`/g, "").trim();
+	if (!cleaned || /[()|\\\n\r]/.test(cleaned)) {
+		throw new Error(`Unsafe Traefik rule value: ${value}`);
+	}
+	return cleaned;
+};
 
 /**
  * Convert an internationalized domain name to ASCII punycode — Traefik
@@ -197,9 +203,19 @@ export const buildTraefikFileConfig = async (
 		const serviceName = `${sanitizeName(appName)}-service-${key}`;
 
 		const host = sanitizeRuleValue(toPunycode(domain.host));
+		// No wildcards — a Host(`*`) / Host(`*.evil`) rule would catch unrelated traffic.
+		if (host.includes("*") || !/^[a-zA-Z0-9.-]+(\.[a-zA-Z0-9.-]+)*\.?$/.test(host)) {
+			throw new Error(`Invalid Traefik host after punycode: ${domain.host}`);
+		}
 		const path = domain.path && domain.path !== "/" ? sanitizeRuleValue(domain.path) : null;
+		if (path && (!path.startsWith("/") || /[()|`]/.test(path) || path.includes(".."))) {
+			throw new Error(`Invalid Traefik path: ${domain.path}`);
+		}
 		const rule = `Host(\`${host}\`)${path ? ` && PathPrefix(\`${path}\`)` : ""}`;
 
+		if (domain.serviceName && !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(domain.serviceName)) {
+			throw new Error(`Invalid compose service name: ${domain.serviceName}`);
+		}
 		const target = domain.serviceName ? `${appName}-${domain.serviceName}-1` : appName;
 		config.http.services[serviceName] = {
 			loadBalancer: {

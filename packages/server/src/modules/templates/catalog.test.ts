@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { listComposeServices, parseComposeFile } from "../compose/compose-file";
+import {
+	assertSafeComposeSpec,
+	hostPrivilegedComposeSafety,
+	listComposeServices,
+	parseComposeFile,
+} from "../compose/compose-file";
 import { findTemplateById, listTemplateSummaries, templates } from "./catalog";
 
 const ENV_REF_PATTERN = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
@@ -70,6 +75,18 @@ describe("template catalog", () => {
 			for (const key of keys) {
 				expect(refs, `env schema key ${key} is unused in compose`).toContain(key);
 			}
+		},
+	);
+
+	it.each(templates.map((template) => [template.id, template] as const))(
+		"%s: passes compose safety checks",
+		(_id, template) => {
+			expect(() =>
+				assertSafeComposeSpec(
+					parseComposeFile(template.compose),
+					template.hostPrivileged ? hostPrivilegedComposeSafety() : undefined,
+				),
+			).not.toThrow();
 		},
 	);
 

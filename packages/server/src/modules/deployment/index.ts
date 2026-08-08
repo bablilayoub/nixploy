@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
-import { applications, compose, deployments } from "../../db/schema";
+import { applications, compose, deployments, previewDeployments } from "../../db/schema";
 import { generateId } from "../../db/schema/utils";
 import { deploymentEvents } from "./events";
 import { getDeploymentLogPath } from "./paths";
@@ -16,6 +16,7 @@ export { queueDepth, setServerConcurrency } from "./queue";
 export interface DeploymentJobInput {
 	applicationId?: string;
 	composeId?: string;
+	previewDeploymentId?: string;
 	type: "deploy" | "redeploy";
 }
 
@@ -31,7 +32,18 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
 
 	let appName: string;
 	let serverId: string | null;
-	if (job.applicationId) {
+	if (job.previewDeploymentId) {
+		const preview = await db.query.previewDeployments.findFirst({
+			where: eq(previewDeployments.previewDeploymentId, job.previewDeploymentId),
+		});
+		if (!preview) throw new Error(`Preview deployment not found: ${job.previewDeploymentId}`);
+		appName = preview.appName;
+		serverId = preview.serverId;
+		if (job.applicationId && job.applicationId !== preview.applicationId) {
+			throw new Error("previewDeploymentId does not match applicationId");
+		}
+		job.applicationId = preview.applicationId;
+	} else if (job.applicationId) {
 		const application = await db.query.applications.findFirst({
 			where: eq(applications.applicationId, job.applicationId),
 		});
@@ -50,13 +62,20 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
 	const deploymentId = generateId();
 	await db.insert(deployments).values({
 		deploymentId,
-		title: job.type === "redeploy" ? "Redeploy" : "Deployment",
+		title: job.previewDeploymentId
+			? job.type === "redeploy"
+				? "Preview redeploy"
+				: "Preview deployment"
+			: job.type === "redeploy"
+				? "Redeploy"
+				: "Deployment",
 		// NOTE: the deploymentStatus enum has no "pending" value; a queued
 		// job is stored as "running" until the worker finalizes it.
 		status: "running",
 		logPath: getDeploymentLogPath(appName, deploymentId),
 		applicationId: job.applicationId ?? null,
 		composeId: job.composeId ?? null,
+		isPreview: Boolean(job.previewDeploymentId),
 		serverId,
 	});
 
@@ -64,6 +83,7 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
 		deploymentId,
 		applicationId: job.applicationId,
 		composeId: job.composeId,
+		previewDeploymentId: job.previewDeploymentId,
 		type: job.type,
 		serverId,
 	});

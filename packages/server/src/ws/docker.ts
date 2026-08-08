@@ -3,11 +3,15 @@ import { eq } from "drizzle-orm";
 import { Client } from "ssh2";
 import { db } from "../db";
 import { servers } from "../db/schema";
+import { isProtectedPlatformName } from "../modules/docker/protected";
+import { execAsyncRemote, verifyRemoteHostKey } from "../utils/exec";
 
 const SSH_READY_TIMEOUT_MS = 30_000;
 const EXEC_TIMEOUT_MS = 15_000;
 
 let dockerInstance: Docker | null = null;
+
+const shq = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
 /** Local dockerode client (daemon socket on the Nixploy host). */
 export function getDocker(): Docker {
@@ -19,19 +23,21 @@ export function getDocker(): Docker {
 
 /**
  * Resolve a running container for an app on the local daemon.
- * Swarm task containers carry the service-name label; plain containers
- * (compose, databases) are matched by name prefix.
+ * Prefer exact Swarm / compose labels — never substring `name=` matching.
  */
 export async function resolveLocalContainer(appName: string): Promise<Docker.Container | null> {
 	const docker = getDocker();
-	let matches = await docker.listContainers({
-		filters: { label: [`com.docker.swarm.service.name=${appName}`] },
-	});
-	if (matches.length === 0) {
-		matches = await docker.listContainers({ filters: { name: [appName] } });
+	const labelFilters = [
+		[`com.docker.swarm.service.name=${appName}`],
+		[`com.docker.compose.project=${appName}`],
+		[`com.docker.stack.namespace=${appName}`],
+	];
+	for (const label of labelFilters) {
+		const matches = await docker.listContainers({ filters: { label } });
+		const first = matches[0];
+		if (first) return docker.getContainer(first.Id);
 	}
-	const first = matches[0];
-	return first ? docker.getContainer(first.Id) : null;
+	return null;
 }
 
 /** Resolve a local container by exact Docker ID (short or full). */
@@ -46,6 +52,30 @@ export async function resolveLocalContainerById(
 		return container;
 	} catch {
 		return null;
+	}
+}
+
+/**
+ * Refuse terminal/logs attach to Nixploy platform containers (parity with
+ * `docker.containerAction` protection).
+ */
+export async function assertContainerNotProtected(
+	containerId: string,
+	serverId: string | null,
+): Promise<void> {
+	let name: string;
+	if (serverId) {
+		name = (
+			await execAsyncRemote(serverId, `docker inspect --format '{{.Name}}' ${shq(containerId)}`)
+		).trim();
+	} else {
+		const info = await getDocker().getContainer(containerId).inspect();
+		name = info.Name ?? "";
+	}
+	if (isProtectedPlatformName(name)) {
+		throw new Error(
+			`Container "${name.replace(/^\//, "")}" is a Nixploy platform service and cannot be accessed from here`,
+		);
 	}
 }
 
@@ -74,6 +104,7 @@ export async function connectToServer(serverId: string): Promise<Client> {
 				username: server.username,
 				privateKey: sshKey.privateKey,
 				readyTimeout: SSH_READY_TIMEOUT_MS,
+				hostVerifier: (key: Buffer) => verifyRemoteHostKey(serverId, key),
 			});
 	});
 }
@@ -111,23 +142,21 @@ export function execOnConnection(conn: Client, command: string): Promise<string>
 	});
 }
 
-/** Resolve a container ID for an app on a remote server (swarm label first, name fallback). */
+/** Resolve a container ID for an app on a remote server (labels only). */
 export async function resolveRemoteContainerId(
 	conn: Client,
 	appName: string,
 ): Promise<string | null> {
-	const shq = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
-	let id = await execOnConnection(
-		conn,
-		`docker ps -q --filter ${shq(`label=com.docker.swarm.service.name=${appName}`)} | head -n 1`,
-	);
-	if (!id) {
-		id = await execOnConnection(
-			conn,
-			`docker ps -q --filter ${shq(`name=${appName}`)} | head -n 1`,
-		);
+	const filters = [
+		`label=com.docker.swarm.service.name=${appName}`,
+		`label=com.docker.compose.project=${appName}`,
+		`label=com.docker.stack.namespace=${appName}`,
+	];
+	for (const filter of filters) {
+		const id = await execOnConnection(conn, `docker ps -q --filter ${shq(filter)} | head -n 1`);
+		if (id) return id;
 	}
-	return id || null;
+	return null;
 }
 
 /** Shell command shared by local + remote terminals: prefer bash, fall back to sh. */

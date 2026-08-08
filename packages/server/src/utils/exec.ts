@@ -1,9 +1,12 @@
 import { exec } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
 import { Client } from "ssh2";
 import { db } from "../db";
 import { servers } from "../db/schema";
+import { getSshKeysPath } from "../modules/deployment/paths";
 
 const execPromise = promisify(exec);
 
@@ -51,6 +54,32 @@ export class RemoteExecError extends Error {
 function commandLabel(command: string): string {
 	const [program = "command"] = command.trim().split(/\s+/, 1);
 	return program;
+}
+
+/**
+ * Trust-on-first-use host key pinning for managed servers.
+ * Keys live under `<configDir>/ssh/known_hosts/<serverId>.pub`.
+ */
+export function verifyRemoteHostKey(serverId: string, key: Buffer): boolean {
+	const dir = path.join(getSshKeysPath(), "known_hosts");
+	mkdirSync(dir, { recursive: true });
+	const file = path.join(dir, `${serverId}.pub`);
+	const encoded = key.toString("base64");
+	if (existsSync(file)) {
+		return readFileSync(file, "utf8").trim() === encoded;
+	}
+	writeFileSync(file, `${encoded}\n`, { mode: 0o600 });
+	return true;
+}
+
+/** Clear a pinned host key (e.g. after intentional server rebuild). */
+export function clearRemoteHostKey(serverId: string): void {
+	const file = path.join(getSshKeysPath(), "known_hosts", `${serverId}.pub`);
+	try {
+		unlinkSync(file);
+	} catch {
+		// missing is fine
+	}
 }
 
 /**
@@ -119,6 +148,7 @@ export async function execAsyncRemote(serverId: string, command: string): Promis
 				username: server.username,
 				privateKey: sshKey.privateKey,
 				readyTimeout: SSH_READY_TIMEOUT_MS,
+				hostVerifier: (key: Buffer) => verifyRemoteHostKey(serverId, key),
 			});
 	});
 }

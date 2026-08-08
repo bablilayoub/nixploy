@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import {
 	deployTemplate,
@@ -29,6 +30,9 @@ export const templateRouter = router({
 	 * Instantiate a template into a project environment: creates a raw compose
 	 * service (compose file + resolved `.env`), optionally attaches domains and
 	 * enqueues the first deployment.
+	 *
+	 * Host-privileged templates (Docker socket / elevated caps) require the
+	 * instance admin role.
 	 */
 	deploy: protectedProcedure
 		.input(
@@ -54,6 +58,16 @@ export const templateRouter = router({
 				ctx.session.session.activeOrganizationId,
 			);
 			await assertCapability(ctx.session.user.id, organizationId, "templates.deploy");
+			const template = findTemplateById(input.templateId);
+			if (!template) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Template not found" });
+			}
+			if (template.hostPrivileged) {
+				await assertInstanceAdmin(ctx.session);
+			}
+			if (input.domains && input.domains.length > 0) {
+				await assertCapability(ctx.session.user.id, organizationId, "domains.manage");
+			}
 			return await deployTemplate(organizationId, input);
 		}),
 });

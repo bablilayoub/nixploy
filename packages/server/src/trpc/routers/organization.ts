@@ -10,7 +10,9 @@ import {
 	capabilitySchemaValues,
 	effectiveCapabilities,
 	getOrganizationServiceStatusCounts,
+	ORG_ROLE_RANK,
 	type OrgCapability,
+	orgRoleRank,
 	parseCapabilityOverrides,
 	parseOrgMetadata,
 	publicCapabilityCatalog,
@@ -150,6 +152,24 @@ export const organizationRouter = router({
 			);
 			await assertCapability(ctx.session.user.id, organizationId, "members.manage");
 
+			const callerMembership = await db.query.members.findFirst({
+				where: and(
+					eq(members.organizationId, organizationId),
+					eq(members.userId, ctx.session.user.id),
+				),
+			});
+			if (!callerMembership) {
+				throw new TRPCError({ code: "FORBIDDEN", message: "Not a member of this organization" });
+			}
+			const callerRank = orgRoleRank(callerMembership.role);
+			const inviteRank = ORG_ROLE_RANK[input.role];
+			if (inviteRank >= callerRank) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "Cannot invite a member at or above your own role",
+				});
+			}
+
 			const invitation = await auth.api.createInvitation({
 				body: {
 					email: input.email,
@@ -253,6 +273,39 @@ export const organizationRouter = router({
 			});
 			if (!membership) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Member not found" });
+			}
+			if (membership.userId === ctx.session.user.id) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "Cannot modify your own capabilities",
+				});
+			}
+
+			const callerMembership = await db.query.members.findFirst({
+				where: and(
+					eq(members.organizationId, organizationId),
+					eq(members.userId, ctx.session.user.id),
+				),
+			});
+			if (!callerMembership) {
+				throw new TRPCError({ code: "FORBIDDEN", message: "Not a member of this organization" });
+			}
+			if (orgRoleRank(membership.role) >= orgRoleRank(callerMembership.role)) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "Cannot modify a member at or above your own role",
+				});
+			}
+
+			const callerOverrides = parseCapabilityOverrides(callerMembership.capabilityOverrides);
+			const callerCaps = effectiveCapabilities(callerMembership.role, callerOverrides);
+			for (const cap of input.grant) {
+				if (!callerCaps.has(cap as OrgCapability)) {
+					throw new TRPCError({
+						code: "FORBIDDEN",
+						message: `Cannot grant capability you do not have: ${cap}`,
+					});
+				}
 			}
 
 			const overrides = {

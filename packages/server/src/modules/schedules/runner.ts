@@ -75,17 +75,23 @@ async function findContainerId(
 	appName: string,
 	serverId: string | null,
 ): Promise<string> {
-	const filter =
+	// Exact Swarm / compose identity — never `name=` substring (that matches
+	// sibling tenants like `api` vs `api-prod`).
+	const filters =
 		target.scheduleType === "compose"
-			? `--filter ${shQuote(`label=com.docker.compose.project=${appName}`)}`
-			: `--filter ${shQuote(`name=${appName}`)}`;
-	const lookup = `docker ps -q ${filter} | head -n 1`;
-	const output = serverId ? await execAsyncRemote(serverId, lookup) : await execAsync(lookup);
-	const containerId = output.trim().split("\n")[0]?.trim();
-	if (!containerId) {
-		throw new Error(`No running container found for ${appName}`);
+			? [
+					`--filter ${shQuote(`label=com.docker.compose.project=${appName}`)}`,
+					`--filter ${shQuote(`label=com.docker.stack.namespace=${appName}`)}`,
+				]
+			: [`--filter ${shQuote(`label=com.docker.swarm.service.name=${appName}`)}`];
+
+	for (const filter of filters) {
+		const lookup = `docker ps -q ${filter} | head -n 1`;
+		const output = serverId ? await execAsyncRemote(serverId, lookup) : await execAsync(lookup);
+		const containerId = output.trim().split("\n")[0]?.trim();
+		if (containerId) return containerId;
 	}
-	return containerId;
+	throw new Error(`No running container found for ${appName}`);
 }
 
 /**

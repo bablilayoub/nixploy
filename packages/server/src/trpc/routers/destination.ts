@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -5,10 +6,53 @@ import { db } from "../../db";
 import { destinations } from "../../db/schema";
 import { testDestination } from "../../modules/backups/runner";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
+import {
+	assertPublicIp,
+	assertSafeOutboundUrl,
+	isCloudMetadataHostname,
+} from "../../utils/public-url";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
 type Session = NonNullable<TRPCContext["session"]>;
+
+async function assertSafeS3Endpoint(endpoint: string): Promise<void> {
+	let parsed: URL;
+	try {
+		parsed = new URL(endpoint);
+	} catch {
+		throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid S3 endpoint URL" });
+	}
+	if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+		throw new TRPCError({ code: "BAD_REQUEST", message: "S3 endpoint must be http(s)" });
+	}
+	const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+	if (isCloudMetadataHostname(host)) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "S3 endpoint must not target cloud metadata",
+		});
+	}
+	// Self-hosted MinIO on LAN/loopback (literal hosts only).
+	if (host === "localhost" || host.endsWith(".localhost")) {
+		return;
+	}
+	if (isIP(host)) {
+		try {
+			assertPublicIp(host);
+		} catch {
+			return;
+		}
+	}
+	try {
+		await assertSafeOutboundUrl(endpoint, {
+			allowHttp: parsed.protocol === "http:",
+			allowPrivate: false,
+		});
+	} catch {
+		throw new TRPCError({ code: "BAD_REQUEST", message: "S3 endpoint host is not allowed" });
+	}
+}
 
 async function getOrganizationId(session: Session): Promise<string> {
 	return await resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
@@ -72,6 +116,7 @@ export const destinationRouter = router({
 	create: protectedProcedure.input(createDestinationInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "destinations.manage");
+		await assertSafeS3Endpoint(input.endpoint);
 		const [row] = await db
 			.insert(destinations)
 			.values({ ...input, organizationId })
@@ -90,6 +135,9 @@ export const destinationRouter = router({
 			await assertCapability(ctx.session.user.id, organizationId, "destinations.manage");
 			const { destinationId, ...values } = input;
 			await findDestinationOrThrow(destinationId, organizationId);
+			if (values.endpoint) {
+				await assertSafeS3Endpoint(values.endpoint);
+			}
 			const [row] = await db
 				.update(destinations)
 				.set(values)

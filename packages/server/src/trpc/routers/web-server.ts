@@ -2,10 +2,11 @@ import { resolve4, resolve6 } from "node:dns/promises";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { members, webServerSettings } from "../../db/schema";
+import { webServerSettings } from "../../db/schema";
+import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { dockerCleanup } from "../../modules/deployment";
 import { resolveCallerOrganizationId } from "../../modules/projects";
 import {
@@ -37,23 +38,11 @@ async function detectPublicIp(): Promise<string | null> {
 
 type Session = NonNullable<TRPCContext["session"]>;
 
-/** Platform-wide settings mutate shared infrastructure — owner/admin only. */
-async function requireOwnerOrAdmin(session: Session): Promise<void> {
-	const organizationId = await resolveCallerOrganizationId(
-		session.user.id,
-		session.session.activeOrganizationId,
-	);
-	const membership = await db.query.members.findFirst({
-		where: and(eq(members.organizationId, organizationId), eq(members.userId, session.user.id)),
-	});
-	// better-auth stores comma-separated roles (e.g. "admin,member").
-	const roles = (membership?.role ?? "").split(",").map((role) => role.trim());
-	if (!roles.includes("owner") && !roles.includes("admin")) {
-		throw new TRPCError({
-			code: "FORBIDDEN",
-			message: "Web server settings require an owner or admin role",
-		});
-	}
+/** Platform-wide settings mutate shared infrastructure — instance admin only. */
+async function requireInstanceAdmin(session: Session): Promise<void> {
+	await assertInstanceAdmin(session);
+	// Ensure the caller still has an org context (membership) for audit trails.
+	await resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
 }
 
 /**
@@ -102,12 +91,13 @@ const updateSettingsInput = z.object({
 export const webServerRouter = router({
 	/** The singleton web-server settings row (null until first saved). */
 	getSettings: protectedProcedure.query(async ({ ctx }) => {
-		await requireOwnerOrAdmin(ctx.session);
+		await requireInstanceAdmin(ctx.session);
 		const [row] = await db.select().from(webServerSettings).limit(1);
 		if (!row) return null;
 		const extras = readExtras(row.metricsConfig);
+		const { metricsConfig: _metricsConfig, ...publicRow } = row;
 		return {
-			...row,
+			...publicRow,
 			traefikDashboardEnabled: extras.traefikDashboardEnabled ?? false,
 			cleanupCronEnabled: extras.cleanupCronEnabled ?? false,
 			cleanupCronExpression: extras.cleanupCronExpression ?? null,
@@ -123,7 +113,7 @@ export const webServerRouter = router({
 	 * the next `restartTraefik`).
 	 */
 	updateSettings: protectedProcedure.input(updateSettingsInput).mutation(async ({ ctx, input }) => {
-		await requireOwnerOrAdmin(ctx.session);
+		await requireInstanceAdmin(ctx.session);
 		const [existing] = await db.select().from(webServerSettings).limit(1);
 
 		const extras: WebServerExtras = {
@@ -217,7 +207,7 @@ export const webServerRouter = router({
 	checkDashboardDomain: protectedProcedure
 		.input(z.object({ domain: z.string().min(1) }))
 		.query(async ({ ctx, input }) => {
-			await requireOwnerOrAdmin(ctx.session);
+			await requireInstanceAdmin(ctx.session);
 			const domain = normalizeDashboardDomain(input.domain);
 			if (!domain) {
 				return {
@@ -245,7 +235,7 @@ export const webServerRouter = router({
 
 	/** Static traefik.yml contents plus the dynamic file-provider config names. */
 	getTraefikConfig: protectedProcedure.query(async ({ ctx }) => {
-		await requireOwnerOrAdmin(ctx.session);
+		await requireInstanceAdmin(ctx.session);
 		const staticConfig = await readFile(join(getTraefikDir(), "traefik.yml"), "utf8").catch(
 			() => null,
 		);
@@ -259,14 +249,14 @@ export const webServerRouter = router({
 
 	/** Force-restart the global Traefik swarm service (picks up static config changes). */
 	restartTraefik: protectedProcedure.mutation(async ({ ctx }) => {
-		await requireOwnerOrAdmin(ctx.session);
+		await requireInstanceAdmin(ctx.session);
 		const output = await execAsync(`docker service update --force ${TRAEFIK_SERVICE_NAME}`);
 		return { success: true, output };
 	}),
 
 	/** Prune unused images and build cache on the Nixploy host, on demand. */
 	dockerCleanupNow: protectedProcedure.mutation(async ({ ctx }) => {
-		await requireOwnerOrAdmin(ctx.session);
+		await requireInstanceAdmin(ctx.session);
 		await dockerCleanup();
 		return { success: true };
 	}),

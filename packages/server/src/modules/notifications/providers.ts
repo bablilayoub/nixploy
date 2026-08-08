@@ -1,6 +1,10 @@
 import nodemailer from "nodemailer";
 import { z } from "zod";
-import { assertPublicHttpsUrl } from "../../utils/public-url";
+import {
+	assertPublicHttpsUrl,
+	assertSafeOutboundUrl,
+	assertSafeSmtpHostname,
+} from "../../utils/public-url";
 
 /**
  * Notification channel providers.
@@ -122,10 +126,7 @@ async function postJson(
 		redirect: "error",
 	});
 	if (!response.ok) {
-		const text = await response.text().catch(() => "");
-		throw new Error(
-			`Notification request failed: ${response.status} ${response.statusText} ${text}`.trim(),
-		);
+		throw new Error(`Notification request failed: ${response.status} ${response.statusText}`);
 	}
 }
 
@@ -143,6 +144,7 @@ export async function sendSlackNotification(
 	config: SlackConfig,
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
+	await assertPublicHttpsUrl(config.webhookUrl);
 	const blocks: unknown[] = [
 		{ type: "header", text: { type: "plain_text", text: title, emoji: true } },
 		{ type: "section", text: { type: "mrkdwn", text: message } },
@@ -170,6 +172,7 @@ export async function sendDiscordNotification(
 	config: DiscordConfig,
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
+	await assertPublicHttpsUrl(config.webhookUrl);
 	if (config.decoration === false) {
 		const lines = [`**${title}**`, message, fieldsAsMarkdown(fields, (s) => `**${s}**`)]
 			.filter(Boolean)
@@ -197,6 +200,7 @@ export async function sendMattermostNotification(
 	config: MattermostConfig,
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
+	await assertSafeOutboundUrl(config.webhookUrl, { allowPrivate: true, allowHttp: true });
 	const text = [`#### ${title}`, message, fieldsAsMarkdown(fields, (s) => `**${s}**`)]
 		.filter(Boolean)
 		.join("\n");
@@ -211,6 +215,7 @@ export async function sendLarkNotification(
 	config: LarkConfig,
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
+	await assertPublicHttpsUrl(config.webhookUrl);
 	const lines = [message, (fields ?? []).map((f) => `${f.name}: ${f.value}`).join("\n")]
 		.filter(Boolean)
 		.join("\n");
@@ -230,6 +235,7 @@ export async function sendTeamsNotification(
 	config: TeamsConfig,
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
+	await assertPublicHttpsUrl(config.webhookUrl);
 	await postJson(config.webhookUrl, {
 		"@type": "MessageCard",
 		"@context": "http://schema.org/extensions",
@@ -275,8 +281,7 @@ export async function sendTelegramNotification(
 		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 	});
 	if (!response.ok) {
-		const text = await response.text().catch(() => "");
-		throw new Error(`Telegram sendMessage failed: ${response.status} ${text}`.trim());
+		throw new Error(`Telegram sendMessage failed: ${response.status}`);
 	}
 }
 
@@ -329,6 +334,7 @@ export async function sendEmailNotification(
 	if (!config.smtpServer || !config.smtpPort) {
 		throw new Error("Email notification requires either a Resend API key or SMTP server/port");
 	}
+	assertSafeSmtpHostname(config.smtpServer);
 	const transporter = nodemailer.createTransport({
 		host: config.smtpServer,
 		port: config.smtpPort,
@@ -350,6 +356,7 @@ export async function sendGotifyNotification(
 	config: GotifyConfig,
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
+	await assertSafeOutboundUrl(config.serverUrl, { allowPrivate: true, allowHttp: true });
 	const body = [message, fieldsAsMarkdown(fields, (s) => `**${s}**`)].filter(Boolean).join("\n\n");
 	const base = config.serverUrl.replace(/\/+$/, "");
 	await postJson(`${base}/message?token=${encodeURIComponent(config.appToken)}`, {
@@ -368,6 +375,7 @@ export async function sendNtfyNotification(
 	config: NtfyConfig,
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
+	await assertSafeOutboundUrl(config.serverUrl, { allowPrivate: true, allowHttp: true });
 	const body = [message, fieldsAsMarkdown(fields, (s) => s)].filter(Boolean).join("\n");
 	const base = config.serverUrl.replace(/\/+$/, "");
 	const headers: Record<string, string> = {
@@ -384,10 +392,10 @@ export async function sendNtfyNotification(
 		headers,
 		body,
 		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+		redirect: "error",
 	});
 	if (!response.ok) {
-		const text = await response.text().catch(() => "");
-		throw new Error(`ntfy publish failed: ${response.status} ${text}`.trim());
+		throw new Error(`ntfy publish failed: ${response.status}`);
 	}
 }
 

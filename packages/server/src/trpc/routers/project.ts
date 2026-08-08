@@ -299,7 +299,12 @@ export const projectRouter = router({
 				})
 				.where(eq(projects.projectId, input.projectId))
 				.returning();
-			return updated;
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? updated : { ...updated, env: null };
 		}),
 
 	/**
@@ -321,7 +326,7 @@ export const projectRouter = router({
 			targetId: project.projectId,
 			targetName: project.name,
 		});
-		return project;
+		return { ...project, env: null };
 	}),
 
 	/**
@@ -348,7 +353,12 @@ export const projectRouter = router({
 				.set({ env: input.env })
 				.where(eq(projects.projectId, input.projectId))
 				.returning();
-			return updated;
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? updated : { ...updated, env: null };
 		}),
 
 	/**

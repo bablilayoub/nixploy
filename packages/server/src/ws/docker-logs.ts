@@ -5,6 +5,7 @@ import { assertComposeContainerOwnership } from "../modules/compose/containers";
 import { assertWsContainerAccess, assertWsDockerContainerAccess } from "./access";
 import type { WsSession } from "./auth";
 import {
+	assertContainerNotProtected,
 	connectToServer,
 	getDocker,
 	resolveLocalContainer,
@@ -70,6 +71,7 @@ export async function handleDockerLogs(
 
 		try {
 			await assertWsDockerContainerAccess(session, serverId);
+			await assertContainerNotProtected(containerId, serverId);
 			if (serverId) {
 				await streamRemoteLogsById(ws, serverId, containerId, tail);
 			} else {

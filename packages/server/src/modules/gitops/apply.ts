@@ -13,6 +13,12 @@ import {
 	redis,
 } from "../../db/schema";
 import {
+	assertComposeServiceName,
+	assertSafePublishedPort,
+	assertTraefikHost,
+	assertTraefikPath,
+} from "../../utils/validators";
+import {
 	createApplication,
 	syncApplicationTraefik,
 	updateApplication,
@@ -180,15 +186,21 @@ const createDomain = async (
 	domain: GitopsDomain,
 	parent: { applicationId?: string; composeId?: string },
 ): Promise<void> => {
+	const host = assertTraefikHost(domain.host);
+	const path = assertTraefikPath(domain.path ?? "/") ?? "/";
+	const serviceName = parent.composeId ? (domain.serviceName ?? null) : null;
+	if (serviceName) {
+		assertComposeServiceName(serviceName);
+	}
 	const certificateType = domain.certificateType ?? "none";
 	const values = {
-		host: domain.host,
-		path: domain.path ?? "/",
+		host,
+		path,
 		port: domain.port ?? null,
 		https: domain.https ?? false,
 		certificateType,
 		certificateId: null,
-		serviceName: parent.composeId ? (domain.serviceName ?? null) : null,
+		serviceName,
 		domainType: parent.applicationId ? ("application" as const) : ("compose" as const),
 		uniqueConfigKey: randomBytes(6).toString("hex"),
 		applicationId: parent.applicationId ?? null,
@@ -231,13 +243,17 @@ const syncDomains = async (
 			continue;
 		}
 		const certificateType = domain.certificateType ?? "none";
+		const serviceName = parent.composeId ? (domain.serviceName ?? null) : null;
+		if (serviceName) {
+			assertComposeServiceName(serviceName);
+		}
 		await db
 			.update(domains)
 			.set({
 				https: domain.https ?? false,
 				certificateType,
 				port: domain.port ?? null,
-				serviceName: parent.composeId ? (domain.serviceName ?? null) : null,
+				serviceName,
 			})
 			.where(eq(domains.domainId, existing.domainId));
 		liveByKey.delete(key);
@@ -370,7 +386,11 @@ const applyDatabase = async (
 			appName:
 				(desired.appName as string | undefined) ?? generateDatabaseAppName(String(desired.name)),
 			dockerImage: (desired.dockerImage as string | undefined) ?? config.defaultImage,
-			externalPort: (desired.externalPort as number | null | undefined) ?? null,
+			externalPort: (() => {
+				const port = (desired.externalPort as number | null | undefined) ?? null;
+				if (port != null) assertSafePublishedPort(port, "externalPort");
+				return port;
+			})(),
 			command: (desired.command as string | null | undefined) ?? null,
 			memoryReservation: (desired.memoryReservation as string | null | undefined) ?? null,
 			memoryLimit: (desired.memoryLimit as string | null | undefined) ?? null,
@@ -440,6 +460,9 @@ const applyDatabase = async (
 		if (value !== undefined) {
 			patch[field] = value;
 		}
+	}
+	if (typeof patch.externalPort === "number") {
+		assertSafePublishedPort(patch.externalPort, "externalPort");
 	}
 	if (Object.keys(patch).length > 0) {
 		await db.update(table).set(patch).where(eq(table[idColumn], existing[idColumn]));

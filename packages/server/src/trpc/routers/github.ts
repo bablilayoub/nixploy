@@ -28,13 +28,9 @@ async function getOrganizationId(session: Session): Promise<string> {
 const githubIdInput = z.object({ githubId: z.string().min(1) });
 
 /** Public base URL of this instance (used for GitHub App manifest URLs). */
-function getBaseUrl(input?: string): string {
-	const candidates = [
-		input,
-		process.env.NIXPLOY_BASE_URL,
-		process.env.BETTER_AUTH_URL,
-		"http://localhost:3000",
-	];
+function getBaseUrl(): string {
+	// Never trust a client-supplied origin — that would send App secrets to an attacker.
+	const candidates = [process.env.NIXPLOY_BASE_URL, process.env.BETTER_AUTH_URL];
 	for (const candidate of candidates) {
 		if (!candidate?.trim()) continue;
 		try {
@@ -46,7 +42,7 @@ function getBaseUrl(input?: string): string {
 	throw new TRPCError({
 		code: "BAD_REQUEST",
 		message:
-			"Could not determine a public base URL for GitHub App setup. Set BETTER_AUTH_URL or open Nixploy via a real http(s) origin.",
+			"Could not determine a public base URL for GitHub App setup. Set BETTER_AUTH_URL (or NIXPLOY_BASE_URL) to this instance's https origin.",
 	});
 }
 
@@ -141,6 +137,7 @@ export const githubRouter = router({
 	/** Repositories accessible to the GitHub App installation. */
 	listRepositories: protectedProcedure.input(githubIdInput).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		await assertCapability(ctx.session.user.id, organizationId, "service.create");
 		return await getGithubRepositories(input.githubId, organizationId);
 	}),
 
@@ -149,6 +146,7 @@ export const githubRouter = router({
 		.input(githubIdInput.extend({ owner: z.string().min(1), repo: z.string().min(1) }))
 		.query(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
+			await assertCapability(ctx.session.user.id, organizationId, "service.create");
 			return await getGithubBranches({
 				githubId: input.githubId,
 				organizationId,
@@ -165,10 +163,7 @@ export const githubRouter = router({
 	createAppManifest: protectedProcedure
 		.input(
 			githubIdInput.extend({
-				baseUrl: z.string().optional(),
 				appName: z.string().optional(),
-				redirectPath: z.string().optional(),
-				webhookPath: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -177,10 +172,8 @@ export const githubRouter = router({
 			return await getGithubAppManifest({
 				githubId: input.githubId,
 				organizationId,
-				baseUrl: getBaseUrl(input.baseUrl),
+				baseUrl: getBaseUrl(),
 				appName: input.appName,
-				redirectPath: input.redirectPath,
-				webhookPath: input.webhookPath,
 			});
 		}),
 
@@ -218,6 +211,13 @@ export const githubRouter = router({
 		if (!row) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "GitHub provider not found" });
 		}
-		return await syncGithubInstallation(row.githubId);
+		const synced = await syncGithubInstallation(row.githubId);
+		if (!synced) {
+			throw new TRPCError({
+				code: "INTERNAL_SERVER_ERROR",
+				message: "Failed to sync installation",
+			});
+		}
+		return publicGithub(synced);
 	}),
 });

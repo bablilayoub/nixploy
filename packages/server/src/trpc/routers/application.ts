@@ -27,13 +27,14 @@ import {
 	upsertApplicationSwarmService,
 } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
+import { redactServerCommandLog } from "../../modules/cluster";
 import {
 	cancelDeployment as cancelQueuedDeployment,
 	queueDeployment,
 } from "../../modules/deployment";
-import { shellQuote } from "../../modules/deployment/paths";
 import { assertCapability, assertWithinQuota, hasCapability } from "../../modules/projects";
-import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { assertSafeGitCloneUrl } from "../../utils/public-url";
+import { appNameSchema } from "../../utils/validators";
 import {
 	assertGitProviderInOrganization,
 	assertServerInOrganization,
@@ -43,6 +44,22 @@ import { protectedProcedure, router } from "../init";
 import { redactApplicationSecrets } from "../redact-secrets";
 
 const applicationIdInput = z.object({ applicationId: z.string().min(1) });
+
+/** Never ship Swarm join tokens via nested `server.command`. */
+function publicApplicationServer<T>(application: T): T {
+	const row = application as { server?: { command?: string | null } | null } & Record<
+		string,
+		unknown
+	>;
+	if (!row.server) return application;
+	return {
+		...row,
+		server: {
+			...row.server,
+			command: redactServerCommandLog(row.server.command),
+		},
+	} as T;
+}
 
 /** Fields that change the swarm service spec and trigger a re-upsert. */
 const swarmSpecFields = {
@@ -98,8 +115,8 @@ export const applicationRouter = router({
 				organizationId,
 				"secrets.read",
 			);
-			if (canSeeSecrets) return rows;
-			return rows.map((row) => ({ ...row, password: null, env: null, buildArgs: null }));
+			if (canSeeSecrets) return rows.map(publicApplicationServer);
+			return rows.map((row) => publicApplicationServer(redactApplicationSecrets(row)));
 		}),
 
 	one: protectedProcedure.input(applicationIdInput).query(async ({ ctx, input }) => {
@@ -139,8 +156,9 @@ export const applicationRouter = router({
 			throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
 		}
 		const canSeeSecrets = await hasCapability(ctx.session.user.id, organizationId, "secrets.read");
-		if (canSeeSecrets) return application;
-		return { ...application, env: null, buildArgs: null, password: null };
+		const safe = publicApplicationServer(application);
+		if (canSeeSecrets) return safe;
+		return redactApplicationSecrets(safe);
 	}),
 
 	create: protectedProcedure
@@ -148,10 +166,7 @@ export const applicationRouter = router({
 			z.object({
 				name: z.string().min(1),
 				description: z.string().optional(),
-				appName: z
-					.string()
-					.regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/)
-					.optional(),
+				appName: appNameSchema.optional(),
 				projectId: z.string().min(1),
 				environmentId: z.string().optional(),
 				environmentName: z.string().optional(),
@@ -418,7 +433,13 @@ export const applicationRouter = router({
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			await assertApplicationAccess(input.applicationId, organizationId);
 			const { applicationId, ...data } = input;
-			return updateApplication(applicationId, data);
+			const application = await updateApplication(applicationId, data);
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? application : redactApplicationSecrets(application);
 		}),
 
 	/** Switch the source type and set the fields relevant to that source. */
@@ -472,6 +493,9 @@ export const applicationRouter = router({
 					throw new TRPCError({ code: "NOT_FOUND", message: "Registry not found" });
 				}
 			}
+			if (input.password !== undefined && input.password !== null) {
+				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			}
 
 			// Clear every source field, then apply only the ones relevant to
 			// the selected source type.
@@ -505,6 +529,16 @@ export const applicationRouter = router({
 
 			switch (input.sourceType) {
 				case "git":
+					if (input.gitUrl) {
+						try {
+							await assertSafeGitCloneUrl(input.gitUrl);
+						} catch (error) {
+							throw new TRPCError({
+								code: "BAD_REQUEST",
+								message: error instanceof Error ? error.message : "Invalid git URL",
+							});
+						}
+					}
 					data.gitUrl = input.gitUrl ?? null;
 					data.gitBranch = input.gitBranch ?? null;
 					data.customGitSSHKeyId = input.customGitSSHKeyId ?? null;
@@ -528,7 +562,13 @@ export const applicationRouter = router({
 					break;
 			}
 
-			return updateApplication(input.applicationId, data);
+			const application = await updateApplication(input.applicationId, data);
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? application : redactApplicationSecrets(application);
 		}),
 
 	/** Docker-image source shorthand (Dokploy's saveDockerProvider). */
@@ -577,7 +617,9 @@ export const applicationRouter = router({
 		await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 		const application = await assertApplicationAccess(input.applicationId, organizationId);
 		await reloadSwarmService(application.appName, application.serverId);
-		return updateApplication(application.applicationId, { status: "running" });
+		const updated = await updateApplication(application.applicationId, { status: "running" });
+		const canSeeSecrets = await hasCapability(ctx.session.user.id, organizationId, "secrets.read");
+		return canSeeSecrets ? updated : redactApplicationSecrets(updated);
 	}),
 
 	/** Scale the swarm service back to the configured replica count. */
@@ -604,22 +646,22 @@ export const applicationRouter = router({
 		return { applicationId: application.applicationId };
 	}),
 
-	/** Best-effort kill of any in-flight build processes for this app. */
+	/** Cancel any in-flight deployments for this application (tracked PIDs). */
 	killBuild: protectedProcedure.input(applicationIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 		const application = await assertApplicationAccess(input.applicationId, organizationId);
-		const command = `pkill -9 -f ${shellQuote(application.appName)} || true`;
-		try {
-			if (application.serverId) {
-				await execAsyncRemote(application.serverId, command);
-			} else {
-				await execAsync(command);
-			}
-		} catch {
-			// best effort — no matching processes is a success
+		const running = await db.query.deployments.findMany({
+			where: and(
+				eq(deployments.applicationId, application.applicationId),
+				eq(deployments.status, "running"),
+			),
+			columns: { deploymentId: true },
+		});
+		for (const row of running) {
+			await cancelQueuedDeployment(row.deploymentId);
 		}
-		return { applicationId: application.applicationId };
+		return { applicationId: application.applicationId, cancelled: running.length };
 	}),
 
 	/** Paginated deployment history (newest first), excluding previews. */

@@ -37,6 +37,11 @@ export interface Template {
 		serviceName: string;
 		port: number;
 	};
+	/**
+	 * Needs host Docker socket and/or elevated capabilities. Deployable only by
+	 * the instance admin; the resulting compose row is marked `hostPrivileged`.
+	 */
+	hostPrivileged?: boolean;
 }
 
 /** Catalog shape exposed by `template.all` (compose bodies stripped). */

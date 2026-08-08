@@ -21,7 +21,21 @@ import { Input } from "@/components/ui/input";
 import { type LoginInput, loginSchema } from "@/server/actions/auth.schema";
 
 function safeNextPath(raw: string | null): string {
-	if (!raw?.startsWith("/") || raw.startsWith("//")) return "/dashboard";
+	if (!raw) return "/dashboard";
+	// Block open redirects: protocol-relative, backslash tricks, encoded separators.
+	if (
+		!raw.startsWith("/") ||
+		raw.startsWith("//") ||
+		raw.includes("\\") ||
+		raw.includes("%2f") ||
+		raw.includes("%2F") ||
+		raw.includes("%5c") ||
+		raw.includes("%5C") ||
+		raw.includes("@") ||
+		!/^\/[A-Za-z0-9._~/-]*$/.test(raw)
+	) {
+		return "/dashboard";
+	}
 	return raw;
 }
 

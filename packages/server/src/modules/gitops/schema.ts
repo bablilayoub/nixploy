@@ -1,15 +1,64 @@
 import { parse, stringify } from "yaml";
 import { z } from "zod";
+import {
+	appNameSchema,
+	assertComposeServiceName,
+	assertTraefikHost,
+	assertTraefikPath,
+} from "../../utils/validators";
 
 export const NIXPLOY_STACK_VERSION = 1;
 
 export const gitopsDomainSchema = z.object({
-	host: z.string().min(1).max(255),
-	path: z.string().min(1).optional(),
+	host: z
+		.string()
+		.min(1)
+		.max(255)
+		.transform((value, ctx) => {
+			try {
+				return assertTraefikHost(value);
+			} catch (error) {
+				ctx.addIssue({
+					code: "custom",
+					message: error instanceof Error ? error.message : "Invalid host",
+				});
+				return z.NEVER;
+			}
+		}),
+	path: z
+		.string()
+		.min(1)
+		.optional()
+		.transform((value, ctx) => {
+			if (value === undefined) return value;
+			try {
+				return assertTraefikPath(value) ?? "/";
+			} catch (error) {
+				ctx.addIssue({
+					code: "custom",
+					message: error instanceof Error ? error.message : "Invalid path",
+				});
+				return z.NEVER;
+			}
+		}),
 	port: z.number().int().min(1).max(65535).nullable().optional(),
 	https: z.boolean().optional(),
 	certificateType: z.enum(["letsencrypt", "none", "custom"]).optional(),
-	serviceName: z.string().nullable().optional(),
+	serviceName: z
+		.string()
+		.nullable()
+		.optional()
+		.superRefine((value, ctx) => {
+			if (!value) return;
+			try {
+				assertComposeServiceName(value);
+			} catch (error) {
+				ctx.addIssue({
+					code: "custom",
+					message: error instanceof Error ? error.message : "Invalid serviceName",
+				});
+			}
+		}),
 });
 
 export const gitopsEnvironmentSchema = z.object({
@@ -27,7 +76,7 @@ export const gitopsProjectSchema = z.object({
 export const gitopsApplicationSchema = z.object({
 	name: z.string().min(1),
 	environment: z.string().min(1),
-	appName: z.string().optional(),
+	appName: appNameSchema.optional(),
 	description: z.string().nullable().optional(),
 	buildType: z
 		.enum([
@@ -62,7 +111,7 @@ export const gitopsApplicationSchema = z.object({
 export const gitopsComposeSchema = z.object({
 	name: z.string().min(1),
 	environment: z.string().min(1),
-	appName: z.string().optional(),
+	appName: appNameSchema.optional(),
 	description: z.string().nullable().optional(),
 	composeType: z.enum(["docker-compose", "stack"]).optional(),
 	sourceType: z.enum(["raw", "git", "github", "gitlab", "bitbucket", "gitea"]).optional(),
@@ -79,7 +128,7 @@ export const gitopsComposeSchema = z.object({
 const databaseBaseSchema = z.object({
 	name: z.string().min(1),
 	environment: z.string().min(1),
-	appName: z.string().optional(),
+	appName: appNameSchema.optional(),
 	description: z.string().nullable().optional(),
 	dockerImage: z.string().optional(),
 	externalPort: z.number().int().min(1).max(65535).nullable().optional(),

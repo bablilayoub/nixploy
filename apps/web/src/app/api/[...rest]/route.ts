@@ -168,6 +168,13 @@ async function buildContext(req: Request): Promise<TRPCContext> {
 	if (!user) {
 		throw new TRPCError({ code: "UNAUTHORIZED", message: "Unknown API key owner" });
 	}
+	const banned =
+		(user as { banned?: boolean | null; banExpires?: Date | null }).banned === true &&
+		(!(user as { banExpires?: Date | null }).banExpires ||
+			((user as { banExpires?: Date | null }).banExpires?.getTime() ?? 0) > Date.now());
+	if (banned) {
+		throw new TRPCError({ code: "FORBIDDEN", message: "User is banned" });
+	}
 
 	// Prefer explicit org from the client (multi-org API keys); otherwise first membership.
 	const requestedOrgId = req.headers.get("x-organization-id")?.trim() || null;

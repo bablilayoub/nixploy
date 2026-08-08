@@ -10,6 +10,7 @@ import {
 	deletePreviewByPullRequest,
 } from "../preview";
 import { upsertPreviewComment } from "../preview/comment";
+import { derivedWebhookSecret } from "./webhook-secret";
 
 export type GitWebhookProvider = "github" | "gitlab" | "bitbucket" | "gitea";
 
@@ -229,21 +230,14 @@ async function verifyAndExtractBitbucket(
 	providerId?: string,
 ): Promise<ExtractedWebhook> {
 	// Bitbucket Cloud has no standard HMAC for all plans. Require a Bearer token
-	// matching the provider's API token (or app password) so the webhook URL alone
-	// is not enough to forge deploys. Configure the same value as a custom header
-	// in Bitbucket: Authorization: Bearer <token>.
+	// matching the dedicated derived webhook secret (never the API token / app
+	// password). Configure Authorization: Bearer <webhookSecret> in Bitbucket.
 	if (providerId) {
 		const rows = await db.select().from(bitbucket).where(eq(bitbucket.bitbucketId, providerId));
 		if (rows.length === 0) {
 			throw new WebhookUnauthorized(`unknown bitbucket provider: ${providerId}`);
 		}
-		const row = rows[0];
-		const expected = row?.apiToken || row?.appPassword;
-		if (!expected) {
-			throw new WebhookUnauthorized(
-				"bitbucket provider has no api token/app password configured for webhook auth",
-			);
-		}
+		const expected = derivedWebhookSecret("bitbucket", providerId);
 		const auth = header(headers, "authorization") ?? "";
 		const presented = auth.replace(/^Bearer\s+/i, "").trim();
 		if (!presented || !safeEqual(presented, expected)) {
@@ -303,12 +297,9 @@ async function verifyAndExtractGitea(
 	rawBody: string,
 	providerId?: string,
 ): Promise<ExtractedWebhook> {
-	// Gitea signs the body with HMAC-SHA256 using the webhook secret; we
-	// compare against every configured gitea row's access token used as
-	// webhook secret (the UI instructs users to set it). When the webhook URL
-	// names a provider, that row must exist and only its token is accepted.
-	// A missing signature is rejected rather than waved through, otherwise
-	// dropping the header would turn this into an open deploy trigger.
+	// Gitea signs the body with HMAC-SHA256 using the webhook secret. We use a
+	// dedicated derived secret (never the API access token). When the webhook
+	// URL names a provider, that row must exist. A missing signature is rejected.
 	const signature = header(headers, "x-gitea-signature");
 	if (providerId) {
 		const rows = await db.select().from(gitea).where(eq(gitea.giteaId, providerId));
@@ -318,23 +309,23 @@ async function verifyAndExtractGitea(
 		if (!signature) {
 			throw new WebhookUnauthorized("missing gitea signature");
 		}
-		const row = rows[0];
-		const digest = row?.accessToken
-			? createHmac("sha256", row.accessToken).update(rawBody).digest("hex")
-			: "";
-		if (!digest || !safeEqual(digest, signature)) {
+		const secret = derivedWebhookSecret("gitea", providerId);
+		const digest = createHmac("sha256", secret).update(rawBody).digest("hex");
+		if (!safeEqual(digest, signature)) {
 			throw new WebhookUnauthorized("gitea signature mismatch");
 		}
 	} else if (signature) {
 		const rows = await db.select().from(gitea);
 		const authorized = rows.some((row) => {
-			if (!row.accessToken) return false;
-			const digest = createHmac("sha256", row.accessToken).update(rawBody).digest("hex");
+			const secret = derivedWebhookSecret("gitea", row.giteaId);
+			const digest = createHmac("sha256", secret).update(rawBody).digest("hex");
 			return safeEqual(digest, signature);
 		});
 		if (!authorized) {
 			throw new WebhookUnauthorized("gitea signature mismatch");
 		}
+	} else {
+		throw new WebhookUnauthorized("missing gitea signature");
 	}
 
 	const payload = JSON.parse(rawBody);

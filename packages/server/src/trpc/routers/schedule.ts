@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import { applications, compose, environments, projects, schedules, servers } from "../../db/schema";
 import { assertApplicationAccess } from "../../modules/application";
+import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { findServerById } from "../../modules/cluster";
 import { findComposeForOrg } from "../../modules/compose/service";
 import {
@@ -110,9 +111,8 @@ async function assertTargetAccess(
 			return;
 		}
 		case "nixploy-server": {
-			// Shell inside the Nixploy process (docker.sock) — instance admins only.
-			const organizationId = await getOrganizationId(session);
-			await assertOrgRole(session.user.id, organizationId, "admin");
+			// Shell on the Nixploy host (docker.sock) — instance admins only, not org admins.
+			await assertInstanceAdmin(session);
 			return;
 		}
 	}
@@ -124,9 +124,7 @@ async function assertScheduleAccess(session: Session, row: ScheduleRow): Promise
 		if (row.userId !== session.user.id) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Schedule not found" });
 		}
-		// Still admin-only: a demoted member keeps no host-shell access.
-		const organizationId = await getOrganizationId(session);
-		await assertOrgRole(session.user.id, organizationId, "admin");
+		await assertInstanceAdmin(session);
 		return;
 	}
 	await assertTargetAccess(session, row);
@@ -164,6 +162,13 @@ export const scheduleRouter = router({
 	 */
 	all: protectedProcedure.query(async ({ ctx }) => {
 		const organizationId = await getOrganizationId(ctx.session);
+		let canSeeHostSchedules = false;
+		try {
+			await assertInstanceAdmin(ctx.session);
+			canSeeHostSchedules = true;
+		} catch {
+			canSeeHostSchedules = false;
+		}
 		const orgProjects = await db.query.projects.findMany({
 			where: eq(projects.organizationId, organizationId),
 			columns: { projectId: true },
@@ -211,7 +216,7 @@ export const scheduleRouter = router({
 		return rows
 			.filter((row) => {
 				if (row.scheduleType === "nixploy-server") {
-					return row.userId === ctx.session.user.id;
+					return canSeeHostSchedules && row.userId === ctx.session.user.id;
 				}
 				if (row.scheduleType === "application" && row.applicationId) {
 					return appIdSet.has(row.applicationId);

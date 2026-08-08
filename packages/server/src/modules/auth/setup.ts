@@ -24,7 +24,13 @@ export async function canSignUpEmail(email: string): Promise<boolean> {
 	const [invite] = await db
 		.select({ id: invitations.id })
 		.from(invitations)
-		.where(sql`lower(${invitations.email}) = ${normalized} and ${invitations.status} = 'pending'`)
+		.where(
+			and(
+				sql`lower(${invitations.email}) = ${normalized}`,
+				eq(invitations.status, "pending"),
+				gt(invitations.expiresAt, new Date()),
+			),
+		)
 		.limit(1);
 	return Boolean(invite);
 }

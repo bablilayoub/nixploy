@@ -53,8 +53,14 @@ certificatesResolvers:
       httpChallenge:
         entryPoint: web
 api:
-  insecure: true
+  dashboard: false
 `;
+}
+
+/** Strip Swarm join tokens from setup logs before API / DB exposure. */
+export function redactServerCommandLog(command: string | null | undefined): string | null {
+	if (!command) return command ?? null;
+	return command.replace(/SWMTKN-\S+/g, "SWMTKN-***");
 }
 
 export async function findServerById(serverId: string, organizationId: string) {
@@ -187,7 +193,15 @@ export async function setupServer(serverId: string): Promise<string> {
 
 		await step(
 			"install docker",
-			`if ! command -v docker >/dev/null 2>&1; then curl -fsSL https://get.docker.com | sh; else echo "docker already installed: $(docker version --format '{{.Server.Version}}' 2>/dev/null)"; fi`,
+			`if ! command -v docker >/dev/null 2>&1; then
+  if [ "\${NIXPLOY_ALLOW_REMOTE_DOCKER_INSTALL:-0}" != "1" ]; then
+    echo "Docker is not installed. Install Docker on this host, or set NIXPLOY_ALLOW_REMOTE_DOCKER_INSTALL=1 to allow curl|sh from get.docker.com." >&2
+    exit 1
+  fi
+  curl -fsSL https://get.docker.com | sh
+else
+  echo "docker already installed: $(docker version --format '{{.Server.Version}}' 2>/dev/null)"
+fi`,
 		);
 
 		const swarmState = (
@@ -229,14 +243,14 @@ export async function setupServer(serverId: string): Promise<string> {
 			log.push("# worker node — overlay network and Traefik stay on managers");
 		}
 
-		const command = log.join("\n");
+		const command = redactServerCommandLog(log.join("\n")) ?? "";
 		await db
 			.update(servers)
 			.set({ command, serverStatus: "active" })
 			.where(eq(servers.serverId, serverId));
 		return command;
 	} catch (error) {
-		const command = log.join("\n");
+		const command = redactServerCommandLog(log.join("\n")) ?? "";
 		await db
 			.update(servers)
 			.set({ command, serverStatus: "inactive" })

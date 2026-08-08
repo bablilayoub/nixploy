@@ -5,6 +5,7 @@ import { assertComposeContainerOwnership } from "../modules/compose/containers";
 import { assertWsDockerContainerAccess, assertWsTerminalAccess } from "./access";
 import type { WsSession } from "./auth";
 import {
+	assertContainerNotProtected,
 	connectToServer,
 	resolveLocalContainer,
 	resolveLocalContainerById,
@@ -77,6 +78,7 @@ export async function handleDockerTerminal(
 
 		try {
 			await assertWsDockerContainerAccess(session, serverId);
+			await assertContainerNotProtected(containerId, serverId);
 			if (serverId) {
 				await attachRemoteTerminalById(ws, serverId, containerId);
 			} else {

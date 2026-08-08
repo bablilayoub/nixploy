@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createAppAuth } from "@octokit/auth-app";
 import { and, eq } from "drizzle-orm";
 import { Octokit } from "octokit";
@@ -15,12 +15,32 @@ export type GithubAppState = {
 	nonce: string;
 };
 
+function githubAppStateSecret(): string {
+	const key = process.env.ENCRYPTION_KEY ?? process.env.BETTER_AUTH_SECRET;
+	if (!key) {
+		throw new Error("ENCRYPTION_KEY (or BETTER_AUTH_SECRET) is required for GitHub App setup");
+	}
+	return key;
+}
+
 export function encodeGithubAppState(state: GithubAppState): string {
-	return Buffer.from(JSON.stringify(state), "utf8").toString("base64url");
+	const payload = Buffer.from(JSON.stringify(state), "utf8").toString("base64url");
+	const sig = createHmac("sha256", githubAppStateSecret()).update(payload).digest("base64url");
+	return `${payload}.${sig}`;
 }
 
 export function decodeGithubAppState(state: string): GithubAppState {
-	return JSON.parse(Buffer.from(state, "base64url").toString("utf8")) as GithubAppState;
+	const [payload, sig] = state.split(".");
+	if (!payload || !sig) {
+		throw new Error("Invalid GitHub App state");
+	}
+	const expected = createHmac("sha256", githubAppStateSecret()).update(payload).digest("base64url");
+	const a = Buffer.from(sig);
+	const b = Buffer.from(expected);
+	if (a.length !== b.length || !timingSafeEqual(a, b)) {
+		throw new Error("Invalid GitHub App state signature");
+	}
+	return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as GithubAppState;
 }
 
 export async function findGithubById(githubId: string, organizationId: string) {
@@ -119,8 +139,8 @@ export async function getGithubAppManifest(input: GithubAppManifestInput) {
 		.set({ githubWebhookSecret: webhookSecret })
 		.where(eq(github.githubId, row.githubId));
 
-	const redirectPath = input.redirectPath ?? "/api/github/callback";
-	const webhookPath = input.webhookPath ?? `/api/webhooks/github/${row.githubId}`;
+	const redirectPath = "/api/github/callback";
+	const webhookPath = `/api/webhooks/github/${row.githubId}`;
 
 	// GitHub validates redirect_url as an absolute URL without relying on query
 	// params — pass `state` as a separate form field (see GitHub App Manifest docs).
@@ -176,14 +196,15 @@ export async function setupGithubApp(input: {
 	if (!row) {
 		throw new Error(`GitHub provider not found: ${input.githubId}`);
 	}
-	if (input.state) {
-		const state = decodeGithubAppState(input.state);
-		if (
-			state.gitProviderId !== row.gitProviderId ||
-			(state.githubId && state.githubId !== row.githubId)
-		) {
-			throw new Error("GitHub App state mismatch");
-		}
+	if (!input.state) {
+		throw new Error("GitHub App state is required");
+	}
+	const state = decodeGithubAppState(input.state);
+	if (
+		state.gitProviderId !== row.gitProviderId ||
+		(state.githubId && state.githubId !== row.githubId)
+	) {
+		throw new Error("GitHub App state mismatch");
 	}
 
 	const response = await fetch(`${GITHUB_API_URL}/app-manifests/${input.code}/conversions`, {
@@ -191,7 +212,7 @@ export async function setupGithubApp(input: {
 		headers: { Accept: "application/vnd.github+json" },
 	});
 	if (!response.ok) {
-		throw new Error(`GitHub App conversion failed: ${response.status} ${await response.text()}`);
+		throw new Error(`GitHub App conversion failed: ${response.status}`);
 	}
 	const app = (await response.json()) as GithubAppConversion;
 

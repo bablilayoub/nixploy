@@ -106,6 +106,7 @@ function DetailsBody({ template, onDeploy }: { template: TemplateDetails; onDepl
 					<p className="text-sm text-muted-foreground">{template.description}</p>
 					<div className="flex flex-wrap gap-1.5 pt-1">
 						<Badge variant="secondary">{template.category}</Badge>
+						{template.hostPrivileged && <Badge variant="outline">Instance admin required</Badge>}
 						{template.tags.map((tag) => (
 							<Badge key={tag} variant="outline">
 								{tag}
