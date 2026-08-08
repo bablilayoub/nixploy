@@ -12,6 +12,7 @@ import {
 import { pruneUnusedVolumes } from "../../modules/docker/prune";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { assertSafeDockerImageRef } from "../../utils/validators";
 import { protectedProcedure, router } from "../init";
 
 /**
@@ -161,10 +162,19 @@ export const dockerRouter = router({
 	}),
 
 	imagePull: protectedProcedure
-		.input(serverInput.extend({ reference: z.string().min(1) }))
+		.input(serverInput.extend({ reference: z.string().min(1).max(512) }))
 		.mutation(async ({ ctx, input }) => {
 			await assertAdmin(ctx, input?.serverId);
-			return await runOn(ctx, input.serverId, `docker pull ${shq(input.reference)}`);
+			let reference: string;
+			try {
+				reference = assertSafeDockerImageRef(input.reference);
+			} catch (error) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: error instanceof Error ? error.message : "Invalid image reference",
+				});
+			}
+			return await runOn(ctx, input.serverId, `docker pull ${shq(reference)}`);
 		}),
 
 	imageRemove: protectedProcedure

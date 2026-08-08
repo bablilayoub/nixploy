@@ -13,6 +13,7 @@
 		"./encryption": "./src/lib/encryption.ts",
 		"./trpc": "./src/trpc/root.ts",
 		"./trpc/*": "./src/trpc/*.ts",
+		"./modules/projects": "./src/modules/projects/index.ts",
 		"./modules/*": "./src/modules/*.ts",
 		"./modules/*/*": "./src/modules/*/*.ts",
 		"./utils/*": "./src/utils/*.ts",

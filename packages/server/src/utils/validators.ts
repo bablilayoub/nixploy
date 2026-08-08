@@ -112,3 +112,23 @@ export function assertSafePublishedPort(port: number, label = "publishedPort"): 
 		);
 	}
 }
+
+/**
+ * Safe `docker pull` / image reference: no whitespace, no leading dashes
+ * (flag injection), and only common OCI ref characters.
+ */
+export const DOCKER_IMAGE_REF_RE = /^[a-zA-Z0-9][a-zA-Z0-9._\-/:@+]*$/;
+
+export function assertSafeDockerImageRef(reference: string): string {
+	const trimmed = reference.trim();
+	if (
+		!trimmed ||
+		trimmed.length > 512 ||
+		trimmed.startsWith("-") ||
+		trimmed.includes("..") ||
+		!DOCKER_IMAGE_REF_RE.test(trimmed)
+	) {
+		throw new Error(`Invalid Docker image reference: ${reference}`);
+	}
+	return trimmed;
+}

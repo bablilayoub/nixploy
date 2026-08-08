@@ -1,13 +1,12 @@
-import { auth } from "@nixploy/server/auth";
-import { db } from "@nixploy/server/db";
-import { users } from "@nixploy/server/schema";
 import { eq } from "drizzle-orm";
+import { db } from "../../db";
+import { users } from "../../db/schema";
+import { auth } from "../../lib/auth";
 
 /**
  * Verify the caller's API key — `x-api-key` header or
- * `Authorization: Bearer <key>` — through the same better-auth api-key
- * verification the REST adapter (apps/web/src/app/api/[...rest]/route.ts)
- * uses. Returns the key owner's user id, or an error Response.
+ * `Authorization: Bearer <key>` — through the better-auth api-key plugin.
+ * Returns the key owner's user id, or an error Response.
  *
  * Callers must still scope whatever they act on to that user's
  * organizations: a valid key alone says nothing about tenancy.

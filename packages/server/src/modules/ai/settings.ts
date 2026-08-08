@@ -7,6 +7,7 @@ import {
 	isCloudMetadataHostname,
 	isLoopbackHostname,
 } from "../../utils/public-url";
+import { BLOCKED_HOST_PORTS } from "../../utils/validators";
 
 const EXTRAS_KEY = "webServer";
 
@@ -57,6 +58,14 @@ export async function assertSafeAiBaseUrl(
 	}
 	if (isLoopbackHostname(parsed.hostname)) {
 		if (provider === "ollama" || provider === "openai-compatible") {
+			const port = parsed.port ? Number(parsed.port) : parsed.protocol === "https:" ? 443 : 80;
+			if (
+				!Number.isInteger(port) ||
+				BLOCKED_HOST_PORTS.has(port) ||
+				(port < 1024 && port !== 80 && port !== 443)
+			) {
+				throw new Error("AI base URL port is not allowed on loopback");
+			}
 			return;
 		}
 		throw new Error("AI base URL must not target loopback for cloud providers");

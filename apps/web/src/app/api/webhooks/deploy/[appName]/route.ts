@@ -1,8 +1,8 @@
 import { findApplicationByAppNameForUser } from "@nixploy/server/modules/application/org";
+import { authenticateApiKey } from "@nixploy/server/modules/auth/api-key";
 import { queueWebhookDeployment } from "@nixploy/server/modules/git/webhook-handler";
-import { hasCapability } from "@nixploy/server/modules/projects";
+import { hasCapability } from "@nixploy/server/modules/projects/index";
 import { clientIpFromRequest, takeRateLimitToken } from "@nixploy/server/utils/rate-limit";
-import { authenticateApiKey } from "../../verify-api-key";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

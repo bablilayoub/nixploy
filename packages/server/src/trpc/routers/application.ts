@@ -34,7 +34,7 @@ import {
 } from "../../modules/deployment";
 import { assertCapability, assertWithinQuota, hasCapability } from "../../modules/projects";
 import { assertSafeGitCloneUrl } from "../../utils/public-url";
-import { appNameSchema } from "../../utils/validators";
+import { appNameSchema, assertSafeDockerImageRef } from "../../utils/validators";
 import {
 	assertGitProviderInOrganization,
 	assertServerInOrganization,
@@ -553,6 +553,16 @@ export const applicationRouter = router({
 					data[`${input.sourceType}Id`] = input[`${input.sourceType}Id`] ?? null;
 					break;
 				case "docker":
+					if (input.dockerImage) {
+						try {
+							assertSafeDockerImageRef(input.dockerImage);
+						} catch (error) {
+							throw new TRPCError({
+								code: "BAD_REQUEST",
+								message: error instanceof Error ? error.message : "Invalid docker image",
+							});
+						}
+					}
 					data.dockerImage = input.dockerImage ?? null;
 					data.username = input.username ?? null;
 					data.password = input.password ?? null;
@@ -588,6 +598,14 @@ export const applicationRouter = router({
 				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			}
 			await assertApplicationAccess(input.applicationId, organizationId);
+			try {
+				assertSafeDockerImageRef(input.dockerImage);
+			} catch (error) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: error instanceof Error ? error.message : "Invalid docker image",
+				});
+			}
 			if (input.registryId) {
 				const reg = await db.query.registry.findFirst({
 					where: eq(registry.registryId, input.registryId),

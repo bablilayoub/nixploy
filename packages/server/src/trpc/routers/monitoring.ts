@@ -16,6 +16,7 @@ import {
 	projects,
 	redis,
 } from "../../db/schema";
+import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { findServerById, getServerStatsCached, type ServerStats } from "../../modules/cluster";
 import { shellQuote } from "../../modules/compose/paths";
 import { readLatestMetricsSample, readMetricsHistory } from "../../modules/monitoring/history";
@@ -227,6 +228,9 @@ export const monitoringRouter = router({
 			await assertCapability(ctx.session.user.id, organizationId, "settings.manage");
 			if (serverId) {
 				await findServerOrThrow(serverId, organizationId);
+			} else {
+				// Local docker.sock — instance admin only (parity with dockerRouter).
+				await assertInstanceAdmin(ctx.session);
 			}
 			const { dockerCleanup } = await import("../../modules/deployment/cleanup");
 			await dockerCleanup(serverId);
