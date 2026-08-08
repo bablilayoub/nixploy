@@ -70,8 +70,9 @@ export interface SpawnOptions {
 
 /**
  * Spawn a shell command on the target server, streaming combined
- * stdout/stderr to `onData`. Local → `bash -c`; remote → ssh2 channel.
- * Killing the returned handle is how deployment cancellation stops builds.
+ * stdout/stderr to `onData`. Local → `sh -c` (Alpine runtime has no bash);
+ * remote → ssh2 channel. Killing the returned handle is how deployment
+ * cancellation stops builds.
  */
 export async function spawnTargeted(
 	serverId: string | null | undefined,
@@ -85,7 +86,8 @@ export async function spawnTargeted(
 }
 
 function spawnLocal(command: string, options: SpawnOptions): TargetedProcess {
-	const child: ChildProcess = spawn("bash", ["-c", command], { cwd: options.cwd });
+	// Prefer /bin/sh — the production image is node:22-alpine (no bash).
+	const child: ChildProcess = spawn("sh", ["-c", command], { cwd: options.cwd });
 	let killed = false;
 
 	const done = new Promise<void>((resolve, reject) => {
