@@ -398,6 +398,8 @@ volumes:
 		],
 		// Image tags pinned to the official self-hosted compose. `db-roles` syncs
 		// built-in role passwords (same job as docker/volumes/db/roles.sql).
+		// Must connect as supabase_admin — postgres is not a superuser in this
+		// image, and reserved roles like authenticator reject non-superuser ALTER.
 		compose: `services:
   studio:
     image: supabase/studio:2026.08.03-sha-022b374
@@ -457,12 +459,11 @@ volumes:
     command:
       - |
         set -euo pipefail
-        psql -h db -U postgres -d postgres -v ON_ERROR_STOP=1 \\
+        psql -h db -U supabase_admin -d postgres -v ON_ERROR_STOP=1 \\
           -c "ALTER USER authenticator WITH PASSWORD '$$POSTGRES_PASSWORD'" \\
+          -c "ALTER USER pgbouncer WITH PASSWORD '$$POSTGRES_PASSWORD'" \\
           -c "ALTER USER supabase_auth_admin WITH PASSWORD '$$POSTGRES_PASSWORD'" \\
-          -c "ALTER USER supabase_admin WITH PASSWORD '$$POSTGRES_PASSWORD'" \\
-          -c "ALTER USER supabase_storage_admin WITH PASSWORD '$$POSTGRES_PASSWORD'" \\
-          -c "ALTER USER supabase_functions_admin WITH PASSWORD '$$POSTGRES_PASSWORD'"
+          -c "ALTER USER supabase_storage_admin WITH PASSWORD '$$POSTGRES_PASSWORD'"
   auth:
     image: supabase/gotrue:v2.189.0
     restart: always
