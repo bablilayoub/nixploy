@@ -26,6 +26,9 @@
 #   NIXPLOY_BUILD_FROM_SOURCE    1 = always build the image locally
 #   NIXPLOY_REPO                 GitHub org/repo                (default: bablilayoub/nixploy)
 #   NIXPLOY_BRANCH               Branch for assets/source       (default: main)
+#   NIXPLOY_GITHUB_TOKEN         Fine-grained PAT (Contents: Read) for private repos.
+#                                Also accepts GITHUB_TOKEN. Required under sudo when
+#                                the repo is private — root does not see your user gitconfig.
 #
 set -euo pipefail
 
@@ -419,14 +422,25 @@ ensure_directories() {
 }
 
 # ── images ───────────────────────────────────────────────────────────────────
+# Clone URL for private repos: embed the PAT so `sudo` does not prompt for a password.
+repo_clone_url() {
+	local token="${NIXPLOY_GITHUB_TOKEN:-${GITHUB_TOKEN:-}}"
+	if [ -n "${token}" ]; then
+		# x-access-token works for fine-grained and classic PATs.
+		printf 'https://x-access-token:%s@github.com/%s.git' "${token}" "${NIXPLOY_REPO}"
+	else
+		printf 'https://github.com/%s.git' "${NIXPLOY_REPO}"
+	fi
+}
+
 build_app_image() {
 	local tmp
 	tmp="$(mktemp -d)"
 	info "Building from source — this takes several minutes (~4GB RAM needed)"
 	if ! run_quiet "Cloning ${NIXPLOY_REPO}@${NIXPLOY_BRANCH}" \
-		git clone --depth 1 --branch "${NIXPLOY_BRANCH}" "https://github.com/${NIXPLOY_REPO}.git" "${tmp}/src"; then
+		git clone --depth 1 --branch "${NIXPLOY_BRANCH}" "$(repo_clone_url)" "${tmp}/src"; then
 		rm -rf "${tmp}"
-		die "Clone failed"
+		die "Clone failed — for a private repo export NIXPLOY_GITHUB_TOKEN (Contents: Read) and re-run with sudo -E"
 	fi
 	if ! run_quiet "Building ${APP_IMAGE}" \
 		docker build -t "${APP_IMAGE}" -f "${tmp}/src/docker/Dockerfile" "${tmp}/src"; then

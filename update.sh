@@ -19,6 +19,9 @@
 #   NIXPLOY_BUILD_FROM_SOURCE    1 = build locally instead of pull (opt-in only)
 #   NIXPLOY_REPO                 GitHub org/repo               (default: bablilayoub/nixploy)
 #   NIXPLOY_BRANCH               Branch for assets/source      (default: main)
+#   NIXPLOY_GITHUB_TOKEN         Fine-grained PAT (Contents: Read) for private repos.
+#                                Also accepts GITHUB_TOKEN. Required under sudo when
+#                                the repo is private — root does not see your user gitconfig.
 #
 set -euo pipefail
 
@@ -147,15 +150,25 @@ require_install() {
 }
 
 # ── image ────────────────────────────────────────────────────────────────────
+# Clone URL for private repos: embed the PAT so `sudo` does not prompt for a password.
+repo_clone_url() {
+	local token="${NIXPLOY_GITHUB_TOKEN:-${GITHUB_TOKEN:-}}"
+	if [ -n "${token}" ]; then
+		printf 'https://x-access-token:%s@github.com/%s.git' "${token}" "${NIXPLOY_REPO}"
+	else
+		printf 'https://github.com/%s.git' "${NIXPLOY_REPO}"
+	fi
+}
+
 build_app_image() {
 	need_cmd git || die "git is required to build from source"
 	local tmp
 	tmp="$(mktemp -d)"
 	info "Building from source — this takes several minutes"
 	if ! run_quiet "Cloning ${NIXPLOY_REPO}@${NIXPLOY_BRANCH}" \
-		git clone --depth 1 --branch "${NIXPLOY_BRANCH}" "https://github.com/${NIXPLOY_REPO}.git" "${tmp}/src"; then
+		git clone --depth 1 --branch "${NIXPLOY_BRANCH}" "$(repo_clone_url)" "${tmp}/src"; then
 		rm -rf "${tmp}"
-		die "Clone failed"
+		die "Clone failed — for a private repo export NIXPLOY_GITHUB_TOKEN (Contents: Read) and re-run with sudo -E"
 	fi
 	if ! run_quiet "Building ${APP_IMAGE}" \
 		docker build -t "${APP_IMAGE}" -f "${tmp}/src/docker/Dockerfile" "${tmp}/src"; then
@@ -194,7 +207,14 @@ refresh_traefik_yml() {
 	local url="https://raw.githubusercontent.com/${NIXPLOY_REPO}/${NIXPLOY_BRANCH}/docker/traefik/traefik.yml"
 	local tmp
 	tmp="$(mktemp)"
-	if curl -fsSL "${url}" -o "${tmp}" 2>>"${LOG_FILE}"; then
+	local token="${NIXPLOY_GITHUB_TOKEN:-${GITHUB_TOKEN:-}}"
+	local curl_args=(-fsSL)
+	if [ -n "${token}" ]; then
+		# Private repos: raw.githubusercontent.com needs the API + Accept raw.
+		url="https://api.github.com/repos/${NIXPLOY_REPO}/contents/docker/traefik/traefik.yml?ref=${NIXPLOY_BRANCH}"
+		curl_args+=(-H "Authorization: Bearer ${token}" -H "Accept: application/vnd.github.raw")
+	fi
+	if curl "${curl_args[@]}" "${url}" -o "${tmp}" 2>>"${LOG_FILE}"; then
 		# Inject the saved ACME email so we don't wipe the Let's Encrypt account.
 		awk -v email="${email}" '
 			/^[[:space:]]*email:/ { sub(/email:.*/, "email: " email); print; next }
