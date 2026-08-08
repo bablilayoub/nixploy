@@ -32,30 +32,36 @@ describe("DB_DUMP_CONFIG", () => {
 		expect(config.restoreCommand(params)).toBe("psql -U 'app_user' -d 'app_db' -v ON_ERROR_STOP=1");
 	});
 
-	it("mysql uses mysqldump/mysql with an inline password", () => {
+	it("mysql never puts the password on argv", () => {
 		const config = DB_DUMP_CONFIG.mysql;
 		expect(config.extension).toBe("sql");
+		expect(config.passwordEnv?.(params)).toEqual({ MYSQL_PWD: "s3cret" });
 		expect(config.dumpCommand(params)).toContain("mysqldump");
-		expect(config.dumpCommand(params)).toContain("-p's3cret'");
+		expect(config.dumpCommand(params)).not.toContain("s3cret");
+		expect(config.dumpCommand(params)).not.toMatch(/-p/);
 		expect(config.dumpCommand(params)).toContain("--databases 'app_db'");
 		expect(config.restoreCommand(params)).toContain("mysql");
-		expect(config.restoreCommand(params)).toContain("'app_db'");
+		expect(config.restoreCommand(params)).not.toContain("s3cret");
 	});
 
-	it("mariadb uses mariadb-dump/mariadb", () => {
+	it("mariadb uses mariadb-dump/mariadb without argv passwords", () => {
 		const config = DB_DUMP_CONFIG.mariadb;
 		expect(config.extension).toBe("sql");
+		expect(config.passwordEnv?.(params)).toEqual({ MYSQL_PWD: "s3cret" });
 		expect(config.dumpCommand(params)).toContain("mariadb-dump");
+		expect(config.dumpCommand(params)).not.toContain("s3cret");
 		expect(config.restoreCommand(params)).toContain("mariadb");
 		expect(config.restoreCommand(params)).not.toContain("mariadb-dump");
 	});
 
-	it("mongo streams an archive with admin auth", () => {
+	it("mongo streams an archive with admin auth via env password", () => {
 		const config = DB_DUMP_CONFIG.mongo;
 		expect(config.extension).toBe("archive");
+		expect(config.passwordEnv?.(params)).toEqual({ MONGO_PASSWORD: "s3cret" });
 		expect(config.dumpCommand(params)).toContain("mongodump");
 		expect(config.dumpCommand(params)).toContain("--archive");
-		expect(config.dumpCommand(params)).toContain("--authenticationDatabase admin");
+		expect(config.dumpCommand(params)).toContain("$MONGO_PASSWORD");
+		expect(config.dumpCommand(params)).not.toContain("s3cret");
 		expect(config.restoreCommand(params)).toContain("mongorestore");
 		expect(config.restoreCommand(params)).toContain("--drop");
 	});
@@ -71,6 +77,7 @@ describe("DB_DUMP_CONFIG", () => {
 		expect(dump).toContain(`-d 'weird db'`);
 		expect(dump).toContain(`-U 'us'\\''er'`);
 		const mysqlDump = DB_DUMP_CONFIG.mysql.dumpCommand(nasty);
-		expect(mysqlDump).toContain(`-p'p a'\\''ss'`);
+		expect(mysqlDump).not.toContain("p a");
+		expect(mysqlDump).toContain(`-u 'us'\\''er'`);
 	});
 });

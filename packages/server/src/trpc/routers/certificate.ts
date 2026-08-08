@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import { certificates, generateId, servers } from "../../db/schema";
 import { getOrganizationId } from "../../modules/application";
+import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { assertCapability } from "../../modules/projects";
 import {
 	getCertificatesDir,
@@ -131,6 +132,9 @@ export const certificateRouter = router({
 			const serverId = input.serverId ?? null;
 			if (serverId) {
 				await assertServerAccess(serverId, organizationId);
+			} else {
+				// Host Traefik cert store is instance-wide.
+				await assertInstanceAdmin(ctx.session);
 			}
 
 			const certificateId = generateId();
@@ -183,6 +187,8 @@ export const certificateRouter = router({
 			const nextServerId = input.serverId !== undefined ? input.serverId : existing.serverId;
 			if (nextServerId) {
 				await assertServerAccess(nextServerId, organizationId);
+			} else {
+				await assertInstanceAdmin(ctx.session);
 			}
 
 			// Re-materialize the files when the PEM data or the target server changed.
@@ -221,6 +227,9 @@ export const certificateRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "certificates.manage");
 		const certificate = await assertCertificateAccess(input.certificateId, organizationId);
+		if (!certificate.serverId) {
+			await assertInstanceAdmin(ctx.session);
+		}
 
 		await db.delete(certificates).where(eq(certificates.certificateId, input.certificateId));
 		await removeCertificateFiles(certificate.certificateId, certificate.serverId);

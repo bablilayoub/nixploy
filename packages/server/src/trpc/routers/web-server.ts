@@ -26,7 +26,10 @@ async function detectPublicIp(): Promise<string | null> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), 4000);
 	try {
-		const res = await fetch("https://api.ipify.org", { signal: controller.signal });
+		const res = await fetch("https://api.ipify.org", {
+			signal: controller.signal,
+			redirect: "error",
+		});
 		const text = (await res.text()).trim();
 		return /^\d{1,3}(\.\d{1,3}){3}$/.test(text) ? text : null;
 	} catch {

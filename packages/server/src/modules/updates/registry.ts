@@ -114,7 +114,7 @@ export async function fetchRemoteDigest(image: string): Promise<string | null> {
 	try {
 		let authHeader: string | undefined;
 		try {
-			const tokenRes = await fetch(tokenUrl, { signal: controller.signal });
+			const tokenRes = await fetch(tokenUrl, { signal: controller.signal, redirect: "error" });
 			if (tokenRes.ok) {
 				const body = (await tokenRes.json()) as { token?: string; access_token?: string };
 				const token = body.token ?? body.access_token;
@@ -140,6 +140,7 @@ export async function fetchRemoteDigest(image: string): Promise<string | null> {
 		let res = await fetch(manifestUrl, {
 			method: "GET",
 			signal: controller.signal,
+			redirect: "error",
 			headers: {
 				...(authHeader ? { Authorization: authHeader } : {}),
 				Accept: accept,
@@ -162,7 +163,10 @@ export async function fetchRemoteDigest(image: string): Promise<string | null> {
 					}
 					assertPublicHostname(realmUrl.hostname.replace(/:\d+$/, ""));
 					const challengeUrl = `${realm}?service=${encodeURIComponent(service ?? ref.registry)}&scope=${encodeURIComponent(scope)}`;
-					const tokenRes = await fetch(challengeUrl, { signal: controller.signal });
+					const tokenRes = await fetch(challengeUrl, {
+						signal: controller.signal,
+						redirect: "error",
+					});
 					if (tokenRes.ok) {
 						const body = (await tokenRes.json()) as { token?: string; access_token?: string };
 						const token = body.token ?? body.access_token;
@@ -170,6 +174,7 @@ export async function fetchRemoteDigest(image: string): Promise<string | null> {
 							res = await fetch(manifestUrl, {
 								method: "GET",
 								signal: controller.signal,
+								redirect: "error",
 								headers: { Authorization: `Bearer ${token}`, Accept: accept },
 							});
 						}

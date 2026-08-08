@@ -190,6 +190,8 @@ export const monitoringRouter = router({
 		.input(z.object({ serverId: z.string().min(1).optional() }).optional())
 		.query(async ({ ctx, input }) => {
 			if (!input?.serverId) {
+				// Local host metrics are instance-wide recon — not org-scoped.
+				await assertInstanceAdmin(ctx.session);
 				return await getLocalServerStats();
 			}
 			const organizationId = await getOrganizationId(ctx.session);

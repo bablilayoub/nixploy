@@ -66,6 +66,7 @@ export const securityRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 			try {
 				assertBasicAuthUsername(input.username);
@@ -119,6 +120,9 @@ export const securityRouter = router({
 				input.securityId,
 				organizationId,
 			);
+			if (input.password) {
+				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			}
 			if (input.username) {
 				try {
 					assertBasicAuthUsername(input.username);

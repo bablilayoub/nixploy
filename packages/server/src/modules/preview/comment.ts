@@ -62,6 +62,7 @@ async function jsonFetch(
 			: { Authorization: `${tokenScheme} ${token}` };
 	const response = await fetch(url, {
 		...rest,
+		redirect: rest.redirect ?? "error",
 		headers: {
 			"content-type": "application/json",
 			accept: "application/json",
@@ -70,10 +71,7 @@ async function jsonFetch(
 		},
 	});
 	if (!response.ok) {
-		const text = await response.text().catch(() => "");
-		throw new Error(
-			`${response.status} ${response.statusText}${text ? `: ${text.slice(0, 200)}` : ""}`,
-		);
+		throw new Error(`${response.status} ${response.statusText}`);
 	}
 	if (response.status === 204) return null;
 	return await response.json().catch(() => null);

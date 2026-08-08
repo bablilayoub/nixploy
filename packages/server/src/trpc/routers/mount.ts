@@ -14,6 +14,7 @@ import {
 } from "../../modules/application";
 import { resolveFileMountPath } from "../../modules/application/paths";
 import { auditFromSession } from "../../modules/audit";
+import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { PROTECTED_VOLUMES } from "../../modules/docker/protected";
 import { assertCapability, hasCapability } from "../../modules/projects";
 import { getConfigDir } from "../../modules/traefik/paths";
@@ -53,6 +54,13 @@ const BLOCKED_HOST_PATH_PREFIXES = [
 	"/srv",
 	"/mnt",
 	"/media",
+	"/data",
+	"/nix",
+	"/workspace",
+	"/Applications",
+	"/Library",
+	"/System",
+	"/private",
 ] as const;
 
 /**
@@ -141,7 +149,7 @@ const validateMountFields = (input: {
 	}
 };
 
-const assertSafeVolumeName = (volumeName: string | null | undefined) => {
+const assertSafeVolumeName = (volumeName: string | null | undefined, appName: string) => {
 	if (!volumeName) return;
 	try {
 		assertDockerVolumeName(volumeName);
@@ -155,6 +163,17 @@ const assertSafeVolumeName = (volumeName: string | null | undefined) => {
 		throw new TRPCError({
 			code: "FORBIDDEN",
 			message: `Volume "${volumeName}" is a Nixploy platform volume and cannot be mounted`,
+		});
+	}
+	// Prevent cross-tenant attach: only volumes owned by this app.
+	const owned =
+		volumeName === appName ||
+		volumeName.startsWith(`${appName}_`) ||
+		volumeName.startsWith(`${appName}-`);
+	if (!owned) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: `Volume "${volumeName}" must be scoped to this application (name "${appName}", or prefix "${appName}_" / "${appName}-")`,
 		});
 	}
 };
@@ -227,10 +246,14 @@ export const mountRouter = router({
 			if (input.type === "file" && input.content !== undefined) {
 				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			}
+			// Bind mounts can expose arbitrary host trees — instance admin only.
+			if (input.type === "bind") {
+				await assertInstanceAdmin(ctx.session);
+			}
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 			validateMountFields(input);
 			if (input.type === "bind") await assertSafeHostPath(input.hostPath);
-			if (input.type === "volume") assertSafeVolumeName(input.volumeName);
+			if (input.type === "volume") assertSafeVolumeName(input.volumeName, application.appName);
 			if (input.type === "file") assertSafeFilePath(application.appName, input.filePath);
 
 			const [mount] = await db
@@ -301,9 +324,12 @@ export const mountRouter = router({
 				filePath: input.filePath !== undefined ? input.filePath : mount.filePath,
 				content: input.content !== undefined ? input.content : mount.content,
 			};
+			if (next.type === "bind" || mount.type === "bind") {
+				await assertInstanceAdmin(ctx.session);
+			}
 			validateMountFields(next);
 			if (next.type === "bind") await assertSafeHostPath(next.hostPath);
-			if (next.type === "volume") assertSafeVolumeName(next.volumeName);
+			if (next.type === "volume") assertSafeVolumeName(next.volumeName, application.appName);
 			if (next.type === "file") assertSafeFilePath(application.appName, next.filePath);
 
 			const [updated] = await db

@@ -96,9 +96,6 @@ async function verifyAndExtractGithub(
 ): Promise<ExtractedWebhook> {
 	const event = header(headers, "x-github-event") ?? "";
 	const signature = header(headers, "x-hub-signature-256") ?? "";
-	if (event === "ping") {
-		throw new WebhookIgnored("github ping event");
-	}
 
 	// Verify the signature against every configured github app; the first
 	// matching secret wins (an instance can host several GitHub Apps). When
@@ -120,6 +117,10 @@ async function verifyAndExtractGithub(
 	}
 	if (!verified) {
 		throw new WebhookUnauthorized("github signature verification failed");
+	}
+
+	if (event === "ping") {
+		throw new WebhookIgnored("github ping event");
 	}
 
 	const payload = JSON.parse(rawBody);

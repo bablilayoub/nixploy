@@ -11,6 +11,8 @@ export function redactApplicationSecrets<T>(row: T): T {
 		env: null,
 		buildArgs: null,
 		password: null,
+		dockerfile: null,
+		command: null,
 	};
 	const environment = source.environment as
 		| ({ env?: string | null; project?: Record<string, unknown> } & Record<string, unknown>)
@@ -27,7 +29,11 @@ export function redactApplicationSecrets<T>(row: T): T {
 
 export function redactComposeSecrets<T>(row: T): T {
 	const source = row as Record<string, unknown>;
-	const next: Record<string, unknown> = { ...source, env: null };
+	const next: Record<string, unknown> = {
+		...source,
+		env: null,
+		composeFile: null,
+	};
 	const environment = source.environment as
 		| ({ env?: string | null; project?: Record<string, unknown> } & Record<string, unknown>)
 		| null
@@ -42,18 +48,38 @@ export function redactComposeSecrets<T>(row: T): T {
 }
 
 export function redactDatabaseSecrets<T extends Record<string, unknown>>(row: T): T {
-	const next: Record<string, unknown> = { ...row, env: null, databasePassword: null };
+	const next: Record<string, unknown> = {
+		...row,
+		env: null,
+		databasePassword: null,
+		command: null,
+	};
 	if ("databaseRootPassword" in row) {
 		next.databaseRootPassword = null;
 	}
 	return next as T;
 }
 
-export function redactDestinationSecrets<T extends { secretAccessKey?: string | null }>(
+export function redactDestinationSecrets<
+	T extends { secretAccessKey?: string | null; accessKey?: string | null },
+>(
 	destination: T,
-): Omit<T, "secretAccessKey"> {
-	const { secretAccessKey: _secretAccessKey, ...rest } = destination;
-	return rest;
+): Omit<T, "secretAccessKey" | "accessKey"> & {
+	accessKey: null;
+	accessKeyConfigured: boolean;
+} {
+	const { secretAccessKey: _secretAccessKey, accessKey, ...rest } = destination;
+	return {
+		...(rest as Omit<T, "secretAccessKey" | "accessKey">),
+		accessKey: null,
+		accessKeyConfigured: Boolean(accessKey),
+	};
+}
+
+export function redactScheduleSecrets<
+	T extends { command?: string | null; script?: string | null },
+>(row: T): T {
+	return { ...row, command: null, script: null };
 }
 
 export function redactEnvironmentServicesSecrets<

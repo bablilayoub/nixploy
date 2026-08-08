@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { desc, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, compose, deployments, domains } from "../../db/schema";
+import { redactSensitiveText } from "../../utils/public-url";
 import { completeChat } from "./client";
 import { writeCachedExplanation } from "./explanation-cache";
 import { validateComposeYaml } from "./generate-compose";
@@ -18,13 +19,34 @@ export interface ExplainFailureResult {
 	deploymentId: string;
 }
 
-function redactSecrets(text: string, secrets: string[]): string {
-	let out = text;
-	for (const secret of secrets) {
-		if (secret.length < 6) continue;
-		out = out.split(secret).join("[REDACTED]");
+function collectEnvSecrets(...blobs: Array<string | null | undefined>): string[] {
+	const secrets: string[] = [];
+	for (const blob of blobs) {
+		if (!blob) continue;
+		for (const line of blob.split("\n")) {
+			const idx = line.indexOf("=");
+			if (idx > 0) {
+				const value = line.slice(idx + 1).trim();
+				if (value.length >= 6) secrets.push(value);
+			}
+		}
 	}
-	return out;
+	return secrets;
+}
+
+function redactSecrets(text: string, secrets: string[]): string {
+	return redactSensitiveText(text, secrets);
+}
+
+function redactComposeYamlForLlm(yaml: string, secrets: string[]): string {
+	const scrubbed = redactSecrets(yaml, secrets);
+	// Drop obvious inline secret assignments from compose env blocks.
+	return scrubbed
+		.replace(
+			/^(\s*(?:-\s*)?(?:PASSWORD|SECRET|TOKEN|API_KEY|ACCESS_KEY|PRIVATE_KEY|DATABASE_URL)[^=:\n]*)[=:][^\n]*$/gim,
+			"$1=[REDACTED]",
+		)
+		.slice(0, 6_000);
 }
 
 async function loadDeploymentForOrg(deploymentId: string, organizationId: string) {
@@ -87,16 +109,25 @@ export async function explainDeploymentFailure(
 		serviceName = deployment.application.name;
 		buildType = deployment.application.buildType;
 		serviceKind = "application";
-		if (deployment.application.env) {
-			for (const line of deployment.application.env.split("\n")) {
-				const idx = line.indexOf("=");
-				if (idx > 0) secrets.push(line.slice(idx + 1).trim());
-			}
-		}
+		secrets.push(
+			...collectEnvSecrets(
+				deployment.application.env,
+				deployment.application.environment?.env,
+				deployment.application.environment?.project?.env,
+				deployment.application.buildArgs,
+			),
+		);
 	} else if (deployment.compose) {
 		serviceName = deployment.compose.name;
 		buildType = "compose";
 		serviceKind = "compose";
+		secrets.push(
+			...collectEnvSecrets(
+				deployment.compose.env,
+				deployment.compose.environment?.env,
+				deployment.compose.environment?.project?.env,
+			),
+		);
 	}
 
 	const safeLog = redactSecrets(logTail, secrets);
@@ -274,11 +305,10 @@ ${context}`;
 			limit: 5,
 		});
 
-		const filePreview = (row.composeFile ?? "").trim();
+		const secrets = collectEnvSecrets(row.env, row.environment?.env, row.environment?.project?.env);
 		const fileSnippet =
-			filePreview.length > 6_000
-				? `${filePreview.slice(0, 6_000)}\n…(truncated)`
-				: filePreview || "(empty — help the operator draft one)";
+			redactComposeYamlForLlm(row.composeFile ?? "", secrets) ||
+			"(empty — help the operator draft one)";
 
 		const context = `Compose "${row.name}" (${row.appName})
 Status: ${row.status}

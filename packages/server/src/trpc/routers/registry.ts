@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import {
 	createRegistry,
 	findRegistryById,
@@ -10,6 +11,7 @@ import {
 	updateRegistryById,
 } from "../../modules/cluster";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertSafeOutboundUrl } from "../../utils/public-url";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -17,6 +19,25 @@ type Session = NonNullable<TRPCContext["session"]>;
 
 async function getOrganizationId(session: Session): Promise<string> {
 	return await resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
+}
+
+/** Normalize registry host/URL and block metadata / private SSRF targets. */
+async function assertSafeRegistryUrl(registryUrl: string, registryType?: "cloud" | "selfHosted") {
+	const trimmed = registryUrl.trim();
+	if (!trimmed) return;
+	const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+	const allowPrivate = registryType === "selfHosted";
+	try {
+		await assertSafeOutboundUrl(withScheme, {
+			allowPrivate,
+			allowHttp: allowPrivate,
+		});
+	} catch (error) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: error instanceof Error ? `Registry URL: ${error.message}` : "Invalid registry URL",
+		});
+	}
 }
 
 const registryIdInput = z.object({ registryId: z.string().min(1) });
@@ -58,6 +79,9 @@ export const registryRouter = router({
 	create: protectedProcedure.input(createRegistryInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "registries.manage");
+		if (input.registryUrl) {
+			await assertSafeRegistryUrl(input.registryUrl, input.registryType);
+		}
 		const created = await createRegistry(input, organizationId);
 		if (!created) {
 			throw new TRPCError({
@@ -75,6 +99,16 @@ export const registryRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "registries.manage");
 			const { registryId, ...values } = input;
+			if (values.registryUrl) {
+				const existing = await findRegistryById(registryId, organizationId);
+				if (!existing) {
+					throw new TRPCError({ code: "NOT_FOUND", message: "Registry not found" });
+				}
+				await assertSafeRegistryUrl(
+					values.registryUrl,
+					values.registryType ?? existing.registryType ?? undefined,
+				);
+			}
 			const updated = await updateRegistryById(registryId, values, organizationId);
 			if (!updated) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Registry not found" });
@@ -102,11 +136,20 @@ export const registryRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "registries.manage");
+			const row = await findRegistryById(input.registryId, organizationId);
+			if (!row) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Registry not found" });
+			}
+			if (row.registryUrl) {
+				await assertSafeRegistryUrl(row.registryUrl, row.registryType ?? undefined);
+			}
 			if (input.serverId) {
 				const server = await findServerById(input.serverId, organizationId);
 				if (!server) {
 					throw new TRPCError({ code: "NOT_FOUND", message: "Server not found" });
 				}
+			} else {
+				await assertInstanceAdmin(ctx.session);
 			}
 			return await testRegistry({
 				registryId: input.registryId,

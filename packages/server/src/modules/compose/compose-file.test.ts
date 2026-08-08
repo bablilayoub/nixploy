@@ -97,6 +97,43 @@ volumes:
 		).toThrow(/external/);
 	});
 
+	it("rejects env_file host path reads", () => {
+		expect(() =>
+			assertSafeComposeSpec(
+				parseComposeFile(`services:
+  x:
+    image: alpine
+    env_file: [/etc/nixploy/secrets.env]
+`),
+			),
+		).toThrow(/env_file/);
+	});
+
+	it("rejects secrets/configs environment and external", () => {
+		expect(() =>
+			assertSafeComposeSpec(
+				parseComposeFile(`services:
+  x:
+    image: alpine
+secrets:
+  k:
+    environment: ENCRYPTION_KEY
+`),
+			),
+		).toThrow(/environment/);
+		expect(() =>
+			assertSafeComposeSpec(
+				parseComposeFile(`services:
+  x:
+    image: alpine
+configs:
+  c:
+    external: true
+`),
+			),
+		).toThrow(/external/);
+	});
+
 	it("rejects extra_hosts and sysctls unless host-privileged", () => {
 		expect(() =>
 			assertSafeComposeSpec(

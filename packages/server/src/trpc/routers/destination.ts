@@ -5,7 +5,11 @@ import { z } from "zod";
 import { db } from "../../db";
 import { destinations } from "../../db/schema";
 import { testDestination } from "../../modules/backups/runner";
-import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
+import {
+	assertCapability,
+	hasCapability,
+	resolveCallerOrganizationId,
+} from "../../modules/projects";
 import {
 	assertPublicIp,
 	assertSafeOutboundUrl,
@@ -13,6 +17,7 @@ import {
 } from "../../utils/public-url";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
+import { redactDestinationSecrets } from "../redact-secrets";
 
 type Session = NonNullable<TRPCContext["session"]>;
 
@@ -84,16 +89,24 @@ const createDestinationInput = z.object({
 });
 
 /**
- * Response shape: the S3 secret key is write-only. The access key stays
- * visible — it is an identifier the edit form prefills, not a credential on
- * its own.
+ * Response shape: secret key is always write-only. Access key is an
+ * identifier for the edit form but still gated behind secrets.read /
+ * destinations.manage so viewers cannot harvest credentials.
  */
-const publicDestination = <T extends { secretAccessKey: string }>(
+async function publicDestination<T extends { secretAccessKey: string; accessKey: string }>(
 	destination: T,
-): Omit<T, "secretAccessKey"> => {
-	const { secretAccessKey: _secretAccessKey, ...rest } = destination;
-	return rest;
-};
+	userId: string,
+	organizationId: string,
+) {
+	const canSee =
+		(await hasCapability(userId, organizationId, "secrets.read")) ||
+		(await hasCapability(userId, organizationId, "destinations.manage"));
+	if (canSee) {
+		const { secretAccessKey: _secretAccessKey, ...rest } = destination;
+		return rest;
+	}
+	return redactDestinationSecrets(destination);
+}
 
 export const destinationRouter = router({
 	/** All S3 destinations of the caller's organization. */
@@ -103,13 +116,19 @@ export const destinationRouter = router({
 			where: eq(destinations.organizationId, organizationId),
 			orderBy: [desc(destinations.createdAt)],
 		});
-		return rows.map(publicDestination);
+		return await Promise.all(
+			rows.map((row) => publicDestination(row, ctx.session.user.id, organizationId)),
+		);
 	}),
 
 	/** A single destination by id. */
 	one: protectedProcedure.input(destinationIdInput).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		return publicDestination(await findDestinationOrThrow(input.destinationId, organizationId));
+		return await publicDestination(
+			await findDestinationOrThrow(input.destinationId, organizationId),
+			ctx.session.user.id,
+			organizationId,
+		);
 	}),
 
 	/** Add an S3-compatible destination (secret key is encrypted at rest). */
@@ -124,7 +143,7 @@ export const destinationRouter = router({
 		if (!row) {
 			throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 		}
-		return publicDestination(row);
+		return await publicDestination(row, ctx.session.user.id, organizationId);
 	}),
 
 	/** Update destination credentials/settings. */
@@ -148,15 +167,17 @@ export const destinationRouter = router({
 					),
 				)
 				.returning();
-			return row ? publicDestination(row) : row;
+			return row ? await publicDestination(row, ctx.session.user.id, organizationId) : row;
 		}),
 
 	/** Remove a destination (backups pointing at it cascade-delete). */
 	remove: protectedProcedure.input(destinationIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "destinations.manage");
-		const row = publicDestination(
+		const row = await publicDestination(
 			await findDestinationOrThrow(input.destinationId, organizationId),
+			ctx.session.user.id,
+			organizationId,
 		);
 		await db
 			.delete(destinations)

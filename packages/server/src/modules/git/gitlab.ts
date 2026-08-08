@@ -98,6 +98,7 @@ function gitlabApi(row: GitlabRow, path: string) {
 	const base = row.gitlabUrl.replace(/\/$/, "");
 	return fetch(`${base}/api/v4${path}`, {
 		headers: { "PRIVATE-TOKEN": row.accessToken ?? "" },
+		redirect: "error",
 	});
 }
 

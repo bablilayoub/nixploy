@@ -108,7 +108,7 @@ export function DestinationsView() {
 			setEditBucket(editing.bucket);
 			setEditRegion(editing.region);
 			setEditEndpoint(editing.endpoint);
-			setEditAccessKey(editing.accessKey);
+			setEditAccessKey(editing.accessKey ?? "");
 			setEditSecretAccessKey("");
 		}
 	}, [editing]);

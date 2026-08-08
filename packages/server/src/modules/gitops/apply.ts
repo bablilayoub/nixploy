@@ -14,6 +14,7 @@ import {
 } from "../../db/schema";
 import {
 	assertComposeServiceName,
+	assertSafeDockerImageRef,
 	assertSafePublishedPort,
 	assertTraefikHost,
 	assertTraefikPath,
@@ -305,6 +306,9 @@ const applyApplication = async (
 			(patch as Record<string, unknown>)[field] = value;
 		}
 	}
+	if (typeof patch.dockerImage === "string" && patch.dockerImage.length > 0) {
+		patch.dockerImage = assertSafeDockerImageRef(patch.dockerImage);
+	}
 	if (Object.keys(patch).length > 0) {
 		await updateApplication(applicationId, patch);
 	}
@@ -356,6 +360,11 @@ const applyCompose = async (
 	}
 
 	if (desired.composeFile !== undefined && composeRow.sourceType === "raw") {
+		if (composeRow.hostPrivileged) {
+			throw new Error(
+				`Compose "${desired.name}" is host-privileged; update its compose file as instance admin in the UI (GitOps cannot rewrite docker.sock stacks)`,
+			);
+		}
 		await saveComposeFile(composeRow, desired.composeFile);
 	}
 
@@ -379,13 +388,16 @@ const applyDatabase = async (
 		const password = randomPassword();
 		const rootPassword = randomPassword();
 		const config = DATABASE_CONFIGS[kind];
+		const dockerImage = assertSafeDockerImageRef(
+			(desired.dockerImage as string | undefined) ?? config.defaultImage,
+		);
 		const base = {
 			name: String(desired.name),
 			description: (desired.description as string | null | undefined) ?? null,
 			environmentId,
 			appName:
 				(desired.appName as string | undefined) ?? generateDatabaseAppName(String(desired.name)),
-			dockerImage: (desired.dockerImage as string | undefined) ?? config.defaultImage,
+			dockerImage,
 			externalPort: (() => {
 				const port = (desired.externalPort as number | null | undefined) ?? null;
 				if (port != null) assertSafePublishedPort(port, "externalPort");
@@ -463,6 +475,9 @@ const applyDatabase = async (
 	}
 	if (typeof patch.externalPort === "number") {
 		assertSafePublishedPort(patch.externalPort, "externalPort");
+	}
+	if (typeof patch.dockerImage === "string" && patch.dockerImage.length > 0) {
+		patch.dockerImage = assertSafeDockerImageRef(patch.dockerImage);
 	}
 	if (Object.keys(patch).length > 0) {
 		await db.update(table).set(patch).where(eq(table[idColumn], existing[idColumn]));

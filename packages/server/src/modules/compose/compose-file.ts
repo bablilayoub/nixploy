@@ -200,9 +200,25 @@ function assertSafeConfigsOrSecrets(kind: "configs" | "secrets", value: unknown)
 	if (!value || typeof value !== "object" || Array.isArray(value)) return;
 	for (const [name, def] of Object.entries(value as Record<string, unknown>)) {
 		if (!def || typeof def !== "object" || Array.isArray(def)) continue;
-		const file = (def as Record<string, unknown>).file ?? (def as Record<string, unknown>).File;
+		const record = def as Record<string, unknown>;
+		const file = record.file ?? record.File;
 		if (typeof file === "string" && file.trim()) {
 			throw new Error(`Compose ${kind} "${name}" must not use file: (host path reads are blocked)`);
+		}
+		const environment = record.environment ?? record.Environment;
+		if (typeof environment === "string" && environment.trim()) {
+			throw new Error(
+				`Compose ${kind} "${name}" must not use environment: (host env reads are blocked)`,
+			);
+		}
+		if (
+			record.external === true ||
+			typeof record.external === "string" ||
+			(typeof record.external === "object" && record.external !== null)
+		) {
+			throw new Error(
+				`Compose ${kind} "${name}" must not use external: (cross-stack attach is blocked)`,
+			);
 		}
 	}
 }
@@ -236,6 +252,11 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 				`Compose service "${serviceName}" must not use build: (host context / dockerfile_inline reads are blocked)`,
 			);
 		}
+		if (service.env_file !== undefined && service.env_file !== null) {
+			throw new Error(
+				`Compose service "${serviceName}" must not use env_file: (host path reads are blocked)`,
+			);
+		}
 
 		// Env interpolation runs after this check — reject ${…} in dangerous fields.
 		const dangerousKeys = [
@@ -256,6 +277,7 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 			"volumes",
 			"extra_hosts",
 			"sysctls",
+			"env_file",
 		] as const;
 		for (const key of dangerousKeys) {
 			const value = service[key];

@@ -196,6 +196,7 @@ export const applicationRouter = router({
 					),
 				});
 				if (!environment) {
+					await assertCapability(ctx.session.user.id, organizationId, "project.write");
 					const [created] = await db
 						.insert(environments)
 						.values({ name: environmentName, projectId: project.projectId })

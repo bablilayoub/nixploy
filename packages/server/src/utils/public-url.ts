@@ -156,8 +156,8 @@ export async function assertSafeOutboundUrl(
 	return parsed;
 }
 
-/** SMTP host: hostname only (no scheme). Blocks metadata; optionally allows LAN. */
-export function assertSafeSmtpHostname(hostname: string, allowPrivate = true): void {
+/** SMTP host: hostname only (no scheme). Blocks metadata; resolves public DNS. */
+export async function assertSafeSmtpHostname(hostname: string, allowPrivate = true): Promise<void> {
 	const host = hostname.trim().toLowerCase();
 	if (!host || host.includes("/") || host.includes(" ")) {
 		throw new Error("Invalid SMTP server hostname");
@@ -165,15 +165,29 @@ export function assertSafeSmtpHostname(hostname: string, allowPrivate = true): v
 	if (isCloudMetadataHostname(host)) {
 		throw new Error("SMTP server must not target cloud metadata");
 	}
-	if (allowPrivate) {
-		try {
-			assertPublicHostname(host);
-		} catch {
-			return;
+	let hostIsPrivate = false;
+	try {
+		assertPublicHostname(host);
+	} catch {
+		hostIsPrivate = true;
+	}
+	if (hostIsPrivate) {
+		if (!allowPrivate) {
+			throw new Error("SMTP server host is not allowed");
 		}
 		return;
 	}
-	assertPublicHostname(host);
+	if (!isIP(host)) {
+		const records = await lookup(host, { all: true, verbatim: true });
+		if (records.length === 0) {
+			throw new Error("SMTP server host could not be resolved");
+		}
+		for (const record of records) {
+			assertPublicIp(record.address);
+		}
+	} else {
+		assertPublicIp(host);
+	}
 }
 
 /**

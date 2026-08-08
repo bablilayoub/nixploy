@@ -18,7 +18,7 @@ import {
 	postgres,
 	type volumeBackups,
 } from "../../db/schema";
-import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { execAsync, execAsyncRemote, execAsyncWithStdin } from "../../utils/exec";
 import { assertDockerVolumeName } from "../../utils/validators";
 import { shellQuote } from "../compose/paths";
 import { PROTECTED_VOLUMES } from "../docker/protected";
@@ -227,12 +227,31 @@ export async function runBackup(backupRow: BackupRow): Promise<{ key: string }> 
 	const linked = await findLinkedDatabase(backupRow);
 	const containerId = await findContainerId(backupRow.appName, linked.serverId);
 
-	const dumpCommand = engine.dumpCommand(dumpParams(backupRow, linked));
+	const params = dumpParams(backupRow, linked);
+	const dumpCommand = engine.dumpCommand(params);
 	if (!/^[a-f0-9]{12,64}$/i.test(containerId)) {
 		throw new Error(`Unexpected container id for ${backupRow.appName}`);
 	}
-	const pipeline = `docker exec ${shellQuote(containerId)} sh -c ${sq(dumpCommand)} | gzip | base64`;
-	const encoded = await run(linked.serverId, pipeline);
+	const passwordEnv = engine.passwordEnv?.(params) ?? {};
+	const passwordEntries = Object.entries(passwordEnv);
+	let encoded: string;
+	if (passwordEntries.length > 0) {
+		// Password on stdin (first line) — never on docker/ps argv.
+		const exports = passwordEntries.map(([key]) => key).join(" ");
+		const reader = passwordEntries.map(([key]) => `IFS= read -r ${key}`).join("; ");
+		const inner = `${reader}; export ${exports}; ${dumpCommand}`;
+		const pipeline = `docker exec -i ${shellQuote(containerId)} sh -c ${sq(inner)} | gzip | base64`;
+		encoded = await execAsyncWithStdin(
+			pipeline,
+			`${passwordEntries.map(([, v]) => v).join("\n")}\n`,
+			{
+				serverId: linked.serverId,
+			},
+		);
+	} else {
+		const pipeline = `docker exec ${shellQuote(containerId)} sh -c ${sq(dumpCommand)} | gzip | base64`;
+		encoded = await run(linked.serverId, pipeline);
+	}
 	const archive = Buffer.from(encoded.replace(/\s+/g, ""), "base64");
 	if (archive.length === 0) {
 		throw new Error(`Dump of ${backupRow.appName} produced no data`);
@@ -289,13 +308,43 @@ export async function restoreBackup(backupRow: BackupRow, key?: string): Promise
 	const linked = await findLinkedDatabase(backupRow);
 	const containerId = await findContainerId(backupRow.appName, linked.serverId);
 
-	const restoreCommand = engine.restoreCommand(dumpParams(backupRow, linked));
+	const params = dumpParams(backupRow, linked);
+	const restoreCommand = engine.restoreCommand(params);
 	if (!/^[a-f0-9]{12,64}$/i.test(containerId)) {
 		throw new Error(`Unexpected container id for ${backupRow.appName}`);
 	}
-	// base64 contains no shell-special characters, so it can be inlined safely.
-	const pipeline = `echo ${archive.toString("base64")} | base64 -d | gunzip | docker exec -i ${shellQuote(containerId)} sh -c ${sq(restoreCommand)}`;
-	await run(linked.serverId, pipeline);
+	const passwordEnv = engine.passwordEnv?.(params) ?? {};
+	const passwordEntries = Object.entries(passwordEnv);
+	const archiveB64 = archive.toString("base64");
+	if (passwordEntries.length > 0) {
+		const passFile = "/tmp/.nixploy-db-pass";
+		await execAsyncWithStdin(
+			`docker exec -i ${shellQuote(containerId)} tee ${passFile} >/dev/null`,
+			`${passwordEntries.map(([, value]) => value).join("\n")}\n`,
+			{ serverId: linked.serverId },
+		);
+		try {
+			const exports = passwordEntries
+				.map(([key], index) =>
+					index === 0
+						? `${key}=$(head -n 1 ${passFile})`
+						: `${key}=$(sed -n '${index + 1}p' ${passFile})`,
+				)
+				.join("; ");
+			const wrapped = `${exports}; export ${passwordEntries.map(([key]) => key).join(" ")}; ${restoreCommand}; rm -f ${passFile}`;
+			await execAsyncWithStdin(
+				`base64 -d | gunzip | docker exec -i ${shellQuote(containerId)} sh -c ${sq(wrapped)}`,
+				archiveB64,
+				{ serverId: linked.serverId },
+			);
+		} finally {
+			await run(linked.serverId, `docker exec ${shellQuote(containerId)} rm -f ${passFile}`);
+		}
+	} else {
+		// base64 contains no shell-special characters, so it can be inlined safely.
+		const pipeline = `echo ${archiveB64} | base64 -d | gunzip | docker exec -i ${shellQuote(containerId)} sh -c ${sq(restoreCommand)}`;
+		await run(linked.serverId, pipeline);
+	}
 	return { key: targetKey };
 }
 

@@ -49,7 +49,7 @@ async function dockerHubTagExists(
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), 15_000);
 	try {
-		const res = await fetch(url, { signal: controller.signal });
+		const res = await fetch(url, { signal: controller.signal, redirect: "error" });
 		if (res.status === 200) return "ok";
 		if (res.status === 404) return "missing";
 		if (res.status === 429) return "rate";

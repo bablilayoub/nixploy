@@ -3,11 +3,27 @@ import { z } from "zod";
 import {
 	appNameSchema,
 	assertComposeServiceName,
+	assertSafeDockerImageRef,
 	assertTraefikHost,
 	assertTraefikPath,
 } from "../../utils/validators";
 
 export const NIXPLOY_STACK_VERSION = 1;
+
+const safeDockerImageSchema = z
+	.string()
+	.min(1)
+	.transform((value, ctx) => {
+		try {
+			return assertSafeDockerImageRef(value);
+		} catch (error) {
+			ctx.addIssue({
+				code: "custom",
+				message: error instanceof Error ? error.message : "Invalid docker image",
+			});
+			return z.NEVER;
+		}
+	});
 
 export const gitopsDomainSchema = z.object({
 	host: z
@@ -95,7 +111,7 @@ export const gitopsApplicationSchema = z.object({
 	owner: z.string().nullable().optional(),
 	branch: z.string().nullable().optional(),
 	buildPath: z.string().optional(),
-	dockerImage: z.string().nullable().optional(),
+	dockerImage: safeDockerImageSchema.nullable().optional(),
 	replicas: z.number().int().min(0).optional(),
 	command: z.string().nullable().optional(),
 	memoryReservation: z.string().nullable().optional(),
@@ -130,7 +146,7 @@ const databaseBaseSchema = z.object({
 	environment: z.string().min(1),
 	appName: appNameSchema.optional(),
 	description: z.string().nullable().optional(),
-	dockerImage: z.string().optional(),
+	dockerImage: safeDockerImageSchema.optional(),
 	externalPort: z.number().int().min(1).max(65535).nullable().optional(),
 	command: z.string().nullable().optional(),
 	memoryReservation: z.string().nullable().optional(),

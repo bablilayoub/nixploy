@@ -10,36 +10,90 @@ import { getSession } from "@/lib/auth-server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const SETUP_COOKIE = "nixploy_github_app_setup";
+const SETUP_MAX_AGE_SEC = 600;
+
+function appOrigin(request: Request): string {
+	const configured =
+		process.env.BETTER_AUTH_URL?.trim() ||
+		process.env.NIXPLOY_BASE_URL?.trim() ||
+		process.env.NEXT_PUBLIC_APP_URL?.trim();
+	if (configured) {
+		try {
+			return new URL(configured).origin;
+		} catch {
+			// fall through
+		}
+	}
+	return new URL(request.url).origin;
+}
+
 /**
  * GitHub App manifest callback. GitHub redirects here with `code` (+ `state`
  * when we submitted it as a form field). We exchange the code for App
  * credentials and send the user back to Settings → Git providers.
+ *
+ * Unauthenticated visits stash `code`/`state` in an httpOnly cookie (never on
+ * the login URL) and resume after sign-in.
  */
 export async function GET(request: Request) {
 	const url = new URL(request.url);
-	const code = url.searchParams.get("code");
+	const origin = appOrigin(request);
+	const codeParam = url.searchParams.get("code");
 	const stateParam = url.searchParams.get("state");
-	const settingsUrl = new URL("/dashboard/settings/git-providers", url.origin);
+	const settingsUrl = new URL("/dashboard/settings/git-providers", origin);
+
+	const session = await getSession();
+	const cookieHeader = request.headers.get("cookie") ?? "";
+	const cookieMatch = cookieHeader
+		.split(";")
+		.map((part) => part.trim())
+		.find((part) => part.startsWith(`${SETUP_COOKIE}=`));
+	let stashed: { code: string; state: string } | null = null;
+	if (cookieMatch) {
+		try {
+			stashed = JSON.parse(decodeURIComponent(cookieMatch.slice(SETUP_COOKIE.length + 1))) as {
+				code: string;
+				state: string;
+			};
+		} catch {
+			stashed = null;
+		}
+	}
+
+	const code = codeParam ?? stashed?.code ?? null;
+	const state = stateParam ?? stashed?.state ?? null;
+
+	if (!session) {
+		if (!code || !state) {
+			settingsUrl.searchParams.set("githubError", code ? "missing_state" : "missing_code");
+			return NextResponse.redirect(settingsUrl);
+		}
+		const login = new URL("/login", origin);
+		login.searchParams.set("next", "/api/github/callback");
+		const response = NextResponse.redirect(login);
+		response.cookies.set(SETUP_COOKIE, encodeURIComponent(JSON.stringify({ code, state })), {
+			httpOnly: true,
+			secure: origin.startsWith("https:"),
+			sameSite: "lax",
+			maxAge: SETUP_MAX_AGE_SEC,
+			path: "/",
+		});
+		return response;
+	}
 
 	if (!code) {
 		settingsUrl.searchParams.set("githubError", "missing_code");
 		return NextResponse.redirect(settingsUrl);
 	}
-	if (!stateParam) {
+	if (!state) {
 		settingsUrl.searchParams.set("githubError", "missing_state");
 		return NextResponse.redirect(settingsUrl);
 	}
 
-	const session = await getSession();
-	if (!session) {
-		const login = new URL("/login", url.origin);
-		login.searchParams.set("callbackUrl", `${url.pathname}${url.search}`);
-		return NextResponse.redirect(login);
-	}
-
 	try {
-		const state = decodeGithubAppState(stateParam);
-		if (!state.githubId) {
+		const decoded = decodeGithubAppState(state);
+		if (!decoded.githubId) {
 			throw new Error("GitHub App state is missing githubId");
 		}
 		const organizationId = await resolveCallerOrganizationId(
@@ -48,16 +102,20 @@ export async function GET(request: Request) {
 		);
 		await assertCapability(session.user.id, organizationId, "git_providers.manage");
 		await setupGithubApp({
-			githubId: state.githubId,
+			githubId: decoded.githubId,
 			organizationId,
 			code,
-			state: stateParam,
+			state,
 		});
 		settingsUrl.searchParams.set("github", "connected");
-		return NextResponse.redirect(settingsUrl);
+		const response = NextResponse.redirect(settingsUrl);
+		response.cookies.set(SETUP_COOKIE, "", { httpOnly: true, maxAge: 0, path: "/" });
+		return response;
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "GitHub App setup failed";
 		settingsUrl.searchParams.set("githubError", message.slice(0, 200));
-		return NextResponse.redirect(settingsUrl);
+		const response = NextResponse.redirect(settingsUrl);
+		response.cookies.set(SETUP_COOKIE, "", { httpOnly: true, maxAge: 0, path: "/" });
+		return response;
 	}
 }

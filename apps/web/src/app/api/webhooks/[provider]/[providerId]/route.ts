@@ -13,9 +13,45 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const PROVIDERS = new Set<GitWebhookProvider>(["github", "gitlab", "bitbucket", "gitea"]);
+const MAX_BODY_BYTES = 1_048_576;
 
 interface RouteParams {
 	params: Promise<{ provider: string; providerId: string }>;
+}
+
+/** Read the request body with a hard byte cap (do not rely on Content-Length alone). */
+async function readBodyLimited(req: Request, limit: number): Promise<string | Response> {
+	const contentLength = req.headers.get("content-length");
+	if (contentLength != null) {
+		const declared = Number(contentLength);
+		if (!Number.isFinite(declared) || declared < 0) {
+			return Response.json({ message: "Invalid Content-Length" }, { status: 400 });
+		}
+		if (declared > limit) {
+			return Response.json({ message: "Payload too large" }, { status: 413 });
+		}
+	}
+	if (!req.body) return "";
+	const reader = req.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		total += value.byteLength;
+		if (total > limit) {
+			await reader.cancel();
+			return Response.json({ message: "Payload too large" }, { status: 413 });
+		}
+		chunks.push(value);
+	}
+	const merged = new Uint8Array(total);
+	let offset = 0;
+	for (const chunk of chunks) {
+		merged.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return new TextDecoder("utf-8").decode(merged);
 }
 
 /**
@@ -42,7 +78,9 @@ export async function POST(req: Request, { params }: RouteParams) {
 	}
 
 	// Signature verification needs the exact raw body and lowercase headers.
-	const rawBody = await req.text();
+	const rawBodyOrError = await readBodyLimited(req, MAX_BODY_BYTES);
+	if (rawBodyOrError instanceof Response) return rawBodyOrError;
+	const rawBody = rawBodyOrError;
 	const headers: Record<string, string> = {};
 	req.headers.forEach((value, key) => {
 		headers[key] = value;

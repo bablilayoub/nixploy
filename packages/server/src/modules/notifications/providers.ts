@@ -113,6 +113,29 @@ export interface NotifyPayload {
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
+const BLOCKED_CUSTOM_HEADERS = new Set([
+	"host",
+	"content-length",
+	"transfer-encoding",
+	"connection",
+	"keep-alive",
+	"upgrade",
+	"te",
+	"trailer",
+	"proxy-authorization",
+	"proxy-authenticate",
+]);
+
+function sanitizeCustomHeaders(headers: Record<string, string>): Record<string, string> {
+	const out: Record<string, string> = {};
+	for (const [key, value] of Object.entries(headers)) {
+		const lower = key.toLowerCase();
+		if (BLOCKED_CUSTOM_HEADERS.has(lower) || lower.startsWith("content-")) continue;
+		out[key] = value;
+	}
+	return out;
+}
+
 async function postJson(
 	url: string,
 	body: unknown,
@@ -120,7 +143,7 @@ async function postJson(
 ): Promise<void> {
 	const response = await fetch(url, {
 		method: "POST",
-		headers: { "Content-Type": "application/json", ...headers },
+		headers: { "Content-Type": "application/json", ...sanitizeCustomHeaders(headers) },
 		body: JSON.stringify(body),
 		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 		redirect: "error",
@@ -279,6 +302,7 @@ export async function sendTelegramNotification(
 			disable_web_page_preview: true,
 		}),
 		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+		redirect: "error",
 	});
 	if (!response.ok) {
 		throw new Error(`Telegram sendMessage failed: ${response.status}`);
@@ -334,7 +358,7 @@ export async function sendEmailNotification(
 	if (!config.smtpServer || !config.smtpPort) {
 		throw new Error("Email notification requires either a Resend API key or SMTP server/port");
 	}
-	assertSafeSmtpHostname(config.smtpServer);
+	await assertSafeSmtpHostname(config.smtpServer);
 	const transporter = nodemailer.createTransport({
 		host: config.smtpServer,
 		port: config.smtpPort,

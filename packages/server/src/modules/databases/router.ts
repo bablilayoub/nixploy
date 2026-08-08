@@ -7,7 +7,7 @@ import { assertServerInOrganization } from "../../trpc/assert-org-refs";
 import type { TRPCContext } from "../../trpc/init";
 import { protectedProcedure, router } from "../../trpc/init";
 import { redactDatabaseSecrets } from "../../trpc/redact-secrets";
-import { assertSafePublishedPort } from "../../utils/validators";
+import { assertSafeDockerImageRef, assertSafePublishedPort } from "../../utils/validators";
 import { auditFromSession } from "../audit";
 import { assertCapability, hasCapability, resolveCallerOrganizationId } from "../projects";
 import {
@@ -183,16 +183,26 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 		create: protectedProcedure.input(createSchema).mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx);
 			await assertCapability(ctx.session.user.id, organizationId, "service.create");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			await assertEnvironmentAccess(input.environmentId, organizationId);
 			await assertServerInOrganization(input.serverId, organizationId);
 			if (input.externalPort != null) {
 				assertSafePublishedPort(input.externalPort, "externalPort");
 			}
+			let dockerImage: string;
+			try {
+				dockerImage = assertSafeDockerImageRef(input.dockerImage);
+			} catch (error) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: error instanceof Error ? error.message : "Invalid docker image",
+				});
+			}
 			const appName = input.appName ?? generateDatabaseAppName(input.name);
 			try {
 				const inserted = (await db
 					.insert(table)
-					.values({ ...input, appName })
+					.values({ ...input, appName, dockerImage })
 					.returning()) as Row[];
 				const createdRow = inserted[0] as Row;
 				await auditFromSession(ctx, organizationId, {
@@ -237,6 +247,16 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			const { [idField]: _id, ...values } = input as Record<string, unknown>;
 			if (typeof values.externalPort === "number") {
 				assertSafePublishedPort(values.externalPort, "externalPort");
+			}
+			if (typeof values.dockerImage === "string") {
+				try {
+					values.dockerImage = assertSafeDockerImageRef(values.dockerImage);
+				} catch (error) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: error instanceof Error ? error.message : "Invalid docker image",
+					});
+				}
 			}
 			const touchesSecrets =
 				values.databasePassword !== undefined ||

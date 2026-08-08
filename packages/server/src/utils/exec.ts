@@ -1,4 +1,4 @@
-import { exec } from "node:child_process";
+import { exec, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -142,6 +142,110 @@ export async function execAsyncRemote(serverId: string, command: string): Promis
 			.on("error", (err) => {
 				reject(err);
 			})
+			.connect({
+				host: server.ipAddress,
+				port: server.port,
+				username: server.username,
+				privateKey: sshKey.privateKey,
+				readyTimeout: SSH_READY_TIMEOUT_MS,
+				hostVerifier: (key: Buffer) => verifyRemoteHostKey(serverId, key),
+			});
+	});
+}
+
+/**
+ * Like {@link execAsync} / {@link execAsyncRemote}, but writes `stdin` to the
+ * process before closing the stream. Used so DB passwords never appear on argv.
+ */
+export async function execAsyncWithStdin(
+	command: string,
+	stdin: string,
+	options: ExecOptions & { serverId?: string | null } = {},
+): Promise<string> {
+	const { serverId, ...localOptions } = options;
+	if (serverId) {
+		return await execAsyncRemoteWithStdin(serverId, command, stdin);
+	}
+	return await new Promise<string>((resolve, reject) => {
+		const child = spawn("sh", ["-c", command], {
+			cwd: localOptions.cwd,
+			env: localOptions.env ? { ...process.env, ...localOptions.env } : process.env,
+			stdio: ["pipe", "pipe", "pipe"],
+		});
+		let stdout = "";
+		let stderr = "";
+		child.stdout.on("data", (data: Buffer) => {
+			stdout += data.toString();
+		});
+		child.stderr.on("data", (data: Buffer) => {
+			stderr += data.toString();
+		});
+		child.on("error", reject);
+		child.on("close", (code) => {
+			if (code === 0 || code === null) resolve(stdout);
+			else
+				reject(
+					new Error(
+						`"${commandLabel(command)}" failed (exit ${code})${stderr ? `: ${stderr.slice(0, 200)}` : ""}`,
+					),
+				);
+		});
+		child.stdin.write(stdin);
+		child.stdin.end();
+	});
+}
+
+async function execAsyncRemoteWithStdin(
+	serverId: string,
+	command: string,
+	stdin: string,
+): Promise<string> {
+	const server = await db.query.servers.findFirst({
+		where: eq(servers.serverId, serverId),
+		with: { sshKey: true },
+	});
+	if (!server) throw new Error(`Server not found: ${serverId}`);
+	const sshKey = server.sshKey;
+	if (!sshKey) {
+		throw new Error(`Server ${server.name} (${serverId}) has no SSH key attached`);
+	}
+
+	return new Promise<string>((resolve, reject) => {
+		const conn = new Client();
+		let stdout = "";
+		let stderr = "";
+		conn
+			.on("ready", () => {
+				conn.exec(command, (err, stream) => {
+					if (err) {
+						conn.end();
+						reject(err);
+						return;
+					}
+					stream
+						.on("close", (code: number | null) => {
+							conn.end();
+							if (code === 0 || code === null) resolve(stdout);
+							else
+								reject(
+									new RemoteExecError(
+										`Remote "${commandLabel(command)}" failed (exit ${code}) on server ${server.name}`,
+										stderr,
+										code,
+									),
+								);
+						})
+						.on("data", (data: Buffer) => {
+							stdout += data.toString();
+						});
+					stream.stderr.on("data", (data: Buffer) => {
+						stderr += data.toString();
+					});
+					stream.write(stdin);
+					stream.end();
+				});
+			})
+			.on("error", reject)
 			.connect({
 				host: server.ipAddress,
 				port: server.port,

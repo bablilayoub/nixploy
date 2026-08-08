@@ -32,7 +32,7 @@ const createBitbucketInput = z.object({
 	apiToken: z.string().nullish(),
 });
 
-/** Response shape: app password and API token are write-only. */
+/** Response shape: credentials and webhook secret are write-only. */
 const publicBitbucket = <
 	T extends {
 		bitbucketId: string;
@@ -47,8 +47,7 @@ const publicBitbucket = <
 		...rest,
 		appPasswordConfigured: Boolean(appPassword),
 		apiTokenConfigured: Boolean(apiToken),
-		/** Dedicated webhook Bearer secret — never the API token. */
-		webhookSecret: derivedWebhookSecret("bitbucket", row.bitbucketId),
+		webhookSecretConfigured: true,
 	};
 };
 
@@ -141,5 +140,19 @@ export const bitbucketRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 		return await testBitbucketConnection(input.bitbucketId, organizationId);
+	}),
+
+	/**
+	 * Reveal the derived Bearer webhook secret for webhook setup.
+	 * Gated — viewers must not forge Bitbucket deliveries.
+	 */
+	revealWebhookSecret: protectedProcedure.input(bitbucketIdInput).query(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
+		const row = await findBitbucketById(input.bitbucketId, organizationId);
+		if (!row) {
+			throw new TRPCError({ code: "NOT_FOUND", message: "Bitbucket provider not found" });
+		}
+		return { webhookSecret: derivedWebhookSecret("bitbucket", row.bitbucketId) };
 	}),
 });

@@ -93,6 +93,7 @@ async function giteaApi(row: GiteaRow, path: string) {
 	const base = row.giteaUrl.replace(/\/$/, "");
 	const response = await fetch(`${base}/api/v1${path}`, {
 		headers: { Authorization: `token ${row.accessToken ?? ""}` },
+		redirect: "error",
 	});
 	if (!response.ok) {
 		throw new Error(`Gitea API request failed: ${response.status}`);

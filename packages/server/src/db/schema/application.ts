@@ -19,7 +19,7 @@ export const applications = pgTable(
 		description: text("description"),
 		/** Service-level env vars (encrypted at rest), override project/environment. */
 		env: encryptedText("env"),
-		buildArgs: text("build_args"),
+		buildArgs: encryptedText("build_args"),
 		status: serviceStatus("status").notNull().default("idle"),
 
 		// ── resources / replicas ────────────────────────────────────────────────

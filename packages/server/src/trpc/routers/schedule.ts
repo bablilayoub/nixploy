@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import { applications, compose, environments, projects, schedules, servers } from "../../db/schema";
@@ -10,6 +10,7 @@ import { findComposeForOrg } from "../../modules/compose/service";
 import {
 	assertCapability,
 	assertOrgRole,
+	hasCapability,
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
 import {
@@ -22,6 +23,7 @@ import {
 } from "../../modules/schedules";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
+import { redactScheduleSecrets } from "../redact-secrets";
 
 /**
  * Cron schedules: shell commands/scripts run in a service container or on a
@@ -34,6 +36,17 @@ type Session = NonNullable<TRPCContext["session"]>;
 
 async function getOrganizationId(session: Session): Promise<string> {
 	return await resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
+}
+
+async function publicSchedule<T extends { command?: string | null; script?: string | null }>(
+	row: T,
+	userId: string,
+	organizationId: string,
+	scheduleType?: string,
+): Promise<T> {
+	if (scheduleType === "nixploy-server") return row;
+	const canSeeSecrets = await hasCapability(userId, organizationId, "secrets.read");
+	return canSeeSecrets ? row : redactScheduleSecrets(row);
 }
 
 /**
@@ -183,7 +196,7 @@ export const scheduleRouter = router({
 				: [];
 		const envIds = environmentRows.map((row) => row.environmentId);
 
-		const [applicationIds, composeIds, orgServers] = await Promise.all([
+		const [applicationRows, composeRows, orgServers] = await Promise.all([
 			envIds.length > 0
 				? db.query.applications.findMany({
 						where: inArray(applications.environmentId, envIds),
@@ -202,16 +215,38 @@ export const scheduleRouter = router({
 			}),
 		]);
 
-		const appIdSet = new Set(applicationIds.map((row) => row.applicationId));
-		const composeIdSet = new Set(composeIds.map((row) => row.composeId));
-		const serverIdSet = new Set(orgServers.map((row) => row.serverId));
-		const appNameById = new Map(applicationIds.map((row) => [row.applicationId, row.name]));
-		const composeNameById = new Map(composeIds.map((row) => [row.composeId, row.name]));
+		const appIds = applicationRows.map((row) => row.applicationId);
+		const composeIdList = composeRows.map((row) => row.composeId);
+		const serverIds = orgServers.map((row) => row.serverId);
+		const appIdSet = new Set(appIds);
+		const composeIdSet = new Set(composeIdList);
+		const serverIdSet = new Set(serverIds);
+		const appNameById = new Map(applicationRows.map((row) => [row.applicationId, row.name]));
+		const composeNameById = new Map(composeRows.map((row) => [row.composeId, row.name]));
 		const serverNameById = new Map(orgServers.map((row) => [row.serverId, row.name]));
 
-		const rows = await db.query.schedules.findMany({
-			orderBy: (table, { desc }) => [desc(table.createdAt)],
-		});
+		const scope = [
+			...(appIds.length > 0 ? [inArray(schedules.applicationId, appIds)] : []),
+			...(composeIdList.length > 0 ? [inArray(schedules.composeId, composeIdList)] : []),
+			...(serverIds.length > 0 ? [inArray(schedules.serverId, serverIds)] : []),
+			...(canSeeHostSchedules
+				? [
+						and(
+							eq(schedules.scheduleType, "nixploy-server"),
+							eq(schedules.userId, ctx.session.user.id),
+						),
+					]
+				: []),
+		];
+		const rows =
+			scope.length === 0
+				? []
+				: await db.query.schedules.findMany({
+						where: or(...scope),
+						orderBy: (table, { desc }) => [desc(table.createdAt)],
+					});
+
+		const canSeeSecrets = await hasCapability(ctx.session.user.id, organizationId, "secrets.read");
 
 		return rows
 			.filter((row) => {
@@ -229,17 +264,20 @@ export const scheduleRouter = router({
 				}
 				return false;
 			})
-			.map((row) => ({
-				...withRunState(row),
-				targetName:
-					row.scheduleType === "application" && row.applicationId
-						? (appNameById.get(row.applicationId) ?? row.appName ?? row.applicationId)
-						: row.scheduleType === "compose" && row.composeId
-							? (composeNameById.get(row.composeId) ?? row.appName ?? row.composeId)
-							: row.scheduleType === "server" && row.serverId
-								? (serverNameById.get(row.serverId) ?? row.serverId)
-								: "This Nixploy host",
-			}));
+			.map((row) => {
+				const withTarget = {
+					...withRunState(row),
+					targetName:
+						row.scheduleType === "application" && row.applicationId
+							? (appNameById.get(row.applicationId) ?? row.appName ?? row.applicationId)
+							: row.scheduleType === "compose" && row.composeId
+								? (composeNameById.get(row.composeId) ?? row.appName ?? row.composeId)
+								: row.scheduleType === "server" && row.serverId
+									? (serverNameById.get(row.serverId) ?? row.serverId)
+									: "This Nixploy host",
+				};
+				return canSeeSecrets ? withTarget : redactScheduleSecrets(withTarget);
+			});
 	}),
 
 	/** Schedules of one target service/server (with live run state). */
@@ -252,6 +290,7 @@ export const scheduleRouter = router({
 		)
 		.query(async ({ ctx, input }) => {
 			if (input.serviceType === "nixploy-server") {
+				await assertInstanceAdmin(ctx.session);
 				const rows = await db.query.schedules.findMany({
 					where: and(
 						eq(schedules.scheduleType, "nixploy-server"),
@@ -268,6 +307,13 @@ export const scheduleRouter = router({
 				serverId: input.serviceType === "server" ? input.serviceId : null,
 			});
 
+			const organizationId = await getOrganizationId(ctx.session);
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+
 			const column =
 				input.serviceType === "application"
 					? schedules.applicationId
@@ -277,7 +323,9 @@ export const scheduleRouter = router({
 			const rows = await db.query.schedules.findMany({
 				where: and(eq(schedules.scheduleType, input.serviceType), eq(column, input.serviceId)),
 			});
-			return rows.map(withRunState);
+			return rows.map((row) =>
+				canSeeSecrets ? withRunState(row) : redactScheduleSecrets(withRunState(row)),
+			);
 		}),
 
 	/** A single schedule (with live run state). */
@@ -286,7 +334,16 @@ export const scheduleRouter = router({
 		.query(async ({ ctx, input }) => {
 			const row = await findScheduleOrThrow(input.scheduleId);
 			await assertScheduleAccess(ctx.session, row);
-			return withRunState(row);
+			if (row.scheduleType === "nixploy-server") {
+				return withRunState(row);
+			}
+			const organizationId = await getOrganizationId(ctx.session);
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			return canSeeSecrets ? withRunState(row) : redactScheduleSecrets(withRunState(row));
 		}),
 
 	/** Create and (when enabled) register a cron schedule. */
@@ -334,7 +391,7 @@ export const scheduleRouter = router({
 				throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 			}
 			registerSchedule(row);
-			return row;
+			return await publicSchedule(row, ctx.session.user.id, organizationId, row.scheduleType);
 		}),
 
 	/** Update a schedule; the cron job is re-registered. */
@@ -376,7 +433,12 @@ export const scheduleRouter = router({
 				throw new TRPCError({ code: "NOT_FOUND", message: "Schedule not found" });
 			}
 			registerSchedule(updated);
-			return updated;
+			return await publicSchedule(
+				updated,
+				ctx.session.user.id,
+				organizationId,
+				updated.scheduleType,
+			);
 		}),
 
 	/** Delete a schedule and cancel its cron job. */
@@ -420,7 +482,12 @@ export const scheduleRouter = router({
 				throw new TRPCError({ code: "NOT_FOUND", message: "Schedule not found" });
 			}
 			registerSchedule(updated);
-			return updated;
+			return await publicSchedule(
+				updated,
+				ctx.session.user.id,
+				organizationId,
+				updated.scheduleType,
+			);
 		}),
 
 	/** Disable and cancel the cron job. */
@@ -440,6 +507,11 @@ export const scheduleRouter = router({
 			if (!updated) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Schedule not found" });
 			}
-			return updated;
+			return await publicSchedule(
+				updated,
+				ctx.session.user.id,
+				organizationId,
+				updated.scheduleType,
+			);
 		}),
 });

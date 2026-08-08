@@ -108,6 +108,7 @@ function bitbucketAuthHeader(row: BitbucketRow): string {
 async function bitbucketApi(row: BitbucketRow, path: string) {
 	const response = await fetch(`${BITBUCKET_API_URL}${path}`, {
 		headers: { Authorization: bitbucketAuthHeader(row) },
+		redirect: "error",
 	});
 	if (!response.ok) {
 		throw new Error(`Bitbucket API request failed: ${response.status}`);
@@ -139,8 +140,12 @@ export async function getBitbucketRepositories(bitbucketId: string, organization
 	let next: string | null =
 		`${BITBUCKET_API_URL}${path}${path.includes("?") ? "&" : "?"}pagelen=100`;
 	while (next) {
+		if (!next.startsWith(`${BITBUCKET_API_URL}/`) && next !== `${BITBUCKET_API_URL}`) {
+			throw new Error("Bitbucket pagination URL is not allowed");
+		}
 		const response: Response = await fetch(next, {
 			headers: { Authorization: bitbucketAuthHeader(row) },
+			redirect: "error",
 		});
 		if (!response.ok) {
 			throw new Error(`Bitbucket list repositories failed: ${response.status}`);

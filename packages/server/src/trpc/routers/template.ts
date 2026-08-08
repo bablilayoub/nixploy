@@ -58,6 +58,7 @@ export const templateRouter = router({
 				ctx.session.session.activeOrganizationId,
 			);
 			await assertCapability(ctx.session.user.id, organizationId, "templates.deploy");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			const template = findTemplateById(input.templateId);
 			if (!template) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Template not found" });

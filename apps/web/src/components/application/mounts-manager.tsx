@@ -273,7 +273,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 								<Label htmlFor="volume-name">Volume Name</Label>
 								<Input
 									id="volume-name"
-									placeholder="my-data"
+									placeholder="{appName}-data"
 									value={form.volumeName}
 									onChange={(e) => setForm((f) => ({ ...f, volumeName: e.target.value }))}
 								/>

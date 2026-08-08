@@ -43,7 +43,7 @@ const createGiteaInput = z.object({
 	redirectUri: z.string().nullish(),
 });
 
-/** Response shape: access / refresh tokens are write-only. */
+/** Response shape: access / refresh tokens and webhook secret are write-only. */
 const publicGitea = <
 	T extends {
 		giteaId: string;
@@ -58,8 +58,7 @@ const publicGitea = <
 		...rest,
 		accessTokenConfigured: Boolean(accessToken),
 		refreshTokenConfigured: Boolean(refreshToken),
-		/** Dedicated HMAC webhook secret — never the access token. */
-		webhookSecret: derivedWebhookSecret("gitea", row.giteaId),
+		webhookSecretConfigured: true,
 	};
 };
 
@@ -164,5 +163,19 @@ export const giteaRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
 		return await testGiteaConnection(input.giteaId, organizationId);
+	}),
+
+	/**
+	 * Reveal the derived HMAC webhook secret for webhook setup.
+	 * Gated — viewers must not forge signed Gitea deliveries.
+	 */
+	revealWebhookSecret: protectedProcedure.input(giteaIdInput).query(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
+		const row = await findGiteaById(input.giteaId, organizationId);
+		if (!row) {
+			throw new TRPCError({ code: "NOT_FOUND", message: "Gitea provider not found" });
+		}
+		return { webhookSecret: derivedWebhookSecret("gitea", row.giteaId) };
 	}),
 });

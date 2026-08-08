@@ -2,6 +2,7 @@ import { client } from "@nixploy/server";
 import { auth } from "@nixploy/server/auth";
 import { appRouter } from "@nixploy/server/trpc";
 import type { TRPCContext } from "@nixploy/server/trpc/init";
+import { clientIpFromRequest, takeRateLimitToken } from "@nixploy/server/utils/rate-limit";
 import { getTRPCErrorFromUnknown, TRPCError } from "@trpc/server";
 import superjson, { type SuperJSONResult } from "superjson";
 
@@ -132,6 +133,14 @@ function coerceFlattenedParams(params: Record<string, string>): Record<string, u
 }
 
 async function buildContext(req: Request): Promise<TRPCContext> {
+	const ip = clientIpFromRequest(req);
+	if (
+		!takeRateLimitToken(`rest-api-key:${ip}`, { windowMs: 60_000, max: 120 }) ||
+		!takeRateLimitToken(`rest-api-key-auth:${ip}`, { windowMs: 60_000, max: 30 })
+	) {
+		throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many requests" });
+	}
+
 	const apiKeyHeader = req.headers.get("x-api-key");
 	if (!apiKeyHeader) {
 		throw new TRPCError({
@@ -235,6 +244,21 @@ async function handle(req: Request, path: string): Promise<Response> {
 		return errorResponse("METHOD_NOT_SUPPORTED", `${procedure.type}s must use ${expectedMethod}`);
 	}
 
+	if (req.method === "POST") {
+		const contentLength = Number(req.headers.get("content-length") ?? "0");
+		if (Number.isFinite(contentLength) && contentLength > 1_048_576) {
+			return errorResponse("PAYLOAD_TOO_LARGE", "Payload too large");
+		}
+	}
+
+	let ctx: TRPCContext;
+	try {
+		ctx = await buildContext(req);
+	} catch (error) {
+		const trpcError = getTRPCErrorFromUnknown(error);
+		return errorResponse(trpcError.code, trpcError.message);
+	}
+
 	let input: unknown;
 	try {
 		if (req.method === "GET") {
@@ -251,18 +275,13 @@ async function handle(req: Request, path: string): Promise<Response> {
 			}
 		} else {
 			const text = await req.text();
+			if (text.length > 1_048_576) {
+				return errorResponse("PAYLOAD_TOO_LARGE", "Payload too large");
+			}
 			input = text.length > 0 ? decodeSerialized(text) : undefined;
 		}
 	} catch {
 		return errorResponse("PARSE_ERROR", "Failed to parse request input");
-	}
-
-	let ctx: TRPCContext;
-	try {
-		ctx = await buildContext(req);
-	} catch (error) {
-		const trpcError = getTRPCErrorFromUnknown(error);
-		return errorResponse(trpcError.code, trpcError.message);
 	}
 
 	try {

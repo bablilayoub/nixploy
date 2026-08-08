@@ -210,6 +210,7 @@ export async function setupGithubApp(input: {
 	const response = await fetch(`${GITHUB_API_URL}/app-manifests/${input.code}/conversions`, {
 		method: "POST",
 		headers: { Accept: "application/vnd.github+json" },
+		redirect: "error",
 	});
 	if (!response.ok) {
 		throw new Error(`GitHub App conversion failed: ${response.status}`);
