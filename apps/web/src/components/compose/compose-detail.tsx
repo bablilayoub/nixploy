@@ -22,18 +22,61 @@ import { CopilotChatDrawer } from "@/components/services/copilot-chat-drawer";
 import { ServiceStatusBadge } from "@/components/services/status-badge";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
 import { PageHeader } from "@/components/shell";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useSyncedTab } from "@/hooks/use-synced-tab";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
 export type ComposeService = inferRouterOutputs<AppRouter>["compose"]["one"];
 
+const TOP_TABS = [
+	"general",
+	"compose-file",
+	"deploy",
+	"runtime",
+	"domains",
+	"environment",
+	"settings",
+];
+
+/** Sub-tab → its top-level tab, so ?tab=logs / ?tab=deployments deep-link. */
+const SUB_TAB_PARENT: Record<string, string> = {
+	deployments: "deploy",
+	schedules: "deploy",
+	backups: "deploy",
+	logs: "runtime",
+	monitoring: "runtime",
+	terminal: "runtime",
+};
+
+const SUB_TAB_DEFAULT: Record<string, string> = {
+	deploy: "deployments",
+	runtime: "logs",
+};
+
 export function ComposeDetail({ projectId, composeId }: { projectId: string; composeId: string }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
-	const [tab, setTab] = useState("general");
+	const [tab, selectTab] = useSyncedTab(
+		"general",
+		(value) => TOP_TABS.includes(value) || value in SUB_TAB_PARENT,
+	);
+	const topTab = TOP_TABS.includes(tab) ? tab : (SUB_TAB_PARENT[tab] ?? "general");
+	const subTab = (parent: string) =>
+		SUB_TAB_PARENT[tab] === parent ? tab : SUB_TAB_DEFAULT[parent];
+	const [confirmStop, setConfirmStop] = useState(false);
 
 	const { data, isLoading, isError } = useQuery(trpc.compose.one.queryOptions({ composeId }));
 
@@ -172,7 +215,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 								variant="outline"
 								className="hidden sm:inline-flex"
 								disabled={anyActionPending}
-								onClick={() => stopMutation.mutate({ composeId })}
+								onClick={() => setConfirmStop(true)}
 							>
 								{stopMutation.isPending ? (
 									<Loader2 className="size-4 animate-spin" />
@@ -200,7 +243,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 				}
 			/>
 
-			<Tabs value={tab} onValueChange={setTab}>
+			<Tabs value={topTab} onValueChange={selectTab}>
 				<UnderlineTabsList>
 					<UnderlineTabsTrigger value="general">General</UnderlineTabsTrigger>
 					<UnderlineTabsTrigger value="compose-file">Compose File</UnderlineTabsTrigger>
@@ -217,7 +260,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 					<ComposeFileTab compose={compose} />
 				</TabsContent>
 				<TabsContent value="deploy" className="mt-6">
-					<Tabs defaultValue="deployments" className="w-full gap-4">
+					<Tabs value={subTab("deploy")} onValueChange={selectTab} className="w-full gap-4">
 						<SubTabsList>
 							<SubTabsTrigger value="deployments">Deployments</SubTabsTrigger>
 							<SubTabsTrigger value="schedules">Schedules</SubTabsTrigger>
@@ -235,7 +278,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 					</Tabs>
 				</TabsContent>
 				<TabsContent value="runtime" className="mt-6">
-					<Tabs defaultValue="logs" className="w-full gap-4">
+					<Tabs value={subTab("runtime")} onValueChange={selectTab} className="w-full gap-4">
 						<SubTabsList>
 							<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
 							<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>
@@ -262,6 +305,28 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 					<SettingsTab projectId={projectId} compose={compose} />
 				</TabsContent>
 			</Tabs>
+
+			<AlertDialog open={confirmStop} onOpenChange={setConfirmStop}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Stop compose service</AlertDialogTitle>
+						<AlertDialogDescription>
+							Stop {compose.name}? Its containers will go offline until you start it again.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							variant="destructive"
+							disabled={stopMutation.isPending}
+							onClick={() => stopMutation.mutate({ composeId })}
+						>
+							{stopMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+							Stop
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</div>
 	);
 }

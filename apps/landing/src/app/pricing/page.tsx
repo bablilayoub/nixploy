@@ -40,7 +40,7 @@ export default function PricingPage() {
 				</ul>
 				<div className="mt-8 flex flex-wrap gap-3">
 					<Link
-						href="/install"
+						href="/docs/install"
 						className="rounded-md bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
 					>
 						Install now

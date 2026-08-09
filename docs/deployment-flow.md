@@ -101,6 +101,10 @@ through `modules/backups` to S3 destinations on schedules.
   The comment carries a hidden marker so later pushes edit it in place instead
   of stacking new comments; a torn-down preview edits it to say so. Commenting
   is best effort — a missing token or API error never fails the deploy.
+  Fork PRs are gated by `previewForksRequireApproval` (default on): they land
+  as `awaiting_approval` without a build until an org member approves in the
+  UI — repo collaborators bypass the gate (`modules/preview/fork-gate.ts`,
+  see [domains-traefik.md](./domains-traefik.md#fork-pull-requests-require-approval)).
 - Rollback (`modules/deployment` + `rollback` router) redeploys the image of
   a previous successful deployment — same pipeline, no source fetch.
 

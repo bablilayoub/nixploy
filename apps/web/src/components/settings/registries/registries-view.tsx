@@ -144,7 +144,6 @@ export function RegistriesView() {
 					</span>
 				}
 				description="Encrypted usernames and passwords. Attach on an app’s source for private images."
-				wide
 				actions={
 					<Dialog open={open} onOpenChange={setOpen}>
 						<DialogTrigger asChild>

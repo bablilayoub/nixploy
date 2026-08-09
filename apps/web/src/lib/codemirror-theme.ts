@@ -5,7 +5,7 @@ import { tags as t } from "@lezer/highlight";
 
 /**
  * CodeMirror chrome + syntax colors aligned with `apps/web/src/app/globals.css`
- * (warm stone palette). Keep hex values in sync when the design tokens change.
+ * (light: warm stone, dark: zinc). Keep hex values in sync when the design tokens change.
  */
 const light = {
 	background: "#ffffff",
@@ -27,21 +27,21 @@ const light = {
 } as const;
 
 const dark = {
-	background: "#141412",
-	foreground: "#f5f5f4",
-	muted: "#1c1c1a",
-	mutedForeground: "#a8a29e",
-	border: "#292927",
-	accent: "#232320",
-	selection: "#292927",
-	cursor: "#fafaf9",
-	keyword: "#fafaf9",
+	background: "#121214",
+	foreground: "#fafafa",
+	muted: "#1c1c1f",
+	mutedForeground: "#a1a1aa",
+	border: "#27272a",
+	accent: "#1c1c1f",
+	selection: "#27272a",
+	cursor: "#fafafa",
+	keyword: "#fafafa",
 	string: "#4ade80",
 	number: "#fbbf24",
-	comment: "#78716c",
+	comment: "#71717a",
 	tag: "#60a5fa",
-	property: "#d6d3d1",
-	operator: "#a8a29e",
+	property: "#d4d4d8",
+	operator: "#a1a1aa",
 	invalid: "#f87171",
 } as const;
 
@@ -105,10 +105,10 @@ function editorChrome(palette: Palette, isDark: boolean): Extension {
 				backgroundColor: palette.accent,
 			},
 			".cm-selectionMatch": {
-				backgroundColor: isDark ? "#292927" : "#e7e5e4",
+				backgroundColor: isDark ? "#27272a" : "#e7e5e4",
 			},
 			"&.cm-focused .cm-matchingBracket, &.cm-focused .cm-nonmatchingBracket": {
-				backgroundColor: isDark ? "#292927" : "#e7e5e4",
+				backgroundColor: isDark ? "#27272a" : "#e7e5e4",
 				outline: `1px solid ${palette.border}`,
 			},
 			".cm-gutters": {
@@ -192,7 +192,7 @@ function highlight(palette: Palette): Extension {
 export const nixployCodeMirrorLight: Extension = [editorChrome(light, false), highlight(light)];
 export const nixployCodeMirrorDark: Extension = [editorChrome(dark, true), highlight(dark)];
 
-/** xterm / log surfaces — same stone palette as the editors. */
+/** xterm / log surfaces — same palette as the editors. */
 export const nixployTerminalTheme = {
 	light: {
 		background: light.background,

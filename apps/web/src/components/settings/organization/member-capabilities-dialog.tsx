@@ -204,7 +204,7 @@ export function MemberCapabilitiesDialog({
 														}))
 													}
 													aria-label={entry.label}
-													className={cn(customized && "data-[state=checked]:bg-amber-600")}
+													className={cn(customized && "data-[state=checked]:bg-warning")}
 												/>
 											</li>
 										);

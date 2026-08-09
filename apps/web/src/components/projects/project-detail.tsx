@@ -371,6 +371,7 @@ export function ProjectDetail({
 								<Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 								<Input
 									placeholder="Search services..."
+									aria-label="Search services"
 									value={search}
 									onChange={(event) => setSearch(event.target.value)}
 									className="h-8 w-full pl-8 sm:w-56"

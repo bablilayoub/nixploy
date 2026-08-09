@@ -1,14 +1,12 @@
 import { Capabilities } from "@/components/capabilities";
 import { Cta } from "@/components/cta";
-import { DeployBeam } from "@/components/deploy-beam";
+import { DeployFlow } from "@/components/deploy-flow";
 import { Faq } from "@/components/faq";
 import { Footer } from "@/components/footer";
 import { Hero } from "@/components/hero";
-import { IntegrationsOrbit } from "@/components/integrations-orbit";
 import { Navbar } from "@/components/navbar";
 import { ProductPanels } from "@/components/product-panels";
-import { SocialProof } from "@/components/social-proof";
-import { Stats } from "@/components/stats";
+import { TemplateStrip } from "@/components/template-strip";
 
 export default function Home() {
 	return (
@@ -18,12 +16,10 @@ export default function Home() {
 				<Navbar />
 				<main>
 					<Hero />
-					<Capabilities />
-					<IntegrationsOrbit />
-					<DeployBeam />
 					<ProductPanels />
-					<Stats />
-					<SocialProof />
+					<DeployFlow />
+					<Capabilities />
+					<TemplateStrip />
 					<Faq />
 					<Cta />
 				</main>

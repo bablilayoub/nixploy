@@ -5,7 +5,7 @@ import { encryptedText } from "../custom-columns";
 import { applications } from "./application";
 import { organizations } from "./auth";
 import { compose } from "./compose";
-import { mariadb, mongo, mysql, postgres } from "./database";
+import { mariadb, mongo, mysql, postgres, redis } from "./database";
 import { databaseType, serviceType } from "./enums";
 import { createdAt, idColumn } from "./utils";
 
@@ -49,6 +49,9 @@ export const backups = pgTable("backup", {
 		onDelete: "cascade",
 	}),
 	mongoId: text("mongo_id").references(() => mongo.mongoId, {
+		onDelete: "cascade",
+	}),
+	redisId: text("redis_id").references(() => redis.redisId, {
 		onDelete: "cascade",
 	}),
 	createdAt: createdAt(),
@@ -106,6 +109,10 @@ export const backupsRelations = relations(backups, ({ one }) => ({
 	mongo: one(mongo, {
 		fields: [backups.mongoId],
 		references: [mongo.mongoId],
+	}),
+	redis: one(redis, {
+		fields: [backups.redisId],
+		references: [redis.redisId],
 	}),
 }));
 

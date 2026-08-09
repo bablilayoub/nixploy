@@ -72,6 +72,30 @@ const isNotFound = (error: unknown): boolean =>
 	error !== null &&
 	(error as { statusCode?: number }).statusCode === 404;
 
+export interface ContainerSpecInput {
+	imageTag: string;
+	env: string[];
+	mounts: Docker.MountSettings[];
+	command: string | null;
+	healthCheck: Docker.HealthConfig | null;
+}
+
+/**
+ * Build the service ContainerSpec with explicit empties. `undefined` values
+ * are dropped by JSON serialization and the engine then keeps the OLD value
+ * on service update — so clearing a custom command, every env var, or a
+ * healthcheck must send `[]`/`null`, not omit the key.
+ */
+export function buildContainerSpec(input: ContainerSpecInput): Docker.ContainerSpec {
+	return {
+		Image: input.imageTag,
+		Env: input.env,
+		Mounts: input.mounts,
+		Command: input.command ? ["/bin/sh", "-c", input.command] : null,
+		HealthCheck: input.healthCheck,
+	} as unknown as Docker.ContainerSpec;
+}
+
 /**
  * Create or update the application's swarm service from the current DB
  * state (env, mounts, ports, resources, replicas, raw swarm overrides)
@@ -143,13 +167,13 @@ export async function upsertSwarmService(
 		Name: application.appName,
 		Labels: sanitizeSwarmLabels(application.labelsSwarm),
 		TaskTemplate: {
-			ContainerSpec: {
-				Image: imageTag,
-				Env: env.length > 0 ? env : undefined,
-				Mounts: mountSpecs.length > 0 ? mountSpecs : undefined,
-				Command: application.command ? ["/bin/sh", "-c", application.command] : undefined,
-				HealthCheck: (application.healthCheckSwarm as Docker.HealthConfig | null) ?? undefined,
-			},
+			ContainerSpec: buildContainerSpec({
+				imageTag,
+				env,
+				mounts: mountSpecs,
+				command: application.command,
+				healthCheck: (application.healthCheckSwarm as Docker.HealthConfig | null) ?? null,
+			}),
 			Resources: {
 				Limits: Object.keys(limits).length > 0 ? limits : undefined,
 				Reservations: Object.keys(reservations).length > 0 ? reservations : undefined,

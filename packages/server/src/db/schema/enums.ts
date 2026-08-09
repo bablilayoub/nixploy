@@ -40,7 +40,13 @@ export const deploymentStatus = pgEnum("deployment_status", [
 	"cancelled",
 ]);
 
-export const previewStatus = pgEnum("preview_status", ["idle", "running", "done", "error"]);
+export const previewStatus = pgEnum("preview_status", [
+	"idle",
+	"running",
+	"done",
+	"error",
+	"awaiting_approval",
+]);
 
 export const certificateType = pgEnum("certificate_type", ["letsencrypt", "custom", "none"]);
 
@@ -70,6 +76,7 @@ export const databaseType = pgEnum("database_type", [
 	"mysql",
 	"mariadb",
 	"mongo",
+	"redis",
 	"web-server",
 ]);
 

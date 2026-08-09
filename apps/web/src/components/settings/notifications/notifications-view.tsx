@@ -87,7 +87,6 @@ export function NotificationsView() {
 					</span>
 				}
 				description="Notification channels grouped by type."
-				wide
 				actions={
 					<Button size="sm" onClick={() => setCreateOpen(true)}>
 						<Plus className="size-4" />

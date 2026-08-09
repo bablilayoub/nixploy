@@ -1,83 +1,39 @@
 "use client";
 
-import {
-	Boxes,
-	Cloud,
-	Database,
-	GitBranch,
-	Globe,
-	KeyRound,
-	Layers,
-	LineChart,
-	Server,
-	Shield,
-	Terminal,
-	Workflow,
-} from "lucide-react";
+import { Boxes, Database, Globe, Hammer, Users, Wrench } from "lucide-react";
 
 import { BlurFade } from "@/components/magicui/blur-fade";
-import { TextAnimate } from "@/components/magicui/text-animate";
 
 const capabilities = [
 	{
-		Icon: GitBranch,
-		title: "Flexible application deploys",
-		body: "Ship from Git with Nixpacks, Dockerfile, buildpacks, static sites, or a prebuilt image — pick what fits the stack.",
-	},
-	{
-		Icon: Boxes,
-		title: "Native Compose support",
-		body: "Run full Docker Compose / Swarm stacks beside your apps without bolting on a separate orchestrator UI.",
-	},
-	{
-		Icon: Server,
-		title: "Local and remote servers",
-		body: "Deploy on the machine running Nixploy or SSH into remote Swarm nodes when you need more capacity.",
-	},
-	{
-		Icon: KeyRound,
-		title: "Org roles & audit trail",
-		body: "Admin / member roles for destructive actions, with meaningful mutations recorded for accountability.",
+		Icon: Hammer,
+		title: "Builds your way",
+		body: "Nixpacks, buildpacks, Dockerfile, static sites, or a prebuilt image — chosen per app, not per platform.",
 	},
 	{
 		Icon: Database,
-		title: "Databases with backups",
-		body: "Postgres, MySQL, MariaDB, Mongo, and Redis — plus scheduled backups and restores from the panel.",
+		title: "Databases with real backups",
+		body: "Postgres, MySQL, MariaDB, MongoDB, and Redis. Scheduled dumps to S3-compatible storage, restores from the panel — and a backup of Nixploy itself.",
 	},
 	{
-		Icon: Terminal,
-		title: "API & CLI",
-		body: "REST with x-api-key, OpenAPI on your panel, and @nixploy/cli for the same workflows in a terminal.",
-	},
-	{
-		Icon: Layers,
-		title: "Docker Swarm ready",
-		body: "Scale services across nodes with Swarm as the runtime — Traefik sits on the edge for routing and TLS.",
-	},
-	{
-		Icon: Workflow,
-		title: "Open source templates",
-		body: "One-click catalogs for common stacks, then own the compose, env, and domains from day one.",
-	},
-	{
-		Icon: Shield,
-		title: "No vendor lock-in",
-		body: "Your servers, your config dir, your Traefik. Leave anytime — nothing proprietary holds the workloads.",
-	},
-	{
-		Icon: LineChart,
-		title: "Live monitoring",
-		body: "Stream logs, watch deploy history, and keep metrics snapshots so status matches reality.",
+		Icon: Boxes,
+		title: "Compose, first-class",
+		body: "Paste a compose file or point at a repo. Stack or plain compose mode, with isolated deployments for side-by-side copies of the same stack.",
 	},
 	{
 		Icon: Globe,
-		title: "Domains & Let's Encrypt",
-		body: "Attach custom domains and get certificates through Traefik without a separate cert dance.",
+		title: "Domains & TLS",
+		body: "Attach domains per service and Traefik issues Let's Encrypt certificates. Redirects and basic-auth rules live in the same tab.",
 	},
 	{
-		Icon: Cloud,
-		title: "Self-hosted & open source",
-		body: "Apache-2.0. One curl installs the panel. You keep the control plane on infrastructure you trust.",
+		Icon: Users,
+		title: "Teams without drama",
+		body: "Organizations with owner, admin, and member roles. Destructive actions check capabilities, land in the audit log, and can require 2FA org-wide.",
+	},
+	{
+		Icon: Wrench,
+		title: "Automate everything",
+		body: "REST with OpenAPI on your own panel, @nixploy/cli for the terminal, and an MCP server so AI tools can deploy and inspect too.",
 	},
 ] as const;
 
@@ -85,22 +41,13 @@ export function Capabilities() {
 	return (
 		<section id="features" className="border-t border-white/8 py-20 sm:py-28">
 			<div className="mx-auto max-w-6xl px-5 sm:px-6">
-				<div className="mx-auto max-w-2xl text-center">
+				<div className="max-w-2xl">
 					<p className="font-mono text-xs tracking-[0.18em] text-neutral-500 uppercase">
-						Capabilities
+						The rest of it
 					</p>
-					<TextAnimate
-						as="h2"
-						by="word"
-						animation="blurInUp"
-						once
-						className="mt-3 font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl"
-					>
-						Powerful deployment, tailored to you
-					</TextAnimate>
-					<p className="mt-4 text-neutral-400">
-						Multi-server deploys, databases, Traefik TLS, and a real API — on metal you control.
-					</p>
+					<h2 className="mt-3 font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+						Everything a PaaS does, on hardware you already pay for.
+					</h2>
 				</div>
 
 				<ul className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -77,7 +77,6 @@ export function EnvironmentVariablesTab({
 			<SettingsSection
 				title="Project variables"
 				description="Shared by every environment in this project. Deeper levels override these values."
-				wide
 			>
 				<EnvEditor
 					value={projectEnv ?? ""}
@@ -90,7 +89,6 @@ export function EnvironmentVariablesTab({
 				<SettingsSection
 					title={`Environment overrides — ${environment.name}`}
 					description="Only apply to this environment. Override project variables on key conflicts."
-					wide
 				>
 					<EnvEditor
 						key={environment.environmentId}
@@ -110,7 +108,6 @@ export function EnvironmentVariablesTab({
 				<SettingsSection
 					title="Resolved preview"
 					description={`Effective variables for "${environment.name}" after merging organization, project and environment levels. Read-only.`}
-					wide
 				>
 					{resolvedQuery.isPending ? (
 						<Skeleton className="h-64 rounded-lg" />

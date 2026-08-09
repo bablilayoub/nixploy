@@ -1,23 +1,33 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import schedule from "node-schedule";
 import { db } from "../../db";
-import { environments, webServerSettings } from "../../db/schema";
+import { environments, servers, webServerSettings } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { execAsyncRemote } from "../../utils/exec";
 import { resolveLocalContainer } from "../../ws/docker";
 import { mapDockerStats } from "../../ws/docker-stats";
 import { getConfigDir } from "../application/paths";
 import { notifyEvent } from "../notifications";
+import {
+	buildRemoteSampleCommand,
+	parseRemoteSampleOutput,
+	readServerMetricsConfig,
+} from "./remote";
 
 const log = createLogger("metrics-history");
 
 /**
  * Metrics history: a lightweight per-service ring buffer on disk. Every 30s
- * a cron snapshots cpu/memory/network for each running local service into
- * `$NIXPLOY_CONFIG_DIR/metrics/<appName>.jsonl`, pruned to 48h. Remote
- * (managed-server) services are not sampled — their stats require an SSH
- * round-trip per service and are only available live via /ws/stats.
+ * a cron snapshots cpu/memory/network for each running service into
+ * `$NIXPLOY_CONFIG_DIR/metrics/<appName>.jsonl`, pruned to 48h.
+ *
+ * Local services are sampled via dockerode. Remote services (hosted on a
+ * managed server) are sampled over one SSH batch per server — honoring that
+ * server's `metricsConfig.metrics` (enabled / intervalSeconds) — alongside a
+ * host-level snapshot stored as `server-<serverId>.jsonl`. A failing or
+ * unreachable server is skipped without affecting local sampling.
  */
 
 export const METRICS_RETENTION_MS = 48 * 60 * 60 * 1000;
@@ -137,6 +147,26 @@ export interface HistorySample {
 
 const metricsDir = () => path.join(getConfigDir(), "metrics");
 const metricsFile = (appName: string) => path.join(metricsDir(), `${appName}.jsonl`);
+/** Host-level history of a managed server lives next to the service files. */
+const serverMetricsFile = (serverId: string) => path.join(metricsDir(), `server-${serverId}.jsonl`);
+
+interface ServerHistoryPoint {
+	t: number;
+	cpu: number; // busy percent over the sample window
+	mu: number; // memory used, bytes
+	mt: number; // memory total, bytes
+	du: number; // disk used (/), bytes
+	dt: number; // disk total (/), bytes
+}
+
+export interface ServerHistorySample {
+	t: number;
+	cpuPercent: number;
+	memoryUsed: number;
+	memoryTotal: number;
+	diskUsed: number;
+	diskTotal: number;
+}
 
 async function appendPoints(appName: string, point: HistoryPoint): Promise<void> {
 	const file = metricsFile(appName);
@@ -156,7 +186,25 @@ async function appendPoints(appName: string, point: HistoryPoint): Promise<void>
 	await writeFile(file, `${kept.map((entry) => JSON.stringify(entry)).join("\n")}\n`, "utf8");
 }
 
-/** One sampling pass over every local application, compose and database service. */
+async function appendServerPoints(serverId: string, point: ServerHistoryPoint): Promise<void> {
+	const file = serverMetricsFile(serverId);
+	let existing: ServerHistoryPoint[] = [];
+	try {
+		existing = (await readFile(file, "utf8"))
+			.split("\n")
+			.filter(Boolean)
+			.map((line) => JSON.parse(line) as ServerHistoryPoint);
+	} catch {
+		// No history yet (or unreadable) — start fresh.
+	}
+	const cutoff = Date.now() - METRICS_RETENTION_MS;
+	const kept = existing.filter((entry) => entry.t >= cutoff);
+	kept.push(point);
+	await mkdir(metricsDir(), { recursive: true });
+	await writeFile(file, `${kept.map((entry) => JSON.stringify(entry)).join("\n")}\n`, "utf8");
+}
+
+/** One sampling pass over every application, compose and database service. */
 export async function sampleAllServices(): Promise<void> {
 	const [apps, composeRows, pg, my, maria, mongoRows, redisRows] = await Promise.all([
 		db.query.applications.findMany({
@@ -195,59 +243,179 @@ export async function sampleAllServices(): Promise<void> {
 		...maria.map((row) => ({ ...row, kind: "other" as const })),
 		...mongoRows.map((row) => ({ ...row, kind: "other" as const })),
 		...redisRows.map((row) => ({ ...row, kind: "other" as const })),
-	].filter(
-		(row) => !row.serverId, // local only (see module doc)
-	);
+	];
 	const thresholds = await readThresholds();
-
 	const now = Date.now();
-	for (const target of targets) {
+
+	for (const target of targets.filter((row) => !row.serverId)) {
 		const appName = target.appName;
 		try {
 			const container = await resolveLocalContainer(appName);
 			if (!container) continue; // not running — no samples, no noise
 			const stats = await container.stats({ stream: false });
 			const frame = mapDockerStats(stats);
-			await evaluateAlerts(appName, target.environmentId, frame, thresholds);
-
-			if (target.kind === "application" || target.kind === "compose") {
-				const environment = await db.query.environments.findFirst({
-					where: eq(environments.environmentId, target.environmentId),
-					with: { project: true },
-				});
-				if (environment?.project.organizationId) {
-					const { evaluateServiceAlertRules } = await import("../observability");
-					await evaluateServiceAlertRules({
-						organizationId: environment.project.organizationId,
-						projectId: environment.project.projectId,
-						applicationId:
-							target.kind === "application" && "applicationId" in target
-								? target.applicationId
-								: null,
-						composeId: target.kind === "compose" && "composeId" in target ? target.composeId : null,
-						appName,
-						cpu: frame.cpu,
-						memoryPercent: frame.memory.percent,
-					});
-				}
-			}
-
-			await appendPoints(appName, {
-				t: now,
-				cpu: frame.cpu,
-				mu: frame.memory.used,
-				mt: frame.memory.total,
-				rx: frame.network.rx,
-				tx: frame.network.tx,
-				br: frame.block.read,
-				bw: frame.block.write,
-				pids: frame.pids,
-			});
+			await handleFrame(target, appName, frame, thresholds, now);
 		} catch {
 			// Container racing a restart or stats hiccup — skip this pass.
 		}
 	}
+
+	await sampleRemoteServers(
+		targets.filter((row) => row.serverId),
+		thresholds,
+		now,
+	);
 }
+
+interface SampleTarget {
+	appName: string;
+	environmentId: string;
+	serverId: string | null;
+	kind: "application" | "compose" | "other";
+	applicationId?: string;
+	composeId?: string;
+}
+
+interface ServiceFrame {
+	cpu: number;
+	memory: { used: number; total: number; percent: number };
+	network: { rx: number; tx: number };
+	block: { read: number; write: number };
+	pids: number;
+}
+
+/** Alerts + persistence shared by the local and remote sampling paths. */
+async function handleFrame(
+	target: SampleTarget,
+	appName: string,
+	frame: ServiceFrame,
+	thresholds: AlertThresholds,
+	now: number,
+): Promise<void> {
+	await evaluateAlerts(appName, target.environmentId, frame, thresholds);
+
+	if (target.kind === "application" || target.kind === "compose") {
+		const environment = await db.query.environments.findFirst({
+			where: eq(environments.environmentId, target.environmentId),
+			with: { project: true },
+		});
+		if (environment?.project.organizationId) {
+			const { evaluateServiceAlertRules } = await import("../observability");
+			await evaluateServiceAlertRules({
+				organizationId: environment.project.organizationId,
+				projectId: environment.project.projectId,
+				applicationId:
+					target.kind === "application" && "applicationId" in target
+						? (target.applicationId ?? null)
+						: null,
+				composeId:
+					target.kind === "compose" && "composeId" in target ? (target.composeId ?? null) : null,
+				appName,
+				cpu: frame.cpu,
+				memoryPercent: frame.memory.percent,
+			});
+		}
+	}
+
+	await appendPoints(appName, {
+		t: now,
+		cpu: frame.cpu,
+		mu: frame.memory.used,
+		mt: frame.memory.total,
+		rx: frame.network.rx,
+		tx: frame.network.tx,
+		br: frame.block.read,
+		bw: frame.block.write,
+		pids: frame.pids,
+	});
+}
+
+/** Platform appNames are lowercase alnum + dash — refuse anything else for shell safety. */
+const SAFE_APP_NAME = /^[a-z0-9][a-z0-9-]*$/;
+
+/** One SSH metrics batch per reachable remote server (failures skip the server only). */
+async function sampleRemoteServers(
+	remoteTargets: SampleTarget[],
+	thresholds: AlertThresholds,
+	now: number,
+): Promise<void> {
+	const byServer = new Map<string, SampleTarget[]>();
+	for (const target of remoteTargets) {
+		if (!target.serverId || !SAFE_APP_NAME.test(target.appName)) continue;
+		const list = byServer.get(target.serverId) ?? [];
+		list.push(target);
+		byServer.set(target.serverId, list);
+	}
+	if (byServer.size === 0) return;
+
+	const serverIds = [...byServer.keys()];
+	const serverRows = await db.query.servers.findMany({
+		where: inArray(servers.serverId, serverIds),
+		columns: { serverId: true, name: true, metricsConfig: true, serverStatus: true },
+	});
+	const configByServerId = new Map(serverRows.map((row) => [row.serverId, row]));
+
+	for (const [serverId, targets] of byServer) {
+		try {
+			const server = configByServerId.get(serverId);
+			if (server?.serverStatus !== "active") continue;
+			const config = readServerMetricsConfig(server.metricsConfig);
+			if (!config.enabled) continue;
+			const lastAt = remoteLastSampleAt.get(serverId) ?? 0;
+			if (now - lastAt < config.intervalSeconds * 1000) continue;
+
+			const appNames = targets.map((target) => target.appName);
+			const raw = await execAsyncRemote(serverId, buildRemoteSampleCommand(appNames), {
+				timeoutMs: REMOTE_SAMPLE_TIMEOUT_MS,
+			});
+			remoteLastSampleAt.set(serverId, now);
+
+			const result = parseRemoteSampleOutput(raw, appNames);
+			if (result.host) {
+				await appendServerPoints(serverId, {
+					t: now,
+					cpu: result.host.cpuPercent,
+					mu: result.host.memoryUsed,
+					mt: result.host.memoryTotal,
+					du: result.host.diskUsed,
+					dt: result.host.diskTotal,
+				});
+			}
+			for (const target of targets) {
+				const frame = result.services.get(target.appName);
+				if (!frame) continue; // not running on this node
+				await handleFrame(
+					target,
+					target.appName,
+					{
+						cpu: frame.cpu,
+						memory: {
+							used: frame.memoryUsed,
+							total: frame.memoryTotal,
+							percent: frame.memoryTotal > 0 ? (frame.memoryUsed / frame.memoryTotal) * 100 : 0,
+						},
+						network: { rx: frame.rx, tx: frame.tx },
+						block: { read: frame.blockRead, write: frame.blockWrite },
+						pids: frame.pids,
+					},
+					thresholds,
+					now,
+				);
+			}
+		} catch (error) {
+			// Unreachable host, SSH hiccup, docker down — record and move on;
+			// local sampling and the other servers are unaffected.
+			log.warn("Remote metrics sample failed", {
+				serverId,
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+}
+
+const REMOTE_SAMPLE_TIMEOUT_MS = 25_000;
+/** Last successful sample per server (in-memory; interval restarts on boot). */
+const remoteLastSampleAt = new Map<string, number>();
 
 /**
  * Read the last `hours` of history for a service, downsampled to at most
@@ -301,6 +469,46 @@ const toSample = (point: HistoryPoint): HistorySample => ({
 	blockWrite: point.bw ?? 0,
 	pids: point.pids ?? 0,
 });
+
+const toServerSample = (point: ServerHistoryPoint): ServerHistorySample => ({
+	t: point.t,
+	cpuPercent: point.cpu,
+	memoryUsed: point.mu,
+	memoryTotal: point.mt,
+	diskUsed: point.du,
+	diskTotal: point.dt,
+});
+
+/**
+ * Read the last `hours` of host-level history for a managed server,
+ * downsampled like service history.
+ */
+export async function readServerMetricsHistory(
+	serverId: string,
+	hours: number,
+): Promise<ServerHistorySample[]> {
+	let points: ServerHistoryPoint[] = [];
+	try {
+		points = (await readFile(serverMetricsFile(serverId), "utf8"))
+			.split("\n")
+			.filter(Boolean)
+			.map((line) => JSON.parse(line) as ServerHistoryPoint);
+	} catch {
+		return [];
+	}
+	const cutoff = Date.now() - hours * 60 * 60 * 1000;
+	const windowed = points.filter((point) => point.t >= cutoff);
+	if (windowed.length <= MAX_POINTS_PER_READ) {
+		return windowed.map(toServerSample);
+	}
+	const stride = windowed.length / MAX_POINTS_PER_READ;
+	const sampled: ServerHistoryPoint[] = [];
+	for (let index = 0; index < MAX_POINTS_PER_READ; index++) {
+		const point = windowed[Math.floor(index * stride)];
+		if (point) sampled.push(point);
+	}
+	return sampled.map(toServerSample);
+}
 
 let started = false;
 let inFlight = false;

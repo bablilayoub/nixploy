@@ -41,6 +41,8 @@ export const applications = pgTable(
 		autoDeploy: boolean("auto_deploy").notNull().default(true),
 		/** When true, pull_request webhooks create/redeploy/delete preview deployments. */
 		isPreviewDeploymentsActive: boolean("is_preview_deployments_active").notNull().default(false),
+		/** Safe default: fork PRs wait for an org member's approval before building. */
+		previewForksRequireApproval: boolean("preview_forks_require_approval").notNull().default(true),
 		watchPaths: text("watch_paths").array(),
 		// docker source
 		dockerImage: text("docker_image"),

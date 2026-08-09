@@ -22,14 +22,14 @@ export function Cta() {
 						once
 						className="font-display text-3xl font-semibold tracking-tight text-white sm:text-5xl"
 					>
-						Ship on your own hardware.
+						Your next deploy could be on your own hardware.
 					</TextAnimate>
 					<p className="mx-auto mt-4 max-w-xl text-neutral-400">
-						Install Nixploy in minutes. Own the panel, the Traefik edge, and every deploy after
-						that.
+						Bring a Docker host. One curl later you have the panel, the Traefik edge, and a platform
+						you actually own.
 					</p>
 					<div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-						<Link href="/install">
+						<Link href="/docs/install">
 							<ShimmerButton className="h-11 gap-2 px-6 text-sm font-medium">
 								Install now <ArrowRight className="size-4" />
 							</ShimmerButton>

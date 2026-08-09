@@ -117,7 +117,6 @@ export function GithubPanel() {
 				</span>
 			}
 			description="GitHub Apps used for repository deploys and webhooks."
-			wide
 			actions={
 				<Dialog open={open} onOpenChange={setOpen}>
 					<DialogTrigger asChild>

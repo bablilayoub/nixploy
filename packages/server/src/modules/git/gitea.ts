@@ -168,3 +168,33 @@ export async function testGiteaConnection(giteaId: string, organizationId: strin
 	const user = (await response.json()) as { login: string };
 	return { username: user.login };
 }
+
+/**
+ * Fork-PR gate bypass: is `username` a collaborator on owner/repo?
+ * Returns null when the check cannot run (provider row unusable, API
+ * unreachable) so callers fail safe toward requiring approval.
+ */
+export async function isGiteaCollaborator(input: {
+	giteaId: string;
+	owner: string;
+	repo: string;
+	username: string;
+}): Promise<boolean | null> {
+	try {
+		const [row] = await db.select().from(gitea).where(eq(gitea.giteaId, input.giteaId)).limit(1);
+		if (!row?.accessToken) return null;
+		const base = row.giteaUrl.replace(/\/$/, "");
+		const response = await fetch(
+			`${base}/api/v1/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/collaborators/${encodeURIComponent(input.username)}`,
+			{
+				headers: { Authorization: `token ${row.accessToken}` },
+				redirect: "error",
+			},
+		);
+		if (response.status === 204 || response.ok) return true;
+		if (response.status === 404) return false;
+		return null;
+	} catch {
+		return null;
+	}
+}

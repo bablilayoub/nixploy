@@ -8,24 +8,28 @@ import { cn } from "@/lib/utils";
 
 const faqs = [
 	{
-		q: "Is Nixploy free?",
-		a: "Yes. Nixploy is open source (Apache-2.0). You run it on your own servers — no hosted plan required.",
+		q: "Is Nixploy really free?",
+		a: "Yes. Apache-2.0, no hosted tier, no license key. The only thing you pay for is the server it runs on.",
 	},
 	{
 		q: "What do I need to install?",
-		a: "A Linux host with Docker and Swarm. One curl installs the panel, Traefik, and the config layout under your Nixploy config dir.",
+		a: "A Linux host with Docker and an active Swarm. One curl installs the panel, Traefik, and the config layout — you're deploying within minutes.",
+	},
+	{
+		q: "Can I run more than one server?",
+		a: "Yes. Add remote servers over SSH from Settings → Servers; they join the same Swarm and report metrics back to the same monitoring view.",
 	},
 	{
 		q: "Can I use my own domains and TLS?",
-		a: "Yes. Traefik handles routing and Let's Encrypt certificates. Point DNS at your server and attach domains in the panel.",
+		a: "Yes. Point DNS at your server, attach the domain to a service, and Traefik issues the Let's Encrypt certificate. Redirects and basic-auth rules are built in.",
 	},
 	{
 		q: "How do I deploy from Git?",
-		a: "Connect GitHub/GitLab/Bitbucket (or a public URL), pick the branch, and deploy. Webhooks and the CLI cover CI-style flows.",
+		a: "Connect GitHub, GitLab, Bitbucket, or Gitea — or paste any Git URL. Pick a branch and a builder (Nixpacks, buildpacks, Dockerfile), and every push triggers a deploy.",
 	},
 	{
 		q: "Is there an API?",
-		a: "Yes. Authenticate with x-api-key against your panel's REST/OpenAPI surface, or use @nixploy/cli.",
+		a: "The whole panel is an API: REST with OpenAPI docs on your own instance, the @nixploy/cli for terminals, and an MCP server so AI assistants can operate it too.",
 	},
 ] as const;
 
@@ -36,10 +40,10 @@ export function Faq() {
 		<section id="faq" className="border-t border-white/8 py-20 sm:py-28">
 			<div className="mx-auto max-w-3xl px-5 sm:px-6">
 				<BlurFade>
-					<div className="text-center">
+					<div>
 						<p className="font-mono text-xs tracking-[0.18em] text-neutral-500 uppercase">FAQ</p>
 						<h2 className="mt-3 font-display text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-							Questions, answered.
+							Frequently asked questions
 						</h2>
 					</div>
 				</BlurFade>

@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { QueryState } from "@/components/query-state";
 import {
 	type ChartConfig,
 	ChartContainer,
@@ -27,7 +28,9 @@ const chartConfig = {
 /** Deployments per day (14d), done vs error — dashboard trend panel. */
 export function DeploymentsChart() {
 	const trpc = useTRPC();
-	const { data, isPending } = useQuery(trpc.deployment.daily.queryOptions({ days: 14 }));
+	const { data, isPending, isError, error, refetch } = useQuery(
+		trpc.deployment.daily.queryOptions({ days: 14 }),
+	);
 	const rows = (data ?? []).map((row) => ({
 		...row,
 		label: row.date.slice(5), // MM-DD
@@ -42,6 +45,17 @@ export function DeploymentsChart() {
 			<div className="ps-2">
 				{isPending ? (
 					<Skeleton className="h-[220px] w-full" />
+				) : isError ? (
+					<QueryState
+						isPending={false}
+						isError={isError}
+						error={error}
+						onRetry={() => refetch()}
+						isEmpty={false}
+						empty={null}
+					>
+						{null}
+					</QueryState>
 				) : (
 					<ChartContainer config={chartConfig} className="aspect-auto h-[220px] w-full">
 						<AreaChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>

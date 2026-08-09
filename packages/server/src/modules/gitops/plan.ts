@@ -1,6 +1,6 @@
 import type { NixployStack } from "./schema";
 
-export type GitopsPlanAction = "create" | "update" | "noop";
+export type GitopsPlanAction = "create" | "update" | "delete" | "noop";
 
 export interface GitopsPlanItem {
 	kind: "application" | "compose" | "postgres" | "mysql" | "mariadb" | "mongo" | "redis" | "domain";
@@ -15,7 +15,7 @@ export interface GitopsPlanResult {
 	projectId: string;
 	environmentName: string;
 	items: GitopsPlanItem[];
-	summary: { create: number; update: number; noop: number };
+	summary: { create: number; update: number; delete: number; noop: number };
 }
 
 const stableEqual = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
@@ -92,6 +92,18 @@ const planDomains = (
 			changes: changes.length > 0 ? changes : undefined,
 		});
 		liveByKey.delete(key);
+	}
+
+	// Live domains absent from the desired stack are removed on apply.
+	for (const leftover of liveByKey.values()) {
+		const label = `${leftover.host}${leftover.path && leftover.path !== "/" ? leftover.path : ""}`;
+		items.push({
+			kind: "domain",
+			action: "delete",
+			name: label,
+			environment: environmentName,
+			parent: parentName,
+		});
 	}
 
 	return items;
@@ -279,7 +291,7 @@ export const buildPlan = (desired: NixployStack, live: LiveStackState): GitopsPl
 			acc[item.action] += 1;
 			return acc;
 		},
-		{ create: 0, update: 0, noop: 0 },
+		{ create: 0, update: 0, delete: 0, noop: 0 },
 	);
 
 	return {

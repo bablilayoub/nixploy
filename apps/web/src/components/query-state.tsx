@@ -27,7 +27,7 @@ export function QueryState({
 	if (isPending) {
 		return (
 			skeleton ?? (
-				<div className="divide-y rounded-xl border">
+				<div className="divide-y rounded-lg border">
 					<Skeleton className="h-10 w-full" />
 					<Skeleton className="h-10 w-full" />
 					<Skeleton className="h-10 w-full" />
@@ -38,7 +38,7 @@ export function QueryState({
 
 	if (isError) {
 		return (
-			<div className="flex flex-col items-center gap-2 rounded-xl border border-dashed py-16 text-center">
+			<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-16 text-center">
 				<AlertTriangle className="size-8 text-muted-foreground" />
 				<p className="text-sm font-medium">Failed to load</p>
 				{error?.message && <p className="text-sm text-muted-foreground">{error.message}</p>}

@@ -83,7 +83,6 @@ export function GiteaPanel() {
 		<SettingsSection
 			title="Gitea"
 			description="Gitea instances connected with an access token."
-			wide
 			actions={
 				<Dialog open={open} onOpenChange={setOpen}>
 					<DialogTrigger asChild>

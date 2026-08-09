@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Tags } from "lucide-react";
-import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -25,9 +26,25 @@ const DEFAULT_COLOR = "#6366f1";
 export function ManageTagsDialog() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const router = useRouter();
+	const pathname = usePathname();
+	const searchParams = useSearchParams();
 	const [open, setOpen] = useState(false);
 	const [name, setName] = useState("");
 	const [color, setColor] = useState(DEFAULT_COLOR);
+
+	// Deep link from the command palette (?new=tags) opens the dialog once.
+	useEffect(() => {
+		if (searchParams.get("new") !== "tags") {
+			return;
+		}
+		setOpen(true);
+		// Strip the param so a refresh doesn't reopen the dialog.
+		const params = new URLSearchParams(searchParams.toString());
+		params.delete("new");
+		const query = params.toString();
+		router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+	}, [searchParams, router, pathname]);
 
 	const tagsQuery = useQuery({
 		...trpc.tag.all.queryOptions(),

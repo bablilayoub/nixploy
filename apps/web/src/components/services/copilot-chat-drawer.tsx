@@ -3,7 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bot, Loader2, Send, Settings2 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -49,10 +50,26 @@ const SUGGESTIONS: Record<CopilotTarget["type"], string[]> = {
 export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const router = useRouter();
+	const pathname = usePathname();
+	const searchParams = useSearchParams();
 	const [open, setOpen] = useState(false);
 	const [input, setInput] = useState("");
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
 	const [pendingActions, setPendingActions] = useState<ProposedAction[]>([]);
+
+	// Deep link from the command palette (?copilot=1) opens the drawer once.
+	useEffect(() => {
+		if (searchParams.get("copilot") !== "1") {
+			return;
+		}
+		setOpen(true);
+		// Strip the param so a refresh doesn't reopen the drawer.
+		const params = new URLSearchParams(searchParams.toString());
+		params.delete("copilot");
+		const query = params.toString();
+		router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+	}, [searchParams, router, pathname]);
 
 	const aiSettings = useQuery({
 		...trpc.ai.getSettings.queryOptions(),

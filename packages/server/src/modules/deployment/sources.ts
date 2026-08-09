@@ -179,6 +179,9 @@ export async function cloneGitSource(
 		await ctx.run(
 			`mkdir -p ${dir} && ` +
 				`(if [ -d ${dir}/.git ]; then ` +
+				// Refresh the remote first: repository/provider/token changes must
+				// take effect on redeploy, not keep fetching the stale origin.
+				`${sshEnv}git -C ${dir} remote set-url origin ${url} && ` +
 				`${sshEnv}git -C ${dir} fetch --depth 1 origin ${branch} && git -C ${dir} reset --hard FETCH_HEAD; ` +
 				`else ${sshEnv}git clone --branch ${branch} --depth 1 --single-branch ${url} ${dir}; fi)`,
 		);
@@ -199,6 +202,9 @@ export async function cloneGitSource(
 	if (source.env) git.env(source.env);
 	const isRepo = await git.checkIsRepo().catch(() => false);
 	if (isRepo) {
+		// Refresh the remote first: repository/provider/token changes must
+		// take effect on redeploy, not keep fetching the stale origin.
+		await git.remote(["set-url", "origin", source.cloneUrl]);
 		await git.fetch(["origin", source.branch, "--depth", "1"]);
 		await git.reset(["--hard", "FETCH_HEAD"]);
 	} else {
@@ -297,6 +303,66 @@ export interface RegistryAuth {
 	username: string;
 	password: string;
 	serveraddress?: string;
+	/** Registry row metadata used to scope where credentials may be sent. */
+	registryUrl?: string | null;
+	imagePrefix?: string | null;
+}
+
+/**
+ * Registry host of an image reference, following Docker's reference rules:
+ * the first path component is a registry only when it contains `.`/`:` or is
+ * `localhost`; anything else (including `library/ubuntu`, `ubuntu:22.04`)
+ * lives on docker.io.
+ */
+export function imageRegistryHost(image: string): string {
+	const slash = image.indexOf("/");
+	if (slash === -1) return "docker.io";
+	const first = image.slice(0, slash).toLowerCase();
+	if (first.includes(".") || first.includes(":") || first === "localhost") return first;
+	return "docker.io";
+}
+
+/** Normalize a stored registry URL to a bare host (`docker.io` aliases fold). */
+function normalizeRegistryHost(registryUrl: string): string {
+	const withoutProto = registryUrl.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
+	const host = (withoutProto.split("/")[0] ?? "").toLowerCase();
+	if (
+		host === "index.docker.io" ||
+		host === "registry-1.docker.io" ||
+		host === "hub.docker.com" ||
+		host === "docker.io"
+	) {
+		return "docker.io";
+	}
+	return host;
+}
+
+/**
+ * Decide whether stored registry credentials may be attached to a pull of
+ * `image`. The daemon forwards `authconfig` to whatever registry the image
+ * reference points at — attaching credentials for a different registry
+ * leaks them to a third party. Credentials with no recorded host (inline
+ * user/pass) only attach to docker.io, the daemon's default.
+ */
+export function shouldAttachRegistryAuth(
+	auth: Pick<RegistryAuth, "registryUrl" | "imagePrefix"> | null,
+	image: string,
+): boolean {
+	if (!auth) return false;
+	const imageHost = imageRegistryHost(image);
+	const registryUrl = auth.registryUrl?.trim();
+	const imagePrefix = auth.imagePrefix?.trim();
+	if (registryUrl && normalizeRegistryHost(registryUrl) === imageHost) return true;
+	if (imagePrefix) {
+		// Prefixes like "my-org" (docker.io) or "ghcr.io/my-org" name a
+		// namespace inside the registry — compare their implied host.
+		if (imageRegistryHost(imagePrefix) === imageHost) return true;
+	}
+	if (!registryUrl && !imagePrefix) {
+		// Inline credentials without an explicit registry URL: docker hub only.
+		return imageHost === "docker.io";
+	}
+	return false;
 }
 
 /** Resolve pull credentials: explicit registry row wins over inline user/pass. */
@@ -312,6 +378,8 @@ export async function resolveRegistryAuth(
 			username: reg.username,
 			password: reg.password,
 			serveraddress: reg.registryUrl || undefined,
+			registryUrl: reg.registryUrl || null,
+			imagePrefix: reg.imagePrefix,
 		};
 	}
 	if (application.username && application.password) {
@@ -333,10 +401,22 @@ export async function pullDockerImage(
 
 	const auth = await resolveRegistryAuth(application);
 	if (auth) ctx.logger.addSecret(auth.password);
+	// Never send registry credentials to a registry the image does not
+	// belong to — the daemon forwards authconfig to the image's registry.
+	const attachAuth = shouldAttachRegistryAuth(auth, image);
+	if (auth && !attachAuth) {
+		ctx.logger.line(
+			`Skipping registry credentials: image ${image} is not in ${auth.registryUrl || "docker.io"}`,
+		);
+	}
 
 	ctx.logger.line(`Pulling image ${image}...`);
 	const docker = await getDocker(ctx.serverId);
-	const stream = await docker.pull(image, auth ? { authconfig: auth } : {});
+	const authconfig =
+		auth && attachAuth
+			? { username: auth.username, password: auth.password, serveraddress: auth.serveraddress }
+			: undefined;
+	const stream = await docker.pull(image, authconfig ? { authconfig } : {});
 
 	await new Promise<void>((resolve, reject) => {
 		docker.modem.followProgress(

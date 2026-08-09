@@ -12,7 +12,6 @@ export function SettingsSection({
 	description,
 	children,
 	danger = false,
-	wide: _wide = false,
 	bare = false,
 	className,
 	actions,
@@ -22,10 +21,6 @@ export function SettingsSection({
 	description?: ReactNode;
 	children?: ReactNode;
 	danger?: boolean;
-	/**
-	 * @deprecated Body is always full width. Kept so call sites keep compiling.
-	 */
-	wide?: boolean;
 	/** Skip outer border/padding — header + body only. */
 	bare?: boolean;
 	className?: string;
@@ -33,8 +28,6 @@ export function SettingsSection({
 	/** In-page jump target (e.g. Platform section anchors). */
 	id?: string;
 }) {
-	void _wide;
-
 	if (danger) {
 		return (
 			<section

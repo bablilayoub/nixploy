@@ -127,7 +127,6 @@ export function SecurityManager({ applicationId }: { applicationId: string }) {
 			<SettingsSection
 				title="Security"
 				description="Protect the application with HTTP basic auth at the reverse proxy."
-				wide
 				actions={
 					<Button size="sm" onClick={() => setDialogOpen(true)}>
 						<Plus className="size-4" />

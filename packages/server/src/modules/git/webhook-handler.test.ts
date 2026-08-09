@@ -237,6 +237,12 @@ describe("provider webhook verification", () => {
 		).rejects.toBeInstanceOf(WebhookIgnored);
 	});
 
+	it("rejects a gitlab delivery with no provider id and no token", async () => {
+		await expect(handleGitWebhook("gitlab", {}, pushBody)).rejects.toBeInstanceOf(
+			WebhookUnauthorized,
+		);
+	});
+
 	it("rejects a gitea delivery with no signature header", async () => {
 		mockSelects([{ giteaId: "gt1", accessToken: "tok" }]);
 		await expect(

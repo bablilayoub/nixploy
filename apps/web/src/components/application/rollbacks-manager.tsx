@@ -84,7 +84,6 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 			<SettingsSection
 				title="Rollbacks"
 				description="Images from past successful deploys. Roll back without rebuilding."
-				wide
 			>
 				{isLoading ? (
 					<div className="flex flex-col gap-2">

@@ -5,14 +5,8 @@ import { Cpu, HardDrive, MemoryStick } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatBytes } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
-
-function formatBytes(bytes: number): string {
-	if (!bytes) return "0 B";
-	const units = ["B", "KB", "MB", "GB", "TB"];
-	const index = Math.min(Math.floor(Math.log2(bytes) / 10), units.length - 1);
-	return `${(bytes / 2 ** (10 * index)).toFixed(1)} ${units[index]}`;
-}
 
 function Meter({
 	icon: Icon,

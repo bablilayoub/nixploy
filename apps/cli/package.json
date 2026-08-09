@@ -7,17 +7,44 @@
 	"bin": {
 		"nixploy": "./dist/index.js"
 	},
+	"main": "./dist/index.js",
+	"exports": {
+		".": "./dist/index.js"
+	},
 	"files": [
 		"dist",
-		"README.md"
+		"README.md",
+		"LICENSE"
 	],
 	"engines": {
 		"node": ">=22"
 	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/bablilayoub/nixploy.git",
+		"directory": "apps/cli"
+	},
+	"homepage": "https://github.com/bablilayoub/nixploy/tree/main/apps/cli",
+	"bugs": {
+		"url": "https://github.com/bablilayoub/nixploy/issues"
+	},
+	"keywords": [
+		"nixploy",
+		"paas",
+		"cli",
+		"docker",
+		"self-hosted",
+		"deploy"
+	],
+	"publishConfig": {
+		"access": "public",
+		"registry": "https://registry.npmjs.org"
+	},
 	"scripts": {
 		"build": "tsup",
 		"dev": "tsup --watch",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"prepublishOnly": "pnpm run typecheck && pnpm run build"
 	},
 	"dependencies": {
 		"commander": "^13.1.0"

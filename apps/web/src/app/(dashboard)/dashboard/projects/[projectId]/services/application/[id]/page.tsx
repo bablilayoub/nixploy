@@ -22,7 +22,29 @@ import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useSyncedTab } from "@/hooks/use-synced-tab";
 import { useTRPC } from "@/lib/trpc";
+
+const TOP_TABS = ["general", "deploy", "runtime", "domains", "config", "settings"];
+
+/** Sub-tab → its top-level tab, so ?tab=logs / ?tab=deployments deep-link. */
+const SUB_TAB_PARENT: Record<string, string> = {
+	deployments: "deploy",
+	preview: "deploy",
+	schedules: "deploy",
+	backups: "deploy",
+	logs: "runtime",
+	monitoring: "runtime",
+	terminal: "runtime",
+	environment: "config",
+	advanced: "config",
+};
+
+const SUB_TAB_DEFAULT: Record<string, string> = {
+	deploy: "deployments",
+	runtime: "logs",
+	config: "environment",
+};
 
 export default function ApplicationDetailPage({
 	params,
@@ -31,6 +53,13 @@ export default function ApplicationDetailPage({
 }) {
 	const { projectId, id } = use(params);
 	const trpc = useTRPC();
+	const [tab, selectTab] = useSyncedTab(
+		"general",
+		(value) => TOP_TABS.includes(value) || value in SUB_TAB_PARENT,
+	);
+	const topTab = TOP_TABS.includes(tab) ? tab : (SUB_TAB_PARENT[tab] ?? "general");
+	const subTab = (parent: string) =>
+		SUB_TAB_PARENT[tab] === parent ? tab : SUB_TAB_DEFAULT[parent];
 	const { data: application, isLoading } = useQuery(
 		trpc.application.one.queryOptions({ applicationId: id }),
 	);
@@ -63,7 +92,7 @@ export default function ApplicationDetailPage({
 		<div className="flex flex-col gap-6">
 			<ApplicationHeader application={application} projectId={projectId} />
 
-			<Tabs defaultValue="general" className="w-full">
+			<Tabs value={topTab} onValueChange={selectTab} className="w-full">
 				<UnderlineTabsList>
 					<UnderlineTabsTrigger value="general">General</UnderlineTabsTrigger>
 					<UnderlineTabsTrigger value="deploy">Deploy</UnderlineTabsTrigger>
@@ -78,7 +107,7 @@ export default function ApplicationDetailPage({
 				</TabsContent>
 
 				<TabsContent value="deploy" className="mt-6">
-					<Tabs defaultValue="deployments" className="w-full gap-4">
+					<Tabs value={subTab("deploy")} onValueChange={selectTab} className="w-full gap-4">
 						<SubTabsList>
 							<SubTabsTrigger value="deployments">Deployments</SubTabsTrigger>
 							<SubTabsTrigger value="preview">Preview</SubTabsTrigger>
@@ -101,7 +130,7 @@ export default function ApplicationDetailPage({
 				</TabsContent>
 
 				<TabsContent value="runtime" className="mt-6">
-					<Tabs defaultValue="logs" className="w-full gap-4">
+					<Tabs value={subTab("runtime")} onValueChange={selectTab} className="w-full gap-4">
 						<SubTabsList>
 							<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
 							<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>
@@ -133,7 +162,7 @@ export default function ApplicationDetailPage({
 				</TabsContent>
 
 				<TabsContent value="config" className="mt-6">
-					<Tabs defaultValue="environment" className="w-full gap-4">
+					<Tabs value={subTab("config")} onValueChange={selectTab} className="w-full gap-4">
 						<SubTabsList>
 							<SubTabsTrigger value="environment">Environment</SubTabsTrigger>
 							<SubTabsTrigger value="advanced">Advanced</SubTabsTrigger>

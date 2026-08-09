@@ -260,6 +260,11 @@ const syncDomains = async (
 		liveByKey.delete(key);
 	}
 
+	// GitOps semantics: live domains absent from the desired stack are removed.
+	for (const leftover of liveByKey.values()) {
+		await db.delete(domains).where(eq(domains.domainId, leftover.domainId));
+	}
+
 	if (parent.applicationId) {
 		const application = await db.query.applications.findFirst({
 			where: eq(applications.applicationId, parent.applicationId),
@@ -532,7 +537,7 @@ export const applyStack = async (
 		const application = await db.query.applications.findFirst({
 			where: and(eq(applications.environmentId, environmentId), eq(applications.name, app.name)),
 		});
-		if (application && (app.domains?.length ?? 0) > 0) {
+		if (application) {
 			const liveDomains = await db.query.domains.findMany({
 				where: eq(domains.applicationId, application.applicationId),
 			});
@@ -551,7 +556,7 @@ export const applyStack = async (
 		const composeRow = await db.query.compose.findFirst({
 			where: and(eq(compose.environmentId, environmentId), eq(compose.name, row.name)),
 		});
-		if (composeRow && (row.domains?.length ?? 0) > 0) {
+		if (composeRow) {
 			const liveDomains = await db.query.domains.findMany({
 				where: eq(domains.composeId, composeRow.composeId),
 			});

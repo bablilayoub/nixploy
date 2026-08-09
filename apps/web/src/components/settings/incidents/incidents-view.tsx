@@ -3,8 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { useState } from "react";
+import { QueryState } from "@/components/query-state";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -32,7 +32,6 @@ export function IncidentsView() {
 			<SettingsSection
 				title="Incident timeline"
 				description="Deploy failures, threshold trips, watchdog events, and uptime flips."
-				wide
 				actions={
 					<Select value={projectId} onValueChange={setProjectId}>
 						<SelectTrigger className="w-48">
@@ -49,25 +48,27 @@ export function IncidentsView() {
 					</Select>
 				}
 			>
-				<div className="flex flex-col gap-3">
-					{incidents.isLoading ? (
-						["a", "b", "c"].map((key) => <Skeleton key={key} className="h-16 w-full" />)
-					) : incidents.isError ? (
-						<div className="flex flex-col items-center gap-2 py-8 text-center">
-							<p className="text-sm font-medium">Could not load incidents</p>
-							<p className="text-sm text-muted-foreground">
-								{incidents.error.message || "Try again in a moment."}
-							</p>
-							<Button variant="outline" size="sm" onClick={() => void incidents.refetch()}>
-								Retry
-							</Button>
+				<QueryState
+					isPending={incidents.isPending}
+					isError={incidents.isError}
+					error={incidents.error}
+					onRetry={() => void incidents.refetch()}
+					skeleton={
+						<div className="flex flex-col gap-3">
+							{["a", "b", "c"].map((key) => (
+								<Skeleton key={key} className="h-16 w-full" />
+							))}
 						</div>
-					) : (incidents.data ?? []).length === 0 ? (
+					}
+					isEmpty={(incidents.data ?? []).length === 0}
+					empty={
 						<p className="py-8 text-center text-sm text-muted-foreground">
 							No incidents yet. Alerts and failed deploys will appear here.
 						</p>
-					) : (
-						(incidents.data ?? []).map((incident) => (
+					}
+				>
+					<div className="flex flex-col gap-3">
+						{(incidents.data ?? []).map((incident) => (
 							<div key={incident.incidentId} className="rounded-lg border px-4 py-3 text-sm">
 								<div className="flex flex-wrap items-center justify-between gap-2">
 									<p className="font-medium">{incident.title}</p>
@@ -86,9 +87,9 @@ export function IncidentsView() {
 									</p>
 								)}
 							</div>
-						))
-					)}
-				</div>
+						))}
+					</div>
+				</QueryState>
 			</SettingsSection>
 
 			<LogSearchSection />
@@ -109,7 +110,6 @@ function LogSearchSection() {
 		<SettingsSection
 			title="Log search"
 			description="Search indexed deployment logs (Postgres tsvector). Failed deploys are ingested automatically."
-			wide
 		>
 			<form
 				className="flex gap-2"

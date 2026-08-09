@@ -62,7 +62,6 @@ export function ServiceAlertRulesCard({
 		<SettingsSection
 			title="Alert rules"
 			description="CPU, memory, restart, and deploy-failure thresholds."
-			wide
 		>
 			<div className="flex flex-col gap-4">
 				{rules.isLoading ? (

@@ -71,7 +71,7 @@ export function PageShell({
 					</p>
 					<div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
 						<Link
-							href="/install"
+							href="/docs/install"
 							className="inline-flex h-11 items-center rounded-md bg-foreground px-5 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
 						>
 							Install guide

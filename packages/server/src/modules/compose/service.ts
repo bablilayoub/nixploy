@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, compose, domains, environments, mounts } from "../../db/schema";
 import { assertSafeAppName } from "../../utils/validators";
+import { parseEnv } from "../deployment/env";
 import { removeServiceLogs } from "../deployment/maintenance";
 import { getTraefik } from "./adapters";
 import {
@@ -260,6 +261,10 @@ export async function prepareComposeFiles(composeRow: ComposeRow): Promise<Prepa
 		composeRow.env,
 	);
 	await writeComposeFile(composeRow, envFilePath, `${mergedEnv}\n`);
+
+	// Scrub the fully merged env from logs too — `docker compose` interpolates
+	// project/environment variables and can echo them into deploy output.
+	for (const [, value] of parseEnv(mergedEnv)) secrets.push(value);
 
 	return { workDir: dirname(composeFilePath), composeFilePath, envFilePath, secrets };
 }

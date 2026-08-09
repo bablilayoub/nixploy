@@ -114,7 +114,6 @@ export function ApiKeysCard() {
 		<SettingsSection
 			title="API keys"
 			description="Personal API keys for the REST API and CLI. Use them with x-api-key or try endpoints in Swagger."
-			wide
 			actions={
 				<div className="flex flex-wrap items-center gap-2">
 					<Button variant="outline" size="sm" asChild>

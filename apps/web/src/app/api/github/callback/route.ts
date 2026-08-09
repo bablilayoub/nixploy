@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { decodeGithubAppState, setupGithubApp } from "@nixploy/server/modules/git/github";
 import {
 	assertCapability,
@@ -12,6 +13,33 @@ export const dynamic = "force-dynamic";
 
 const SETUP_COOKIE = "nixploy_github_app_setup";
 const SETUP_MAX_AGE_SEC = 600;
+
+function setupCookieSecret(): string {
+	const key = process.env.BETTER_AUTH_SECRET;
+	if (!key) {
+		throw new Error("BETTER_AUTH_SECRET is required to sign the GitHub App setup cookie");
+	}
+	return key;
+}
+
+/** HMAC-sign the stashed code/state so a forged cookie cannot inject them. */
+function signSetupStash(payload: string): string {
+	const sig = createHmac("sha256", setupCookieSecret()).update(payload).digest("base64url");
+	return `${payload}.${sig}`;
+}
+
+/** Returns the payload when the signature matches, null otherwise. */
+function verifySetupStash(value: string): string | null {
+	const dot = value.lastIndexOf(".");
+	if (dot <= 0) return null;
+	const payload = value.slice(0, dot);
+	const sig = value.slice(dot + 1);
+	const expected = createHmac("sha256", setupCookieSecret()).update(payload).digest("base64url");
+	const a = Buffer.from(sig);
+	const b = Buffer.from(expected);
+	if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+	return payload;
+}
 
 function appOrigin(request: Request): string {
 	const configured =
@@ -52,10 +80,9 @@ export async function GET(request: Request) {
 	let stashed: { code: string; state: string } | null = null;
 	if (cookieMatch) {
 		try {
-			stashed = JSON.parse(decodeURIComponent(cookieMatch.slice(SETUP_COOKIE.length + 1))) as {
-				code: string;
-				state: string;
-			};
+			const raw = decodeURIComponent(cookieMatch.slice(SETUP_COOKIE.length + 1));
+			const payload = verifySetupStash(raw);
+			stashed = payload ? (JSON.parse(payload) as { code: string; state: string }) : null;
 		} catch {
 			stashed = null;
 		}
@@ -72,13 +99,17 @@ export async function GET(request: Request) {
 		const login = new URL("/login", origin);
 		login.searchParams.set("next", "/api/github/callback");
 		const response = NextResponse.redirect(login);
-		response.cookies.set(SETUP_COOKIE, encodeURIComponent(JSON.stringify({ code, state })), {
-			httpOnly: true,
-			secure: origin.startsWith("https:"),
-			sameSite: "lax",
-			maxAge: SETUP_MAX_AGE_SEC,
-			path: "/",
-		});
+		response.cookies.set(
+			SETUP_COOKIE,
+			encodeURIComponent(signSetupStash(JSON.stringify({ code, state }))),
+			{
+				httpOnly: true,
+				secure: origin.startsWith("https:"),
+				sameSite: "lax",
+				maxAge: SETUP_MAX_AGE_SEC,
+				path: "/",
+			},
+		);
 		return response;
 	}
 

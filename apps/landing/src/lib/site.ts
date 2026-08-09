@@ -3,7 +3,7 @@ export const site = {
 	url: "https://nixploy.com",
 	tagline: "Ship anything. Own everything.",
 	description:
-		"Nixploy is a free, self-hostable Platform as a Service. Deploy apps, databases, and compose stacks on infrastructure you control — with Git deploys, Traefik TLS, monitoring, and a first-class CLI.",
+		"Nixploy is a free, self-hostable Platform as a Service. Deploy apps, databases, and compose stacks on infrastructure you control — with Git deploys, Traefik TLS, monitoring, backups, GitOps, MCP, Deploy Copilot, and a first-class CLI.",
 	github: "https://github.com/bablilayoub/nixploy",
 	githubDocs: "https://github.com/bablilayoub/nixploy/tree/main/docs",
 	githubApiDocs: "https://github.com/bablilayoub/nixploy/blob/main/docs/api.md",
@@ -22,14 +22,14 @@ export const navLinks = [
 	{ href: "/features", label: "Features" },
 	{ href: "/docs", label: "Docs" },
 	{ href: "/api", label: "API" },
-	{ href: "/install", label: "Install" },
+	{ href: "/docs/install", label: "Install" },
 ] as const;
 
 export const footerLinks = [
 	{ href: "/features", label: "Features" },
 	{ href: "/docs", label: "Docs" },
 	{ href: "/api", label: "API" },
-	{ href: "/install", label: "Install" },
+	{ href: "/docs/install", label: "Install" },
 	{ href: "/pricing", label: "Pricing" },
 	{ href: "/about", label: "About" },
 	{ href: "/privacy", label: "Privacy" },

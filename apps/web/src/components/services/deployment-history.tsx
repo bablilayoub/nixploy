@@ -27,6 +27,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { formatDuration } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
 
 const PAGE_SIZE = 10;
@@ -48,16 +49,6 @@ type DeploymentRow = {
 	createdAt: Date | string;
 	startedAt: Date | string | null;
 	finishedAt: Date | string | null;
-};
-
-const formatDuration = (deployment: DeploymentRow) => {
-	if (!deployment.startedAt) return "—";
-	const start = new Date(deployment.startedAt);
-	const end = deployment.finishedAt ? new Date(deployment.finishedAt) : new Date();
-	const seconds = Math.max(0, Math.round((end.getTime() - start.getTime()) / 1000));
-	if (seconds < 60) return `${seconds}s`;
-	const minutes = Math.floor(seconds / 60);
-	return `${minutes}m ${seconds % 60}s`;
 };
 
 export type DeploymentHistoryProps = {
@@ -268,7 +259,7 @@ export function DeploymentHistory({
 										{format(new Date(deployment.createdAt), "MMM d, yyyy HH:mm")}
 									</TableCell>
 									<TableCell className="text-muted-foreground">
-										{formatDuration(deployment)}
+										{formatDuration(deployment.startedAt, deployment.finishedAt)}
 									</TableCell>
 									<TableCell className="text-right">
 										<div className="flex justify-end gap-1">

@@ -320,101 +320,128 @@ export async function setUptimeProbe(input: {
 	return row;
 }
 
+/** Max probes checked in parallel — serial probes blow the 30s cron budget. */
+const UPTIME_PROBE_CONCURRENCY = 5;
+
+type UptimeProbeWithDomain = typeof uptimeProbes.$inferSelect & {
+	domain: { host: string; https: boolean } | null;
+};
+
+async function runOneProbe(probe: UptimeProbeWithDomain): Promise<void> {
+	const domain = probe.domain;
+	const host = domain?.host;
+	if (!domain || !host) return;
+	const scheme = domain.https ? "https" : "http";
+	const path = probe.path.startsWith("/") ? probe.path : `/${probe.path}`;
+	const url = `${scheme}://${host}${path}`;
+	try {
+		await assertSafeOutboundUrl(url, { allowHttp: !domain.https });
+	} catch {
+		await db
+			.update(uptimeProbes)
+			.set({
+				lastCheckedAt: new Date(),
+				status: "down",
+				lastStatusChangeAt: new Date(),
+				lastError: "Probe host is not allowed (private/link-local/metadata)",
+			})
+			.where(eq(uptimeProbes.uptimeProbeId, probe.uptimeProbeId));
+		return;
+	}
+
+	let nextStatus: "up" | "down" = "down";
+	let lastError: string | null = null;
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), probe.timeoutMs);
+	try {
+		const res = await fetch(url, {
+			method: "GET",
+			redirect: "error",
+			signal: controller.signal,
+			headers: { "user-agent": "nixploy-uptime/1.0" },
+		});
+		nextStatus = res.status === probe.expectedStatus ? "up" : "down";
+		if (nextStatus === "down") {
+			lastError = `HTTP ${res.status} (expected ${probe.expectedStatus})`;
+		}
+	} catch (error) {
+		nextStatus = "down";
+		lastError = error instanceof Error ? error.message : String(error);
+	} finally {
+		clearTimeout(timer);
+	}
+
+	const flipped = probe.status !== "unknown" && probe.status !== nextStatus;
+	await db
+		.update(uptimeProbes)
+		.set({
+			status: nextStatus,
+			lastCheckedAt: new Date(),
+			lastError,
+			...(flipped || probe.status === "unknown" ? { lastStatusChangeAt: new Date() } : {}),
+		})
+		.where(eq(uptimeProbes.uptimeProbeId, probe.uptimeProbeId));
+
+	if (flipped) {
+		const title = `Uptime ${nextStatus}: ${host}`;
+		const message =
+			nextStatus === "down"
+				? `Probe for ${url} is down: ${lastError ?? "unknown error"}`
+				: `Probe for ${url} recovered.`;
+		await recordIncident({
+			organizationId: probe.organizationId,
+			kind: "uptime",
+			severity: nextStatus === "down" ? "critical" : "info",
+			title,
+			message,
+			serviceName: host,
+			metadata: { url, status: nextStatus },
+		});
+		await notifyEvent(probe.organizationId, "uptimeFlip", {
+			title,
+			message,
+			fields: [
+				{ name: "Host", value: host },
+				{ name: "Status", value: nextStatus },
+			],
+		});
+	}
+}
+
 export async function runUptimeProbes(): Promise<void> {
 	const probes = await db.query.uptimeProbes.findMany({
 		where: and(eq(uptimeProbes.enabled, true)),
 		with: { domain: true },
 	});
 	const now = Date.now();
+	const due = probes.filter(
+		(probe) => now - (probe.lastCheckedAt?.getTime() ?? 0) >= probe.intervalSeconds * 1000,
+	);
 
-	for (const probe of probes) {
-		const last = probe.lastCheckedAt?.getTime() ?? 0;
-		if (now - last < probe.intervalSeconds * 1000) continue;
-
-		const host = probe.domain?.host;
-		if (!host) continue;
-		const scheme = probe.domain.https ? "https" : "http";
-		const path = probe.path.startsWith("/") ? probe.path : `/${probe.path}`;
-		const url = `${scheme}://${host}${path}`;
-		try {
-			await assertSafeOutboundUrl(url, { allowHttp: !probe.domain.https });
-		} catch {
-			await db
-				.update(uptimeProbes)
-				.set({
-					lastCheckedAt: new Date(),
-					status: "down",
-					lastStatusChangeAt: new Date(),
-					lastError: "Probe host is not allowed (private/link-local/metadata)",
-				})
-				.where(eq(uptimeProbes.uptimeProbeId, probe.uptimeProbeId));
-			continue;
-		}
-
-		let nextStatus: "up" | "down" = "down";
-		let lastError: string | null = null;
-		try {
-			const controller = new AbortController();
-			const timer = setTimeout(() => controller.abort(), probe.timeoutMs);
-			const res = await fetch(url, {
-				method: "GET",
-				redirect: "error",
-				signal: controller.signal,
-				headers: { "user-agent": "nixploy-uptime/1.0" },
-			});
-			clearTimeout(timer);
-			nextStatus = res.status === probe.expectedStatus ? "up" : "down";
-			if (nextStatus === "down") {
-				lastError = `HTTP ${res.status} (expected ${probe.expectedStatus})`;
-			}
-		} catch (error) {
-			nextStatus = "down";
-			lastError = error instanceof Error ? error.message : String(error);
-		}
-
-		const flipped = probe.status !== "unknown" && probe.status !== nextStatus;
-		await db
-			.update(uptimeProbes)
-			.set({
-				status: nextStatus,
-				lastCheckedAt: new Date(),
-				lastError,
-				...(flipped || probe.status === "unknown" ? { lastStatusChangeAt: new Date() } : {}),
-			})
-			.where(eq(uptimeProbes.uptimeProbeId, probe.uptimeProbeId));
-
-		if (flipped) {
-			const title = `Uptime ${nextStatus}: ${host}`;
-			const message =
-				nextStatus === "down"
-					? `Probe for ${url} is down: ${lastError ?? "unknown error"}`
-					: `Probe for ${url} recovered.`;
-			await recordIncident({
-				organizationId: probe.organizationId,
-				kind: "uptime",
-				severity: nextStatus === "down" ? "critical" : "info",
-				title,
-				message,
-				serviceName: host,
-				metadata: { url, status: nextStatus },
-			});
-			await notifyEvent(probe.organizationId, "uptimeFlip", {
-				title,
-				message,
-				fields: [
-					{ name: "Host", value: host },
-					{ name: "Status", value: nextStatus },
-				],
-			});
-		}
+	// Bounded concurrency: one slow/broken probe must not stall the pass.
+	for (let i = 0; i < due.length; i += UPTIME_PROBE_CONCURRENCY) {
+		await Promise.all(
+			due.slice(i, i + UPTIME_PROBE_CONCURRENCY).map((probe) =>
+				runOneProbe(probe).catch((error) => {
+					console.error(`uptime probe ${probe.uptimeProbeId} failed:`, error);
+				}),
+			),
+		);
 	}
 }
 
 export async function initUptimeProbes(): Promise<void> {
 	const schedule = (await import("node-schedule")).default;
+	let inFlight = false;
 	schedule.scheduleJob("uptime-probes", "*/30 * * * * *", () => {
-		void runUptimeProbes().catch((error) => {
-			console.error("uptime probes failed:", error);
-		});
+		if (inFlight) return; // never overlap passes
+		inFlight = true;
+		void runUptimeProbes()
+			.catch((error) => {
+				console.error("uptime probes failed:", error);
+			})
+			.finally(() => {
+				inFlight = false;
+			});
 	});
 }

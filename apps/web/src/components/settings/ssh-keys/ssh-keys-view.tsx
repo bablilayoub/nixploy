@@ -142,7 +142,6 @@ export function SshKeysView() {
 			<SettingsSection
 				title="SSH keys"
 				description="Keypairs used to connect to remote servers."
-				wide
 				actions={
 					<Dialog open={open} onOpenChange={setOpen}>
 						<DialogTrigger asChild>

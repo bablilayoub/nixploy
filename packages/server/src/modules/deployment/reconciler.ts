@@ -218,7 +218,14 @@ export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 
 	const graceSince = new Date(Date.now() - RECENT_DEPLOY_GRACE_MS);
 	const recentDone = await db.query.deployments.findMany({
-		where: and(eq(deployments.status, "done"), gte(deployments.finishedAt, graceSince)),
+		// Preview deploys share the parent's applicationId — without the
+		// isPreview filter a finished preview would pin the production
+		// service to "running" for the whole grace window.
+		where: and(
+			eq(deployments.status, "done"),
+			eq(deployments.isPreview, false),
+			gte(deployments.finishedAt, graceSince),
+		),
 		columns: { applicationId: true, composeId: true },
 	});
 	const graceApplications = new Set(recentDone.map((row) => row.applicationId).filter(Boolean));

@@ -29,6 +29,8 @@ const SCHEDULES_LOG_DIR =
 const jobs = new Map<string, schedule.Job>();
 /** Last-run state, keyed by scheduleId (runtime-only, rebuilt on boot). */
 const runStates = new Map<string, ScheduleRunState>();
+/** scheduleIds with a run in flight — cron ticks must never overlap runs. */
+const inFlight = new Set<string>();
 
 function getState(scheduleId: string): ScheduleRunState {
 	let state = runStates.get(scheduleId);
@@ -155,11 +157,22 @@ export function registerSchedule(row: ScheduleRow): void {
 	unregisterSchedule(row.scheduleId);
 	if (!row.enabled) return;
 	const job = schedule.scheduleJob(row.scheduleId, row.cronExpression, () => {
-		void runSchedule(row, "cron").catch((error) => {
-			log.error(`Schedule ${row.name} (${row.scheduleId}) failed`, {
-				error: error instanceof Error ? error.message : String(error),
+		// Skip this tick when the previous run is still going (mirrors the
+		// guards in reconciler.ts / maintenance.ts).
+		if (inFlight.has(row.scheduleId)) {
+			log.warn(`Schedule ${row.name} (${row.scheduleId}) still running — skipping tick`);
+			return;
+		}
+		inFlight.add(row.scheduleId);
+		void runSchedule(row, "cron")
+			.catch((error) => {
+				log.error(`Schedule ${row.name} (${row.scheduleId}) failed`, {
+					error: error instanceof Error ? error.message : String(error),
+				});
+			})
+			.finally(() => {
+				inFlight.delete(row.scheduleId);
 			});
-		});
 	});
 	if (!job) {
 		throw new Error(`Invalid cron expression: ${row.cronExpression}`);

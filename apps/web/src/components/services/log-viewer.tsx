@@ -66,23 +66,23 @@ const LEVEL_STYLES: Record<
 > = {
 	error: {
 		tag: "ERR",
-		badge: "bg-red-500/15 text-red-400",
-		text: "text-red-300",
+		badge: "bg-destructive/15 text-destructive",
+		text: "text-destructive",
 	},
 	warn: {
 		tag: "WRN",
-		badge: "bg-amber-500/15 text-amber-400",
-		text: "text-amber-200",
+		badge: "bg-warning/15 text-warning",
+		text: "text-warning",
 	},
 	success: {
 		tag: "OK",
-		badge: "bg-emerald-500/15 text-emerald-400",
-		text: "text-emerald-300",
+		badge: "bg-success/15 text-success",
+		text: "text-success",
 	},
 	info: {
 		tag: "INF",
-		badge: "bg-sky-500/15 text-sky-400",
-		text: "text-sky-300",
+		badge: "bg-info/15 text-info",
+		text: "text-info",
 	},
 	debug: {
 		tag: "DBG",
@@ -103,7 +103,7 @@ function LogLine({ line, wrap }: { line: string; wrap: boolean }) {
 				{style && (
 					<span
 						className={cn(
-							"inline-block rounded px-1 py-px text-[9px] font-semibold leading-3",
+							"inline-block rounded px-1 py-px text-[11px] font-semibold leading-3",
 							style.badge,
 						)}
 					>
@@ -464,6 +464,7 @@ export function LogViewer({
 			<div className="flex flex-wrap items-center gap-2 border-b border-border bg-black/[0.02] px-3 py-1.5 dark:bg-white/[0.02]">
 				<Input
 					placeholder="Filter logs…"
+					aria-label="Filter logs"
 					value={filter}
 					onChange={(event) => setFilter(event.target.value)}
 					className="h-7 w-44 font-mono text-xs"

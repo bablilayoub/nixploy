@@ -150,7 +150,6 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 			<SettingsSection
 				title="Ports"
 				description="Publish container ports on the swarm, bypassing the reverse proxy."
-				wide
 				actions={
 					<Button size="sm" onClick={() => setDialogOpen(true)}>
 						<Plus className="size-4" />

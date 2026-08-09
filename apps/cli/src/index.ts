@@ -16,10 +16,12 @@ import { templateCommand } from "./commands/template.js";
 
 const program = new Command();
 
+declare const __CLI_VERSION__: string;
+
 program
 	.name("nixploy")
 	.description("Nixploy CLI — manage projects, apps, databases and env vars")
-	.version("0.1.0")
+	.version(__CLI_VERSION__)
 	.option("--url <url>", "Nixploy server base URL (overrides config and NIXPLOY_API_URL)")
 	.option("--api-key <key>", "API key (overrides config and NIXPLOY_API_KEY)")
 	.hook("preAction", (thisCommand) => {

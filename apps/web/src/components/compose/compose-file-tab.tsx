@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import type { ComposeService } from "@/components/compose/compose-detail";
+import { GenerateComposeDialog } from "@/components/compose/generate-compose-dialog";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,11 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 		setLocked(true);
 	};
 
+	const acceptDraft = (composeFile: string) => {
+		setValue(composeFile);
+		setLocked(false);
+	};
+
 	return (
 		<SettingsStack>
 			<SettingsSection
@@ -59,35 +65,37 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 						{compose.sourceType === "raw"
 							? "This file is stored directly on the service."
 							: "Overwrites the compose file inside the local clone of the source."}{" "}
-						Use Copilot in the header to draft or rewrite YAML.
+						Use Copilot to draft or rewrite YAML.
 					</>
 				}
-				wide
 				actions={
-					!locked ? (
-						<div className="flex items-center gap-2">
-							<Button
-								size="sm"
-								variant="secondary"
-								disabled={saveMutation.isPending}
-								onClick={cancelEditing}
-							>
-								Cancel
-							</Button>
-							<Button
-								size="sm"
-								disabled={saveMutation.isPending || value === compose.composeFile}
-								onClick={() =>
-									saveMutation.mutate({
-										composeId: compose.composeId,
-										composeFile: value,
-									})
-								}
-							>
-								{saveMutation.isPending ? "Saving…" : "Save"}
-							</Button>
-						</div>
-					) : undefined
+					<div className="flex items-center gap-2">
+						<GenerateComposeDialog onAccept={acceptDraft} />
+						{!locked && (
+							<>
+								<Button
+									size="sm"
+									variant="secondary"
+									disabled={saveMutation.isPending}
+									onClick={cancelEditing}
+								>
+									Cancel
+								</Button>
+								<Button
+									size="sm"
+									disabled={saveMutation.isPending || value === compose.composeFile}
+									onClick={() =>
+										saveMutation.mutate({
+											composeId: compose.composeId,
+											composeFile: value,
+										})
+									}
+								>
+									{saveMutation.isPending ? "Saving…" : "Save"}
+								</Button>
+							</>
+						)}
+					</div>
 				}
 			>
 				<CodeEditor

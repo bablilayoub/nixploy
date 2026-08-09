@@ -41,7 +41,7 @@ const servers = new Set<WebSocketServer>();
  */
 export function setupWebSocketServer(httpServer: HttpServer): void {
 	httpServer.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
-		void handleUpgrade(req, socket, head);
+		void handleUpgrade(httpServer, req, socket, head);
 	});
 
 	heartbeat = setInterval(() => {
@@ -59,13 +59,22 @@ export function setupWebSocketServer(httpServer: HttpServer): void {
 	heartbeat.unref();
 }
 
-async function handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): Promise<void> {
+async function handleUpgrade(
+	httpServer: HttpServer,
+	req: IncomingMessage,
+	socket: Duplex,
+	head: Buffer,
+): Promise<void> {
 	const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
 	const handler = routes[pathname];
 	if (!handler) {
 		// Not a Nixploy endpoint — leave the socket untouched so other
 		// upgrade listeners (e.g. Next.js dev HMR at /_next/webpack-hmr)
-		// can handle it.
+		// can handle it. When we are the only listener nobody will, so
+		// destroy the socket instead of leaking the TCP connection.
+		if (httpServer.listenerCount("upgrade") === 1) {
+			socket.destroy();
+		}
 		return;
 	}
 

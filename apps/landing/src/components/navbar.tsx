@@ -67,7 +67,7 @@ export function Navbar() {
 						GitHub
 					</a>
 					<Link
-						href="/install"
+						href="/docs/install"
 						className="hidden rounded-md bg-foreground px-3.5 py-1.5 text-sm font-medium text-background transition-colors hover:bg-foreground/90 sm:inline-flex"
 					>
 						Get started

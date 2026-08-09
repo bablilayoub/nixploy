@@ -53,9 +53,11 @@ export function generateDatabaseAppName(name: string): string {
 const TABLE_BY_KIND = { postgres, mysql, mariadb, mongo, redis } as const;
 
 /**
- * Clone a database row into `environmentId`: fresh appName, status `idle`,
- * no external port (it would collide with the source). The engine-managed
- * data volume is NOT copied — mounts stay with the source service.
+ * Clone a database row into `environmentId`: fresh appName and timestamps,
+ * status `idle`, no external port (it would collide with the source). The
+ * engine-managed data volume is NOT copied — mounts stay with the source
+ * service. The database password IS copied on purpose so the clone is
+ * reachable with the same credentials.
  */
 export async function duplicateDatabase<K extends DatabaseKind>(
 	kind: K,
@@ -65,6 +67,7 @@ export async function duplicateDatabase<K extends DatabaseKind>(
 	// biome-ignore lint/suspicious/noExplicitAny: drizzle table generics differ per kind
 	const table = TABLE_BY_KIND[kind] as any;
 	const values: Record<string, unknown> = { ...source };
+	// Identity/status fields reset to schema defaults (or explicit values below).
 	delete values[`${kind}Id`];
 	delete values.createdAt;
 	delete values.appName;
@@ -78,6 +81,7 @@ export async function duplicateDatabase<K extends DatabaseKind>(
 			environmentId,
 			status: "idle",
 			externalPort: null,
+			createdAt: new Date(),
 		})
 		.returning()) as DatabaseRowMap[K][];
 	const row = inserted[0];

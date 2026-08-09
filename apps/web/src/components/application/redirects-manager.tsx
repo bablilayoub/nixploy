@@ -124,7 +124,6 @@ export function RedirectsManager({ applicationId }: { applicationId: string }) {
 			<SettingsSection
 				title="Redirects"
 				description="Regex-based URL redirects applied at the reverse proxy."
-				wide
 				actions={
 					<Button size="sm" onClick={() => setDialogOpen(true)}>
 						<Plus className="size-4" />

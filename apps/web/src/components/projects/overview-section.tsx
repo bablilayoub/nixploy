@@ -4,21 +4,15 @@ import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { ChevronRight, Container, FolderGit2, Rocket, Server } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
-import { StatusDot, type StatusDotStatus } from "@/components/shell";
+import { StatusDot } from "@/components/shell";
 import { Skeleton } from "@/components/ui/skeleton";
+import { deploymentStatusDot } from "@/lib/status";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
-
-const deploymentStatusDot: Record<string, StatusDotStatus> = {
-	running: "info",
-	done: "success",
-	error: "error",
-	cancelled: "neutral",
-};
 
 function StatPanel({
 	label,
@@ -155,13 +149,50 @@ function DockerStatPanel() {
 /** Latest deployments across every project of the organization. */
 export function RecentDeployments() {
 	const trpc = useTRPC();
-	const { data, isPending, isError, error, refetch } = useQuery(
-		trpc.deployment.recent.queryOptions({ limit: 8 }),
-	);
+	const { data, isPending, isError, error, refetch } = useQuery({
+		...trpc.deployment.recent.queryOptions({ limit: 8 }),
+		refetchInterval: 10_000,
+	});
 	const deployments = data?.deployments ?? [];
+
+	// Flash a row once when its status flips between polls (running → done/error).
+	const previousStatuses = useRef(new Map<string, string>());
+	const [flashed, setFlashed] = useState<ReadonlySet<string>>(new Set());
+	useEffect(() => {
+		const next = new Set<string>();
+		for (const deployment of deployments) {
+			const previous = previousStatuses.current.get(deployment.deploymentId);
+			if (previous && previous !== deployment.status) {
+				next.add(deployment.deploymentId);
+			}
+		}
+		previousStatuses.current = new Map(
+			deployments.map((deployment) => [deployment.deploymentId, deployment.status]),
+		);
+		if (next.size > 0) {
+			setFlashed((current) => new Set([...current, ...next]));
+		}
+	}, [deployments]);
+
+	const clearFlash = (deploymentId: string) => {
+		setFlashed((current) => {
+			if (!current.has(deploymentId)) {
+				return current;
+			}
+			const next = new Set(current);
+			next.delete(deploymentId);
+			return next;
+		});
+	};
 
 	return (
 		<section className="flex h-full flex-col rounded-lg border border-border p-4 sm:p-5">
+			<style>
+				{`@keyframes nixploy-row-flash {
+	from { background-color: var(--secondary); }
+	to { background-color: transparent; }
+}`}
+			</style>
 			<div className="mb-4 space-y-1">
 				<h3 className="text-sm font-medium">Recent deployments</h3>
 				<p className="text-sm text-muted-foreground">
@@ -230,11 +261,26 @@ export function RecentDeployments() {
 								key={deployment.deploymentId}
 								href={href}
 								className="flex items-center gap-3 rounded-md px-1 py-2 transition-colors hover:bg-muted/40"
+								style={
+									flashed.has(deployment.deploymentId)
+										? { animation: "nixploy-row-flash 900ms ease-out" }
+										: undefined
+								}
+								onAnimationEnd={() => clearFlash(deployment.deploymentId)}
 							>
 								{inner}
 							</Link>
 						) : (
-							<div key={deployment.deploymentId} className="flex items-center gap-3 px-1 py-2">
+							<div
+								key={deployment.deploymentId}
+								className="flex items-center gap-3 px-1 py-2"
+								style={
+									flashed.has(deployment.deploymentId)
+										? { animation: "nixploy-row-flash 900ms ease-out" }
+										: undefined
+								}
+								onAnimationEnd={() => clearFlash(deployment.deploymentId)}
+							>
 								{inner}
 							</div>
 						);

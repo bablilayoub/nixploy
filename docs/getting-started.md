@@ -4,8 +4,8 @@ After [install](./install.md), this is the shortest path to a real deploy.
 
 ## 1. Owner setup
 
-Open the Setup URL from the installer. Create the first user — that creates an
-organization (`Your Name's Org`). Public registration stays off afterward;
+Open the Setup URL from the installer. A short wizard walks you through the
+owner account and organization name. Public registration stays off afterward;
 invite teammates from **Settings → Organization**.
 
 ## 2. Deploy something trivial
@@ -34,7 +34,7 @@ Deployments for PRs.
 Settings → Profile → API key:
 
 ```bash
-npm i -g @nixploy/cli
+npm i -g @nixploy/cli   # published as @nixploy/cli (see apps/cli/README.md)
 nixploy auth login --url https://panel.yourdomain.com --api-key nxlp_...
 nixploy doctor
 nixploy app list --project-id <id>
@@ -48,7 +48,7 @@ Swagger lives at `/swagger` on your panel.
 
 | Feature | Where |
 | --- | --- |
-| Deploy Copilot | Settings → Platform → Copilot; explain on Deployments |
+| Deploy Copilot | Settings → Platform → Copilot; explain on Deployments; chat drawer on any service; **Generate with Copilot** on a compose service's Compose File tab drafts a compose file from a prompt (preview → accept → save) |
 | Placement | Application → Advanced → Placement |
 | GitOps | Project → GitOps (export / URL sync) |
 | Notifications | Settings → Notifications |

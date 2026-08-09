@@ -428,7 +428,6 @@ export function ServerSettingsView() {
 					id="proxy"
 					title="Proxy"
 					description="Traefik reverse proxy for the Nixploy host."
-					wide
 					actions={
 						<div className="flex flex-wrap items-center gap-2">
 							<Button
@@ -521,7 +520,6 @@ export function ServerSettingsView() {
 					id="health"
 					title="Host health"
 					description="Live host metrics and alert thresholds for subscribed channels."
-					wide
 					actions={
 						<Button
 							type="button"

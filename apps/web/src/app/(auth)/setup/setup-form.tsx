@@ -2,7 +2,15 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle } from "lucide-react";
+import {
+	AlertCircle,
+	ArrowLeft,
+	ArrowRight,
+	Check,
+	GitBranch,
+	LayoutTemplate,
+	Users,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -21,16 +29,37 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
-import { type RegisterInput, setupSchema } from "@/server/actions/auth.schema";
+import { cn } from "@/lib/utils";
+import {
+	buildOrgSlug,
+	type RegisterInput,
+	type SetupOrgInput,
+	setupOrgSchema,
+	setupSchema,
+} from "@/server/actions/auth.schema";
+
+type WizardStep = "welcome" | "owner" | "org" | "ready";
+
+const STEPS: WizardStep[] = ["welcome", "owner", "org", "ready"];
+
+const STEP_LABELS: Record<WizardStep, string> = {
+	welcome: "Welcome",
+	owner: "Owner",
+	org: "Organization",
+	ready: "Ready",
+};
 
 /**
- * First-boot onboarding: create the instance owner when zero users exist.
+ * First-boot onboarding wizard: Welcome → Owner → Organization → Ready.
  * Public /register is removed; this is the only self-serve signup path.
  */
 export function SetupForm() {
 	const router = useRouter();
 	const trpc = useTRPC();
+	const [step, setStep] = useState<WizardStep>("welcome");
 	const [formError, setFormError] = useState<string | null>(null);
+	const [submitting, setSubmitting] = useState(false);
+	const [complete, setComplete] = useState(false);
 
 	const status = useQuery(trpc.setup.needsSetup.queryOptions());
 
@@ -40,21 +69,65 @@ export function SetupForm() {
 		}
 	}, [status.data, router]);
 
-	const form = useForm<RegisterInput>({
+	const ownerForm = useForm<RegisterInput>({
 		resolver: zodResolver(setupSchema),
 		defaultValues: { name: "", email: "", password: "", confirmPassword: "" },
+		mode: "onSubmit",
 	});
 
-	async function onSubmit(values: RegisterInput) {
+	const orgForm = useForm<SetupOrgInput>({
+		resolver: zodResolver(setupOrgSchema),
+		defaultValues: { orgName: "" },
+		mode: "onSubmit",
+	});
+
+	const stepIndex = STEPS.indexOf(step);
+
+	function goOwner() {
 		setFormError(null);
+		setStep("owner");
+	}
+
+	async function goOrgFromOwner() {
+		setFormError(null);
+		const ok = await ownerForm.trigger();
+		if (!ok) return;
+		const name = ownerForm.getValues("name").trim();
+		const currentOrg = orgForm.getValues("orgName").trim();
+		if (!currentOrg || currentOrg.endsWith("'s Org")) {
+			orgForm.setValue("orgName", name ? `${name}'s Org` : "");
+		}
+		setStep("org");
+	}
+
+	async function goReadyFromOrg() {
+		setFormError(null);
+		const ok = await orgForm.trigger();
+		if (!ok) return;
+		setStep("ready");
+	}
+
+	async function createInstance() {
+		setFormError(null);
+		const ownerOk = await ownerForm.trigger();
+		const orgOk = await orgForm.trigger();
+		if (!ownerOk || !orgOk) {
+			if (!ownerOk) setStep("owner");
+			else setStep("org");
+			return;
+		}
+
+		const owner = ownerForm.getValues();
+		const { orgName } = orgForm.getValues();
+		setSubmitting(true);
 		try {
 			const signupRes = await fetch("/api/auth/sign-up/email", {
 				method: "POST",
 				headers: { "Content-Type": "application/json", Origin: window.location.origin },
 				body: JSON.stringify({
-					name: values.name.trim(),
-					email: values.email,
-					password: values.password,
+					name: owner.name.trim(),
+					email: owner.email,
+					password: owner.password,
 				}),
 			});
 			const signup = (await signupRes.json()) as { message?: string };
@@ -62,26 +135,22 @@ export function SetupForm() {
 				const msg = signup.message ?? `Setup failed (${signupRes.status})`;
 				toast.error(msg);
 				setFormError(msg);
+				setStep("owner");
 				return;
 			}
 
-			// crypto.randomUUID is missing on non-secure HTTP (common for first
-			// install via http://server-ip:3000). Fall back for the org slug.
-			const suffix =
-				typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-					? crypto.randomUUID().slice(0, 8)
-					: Math.random().toString(36).slice(2, 10);
-			const slug = `personal-${suffix}`;
+			const slug = buildOrgSlug(orgName);
 			const orgRes = await fetch("/api/auth/organization/create", {
 				method: "POST",
 				headers: { "Content-Type": "application/json", Origin: window.location.origin },
-				body: JSON.stringify({ name: `${values.name.trim()}'s Org`, slug }),
+				body: JSON.stringify({ name: orgName.trim(), slug }),
 			});
 			const org = (await orgRes.json()) as { id?: string; message?: string } | null;
 			if (!orgRes.ok || !org?.id) {
 				const msg = org?.message ?? "Failed to create organization";
 				toast.error(msg);
 				setFormError(msg);
+				setStep("org");
 				return;
 			}
 
@@ -92,18 +161,26 @@ export function SetupForm() {
 			});
 			if (!setRes.ok) {
 				const setData = (await setRes.json()) as { message?: string };
-				toast.error(setData.message ?? "Failed to activate organization");
+				const msg = setData.message ?? "Failed to activate organization";
+				toast.error(msg);
+				setFormError(msg);
 				return;
 			}
 
 			toast.success("Instance ready");
-			router.push("/dashboard");
-			router.refresh();
+			setComplete(true);
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : "Network error";
 			toast.error(msg);
 			setFormError(msg);
+		} finally {
+			setSubmitting(false);
 		}
+	}
+
+	function openDashboard() {
+		router.push("/dashboard");
+		router.refresh();
 	}
 
 	if (status.isPending) {
@@ -127,85 +204,325 @@ export function SetupForm() {
 	}
 
 	return (
-		<Card>
-			<CardHeader className="text-center">
-				<CardTitle className="text-xl">Welcome to Nixploy</CardTitle>
-				<CardDescription>
-					Create the owner account for this server. Public registration stays closed after this.
-				</CardDescription>
-			</CardHeader>
-			<CardContent>
-				<Form {...form}>
-					<form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
-						{formError && (
-							<div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-								<AlertCircle className="size-4 shrink-0" />
-								{formError}
+		<div className="flex flex-col gap-4">
+			<StepIndicator current={step} />
+			<Card>
+				{step === "welcome" && (
+					<>
+						<CardHeader className="text-center">
+							<CardTitle className="text-xl">Welcome to Nixploy</CardTitle>
+							<CardDescription>
+								Self-hosted PaaS on this server. A short setup creates your owner account and
+								organization — public registration stays closed afterward.
+							</CardDescription>
+						</CardHeader>
+						<CardContent className="grid gap-4">
+							<ul className="grid gap-2 text-sm text-muted-foreground">
+								<li className="flex gap-2">
+									<Check className="mt-0.5 size-4 shrink-0 text-foreground" />
+									Owner account for this instance
+								</li>
+								<li className="flex gap-2">
+									<Check className="mt-0.5 size-4 shrink-0 text-foreground" />
+									Organization to hold projects and services
+								</li>
+								<li className="flex gap-2">
+									<Check className="mt-0.5 size-4 shrink-0 text-foreground" />
+									Invite teammates later from Settings
+								</li>
+							</ul>
+							<Button type="button" className="w-full" onClick={goOwner}>
+								Continue
+								<ArrowRight className="size-4" />
+							</Button>
+						</CardContent>
+					</>
+				)}
+
+				{step === "owner" && (
+					<>
+						<CardHeader className="text-center">
+							<CardTitle className="text-xl">Owner account</CardTitle>
+							<CardDescription>
+								This is the first admin. You will sign in with this email and password.
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<Form {...ownerForm}>
+								<form
+									onSubmit={ownerForm.handleSubmit(() => void goOrgFromOwner())}
+									className="grid gap-4"
+								>
+									{formError && step === "owner" && <FormError message={formError} />}
+									<FormField
+										control={ownerForm.control}
+										name="name"
+										render={({ field }) => (
+											<FormItem>
+												<FormLabel>Name</FormLabel>
+												<FormControl>
+													<Input placeholder="Ada Lovelace" autoComplete="name" {...field} />
+												</FormControl>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+									<FormField
+										control={ownerForm.control}
+										name="email"
+										render={({ field }) => (
+											<FormItem>
+												<FormLabel>Email</FormLabel>
+												<FormControl>
+													<Input
+														type="email"
+														placeholder="you@example.com"
+														autoComplete="email"
+														{...field}
+													/>
+												</FormControl>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+									<FormField
+										control={ownerForm.control}
+										name="password"
+										render={({ field }) => (
+											<FormItem>
+												<FormLabel>Password</FormLabel>
+												<FormControl>
+													<Input type="password" autoComplete="new-password" {...field} />
+												</FormControl>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+									<FormField
+										control={ownerForm.control}
+										name="confirmPassword"
+										render={({ field }) => (
+											<FormItem>
+												<FormLabel>Confirm password</FormLabel>
+												<FormControl>
+													<Input type="password" autoComplete="new-password" {...field} />
+												</FormControl>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+									<div className="flex gap-2">
+										<Button
+											type="button"
+											variant="outline"
+											className="flex-1"
+											onClick={() => {
+												setFormError(null);
+												setStep("welcome");
+											}}
+										>
+											<ArrowLeft className="size-4" />
+											Back
+										</Button>
+										<Button type="submit" className="flex-1">
+											Continue
+											<ArrowRight className="size-4" />
+										</Button>
+									</div>
+								</form>
+							</Form>
+						</CardContent>
+					</>
+				)}
+
+				{step === "org" && (
+					<>
+						<CardHeader className="text-center">
+							<CardTitle className="text-xl">Organization</CardTitle>
+							<CardDescription>
+								Projects, services, and teammates live under this organization.
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<Form {...orgForm}>
+								<form
+									onSubmit={orgForm.handleSubmit(() => void goReadyFromOrg())}
+									className="grid gap-4"
+								>
+									{formError && step === "org" && <FormError message={formError} />}
+									<FormField
+										control={orgForm.control}
+										name="orgName"
+										render={({ field }) => (
+											<FormItem>
+												<FormLabel>Organization name</FormLabel>
+												<FormControl>
+													<Input placeholder="Acme Ops" autoComplete="organization" {...field} />
+												</FormControl>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
+									<div className="flex gap-2">
+										<Button
+											type="button"
+											variant="outline"
+											className="flex-1"
+											onClick={() => {
+												setFormError(null);
+												setStep("owner");
+											}}
+										>
+											<ArrowLeft className="size-4" />
+											Back
+										</Button>
+										<Button type="submit" className="flex-1">
+											Continue
+											<ArrowRight className="size-4" />
+										</Button>
+									</div>
+								</form>
+							</Form>
+						</CardContent>
+					</>
+				)}
+
+				{step === "ready" && !complete && (
+					<>
+						<CardHeader className="text-center">
+							<CardTitle className="text-xl">Ready to create</CardTitle>
+							<CardDescription>
+								Confirm the details below. This creates your owner account and organization.
+							</CardDescription>
+						</CardHeader>
+						<CardContent className="grid gap-4">
+							{formError && <FormError message={formError} />}
+							<dl className="grid gap-3 rounded-lg border bg-muted/40 p-4 text-sm">
+								<div className="grid gap-0.5">
+									<dt className="text-muted-foreground">Owner</dt>
+									<dd className="font-medium">{ownerForm.getValues("name").trim()}</dd>
+									<dd className="text-muted-foreground">{ownerForm.getValues("email")}</dd>
+								</div>
+								<div className="grid gap-0.5">
+									<dt className="text-muted-foreground">Organization</dt>
+									<dd className="font-medium">{orgForm.getValues("orgName").trim()}</dd>
+								</div>
+							</dl>
+							<div className="flex gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									className="flex-1"
+									disabled={submitting}
+									onClick={() => {
+										setFormError(null);
+										setStep("org");
+									}}
+								>
+									<ArrowLeft className="size-4" />
+									Back
+								</Button>
+								<Button
+									type="button"
+									className="flex-1"
+									disabled={submitting}
+									onClick={() => void createInstance()}
+								>
+									{submitting ? "Creating…" : "Create instance"}
+								</Button>
 							</div>
-						)}
-						<FormField
-							control={form.control}
-							name="name"
-							render={({ field }) => (
-								<FormItem>
-									<FormLabel>Name</FormLabel>
-									<FormControl>
-										<Input placeholder="Ada Lovelace" autoComplete="name" {...field} />
-									</FormControl>
-									<FormMessage />
-								</FormItem>
+						</CardContent>
+					</>
+				)}
+
+				{step === "ready" && complete && (
+					<>
+						<CardHeader className="text-center">
+							<CardTitle className="text-xl">You&apos;re in</CardTitle>
+							<CardDescription>
+								{orgForm.getValues("orgName").trim()} is ready. Here&apos;s a sensible next path.
+							</CardDescription>
+						</CardHeader>
+						<CardContent className="grid gap-4">
+							<ul className="grid gap-3 text-sm">
+								<li className="flex gap-3">
+									<LayoutTemplate className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+									<span>
+										<span className="font-medium text-foreground">Deploy something small</span>
+										<span className="block text-muted-foreground">
+											Templates or a Docker image like traefik/whoami.
+										</span>
+									</span>
+								</li>
+								<li className="flex gap-3">
+									<GitBranch className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+									<span>
+										<span className="font-medium text-foreground">Connect Git</span>
+										<span className="block text-muted-foreground">
+											Settings → Git Providers for GitHub, GitLab, and more.
+										</span>
+									</span>
+								</li>
+								<li className="flex gap-3">
+									<Users className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+									<span>
+										<span className="font-medium text-foreground">Invite teammates later</span>
+										<span className="block text-muted-foreground">
+											Settings → Organization when you need help.
+										</span>
+									</span>
+								</li>
+							</ul>
+							<Button type="button" className="w-full" onClick={openDashboard}>
+								Open dashboard
+							</Button>
+						</CardContent>
+					</>
+				)}
+			</Card>
+			<p className="text-center text-xs text-muted-foreground">
+				Step {Math.min(stepIndex + 1, STEPS.length)} of {STEPS.length}
+				{step !== "welcome" ? ` · ${STEP_LABELS[step]}` : null}
+			</p>
+		</div>
+	);
+}
+
+function StepIndicator({ current }: { current: WizardStep }) {
+	const currentIndex = STEPS.indexOf(current);
+	return (
+		<ol className="flex items-center justify-center gap-2" aria-label="Setup progress">
+			{STEPS.map((id, index) => {
+				const done = index < currentIndex;
+				const active = index === currentIndex;
+				return (
+					<li key={id} className="flex items-center gap-2">
+						<span
+							className={cn(
+								"flex size-7 items-center justify-center rounded-full text-xs font-medium tabular-nums",
+								done && "bg-primary text-primary-foreground",
+								active && "bg-foreground text-background",
+								!done && !active && "bg-muted text-muted-foreground",
 							)}
-						/>
-						<FormField
-							control={form.control}
-							name="email"
-							render={({ field }) => (
-								<FormItem>
-									<FormLabel>Email</FormLabel>
-									<FormControl>
-										<Input
-											type="email"
-											placeholder="you@example.com"
-											autoComplete="email"
-											{...field}
-										/>
-									</FormControl>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
-						<FormField
-							control={form.control}
-							name="password"
-							render={({ field }) => (
-								<FormItem>
-									<FormLabel>Password</FormLabel>
-									<FormControl>
-										<Input type="password" autoComplete="new-password" {...field} />
-									</FormControl>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
-						<FormField
-							control={form.control}
-							name="confirmPassword"
-							render={({ field }) => (
-								<FormItem>
-									<FormLabel>Confirm password</FormLabel>
-									<FormControl>
-										<Input type="password" autoComplete="new-password" {...field} />
-									</FormControl>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
-						<Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-							{form.formState.isSubmitting ? "Setting up…" : "Create owner account"}
-						</Button>
-					</form>
-				</Form>
-			</CardContent>
-		</Card>
+							aria-current={active ? "step" : undefined}
+						>
+							{done ? <Check className="size-3.5" /> : index + 1}
+						</span>
+						{index < STEPS.length - 1 ? (
+							<span className={cn("h-px w-6 sm:w-8", done ? "bg-primary" : "bg-border")} />
+						) : null}
+					</li>
+				);
+			})}
+		</ol>
+	);
+}
+
+function FormError({ message }: { message: string }) {
+	return (
+		<div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+			<AlertCircle className="size-4 shrink-0" />
+			{message}
+		</div>
 	);
 }

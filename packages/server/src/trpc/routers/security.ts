@@ -94,7 +94,17 @@ export const securityRouter = router({
 				});
 			}
 
-			await syncApplicationTraefik(application);
+			try {
+				await syncApplicationTraefik(application);
+			} catch (error) {
+				// Compensation: without it the client sees a 500 but the row exists,
+				// and a retry can stack duplicate basic-auth entries behind the failure.
+				await db
+					.delete(security)
+					.where(eq(security.securityId, entry.securityId))
+					.catch(() => {});
+				throw error;
+			}
 			await auditFromSession(ctx, organizationId, {
 				action: "security.create",
 				targetType: "security",
@@ -143,7 +153,21 @@ export const securityRouter = router({
 				.where(eq(security.securityId, entry.securityId))
 				.returning();
 
-			await syncApplicationTraefik(application);
+			try {
+				await syncApplicationTraefik(application);
+			} catch (error) {
+				// Compensation: restore the previous row so the client can retry
+				// instead of finding a half-applied update behind the 500.
+				await db
+					.update(security)
+					.set({
+						username: entry.username,
+						password: entry.password,
+					})
+					.where(eq(security.securityId, entry.securityId))
+					.catch(() => {});
+				throw error;
+			}
 			await auditFromSession(ctx, organizationId, {
 				action: "security.update",
 				targetType: "security",

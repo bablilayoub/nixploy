@@ -23,43 +23,46 @@ export type DatabaseType = (typeof DATABASE_TYPES)[number];
 interface ServiceTypeMeta {
 	label: string;
 	icon: LucideIcon;
+	/** Single neutral treatment for every service-type icon — StatusDot carries the color. */
 	iconClassName: string;
 }
+
+const NEUTRAL_ICON_CLASS = "text-muted-foreground";
 
 export const SERVICE_TYPE_META: Record<ServiceType, ServiceTypeMeta> = {
 	application: {
 		label: "Application",
 		icon: AppWindow,
-		iconClassName: "text-sky-400",
+		iconClassName: NEUTRAL_ICON_CLASS,
 	},
 	compose: {
 		label: "Compose",
 		icon: Boxes,
-		iconClassName: "text-violet-400",
+		iconClassName: NEUTRAL_ICON_CLASS,
 	},
 	postgres: {
 		label: "PostgreSQL",
 		icon: Database,
-		iconClassName: "text-blue-400",
+		iconClassName: NEUTRAL_ICON_CLASS,
 	},
 	mysql: {
 		label: "MySQL",
 		icon: Database,
-		iconClassName: "text-orange-400",
+		iconClassName: NEUTRAL_ICON_CLASS,
 	},
 	mariadb: {
 		label: "MariaDB",
 		icon: Database,
-		iconClassName: "text-teal-400",
+		iconClassName: NEUTRAL_ICON_CLASS,
 	},
 	mongo: {
 		label: "MongoDB",
 		icon: Database,
-		iconClassName: "text-green-400",
+		iconClassName: NEUTRAL_ICON_CLASS,
 	},
 	redis: {
 		label: "Redis",
 		icon: Database,
-		iconClassName: "text-red-400",
+		iconClassName: NEUTRAL_ICON_CLASS,
 	},
 };

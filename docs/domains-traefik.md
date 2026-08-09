@@ -106,6 +106,21 @@ Enable **Preview Deployments** on an application's Source tab
 
 Manual create from the Preview Deployments tab still works without the toggle.
 
+### Fork pull requests require approval
+
+Fork PRs can carry arbitrary code, so they are **not auto-built** by
+default. With **Fork PRs require approval** on (per-application, Source tab,
+default on — `previewForksRequireApproval`), a fork PR webhook parks the
+preview as `awaiting_approval` (row + route created, nothing built) and
+posts an "awaiting approval" comment on the PR. An org member approves or
+denies it from the Preview Deployments tab (`previewDeployment.approve` /
+`previewDeployment.deny`). Authors who are collaborators on the base repo
+bypass the gate (GitHub / GitLab / Gitea / Bitbucket membership checks;
+unknown/unreachable check fails safe toward requiring approval). Non-fork
+PRs and apps that opted out
+of the toggle auto-build as before; once a PR's preview is approved, later
+pushes to it redeploy without re-approval.
+
 
 Managed servers join the **primary** Swarm (see `setupServer` in
 `modules/cluster/servers.ts`). Traefik remains the cluster-wide global

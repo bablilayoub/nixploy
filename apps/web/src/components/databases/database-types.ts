@@ -1,10 +1,11 @@
 import type { LucideIcon } from "lucide-react";
-import { Cylinder, Database, DatabaseZap, Layers } from "lucide-react";
+
+import { SERVICE_TYPE_META } from "@/components/projects/service-types";
 
 export type DatabaseType = "postgres" | "mysql" | "mariadb" | "mongo" | "redis";
 
-/** Database types supported by the `backup` router (no redis dumps). */
-export type BackupDatabaseType = Exclude<DatabaseType, "redis">;
+/** Database types supported by the `backup` router (all five engines). */
+export type BackupDatabaseType = DatabaseType;
 
 export type ServiceStatus = "idle" | "running" | "done" | "error";
 
@@ -23,9 +24,7 @@ export interface DatabaseTypeConfig {
 export const DATABASE_TYPES: Record<DatabaseType, DatabaseTypeConfig> = {
 	postgres: {
 		idField: "postgresId",
-		label: "PostgreSQL",
-		icon: Cylinder,
-		iconClassName: "bg-sky-500/15 text-sky-400",
+		...SERVICE_TYPE_META.postgres,
 		supportsBackups: true,
 		hasDatabaseName: true,
 		hasUser: true,
@@ -33,9 +32,7 @@ export const DATABASE_TYPES: Record<DatabaseType, DatabaseTypeConfig> = {
 	},
 	mysql: {
 		idField: "mysqlId",
-		label: "MySQL",
-		icon: Database,
-		iconClassName: "bg-blue-500/15 text-blue-400",
+		...SERVICE_TYPE_META.mysql,
 		supportsBackups: true,
 		hasDatabaseName: true,
 		hasUser: true,
@@ -43,9 +40,7 @@ export const DATABASE_TYPES: Record<DatabaseType, DatabaseTypeConfig> = {
 	},
 	mariadb: {
 		idField: "mariadbId",
-		label: "MariaDB",
-		icon: Database,
-		iconClassName: "bg-amber-500/15 text-amber-400",
+		...SERVICE_TYPE_META.mariadb,
 		supportsBackups: true,
 		hasDatabaseName: true,
 		hasUser: true,
@@ -53,9 +48,7 @@ export const DATABASE_TYPES: Record<DatabaseType, DatabaseTypeConfig> = {
 	},
 	mongo: {
 		idField: "mongoId",
-		label: "MongoDB",
-		icon: Layers,
-		iconClassName: "bg-green-500/15 text-green-400",
+		...SERVICE_TYPE_META.mongo,
 		supportsBackups: true,
 		hasDatabaseName: false,
 		hasUser: true,
@@ -63,15 +56,15 @@ export const DATABASE_TYPES: Record<DatabaseType, DatabaseTypeConfig> = {
 	},
 	redis: {
 		idField: "redisId",
-		label: "Redis",
-		icon: DatabaseZap,
-		iconClassName: "bg-red-500/15 text-red-400",
-		supportsBackups: false,
+		...SERVICE_TYPE_META.redis,
+		supportsBackups: true,
 		hasDatabaseName: false,
 		hasUser: false,
 		hasRootPassword: false,
 	},
 };
+
+export { SERVICE_TYPE_META };
 
 /** Normalized shape shared by all five database rows (optional per-type fields). */
 export interface DatabaseRow {

@@ -80,6 +80,9 @@ export function SourceConfig({ application }: { application: Application }) {
 	const [isPreviewDeploymentsActive, setIsPreviewDeploymentsActive] = useState(
 		application.isPreviewDeploymentsActive,
 	);
+	const [previewForksRequireApproval, setPreviewForksRequireApproval] = useState(
+		application.previewForksRequireApproval,
+	);
 	// docker
 	const [dockerImage, setDockerImage] = useState(application.dockerImage ?? "");
 	const [dockerUsername, setDockerUsername] = useState(application.username ?? "");
@@ -107,6 +110,7 @@ export function SourceConfig({ application }: { application: Application }) {
 		setBuildPath(application.buildPath ?? "/");
 		setAutoDeploy(application.autoDeploy);
 		setIsPreviewDeploymentsActive(application.isPreviewDeploymentsActive);
+		setPreviewForksRequireApproval(application.previewForksRequireApproval);
 		setDockerImage(application.dockerImage ?? "");
 		setDockerUsername(application.username ?? "");
 		setDockerPassword("");
@@ -160,7 +164,13 @@ export function SourceConfig({ application }: { application: Application }) {
 	);
 
 	const onSave = () => {
-		const base = { applicationId, buildPath, autoDeploy, isPreviewDeploymentsActive };
+		const base = {
+			applicationId,
+			buildPath,
+			autoDeploy,
+			isPreviewDeploymentsActive,
+			previewForksRequireApproval,
+		};
 		switch (sourceType) {
 			case "git":
 				saveSource.mutate({
@@ -392,19 +402,35 @@ export function SourceConfig({ application }: { application: Application }) {
 							<Switch id="auto-deploy" checked={autoDeploy} onCheckedChange={setAutoDeploy} />
 						</div>
 						{isGitProviderSource(sourceType) && (
-							<div className="flex items-center justify-between rounded-md border p-3">
-								<div className="flex flex-col gap-1">
-									<Label htmlFor="preview-deploys">Preview Deployments</Label>
-									<p className="text-xs text-muted-foreground">
-										Create and tear down preview environments from pull request webhooks.
-									</p>
+							<>
+								<div className="flex items-center justify-between rounded-md border p-3">
+									<div className="flex flex-col gap-1">
+										<Label htmlFor="preview-deploys">Preview Deployments</Label>
+										<p className="text-xs text-muted-foreground">
+											Create and tear down preview environments from pull request webhooks.
+										</p>
+									</div>
+									<Switch
+										id="preview-deploys"
+										checked={isPreviewDeploymentsActive}
+										onCheckedChange={setIsPreviewDeploymentsActive}
+									/>
 								</div>
-								<Switch
-									id="preview-deploys"
-									checked={isPreviewDeploymentsActive}
-									onCheckedChange={setIsPreviewDeploymentsActive}
-								/>
-							</div>
+								<div className="flex items-center justify-between rounded-md border p-3">
+									<div className="flex flex-col gap-1">
+										<Label htmlFor="preview-fork-gate">Fork PRs require approval</Label>
+										<p className="text-xs text-muted-foreground">
+											Preview builds from fork pull requests wait for manual approval, unless the
+											author is a repo collaborator. Recommended: fork code is untrusted.
+										</p>
+									</div>
+									<Switch
+										id="preview-fork-gate"
+										checked={previewForksRequireApproval}
+										onCheckedChange={setPreviewForksRequireApproval}
+									/>
+								</div>
+							</>
 						)}
 					</>
 				)}

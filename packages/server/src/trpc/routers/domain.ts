@@ -330,7 +330,17 @@ export const domainRouter = router({
 				});
 			}
 
-			await resyncServiceTraefik(domain);
+			try {
+				await resyncServiceTraefik(domain);
+			} catch (error) {
+				// Compensation: without it the client sees a 500 but the row exists,
+				// and a retry hits the unique violation instead of creating cleanly.
+				await db
+					.delete(domains)
+					.where(eq(domains.domainId, domain.domainId))
+					.catch(() => {});
+				throw error;
+			}
 			await auditFromSession(ctx, organizationId, {
 				action: "domain.create",
 				targetType: "domain",
@@ -419,7 +429,22 @@ export const domainRouter = router({
 				});
 			}
 
-			await resyncServiceTraefik(domain);
+			try {
+				await resyncServiceTraefik(domain);
+			} catch (error) {
+				// Compensation: restore the previous row so the client can retry
+				// instead of finding a half-applied update behind the 500.
+				const restore: Record<string, unknown> = {};
+				for (const key of Object.keys(data)) {
+					restore[key] = existing[key as keyof typeof existing];
+				}
+				await db
+					.update(domains)
+					.set(restore)
+					.where(eq(domains.domainId, domainId))
+					.catch(() => {});
+				throw error;
+			}
 			return domain;
 		}),
 

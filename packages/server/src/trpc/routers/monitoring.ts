@@ -19,7 +19,11 @@ import {
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { findServerById, getServerStatsCached, type ServerStats } from "../../modules/cluster";
 import { shellQuote } from "../../modules/compose/paths";
-import { readLatestMetricsSample, readMetricsHistory } from "../../modules/monitoring/history";
+import {
+	readLatestMetricsSample,
+	readMetricsHistory,
+	readServerMetricsHistory,
+} from "../../modules/monitoring/history";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { mapDockerStats } from "../../ws/docker-stats";
@@ -324,8 +328,8 @@ export const monitoringRouter = router({
 		}),
 
 	/**
-	 * Historical metrics of a service (applications + databases, local host
-	 * only), sampled every 30s and kept for 48h by the metrics-history cron.
+	 * Historical metrics of a service (local and remote-hosted), sampled
+	 * every 30s and kept for 48h by the metrics-history cron.
 	 */
 	history: protectedProcedure
 		.input(z.object({ appName: z.string().min(1), hours: z.number().min(0.5).max(48) }))
@@ -374,8 +378,20 @@ export const monitoringRouter = router({
 		}),
 
 	/**
-	 * Org-wide fleet: every service with status + latest local metrics sample
-	 * (remote-hosted services omit metrics; charts stay live-only for them).
+	 * Host-level history of a managed server (cpu/memory/disk), sampled over
+	 * SSH by the metrics-history cron when the server's metrics are enabled.
+	 */
+	serverHistory: protectedProcedure
+		.input(z.object({ serverId: z.string().min(1), hours: z.number().min(0.5).max(48) }))
+		.query(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await findServerOrThrow(input.serverId, organizationId);
+			return await readServerMetricsHistory(input.serverId, input.hours);
+		}),
+
+	/**
+	 * Org-wide fleet: every service with status + latest metrics sample
+	 * (local services via dockerode, remote via the SSH sampling batch).
 	 */
 	fleetOverview: protectedProcedure.query(async ({ ctx }) => {
 		const organizationId = await getOrganizationId(ctx.session);
@@ -556,7 +572,7 @@ export const monitoringRouter = router({
 			base.map(async (row) => {
 				const environment = envById.get(row.environmentId);
 				const projectId = environment?.projectId ?? "";
-				const metrics = row.serverId == null ? await readLatestMetricsSample(row.appName) : null;
+				const metrics = await readLatestMetricsSample(row.appName);
 				return {
 					...row,
 					projectId,

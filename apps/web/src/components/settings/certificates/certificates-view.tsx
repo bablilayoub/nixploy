@@ -127,7 +127,6 @@ export function CertificatesView() {
 						</span>
 					}
 					description="Certificates stored on this server."
-					wide
 					actions={
 						<DialogTrigger asChild>
 							<Button size="sm">

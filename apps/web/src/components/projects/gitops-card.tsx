@@ -22,7 +22,7 @@ import { useTRPC } from "@/lib/trpc";
 
 type PlanItem = {
 	kind: string;
-	action: "create" | "update" | "noop";
+	action: "create" | "update" | "delete" | "noop";
 	name: string;
 	environment: string;
 	parent?: string;
@@ -264,7 +264,7 @@ export const GitopsCard = forwardRef<
 						<DialogTitle>Apply stack?</DialogTitle>
 						<DialogDescription>
 							{planMutation.data
-								? `${planMutation.data.summary.create} create, ${planMutation.data.summary.update} update, ${planMutation.data.summary.noop} unchanged`
+								? `${planMutation.data.summary.create} create, ${planMutation.data.summary.update} update, ${planMutation.data.summary.delete} delete, ${planMutation.data.summary.noop} unchanged`
 								: "Review planned changes before applying."}
 						</DialogDescription>
 					</DialogHeader>
@@ -279,7 +279,15 @@ export const GitopsCard = forwardRef<
 										key={`${item.kind}-${item.parent ?? ""}-${item.name}`}
 										className="flex items-center gap-2 text-sm"
 									>
-										<Badge variant={item.action === "create" ? "default" : "secondary"}>
+										<Badge
+											variant={
+												item.action === "create"
+													? "default"
+													: item.action === "delete"
+														? "destructive"
+														: "secondary"
+											}
+										>
 											{item.action}
 										</Badge>
 										<span>

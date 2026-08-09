@@ -107,11 +107,7 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 									<TableCell>
 										<Badge
 											variant="outline"
-											className={
-												node.Status === "Ready"
-													? "text-emerald-600 dark:text-emerald-400"
-													: "text-amber-600 dark:text-amber-400"
-											}
+											className={node.Status === "Ready" ? "text-success" : "text-warning"}
 										>
 											{node.Status}
 										</Badge>

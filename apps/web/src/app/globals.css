@@ -75,11 +75,12 @@
 	--success: #16a34a;
 	--warning: #d97706;
 	--info: #2563eb;
-	--chart-1: #2563eb;
-	--chart-2: #16a34a;
-	--chart-3: #d97706;
-	--chart-4: #78716c;
-	--chart-5: #1c1917;
+	/* Monochrome series: steps of the foreground, readable on both themes. */
+	--chart-1: var(--foreground);
+	--chart-2: color-mix(in oklab, var(--foreground) 70%, transparent);
+	--chart-3: color-mix(in oklab, var(--foreground) 55%, transparent);
+	--chart-4: color-mix(in oklab, var(--foreground) 40%, transparent);
+	--chart-5: color-mix(in oklab, var(--foreground) 25%, transparent);
 	/* Match shadcn-admin: sidebar tracks page bg so inset gutters read as one canvas */
 	--sidebar: var(--background);
 	--sidebar-foreground: var(--foreground);
@@ -114,11 +115,6 @@
 	--success: #4ade80;
 	--warning: #fbbf24;
 	--info: #60a5fa;
-	--chart-1: #60a5fa;
-	--chart-2: #4ade80;
-	--chart-3: #fbbf24;
-	--chart-4: #a1a1aa;
-	--chart-5: #fafafa;
 }
 
 @layer base {

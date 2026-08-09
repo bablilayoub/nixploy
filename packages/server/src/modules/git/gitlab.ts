@@ -190,3 +190,39 @@ export async function testGitlabConnection(gitlabId: string, organizationId: str
 	const user = (await response.json()) as { username: string };
 	return { username: user.username };
 }
+
+/**
+ * Fork-PR gate bypass: is `username` a project member on owner/repo?
+ * Returns null when the check cannot run (provider row unusable, API
+ * unreachable) so callers fail safe toward requiring approval.
+ */
+export async function isGitlabCollaborator(input: {
+	gitlabId: string;
+	owner: string;
+	repo: string;
+	username: string;
+}): Promise<boolean | null> {
+	try {
+		const [row] = await db
+			.select()
+			.from(gitlab)
+			.where(eq(gitlab.gitlabId, input.gitlabId))
+			.limit(1);
+		if (!row?.accessToken) return null;
+		const usersResponse = await gitlabApi(
+			row,
+			`/users?username=${encodeURIComponent(input.username)}`,
+		);
+		if (!usersResponse.ok) return null;
+		const users = (await usersResponse.json()) as Array<{ id: number }>;
+		const userId = users[0]?.id;
+		if (userId === undefined) return false;
+		const projectPath = encodeURIComponent(`${input.owner}/${input.repo}`);
+		const memberResponse = await gitlabApi(row, `/projects/${projectPath}/members/all/${userId}`);
+		if (memberResponse.status === 404) return false;
+		if (!memberResponse.ok) return null;
+		return true;
+	} catch {
+		return null;
+	}
+}

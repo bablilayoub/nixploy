@@ -11,15 +11,9 @@ import { ServiceStatusBadge } from "@/components/services/status-badge";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatBytes } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
-
-function formatBytes(bytes: number): string {
-	if (!bytes) return "0 B";
-	const units = ["B", "KB", "MB", "GB", "TB"];
-	const index = Math.min(Math.floor(Math.log2(bytes) / 10), units.length - 1);
-	return `${(bytes / 2 ** (10 * index)).toFixed(1)} ${units[index]}`;
-}
 
 function HostStat({
 	icon: Icon,
@@ -102,6 +96,7 @@ export function MonitoringView() {
 	const diskPercent = hostQuery.data?.disk.totalBytes
 		? (hostQuery.data.disk.usedBytes / hostQuery.data.disk.totalBytes) * 100
 		: null;
+	const host = hostQuery.data;
 
 	return (
 		<div className="flex flex-col gap-5">
@@ -110,50 +105,53 @@ export function MonitoringView() {
 				description="Host health and live metrics across every service in this organization."
 			/>
 
-			{hostQuery.isPending ? (
-				<Skeleton className="h-[4.5rem] w-full rounded-lg" />
-			) : hostQuery.isError || !hostQuery.data ? (
-				<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-6 text-center">
-					<p className="text-sm text-muted-foreground">
-						{hostQuery.error?.message || "Unable to read host metrics"}
-					</p>
-					<Button size="sm" variant="outline" onClick={() => hostQuery.refetch()}>
-						Retry
-					</Button>
-				</div>
-			) : (
-				<div className="flex flex-col overflow-hidden rounded-xl border bg-card sm:flex-row">
-					<HostStat
-						icon={MemoryStick}
-						label="Memory"
-						value={`${formatBytes(hostQuery.data.memory.usedBytes)} / ${formatBytes(hostQuery.data.memory.totalBytes)}`}
-						percent={memoryPercent}
-						hint={memoryPercent != null ? `${memoryPercent.toFixed(0)}% used` : undefined}
-					/>
-					<HostStat
-						icon={HardDrive}
-						label="Disk"
-						value={
-							hostQuery.data.disk.totalBytes
-								? `${formatBytes(hostQuery.data.disk.usedBytes)} / ${formatBytes(hostQuery.data.disk.totalBytes)}`
-								: "Unavailable"
-						}
-						percent={diskPercent}
-						hint={
-							diskPercent != null
-								? `${diskPercent.toFixed(0)}% used`
-								: hostQuery.data.disk.usedPercent || undefined
-						}
-					/>
-					<HostStat
-						icon={Cpu}
-						label="Load"
-						value={hostQuery.data.loadAverage.map((v) => v.toFixed(2)).join(" · ")}
-						percent={null}
-						hint={`${hostQuery.data.containersRunning}/${hostQuery.data.containers} containers · ${hostQuery.data.cpus} CPUs`}
-					/>
-				</div>
-			)}
+			<QueryState
+				isPending={hostQuery.isPending}
+				isError={hostQuery.isError}
+				error={hostQuery.error}
+				onRetry={() => hostQuery.refetch()}
+				skeleton={<Skeleton className="h-[4.5rem] w-full rounded-lg" />}
+				isEmpty={!host}
+				empty={
+					<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-6 text-center">
+						<p className="text-sm text-muted-foreground">Unable to read host metrics</p>
+					</div>
+				}
+			>
+				{host ? (
+					<div className="flex flex-col overflow-hidden rounded-xl border bg-card sm:flex-row">
+						<HostStat
+							icon={MemoryStick}
+							label="Memory"
+							value={`${formatBytes(host.memory.usedBytes)} / ${formatBytes(host.memory.totalBytes)}`}
+							percent={memoryPercent}
+							hint={memoryPercent != null ? `${memoryPercent.toFixed(0)}% used` : undefined}
+						/>
+						<HostStat
+							icon={HardDrive}
+							label="Disk"
+							value={
+								host.disk.totalBytes
+									? `${formatBytes(host.disk.usedBytes)} / ${formatBytes(host.disk.totalBytes)}`
+									: "Unavailable"
+							}
+							percent={diskPercent}
+							hint={
+								diskPercent != null
+									? `${diskPercent.toFixed(0)}% used`
+									: host.disk.usedPercent || undefined
+							}
+						/>
+						<HostStat
+							icon={Cpu}
+							label="Load"
+							value={host.loadAverage.map((v) => v.toFixed(2)).join(" · ")}
+							percent={null}
+							hint={`${host.containersRunning}/${host.containers} containers · ${host.cpus} CPUs`}
+						/>
+					</div>
+				) : null}
+			</QueryState>
 
 			<div className="grid items-start gap-5 lg:grid-cols-[minmax(16rem,18rem)_minmax(0,1fr)]">
 				<aside className="rounded-lg border">
@@ -230,7 +228,7 @@ export function MonitoringView() {
 									</p>
 								</div>
 								<Button asChild size="sm" variant="outline">
-									<Link href={serviceHref(selected)}>Open</Link>
+									<Link href={`${serviceHref(selected)}?tab=monitoring`}>Open</Link>
 								</Button>
 							</div>
 							<div className="p-4">

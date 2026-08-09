@@ -77,6 +77,8 @@ export const organizations = pgTable("organization", {
 	slug: text("slug").notNull().unique(),
 	logo: text("logo"),
 	metadata: text("metadata"),
+	/** When true, members without 2FA on their account are gated out of the org. */
+	requireTwoFactor: boolean("require_two_factor").notNull().default(false),
 	createdAt: createdAt(),
 });
 

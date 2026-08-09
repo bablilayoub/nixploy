@@ -1,9 +1,7 @@
-import { client } from "@nixploy/server";
-import { auth } from "@nixploy/server/auth";
+import { buildApiKeyContext } from "@nixploy/server/lib/api-key-context";
 import { appRouter } from "@nixploy/server/trpc";
 import type { TRPCContext } from "@nixploy/server/trpc/init";
-import { clientIpFromRequest, takeRateLimitToken } from "@nixploy/server/utils/rate-limit";
-import { getTRPCErrorFromUnknown, TRPCError } from "@trpc/server";
+import { getTRPCErrorFromUnknown } from "@trpc/server";
 import superjson, { type SuperJSONResult } from "superjson";
 
 export const runtime = "nodejs";
@@ -133,104 +131,8 @@ function coerceFlattenedParams(params: Record<string, string>): Record<string, u
 }
 
 async function buildContext(req: Request): Promise<TRPCContext> {
-	const ip = clientIpFromRequest(req);
-	if (
-		!takeRateLimitToken(`rest-api-key:${ip}`, { windowMs: 60_000, max: 120 }) ||
-		!takeRateLimitToken(`rest-api-key-auth:${ip}`, { windowMs: 60_000, max: 30 })
-	) {
-		throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many requests" });
-	}
-
-	const apiKeyHeader = req.headers.get("x-api-key");
-	if (!apiKeyHeader) {
-		throw new TRPCError({
-			code: "UNAUTHORIZED",
-			message: "Missing x-api-key header",
-		});
-	}
-
-	const result = (await auth.api.verifyApiKey({
-		body: { key: apiKeyHeader },
-	})) as {
-		valid: boolean;
-		key: { referenceId?: string; userId?: string; id: string } | null;
-	};
-	if (!result.valid || !result.key) {
-		throw new TRPCError({
-			code: "UNAUTHORIZED",
-			message: "Invalid or expired API key",
-		});
-	}
-
-	// @better-auth/api-key >= 1.6 exposes the owner as referenceId.
-	const userId = result.key.referenceId ?? result.key.userId;
-	if (!userId) {
-		throw new TRPCError({ code: "UNAUTHORIZED", message: "Unknown API key owner" });
-	}
-	const users = await client`
-		SELECT id, name, email, email_verified AS "emailVerified",
-			image, role, banned, two_factor_enabled AS "twoFactorEnabled",
-			created_at AS "createdAt", updated_at AS "updatedAt"
-		FROM "user" WHERE id = ${userId} LIMIT 1
-	`;
-	const user = users[0];
-	if (!user) {
-		throw new TRPCError({ code: "UNAUTHORIZED", message: "Unknown API key owner" });
-	}
-	const banned =
-		(user as { banned?: boolean | null; banExpires?: Date | null }).banned === true &&
-		(!(user as { banExpires?: Date | null }).banExpires ||
-			((user as { banExpires?: Date | null }).banExpires?.getTime() ?? 0) > Date.now());
-	if (banned) {
-		throw new TRPCError({ code: "FORBIDDEN", message: "User is banned" });
-	}
-
-	// Prefer explicit org from the client (multi-org API keys); otherwise first membership.
-	const requestedOrgId = req.headers.get("x-organization-id")?.trim() || null;
-	let activeOrganizationId: string | null = null;
-	if (requestedOrgId) {
-		const membership = await client`
-			SELECT organization_id AS "organizationId"
-			FROM member
-			WHERE user_id = ${userId} AND organization_id = ${requestedOrgId}
-			LIMIT 1
-		`;
-		if (!membership[0]) {
-			throw new TRPCError({
-				code: "FORBIDDEN",
-				message: "Not a member of the requested organization",
-			});
-		}
-		activeOrganizationId = requestedOrgId;
-	} else {
-		const memberships = await client`
-			SELECT organization_id AS "organizationId"
-			FROM member WHERE user_id = ${userId} LIMIT 1
-		`;
-		activeOrganizationId =
-			(memberships[0] as { organizationId?: string } | undefined)?.organizationId ?? null;
-	}
-
-	// Synthesize the same { user, session } shape better-auth's getSession
-	// returns — the routers only read user.id and session.activeOrganizationId.
-	const now = new Date();
-	const session = {
-		user,
-		session: {
-			id: `api-key_${result.key.id}`,
-			token: "api-key",
-			userId,
-			expiresAt: new Date(now.getTime() + 1000 * 60 * 60),
-			createdAt: now,
-			updatedAt: now,
-			ipAddress: null,
-			userAgent: req.headers.get("user-agent"),
-			impersonatedBy: null,
-			activeOrganizationId,
-		},
-	} as unknown as NonNullable<TRPCContext["session"]>;
-
-	return { headers: req.headers, session };
+	// Shared with the MCP endpoint — see packages/server/src/lib/api-key-context.ts.
+	return buildApiKeyContext(req, { bucket: "rest-api-key" });
 }
 
 async function handle(req: Request, path: string): Promise<Response> {

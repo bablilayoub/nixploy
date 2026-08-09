@@ -21,6 +21,11 @@ const SPA_NGINX_CONF = `server {
 export async function buildStatic(input: BuildInput, imageTag: string): Promise<void> {
 	const { ctx, application, buildDir } = input;
 	const publishDir = (application.publishDirectory ?? ".").replace(/^\/+/, "") || ".";
+	// Defensive: the router validates too, but this string lands raw in a
+	// generated Dockerfile, so never allow whitespace or path escapes through.
+	if (!/^[A-Za-z0-9._/-]+$/.test(publishDir) || publishDir.split("/").includes("..")) {
+		throw new Error(`Invalid publishDirectory: ${application.publishDirectory}`);
+	}
 
 	const dockerfile = [
 		"FROM nginx:alpine",

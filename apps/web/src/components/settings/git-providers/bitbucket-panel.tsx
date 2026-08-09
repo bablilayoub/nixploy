@@ -90,7 +90,6 @@ export function BitbucketPanel() {
 		<SettingsSection
 			title="Bitbucket"
 			description="Bitbucket Cloud workspaces connected with an API token or app password."
-			wide
 			actions={
 				<Dialog open={open} onOpenChange={setOpen}>
 					<DialogTrigger asChild>

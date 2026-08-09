@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { SettingsSection } from "@/components/settings/settings-section";
 import {
@@ -283,32 +284,31 @@ export function DomainManager({
 					</Button>
 				}
 			>
-				{domainsQuery.isLoading ? (
-					<div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
-						<Loader2 className="mr-2 size-4 animate-spin" /> Loading domains…
-					</div>
-				) : domainsQuery.isError ? (
-					<div className="flex h-24 flex-col items-center justify-center gap-2 text-sm">
-						<p className="text-muted-foreground">
-							{domainsQuery.error.message || "Failed to load domains"}
-						</p>
-						<Button size="sm" variant="outline" onClick={() => domainsQuery.refetch()}>
-							Retry
-						</Button>
-					</div>
-				) : domains.length === 0 ? (
-					<EmptyState
-						icon={Globe}
-						title="No domains yet"
-						description="Add a domain to expose this service over HTTP(S)."
-						action={
-							<Button size="sm" variant="outline" onClick={openCreate}>
-								<Plus className="size-4" />
-								Add Domain
-							</Button>
-						}
-					/>
-				) : (
+				<QueryState
+					isPending={domainsQuery.isLoading}
+					isError={domainsQuery.isError}
+					error={domainsQuery.error}
+					onRetry={() => domainsQuery.refetch()}
+					skeleton={
+						<div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
+							<Loader2 className="mr-2 size-4 animate-spin" /> Loading domains…
+						</div>
+					}
+					isEmpty={domains.length === 0}
+					empty={
+						<EmptyState
+							icon={Globe}
+							title="No domains yet"
+							description="Add a domain to expose this service over HTTP(S)."
+							action={
+								<Button size="sm" variant="outline" onClick={openCreate}>
+									<Plus className="size-4" />
+									Add Domain
+								</Button>
+							}
+						/>
+					}
+				>
 					<TableCard framed={false}>
 						<Table>
 							<TableHeader>
@@ -396,7 +396,7 @@ export function DomainManager({
 							</TableBody>
 						</Table>
 					</TableCard>
-				)}
+				</QueryState>
 			</SettingsSection>
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

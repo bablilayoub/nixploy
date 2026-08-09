@@ -100,6 +100,19 @@ Labels and descriptions live in `CAPABILITY_CATALOG`
   version when upgrading better-auth.
 - Login with 2FA enabled routes through `/two-factor` after password sign-in.
 
+### Org-level enforcement
+
+- Settings → Organization → Security → **Require two-factor authentication**
+  (`organization.requireTwoFactor`, default off; owner/admin via
+  `organization.updateSettings`).
+- When on, members whose account has no 2FA are blocked from **every
+  org-scoped tRPC procedure** (middleware in `trpc/init.ts`, predicate in
+  `modules/auth/two-factor-gate.ts`) and the dashboard layout swaps in a
+  "Two-factor authentication required" interstitial with the setup card
+  instead of the app. 2FA setup runs through better-auth routes, so a gated
+  member can always enable it and continue; users with no organization
+  (first-run setup) are exempt.
+
 ## API keys (REST & CLI)
 
 - Every tRPC procedure is also exposed as REST under `/api/<router>.<procedure>`

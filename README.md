@@ -34,14 +34,19 @@ Full installer options: [`docs/install.md`](./docs/install.md). Update with [`up
 
 | Area | What you get |
 | --- | --- |
-| **Deploy** | Git providers, Docker images, zip uploads · Nixpacks / Dockerfile / buildpacks / static · PR previews · rollbacks |
-| **Data** | Postgres, MySQL, MariaDB, MongoDB, Redis · scheduled S3-compatible backups |
-| **Compose** | Native Compose / Swarm stacks with domains and logs |
-| **Edge** | Traefik routing + Let's Encrypt TLS |
-| **Observe** | Live metrics, log streaming, alerts, web terminal |
-| **Team** | Orgs & roles, audit log, notifications, quotas |
-| **Automate** | REST API (`x-api-key`), `/swagger` on your panel, `@nixploy/cli`, GitOps (`nixploy.yaml`) |
-| **Catalog** | 86+ one-click templates |
+| **Deploy** | GitHub / GitLab / Bitbucket / Gitea / generic Git, Docker images, zip · Nixpacks / Railpack / Dockerfile / buildpacks / static · BuildKit cache · PR previews (fork gate) · rollbacks |
+| **Data** | Postgres, MySQL, MariaDB, MongoDB, Redis · DB backups to S3 · volume backups · **instance self-backup** (panel DB + config) |
+| **Compose** | Native Compose / Swarm stacks with domains, logs, AI compose generate |
+| **Edge** | Traefik v3 + Let's Encrypt / custom certs · redirects · basic-auth · traefik.me smoke hosts |
+| **Observe** | Live logs & metrics (48h history) · web terminal · alert rules · uptime probes · incidents |
+| **Team** | Orgs · roles (viewer→owner) · **capability overlays** · 2FA · audit log · quotas · white-label |
+| **Notify** | Slack, Discord, Telegram, email, Gotify, ntfy, Pushover, Mattermost, Lark, Teams, webhooks |
+| **Automate** | REST API + `/swagger` · `@nixploy/cli` · GitOps (`nixploy.yaml`) · **MCP** (`POST /api/mcp`) |
+| **AI** | Deploy Copilot — explain failures, confirm-gated chat, generate compose (BYO key) |
+| **Infra** | Remote Swarm servers · Docker control center · registries · schedules · in-app GHCR updates · `doctor` |
+| **Catalog** | 86+ one-click templates (15 categories), CI-checked image tags |
+
+Product docs: [nixploy.com/docs](https://nixploy.com/docs) · API: [nixploy.com/api](https://nixploy.com/api)
 
 ## Screenshots
 
@@ -146,14 +151,18 @@ REST paths are `GET|POST /api/<router>.<procedure>` with an `x-api-key` header. 
 
 | Guide | Link |
 | --- | --- |
+| **Website docs** | [nixploy.com/docs](https://nixploy.com/docs) |
+| **API reference** | [nixploy.com/api](https://nixploy.com/api) · [`docs/api.md`](./docs/api.md) |
 | **Contributing** | [`CONTRIBUTING.md`](./CONTRIBUTING.md) |
-| Docs index | [`docs/README.md`](./docs/README.md) |
+| Docs index (repo) | [`docs/README.md`](./docs/README.md) |
 | Install | [`docs/install.md`](./docs/install.md) |
 | Getting started | [`docs/getting-started.md`](./docs/getting-started.md) |
-| REST API | [`docs/api.md`](./docs/api.md) |
-| Migrate from Coolify | [`docs/migrate-from-coolify.md`](./docs/migrate-from-coolify.md) |
-| Migrate from Dokploy | [`docs/migrate-from-dokploy.md`](./docs/migrate-from-dokploy.md) |
-| Marketing site | [nixploy.com/docs](https://nixploy.com/docs) |
+| MCP | [`docs/mcp.md`](./docs/mcp.md) |
+| Instance backup | [`docs/instance-backup.md`](./docs/instance-backup.md) |
+| Observability | [`docs/observability.md`](./docs/observability.md) |
+| Auth & capabilities | [`docs/auth.md`](./docs/auth.md) |
+| Docker control center | [`docs/docker.md`](./docs/docker.md) |
+| Migrate Coolify / Dokploy | [`docs/migrate-from-coolify.md`](./docs/migrate-from-coolify.md) · [`docs/migrate-from-dokploy.md`](./docs/migrate-from-dokploy.md) |
 
 ## Repository layout
 

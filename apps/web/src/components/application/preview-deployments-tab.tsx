@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { ExternalLink, GitPullRequest, Loader2, Plus, Trash2 } from "lucide-react";
+import { Check, ExternalLink, GitPullRequest, Loader2, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { SettingsSection } from "@/components/settings/settings-section";
@@ -50,6 +50,7 @@ const STATUS_CONFIG: Record<
 	running: { label: "Running", status: "success" },
 	done: { label: "Done", status: "info" },
 	error: { label: "Error", status: "error" },
+	awaiting_approval: { label: "Awaiting approval", status: "warning" },
 };
 
 /** Turn a "expires in N days" input into an absolute date for the API. */
@@ -108,11 +109,30 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 		}),
 	);
 
+	const approve = useMutation(
+		trpc.previewDeployment.approve.mutationOptions({
+			onSuccess: () => {
+				toast.success("Preview approved — deployment queued");
+				invalidate();
+			},
+			onError: (error) => toast.error(error.message),
+		}),
+	);
+
+	const deny = useMutation(
+		trpc.previewDeployment.deny.mutationOptions({
+			onSuccess: () => {
+				toast.success("Preview denied and removed");
+				invalidate();
+			},
+			onError: (error) => toast.error(error.message),
+		}),
+	);
+
 	return (
 		<SettingsSection
 			title="Preview Deployments"
 			description="Per-PR preview instances. Enable under Source for git webhooks."
-			wide
 			actions={
 				<Dialog open={createOpen} onOpenChange={setCreateOpen}>
 					<DialogTrigger asChild>
@@ -239,6 +259,11 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 											{preview.pullRequestTitle}
 										</span>
 									)}
+									{preview.pullRequestAuthor && (
+										<span className="block text-xs text-muted-foreground">
+											by @{preview.pullRequestAuthor}
+										</span>
+									)}
 								</TableCell>
 								<TableCell className="text-muted-foreground">{preview.branch ?? "—"}</TableCell>
 								<TableCell>
@@ -271,14 +296,45 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 									{preview.expiresAt ? format(preview.expiresAt, "MMM d, yyyy HH:mm") : "Never"}
 								</TableCell>
 								<TableCell className="text-right">
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => setDeleteTarget(preview)}
-										aria-label={`Delete preview for PR #${preview.pullRequestNumber}`}
-									>
-										<Trash2 className="size-4 text-destructive" />
-									</Button>
+									{preview.previewStatus === "awaiting_approval" ? (
+										<div className="flex items-center justify-end gap-1">
+											<Button
+												variant="outline"
+												size="sm"
+												disabled={approve.isPending || deny.isPending}
+												onClick={() =>
+													approve.mutate({ previewDeploymentId: preview.previewDeploymentId })
+												}
+											>
+												{approve.isPending ? (
+													<Loader2 className="size-4 animate-spin" />
+												) : (
+													<Check className="size-4" />
+												)}
+												Approve
+											</Button>
+											<Button
+												variant="ghost"
+												size="sm"
+												disabled={approve.isPending || deny.isPending}
+												onClick={() =>
+													deny.mutate({ previewDeploymentId: preview.previewDeploymentId })
+												}
+											>
+												<X className="size-4 text-destructive" />
+												Deny
+											</Button>
+										</div>
+									) : (
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={() => setDeleteTarget(preview)}
+											aria-label={`Delete preview for PR #${preview.pullRequestNumber}`}
+										>
+											<Trash2 className="size-4 text-destructive" />
+										</Button>
+									)}
 								</TableCell>
 							</TableRow>
 						))}

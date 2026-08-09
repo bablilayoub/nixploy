@@ -94,7 +94,6 @@ export function SessionsCard() {
 		<SettingsSection
 			title="Active sessions"
 			description="Devices currently signed in to your account."
-			wide
 		>
 			{isLoading ? (
 				<div className="flex flex-col gap-2">

@@ -90,7 +90,6 @@ export function GitlabPanel() {
 				</span>
 			}
 			description="GitLab instances connected with a personal access token."
-			wide
 			actions={
 				<Dialog open={open} onOpenChange={setOpen}>
 					<DialogTrigger asChild>

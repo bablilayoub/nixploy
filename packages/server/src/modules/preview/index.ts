@@ -13,7 +13,13 @@ export type CreatePreviewInput = {
 	pullRequestId?: string | null;
 	pullRequestTitle?: string | null;
 	pullRequestURL?: string | null;
+	pullRequestAuthor?: string | null;
 	expiresAt?: Date | null;
+	/**
+	 * Fork-gated PRs: create the preview row + route but do NOT build.
+	 * The row lands in `awaiting_approval` until previewDeployment.approve.
+	 */
+	deferDeploy?: boolean;
 };
 
 export type PreviewWithDomain = typeof previewDeployments.$inferSelect & {
@@ -109,7 +115,8 @@ export async function createPreviewDeployment(
 			pullRequestNumber: input.pullRequestNumber,
 			pullRequestTitle: input.pullRequestTitle ?? null,
 			pullRequestURL: input.pullRequestURL ?? null,
-			previewStatus: "running",
+			pullRequestAuthor: input.pullRequestAuthor ?? null,
+			previewStatus: input.deferDeploy ? "awaiting_approval" : "running",
 			expiresAt: input.expiresAt ?? null,
 			applicationId: application.applicationId,
 			serverId: application.serverId,
@@ -119,55 +126,76 @@ export async function createPreviewDeployment(
 		throw new Error("Failed to create preview deployment");
 	}
 
-	const [domain] = await db
-		.insert(domains)
-		.values({
-			host,
-			path: "/",
-			port: null,
-			https,
-			certificateType,
-			certificateId: https ? (parentDomain?.certificateId ?? null) : null,
-			domainType: "preview",
-			applicationId: application.applicationId,
-			previewDeploymentId: preview.previewDeploymentId,
-		})
-		.returning();
-
-	if (domain) {
-		await db
-			.update(previewDeployments)
-			.set({ domainId: domain.domainId })
-			.where(eq(previewDeployments.previewDeploymentId, preview.previewDeploymentId));
-	}
-
-	await writeAppTraefikConfig({
-		appName: variantAppName,
-		serverId: application.serverId,
-		domains: [
-			{
+	// Compensation on any failure below: without it the preview row survives
+	// and every subsequent webhook for this PR hits PreviewConflictError.
+	try {
+		const [domain] = await db
+			.insert(domains)
+			.values({
 				host,
-				port: 3000,
 				path: "/",
+				port: null,
 				https,
 				certificateType,
 				certificateId: https ? (parentDomain?.certificateId ?? null) : null,
-			},
-		],
-	});
+				domainType: "preview",
+				applicationId: application.applicationId,
+				previewDeploymentId: preview.previewDeploymentId,
+			})
+			.returning();
 
-	const deploymentId = await queueDeployment({
-		applicationId: application.applicationId,
-		previewDeploymentId: preview.previewDeploymentId,
-		type: "deploy",
-	});
+		if (domain) {
+			await db
+				.update(previewDeployments)
+				.set({ domainId: domain.domainId })
+				.where(eq(previewDeployments.previewDeploymentId, preview.previewDeploymentId));
+		}
 
-	return {
-		...preview,
-		domainId: domain?.domainId ?? null,
-		domain: domain ?? null,
-		deploymentId,
-	};
+		await writeAppTraefikConfig({
+			appName: variantAppName,
+			serverId: application.serverId,
+			domains: [
+				{
+					host,
+					port: 3000,
+					path: "/",
+					https,
+					certificateType,
+					certificateId: https ? (parentDomain?.certificateId ?? null) : null,
+				},
+			],
+		});
+
+		if (input.deferDeploy) {
+			// Awaiting approval: route exists but nothing was built. Approving
+			// redeploys via redeployPreviewDeployment.
+			return { ...preview, domainId: domain?.domainId ?? null, domain: domain ?? null };
+		}
+
+		const deploymentId = await queueDeployment({
+			applicationId: application.applicationId,
+			previewDeploymentId: preview.previewDeploymentId,
+			type: "deploy",
+		});
+
+		return {
+			...preview,
+			domainId: domain?.domainId ?? null,
+			domain: domain ?? null,
+			deploymentId,
+		};
+	} catch (error) {
+		await removeTraefikConfig(variantAppName, application.serverId).catch(() => {});
+		await db
+			.delete(domains)
+			.where(eq(domains.previewDeploymentId, preview.previewDeploymentId))
+			.catch(() => {});
+		await db
+			.delete(previewDeployments)
+			.where(eq(previewDeployments.previewDeploymentId, preview.previewDeploymentId))
+			.catch(() => {});
+		throw error;
+	}
 }
 
 /** Redeploy an existing preview by enqueueing an isolated preview deploy. */
@@ -220,7 +248,13 @@ export async function createOrRedeployPreview(input: CreatePreviewInput): Promis
 }> {
 	const existing = await findPreviewByPullRequest(input.applicationId, input.pullRequestNumber);
 	if (existing) {
-		if (input.branch || input.pullRequestTitle || input.pullRequestURL || input.pullRequestId) {
+		if (
+			input.branch ||
+			input.pullRequestTitle ||
+			input.pullRequestURL ||
+			input.pullRequestId ||
+			input.pullRequestAuthor
+		) {
 			await db
 				.update(previewDeployments)
 				.set({
@@ -230,6 +264,9 @@ export async function createOrRedeployPreview(input: CreatePreviewInput): Promis
 						: {}),
 					...(input.pullRequestURL !== undefined ? { pullRequestURL: input.pullRequestURL } : {}),
 					...(input.pullRequestId !== undefined ? { pullRequestId: input.pullRequestId } : {}),
+					...(input.pullRequestAuthor !== undefined
+						? { pullRequestAuthor: input.pullRequestAuthor }
+						: {}),
 				})
 				.where(eq(previewDeployments.previewDeploymentId, existing.previewDeploymentId));
 		}

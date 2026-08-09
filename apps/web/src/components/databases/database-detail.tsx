@@ -8,6 +8,7 @@ import {
 	Eye,
 	EyeOff,
 	Loader2,
+	MoreVertical,
 	Play,
 	RefreshCw,
 	Square,
@@ -36,12 +37,29 @@ import { ServiceStatusBadge } from "@/components/services/status-badge";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { PageHeader } from "@/components/shell";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useSyncedTab } from "@/hooks/use-synced-tab";
 import { useTRPC } from "@/lib/trpc";
 
 interface DatabaseDetailProps {
@@ -50,6 +68,13 @@ interface DatabaseDetailProps {
 	id: string;
 	projectId: string;
 }
+
+/** Sub-tab → its top-level tab, so ?tab=logs deep-links into Runtime. */
+const SUB_TAB_PARENT: Record<string, string> = {
+	logs: "runtime",
+	monitoring: "runtime",
+	terminal: "runtime",
+};
 
 function CopyButton({ value }: { value: string }) {
 	const [copied, setCopied] = useState(false);
@@ -172,6 +197,22 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 
 	const actionPending =
 		startMutation.isPending || stopMutation.isPending || reloadMutation.isPending;
+	const [confirmStop, setConfirmStop] = useState(false);
+
+	const topTabs = [
+		"general",
+		"connection",
+		"environment",
+		...(cfg.supportsBackups ? ["backups"] : []),
+		"runtime",
+		"settings",
+	];
+	const [tab, selectTab] = useSyncedTab(
+		"general",
+		(value) => topTabs.includes(value) || value in SUB_TAB_PARENT,
+	);
+	const topTab = topTabs.includes(tab) ? tab : (SUB_TAB_PARENT[tab] ?? "general");
+	const runtimeTab = SUB_TAB_PARENT[tab] === "runtime" ? tab : "logs";
 
 	if (rowQuery.isLoading) {
 		return (
@@ -233,7 +274,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 								variant="outline"
 								size="sm"
 								disabled={actionPending}
-								onClick={() => stopMutation.mutate(idInput)}
+								onClick={() => setConfirmStop(true)}
 							>
 								{stopMutation.isPending ? (
 									<Loader2 className="size-4 animate-spin" />
@@ -271,11 +312,55 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 							)}
 							Reload
 						</Button>
+						<DropdownMenu>
+							<DropdownMenuTrigger asChild>
+								<Button
+									variant="outline"
+									size="icon"
+									className="sm:hidden"
+									aria-label="More actions"
+									disabled={actionPending}
+								>
+									<MoreVertical className="size-4" />
+								</Button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="end">
+								<DropdownMenuItem
+									disabled={actionPending || (status !== "running" && status !== "done")}
+									onClick={() => reloadMutation.mutate(idInput)}
+								>
+									<RefreshCw className="size-4" />
+									Reload
+								</DropdownMenuItem>
+							</DropdownMenuContent>
+						</DropdownMenu>
 					</>
 				}
 			/>
 
-			<Tabs defaultValue="general">
+			<AlertDialog open={confirmStop} onOpenChange={setConfirmStop}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Stop {cfg.label}</AlertDialogTitle>
+						<AlertDialogDescription>
+							Stop {db.name}? Connected apps will lose database access until you start it again.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							variant="destructive"
+							disabled={stopMutation.isPending}
+							onClick={() => stopMutation.mutate(idInput)}
+						>
+							{stopMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+							Stop
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			<Tabs value={topTab} onValueChange={selectTab}>
 				<UnderlineTabsList>
 					<UnderlineTabsTrigger value="general">General</UnderlineTabsTrigger>
 					<UnderlineTabsTrigger value="connection">Connection</UnderlineTabsTrigger>
@@ -311,15 +396,15 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 				{cfg.supportsBackups && (
 					<TabsContent value="backups" className="mt-6">
 						<DatabaseBackups
-							databaseType={type as Exclude<DatabaseType, "redis">}
+							databaseType={type}
 							serviceId={id}
-							databaseName={db.databaseName ?? "admin"}
+							databaseName={type === "redis" ? "0" : (db.databaseName ?? "admin")}
 						/>
 					</TabsContent>
 				)}
 
 				<TabsContent value="runtime" className="mt-6">
-					<Tabs defaultValue="logs" className="w-full gap-4">
+					<Tabs value={runtimeTab} onValueChange={selectTab} className="w-full gap-4">
 						<SubTabsList>
 							<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
 							<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>
@@ -577,7 +662,6 @@ function EnvironmentTab({ ns, idInput, env, invalidate }: TabProps & { env: stri
 		<SettingsSection
 			title="Environment variables"
 			description="Service-level variables. Reload the service to apply changes."
-			wide
 		>
 			<EnvEditor
 				value={env ?? ""}

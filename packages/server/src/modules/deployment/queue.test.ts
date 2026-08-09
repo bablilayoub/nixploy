@@ -159,4 +159,42 @@ describe("deployment queue", () => {
 		expect(started).toEqual(["j1", "j2"]);
 		expect(queue.queueDepth(null)).toEqual({ pending: 0, running: 0 });
 	});
+
+	it("removes a process whose done promise rejects, without an unhandled rejection", async () => {
+		const { runner, finish } = controlledRunner();
+		queue.setJobRunner(runner);
+
+		queue.enqueue(job("j1"));
+		await flush();
+
+		let rejectDone!: (error: Error) => void;
+		const proc = {
+			kill: vi.fn(),
+			done: new Promise<void>((_, reject) => {
+				rejectDone = reject;
+			}),
+		};
+		queue.registerDeploymentProcess("j1", proc);
+
+		const unhandled: unknown[] = [];
+		const onUnhandled = (reason: unknown) => unhandled.push(reason);
+		process.on("unhandledRejection", onUnhandled);
+		try {
+			rejectDone(new Error("build failed"));
+			// Let the rejection (and any unhandled-rejection event) settle.
+			await flush();
+			await flush();
+
+			expect(unhandled).toEqual([]);
+
+			// The rejected process was removed from the tracked set: cancelling
+			// the deployment must not try to kill it again.
+			expect(queue.requestCancellation("j1")).toBe("running");
+			expect(proc.kill).not.toHaveBeenCalled();
+
+			await finish("j1");
+		} finally {
+			process.removeListener("unhandledRejection", onUnhandled);
+		}
+	});
 });

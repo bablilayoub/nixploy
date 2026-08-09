@@ -340,3 +340,35 @@ export async function testGithubConnection(githubId: string, organizationId: str
 	const { data } = await octokit.rest.apps.getAuthenticated();
 	return { appName: data?.name ?? row.githubAppName ?? "" };
 }
+
+/**
+ * Fork-PR gate bypass: is `username` a collaborator on owner/repo?
+ * Returns null when the check cannot run (provider row unusable, API
+ * unreachable) so callers fail safe toward requiring approval.
+ */
+export async function isGithubCollaborator(input: {
+	githubId: string;
+	owner: string;
+	repo: string;
+	username: string;
+}): Promise<boolean | null> {
+	try {
+		const [row] = await db
+			.select()
+			.from(github)
+			.where(eq(github.githubId, input.githubId))
+			.limit(1);
+		if (!row) return null;
+		const octokit = getGithubOctokit(row);
+		await octokit.rest.repos.checkCollaborator({
+			owner: input.owner,
+			repo: input.repo,
+			username: input.username,
+		});
+		return true; // 204 — collaborator
+	} catch (error) {
+		const status = (error as { status?: number } | null)?.status;
+		if (status === 404) return false; // not a collaborator
+		return null; // API down, bad credentials, … — unknown
+	}
+}

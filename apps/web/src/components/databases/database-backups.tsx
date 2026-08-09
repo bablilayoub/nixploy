@@ -146,7 +146,6 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 			<SettingsSection
 				title="Backups"
 				description="Scheduled dumps uploaded to an S3 destination. Restore from any stored dump."
-				wide
 				actions={
 					<Button size="sm" onClick={openCreate} disabled={destinations.length === 0}>
 						<Plus className="size-4" />

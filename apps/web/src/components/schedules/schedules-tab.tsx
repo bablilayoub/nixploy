@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { SettingsSection } from "@/components/settings/settings-section";
-import { StatusDot, type StatusDotStatus } from "@/components/shell";
+import { StatusDot } from "@/components/shell";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { Textarea } from "@/components/ui/textarea";
+import { scheduleRunStatusDot } from "@/lib/status";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -68,12 +69,6 @@ function looksLikeCron(expression: string): boolean {
 	const fields = expression.trim().split(/\s+/);
 	return fields.length === 5 || fields.length === 6;
 }
-
-const runStatusDot: Record<string, StatusDotStatus> = {
-	running: "info",
-	success: "success",
-	error: "error",
-};
 
 const EMPTY_FORM = {
 	name: "",
@@ -281,7 +276,9 @@ export function SchedulesTab({
 													className="flex items-center gap-2 text-sm"
 													title={schedule.lastError ?? undefined}
 												>
-													<StatusDot status={runStatusDot[schedule.lastStatus] ?? "neutral"} />
+													<StatusDot
+														status={scheduleRunStatusDot[schedule.lastStatus] ?? "neutral"}
+													/>
 													{schedule.lastRunAt
 														? formatDistanceToNow(new Date(schedule.lastRunAt), { addSuffix: true })
 														: schedule.lastStatus}

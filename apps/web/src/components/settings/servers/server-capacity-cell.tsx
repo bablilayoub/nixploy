@@ -2,17 +2,10 @@
 
 import type { inferRouterOutputs } from "@trpc/server";
 import { Loader2 } from "lucide-react";
-
+import { formatBytes } from "@/lib/format";
 import type { AppRouter } from "@/lib/trpc-types";
 
 type ServerStats = inferRouterOutputs<AppRouter>["server"]["getStats"];
-
-function formatBytes(bytes: number): string {
-	if (!bytes) return "—";
-	const units = ["B", "KB", "MB", "GB", "TB"];
-	const index = Math.min(Math.floor(Math.log2(bytes) / 10), units.length - 1);
-	return `${(bytes / 2 ** (10 * index)).toFixed(0)} ${units[index]}`;
-}
 
 /** Inline CPU / memory capacity for the servers table (fed from getStatsBatch). */
 export function ServerCapacityCell({

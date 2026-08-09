@@ -66,6 +66,7 @@ export const organizationRouter = router({
 			name: org.name,
 			slug: org.slug,
 			logo: org.logo,
+			requireTwoFactor: org.requireTwoFactor,
 			quotas: {
 				maxProjects: metadata.quotas?.maxProjects ?? null,
 				maxServices: metadata.quotas?.maxServices ?? null,
@@ -83,13 +84,14 @@ export const organizationRouter = router({
 		};
 	}),
 
-	/** Update quotas, branding, or logo (admin/owner only). */
+	/** Update quotas, branding, logo, or the 2FA requirement (admin/owner only). */
 	updateSettings: protectedProcedure
 		.input(
 			z.object({
 				quotas: quotaInputSchema.optional(),
 				branding: brandingInputSchema.optional(),
 				logo: z.string().nullable().optional(),
+				requireTwoFactor: z.boolean().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -119,6 +121,9 @@ export const organizationRouter = router({
 				.set({
 					metadata: serializeOrgMetadata(metadata),
 					...(input.logo !== undefined ? { logo: input.logo } : {}),
+					...(input.requireTwoFactor !== undefined
+						? { requireTwoFactor: input.requireTwoFactor }
+						: {}),
 				})
 				.where(eq(organizations.id, organizationId))
 				.returning();
@@ -128,6 +133,10 @@ export const organizationRouter = router({
 				targetType: "organization",
 				targetId: organizationId,
 				targetName: org.name,
+				metadata:
+					input.requireTwoFactor !== undefined
+						? { requireTwoFactor: input.requireTwoFactor }
+						: undefined,
 			});
 
 			return updated;

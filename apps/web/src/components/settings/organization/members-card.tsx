@@ -305,7 +305,6 @@ export function MembersCard() {
 		<SettingsSection
 			title="Members"
 			description="People with access to this organization."
-			wide
 			actions={inviteDialog}
 		>
 			{isLoading || isOrgPending ? (

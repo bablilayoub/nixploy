@@ -20,13 +20,24 @@ download-as-`.txt`.
   snapshots cpu/memory/network/block-io/pids for every **local**
   application, compose (first container) and database into
   `$NIXPLOY_CONFIG_DIR/metrics/<appName>.jsonl`, pruned to 48h.
-  Managed-server services are live-only (SSH sampling is too expensive).
+- Services hosted on **managed servers** are sampled in the same pass: one
+  SSH batch per active server collects host cpu (`/proc/stat` delta), memory
+  (`/proc/meminfo`) and disk (`df`) plus a one-shot `docker stats` per
+  service container (`modules/monitoring/remote.ts`). Service samples land
+  in the same `<appName>.jsonl` files, so the Monitoring tab history and
+  24h uptime chip work for remote services too; host-level samples go to
+  `server-<serverId>.jsonl` and are exposed via
+  `monitoring.serverHistory { serverId, hours }`.
+  Per-server opt-out / cadence: `server.metricsConfig.metrics`
+  (`enabled`, `intervalSeconds`), editable on the server edit dialog
+  (Settings → Servers). An unreachable server is skipped per pass — local
+  sampling is never affected.
 - `monitoring.history { appName, hours }` returns the window downsampled to
   ≤240 points; the Monitoring tab's range picker (Live / 1h / 6h / 24h /
   48h) switches between the live `/ws/stats` feed and history (network and
   disk rates are computed from consecutive cumulative deltas).
 - The Monitoring header shows a 24h uptime chip (share of 30s slots with
-  samples) for local services, and a "Service is not running" empty state
+  samples), and a "Service is not running" empty state
   with Retry when the live stats socket reports no container — no more
   infinite "Connecting…" for stopped services.
 - KPI cards: CPU, memory, network in/out, disk I/O and process count, each
@@ -40,10 +51,10 @@ download-as-`.txt`.
   (`webServerSettings.metricsConfig.webServer.{cpuAlertPercent,
   memoryAlertPercent}` — empty = disabled).
 - The metrics-history pass keeps a rolling 5-sample window (~2.5 min) per
-  local service; a sustained average above a threshold fires a
+  service; a sustained average above a threshold fires a
   `serverThreshold` notification, once per 30 min per service + metric
-  (`evaluateAlerts` in `modules/monitoring/history.ts`). Local services
-  only (sampling is local).
+  (`evaluateAlerts` in `modules/monitoring/history.ts`). Local and
+  remote-hosted services alike (remote samples arrive over the SSH batch).
 
 ## Status reconciler & watchdog
 

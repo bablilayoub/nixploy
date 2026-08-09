@@ -14,6 +14,19 @@ const execPromise = promisify(exec);
 const MAX_BUFFER = 1024 * 1024 * 50;
 const SSH_READY_TIMEOUT_MS = 30_000;
 
+/** Default hard timeout for long-running SSH commands (builds, pulls). */
+export const DEFAULT_REMOTE_TIMEOUT_MS = 30 * 60 * 1000;
+
+/**
+ * Resolve the remote command timeout: explicit override, then
+ * `NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS`, then {@link DEFAULT_REMOTE_TIMEOUT_MS}.
+ */
+export function remoteCommandTimeoutMs(override?: number): number {
+	if (override && override > 0) return override;
+	const fromEnv = Number.parseInt(process.env.NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS ?? "", 10);
+	return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : DEFAULT_REMOTE_TIMEOUT_MS;
+}
+
 export interface ExecOptions {
 	cwd?: string;
 	env?: NodeJS.ProcessEnv;
@@ -89,7 +102,11 @@ export function clearRemoteHostKey(serverId: string): void {
  * Rejects with {@link RemoteExecError} (carrying stderr + exit code) when
  * the command exits non-zero.
  */
-export async function execAsyncRemote(serverId: string, command: string): Promise<string> {
+export async function execAsyncRemote(
+	serverId: string,
+	command: string,
+	options: { timeoutMs?: number } = {},
+): Promise<string> {
 	const server = await db.query.servers.findFirst({
 		where: eq(servers.serverId, serverId),
 		with: { sshKey: true },
@@ -103,33 +120,62 @@ export async function execAsyncRemote(serverId: string, command: string): Promis
 		throw new Error(`Server ${server.name} (${serverId}) has no SSH key attached`);
 	}
 
+	const timeoutMs = remoteCommandTimeoutMs(options.timeoutMs);
+
 	return new Promise<string>((resolve, reject) => {
 		const conn = new Client();
 		let stdout = "";
 		let stderr = "";
+		let settled = false;
+
+		const finish = (fn: () => void) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			fn();
+		};
+		const fail = (error: Error) =>
+			finish(() => {
+				conn.end();
+				reject(error);
+			});
+
+		// Hard command timeout — a wedged remote command must not pin the
+		// connection (and the caller) forever.
+		const timer = setTimeout(() => {
+			fail(
+				new RemoteExecError(
+					`Remote "${commandLabel(command)}" timed out after ${Math.round(timeoutMs / 1000)}s on server ${server.name}`,
+					stderr,
+					null,
+				),
+			);
+		}, timeoutMs);
+		timer.unref?.();
 
 		conn
 			.on("ready", () => {
 				conn.exec(command, (err, stream) => {
 					if (err) {
-						conn.end();
-						reject(err);
+						fail(err);
 						return;
 					}
 					stream
 						.on("close", (code: number | null) => {
-							conn.end();
-							if (code === 0 || code === null) {
-								resolve(stdout);
-							} else {
-								reject(
-									new RemoteExecError(
-										`Remote "${commandLabel(command)}" failed (exit ${code}) on server ${server.name}`,
-										stderr,
-										code,
-									),
-								);
-							}
+							finish(() => {
+								conn.end();
+								if (code === 0 || code === null) {
+									resolve(stdout);
+								} else {
+									reject(
+										new RemoteExecError(
+											`Remote "${commandLabel(command)}" failed (exit ${code}) on server ${server.name}`,
+											stderr,
+											code,
+										),
+									);
+								}
+							});
 						})
 						.on("data", (data: Buffer) => {
 							stdout += data.toString();
@@ -137,10 +183,13 @@ export async function execAsyncRemote(serverId: string, command: string): Promis
 					stream.stderr.on("data", (data: Buffer) => {
 						stderr += data.toString();
 					});
+					stream.on("error", fail);
 				});
 			})
 			.on("error", (err) => {
-				reject(err);
+				// Always close the connection — an SSH error after `ready`
+				// otherwise leaks the socket.
+				fail(err);
 			})
 			.connect({
 				host: server.ipAddress,
@@ -245,7 +294,10 @@ async function execAsyncRemoteWithStdin(
 					stream.end();
 				});
 			})
-			.on("error", reject)
+			.on("error", (err) => {
+				conn.end();
+				reject(err);
+			})
 			.connect({
 				host: server.ipAddress,
 				port: server.port,

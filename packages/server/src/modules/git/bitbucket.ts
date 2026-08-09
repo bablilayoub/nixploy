@@ -199,3 +199,38 @@ export async function testBitbucketConnection(bitbucketId: string, organizationI
 	const user = (await response.json()) as { username?: string; display_name?: string };
 	return { username: user.username ?? user.display_name ?? "" };
 }
+
+/**
+ * Fork-PR gate bypass: does `username` have an explicit permission on
+ * workspace/repo? Returns null when the check cannot run (provider row
+ * unusable, API unreachable) so callers fail safe toward requiring approval.
+ */
+export async function isBitbucketCollaborator(input: {
+	bitbucketId: string;
+	owner: string;
+	repo: string;
+	username: string;
+}): Promise<boolean | null> {
+	try {
+		const [row] = await db
+			.select()
+			.from(bitbucket)
+			.where(eq(bitbucket.bitbucketId, input.bitbucketId))
+			.limit(1);
+		if (!row) return null;
+		const query = `user.username="${input.username.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+		const path =
+			`/repositories/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}` +
+			`/permissions/users?q=${encodeURIComponent(query)}`;
+		const response = await fetch(`${BITBUCKET_API_URL}${path}`, {
+			headers: { Authorization: bitbucketAuthHeader(row) },
+			redirect: "error",
+		});
+		if (response.status === 404) return false;
+		if (!response.ok) return null;
+		const data = (await response.json()) as { values?: unknown[] };
+		return (data.values?.length ?? 0) > 0;
+	} catch {
+		return null;
+	}
+}

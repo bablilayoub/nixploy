@@ -93,3 +93,37 @@ pnpm install
 pnpm --filter @nixploy/cli typecheck
 pnpm --filter @nixploy/cli build
 ```
+
+## Publishing to npm
+
+Package name: `@nixploy/cli` (public scoped). CI workflow:
+[`.github/workflows/publish-cli.yml`](../../.github/workflows/publish-cli.yml).
+
+**One-time setup**
+
+1. Create the [`@nixploy`](https://www.npmjs.com/org/create) organization on npm (or claim the scope).
+2. Add an npm **Automation** access token with publish rights for `@nixploy`.
+3. Store it as the repo secret `NPM_TOKEN` (Settings → Secrets → Actions).
+
+**Release**
+
+1. Bump `version` in [`package.json`](./package.json) (semver).
+2. Commit, then tag and push:
+
+   ```bash
+   git tag cli-v0.1.0
+   git push origin cli-v0.1.0
+   ```
+
+   The tag must match `package.json` (`cli-v` + version). The workflow builds and runs `pnpm publish`.
+
+3. Or run **Actions → Publish CLI → Run workflow** (optional dry-run).
+
+**Manual (local)**
+
+```bash
+cd apps/cli
+pnpm run prepublishOnly
+# requires npm login with @nixploy publish rights
+pnpm publish --access public
+```

@@ -99,15 +99,25 @@ export const registryRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "registries.manage");
 			const { registryId, ...values } = input;
+			const existing = await findRegistryById(registryId, organizationId);
+			if (!existing) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Registry not found" });
+			}
 			if (values.registryUrl) {
-				const existing = await findRegistryById(registryId, organizationId);
-				if (!existing) {
-					throw new TRPCError({ code: "NOT_FOUND", message: "Registry not found" });
-				}
 				await assertSafeRegistryUrl(
 					values.registryUrl,
 					values.registryType ?? existing.registryType ?? undefined,
 				);
+				// Changing the URL without re-entering the password would let a
+				// `registries.manage` user point the stored credentials at an
+				// attacker host and exfiltrate them via `test`.
+				const urlChanged = values.registryUrl.trim() !== (existing.registryUrl ?? "").trim();
+				if (urlChanged && !values.password) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "Re-enter the registry password when changing the registry URL",
+					});
+				}
 			}
 			const updated = await updateRegistryById(registryId, values, organizationId);
 			if (!updated) {

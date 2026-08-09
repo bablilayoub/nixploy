@@ -2,96 +2,65 @@
 
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 import { InstallCommand } from "@/components/install-command";
-import { LogoMark } from "@/components/logo";
-import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
 import { BlurFade } from "@/components/magicui/blur-fade";
 import { BorderBeam } from "@/components/magicui/border-beam";
-import { Particles } from "@/components/magicui/particles";
-import { RippleButton } from "@/components/magicui/ripple-button";
 import { Safari } from "@/components/magicui/safari";
 import { ShimmerButton } from "@/components/magicui/shimmer-button";
-import { TextAnimate } from "@/components/magicui/text-animate";
-import { WordRotate } from "@/components/magicui/word-rotate";
+import { site } from "@/lib/site";
 
 export function Hero() {
-	const router = useRouter();
-
 	return (
-		<section className="relative overflow-hidden pt-28 pb-16 sm:pt-32 sm:pb-24">
-			<Particles className="absolute inset-0" quantity={90} ease={80} color="#ffffff" refresh />
-
+		<section className="relative overflow-hidden pt-28 pb-16 sm:pt-36 sm:pb-20">
 			<div className="relative mx-auto max-w-6xl px-5 sm:px-6">
-				<div className="mx-auto max-w-3xl text-center">
+				<div className="max-w-3xl">
 					<BlurFade delay={0.05}>
-						<div className="mb-7 flex flex-col items-center gap-4">
-							<LogoMark className="size-14 rounded-xl sm:size-16" />
-							<div className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1">
-								<AnimatedShinyText className="mx-0 text-xs font-medium tracking-wide text-neutral-300">
-									Self-hosted PaaS · open source
-								</AnimatedShinyText>
-							</div>
-						</div>
+						<a
+							href={site.github}
+							target="_blank"
+							rel="noopener noreferrer"
+							className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-neutral-300 transition-colors hover:border-white/20 hover:text-white"
+						>
+							Open source · Apache-2.0
+							<ArrowRight className="size-3" />
+						</a>
 					</BlurFade>
 
-					<TextAnimate
-						as="h1"
-						by="character"
-						animation="blurInUp"
-						startOnView={false}
-						className="font-display text-balance text-4xl font-semibold tracking-tight text-white sm:text-6xl lg:text-7xl"
-					>
-						Nixploy
-					</TextAnimate>
+					<BlurFade delay={0.12}>
+						<h1 className="mt-6 font-display text-4xl font-semibold tracking-tight text-balance text-white sm:text-6xl lg:text-7xl">
+							Deploy anything to your own servers.
+						</h1>
+					</BlurFade>
 
-					<div className="mt-4 flex flex-wrap items-center justify-center gap-x-2 font-display text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-						<span>Ship</span>
-						<WordRotate
-							className="text-neutral-400"
-							words={["apps", "databases", "compose", "anything"]}
-						/>
-						<span>on your metal.</span>
-					</div>
-
-					<TextAnimate
-						as="p"
-						by="word"
-						animation="fadeIn"
-						delay={0.2}
-						startOnView={false}
-						className="mx-auto mt-5 max-w-2xl text-balance text-lg leading-relaxed text-neutral-400 sm:text-xl"
-					>
-						Deploy apps, databases, and compose stacks on infrastructure you control — with Git
-						deploys, Traefik TLS, and a first-class CLI.
-					</TextAnimate>
+					<BlurFade delay={0.2}>
+						<p className="mt-6 max-w-2xl text-lg leading-relaxed text-neutral-400 sm:text-xl">
+							Nixploy turns any Docker host into a full deployment platform. Push from Git and get
+							builds, TLS domains, databases with backups, and live monitoring — without the per-app
+							cloud bill.
+						</p>
+					</BlurFade>
 
 					<BlurFade delay={0.28}>
-						<div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-							<Link href="/install">
+						<div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
+							<Link href="/docs/install">
 								<ShimmerButton className="h-11 gap-2 px-6 text-sm font-medium">
-									Get started <ArrowRight className="size-4" />
+									Install Nixploy <ArrowRight className="size-4" />
 								</ShimmerButton>
 							</Link>
-							<RippleButton
-								className="h-11 px-5 text-sm font-medium"
-								rippleColor="#ffffff"
-								onClick={() => router.push("/docs")}
-							>
-								Documentation
-							</RippleButton>
+							<InstallCommand className="w-full sm:max-w-md" />
 						</div>
 					</BlurFade>
 
 					<BlurFade delay={0.34}>
-						<div className="mx-auto mt-8 max-w-2xl">
-							<InstallCommand className="w-full" />
-						</div>
+						<p className="mt-5 text-sm text-neutral-500">
+							Runs anywhere Docker runs. Five databases, seven service types, 86 one-click
+							templates.
+						</p>
 					</BlurFade>
 				</div>
 
-				<BlurFade delay={0.4} className="relative mx-auto mt-16 max-w-5xl">
+				<BlurFade delay={0.4} className="relative mt-14 sm:mt-16">
 					<div className="relative">
 						<Safari imageSrc="/screenshots/02-dashboard.png" url="panel.nixploy.local" />
 						<BorderBeam size={120} duration={10} colorFrom="#ffffff" colorTo="#525252" />

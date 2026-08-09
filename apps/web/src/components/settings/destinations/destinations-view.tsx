@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { QueryState } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
+import { InstanceBackups } from "@/components/settings/destinations/instance-backups";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
@@ -138,7 +139,6 @@ export function DestinationsView() {
 					</span>
 				}
 				description="S3-compatible buckets used for database and volume backups."
-				wide
 				actions={
 					<Dialog open={open} onOpenChange={setOpen}>
 						<DialogTrigger asChild>
@@ -327,6 +327,7 @@ export function DestinationsView() {
 					</Table>
 				</QueryState>
 			</SettingsSection>
+			<InstanceBackups />
 			<Dialog open={editing !== null} onOpenChange={(isOpen) => !isOpen && setEditing(null)}>
 				<DialogContent>
 					<DialogHeader>

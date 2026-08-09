@@ -25,6 +25,7 @@ export type CreateServerInput = {
 export type UpdateServerInput = Partial<CreateServerInput> & {
 	serverStatus?: "active" | "inactive";
 	enableDockerCleanup?: boolean;
+	metricsConfig?: Record<string, unknown>;
 };
 
 /** Traefik static config (`traefik.yml`) written on the Nixploy host. */

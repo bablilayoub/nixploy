@@ -50,6 +50,8 @@ export const previewDeployments = pgTable("preview_deployment", {
 	pullRequestNumber: text("pull_request_number"),
 	pullRequestTitle: text("pull_request_title"),
 	pullRequestURL: text("pull_request_url"),
+	/** Provider login of the PR author (shown on the approval gate). */
+	pullRequestAuthor: text("pull_request_author"),
 	previewStatus: previewStatus("preview_status").notNull().default("idle"),
 	domainId: text("domain_id"),
 	expiresAt: timestamp("expires_at", { withTimezone: true }),

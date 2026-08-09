@@ -9,8 +9,10 @@ import {
 	deletePreviewDeployment,
 	PreviewConflictError,
 	PreviewNotFoundError,
+	redeployPreviewDeployment,
 	withPreviewDomain,
 } from "../../modules/preview";
+import { upsertPreviewComment } from "../../modules/preview/comment";
 import { assertCapability } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
@@ -93,6 +95,63 @@ export const previewDeploymentRouter = router({
 			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 			await findApplicationPreview(input.previewDeploymentId, organizationId);
 
+			try {
+				return await deletePreviewDeployment(input.previewDeploymentId);
+			} catch (error) {
+				if (error instanceof PreviewNotFoundError) {
+					throw new TRPCError({ code: "NOT_FOUND", message: error.message });
+				}
+				throw error;
+			}
+		}),
+
+	/**
+	 * Approve a fork-PR preview that is awaiting approval: queues the build
+	 * that the webhook gate deferred.
+	 */
+	approve: protectedProcedure
+		.input(z.object({ previewDeploymentId: z.string().min(1) }))
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
+			const { preview } = await findApplicationPreview(input.previewDeploymentId, organizationId);
+			if (preview.previewStatus !== "awaiting_approval") {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Preview is not awaiting approval",
+				});
+			}
+			const result = await redeployPreviewDeployment(preview.previewDeploymentId);
+			if (preview.pullRequestNumber) {
+				await upsertPreviewComment({
+					applicationId: preview.applicationId,
+					pullRequestNumber: preview.pullRequestNumber,
+					status: "deploying",
+				});
+			}
+			return result;
+		}),
+
+	/** Deny a fork-PR preview awaiting approval: tears down row + route, never builds. */
+	deny: protectedProcedure
+		.input(z.object({ previewDeploymentId: z.string().min(1) }))
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
+			const { preview } = await findApplicationPreview(input.previewDeploymentId, organizationId);
+			if (preview.previewStatus !== "awaiting_approval") {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Preview is not awaiting approval",
+				});
+			}
+			if (preview.pullRequestNumber) {
+				await upsertPreviewComment({
+					applicationId: preview.applicationId,
+					pullRequestNumber: preview.pullRequestNumber,
+					status: "removed",
+				});
+			}
 			try {
 				return await deletePreviewDeployment(input.previewDeploymentId);
 			} catch (error) {

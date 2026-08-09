@@ -237,6 +237,7 @@ export const applicationRouter = router({
 				description: z.string().nullable().optional(),
 				autoDeploy: z.boolean().optional(),
 				isPreviewDeploymentsActive: z.boolean().optional(),
+				previewForksRequireApproval: z.boolean().optional(),
 				watchPaths: z.array(z.string()).nullable().optional(),
 				buildArgs: z.string().nullable().optional(),
 				serverId: z.string().nullable().optional(),
@@ -424,7 +425,14 @@ export const applicationRouter = router({
 				dockerfile: z.string().nullable().optional(),
 				dockerContextPath: z.string().nullable().optional(),
 				dockerBuildStage: z.string().nullable().optional(),
-				publishDirectory: z.string().nullable().optional(),
+				publishDirectory: z
+					.string()
+					.regex(
+						/^[A-Za-z0-9._/-]+$/,
+						"publishDirectory may only contain letters, digits, dots, dashes, underscores and slashes",
+					)
+					.nullable()
+					.optional(),
 				isStaticSpa: z.boolean().nullable().optional(),
 				useBuildCache: z.boolean().optional(),
 			}),
@@ -468,6 +476,7 @@ export const applicationRouter = router({
 				registryId: z.string().nullable().optional(),
 				autoDeploy: z.boolean().optional(),
 				isPreviewDeploymentsActive: z.boolean().optional(),
+				previewForksRequireApproval: z.boolean().optional(),
 				watchPaths: z.array(z.string()).nullable().optional(),
 			}),
 		)
@@ -524,6 +533,9 @@ export const applicationRouter = router({
 				...(input.autoDeploy !== undefined ? { autoDeploy: input.autoDeploy } : {}),
 				...(input.isPreviewDeploymentsActive !== undefined
 					? { isPreviewDeploymentsActive: input.isPreviewDeploymentsActive }
+					: {}),
+				...(input.previewForksRequireApproval !== undefined
+					? { previewForksRequireApproval: input.previewForksRequireApproval }
 					: {}),
 				...(input.watchPaths !== undefined ? { watchPaths: input.watchPaths } : {}),
 			};

@@ -16,6 +16,7 @@ import {
 	mongo,
 	mysql,
 	postgres,
+	redis,
 	type volumeBackups,
 } from "../../db/schema";
 import { execAsync, execAsyncRemote, execAsyncWithStdin } from "../../utils/exec";
@@ -23,7 +24,18 @@ import { assertDockerVolumeName } from "../../utils/validators";
 import { shellQuote } from "../compose/paths";
 import { PROTECTED_VOLUMES } from "../docker/protected";
 import { notifyEvent } from "../notifications";
+import { getConfigDir } from "../traefik/paths";
 import { DB_DUMP_CONFIG, type DumpCommandParams } from "./dump-commands";
+import {
+	buildConfigArchiveCommand,
+	buildInstanceContainerDumpCommand,
+	buildInstanceContainerFilters,
+	buildInstancePgDumpCommand,
+	buildRedisSnapshotScript,
+	isSafeRedisDataDir,
+	parseInstanceDatabaseUrl,
+	WEB_SERVER_CONFIG_SUFFIX,
+} from "./instance-backup";
 
 /**
  * Backup runner: database dumps and volume archives to S3-compatible
@@ -179,6 +191,16 @@ async function findLinkedDatabase(backupRow: BackupRow): Promise<LinkedDatabaseR
 			if (row) return row;
 			break;
 		}
+		case "redis": {
+			if (!backupRow.redisId) break;
+			const row = await db.query.redis.findFirst({
+				where: eq(redis.redisId, backupRow.redisId),
+			});
+			// Redis services have no user — AUTH is password-only.
+			if (row)
+				return { serverId: row.serverId, databaseUser: "", databasePassword: row.databasePassword };
+			break;
+		}
 	}
 	throw new Error(
 		`Backup ${backupRow.backupId}: no linked ${backupRow.databaseType} database found`,
@@ -215,7 +237,10 @@ function dumpParams(backupRow: BackupRow, linked: LinkedDatabaseRow): DumpComman
 export async function runBackup(backupRow: BackupRow): Promise<{ key: string }> {
 	const databaseType = backupRow.databaseType;
 	if (databaseType === "web-server") {
-		throw new Error("web-server backups are not supported");
+		return await runWebServerBackup(backupRow);
+	}
+	if (databaseType === "redis") {
+		return await runRedisBackup(backupRow);
 	}
 	const engine = DB_DUMP_CONFIG[databaseType];
 	const destination = await db.query.destinations.findFirst({
@@ -286,7 +311,12 @@ export async function listBackupKeys(backupRow: BackupRow): Promise<string[]> {
 export async function restoreBackup(backupRow: BackupRow, key?: string): Promise<{ key: string }> {
 	const databaseType = backupRow.databaseType;
 	if (databaseType === "web-server") {
-		throw new Error("web-server backups are not supported");
+		throw new Error(
+			"web-server backups are restored manually (pg_dump archive + config tar.gz) — see docs/instance-backup.md",
+		);
+	}
+	if (databaseType === "redis") {
+		return await restoreRedisBackup(backupRow, key);
 	}
 	const engine = DB_DUMP_CONFIG[databaseType];
 	const destination = await db.query.destinations.findFirst({
@@ -345,6 +375,184 @@ export async function restoreBackup(backupRow: BackupRow, key?: string): Promise
 		const pipeline = `echo ${archiveB64} | base64 -d | gunzip | docker exec -i ${shellQuote(containerId)} sh -c ${sq(restoreCommand)}`;
 		await run(linked.serverId, pipeline);
 	}
+	return { key: targetKey };
+}
+
+// ── instance self-backup (web-server) ───────────────────────────────────────
+
+async function findDestinationOrThrow(destinationId: string): Promise<DestinationRow> {
+	const destination = await db.query.destinations.findFirst({
+		where: eq(destinations.destinationId, destinationId),
+	});
+	if (!destination) {
+		throw new Error(`Destination not found: ${destinationId}`);
+	}
+	return destination;
+}
+
+/**
+ * Dump the instance database by shelling out to a Postgres container when
+ * the Nixploy process itself has no pg_dump. The DATABASE_URL host is the
+ * Swarm service name in production and the compose service name in
+ * docker-compose.dev.yml, so the container is found by that name.
+ */
+async function dumpInstanceFromContainer(
+	target: ReturnType<typeof parseInstanceDatabaseUrl>,
+): Promise<string> {
+	for (const filter of buildInstanceContainerFilters(target.host)) {
+		const output = await execAsync(`docker ps -q ${filter} | head -n 1`);
+		const containerId = output.trim().split("\n")[0]?.trim();
+		if (containerId && /^[a-f0-9]{12,64}$/i.test(containerId)) {
+			return await execAsync(
+				`docker exec ${shellQuote(containerId)} sh -c ${sq(buildInstanceContainerDumpCommand(target))} | gzip | base64`,
+			);
+		}
+	}
+	throw new Error(
+		`pg_dump is not available in the Nixploy process and no Postgres container matches the DATABASE_URL host "${target.host}"`,
+	);
+}
+
+/**
+ * Back up the Nixploy instance itself: a pg_dump of the DATABASE_URL
+ * database plus a tar.gz of the config directory (Traefik dynamic configs,
+ * certificates, SSH keys). Uploaded as two sibling artifacts —
+ * `<prefix>/<appName>/<ts>.gz` and `<prefix>/<appName>-config/<ts>.gz` —
+ * so retention prunes each stream independently. Restore is manual
+ * (docs/instance-backup.md).
+ */
+async function runWebServerBackup(backupRow: BackupRow): Promise<{ key: string }> {
+	const destination = await findDestinationOrThrow(backupRow.destinationId);
+	const target = parseInstanceDatabaseUrl(process.env.DATABASE_URL);
+
+	// Prefer a local pg_dump (password via PGPASSWORD env, never argv);
+	// fall back to the instance's own Postgres container when the app
+	// image (or the dev host) has no Postgres client installed.
+	const hasLocalPgDump = await execAsync("command -v pg_dump")
+		.then(() => true)
+		.catch(() => false);
+	const encodedDump = hasLocalPgDump
+		? await execAsync(`set -o pipefail; ${buildInstancePgDumpCommand(target)} | gzip | base64`, {
+				env: { ...process.env, PGPASSWORD: target.password },
+			})
+		: await dumpInstanceFromContainer(target);
+	const dump = Buffer.from(encodedDump.replace(/\s+/g, ""), "base64");
+	if (dump.length === 0) {
+		throw new Error("Dump of the instance database produced no data");
+	}
+
+	// tar czf already compresses; only base64 for transport.
+	const encodedConfig = await execAsync(`${buildConfigArchiveCommand(getConfigDir())} | base64`);
+	const configArchive = Buffer.from(encodedConfig.replace(/\s+/g, ""), "base64");
+	if (configArchive.length === 0) {
+		throw new Error("Archive of the instance config directory produced no data");
+	}
+
+	const date = new Date();
+	const dumpKey = buildBackupKey(backupRow.prefix, backupRow.appName, date);
+	const configKey = buildBackupKey(
+		backupRow.prefix,
+		`${backupRow.appName}${WEB_SERVER_CONFIG_SUFFIX}`,
+		date,
+	);
+	await uploadToDestination(destination, dumpKey, dump);
+	await uploadToDestination(destination, configKey, configArchive);
+	await pruneOldBackups(
+		destination,
+		`${backupRow.prefix}/${backupRow.appName}/`,
+		backupRow.keepLatestCount,
+	);
+	await pruneOldBackups(
+		destination,
+		`${backupRow.prefix}/${backupRow.appName}${WEB_SERVER_CONFIG_SUFFIX}/`,
+		backupRow.keepLatestCount,
+	);
+	return { key: dumpKey };
+}
+
+// ── redis ────────────────────────────────────────────────────────────────────
+
+/**
+ * Snapshot a redis service: BGSAVE (or blocking SAVE) inside the container,
+ * wait for persistence to finish, then `docker cp` the whole data directory
+ * (dump.rdb plus the AOF when appendonly is enabled) into a tar.gz on S3.
+ */
+async function runRedisBackup(backupRow: BackupRow): Promise<{ key: string }> {
+	const destination = await findDestinationOrThrow(backupRow.destinationId);
+	const linked = await findLinkedDatabase(backupRow);
+	const containerId = await findContainerId(backupRow.appName, linked.serverId);
+	if (!/^[a-f0-9]{12,64}$/i.test(containerId)) {
+		throw new Error(`Unexpected container id for ${backupRow.appName}`);
+	}
+
+	// Password on stdin (first line) — never on docker/ps argv.
+	const dirOutput = await execAsyncWithStdin(
+		`docker exec -i ${shellQuote(containerId)} sh -c ${sq(buildRedisSnapshotScript())}`,
+		`${linked.databasePassword}\n`,
+		{ serverId: linked.serverId },
+	);
+	const dataDir = dirOutput.trim().split("\n").pop()?.trim() ?? "";
+	if (!isSafeRedisDataDir(dataDir)) {
+		throw new Error(`Unexpected redis data directory reported by ${backupRow.appName}`);
+	}
+
+	// `docker cp <id>:<dir> -` streams a tar of the data directory.
+	const encoded = await run(
+		linked.serverId,
+		`docker cp ${shellQuote(containerId)}:${dataDir} - | gzip | base64`,
+	);
+	const archive = Buffer.from(encoded.replace(/\s+/g, ""), "base64");
+	if (archive.length === 0) {
+		throw new Error(`Snapshot of redis ${backupRow.appName} produced no data`);
+	}
+
+	const key = buildBackupKey(backupRow.prefix, backupRow.appName);
+	await uploadToDestination(destination, key, archive);
+	await pruneOldBackups(
+		destination,
+		`${backupRow.prefix}/${backupRow.appName}/`,
+		backupRow.keepLatestCount,
+	);
+	return { key };
+}
+
+/**
+ * Restore redis from a stored snapshot: unpack the data-directory tar back
+ * into the container, then SHUTDOWN NOSAVE — the Swarm restart policy
+ * brings redis back and it loads the restored RDB/AOF from disk.
+ */
+async function restoreRedisBackup(backupRow: BackupRow, key?: string): Promise<{ key: string }> {
+	const destination = await findDestinationOrThrow(backupRow.destinationId);
+	const keys = await listBackupKeys(backupRow);
+	const targetKey = key ?? keys[0];
+	if (!targetKey) {
+		throw new Error(`No stored dump found for ${backupRow.appName}`);
+	}
+	if (!keys.includes(targetKey)) {
+		throw new Error(`Dump ${targetKey} does not belong to backup ${backupRow.backupId}`);
+	}
+
+	const archive = await downloadFromDestination(destination, targetKey);
+	const linked = await findLinkedDatabase(backupRow);
+	const containerId = await findContainerId(backupRow.appName, linked.serverId);
+	if (!/^[a-f0-9]{12,64}$/i.test(containerId)) {
+		throw new Error(`Unexpected container id for ${backupRow.appName}`);
+	}
+
+	// The tar holds the data dir at its original absolute path (e.g. `data/`),
+	// so extracting into the container root puts dump.rdb/AOF back in place.
+	await run(
+		linked.serverId,
+		`echo ${archive.toString("base64")} | base64 -d | gunzip | docker cp - ${shellQuote(containerId)}:/`,
+	);
+	// SHUTDOWN drops the connection — a non-zero exit is expected here.
+	await execAsyncWithStdin(
+		`docker exec -i ${shellQuote(containerId)} sh -c ${sq(
+			"IFS= read -r REDISCLI_AUTH; export REDISCLI_AUTH; redis-cli --no-auth-warning SHUTDOWN NOSAVE",
+		)}`,
+		`${linked.databasePassword}\n`,
+		{ serverId: linked.serverId },
+	).catch(() => {});
 	return { key: targetKey };
 }
 

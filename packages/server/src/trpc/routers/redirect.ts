@@ -104,7 +104,17 @@ export const redirectRouter = router({
 				});
 			}
 
-			await syncApplicationTraefik(application);
+			try {
+				await syncApplicationTraefik(application);
+			} catch (error) {
+				// Compensation: without it the client sees a 500 but the row exists,
+				// and a retry can stack duplicate redirects behind the failure.
+				await db
+					.delete(redirects)
+					.where(eq(redirects.redirectId, redirect.redirectId))
+					.catch(() => {});
+				throw error;
+			}
 			return redirect;
 		}),
 
@@ -128,17 +138,33 @@ export const redirectRouter = router({
 			const replacement = input.replacement ?? redirect.replacement;
 			assertSafeRedirectRule(regex, replacement);
 
+			const next = {
+				regex,
+				replacement,
+				permanent: input.permanent ?? redirect.permanent,
+			};
 			const [updated] = await db
 				.update(redirects)
-				.set({
-					regex,
-					replacement,
-					permanent: input.permanent ?? redirect.permanent,
-				})
+				.set(next)
 				.where(eq(redirects.redirectId, redirect.redirectId))
 				.returning();
 
-			await syncApplicationTraefik(application);
+			try {
+				await syncApplicationTraefik(application);
+			} catch (error) {
+				// Compensation: restore the previous row so the client can retry
+				// instead of finding a half-applied update behind the 500.
+				await db
+					.update(redirects)
+					.set({
+						regex: redirect.regex,
+						replacement: redirect.replacement,
+						permanent: redirect.permanent,
+					})
+					.where(eq(redirects.redirectId, redirect.redirectId))
+					.catch(() => {});
+				throw error;
+			}
 			return updated;
 		}),
 

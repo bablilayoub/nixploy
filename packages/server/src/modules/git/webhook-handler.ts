@@ -2,14 +2,33 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Webhooks } from "@octokit/webhooks";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
-import { applications, bitbucket, deployments, gitea, github, gitlab } from "../../db/schema";
+import {
+	applications,
+	bitbucket,
+	deployments,
+	gitea,
+	github,
+	gitlab,
+	previewDeployments,
+} from "../../db/schema";
 import { queueDeployment } from "../deployment";
 import {
 	classifyPullRequestAction,
 	createOrRedeployPreview,
+	createPreviewDeployment,
 	deletePreviewByPullRequest,
+	findPreviewByPullRequest,
 } from "../preview";
 import { upsertPreviewComment } from "../preview/comment";
+import {
+	decideForkPreviewGate,
+	type ForkGateDecision,
+	isForkPullRequest,
+} from "../preview/fork-gate";
+import { isBitbucketCollaborator } from "./bitbucket";
+import { isGiteaCollaborator } from "./gitea";
+import { isGithubCollaborator } from "./github";
+import { isGitlabCollaborator } from "./gitlab";
 import { derivedWebhookSecret } from "./webhook-secret";
 
 export type GitWebhookProvider = "github" | "gitlab" | "bitbucket" | "gitea";
@@ -20,6 +39,10 @@ export type PullRequestWebhookInfo = {
 	id?: string | null;
 	title?: string | null;
 	url?: string | null;
+	/** PR head lives in a different repository than the base (fork PR). */
+	isFork?: boolean;
+	/** Provider login of the PR author (collaborator bypass + UI display). */
+	authorLogin?: string | null;
 };
 
 export type GitWebhookResult = {
@@ -152,6 +175,13 @@ async function verifyAndExtractGithub(
 				id: asString(pr.id) || null,
 				title: typeof pr.title === "string" ? pr.title : null,
 				url: typeof pr.html_url === "string" ? pr.html_url : null,
+				isFork: isForkPullRequest({
+					headRepoFullName:
+						typeof pr.head?.repo?.full_name === "string" ? pr.head.repo.full_name : null,
+					baseRepoFullName: fullName || null,
+					headRepoForkFlag: typeof pr.head?.repo?.fork === "boolean" ? pr.head.repo.fork : null,
+				}),
+				authorLogin: typeof pr.user?.login === "string" ? pr.user.login : null,
 			},
 		};
 	}
@@ -187,6 +217,8 @@ async function verifyAndExtractGitlab(
 		if (!authorized) {
 			throw new WebhookUnauthorized("gitlab token mismatch");
 		}
+	} else {
+		throw new WebhookUnauthorized("missing gitlab token");
 	}
 
 	const payload = JSON.parse(rawBody);
@@ -219,6 +251,11 @@ async function verifyAndExtractGitlab(
 				id: asString(attrs.id) || null,
 				title: typeof attrs.title === "string" ? attrs.title : null,
 				url: typeof attrs.url === "string" ? attrs.url : null,
+				isFork:
+					attrs.source_project_id != null &&
+					attrs.target_project_id != null &&
+					attrs.source_project_id !== attrs.target_project_id,
+				authorLogin: typeof payload.user?.username === "string" ? payload.user.username : null,
 			},
 		};
 	}
@@ -276,6 +313,8 @@ async function verifyAndExtractBitbucket(
 	};
 	if (event in prEvents) {
 		const pr = payload.pullrequest ?? {};
+		const baseFullName: string = payload.repository?.full_name ?? "";
+		const headFullName: string = pr.source?.repository?.full_name ?? "";
 		return {
 			branch: pr.source?.branch?.name ?? "",
 			type: "pull_request",
@@ -287,6 +326,11 @@ async function verifyAndExtractBitbucket(
 				id: asString(pr.id) || null,
 				title: typeof pr.title === "string" ? pr.title : null,
 				url: typeof pr.links?.html?.href === "string" ? pr.links.html.href : null,
+				isFork: isForkPullRequest({
+					headRepoFullName: headFullName || null,
+					baseRepoFullName: baseFullName || null,
+				}),
+				authorLogin: typeof pr.author?.nickname === "string" ? pr.author.nickname : null,
 			},
 		};
 	}
@@ -359,6 +403,13 @@ async function verifyAndExtractGitea(
 				id: asString(pr.id) || null,
 				title: typeof pr.title === "string" ? pr.title : null,
 				url: typeof pr.html_url === "string" ? pr.html_url : null,
+				isFork: isForkPullRequest({
+					headRepoFullName:
+						typeof pr.head?.repo?.full_name === "string" ? pr.head.repo.full_name : null,
+					baseRepoFullName: fullName || null,
+					headRepoForkFlag: typeof pr.head?.repo?.fork === "boolean" ? pr.head.repo.fork : null,
+				}),
+				authorLogin: typeof pr.user?.login === "string" ? pr.user.login : null,
 			},
 		};
 	}
@@ -624,6 +675,72 @@ export async function queueWebhookDeployment(
 }
 
 /**
+ * Fork gate for one PR delivery: consult the app's
+ * `previewForksRequireApproval` setting and the provider collaborator /
+ * membership API (fail-safe: unknown collaborator status ⇒ gated).
+ */
+async function evaluateForkGate(
+	applicationId: string,
+	pr: PullRequestWebhookInfo,
+): Promise<ForkGateDecision> {
+	if (!pr.isFork) return "allow";
+	const application = await db.query.applications.findFirst({
+		where: eq(applications.applicationId, applicationId),
+		columns: {
+			sourceType: true,
+			owner: true,
+			repository: true,
+			githubId: true,
+			gitlabId: true,
+			giteaId: true,
+			bitbucketId: true,
+			previewForksRequireApproval: true,
+		},
+	});
+	if (!application) return "allow"; // deleted between match and apply
+	let isCollaborator: boolean | null = null;
+	const owner = application.owner;
+	const repo = application.repository;
+	const username = pr.authorLogin;
+	if (owner && repo && username) {
+		if (application.sourceType === "github" && application.githubId) {
+			isCollaborator = await isGithubCollaborator({
+				githubId: application.githubId,
+				owner,
+				repo,
+				username,
+			});
+		} else if (application.sourceType === "gitlab" && application.gitlabId) {
+			isCollaborator = await isGitlabCollaborator({
+				gitlabId: application.gitlabId,
+				owner,
+				repo,
+				username,
+			});
+		} else if (application.sourceType === "gitea" && application.giteaId) {
+			isCollaborator = await isGiteaCollaborator({
+				giteaId: application.giteaId,
+				owner,
+				repo,
+				username,
+			});
+		} else if (application.sourceType === "bitbucket" && application.bitbucketId) {
+			isCollaborator = await isBitbucketCollaborator({
+				bitbucketId: application.bitbucketId,
+				owner,
+				repo,
+				username,
+			});
+		}
+	}
+	return decideForkPreviewGate({
+		isFork: true,
+		requireApproval: application.previewForksRequireApproval,
+		isCollaborator,
+	});
+}
+
+/**
  * Apply a verified pull_request webhook to one application: create/redeploy
  * on open/sync, delete on close. Returns a short status string for the HTTP
  * response.
@@ -657,14 +774,71 @@ export async function handlePreviewWebhookForApplication(
 		};
 	}
 
-	const result = await createOrRedeployPreview({
-		applicationId,
-		pullRequestNumber: pr.number,
-		branch: webhook.branch || null,
-		pullRequestId: pr.id ?? null,
-		pullRequestTitle: pr.title ?? null,
-		pullRequestURL: pr.url ?? null,
-	});
+	const result = await (async () => {
+		const gate = await evaluateForkGate(applicationId, pr);
+		if (gate === "allow") {
+			return await createOrRedeployPreview({
+				applicationId,
+				pullRequestNumber: pr.number,
+				branch: webhook.branch || null,
+				pullRequestId: pr.id ?? null,
+				pullRequestTitle: pr.title ?? null,
+				pullRequestURL: pr.url ?? null,
+				pullRequestAuthor: pr.authorLogin ?? null,
+			});
+		}
+
+		// Fork PR + approval required + author not a known collaborator: never
+		// auto-build arbitrary code. Park the preview as awaiting_approval.
+		const gatedInput = {
+			applicationId,
+			pullRequestNumber: pr.number,
+			branch: webhook.branch || null,
+			pullRequestId: pr.id ?? null,
+			pullRequestTitle: pr.title ?? null,
+			pullRequestURL: pr.url ?? null,
+			pullRequestAuthor: pr.authorLogin ?? null,
+		};
+		const existing = await findPreviewByPullRequest(applicationId, pr.number);
+		if (existing && existing.previewStatus !== "awaiting_approval") {
+			// Approved earlier (or predates the gate) — keep it redeploying.
+			return await createOrRedeployPreview(gatedInput);
+		}
+		if (existing) {
+			// Still gated: refresh PR metadata only, no build.
+			await db
+				.update(previewDeployments)
+				.set({
+					branch: gatedInput.branch,
+					pullRequestId: gatedInput.pullRequestId,
+					pullRequestTitle: gatedInput.pullRequestTitle,
+					pullRequestURL: gatedInput.pullRequestURL,
+					pullRequestAuthor: gatedInput.pullRequestAuthor,
+				})
+				.where(eq(previewDeployments.previewDeploymentId, existing.previewDeploymentId));
+			await upsertPreviewComment({
+				applicationId,
+				pullRequestNumber: pr.number,
+				status: "awaiting_approval",
+			});
+			return {
+				action: "awaiting_approval" as const,
+				previewDeploymentId: existing.previewDeploymentId,
+				deploymentId: "",
+			};
+		}
+		const created = await createPreviewDeployment({ ...gatedInput, deferDeploy: true });
+		await upsertPreviewComment({
+			applicationId,
+			pullRequestNumber: pr.number,
+			status: "awaiting_approval",
+		});
+		return {
+			action: "awaiting_approval" as const,
+			previewDeploymentId: created.previewDeploymentId,
+			deploymentId: "",
+		};
+	})();
 
 	const title = `Preview: PR #${pr.number} (${result.action})`;
 	if (result.deploymentId) {
@@ -674,11 +848,13 @@ export async function handlePreviewWebhookForApplication(
 			.where(eq(deployments.deploymentId, result.deploymentId));
 	}
 
-	await upsertPreviewComment({
-		applicationId,
-		pullRequestNumber: pr.number,
-		status: "deploying",
-	});
+	if (result.action !== "awaiting_approval") {
+		await upsertPreviewComment({
+			applicationId,
+			pullRequestNumber: pr.number,
+			status: "deploying",
+		});
+	}
 
 	return {
 		action: result.action,

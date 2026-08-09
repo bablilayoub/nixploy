@@ -11,6 +11,7 @@ import {
 	removeServer,
 	setupServer,
 	testConnection,
+	type UpdateServerInput,
 	updateServerById,
 } from "../../modules/cluster";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
@@ -94,22 +95,36 @@ export const serverRouter = router({
 		return created ? publicServer(created) : created;
 	}),
 
-	/** Update connection details, status or the docker-cleanup toggle. */
+	/** Update connection details, status or the docker-cleanup/metrics toggles. */
 	update: protectedProcedure
 		.input(
 			createServerInput.partial().extend({
 				serverId: z.string().min(1),
 				serverStatus: z.enum(["active", "inactive"]).optional(),
 				enableDockerCleanup: z.boolean().optional(),
+				/** Master switch for the SSH metrics-history sampling of this server. */
+				metricsEnabled: z.boolean().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "servers.manage");
-			await findServerOrThrow(input.serverId, organizationId);
+			const existing = await findServerOrThrow(input.serverId, organizationId);
 			await assertSshKeyInOrganization(input.sshKeyId, organizationId);
-			const { serverId, ...values } = input;
-			const updated = await updateServerById(serverId, values, organizationId);
+			const { serverId, metricsEnabled, ...values } = input;
+			const update: UpdateServerInput = { ...values };
+			if (metricsEnabled !== undefined) {
+				const base =
+					typeof existing.metricsConfig === "object" && existing.metricsConfig !== null
+						? (existing.metricsConfig as Record<string, unknown>)
+						: {};
+				const metrics =
+					typeof base.metrics === "object" && base.metrics !== null
+						? (base.metrics as Record<string, unknown>)
+						: {};
+				update.metricsConfig = { ...base, metrics: { ...metrics, enabled: metricsEnabled } };
+			}
+			const updated = await updateServerById(serverId, update, organizationId);
 			return updated ? publicServer(updated) : updated;
 		}),
 

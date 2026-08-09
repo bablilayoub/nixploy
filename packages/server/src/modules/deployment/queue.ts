@@ -141,9 +141,13 @@ export function registerDeploymentProcess(deploymentId: string, proc: TargetedPr
 		processesByDeployment.set(deploymentId, set);
 	}
 	set.add(proc);
-	void proc.done.finally(() => {
-		set.delete(proc);
-	});
+	// `.finally()` returns a NEW promise that rejects when `proc.done`
+	// rejects — an unhandled rejection that kills the whole Node process.
+	// `.then(onSettle, onSettle)` settles in both directions instead.
+	void proc.done.then(
+		() => set.delete(proc),
+		() => set.delete(proc),
+	);
 }
 
 /** True once cancellation was requested for a running deployment. */

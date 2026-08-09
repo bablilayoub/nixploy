@@ -4,7 +4,12 @@ import { eq } from "drizzle-orm";
 import { Client as SshClient } from "ssh2";
 import { db } from "../../db";
 import { servers } from "../../db/schema";
-import { execAsync, execAsyncRemote, verifyRemoteHostKey } from "../../utils/exec";
+import {
+	execAsync,
+	execAsyncRemote,
+	remoteCommandTimeoutMs,
+	verifyRemoteHostKey,
+} from "../../utils/exec";
 import { shellQuote } from "./paths";
 
 /**
@@ -66,6 +71,41 @@ export interface TargetedProcess {
 export interface SpawnOptions {
 	cwd?: string;
 	onData?: (chunk: string) => void;
+	/**
+	 * Hard timeout for remote (SSH) commands. Defaults to
+	 * `NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS` or 30 minutes.
+	 */
+	timeoutMs?: number;
+}
+
+/** Marker prefix so the remote shell reports its pid on the first stderr line. */
+const REMOTE_PID_MARKER = "__nixploy_remote_pid__:";
+
+/**
+ * Extract the remote pid marker from the first stderr line; everything else
+ * is forwarded to the log unchanged.
+ */
+function createPidParser(onPid: (pid: number) => void): (chunk: string) => string {
+	let found = false;
+	let buffer = "";
+	return (chunk: string): string => {
+		if (found) return chunk;
+		buffer += chunk;
+		const newline = buffer.indexOf("\n");
+		if (newline === -1) return "";
+		const head = buffer.slice(0, newline);
+		const rest = buffer.slice(newline + 1);
+		buffer = "";
+		if (head.startsWith(REMOTE_PID_MARKER)) {
+			const pid = Number.parseInt(head.slice(REMOTE_PID_MARKER.length).trim(), 10);
+			if (Number.isFinite(pid) && pid > 0) onPid(pid);
+			found = true;
+			return rest;
+		}
+		// Not a marker (unexpected shell noise) — forward untouched.
+		found = true;
+		return `${head}\n${rest}`;
+	};
 }
 
 /**
@@ -87,8 +127,28 @@ export async function spawnTargeted(
 
 function spawnLocal(command: string, options: SpawnOptions): TargetedProcess {
 	// Prefer /bin/sh — the production image is node:22-alpine (no bash).
-	const child: ChildProcess = spawn("sh", ["-c", command], { cwd: options.cwd });
+	// `detached` puts the shell in its own process group so kill() can signal
+	// the whole build tree, not just the `sh -c` wrapper.
+	const child: ChildProcess = spawn("sh", ["-c", command], { cwd: options.cwd, detached: true });
 	let killed = false;
+
+	const signalTree = (signal: NodeJS.Signals) => {
+		try {
+			if (child.pid) {
+				process.kill(-child.pid, signal);
+			} else {
+				child.kill(signal);
+			}
+		} catch {
+			// Process-group signalling is unsupported (e.g. Windows) or the
+			// group already exited — fall back to signalling the shell itself.
+			try {
+				child.kill(signal);
+			} catch {
+				// already exited
+			}
+		}
+	};
 
 	const done = new Promise<void>((resolve, reject) => {
 		child.stdout?.on("data", (d: Buffer) => options.onData?.(d.toString()));
@@ -113,9 +173,9 @@ function spawnLocal(command: string, options: SpawnOptions): TargetedProcess {
 		pid: child.pid,
 		kill: () => {
 			killed = true;
-			child.kill("SIGTERM");
+			signalTree("SIGTERM");
 			// Escalate if the process ignores SIGTERM.
-			setTimeout(() => child.kill("SIGKILL"), 5_000).unref();
+			setTimeout(() => signalTree("SIGKILL"), 5_000).unref();
 		},
 		done,
 	};
@@ -154,39 +214,103 @@ async function spawnRemote(
 	});
 
 	const stream = await new Promise<import("ssh2").ClientChannel>((resolve, reject) => {
-		const remoteCommand = options.cwd ? `cd ${shellQuote(options.cwd)} && ${command}` : command;
+		// The first stderr line carries the remote shell's pid so kill() can
+		// terminate the actual command tree, not just the SSH channel.
+		const remoteCommand =
+			`printf '%s\\n' '${REMOTE_PID_MARKER}'"$$" >&2; ` +
+			(options.cwd ? `cd ${shellQuote(options.cwd)} && ${command}` : command);
 		conn.exec(remoteCommand, (err, s) => (err ? reject(err) : resolve(s)));
 	});
 
 	let killed = false;
+	let remotePid: number | null = null;
+	const parsePid = createPidParser((pid) => {
+		remotePid = pid;
+	});
+	const timeoutMs = remoteCommandTimeoutMs(options.timeoutMs);
+
 	const done = new Promise<void>((resolve, reject) => {
+		let settled = false;
+		const timer = setTimeout(() => {
+			fail(
+				new CommandError(
+					`Remote command timed out after ${Math.round(timeoutMs / 1000)}s on server ${server.name}`,
+					null,
+					false,
+				),
+			);
+		}, timeoutMs);
+		timer.unref?.();
+
+		const finish = (fn: () => void) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			fn();
+		};
+		const fail = (error: CommandError) =>
+			finish(() => {
+				conn.destroy();
+				reject(error);
+			});
+
 		stream.on("data", (d: Buffer) => options.onData?.(d.toString()));
-		stream.stderr.on("data", (d: Buffer) => options.onData?.(d.toString()));
+		stream.stderr.on("data", (d: Buffer) => {
+			const chunk = parsePid(d.toString());
+			if (chunk) options.onData?.(chunk);
+		});
+		stream.on("error", (err: Error) =>
+			fail(new CommandError(`Remote command stream error: ${err.message}`, null, killed)),
+		);
+		conn.on("error", (err: Error) =>
+			fail(new CommandError(`SSH connection error: ${err.message}`, null, killed)),
+		);
 		stream.on("close", (code: number | null) => {
-			conn.end();
-			if (code === 0 || (code === null && killed)) {
-				if (code === null && killed) {
-					reject(new CommandError("Command was cancelled", code, true));
-					return;
+			finish(() => {
+				conn.end();
+				if (code === 0 || (code === null && killed)) {
+					if (code === null && killed) {
+						reject(new CommandError("Command was cancelled", code, true));
+						return;
+					}
+					resolve();
+				} else {
+					reject(
+						new CommandError(
+							killed
+								? "Command was cancelled"
+								: `Remote command failed (exit ${code}) on server ${server.name}`,
+							code,
+							killed,
+						),
+					);
 				}
-				resolve();
-			} else {
-				reject(
-					new CommandError(
-						killed
-							? "Command was cancelled"
-							: `Remote command failed (exit ${code}) on server ${server.name}`,
-						code,
-						killed,
-					),
-				);
-			}
+			});
 		});
 	});
 
 	return {
 		kill: () => {
 			killed = true;
+			// Kill the remote command tree first — closing the channel alone
+			// leaves builds/clones running on the server.
+			if (remotePid) {
+				const pid = remotePid;
+				try {
+					conn.exec(`pkill -TERM -P ${pid} ; kill -TERM ${pid} ; true`, () => {
+						stream.close();
+						conn.end();
+					});
+					// Fallback: never leave the channel open if the kill exec stalls.
+					setTimeout(() => {
+						stream.close();
+						conn.end();
+					}, 2_000).unref();
+					return;
+				} catch {
+					// fall through to closing the channel
+				}
+			}
 			stream.close();
 			conn.end();
 		},

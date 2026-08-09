@@ -153,8 +153,14 @@ async function runApplicationJob(ctx: DeploymentContext, job: QueueJob): Promise
 			}
 		: application;
 
-	// Register every secret that could leak into command output.
-	for (const [, value] of parseEnv(application.env)) ctx.logger.addSecret(value);
+	// Register every secret that could leak into command output: the fully
+	// merged env (project → environment → application), not just the app's own.
+	const mergedEnv = mergeEnv(
+		application.environment.project.env,
+		application.environment.env,
+		application.env,
+	);
+	for (const [, value] of parseEnv(mergedEnv)) ctx.logger.addSecret(value);
 	const registryAuth =
 		application.sourceType === "docker" ? await resolveRegistryAuth(application) : null;
 	if (registryAuth) ctx.logger.addSecret(registryAuth.password);
@@ -171,11 +177,6 @@ async function runApplicationJob(ctx: DeploymentContext, job: QueueJob): Promise
 		throwIfCancelled(job.deploymentId);
 
 		const buildDir = resolveBuildDir(codeDir, application.buildPath || "/");
-		const mergedEnv = mergeEnv(
-			application.environment.project.env,
-			application.environment.env,
-			application.env,
-		);
 		imageTag = await buildImage({
 			ctx,
 			application: deployTarget,
@@ -280,6 +281,9 @@ async function setServiceStatus(
 	job: QueueJob,
 	status: "idle" | "running" | "done" | "error",
 ): Promise<void> {
+	// Preview jobs carry the PARENT applicationId — never let a preview
+	// deploy corrupt the production service's status.
+	if (job.previewDeploymentId) return;
 	if (job.applicationId) {
 		await db
 			.update(applications)
@@ -288,6 +292,17 @@ async function setServiceStatus(
 	} else if (job.composeId) {
 		await db.update(compose).set({ status }).where(eq(compose.composeId, job.composeId));
 	}
+}
+
+/** Mirror a preview job's terminal outcome onto its previewDeployments row. */
+async function setPreviewStatus(job: QueueJob, terminalStatus: TerminalStatus): Promise<void> {
+	if (!job.previewDeploymentId) return;
+	// "done" is already written by runApplicationJob on success.
+	if (terminalStatus === "done") return;
+	await db
+		.update(previewDeployments)
+		.set({ previewStatus: terminalStatus === "cancelled" ? "idle" : "error" })
+		.where(eq(previewDeployments.previewDeploymentId, job.previewDeploymentId));
 }
 
 /**
@@ -355,6 +370,8 @@ async function processJob(job: QueueJob): Promise<void> {
 			.update(deployments)
 			.set({ status: terminalStatus, finishedAt: new Date() })
 			.where(eq(deployments.deploymentId, job.deploymentId));
+		// Without this, failed previews stayed "running" forever.
+		await setPreviewStatus(job, terminalStatus).catch(() => {});
 		await setServiceStatus(
 			job,
 			terminalStatus === "done" ? "running" : terminalStatus === "cancelled" ? "idle" : "error",

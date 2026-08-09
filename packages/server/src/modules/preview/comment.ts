@@ -10,7 +10,7 @@ import { previewHost } from "./index";
  */
 export const PREVIEW_COMMENT_MARKER = "<!-- nixploy-preview -->";
 
-export type PreviewCommentStatus = "deploying" | "removed";
+export type PreviewCommentStatus = "deploying" | "removed" | "awaiting_approval";
 
 export type RenderPreviewCommentInput = {
 	pullRequestNumber: string;
@@ -30,6 +30,16 @@ export function renderPreviewComment({
 			"### Nixploy preview removed",
 			"",
 			`The preview environment for PR #${pullRequestNumber} has been torn down.`,
+		].join("\n");
+	}
+	if (status === "awaiting_approval") {
+		return [
+			PREVIEW_COMMENT_MARKER,
+			"### Nixploy preview awaiting approval",
+			"",
+			`This pull request comes from a fork, so the preview for PR #${pullRequestNumber} was not built automatically.`,
+			"",
+			"A maintainer can approve the preview from the Nixploy dashboard.",
 		].join("\n");
 	}
 	return [

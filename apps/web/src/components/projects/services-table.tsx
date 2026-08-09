@@ -6,11 +6,22 @@ import Link from "next/link";
 import { Fragment, useState } from "react";
 import { toast } from "sonner";
 
-import { StatusDot, type StatusDotStatus } from "@/components/shell";
+import { StatusDot } from "@/components/shell";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { serviceStatusDot } from "@/lib/status";
 import { useTRPCClient } from "@/lib/trpc";
 
 import { ServiceRowActions } from "./service-row-actions";
@@ -24,13 +35,6 @@ export interface ServiceEntry {
 	status: string;
 	tags?: Array<{ tagId: string; name: string; color: string }>;
 }
-
-const serviceStatusDot: Record<string, StatusDotStatus> = {
-	idle: "neutral",
-	running: "success",
-	done: "info",
-	error: "error",
-};
 
 const TYPE_ORDER = Object.keys(SERVICE_TYPE_META) as ServiceType[];
 
@@ -63,6 +67,7 @@ export function ServicesTable({
 	const queryClient = useQueryClient();
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [bulkPending, setBulkPending] = useState(false);
+	const [confirmStop, setConfirmStop] = useState(false);
 
 	const groups = TYPE_ORDER.map((type) => ({
 		type,
@@ -107,6 +112,32 @@ export function ServicesTable({
 
 	return (
 		<div className="space-y-3">
+			<AlertDialog open={confirmStop} onOpenChange={setConfirmStop}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							Stop {selectedServices.length} service{selectedServices.length === 1 ? "" : "s"}
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							Stop the {selectedServices.length} selected service
+							{selectedServices.length === 1 ? "" : "s"}? They will go offline until you start them
+							again.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							variant="destructive"
+							disabled={bulkPending}
+							onClick={() => void runBulk("stop")}
+						>
+							{bulkPending && <Loader2 className="size-4 animate-spin" />}
+							Stop
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
 			{selected.size > 0 && (
 				<div className="flex items-center justify-between rounded-lg border border-border bg-secondary/40 px-3 py-2">
 					<span className="text-sm text-muted-foreground">{selected.size} selected</span>
@@ -128,7 +159,7 @@ export function ServicesTable({
 							size="sm"
 							variant="outline"
 							disabled={bulkPending}
-							onClick={() => runBulk("stop")}
+							onClick={() => setConfirmStop(true)}
 						>
 							<Square className="size-4" />
 							Stop

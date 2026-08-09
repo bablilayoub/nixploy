@@ -33,6 +33,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
 	Table,
 	TableBody,
@@ -104,6 +105,7 @@ export function ServersView() {
 	const [editUsername, setEditUsername] = useState("root");
 	const [editSshKeyId, setEditSshKeyId] = useState<string | null>(null);
 	const [editSwarmRole, setEditSwarmRole] = useState<"worker" | "manager">("worker");
+	const [editMetricsEnabled, setEditMetricsEnabled] = useState(true);
 
 	const { data: sshKeys } = useQuery(trpc.sshKey.all.queryOptions());
 
@@ -116,6 +118,8 @@ export function ServersView() {
 			setEditUsername(editing.username);
 			setEditSshKeyId(editing.sshKeyId ?? null);
 			setEditSwarmRole(editing.swarmRole);
+			const metricsConfig = editing.metricsConfig as { metrics?: { enabled?: boolean } } | null;
+			setEditMetricsEnabled(metricsConfig?.metrics?.enabled !== false);
 		}
 	}, [editing]);
 
@@ -147,7 +151,6 @@ export function ServersView() {
 			<SettingsSection
 				title="Servers"
 				description="Remote Docker hosts connected over SSH."
-				wide
 				actions={<CreateServerDialog />}
 			>
 				<QueryState
@@ -320,6 +323,7 @@ export function ServersView() {
 									username: editUsername.trim() || undefined,
 									sshKeyId: editSshKeyId,
 									swarmRole: editSwarmRole,
+									metricsEnabled: editMetricsEnabled,
 								});
 							}
 						}}
@@ -406,6 +410,19 @@ export function ServersView() {
 							<p className="text-xs text-muted-foreground">
 								Applied on the next setup run if the node is not yet in the swarm.
 							</p>
+						</div>
+						<div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
+							<div className="grid gap-0.5">
+								<Label htmlFor="edit-server-metrics">Metrics history</Label>
+								<p className="text-xs text-muted-foreground">
+									Sample host and container stats over SSH every 30s.
+								</p>
+							</div>
+							<Switch
+								id="edit-server-metrics"
+								checked={editMetricsEnabled}
+								onCheckedChange={setEditMetricsEnabled}
+							/>
 						</div>
 						<DialogFooter>
 							<Button

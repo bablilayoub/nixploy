@@ -2,6 +2,7 @@ import Docker from "dockerode";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { servers } from "../../db/schema";
+import { verifyRemoteHostKey } from "../../utils/exec";
 
 /**
  * Docker/Swarm operations against the local host or a remote managed
@@ -36,6 +37,7 @@ export const getDocker = async (serverId?: string | null): Promise<Docker> => {
 			port: server.port,
 			username: server.username,
 			privateKey: server.sshKey.privateKey,
+			hostVerifier: (key: Buffer) => verifyRemoteHostKey(serverId, key),
 		},
 	});
 };

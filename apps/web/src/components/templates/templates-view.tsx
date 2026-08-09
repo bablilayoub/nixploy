@@ -5,7 +5,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import { ArrowDownAZ, ArrowUpAZ, LayoutGrid } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-
+import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { PageHeader } from "@/components/shell";
 import { Badge } from "@/components/ui/badge";
@@ -48,9 +48,9 @@ function TemplateCard({
 					</div>
 					<div className="min-w-0 flex-1">
 						<div className="flex items-start justify-between gap-2">
-							<h2 className="truncate text-sm font-medium text-foreground">{template.name}</h2>
+							<h3 className="truncate text-sm font-medium text-foreground">{template.name}</h3>
 							{template.hostPrivileged ? (
-								<Badge variant="outline" className="shrink-0 text-[10px] font-normal">
+								<Badge variant="outline" className="shrink-0 text-[11px] font-normal">
 									Instance admin
 								</Badge>
 							) : (
@@ -83,7 +83,13 @@ export function TemplatesView() {
 	const [selected, setSelected] = useState<TemplateSummary | null>(null);
 	const [inspecting, setInspecting] = useState<TemplateSummary | null>(null);
 
-	const { data: templates, isPending } = useQuery({
+	const {
+		data: templates,
+		isPending,
+		isError,
+		error,
+		refetch,
+	} = useQuery({
 		...trpc.template.all.queryOptions(),
 		staleTime: Number.POSITIVE_INFINITY,
 	});
@@ -137,6 +143,7 @@ export function TemplatesView() {
 				<div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
 					<Input
 						placeholder="Search templates…"
+						aria-label="Search templates"
 						className="h-9 w-full sm:max-w-xs"
 						value={search}
 						onChange={(event) => setSearch(event.target.value)}
@@ -176,63 +183,73 @@ export function TemplatesView() {
 				</Select>
 			</div>
 
-			{isPending ? (
-				<ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-					{["one", "two", "three", "four", "five", "six"].map((row) => (
-						<li key={row} className="rounded-lg border p-4">
-							<div className="flex gap-3">
-								<Skeleton className="size-10 shrink-0 rounded-md" />
-								<div className="min-w-0 flex-1 space-y-2">
-									<Skeleton className="h-4 w-28" />
-									<Skeleton className="h-3 w-full" />
+			<QueryState
+				isPending={isPending}
+				isError={isError}
+				error={error}
+				onRetry={() => refetch()}
+				skeleton={
+					<ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+						{["one", "two", "three", "four", "five", "six"].map((row) => (
+							<li key={row} className="rounded-lg border p-4">
+								<div className="flex gap-3">
+									<Skeleton className="size-10 shrink-0 rounded-md" />
+									<div className="min-w-0 flex-1 space-y-2">
+										<Skeleton className="h-4 w-28" />
+										<Skeleton className="h-3 w-full" />
+									</div>
 								</div>
-							</div>
-						</li>
-					))}
-				</ul>
-			) : filtered.length === 0 ? (
-				<EmptyState
-					icon={LayoutGrid}
-					title="No templates match"
-					description="Try a different search or category."
-				/>
-			) : grouped ? (
-				<div className="flex flex-col gap-8">
-					{grouped.map(([categoryName, rows]) => (
-						<section key={categoryName} className="space-y-3">
-							<div className="flex items-center gap-2">
-								<h3 className="text-sm font-medium capitalize">{categoryName}</h3>
-								<Badge variant="secondary" className="font-normal tabular-nums">
-									{rows.length}
-								</Badge>
-							</div>
-							<ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-								{rows.map((template) => (
-									<li key={template.id}>
-										<TemplateCard
-											template={template}
-											onInspect={() => setInspecting(template)}
-											onDeploy={() => setSelected(template)}
-										/>
-									</li>
-								))}
-							</ul>
-						</section>
-					))}
-				</div>
-			) : (
-				<ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-					{filtered.map((template) => (
-						<li key={template.id}>
-							<TemplateCard
-								template={template}
-								onInspect={() => setInspecting(template)}
-								onDeploy={() => setSelected(template)}
-							/>
-						</li>
-					))}
-				</ul>
-			)}
+							</li>
+						))}
+					</ul>
+				}
+				isEmpty={filtered.length === 0}
+				empty={
+					<EmptyState
+						icon={LayoutGrid}
+						title="No templates match"
+						description="Try a different search or category."
+					/>
+				}
+			>
+				{grouped ? (
+					<div className="flex flex-col gap-8">
+						{grouped.map(([categoryName, rows]) => (
+							<section key={categoryName} className="space-y-3">
+								<div className="flex items-center gap-2">
+									<h2 className="text-sm font-medium capitalize">{categoryName}</h2>
+									<Badge variant="secondary" className="font-normal tabular-nums">
+										{rows.length}
+									</Badge>
+								</div>
+								<ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+									{rows.map((template) => (
+										<li key={template.id}>
+											<TemplateCard
+												template={template}
+												onInspect={() => setInspecting(template)}
+												onDeploy={() => setSelected(template)}
+											/>
+										</li>
+									))}
+								</ul>
+							</section>
+						))}
+					</div>
+				) : (
+					<ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+						{filtered.map((template) => (
+							<li key={template.id}>
+								<TemplateCard
+									template={template}
+									onInspect={() => setInspecting(template)}
+									onDeploy={() => setSelected(template)}
+								/>
+							</li>
+						))}
+					</ul>
+				)}
+			</QueryState>
 
 			<TemplateDetailsDialog
 				template={inspecting}

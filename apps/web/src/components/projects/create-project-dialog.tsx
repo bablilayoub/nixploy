@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -22,9 +23,25 @@ import { useTRPC } from "@/lib/trpc";
 export function CreateProjectDialog({ children }: { children: React.ReactNode }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const router = useRouter();
+	const pathname = usePathname();
+	const searchParams = useSearchParams();
 	const [open, setOpen] = useState(false);
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
+
+	// Deep link from the command palette (?new=project) opens the dialog once.
+	useEffect(() => {
+		if (searchParams.get("new") !== "project") {
+			return;
+		}
+		setOpen(true);
+		// Strip the param so a refresh doesn't reopen the dialog.
+		const params = new URLSearchParams(searchParams.toString());
+		params.delete("new");
+		const query = params.toString();
+		router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+	}, [searchParams, router, pathname]);
 
 	const createProject = useMutation(
 		trpc.project.create.mutationOptions({

@@ -44,7 +44,8 @@ ENV NIXPLOY_APP_VERSION=$NIXPLOY_APP_VERSION
 
 # Docker CLI talks to the host socket (Swarm, builds, logs).
 # git/openssh used when cloning app sources during deploys.
-RUN apk add --no-cache docker-cli docker-cli-compose git openssh-client curl
+# postgresql-client: instance backups prefer local pg_dump (container fallback remains).
+RUN apk add --no-cache docker-cli docker-cli-compose git openssh-client curl postgresql-client
 
 # Root is required for the mounted docker.sock (same pattern as most PaaS images).
 COPY --from=build /app /app

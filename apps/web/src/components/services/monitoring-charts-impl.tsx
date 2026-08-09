@@ -25,6 +25,7 @@ import {
 
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
+import { formatBytes } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
@@ -48,19 +49,6 @@ interface Sample {
 	diskReadRate: number;
 	diskWriteRate: number;
 	pids: number;
-}
-
-function formatBytes(bytes: number): string {
-	if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
-	if (bytes < 1024) return `${bytes.toFixed(0)} B`;
-	const units = ["KB", "MB", "GB", "TB"];
-	let value = bytes;
-	let unit = -1;
-	do {
-		value /= 1024;
-		unit++;
-	} while (value >= 1024 && unit < units.length - 1);
-	return `${value.toFixed(value >= 100 ? 0 : 1)} ${units[unit]}`;
 }
 
 function wsUrl(params: Record<string, string | null | undefined>) {
@@ -370,11 +358,10 @@ export function MonitoringCharts({
 
 	const samples = range === "live" ? liveSamples : historySamples;
 
-	// 24h uptime: sampled-30s slots with data vs the full window (history only,
-	// local services — remote returns no rows and shows nothing).
+	// 24h uptime: sampled-30s slots with data vs the full window (history only —
+	// services without samples yet show nothing).
 	const uptimeQuery = useQuery({
 		...trpc.monitoring.history.queryOptions({ appName, hours: 24 }),
-		enabled: !serverId,
 		refetchInterval: 60_000,
 	});
 	const uptime = useMemo(() => {
@@ -497,11 +484,7 @@ export function MonitoringCharts({
 					<span
 						className={cn(
 							"size-1.5 rounded-full",
-							range !== "live"
-								? "bg-sky-500"
-								: connected
-									? "animate-pulse bg-emerald-500"
-									: "bg-amber-500",
+							range !== "live" ? "bg-info" : connected ? "animate-pulse bg-success" : "bg-warning",
 						)}
 					/>
 					{range !== "live"
@@ -615,7 +598,7 @@ export function MonitoringCharts({
 									<span
 										className={cn(
 											"size-1.5 rounded-full",
-											replica.state === "running" ? "bg-emerald-500" : "bg-amber-500",
+											replica.state === "running" ? "bg-success" : "bg-warning",
 										)}
 									/>
 									<span className="max-w-40 truncate font-mono text-xs">{replica.name}</span>

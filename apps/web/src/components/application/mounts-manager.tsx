@@ -171,7 +171,6 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 			<SettingsSection
 				title="Mounts"
 				description="Persist data with volumes, bind host paths, or inject config files."
-				wide
 				actions={
 					<Button size="sm" onClick={() => setDialogOpen(true)}>
 						<Plus className="size-4" />

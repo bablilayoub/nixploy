@@ -290,7 +290,7 @@ export function CommandPalette({ className }: { className?: string }) {
 					group: "This Project",
 					icon: Tags,
 					keywords: ["label", "filter", "tag", "tags"],
-					run: go(`/dashboard/projects/${projectId}`),
+					run: go(`/dashboard/projects/${projectId}?new=tags`),
 				},
 			);
 
@@ -302,7 +302,7 @@ export function CommandPalette({ className }: { className?: string }) {
 					group: "This Project",
 					icon: Bot,
 					keywords: ["ai", "chat", "generate", "compose", "yaml", "assistant"],
-					run: go(`/dashboard/projects/${projectId}/services/compose/${composeId}`),
+					run: go(`/dashboard/projects/${projectId}/services/compose/${composeId}?copilot=1`),
 				});
 			}
 
@@ -314,7 +314,9 @@ export function CommandPalette({ className }: { className?: string }) {
 					group: "This Project",
 					icon: Bot,
 					keywords: ["ai", "chat", "explain", "assistant"],
-					run: go(`/dashboard/projects/${projectId}/services/application/${applicationId}`),
+					run: go(
+						`/dashboard/projects/${projectId}/services/application/${applicationId}?copilot=1`,
+					),
 				});
 			}
 		}
@@ -425,7 +427,7 @@ export function CommandPalette({ className }: { className?: string }) {
 				group: "Actions",
 				icon: Plus,
 				keywords: ["create"],
-				run: go("/dashboard"),
+				run: go("/dashboard?new=project"),
 			},
 			{
 				id: "action:toggle-theme",
