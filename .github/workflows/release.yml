@@ -1,0 +1,130 @@
+name: Release
+
+# Tag-driven PaaS release (Dokploy-style):
+#   1. Bump package.json version (e.g. 0.1.0)
+#   2. Commit, then: git tag v0.1.0 && git push origin v0.1.0
+# CI builds/pushes GHCR (:vX.Y.Z + :latest), creates a GitHub Release with
+# auto-generated notes, and attaches version-pinned install.sh / update.sh.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)release, e.g. v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          case "$TAG" in
+            v*) ;;
+            *)
+              echo "Tag must start with v (got: $TAG)"
+              exit 1
+              ;;
+          esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - name: Assert tag matches package.json
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          EXPECTED="v${PKG}"
+          if [ "${{ steps.tag.outputs.tag }}" != "$EXPECTED" ]; then
+            echo "Tag ${{ steps.tag.outputs.tag }} does not match package.json version (expected $EXPECTED)"
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          build-args: |
+            NIXPLOY_APP_VERSION=${{ steps.tag.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Pin install.sh and update.sh
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          pin_script() {
+            local src="$1"
+            local dest="$2"
+            # Dokploy-style: shebang, then forced default for this tag, then rest of script.
+            {
+              head -n 1 "$src"
+              echo "NIXPLOY_VERSION=\"\${NIXPLOY_VERSION:-${TAG}}\""
+              # Skip the in-repo default assignment so the injected line is authoritative.
+              tail -n +2 "$src" | sed "/^NIXPLOY_VERSION=\"\${NIXPLOY_VERSION:-/d"
+            } >"$dest"
+            head -1 "$dest" | grep -q '^#!' || { echo "$dest missing shebang"; exit 1; }
+            grep -q "NIXPLOY_VERSION=\"\${NIXPLOY_VERSION:-${TAG}}\"" "$dest" || {
+              echo "$dest was not pinned to $TAG"
+              exit 1
+            }
+            grep -q 'NIXPLOY_VERSION' "$dest" || { echo "$dest lost NIXPLOY_VERSION"; exit 1; }
+          }
+          pin_script install.sh install-release.sh
+          pin_script update.sh update-release.sh
+          mv install-release.sh install.sh
+          mv update-release.sh update.sh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: |
+            install.sh
+            update.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

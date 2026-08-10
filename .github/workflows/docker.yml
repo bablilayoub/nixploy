@@ -3,7 +3,6 @@ name: Docker
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -39,7 +38,6 @@ jobs:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=
-            type=ref,event=tag
 
       - name: Read package version
         id: version

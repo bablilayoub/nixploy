@@ -9,6 +9,7 @@ Guides for running and developing Nixploy.
 | Guide | Audience | What it’s for |
 | --- | --- | --- |
 | [install.md](./install.md) | Operators | Production one-liner, env overrides, update, troubleshooting |
+| [releases.md](./releases.md) | Maintainers | Cut PaaS GitHub Releases (`v*`), GHCR tags, pinned install assets |
 | [getting-started.md](./getting-started.md) | Operators | First deploy (whoami / template), Git, CLI |
 | [api.md](./api.md) | Operators / CI | REST conventions, router catalog, CLI, Swagger, MCP pointer |
 | [mcp.md](./mcp.md) | Operators / AI | MCP server tools, auth, client config |

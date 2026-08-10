@@ -17,6 +17,14 @@ needed, initializes Swarm, and starts three Swarm services: `nixploy`,
 curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash
 ```
 
+`main` tracks the branch default for `NIXPLOY_VERSION`. For a specific release, use the
+**version-pinned** script from [GitHub Releases](https://github.com/bablilayoub/nixploy/releases)
+(see [releases.md](./releases.md)):
+
+```bash
+curl -fsSL https://github.com/bablilayoub/nixploy/releases/latest/download/install.sh | sudo bash
+```
+
 With a real domain (recommended — Let's Encrypt):
 
 1. Point an **A record** for `panel.yourdomain.com` at the server.
@@ -81,6 +89,12 @@ source of truth for installer/updater env knobs; README and the landing
 curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/update.sh | sudo bash
 ```
 
+Or from the latest GitHub Release asset (pinned `NIXPLOY_VERSION`):
+
+```bash
+curl -fsSL https://github.com/bablilayoub/nixploy/releases/latest/download/update.sh | sudo bash
+```
+
 Keeps secrets, Postgres data, ACME certs, and Traefik routes. Migrations run on
 boot. Or use **Settings → Platform → Updates** in the UI.
 
@@ -88,7 +102,7 @@ boot. Or use **Settings → Platform → Updates** in the UI.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `NIXPLOY_VERSION` / `NIXPLOY_IMAGE` | `latest` | Pin app image tag or full ref |
+| `NIXPLOY_VERSION` / `NIXPLOY_IMAGE` | release default / `v0.1.0` in repo | Pin app image tag or full ref |
 | `NIXPLOY_CONFIG_DIR` | `/etc/nixploy` | Host config/data directory |
 | `NIXPLOY_PORT` | `3000` | Published app port for health checks |
 | `NIXPLOY_UPDATE_TRAEFIK` | `1` | Also pull & force Traefik service |

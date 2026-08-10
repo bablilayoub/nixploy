@@ -30,6 +30,8 @@ NIXPLOY_DOMAIN=panel.example.com NIXPLOY_LETSENCRYPT_EMAIL=you@example.com \
 
 Full installer options: [`docs/install.md`](./docs/install.md). Update with [`update.sh`](./update.sh).
 
+**Releases:** [github.com/bablilayoub/nixploy/releases](https://github.com/bablilayoub/nixploy/releases) — tag `vX.Y.Z` to publish the GHCR image, changelog, and version-pinned install/update scripts. How to cut a release: [`docs/releases.md`](./docs/releases.md).
+
 ## Features
 
 | Area | What you get |
@@ -156,6 +158,7 @@ REST paths are `GET|POST /api/<router>.<procedure>` with an `x-api-key` header. 
 | **Contributing** | [`CONTRIBUTING.md`](./CONTRIBUTING.md) |
 | Docs index (repo) | [`docs/README.md`](./docs/README.md) |
 | Install | [`docs/install.md`](./docs/install.md) |
+| Releases | [GitHub Releases](https://github.com/bablilayoub/nixploy/releases) · [`docs/releases.md`](./docs/releases.md) |
 | Getting started | [`docs/getting-started.md`](./docs/getting-started.md) |
 | MCP | [`docs/mcp.md`](./docs/mcp.md) |
 | Instance backup | [`docs/instance-backup.md`](./docs/instance-backup.md) |
