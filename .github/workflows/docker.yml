@@ -15,6 +15,12 @@ env:
 
 jobs:
   build-and-push:
+    # Version / release commits use [skip ci] so only Release (tag v[0-9]*) builds that image.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.head_commit &&
+       !contains(github.event.head_commit.message, '[skip ci]') &&
+       !contains(github.event.head_commit.message, '[ci skip]'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

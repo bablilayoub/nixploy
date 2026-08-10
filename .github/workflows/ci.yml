@@ -13,6 +13,12 @@ concurrency:
 jobs:
   check:
     name: Typecheck & test
+    # On push to main, skip release version-bump commits ([skip ci]). PRs always run.
+    if: >-
+      github.event_name != 'push' ||
+      (github.event.head_commit &&
+       !contains(github.event.head_commit.message, '[skip ci]') &&
+       !contains(github.event.head_commit.message, '[ci skip]'))
     runs-on: ubuntu-latest
     services:
       postgres:

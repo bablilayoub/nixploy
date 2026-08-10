@@ -18,14 +18,22 @@ CI fails if the tag does not match `v` + `package.json` version.
 ## Cut a release
 
 1. Bump `"version"` in the root [`package.json`](../package.json) (and keep `apps/web` / other workspace versions in sync if you treat them as the product version).
-2. Commit on `main` (after CI is green).
+2. Commit on `main` with `[skip ci]` in the message so **CI** and **Docker** do not run on that push. Only the tag triggers packaging.
 3. Tag and push:
 
 ```bash
 VERSION=$(node -p "require('./package.json').version")
+git commit -m "chore: release v${VERSION} [skip ci]"   # if the bump is not committed yet
 git tag "v${VERSION}"
-git push origin "v${VERSION}"
+git push origin HEAD "v${VERSION}"
 ```
+
+Tag → workflow map (they do not overlap):
+
+| Tag | Workflow |
+| --- | --- |
+| `v0.1.1` (`v[0-9]*`) | **Release** — GHCR + GitHub Release |
+| `cli-v0.1.2` (`cli-v*`) | **Publish CLI** — npm only |
 
 4. Watch **Actions → Release**. When it finishes, open
    [github.com/bablilayoub/nixploy/releases](https://github.com/bablilayoub/nixploy/releases).

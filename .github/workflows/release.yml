@@ -8,8 +8,10 @@ name: Release
 
 on:
   push:
+    # PaaS only — do not use "v*" alone if it could collide; require digit after v.
+    # CLI uses cli-v* → Publish CLI workflow.
     tags:
-      - "v*"
+      - "v[0-9]*"
   workflow_dispatch:
     inputs:
       tag:
