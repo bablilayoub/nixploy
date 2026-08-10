@@ -252,7 +252,7 @@ volumes:
     volumes:
       - karakeep-meili-data:/meili_data
   karakeep_chrome:
-    image: gcr.io/zenika-hub/alpine-chrome:123
+    image: zenika/alpine-chrome:124
     restart: always
     command:
       - --no-sandbox
