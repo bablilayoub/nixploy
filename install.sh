@@ -22,7 +22,7 @@
 #   NIXPLOY_CONFIG_DIR           Host config directory          (default: /etc/nixploy)
 #   POSTGRES_VERSION             Postgres image tag             (default: 17-alpine)
 #   TRAEFIK_VERSION              Traefik image tag              (default: v3.5.0)
-#   NIXPLOY_SKIP_DOCKER_INSTALL  1 = require pre-installed Docker
+#   NIXPLOY_SKIP_DOCKER_INSTALL  1 = require pre-installed Docker (skip get.docker.com)
 #   NIXPLOY_BUILD_FROM_SOURCE    1 = always build the image locally
 #   NIXPLOY_REPO                 GitHub org/repo                (default: bablilayoub/nixploy)
 #   NIXPLOY_BRANCH               Branch for assets/source       (default: main)
@@ -208,7 +208,7 @@ install_docker() {
 		return
 	fi
 	[ "${NIXPLOY_SKIP_DOCKER_INSTALL:-0}" = "1" ] && die "Docker missing and NIXPLOY_SKIP_DOCKER_INSTALL=1"
-	[ "${NIXPLOY_ALLOW_DOCKER_INSTALL:-0}" = "1" ] || die "Docker missing. Install Docker manually, or re-run with NIXPLOY_ALLOW_DOCKER_INSTALL=1 to permit curl|sh from get.docker.com"
+	# Official convenience script (same path Coolify/Dokploy installers use).
 	run_quiet "Installing Docker Engine" bash -c "curl -fsSL https://get.docker.com | sh"
 	need_cmd docker || die "Docker install failed"
 	systemctl enable --now docker 2>/dev/null || service docker start 2>/dev/null || true
