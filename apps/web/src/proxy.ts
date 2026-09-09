@@ -1,19 +1,21 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 /**
- * Edge gate for the dashboard. This only checks for the *presence* of the
+ * Request gate for the dashboard (Next.js `proxy.ts`, formerly `middleware.ts`;
+ * runs in the Node.js runtime). This only checks for the *presence* of the
  * better-auth session cookie (named `better-auth.session_token`, prefixed
  * with `__Secure-` when served over HTTPS) — the authoritative validation
  * happens in the (dashboard) layout via `auth.api.getSession`.
  *
  * First-boot routing (/setup vs /login) is handled in those pages via a
- * server-side user-count check — edge middleware cannot query Postgres.
+ * server-side user-count check — the proxy stays free of database access so
+ * it never blocks on a cold pool.
  */
 function hasSessionCookie(req: NextRequest): boolean {
 	return req.cookies.getAll().some((cookie) => cookie.name.endsWith("better-auth.session_token"));
 }
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
 	const { pathname } = req.nextUrl;
 	const authenticated = hasSessionCookie(req);
 

@@ -36,7 +36,7 @@ Boot order: `app.prepare()` → WS attach → deployment recovery → crons → 
 | `/api/webhooks/deploy/<appName>` | `api/webhooks/deploy/[appName]/route.ts` | Generic API-key deploy hook (org-scoped via `findApplicationByAppNameForUser`) |
 | `/ws/{deployment,logs,stats,terminal}` | `packages/server/src/ws/*.ts` | Upgrade auth = session cookie (`ws/auth.ts`); access checks in `ws/access.ts` (org + capability `service.runtime` / `docker.manage`) |
 
-Edge middleware `apps/web/middleware.ts` only checks for the presence of the
+The request proxy `apps/web/src/proxy.ts` (Next 16 `proxy` convention, Node runtime; it must live under `src/` because the app dir is `src/app` — Next only scans that folder) only checks for the presence of the
 `better-auth.session_token` cookie (redirects `/dashboard` → `/login`,
 `/register` → `/setup`); the authoritative check is `getSession()` in
 `(dashboard)/layout.tsx` (`lib/auth-server.ts`).

@@ -29,7 +29,6 @@ Ordered by risk. The workspace pins are deliberate (`pnpm.overrides` in root `pa
 | Package | Current → Latest | Risk | Notes |
 | --- | --- | --- | --- |
 | `better-auth`, `@better-auth/api-key` | 1.6.25 → 1.7.3 | **High** | Pinned in web, ranged `^1.3.4` in server (unify). Check org/admin/twoFactor/apiKey plugin schema diffs, `verifyApiKey` return shape (`referenceId`), `databaseHooks` signatures, rate-limit config. Re-run tenancy suite + manual login/2FA/API-key flows. |
-| `next` (web) | 16.2.12 → 16.3.4 | Medium | Read 16.3 notes; also consider migrating `middleware.ts` → `proxy.ts` (supported in installed version). |
 | `next` (landing) | 15.5.22 → 16.3.4 | Medium | Separate app; Next 16 = Turbopack default, async request APIs, `proxy.ts`. Lucide 0.544 → 1.x rename check. |
 | `typescript` | 5.9.3 → 7.0.2 | **High** | TS 7 (Go-based compiler). Biome, drizzle-kit, tsup, Next plugin compatibility must all be verified. Try in a branch; not required for anything today. |
 | `vitest` | 4.1.10 → 5.0.0 | Medium | Check `vitest.config.ts` `env` option + `include` semantics. |
@@ -51,7 +50,7 @@ Image pins to review periodically: `traefik:v3.5.0` (install.sh, update.sh, setu
 - [ ] `NEXT_PUBLIC_APP_URL` is still read as a third fallback by the GitHub App callback (`api/github/callback/route.ts`). Drop the fallback once `BETTER_AUTH_URL` is guaranteed everywhere (install.sh always writes it).
 - [x] ~~`better-auth` version range mismatch~~ — both pinned `1.6.25`.
 - [x] ~~Biome warnings~~ — suppressed with reasoned `biome-ignore` comments; `biome check` is clean.
-- [ ] `apps/web/middleware.ts` → `proxy.ts` (Next 16 convention).
+- [x] ~~`apps/web/middleware.ts` → `proxy.ts`~~ — migrated to `apps/web/src/proxy.ts` with the Next 16.3 bump. Finding: a root-level `apps/web/proxy.ts` is not discovered when the app dir is `src/app` (build shows no `ƒ Proxy`, deep `/dashboard/*` paths fell through to the layout redirect, `/register/x` 404'd). Open question: whether the root-level `middleware.ts` shipped in v0.1.0 was ever active either — the dashboard layout's `getSession` check was always the authoritative gate, so no exposure, but worth a quick check on a v0.1.0 image before assuming the proxy ever ran there.
 - [ ] Landing on Next 15 while panel on Next 16; landing docs (`src/lib/docs/pages.ts`) hand-duplicate `docs/*` — drift risk, no check.
 - [ ] `next.config.ts` sets `output: "standalone"` but the image runs `tsx server.ts` from the full tree; standalone output is built and unused (image size).
 - [ ] `playwright-core` lives only in `tools/screenshots` (separate npm project with `package-lock.json`); `apps/web/e2e/smoke.mjs` and `docs/development.md` assume it is available — decide: add as root devDependency or point docs at `tools/screenshots`.
