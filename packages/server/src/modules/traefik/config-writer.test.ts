@@ -83,6 +83,24 @@ describe("buildTraefikFileConfig", () => {
 		});
 	});
 
+	it("https + certificateType none: websecure router still declares tls (default cert)", async () => {
+		const config = await buildTraefikFileConfig({
+			appName: "myapp",
+			domains: [{ ...baseDomain, https: true, certificateType: "none" }],
+		});
+
+		const webRouter = config.http.routers["myapp-router-0"];
+		expect(webRouter?.middlewares).toEqual(["myapp-redirect-to-https"]);
+		expect(webRouter?.tls).toBeUndefined();
+
+		// Regression: without `tls` Traefik treats the router as plain-HTTP on
+		// :443 and the TLS catch-all dashboard router answers with a 502.
+		const secureRouter = config.http.routers["myapp-router-websecure-0"];
+		expect(secureRouter?.entryPoints).toEqual(["websecure"]);
+		expect(secureRouter?.tls).toEqual({});
+		expect(config.tls).toBeUndefined();
+	});
+
 	it("adds PathPrefix to the rule for path-scoped domains", async () => {
 		const config = await buildTraefikFileConfig({
 			appName: "myapp",

@@ -251,11 +251,14 @@ export const buildTraefikFileConfig = async (
 			};
 			if (domain.certificateType === "letsencrypt") {
 				secureRouter.tls = { certResolver: "letsencrypt" };
-			} else if (domain.certificateType === "custom") {
-				// TLS without a resolver: the cert comes from tls.certificates below.
+			} else {
+				// "custom": the cert comes from tls.certificates below.
+				// "none": Traefik serves the default (self-signed) certificate.
+				// Either way the router MUST declare `tls`, otherwise Traefik only
+				// matches it for plain HTTP and the priority-1 dashboard catch-all
+				// (which does declare tls) swallows every HTTPS request → 502.
 				secureRouter.tls = {};
 			}
-			// certificateType "none" with https: TLS on websecure via default cert.
 			config.http.routers[routerNameSecure] = secureRouter;
 		} else {
 			config.http.routers[routerName] = {
