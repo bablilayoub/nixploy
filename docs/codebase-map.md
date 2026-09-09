@@ -6,7 +6,7 @@ entry points and the shape of each subsystem. Conventions live in
 [`../CLAUDE.md`](../CLAUDE.md) / [`../AGENTS.md`](../AGENTS.md); the working
 backlog in [`status.md`](./status.md).
 
-Snapshot: 2026-09-10, commit `07ab3d4`, PaaS `v0.1.0`, CLI `0.1.1`.
+Snapshot: 2026-09-10, branch `chore/sprint-1-hygiene` (on top of `main` @ `07ab3d4`), PaaS `v0.1.0`, CLI `0.1.1`. Versions: Next 16.3 (web + landing), better-auth 1.7.3.
 
 ## 1. Process topology
 
@@ -188,7 +188,7 @@ Installer/updater-only knobs (`NIXPLOY_DOMAIN`, `NIXPLOY_LETSENCRYPT_EMAIL`, `NI
 
 ## 9. Landing (`apps/landing`)
 
-Next 15 App Router, Tailwind v4, Motion, magicui components. Pages: `/`, `/features`, `/docs`, `/docs/[slug]`, `/api` (endpoint catalog), `/pricing`, `/about`, `/privacy`, `robots`, `sitemap`. Content is hand-authored in `src/lib/{site,features}.ts` and `src/lib/docs/{pages,nav,api-catalog}.ts` — it duplicates parts of `docs/` and must be updated by hand.
+Next 16 App Router, Tailwind v4, Motion, magicui components. Pages: `/`, `/features`, `/docs`, `/docs/[slug]`, `/api` (endpoint catalog), `/pricing`, `/about`, `/privacy`, `robots`, `sitemap`. Content is hand-authored in `src/lib/{site,features}.ts` and `src/lib/docs/{pages,nav,api-catalog}.ts` — it duplicates parts of `docs/` and must be updated by hand.
 
 ## 10. CI / release / packaging
 

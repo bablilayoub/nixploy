@@ -20,7 +20,7 @@ pnpm monorepo:
 | `apps/web` | `@nixploy/web` | Next.js panel: UI, `/api/trpc`, `/api/<router>.<proc>` REST, `/api/mcp`, `/swagger`, custom `server.ts` (WS + queue + crons) |
 | `packages/server` | `@nixploy/server` | Drizzle schema + migrations, better-auth, tRPC routers, deploy engine, builders, Traefik/Docker utils, backups, notifications, templates, MCP tools |
 | `apps/cli` | `@nixploy/cli` | Published npm CLI over the REST API (`x-api-key`) |
-| `apps/landing` | `@nixploy/landing` | nixploy.com marketing site (Next.js 15, separate from the panel) |
+| `apps/landing` | `@nixploy/landing` | nixploy.com marketing site (Next.js 16, separate from the panel) |
 | `docker/` | — | Production Dockerfile, entrypoint (migrate-then-start), Traefik static config, dev compose |
 | `install.sh` / `update.sh` | — | Production installer / updater (Swarm services `nixploy`, `nixploy-postgres`, `nixploy-traefik`) |
 | `tools/` | — | `release.sh` (tag-driven releases), `golden-path-api.mjs` (API smoke), `screenshots/` (separate npm project, Playwright captures) |
@@ -89,7 +89,7 @@ Details and status live in `docs/status.md`; this is the short list you must not
 - `NEXT_PUBLIC_APP_URL` is only read server-side as the third fallback for the GitHub App callback origin (`api/github/callback/route.ts`: `BETTER_AUTH_URL` → `NIXPLOY_BASE_URL` → `NEXT_PUBLIC_APP_URL`). The client bundle never bakes a URL in; do not add `NEXT_PUBLIC_*` URLs.
 - The dashboard cookie gate lives in `apps/web/src/proxy.ts` (Next 16 `proxy` convention; `middleware.ts` is deprecated). It **must** sit under `src/` — Next only scans the parent of the app dir for `proxy.ts`, and a root-level file is silently ignored (verified: empty middleware manifest, no `ƒ Proxy` line in the build). It must stay database-free; authoritative session checks happen in `(dashboard)/layout.tsx`.
 - `better-auth` + `@better-auth/api-key` are pinned to the same exact version in `apps/web` and `packages/server` (1.7.3). When upgrading: bump both, diff the plugin schemas (runtime-introspect `plugin.schema` for organization/admin/twoFactor/apiKey and `getAuthTables` from `better-auth/db`) against `db/schema/auth.ts`, then run the full manual loop (setup → 2FA enroll → sign-out → sign-in with TOTP → API key → REST + MCP → invite). The drizzle adapter reads `db._` at construction; `db/index.ts` answers that with `undefined` when `DATABASE_URL` is unset so offline tests and `next build` keep working.
-- The landing site runs Next 15.5 + lucide 0.544 while the panel runs Next 16.2 + lucide 1.x. They are separate apps; upgrade the landing deliberately, not as a side effect.
+- The landing site and the panel are separate Next apps (both 16.3 now). Keep their `next` versions moving together; a build of one does not exercise the other.
 - The tenancy suite (13 tests) silently skips without `DATABASE_URL_TEST`. A green local `pnpm test` does not prove tenant isolation.
 - `docker/Dockerfile` deps stage copies only `apps/web`, `apps/cli`, `packages/server` package manifests (no `apps/landing`); CI image builds are green, so leave it unless adding a workspace the image needs.
 - The in-memory deploy queue and rate limiters are process-local: multi-replica `nixploy` is unsupported by design.
