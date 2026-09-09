@@ -12,21 +12,10 @@
  * container-side constant regardless of the host's config dir.
  */
 
-/** Host-side root of all Nixploy state. */
-export const getConfigDir = (): string => {
-	if (process.env.NIXPLOY_CONFIG_DIR) {
-		return process.env.NIXPLOY_CONFIG_DIR;
-	}
-	if (
-		process.platform === "darwin" &&
-		typeof process.getuid === "function" &&
-		process.getuid() !== 0
-	) {
-		// Non-root dev on macOS: /etc requires sudo, keep state in the repo.
-		return `${process.cwd()}/.nixploy-data`;
-	}
-	return "/etc/nixploy";
-};
+import { getConfigDir } from "../deployment/paths";
+
+/** Host-side root of all Nixploy state — see `deployment/paths.ts`. */
+export { getConfigDir };
 
 /** Host-side Traefik config directory. */
 export const getTraefikDir = (): string => `${getConfigDir()}/traefik`;

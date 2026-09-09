@@ -1,11 +1,8 @@
 import path from "node:path";
+import { getConfigDir } from "../deployment/paths";
 
-/**
- * Root directory where Nixploy keeps all on-disk state (app code, file
- * mounts, traefik dynamic config). Mirrors Dokploy's `/etc/dokploy`.
- */
-export const getConfigDir = (): string =>
-	process.env.NIXPLOY_CONFIG_DIR ?? process.env.NIXPLOY_DIR ?? "/etc/nixploy";
+/** Root directory where Nixploy keeps all on-disk state — see `deployment/paths.ts`. */
+export { getConfigDir };
 
 /** Per-service directory: `<configDir>/applications/<appName>`. */
 export const getApplicationDir = (appName: string): string =>

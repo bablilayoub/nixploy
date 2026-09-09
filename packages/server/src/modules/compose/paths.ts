@@ -1,26 +1,20 @@
 import { join, normalize, sep } from "node:path";
+import { getConfigDir } from "../deployment/paths";
 
-/**
- * Root of all Nixploy-managed on-disk state (compose files, clones, logs).
- * Matches the install layout (`/etc/nixploy`), overridable for dev/tests.
- */
-export const NIXPLOY_CONFIG_DIR = process.env.NIXPLOY_CONFIG_DIR ?? "/etc/nixploy";
+/** Root of all Nixploy-managed on-disk state — see `deployment/paths.ts`. */
+export { getConfigDir };
 
 /** Overlay network every deployed compose service joins for Traefik routing. */
 export const NIXPLOY_NETWORK = process.env.NIXPLOY_NETWORK ?? "nixploy-network";
 
 /** Per-compose working directory: `<configDir>/compose/<appName>`. */
-export const getComposeBaseDir = (appName: string) => join(NIXPLOY_CONFIG_DIR, "compose", appName);
+export const getComposeBaseDir = (appName: string) => join(getConfigDir(), "compose", appName);
 
 /** Git sources are cloned into `<base>/code`. */
 export const getComposeCodeDir = (appName: string) => join(getComposeBaseDir(appName), "code");
 
 /** Merged `.env` file for a compose project. */
 export const getComposeEnvPath = (appName: string) => join(getComposeBaseDir(appName), ".env");
-
-/** Deployment log file for the fallback compose worker. */
-export const getDeploymentLogPath = (deploymentId: string) =>
-	join(NIXPLOY_CONFIG_DIR, "logs", `${deploymentId}.log`);
 
 /**
  * Resolve the on-disk compose file path for a compose row.

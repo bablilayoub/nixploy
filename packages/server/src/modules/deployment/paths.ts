@@ -2,18 +2,23 @@ import fs from "node:fs";
 import path from "node:path";
 
 /**
- * Base directory for all Nixploy-managed state (code checkouts, logs,
- * file mounts, drop uploads, ssh keys).
+ * Base directory for all Nixploy-managed state (code checkouts, compose
+ * files, logs, metrics, file mounts, drop uploads, ssh keys, Traefik config).
+ *
+ * This is the single source of truth — `modules/{application,compose,traefik}/paths.ts`
+ * re-export it so every subsystem resolves the same directory.
  *
  * Resolution order:
- * 1. `NIXPLOY_CONFIG_DIR` env var (always wins).
+ * 1. `NIXPLOY_CONFIG_DIR` env var (always wins). `NIXPLOY_DIR` is accepted
+ *    as a legacy alias.
  * 2. `./.nixploy-data` when developing on macOS as a non-root user
  *    (writing to /etc requires sudo there).
  * 3. `/etc/nixploy` (production default, matches install.sh).
  */
 export function getConfigDir(): string {
-	if (process.env.NIXPLOY_CONFIG_DIR) {
-		return process.env.NIXPLOY_CONFIG_DIR;
+	const configured = process.env.NIXPLOY_CONFIG_DIR ?? process.env.NIXPLOY_DIR;
+	if (configured) {
+		return configured;
 	}
 	if (
 		process.platform === "darwin" &&

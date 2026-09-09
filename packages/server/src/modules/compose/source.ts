@@ -6,7 +6,8 @@ import { db } from "../../db";
 import type { compose } from "../../db/schema";
 import { bitbucket, gitea, github, gitlab, sshKeys } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
-import { getComposeCodeDir, NIXPLOY_CONFIG_DIR, shellQuote } from "./paths";
+import { getSshKeysPath } from "../deployment/paths";
+import { getComposeCodeDir, shellQuote } from "./paths";
 
 export type ComposeRow = typeof compose.$inferSelect;
 
@@ -39,12 +40,12 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 					where: eq(sshKeys.sshKeyId, composeRow.customGitSSHKeyId),
 				});
 				if (!key) throw new Error("Custom git SSH key not found");
-				const keyPath = join(NIXPLOY_CONFIG_DIR, "ssh", `${key.sshKeyId}.pem`);
+				const keyPath = join(getSshKeysPath(), `${key.sshKeyId}.pem`);
 				await mkdir(dirname(keyPath), { recursive: true });
 				await writeFile(keyPath, key.privateKey, { mode: 0o600 });
 				await chmod(keyPath, 0o600);
 				source.env = {
-					GIT_SSH_COMMAND: `ssh -i ${shellQuote(keyPath)} -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${shellQuote(join(NIXPLOY_CONFIG_DIR, "ssh", "known_hosts"))}`,
+					GIT_SSH_COMMAND: `ssh -i ${shellQuote(keyPath)} -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${shellQuote(join(getSshKeysPath(), "known_hosts"))}`,
 				};
 			}
 			return source;
