@@ -9,10 +9,10 @@ file is for **state** and **tasks**.
 
 | Item | Value |
 | --- | --- |
-| Branch | `chore/sprint-1-hygiene` — 12 commits on top of `main` @ `07ab3d4`, **not pushed, not merged** (user decision) |
+| Branch | `chore/sprint-1-hygiene` — 14 commits on top of `main` @ `07ab3d4`, **not pushed, not merged** (user decision) |
 | Tags / releases | PaaS `v0.1.0` (GitHub Release + GHCR), CLI `cli-v0.1.1` (npm `@nixploy/cli@0.1.1`) — unchanged |
 | Local toolchain | Node 22.21.0, pnpm 10.33.0, Docker 29.7.2, Swarm active |
-| Key versions now | Next 16.3.4 (web **and** landing), better-auth + api-key 1.7.3, React 19.2.8, Biome 2.5.12, zod 4.6.1, TanStack Query 5.102, lucide 1.43 (both apps), TypeScript 5.9.3, vitest 4.1.10, drizzle-orm 0.45.2 |
+| Key versions now | Next 16.3.4 (web **and** landing), better-auth + api-key 1.7.3, React 19.2.8, Biome 2.5.12, zod 4.6.1, TanStack Query 5.102, lucide 1.43 (both apps), commander 15, vitest 5.0.0, TypeScript 5.9.3, drizzle-orm 0.45.2 |
 | `pnpm typecheck` | ✅ all 4 workspaces |
 | `pnpm test` | ✅ 44 files, 714 passed offline / 726 passed with `DATABASE_URL_TEST` (1 skipped) |
 | Biome (CI command) | ✅ 0 errors, 0 warnings |
@@ -31,8 +31,6 @@ Everything patch/minor and the better-auth / Next majors are done (see session l
 | Package | Current → Latest | Risk | Notes |
 | --- | --- | --- | --- |
 | `typescript` | 5.9.3 → 7.0.2 | **High** | TS 7 (Go-based compiler). Biome, drizzle-kit, tsup, Next's TS plugin must all cope. Nothing needs it today. |
-| `vitest` | 4.1.10 → 5.0.0 | Medium | Check `vitest.config.ts` `env` option + `include` semantics; better-auth peer allows `^4` only — a `^5` peer warning is expected. |
-| `commander` (cli) | 13.1.0 → 15.0.0 | Low-Med | Option parsing defaults changed across 14/15; run every CLI command against a panel. |
 | `nodemailer` | 9.0.3 → 10.0.2 | Low-Med | Email notification provider only. |
 | `@tanstack/react-table` | 8.21.3 → 9.2.4 | Medium | Only `components/data-table/*` + services table; v9 API changes. |
 | `motion` (landing) | 12.43 → 13.2 | Low | magicui components only. |
@@ -66,8 +64,8 @@ Image pins to review periodically: `traefik:v3.5.0` (install.sh, update.sh, setu
 
 ## Next steps
 
-1. **Merge decision** — review `chore/sprint-1-hygiene` (12 commits, each independently revertible), merge to `main`, let CI + the Docker workflow run. A PaaS release (`v0.1.1`) would ship better-auth 1.7.3 + Next 16.3 to installs via `update.sh`.
-2. **Major evaluations** (one branch each, go/no-go here): commander 15 (CLI), vitest 5, react-table 9, TypeScript 7, nodemailer 10, motion 13.
+1. **Merge decision** — review `chore/sprint-1-hygiene` (14 commits, each independently revertible), merge to `main`, let CI + the Docker workflow run. A PaaS release (`v0.1.1`) would ship better-auth 1.7.3 + Next 16.3 to installs via `update.sh`.
+2. **Major evaluations** (one branch each, go/no-go here): react-table 9, TypeScript 7, nodemailer 10, motion 13. Done: commander 15 ✅, vitest 5 ✅ (peer warning from better-auth only).
 3. **Debt** from the list above, smallest first: API-key error log noise, `NEXT_PUBLIC_APP_URL` fallback, playwright-core location, landing docs drift check.
 4. **Structure**: split the three >750-line server files (see `archive/hardening.md §2.3`) once tests exist for the paths touched.
 
@@ -75,3 +73,4 @@ Image pins to review periodically: `traefik:v3.5.0` (install.sh, update.sh, setu
 
 - **2026-09-10 (audit)** — Initial audit. Added `CLAUDE.md`, `docs/codebase-map.md`, this file. Verified typecheck/test/biome locally; no code changes.
 - **2026-09-10 (sprint 1, branch `chore/sprint-1-hygiene`)** — 12 commits: drop stale web lockfile; unify `getConfigDir`; pin better-auth; unify overlay-network name; silence Biome warnings; docs + archive move; routine in-range bumps (Biome 2.5.12, zod 4.6, TanStack Query 5.102, RHF 7.87, lucide 1.43, aws-sdk, octokit, …); **better-auth 1.7.3** (2FA response narrowing + db proxy `_` probe; full manual auth loop verified on a throwaway DB); **Next 16.3.4 + `src/proxy.ts`** (root placement is ignored — verified); **landing → Next 16.3.4 + lucide 1.x**. All gates green: typecheck, full vitest with `DATABASE_URL_TEST`, Biome, workspace build, runtime smokes. Nothing pushed.
+- **2026-09-10 (sprint 1, cont.)** — commander 15 (CLI parse matrix verified) and vitest 5 (both suites unchanged) landed on the same branch; docs refreshed.
