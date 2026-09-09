@@ -24,7 +24,7 @@
 		"db:studio": "pnpm -F @nixploy/server db:studio"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.1.2",
+		"@biomejs/biome": "^2.5.12",
 		"typescript": "^5.9.2"
 	},
 	"pnpm": {

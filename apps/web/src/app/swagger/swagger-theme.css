@@ -439,7 +439,6 @@
 	background: var(--card);
 }
 
-/* biome-ignore lint/style/noDescendingSpecificity: swagger-ui override — the earlier, more specific header rule must win for section headers */
 .swagger-explorer .swagger-ui section.models h4,
 .swagger-explorer .swagger-ui .model-title,
 .swagger-explorer .swagger-ui .model {
@@ -543,7 +542,6 @@
 	margin: 0;
 }
 
-/* biome-ignore lint/style/noDescendingSpecificity: swagger-ui override — the earlier, more specific header rule must win for section headers */
 .swagger-explorer .swagger-ui .auth-container h4 {
 	margin: 0 0 0.75rem;
 	padding: 0;

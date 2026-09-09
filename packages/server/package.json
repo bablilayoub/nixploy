@@ -27,10 +27,10 @@
 		"db:studio": "drizzle-kit studio"
 	},
 	"dependencies": {
-		"@aws-sdk/client-s3": "^3.1095.0",
+		"@aws-sdk/client-s3": "^3.1129.0",
 		"@better-auth/api-key": "1.6.25",
 		"@modelcontextprotocol/sdk": "^1.30.0",
-		"@octokit/auth-app": "^8.2.0",
+		"@octokit/auth-app": "^8.3.1",
 		"@octokit/webhooks": "^14.2.0",
 		"@trpc/client": "^11.18.0",
 		"@trpc/server": "^11.18.0",
@@ -48,17 +48,17 @@
 		"simple-git": "^3.36.0",
 		"ssh2": "^1.16.0",
 		"superjson": "^2.2.6",
-		"ws": "^8.21.1",
+		"ws": "^8.21.3",
 		"yaml": "^2.9.0",
-		"zod": "^4.0.5"
+		"zod": "^4.6.1"
 	},
 	"devDependencies": {
 		"@types/adm-zip": "^0.5.8",
 		"@types/dockerode": "^4.0.1",
-		"@types/node": "^22.15.0",
+		"@types/node": "^22.20.2",
 		"@types/node-schedule": "^2.1.8",
 		"@types/nodemailer": "^8.0.1",
-		"@types/ssh2": "^1.15.1",
+		"@types/ssh2": "^1.15.6",
 		"@types/ws": "^8.18.1",
 		"drizzle-kit": "^0.31.1",
 		"typescript": "^5.9.2",
