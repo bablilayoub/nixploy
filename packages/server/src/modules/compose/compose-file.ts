@@ -1,5 +1,5 @@
 import { parse, stringify } from "yaml";
-import { NIXPLOY_NETWORK } from "./paths";
+import { getSwarmNetwork } from "../application/paths";
 
 /**
  * Loose shape of a docker-compose / stack file. Only the keys this module
@@ -422,29 +422,29 @@ export function injectNetwork(
 	spec: ComposeFileSpec,
 	input: { appName: string; composeType: "docker-compose" | "stack" },
 ): ComposeFileSpec {
+	const network = getSwarmNetwork();
 	const next: ComposeFileSpec = { ...spec };
 	next.networks = {
 		...next.networks,
-		[NIXPLOY_NETWORK]: { external: true, name: NIXPLOY_NETWORK },
+		[network]: { external: true, name: network },
 	};
 	for (const [serviceName, service] of Object.entries(next.services ?? {})) {
 		const alias = `${input.appName}-${serviceName}`;
 		if (Array.isArray(service.networks)) {
 			service.networks =
 				input.composeType === "stack"
-					? [...new Set([...service.networks, NIXPLOY_NETWORK])]
-					: service.networks.filter((n) => n !== NIXPLOY_NETWORK);
+					? [...new Set([...service.networks, network])]
+					: service.networks.filter((n) => n !== network);
 			if (input.composeType === "docker-compose") {
 				// convert to map form so the alias can be attached
 				const asMap: Record<string, { aliases?: string[] } & Record<string, unknown>> = {};
 				for (const n of service.networks) asMap[n] = {};
-				asMap[NIXPLOY_NETWORK] = { aliases: [alias] };
+				asMap[network] = { aliases: [alias] };
 				service.networks = asMap;
 			}
 		} else {
 			const existing = service.networks ?? {};
-			existing[NIXPLOY_NETWORK] =
-				input.composeType === "docker-compose" ? { aliases: [alias] } : {};
+			existing[network] = input.composeType === "docker-compose" ? { aliases: [alias] } : {};
 			service.networks = existing;
 		}
 	}

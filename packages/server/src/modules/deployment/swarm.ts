@@ -2,14 +2,11 @@ import type Docker from "dockerode";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { environments, mounts, ports } from "../../db/schema";
-import { resolveFileMountPath } from "../application/paths";
+import { getSwarmNetwork, resolveFileMountPath } from "../application/paths";
 import type { DeploymentContext } from "./context";
 import { getDocker } from "./docker";
 import { envToArray, mergeEnv } from "./env";
 import type { ApplicationRow } from "./sources";
-
-/** Attachable overlay network every swarm service joins (Traefik routing). */
-export const getSwarmNetwork = (): string => process.env.NIXPLOY_NETWORK ?? "nixploy-network";
 
 /** Drop Traefik/hijack labels from user-supplied swarm label maps. */
 export function sanitizeSwarmLabels(raw: unknown): Record<string, string> | undefined {

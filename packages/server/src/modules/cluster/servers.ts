@@ -2,9 +2,9 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { servers, webServerSettings } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { getSwarmNetwork } from "../application/paths";
 import { getTraefikDir } from "../traefik/paths";
 
-export const NIXPLOY_NETWORK = "nixploy-network";
 export const TRAEFIK_SERVICE_NAME = "nixploy-traefik";
 export const TRAEFIK_IMAGE = "traefik:v3.5.0";
 /** Resolved via `NIXPLOY_CONFIG_DIR` (default `/etc/nixploy/traefik`). */
@@ -223,9 +223,10 @@ fi`,
 		// Overlay networks are cluster-scoped; create from a manager if missing.
 		// Workers cannot create overlay networks.
 		if (role === "manager") {
+			const network = getSwarmNetwork();
 			await step(
 				"create network",
-				`if [ -z "$(docker network ls --filter name=^${NIXPLOY_NETWORK}$ --format '{{.Name}}')" ]; then docker network create --driver overlay --attachable ${NIXPLOY_NETWORK}; else echo "network ${NIXPLOY_NETWORK} already exists"; fi`,
+				`if [ -z "$(docker network ls --filter name=^${network}$ --format '{{.Name}}')" ]; then docker network create --driver overlay --attachable ${network}; else echo "network ${network} already exists"; fi`,
 			);
 
 			// Managers may schedule the global Traefik service; ensure dirs exist

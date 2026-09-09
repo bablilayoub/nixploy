@@ -5,6 +5,7 @@ import { db } from "../../db";
 import { mariadb, mongo, mysql, postgres, redis, servers } from "../../db/schema";
 import { execAsyncRemote } from "../../utils/exec";
 import { assertSafePublishedPort } from "../../utils/validators";
+import { getSwarmNetwork } from "../application/paths";
 
 /**
  * Shared engine for the five one-click database services (postgres, mysql,
@@ -36,8 +37,6 @@ export interface DatabaseRowMap {
 export type AnyDatabaseRow = DatabaseRowMap[DatabaseKind];
 
 export type DatabaseStatus = "idle" | "running" | "done" | "error";
-
-export const NIXPLOY_NETWORK = "nixploy-network";
 
 /** Generate a swarm-safe unique appName from the service name. */
 export function generateDatabaseAppName(name: string): string {
@@ -398,7 +397,7 @@ function toSwarmSpec(def: ServiceDefinition, replicas: number): Record<string, u
 				...(Object.keys(limits).length > 0 ? { Limits: limits } : {}),
 				...(Object.keys(reservations).length > 0 ? { Reservations: reservations } : {}),
 			},
-			Networks: [{ Target: NIXPLOY_NETWORK }],
+			Networks: [{ Target: getSwarmNetwork() }],
 			RestartPolicy: { Condition: "any" },
 		},
 		Mode: { Replicated: { Replicas: replicas } },
@@ -430,7 +429,7 @@ function toCreateCommand(def: ServiceDefinition, replicas: number): string {
 		"--label",
 		shellQuote(`nixploy.service.type=${def.kind}`),
 		"--network",
-		NIXPLOY_NETWORK,
+		getSwarmNetwork(),
 		"--restart-condition",
 		"any",
 		"--replicas",
@@ -466,15 +465,15 @@ async function ensureNetwork(serverId: string | null): Promise<void> {
 	if (isRemote(serverId)) {
 		await execAsyncRemote(
 			serverId,
-			`docker network inspect ${NIXPLOY_NETWORK} >/dev/null 2>&1 || docker network create --driver overlay --attachable ${NIXPLOY_NETWORK}`,
+			`docker network inspect ${getSwarmNetwork()} >/dev/null 2>&1 || docker network create --driver overlay --attachable ${getSwarmNetwork()}`,
 		);
 		return;
 	}
-	const networks = await docker.listNetworks({ filters: { name: [NIXPLOY_NETWORK] } });
-	const exists = networks.some((n) => n.Name === NIXPLOY_NETWORK);
+	const networks = await docker.listNetworks({ filters: { name: [getSwarmNetwork()] } });
+	const exists = networks.some((n) => n.Name === getSwarmNetwork());
 	if (!exists) {
 		await docker.createNetwork({
-			Name: NIXPLOY_NETWORK,
+			Name: getSwarmNetwork(),
 			Driver: "overlay",
 			Attachable: true,
 		});

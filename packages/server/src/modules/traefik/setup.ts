@@ -1,6 +1,7 @@
 import { db } from "../../db";
 import { webServerSettings } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { getSwarmNetwork } from "../application/paths";
 import { writeFileOnServer } from "./config-writer";
 import {
 	buildDefaultTlsYaml,
@@ -20,8 +21,6 @@ import {
 export const TRAEFIK_SERVICE_NAME = "nixploy-traefik";
 /** Pinned Traefik image (v3, file provider). */
 export const TRAEFIK_IMAGE = "traefik:v3.5.0";
-
-const getSwarmNetwork = (): string => process.env.NIXPLOY_NETWORK ?? "nixploy-network";
 
 /** Shell-quote a string for POSIX sh (single-quote wrapping). */
 const shq = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;

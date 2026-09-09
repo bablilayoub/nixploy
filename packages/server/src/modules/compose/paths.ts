@@ -4,9 +4,6 @@ import { getConfigDir } from "../deployment/paths";
 /** Root of all Nixploy-managed on-disk state — see `deployment/paths.ts`. */
 export { getConfigDir };
 
-/** Overlay network every deployed compose service joins for Traefik routing. */
-export const NIXPLOY_NETWORK = process.env.NIXPLOY_NETWORK ?? "nixploy-network";
-
 /** Per-compose working directory: `<configDir>/compose/<appName>`. */
 export const getComposeBaseDir = (appName: string) => join(getConfigDir(), "compose", appName);
 

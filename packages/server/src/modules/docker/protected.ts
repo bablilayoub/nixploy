@@ -3,11 +3,13 @@
  * be stopped, restarted or removed from the Docker control center.
  */
 
+import { getSwarmNetwork } from "../application/paths";
+
 /** Exact Swarm/service names owned by Nixploy itself. */
 export const PROTECTED_PLATFORM_NAMES = ["nixploy", "nixploy-postgres", "nixploy-traefik"] as const;
 
 /** The shared overlay network must never be removed from the UI. */
-export const PROTECTED_NETWORKS = new Set(["bridge", "host", "none", "ingress", "nixploy-network"]);
+export const PROTECTED_NETWORKS = new Set(["bridge", "host", "none", "ingress", getSwarmNetwork()]);
 
 /** Named volume backing the Nixploy Postgres service. */
 export const PROTECTED_VOLUMES = new Set(["nixploy-postgres-data"]);
