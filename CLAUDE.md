@@ -1,0 +1,103 @@
+# CLAUDE.md — Nixploy
+
+Entry point for Claude Code sessions in this repo. Read in this order:
+
+1. This file (commands, hard rules, gotchas).
+2. [`AGENTS.md`](AGENTS.md) — shared agent conventions (also mirrored in `.cursor/rules/*.mdc` and `.agents/skills/nixploy-dev/SKILL.md`; keep all three in sync when a convention changes).
+3. [`docs/codebase-map.md`](docs/codebase-map.md) — where every subsystem lives, entry points, data flow.
+4. [`docs/status.md`](docs/status.md) — dated health snapshot, dependency upgrade candidates, known debt, working backlog. **Update it at the end of every work session.**
+
+Product intent: [`PLAN.md`](PLAN.md) (Phases 1–10 shipped). Operator/contributor guides: [`docs/README.md`](docs/README.md).
+
+## What this is
+
+Nixploy is a self-hosted PaaS (Dokploy/Coolify-class): one Node process (Next.js 16 App Router with a custom `server.ts`) that hosts the UI, tRPC, a REST/OpenAPI adapter, an MCP endpoint, WebSocket streams, an in-memory deploy queue and node-schedule crons. It drives a single-node Docker Swarm (remote servers join it over SSH) and writes Traefik v3 file-provider YAML for routing/TLS.
+
+pnpm monorepo:
+
+| Path | Package | Role |
+| --- | --- | --- |
+| `apps/web` | `@nixploy/web` | Next.js panel: UI, `/api/trpc`, `/api/<router>.<proc>` REST, `/api/mcp`, `/swagger`, custom `server.ts` (WS + queue + crons) |
+| `packages/server` | `@nixploy/server` | Drizzle schema + migrations, better-auth, tRPC routers, deploy engine, builders, Traefik/Docker utils, backups, notifications, templates, MCP tools |
+| `apps/cli` | `@nixploy/cli` | Published npm CLI over the REST API (`x-api-key`) |
+| `apps/landing` | `@nixploy/landing` | nixploy.com marketing site (Next.js 15, separate from the panel) |
+| `docker/` | — | Production Dockerfile, entrypoint (migrate-then-start), Traefik static config, dev compose |
+| `install.sh` / `update.sh` | — | Production installer / updater (Swarm services `nixploy`, `nixploy-postgres`, `nixploy-traefik`) |
+| `tools/` | — | `release.sh` (tag-driven releases), `golden-path-api.mjs` (API smoke), `screenshots/` (separate npm project, Playwright captures) |
+
+## Commands
+
+Run everything from the repo root unless stated.
+
+```bash
+pnpm install                                   # ALWAYS at the root, never inside one package
+pnpm typecheck                                 # tsc --noEmit across all 4 workspaces
+pnpm -F @nixploy/server exec tsc --noEmit      # fast server-only typecheck
+cd apps/web && pnpm exec tsc --noEmit          # fast web-only typecheck
+pnpm exec biome check --write <files>          # lint + format changed files (tabs, double quotes)
+pnpm exec biome check packages/server apps/web apps/cli apps/landing   # what CI runs
+pnpm test                                      # vitest in packages/server (offline; tenancy suite skips without DATABASE_URL_TEST)
+DATABASE_URL_TEST=postgres://nixploy:nixploy@127.0.0.1:54329/nixploy_test pnpm test   # full suite incl. tenancy isolation
+pnpm test:template-images                      # registry manifest probe for every template image (network)
+pnpm db:generate                               # new Drizzle migration after editing packages/server/src/db/schema/*
+pnpm db:migrate                                # apply migrations to DATABASE_URL (apps/web/.env is NOT auto-loaded here — export it or use ./dev.sh)
+pnpm db:studio                                 # Drizzle Studio
+cd apps/web && pnpm dev                        # panel on :3000 (loads apps/web/.env itself)
+cd apps/web && set -a && . ./.env && set +a && pnpm build   # production build (needs env)
+cd apps/landing && pnpm dev                    # landing on :3001
+pnpm -F @nixploy/cli typecheck && pnpm -F @nixploy/cli build
+./dev.sh                                       # local one-shot: Postgres container + panel + landing (untracked helper, gitignored)
+pnpm smoke:golden-path                         # needs NIXPLOY_URL + NIXPLOY_API_KEY against a running panel
+./tools/release.sh paas --bump patch --dry-run # release flow preview (see docs/releases.md)
+```
+
+Dev database: Docker container `nixploy-dev-pg` on `127.0.0.1:54329` (user/pass/db `nixploy`). If it is stopped: `docker start nixploy-dev-pg`. Docker Swarm must be active (`docker swarm init`). Traefik and the `nixploy-network` overlay are auto-provisioned on panel boot (skip with `NIXPLOY_DISABLE_TRAEFIK_BOOT=1`).
+
+## Hard rules (do not violate)
+
+- **Tenancy.** `organization → project → environment → service`. Every tenant-scoped procedure is `protectedProcedure` and resolves the org via `resolveCallerOrganizationId(userId, activeOrganizationId)` (`modules/projects`) or `ctx.organizationId()` / `getOrganizationId(session)` (memoized per request). Never read `session.activeOrganizationId` raw, never throw when it is null, always filter rows by the resolved org (`assertApplicationAccess`, `assertEnvironmentAccess`, `getServiceContext` in `modules/application/org.ts`).
+- **Authorization.** Mutations gate with `assertCapability(userId, orgId, "<capability>")` (catalog in `modules/projects/capabilities.ts`; `hasCapability` for soft gates such as secret masking). Role ladder `viewer < member < deployer < admin < owner` via `assertOrgRole` where a coarse gate is enough. Record meaningful mutations with `auditFromSession` (fire-and-forget).
+- **Routers.** One file per domain in `packages/server/src/trpc/routers/<kebab>.ts`, export `<name>Router`, register in `trpc/root.ts`. Unregistered = unreachable from tRPC, REST, CLI and MCP. Routers stay thin; logic lives in `modules/<domain>/` with vitest tests next to the code. Zod on every input.
+- **Secrets at rest.** `encryptedText` / `encryptedJson` columns (AES-256-GCM, `ENCRYPTION_KEY`) for env vars, passwords, tokens, S3 keys, notification configs. Redact on read for viewers (`trpc/redact-secrets.ts`). Never log tokens; keep passwords off argv (`execAsyncWithStdin`).
+- **Shell/Docker.** `execAsync` (host) / `execAsyncRemote(serverId)` (SSH) from `utils/exec.ts`, or `spawnTargeted` / `getDocker(serverId)` from `modules/deployment/docker.ts` for streaming + dockerode. No raw `child_process` in feature code. Always `shellQuote` user-controlled values.
+- **Paths.** Never hardcode `/etc/nixploy`. Use the helpers (`getConfigDir`, `getAppCodePath`, `getDeploymentLogPath`, `getDynamicDir`, …). Note there are currently four `getConfigDir` variants (see gotchas).
+- **Traefik.** Only `writeAppTraefikConfig` / `removeTraefikConfig` (`modules/traefik`) write dynamic YAML. Never hand-write YAML in feature code.
+- **Deployments.** Only through `queueDeployment` (`modules/deployment/index.ts`). Never spawn builds from a router.
+- **Schema changes.** Edit Drizzle schema → `pnpm db:generate` → commit the SQL migration (hand-edit when Postgres needs `USING` casts or a backfill before `SET NOT NULL`). Keep `db/schema/auth.ts` in sync with the better-auth plugin version.
+- **Dependencies.** The workspace dependency set is deliberately fixed. Do not add packages without saying why; upgrades go through `docs/status.md` first.
+- **Style.** Biome: tabs, double quotes, semicolons, trailing commas, named exports, line width 100. Match surrounding code. Minimal diffs, no speculative abstractions.
+- **Web.** `useTRPC()` from `@/lib/trpc` with `queryOptions` / `mutationOptions`, invalidate by `queryKey`. shadcn primitives in `@/components/ui`, lucide icons, sonner toasts (sentence case). Every list surface ships loading skeleton + error-with-retry + empty state (`components/query-state.tsx`). Log rendering through `components/services/log-viewer.tsx`, charts through `monitoring-charts.tsx`. Gate client-only rendering behind a mounted flag. `useSearchParams` needs a `<Suspense>` boundary.
+- **Docs.** When behaviour changes, update the matching guide in `docs/` and, if operator-facing, the landing docs (`apps/landing/src/lib/docs/pages.ts` duplicates parts of `docs/` by hand — drift is a known risk).
+
+## Verification loop (before declaring anything done)
+
+1. `pnpm -F @nixploy/server exec tsc --noEmit` (server) and/or `cd apps/web && pnpm exec tsc --noEmit` (web), `pnpm -F @nixploy/cli typecheck` (cli), `pnpm -F @nixploy/landing typecheck` (landing).
+2. `pnpm exec biome check --write <changed files>` from the root.
+3. `pnpm test` (add `DATABASE_URL_TEST` when touching routers or tenancy — CI runs the full suite against Postgres).
+4. Bigger UI work: `cd apps/web && pnpm build` with env loaded, then drive the real app (Playwright via `tools/screenshots`, or the in-app browser) and check light **and** dark mode, watching the console for hydration warnings.
+5. Touching the deploy path: smoke-test against the local Swarm (deploy `traefik/whoami`, attach a `*.traefik.me` domain, hit it through Traefik).
+6. Report results honestly: quote failing output, say what was skipped.
+
+## Gotchas found in the 2026-09 audit
+
+Details and status live in `docs/status.md`; this is the short list you must not trip over.
+
+- `getConfigDir` (config root) and `getSwarmNetwork` (overlay network) each have exactly one implementation now: `modules/deployment/paths.ts` and `modules/application/paths.ts`. Other `paths.ts` files re-export them. Never add another `process.env.NIXPLOY_CONFIG_DIR` / `NIXPLOY_NETWORK` read; on macOS dev the config root falls back to `./.nixploy-data` when the env var is unset.
+- `apps/web/server.ts` imports cron modules via relative `../../packages/server/src/...` paths on purpose (single module instance under tsx). Do not "fix" them into package specifiers without checking the queue/worker singleton still holds.
+- `deploymentStatus` has no `queued` value: a queued job is stored as `running` until the worker finalizes it. Boot recovery marks leftover `running` rows as `error`.
+- `apps/web/pnpm-lock.yaml` is a stale tracked artifact from before the workspace lock; the real lock is the root `pnpm-lock.yaml`.
+- `NEXT_PUBLIC_APP_URL` is only read server-side as the third fallback for the GitHub App callback origin (`api/github/callback/route.ts`: `BETTER_AUTH_URL` → `NIXPLOY_BASE_URL` → `NEXT_PUBLIC_APP_URL`). The client bundle never bakes a URL in; do not add `NEXT_PUBLIC_*` URLs.
+- `apps/web/middleware.ts` uses the pre-Next-16 convention; Next 16 ships `proxy.ts` (`PROXY_FILENAME` exists in the installed `next`). Migration candidate, not a bug.
+- `better-auth` is pinned `1.6.25` in `apps/web` but ranged `^1.3.4` in `packages/server` (lock resolves both to 1.6.25). Pin both identically when upgrading, and re-check `db/schema/auth.ts` columns.
+- The landing site runs Next 15.5 + lucide 0.544 while the panel runs Next 16.2 + lucide 1.x. They are separate apps; upgrade the landing deliberately, not as a side effect.
+- The tenancy suite (13 tests) silently skips without `DATABASE_URL_TEST`. A green local `pnpm test` does not prove tenant isolation.
+- `docker/Dockerfile` deps stage copies only `apps/web`, `apps/cli`, `packages/server` package manifests (no `apps/landing`); CI image builds are green, so leave it unless adding a workspace the image needs.
+- The in-memory deploy queue and rate limiters are process-local: multi-replica `nixploy` is unsupported by design.
+
+## Working agreement for Claude
+
+- Prefer small, focused commits. Commit only when asked. Commit messages: conventional (`fix:`, `feat:`, `chore:`), body explains why. Never push tags (`v*`, `cli-v*`) casually — they trigger releases.
+- Before large cleanup, check `docs/status.md` backlog so work is not duplicated and mark items in progress / done there.
+- When you learn something non-obvious about this codebase, put it in `docs/status.md` (if it is a task) or `docs/codebase-map.md` / this file (if it is durable knowledge), not only in chat.
+- Never run `pnpm install` inside a single workspace package. Never edit generated files under `packages/server/drizzle/meta/` by hand.
+- `.nixploy-data/` (local runtime state), `apps/web/.env`, `dev.sh` are local-only. Never commit them or paste their secrets.

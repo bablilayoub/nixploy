@@ -50,9 +50,12 @@ Use this against the marketing site / README when docs drift:
 | --- | --- |
 | [**CONTRIBUTING.md**](../CONTRIBUTING.md) | Clone → run → PR checklist |
 | [development.md](./development.md) | Local setup, env, verification loop |
-| [next.md](./next.md) | Polish / organize backlog |
-| [hardening.md](./hardening.md) | Security / tenancy / cost backlog |
+| [codebase-map.md](./codebase-map.md) | File-level map: entry points, routers → modules, on-disk layout, env vars, crons |
+| [status.md](./status.md) | Living snapshot: health checks, dependency upgrade candidates, known debt, backlog, session log |
+| [archive/next.md](./archive/next.md) | Phase 10 checklist (done) |
+| [archive/hardening.md](./archive/hardening.md) | Phase 9 hardening checklist (done) |
 | [AGENTS.md](../AGENTS.md) | Repo conventions |
+| [CLAUDE.md](../CLAUDE.md) | Claude Code entry point: commands, hard rules, gotchas |
 
 ## Also see
 

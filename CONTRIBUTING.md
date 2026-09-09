@@ -7,7 +7,7 @@ Deeper conventions (tenancy, routers, secrets) live in [`AGENTS.md`](./AGENTS.md
 ## What to work on
 
 1. Bugs and UX polish beat speculative features.
-2. Check [`docs/next.md`](./docs/next.md) and [`docs/hardening.md`](./docs/hardening.md) before starting large cleanup.
+2. Check [`docs/status.md`](./docs/status.md) (living backlog) before starting large cleanup; completed phase checklists live in [`docs/archive/`](./docs/archive/).
 3. Open an issue (or comment on an existing one) if the change is big or unclear — saves rework.
 
 ## Prerequisites

@@ -66,5 +66,6 @@ Production build before shipping big UI changes:
 `docs/auth.md`, `docs/deployment-flow.md`, `docs/domains-traefik.md`,
 `docs/templates.md`, `docs/install.md`, `docs/getting-started.md`,
 `docs/migrate-from-dokploy.md`, `docs/migrate-from-coolify.md`,
-`PLAN.md` (product blueprint). Keep them in sync when you
+`docs/codebase-map.md` (file-level map), `docs/status.md` (living backlog —
+update after each session), `PLAN.md` (product blueprint). Keep them in sync when you
 change behavior.

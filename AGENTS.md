@@ -60,8 +60,8 @@ cd apps/web && pnpm dev         # dev server on :3000
 - Apply schema with `pnpm db:migrate` (run in `packages/server` or from the root script), generate new migrations with `pnpm db:generate` after editing `packages/server/src/db/schema/*`.
 - First user completes `/setup` on a fresh database (public `/register` is
   removed); an organization named `<name>'s Org` is created during setup.
-- Detailed guides live in `docs/` — start at [`docs/README.md`](docs/README.md). Phase 9 polish checklist: [`docs/next.md`](docs/next.md).
-- `docs/hardening.md` is the current Phase 9 backlog: indexes, tenancy tests, dedupe and runtime cost. Check it before starting cleanup work so two people don't fix the same thing.
+- Detailed guides live in `docs/` — start at [`docs/README.md`](docs/README.md). File-level map: [`docs/codebase-map.md`](docs/codebase-map.md). Living backlog + health snapshot: [`docs/status.md`](docs/status.md) (update it after every work session). Completed phase checklists (Phase 9 hardening, Phase 10) are archived under `docs/archive/`.
+- Check `docs/status.md` before starting cleanup work so two people don't fix the same thing.
 
 ## Notes
 
