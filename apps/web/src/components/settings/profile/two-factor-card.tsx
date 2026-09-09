@@ -63,6 +63,12 @@ export function TwoFactorCard() {
 			toast.error(error.message ?? "Failed to enable 2FA");
 			return;
 		}
+		// better-auth ≥ 1.7 discriminates the response on `method`; Nixploy only
+		// enrolls authenticator apps, so anything else is unexpected.
+		if (data.method !== "totp") {
+			toast.error("Unexpected two-factor method returned by the server");
+			return;
+		}
 		setTotpURI(data.totpURI);
 		setBackupCodes(data.backupCodes ?? []);
 	}

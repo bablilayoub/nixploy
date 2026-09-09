@@ -69,6 +69,13 @@ function ensureSql(): SqlClient {
  */
 export const db: Db = new Proxy({} as Db, {
 	get(_target, prop) {
+		// better-auth's drizzle adapter (≥ 1.7) reads `db._?.schema` while it is
+		// constructed, i.e. at import time of lib/auth.ts. Without a DATABASE_URL
+		// (offline unit tests, `next build`) answer that probe with `undefined`
+		// — the adapter tolerates it — instead of failing the import.
+		if (prop === "_" && !process.env.DATABASE_URL) {
+			return undefined;
+		}
 		const instance = ensureDb();
 		const value = Reflect.get(instance, prop);
 		return typeof value === "function" ? value.bind(instance) : value;

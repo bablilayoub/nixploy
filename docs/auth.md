@@ -1,6 +1,6 @@
 # Auth & organizations
 
-Authentication is [better-auth](https://better-auth.com) (v1.6.x) with its
+Authentication is [better-auth](https://better-auth.com) (v1.7.x) with its
 organization plugin, Drizzle adapter, and the two-factor (TOTP) plugin. Config
 lives in `packages/server/src/lib/auth.ts`; the handler is mounted at
 `/api/auth/*` in the Next.js app. The web client is
