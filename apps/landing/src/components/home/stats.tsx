@@ -2,22 +2,26 @@
 
 import { NumberTicker } from "@/components/magicui/number-ticker";
 import { Container } from "@/components/ui";
-import { stats } from "@/lib/landing-data";
+import { heroStats } from "@/lib/landing-data";
 
 export function Stats() {
 	return (
-		<section className="border-y border-border bg-surface/40">
+		<section className="py-12 sm:py-16">
 			<Container>
-				<dl className="grid grid-cols-2 divide-border sm:grid-cols-4 sm:divide-x">
-					{stats.map((stat) => (
+				<dl className="grid gap-10 sm:grid-cols-3 sm:gap-6">
+					{heroStats.map((stat, i) => (
 						<div
 							key={stat.label}
-							className="flex flex-col items-center px-2 py-8 text-center sm:px-6"
+							className={
+								i > 0
+									? "flex items-baseline gap-4 sm:border-l sm:border-border sm:pl-8"
+									: "flex items-baseline gap-4"
+							}
 						>
-							<dd className="font-display text-3xl font-semibold text-foreground sm:text-4xl">
+							<dd className="font-display text-4xl font-semibold text-foreground sm:text-5xl">
 								<NumberTicker value={stat.value} suffix={stat.suffix} />
 							</dd>
-							<dt className="mt-1 text-xs text-muted sm:text-sm">{stat.label}</dt>
+							<dt className="max-w-[10rem] text-sm leading-snug text-muted">{stat.label}</dt>
 						</div>
 					))}
 				</dl>

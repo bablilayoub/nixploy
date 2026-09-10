@@ -1,124 +1,134 @@
 /**
- * Static content for the marketing home page. Numbers here mirror the
- * product (86 templates / 15 categories / 5 databases / 11 notification
- * channels / 42 routers) — update them when the catalog changes.
+ * Static content for the marketing home page. Numbers mirror the product
+ * (86 templates / 15 categories / 5 databases / ~300 endpoints) — update
+ * them when the catalog changes.
  */
 
-export const stats = [
+export const heroStats = [
 	{ value: 86, suffix: "+", label: "one-click templates" },
-	{ value: 5, suffix: "", label: "database engines" },
-	{ value: 11, suffix: "", label: "notification channels" },
-	{ value: 300, suffix: "+", label: "REST endpoints, one API key" },
+	{ value: 5, suffix: "", label: "database engines, with backups" },
+	{ value: 300, suffix: "+", label: "REST endpoints behind one API key" },
 ] as const;
 
-export const heroWords = [
-	"applications",
-	"databases",
-	"compose stacks",
-	"pull requests",
-	"86 templates",
-];
-
-/** Deploy log played back in the hero terminal (one line at a time). */
-export const heroLog = [
-	{ text: "$ git push origin main", tone: "cmd" },
-	{ text: "→ webhook · api-42 queued on server-1", tone: "dim" },
-	{ text: "→ nixpacks · node 22 · pnpm workspace detected", tone: "dim" },
-	{ text: "→ image api-42:latest built in 38s (BuildKit cache hit)", tone: "dim" },
-	{ text: "→ swarm rolling update · 3/3 replicas healthy", tone: "ok" },
-	{ text: "→ traefik · api.example.com · Let's Encrypt ✓", tone: "ok" },
-	{ text: "✓ live in 41s · rollback available", tone: "ok" },
+/** Technologies shown in the strip under the hero (simpleicons slugs). */
+export const stack = [
+	{ name: "Docker Swarm", logo: "docker" },
+	{ name: "Traefik", logo: "traefikproxy" },
+	{ name: "Let's Encrypt", logo: "letsencrypt" },
+	{ name: "PostgreSQL", logo: "postgresql" },
+	{ name: "MySQL", logo: "mysql" },
+	{ name: "MariaDB", logo: "mariadb" },
+	{ name: "MongoDB", logo: "mongodb" },
+	{ name: "Redis", logo: "redis" },
+	{ name: "GitHub", logo: "github" },
+	{ name: "GitLab", logo: "gitlab" },
+	{ name: "Bitbucket", logo: "bitbucket" },
+	{ name: "Gitea", logo: "gitea" },
+	{ name: "Nixpacks", logo: "railway" },
+	{ name: "Docker Compose", logo: "docker" },
 ] as const;
 
-export type Tone = (typeof heroLog)[number]["tone"];
-
-export const pipelineSteps = [
+export const steps = [
 	{
-		n: "01",
 		title: "Connect a source",
-		body: "GitHub, GitLab, Bitbucket, Gitea, any Git URL, a Docker image or a zip. Pick the branch and the builder: Nixpacks, Railpack, buildpacks, Dockerfile or static.",
+		body: "GitHub, GitLab, Bitbucket, Gitea, any Git URL, a Docker image or a zip. Pick the branch and the builder — Nixpacks, Railpack, buildpacks, Dockerfile or static.",
 	},
 	{
-		n: "02",
+		title: "Define environments and targets",
+		body: "Group services into projects and environments with inherited variables. Pin a service to any server that joined your Swarm, set replicas, resources and health checks.",
+	},
+	{
 		title: "Push",
-		body: "The webhook fires and the build queues per server. Fork pull requests wait for approval before anything runs on your host.",
+		body: "The webhook fires, the build queues, the image is produced on the host and the Swarm rolls it out with zero downtime. Fork pull requests wait for your approval.",
 	},
 	{
-		n: "03",
-		title: "Roll out",
-		body: "Swarm updates the service with zero downtime, Traefik hot-reloads the route, Let's Encrypt issues the cert. A failed deploy never touches the running version.",
-	},
-	{
-		n: "04",
-		title: "Watch and roll back",
-		body: "Build and runtime logs stream live, metrics keep 48 h of history, alerts hit your channels. One click returns any previous image.",
+		title: "Route, watch, roll back",
+		body: "Traefik hot-loads the domain and issues the Let's Encrypt certificate. Logs and metrics stream live, alerts reach your channels, and any previous image is one click away.",
 	},
 ] as const;
 
-export type TemplateChip = { name: string; logo: string; category: string };
+export const features = [
+	{
+		icon: "git",
+		title: "Git push deployments",
+		body: "Webhooks from every major provider, five builders, BuildKit cache, per-branch previews and instant rollbacks — without writing a pipeline.",
+	},
+	{
+		icon: "layers",
+		title: "Compose stacks and templates",
+		body: "Paste a compose file or pick one of 86 templates. Nixploy renders, validates and deploys it as a plain stack you can edit, back up and move.",
+	},
+	{
+		icon: "database",
+		title: "Databases with real backups",
+		body: "Postgres, MySQL, MariaDB, MongoDB and Redis as managed services. Scheduled dumps to any S3-compatible bucket, restore from the panel, verified exit status.",
+	},
+	{
+		icon: "globe",
+		title: "Domains and TLS",
+		body: "Attach a hostname and Traefik routes it with a Let's Encrypt or custom certificate. Redirects, basic-auth and path rewrites live in the same tab.",
+	},
+	{
+		icon: "activity",
+		title: "Logs, metrics and alerts",
+		body: "Live build and container logs, a web terminal, 48 hours of per-container metrics, uptime probes, incident tracking and threshold alerts.",
+	},
+	{
+		icon: "terminal",
+		title: "API, CLI and MCP",
+		body: "Every panel action is a REST endpoint with OpenAPI docs, a CLI command and an MCP tool — same permissions, same audit log for humans and agents.",
+	},
+] as const;
 
-/** Curated slice of the 86-template catalog (simpleicons slugs or absolute URLs). */
-export const templateChips: TemplateChip[] = [
-	{ name: "Supabase", logo: "supabase", category: "Databases" },
-	{ name: "Plausible", logo: "plausibleanalytics", category: "Analytics" },
-	{ name: "Ghost", logo: "ghost", category: "CMS" },
-	{ name: "Uptime Kuma", logo: "uptimekuma", category: "Monitoring" },
-	{ name: "Ollama", logo: "ollama", category: "AI" },
-	{ name: "n8n", logo: "n8n", category: "Apps" },
-	{ name: "MinIO", logo: "minio", category: "Storage" },
-	{ name: "Vaultwarden", logo: "vaultwarden", category: "Security" },
-	{ name: "Umami", logo: "umami", category: "Analytics" },
-	{ name: "Metabase", logo: "metabase", category: "Analytics" },
-	{ name: "Grafana", logo: "grafana", category: "Monitoring" },
-	{ name: "Prometheus", logo: "prometheus", category: "Monitoring" },
-	{ name: "WordPress", logo: "wordpress", category: "CMS" },
-	{ name: "Strapi", logo: "strapi", category: "CMS" },
-	{ name: "Directus", logo: "directus", category: "CMS" },
-	{ name: "Nextcloud", logo: "nextcloud", category: "Storage" },
-	{ name: "Gitea", logo: "gitea", category: "Developer Tools" },
-	{ name: "Mattermost", logo: "mattermost", category: "Communication" },
-	{ name: "Cal.com", logo: "caldotcom", category: "Apps" },
-	{ name: "Chatwoot", logo: "chatwoot", category: "Apps" },
-	{ name: "Immich", logo: "immich", category: "Media" },
-	{ name: "Jellyfin", logo: "jellyfin", category: "Media" },
-	{ name: "Paperless-ngx", logo: "paperlessngx", category: "Knowledge" },
-	{ name: "Outline", logo: "outline", category: "Knowledge" },
-	{ name: "BookStack", logo: "bookstack", category: "Knowledge" },
-	{ name: "Keycloak", logo: "keycloak", category: "Security" },
-	{ name: "Authentik", logo: "authentik", category: "Security" },
-	{ name: "Meilisearch", logo: "meilisearch", category: "Developer Tools" },
-	{ name: "Portainer", logo: "portainer", category: "Developer Tools" },
-	{ name: "code-server", logo: "coder", category: "Developer Tools" },
-	{ name: "Hoppscotch", logo: "hoppscotch", category: "Developer Tools" },
-	{ name: "Excalidraw", logo: "excalidraw", category: "Developer Tools" },
-	{ name: "Pi-hole", logo: "pihole", category: "Security" },
-	{ name: "WireGuard Easy", logo: "wireguard", category: "Security" },
-	{ name: "Firefly III", logo: "fireflyiii", category: "Finance" },
-	{ name: "ntfy", logo: "ntfy", category: "Notifications" },
-	{ name: "Listmonk", logo: "listmonk", category: "Notifications" },
-	{ name: "Syncthing", logo: "syncthing", category: "Storage" },
-	{ name: "Homarr", logo: "homarr", category: "Monitoring" },
-	{ name: "Vikunja", logo: "vikunja", category: "Productivity" },
-	{ name: "Mealie", logo: "mealie", category: "Productivity" },
-	{ name: "pgAdmin", logo: "postgresql", category: "Databases" },
-];
+export const security = [
+	{
+		title: "Secrets encrypted at rest",
+		body: "Environment variables, database passwords, registry credentials and notification configs are AES-256-GCM encrypted and redacted for members without the secrets capability.",
+	},
+	{
+		title: "Roles, capabilities and 2FA",
+		body: "Owner to viewer roles with per-member capability overlays. Organizations can require TOTP for everyone; API keys are scoped, rate-limited per key and expire.",
+	},
+	{
+		title: "Audit log and safe defaults",
+		body: "Every destructive action is recorded with actor and target. Compose files are rendered and validated before they run, tenants get private networks, platform resources cannot be pruned.",
+	},
+] as const;
 
-export const templateCategories = [
-	"Apps",
-	"CMS",
-	"Productivity",
-	"Analytics",
-	"Monitoring",
-	"Media",
-	"Knowledge",
-	"Notifications",
-	"Finance",
-	"Developer Tools",
-	"Databases",
-	"AI",
-	"Communication",
-	"Security",
-	"Storage",
+export const securityBadges = ["AES-256", "TOTP 2FA", "Audit log"] as const;
+
+export const plans = [
+	{
+		name: "Self-hosted",
+		price: "$0",
+		period: "forever",
+		blurb: "Everything, on a server you own. Apache-2.0, no seats, no feature gates.",
+		cta: { label: "Install Nixploy", href: "/docs/install" },
+		highlight: true,
+		items: [
+			"Unlimited projects, services and servers",
+			"Git deploys, previews, rollbacks",
+			"Databases, backups, instance self-backup",
+			"Domains, TLS, monitoring, alerts",
+			"Teams, roles, 2FA, audit log",
+			"REST API, CLI, MCP, Deploy Copilot",
+		],
+	},
+	{
+		name: "Support",
+		price: "Talk to us",
+		period: "",
+		blurb:
+			"Hands-on help migrating from Dokploy, Coolify or a hand-rolled setup, and priority answers when something breaks.",
+		cta: { label: "Email hello@nixploy.com", href: "mailto:hello@nixploy.com" },
+		highlight: false,
+		items: [
+			"Migration and architecture review",
+			"Priority issue handling",
+			"Upgrade assistance for major releases",
+			"Custom template curation",
+		],
+	},
 ] as const;
 
 export const faqs = [
@@ -131,49 +141,19 @@ export const faqs = [
 		a: "One Linux host (x86_64 or arm64) with root. The installer sets up Docker, initialises Swarm, starts Postgres, Traefik and the panel, and prints your setup URL. About two minutes.",
 	},
 	{
+		q: "What happens if a deployment fails midway?",
+		a: "The previous version keeps serving. Builds run before the rollout, the Swarm update is health-checked, and a failed deploy never replaces the running tasks. Roll back to any pinned image from the Deployments tab.",
+	},
+	{
 		q: "Can I run more than one server?",
-		a: "Yes. Add remote servers over SSH from Settings → Servers; they join the same Swarm as workers or managers. Placement constraints decide where each service runs and metrics are sampled from every node.",
+		a: "Yes. Add servers over SSH from Settings → Servers; they join the same Swarm. Services pinned to a server are placed on that node, and metrics are sampled from every node.",
 	},
 	{
-		q: "How do domains and TLS work?",
-		a: "Point DNS at your server, attach the hostname to a service, and Traefik issues the Let's Encrypt certificate. Custom certificates, redirects and basic-auth live in the same tab. traefik.me hosts give you a working URL before you own a domain.",
-	},
-	{
-		q: "How do I deploy from Git?",
-		a: "Connect GitHub, GitLab, Bitbucket or Gitea — or paste any Git URL. Pick a branch and a builder (Nixpacks, Railpack, buildpacks, Dockerfile, static) and every push deploys. Pull requests can get their own preview URL.",
+		q: "Does Nixploy support monorepos and compose stacks?",
+		a: "Yes. Point an application at a build path inside the repository, or deploy a compose file (raw or from Git) as a stack with per-service domains and its own private network.",
 	},
 	{
 		q: "Is there an API?",
 		a: "The whole panel is an API: every procedure is a REST endpoint with OpenAPI docs on your own instance, @nixploy/cli wraps it for the terminal, and an MCP server lets AI assistants inspect and deploy with the same permissions.",
 	},
-	{
-		q: "How does it compare to Dokploy or Coolify?",
-		a: "Same category — a self-hosted PaaS on Docker. Nixploy's differences are scope and control: Swarm-native rollouts, per-member capability overlays with 2FA enforcement and an audit log, instance self-backup, MCP + Deploy Copilot, and a REST/CLI surface that mirrors the UI one-to-one.",
-	},
 ] as const;
-
-export const automationSamples = {
-	rest: `# create a project, deploy an app, read its logs
-curl -sS -X POST https://panel.example.com/api/application.deploy \\
-  -H "x-api-key: nxlp_…" -H "content-type: application/json" \\
-  -d '{"applicationId":"69dd7274-…"}'
-
-curl -sS "https://panel.example.com/api/deployment.getLogs?input=%7B%22applicationId%22%3A%22…%22%7D" \\
-  -H "x-api-key: nxlp_…"`,
-	cli: `$ npm i -g @nixploy/cli
-$ nixploy auth login --url https://panel.example.com --api-key nxlp_…
-$ nixploy app deploy 69dd7274-…
-→ queued deployment 3c93bf90-…
-$ nixploy app logs 69dd7274-… -f
-→ image built · service updated · 3/3 healthy`,
-	mcp: `{
-  "mcpServers": {
-    "nixploy": {
-      "type": "http",
-      "url": "https://panel.example.com/api/mcp",
-      "headers": { "Authorization": "Bearer nxlp_…" }
-    }
-  }
-}
-// tools: list_projects · deploy_service · get_service_logs · add_domain …`,
-} as const;

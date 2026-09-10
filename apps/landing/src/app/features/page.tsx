@@ -201,7 +201,7 @@ export default function FeaturesPage() {
 						<div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
 							<Link
 								href="/docs/install"
-								className="inline-flex h-11 items-center rounded-md bg-accent px-5 text-sm font-medium text-[#14100a] transition-colors hover:bg-accent-strong"
+								className="inline-flex h-11 items-center rounded-full bg-foreground px-5 text-sm font-medium text-background transition-colors hover:bg-accent-strong"
 							>
 								Install guide
 							</Link>
@@ -209,7 +209,7 @@ export default function FeaturesPage() {
 								href={site.github}
 								target="_blank"
 								rel="noreferrer"
-								className="inline-flex h-11 items-center rounded-md border border-border px-5 text-sm font-medium text-foreground transition-colors hover:bg-surface"
+								className="inline-flex h-11 items-center rounded-full border border-border px-5 text-sm font-medium text-foreground transition-colors hover:bg-surface"
 							>
 								Star on GitHub
 							</a>

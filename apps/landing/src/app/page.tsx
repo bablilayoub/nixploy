@@ -1,13 +1,14 @@
 import { Footer } from "@/components/footer";
-import { Automation } from "@/components/home/automation";
-import { Bento } from "@/components/home/bento";
+import { CodeToProduction } from "@/components/home/code-to-production";
 import { Cta } from "@/components/home/cta";
 import { Faq } from "@/components/home/faq";
+import { Features } from "@/components/home/features";
 import { Hero } from "@/components/home/hero";
-import { PanelPreview } from "@/components/home/panel-preview";
-import { Pipeline } from "@/components/home/pipeline";
+import { Pricing } from "@/components/home/pricing";
+import { Security } from "@/components/home/security";
+import { StackStrip } from "@/components/home/stack-strip";
+import { Statement } from "@/components/home/statement";
 import { Stats } from "@/components/home/stats";
-import { Templates } from "@/components/home/templates";
 import { Navbar } from "@/components/navbar";
 
 export default function Home() {
@@ -18,12 +19,13 @@ export default function Home() {
 				<Navbar />
 				<main>
 					<Hero />
+					<StackStrip />
 					<Stats />
-					<PanelPreview />
-					<Pipeline />
-					<Bento />
-					<Templates />
-					<Automation />
+					<Statement />
+					<CodeToProduction />
+					<Features />
+					<Security />
+					<Pricing />
 					<Faq />
 					<Cta />
 				</main>

@@ -43,9 +43,9 @@ type ButtonProps = {
 
 const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
 	primary:
-		"bg-accent text-[#14100a] hover:bg-accent-strong shadow-[0_0_0_1px_rgba(242,181,61,0.4),0_12px_40px_-12px_rgba(242,181,61,0.55)]",
+		"bg-foreground text-background hover:bg-accent-strong shadow-[0_0_0_1px_rgba(255,255,255,0.25),0_12px_40px_-14px_rgba(255,255,255,0.45)]",
 	secondary:
-		"border border-border-strong bg-surface-2 text-foreground hover:border-accent/50 hover:bg-surface-3",
+		"border border-border-strong bg-surface-2/60 text-foreground hover:border-foreground/40 hover:bg-surface-3",
 	ghost: "text-muted hover:text-foreground",
 };
 
@@ -58,7 +58,7 @@ export function Button({
 	arrow,
 }: ButtonProps) {
 	const classes = cn(
-		"inline-flex h-11 items-center justify-center gap-2 rounded-lg px-5 text-sm font-medium transition-[background,border-color,color,transform] duration-200 active:scale-[0.98]",
+		"inline-flex h-11 items-center justify-center gap-2 rounded-full px-5 text-sm font-medium transition-[background,border-color,color,transform] duration-200 active:scale-[0.98]",
 		variants[variant],
 		className,
 	);
@@ -92,5 +92,39 @@ export function Pill({ children, className }: { children: ReactNode; className?:
 		>
 			{children}
 		</span>
+	);
+}
+
+/** App-window frame around a screenshot, with a soft halo behind it. */
+export function WindowFrame({
+	src,
+	alt,
+	className,
+	priority = false,
+}: {
+	src: string;
+	alt: string;
+	className?: string;
+	priority?: boolean;
+}) {
+	return (
+		<div className={cn("relative", className)}>
+			<div className="halo" aria-hidden />
+			<div className="overflow-hidden rounded-2xl border border-border-strong bg-surface shadow-[0_40px_120px_-40px_rgba(0,0,0,0.9)]">
+				<div className="flex items-center gap-1.5 border-b border-border px-4 py-2.5">
+					<span className="size-2.5 rounded-full bg-surface-3" />
+					<span className="size-2.5 rounded-full bg-surface-3" />
+					<span className="size-2.5 rounded-full bg-surface-3" />
+				</div>
+				{/* biome-ignore lint/performance/noImgElement: static marketing asset, full-width */}
+				<img
+					src={src}
+					alt={alt}
+					className="block w-full grayscale"
+					loading={priority ? "eager" : "lazy"}
+					decoding="async"
+				/>
+			</div>
+		</div>
 	);
 }
