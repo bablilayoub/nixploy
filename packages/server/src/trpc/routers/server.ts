@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { auditFromSession } from "../../modules/audit";
+import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import {
 	createServer,
 	findServerById,
@@ -44,6 +45,10 @@ const createServerInput = z.object({
 	port: z.number().int().min(1).max(65535).optional(),
 	username: z.string().min(1).optional(),
 	sshKeyId: z.string().nullish(),
+	/**
+	 * Defaults to `worker` (schema default). `manager` is instance-admin only:
+	 * a manager of the primary Swarm sees and controls every tenant's services.
+	 */
 	swarmRole: z.enum(["worker", "manager"]).optional(),
 });
 
@@ -73,6 +78,9 @@ export const serverRouter = router({
 	create: protectedProcedure.input(createServerInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "servers.manage");
+		if (input.swarmRole === "manager") {
+			await assertInstanceAdmin(ctx.session);
+		}
 		await assertSshKeyInOrganization(input.sshKeyId, organizationId);
 		const created = await createServer(
 			{
@@ -110,6 +118,11 @@ export const serverRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "servers.manage");
 			const existing = await findServerOrThrow(input.serverId, organizationId);
+			// Promoting to manager is a cluster-wide grant (see `create`); an
+			// unchanged `manager` on an admin-created row stays editable by the org.
+			if (input.swarmRole === "manager" && existing.swarmRole !== "manager") {
+				await assertInstanceAdmin(ctx.session);
+			}
 			await assertSshKeyInOrganization(input.sshKeyId, organizationId);
 			const { serverId, metricsEnabled, ...values } = input;
 			const update: UpdateServerInput = { ...values };
@@ -171,12 +184,36 @@ export const serverRouter = router({
 	 * Idempotent provisioning: install Docker, join the primary Swarm
 	 * (worker or manager), and prepare Traefik dirs on managers. Returns the
 	 * accumulated shell log (also persisted on the server row).
+	 *
+	 * Instance admin only, whatever the role: the join token is read from the
+	 * Nixploy host and the node becomes part of the *shared* Swarm. A manager
+	 * can inspect and update every tenant's service (env included); even a
+	 * worker runs other organizations' unpinned tasks as root, so an org admin
+	 * joining a host they control could read them. `servers.manage` alone
+	 * still covers registering, editing and removing the row.
 	 */
 	setup: protectedProcedure.input(serverIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "servers.manage");
-		await findServerOrThrow(input.serverId, organizationId);
-		const command = await setupServer(input.serverId);
+		await assertInstanceAdmin(ctx.session);
+		const server = await findServerOrThrow(input.serverId, organizationId);
+		const swarmRole = server.swarmRole === "manager" ? "manager" : "worker";
+		const audit = (result: "ok" | "failed") =>
+			auditFromSession(ctx, organizationId, {
+				action: "server.setup",
+				targetType: "server",
+				targetId: server.serverId,
+				targetName: server.name,
+				metadata: { swarmRole, result },
+			});
+		let command: string;
+		try {
+			command = await setupServer(input.serverId, { instanceAdminVerified: true });
+		} catch (error) {
+			void audit("failed");
+			throw error;
+		}
+		void audit("ok");
 		return { command: redactServerCommandLog(command) };
 	}),
 

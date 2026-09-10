@@ -27,6 +27,7 @@ import {
 	hasCapability,
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
+import { textBlobSchema } from "../../utils/input-limits";
 import { protectedProcedure, router } from "../init";
 
 /** Reject names already used by another environment in the same project. */
@@ -86,7 +87,7 @@ export const environmentRouter = router({
 				projectId: z.string().min(1),
 				name: z.string().min(1).max(255),
 				description: z.string().nullish(),
-				env: z.string().nullish(),
+				env: textBlobSchema.nullish(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -124,7 +125,7 @@ export const environmentRouter = router({
 				environmentId: z.string().min(1),
 				name: z.string().min(1).max(255).optional(),
 				description: z.string().nullish(),
-				env: z.string().nullish(),
+				env: textBlobSchema.nullish(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -338,7 +339,7 @@ export const environmentRouter = router({
 		.input(
 			z.object({
 				environmentId: z.string().min(1),
-				env: z.string(),
+				env: textBlobSchema,
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {

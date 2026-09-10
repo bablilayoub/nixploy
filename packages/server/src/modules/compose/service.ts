@@ -218,21 +218,63 @@ async function hasBeenDeployed(row: ComposeRow): Promise<boolean> {
 	return containers.length > 0;
 }
 
+/**
+ * Columns that decide WHAT is rendered on the next deploy. `hostPrivileged`
+ * relaxes the compose safety check (docker.sock, extra capabilities) for
+ * templates an instance admin installed; it must never survive a re-pointed
+ * source, or a `service.write` holder could deploy their own repo with the
+ * host socket allowed. Changing any of these as a non-admin drops the flag.
+ */
+export const COMPOSE_SOURCE_FIELDS = [
+	"sourceType",
+	"repository",
+	"owner",
+	"branch",
+	"composePath",
+	"gitUrl",
+	"gitBranch",
+	"customGitSSHKeyId",
+	"githubId",
+	"gitlabId",
+	"bitbucketId",
+	"giteaId",
+] as const satisfies readonly (keyof ComposeRow)[];
+
+export type ComposeUpdateInput = Partial<
+	Omit<typeof compose.$inferInsert, "composeId" | "environmentId" | "createdAt" | "hostPrivileged">
+>;
+
+export interface ComposeMutationOptions {
+	/**
+	 * The caller passed `assertInstanceAdmin` for this row. Only then does a
+	 * host-privileged row keep its flag (and its relaxed safety check) across
+	 * a source or compose-file change. Defaults to false: every other path
+	 * (GitOps apply, future callers) demotes the row to the strict check.
+	 */
+	callerIsInstanceAdmin?: boolean;
+}
+
+/** True when `input` changes at least one of {@link COMPOSE_SOURCE_FIELDS}. */
+export function composeSourceChanged(
+	existing: Pick<ComposeRow, (typeof COMPOSE_SOURCE_FIELDS)[number]>,
+	input: ComposeUpdateInput,
+): boolean {
+	return COMPOSE_SOURCE_FIELDS.some(
+		(field) => input[field] !== undefined && input[field] !== existing[field],
+	);
+}
+
 export async function updateComposeById(
 	composeId: string,
-	input: Partial<
-		Omit<
-			typeof compose.$inferInsert,
-			"composeId" | "environmentId" | "createdAt" | "hostPrivileged"
-		>
-	>,
+	input: ComposeUpdateInput,
+	options: ComposeMutationOptions = {},
 ): Promise<ComposeRow> {
 	const existing = await db.query.compose.findFirst({
 		where: eq(compose.composeId, composeId),
 	});
 	if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Compose service not found" });
 
-	const values = { ...input };
+	const values: Partial<typeof compose.$inferInsert> = { ...input };
 	if (values.appName && values.appName !== existing.appName) {
 		if (await isAppNameTaken(values.appName)) {
 			throw new TRPCError({
@@ -256,6 +298,13 @@ export async function updateComposeById(
 		!(values.suffix || existing.suffix)
 	) {
 		values.suffix = randomSuffix();
+	}
+	if (
+		existing.hostPrivileged &&
+		!options.callerIsInstanceAdmin &&
+		composeSourceChanged(existing, input)
+	) {
+		values.hostPrivileged = false;
 	}
 
 	const [updated] = await db
@@ -606,8 +655,16 @@ export async function saveEnvironment(composeId: string, env: string): Promise<v
  * Save the compose file of a raw source (the `composeFile` column). Git
  * sources are read from the checkout, which is reset on every deploy — edits
  * made here would be silently discarded, so they are rejected.
+ *
+ * A host-privileged row keeps its relaxed safety check only when the caller
+ * is the instance admin (`options.callerIsInstanceAdmin`); anyone else gets
+ * the strict check and the row is demoted to `hostPrivileged: false`.
  */
-export async function saveComposeFile(composeRow: ComposeRow, composeFile: string): Promise<void> {
+export async function saveComposeFile(
+	composeRow: ComposeRow,
+	composeFile: string,
+	options: ComposeMutationOptions = {},
+): Promise<void> {
 	if (composeRow.sourceType !== "raw") {
 		throw new TRPCError({
 			code: "BAD_REQUEST",
@@ -615,13 +672,20 @@ export async function saveComposeFile(composeRow: ComposeRow, composeFile: strin
 				"The compose file of a git-backed service is edited in the repository (the checkout is reset on every deploy). Switch the source type to raw to edit it here.",
 		});
 	}
+	const keepPrivileged = composeRow.hostPrivileged && options.callerIsInstanceAdmin === true;
 	// validate before persisting so a broken / unsafe file is rejected early
 	listComposeServices(composeFile);
 	assertSafeComposeSpec(
 		parseComposeFile(composeFile),
-		composeRow.hostPrivileged ? hostPrivilegedComposeSafety() : undefined,
+		keepPrivileged ? hostPrivilegedComposeSafety() : undefined,
 	);
-	await db.update(compose).set({ composeFile }).where(eq(compose.composeId, composeRow.composeId));
+	await db
+		.update(compose)
+		.set({
+			composeFile,
+			...(composeRow.hostPrivileged && !keepPrivileged ? { hostPrivileged: false } : {}),
+		})
+		.where(eq(compose.composeId, composeRow.composeId));
 }
 
 /** Ensure the base working directory exists (used by the fallback worker). */

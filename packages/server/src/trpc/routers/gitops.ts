@@ -21,6 +21,7 @@ import {
 	hasCapability,
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
+import { textBlobSchema } from "../../utils/input-limits";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -67,7 +68,7 @@ async function assertApplyPermissions(
 const stackInputSchema = z
 	.object({
 		stack: nixployStackSchema.optional(),
-		yaml: z.string().min(1).optional(),
+		yaml: textBlobSchema.min(1).optional(),
 		projectId: z.string().min(1).optional(),
 	})
 	.refine((value) => Boolean(value.stack) !== Boolean(value.yaml), {
@@ -168,7 +169,7 @@ export const gitopsRouter = router({
 	syncFromGit: protectedProcedure
 		.input(
 			z.object({
-				yaml: z.string().min(1),
+				yaml: textBlobSchema.min(1),
 				projectId: z.string().min(1).optional(),
 				redeploy: z.boolean().optional(),
 			}),

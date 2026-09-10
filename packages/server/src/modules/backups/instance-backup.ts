@@ -98,11 +98,20 @@ export function buildInstanceContainerDumpCommand(target: InstanceDatabaseTarget
 // ── web-server: config directory archive ────────────────────────────────────
 
 /**
- * Config-dir subtrees that are derived or unbounded (cloned app sources,
- * compose working dirs, deployment logs, metrics history, build caches,
- * downloaded tools, uploaded files) and therefore excluded from the
- * instance archive. Everything else — Traefik static/dynamic config,
- * acme.json, SSH keys — is included.
+ * Config-dir entries excluded from the instance archive, relative to the
+ * config dir (tar sees them as `./<entry>`; `*` globs are allowed):
+ *
+ * - subtrees that are derived or unbounded (cloned app sources, compose
+ *   working dirs, deployment logs, metrics history, build caches, downloaded
+ *   tools, uploaded files);
+ * - the panel's own secrets file `.env` (ENCRYPTION_KEY, BETTER_AUTH_SECRET,
+ *   DATABASE_URL, POSTGRES_PASSWORD — written by install.sh) and any
+ *   `.env.*` copy. Shipping the key next to the dump it protects would hand
+ *   every stored credential to whoever can read the bucket; operators keep
+ *   `.env` separately (docs/instance-backup.md).
+ *
+ * Everything else — Traefik static/dynamic config, acme.json, SSH keys — is
+ * included.
  */
 export const CONFIG_ARCHIVE_EXCLUDES = [
 	"applications",
@@ -112,14 +121,20 @@ export const CONFIG_ARCHIVE_EXCLUDES = [
 	"cache",
 	"tools",
 	"files",
+	".env",
+	".env.*",
 ] as const;
 
 /**
  * tar.gz the config directory to stdout (minus {@link CONFIG_ARCHIVE_EXCLUDES}).
- * The runner base64-encodes the stream for transport.
+ * The runner base64-encodes the stream for transport. Patterns are anchored
+ * with `./` so `./.env` never matches an unrelated `<app>/.env` deeper down
+ * (those subtrees are excluded wholesale anyway).
  */
 export function buildConfigArchiveCommand(configDir: string): string {
-	const excludes = CONFIG_ARCHIVE_EXCLUDES.map((dir) => `--exclude=${sq(`./${dir}`)}`).join(" ");
+	const excludes = CONFIG_ARCHIVE_EXCLUDES.map((entry) => `--exclude=${sq(`./${entry}`)}`).join(
+		" ",
+	);
 	return `tar czf - -C ${sq(configDir)} ${excludes} .`;
 }
 

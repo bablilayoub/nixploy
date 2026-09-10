@@ -12,6 +12,7 @@ import {
 	previewDeployments,
 } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { isSafeWatchPathPattern } from "../../utils/input-limits";
 import { queueDeployment } from "../deployment";
 import { getAppCodePath, shellQuote } from "../deployment/paths";
 import {
@@ -523,6 +524,29 @@ function globToRegExp(glob: string): RegExp {
 }
 
 /**
+ * Compiled glob cache. A push delivery evaluates every (pattern × changed
+ * path) pair of every matching application; without the cache each pair
+ * recompiled the regex. Bounded FIFO so hostile pattern churn cannot grow it.
+ */
+const GLOB_CACHE_MAX = 512;
+const globCache = new Map<string, RegExp>();
+
+/** Exposed for tests. */
+export const globCacheSize = (): number => globCache.size;
+
+function compileGlob(pattern: string): RegExp {
+	const cached = globCache.get(pattern);
+	if (cached) return cached;
+	const compiled = globToRegExp(pattern);
+	if (globCache.size >= GLOB_CACHE_MAX) {
+		const oldest = globCache.keys().next().value;
+		if (oldest !== undefined) globCache.delete(oldest);
+	}
+	globCache.set(pattern, compiled);
+	return compiled;
+}
+
+/**
  * Decide whether a delivery's changed files fall under an application's
  * watch paths:
  * - no watch paths configured → every change deploys;
@@ -544,8 +568,10 @@ export const watchPathsMatch = (
 		const normalized = changed.replace(/^\/+/, "");
 		return patterns.some((pattern) => {
 			if (normalized === pattern || normalized.startsWith(`${pattern}/`)) return true;
-			if (pattern.includes("*") || pattern.includes("?")) {
-				return globToRegExp(pattern).test(normalized);
+			// Rows written before the input caps existed may hold patterns the
+			// zod schema now rejects; they only get exact/prefix matching above.
+			if ((pattern.includes("*") || pattern.includes("?")) && isSafeWatchPathPattern(pattern)) {
+				return compileGlob(pattern).test(normalized);
 			}
 			return false;
 		});

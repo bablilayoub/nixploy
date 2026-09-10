@@ -18,6 +18,7 @@ import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { PROTECTED_VOLUMES } from "../../modules/docker/protected";
 import { assertCapability, hasCapability } from "../../modules/projects";
 import { getConfigDir } from "../../modules/traefik/paths";
+import { mountContentSchema } from "../../utils/input-limits";
 import { assertDockerVolumeName } from "../../utils/validators";
 import { protectedProcedure, router } from "../init";
 
@@ -31,8 +32,8 @@ const mountFields = {
 	volumeName: z.string().nullable().optional(),
 	/** file: path relative to the app's files dir (`<configDir>/applications/<appName>/files`). */
 	filePath: z.string().nullable().optional(),
-	/** file: content written to `filePath`. */
-	content: z.string().nullable().optional(),
+	/** file: content written to `filePath` (capped at 256 KiB). */
+	content: mountContentSchema.nullable().optional(),
 } as const;
 
 const BLOCKED_HOST_PATH_PREFIXES = [

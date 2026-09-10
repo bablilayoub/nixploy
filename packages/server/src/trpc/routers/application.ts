@@ -37,6 +37,7 @@ import {
 } from "../../modules/deployment";
 import { getDeploymentLogPath } from "../../modules/deployment/paths";
 import { assertCapability, assertWithinQuota, hasCapability } from "../../modules/projects";
+import { textBlobSchema, watchPathsSchema } from "../../utils/input-limits";
 import { assertSafeGitCloneUrl } from "../../utils/public-url";
 import { appNameSchema, assertSafeDockerImageRef } from "../../utils/validators";
 import {
@@ -252,8 +253,8 @@ export const applicationRouter = router({
 				autoDeploy: z.boolean().optional(),
 				isPreviewDeploymentsActive: z.boolean().optional(),
 				previewForksRequireApproval: z.boolean().optional(),
-				watchPaths: z.array(z.string()).nullable().optional(),
-				buildArgs: z.string().nullable().optional(),
+				watchPaths: watchPathsSchema.nullable().optional(),
+				buildArgs: textBlobSchema.nullable().optional(),
 				serverId: z.string().nullable().optional(),
 				...swarmSpecFields,
 			}),
@@ -407,8 +408,8 @@ export const applicationRouter = router({
 	saveEnvironment: protectedProcedure
 		.input(
 			applicationIdInput.extend({
-				env: z.string(),
-				buildArgs: z.string().nullable().optional(),
+				env: textBlobSchema,
+				buildArgs: textBlobSchema.nullable().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -491,7 +492,7 @@ export const applicationRouter = router({
 				autoDeploy: z.boolean().optional(),
 				isPreviewDeploymentsActive: z.boolean().optional(),
 				previewForksRequireApproval: z.boolean().optional(),
-				watchPaths: z.array(z.string()).nullable().optional(),
+				watchPaths: watchPathsSchema.nullable().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {

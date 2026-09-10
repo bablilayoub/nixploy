@@ -42,7 +42,7 @@
 		"drizzle-zod": "^0.8.2",
 		"node-os-utils": "^2.0.4",
 		"node-schedule": "^2.1.1",
-		"nodemailer": "^9.0.3",
+		"nodemailer": "^9.1.1",
 		"octokit": "^5.0.5",
 		"postgres": "^3.4.5",
 		"simple-git": "^3.36.0",

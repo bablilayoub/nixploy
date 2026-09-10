@@ -21,6 +21,7 @@ import { classifyPullRequestAction, previewAppName, previewHost } from "../previ
 import {
 	applicationMatchesPreviewWebhook,
 	applicationMatchesWebhook,
+	globCacheSize,
 	handleGitWebhook,
 	isGitlabMetadataOnlyUpdate,
 	type PreviewWebhookCandidate,
@@ -57,6 +58,25 @@ describe("watchPathsMatch", () => {
 
 	it("normalizes leading and trailing slashes in patterns", () => {
 		expect(watchPathsMatch(["src/index.ts"], ["/src/"])).toBe(true);
+	});
+
+	it("compiles each glob once and reuses it across paths and deliveries", () => {
+		const before = globCacheSize();
+		const paths = Array.from({ length: 40 }, (_, i) => `docs/page-${i}.md`);
+		expect(watchPathsMatch(paths, ["src/**/*.ts", "lib/*.js"])).toBe(false);
+		expect(watchPathsMatch(paths, ["src/**/*.ts", "lib/*.js"])).toBe(false);
+		expect(globCacheSize()).toBe(before + 2);
+	});
+
+	it("never compiles a pattern that violates the watch-path caps (legacy rows)", () => {
+		const hostile = `${"**a".repeat(40)}`;
+		const before = globCacheSize();
+		const started = Date.now();
+		// Exact / prefix matching still applies; the glob branch is skipped.
+		expect(watchPathsMatch([`${"a".repeat(2000)}b`], [hostile])).toBe(false);
+		expect(watchPathsMatch([hostile, `${hostile}/x`], [hostile])).toBe(true);
+		expect(Date.now() - started).toBeLessThan(500);
+		expect(globCacheSize()).toBe(before);
 	});
 });
 

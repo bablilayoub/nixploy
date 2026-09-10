@@ -15,12 +15,31 @@ Every run produces **two artifacts** in the destination bucket:
 
 The config archive includes everything under the config dir **except**
 derived/heavy subtrees (`applications/`, `compose/`, `logs/`, `metrics/`,
-`cache/`, `tools/`, `files/`). What remains is the state an instance restore
-actually needs:
+`cache/`, `tools/`, `files/`) and the panel's own secrets file (`.env`, plus
+any `.env.*` copy). What remains is the state an instance restore actually
+needs:
 
 - `traefik/` — static config, file-provider dynamic YAML (routes, TLS),
   `acme.json` (Let's Encrypt account + certificates)
 - `ssh/` — SSH keys for managed servers, pinned known-hosts
+
+### `.env` is NOT in the archive — back it up yourself
+
+`install.sh` writes `ENCRYPTION_KEY`, `BETTER_AUTH_SECRET`, `DATABASE_URL`
+and `POSTGRES_PASSWORD` to `<config dir>/.env` (`/etc/nixploy/.env`). The
+instance backup deliberately excludes that file: the database dump holds
+every tenant's credentials encrypted with `ENCRYPTION_KEY`, and shipping the
+key in the same bucket would hand all of them to anyone who can read it
+(leaked destination credentials, a public bucket, provider staff).
+
+Keep a copy of `.env` somewhere the bucket reader cannot reach — a password
+manager, an offline vault, a separate KMS-encrypted secret. **A restore
+without the original `ENCRYPTION_KEY` cannot decrypt anything stored**:
+env vars, database passwords, registry/git/SSH credentials, S3 keys and
+notification configs are unrecoverable, and every service must be
+re-configured by hand. `BETTER_AUTH_SECRET` matters less (existing sessions
+become invalid), `POSTGRES_PASSWORD`/`DATABASE_URL` only need to match the
+Postgres you restore into.
 
 > **Sensitivity:** the dump contains all tenants' data (secrets are encrypted
 > at rest, but readable with your `ENCRYPTION_KEY`), and the archive contains
@@ -64,10 +83,14 @@ There is no one-click restore on purpose: you are typically restoring onto a
 **fresh** host where the panel does not run yet.
 
 1. **Provision the new host.** Install Docker, then install Nixploy per
-   [install.md](./install.md), but stop before logging in. Make sure the
-   instance uses the **same** `ENCRYPTION_KEY` and `BETTER_AUTH_SECRET` as the
-   old one — otherwise encrypted columns (env vars, credentials) are
-   unreadable after the restore.
+   [install.md](./install.md), but stop before logging in. Then put your
+   **own** copy of the old `.env` in place (`/etc/nixploy/.env`, mode 600)
+   — it is not in the backup. The instance must run with the **same**
+   `ENCRYPTION_KEY` (and ideally `BETTER_AUTH_SECRET`) as the old one;
+   otherwise every encrypted column (env vars, credentials, S3/notification
+   configs) is unreadable after the restore and has to be re-entered.
+   `DATABASE_URL`/`POSTGRES_PASSWORD` must match the Postgres you restore
+   into; keep the installer's fresh values if you let it create Postgres.
 
 2. **Fetch the artifacts** from your bucket (replace prefix/timestamps):
 
@@ -97,10 +120,13 @@ There is no one-click restore on purpose: you are typically restoring onto a
    ```
 
 5. **Recreate the platform services** — rerun `install.sh` (or
-   `docker service update --force nixploy` + `nixploy-traefik`). Traefik picks
-   up the restored dynamic configs and certificates; the app runs migrations
-   on boot (`pnpm db:migrate` semantics) and your orgs, projects and
-   deployments are back.
+   `docker service update --force nixploy` + `nixploy-traefik`) so the
+   `nixploy` service picks up the restored `.env`. Traefik picks up the
+   restored dynamic configs and certificates; the app runs migrations on
+   boot (`pnpm db:migrate` semantics) and your orgs, projects and
+   deployments are back. Open a service's environment tab: if values show
+   as garbage or decryption errors appear in the logs, the `ENCRYPTION_KEY`
+   in `.env` is not the original one.
 
 6. **Redeploy affected services** as needed — the database knows about them,
    and container state is reconciled automatically for services whose images

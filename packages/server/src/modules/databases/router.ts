@@ -7,6 +7,7 @@ import { assertServerInOrganization } from "../../trpc/assert-org-refs";
 import type { TRPCContext } from "../../trpc/init";
 import { protectedProcedure, router } from "../../trpc/init";
 import { redactDatabaseSecrets } from "../../trpc/redact-secrets";
+import { textBlobSchema } from "../../utils/input-limits";
 import {
 	appNameSchema,
 	assertSafeDockerImageRef,
@@ -446,7 +447,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 
 		/** Save service-level env vars (multi-line `KEY=VALUE`). */
 		saveEnvironment: protectedProcedure
-			.input(z.object({ [idField]: z.string().min(1), env: z.string() }))
+			.input(z.object({ [idField]: z.string().min(1), env: textBlobSchema }))
 			.mutation(async ({ ctx, input }) => {
 				const organizationId = await getOrganizationId(ctx);
 				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");

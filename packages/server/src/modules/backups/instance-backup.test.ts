@@ -104,6 +104,17 @@ describe("buildConfigArchiveCommand", () => {
 		expect(command).not.toContain("--exclude='./ssh'");
 	});
 
+	it("never ships the panel's own secrets file next to the dump it protects", () => {
+		const command = buildConfigArchiveCommand("/etc/nixploy");
+		// install.sh writes ENCRYPTION_KEY / BETTER_AUTH_SECRET / DATABASE_URL /
+		// POSTGRES_PASSWORD to <configDir>/.env; a bucket reader must not get
+		// the ciphertexts (pg_dump) and the key (archive) in the same run.
+		expect(command).toContain("--exclude='./.env'");
+		expect(command).toContain("--exclude='./.env.*'");
+		expect(CONFIG_ARCHIVE_EXCLUDES).toContain(".env");
+		expect(CONFIG_ARCHIVE_EXCLUDES).toContain(".env.*");
+	});
+
 	it("shell-quotes a config dir with spaces", () => {
 		expect(buildConfigArchiveCommand("/opt/my nixploy")).toContain("-C '/opt/my nixploy'");
 	});

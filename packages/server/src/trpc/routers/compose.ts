@@ -27,6 +27,7 @@ import {
 	hasCapability,
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
+import { textBlobSchema, watchPathsSchema } from "../../utils/input-limits";
 import { assertSafeGitCloneUrl } from "../../utils/public-url";
 import { appNameSchema } from "../../utils/validators";
 import {
@@ -147,7 +148,7 @@ export const composeRouter = router({
 				branch: z.string().nullish(),
 				composePath: z.string().min(1).optional(),
 				autoDeploy: z.boolean().optional(),
-				watchPaths: z.array(z.string()).nullish(),
+				watchPaths: watchPathsSchema.nullish(),
 				gitUrl: z.string().nullish(),
 				gitBranch: z.string().nullish(),
 				customGitSSHKeyId: z.string().nullish(),
@@ -167,7 +168,16 @@ export const composeRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
-			await findComposeForOrg(input.composeId, organizationId);
+			const row = await findComposeForOrg(input.composeId, organizationId);
+			// Host-privileged rows (docker.sock templates) relax the compose safety
+			// check on every deploy. Re-pointing their source at another repo or
+			// path would render an attacker's file with that relaxation, so the
+			// row is instance-admin only — same gate as `saveComposeFile`.
+			let callerIsInstanceAdmin = false;
+			if (row.hostPrivileged) {
+				await assertInstanceAdmin(ctx.session);
+				callerIsInstanceAdmin = true;
+			}
 
 			if (input.gitUrl) {
 				try {
@@ -190,7 +200,7 @@ export const composeRouter = router({
 			}
 
 			const { composeId, ...values } = input;
-			const updated = await updateComposeById(composeId, values);
+			const updated = await updateComposeById(composeId, values, { callerIsInstanceAdmin });
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
 				organizationId,
@@ -326,7 +336,7 @@ export const composeRouter = router({
 
 	/** Save the service-level `.env` content (encrypted at rest). */
 	saveEnvironment: protectedProcedure
-		.input(composeIdInput.extend({ env: z.string() }))
+		.input(composeIdInput.extend({ env: textBlobSchema }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
@@ -340,16 +350,18 @@ export const composeRouter = router({
 	 * this updates the row; for git sources it overwrites the local clone.
 	 */
 	saveComposeFile: protectedProcedure
-		.input(composeIdInput.extend({ composeFile: z.string() }))
+		.input(composeIdInput.extend({ composeFile: textBlobSchema }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			const row = await findComposeForOrg(input.composeId, organizationId);
+			let callerIsInstanceAdmin = false;
 			if (row.hostPrivileged) {
 				await assertInstanceAdmin(ctx.session);
+				callerIsInstanceAdmin = true;
 			}
 			try {
-				await saveComposeFile(row, input.composeFile);
+				await saveComposeFile(row, input.composeFile, { callerIsInstanceAdmin });
 			} catch (error) {
 				if (error instanceof ComposeValidationError) {
 					throw new TRPCError({ code: "BAD_REQUEST", message: error.message });

@@ -160,6 +160,16 @@ export async function getPrimarySwarmJoinCommand(role: SwarmRole): Promise<strin
 	return `docker swarm join --token ${token} ${addr}${port}`;
 }
 
+export interface SetupServerOptions {
+	/**
+	 * The caller ran `assertInstanceAdmin` for this request. Joining the
+	 * primary Swarm is cluster-wide (a manager controls every tenant's
+	 * services, a worker runs every org's unpinned tasks as root), so the
+	 * join is refused without it — org capabilities alone are not enough.
+	 */
+	instanceAdminVerified: boolean;
+}
+
 /**
  * Idempotent remote provisioning of a managed server:
  * install Docker if missing, join the *primary* Swarm (worker or manager),
@@ -168,7 +178,10 @@ export async function getPrimarySwarmJoinCommand(role: SwarmRole): Promise<strin
  * own swarm or Traefik. Safe to re-run; the accumulated shell log is
  * persisted on the server row (`command` column).
  */
-export async function setupServer(serverId: string): Promise<string> {
+export async function setupServer(serverId: string, options: SetupServerOptions): Promise<string> {
+	if (!options.instanceAdminVerified) {
+		throw new Error("Joining a server to the primary Swarm requires the instance admin");
+	}
 	const log: string[] = [];
 	const step = async (label: string, command: string) => {
 		log.push(`$ ${command}`);

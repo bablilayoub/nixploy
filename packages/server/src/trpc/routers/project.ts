@@ -29,6 +29,7 @@ import {
 	resolveEnvironmentVariables,
 	toEnvString,
 } from "../../modules/projects";
+import { textBlobSchema } from "../../utils/input-limits";
 import { protectedProcedure, router } from "../init";
 import { redactEnvironmentServicesSecrets } from "../redact-secrets";
 
@@ -277,7 +278,7 @@ export const projectRouter = router({
 				projectId: z.string().min(1),
 				name: z.string().min(1).max(255).optional(),
 				description: z.string().nullish(),
-				env: z.string().nullish(),
+				env: textBlobSchema.nullish(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -346,7 +347,7 @@ export const projectRouter = router({
 		.input(
 			z.object({
 				projectId: z.string().min(1),
-				env: z.string(),
+				env: textBlobSchema,
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {

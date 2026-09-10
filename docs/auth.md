@@ -88,6 +88,33 @@ Labels and descriptions live in `CAPABILITY_CATALOG`
 | `deployer` | member + deploy/runtime, templates, backups, schedules |
 | `admin` / `owner` | full catalog |
 
+## Instance admin
+
+The first user (better-auth `admin()` plugin, `user.role = "admin"`) is the
+**instance admin** — the only trusted-root identity. Org roles and
+capabilities stop at the organization boundary; anything that reaches the
+shared host or cluster additionally requires `assertInstanceAdmin(session)`
+(`modules/auth/instance-admin.ts`), whatever the caller's org role:
+
+- **Swarm joins** — `server.setup` (the actual `docker swarm join`) and any
+  `swarmRole: "manager"` on `server.create` / `server.update`. A manager sees
+  and controls every tenant's services; even a worker runs other orgs'
+  unpinned tasks as root. `servers.manage` still lets an org register, edit
+  and remove its server rows. Every setup run is audited as `server.setup`
+  with the role and result.
+- **Cluster-wide Docker** — `docker.nodes`, `nodeUpdate`, `swarmServices`,
+  system prune (see [docker.md](./docker.md)).
+- **Host-privileged compose** — templates that mount `docker.sock` or add
+  capabilities create rows with `hostPrivileged = true`; `compose.update`
+  and `compose.saveComposeFile` on such a row are instance-admin only, and
+  any source change by another path (GitOps apply) demotes the row to the
+  strict safety check.
+- Host bind mounts, host TLS store, `nixploy-server` schedules, instance
+  backups, self-update, the AI singleton and the Traefik host settings.
+
+Keep the instance-admin account on 2FA and do not hand its API keys to CI:
+a key carries the owner's full capability set, including these gates.
+
 ## Two-factor authentication (TOTP)
 
 - Profile → security card: enable requires the password, shows a QR code
