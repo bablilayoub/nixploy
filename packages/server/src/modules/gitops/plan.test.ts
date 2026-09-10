@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPlan, type LiveStackState } from "./plan";
+import { buildPlan, diffFields, type LiveStackState, summarizePlanNeeds } from "./plan";
 import type { NixployStack } from "./schema";
 
 const liveState = (overrides: Partial<LiveStackState> = {}): LiveStackState => ({
@@ -117,5 +117,137 @@ describe("buildPlan domain deletions", () => {
 
 		expect(plan.items.filter((item) => item.action === "delete")).toHaveLength(0);
 		expect(plan.summary.delete).toBe(0);
+	});
+});
+
+describe("diffFields", () => {
+	it("only diffs keys the manifest defines (undefined means keep)", () => {
+		const live = { buildType: "nixpacks", replicas: 1, branch: "main", autoDeploy: true };
+		expect(diffFields({ branch: "main" }, live, ["buildType", "replicas", "branch"])).toEqual([]);
+		expect(diffFields({ branch: "dev" }, live, ["buildType", "replicas", "branch"])).toEqual([
+			"branch",
+		]);
+		expect(diffFields({ replicas: undefined }, live, ["replicas"])).toEqual([]);
+		// explicit null is a real value: clear the column
+		expect(diffFields({ branch: null }, live, ["branch"])).toEqual(["branch"]);
+	});
+});
+
+describe("buildPlan hand-written manifests", () => {
+	it("reports noop for an app whose manifest omits every defaulted field", () => {
+		const plan = buildPlan(
+			stack({
+				applications: [
+					{ name: "web", environment: "prod", repository: "repo", owner: "me", branch: "main" },
+				],
+			}),
+			liveState({
+				applications: [
+					{
+						name: "web",
+						appName: "web-a1b2c3",
+						row: {
+							buildType: "nixpacks",
+							sourceType: "github",
+							repository: "repo",
+							owner: "me",
+							branch: "main",
+							buildPath: "/",
+							replicas: 1,
+							autoDeploy: true,
+							description: null,
+						},
+						domains: [],
+					},
+				],
+			}),
+		);
+		expect(plan.items).toEqual([
+			{ kind: "application", action: "noop", name: "web", environment: "prod", changes: undefined },
+		]);
+		expect(summarizePlanNeeds(plan)).toEqual({ creates: 0, writes: false, redeploys: 0 });
+	});
+
+	it("keeps a live letsencrypt domain when the manifest only lists the host", () => {
+		const plan = buildPlan(
+			stack({
+				applications: [
+					{
+						name: "web",
+						environment: "prod",
+						domains: [{ host: "app.example.com", path: undefined }],
+					},
+				],
+			}),
+			liveState({
+				applications: [
+					{
+						name: "web",
+						appName: "web-a1b2c3",
+						row: {},
+						domains: [
+							{
+								host: "app.example.com",
+								path: "/",
+								port: null,
+								https: true,
+								certificateType: "letsencrypt",
+								serviceName: null,
+							},
+						],
+					},
+				],
+			}),
+		);
+		const domain = plan.items.find((item) => item.kind === "domain");
+		expect(domain?.action).toBe("noop");
+	});
+
+	it("ignores serviceName on application domains but diffs it on compose domains", () => {
+		const desiredDomain = { host: "app.example.com", path: undefined, serviceName: "web" };
+		const liveDomain = {
+			host: "app.example.com",
+			path: "/",
+			port: null,
+			https: false,
+			certificateType: "none",
+			serviceName: null,
+		};
+		const plan = buildPlan(
+			stack({
+				applications: [{ name: "app", environment: "prod", domains: [desiredDomain] }],
+				compose: [{ name: "stack", environment: "prod", domains: [desiredDomain] }],
+			}),
+			liveState({
+				applications: [{ name: "app", appName: "app-1", row: {}, domains: [liveDomain] }],
+				compose: [{ name: "stack", appName: "stack-1", row: {}, domains: [liveDomain] }],
+			}),
+		);
+		const domains = plan.items.filter((item) => item.kind === "domain");
+		expect(domains.find((item) => item.parent === "app")?.action).toBe("noop");
+		expect(domains.find((item) => item.parent === "stack")?.action).toBe("update");
+		expect(domains.find((item) => item.parent === "stack")?.changes).toEqual(["serviceName"]);
+	});
+});
+
+describe("summarizePlanNeeds", () => {
+	it("counts creates, flags writes and counts redeployable services", () => {
+		const plan = buildPlan(
+			stack({
+				applications: [
+					{ name: "new", environment: "prod" },
+					{ name: "changed", environment: "prod", branch: "dev" },
+					{ name: "same", environment: "prod", branch: "main" },
+				],
+				databases: { redis: [{ name: "cache", environment: "prod" }] },
+			}),
+			liveState({
+				applications: [
+					{ name: "changed", appName: "c-1", row: { branch: "main" }, domains: [] },
+					{ name: "same", appName: "s-1", row: { branch: "main" }, domains: [] },
+				],
+			}),
+		);
+		expect(summarizePlanNeeds(plan)).toEqual({ creates: 2, writes: true, redeploys: 2 });
 	});
 });

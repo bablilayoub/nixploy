@@ -1,15 +1,22 @@
+import { execFileSync } from "node:child_process";
+import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
 	buildRemoteSampleCommand,
+	countRecentFailedTasks,
 	cpuPercentBetween,
 	parseByteSize,
 	parseDfLine,
+	parseDockerCreatedAt,
 	parseDockerStatsJsonLine,
 	parseMeminfo,
 	parseProcStatCpuLine,
 	parseRemoteSampleOutput,
 	parseUsagePair,
 	readServerMetricsConfig,
+	remoteSampleTimeoutMs,
 } from "./remote";
 
 describe("parseByteSize", () => {
@@ -151,9 +158,14 @@ describe("parseRemoteSampleOutput", () => {
 			BlockIO: "0B / 0B",
 			PIDs: "3",
 		}),
+		"restarts=2",
+		"task=2020-01-01 00:00:00 +0000 UTC|Exited (1) 6 years ago",
 		"==SVC==other-app",
+		`task=${new Date().toISOString().slice(0, 19).replace("T", " ")} +0000 UTC|Exited (1) 2 seconds ago`,
+		"task=2026-01-01 00:00:00 +0000 UTC|Exited (0) 3 minutes ago",
 		"==SVC==injected",
 		JSON.stringify({ CPUPerc: "99.00%" }),
+		"restarts=99",
 	].join("\n");
 
 	it("parses host and service sections", () => {
@@ -173,6 +185,11 @@ describe("parseRemoteSampleOutput", () => {
 		expect(result.services.has("other-app")).toBe(false);
 		// unknown SVC markers are ignored (container output cannot inject)
 		expect(result.services.has("injected")).toBe(false);
+		expect(result.restarts.has("injected")).toBe(false);
+		// RestartCount (2) + recent crashed tasks (0: the only one is 6 years old)
+		expect(result.restarts.get("my-app")).toBe(2);
+		// no running container but one fresh crashed task → 1 (Exited (0) ignored)
+		expect(result.restarts.get("other-app")).toBe(1);
 	});
 
 	it("returns null host when nothing parsed", () => {
@@ -208,5 +225,65 @@ describe("buildRemoteSampleCommand", () => {
 		expect(command).toContain("label=com.docker.swarm.service.name='my-app'");
 		expect(command).toContain("==SVC==my-app");
 		expect(command).toContain("docker stats --no-stream");
+	});
+
+	it("never lets a stopped last service fail the batch", () => {
+		const command = buildRemoteSampleCommand(["running-app", "stopped-app"]);
+		// `[ -n "$cid" ] && …` as the final statement exits 1 when cid is empty.
+		expect(command).not.toContain("&& docker stats");
+		expect(command).not.toContain("] && cid=");
+		expect(command.endsWith("; true")).toBe(true);
+		// Real shell check: with a docker stub that always fails, the batch
+		// still exits 0 and prints every section marker.
+		const dir = mkdtempSync(path.join(tmpdir(), "nixploy-docker-stub-"));
+		writeFileSync(path.join(dir, "docker"), "#!/bin/sh\nexit 1\n");
+		chmodSync(path.join(dir, "docker"), 0o755);
+		const out = execFileSync("/bin/sh", ["-c", command], {
+			encoding: "utf8",
+			env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
+			// /proc/stat does not exist on macOS — the greps' stderr is expected noise.
+			stdio: ["ignore", "pipe", "ignore"],
+		});
+		expect(out).toContain("==SVC==running-app");
+		expect(out).toContain("==SVC==stopped-app");
+	});
+
+	it("adds restart probes only when asked", () => {
+		expect(buildRemoteSampleCommand(["my-app"])).not.toContain("RestartCount");
+		const command = buildRemoteSampleCommand(["my-app"], { restarts: true });
+		expect(command).toContain("{{.RestartCount}}");
+		expect(command).toContain("task={{.CreatedAt}}|{{.Status}}");
+	});
+});
+
+describe("remoteSampleTimeoutMs", () => {
+	it("scales with the number of services within bounds", () => {
+		expect(remoteSampleTimeoutMs(0)).toBe(25_000);
+		expect(remoteSampleTimeoutMs(10)).toBe(45_000);
+		expect(remoteSampleTimeoutMs(1000)).toBe(180_000);
+	});
+});
+
+describe("countRecentFailedTasks", () => {
+	const now = Date.parse("2026-01-01T12:00:00Z");
+	it("counts non-zero exits inside the window only", () => {
+		expect(
+			countRecentFailedTasks(
+				[
+					{ createdAt: now - 60_000, status: "Exited (1) 1 minute ago" },
+					{ createdAt: now - 120_000, status: "Exited (137) 2 minutes ago" },
+					{ createdAt: now - 60_000, status: "Exited (0) 1 minute ago" },
+					{ createdAt: now - 3 * 60 * 60 * 1000, status: "Exited (1) 3 hours ago" },
+					{ createdAt: null, status: "Exited (2) unknown" },
+				],
+				now,
+			),
+		).toBe(3);
+	});
+
+	it("parses docker ps CreatedAt with its numeric offset", () => {
+		expect(parseDockerCreatedAt("2026-01-01 12:00:00 +0000 UTC")).toBe(now);
+		expect(parseDockerCreatedAt("2026-01-01 14:00:00 +0200 CEST")).toBe(now);
+		expect(parseDockerCreatedAt("garbage")).toBeNull();
 	});
 });

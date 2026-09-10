@@ -11,6 +11,20 @@ export type RedeployFromApplyResult = {
 };
 
 /**
+ * Items an apply actually changed: creates, and updates whose patch was
+ * non-empty. Items that failed to apply are never redeployed. Domain items
+ * are excluded — they re-sync Traefik directly and need no rebuild.
+ */
+export function itemsToRedeploy(result: ApplyStackResult): ApplyStackResult["items"] {
+	return result.items.filter(
+		(item) =>
+			(item.kind === "application" || item.kind === "compose") &&
+			!item.error &&
+			(item.action === "create" || (item.action === "update" && (item.changes?.length ?? 0) > 0)),
+	);
+}
+
+/**
  * Queue redeploys for applications/compose that were created or updated by a
  * GitOps apply. Databases are skipped (no deploy queue).
  */
@@ -27,7 +41,7 @@ export async function redeployChangedFromApply(
 		throw new Error(`Environment "${result.environmentName}" not found`);
 	}
 
-	const changed = result.items.filter((item) => item.action !== "noop");
+	const changed = itemsToRedeploy(result);
 	const appNames = changed.filter((item) => item.kind === "application").map((item) => item.name);
 	const composeNames = changed.filter((item) => item.kind === "compose").map((item) => item.name);
 
@@ -83,6 +97,36 @@ export async function redeployChangedFromApply(
 	return { deploymentIds, skipped };
 }
 
+/** Upper bound for a fetched stack document — a manifest is a few KB, never megabytes. */
+export const MAX_STACK_YAML_BYTES = 1024 * 1024;
+
+/** Read a response body up to `limit` bytes; throws once the limit is exceeded. */
+export async function readBodyWithLimit(res: Response, limit: number): Promise<string> {
+	const declared = Number.parseInt(res.headers.get("content-length") ?? "", 10);
+	if (Number.isFinite(declared) && declared > limit) {
+		throw new Error(`Stack YAML is too large (${declared} bytes, limit ${limit})`);
+	}
+	if (!res.body) return await res.text();
+	const reader = res.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let received = 0;
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			received += value.byteLength;
+			if (received > limit) {
+				throw new Error(`Stack YAML is too large (limit ${limit} bytes)`);
+			}
+			chunks.push(value);
+		}
+	} finally {
+		reader.releaseLock();
+		await res.body.cancel().catch(() => {});
+	}
+	return Buffer.concat(chunks).toString("utf8");
+}
+
 /** Fetch a stack YAML document from an HTTPS URL (e.g. raw GitHub). */
 export async function fetchStackYamlFromUrl(url: string): Promise<string> {
 	try {
@@ -104,7 +148,7 @@ export async function fetchStackYamlFromUrl(url: string): Promise<string> {
 		if (!res.ok) {
 			throw new Error(`Failed to fetch stack YAML (${res.status})`);
 		}
-		const text = await res.text();
+		const text = await readBodyWithLimit(res, MAX_STACK_YAML_BYTES);
 		if (!text.trim()) {
 			throw new Error("Remote stack YAML is empty");
 		}

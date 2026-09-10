@@ -33,7 +33,7 @@ import {
 import { DATABASE_CONFIGS, generateDatabaseAppName } from "../databases/engine";
 import { getEnvironmentServices } from "../projects";
 import { randomPassword, resolveEnvironmentId, resolveProjectForStack } from "./export";
-import { buildPlan, type GitopsPlanResult, type LiveStackState } from "./plan";
+import { buildPlan, type GitopsPlanItem, type GitopsPlanResult, type LiveStackState } from "./plan";
 import type { GitopsDomain, NixployStack } from "./schema";
 
 const domainKey = (domain: GitopsDomain) =>
@@ -227,6 +227,27 @@ const createDomain = async (
 	}
 };
 
+/**
+ * Patch for an existing domain: only fields the manifest defines. A
+ * hand-written `domains: [{host}]` must keep the live Let's Encrypt setup —
+ * `https ?? false` / `certificateType ?? "none"` would downgrade it to plain
+ * HTTP and rewrite Traefik. `serviceName` only exists on compose domains.
+ */
+export const domainUpdatePatch = (
+	domain: GitopsDomain,
+	parent: { applicationId?: string; composeId?: string },
+): Partial<typeof domains.$inferInsert> => {
+	const patch: Partial<typeof domains.$inferInsert> = {};
+	if (domain.https !== undefined) patch.https = domain.https;
+	if (domain.certificateType !== undefined) patch.certificateType = domain.certificateType;
+	if (domain.port !== undefined) patch.port = domain.port;
+	if (parent.composeId && domain.serviceName !== undefined) {
+		if (domain.serviceName) assertComposeServiceName(domain.serviceName);
+		patch.serviceName = domain.serviceName;
+	}
+	return patch;
+};
+
 const syncDomains = async (
 	desired: GitopsDomain[] | undefined,
 	liveDomains: Array<{ domainId: string; host: string; path: string | null; port: number | null }>,
@@ -243,20 +264,10 @@ const syncDomains = async (
 			await createDomain(domain, parent);
 			continue;
 		}
-		const certificateType = domain.certificateType ?? "none";
-		const serviceName = parent.composeId ? (domain.serviceName ?? null) : null;
-		if (serviceName) {
-			assertComposeServiceName(serviceName);
+		const patch = domainUpdatePatch(domain, parent);
+		if (Object.keys(patch).length > 0) {
+			await db.update(domains).set(patch).where(eq(domains.domainId, existing.domainId));
 		}
-		await db
-			.update(domains)
-			.set({
-				https: domain.https ?? false,
-				certificateType,
-				port: domain.port ?? null,
-				serviceName,
-			})
-			.where(eq(domains.domainId, existing.domainId));
 		liveByKey.delete(key);
 	}
 
@@ -502,6 +513,8 @@ export const planStack = async (
 
 export interface ApplyStackResult extends GitopsPlanResult {
 	applied: number;
+	/** Services that could not be applied — the rest of the stack was still written. */
+	errors: Array<{ kind: GitopsPlanItem["kind"]; name: string; message: string }>;
 }
 
 const planAction = (
@@ -515,7 +528,16 @@ const planAction = (
 			item.kind === kind && item.name === name && (parent ? item.parent === parent : !item.parent),
 	)?.action;
 
-/** Apply a desired stack to the live project/environment (no deploy engine). */
+/**
+ * Apply a desired stack to the live project/environment (no deploy engine).
+ *
+ * The service writers (`createApplication`, `updateComposeById`, …) run on the
+ * shared `db` handle with Traefik/file side effects, so the apply cannot be a
+ * single transaction. Instead every service is applied independently: a
+ * failure (e.g. a domain host already taken by another service) is recorded
+ * on that item and in `errors`, its domains are left untouched, and the
+ * remaining services still apply. Failed items are never redeployed.
+ */
 export const applyStack = async (
 	stack: NixployStack,
 	organizationId: string,
@@ -525,43 +547,65 @@ export const applyStack = async (
 	const { environmentId, environmentName } = await resolveEnvironmentId(project.projectId, stack);
 	const live = await loadLiveStackState(project.projectId, environmentName);
 	const plan = buildPlan(stack, live);
+	const errors: ApplyStackResult["errors"] = [];
+
+	const attempt = async (
+		kind: GitopsPlanItem["kind"],
+		name: string,
+		fn: () => Promise<void>,
+	): Promise<void> => {
+		try {
+			await fn();
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			errors.push({ kind, name, message });
+			for (const item of plan.items) {
+				if (item.kind === kind && item.name === name && !item.parent) item.error = message;
+				if (item.kind === "domain" && item.parent === name) item.error = message;
+			}
+		}
+	};
 
 	for (const app of stack.applications ?? []) {
 		if (app.environment !== environmentName) continue;
 		const existing = live.applications.find((row) => row.name === app.name);
 		const action = planAction(plan, "application", app.name);
-		if (action !== "noop") {
-			await applyApplication(app, environmentId, existing);
-			continue;
-		}
-		const application = await db.query.applications.findFirst({
-			where: and(eq(applications.environmentId, environmentId), eq(applications.name, app.name)),
-		});
-		if (application) {
-			const liveDomains = await db.query.domains.findMany({
-				where: eq(domains.applicationId, application.applicationId),
+		await attempt("application", app.name, async () => {
+			if (action !== "noop") {
+				await applyApplication(app, environmentId, existing);
+				return;
+			}
+			const application = await db.query.applications.findFirst({
+				where: and(eq(applications.environmentId, environmentId), eq(applications.name, app.name)),
 			});
-			await syncDomains(app.domains, liveDomains, { applicationId: application.applicationId });
-		}
+			if (application) {
+				const liveDomains = await db.query.domains.findMany({
+					where: eq(domains.applicationId, application.applicationId),
+				});
+				await syncDomains(app.domains, liveDomains, { applicationId: application.applicationId });
+			}
+		});
 	}
 
 	for (const row of stack.compose ?? []) {
 		if (row.environment !== environmentName) continue;
 		const existing = live.compose.find((entry) => entry.name === row.name);
 		const action = planAction(plan, "compose", row.name);
-		if (action !== "noop") {
-			await applyCompose(row, environmentId, existing);
-			continue;
-		}
-		const composeRow = await db.query.compose.findFirst({
-			where: and(eq(compose.environmentId, environmentId), eq(compose.name, row.name)),
-		});
-		if (composeRow) {
-			const liveDomains = await db.query.domains.findMany({
-				where: eq(domains.composeId, composeRow.composeId),
+		await attempt("compose", row.name, async () => {
+			if (action !== "noop") {
+				await applyCompose(row, environmentId, existing);
+				return;
+			}
+			const composeRow = await db.query.compose.findFirst({
+				where: and(eq(compose.environmentId, environmentId), eq(compose.name, row.name)),
 			});
-			await syncDomains(row.domains, liveDomains, { composeId: composeRow.composeId });
-		}
+			if (composeRow) {
+				const liveDomains = await db.query.domains.findMany({
+					where: eq(domains.composeId, composeRow.composeId),
+				});
+				await syncDomains(row.domains, liveDomains, { composeId: composeRow.composeId });
+			}
+		});
 	}
 
 	const databaseKinds: DatabaseKind[] = ["postgres", "mysql", "mariadb", "mongo", "redis"];
@@ -571,12 +615,15 @@ export const applyStack = async (
 			const existing = live.databases[kind].find((entry) => entry.name === dbDesired.name);
 			const action = planAction(plan, kind, dbDesired.name);
 			if (action === "noop") continue;
-			await applyDatabase(kind, dbDesired as Record<string, unknown>, environmentId, existing);
+			await attempt(kind, dbDesired.name, () =>
+				applyDatabase(kind, dbDesired as Record<string, unknown>, environmentId, existing),
+			);
 		}
 	}
 
 	return {
 		...plan,
-		applied: plan.items.filter((item) => item.action !== "noop").length,
+		applied: plan.items.filter((item) => item.action !== "noop" && !item.error).length,
+		errors,
 	};
 };

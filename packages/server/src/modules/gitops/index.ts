@@ -5,6 +5,7 @@ export {
 	planStack,
 } from "./apply";
 export {
+	type ExportStackOptions,
 	exportStack,
 	randomPassword,
 	resolveEnvironmentId,
@@ -16,9 +17,11 @@ export {
 	type GitopsPlanItem,
 	type GitopsPlanResult,
 	type LiveStackState,
+	summarizePlanNeeds,
 } from "./plan";
 export {
 	fetchStackYamlFromUrl,
+	itemsToRedeploy,
 	type RedeployFromApplyResult,
 	redeployChangedFromApply,
 } from "./redeploy";

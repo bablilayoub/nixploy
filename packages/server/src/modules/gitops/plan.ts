@@ -9,7 +9,41 @@ export interface GitopsPlanItem {
 	environment: string;
 	parent?: string;
 	changes?: string[];
+	/** Set by apply when this item could not be written (others still applied). */
+	error?: string;
 }
+
+/** What an apply of this plan needs permission for (service items only; domains ride on their parent). */
+export interface PlanNeeds {
+	/** Number of new services the apply would create (quota + `service.create`). */
+	creates: number;
+	/** Any service or domain update/delete (`service.write`). */
+	writes: boolean;
+	/** Applications/compose that would be redeployed (`service.deploy`). */
+	redeploys: number;
+}
+
+export const summarizePlanNeeds = (plan: GitopsPlanResult): PlanNeeds => {
+	let creates = 0;
+	let writes = false;
+	let redeploys = 0;
+	for (const item of plan.items) {
+		if (item.action === "noop") continue;
+		if (item.kind === "domain") {
+			writes = true;
+			continue;
+		}
+		if (item.action === "create") creates += 1;
+		else writes = true;
+		if (
+			(item.kind === "application" || item.kind === "compose") &&
+			(item.action === "create" || (item.changes?.length ?? 0) > 0)
+		) {
+			redeploys += 1;
+		}
+	}
+	return { creates, writes, redeploys };
+};
 
 export interface GitopsPlanResult {
 	projectId: string;
@@ -20,13 +54,20 @@ export interface GitopsPlanResult {
 
 const stableEqual = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
-const diffFields = (
+/**
+ * Fields the manifest actually sets (`undefined` = "leave as is", never
+ * "reset to null"): a hand-written manifest listing only `repository` and
+ * `branch` must not diff every omitted column against the DB defaults, or
+ * every apply would report — and redeploy — unchanged services.
+ */
+export const diffFields = (
 	desired: Record<string, unknown>,
 	live: Record<string, unknown>,
-	fields: string[],
+	fields: readonly string[],
 ): string[] => {
 	const changes: string[] = [];
 	for (const field of fields) {
+		if (!(field in desired) || desired[field] === undefined) continue;
 		const desiredValue = desired[field] ?? null;
 		const liveValue = live[field] ?? null;
 		if (!stableEqual(desiredValue, liveValue)) {
@@ -36,11 +77,17 @@ const diffFields = (
 	return changes;
 };
 
+/** Domain fields diffed per parent kind: `serviceName` only exists on compose domains. */
+const DOMAIN_FIELDS: Record<"application" | "compose", readonly string[]> = {
+	application: ["https", "certificateType", "port"],
+	compose: ["https", "certificateType", "port", "serviceName"],
+};
+
 const domainKey = (domain: { host: string; path?: string | null; port?: number | null }) =>
 	`${domain.host}|${domain.path ?? "/"}|${domain.port ?? ""}`;
 
 const planDomains = (
-	_parentKind: "application" | "compose",
+	parentKind: "application" | "compose",
 	parentName: string,
 	environmentName: string,
 	desired: Array<{
@@ -77,12 +124,7 @@ const planDomains = (
 			});
 			continue;
 		}
-		const changes = diffFields(domain, existing, [
-			"https",
-			"certificateType",
-			"port",
-			"serviceName",
-		]);
+		const changes = diffFields(domain, existing, DOMAIN_FIELDS[parentKind]);
 		items.push({
 			kind: "domain",
 			action: changes.length > 0 ? "update" : "noop",
@@ -192,7 +234,7 @@ export const buildPlan = (desired: NixployStack, live: LiveStackState): GitopsPl
 				environment: environmentName,
 			});
 		} else {
-			const changes = diffFields(app, existing.row, [...APPLICATION_FIELDS]);
+			const changes = diffFields(app, existing.row, APPLICATION_FIELDS);
 			items.push({
 				kind: "application",
 				action: changes.length > 0 ? "update" : "noop",
@@ -232,7 +274,7 @@ export const buildPlan = (desired: NixployStack, live: LiveStackState): GitopsPl
 				environment: environmentName,
 			});
 		} else {
-			const changes = diffFields(row, existing.row, [...COMPOSE_FIELDS]);
+			const changes = diffFields(row, existing.row, COMPOSE_FIELDS);
 			items.push({
 				kind: "compose",
 				action: changes.length > 0 ? "update" : "noop",
@@ -275,7 +317,7 @@ export const buildPlan = (desired: NixployStack, live: LiveStackState): GitopsPl
 				});
 				continue;
 			}
-			const changes = diffFields(db, existing.row, [...DATABASE_FIELDS]);
+			const changes = diffFields(db, existing.row, DATABASE_FIELDS);
 			items.push({
 				kind,
 				action: changes.length > 0 ? "update" : "noop",

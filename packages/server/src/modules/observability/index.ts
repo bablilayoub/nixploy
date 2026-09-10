@@ -1,6 +1,6 @@
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, ilike, isNull, or, sql } from "drizzle-orm";
 import { db } from "../../db";
-import { alertRules, incidents, serviceLogs, uptimeProbes } from "../../db/schema";
+import { alertRules, deployments, incidents, serviceLogs, uptimeProbes } from "../../db/schema";
 import { assertSafeOutboundUrl } from "../../utils/public-url";
 import { notifyEvent } from "../notifications";
 
@@ -121,9 +121,86 @@ export async function deleteAlertRule(alertRuleId: string, organizationId: strin
 		);
 }
 
+/** Metrics an alert rule can watch (mirrors the router's `metricSchema`). */
+export const ALERT_RULE_METRICS = ["cpu", "memory", "restarts", "deploy_failure_streak"] as const;
+export type AlertRuleMetric = (typeof ALERT_RULE_METRICS)[number];
+
+/**
+ * Distinct metrics used by enabled alert rules, so the metrics-history pass
+ * only pays for restart counting / deploy-streak queries when a rule needs them.
+ */
+export async function requiredAlertMetrics(): Promise<Set<AlertRuleMetric>> {
+	const rows = await db
+		.selectDistinct({ metric: alertRules.metric })
+		.from(alertRules)
+		.where(eq(alertRules.enabled, true));
+	return new Set(
+		rows
+			.map((row) => row.metric)
+			.filter((metric): metric is AlertRuleMetric =>
+				(ALERT_RULE_METRICS as readonly string[]).includes(metric),
+			),
+	);
+}
+
+/** Key of the deploy-failure-streak map for a service. */
+export const deployStreakKey = (service: {
+	applicationId?: string | null;
+	composeId?: string | null;
+}): string | null =>
+	service.applicationId
+		? `application:${service.applicationId}`
+		: service.composeId
+			? `compose:${service.composeId}`
+			: null;
+
+const DEPLOY_STREAK_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
+const DEPLOY_STREAK_MAX_ROWS = 5000;
+
+/**
+ * Consecutive failed deployments per service, newest first: the streak ends
+ * at the first successful deployment (in-flight ones are ignored). Schedule
+ * runs share the deployments table and are excluded. One query per pass.
+ */
+export async function computeDeployFailureStreaks(): Promise<Map<string, number>> {
+	const rows = await db
+		.select({
+			applicationId: deployments.applicationId,
+			composeId: deployments.composeId,
+			status: deployments.status,
+		})
+		.from(deployments)
+		.where(
+			and(
+				isNull(deployments.scheduleId),
+				gt(deployments.createdAt, new Date(Date.now() - DEPLOY_STREAK_LOOKBACK_MS)),
+			),
+		)
+		.orderBy(desc(deployments.createdAt))
+		.limit(DEPLOY_STREAK_MAX_ROWS);
+
+	const streaks = new Map<string, number>();
+	const closed = new Set<string>();
+	for (const row of rows) {
+		const key = deployStreakKey(row);
+		if (!key || closed.has(key)) continue;
+		if (row.status === "error") {
+			streaks.set(key, (streaks.get(key) ?? 0) + 1);
+		} else if (row.status === "done") {
+			closed.add(key);
+			if (!streaks.has(key)) streaks.set(key, 0);
+		}
+	}
+	return streaks;
+}
+
 /**
  * Evaluate per-service alert rules against a metrics sample.
- * Called from the metrics-history cron alongside org-wide thresholds.
+ * Called from the metrics-history cron alongside org-wide thresholds. A
+ * metric the caller did not measure (`undefined`/`null`) skips its rules —
+ * the caller is responsible for feeding every metric a rule can reference
+ * (see metrics-history: `restarts` from docker, `deployFailureStreak` from
+ * {@link computeDeployFailureStreaks}).
  */
 export async function evaluateServiceAlertRules(input: {
 	organizationId: string;
@@ -131,10 +208,10 @@ export async function evaluateServiceAlertRules(input: {
 	applicationId?: string | null;
 	composeId?: string | null;
 	appName: string;
-	cpu: number;
-	memoryPercent: number;
-	restarts?: number;
-	deployFailureStreak?: number;
+	cpu?: number | null;
+	memoryPercent?: number | null;
+	restarts?: number | null;
+	deployFailureStreak?: number | null;
 }): Promise<void> {
 	const conditions = [
 		eq(alertRules.organizationId, input.organizationId),
@@ -153,8 +230,8 @@ export async function evaluateServiceAlertRules(input: {
 
 	for (const rule of rules) {
 		let value: number | null = null;
-		if (rule.metric === "cpu") value = input.cpu;
-		else if (rule.metric === "memory") value = input.memoryPercent;
+		if (rule.metric === "cpu") value = input.cpu ?? null;
+		else if (rule.metric === "memory") value = input.memoryPercent ?? null;
 		else if (rule.metric === "restarts") value = input.restarts ?? null;
 		else if (rule.metric === "deploy_failure_streak") value = input.deployFailureStreak ?? null;
 		if (value === null || value < rule.threshold) continue;

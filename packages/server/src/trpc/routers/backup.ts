@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import { backups, destinations } from "../../db/schema";
 import { getServiceContext } from "../../modules/application";
+import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { WEB_SERVER_APP_NAME } from "../../modules/backups/instance-backup";
 import { listBackupKeys, restoreBackup } from "../../modules/backups/runner";
 import {
@@ -12,11 +13,7 @@ import {
 	runBackupNow,
 	unregisterBackupSchedule,
 } from "../../modules/backups/scheduler";
-import {
-	assertCapability,
-	assertOrgRole,
-	resolveCallerOrganizationId,
-} from "../../modules/projects";
+import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 import { redactDestinationSecrets } from "../redact-secrets";
@@ -154,9 +151,9 @@ export const backupRouter = router({
 
 		let appName: string;
 		if (input.databaseType === "web-server") {
-			// Instance backups cover every tenant's data — infrastructure-level,
-			// so they require the admin role on top of the backups capability.
-			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			// Instance backups dump every tenant's rows plus the config dir
+			// (acme.json, SSH keys) — platform-level, instance admins only.
+			await assertInstanceAdmin(ctx.session);
 			appName = WEB_SERVER_APP_NAME;
 		} else {
 			const service = await assertDatabaseServiceAccess(
@@ -207,7 +204,10 @@ export const backupRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
-			await findBackupOrThrow(input.backupId, organizationId);
+			const existing = await findBackupOrThrow(input.backupId, organizationId);
+			if (existing.databaseType === "web-server") {
+				await assertInstanceAdmin(ctx.session);
+			}
 			if (input.schedule && !isValidBackupCron(input.schedule)) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
@@ -235,6 +235,9 @@ export const backupRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 		const row = await findBackupOrThrow(input.backupId, organizationId);
+		if (row.databaseType === "web-server") {
+			await assertInstanceAdmin(ctx.session);
+		}
 		unregisterBackupSchedule(row.backupId);
 		await db.delete(backups).where(eq(backups.backupId, row.backupId));
 		return true;
@@ -245,7 +248,17 @@ export const backupRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 		const row = await findBackupOrThrow(input.backupId, organizationId);
-		await runBackupNow(row);
+		if (row.databaseType === "web-server") {
+			await assertInstanceAdmin(ctx.session);
+		}
+		try {
+			await runBackupNow(row);
+		} catch (error) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: error instanceof Error ? error.message : "Backup failed",
+			});
+		}
 		return { success: true };
 	}),
 

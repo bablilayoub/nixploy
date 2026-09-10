@@ -117,7 +117,7 @@ export interface DatabaseTypeConfig<TRow extends BaseRow> {
 	containerEnv(row: TRow): Record<string, string>;
 	/**
 	 * Extra args appended to the image entrypoint when the row has no custom
-	 * `command` (e.g. redis `--requirepass`, mongo `--replSet`).
+	 * `command` (e.g. the redis `--requirepass` wrapper).
 	 */
 	defaultArgs(row: TRow): string[];
 	/** Build a connection URL for this database type. */
@@ -127,20 +127,62 @@ export interface DatabaseTypeConfig<TRow extends BaseRow> {
 const encode = encodeURIComponent;
 
 /**
+ * Major Postgres version of an image ref (`postgres:18.1-alpine` → 18,
+ * `timescale/timescaledb:2.17-pg17` → 17). `null` when the tag carries no
+ * version (`latest`, digest-only refs, custom names).
+ */
+export function postgresMajorVersion(image: string): number | null {
+	const lastSlash = image.lastIndexOf("/");
+	const nameAndTag = lastSlash === -1 ? image : image.slice(lastSlash + 1);
+	const colon = nameAndTag.indexOf(":");
+	if (colon === -1) return null;
+	const tag = nameAndTag.slice(colon + 1).split("@")[0] ?? "";
+	const pgTag = tag.match(/(?:^|[^a-z0-9])pg(\d+)(?:$|[^0-9])/i);
+	if (pgTag) return Number.parseInt(pgTag[1] as string, 10);
+	const leading = tag.match(/^(\d+)/);
+	return leading ? Number.parseInt(leading[1] as string, 10) : null;
+}
+
+/** Data dir the postgres container is told to use (mounted volume root). */
+const POSTGRES_DATA_DIR = "/var/lib/postgresql/data";
+
+/**
+ * postgres:18+ moved the image VOLUME to `/var/lib/postgresql` with
+ * `PGDATA=/var/lib/postgresql/18/docker`, i.e. outside our
+ * `/var/lib/postgresql/data` mount — a redeploy would start on an empty
+ * cluster. Pinning PGDATA under the mount keeps the data on the named volume
+ * for every version (the official 18 docs recommend a subdirectory).
+ * Versions < 18 keep their historical default (`PGDATA` = mount root) so
+ * existing clusters are untouched; unversioned tags resolve to the current
+ * major (18+) behaviour.
+ */
+export function postgresPgdata(image: string): string | null {
+	const major = postgresMajorVersion(image);
+	if (major !== null && major < 18) return null;
+	return `${POSTGRES_DATA_DIR}/pgdata`;
+}
+
+const POSTGRES_DEFAULT_IMAGE = "postgres:17";
+
+/**
  * Indexed by {@link DatabaseKind} so `DATABASE_CONFIGS[kind]` with a generic
  * `K extends DatabaseKind` yields `DatabaseTypeConfig<DatabaseRowMap[K]>`
  * (an explicit per-key annotation would widen lookups to a union of configs).
  */
 export const DATABASE_CONFIGS: { [K in DatabaseKind]: DatabaseTypeConfig<DatabaseRowMap[K]> } = {
 	postgres: {
-		defaultImage: "postgres:17",
+		defaultImage: POSTGRES_DEFAULT_IMAGE,
 		internalPort: 5432,
-		dataDir: "/var/lib/postgresql/data",
-		containerEnv: (row) => ({
-			POSTGRES_DB: row.databaseName,
-			POSTGRES_USER: row.databaseUser,
-			POSTGRES_PASSWORD: row.databasePassword,
-		}),
+		dataDir: POSTGRES_DATA_DIR,
+		containerEnv: (row) => {
+			const pgdata = postgresPgdata(row.dockerImage || POSTGRES_DEFAULT_IMAGE);
+			return {
+				POSTGRES_DB: row.databaseName,
+				POSTGRES_USER: row.databaseUser,
+				POSTGRES_PASSWORD: row.databasePassword,
+				...(pgdata ? { PGDATA: pgdata } : {}),
+			};
+		},
 		defaultArgs: () => [],
 		connectionUrl: (row, host, port) =>
 			`postgresql://${encode(row.databaseUser)}:${encode(row.databasePassword)}@${host}:${port}/${row.databaseName}`,
@@ -181,11 +223,13 @@ export const DATABASE_CONFIGS: { [K in DatabaseKind]: DatabaseTypeConfig<Databas
 			MONGO_INITDB_ROOT_USERNAME: row.databaseUser,
 			MONGO_INITDB_ROOT_PASSWORD: row.databasePassword,
 		}),
-		defaultArgs: (row) => (row.replicaSet ? ["--replSet", row.replicaSet, "--bind_ip_all"] : []),
-		connectionUrl: (row, host, port) => {
-			const base = `mongodb://${encode(row.databaseUser)}:${encode(row.databasePassword)}@${host}:${port}/?authSource=admin`;
-			return row.replicaSet ? `${base}&replicaSet=${encode(row.replicaSet)}` : base;
-		},
+		// Replica sets are not supported: `--replSet` with root credentials
+		// requires a keyFile plus `rs.initiate()` the engine does not
+		// provision, so mongod refuses to start. The legacy `replicaSet`
+		// column is ignored (the router rejects setting it).
+		defaultArgs: () => [],
+		connectionUrl: (row, host, port) =>
+			`mongodb://${encode(row.databaseUser)}:${encode(row.databasePassword)}@${host}:${port}/?authSource=admin`,
 	},
 	redis: {
 		defaultImage: "redis:8-alpine",
@@ -573,6 +617,66 @@ export async function inspectServiceState(
 	};
 }
 
+// ── ownership guard ─────────────────────────────────────────────────────────
+
+/** Labels stamped on every swarm service the engine creates. */
+export const MANAGED_LABEL = "nixploy.managed";
+export const SERVICE_TYPE_LABEL = "nixploy.service.type";
+
+/**
+ * Whether a swarm service's labels identify it as an engine-managed database
+ * of `kind` (any kind when omitted). Platform services (`nixploy-postgres`)
+ * and application services carry no such label.
+ */
+export function isManagedDatabaseLabels(
+	labels: Record<string, string> | null | undefined,
+	kind?: DatabaseKind,
+): boolean {
+	if (labels?.[MANAGED_LABEL] !== "true") return false;
+	const type = labels[SERVICE_TYPE_LABEL];
+	if (!type || !(type in DATABASE_CONFIGS)) return false;
+	return kind ? type === kind : true;
+}
+
+/**
+ * Refuse to update/remove a swarm service the engine did not create — a row
+ * whose appName collides with the platform's own Postgres or another
+ * tenant's application must never replace or delete that service.
+ */
+async function assertManagedDatabaseService(
+	appName: string,
+	serverId: string | null,
+	kind: DatabaseKind | undefined,
+	action: "update" | "remove",
+): Promise<void> {
+	let labels: Record<string, string> | null | undefined;
+	if (isRemote(serverId)) {
+		const out = await execAsyncRemote(
+			serverId,
+			`docker service inspect --format '{{json .Spec.Labels}}' ${shellQuote(appName)} 2>/dev/null || true`,
+		);
+		const trimmed = out.trim();
+		if (!trimmed) return; // no such service — nothing to protect
+		try {
+			labels = JSON.parse(trimmed) as Record<string, string> | null;
+		} catch {
+			labels = null;
+		}
+	} else {
+		const existing = await docker
+			.getService(appName)
+			.inspect()
+			.catch(() => null);
+		if (!existing) return;
+		labels = existing.Spec?.Labels as Record<string, string> | undefined;
+	}
+	if (!isManagedDatabaseLabels(labels, kind)) {
+		throw new Error(
+			`Refusing to ${action} swarm service "${appName}": it is not a Nixploy-managed ${kind ?? "database"} service`,
+		);
+	}
+}
+
 // ── public engine API ───────────────────────────────────────────────────────
 
 /** Whether a swarm service for this database exists on the target server. */
@@ -593,6 +697,7 @@ export async function deployDatabase<K extends DatabaseKind>(
 ): Promise<void> {
 	const def = buildServiceDefinition(kind, row);
 	await ensureNetwork(row.serverId);
+	await assertManagedDatabaseService(def.name, row.serverId, kind, "update");
 
 	if (isRemote(row.serverId)) {
 		// `docker service update` cannot re-key mounts/env atomically; a
@@ -675,13 +780,40 @@ async function scaleDatabase(
 	});
 }
 
-/** Remove the swarm service and its `<appName>-data` volume. Idempotent. */
-export async function removeDatabase(appName: string, serverId: string | null): Promise<void> {
+/** How long to wait for the last task container to leave after `service rm`. */
+const REMOVE_TASK_WAIT_MS = 30_000;
+const REMOVE_VOLUME_ATTEMPTS = 5;
+const REMOVE_VOLUME_RETRY_MS = 2_000;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Remove the swarm service and its `<appName>-data` volume. Idempotent.
+ *
+ * `docker service rm` returns before the task container has stopped; a
+ * `volume rm` issued immediately fails with "volume is in use" and the data
+ * volume stays orphaned. So: wait (bounded) until no task container with
+ * the service label remains, then remove the volume with a few retries.
+ * `kind` (when known) tightens the ownership guard — a service the engine
+ * did not create is never touched.
+ */
+export async function removeDatabase(
+	appName: string,
+	serverId: string | null,
+	kind?: DatabaseKind,
+): Promise<void> {
 	const volumeName = `${appName}-data`;
+	await assertManagedDatabaseService(appName, serverId, kind, "remove");
 	if (isRemote(serverId)) {
+		const label = shellQuote(`label=com.docker.swarm.service.name=${appName}`);
 		await execAsyncRemote(
 			serverId,
-			`docker service rm ${shellQuote(appName)} >/dev/null 2>&1 || true; docker volume rm ${shellQuote(volumeName)} >/dev/null 2>&1 || true`,
+			[
+				`docker service rm ${shellQuote(appName)} >/dev/null 2>&1 || true`,
+				`i=0; while [ "$i" -lt ${Math.floor(REMOVE_TASK_WAIT_MS / 1000)} ] && [ -n "$(docker ps -aq --filter ${label} 2>/dev/null)" ]; do sleep 1; i=$((i+1)); done`,
+				`if docker volume inspect ${shellQuote(volumeName)} >/dev/null 2>&1; then i=0; until docker volume rm ${shellQuote(volumeName)} >/dev/null 2>&1 || [ "$i" -ge ${REMOVE_VOLUME_ATTEMPTS} ]; do sleep ${Math.floor(REMOVE_VOLUME_RETRY_MS / 1000)}; i=$((i+1)); done; fi`,
+				"true",
+			].join("; "),
 		);
 		return;
 	}
@@ -689,10 +821,40 @@ export async function removeDatabase(appName: string, serverId: string | null): 
 		.getService(appName)
 		.remove()
 		.catch(() => undefined);
-	await docker
-		.getVolume(volumeName)
-		.remove()
-		.catch(() => undefined);
+
+	const deadline = Date.now() + REMOVE_TASK_WAIT_MS;
+	while (Date.now() < deadline) {
+		const remaining = await docker
+			.listContainers({
+				all: true,
+				filters: { label: [`com.docker.swarm.service.name=${appName}`] },
+			})
+			.catch(() => []);
+		if (remaining.length === 0) break;
+		await sleep(1_000);
+	}
+
+	const volume = docker.getVolume(volumeName);
+	const exists = await volume
+		.inspect()
+		.then(() => true)
+		.catch(() => false);
+	if (!exists) return;
+	for (let attempt = 1; attempt <= REMOVE_VOLUME_ATTEMPTS; attempt++) {
+		try {
+			await volume.remove();
+			return;
+		} catch (error) {
+			const status = (error as { statusCode?: number }).statusCode;
+			if (status === 404) return;
+			if (attempt === REMOVE_VOLUME_ATTEMPTS) {
+				throw new Error(
+					`Removed service "${appName}" but its data volume "${volumeName}" is still in use — remove it manually`,
+				);
+			}
+			await sleep(REMOVE_VOLUME_RETRY_MS);
+		}
+	}
 }
 
 /** Force a rolling re-creation of the service's tasks (re-pull + restart). */

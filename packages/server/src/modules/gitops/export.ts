@@ -55,6 +55,7 @@ const mapCompose = (
 	row: typeof compose.$inferSelect,
 	environmentName: string,
 	domainRows: Array<typeof domains.$inferSelect>,
+	includeComposeFile: boolean,
 ): GitopsCompose => ({
 	name: row.name,
 	environment: environmentName,
@@ -63,7 +64,9 @@ const mapCompose = (
 	composeType: row.composeType,
 	sourceType: row.sourceType,
 	composePath: row.composePath,
-	composeFile: row.sourceType === "raw" ? row.composeFile : undefined,
+	// Inline compose files carry credentials; the router only asks for them
+	// when the caller holds `secrets.read` (parity with compose.one redaction).
+	composeFile: includeComposeFile && row.sourceType === "raw" ? row.composeFile : undefined,
 	repository: row.repository,
 	owner: row.owner,
 	branch: row.branch,
@@ -72,11 +75,17 @@ const mapCompose = (
 	domains: mapApplicationDomains(domainRows),
 });
 
+export interface ExportStackOptions {
+	/** Include raw compose files (secret-bearing) — caller must hold `secrets.read`. */
+	includeComposeFile?: boolean;
+}
+
 /** Export the current project + environment as a nixploy.yaml-friendly object. */
 export const exportStack = async (
 	projectId: string,
 	environmentName: string,
 	organizationId: string,
+	options: ExportStackOptions = {},
 ): Promise<NixployStack> => {
 	const project = await findProjectById(projectId, organizationId);
 	const environment = await db.query.environments.findFirst({
@@ -132,7 +141,14 @@ export const exportStack = async (
 			)
 			.sort((a, b) => a.name.localeCompare(b.name)),
 		compose: services.compose
-			.map((row) => mapCompose(row, environment.name, domainsByCompose.get(row.composeId) ?? []))
+			.map((row) =>
+				mapCompose(
+					row,
+					environment.name,
+					domainsByCompose.get(row.composeId) ?? [],
+					options.includeComposeFile === true,
+				),
+			)
 			.sort((a, b) => a.name.localeCompare(b.name)),
 		databases: {
 			postgres: services.postgres

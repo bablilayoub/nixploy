@@ -6,9 +6,9 @@
  * - `restoreCommand` reads the raw (uncompressed) dump bytes from stdin.
  *
  * Passwords are never placed on argv. MySQL/MariaDB read `MYSQL_PWD`;
- * MongoDB reads `MONGO_PASSWORD`. The backup runner injects those via
- * `docker exec -e VAR` from the Node/SSH process environment (not the
- * shell command string).
+ * MongoDB tools read theirs from a throwaway `--config` YAML file written
+ * from `MONGO_PASSWORD`. The backup runner feeds those variables to the
+ * container shell through stdin (never the docker/ps argv surface).
  *
  * Compression (gzip) and transport-safe encoding (base64) are applied by the
  * backup runner, so these commands stay plain and binary-safe.
@@ -38,13 +38,25 @@ export interface DumpEngineConfig {
 	restoreCommand(params: DumpCommandParams): string;
 }
 
+/**
+ * mongodump/mongorestore accept sensitive options (`password`, `uri`) from a
+ * `--config` YAML file (database-tools >= 100.0), which keeps the password
+ * off the container's process argv. The file is written under umask 077
+ * from `$MONGO_PASSWORD` (YAML single-quote escaping) and removed once the
+ * tool exits; the tool's exit status is preserved.
+ */
+const withMongoConfig = (tool: "mongodump" | "mongorestore", args: string) =>
+	`umask 077; __cfg=$(mktemp) && printf "password: '%s'\\n" "$(printf '%s' "$MONGO_PASSWORD" | sed "s/'/''/g")" >"$__cfg" && ${tool} --config="$__cfg" ${args}; __mongo_rc=$?; rm -f "$__cfg"; [ "$__mongo_rc" -eq 0 ]`;
+
 export const DB_DUMP_CONFIG: Record<BackupDatabaseType, DumpEngineConfig> = {
 	postgres: {
 		extension: "sql",
 		// Local connections inside the official postgres image are trust-authenticated,
-		// so no password is needed here (same approach as Dokploy).
+		// so no password is needed here (same approach as Dokploy). `--clean
+		// --if-exists` makes the dump restorable into a database that already
+		// holds the schema (psql runs with ON_ERROR_STOP).
 		dumpCommand: ({ database, databaseUser }) =>
-			`pg_dump -U ${sq(databaseUser)} -d ${sq(database)} --no-owner --no-privileges`,
+			`pg_dump -U ${sq(databaseUser)} -d ${sq(database)} --no-owner --no-privileges --clean --if-exists`,
 		restoreCommand: ({ database, databaseUser }) =>
 			`psql -U ${sq(databaseUser)} -d ${sq(database)} -v ON_ERROR_STOP=1`,
 	},
@@ -68,8 +80,14 @@ export const DB_DUMP_CONFIG: Record<BackupDatabaseType, DumpEngineConfig> = {
 		extension: "archive",
 		passwordEnv: ({ databasePassword }) => ({ MONGO_PASSWORD: databasePassword }),
 		dumpCommand: ({ database, databaseUser }) =>
-			`mongodump -u ${sq(databaseUser)} -p "$MONGO_PASSWORD" --authenticationDatabase admin -d ${sq(database)} --archive`,
+			withMongoConfig(
+				"mongodump",
+				`-u ${sq(databaseUser)} --authenticationDatabase admin -d ${sq(database)} --archive`,
+			),
 		restoreCommand: ({ database, databaseUser }) =>
-			`mongorestore -u ${sq(databaseUser)} -p "$MONGO_PASSWORD" --authenticationDatabase admin -d ${sq(database)} --archive --drop`,
+			withMongoConfig(
+				"mongorestore",
+				`-u ${sq(databaseUser)} --authenticationDatabase admin -d ${sq(database)} --archive --drop`,
+			),
 	},
 };

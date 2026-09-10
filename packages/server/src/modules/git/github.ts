@@ -6,6 +6,8 @@ import { db } from "../../db";
 import { github, gitProviders } from "../../db/schema";
 
 const GITHUB_API_URL = "https://api.github.com";
+/** Per-request timeout for GitHub API calls (a stalled API must not pin a request for minutes). */
+const GITHUB_REQUEST_TIMEOUT_MS = 15_000;
 const GITHUB_APP_CREATION_URL = "https://github.com/settings/apps/new";
 
 /** State payload round-tripped through the GitHub App manifest flow. */
@@ -211,6 +213,7 @@ export async function setupGithubApp(input: {
 		method: "POST",
 		headers: { Accept: "application/vnd.github+json" },
 		redirect: "error",
+		signal: AbortSignal.timeout(GITHUB_REQUEST_TIMEOUT_MS),
 	});
 	if (!response.ok) {
 		throw new Error(`GitHub App conversion failed: ${response.status}`);
@@ -242,7 +245,7 @@ export async function syncGithubInstallation(githubId: string) {
 	}
 	const auth = createAppAuth({ appId: row.githubAppId, privateKey: row.githubPrivateKey });
 	const { token } = await auth({ type: "app" });
-	const octokit = new Octokit({ auth: token });
+	const octokit = new Octokit({ auth: token, request: { timeout: GITHUB_REQUEST_TIMEOUT_MS } });
 	const installations = await octokit.paginate(octokit.rest.apps.listInstallations, {
 		per_page: 100,
 	});
@@ -285,6 +288,7 @@ export function getGithubOctokit(row: {
 			privateKey: row.githubPrivateKey,
 			installationId: Number(row.githubInstallationId),
 		},
+		request: { timeout: GITHUB_REQUEST_TIMEOUT_MS },
 	});
 }
 

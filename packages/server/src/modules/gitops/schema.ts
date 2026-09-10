@@ -187,15 +187,52 @@ export const gitopsDatabasesSchema = z
 	})
 	.optional();
 
-export const nixployStackSchema = z.object({
-	version: z.literal(NIXPLOY_STACK_VERSION),
-	project: gitopsProjectSchema,
-	environment: gitopsEnvironmentSchema.optional(),
-	environments: z.array(gitopsEnvironmentSchema).optional(),
-	applications: z.array(gitopsApplicationSchema).optional(),
-	compose: z.array(gitopsComposeSchema).optional(),
-	databases: gitopsDatabasesSchema,
-});
+/**
+ * Services are matched to live rows by `(kind, environment, name)`; a
+ * manifest listing the same key twice would create two rows on the first
+ * apply and only ever match one afterwards.
+ */
+export function findDuplicateStackEntries(stack: {
+	applications?: Array<{ name: string; environment: string }>;
+	compose?: Array<{ name: string; environment: string }>;
+	databases?: Partial<Record<string, Array<{ name: string; environment: string }>>>;
+}): string[] {
+	const seen = new Set<string>();
+	const duplicates: string[] = [];
+	const visit = (kind: string, entries: Array<{ name: string; environment: string }> = []) => {
+		for (const entry of entries) {
+			const key = `${kind}/${entry.environment}/${entry.name}`;
+			if (seen.has(key)) duplicates.push(key);
+			seen.add(key);
+		}
+	};
+	visit("application", stack.applications);
+	visit("compose", stack.compose);
+	for (const [kind, entries] of Object.entries(stack.databases ?? {})) {
+		visit(kind, entries);
+	}
+	return duplicates;
+}
+
+export const nixployStackSchema = z
+	.object({
+		version: z.literal(NIXPLOY_STACK_VERSION),
+		project: gitopsProjectSchema,
+		environment: gitopsEnvironmentSchema.optional(),
+		environments: z.array(gitopsEnvironmentSchema).optional(),
+		applications: z.array(gitopsApplicationSchema).optional(),
+		compose: z.array(gitopsComposeSchema).optional(),
+		databases: gitopsDatabasesSchema,
+	})
+	.superRefine((stack, ctx) => {
+		const duplicates = findDuplicateStackEntries(stack);
+		if (duplicates.length > 0) {
+			ctx.addIssue({
+				code: "custom",
+				message: `Duplicate stack entries (kind/environment/name): ${duplicates.join(", ")}`,
+			});
+		}
+	});
 
 export type NixployStack = z.infer<typeof nixployStackSchema>;
 export type GitopsApplication = z.infer<typeof gitopsApplicationSchema>;

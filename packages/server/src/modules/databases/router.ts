@@ -7,9 +7,20 @@ import { assertServerInOrganization } from "../../trpc/assert-org-refs";
 import type { TRPCContext } from "../../trpc/init";
 import { protectedProcedure, router } from "../../trpc/init";
 import { redactDatabaseSecrets } from "../../trpc/redact-secrets";
-import { assertSafeDockerImageRef, assertSafePublishedPort } from "../../utils/validators";
+import {
+	appNameSchema,
+	assertSafeDockerImageRef,
+	assertSafePublishedPort,
+} from "../../utils/validators";
+import { isAppNameTaken } from "../application/app-name";
 import { auditFromSession } from "../audit";
-import { assertCapability, hasCapability, resolveCallerOrganizationId } from "../projects";
+import { unregisterBackupsForService } from "../backups/scheduler";
+import {
+	assertCapability,
+	assertWithinQuota,
+	hasCapability,
+	resolveCallerOrganizationId,
+} from "../projects";
 import {
 	buildConnectionUrl,
 	DATABASE_CONFIGS,
@@ -67,11 +78,32 @@ async function assertEnvironmentAccess(environmentId: string, organizationId: st
 	return environment;
 }
 
-const appNameSchema = z
-	.string()
-	.min(3)
-	.max(63)
-	.regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/, "appName must be lowercase alphanumeric with dashes");
+/**
+ * Unique appName for a new database row: an explicit name must be free
+ * across every service table (the swarm namespace is global — a collision
+ * with an application or the platform's own `nixploy-postgres` would let
+ * `docker service update`/`rm` hit that service); a generated one is
+ * re-rolled on the (unlikely) collision.
+ */
+async function resolveNewAppName(requested: string | undefined, name: string): Promise<string> {
+	if (requested) {
+		if (await isAppNameTaken(requested)) {
+			throw new TRPCError({
+				code: "CONFLICT",
+				message: `appName "${requested}" is already in use`,
+			});
+		}
+		return requested;
+	}
+	for (let attempt = 0; attempt < 10; attempt++) {
+		const candidate = generateDatabaseAppName(name);
+		if (!(await isAppNameTaken(candidate))) return candidate;
+	}
+	throw new TRPCError({
+		code: "INTERNAL_SERVER_ERROR",
+		message: `Could not generate a unique appName for "${name}"`,
+	});
+}
 
 export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRouterOptions<K>) {
 	type Row = DatabaseRowMap[K];
@@ -184,6 +216,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			const organizationId = await getOrganizationId(ctx);
 			await assertCapability(ctx.session.user.id, organizationId, "service.create");
 			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			await assertWithinQuota(organizationId, { services: true });
 			await assertEnvironmentAccess(input.environmentId, organizationId);
 			await assertServerInOrganization(input.serverId, organizationId);
 			if (input.externalPort != null) {
@@ -198,7 +231,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 					message: error instanceof Error ? error.message : "Invalid docker image",
 				});
 			}
-			const appName = input.appName ?? generateDatabaseAppName(input.name);
+			const appName = await resolveNewAppName(input.appName, input.name);
 			try {
 				const inserted = (await db
 					.insert(table)
@@ -245,6 +278,25 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			}
 			await assertServerInOrganization(input.serverId, organizationId);
 			const { [idField]: _id, ...values } = input as Record<string, unknown>;
+			if (typeof values.appName === "string" && values.appName !== existing.appName) {
+				// The swarm service, its `<appName>-data` volume and every backup
+				// row are keyed by appName: renaming a deployed database would
+				// orphan all of them. Renames are only allowed before the first start.
+				if (await databaseServiceExists(existing.appName, existing.serverId)) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "appName cannot be changed once the database has been deployed",
+					});
+				}
+				if (await isAppNameTaken(values.appName)) {
+					throw new TRPCError({
+						code: "CONFLICT",
+						message: `appName "${values.appName}" is already in use`,
+					});
+				}
+			} else if (values.appName === existing.appName) {
+				delete values.appName;
+			}
 			if (typeof values.externalPort === "number") {
 				assertSafePublishedPort(values.externalPort, "externalPort");
 			}
@@ -343,7 +395,9 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			await assertCapability(ctx.session.user.id, organizationId, "service.delete");
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
-			await removeDatabase(row.appName, row.serverId);
+			// Cancel the row's backup crons first so they cannot fire mid-teardown.
+			unregisterBackupsForService({ appName: row.appName });
+			await removeDatabase(row.appName, row.serverId, kind);
 			await db.delete(table).where(eq(idColumn, id));
 			await auditFromSession(ctx, organizationId, {
 				action: `${kind}.delete`,

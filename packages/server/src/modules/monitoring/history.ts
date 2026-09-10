@@ -9,11 +9,14 @@ import { execAsyncRemote } from "../../utils/exec";
 import { resolveLocalContainer } from "../../ws/docker";
 import { mapDockerStats } from "../../ws/docker-stats";
 import { getConfigDir } from "../application/paths";
+import { getDocker } from "../deployment/docker";
 import { notifyEvent } from "../notifications";
 import {
 	buildRemoteSampleCommand,
+	countRecentFailedTasks,
 	parseRemoteSampleOutput,
 	readServerMetricsConfig,
+	remoteSampleTimeoutMs,
 } from "./remote";
 
 const log = createLogger("metrics-history");
@@ -23,11 +26,12 @@ const log = createLogger("metrics-history");
  * a cron snapshots cpu/memory/network for each running service into
  * `$NIXPLOY_CONFIG_DIR/metrics/<appName>.jsonl`, pruned to 48h.
  *
- * Local services are sampled via dockerode. Remote services (hosted on a
- * managed server) are sampled over one SSH batch per server — honoring that
- * server's `metricsConfig.metrics` (enabled / intervalSeconds) — alongside a
- * host-level snapshot stored as `server-<serverId>.jsonl`. A failing or
- * unreachable server is skipped without affecting local sampling.
+ * Local services are sampled via dockerode (a few at a time). Remote services
+ * (hosted on a managed server) are sampled over one SSH batch per server,
+ * servers in parallel — honoring that server's `metricsConfig.metrics`
+ * (enabled / intervalSeconds) — alongside a host-level snapshot stored as
+ * `server-<serverId>.jsonl`. A failing or unreachable server is skipped
+ * without affecting local sampling.
  */
 
 export const METRICS_RETENTION_MS = 48 * 60 * 60 * 1000;
@@ -235,7 +239,7 @@ export async function sampleAllServices(): Promise<void> {
 			columns: { appName: true, serverId: true, environmentId: true },
 		}),
 	]);
-	const targets = [
+	const targets: SampleTarget[] = [
 		...apps.map((row) => ({ ...row, kind: "application" as const })),
 		...composeRows.map((row) => ({ ...row, kind: "compose" as const })),
 		...pg.map((row) => ({ ...row, kind: "other" as const })),
@@ -244,27 +248,42 @@ export async function sampleAllServices(): Promise<void> {
 		...mongoRows.map((row) => ({ ...row, kind: "other" as const })),
 		...redisRows.map((row) => ({ ...row, kind: "other" as const })),
 	];
-	const thresholds = await readThresholds();
+	const context = await loadPassContext();
 	const now = Date.now();
 
-	for (const target of targets.filter((row) => !row.serverId)) {
-		const appName = target.appName;
-		try {
-			const container = await resolveLocalContainer(appName);
-			if (!container) continue; // not running — no samples, no noise
-			const stats = await container.stats({ stream: false });
-			const frame = mapDockerStats(stats);
-			await handleFrame(target, appName, frame, thresholds, now);
-		} catch {
-			// Container racing a restart or stats hiccup — skip this pass.
-		}
-	}
+	// Local + every remote server run side by side: an unreachable remote
+	// must not delay local sampling, and one slow `docker stats` must not
+	// serialize the whole pass past the 30s cadence.
+	await Promise.all([
+		mapWithConcurrency(
+			targets.filter((row) => !row.serverId),
+			LOCAL_SAMPLE_CONCURRENCY,
+			(target) => sampleLocalTarget(target, context, now),
+		),
+		sampleRemoteServers(
+			targets.filter((row) => row.serverId),
+			context,
+			now,
+		),
+	]);
+}
 
-	await sampleRemoteServers(
-		targets.filter((row) => row.serverId),
-		thresholds,
-		now,
-	);
+/** Max local `docker stats` calls in flight (each blocks ~1-2s). */
+const LOCAL_SAMPLE_CONCURRENCY = 4;
+
+async function mapWithConcurrency<T>(
+	items: T[],
+	limit: number,
+	fn: (item: T) => Promise<void>,
+): Promise<void> {
+	let index = 0;
+	const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+		while (index < items.length) {
+			const item = items[index++] as T;
+			await fn(item);
+		}
+	});
+	await Promise.all(workers);
 }
 
 interface SampleTarget {
@@ -284,38 +303,135 @@ interface ServiceFrame {
 	pids: number;
 }
 
+/** Per-pass inputs shared by every target: thresholds + which rule metrics need extra work. */
+interface PassContext {
+	thresholds: AlertThresholds;
+	/** Enabled alert rules reference `restarts` — count crashed tasks per service. */
+	wantRestarts: boolean;
+	/** `deploy_failure_streak` rules exist — streaks computed once per pass. */
+	deployStreaks: Map<string, number> | null;
+}
+
+async function loadPassContext(): Promise<PassContext> {
+	const { requiredAlertMetrics, computeDeployFailureStreaks } = await import("../observability");
+	const [thresholds, metrics] = await Promise.all([readThresholds(), requiredAlertMetrics()]);
+	return {
+		thresholds,
+		wantRestarts: metrics.has("restarts"),
+		deployStreaks: metrics.has("deploy_failure_streak")
+			? await computeDeployFailureStreaks()
+			: null,
+	};
+}
+
+const LOCAL_LABEL_FILTERS = (appName: string) => [
+	`com.docker.swarm.service.name=${appName}`,
+	`com.docker.compose.project=${appName}`,
+	`com.docker.stack.namespace=${appName}`,
+];
+
+/**
+ * Restart signal for a local service: RestartCount of the running container
+ * (in-place restarts, compose `restart:` policies) plus recently crashed task
+ * containers (Swarm crash loops never restart in place).
+ */
+async function countLocalRestarts(
+	appName: string,
+	container: Awaited<ReturnType<typeof resolveLocalContainer>>,
+	now: number,
+): Promise<number> {
+	let restarts = 0;
+	if (container) {
+		const info = await container.inspect();
+		restarts += info.RestartCount ?? 0;
+	}
+	const docker = await getDocker();
+	for (const label of LOCAL_LABEL_FILTERS(appName)) {
+		const exited = await docker.listContainers({
+			all: true,
+			filters: { label: [label], status: ["exited"] },
+		});
+		restarts += countRecentFailedTasks(
+			exited.map((entry) => ({ createdAt: entry.Created * 1000, status: entry.Status })),
+			now,
+		);
+	}
+	return restarts;
+}
+
+async function sampleLocalTarget(
+	target: SampleTarget,
+	context: PassContext,
+	now: number,
+): Promise<void> {
+	const appName = target.appName;
+	try {
+		const container = await resolveLocalContainer(appName);
+		const restarts =
+			context.wantRestarts && target.kind !== "other"
+				? await countLocalRestarts(appName, container, now)
+				: null;
+		if (!container) {
+			// Not running — no samples, no noise. Crash loops still feed the
+			// restart-based rules so "restarts ≥ N" fires without a live container.
+			await evaluateRules(target, appName, { restarts }, context);
+			return;
+		}
+		const stats = await container.stats({ stream: false });
+		const frame = mapDockerStats(stats);
+		await handleFrame(target, appName, frame, context, now, restarts);
+	} catch {
+		// Container racing a restart or stats hiccup — skip this pass.
+	}
+}
+
+/** Per-service alert rules (observability) for application/compose targets. */
+async function evaluateRules(
+	target: SampleTarget,
+	appName: string,
+	metrics: { cpu?: number; memoryPercent?: number; restarts?: number | null },
+	context: PassContext,
+): Promise<void> {
+	if (target.kind !== "application" && target.kind !== "compose") return;
+	const environment = await db.query.environments.findFirst({
+		where: eq(environments.environmentId, target.environmentId),
+		with: { project: true },
+	});
+	if (!environment?.project.organizationId) return;
+	const { evaluateServiceAlertRules, deployStreakKey } = await import("../observability");
+	const applicationId = target.kind === "application" ? (target.applicationId ?? null) : null;
+	const composeId = target.kind === "compose" ? (target.composeId ?? null) : null;
+	const streakKey = deployStreakKey({ applicationId, composeId });
+	await evaluateServiceAlertRules({
+		organizationId: environment.project.organizationId,
+		projectId: environment.project.projectId,
+		applicationId,
+		composeId,
+		appName,
+		cpu: metrics.cpu,
+		memoryPercent: metrics.memoryPercent,
+		restarts: metrics.restarts,
+		deployFailureStreak:
+			context.deployStreaks && streakKey ? (context.deployStreaks.get(streakKey) ?? 0) : null,
+	});
+}
+
 /** Alerts + persistence shared by the local and remote sampling paths. */
 async function handleFrame(
 	target: SampleTarget,
 	appName: string,
 	frame: ServiceFrame,
-	thresholds: AlertThresholds,
+	context: PassContext,
 	now: number,
+	restarts: number | null,
 ): Promise<void> {
-	await evaluateAlerts(appName, target.environmentId, frame, thresholds);
-
-	if (target.kind === "application" || target.kind === "compose") {
-		const environment = await db.query.environments.findFirst({
-			where: eq(environments.environmentId, target.environmentId),
-			with: { project: true },
-		});
-		if (environment?.project.organizationId) {
-			const { evaluateServiceAlertRules } = await import("../observability");
-			await evaluateServiceAlertRules({
-				organizationId: environment.project.organizationId,
-				projectId: environment.project.projectId,
-				applicationId:
-					target.kind === "application" && "applicationId" in target
-						? (target.applicationId ?? null)
-						: null,
-				composeId:
-					target.kind === "compose" && "composeId" in target ? (target.composeId ?? null) : null,
-				appName,
-				cpu: frame.cpu,
-				memoryPercent: frame.memory.percent,
-			});
-		}
-	}
+	await evaluateAlerts(appName, target.environmentId, frame, context.thresholds);
+	await evaluateRules(
+		target,
+		appName,
+		{ cpu: frame.cpu, memoryPercent: frame.memory.percent, restarts },
+		context,
+	);
 
 	await appendPoints(appName, {
 		t: now,
@@ -333,10 +449,10 @@ async function handleFrame(
 /** Platform appNames are lowercase alnum + dash — refuse anything else for shell safety. */
 const SAFE_APP_NAME = /^[a-z0-9][a-z0-9-]*$/;
 
-/** One SSH metrics batch per reachable remote server (failures skip the server only). */
+/** One SSH metrics batch per reachable remote server, servers sampled concurrently. */
 async function sampleRemoteServers(
 	remoteTargets: SampleTarget[],
-	thresholds: AlertThresholds,
+	context: PassContext,
 	now: number,
 ): Promise<void> {
 	const byServer = new Map<string, SampleTarget[]>();
@@ -355,65 +471,86 @@ async function sampleRemoteServers(
 	});
 	const configByServerId = new Map(serverRows.map((row) => [row.serverId, row]));
 
-	for (const [serverId, targets] of byServer) {
-		try {
-			const server = configByServerId.get(serverId);
-			if (server?.serverStatus !== "active") continue;
-			const config = readServerMetricsConfig(server.metricsConfig);
-			if (!config.enabled) continue;
-			const lastAt = remoteLastSampleAt.get(serverId) ?? 0;
-			if (now - lastAt < config.intervalSeconds * 1000) continue;
+	await Promise.all(
+		[...byServer].map(([serverId, targets]) =>
+			sampleOneRemoteServer(serverId, targets, configByServerId.get(serverId), context, now),
+		),
+	);
+}
 
-			const appNames = targets.map((target) => target.appName);
-			const raw = await execAsyncRemote(serverId, buildRemoteSampleCommand(appNames), {
-				timeoutMs: REMOTE_SAMPLE_TIMEOUT_MS,
-			});
-			remoteLastSampleAt.set(serverId, now);
+async function sampleOneRemoteServer(
+	serverId: string,
+	targets: SampleTarget[],
+	server: { metricsConfig: unknown; serverStatus: string } | undefined,
+	context: PassContext,
+	now: number,
+): Promise<void> {
+	try {
+		if (server?.serverStatus !== "active") return;
+		const config = readServerMetricsConfig(server.metricsConfig);
+		if (!config.enabled) return;
+		const lastAt = remoteLastSampleAt.get(serverId) ?? 0;
+		if (now - lastAt < config.intervalSeconds * 1000) return;
 
-			const result = parseRemoteSampleOutput(raw, appNames);
-			if (result.host) {
-				await appendServerPoints(serverId, {
-					t: now,
-					cpu: result.host.cpuPercent,
-					mu: result.host.memoryUsed,
-					mt: result.host.memoryTotal,
-					du: result.host.diskUsed,
-					dt: result.host.diskTotal,
-				});
-			}
-			for (const target of targets) {
-				const frame = result.services.get(target.appName);
-				if (!frame) continue; // not running on this node
-				await handleFrame(
-					target,
-					target.appName,
-					{
-						cpu: frame.cpu,
-						memory: {
-							used: frame.memoryUsed,
-							total: frame.memoryTotal,
-							percent: frame.memoryTotal > 0 ? (frame.memoryUsed / frame.memoryTotal) * 100 : 0,
-						},
-						network: { rx: frame.rx, tx: frame.tx },
-						block: { read: frame.blockRead, write: frame.blockWrite },
-						pids: frame.pids,
-					},
-					thresholds,
-					now,
-				);
-			}
-		} catch (error) {
-			// Unreachable host, SSH hiccup, docker down — record and move on;
-			// local sampling and the other servers are unaffected.
-			log.warn("Remote metrics sample failed", {
-				serverId,
-				error: error instanceof Error ? error.message : String(error),
+		const appNames = targets.map((target) => target.appName);
+		const raw = await execAsyncRemote(
+			serverId,
+			buildRemoteSampleCommand(appNames, { restarts: context.wantRestarts }),
+			{ timeoutMs: remoteSampleTimeoutMs(appNames.length) },
+		);
+		remoteLastSampleAt.set(serverId, now);
+
+		const result = parseRemoteSampleOutput(raw, appNames);
+		if (result.host) {
+			await appendServerPoints(serverId, {
+				t: now,
+				cpu: result.host.cpuPercent,
+				mu: result.host.memoryUsed,
+				mt: result.host.memoryTotal,
+				du: result.host.diskUsed,
+				dt: result.host.diskTotal,
 			});
 		}
+		for (const target of targets) {
+			const restarts =
+				context.wantRestarts && target.kind !== "other"
+					? (result.restarts.get(target.appName) ?? 0)
+					: null;
+			const frame = result.services.get(target.appName);
+			if (!frame) {
+				// Not running on this node — restart-based rules still evaluate.
+				await evaluateRules(target, target.appName, { restarts }, context);
+				continue;
+			}
+			await handleFrame(
+				target,
+				target.appName,
+				{
+					cpu: frame.cpu,
+					memory: {
+						used: frame.memoryUsed,
+						total: frame.memoryTotal,
+						percent: frame.memoryTotal > 0 ? (frame.memoryUsed / frame.memoryTotal) * 100 : 0,
+					},
+					network: { rx: frame.rx, tx: frame.tx },
+					block: { read: frame.blockRead, write: frame.blockWrite },
+					pids: frame.pids,
+				},
+				context,
+				now,
+				restarts,
+			);
+		}
+	} catch (error) {
+		// Unreachable host, SSH hiccup, docker down — record and move on;
+		// local sampling and the other servers are unaffected.
+		log.warn("Remote metrics sample failed", {
+			serverId,
+			error: error instanceof Error ? error.message : String(error),
+		});
 	}
 }
 
-const REMOTE_SAMPLE_TIMEOUT_MS = 25_000;
 /** Last successful sample per server (in-memory; interval restarts on boot). */
 const remoteLastSampleAt = new Map<string, number>();
 

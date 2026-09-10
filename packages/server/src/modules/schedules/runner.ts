@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, compose } from "../../db/schema";
-import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { execAsync, execAsyncRemote, remoteCommandTimeoutMs } from "../../utils/exec";
 
 /**
  * Executes a schedule's command/script against its target:
@@ -111,7 +111,9 @@ export async function runScheduleCommand(target: ScheduleTarget): Promise<string
 			]);
 			const containerId = await findContainerId(target, appName, serviceServerId);
 			const dockerCmd = `docker exec ${shQuote(containerId)} ${target.shellType} -c ${shQuote(inner)}`;
-			return serviceServerId ? execAsyncRemote(serviceServerId, dockerCmd) : execAsync(dockerCmd);
+			return serviceServerId
+				? execAsyncRemote(serviceServerId, dockerCmd)
+				: execAsync(dockerCmd, { timeout: remoteCommandTimeoutMs() });
 		}
 		case "server": {
 			if (!target.serverId) {
@@ -120,7 +122,9 @@ export async function runScheduleCommand(target: ScheduleTarget): Promise<string
 			return execAsyncRemote(target.serverId, inner);
 		}
 		case "nixploy-server": {
-			return execAsync(inner);
+			// Same hard timeout as remote commands: a hung command must not pin
+			// the schedule's in-flight guard forever.
+			return execAsync(inner, { timeout: remoteCommandTimeoutMs() });
 		}
 	}
 }

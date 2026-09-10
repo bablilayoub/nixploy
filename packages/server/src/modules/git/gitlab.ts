@@ -94,11 +94,17 @@ export async function removeGitlab(gitlabId: string, organizationId: string) {
 
 type GitlabRow = NonNullable<Awaited<ReturnType<typeof findGitlabById>>>;
 
+/** Self-hosted instances that accept TCP but stall must not pin a request for undici's 300s. */
+const GITLAB_REQUEST_TIMEOUT_MS = 15_000;
+const GITLAB_PAGE_SIZE = 100;
+const GITLAB_MAX_PAGES = 20;
+
 function gitlabApi(row: GitlabRow, path: string) {
 	const base = row.gitlabUrl.replace(/\/$/, "");
 	return fetch(`${base}/api/v4${path}`, {
 		headers: { "PRIVATE-TOKEN": row.accessToken ?? "" },
 		redirect: "error",
+		signal: AbortSignal.timeout(GITLAB_REQUEST_TIMEOUT_MS),
 	});
 }
 
@@ -173,12 +179,22 @@ export async function getGitlabBranches(input: {
 	const projectId = /^\d+$/.test(input.projectId)
 		? input.projectId
 		: encodeURIComponent(input.projectId);
-	const response = await assertOk(
-		await gitlabApi(row, `/projects/${projectId}/repository/branches?per_page=100`),
-		"list branches",
-	);
-	const branches = (await response.json()) as Array<{ name: string }>;
-	return branches.map((b) => b.name);
+	const names: string[] = [];
+	for (let page = 1; page <= GITLAB_MAX_PAGES; page++) {
+		const response = await assertOk(
+			await gitlabApi(
+				row,
+				`/projects/${projectId}/repository/branches?per_page=${GITLAB_PAGE_SIZE}&page=${page}`,
+			),
+			"list branches",
+		);
+		const batch = (await response.json()) as Array<{ name: string }>;
+		names.push(...batch.map((b) => b.name));
+		// `x-next-page` is empty on the last page; fall back to a short batch.
+		const nextPage = response.headers.get("x-next-page");
+		if (nextPage !== null ? !nextPage.trim() : batch.length < GITLAB_PAGE_SIZE) break;
+	}
+	return names;
 }
 
 export async function testGitlabConnection(gitlabId: string, organizationId: string) {

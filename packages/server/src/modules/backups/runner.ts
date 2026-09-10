@@ -36,6 +36,7 @@ import {
 	parseInstanceDatabaseUrl,
 	WEB_SERVER_CONFIG_SUFFIX,
 } from "./instance-backup";
+import { assertNonEmptyGzip, buildEncodedPipeline, decodePipelineOutput } from "./pipeline";
 
 /**
  * Backup runner: database dumps and volume archives to S3-compatible
@@ -44,9 +45,12 @@ import {
  * Transport strategy (works identically for the local Docker daemon and for
  * remote managed servers over SSH): the dump/archive command runs inside a
  * container on the target server, its bytes are gzipped + base64-encoded in
- * the same shell pipeline, the (text) result travels back through
- * execAsync/execAsyncRemote, and the decoded buffer is uploaded to S3.
- * Restore runs the exact reverse pipeline.
+ * the same shell pipeline (see pipeline.ts — the producer's exit status is
+ * carried along so a failed dump never uploads an empty archive), the (text)
+ * result travels back through execAsync/execAsyncRemote, and the decoded
+ * buffer is uploaded to S3. Restore runs the exact reverse pipeline with the
+ * base64 archive fed through stdin — never inlined on argv, which Linux caps
+ * at 128 KiB per argument (E2BIG).
  */
 
 export type DestinationRow = typeof destinations.$inferSelect;
@@ -207,6 +211,21 @@ async function findLinkedDatabase(backupRow: BackupRow): Promise<LinkedDatabaseR
 	);
 }
 
+/**
+ * Whether the database service a backup row points at still exists. Used by
+ * the scheduler to drop cron jobs whose service was deleted underneath them
+ * (rows cascade, but a captured row keeps firing otherwise).
+ */
+export async function backupServiceExists(backupRow: BackupRow): Promise<boolean> {
+	if (backupRow.databaseType === "web-server") return true;
+	try {
+		await findLinkedDatabase(backupRow);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 async function findContainerId(appName: string, serverId: string | null): Promise<string> {
 	const filters = [
 		`--filter ${shellQuote(`label=com.docker.swarm.service.name=${appName}`)}`,
@@ -265,7 +284,9 @@ export async function runBackup(backupRow: BackupRow): Promise<{ key: string }> 
 		const exports = passwordEntries.map(([key]) => key).join(" ");
 		const reader = passwordEntries.map(([key]) => `IFS= read -r ${key}`).join("; ");
 		const inner = `${reader}; export ${exports}; ${dumpCommand}`;
-		const pipeline = `docker exec -i ${shellQuote(containerId)} sh -c ${sq(inner)} | gzip | base64`;
+		const pipeline = buildEncodedPipeline(
+			`docker exec -i ${shellQuote(containerId)} sh -c ${sq(inner)}`,
+		);
 		encoded = await execAsyncWithStdin(
 			pipeline,
 			`${passwordEntries.map(([, v]) => v).join("\n")}\n`,
@@ -274,13 +295,14 @@ export async function runBackup(backupRow: BackupRow): Promise<{ key: string }> 
 			},
 		);
 	} else {
-		const pipeline = `docker exec ${shellQuote(containerId)} sh -c ${sq(dumpCommand)} | gzip | base64`;
+		const pipeline = buildEncodedPipeline(
+			`docker exec ${shellQuote(containerId)} sh -c ${sq(dumpCommand)}`,
+		);
 		encoded = await run(linked.serverId, pipeline);
 	}
-	const archive = Buffer.from(encoded.replace(/\s+/g, ""), "base64");
-	if (archive.length === 0) {
-		throw new Error(`Dump of ${backupRow.appName} produced no data`);
-	}
+	const label = `Dump of ${backupRow.appName}`;
+	const archive = decodePipelineOutput(encoded, label);
+	assertNonEmptyGzip(archive, label);
 
 	const key = buildBackupKey(backupRow.prefix, backupRow.appName);
 	await uploadToDestination(destination, key, archive);
@@ -361,7 +383,8 @@ export async function restoreBackup(backupRow: BackupRow, key?: string): Promise
 						: `${key}=$(sed -n '${index + 1}p' ${passFile})`,
 				)
 				.join("; ");
-			const wrapped = `${exports}; export ${passwordEntries.map(([key]) => key).join(" ")}; ${restoreCommand}; rm -f ${passFile}`;
+			// Preserve the restore tool's exit status past the cleanup.
+			const wrapped = `${exports}; export ${passwordEntries.map(([key]) => key).join(" ")}; ${restoreCommand}; __rc=$?; rm -f ${passFile}; exit $__rc`;
 			await execAsyncWithStdin(
 				`base64 -d | gunzip | docker exec -i ${shellQuote(containerId)} sh -c ${sq(wrapped)}`,
 				archiveB64,
@@ -371,9 +394,13 @@ export async function restoreBackup(backupRow: BackupRow, key?: string): Promise
 			await run(linked.serverId, `docker exec ${shellQuote(containerId)} rm -f ${passFile}`);
 		}
 	} else {
-		// base64 contains no shell-special characters, so it can be inlined safely.
-		const pipeline = `echo ${archiveB64} | base64 -d | gunzip | docker exec -i ${shellQuote(containerId)} sh -c ${sq(restoreCommand)}`;
-		await run(linked.serverId, pipeline);
+		// The archive travels through stdin: inlining it on argv fails with
+		// E2BIG once the base64 exceeds ~128 KiB (i.e. every real database).
+		await execAsyncWithStdin(
+			`base64 -d | gunzip | docker exec -i ${shellQuote(containerId)} sh -c ${sq(restoreCommand)}`,
+			archiveB64,
+			{ serverId: linked.serverId },
+		);
 	}
 	return { key: targetKey };
 }
@@ -404,7 +431,9 @@ async function dumpInstanceFromContainer(
 		const containerId = output.trim().split("\n")[0]?.trim();
 		if (containerId && /^[a-f0-9]{12,64}$/i.test(containerId)) {
 			return await execAsync(
-				`docker exec ${shellQuote(containerId)} sh -c ${sq(buildInstanceContainerDumpCommand(target))} | gzip | base64`,
+				buildEncodedPipeline(
+					`docker exec ${shellQuote(containerId)} sh -c ${sq(buildInstanceContainerDumpCommand(target))}`,
+				),
 			);
 		}
 	}
@@ -432,21 +461,22 @@ async function runWebServerBackup(backupRow: BackupRow): Promise<{ key: string }
 		.then(() => true)
 		.catch(() => false);
 	const encodedDump = hasLocalPgDump
-		? await execAsync(`set -o pipefail; ${buildInstancePgDumpCommand(target)} | gzip | base64`, {
+		? await execAsync(buildEncodedPipeline(buildInstancePgDumpCommand(target)), {
 				env: { ...process.env, PGPASSWORD: target.password },
 			})
 		: await dumpInstanceFromContainer(target);
-	const dump = Buffer.from(encodedDump.replace(/\s+/g, ""), "base64");
-	if (dump.length === 0) {
-		throw new Error("Dump of the instance database produced no data");
-	}
+	const dump = decodePipelineOutput(encodedDump, "Dump of the instance database");
+	assertNonEmptyGzip(dump, "Dump of the instance database");
 
 	// tar czf already compresses; only base64 for transport.
-	const encodedConfig = await execAsync(`${buildConfigArchiveCommand(getConfigDir())} | base64`);
-	const configArchive = Buffer.from(encodedConfig.replace(/\s+/g, ""), "base64");
-	if (configArchive.length === 0) {
-		throw new Error("Archive of the instance config directory produced no data");
-	}
+	const encodedConfig = await execAsync(
+		buildEncodedPipeline(buildConfigArchiveCommand(getConfigDir()), "base64"),
+	);
+	const configArchive = decodePipelineOutput(
+		encodedConfig,
+		"Archive of the instance config directory",
+	);
+	assertNonEmptyGzip(configArchive, "Archive of the instance config directory");
 
 	const date = new Date();
 	const dumpKey = buildBackupKey(backupRow.prefix, backupRow.appName, date);
@@ -499,12 +529,11 @@ async function runRedisBackup(backupRow: BackupRow): Promise<{ key: string }> {
 	// `docker cp <id>:<dir> -` streams a tar of the data directory.
 	const encoded = await run(
 		linked.serverId,
-		`docker cp ${shellQuote(containerId)}:${dataDir} - | gzip | base64`,
+		buildEncodedPipeline(`docker cp ${shellQuote(containerId)}:${dataDir} -`),
 	);
-	const archive = Buffer.from(encoded.replace(/\s+/g, ""), "base64");
-	if (archive.length === 0) {
-		throw new Error(`Snapshot of redis ${backupRow.appName} produced no data`);
-	}
+	const label = `Snapshot of redis ${backupRow.appName}`;
+	const archive = decodePipelineOutput(encoded, label);
+	assertNonEmptyGzip(archive, label);
 
 	const key = buildBackupKey(backupRow.prefix, backupRow.appName);
 	await uploadToDestination(destination, key, archive);
@@ -541,9 +570,10 @@ async function restoreRedisBackup(backupRow: BackupRow, key?: string): Promise<{
 
 	// The tar holds the data dir at its original absolute path (e.g. `data/`),
 	// so extracting into the container root puts dump.rdb/AOF back in place.
-	await run(
-		linked.serverId,
-		`echo ${archive.toString("base64")} | base64 -d | gunzip | docker cp - ${shellQuote(containerId)}:/`,
+	await execAsyncWithStdin(
+		`base64 -d | gunzip | docker cp - ${shellQuote(containerId)}:/`,
+		archive.toString("base64"),
+		{ serverId: linked.serverId },
 	);
 	// SHUTDOWN drops the connection — a non-zero exit is expected here.
 	await execAsyncWithStdin(
@@ -594,14 +624,22 @@ export async function runVolumeBackup(volumeBackup: VolumeBackupRow): Promise<{ 
 	}
 	const serverId = await resolveVolumeServerId(volumeBackup);
 
+	// `docker run -v <name>:…` silently creates a missing volume, which would
+	// upload an empty archive and prune real ones — require it to exist.
+	await run(
+		serverId,
+		`docker volume inspect ${sq(volumeBackup.volumeName)} --format '{{.Name}}'`,
+	).catch(() => {
+		throw new Error(`Volume ${volumeBackup.volumeName} does not exist on the target server`);
+	});
+
 	const archiveCmd =
 		`docker run --rm -v ${sq(`${volumeBackup.volumeName}:${VOLUME_MOUNT}`)} alpine ` +
 		`sh -c ${sq(`tar czf - -C ${VOLUME_MOUNT} .`)}`;
-	const encoded = await run(serverId, `${archiveCmd} | base64`);
-	const archive = Buffer.from(encoded.replace(/\s+/g, ""), "base64");
-	if (archive.length === 0) {
-		throw new Error(`Archive of volume ${volumeBackup.volumeName} produced no data`);
-	}
+	const encoded = await run(serverId, buildEncodedPipeline(archiveCmd, "base64"));
+	const label = `Archive of volume ${volumeBackup.volumeName}`;
+	const archive = decodePipelineOutput(encoded, label);
+	assertNonEmptyGzip(archive, label);
 
 	const key = buildBackupKey(volumeBackup.prefix, volumeBackup.volumeName);
 	await uploadToDestination(destination, key, archive);
@@ -656,7 +694,7 @@ export async function restoreVolumeBackup(
 	const restoreCmd =
 		`docker run --rm -i -v ${sq(`${volumeBackup.volumeName}:${VOLUME_MOUNT}`)} alpine ` +
 		`sh -c ${sq(`cd ${VOLUME_MOUNT} && tar xzf -`)}`;
-	await run(serverId, `echo ${archive.toString("base64")} | base64 -d | ${restoreCmd}`);
+	await execAsyncWithStdin(`base64 -d | ${restoreCmd}`, archive.toString("base64"), { serverId });
 	return { key: targetKey };
 }
 

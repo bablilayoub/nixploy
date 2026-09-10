@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DB_DUMP_CONFIG, type DumpCommandParams } from "./dump-commands";
 
@@ -27,7 +31,7 @@ describe("DB_DUMP_CONFIG", () => {
 		const config = DB_DUMP_CONFIG.postgres;
 		expect(config.extension).toBe("sql");
 		expect(config.dumpCommand(params)).toBe(
-			"pg_dump -U 'app_user' -d 'app_db' --no-owner --no-privileges",
+			"pg_dump -U 'app_user' -d 'app_db' --no-owner --no-privileges --clean --if-exists",
 		);
 		expect(config.restoreCommand(params)).toBe("psql -U 'app_user' -d 'app_db' -v ON_ERROR_STOP=1");
 	});
@@ -54,16 +58,34 @@ describe("DB_DUMP_CONFIG", () => {
 		expect(config.restoreCommand(params)).not.toContain("mariadb-dump");
 	});
 
-	it("mongo streams an archive with admin auth via env password", () => {
+	it("mongo streams an archive with admin auth via a --config file, never -p", () => {
 		const config = DB_DUMP_CONFIG.mongo;
 		expect(config.extension).toBe("archive");
 		expect(config.passwordEnv?.(params)).toEqual({ MONGO_PASSWORD: "s3cret" });
-		expect(config.dumpCommand(params)).toContain("mongodump");
+		expect(config.dumpCommand(params)).toContain("mongodump --config=");
 		expect(config.dumpCommand(params)).toContain("--archive");
-		expect(config.dumpCommand(params)).toContain("$MONGO_PASSWORD");
+		expect(config.dumpCommand(params)).not.toMatch(/ -p /);
 		expect(config.dumpCommand(params)).not.toContain("s3cret");
-		expect(config.restoreCommand(params)).toContain("mongorestore");
+		expect(config.restoreCommand(params)).toContain("mongorestore --config=");
 		expect(config.restoreCommand(params)).toContain("--drop");
+	});
+
+	it("mongo writes the YAML config from $MONGO_PASSWORD and preserves the tool's exit status", () => {
+		// Stub mongodump: print the config file it was given, exit with $MONGO_STUB_EXIT.
+		const dir = mkdtempSync(path.join(tmpdir(), "nixploy-mongo-"));
+		const stub = path.join(dir, "mongodump");
+		writeFileSync(
+			stub,
+			`#!/bin/sh\nfor a in "$@"; do case "$a" in --config=*) cat "$(printf %s "$a" | cut -c10-)";; esac; done\nexit "\${MONGO_STUB_EXIT:-0}"\n`,
+		);
+		chmodSync(stub, 0o755);
+		const run = (env: Record<string, string>) =>
+			execFileSync("sh", ["-c", DB_DUMP_CONFIG.mongo.dumpCommand(params)], {
+				encoding: "utf8",
+				env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, ...env },
+			});
+		expect(run({ MONGO_PASSWORD: "pa'ss\"w$rd" })).toBe("password: 'pa''ss\"w$rd'\n");
+		expect(() => run({ MONGO_PASSWORD: "x", MONGO_STUB_EXIT: "3" })).toThrow();
 	});
 
 	it("shell-quotes values containing spaces and single quotes", () => {

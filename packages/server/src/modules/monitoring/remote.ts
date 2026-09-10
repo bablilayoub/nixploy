@@ -30,6 +30,46 @@ export interface RemoteSampleResult {
 	host: RemoteHostSample | null;
 	/** appName → container stats (only services with a running container). */
 	services: Map<string, RemoteContainerFrame>;
+	/**
+	 * appName → restart signal: the running container's RestartCount plus the
+	 * service's recently crashed task containers (see {@link countRecentFailedTasks}).
+	 * Present for every listed service, running or not, so crash loops with no
+	 * live container still feed `restarts` alert rules.
+	 */
+	restarts: Map<string, number>;
+}
+
+/** Crashed task containers older than this no longer count as "restarts". */
+export const RESTART_WINDOW_MS = 60 * 60 * 1000;
+
+/** Parse `docker ps --format '{{.CreatedAt}}'` ("2024-01-01 12:00:00 +0000 UTC"). */
+export function parseDockerCreatedAt(text: string): number | null {
+	const match = text.trim().match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([+-]\d{4})/);
+	if (!match) return null;
+	const time = new Date(`${match[1]} ${match[2]}`).getTime();
+	return Number.isFinite(time) ? time : null;
+}
+
+/**
+ * Count task containers that exited non-zero within the restart window.
+ * Swarm never restarts a container in place — a crash-looping service shows
+ * up as a trail of `Exited (1)` task containers (history keeps ~5 per slot),
+ * which is what "restarts ≥ N" alert rules are meant to catch. `Exited (0)`
+ * (scale-down, rolling update) never counts.
+ */
+export function countRecentFailedTasks(
+	entries: Array<{ createdAt: number | null; status: string }>,
+	now = Date.now(),
+	windowMs = RESTART_WINDOW_MS,
+): number {
+	let count = 0;
+	for (const entry of entries) {
+		const code = entry.status.match(/^Exited \((\d+)\)/);
+		if (!code || code[1] === "0") continue;
+		if (entry.createdAt !== null && now - entry.createdAt > windowMs) continue;
+		count += 1;
+	}
+	return count;
 }
 
 /** Per-server sampling knobs from `server.metricsConfig.metrics`. */
@@ -199,6 +239,8 @@ export function parseRemoteSampleOutput(raw: string, appNames: string[]): Remote
 	let memText = "";
 	let diskParsed = { totalBytes: 0, usedBytes: 0, availableBytes: 0 };
 	const services = new Map<string, RemoteContainerFrame>();
+	const restarts = new Map<string, number>();
+	const tasks = new Map<string, Array<{ createdAt: number | null; status: string }>>();
 
 	let section = "";
 	let currentService: string | null = null;
@@ -234,12 +276,34 @@ export function parseRemoteSampleOutput(raw: string, appNames: string[]): Remote
 				break;
 			}
 			case "SVC": {
-				if (!currentService || services.has(currentService)) break;
+				if (!currentService) break;
+				const restartLine = line.match(/^restarts=(\d+)\s*$/);
+				if (restartLine) {
+					restarts.set(
+						currentService,
+						(restarts.get(currentService) ?? 0) + Number.parseInt(restartLine[1] ?? "0", 10),
+					);
+					break;
+				}
+				if (line.startsWith("task=")) {
+					const [createdAt = "", ...statusParts] = line.slice("task=".length).split("|");
+					const list = tasks.get(currentService) ?? [];
+					list.push({ createdAt: parseDockerCreatedAt(createdAt), status: statusParts.join("|") });
+					tasks.set(currentService, list);
+					break;
+				}
+				if (services.has(currentService)) break;
 				const frame = parseDockerStatsJsonLine(line);
 				if (frame) services.set(currentService, frame);
 				break;
 			}
 		}
+	}
+	for (const appName of allowed) {
+		restarts.set(
+			appName,
+			(restarts.get(appName) ?? 0) + countRecentFailedTasks(tasks.get(appName) ?? []),
+		);
 	}
 
 	const memory = parseMeminfo(memText);
@@ -256,14 +320,38 @@ export function parseRemoteSampleOutput(raw: string, appNames: string[]): Remote
 				}
 			: null,
 		services,
+		restarts,
 	};
 }
 
+/** Per-service cost of the SSH batch: three `docker ps`, a 1s+ `docker stats`, inspect, `ps -a`. */
+const REMOTE_SAMPLE_BASE_TIMEOUT_MS = 15_000;
+const REMOTE_SAMPLE_PER_SERVICE_MS = 3_000;
+const REMOTE_SAMPLE_MAX_TIMEOUT_MS = 3 * 60 * 1000;
+
+/** SSH timeout for {@link buildRemoteSampleCommand}, sized by service count. */
+export function remoteSampleTimeoutMs(serviceCount: number): number {
+	return Math.min(
+		REMOTE_SAMPLE_MAX_TIMEOUT_MS,
+		Math.max(25_000, REMOTE_SAMPLE_BASE_TIMEOUT_MS + serviceCount * REMOTE_SAMPLE_PER_SERVICE_MS),
+	);
+}
+
 /**
- * One SSH batch: host /proc/stat delta (1s), meminfo, df and a one-shot
- * `docker stats` for the first container matching each service's labels.
+ * One SSH batch: host /proc/stat delta (1s), meminfo, df and, per service,
+ * a one-shot `docker stats` for the first container matching its labels plus
+ * the restart signal (`restarts=` from the container's RestartCount and one
+ * `task=<createdAt>|<status>` line per exited task container).
+ *
+ * Every conditional is an `if … fi` and the script ends with `true`: the
+ * batch is `;`-joined and its exit status is the LAST command's, so a
+ * stopped final service must not fail the whole sample (which dropped the
+ * host and every other service on that server).
  */
-export function buildRemoteSampleCommand(appNames: string[]): string {
+export function buildRemoteSampleCommand(
+	appNames: string[],
+	options: { restarts?: boolean } = {},
+): string {
 	const lines = [
 		"echo '==CPU_A=='",
 		"grep '^cpu ' /proc/stat",
@@ -277,13 +365,28 @@ export function buildRemoteSampleCommand(appNames: string[]): string {
 	];
 	for (const appName of appNames) {
 		const quoted = shellQuote(appName);
+		const labels = [
+			`label=com.docker.swarm.service.name=${quoted}`,
+			`label=com.docker.compose.project=${quoted}`,
+			`label=com.docker.stack.namespace=${quoted}`,
+		];
 		lines.push(
 			`echo '==SVC==${appName}'`,
-			`cid=$(docker ps -q --filter label=com.docker.swarm.service.name=${quoted} 2>/dev/null | head -n 1)`,
-			`[ -z "$cid" ] && cid=$(docker ps -q --filter label=com.docker.compose.project=${quoted} 2>/dev/null | head -n 1)`,
-			`[ -z "$cid" ] && cid=$(docker ps -q --filter label=com.docker.stack.namespace=${quoted} 2>/dev/null | head -n 1)`,
-			`[ -n "$cid" ] && docker stats --no-stream --format '{{json .}}' "$cid" 2>/dev/null | head -n 1`,
+			`cid=$(docker ps -q --filter ${labels[0]} 2>/dev/null | head -n 1)`,
+			`if [ -z "$cid" ]; then cid=$(docker ps -q --filter ${labels[1]} 2>/dev/null | head -n 1); fi`,
+			`if [ -z "$cid" ]; then cid=$(docker ps -q --filter ${labels[2]} 2>/dev/null | head -n 1); fi`,
+			`if [ -n "$cid" ]; then docker stats --no-stream --format '{{json .}}' "$cid" 2>/dev/null | head -n 1; fi`,
 		);
+		if (options.restarts) {
+			lines.push(
+				`if [ -n "$cid" ]; then echo "restarts=$(docker inspect --format '{{.RestartCount}}' "$cid" 2>/dev/null)"; fi`,
+				...labels.map(
+					(label) =>
+						`docker ps -a --filter ${label} --filter status=exited --format 'task={{.CreatedAt}}|{{.Status}}' 2>/dev/null`,
+				),
+			);
+		}
 	}
+	lines.push("true");
 	return lines.join("; ");
 }

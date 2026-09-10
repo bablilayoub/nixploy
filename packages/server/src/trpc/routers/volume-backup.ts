@@ -269,7 +269,14 @@ export const volumeBackupRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 		const row = await findVolumeBackupOrThrow(input.volumeBackupId, organizationId);
-		await runVolumeBackupNow(row);
+		try {
+			await runVolumeBackupNow(row);
+		} catch (error) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: error instanceof Error ? error.message : "Volume backup failed",
+			});
+		}
 		return { success: true };
 	}),
 

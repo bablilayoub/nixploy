@@ -3,9 +3,10 @@ import path from "node:path";
 import { eq } from "drizzle-orm";
 import schedule from "node-schedule";
 import { db } from "../../db";
-import { deployments, schedules } from "../../db/schema";
+import { applications, compose, deployments, schedules } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
 import { getConfigDir } from "../application/paths";
+import { isValidCronExpression } from "./cron";
 import { runScheduleCommand } from "./runner";
 
 const log = createLogger("schedules");
@@ -25,11 +26,11 @@ export interface ScheduleRunState {
 const SCHEDULES_LOG_DIR =
 	process.env.NIXPLOY_SCHEDULES_LOG_PATH ?? path.join(getConfigDir(), "schedules");
 
-/** Live node-schedule jobs, keyed by scheduleId. */
-const jobs = new Map<string, schedule.Job>();
+/** Live node-schedule jobs (plus the row they were registered from), keyed by scheduleId. */
+const jobs = new Map<string, { job: schedule.Job; row: ScheduleRow }>();
 /** Last-run state, keyed by scheduleId (runtime-only, rebuilt on boot). */
 const runStates = new Map<string, ScheduleRunState>();
-/** scheduleIds with a run in flight — cron ticks must never overlap runs. */
+/** scheduleIds with a run in flight — cron ticks skip, manual runs refuse to overlap. */
 const inFlight = new Set<string>();
 
 function getState(scheduleId: string): ScheduleRunState {
@@ -45,12 +46,16 @@ export function getScheduleRunState(scheduleId: string): ScheduleRunState {
 	return getState(scheduleId);
 }
 
-/** Syntax-check a cron expression without registering a real job. */
+/**
+ * Syntax-check a cron expression without registering a real job. Strict:
+ * node-schedule would otherwise accept any date string as a one-shot job.
+ */
 export function isValidCron(cronExpression: string): boolean {
-	const probe = schedule.scheduleJob(cronExpression, () => {});
-	if (!probe) return false;
-	probe.cancel();
-	return true;
+	return isValidCronExpression(cronExpression);
+}
+
+export function isScheduleRunning(scheduleId: string): boolean {
+	return inFlight.has(scheduleId);
 }
 
 /** Persist a run's output and mirror it into a deployment row for history. */
@@ -108,11 +113,19 @@ export interface ScheduleRunResult {
 	finishedAt: Date;
 }
 
-/** Execute a schedule immediately (used by cron jobs and manual runs). */
+/**
+ * Execute a schedule immediately (used by cron jobs and manual runs). Holds
+ * the per-schedule in-flight guard: a manual run while a run is in progress
+ * throws instead of doubling up.
+ */
 export async function runSchedule(
 	row: ScheduleRow,
 	trigger: "cron" | "manual" = "cron",
 ): Promise<ScheduleRunResult> {
+	if (inFlight.has(row.scheduleId)) {
+		throw new Error(`Schedule "${row.name}" is already running — wait for it to finish`);
+	}
+	inFlight.add(row.scheduleId);
 	const state = getState(row.scheduleId);
 	const startedAt = new Date();
 	state.lastRunAt = startedAt;
@@ -149,41 +162,115 @@ export async function runSchedule(
 			throw error;
 		}
 		return { success: false, output: message, startedAt, finishedAt };
+	} finally {
+		inFlight.delete(row.scheduleId);
 	}
+}
+
+/**
+ * Cron tick: re-read the row so a schedule deleted/disabled (or whose target
+ * service was deleted — rows cascade) stops firing instead of `docker exec`-ing
+ * into whatever now carries the label.
+ */
+async function tickSchedule(scheduleId: string): Promise<void> {
+	if (inFlight.has(scheduleId)) {
+		// Skip this tick when the previous run is still going (mirrors the
+		// guards in reconciler.ts / maintenance.ts).
+		log.warn(`Schedule ${scheduleId} still running — skipping tick`);
+		return;
+	}
+	const row = await db.query.schedules.findFirst({
+		where: eq(schedules.scheduleId, scheduleId),
+	});
+	if (!row?.enabled) {
+		log.info(`Schedule ${scheduleId} was removed or disabled — unregistering its cron job`);
+		unregisterSchedule(scheduleId);
+		return;
+	}
+	const target = await scheduleTargetExists(row);
+	if (!target) {
+		log.warn(`Schedule ${row.name} (${scheduleId}) lost its target service — unregistering`);
+		unregisterSchedule(scheduleId);
+		return;
+	}
+	await runSchedule(row, "cron").catch((error) => {
+		log.error(`Schedule ${row.name} (${scheduleId}) failed`, {
+			error: error instanceof Error ? error.message : String(error),
+		});
+	});
+}
+
+/** Application/compose schedules need their service row; other types always resolve. */
+async function scheduleTargetExists(row: ScheduleRow): Promise<boolean> {
+	if (row.scheduleType === "application") {
+		if (!row.applicationId) return true;
+		const app = await db.query.applications.findFirst({
+			where: eq(applications.applicationId, row.applicationId),
+			columns: { applicationId: true },
+		});
+		return Boolean(app);
+	}
+	if (row.scheduleType === "compose") {
+		if (!row.composeId) return true;
+		const stack = await db.query.compose.findFirst({
+			where: eq(compose.composeId, row.composeId),
+			columns: { composeId: true },
+		});
+		return Boolean(stack);
+	}
+	return true;
 }
 
 /** (Re)register the cron job for a schedule row. No-op when disabled. */
 export function registerSchedule(row: ScheduleRow): void {
 	unregisterSchedule(row.scheduleId);
 	if (!row.enabled) return;
+	if (!isValidCron(row.cronExpression)) {
+		throw new Error(`Invalid cron expression: ${row.cronExpression}`);
+	}
 	const job = schedule.scheduleJob(row.scheduleId, row.cronExpression, () => {
-		// Skip this tick when the previous run is still going (mirrors the
-		// guards in reconciler.ts / maintenance.ts).
-		if (inFlight.has(row.scheduleId)) {
-			log.warn(`Schedule ${row.name} (${row.scheduleId}) still running — skipping tick`);
-			return;
-		}
-		inFlight.add(row.scheduleId);
-		void runSchedule(row, "cron")
-			.catch((error) => {
-				log.error(`Schedule ${row.name} (${row.scheduleId}) failed`, {
-					error: error instanceof Error ? error.message : String(error),
-				});
-			})
-			.finally(() => {
-				inFlight.delete(row.scheduleId);
+		void tickSchedule(row.scheduleId).catch((error) => {
+			log.error(`Schedule tick ${row.scheduleId} crashed`, {
+				error: error instanceof Error ? error.message : String(error),
 			});
+		});
 	});
 	if (!job) {
 		throw new Error(`Invalid cron expression: ${row.cronExpression}`);
 	}
-	jobs.set(row.scheduleId, job);
+	jobs.set(row.scheduleId, { job, row });
 }
 
 /** Cancel and drop the cron job for a schedule. */
 export function unregisterSchedule(scheduleId: string): void {
-	jobs.get(scheduleId)?.cancel();
+	jobs.get(scheduleId)?.job.cancel();
 	jobs.delete(scheduleId);
+}
+
+/**
+ * Cancel every cron job targeting a service that is being deleted (matched
+ * on applicationId / composeId, falling back to appName). Call it from the
+ * application/compose delete paths so a deleted service's schedules stop
+ * immediately. Returns the number of jobs cancelled.
+ */
+export function unregisterSchedulesForService(service: {
+	appName?: string | null;
+	applicationId?: string | null;
+	composeId?: string | null;
+}): number {
+	let cancelled = 0;
+	for (const [scheduleId, entry] of jobs) {
+		const { row } = entry;
+		const matches =
+			(service.applicationId && row.applicationId === service.applicationId) ||
+			(service.composeId && row.composeId === service.composeId) ||
+			(service.appName && row.appName === service.appName);
+		if (matches) {
+			unregisterSchedule(scheduleId);
+			cancelled += 1;
+		}
+	}
+	return cancelled;
 }
 
 export function isScheduleRegistered(scheduleId: string): boolean {

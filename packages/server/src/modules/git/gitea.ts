@@ -89,11 +89,18 @@ export async function removeGitea(giteaId: string, organizationId: string) {
 
 type GiteaRow = NonNullable<Awaited<ReturnType<typeof findGiteaById>>>;
 
+/** Self-hosted instances that accept TCP but stall must not pin a request for undici's 300s. */
+const GITEA_REQUEST_TIMEOUT_MS = 15_000;
+/** Requested page size; the server may cap it lower (`MAX_RESPONSE_ITEMS`, default 50). */
+const GITEA_PAGE_SIZE = 50;
+const GITEA_MAX_PAGES = 40;
+
 async function giteaApi(row: GiteaRow, path: string) {
 	const base = row.giteaUrl.replace(/\/$/, "");
 	const response = await fetch(`${base}/api/v1${path}`, {
 		headers: { Authorization: `token ${row.accessToken ?? ""}` },
 		redirect: "error",
+		signal: AbortSignal.timeout(GITEA_REQUEST_TIMEOUT_MS),
 	});
 	if (!response.ok) {
 		throw new Error(`Gitea API request failed: ${response.status}`);
@@ -151,12 +158,20 @@ export async function getGiteaBranches(input: {
 	if (!row?.accessToken) {
 		throw new Error("Gitea provider is not configured (missing access token)");
 	}
-	const response = await giteaApi(
-		row,
-		`/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/branches?limit=100`,
-	);
-	const branches = (await response.json()) as Array<{ name: string }>;
-	return branches.map((b) => b.name);
+	const names: string[] = [];
+	for (let page = 1; page <= GITEA_MAX_PAGES; page++) {
+		const response = await giteaApi(
+			row,
+			`/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/branches?limit=${GITEA_PAGE_SIZE}&page=${page}`,
+		);
+		const batch = (await response.json()) as Array<{ name: string }>;
+		names.push(...batch.map((b) => b.name));
+		// The server silently caps `limit`, so only an empty page proves the end
+		// (unless the total is known from `x-total-count`).
+		const total = Number.parseInt(response.headers.get("x-total-count") ?? "", 10);
+		if (batch.length === 0 || (Number.isFinite(total) && names.length >= total)) break;
+	}
+	return names;
 }
 
 export async function testGiteaConnection(giteaId: string, organizationId: string) {
@@ -189,6 +204,7 @@ export async function isGiteaCollaborator(input: {
 			{
 				headers: { Authorization: `token ${row.accessToken}` },
 				redirect: "error",
+				signal: AbortSignal.timeout(GITEA_REQUEST_TIMEOUT_MS),
 			},
 		);
 		if (response.status === 204 || response.ok) return true;

@@ -10,6 +10,14 @@ export const mongoRouter = buildDatabaseRouter({
 	createFields: {
 		databaseUser: z.string().min(1),
 		databasePassword: z.string().min(1),
-		replicaSet: z.string().optional(),
+		// Replica sets need a keyFile + `rs.initiate()` the engine does not
+		// provision (mongod refuses `--replSet` with root auth otherwise), so
+		// the option is rejected instead of producing a crash-looping service.
+		replicaSet: z
+			.never({
+				error:
+					"MongoDB replica sets are not supported by the one-click service — deploy a standalone instance",
+			})
+			.optional(),
 	},
 });
