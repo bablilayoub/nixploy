@@ -4,6 +4,18 @@ import { mergeNodeConstraint } from "../cluster/placement";
 import { parseEnv } from "../deployment/env";
 
 /**
+ * A compose file the platform refuses to run (privileged services, host
+ * binds, interpolation into dangerous keys, …). Routers map it to
+ * BAD_REQUEST; the deploy worker logs it as the deployment error.
+ */
+export class ComposeValidationError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "ComposeValidationError";
+	}
+}
+
+/**
  * Loose shape of a docker-compose / stack file. Only the keys this module
  * transforms are typed; everything else is passed through untouched.
  */
@@ -335,7 +347,9 @@ function assertAndCollectVolumeSources(
 ): string[] {
 	if (volumes === undefined || volumes === null) return [];
 	if (!Array.isArray(volumes)) {
-		throw new Error(`Compose service "${serviceName}" volumes must be an array of mounts`);
+		throw new ComposeValidationError(
+			`Compose service "${serviceName}" volumes must be an array of mounts`,
+		);
 	}
 	const sources: string[] = [];
 	for (const entry of volumes) {
@@ -356,13 +370,13 @@ function assertAndCollectVolumeSources(
 						? obj.Source
 						: "";
 			if (type === "tmpfs" || type === "npipe") {
-				throw new Error(
+				throw new ComposeValidationError(
 					`Compose service "${serviceName}" must not use volumes type: ${type} (named volumes only)`,
 				);
 			}
 			if (type === "bind") {
 				if (!(options?.allowDockerSocket && isDockerSocketSource(source))) {
-					throw new Error(
+					throw new ComposeValidationError(
 						`Compose service "${serviceName}" must not use volumes type: bind (named volumes only)`,
 					);
 				}
@@ -370,7 +384,9 @@ function assertAndCollectVolumeSources(
 			if (source) sources.push(source);
 			continue;
 		}
-		throw new Error(`Compose service "${serviceName}" has an invalid volumes entry`);
+		throw new ComposeValidationError(
+			`Compose service "${serviceName}" has an invalid volumes entry`,
+		);
 	}
 	return sources;
 }
@@ -398,14 +414,14 @@ function assertSafeNamedVolumes(volumes: unknown): void {
 		if (typeof def !== "object" || Array.isArray(def)) continue;
 		const record = def as Record<string, unknown>;
 		if (isExternal(record)) {
-			throw new Error(
+			throw new ComposeValidationError(
 				`Compose volume "${name}" must not use external: (attaching host volumes is blocked)`,
 			);
 		}
 		// `name:` bypasses the `<appName>_` scoping and mounts any volume on the
 		// node — another tenant's `<app>_data` or the platform's own Postgres.
 		if (hasName(record)) {
-			throw new Error(
+			throw new ComposeValidationError(
 				`Compose volume "${name}" must not set name: (volume names are scoped to this service)`,
 			);
 		}
@@ -416,7 +432,7 @@ function assertSafeNamedVolumes(volumes: unknown): void {
 		const o = String(map.o ?? map.options ?? "").toLowerCase();
 		const device = String(map.device ?? map.Device ?? "");
 		if (type === "none" || o.includes("bind") || device.startsWith("/") || device.startsWith(".")) {
-			throw new Error(
+			throw new ComposeValidationError(
 				`Compose volume "${name}" must not use host bind driver_opts (type/o/device)`,
 			);
 		}
@@ -430,21 +446,23 @@ function assertSafeConfigsOrSecrets(kind: "configs" | "secrets", value: unknown)
 		const record = def as Record<string, unknown>;
 		const file = record.file ?? record.File;
 		if (typeof file === "string" && file.trim()) {
-			throw new Error(`Compose ${kind} "${name}" must not use file: (host path reads are blocked)`);
+			throw new ComposeValidationError(
+				`Compose ${kind} "${name}" must not use file: (host path reads are blocked)`,
+			);
 		}
 		const environment = record.environment ?? record.Environment;
 		if (typeof environment === "string" && environment.trim()) {
-			throw new Error(
+			throw new ComposeValidationError(
 				`Compose ${kind} "${name}" must not use environment: (host env reads are blocked)`,
 			);
 		}
 		if (isExternal(record)) {
-			throw new Error(
+			throw new ComposeValidationError(
 				`Compose ${kind} "${name}" must not use external: (cross-stack attach is blocked)`,
 			);
 		}
 		if (hasName(record)) {
-			throw new Error(
+			throw new ComposeValidationError(
 				`Compose ${kind} "${name}" must not set name: (names are scoped to this service)`,
 			);
 		}
@@ -459,19 +477,19 @@ function assertSafeConfigsOrSecrets(kind: "configs" | "secrets", value: unknown)
 function assertSafeNetworks(networks: unknown): void {
 	if (networks === undefined || networks === null) return;
 	if (typeof networks !== "object" || Array.isArray(networks)) {
-		throw new Error("Compose top-level networks must be a mapping");
+		throw new ComposeValidationError("Compose top-level networks must be a mapping");
 	}
 	for (const [name, def] of Object.entries(networks as Record<string, unknown>)) {
 		if (def === null || def === undefined) continue;
 		if (typeof def !== "object" || Array.isArray(def)) continue;
 		const record = def as Record<string, unknown>;
 		if (isExternal(record)) {
-			throw new Error(
+			throw new ComposeValidationError(
 				`Compose network "${name}" must not use external: (networking is managed by Nixploy)`,
 			);
 		}
 		if (hasName(record)) {
-			throw new Error(
+			throw new ComposeValidationError(
 				`Compose network "${name}" must not set name: (network names are scoped to this service)`,
 			);
 		}
@@ -481,7 +499,7 @@ function assertSafeNetworks(networks: unknown): void {
 			driver !== null &&
 			!ALLOWED_NETWORK_DRIVERS.has(String(driver).trim().toLowerCase())
 		) {
-			throw new Error(
+			throw new ComposeValidationError(
 				`Compose network "${name}" must not use driver ${String(driver)} (bridge/overlay only)`,
 			);
 		}
@@ -514,15 +532,15 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 
 	for (const [serviceName, service] of Object.entries(spec.services ?? {})) {
 		if (service.extends !== undefined && service.extends !== null) {
-			throw new Error(`Compose service "${serviceName}" must not use extends`);
+			throw new ComposeValidationError(`Compose service "${serviceName}" must not use extends`);
 		}
 		if (service.build !== undefined && service.build !== null) {
-			throw new Error(
+			throw new ComposeValidationError(
 				`Compose service "${serviceName}" must not use build: (host context / dockerfile_inline reads are blocked)`,
 			);
 		}
 		if (service.env_file !== undefined && service.env_file !== null) {
-			throw new Error(
+			throw new ComposeValidationError(
 				`Compose service "${serviceName}" must not use env_file: (host path reads are blocked)`,
 			);
 		}
@@ -554,14 +572,16 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 			if (value === undefined || value === null) continue;
 			const serialized = typeof value === "string" ? value : JSON.stringify(value);
 			if (serialized.includes("$")) {
-				throw new Error(
+				throw new ComposeValidationError(
 					`Compose service "${serviceName}" must not use env interpolation in "${key}"`,
 				);
 			}
 		}
 
 		if (isTruthy(service.privileged)) {
-			throw new Error(`Compose service "${serviceName}" must not set privileged: true`);
+			throw new ComposeValidationError(
+				`Compose service "${serviceName}" must not set privileged: true`,
+			);
 		}
 		// Nixploy injects overlay networking — reject any custom namespace / cgroup mode.
 		for (const key of [
@@ -576,15 +596,19 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 		] as const) {
 			const value = service[key];
 			if (value === undefined || value === null || value === "") continue;
-			throw new Error(
+			throw new ComposeValidationError(
 				`Compose service "${serviceName}" must not set ${key} (host/shared namespaces are blocked)`,
 			);
 		}
 		if (service.volumes_from !== undefined && service.volumes_from !== null) {
-			throw new Error(`Compose service "${serviceName}" must not use volumes_from`);
+			throw new ComposeValidationError(
+				`Compose service "${serviceName}" must not use volumes_from`,
+			);
 		}
 		if (service.security_opt !== undefined && service.security_opt !== null) {
-			throw new Error(`Compose service "${serviceName}" must not set security_opt`);
+			throw new ComposeValidationError(
+				`Compose service "${serviceName}" must not set security_opt`,
+			);
 		}
 
 		const caps = service.cap_add;
@@ -592,31 +616,37 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 		for (const cap of capList) {
 			const normalized = cap.toUpperCase().replace(/^CAP_/, "");
 			if (BLOCKED_CAP_ADD.has(normalized) && !allowedCaps.has(normalized)) {
-				throw new Error(`Compose service "${serviceName}" must not add capability ${cap}`);
+				throw new ComposeValidationError(
+					`Compose service "${serviceName}" must not add capability ${cap}`,
+				);
 			}
 		}
 
 		if (service.devices !== undefined && service.devices !== null) {
-			throw new Error(`Compose service "${serviceName}" must not mount host devices`);
+			throw new ComposeValidationError(
+				`Compose service "${serviceName}" must not mount host devices`,
+			);
 		}
 		if (service.device_requests !== undefined && service.device_requests !== null) {
-			throw new Error(`Compose service "${serviceName}" must not set device_requests`);
+			throw new ComposeValidationError(
+				`Compose service "${serviceName}" must not set device_requests`,
+			);
 		}
 		if (service.gpus !== undefined && service.gpus !== null) {
-			throw new Error(`Compose service "${serviceName}" must not set gpus`);
+			throw new ComposeValidationError(`Compose service "${serviceName}" must not set gpus`);
 		}
 
 		if (service.extra_hosts !== undefined && service.extra_hosts !== null) {
-			throw new Error(
+			throw new ComposeValidationError(
 				`Compose service "${serviceName}" must not set extra_hosts (DNS spoofing is blocked)`,
 			);
 		}
 		if (service.sysctls !== undefined && service.sysctls !== null && !options?.allowSysctls) {
-			throw new Error(`Compose service "${serviceName}" must not set sysctls`);
+			throw new ComposeValidationError(`Compose service "${serviceName}" must not set sysctls`);
 		}
 
 		if (service.ports !== undefined && service.ports !== null) {
-			throw new Error(
+			throw new ComposeValidationError(
 				`Compose service "${serviceName}" must not publish host ports (use Nixploy domains / Traefik)`,
 			);
 		}
@@ -626,7 +656,9 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 			const isSocket = isDockerSocketSource(source);
 			if (lower.includes("docker.sock") || lower.endsWith("/docker.sock")) {
 				if (!(options?.allowDockerSocket && isSocket)) {
-					throw new Error(`Compose service "${serviceName}" must not mount the Docker socket`);
+					throw new ComposeValidationError(
+						`Compose service "${serviceName}" must not mount the Docker socket`,
+					);
 				}
 				continue;
 			}
@@ -639,7 +671,7 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 				source.startsWith("$") ||
 				source.includes("..")
 			) {
-				throw new Error(
+				throw new ComposeValidationError(
 					`Compose service "${serviceName}" must not bind-mount host paths (use named volumes)`,
 				);
 			}
@@ -647,7 +679,7 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 
 		for (const [key] of labelEntries(service.labels)) {
 			if (key.toLowerCase().startsWith("traefik.")) {
-				throw new Error(
+				throw new ComposeValidationError(
 					`Compose service "${serviceName}" must not set Traefik labels (routing is managed by Nixploy)`,
 				);
 			}

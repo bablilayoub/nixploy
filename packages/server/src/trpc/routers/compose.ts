@@ -6,6 +6,7 @@ import { compose, environments, projects } from "../../db/schema";
 import { assertEnvironmentAccess } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
+import { ComposeValidationError } from "../../modules/compose/compose-file";
 import { listComposeContainers } from "../../modules/compose/containers";
 import {
 	createCompose,
@@ -347,7 +348,14 @@ export const composeRouter = router({
 			if (row.hostPrivileged) {
 				await assertInstanceAdmin(ctx.session);
 			}
-			await saveComposeFile(row, input.composeFile);
+			try {
+				await saveComposeFile(row, input.composeFile);
+			} catch (error) {
+				if (error instanceof ComposeValidationError) {
+					throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+				}
+				throw error;
+			}
 			return true;
 		}),
 

@@ -614,10 +614,39 @@ export async function databaseServiceExists(appName: string): Promise<boolean> {
  * replica count is preserved; on create the service starts with 1 replica.
  * Rows pinned to a server get a `node.id==` placement constraint.
  */
+/**
+ * Swarm rejects an update whose `version` no longer matches the service
+ * ("update out of sequence") — e.g. a scale right after a spec update, or
+ * two callers racing. Re-inspect and retry a few times before giving up.
+ */
+async function updateServiceWithRetry(
+	appName: string,
+	mutate: (spec: Record<string, unknown>) => Record<string, unknown>,
+	attempts = 5,
+): Promise<void> {
+	const service = docker.getService(appName);
+	for (let attempt = 1; ; attempt++) {
+		const existing = await service.inspect();
+		const spec = mutate({ ...(existing.Spec ?? {}) });
+		try {
+			await service.update({
+				// biome-ignore lint/suspicious/noExplicitAny: dockerode update takes version + full spec
+				...(spec as any),
+				version: existing.Version.Index,
+			});
+			return;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			if (attempt >= attempts || !/out of sequence/i.test(message)) throw error;
+			await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+		}
+	}
+}
+
 export async function deployDatabase<K extends DatabaseKind>(
 	kind: K,
 	row: DatabaseRowMap[K],
-): Promise<void> {
+): Promise<{ created: boolean }> {
 	const def = buildServiceDefinition(kind, row);
 	const swarmNodeId = isRemote(row.serverId) ? await getServerSwarmNodeId(row.serverId) : null;
 	await ensureNetwork();
@@ -626,16 +655,20 @@ export async function deployDatabase<K extends DatabaseKind>(
 	const service = docker.getService(def.name);
 	const existing = await service.inspect().catch(() => null);
 	if (existing) {
-		const replicas = existing.Spec?.Mode?.Replicated?.Replicas ?? 1;
-		await service.update({
-			// biome-ignore lint/suspicious/noExplicitAny: dockerode update takes version + full spec
-			...(buildDatabaseSwarmSpec(def, replicas, swarmNodeId) as any),
-			version: existing.Version.Index,
+		await updateServiceWithRetry(def.name, (current) => {
+			const replicas =
+				(current as { Mode?: { Replicated?: { Replicas?: number } } }).Mode?.Replicated?.Replicas ??
+				1;
+			return buildDatabaseSwarmSpec(def, replicas, swarmNodeId) as unknown as Record<
+				string,
+				unknown
+			>;
 		});
-	} else {
-		// biome-ignore lint/suspicious/noExplicitAny: dockerode createService accepts the raw Engine API spec
-		await docker.createService(buildDatabaseSwarmSpec(def, 1, swarmNodeId) as any);
+		return { created: false };
 	}
+	// biome-ignore lint/suspicious/noExplicitAny: dockerode createService accepts the raw Engine API spec
+	await docker.createService(buildDatabaseSwarmSpec(def, 1, swarmNodeId) as any);
+	return { created: true };
 }
 
 /** Scale the service to 1 replica (deploying it first if it does not exist). */
@@ -643,8 +676,10 @@ export async function startDatabase<K extends DatabaseKind>(
 	kind: K,
 	row: DatabaseRowMap[K],
 ): Promise<void> {
-	await deployDatabase(kind, row);
-	await scaleDatabase(row.appName, 1);
+	const { created } = await deployDatabase(kind, row);
+	// A freshly created service already runs 1 replica; scaling it again
+	// immediately races the create and Swarm answers "update out of sequence".
+	if (!created) await scaleDatabase(row.appName, 1);
 }
 
 /** Scale the service to 0 replicas (keeps service + volume for restarts). */
@@ -668,13 +703,10 @@ async function scaleDatabase(appName: string, replicas: number): Promise<void> {
 		if (replicas === 0) return;
 		throw new Error(`Service "${appName}" does not exist; deploy it first`);
 	}
-	const spec = existing.Spec ?? {};
-	spec.Mode = { Replicated: { Replicas: replicas } };
-	await service.update({
-		// biome-ignore lint/suspicious/noExplicitAny: dockerode update takes version + full spec
-		...(spec as any),
-		version: existing.Version.Index,
-	});
+	await updateServiceWithRetry(appName, (spec) => ({
+		...spec,
+		Mode: { Replicated: { Replicas: replicas } },
+	}));
 }
 
 /** How long to wait for the last task container to leave after `service rm`. */
@@ -758,17 +790,12 @@ export async function removeDatabase(
 
 /** Force a rolling re-creation of the service's tasks (re-pull + restart). */
 export async function reloadDatabase(appName: string): Promise<void> {
-	const service = docker.getService(appName);
-	const existing = await service.inspect();
-	const spec = existing.Spec ?? {};
-	spec.TaskTemplate = {
-		...spec.TaskTemplate,
-		ForceUpdate: (spec.TaskTemplate?.ForceUpdate ?? 0) + 1,
-	};
-	await service.update({
-		// biome-ignore lint/suspicious/noExplicitAny: dockerode update takes version + full spec
-		...(spec as any),
-		version: existing.Version.Index,
+	await updateServiceWithRetry(appName, (spec) => {
+		const template = (spec.TaskTemplate ?? {}) as { ForceUpdate?: number };
+		return {
+			...spec,
+			TaskTemplate: { ...template, ForceUpdate: (template.ForceUpdate ?? 0) + 1 },
+		};
 	});
 }
 
