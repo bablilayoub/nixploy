@@ -1,13 +1,44 @@
 import { describe, expect, it } from "vitest";
 import {
+	buildDatabaseSwarmSpec,
 	DATABASE_CONFIGS,
 	isManagedDatabaseLabels,
 	postgresMajorVersion,
 	postgresPgdata,
+	type ServiceDefinition,
 	type ServiceState,
 	statusFromServiceState,
 	summarizeTaskStates,
 } from "./engine";
+
+describe("buildDatabaseSwarmSpec placement", () => {
+	const def: ServiceDefinition = {
+		name: "pg-abc123",
+		image: "postgres:17",
+		env: ["POSTGRES_DB=app"],
+		args: [],
+		volumeName: "pg-abc123-data",
+		dataDir: "/var/lib/postgresql/data",
+		publishedPort: null,
+		targetPort: 5432,
+		kind: "postgres",
+	};
+	const taskTemplate = (spec: Record<string, unknown>) =>
+		spec.TaskTemplate as { Placement?: { Constraints?: string[] } };
+
+	it("has no placement for databases on the Nixploy host", () => {
+		expect(taskTemplate(buildDatabaseSwarmSpec(def, 1))).not.toHaveProperty("Placement");
+		expect(taskTemplate(buildDatabaseSwarmSpec(def, 1, null))).not.toHaveProperty("Placement");
+	});
+
+	it("pins databases on a managed server to its swarm node (local data volume)", () => {
+		const spec = buildDatabaseSwarmSpec(def, 1, "node123");
+		expect(taskTemplate(spec).Placement).toEqual({ Constraints: ["node.id==node123"] });
+		// The rest of the spec is unchanged by the pin.
+		expect(spec.Mode).toEqual({ Replicated: { Replicas: 1 } });
+		expect(spec.Labels).toEqual({ "nixploy.managed": "true", "nixploy.service.type": "postgres" });
+	});
+});
 
 const state = (partial: Partial<ServiceState>): ServiceState => ({
 	exists: true,

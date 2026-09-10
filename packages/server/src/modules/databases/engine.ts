@@ -6,6 +6,8 @@ import { mariadb, mongo, mysql, postgres, redis, servers } from "../../db/schema
 import { execAsyncRemote } from "../../utils/exec";
 import { assertSafePublishedPort } from "../../utils/validators";
 import { getSwarmNetwork } from "../application/paths";
+import { mergeNodeConstraint } from "../cluster/placement";
+import { getServerSwarmNodeId } from "../cluster/swarm-node";
 
 /**
  * Shared engine for the five one-click database services (postgres, mysql,
@@ -13,9 +15,13 @@ import { getSwarmNetwork } from "../application/paths";
  * service on `nixploy-network` with a named volume `<appName>-data` and an
  * optional host-mode published port for external connections.
  *
- * Local servers are driven through dockerode (socket); remote servers through
- * `docker` CLI over SSH via {@link execAsyncRemote}, mirroring Dokploy's
- * local/remote execution duality.
+ * Swarm SERVICE objects (create/update/inspect/scale/rm) are always issued
+ * to the primary manager through dockerode: managed servers join the primary
+ * swarm, usually as workers, whose daemons reject service-level calls. A
+ * database pinned to a server (`row.serverId`) is tied to it by the
+ * placement constraint `node.id==<swarmNodeId>` so its local `<appName>-data`
+ * volume stays on that node. Only volume cleanup — a per-node object — still
+ * runs on the pinned server over SSH.
  */
 
 export type DatabaseKind = "postgres" | "mysql" | "mariadb" | "mongo" | "redis";
@@ -360,7 +366,7 @@ function parseCpu(value: string | null): number | undefined {
 
 // ── spec building ───────────────────────────────────────────────────────────
 
-interface ServiceDefinition {
+export interface ServiceDefinition {
 	name: string;
 	image: string;
 	env: string[];
@@ -405,7 +411,16 @@ function buildServiceDefinition<K extends DatabaseKind>(
 	};
 }
 
-function toSwarmSpec(def: ServiceDefinition, replicas: number): Record<string, unknown> {
+/**
+ * Engine API service spec for a database. `swarmNodeId` (the pinned server's
+ * node in the primary swarm) becomes a `node.id==…` placement constraint —
+ * the `<appName>-data` volume is a local volume on that node.
+ */
+export function buildDatabaseSwarmSpec(
+	def: ServiceDefinition,
+	replicas: number,
+	swarmNodeId: string | null = null,
+): Record<string, unknown> {
 	const limits: Record<string, number> = {};
 	if (def.memoryLimit !== undefined) limits.MemoryBytes = def.memoryLimit;
 	if (def.cpuLimit !== undefined) limits.NanoCPUs = def.cpuLimit;
@@ -443,6 +458,7 @@ function toSwarmSpec(def: ServiceDefinition, replicas: number): Record<string, u
 			},
 			Networks: [{ Target: getSwarmNetwork() }],
 			RestartPolicy: { Condition: "any" },
+			...(swarmNodeId ? { Placement: { Constraints: mergeNodeConstraint([], swarmNodeId) } } : {}),
 		},
 		Mode: { Replicated: { Replicas: replicas } },
 		...(def.publishedPort
@@ -463,56 +479,10 @@ function toSwarmSpec(def: ServiceDefinition, replicas: number): Record<string, u
 	};
 }
 
-function toCreateCommand(def: ServiceDefinition, replicas: number): string {
-	const parts: string[] = [
-		"docker service create",
-		"--name",
-		shellQuote(def.name),
-		"--label",
-		shellQuote("nixploy.managed=true"),
-		"--label",
-		shellQuote(`nixploy.service.type=${def.kind}`),
-		"--network",
-		getSwarmNetwork(),
-		"--restart-condition",
-		"any",
-		"--replicas",
-		String(replicas),
-		"--mount",
-		shellQuote(`type=volume,source=${def.volumeName},target=${def.dataDir}`),
-	];
-	for (const envPair of def.env) {
-		parts.push("--env", shellQuote(envPair));
-	}
-	if (def.publishedPort) {
-		parts.push(
-			"--publish",
-			shellQuote(`mode=host,published=${def.publishedPort},target=${def.targetPort},protocol=tcp`),
-		);
-	}
-	if (def.memoryLimit !== undefined) parts.push("--limit-memory", String(def.memoryLimit));
-	if (def.memoryReservation !== undefined)
-		parts.push("--reserve-memory", String(def.memoryReservation));
-	if (def.cpuLimit !== undefined) parts.push("--limit-cpu", String(def.cpuLimit / 1e9));
-	if (def.cpuReservation !== undefined)
-		parts.push("--reserve-cpu", String(def.cpuReservation / 1e9));
-	parts.push(shellQuote(def.image));
-	for (const arg of def.args) {
-		parts.push(shellQuote(arg));
-	}
-	return parts.join(" ");
-}
-
 // ── network ─────────────────────────────────────────────────────────────────
 
-async function ensureNetwork(serverId: string | null): Promise<void> {
-	if (isRemote(serverId)) {
-		await execAsyncRemote(
-			serverId,
-			`docker network inspect ${getSwarmNetwork()} >/dev/null 2>&1 || docker network create --driver overlay --attachable ${getSwarmNetwork()}`,
-		);
-		return;
-	}
+/** The shared overlay is cluster-scoped: create it on the primary manager when missing. */
+async function ensureNetwork(): Promise<void> {
 	const networks = await docker.listNetworks({ filters: { name: [getSwarmNetwork()] } });
 	const exists = networks.some((n) => n.Name === getSwarmNetwork());
 	if (!exists) {
@@ -566,41 +536,12 @@ export function summarizeTaskStates(
 	return { running, pending, failed };
 }
 
-export async function inspectServiceState(
-	appName: string,
-	serverId: string | null,
-): Promise<ServiceState> {
-	if (isRemote(serverId)) {
-		// Desired replicas come from `service ls` ("1/1"); live task states from
-		// `service ps` — the replica counter alone cannot distinguish "starting"
-		// from "crash-looping".
-		const out = await execAsyncRemote(
-			serverId,
-			`docker service ls --filter ${shellQuote(`name=${appName}`)} --format '{{.Name}} {{.Replicas}}'`,
-		);
-		let desired: number | null = null;
-		for (const line of out.split("\n")) {
-			const [name, replicas] = line.trim().split(/\s+/);
-			if (name === appName && replicas) {
-				desired = Number.parseInt(replicas.split("/")[1] ?? "0", 10) || 0;
-				break;
-			}
-		}
-		if (desired === null) return NO_SERVICE;
-
-		const ps = await execAsyncRemote(
-			serverId,
-			`docker service ps ${shellQuote(appName)} --format '{{.CurrentState}}'`,
-		);
-		// CurrentState looks like "Running 4 minutes ago" — the first word is
-		// the task state. Historical (shutdown) rows are ignored by the counter.
-		const states = ps
-			.split("\n")
-			.map((line) => line.trim().split(/\s+/)[0]?.toLowerCase() ?? "")
-			.filter(Boolean);
-		return { exists: true, desired, ...summarizeTaskStates(states) };
-	}
-
+/**
+ * Desired replicas and live task states of a swarm service, read from the
+ * primary manager (the only place service/task objects exist — wherever the
+ * task itself runs).
+ */
+export async function inspectServiceState(appName: string): Promise<ServiceState> {
 	const services = await docker.listServices({ filters: { name: [appName] } });
 	const service = services.find((s) => s.Spec?.Name === appName);
 	if (!service) {
@@ -645,31 +586,15 @@ export function isManagedDatabaseLabels(
  */
 async function assertManagedDatabaseService(
 	appName: string,
-	serverId: string | null,
 	kind: DatabaseKind | undefined,
 	action: "update" | "remove",
 ): Promise<void> {
-	let labels: Record<string, string> | null | undefined;
-	if (isRemote(serverId)) {
-		const out = await execAsyncRemote(
-			serverId,
-			`docker service inspect --format '{{json .Spec.Labels}}' ${shellQuote(appName)} 2>/dev/null || true`,
-		);
-		const trimmed = out.trim();
-		if (!trimmed) return; // no such service — nothing to protect
-		try {
-			labels = JSON.parse(trimmed) as Record<string, string> | null;
-		} catch {
-			labels = null;
-		}
-	} else {
-		const existing = await docker
-			.getService(appName)
-			.inspect()
-			.catch(() => null);
-		if (!existing) return;
-		labels = existing.Spec?.Labels as Record<string, string> | undefined;
-	}
+	const existing = await docker
+		.getService(appName)
+		.inspect()
+		.catch(() => null);
+	if (!existing) return; // no such service — nothing to protect
+	const labels = existing.Spec?.Labels as Record<string, string> | undefined;
 	if (!isManagedDatabaseLabels(labels, kind)) {
 		throw new Error(
 			`Refusing to ${action} swarm service "${appName}": it is not a Nixploy-managed ${kind ?? "database"} service`,
@@ -679,38 +604,24 @@ async function assertManagedDatabaseService(
 
 // ── public engine API ───────────────────────────────────────────────────────
 
-/** Whether a swarm service for this database exists on the target server. */
-export async function databaseServiceExists(
-	appName: string,
-	serverId: string | null,
-): Promise<boolean> {
-	return (await inspectServiceState(appName, serverId)).exists;
+/** Whether a swarm service for this database exists in the primary swarm. */
+export async function databaseServiceExists(appName: string): Promise<boolean> {
+	return (await inspectServiceState(appName)).exists;
 }
 
 /**
  * Create or update the swarm service for a database. On update the current
  * replica count is preserved; on create the service starts with 1 replica.
+ * Rows pinned to a server get a `node.id==` placement constraint.
  */
 export async function deployDatabase<K extends DatabaseKind>(
 	kind: K,
 	row: DatabaseRowMap[K],
 ): Promise<void> {
 	const def = buildServiceDefinition(kind, row);
-	await ensureNetwork(row.serverId);
-	await assertManagedDatabaseService(def.name, row.serverId, kind, "update");
-
-	if (isRemote(row.serverId)) {
-		// `docker service update` cannot re-key mounts/env atomically; a
-		// remove+create is the reliable path over the CLI (Dokploy does the
-		// same for remote database rebuilds).
-		const state = await inspectServiceState(def.name, row.serverId);
-		const replicas = state.exists ? state.desired : 1;
-		if (state.exists) {
-			await execAsyncRemote(row.serverId, `docker service rm ${shellQuote(def.name)}`);
-		}
-		await execAsyncRemote(row.serverId, toCreateCommand(def, replicas));
-		return;
-	}
+	const swarmNodeId = isRemote(row.serverId) ? await getServerSwarmNodeId(row.serverId) : null;
+	await ensureNetwork();
+	await assertManagedDatabaseService(def.name, kind, "update");
 
 	const service = docker.getService(def.name);
 	const existing = await service.inspect().catch(() => null);
@@ -718,12 +629,12 @@ export async function deployDatabase<K extends DatabaseKind>(
 		const replicas = existing.Spec?.Mode?.Replicated?.Replicas ?? 1;
 		await service.update({
 			// biome-ignore lint/suspicious/noExplicitAny: dockerode update takes version + full spec
-			...(toSwarmSpec(def, replicas) as any),
+			...(buildDatabaseSwarmSpec(def, replicas, swarmNodeId) as any),
 			version: existing.Version.Index,
 		});
 	} else {
 		// biome-ignore lint/suspicious/noExplicitAny: dockerode createService accepts the raw Engine API spec
-		await docker.createService(toSwarmSpec(def, 1) as any);
+		await docker.createService(buildDatabaseSwarmSpec(def, 1, swarmNodeId) as any);
 	}
 }
 
@@ -733,29 +644,15 @@ export async function startDatabase<K extends DatabaseKind>(
 	row: DatabaseRowMap[K],
 ): Promise<void> {
 	await deployDatabase(kind, row);
-	await scaleDatabase(row.appName, row.serverId, 1);
+	await scaleDatabase(row.appName, 1);
 }
 
 /** Scale the service to 0 replicas (keeps service + volume for restarts). */
-export async function stopDatabase(appName: string, serverId: string | null): Promise<void> {
-	await scaleDatabase(appName, serverId, 0);
+export async function stopDatabase(appName: string): Promise<void> {
+	await scaleDatabase(appName, 0);
 }
 
-async function scaleDatabase(
-	appName: string,
-	serverId: string | null,
-	replicas: number,
-): Promise<void> {
-	if (isRemote(serverId)) {
-		if (!(await databaseServiceExists(appName, serverId))) {
-			// Scaling a service that was never deployed: stopping is a no-op,
-			// starting must go through deploy first.
-			if (replicas === 0) return;
-			throw new Error(`Service "${appName}" does not exist; deploy it first`);
-		}
-		await execAsyncRemote(serverId, `docker service scale ${shellQuote(appName)}=${replicas}`);
-		return;
-	}
+async function scaleDatabase(appName: string, replicas: number): Promise<void> {
 	const service = docker.getService(appName);
 	const existing = await service.inspect().catch((error: unknown) => {
 		if (
@@ -795,7 +692,9 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * volume stays orphaned. So: wait (bounded) until no task container with
  * the service label remains, then remove the volume with a few retries.
  * `kind` (when known) tightens the ownership guard — a service the engine
- * did not create is never touched.
+ * did not create is never touched. The service is removed on the primary
+ * manager; the task container and the volume are per-node objects, so their
+ * cleanup runs on the pinned server (`serverId`) over SSH.
  */
 export async function removeDatabase(
 	appName: string,
@@ -803,13 +702,17 @@ export async function removeDatabase(
 	kind?: DatabaseKind,
 ): Promise<void> {
 	const volumeName = `${appName}-data`;
-	await assertManagedDatabaseService(appName, serverId, kind, "remove");
+	await assertManagedDatabaseService(appName, kind, "remove");
+	await docker
+		.getService(appName)
+		.remove()
+		.catch(() => undefined);
+
 	if (isRemote(serverId)) {
 		const label = shellQuote(`label=com.docker.swarm.service.name=${appName}`);
 		await execAsyncRemote(
 			serverId,
 			[
-				`docker service rm ${shellQuote(appName)} >/dev/null 2>&1 || true`,
 				`i=0; while [ "$i" -lt ${Math.floor(REMOVE_TASK_WAIT_MS / 1000)} ] && [ -n "$(docker ps -aq --filter ${label} 2>/dev/null)" ]; do sleep 1; i=$((i+1)); done`,
 				`if docker volume inspect ${shellQuote(volumeName)} >/dev/null 2>&1; then i=0; until docker volume rm ${shellQuote(volumeName)} >/dev/null 2>&1 || [ "$i" -ge ${REMOVE_VOLUME_ATTEMPTS} ]; do sleep ${Math.floor(REMOVE_VOLUME_RETRY_MS / 1000)}; i=$((i+1)); done; fi`,
 				"true",
@@ -817,10 +720,6 @@ export async function removeDatabase(
 		);
 		return;
 	}
-	await docker
-		.getService(appName)
-		.remove()
-		.catch(() => undefined);
 
 	const deadline = Date.now() + REMOVE_TASK_WAIT_MS;
 	while (Date.now() < deadline) {
@@ -858,11 +757,7 @@ export async function removeDatabase(
 }
 
 /** Force a rolling re-creation of the service's tasks (re-pull + restart). */
-export async function reloadDatabase(appName: string, serverId: string | null): Promise<void> {
-	if (isRemote(serverId)) {
-		await execAsyncRemote(serverId, `docker service update --force ${shellQuote(appName)}`);
-		return;
-	}
+export async function reloadDatabase(appName: string): Promise<void> {
 	const service = docker.getService(appName);
 	const existing = await service.inspect();
 	const spec = existing.Spec ?? {};
@@ -893,12 +788,9 @@ export function statusFromServiceState(state: ServiceState): DatabaseStatus {
 	return "running";
 }
 
-/** Live status derived from the swarm service's task states. */
-export async function getDatabaseStatus(
-	appName: string,
-	serverId: string | null,
-): Promise<DatabaseStatus> {
-	return statusFromServiceState(await inspectServiceState(appName, serverId));
+/** Live status derived from the swarm service's task states (primary manager). */
+export async function getDatabaseStatus(appName: string): Promise<DatabaseStatus> {
+	return statusFromServiceState(await inspectServiceState(appName));
 }
 
 /**

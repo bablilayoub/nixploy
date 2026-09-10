@@ -24,6 +24,7 @@ import {
 	readMetricsHistory,
 	readServerMetricsHistory,
 } from "../../modules/monitoring/history";
+import { parseDockerStatsJsonLine } from "../../modules/monitoring/remote";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { mapDockerStats } from "../../ws/docker-stats";
@@ -185,6 +186,59 @@ async function getRemoteContainerStats(
 	};
 }
 
+/** Container labels a service's replicas carry, in resolution order (Swarm, compose, stack). */
+const REPLICA_LABEL_FILTERS = (appName: string) => [
+	`com.docker.swarm.service.name=${appName}`,
+	`com.docker.compose.project=${appName}`,
+	`com.docker.stack.namespace=${appName}`,
+];
+
+interface ReplicaStat {
+	id: string;
+	name: string;
+	state: string;
+	cpu: number;
+	memoryUsed: number;
+	memoryPercent: number;
+	pids: number;
+}
+
+/**
+ * Replica stats of a service pinned to a managed server. Container-level:
+ * the replicas run on that node (placement constraint), so `docker ps` and
+ * `docker stats` go there over SSH in one round trip.
+ */
+async function listRemoteReplicaStats(serverId: string, appName: string): Promise<ReplicaStat[]> {
+	const lookups = REPLICA_LABEL_FILTERS(appName).map(
+		(label) => `docker ps -q --filter ${shellQuote(`label=${label}`)}`,
+	);
+	const script = [
+		`ids=$(${lookups[0]})`,
+		...lookups.slice(1).map((lookup) => `[ -n "$ids" ] || ids=$(${lookup})`),
+		`[ -n "$ids" ] || exit 0`,
+		`docker stats --no-stream --format '{{json .}}' $ids`,
+	].join("; ");
+	const raw = await execAsyncRemote(serverId, script, { timeoutMs: 30_000 });
+	const stats: ReplicaStat[] = [];
+	for (const line of raw.split("\n")) {
+		const trimmed = line.trim();
+		if (!trimmed) continue;
+		const frame = parseDockerStatsJsonLine(trimmed);
+		if (!frame) continue;
+		const { ID = "", Name = "" } = JSON.parse(trimmed) as { ID?: string; Name?: string };
+		stats.push({
+			id: ID.slice(0, 12),
+			name: Name || ID.slice(0, 12),
+			state: "running", // `docker ps -q` only lists running containers
+			cpu: frame.cpu,
+			memoryUsed: frame.memoryUsed,
+			memoryPercent: frame.memoryTotal > 0 ? (frame.memoryUsed / frame.memoryTotal) * 100 : 0,
+			pids: frame.pids,
+		});
+	}
+	return stats;
+}
+
 export const monitoringRouter = router({
 	/**
 	 * Host metrics: the Nixploy server itself when `serverId` is omitted,
@@ -249,8 +303,7 @@ export const monitoringRouter = router({
 	 */
 	replicaStats: protectedProcedure
 		.input(z.object({ appName: z.string().min(1), serverId: z.string().nullish() }))
-		.query(async ({ ctx, input }) => {
-			if (input.serverId) return []; // remote replica fan-out: live-only for now
+		.query(async ({ ctx, input }): Promise<ReplicaStat[]> => {
 			const organizationId = await getOrganizationId(ctx.session);
 			const withTenancy = {
 				with: { environment: { with: { project: true } } },
@@ -292,18 +345,18 @@ export const monitoringRouter = router({
 				throw new TRPCError({ code: "NOT_FOUND", message: "Service not found" });
 			}
 
-			let containers = await docker.listContainers({
-				filters: { label: [`com.docker.swarm.service.name=${input.appName}`] },
-			});
-			if (containers.length === 0) {
-				containers = await docker.listContainers({
-					filters: { label: [`com.docker.compose.project=${input.appName}`] },
-				});
+			// Pinned services: the replicas run on the row's server, not
+			// wherever the client asked — the row is the source of truth.
+			const serverId = owner.serverId ?? null;
+			if (serverId) {
+				await findServerOrThrow(serverId, organizationId);
+				return await listRemoteReplicaStats(serverId, input.appName);
 			}
-			if (containers.length === 0) {
-				containers = await docker.listContainers({
-					filters: { label: [`com.docker.stack.namespace=${input.appName}`] },
-				});
+
+			let containers: Docker.ContainerInfo[] = [];
+			for (const label of REPLICA_LABEL_FILTERS(input.appName)) {
+				containers = await docker.listContainers({ filters: { label: [label] } });
+				if (containers.length > 0) break;
 			}
 			const stats = await Promise.all(
 				containers.map(async (container) => {

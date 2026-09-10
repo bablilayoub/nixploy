@@ -729,6 +729,48 @@ describe("buildDeployComposeFile", () => {
 		});
 	});
 
+	it("pins every stack service to the row's swarm node, merging user constraints", () => {
+		const output = buildDeployComposeFile(
+			`services:
+  web:
+    image: nginx
+    deploy:
+      replicas: 2
+      placement:
+        constraints:
+          - node.role==worker
+          - node.id==stale
+  db:
+    image: postgres
+`,
+			{ appName: "myapp", composeType: "stack", swarmNodeId: "node123" },
+		);
+		const spec = parseComposeFile(output);
+		expect(spec.services?.web?.deploy).toEqual({
+			replicas: 2,
+			placement: { constraints: ["node.role==worker", "node.id==node123"] },
+		});
+		expect(spec.services?.db?.deploy).toEqual({
+			placement: { constraints: ["node.id==node123"] },
+		});
+	});
+
+	it("adds no placement without a swarmNodeId, and never for plain compose", () => {
+		const content = "services:\n  web:\n    image: nginx\n";
+		const stack = parseComposeFile(
+			buildDeployComposeFile(content, { appName: "myapp", composeType: "stack" }),
+		);
+		expect(stack.services?.web?.deploy).toBeUndefined();
+		const plain = parseComposeFile(
+			buildDeployComposeFile(content, {
+				appName: "myapp",
+				composeType: "docker-compose",
+				swarmNodeId: "node123",
+			}),
+		);
+		expect(plain.services?.web?.deploy).toBeUndefined();
+	});
+
 	it("normalizes stack files: drops top-level name and flattens long-form depends_on", () => {
 		const output = buildDeployComposeFile(
 			`name: tenant-project

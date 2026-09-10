@@ -64,15 +64,18 @@ export function reconcileStatus(current: StoredStatus, live: LiveStatus): Stored
 const runOn = (serverId: string | null, command: string): Promise<string> =>
 	serverId ? execAsyncRemote(serverId, command) : execAsync(command);
 
-/** Probe a compose deployment (stack services or compose containers). */
+/**
+ * Probe a compose deployment. Stack services are Swarm objects and are read
+ * from the primary manager whatever server the row is pinned to; plain
+ * compose containers live on the row's server and are probed there.
+ */
 async function probeComposeState(row: {
 	appName: string;
 	composeType: string;
 	serverId: string | null;
 }): Promise<LiveStatus> {
 	if (row.composeType === "stack") {
-		const out = await runOn(
-			row.serverId,
+		const out = await execAsync(
 			`docker service ls --filter ${shellQuote(`label=com.docker.stack.namespace=${row.appName}`)} --format '{{.Name}}'`,
 		);
 		const names = out
@@ -83,7 +86,7 @@ async function probeComposeState(row: {
 		let running = 0;
 		let failed = 0;
 		for (const name of names) {
-			const state = await inspectServiceState(name, row.serverId);
+			const state = await inspectServiceState(name);
 			running += state.running;
 			failed += state.failed;
 		}
@@ -236,9 +239,9 @@ export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 		for (const row of rows) {
 			if (descriptor.kind === "application" && busyApplications.has(row.id)) continue;
 			try {
-				const liveState = statusFromServiceState(
-					await inspectServiceState(row.appName, row.serverId),
-				);
+				// Service state comes from the primary manager for every row,
+				// pinned or not (see databases/engine.ts).
+				const liveState = statusFromServiceState(await inspectServiceState(row.appName));
 				// statusFromServiceState never yields "done" today; keep the cast honest.
 				const live: LiveStatus = liveState === "done" ? "running" : liveState;
 				let next = reconcileStatus(row.status, live);

@@ -15,6 +15,7 @@ import {
 	buildComposeDeployCommand,
 	prepareComposeFiles,
 	resyncComposeDomains,
+	runsOnPrimary,
 } from "../compose/service";
 import { parsePreviewSourceRef } from "../preview/source-ref";
 import { syncPreviewTraefik } from "../preview/traefik";
@@ -269,7 +270,10 @@ async function runComposeJob(ctx: DeploymentContext, job: QueueJob): Promise<voi
 	ctx.logger.line(
 		row.composeType === "stack" ? "Deploying stack..." : "Starting compose project...",
 	);
-	await ctx.run(command, { cwd: files.workDir });
+	// Stacks are Swarm services: `docker stack deploy` runs on the primary
+	// manager with the file rendered there (tasks are pinned to the row's
+	// server by the injected node constraint). Plain compose runs on the server.
+	await ctx.run(command, { cwd: files.workDir, onPrimary: runsOnPrimary(row) });
 	throwIfCancelled(job.deploymentId);
 
 	// Per-service Traefik configs for compose domains — best effort.
@@ -443,7 +447,7 @@ async function processJob(job: QueueJob): Promise<void> {
 			serverId: job.serverId,
 			logger: log,
 			run: async (command, opts) => {
-				const proc = await spawnTargeted(job.serverId, command, {
+				const proc = await spawnTargeted(opts?.onPrimary ? null : job.serverId, command, {
 					cwd: opts?.cwd,
 					onData: (chunk) => log.write(chunk),
 				});

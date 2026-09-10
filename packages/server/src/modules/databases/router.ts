@@ -113,7 +113,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 
 	const createSchema = z.object({
 		name: z.string().min(1),
-		description: z.string().optional(),
+		description: z.string().nullish(),
 		appName: appNameSchema.optional(),
 		dockerImage: z.string().min(1).default(config.defaultImage),
 		environmentId: z.string().min(1),
@@ -282,7 +282,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 				// The swarm service, its `<appName>-data` volume and every backup
 				// row are keyed by appName: renaming a deployed database would
 				// orphan all of them. Renames are only allowed before the first start.
-				if (await databaseServiceExists(existing.appName, existing.serverId)) {
+				if (await databaseServiceExists(existing.appName)) {
 					throw new TRPCError({
 						code: "BAD_REQUEST",
 						message: "appName cannot be changed once the database has been deployed",
@@ -432,7 +432,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
-			await stopDatabase(row.appName, row.serverId);
+			await stopDatabase(row.appName);
 			const updated = await updateRow(id, { status: "idle" });
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
@@ -484,7 +484,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 					assertSafePublishedPort(externalPort, "externalPort");
 				}
 				const row = await updateRow(id, { externalPort });
-				if (await databaseServiceExists(row.appName, row.serverId)) {
+				if (await databaseServiceExists(row.appName)) {
 					await deployDatabase(kind, row);
 				}
 				const canSeeSecrets = await hasCapability(
@@ -501,13 +501,13 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
-			if (!(await databaseServiceExists(row.appName, row.serverId))) {
+			if (!(await databaseServiceExists(row.appName))) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
 					message: "Database is not deployed; use start instead",
 				});
 			}
-			await reloadDatabase(row.appName, row.serverId);
+			await reloadDatabase(row.appName);
 			const updated = await updateRow(id, { status: "running" });
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
@@ -540,7 +540,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			const organizationId = await getOrganizationId(ctx);
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
-			const status = await getDatabaseStatus(row.appName, row.serverId);
+			const status = await getDatabaseStatus(row.appName);
 			if (status !== row.status) {
 				await updateRow(id, { status });
 			}

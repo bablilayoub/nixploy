@@ -34,6 +34,13 @@ export const servers = pgTable(
 		serverStatus: serverStatus("server_status").notNull().default("active"),
 		/** Join the primary swarm as a worker (default) or manager. */
 		swarmRole: swarmRole("swarm_role").notNull().default("worker"),
+		/**
+		 * Swarm node id of this server in the PRIMARY swarm (`docker info
+		 * .Swarm.NodeID`), recorded by `setupServer` after the join and lazily
+		 * by `getServerSwarmNodeId`. Services pinned to the server are placed
+		 * with `node.id==<swarmNodeId>`; null until the server has joined.
+		 */
+		swarmNodeId: text("swarm_node_id"),
 		/** Shell command run after provisioning (swarm join log etc.). */
 		command: text("command").notNull().default(""),
 		metricsConfig: jsonb("metrics_config"),

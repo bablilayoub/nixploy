@@ -214,13 +214,26 @@ export async function cloneComposeSource(composeRow: ComposeRow): Promise<{
 	return { codeDir, secrets };
 }
 
+/**
+ * Where a compose row's commands run. Plain `docker compose` and every
+ * container-level command (ps/inspect/network connect) target the row's
+ * server; `onPrimary` forces the Nixploy host, which is where Swarm
+ * SERVICE-level commands — `docker stack deploy/rm`, `docker service …` —
+ * must run: managed servers join the primary swarm as workers whose engines
+ * reject them. Stack tasks still land on the pinned server through the
+ * `node.id==` constraint injected into the rendered file.
+ */
+export interface ComposeCommandTarget {
+	onPrimary?: boolean;
+}
+
 /** Run a compose lifecycle command locally or on the row's remote server. */
 export async function runComposeCommand(
 	composeRow: ComposeRow,
 	command: string,
-	options: { cwd?: string } = {},
+	options: ComposeCommandTarget & { cwd?: string } = {},
 ): Promise<string> {
-	if (composeRow.serverId) {
+	if (composeRow.serverId && !options.onPrimary) {
 		const cwd = options.cwd ? `cd ${shellQuote(options.cwd)} && ` : "";
 		return execAsyncRemote(composeRow.serverId, `${cwd}${command}`);
 	}
@@ -230,14 +243,16 @@ export async function runComposeCommand(
 /**
  * Write a file on the target server (local fs, or base64 over SSH).
  * `mode` is applied after the write so an existing file is tightened too.
+ * `onPrimary` writes on the Nixploy host regardless of the row's server
+ * (the rendered stack file must sit where `docker stack deploy` runs).
  */
 export async function writeComposeFile(
 	composeRow: ComposeRow,
 	path: string,
 	content: string,
-	options: { mode?: number } = {},
+	options: ComposeCommandTarget & { mode?: number } = {},
 ): Promise<void> {
-	if (composeRow.serverId) {
+	if (composeRow.serverId && !options.onPrimary) {
 		// Streamed over the SSH channel's stdin: compose files and .env can
 		// exceed the remote shell's argv limit and must never sit in `ps`.
 		await writeFileTargeted(composeRow.serverId, path, content, options.mode?.toString(8));

@@ -77,6 +77,26 @@ describe("buildApplicationSwarmSpec", () => {
 		expect(spec.Mode).toEqual({ Replicated: { Replicas: 2 } });
 	});
 
+	it("pins the task to the server's swarm node when one is given", () => {
+		const pinned = JSON.parse(
+			JSON.stringify(
+				buildApplicationSwarmSpec(
+					{ ...application, placementSwarm: { Constraints: ["node.labels.tier==db"] } },
+					[],
+					[],
+					"myapp:latest",
+					[],
+					{ swarmNodeId: "node123" },
+				),
+			),
+		);
+		expect(pinned.TaskTemplate.Placement).toEqual({
+			Constraints: ["node.labels.tier==db", "node.id==node123"],
+		});
+		// Unpinned: the user's placement (or none) passes through.
+		expect(wire([]).TaskTemplate.Placement).toBeUndefined();
+	});
+
 	it("sends explicit empties so an update never inherits stale values", () => {
 		// `undefined` keys vanish in JSON: the engine would keep the previous
 		// env/command/healthcheck, or a spread over the current spec would

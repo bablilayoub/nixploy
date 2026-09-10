@@ -1,5 +1,6 @@
 import { parse, stringify } from "yaml";
 import { getSwarmNetwork } from "../application/paths";
+import { mergeNodeConstraint } from "../cluster/placement";
 import { parseEnv } from "../deployment/env";
 
 /**
@@ -774,6 +775,47 @@ function normalizeForStack(spec: ComposeFileSpec): ComposeFileSpec {
 	return { ...rest, services };
 }
 
+/**
+ * Stack mode, row pinned to a managed server: `docker stack deploy` runs on
+ * the PRIMARY manager (see compose/source.ts), so every service gets
+ * `deploy.placement.constraints: ["node.id==<swarmNodeId>"]` to land its
+ * tasks — and their `<appName>_*` named volumes — on the pinned server. The
+ * user's other constraints are kept; a foreign `node.id==` pin is replaced.
+ *
+ * Limitation: `docker stack deploy` never builds (it ignores `build:`, which
+ * the safety check rejects anyway), so stack services on a remote must use
+ * images the pinned node can pull from a registry.
+ */
+export function injectNodeConstraint(
+	spec: ComposeFileSpec,
+	swarmNodeId: string | null | undefined,
+): ComposeFileSpec {
+	if (!swarmNodeId) return spec;
+	const services: Record<string, ComposeServiceSpec> = {};
+	for (const [serviceName, service] of Object.entries(spec.services ?? {})) {
+		const deploy =
+			service.deploy && typeof service.deploy === "object" && !Array.isArray(service.deploy)
+				? (service.deploy as Record<string, unknown>)
+				: {};
+		const placement =
+			deploy.placement && typeof deploy.placement === "object" && !Array.isArray(deploy.placement)
+				? (deploy.placement as Record<string, unknown>)
+				: {};
+		const constraints = Array.isArray(placement.constraints) ? placement.constraints : [];
+		services[serviceName] = {
+			...service,
+			deploy: {
+				...deploy,
+				placement: {
+					...placement,
+					constraints: mergeNodeConstraint(constraints, swarmNodeId),
+				},
+			},
+		};
+	}
+	return { ...spec, services };
+}
+
 export interface DeployComposeInput {
 	appName: string;
 	composeType: "docker-compose" | "stack";
@@ -783,6 +825,11 @@ export interface DeployComposeInput {
 	env?: ComposeEnv;
 	/** Source service names (before the suffix) that have a Nixploy domain. */
 	exposedServices?: Iterable<string>;
+	/**
+	 * Stack mode only: primary-swarm node id of the server the row is pinned
+	 * to (`getServerSwarmNodeId`); every service is placed on it.
+	 */
+	swarmNodeId?: string | null;
 }
 
 /**
@@ -814,7 +861,7 @@ export function buildDeployComposeFile(
 		exposedServices,
 	});
 	if (input.composeType === "stack") {
-		spec = normalizeForStack(spec);
+		spec = injectNodeConstraint(normalizeForStack(spec), input.swarmNodeId);
 	}
 	return stringify(escapeComposeInterpolation(spec));
 }

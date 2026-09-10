@@ -8,6 +8,7 @@ import { assertSafeAppName } from "../../utils/validators";
 import { isAppNameTaken as isAnyAppNameTaken } from "../application/app-name";
 import { getSwarmNetwork } from "../application/paths";
 import { unregisterBackupsForService } from "../backups/scheduler";
+import { getServerSwarmNodeId } from "../cluster/swarm-node";
 import { removeServiceLogs } from "../deployment/maintenance";
 import { unregisterSchedulesForService } from "../schedules";
 import { DEFAULT_CONTAINER_PORT } from "../traefik/config-writer";
@@ -52,6 +53,14 @@ import {
 
 export type { ComposeRow };
 export { buildComposeDeployCommand, traefikAppName };
+
+/**
+ * Stack rows are Swarm services: their deploy/rm/inspect commands run on the
+ * primary manager whatever server the row is pinned to (see
+ * `runComposeCommand`). Plain compose rows run entirely on their server.
+ */
+export const runsOnPrimary = (row: Pick<ComposeRow, "composeType">): boolean =>
+	row.composeType === "stack";
 
 /** Compose row with its tenancy chain (environment → project) loaded. */
 export async function findComposeById(composeId: string) {
@@ -325,6 +334,14 @@ export async function prepareComposeFiles(composeRow: ComposeRow): Promise<Prepa
 	);
 	const env = composeEnvMap(mergedEnv);
 
+	// Stack rows pinned to a server: `docker stack deploy` runs on the primary
+	// manager, so the rendered file is written on the Nixploy host and every
+	// service is placed on the server's swarm node. The clone/raw source and
+	// the operator `.env` stay on the row's server as before.
+	const onPrimary = runsOnPrimary(composeRow);
+	const swarmNodeId =
+		onPrimary && composeRow.serverId ? await getServerSwarmNodeId(composeRow.serverId) : null;
+
 	const transformed = buildDeployComposeFile(
 		rawContent,
 		{
@@ -333,11 +350,12 @@ export async function prepareComposeFiles(composeRow: ComposeRow): Promise<Prepa
 			suffix: composeSuffix(composeRow),
 			env,
 			exposedServices: await exposedServiceNames(composeRow.composeId),
+			swarmNodeId,
 		},
 		composeRow.hostPrivileged ? hostPrivilegedComposeSafety() : undefined,
 	);
 	// Both carry resolved secrets — owner-only.
-	await writeComposeFile(composeRow, composeFilePath, transformed, { mode: 0o600 });
+	await writeComposeFile(composeRow, composeFilePath, transformed, { mode: 0o600, onPrimary });
 	await writeComposeFile(composeRow, envFilePath, `${mergedEnv}\n`, { mode: 0o600 });
 
 	// Scrub the merged env from logs — values land in the rendered file and
@@ -367,6 +385,7 @@ export async function startCompose(composeRow: ComposeRow): Promise<void> {
 		const files = await prepareComposeFiles(composeRow);
 		await runComposeCommand(composeRow, buildComposeDeployCommand(composeRow, files), {
 			cwd: files.workDir,
+			onPrimary: runsOnPrimary(composeRow),
 		});
 		await updateStatus(composeRow.composeId, "running");
 	} catch (error) {
@@ -381,6 +400,7 @@ export async function stopCompose(composeRow: ComposeRow): Promise<void> {
 		const files = await prepareComposeFiles(composeRow);
 		await runComposeCommand(composeRow, buildComposeStopCommand(composeRow, files), {
 			cwd: files.workDir,
+			onPrimary: runsOnPrimary(composeRow),
 		});
 	} finally {
 		await updateStatus(composeRow.composeId, "idle");
@@ -409,9 +429,10 @@ export async function deleteCompose(composeRow: ComposeRow): Promise<void> {
 		const command = files
 			? buildComposeDownCommand(composeRow, files)
 			: buildComposeFallbackDownCommand(composeRow);
-		await runComposeCommand(composeRow, command, files ? { cwd: files.workDir } : {}).catch(
-			() => {},
-		);
+		await runComposeCommand(composeRow, command, {
+			...(files ? { cwd: files.workDir } : {}),
+			onPrimary: runsOnPrimary(composeRow),
+		}).catch(() => {});
 	} catch {
 		// best-effort teardown
 	}
@@ -432,9 +453,10 @@ export async function deleteCompose(composeRow: ComposeRow): Promise<void> {
 	const baseDir = getComposeBaseDir(composeRow.appName);
 	if (composeRow.serverId) {
 		await runComposeCommand(composeRow, `rm -rf ${shellQuote(baseDir)}`).catch(() => {});
-	} else {
-		await rm(baseDir, { recursive: true, force: true }).catch(() => {});
 	}
+	// Always sweep the Nixploy host too: a stack pinned to a server keeps its
+	// rendered file here (no-op for rows that never wrote anything locally).
+	await rm(baseDir, { recursive: true, force: true }).catch(() => {});
 	// Build logs live outside the compose dir and have no FK to cascade through.
 	await removeServiceLogs(composeRow.appName).catch(() => {});
 }
@@ -474,18 +496,25 @@ export async function loadServices(composeRow: ComposeRow): Promise<string[]> {
 async function ensureSharedNetworkAttached(row: ComposeRow, serviceName: string): Promise<void> {
 	const network = getSwarmNetwork();
 	if (row.composeType === "stack") {
+		// Service-level: the primary manager owns the service object.
+		const onPrimary = true;
 		const [networkId, attached] = await Promise.all([
-			runComposeCommand(row, `docker network inspect --format '{{.Id}}' ${shellQuote(network)}`),
+			runComposeCommand(row, `docker network inspect --format '{{.Id}}' ${shellQuote(network)}`, {
+				onPrimary,
+			}),
 			runComposeCommand(
 				row,
 				`docker service inspect --format '{{json .Spec.TaskTemplate.Networks}}' ${shellQuote(stackServiceName(row, serviceName))}`,
+				{ onPrimary },
 			),
 		]);
 		const targets = (JSON.parse(attached.trim() || "[]") as Array<{ Target?: string }>).map(
 			(entry) => entry.Target,
 		);
 		if (targets.includes(networkId.trim())) return;
-		await runComposeCommand(row, sharedNetworkServiceUpdateCommand(row, serviceName));
+		await runComposeCommand(row, sharedNetworkServiceUpdateCommand(row, serviceName), {
+			onPrimary,
+		});
 		return;
 	}
 

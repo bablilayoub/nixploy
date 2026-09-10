@@ -8,6 +8,9 @@
  * `db` / routers so the lazy client targets the test database.
  */
 
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { TenantFixture } from "./tenancy.harness";
 import { COVERED, EXEMPT, isListOrGetProcedure } from "./tenancy-coverage";
@@ -25,6 +28,11 @@ describe.skipIf(!testUrl)("tenant isolation", () => {
 
 	beforeAll(async () => {
 		process.env.DATABASE_URL = testUrl as string;
+		// Domain mutations write Traefik YAML under the config dir; CI runs as
+		// a plain user where the production default (/etc/nixploy) is not writable.
+		if (!process.env.NIXPLOY_CONFIG_DIR) {
+			process.env.NIXPLOY_CONFIG_DIR = await mkdtemp(join(tmpdir(), "nixploy-tenancy-"));
+		}
 		harness = await import("./tenancy.harness");
 		({ a, b } = await harness.seedTwoTenants());
 		callerA = harness.createTestCaller(a.session);
@@ -127,6 +135,54 @@ describe.skipIf(!testUrl)("tenant isolation", () => {
 		expect(listA.map((row) => row.tagId)).not.toContain(tagB?.tagId);
 		expect(listB.map((row) => row.tagId)).toContain(tagB?.tagId);
 		expect(listB.map((row) => row.tagId)).not.toContain(tagA?.tagId);
+	});
+
+	it("domain.create refuses a host another org already routes (any port, any path)", async () => {
+		const host = `shared-${Date.now()}.example.test`;
+		const created = await callerA.domain.create({
+			host,
+			applicationId: a.applicationId,
+			port: 3000,
+		});
+		expect(created.host).toBe(host);
+
+		const expectConflict = async (promise: Promise<unknown>) => {
+			await expect(promise).rejects.toMatchObject({ code: "CONFLICT" });
+		};
+		// Different port / NULL port never made the DB index fire.
+		await expectConflict(
+			callerB.domain.create({ host, applicationId: b.applicationId, port: 8080 }),
+		);
+		await expectConflict(callerB.domain.create({ host, applicationId: b.applicationId }));
+		// A sub-path on someone else's host is exactly the hijack (longer
+		// PathPrefix wins in Traefik); case folding must not bypass it.
+		await expectConflict(
+			callerB.domain.create({
+				host: host.toUpperCase(),
+				path: "/api",
+				applicationId: b.applicationId,
+				port: 8080,
+			}),
+		);
+		// Same org, same host + path on any service: still a conflict.
+		await expectConflict(
+			callerA.domain.create({ host, applicationId: a.applicationId, port: 4000 }),
+		);
+		// Same org, another path: legitimate multi-service host.
+		const api = await callerA.domain.create({
+			host,
+			path: "/api",
+			applicationId: a.applicationId,
+			port: 3000,
+		});
+		expect(api.path).toBe("/api");
+		// Updating the other org's own domain onto the taken host is rejected too.
+		const own = await callerB.domain.create({
+			host: `own-${Date.now()}.example.test`,
+			applicationId: b.applicationId,
+			port: 3000,
+		});
+		await expectConflict(callerB.domain.update({ domainId: own.domainId, host }));
 	});
 });
 

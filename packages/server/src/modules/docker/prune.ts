@@ -109,14 +109,19 @@ export function isGuardedVolumeName(name: string, guard?: ServiceVolumeGuard | n
  * passed; we also skip Nixploy platform volumes, volumes any Swarm service
  * mounts, and volumes Nixploy service rows own (`guard`) even if nothing
  * mounts them right now.
+ *
+ * `run` targets the host whose volumes are pruned; `runOnPrimary` (defaults
+ * to `run`) reads the Swarm service specs, which only exist on the primary
+ * manager — a managed server is usually a worker with no service API.
  */
 export async function pruneUnusedVolumes(
 	run: Run,
 	guard?: ServiceVolumeGuard | null,
+	runOnPrimary: Run = run,
 ): Promise<string> {
 	const [inUse, swarmMounted, listed] = await Promise.all([
 		listInUseVolumeNames(run),
-		listSwarmServiceVolumeNames(run),
+		listSwarmServiceVolumeNames(runOnPrimary),
 		run(`docker volume ls --format '{{json .}}'`).then(parseJsonLines<{ Name: string }>),
 	]);
 

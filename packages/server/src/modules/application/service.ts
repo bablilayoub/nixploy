@@ -15,12 +15,14 @@ import {
 } from "../../db/schema";
 import { assertSafeAppName, assertSafePublishedPort } from "../../utils/validators";
 import { unregisterBackupsForService } from "../backups/scheduler";
+import { getServerSwarmNodeId } from "../cluster/swarm-node";
 import { envToArray, mergeEnv } from "../deployment/env";
 import { removeServiceLogs } from "../deployment/maintenance";
 import {
 	buildContainerSpec,
 	sanitizeNetworkAttachments,
 	sanitizeSwarmLabels,
+	withNodeConstraint,
 } from "../deployment/swarm";
 import { deletePreviewDeployment } from "../preview";
 import { unregisterSchedulesForService } from "../schedules";
@@ -189,6 +191,14 @@ export const loadMergedApplicationEnv = async (
 	return envToArray(mergeEnv(environment?.project.env, environment?.env, application.env));
 };
 
+export interface ApplicationSwarmSpecOptions {
+	/**
+	 * Primary-swarm node id of the server the application is pinned to
+	 * (`getServerSwarmNodeId`); merged into the placement as `node.id==…`.
+	 */
+	swarmNodeId?: string | null;
+}
+
 /**
  * Swarm service spec from DB state. The ContainerSpec carries explicit
  * empties (`Env: []`, `Command: null`, ...): `undefined` keys vanish in
@@ -205,6 +215,7 @@ export const buildApplicationSwarmSpec = (
 	>,
 	image: string,
 	env: string[],
+	options: ApplicationSwarmSpecOptions = {},
 ): Docker.ServiceSpec => {
 	const mountSpecs: Docker.MountSettings[] = applicationMounts.map(
 		(mount): Docker.MountSettings => {
@@ -270,7 +281,10 @@ export const buildApplicationSwarmSpec = (
 			},
 			RestartPolicy:
 				(application.restartPolicySwarm as Docker.TaskRestartPolicy | null) ?? undefined,
-			Placement: (application.placementSwarm as Docker.Placement | null) ?? undefined,
+			Placement: withNodeConstraint(
+				application.placementSwarm as Docker.Placement | null,
+				options.swarmNodeId,
+			),
 			Networks: sanitizeNetworkAttachments(application.networkSwarm),
 		},
 		Mode: (application.modeSwarm as Docker.ServiceMode | null) ?? {
@@ -295,13 +309,16 @@ export const buildApplicationSwarmSpec = (
  * engine owns the first rollout.
  */
 export const upsertApplicationSwarmService = async (application: ApplicationRow): Promise<void> => {
-	const docker = await getDocker(application.serverId);
+	// Service objects live on the primary manager; the pinned server only
+	// shows up as a placement constraint (see application/docker.ts).
+	const docker = await getDocker();
 	const service = docker.getService(application.appName);
 
-	const [applicationMounts, applicationPorts, env] = await Promise.all([
+	const [applicationMounts, applicationPorts, env, swarmNodeId] = await Promise.all([
 		db.query.mounts.findMany({ where: eq(mounts.applicationId, application.applicationId) }),
 		db.query.ports.findMany({ where: eq(ports.applicationId, application.applicationId) }),
 		loadMergedApplicationEnv(application),
+		application.serverId ? getServerSwarmNodeId(application.serverId) : null,
 	]);
 
 	let current: ServiceInspectInfo | null = null;
@@ -334,6 +351,7 @@ export const upsertApplicationSwarmService = async (application: ApplicationRow)
 		applicationPorts,
 		image,
 		env,
+		{ swarmNodeId },
 	);
 
 	if (!current) {
@@ -563,10 +581,11 @@ export const deleteApplication = async (
 		),
 	);
 
-	await removeSwarmService(application.appName, application.serverId).catch(() => {
+	await removeSwarmService(application.appName).catch(() => {
 		// service may never have been deployed
 	});
-	// Built images + rollback pins are not swept by the (dangling-only) cleanup cron.
+	// Built images + rollback pins are not swept by the (dangling-only) cleanup
+	// cron. Image-level: they live on the server the app was built on.
 	await removeApplicationImages(application.appName, application.serverId).catch(() => {});
 	await removeTraefikConfig(application.appName);
 
@@ -581,23 +600,23 @@ export const deleteApplication = async (
 
 /** Start a stopped application by scaling back to its configured replicas. */
 export const startApplication = async (
-	application: Pick<Application, "applicationId" | "appName" | "replicas" | "serverId">,
+	application: Pick<Application, "applicationId" | "appName" | "replicas">,
 ): Promise<void> => {
-	const service = await inspectSwarmService(application.appName, application.serverId);
+	const service = await inspectSwarmService(application.appName);
 	if (!service) {
 		throw new Error("Application has not been deployed yet — deploy it first");
 	}
-	await scaleSwarmService(application.appName, application.replicas || 1, application.serverId);
+	await scaleSwarmService(application.appName, application.replicas || 1);
 	await updateApplication(application.applicationId, { status: "running" });
 };
 
 /** Stop an application by scaling its swarm service to 0. */
 export const stopApplication = async (
-	application: Pick<Application, "applicationId" | "appName" | "serverId">,
+	application: Pick<Application, "applicationId" | "appName">,
 ): Promise<void> => {
 	// Never-deployed apps have no service to scale; the row still flips to idle.
-	if (await inspectSwarmService(application.appName, application.serverId)) {
-		await scaleSwarmService(application.appName, 0, application.serverId);
+	if (await inspectSwarmService(application.appName)) {
+		await scaleSwarmService(application.appName, 0);
 	}
 	await updateApplication(application.applicationId, { status: "idle" });
 };

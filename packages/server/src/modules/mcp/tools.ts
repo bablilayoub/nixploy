@@ -288,7 +288,7 @@ export const mcpTools: McpToolDefinition[] = [
 	{
 		name: "get_service_metrics",
 		description:
-			"Latest CPU/memory stats per running replica of a service, identified by its appName (from list_services). Local-host services only — remote servers return an empty list.",
+			"Latest CPU/memory stats per running replica of a service, identified by its appName (from list_services). Pass the service's serverId for services pinned to a managed server (sampled over SSH).",
 		inputSchema: z.object({
 			appName: z.string().min(1).describe("Swarm service name (appName from list_services)"),
 			serverId: z.string().nullish(),

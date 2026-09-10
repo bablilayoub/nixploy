@@ -108,6 +108,14 @@ export const auth = betterAuth({
 			"/two-factor/verify-backup-code": { window: 60, max: 10 },
 			"/forget-password": { window: 300, max: 5 },
 			"/reset-password": { window: 300, max: 5 },
+			// Read-only routes the dashboard calls on every navigation. better-auth
+			// keys its limiter by client IP + path (or one shared bucket when no
+			// trusted proxy resolves an IP), so the 60/min default throttled a
+			// single team hard-refreshing the panel.
+			"/get-session": { window: 60, max: 600 },
+			"/list-sessions": { window: 60, max: 120 },
+			"/organization/*": { window: 60, max: 300 },
+			"/api-key/*": { window: 60, max: 120 },
 		},
 	},
 	plugins: [

@@ -309,10 +309,13 @@ export async function deletePreviewDeployment(
 	});
 	const serverId = application?.serverId ?? preview.serverId;
 
-	await removeSwarmService(preview.appName, serverId).catch(() => {
+	// Service objects live on the primary manager whatever server the
+	// preview inherited from its parent.
+	await removeSwarmService(preview.appName).catch(() => {
 		// variant may never have been deployed
 	});
-	// The PR build is tagged `<app>-pr-<n>:latest`; nothing else references it.
+	// The PR build is tagged `<app>-pr-<n>:latest` on the server that built
+	// it; nothing else references it.
 	await removeApplicationImages(preview.appName, serverId).catch(() => {});
 	// Routing YAML always lives on the Nixploy host (where Traefik runs).
 	await removeTraefikConfig(preview.appName);

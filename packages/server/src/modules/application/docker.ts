@@ -5,10 +5,20 @@ import { servers } from "../../db/schema";
 import { verifyRemoteHostKey } from "../../utils/exec";
 
 /**
- * Docker/Swarm operations against the local host or a remote managed
- * server. Local goes through the docker socket; remote servers are
- * reached with dockerode's SSH transport using the server's SSH key
- * (same trust model as `execAsyncRemote`).
+ * Docker operations against the local host or a remote managed server.
+ * Local goes through the docker socket; remote servers are reached with
+ * dockerode's SSH transport using the server's SSH key (same trust model as
+ * `execAsyncRemote`).
+ *
+ * Which daemon to talk to depends on the KIND of object:
+ * - Swarm SERVICE objects (create/inspect/update/scale/remove) always go to
+ *   the primary manager (`getDocker()` with no serverId): managed servers
+ *   join the primary swarm, usually as workers, whose engines reject every
+ *   service-level call. Where a task RUNS is decided by its placement
+ *   constraint (`cluster/placement.ts`), not by which daemon received it.
+ * - Container/image-level operations (logs, exec, stats, image removal)
+ *   target the node that holds the container/image: `getDocker(serverId)`
+ *   for services pinned to a server.
  */
 export const getDocker = async (serverId?: string | null): Promise<Docker> => {
 	if (!serverId) {
@@ -55,12 +65,9 @@ const isNotFound = (error: unknown): boolean =>
  */
 export type ServiceInspectInfo = Docker.Service;
 
-/** Inspect a swarm service by name; `null` when it does not exist. */
-export const inspectSwarmService = async (
-	appName: string,
-	serverId?: string | null,
-): Promise<ServiceInspectInfo | null> => {
-	const docker = await getDocker(serverId);
+/** Inspect a swarm service by name on the primary manager; `null` when it does not exist. */
+export const inspectSwarmService = async (appName: string): Promise<ServiceInspectInfo | null> => {
+	const docker = await getDocker();
 	try {
 		return await docker.getService(appName).inspect();
 	} catch (error) {
@@ -70,11 +77,8 @@ export const inspectSwarmService = async (
 };
 
 /** Remove a swarm service; no-op when it does not exist. */
-export const removeSwarmService = async (
-	appName: string,
-	serverId?: string | null,
-): Promise<void> => {
-	const docker = await getDocker(serverId);
+export const removeSwarmService = async (appName: string): Promise<void> => {
+	const docker = await getDocker();
 	try {
 		await docker.getService(appName).remove();
 	} catch (error) {
@@ -91,6 +95,9 @@ export const removeSwarmService = async (
  * disk forever. Untagging is forced so it succeeds while the service's last
  * tasks are still shutting down; the layers become dangling and are
  * reclaimed by the next cleanup pass.
+ *
+ * Image-level: runs on the server the app is pinned to (that is where the
+ * build tagged them), or the Nixploy host for unpinned apps.
  */
 export const removeApplicationImages = async (
 	appName: string,
@@ -112,12 +119,8 @@ export const removeApplicationImages = async (
 };
 
 /** Scale a swarm service to `replicas` (0 = stopped). */
-export const scaleSwarmService = async (
-	appName: string,
-	replicas: number,
-	serverId?: string | null,
-): Promise<void> => {
-	const docker = await getDocker(serverId);
+export const scaleSwarmService = async (appName: string, replicas: number): Promise<void> => {
+	const docker = await getDocker();
 	const service = docker.getService(appName);
 	const current = await service.inspect();
 	const spec = current.Spec ?? {};
@@ -126,11 +129,8 @@ export const scaleSwarmService = async (
 };
 
 /** Force a re-pull/restart of every task (`docker service update --force`). */
-export const reloadSwarmService = async (
-	appName: string,
-	serverId?: string | null,
-): Promise<void> => {
-	const docker = await getDocker(serverId);
+export const reloadSwarmService = async (appName: string): Promise<void> => {
+	const docker = await getDocker();
 	const service = docker.getService(appName);
 	const current = await service.inspect();
 	const spec = current.Spec ?? {};
@@ -141,13 +141,13 @@ export const reloadSwarmService = async (
 	await service.update({ version: current.Version.Index, ...spec });
 };
 
-/** Point a swarm service at a different image (used by rollbacks). */
-export const updateSwarmServiceImage = async (
-	appName: string,
-	image: string,
-	serverId?: string | null,
-): Promise<void> => {
-	const docker = await getDocker(serverId);
+/**
+ * Point a swarm service at a different image (used by rollbacks). The
+ * placement constraint of the running spec is kept, so a locally built
+ * `appName:<version>` pin resolves on the node that built it.
+ */
+export const updateSwarmServiceImage = async (appName: string, image: string): Promise<void> => {
+	const docker = await getDocker();
 	const service = docker.getService(appName);
 	const current = await service.inspect();
 	const spec = current.Spec ?? {};
@@ -161,19 +161,19 @@ export const updateSwarmServiceImage = async (
 /**
  * Create a copy of a running service under a new name (used by preview
  * deployments). Published ports are stripped so the variant never
- * collides with the parent on the ingress network.
+ * collides with the parent on the ingress network; the parent's placement
+ * (node pin) is inherited.
  */
 export const cloneSwarmService = async (
 	sourceAppName: string,
 	targetAppName: string,
-	serverId?: string | null,
 ): Promise<void> => {
-	const docker = await getDocker(serverId);
-	const current = await inspectSwarmService(sourceAppName, serverId);
+	const docker = await getDocker();
+	const current = await inspectSwarmService(sourceAppName);
 	if (!current?.Spec) {
 		throw new Error(`Swarm service "${sourceAppName}" does not exist`);
 	}
-	const existing = await inspectSwarmService(targetAppName, serverId);
+	const existing = await inspectSwarmService(targetAppName);
 	if (existing) {
 		await docker.getService(targetAppName).remove();
 	}

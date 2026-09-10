@@ -6,6 +6,7 @@ import { getSwarmNetwork } from "../application/paths";
 import { shellQuote } from "../deployment/paths";
 import { REMOTE_TRAEFIK_DIR } from "../traefik/paths";
 import { buildTraefikStaticConfig } from "../traefik/setup";
+import { inspectPrimaryNode } from "./swarm-node";
 
 export type SwarmRole = "worker" | "manager";
 
@@ -220,6 +221,20 @@ fi`,
 			log.push(`# swarm already active (${role} requested; left as-is)`);
 		}
 
+		// Record the node id in the PRIMARY swarm: services pinned to this
+		// server are created on the primary manager with a
+		// `node.id==<swarmNodeId>` placement constraint (cluster/swarm-node.ts).
+		// A node the primary does not know joined some other swarm — leave the
+		// column empty so deploys fail with a clear error instead of pending.
+		const swarmNodeId =
+			(await step("read swarm node id", `docker info --format '{{.Swarm.NodeID}}'`)).trim() || null;
+		const knownToPrimary = swarmNodeId ? await inspectPrimaryNode(swarmNodeId) : null;
+		if (!knownToPrimary) {
+			log.push(
+				`# warning: node ${swarmNodeId ?? "?"} is not part of the Nixploy host's swarm — run \`docker swarm leave --force\` on this server and re-run setup`,
+			);
+		}
+
 		// Overlay networks are cluster-scoped; create from a manager if missing.
 		// Workers cannot create overlay networks.
 		if (role === "manager") {
@@ -251,7 +266,11 @@ fi`,
 		const command = redactServerCommandLog(log.join("\n")) ?? "";
 		await db
 			.update(servers)
-			.set({ command, serverStatus: "active" })
+			.set({
+				command,
+				serverStatus: "active",
+				swarmNodeId: knownToPrimary ? swarmNodeId : null,
+			})
 			.where(eq(servers.serverId, serverId));
 		return command;
 	} catch (error) {

@@ -1,5 +1,42 @@
 import { describe, expect, it } from "vitest";
-import { buildContainerSpec, buildRuntimeSpecs } from "./swarm";
+import { buildContainerSpec, buildRuntimeSpecs, withNodeConstraint } from "./swarm";
+
+describe("withNodeConstraint", () => {
+	it("leaves the user's placement untouched for unpinned services", () => {
+		expect(withNodeConstraint(null, null)).toBeUndefined();
+		expect(withNodeConstraint({ Constraints: ["node.role==worker"] }, null)).toEqual({
+			Constraints: ["node.role==worker"],
+		});
+	});
+
+	it("adds node.id== for pinned services, keeping other constraints and preferences", () => {
+		expect(
+			withNodeConstraint(
+				{
+					Constraints: ["node.role==worker", "node.labels.zone==eu"],
+					Preferences: [{ Spread: { SpreadDescriptor: "node.labels.zone" } }],
+				},
+				"nodeabc",
+			),
+		).toEqual({
+			Constraints: ["node.role==worker", "node.labels.zone==eu", "node.id==nodeabc"],
+			Preferences: [{ Spread: { SpreadDescriptor: "node.labels.zone" } }],
+		});
+		expect(withNodeConstraint(undefined, "nodeabc")).toEqual({
+			Constraints: ["node.id==nodeabc"],
+		});
+	});
+
+	it("never duplicates the pin and replaces a foreign node.id== pin", () => {
+		// A stale/foreign node pin next to ours would leave the task unschedulable.
+		expect(
+			withNodeConstraint(
+				{ Constraints: ["node.id==nodeabc", "node.id == other", "node.id!=old"] },
+				"nodeabc",
+			),
+		).toEqual({ Constraints: ["node.id!=old", "node.id==nodeabc"] });
+	});
+});
 
 describe("buildRuntimeSpecs", () => {
 	const mounts = [

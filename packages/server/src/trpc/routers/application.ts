@@ -661,7 +661,7 @@ export const applicationRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 		const application = await assertApplicationAccess(input.applicationId, organizationId);
-		await reloadSwarmService(application.appName, application.serverId);
+		await reloadSwarmService(application.appName);
 		const updated = await updateApplication(application.applicationId, { status: "running" });
 		const canSeeSecrets = await hasCapability(ctx.session.user.id, organizationId, "secrets.read");
 		return canSeeSecrets ? updated : redactApplicationSecrets(updated);
@@ -672,7 +672,7 @@ export const applicationRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 		const application = await assertApplicationAccess(input.applicationId, organizationId);
-		if (!(await inspectSwarmService(application.appName, application.serverId))) {
+		if (!(await inspectSwarmService(application.appName))) {
 			throw new TRPCError({
 				code: "PRECONDITION_FAILED",
 				message: "Application has not been deployed yet — deploy it first",
@@ -767,7 +767,7 @@ export const applicationRouter = router({
 			if (!rollback) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Rollback not found" });
 			}
-			if (!(await inspectSwarmService(application.appName, application.serverId))) {
+			if (!(await inspectSwarmService(application.appName))) {
 				throw new TRPCError({
 					code: "PRECONDITION_FAILED",
 					message: "Application has no running service to roll back — deploy it first",
@@ -779,7 +779,7 @@ export const applicationRouter = router({
 			const startedAt = new Date();
 			const lines = [`Rollback ${deploymentId} started`, `Rolling back to image ${rollback.image}`];
 			try {
-				await updateSwarmServiceImage(application.appName, rollback.image, application.serverId);
+				await updateSwarmServiceImage(application.appName, rollback.image);
 				lines.push("Swarm service updated", "Rollback successful");
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);

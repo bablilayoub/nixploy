@@ -3,6 +3,8 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { environments, mounts, ports } from "../../db/schema";
 import { getSwarmNetwork, resolveFileMountPath } from "../application/paths";
+import { mergeNodeConstraint } from "../cluster/placement";
+import { getServerSwarmNodeId } from "../cluster/swarm-node";
 import type { DeploymentContext } from "./context";
 import { getDocker } from "./docker";
 import { envToArray, mergeEnv } from "./env";
@@ -53,6 +55,24 @@ const parseCpuNano = (value: string | null): number | undefined => {
 	if (Number.isNaN(cpus) || cpus <= 0) return undefined;
 	return Math.floor(cpus * 1e9);
 };
+
+/**
+ * Placement for a service: the user's `placementSwarm` with the pinned
+ * server's `node.id==<swarmNodeId>` constraint merged in. The image is
+ * built on that server and its volumes/file mounts live there, so the task
+ * must be scheduled on it; unpinned services (`serverId` null) keep the
+ * user's placement untouched.
+ */
+export function withNodeConstraint(
+	placement: Docker.Placement | null | undefined,
+	swarmNodeId: string | null | undefined,
+): Docker.Placement | undefined {
+	if (!swarmNodeId) return placement ?? undefined;
+	return {
+		...(placement ?? {}),
+		Constraints: mergeNodeConstraint(placement?.Constraints, swarmNodeId),
+	};
+}
 
 /** Create the shared overlay network when missing (fresh swarm installs). */
 async function ensureSwarmNetwork(docker: Docker): Promise<void> {
@@ -169,8 +189,13 @@ export async function upsertSwarmService(
 	imageTag: string,
 	options: UpsertSwarmServiceOptions = {},
 ): Promise<void> {
-	const docker = await getDocker(ctx.serverId);
+	// Swarm service objects live on the PRIMARY manager: managed servers join
+	// its swarm (usually as workers, whose engines reject service-level
+	// calls). The build ran on ctx.serverId; the placement constraint below
+	// sends the task there, where the image is.
+	const docker = await getDocker();
 	await ensureSwarmNetwork(docker);
+	const swarmNodeId = ctx.serverId ? await getServerSwarmNodeId(ctx.serverId) : null;
 
 	const [applicationMounts, applicationPorts, environment] = await Promise.all([
 		db.query.mounts.findMany({ where: eq(mounts.applicationId, application.applicationId) }),
@@ -221,7 +246,10 @@ export async function upsertSwarmService(
 			},
 			RestartPolicy:
 				(application.restartPolicySwarm as Docker.TaskRestartPolicy | null) ?? undefined,
-			Placement: (application.placementSwarm as Docker.Placement | null) ?? undefined,
+			Placement: withNodeConstraint(
+				application.placementSwarm as Docker.Placement | null,
+				swarmNodeId,
+			),
 			Networks: sanitizeNetworkAttachments(application.networkSwarm),
 		},
 		// Previews are throwaway single replicas; the parent's mode/replica

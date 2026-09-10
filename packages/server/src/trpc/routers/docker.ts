@@ -102,6 +102,28 @@ async function assertClusterAdmin(ctx: AdminContext, serverId?: string | null) {
 	return organizationId;
 }
 
+/**
+ * Swarm services and nodes are cluster-scoped objects that only a manager
+ * can read or change. Managed servers are usually workers, so the swarm
+ * views always run on the PRIMARY engine — `serverId` is still checked
+ * against the caller's org (the tab was opened for that server) but never
+ * used as the command target.
+ */
+async function runSwarmOnPrimary(
+	ctx: DockerContext,
+	serverId: string | null | undefined,
+	command: string,
+): Promise<string> {
+	if (serverId) {
+		const organizationId = await resolveOrg(ctx);
+		const server = await findServerById(serverId, organizationId);
+		if (!server) {
+			throw new TRPCError({ code: "NOT_FOUND", message: "Server not found" });
+		}
+	}
+	return await execAsync(command);
+}
+
 /** `docker node|service ...` on a worker or non-swarm engine: an empty tab, not an error. */
 function isNotSwarmManagerError(error: unknown): boolean {
 	const message = error instanceof Error ? error.message : String(error);
@@ -226,7 +248,7 @@ export const dockerRouter = router({
 		await assertClusterAdmin(ctx, input?.serverId);
 		let out: string;
 		try {
-			out = await runOn(ctx, input.serverId, `docker service ls --format '{{json .}}'`);
+			out = await runSwarmOnPrimary(ctx, input.serverId, `docker service ls --format '{{json .}}'`);
 		} catch (error) {
 			if (isNotSwarmManagerError(error)) return [];
 			throw error;
@@ -248,7 +270,7 @@ export const dockerRouter = router({
 		await assertClusterAdmin(ctx, input?.serverId);
 		let out: string;
 		try {
-			out = await runOn(ctx, input.serverId, `docker node ls --format '{{json .}}'`);
+			out = await runSwarmOnPrimary(ctx, input.serverId, `docker node ls --format '{{json .}}'`);
 		} catch (error) {
 			if (isNotSwarmManagerError(error)) return [];
 			throw error;
@@ -272,7 +294,7 @@ export const dockerRouter = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await assertClusterAdmin(ctx, input?.serverId);
-			await runOn(
+			await runSwarmOnPrimary(
 				ctx,
 				input.serverId,
 				`docker node update --availability ${input.availability} ${shq(input.nodeId)}`,
@@ -366,9 +388,11 @@ export const dockerRouter = router({
 		const organizationId = await assertAdmin(ctx, input?.serverId);
 		// Docker 23+ `volume prune -f` only removes anonymous volumes; remove
 		// named unused volumes too while keeping platform + service volumes safe.
+		// Service specs (mounted volume names) are read from the primary manager.
 		const output = await pruneUnusedVolumes(
 			(command) => runOn(ctx, input.serverId, command),
 			await listServiceVolumeGuard(),
+			execAsync,
 		);
 		void auditFromSession(ctx, organizationId, { action: "docker.volumes.prune" });
 		return output;
@@ -406,7 +430,7 @@ export const dockerRouter = router({
 			// so data volumes of stopped (scaled-to-zero) services survive.
 			const systemOut = await run("docker system prune -f");
 			const volumeOut = input.volumes
-				? await pruneUnusedVolumes(run, await listServiceVolumeGuard())
+				? await pruneUnusedVolumes(run, await listServiceVolumeGuard(), execAsync)
 				: "";
 			await auditFromSession(ctx, organizationId, {
 				action: "docker.system.prune",
