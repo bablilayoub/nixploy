@@ -10,7 +10,7 @@ import { chromium } from "playwright-core";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "../..");
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
-const EMAIL = process.env.SMOKE_EMAIL ?? "ayoubbablil@gmail.com";
+const EMAIL = process.env.SMOKE_EMAIL ?? "";
 const PASSWORD = process.env.SMOKE_PASSWORD ?? "BablilAyoub@2001";
 const OUT = join(__dirname, "out");
 const LANDING = join(ROOT, "apps/landing/public/screenshots");

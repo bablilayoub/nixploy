@@ -9,8 +9,8 @@ import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
-const EMAIL = process.env.SMOKE_EMAIL ?? "ayoubbablil@gmail.com";
-const PASSWORD = process.env.SMOKE_PASSWORD ?? "Nixploy1!";
+const EMAIL = process.env.SMOKE_EMAIL ?? "";
+const PASSWORD = process.env.SMOKE_PASSWORD ?? "";
 const OUT = new URL("./out/phase9/", import.meta.url).pathname;
 const CHROME =
 	process.env.PLAYWRIGHT_CHROME ??

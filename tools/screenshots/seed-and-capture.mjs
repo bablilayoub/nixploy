@@ -5,6 +5,12 @@
 import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
 
+function requireEnv(name) {
+	const value = process.env[name];
+	if (!value) throw new Error(`${name} is required`);
+	return value;
+}
+
 const BASE = "http://localhost:3000";
 const OUT = new URL("./out/", import.meta.url).pathname;
 mkdirSync(OUT, { recursive: true });
@@ -24,8 +30,8 @@ async function shot(name, settle = 1800) {
 async function login() {
 	await page.goto(`${BASE}/login`, { waitUntil: "load" });
 	await shot("01-login", 800);
-	await page.getByLabel(/email/i).fill("ayoubbablil@gmail.com");
-	await page.locator('input[type="password"]').first().fill("Nixploy1!");
+	await page.getByLabel(/email/i).fill(requireEnv("SMOKE_EMAIL"));
+	await page.locator('input[type="password"]').first().fill(requireEnv("SMOKE_PASSWORD"));
 	await page.getByRole("button", { name: /sign in/i }).click();
 	await page.waitForURL(/dashboard/i, { timeout: 30_000 });
 	await page.waitForLoadState("networkidle");

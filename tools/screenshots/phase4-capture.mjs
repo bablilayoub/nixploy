@@ -11,8 +11,8 @@ import { chromium } from "playwright-core";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BASE = process.env.BASE_URL ?? "http://localhost:3100";
-const EMAIL = process.env.SMOKE_EMAIL ?? "ayoubbablil@gmail.com";
-const PASSWORD = process.env.SMOKE_PASSWORD ?? "Nixploy1!";
+const EMAIL = process.env.SMOKE_EMAIL ?? "";
+const PASSWORD = process.env.SMOKE_PASSWORD ?? "";
 const OUT = join(__dirname, "out/phase4");
 mkdirSync(OUT, { recursive: true });
 

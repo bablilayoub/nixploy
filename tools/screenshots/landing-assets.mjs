@@ -8,6 +8,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 
+function requireEnv(name) {
+	const value = process.env[name];
+	if (!value) throw new Error(`${name} is required`);
+	return value;
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BASE = process.env.BASE_URL ?? "http://localhost:3100";
 const OUT = join(__dirname, "../../apps/landing/public/screenshots");
@@ -30,8 +36,8 @@ await page.addInitScript(() => {
 });
 
 await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
-await page.fill('input[type="email"]', "ayoubbablil@gmail.com");
-await page.fill('input[type="password"]', "Nixploy1!");
+await page.fill('input[type="email"]', requireEnv("SMOKE_EMAIL"));
+await page.fill('input[type="password"]', requireEnv("SMOKE_PASSWORD"));
 await page.click('button[type="submit"]');
 await page.waitForURL(/dashboard/, { timeout: 20_000 });
 await page.waitForTimeout(1500);

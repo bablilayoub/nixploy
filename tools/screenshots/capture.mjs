@@ -6,8 +6,8 @@ import { mkdirSync } from "node:fs";
 import { chromium } from "playwright-core";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
-const EMAIL = process.env.SMOKE_EMAIL ?? "ayoubbablil@gmail.com";
-const PASSWORD = process.env.SMOKE_PASSWORD ?? "Nixploy1!";
+const EMAIL = process.env.SMOKE_EMAIL ?? "";
+const PASSWORD = process.env.SMOKE_PASSWORD ?? "";
 const OUT = new URL("./out/", import.meta.url).pathname;
 
 mkdirSync(OUT, { recursive: true });
