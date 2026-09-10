@@ -31,6 +31,13 @@ services:
     environment:
       DATABASE_URL: postgres://nixploy:nixploy@postgres:5432/nixploy
       PORT: "3000"
+      # DEV-ONLY defaults so the production image boots locally. The image runs
+      # with NODE_ENV=production, and saving any env var / registry /
+      # notification throws without ENCRYPTION_KEY. Never reuse these values
+      # on a real host — install.sh generates random secrets there.
+      BETTER_AUTH_SECRET: dev-only-better-auth-secret-do-not-use-in-production
+      ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      BETTER_AUTH_URL: http://localhost:3000
       # See apps/web/.env.example for the full list of supported variables.
     ports:
       - "3000:3000"

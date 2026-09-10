@@ -54,6 +54,24 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Traefik static config drift
+        # install.sh, update.sh, docker/traefik/traefik.yml and setup.ts each
+        # carry the static config; a stale copy would otherwise ship green.
+        run: |
+          set -euo pipefail
+          email="drift-check@example.com"
+          NIXPLOY_RENDER_TRAEFIK_ONLY=1 NIXPLOY_LETSENCRYPT_EMAIL="$email" bash install.sh > /tmp/traefik-install.yml
+          NIXPLOY_RENDER_TRAEFIK_ONLY=1 NIXPLOY_LETSENCRYPT_EMAIL="$email" bash update.sh > /tmp/traefik-update.yml
+          sed '/^#/d' docker/traefik/traefik.yml | sed "s/^\( *email: \).*/\1$email/" > /tmp/traefik-template.yml
+          (cd packages/server && EMAIL="$email" env -u DATABASE_URL pnpm exec tsx -e \
+            'import { buildTraefikStaticConfig } from "./src/modules/traefik/setup"; process.stdout.write(buildTraefikStaticConfig(process.env.EMAIL))') \
+            > /tmp/traefik-setup.yml
+          for name in install update template; do
+            diff -u /tmp/traefik-setup.yml "/tmp/traefik-$name.yml" \
+              || { echo "::error::$name traefik.yml drifted from setup.ts#buildTraefikStaticConfig"; exit 1; }
+          done
+          echo "traefik static config: install.sh, update.sh, template and setup.ts agree"
+
       - name: Biome
         run: pnpm exec biome check packages/server apps/web apps/cli apps/landing
 
@@ -184,10 +202,35 @@ jobs:
           docker service logs nixploy-smoke-whoami || true
           exit 1
 
+      - name: Validate install.sh static config with Traefik
+        # Boots traefik:v3.5.0 on the exact traefik.yml install.sh writes to
+        # hosts; a heredoc typo would otherwise surface at the next install.
+        run: |
+          set -euo pipefail
+          dir=/tmp/nixploy-smoke/static
+          mkdir -p "$dir/dynamic"
+          NIXPLOY_RENDER_TRAEFIK_ONLY=1 NIXPLOY_LETSENCRYPT_EMAIL=ci@example.com bash install.sh > "$dir/traefik.yml"
+          touch "$dir/acme.json" && chmod 600 "$dir/acme.json"
+          cat "$dir/traefik.yml"
+          docker run -d --name nixploy-smoke-static \
+            -v "$dir/traefik.yml:/etc/traefik/traefik.yml:ro" \
+            -v "$dir/dynamic:/etc/nixploy/traefik/dynamic" \
+            -v "$dir/acme.json:/etc/nixploy/traefik/acme.json" \
+            traefik:v3.5.0 --configFile=/etc/traefik/traefik.yml
+          sleep 8
+          docker logs nixploy-smoke-static 2>&1 | tee "$dir/traefik.log"
+          status="$(docker inspect -f '{{.State.Status}}' nixploy-smoke-static)"
+          if [ "$status" != "running" ] || grep -qiE '"level":"error"|level=error|command traefik error' "$dir/traefik.log"; then
+            echo "::error::Traefik v3.5.0 rejected the traefik.yml rendered by install.sh (status: $status)"
+            exit 1
+          fi
+          echo "traefik accepted install.sh's static config"
+
       - name: Cleanup
         if: always()
         run: |
           docker service rm nixploy-smoke-whoami nixploy-smoke-traefik || true
+          docker rm -f nixploy-smoke-static || true
 
   # Optional full API golden path against a running Nixploy (secrets required).
   api-golden-path:

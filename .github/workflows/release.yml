@@ -3,8 +3,10 @@ name: Release
 # Tag-driven PaaS release (Dokploy-style):
 #   1. Bump package.json version (e.g. 0.1.0)
 #   2. Commit, then: git tag v0.1.0 && git push origin v0.1.0
-# CI builds/pushes GHCR (:vX.Y.Z + :latest), creates a GitHub Release with
-# auto-generated notes, and attaches version-pinned install.sh / update.sh.
+# CI builds/pushes GHCR (:vX.Y.Z, plus :latest for a final-version tag push),
+# creates a GitHub Release with auto-generated notes, and attaches
+# version-pinned install.sh / update.sh. workflow_dispatch re-runs rebuild an
+# existing tag's image and assets without moving :latest.
 
 on:
   push:
@@ -78,15 +80,36 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Image tags
+        id: tags
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          IMAGE="${REGISTRY}/${IMAGE_NAME}"
+          TAGS="${IMAGE}:${TAG}"
+          # `latest` is the channel the in-app updater tracks: only a real tag
+          # push of a final version moves it. Re-running an old tag through
+          # workflow_dispatch (asset repair) or a prerelease must not rewind it.
+          if [ "$EVENT" = "push" ] && printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            TAGS="${TAGS}"$'\n'"${IMAGE}:latest"
+            echo "moving :latest to ${TAG}"
+          else
+            echo "not moving :latest (event=${EVENT}, tag=${TAG})"
+          fi
+          {
+            echo "tags<<EOF"
+            echo "$TAGS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          tags: ${{ steps.tags.outputs.tags }}
           build-args: |
             NIXPLOY_APP_VERSION=${{ steps.tag.outputs.version }}
           cache-from: type=gha
@@ -124,7 +147,7 @@ jobs:
           name: ${{ steps.tag.outputs.tag }}
           generate_release_notes: true
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(steps.tag.outputs.tag, '-') }}
           files: |
             install.sh
             update.sh

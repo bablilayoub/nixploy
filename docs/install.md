@@ -44,11 +44,30 @@ Public `/register` is disabled after that.
 1. Detects the OS and installs Docker (unless `NIXPLOY_SKIP_DOCKER_INSTALL=1`)
 2. `docker swarm init` (single-node manager)
 3. Creates the `nixploy-network` overlay
-4. Writes secrets under `/etc/nixploy/.env` (or `$NIXPLOY_CONFIG_DIR`)
+4. Detects the public IP (`api.ipify.org`, falling back to the primary
+   interface — NAT'd clouds put a private address on the NIC) and writes
+   secrets under `/etc/nixploy/.env` (or `$NIXPLOY_CONFIG_DIR`)
 5. Starts `nixploy` + Postgres + Traefik from GHCR (builds from source if the
-   image pull fails)
+   image pull fails), then waits for the panel **through Traefik on
+   loopback** — public DNS does not have to be propagated yet
 
-The script is **idempotent** — safe to re-run.
+The script is **idempotent** — safe to re-run. A re-run keeps the existing
+secrets, `BETTER_AUTH_URL`, the dashboard router (`00-nixploy-dashboard.yml`)
+and the ACME email, and derives the dashboard domain from the stored
+`BETTER_AUTH_URL`. Only an explicit `NIXPLOY_DOMAIN`, `NIXPLOY_PUBLIC_IP` or
+`NIXPLOY_LETSENCRYPT_EMAIL` changes those.
+
+**Let's Encrypt needs a contact email.** Without `NIXPLOY_LETSENCRYPT_EMAIL`
+(or a domain, from which `admin@<domain>` is guessed) the static Traefik config
+carries the placeholder `nixploy@localhost`, which Let's Encrypt rejects: the
+panel stays on the self-signed certificate and app domains cannot get real
+certificates until you set the email — re-run with the variable, or use
+**Settings → Platform → Let's Encrypt email**. The installer prints a warning
+in that case.
+
+The panel is only reachable through Traefik (`:80` → `:443`). Port `3000` is
+**not** host-published unless you set `NIXPLOY_PORT` (plain HTTP, all
+interfaces — Swarm host-mode publishing cannot bind to `127.0.0.1` only).
 
 ## After install (first hour)
 
@@ -69,15 +88,23 @@ nixploy doctor
 | Variable | Purpose |
 | --- | --- |
 | `NIXPLOY_DOMAIN` | Panel hostname |
-| `NIXPLOY_LETSENCRYPT_EMAIL` | ACME contact |
-| `NIXPLOY_VERSION` / `NIXPLOY_IMAGE` | Pin image tag or full ref |
-| `NIXPLOY_PORT` | Host publish port if not 80/443 only |
-| `NIXPLOY_CONFIG_DIR` | Data dir (default `/etc/nixploy`) |
+| `NIXPLOY_LETSENCRYPT_EMAIL` | ACME contact (required for Let's Encrypt — see above) |
+| `NIXPLOY_PUBLIC_IP` | Public IPv4 for `BETTER_AUTH_URL`, the setup URL and the self-signed SAN when auto-detection is wrong (default: `api.ipify.org`, then the primary interface) |
+| `NIXPLOY_VERSION` / `NIXPLOY_IMAGE` | Pin image tag or full ref. The ref is also passed to the panel as `NIXPLOY_IMAGE` |
+| `NIXPLOY_PORT` | Opt-in: additionally host-publish the app on this port (plain HTTP). Unset = Traefik only |
+| `NIXPLOY_CONFIG_DIR` | Host data dir (default `/etc/nixploy`). Inside the container it is always `/etc/nixploy` |
+| `NIXPLOY_NETWORK` | Swarm overlay network (default `nixploy-network`); forwarded to the panel when set |
+| `TRUSTED_PROXIES` | Forwarded to the panel; defaults to `1` because only Traefik reaches it (client IPs for rate limits come from `X-Forwarded-For`) |
 | `NIXPLOY_BUILD_FROM_SOURCE=1` | Force local image build |
 | `NIXPLOY_SKIP_DOCKER_INSTALL=1` | Assume Docker is already present |
-| `DATABASE_POOL_MAX` | Postgres pool size in the Nixploy process (default `10`). Raise on busy single-node installs that share web + deploy worker + crons. |
-| `LOG_LEVEL` | `debug` \| `info` \| `warn` \| `error` (default `info`) for the process logger |
-| `LOG_FORMAT` | Set to `json` for one JSON object per log line (default: plain text with `[subsystem]` prefix) |
+| `DATABASE_POOL_MAX` | Postgres pool size in the Nixploy process (default `10`). Raise on busy single-node installs that share web + deploy worker + crons. Forwarded when set |
+| `LOG_LEVEL` | `debug` \| `info` \| `warn` \| `error` (default `info`) for the process logger. Forwarded when set |
+| `LOG_FORMAT` | Set to `json` for one JSON object per log line (default: plain text with `[subsystem]` prefix). Forwarded when set |
+
+Forwarded variables become part of the `nixploy` service spec, so they
+survive later `update.sh` runs; `update.sh` only adds/overwrites the ones set
+in its own environment. Container logs use the `json-file` driver with
+rotation (`max-size=10m`, `max-file=3`) for `nixploy` and `nixploy-traefik`.
 
 See the header comments in [`install.sh`](../install.sh). This file is the
 source of truth for installer/updater env knobs; README and the landing
@@ -98,18 +125,27 @@ curl -fsSL https://github.com/bablilayoub/nixploy/releases/latest/download/updat
 Keeps secrets, Postgres data, ACME certs, and Traefik routes. Migrations run on
 boot. Or use **Settings → Platform → Updates** in the UI.
 
+The roll is `stop-first` with `--update-failure-action rollback`: the image's
+`HEALTHCHECK` (`/api/auth/ok`) gates readiness, and a new container that dies
+within the 60 s monitor window makes Swarm restore the previous version
+automatically — `update.sh` reports this as a failed update. Readiness is
+probed through Traefik on loopback, so `:3000` does not need to be published.
+To roll back by hand: `docker service rollback nixploy`.
+
 ### Update overrides
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `NIXPLOY_VERSION` / `NIXPLOY_IMAGE` | release default / `v0.1.0` in repo | Pin app image tag or full ref |
 | `NIXPLOY_CONFIG_DIR` | `/etc/nixploy` | Host config/data directory |
-| `NIXPLOY_PORT` | `3000` | Published app port for health checks |
+| `NIXPLOY_PORT` | auto-detected from the service | Host port `:3000` is published on (extra readiness probe only) |
+| `NIXPLOY_LETSENCRYPT_EMAIL` | keep existing | Replace the ACME email in `traefik.yml` |
+| `TRUSTED_PROXIES`, `LOG_LEVEL`, `LOG_FORMAT`, `DATABASE_POOL_MAX`, `NIXPLOY_NETWORK` | — | Forwarded to the panel when set (see install overrides) |
 | `NIXPLOY_UPDATE_TRAEFIK` | `1` | Also pull & force Traefik service |
-| `NIXPLOY_REFRESH_TRAEFIK_YML` | `1` | Rewrite static `traefik.yml` from repo |
+| `NIXPLOY_REFRESH_TRAEFIK_YML` | `1` | Re-render static `traefik.yml` locally (same content as the app writes), keeping the ACME email |
 | `NIXPLOY_PRUNE` | `1` | Prune dangling images after roll |
 | `NIXPLOY_BUILD_FROM_SOURCE` | `0` | Build locally instead of pulling GHCR |
-| `NIXPLOY_REPO` / `NIXPLOY_BRANCH` | `bablilayoub/nixploy` / `main` | Source for Traefik assets / build |
+| `NIXPLOY_REPO` / `NIXPLOY_BRANCH` | `bablilayoub/nixploy` / image tag | Source for local builds |
 
 See the header comments in [`update.sh`](../update.sh).
 
@@ -118,7 +154,9 @@ See the header comments in [`update.sh`](../update.sh).
 | Symptom | Check |
 | --- | --- |
 | Can't reach panel | `docker service ls`, `docker service logs nixploy`, firewall 80/443 |
-| TLS stuck | DNS A record, Let's Encrypt email, Traefik logs |
+| Setup URL shows a private IP / "Invalid origin" on sign-in | `BETTER_AUTH_URL` in `/etc/nixploy/.env` must be the address you browse to: re-run with `NIXPLOY_PUBLIC_IP=…` or `NIXPLOY_DOMAIN=…` |
+| Update rolled back | `docker service ps nixploy --no-trunc` shows the failed task; `docker service logs nixploy` has the boot/migration error |
+| TLS stuck | DNS A record, Let's Encrypt email (not `nixploy@localhost`), Traefik logs |
 | Deploy never finishes | Application → Deployments → Logs; Docker disk space |
 | Traefik not routing | Domain attached? Service status `done`? `nixploy-network` connected? |
 

@@ -41,8 +41,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Continuous builds: `main` + commit sha only. `latest` is the release
+          # channel the in-app updater tracks and is moved solely by the Release
+          # workflow on a tag push (docs/releases.md).
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=main,enable={{is_default_branch}}
             type=sha,prefix=
 
       - name: Read package version
