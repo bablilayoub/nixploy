@@ -98,7 +98,14 @@ organizationId` (see `assertApplicationAccess` and friends in
   host ports 80/443, configured through the **file provider** watching the
   dynamic dir under `NIXPLOY_CONFIG_DIR` (default `/etc/nixploy`, dev default
   `.nixploy-data/`). See `docs/domains-traefik.md`.
-- Remote servers are driven over SSH (`execAsyncRemote(serverId)`). Setup
+- Remote servers are driven over SSH (`execAsyncRemote(serverId)`) for
+  everything that happens *on* the node — builds, image pulls, container
+  exec/logs/stats, file mounts, volume removal, plain `docker compose`. Swarm
+  **service** objects (create/update/inspect/scale/rm, stack deploy, status
+  reads) are always issued to the primary manager; a service pinned to a
+  server carries `node.id==<server.swarm_node_id>` in its placement
+  constraints so its tasks land where the image and the data volume live
+  (`modules/cluster/placement.ts`, `modules/cluster/swarm-node.ts`). Setup
   joins them to the **primary** Swarm as a worker or manager — they do not
   run an isolated `swarm init`. Traefik stays cluster-wide on managers.
   Every docker/shell call has a local/remote duality.

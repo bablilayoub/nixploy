@@ -47,8 +47,10 @@ the status reconciler (see `docs/architecture.md`) owns that cleanup.
      optional).
    - docker-image source skips the build entirely.
 4. **Swarm upsert** (`swarm.ts`): create or update the swarm service
-   `<appName>` with the image, env, mounts, ports, resources, on the shared
-   overlay network. Same-tag redeploys bump `TaskTemplate.ForceUpdate` —
+   `<appName>` — always through the primary manager — with the image, env,
+   mounts, ports, resources, on the shared overlay network; services pinned
+   to a managed server get a `node.id==<swarmNodeId>` placement constraint
+   (merged with the user's own constraints). Same-tag redeploys bump `TaskTemplate.ForceUpdate` —
    otherwise the spec is identical, the swarm no-ops, and tasks keep
    running the OLD image.
 5. **Traefik sync** (`modules/application/service.ts#syncApplicationTraefik`):

@@ -5,73 +5,71 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
-## Snapshot — 2026-09-10 (end of sprint 1)
+## Snapshot — 2026-09-11 (end of the stability sweep + landing rebuild)
 
 | Item | Value |
 | --- | --- |
-| Branch | `chore/sprint-1-hygiene` — 14 commits on top of `main` @ `07ab3d4`, **not pushed, not merged** (user decision) |
-| Tags / releases | PaaS `v0.1.0` (GitHub Release + GHCR), CLI `cli-v0.1.1` (npm `@nixploy/cli@0.1.1`) — unchanged |
+| Branches | `chore/sprint-1-hygiene` (14 commits over `main` @ `07ab3d4`) → `work/stability-and-landing` (16 more commits on top). **Neither pushed nor merged** — user decision. Merge order: sprint-1 first, then stability. |
+| Tags / releases | PaaS `v0.1.0` (GitHub Release + GHCR), CLI `cli-v0.1.1` — unchanged. The stability branch is release-worthy as `v0.1.1`/`v0.2.0` once merged and CI is green. |
 | Local toolchain | Node 22.21.0, pnpm 10.33.0, Docker 29.7.2, Swarm active |
-| Key versions now | Next 16.3.4 (web **and** landing), better-auth + api-key 1.7.3, React 19.2.8, Biome 2.5.12, zod 4.6.1, TanStack Query 5.102, lucide 1.43 (both apps), commander 15, vitest 5.0.0, TypeScript 5.9.3, drizzle-orm 0.45.2 |
+| Key versions | Next 16.3.4 (web + landing), better-auth + api-key 1.7.3, React 19.2.8, Biome 2.5.12, zod 4.6.1, TanStack Query 5.102, lucide 1.43, commander 15, vitest 5.0.0, TypeScript 5.9.3, drizzle-orm 0.45.2 |
 | `pnpm typecheck` | ✅ all 4 workspaces |
-| `pnpm test` | ✅ 44 files, 714 passed offline / 726 passed with `DATABASE_URL_TEST` (1 skipped) |
-| Biome (CI command) | ✅ 0 errors, 0 warnings |
-| `pnpm build` (web + landing + cli) | ✅ including a web build without `DATABASE_URL` (Docker scenario) |
-| Runtime checks done | Panel on a throwaway DB: setup wizard, 2FA enroll/verify, sign-out, sign-in via `/two-factor`, API key, REST, MCP, invite hooks, proxy redirect matrix. Landing: `next start` 200 on every route. |
-| Dev DB | Container `nixploy-dev-pg` running (`127.0.0.1:54329`); databases `nixploy` (dev) and `nixploy_test` (migrated, for the tenancy suite) |
-| Local swarm | `nixploy-traefik` global service running; leftover smoke service `hello-ac7e44` (redis) still running |
-| Code size | server 219 source files / 44 test files; 27 files > 500 lines (largest: `git/webhook-handler.ts` 864, `databases/engine.ts` 773, `routers/application.ts` 770) |
-| Schema | 18 migrations (`0000`…`0017`), no new migration needed for better-auth 1.7.3 (plugin schemas identical) |
-| Product | Phases 1–10 of `PLAN.md` shipped; 42 routers / ~300 procedures; 86 templates in 15 categories; 11 notification providers; MCP with 13 tools |
+| `pnpm test` | ✅ 61 files, 886 passed with `DATABASE_URL_TEST` (1 skipped) |
+| Biome (CI command) | ✅ 0 errors, 1 pre-existing warning (`services/danger-zone.tsx` `void \| Promise` onConfirm) |
+| Builds | ✅ web (also without `DATABASE_URL`, the Docker scenario), landing (31 static routes), cli; Docker image built and booted healthy from a clean tree by the ops pass |
+| REST e2e loop (`traefik/whoami` app → traefik.me domain → HTTPS via Traefik → stop/start/reload → env + port edit keeps inherited env → redeploy → rollback; uptime-kuma template → private net + Traefik → stop/start; compose safety probe → 400; postgres create/start/exec/stop/start/rename-guard/protected volume; docker/gitops/audit/monitoring/schedule (command + stdin script); cascade cleanup incl. volumes, YAML, dirs) | ✅ 58/59 on the final tree — the one miss is a resume artifact (latest deployment was the rollback), not a bug |
+| UI verification | Both UI agents drove every touched page in light + dark (Playwright + in-app browser); 0 console / hydration errors after fixing three real hydration mismatches |
+| Dev DB | `nixploy-dev-pg` (127.0.0.1:54329): `nixploy` (dev), `nixploy_test` (tenancy suite), `nixploy_e2e` (e2e user e2e@example.test) — all migrated to `0018` |
+| Schema | 19 migrations (`0000`…`0018_needy_bloodstorm` = `server.swarm_node_id`) |
+| Product | Phases 1–10 of `PLAN.md` shipped; 42 routers / ~300 procedures; 86 templates; 11 notification providers; MCP with 13 tools |
 
-## Dependency upgrade candidates (remaining)
+## What the stability sweep did (2026-09-10/11)
 
-Everything patch/minor and the better-auth / Next majors are done (see session log). What is left are real majors; each wants its own branch and a go/no-go note here.
+Seven read-only audits (deploy engine, compose/DB/templates, Traefik/domains/previews, auth/tenancy/API, integrations/jobs, ops scripts, web UI ×4 partitions) produced ~120 confirmed findings; six fix passes plus a remote-server redesign landed them. Each commit body on `work/stability-and-landing` lists exactly what changed. Highlights, most important first:
+
+- **Security**: compose files are rendered before validation (the `$VAR` / `~` / `volumes.name:` bypasses gave tenants host root or other tenants' volumes); tenant env never reaches the docker CLI; per-app private networks stop cross-tenant DNS; host uniqueness across orgs (route hijack); WS 2FA gate + Origin check + container-label ownership; instance backups instance-admin only; volume prune guards; update image validation/quoting; reserved app names; invitation binding; per-key rate limits.
+- **Broken features made real**: HTTPS on the default certificate (502), stack deploys (rejected by the current CLI), remote servers (Swarm calls now hit the primary, tasks pinned by `node.id`), custom git SSH keys, previews (ports/volumes/port/auth/fork refs), rollbacks (were an empty tab), deploy notifications (never emitted), backup exit status (silent empty dumps) and restores > 96 KB, GitOps diff/apply semantics (TLS downgrade + redeploy-everything), `update.sh` (crashed on every run), database volume orphaning, mongo replicaSet (never started — now rejected), fork-PR previews.
+- **UI**: capability gating everywhere (viewers stop seeing controls that 403), error states instead of misleading empty copy, correct invalidations, better-auth `{ error }` handling, setup-wizard retry, status polling after deploy, log viewer reconnect stop, hydration fixes.
+- **Landing**: rebuilt (`apps/landing`), see the `feat(landing)` commit.
+
+## Dependency upgrade candidates (remaining majors)
 
 | Package | Current → Latest | Risk | Notes |
 | --- | --- | --- | --- |
-| `typescript` | 5.9.3 → 7.0.2 | **High** | TS 7 (Go-based compiler). Biome, drizzle-kit, tsup, Next's TS plugin must all cope. Nothing needs it today. |
-| `nodemailer` | 9.0.3 → 10.0.2 | Low-Med | Email notification provider only. |
-| `@tanstack/react-table` | 8.21.3 → 9.2.4 | Medium | Only `components/data-table/*` + services table; v9 API changes. |
-| `motion` (landing) | 12.43 → 13.2 | Low | magicui components only. |
-| `node-os-utils` | 2.0.4 → 3.1.0 | Low | Host monitoring; Alpine disk calls already dropped (commit `2073947`). |
-| `react` / `react-dom` (+ `@types/react*`) | 19.2.8 → 19.3.0 | Low-Med | Minor, but bump together with a Next release that lists 19.3 as tested. |
-| `drizzle-orm` | 0.45.2 → 1.0.0-rc | Deferred | better-auth 1.7 peer accepts `>=1.0.0-rc.1`; wait for the drizzle 1.0 stable + drizzle-kit pairing. |
+| `typescript` | 5.9.3 → 7.0.2 | **High** | Go-based compiler; verify Biome/drizzle-kit/tsup/Next plugin. Nothing needs it. |
+| `@tanstack/react-table` | 8.21.3 → 9.2.4 | Medium | `components/data-table/*` + services table. |
+| `nodemailer` | 9.0.3 → 10.0.2 | Low-Med | Email provider only. |
+| `motion` (landing) | 12.43 → 13.2 | Low | magicui primitives. |
+| `node-os-utils` | 2.0.4 → 3.1.0 | Low | Host monitoring. |
+| `react` / `react-dom` | 19.2.8 → 19.3.0 | Low-Med | Bump with a Next release that lists 19.3. |
+| `drizzle-orm` | 0.45.2 → 1.0.0-rc | Deferred | Wait for stable + drizzle-kit pairing. |
 
-Image pins to review periodically: `traefik:v3.5.0` (install.sh, update.sh, setup.ts, ci.yml), `postgres:17-alpine`, `node:22-alpine`, `traefik/whoami:v1.10.1`, template images (CI probes that tags exist, not that they are current).
+Image pins to review periodically: `traefik:v3.5.0`, `postgres:17-alpine`, `node:22-alpine`, `traefik/whoami:v1.10.1`, template images (CI checks tags exist, not freshness).
 
-## Known debt / gotchas (verified in code)
+## Known debt / follow-ups (from the sweep, not yet done)
 
-- [x] ~~Four `getConfigDir` implementations~~ — unified in `modules/deployment/paths.ts` (`NIXPLOY_DIR` kept as legacy alias); overlay network name unified in `modules/application/paths.ts#getSwarmNetwork` (databases + remote-server setup previously ignored `NIXPLOY_NETWORK`).
-- [x] ~~`apps/web/pnpm-lock.yaml` stale tracked file~~ — deleted.
-- [x] ~~`better-auth` version range mismatch~~ — both pinned, now `1.7.3`.
-- [x] ~~Biome warnings~~ — clean; `noDescendingSpecificity` is off for `swagger-theme.css` only (biome.json override).
-- [x] ~~`apps/web/middleware.ts` → `proxy.ts`~~ — now `apps/web/src/proxy.ts`. A root-level file is **not discovered** when the app dir is `src/app` (Next scans only the app dir's parent). Open question: whether the root-level `middleware.ts` shipped in v0.1.0 was ever active; the dashboard layout's `getSession` check was always the authoritative gate, so no exposure either way.
-- [x] ~~Landing on Next 15~~ — both apps on 16.3.4.
-- [x] ~~`hardening.md` / `next.md` historical checklists~~ — moved to `docs/archive/`, links updated.
-- [ ] `NEXT_PUBLIC_APP_URL` is still read as a third fallback by the GitHub App callback (`api/github/callback/route.ts`). Drop the fallback once `BETTER_AUTH_URL` is guaranteed everywhere (install.sh always writes it).
-- [ ] better-auth logs `ERROR [Better Auth]: Failed to validate API key` for every bad `x-api-key` (noisy on a public panel; harmless). Consider lowering via better-auth `logger` config.
-- [ ] Landing docs (`apps/landing/src/lib/docs/pages.ts`) hand-duplicate `docs/*` — drift risk, no check.
-- [ ] `next.config.ts` sets `output: "standalone"` but the image runs `tsx server.ts` from the full tree; standalone output is built and unused (image size).
-- [ ] `playwright-core` lives only in `tools/screenshots` (separate npm project with `package-lock.json`); `apps/web/e2e/smoke.mjs` and `docs/development.md` assume it is available — decide: add as root devDependency or point docs at `tools/screenshots`.
-- [ ] `dev.sh` is gitignored (local helper) although `CONTRIBUTING.md`/`AGENTS.md` do not mention it; either track it or keep it personal.
-- [ ] Large files flagged in `archive/hardening.md §2.3` still unsplit: `databases/engine.ts`, `routers/application.ts`, `git/webhook-handler.ts`.
-- [ ] Remaining `console.*` in non-cron paths (e.g. `projects/index.ts` cascade teardown, worker observability catch) could move to `lib/logger.ts`.
-- [ ] `deploymentStatus` enum lacks `queued`; queued rows show as `running` (documented, UI copes). Consider adding the enum value with a migration if the UI should distinguish.
-- [ ] `install.sh` / `update.sh` default `NIXPLOY_VERSION=v0.1.0`; `tools/release.sh` re-pins on release. Any manual edit must keep the exact line format the release workflow greps for.
-- [ ] Local swarm leftover service `hello-ac7e44` and stale `.nixploy-data/metrics/*.jsonl` from earlier smoke tests (harmless, local only).
-- [ ] Next 16.3 deprecates the Edge runtime and "undocumented custom server methods"; `apps/web/server.ts` only uses `next()`, `prepare()`, `getRequestHandler()` (documented) — keep it that way.
+- [ ] **Remote servers**: stack-type compose on a remote must use registry-pullable images (`docker stack deploy` runs on the primary, no build); `docker.swarmServices` with a `serverId` returns the cluster-wide list (filter by `node.id` if per-server views are wanted); real multi-node smoke still pending (unit-tested only — no second host here).
+- [ ] First-admin claim is serialized but the INSERT still happens after the hook; a fully atomic claim needs an `instance_setup` singleton row (migration).
+- [ ] Redacted `env` / `composeFile` come back as `null`, indistinguishable from "unset"; add an explicit `redacted` flag to `one` responses (UI currently keys the read-only state on `can("secrets.read")`).
+- [ ] `lib/safe-next-path.ts` rejects any `?query`, so `?next=/dashboard/projects/x?tab=domains` falls back to `/dashboard`.
+- [ ] `schedule.create/remove` write no audit rows; `settings/incidents/page.tsx` has no `<title>`.
+- [ ] Updater channel: install/update pin `NIXPLOY_IMAGE=…:vX.Y.Z`; `updates/settings.ts` tracks that ref, so release installs never see `:latest` moving — derive the channel (strip the tag → `:latest`, which now only moves on real releases) or add `NIXPLOY_UPDATE_IMAGE`.
+- [ ] `tools/release.sh` is untracked locally (`.git/info/exclude`) although docs reference it — decide whether to track it.
+- [ ] Landing docs (`apps/landing/src/lib/docs/pages.ts`) still hand-duplicate `docs/*`; the sweep's operator-facing changes (TRUSTED_PROXIES, invitation header, PG 18, mongo replica sets, instance backups admin-only, GitOps partial apply, remote-server placement) are in `docs/` but not mirrored on the site yet.
+- [ ] `NEXT_PUBLIC_APP_URL` third fallback in the GitHub callback; better-auth logs `ERROR … Failed to validate API key` on every bad key.
+- [ ] Large files still unsplit: `git/webhook-handler.ts`, `databases/engine.ts`, `routers/application.ts`.
+- [ ] `deploymentStatus` has no `queued` value (queued rows show `running`).
+- [ ] Local swarm leftovers from earlier smokes: service `hello-ac7e44`, stale `.nixploy-data/metrics/*.jsonl` (harmless).
 
 ## Next steps
 
-1. **Merge decision** — review `chore/sprint-1-hygiene` (14 commits, each independently revertible), merge to `main`, let CI + the Docker workflow run. A PaaS release (`v0.1.1`) would ship better-auth 1.7.3 + Next 16.3 to installs via `update.sh`.
-2. **Major evaluations** (one branch each, go/no-go here): react-table 9, TypeScript 7, nodemailer 10, motion 13. Done: commander 15 ✅, vitest 5 ✅ (peer warning from better-auth only).
-3. **Debt** from the list above, smallest first: API-key error log noise, `NEXT_PUBLIC_APP_URL` fallback, playwright-core location, landing docs drift check.
-4. **Structure**: split the three >750-line server files (see `archive/hardening.md §2.3`) once tests exist for the paths touched.
+1. **Merge** `chore/sprint-1-hygiene` then `work/stability-and-landing` into `main`, push, let CI + Docker run; cut a release (`./tools/release.sh paas --bump minor`) — the sweep changes operator-visible behaviour (installer env, compose rendering, remote servers), so `v0.2.0` is the honest number.
+2. **Real multi-node test** of the remote-server path on a second Linux host (join as worker, pin an app + a database, deploy, stop/start, remove server).
+3. Mirror the operator-facing doc changes onto the landing docs.
+4. Follow-ups above, smallest first; then the remaining major upgrades.
 
 ## Session log
 
-- **2026-09-10 (audit)** — Initial audit. Added `CLAUDE.md`, `docs/codebase-map.md`, this file. Verified typecheck/test/biome locally; no code changes.
-- **2026-09-10 (sprint 1, branch `chore/sprint-1-hygiene`)** — 12 commits: drop stale web lockfile; unify `getConfigDir`; pin better-auth; unify overlay-network name; silence Biome warnings; docs + archive move; routine in-range bumps (Biome 2.5.12, zod 4.6, TanStack Query 5.102, RHF 7.87, lucide 1.43, aws-sdk, octokit, …); **better-auth 1.7.3** (2FA response narrowing + db proxy `_` probe; full manual auth loop verified on a throwaway DB); **Next 16.3.4 + `src/proxy.ts`** (root placement is ignored — verified); **landing → Next 16.3.4 + lucide 1.x**. All gates green: typecheck, full vitest with `DATABASE_URL_TEST`, Biome, workspace build, runtime smokes. Nothing pushed.
-- **2026-09-10 (sprint 1, cont.)** — commander 15 (CLI parse matrix verified) and vitest 5 (both suites unchanged) landed on the same branch; docs refreshed.
-- **2026-09-10 (deploy-engine / previews / Traefik bug sweep)** — `upsertApplicationSwarmService` now merges project → environment → app env with explicit container-spec empties (port/mount/env edits no longer drop inherited vars); managed-server host pins moved to `<config>/ssh/pinned-hosts/` (legacy dir read as fallback) and custom-key git clones use a real `git_known_hosts` file with `accept-new`, key written on the target server; `writeFileTargeted` / `writeFileOnServer` stream content over stdin (drop archives > 128 KiB, certificates, basic-auth files); previews strip ports/volumes/mounts, run 1 replica, route to the parent domain's port with the parent's basic-auth/redirects, and fork PRs fetch `refs/pull/<n>/head` / `refs/merge-requests/<iid>/head` / the fork repo (`preview/source-ref.ts`, no schema change); GitLab `update` without `oldrev` and Bitbucket `updated` with an unchanged head commit no longer rebuild; log redaction floor (`isRedactableSecret`); `dockerCleanup` prunes dangling images only; rollbacks implemented (`deployment/rollback.ts`: `appName:<version>` pins, newest 5 kept, `application.rollback` repoints the service); `processJob` finalizes rows even when the log cannot be opened, queue drain starts up to `concurrency` jobs and logs crashed runners; boot recovery marks running previews `error` without touching the parent app; `spawnRemote` ends the SSH socket on exec errors and pkills the remote tree on timeout / early cancel; deploy notifications wired (`emitDeployNotification` for apps, previews, compose); Traefik app YAML is always written locally (`serverId` ignored by the writer), `internalPath` = `stripPrefix` + `addPrefix`, single `DEFAULT_CONTAINER_PORT` (80); reserved app names (`00-nixploy-dashboard`, `00-default-tls`, `*-pr-<n>`), `isAppNameTaken` covers preview and compose Traefik keys, slug capped at 40; `domain.create/update` reject cross-org hosts and duplicate host+path (CONFLICT), null `serviceName` on app domains, preview domain edits rewrite the preview's own YAML; redirect regexes must compile; `duplicateApplication` and the mount router materialize file mounts on the app's server. Tests added for each (logger, queue, swarm, application service, preview source-ref/traefik/index, webhook handler, config-writer, exec, tenancy domain conflict).
+- **2026-09-10 (audit)** — Initial audit. Added `CLAUDE.md`, `docs/codebase-map.md`, this file.
+- **2026-09-10 (sprint 1, branch `chore/sprint-1-hygiene`)** — hygiene, routine bumps, better-auth 1.7.3, Next 16.3.4 + `src/proxy.ts`, landing → Next 16, commander 15, vitest 5. All gates green.
+- **2026-09-10/11 (stability sweep + landing, branch `work/stability-and-landing`)** — 7 parallel audits → fixes per scope (see "What the stability sweep did"), remote-server redesign (`swarm_node_id` + `node.id` pinning, migration 0018), landing rebuilt, docs updated. Gates: typecheck 0/0, 886 tests, Biome clean, builds green, REST e2e loop 58/59 (resume artifact), UI driven light + dark. Nothing pushed.

@@ -131,12 +131,13 @@ pushes to it redeploy without re-approval.
 
 
 Managed servers join the **primary** Swarm (see `setupServer` in
-`modules/cluster/servers.ts`). Traefik remains the cluster-wide global
-service on managers. Worker nodes do not get their own Traefik or overlay
-init — they schedule user workloads onto `nixploy-network`. Manager remotes
-get Traefik config dirs prepared so the global Traefik service can bind-mount
-if scheduled there.
+`modules/cluster/servers.ts`, which also records the node's Swarm id).
+Traefik remains the cluster-wide global service on managers. Worker nodes do
+not get their own Traefik or overlay init — they run user workloads pinned to
+them via `node.id` placement constraints, attached to `nixploy-network`.
+Manager remotes get Traefik config dirs prepared so the global Traefik service
+can bind-mount if scheduled there.
 
-Dynamic YAML for services placed on a remote is still written via
-`execAsyncRemote` under `/etc/nixploy/traefik` when that server hosts the
-file provider mounts.
+Dynamic YAML is written on the Nixploy host only (the primary's file
+provider is the one that routes); Traefik reaches services on any node
+through the overlay network's VIP DNS.
