@@ -1,5 +1,6 @@
 import { parse, stringify } from "yaml";
 import { getSwarmNetwork } from "../application/paths";
+import { parseEnv } from "../deployment/env";
 
 /**
  * Loose shape of a docker-compose / stack file. Only the keys this module
@@ -18,6 +19,9 @@ export interface ComposeFileSpec {
 	[key: string]: unknown;
 }
 
+/** Interpolation variables: the merged project → environment → service env. */
+export type ComposeEnv = Readonly<Record<string, string>>;
+
 export function parseComposeFile(content: string): ComposeFileSpec {
 	const spec = parse(content) as ComposeFileSpec | null;
 	if (!spec || typeof spec !== "object") {
@@ -34,6 +38,209 @@ export function listComposeServices(content: string): string[] {
 	const spec = parseComposeFile(content);
 	return Object.keys(spec.services ?? {});
 }
+
+// ── env interpolation ───────────────────────────────────────────────────────
+
+const VAR_NAME_RE = /^[_a-zA-Z][_a-zA-Z0-9]*/;
+
+/**
+ * Expand one string the way compose does (compose-go template grammar):
+ * `$VAR`, `${VAR}`, `${VAR:-default}`, `${VAR-default}`, `${VAR:?err}`,
+ * `${VAR?err}`, `${VAR:+alt}`, `${VAR+alt}`, nested `${A:-${B}}`, and `$$`
+ * as a literal dollar. Unknown variables expand to the empty string, exactly
+ * like `docker compose` does when a variable is unset.
+ */
+export function interpolateComposeString(input: string, env: ComposeEnv): string {
+	let out = "";
+	let i = 0;
+	while (i < input.length) {
+		const ch = input[i];
+		if (ch !== "$") {
+			out += ch;
+			i += 1;
+			continue;
+		}
+		const next = input[i + 1];
+		if (next === "$") {
+			out += "$";
+			i += 2;
+			continue;
+		}
+		if (next === "{") {
+			let depth = 1;
+			let j = i + 2;
+			while (j < input.length && depth > 0) {
+				if (input[j] === "{") depth += 1;
+				else if (input[j] === "}") depth -= 1;
+				if (depth > 0) j += 1;
+			}
+			if (depth !== 0) {
+				throw new Error(`Invalid compose interpolation (unterminated \${): "${input}"`);
+			}
+			out += expandBraced(input.slice(i + 2, j), env, input);
+			i = j + 1;
+			continue;
+		}
+		const named = VAR_NAME_RE.exec(input.slice(i + 1));
+		if (named) {
+			out += env[named[0]] ?? "";
+			i += 1 + named[0].length;
+			continue;
+		}
+		// A `$` followed by anything else is not a template — keep it.
+		out += "$";
+		i += 1;
+	}
+	return out;
+}
+
+function expandBraced(inner: string, env: ComposeEnv, whole: string): string {
+	const named = VAR_NAME_RE.exec(inner);
+	if (!named) {
+		throw new Error(`Invalid compose interpolation format: "${whole}"`);
+	}
+	const name = named[0];
+	const rest = inner.slice(name.length);
+	const value = env[name];
+	if (rest === "") return value ?? "";
+	const two = rest.slice(0, 2);
+	const one = rest.slice(0, 1);
+	const op =
+		two === ":-" || two === ":?" || two === ":+"
+			? two
+			: one === "-" || one === "?" || one === "+"
+				? one
+				: null;
+	if (!op) {
+		throw new Error(`Invalid compose interpolation format: "${whole}"`);
+	}
+	const arg = rest.slice(op.length);
+	// `:` variants treat an empty value like an unset one.
+	const missing = op.startsWith(":") ? value === undefined || value === "" : value === undefined;
+	switch (op) {
+		case ":-":
+		case "-":
+			return missing ? interpolateComposeString(arg, env) : (value as string);
+		case ":?":
+		case "?":
+			if (!missing) return value as string;
+			throw new Error(
+				`Required compose variable ${name} is missing a value: ${interpolateComposeString(arg, env)}`,
+			);
+		default:
+			return missing ? "" : interpolateComposeString(arg, env);
+	}
+}
+
+function mapStrings(value: unknown, fn: (text: string) => string): unknown {
+	if (typeof value === "string") return fn(value);
+	if (Array.isArray(value)) return value.map((entry) => mapStrings(entry, fn));
+	if (value && typeof value === "object") {
+		const out: Record<string, unknown> = {};
+		for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+			out[key] = mapStrings(entry, fn);
+		}
+		return out;
+	}
+	return value;
+}
+
+/**
+ * Resolve `environment` entries without a value (`- KEY` / `KEY:` null) from
+ * the merged env, dropping the ones it does not define. Compose would fall
+ * back to the *panel's* process environment for those — never allow that.
+ */
+function resolveBareEnvironment(environment: unknown, env: ComposeEnv): unknown {
+	if (Array.isArray(environment)) {
+		const out: unknown[] = [];
+		for (const entry of environment) {
+			if (typeof entry !== "string" || entry.includes("=")) {
+				out.push(entry);
+				continue;
+			}
+			const key = entry.trim();
+			if (key in env) out.push(`${key}=${env[key]}`);
+		}
+		return out;
+	}
+	if (environment && typeof environment === "object") {
+		const out: Record<string, unknown> = {};
+		for (const [key, value] of Object.entries(environment as Record<string, unknown>)) {
+			if (value === null || value === undefined) {
+				if (key in env) out[key] = env[key];
+				continue;
+			}
+			out[key] = value;
+		}
+		return out;
+	}
+	return environment;
+}
+
+/**
+ * Interpolate every string of the parsed spec with the merged env — this is
+ * the spec Docker will actually run, so it is what the safety check must see.
+ * Returns a deep copy; the input is left untouched.
+ */
+export function renderComposeSpec(spec: ComposeFileSpec, env: ComposeEnv): ComposeFileSpec {
+	const rendered = mapStrings(spec, (text) =>
+		interpolateComposeString(text, env),
+	) as ComposeFileSpec;
+	for (const service of Object.values(rendered.services ?? {})) {
+		if (service.environment !== undefined) {
+			service.environment = resolveBareEnvironment(service.environment, env);
+		}
+	}
+	return rendered;
+}
+
+/**
+ * Escape every `$` as `$$` so the already-rendered file survives Docker's own
+ * interpolation pass unchanged (compose and the stack loader both un-escape
+ * `$$`). Nothing in the deployed file is ever resolved from the host env.
+ */
+export function escapeComposeInterpolation(spec: ComposeFileSpec): ComposeFileSpec {
+	// Function replacer: a "$$" replacement string would itself mean a literal "$".
+	return mapStrings(spec, (text) => text.replaceAll("$", () => "$$")) as ComposeFileSpec;
+}
+
+/**
+ * Value the container should see for one `KEY=VALUE` env line. Surrounding
+ * matching quotes are stripped (what `docker compose --env-file` used to do
+ * for these files); nothing else is interpreted.
+ */
+function unquoteEnvValue(value: string): string {
+	const trimmed = value.trim();
+	if (trimmed.length >= 2) {
+		const first = trimmed[0];
+		if ((first === '"' || first === "'") && trimmed.endsWith(first)) {
+			return trimmed.slice(1, -1);
+		}
+	}
+	return trimmed;
+}
+
+/** Merged `KEY=VALUE` lines → interpolation map. */
+export function composeEnvMap(mergedEnv: string | null | undefined): Record<string, string> {
+	const env: Record<string, string> = {};
+	for (const [key, value] of parseEnv(mergedEnv)) env[key] = unquoteEnvValue(value);
+	return env;
+}
+
+/**
+ * Whether an env value is worth registering as a log secret. Short tokens
+ * (`DEBUG=1`, `POSTGRES_USER=postgres`, ports, booleans) would redact every
+ * occurrence of "1" / "postgres" in the deploy log and make it unreadable.
+ */
+export function shouldRedactEnvValue(value: string): boolean {
+	const trimmed = value.trim();
+	if (trimmed.length < 8) return false;
+	if (/^\d+$/.test(trimmed)) return false;
+	if (/^(true|false|yes|no|on|off|null|undefined)$/i.test(trimmed)) return false;
+	return true;
+}
+
+// ── safety ──────────────────────────────────────────────────────────────────
 
 const BLOCKED_CAP_ADD = new Set([
 	"ALL",
@@ -62,6 +269,9 @@ const BLOCKED_CAP_ADD = new Set([
 const HOST_PRIVILEGED_CAPS = new Set(["NET_ADMIN", "SYS_MODULE"]);
 
 const DOCKER_SOCKET_SOURCES = new Set(["/var/run/docker.sock", "/run/docker.sock"]);
+
+/** Network drivers a tenant file may declare (everything else reaches the host / LAN). */
+const ALLOWED_NETWORK_DRIVERS = new Set(["bridge", "overlay"]);
 
 export interface ComposeSafetyOptions {
 	/** Allow bind-mount of the Docker engine socket only (exact host paths). */
@@ -101,6 +311,19 @@ function isTruthy(value: unknown): boolean {
 		return lower === "true" || lower === "yes" || lower === "1" || lower === "on";
 	}
 	return false;
+}
+
+function isExternal(record: Record<string, unknown>): boolean {
+	return (
+		record.external === true ||
+		typeof record.external === "string" ||
+		(typeof record.external === "object" && record.external !== null)
+	);
+}
+
+function hasName(record: Record<string, unknown>): boolean {
+	const name = record.name ?? record.Name;
+	return typeof name === "string" && name.trim() !== "";
 }
 
 /** Collect volume sources; rejects long-form bind/tmpfs and non-array shapes. */
@@ -173,13 +396,16 @@ function assertSafeNamedVolumes(volumes: unknown): void {
 		if (def === null || def === undefined) continue;
 		if (typeof def !== "object" || Array.isArray(def)) continue;
 		const record = def as Record<string, unknown>;
-		if (
-			record.external === true ||
-			typeof record.external === "string" ||
-			(typeof record.external === "object" && record.external !== null)
-		) {
+		if (isExternal(record)) {
 			throw new Error(
 				`Compose volume "${name}" must not use external: (attaching host volumes is blocked)`,
+			);
+		}
+		// `name:` bypasses the `<appName>_` scoping and mounts any volume on the
+		// node — another tenant's `<app>_data` or the platform's own Postgres.
+		if (hasName(record)) {
+			throw new Error(
+				`Compose volume "${name}" must not set name: (volume names are scoped to this service)`,
 			);
 		}
 		const opts = record.driver_opts;
@@ -211,13 +437,51 @@ function assertSafeConfigsOrSecrets(kind: "configs" | "secrets", value: unknown)
 				`Compose ${kind} "${name}" must not use environment: (host env reads are blocked)`,
 			);
 		}
-		if (
-			record.external === true ||
-			typeof record.external === "string" ||
-			(typeof record.external === "object" && record.external !== null)
-		) {
+		if (isExternal(record)) {
 			throw new Error(
 				`Compose ${kind} "${name}" must not use external: (cross-stack attach is blocked)`,
+			);
+		}
+		if (hasName(record)) {
+			throw new Error(
+				`Compose ${kind} "${name}" must not set name: (names are scoped to this service)`,
+			);
+		}
+	}
+}
+
+/**
+ * Tenant-declared networks stay private to the project: no `external:` /
+ * `name:` (would attach to the shared overlay or another tenant's network)
+ * and only bridge/overlay drivers (macvlan/ipvlan put containers on the LAN).
+ */
+function assertSafeNetworks(networks: unknown): void {
+	if (networks === undefined || networks === null) return;
+	if (typeof networks !== "object" || Array.isArray(networks)) {
+		throw new Error("Compose top-level networks must be a mapping");
+	}
+	for (const [name, def] of Object.entries(networks as Record<string, unknown>)) {
+		if (def === null || def === undefined) continue;
+		if (typeof def !== "object" || Array.isArray(def)) continue;
+		const record = def as Record<string, unknown>;
+		if (isExternal(record)) {
+			throw new Error(
+				`Compose network "${name}" must not use external: (networking is managed by Nixploy)`,
+			);
+		}
+		if (hasName(record)) {
+			throw new Error(
+				`Compose network "${name}" must not set name: (network names are scoped to this service)`,
+			);
+		}
+		const driver = record.driver ?? record.Driver;
+		if (
+			driver !== undefined &&
+			driver !== null &&
+			!ALLOWED_NETWORK_DRIVERS.has(String(driver).trim().toLowerCase())
+		) {
+			throw new Error(
+				`Compose network "${name}" must not use driver ${String(driver)} (bridge/overlay only)`,
 			);
 		}
 	}
@@ -226,6 +490,9 @@ function assertSafeConfigsOrSecrets(kind: "configs" | "secrets", value: unknown)
 /**
  * Reject compose features that escape the container into the Nixploy host
  * (docker.sock, privileged, host namespaces, dangerous caps, Traefik label hijack).
+ *
+ * Run it on the raw spec (early feedback) AND on the env-rendered spec from
+ * {@link renderComposeSpec} — the rendered one is what Docker executes.
  *
  * `options` is only for instance-admin host-privileged templates / rows — still
  * blocks privileged mode, host namespaces, arbitrary binds, and Traefik labels.
@@ -240,6 +507,7 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 	assertSafeNamedVolumes(spec.volumes);
 	assertSafeConfigsOrSecrets("configs", spec.configs);
 	assertSafeConfigsOrSecrets("secrets", spec.secrets);
+	assertSafeNetworks(spec.networks);
 
 	const allowedCaps = allowedCapSet(options);
 
@@ -258,7 +526,8 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 			);
 		}
 
-		// Env interpolation runs after this check — reject ${…} in dangerous fields.
+		// Dangerous fields must be literal: no `$VAR` / `${VAR}` that only the
+		// merged env decides at deploy time (the rendered spec is checked too).
 		const dangerousKeys = [
 			"privileged",
 			"network_mode",
@@ -283,7 +552,7 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 			const value = service[key];
 			if (value === undefined || value === null) continue;
 			const serialized = typeof value === "string" ? value : JSON.stringify(value);
-			if (/\$\{/.test(serialized)) {
+			if (serialized.includes("$")) {
 				throw new Error(
 					`Compose service "${serviceName}" must not use env interpolation in "${key}"`,
 				);
@@ -360,8 +629,15 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 				}
 				continue;
 			}
-			// Host binds (absolute or relative) are forbidden — only named volumes.
-			if (source.startsWith("/") || source.startsWith(".") || source.includes("..")) {
+			// Host binds are forbidden — only named volumes. `~` expands to the
+			// host home and `$` can only be a leftover template.
+			if (
+				source.startsWith("/") ||
+				source.startsWith(".") ||
+				source.startsWith("~") ||
+				source.startsWith("$") ||
+				source.includes("..")
+			) {
 				throw new Error(
 					`Compose service "${serviceName}" must not bind-mount host paths (use named volumes)`,
 				);
@@ -377,6 +653,8 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 		}
 	}
 }
+
+// ── deploy transforms ───────────────────────────────────────────────────────
 
 /**
  * Rename every service with a suffix (isolated deployments) and rewrite
@@ -412,58 +690,133 @@ export function randomizeServiceNames(spec: ComposeFileSpec, suffix: string): Co
 	return { ...spec, services: renamed };
 }
 
+/** Name of the private per-app network every service of `appName` joins. */
+export const privateNetworkName = (appName: string) => `${appName}-net`;
+
+function toNetworkMap(
+	networks: ComposeServiceSpec["networks"],
+): Record<string, { aliases?: string[] } & Record<string, unknown>> {
+	const map: Record<string, { aliases?: string[] } & Record<string, unknown>> = {};
+	if (Array.isArray(networks)) {
+		for (const name of networks) map[String(name)] = {};
+		return map;
+	}
+	if (networks && typeof networks === "object") {
+		for (const [name, config] of Object.entries(networks)) {
+			map[name] = config && typeof config === "object" ? { ...config } : {};
+		}
+	}
+	return map;
+}
+
 /**
- * Attach every service to the shared `nixploy-network` overlay network so
- * Traefik can reach it. In `docker-compose` mode each service also gets the
- * alias `<appName>-<serviceName>` — that is the hostname Traefik routes to.
- * Stack mode relies on native swarm DNS (`<appName>_<serviceName>`).
+ * Networking for a deploy:
+ * - every service joins a private per-app network (`<appName>-net`) so bare
+ *   service names (`db`, `redis`) only resolve inside this stack — on the
+ *   shared overlay they would round-robin across tenants;
+ * - only `exposedServices` (the Traefik targets) also join `nixploy-network`,
+ *   with the alias `<appName>-<serviceName>` Traefik routes to. Any tenant
+ *   reference to the shared network is dropped first.
  */
 export function injectNetwork(
 	spec: ComposeFileSpec,
-	input: { appName: string; composeType: "docker-compose" | "stack" },
+	input: {
+		appName: string;
+		composeType: "docker-compose" | "stack";
+		exposedServices?: Iterable<string>;
+	},
 ): ComposeFileSpec {
-	const network = getSwarmNetwork();
-	const next: ComposeFileSpec = { ...spec };
-	next.networks = {
-		...next.networks,
-		[network]: { external: true, name: network },
-	};
-	for (const [serviceName, service] of Object.entries(next.services ?? {})) {
-		const alias = `${input.appName}-${serviceName}`;
-		if (Array.isArray(service.networks)) {
-			service.networks =
-				input.composeType === "stack"
-					? [...new Set([...service.networks, network])]
-					: service.networks.filter((n) => n !== network);
-			if (input.composeType === "docker-compose") {
-				// convert to map form so the alias can be attached
-				const asMap: Record<string, { aliases?: string[] } & Record<string, unknown>> = {};
-				for (const n of service.networks) asMap[n] = {};
-				asMap[network] = { aliases: [alias] };
-				service.networks = asMap;
-			}
-		} else {
-			const existing = service.networks ?? {};
-			existing[network] = input.composeType === "docker-compose" ? { aliases: [alias] } : {};
-			service.networks = existing;
-		}
+	const shared = getSwarmNetwork();
+	const privateNet = privateNetworkName(input.appName);
+	const exposed = new Set(input.exposedServices ?? []);
+
+	const networks: Record<string, unknown> =
+		spec.networks && typeof spec.networks === "object" && !Array.isArray(spec.networks)
+			? { ...spec.networks }
+			: {};
+	networks[privateNet] =
+		input.composeType === "stack"
+			? { name: privateNet, driver: "overlay", attachable: true }
+			: { name: privateNet };
+	if (exposed.size > 0) {
+		networks[shared] = { external: true, name: shared };
+	} else {
+		delete networks[shared];
 	}
-	return next;
+
+	const services: Record<string, ComposeServiceSpec> = {};
+	for (const [serviceName, service] of Object.entries(spec.services ?? {})) {
+		const attached = toNetworkMap(service.networks);
+		delete attached[shared];
+		attached[privateNet] = {};
+		if (exposed.has(serviceName)) {
+			attached[shared] = { aliases: [`${input.appName}-${serviceName}`] };
+		}
+		services[serviceName] = { ...service, networks: attached };
+	}
+	return { ...spec, networks, services };
 }
 
-/** Full transform applied right before deploy: safety check + suffix + network. */
+/**
+ * `docker stack deploy` uses the v3 stack loader: it rejects top-level `name:`
+ * and long-form `depends_on`. Both are meaningless for swarm — drop / flatten.
+ */
+function normalizeForStack(spec: ComposeFileSpec): ComposeFileSpec {
+	const { name: _name, ...rest } = spec;
+	const services: Record<string, ComposeServiceSpec> = {};
+	for (const [serviceName, service] of Object.entries(rest.services ?? {})) {
+		const next = { ...service };
+		if (next.depends_on && !Array.isArray(next.depends_on) && typeof next.depends_on === "object") {
+			next.depends_on = Object.keys(next.depends_on);
+		}
+		services[serviceName] = next;
+	}
+	return { ...rest, services };
+}
+
+export interface DeployComposeInput {
+	appName: string;
+	composeType: "docker-compose" | "stack";
+	/** Isolation suffix applied to every service name (empty/null = none). */
+	suffix?: string | null;
+	/** Merged project → environment → service env, rendered into the file. */
+	env?: ComposeEnv;
+	/** Source service names (before the suffix) that have a Nixploy domain. */
+	exposedServices?: Iterable<string>;
+}
+
+/**
+ * Full transform applied right before deploy: safety check on the raw spec,
+ * env interpolation, safety check on the rendered spec, suffix, networking.
+ * The output contains no live templates (`$` is escaped), so Docker never
+ * resolves anything from the host environment.
+ */
 export function buildDeployComposeFile(
 	content: string,
-	input: { appName: string; composeType: "docker-compose" | "stack"; suffix?: string | null },
+	input: DeployComposeInput,
 	options?: ComposeSafetyOptions,
 ): string {
-	let spec = parseComposeFile(content);
+	const raw = parseComposeFile(content);
+	assertSafeComposeSpec(raw, options);
+	let spec = renderComposeSpec(raw, input.env ?? {});
 	assertSafeComposeSpec(spec, options);
-	if (input.suffix) {
-		spec = randomizeServiceNames(spec, input.suffix);
+
+	const suffix = input.suffix || "";
+	if (suffix) {
+		spec = randomizeServiceNames(spec, suffix);
 	}
-	spec = injectNetwork(spec, { appName: input.appName, composeType: input.composeType });
-	return stringify(spec);
+	const exposedServices = [...(input.exposedServices ?? [])].map((name) =>
+		suffix ? `${name}-${suffix}` : name,
+	);
+	spec = injectNetwork(spec, {
+		appName: input.appName,
+		composeType: input.composeType,
+		exposedServices,
+	});
+	if (input.composeType === "stack") {
+		spec = normalizeForStack(spec);
+	}
+	return stringify(escapeComposeInterpolation(spec));
 }
 
 /**

@@ -1,23 +1,43 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
-import { dirname } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
-import { applications, compose, domains, environments, mounts } from "../../db/schema";
+import { applications, compose, deployments, domains, environments, mounts } from "../../db/schema";
 import { assertSafeAppName } from "../../utils/validators";
-import { parseEnv } from "../deployment/env";
+import { getSwarmNetwork } from "../application/paths";
 import { removeServiceLogs } from "../deployment/maintenance";
 import { getTraefik } from "./adapters";
 import {
+	buildComposeDeployCommand,
+	buildComposeDownCommand,
+	buildComposeFallbackDownCommand,
+	buildComposeStopCommand,
+	composeSuffix,
+	deployedServiceName,
+	sharedNetworkConnectCommand,
+	sharedNetworkServiceUpdateCommand,
+	stackServiceName,
+	traefikAppName,
+} from "./commands";
+import {
 	assertSafeComposeSpec,
 	buildDeployComposeFile,
+	composeEnvMap,
 	hostPrivilegedComposeSafety,
 	listComposeServices,
 	mergeEnvVars,
 	parseComposeFile,
+	shouldRedactEnvValue,
 } from "./compose-file";
-import { getComposeBaseDir, getComposeEnvPath, resolveComposeFilePath, shellQuote } from "./paths";
+import { listComposeContainers } from "./containers";
+import {
+	getComposeBaseDir,
+	getComposeDeployFilePath,
+	getComposeEnvPath,
+	resolveComposeFilePath,
+	shellQuote,
+} from "./paths";
 import {
 	type ComposeRow,
 	cloneComposeSource,
@@ -27,6 +47,7 @@ import {
 } from "./source";
 
 export type { ComposeRow };
+export { buildComposeDeployCommand, traefikAppName };
 
 /** Compose row with its tenancy chain (environment → project) loaded. */
 export async function findComposeById(composeId: string) {
@@ -170,6 +191,20 @@ export async function duplicateCompose(
 	return created;
 }
 
+/**
+ * Whether the row has ever been deployed: a deployment row exists, or
+ * containers of the project / stack are present on its server (best effort).
+ */
+async function hasBeenDeployed(row: ComposeRow): Promise<boolean> {
+	const deployment = await db.query.deployments.findFirst({
+		where: eq(deployments.composeId, row.composeId),
+		columns: { deploymentId: true },
+	});
+	if (deployment) return true;
+	const containers = await listComposeContainers(row.appName, row.serverId).catch(() => []);
+	return containers.length > 0;
+}
+
 export async function updateComposeById(
 	composeId: string,
 	input: Partial<
@@ -179,20 +214,40 @@ export async function updateComposeById(
 		>
 	>,
 ): Promise<ComposeRow> {
-	if (input.appName && (await isAppNameTaken(input.appName))) {
-		const existing = await db.query.compose.findFirst({
-			where: eq(compose.composeId, composeId),
-		});
-		if (existing?.appName !== input.appName) {
+	const existing = await db.query.compose.findFirst({
+		where: eq(compose.composeId, composeId),
+	});
+	if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Compose service not found" });
+
+	const values = { ...input };
+	if (values.appName && values.appName !== existing.appName) {
+		if (await isAppNameTaken(values.appName)) {
 			throw new TRPCError({
 				code: "CONFLICT",
-				message: `appName "${input.appName}" is already in use`,
+				message: `appName "${values.appName}" is already in use`,
+			});
+		}
+		// The appName names the running project/stack, its volumes and the
+		// Traefik configs — renaming would orphan all of them.
+		if (await hasBeenDeployed(existing)) {
+			throw new TRPCError({
+				code: "PRECONDITION_FAILED",
+				message:
+					"appName cannot be changed after the first deployment (it names the running stack, its volumes and routing). Create a new service instead.",
 			});
 		}
 	}
+	// Isolated deployments need a suffix; the UI only sends the toggle.
+	if (
+		(values.isolatedDeployment ?? existing.isolatedDeployment) &&
+		!(values.suffix || existing.suffix)
+	) {
+		values.suffix = randomSuffix();
+	}
+
 	const [updated] = await db
 		.update(compose)
-		.set(input)
+		.set(values)
 		.where(eq(compose.composeId, composeId))
 		.returning();
 	if (!updated) throw new TRPCError({ code: "NOT_FOUND", message: "Compose service not found" });
@@ -202,56 +257,60 @@ export async function updateComposeById(
 // ── file preparation ────────────────────────────────────────────────────────
 
 export interface PreparedComposeFiles {
-	/** Directory compose commands run in. */
+	/** Directory compose commands run in (`<configDir>/compose/<appName>`). */
 	workDir: string;
-	/** Final (transformed) compose file passed with `-f`. */
+	/** Rendered compose file passed with `-f` / `-c` (`docker-compose.nixploy.yml`). */
 	composeFilePath: string;
-	/** Merged env file passed with `--env-file`. */
+	/** Merged env written for operators; the deploy commands do not read it. */
 	envFilePath: string;
 	/** Git tokens / passwords to scrub from logs and errorMessage. */
 	secrets: string[];
 }
 
+/** Source service names that have a Nixploy domain (the Traefik targets). */
+async function exposedServiceNames(composeId: string): Promise<Set<string>> {
+	const rows = await db.query.domains.findMany({
+		where: eq(domains.composeId, composeId),
+		columns: { serviceName: true },
+	});
+	const names = new Set<string>();
+	for (const row of rows) if (row.serviceName) names.add(row.serviceName);
+	return names;
+}
+
 /**
  * Materialize everything a deploy needs on disk: clone the git source when
- * applicable, apply suffix/network transforms to the compose file, and write
- * the merged project → environment → service env file.
+ * applicable, render the compose file (env interpolated, safety-checked,
+ * suffix + networks injected) to `docker-compose.nixploy.yml`, and write the
+ * merged project → environment → service env file.
  * Also used by the deploy engine's worker for compose jobs.
  */
 export async function prepareComposeFiles(composeRow: ComposeRow): Promise<PreparedComposeFiles> {
 	const { appName } = composeRow;
 	const envFilePath = getComposeEnvPath(appName);
-	let composeFilePath: string;
+	const composeFilePath = getComposeDeployFilePath(appName);
 	let rawContent: string;
 	let secrets: string[] = [];
 
 	if (composeRow.sourceType === "raw") {
-		composeFilePath = resolveComposeFilePath(appName, "raw", composeRow.composePath);
 		rawContent = composeRow.composeFile;
 		if (!rawContent.trim()) {
 			throw new Error("Compose file is empty — save a compose file before deploying");
 		}
+		// Keep the untouched source next to the rendered file for operators.
+		await writeComposeFile(
+			composeRow,
+			resolveComposeFilePath(appName, "raw", composeRow.composePath),
+			rawContent,
+		);
 	} else {
 		const cloned = await cloneComposeSource(composeRow);
 		secrets = cloned.secrets;
-		composeFilePath = resolveComposeFilePath(
-			appName,
-			composeRow.sourceType,
-			composeRow.composePath,
+		rawContent = await readComposeFile(
+			composeRow,
+			resolveComposeFilePath(appName, composeRow.sourceType, composeRow.composePath),
 		);
-		rawContent = await readComposeFile(composeRow, composeFilePath);
 	}
-
-	const transformed = buildDeployComposeFile(
-		rawContent,
-		{
-			appName,
-			composeType: composeRow.composeType,
-			suffix: composeRow.isolatedDeployment ? composeRow.suffix : null,
-		},
-		composeRow.hostPrivileged ? hostPrivilegedComposeSafety() : undefined,
-	);
-	await writeComposeFile(composeRow, composeFilePath, transformed);
 
 	// Env inheritance: project → environment → service (service wins).
 	const full = await findComposeById(composeRow.composeId);
@@ -260,51 +319,37 @@ export async function prepareComposeFiles(composeRow: ComposeRow): Promise<Prepa
 		full?.environment.env,
 		composeRow.env,
 	);
-	await writeComposeFile(composeRow, envFilePath, `${mergedEnv}\n`);
+	const env = composeEnvMap(mergedEnv);
 
-	// Scrub the fully merged env from logs too — `docker compose` interpolates
-	// project/environment variables and can echo them into deploy output.
-	for (const [, value] of parseEnv(mergedEnv)) secrets.push(value);
+	const transformed = buildDeployComposeFile(
+		rawContent,
+		{
+			appName,
+			composeType: composeRow.composeType,
+			suffix: composeSuffix(composeRow),
+			env,
+			exposedServices: await exposedServiceNames(composeRow.composeId),
+		},
+		composeRow.hostPrivileged ? hostPrivilegedComposeSafety() : undefined,
+	);
+	// Both carry resolved secrets — owner-only.
+	await writeComposeFile(composeRow, composeFilePath, transformed, { mode: 0o600 });
+	await writeComposeFile(composeRow, envFilePath, `${mergedEnv}\n`, { mode: 0o600 });
 
-	return { workDir: dirname(composeFilePath), composeFilePath, envFilePath, secrets };
+	// Scrub the merged env from logs — values land in the rendered file and
+	// Docker echoes parts of it on errors. Short tokens would redact too much.
+	for (const value of Object.values(env)) {
+		if (shouldRedactEnvValue(value)) secrets.push(value);
+	}
+
+	return { workDir: getComposeBaseDir(appName), composeFilePath, envFilePath, secrets };
 }
 
 // ── lifecycle commands ──────────────────────────────────────────────────────
 
-const upCommand = (row: ComposeRow, files: PreparedComposeFiles) => {
-	const f = shellQuote(files.composeFilePath);
-	const env = shellQuote(files.envFilePath);
-	if (row.composeType === "stack") {
-		// `docker stack deploy` has no --env-file; render the interpolated file
-		// with `docker compose config` and feed it via stdin instead.
-		return `docker compose -f ${f} --env-file ${env} config | docker stack deploy --with-registry-auth --prune -c - ${shellQuote(row.appName)}`;
-	}
-	return `docker compose -p ${shellQuote(row.appName)} -f ${f} --env-file ${env} up -d --remove-orphans`;
-};
-
-const stopCommand = (row: ComposeRow, files: PreparedComposeFiles) => {
-	if (row.composeType === "stack") {
-		return `docker stack rm ${shellQuote(row.appName)}`;
-	}
-	return `docker compose -p ${shellQuote(row.appName)} -f ${shellQuote(files.composeFilePath)} --env-file ${shellQuote(files.envFilePath)} stop`;
-};
-
-const downCommand = (row: ComposeRow, files: PreparedComposeFiles) => {
-	if (row.composeType === "stack") {
-		return `docker stack rm ${shellQuote(row.appName)}`;
-	}
-	return `docker compose -p ${shellQuote(row.appName)} -f ${shellQuote(files.composeFilePath)} --env-file ${shellQuote(files.envFilePath)} down --remove-orphans`;
-};
-
 /** The deploy command shown in the UI ("getDefaultCommand"). */
 export function getDefaultCommand(row: ComposeRow): string {
-	const composeFilePath = resolveComposeFilePath(row.appName, row.sourceType, row.composePath);
-	return upCommand(row, {
-		workDir: dirname(composeFilePath),
-		composeFilePath,
-		envFilePath: getComposeEnvPath(row.appName),
-		secrets: [],
-	});
+	return buildComposeDeployCommand(row, { composeFilePath: getComposeDeployFilePath(row.appName) });
 }
 
 async function updateStatus(composeId: string, status: "idle" | "running" | "done" | "error") {
@@ -316,7 +361,9 @@ export async function startCompose(composeRow: ComposeRow): Promise<void> {
 	await updateStatus(composeRow.composeId, "running");
 	try {
 		const files = await prepareComposeFiles(composeRow);
-		await runComposeCommand(composeRow, upCommand(composeRow, files), { cwd: files.workDir });
+		await runComposeCommand(composeRow, buildComposeDeployCommand(composeRow, files), {
+			cwd: files.workDir,
+		});
 		await updateStatus(composeRow.composeId, "running");
 	} catch (error) {
 		await updateStatus(composeRow.composeId, "error");
@@ -328,7 +375,9 @@ export async function startCompose(composeRow: ComposeRow): Promise<void> {
 export async function stopCompose(composeRow: ComposeRow): Promise<void> {
 	try {
 		const files = await prepareComposeFiles(composeRow);
-		await runComposeCommand(composeRow, stopCommand(composeRow, files), { cwd: files.workDir });
+		await runComposeCommand(composeRow, buildComposeStopCommand(composeRow, files), {
+			cwd: files.workDir,
+		});
 	} finally {
 		await updateStatus(composeRow.composeId, "idle");
 	}
@@ -345,17 +394,16 @@ export async function deleteCompose(composeRow: ComposeRow): Promise<void> {
 	});
 
 	try {
+		// When the files cannot be prepared (clone failure, file now failing
+		// safety, empty file) fall back to the name-only teardown so the
+		// containers never outlive the row.
 		const files = await prepareComposeFiles(composeRow).catch(() => null);
-		if (files) {
-			await runComposeCommand(composeRow, downCommand(composeRow, files), {
-				cwd: files.workDir,
-			}).catch(() => {});
-		} else if (composeRow.composeType === "stack") {
-			await runComposeCommand(
-				composeRow,
-				`docker stack rm ${shellQuote(composeRow.appName)}`,
-			).catch(() => {});
-		}
+		const command = files
+			? buildComposeDownCommand(composeRow, files)
+			: buildComposeFallbackDownCommand(composeRow);
+		await runComposeCommand(composeRow, command, files ? { cwd: files.workDir } : {}).catch(
+			() => {},
+		);
 	} catch {
 		// best-effort teardown
 	}
@@ -373,10 +421,11 @@ export async function deleteCompose(composeRow: ComposeRow): Promise<void> {
 	}
 
 	await db.delete(compose).where(eq(compose.composeId, composeRow.composeId));
-	if (!composeRow.serverId) {
-		await rm(getComposeBaseDir(composeRow.appName), { recursive: true, force: true }).catch(
-			() => {},
-		);
+	const baseDir = getComposeBaseDir(composeRow.appName);
+	if (composeRow.serverId) {
+		await runComposeCommand(composeRow, `rm -rf ${shellQuote(baseDir)}`).catch(() => {});
+	} else {
+		await rm(baseDir, { recursive: true, force: true }).catch(() => {});
 	}
 	// Build logs live outside the compose dir and have no FK to cascade through.
 	await removeServiceLogs(composeRow.appName).catch(() => {});
@@ -409,14 +458,47 @@ export async function loadServices(composeRow: ComposeRow): Promise<string[]> {
 }
 
 /**
- * Traefik config key for one compose service — this is also the hostname the
- * service is reachable at on `nixploy-network`:
- * - docker-compose: `<appName>-<serviceName>` (network alias injected at deploy)
- * - stack: `<appName>_<serviceName>` (native swarm DNS)
+ * Make sure a running service is reachable by Traefik: a domain added after
+ * the deploy targets a service that only joined the private per-app network.
+ * Attach it to the shared overlay with its alias, at runtime and idempotently;
+ * the next deploy renders the file with the network already included.
  */
-export function traefikAppName(row: ComposeRow, serviceName: string | null): string {
-	const name = serviceName ?? "";
-	return row.composeType === "stack" ? `${row.appName}_${name}` : `${row.appName}-${name}`;
+async function ensureSharedNetworkAttached(row: ComposeRow, serviceName: string): Promise<void> {
+	const network = getSwarmNetwork();
+	if (row.composeType === "stack") {
+		const [networkId, attached] = await Promise.all([
+			runComposeCommand(row, `docker network inspect --format '{{.Id}}' ${shellQuote(network)}`),
+			runComposeCommand(
+				row,
+				`docker service inspect --format '{{json .Spec.TaskTemplate.Networks}}' ${shellQuote(stackServiceName(row, serviceName))}`,
+			),
+		]);
+		const targets = (JSON.parse(attached.trim() || "[]") as Array<{ Target?: string }>).map(
+			(entry) => entry.Target,
+		);
+		if (targets.includes(networkId.trim())) return;
+		await runComposeCommand(row, sharedNetworkServiceUpdateCommand(row, serviceName));
+		return;
+	}
+
+	const containerIds = (
+		await runComposeCommand(
+			row,
+			`docker ps -q --filter label=com.docker.compose.project=${shellQuote(row.appName)} --filter label=com.docker.compose.service=${shellQuote(deployedServiceName(row, serviceName))}`,
+		)
+	)
+		.split("\n")
+		.map((line) => line.trim())
+		.filter(Boolean);
+	for (const containerId of containerIds) {
+		const raw = await runComposeCommand(
+			row,
+			`docker inspect --format '{{json .NetworkSettings.Networks}}' ${shellQuote(containerId)}`,
+		);
+		const attached = JSON.parse(raw.trim() || "{}") as Record<string, unknown>;
+		if (network in attached) continue;
+		await runComposeCommand(row, sharedNetworkConnectCommand(row, serviceName, containerId));
+	}
 }
 
 /**
@@ -458,6 +540,8 @@ export async function resyncComposeDomains(composeId: string): Promise<void> {
 				certificateId: d.certificateId,
 			})),
 		});
+		// Best effort: the service may simply not be running yet.
+		await ensureSharedNetworkAttached(row, serviceName).catch(() => {});
 	}
 
 	// Remove configs for services that no longer have any domain.
@@ -481,36 +565,25 @@ export async function saveEnvironment(composeId: string, env: string): Promise<v
 }
 
 /**
- * Save the compose file. For raw sources this updates the `composeFile`
- * column; for git sources it overwrites the file inside the local clone.
+ * Save the compose file of a raw source (the `composeFile` column). Git
+ * sources are read from the checkout, which is reset on every deploy — edits
+ * made here would be silently discarded, so they are rejected.
  */
 export async function saveComposeFile(composeRow: ComposeRow, composeFile: string): Promise<void> {
+	if (composeRow.sourceType !== "raw") {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message:
+				"The compose file of a git-backed service is edited in the repository (the checkout is reset on every deploy). Switch the source type to raw to edit it here.",
+		});
+	}
 	// validate before persisting so a broken / unsafe file is rejected early
 	listComposeServices(composeFile);
 	assertSafeComposeSpec(
 		parseComposeFile(composeFile),
 		composeRow.hostPrivileged ? hostPrivilegedComposeSafety() : undefined,
 	);
-	if (composeRow.sourceType === "raw") {
-		await db
-			.update(compose)
-			.set({ composeFile })
-			.where(eq(compose.composeId, composeRow.composeId));
-		return;
-	}
-	if (composeRow.serverId) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: "Compose files on remote servers are edited in the repository",
-		});
-	}
-	const path = resolveComposeFilePath(
-		composeRow.appName,
-		composeRow.sourceType,
-		composeRow.composePath,
-	);
-	await mkdir(dirname(path), { recursive: true });
-	await writeComposeFile(composeRow, path, composeFile);
+	await db.update(compose).set({ composeFile }).where(eq(compose.composeId, composeRow.composeId));
 }
 
 /** Ensure the base working directory exists (used by the fallback worker). */

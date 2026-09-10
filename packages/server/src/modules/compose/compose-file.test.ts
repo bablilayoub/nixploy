@@ -2,11 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
 	assertSafeComposeSpec,
 	buildDeployComposeFile,
+	composeEnvMap,
+	escapeComposeInterpolation,
 	hostPrivilegedComposeSafety,
+	injectNetwork,
+	interpolateComposeString,
 	listComposeServices,
 	mergeEnvVars,
 	parseComposeFile,
 	randomizeServiceNames,
+	renderComposeSpec,
+	shouldRedactEnvValue,
 } from "./compose-file";
 
 const COMPOSE = `
@@ -50,6 +56,83 @@ describe("parseComposeFile / listComposeServices", () => {
 		expect(() => parseComposeFile("services: {}")).toThrow(
 			"Invalid compose file: no services defined",
 		);
+	});
+});
+
+describe("interpolateComposeString", () => {
+	const env = { A: "alpha", EMPTY: "", HOST: "db" };
+
+	it(`expands $VAR and \${VAR}, unknown variables to the empty string`, () => {
+		expect(interpolateComposeString(`$A/\${A}/$MISSING/\${MISSING}!`, env)).toBe("alpha/alpha//!");
+	});
+
+	it("supports :- and - defaults with compose semantics", () => {
+		expect(interpolateComposeString(`\${MISSING:-x}`, env)).toBe("x");
+		expect(interpolateComposeString(`\${EMPTY:-x}`, env)).toBe("x");
+		expect(interpolateComposeString(`\${EMPTY-x}`, env)).toBe("");
+		expect(interpolateComposeString(`\${MISSING-x}`, env)).toBe("x");
+		expect(interpolateComposeString(`\${A:-x}`, env)).toBe("alpha");
+	});
+
+	it("supports :? / ? errors and :+ / + alternates", () => {
+		expect(() => interpolateComposeString(`\${MISSING:?need it}`, env)).toThrow(/MISSING.*need it/);
+		expect(() => interpolateComposeString(`\${EMPTY:?need it}`, env)).toThrow(/EMPTY/);
+		expect(interpolateComposeString(`\${EMPTY?need it}`, env)).toBe("");
+		expect(interpolateComposeString(`\${A:+set}`, env)).toBe("set");
+		expect(interpolateComposeString(`\${EMPTY:+set}`, env)).toBe("");
+		expect(interpolateComposeString(`\${EMPTY+set}`, env)).toBe("set");
+	});
+
+	it("handles nested defaults, $$ escapes and stray dollars", () => {
+		expect(interpolateComposeString(`\${MISSING:-\${HOST}:5432}`, env)).toBe("db:5432");
+		expect(interpolateComposeString(`cost: $$5 and $$\${A}`, env)).toBe("cost: $5 and $alpha");
+		expect(interpolateComposeString("$1 $ end", env)).toBe("$1 $ end");
+	});
+
+	it("rejects malformed templates", () => {
+		expect(() => interpolateComposeString(`\${A`, env)).toThrow(/unterminated/);
+		expect(() => interpolateComposeString(`\${9x}`, env)).toThrow(/Invalid compose interpolation/);
+		expect(() => interpolateComposeString(`\${A%x}`, env)).toThrow(/Invalid compose interpolation/);
+	});
+});
+
+describe("renderComposeSpec", () => {
+	it("interpolates every string and resolves bare environment keys from the merged env only", () => {
+		const spec = parseComposeFile(`services:
+  app:
+    image: "ghcr.io/x/app:\${TAG:-latest}"
+    environment:
+      - DB_PASSWORD
+      - ENCRYPTION_KEY
+      - PLAIN=1
+    command: ["sh", "-c", "echo $$HOME $TAG"]
+  db:
+    image: postgres
+    environment:
+      POSTGRES_PASSWORD:
+      DATABASE_URL:
+      LITERAL: "\${TAG}"
+`);
+		const rendered = renderComposeSpec(spec, {
+			TAG: "v2",
+			DB_PASSWORD: "pw",
+			POSTGRES_PASSWORD: "pw",
+		});
+		expect(rendered.services?.app?.image).toBe("ghcr.io/x/app:v2");
+		// ENCRYPTION_KEY is not in the tenant env: dropped, never taken from the panel process.
+		expect(rendered.services?.app?.environment).toEqual(["DB_PASSWORD=pw", "PLAIN=1"]);
+		expect(rendered.services?.app?.command).toEqual(["sh", "-c", "echo $HOME v2"]);
+		expect(rendered.services?.db?.environment).toEqual({
+			POSTGRES_PASSWORD: "pw",
+			LITERAL: "v2",
+		});
+		// input untouched
+		expect(spec.services?.app?.image).toBe(`ghcr.io/x/app:\${TAG:-latest}`);
+	});
+
+	it("escapeComposeInterpolation doubles every dollar for Docker's own pass", () => {
+		const spec = { services: { x: { image: "a", command: "echo $HOME $$" } } };
+		expect(escapeComposeInterpolation(spec).services?.x?.command).toBe("echo $$HOME $$$$");
 	});
 });
 
@@ -364,37 +447,335 @@ services:
 `),
 			),
 		).toThrow(/env interpolation/);
+		// Unbraced `$VAR` is valid compose interpolation too.
+		expect(() =>
+			assertSafeComposeSpec(
+				parseComposeFile(`services:
+  x:
+    image: alpine
+    cap_add: [$CAP]
+`),
+			),
+		).toThrow(/env interpolation/);
+	});
+
+	it("treats ~ and $ prefixed volume sources as host binds", () => {
+		expect(() =>
+			assertSafeComposeSpec(
+				parseComposeFile(`services:
+  x:
+    image: alpine
+    volumes: ["~/.ssh:/stolen:ro"]
+`),
+			),
+		).toThrow(/bind-mount host paths/);
+		expect(() =>
+			assertSafeComposeSpec({
+				services: {
+					x: { image: "alpine", volumes: [{ type: "volume", source: "~", target: "/h" }] },
+				},
+			}),
+		).toThrow(/bind-mount host paths/);
+		expect(() =>
+			assertSafeComposeSpec({
+				services: { x: { image: "alpine", volumes: ["$$HOME:/h"] } },
+			}),
+		).toThrow(/env interpolation/);
+	});
+
+	it("rejects name: on top-level volumes, configs and secrets (cross-tenant mounts)", () => {
+		expect(() =>
+			assertSafeComposeSpec(
+				parseComposeFile(`services:
+  x:
+    image: alpine
+    volumes: [data:/var/lib/postgresql/data]
+volumes:
+  data:
+    name: nixploy-postgres-data
+`),
+			),
+		).toThrow(/must not set name:/);
+		expect(() =>
+			assertSafeComposeSpec(
+				parseComposeFile(`services:
+  x:
+    image: alpine
+configs:
+  c:
+    name: other-tenant-config
+`),
+			),
+		).toThrow(/must not set name:/);
+		expect(() =>
+			assertSafeComposeSpec(
+				parseComposeFile(`services:
+  x:
+    image: alpine
+secrets:
+  s:
+    name: other-tenant-secret
+`),
+			),
+		).toThrow(/must not set name:/);
+	});
+
+	it("rejects tenant-declared external / named / non-bridge networks", () => {
+		expect(() =>
+			assertSafeComposeSpec(
+				parseComposeFile(`services:
+  x:
+    image: alpine
+    networks: [shared]
+networks:
+  shared:
+    external: true
+    name: nixploy-network
+`),
+			),
+		).toThrow(/must not use external/);
+		expect(() =>
+			assertSafeComposeSpec(
+				parseComposeFile(`services:
+  x:
+    image: alpine
+networks:
+  shared:
+    name: victim-app_default
+`),
+			),
+		).toThrow(/must not set name:/);
+		expect(() =>
+			assertSafeComposeSpec(
+				parseComposeFile(`services:
+  x:
+    image: alpine
+networks:
+  lan:
+    driver: macvlan
+`),
+			),
+		).toThrow(/driver macvlan/);
+		expect(() =>
+			assertSafeComposeSpec(
+				parseComposeFile(`services:
+  x:
+    image: alpine
+    networks: [internal]
+networks:
+  internal:
+    driver: bridge
+    internal: true
+`),
+			),
+		).not.toThrow();
+	});
+});
+
+/**
+ * The bypasses from the audit: every dangerous value is a plain env
+ * reference, resolved from the tenant-controlled `.env` at deploy time. The
+ * rendered spec (what Docker runs) must be the one that is validated.
+ */
+describe("interpolation bypasses", () => {
+	const env = { P: "true", NM: "host", PID: "host", CAP: "SYS_ADMIN", V: "/", L: "traefik.enable" };
+
+	it.each([
+		["privileged: $P", { privileged: "$P" }, /privileged: true/],
+		["network_mode: $NM", { network_mode: "$NM" }, /network_mode/],
+		["pid: $PID", { pid: "$PID" }, /pid/],
+		["cap_add: [$CAP]", { cap_add: ["$CAP"] }, /SYS_ADMIN/],
+		["volumes: [$V:/host]", { volumes: ["$V:/host"] }, /bind-mount host paths/],
+		["volumes: [~/.ssh:/x]", { volumes: ["~/.ssh:/stolen"] }, /bind-mount host paths/],
+		[`labels: [\${L}=true]`, { labels: [`\${L}=true`] }, /Traefik labels/],
+	])("rendered spec rejects %s", (_label, fields, error) => {
+		const spec = { services: { x: { image: "alpine", ...fields } } };
+		expect(() => assertSafeComposeSpec(renderComposeSpec(spec, env))).toThrow(error);
+	});
+
+	it("buildDeployComposeFile validates the env-rendered file", () => {
+		const content = `services:
+  x:
+    image: alpine
+    labels:
+      - "\${L}=true"
+`;
+		const input = { appName: "app", composeType: "docker-compose" as const };
+		expect(() => buildDeployComposeFile(content, { ...input, env })).toThrow(/Traefik labels/);
+		expect(() => buildDeployComposeFile(content, { ...input, env: {} })).not.toThrow();
+		expect(() =>
+			buildDeployComposeFile("services:\n  x:\n    image: alpine\n    privileged: $P\n", {
+				...input,
+				env,
+			}),
+		).toThrow(/env interpolation/);
+	});
+});
+
+describe("injectNetwork", () => {
+	const spec = parseComposeFile(`services:
+  web:
+    image: nginx
+    networks: [nixploy-network]
+  db:
+    image: postgres
+  cache:
+    image: redis
+    networks:
+      backend:
+        aliases: [redis-primary]
+networks:
+  backend: {}
+`);
+
+	it("keeps every service on a private per-app network and exposes only Traefik targets", () => {
+		const out = injectNetwork(spec, {
+			appName: "shop",
+			composeType: "docker-compose",
+			exposedServices: ["web"],
+		});
+		expect(out.networks?.["shop-net"]).toEqual({ name: "shop-net" });
+		expect(out.networks?.["nixploy-network"]).toEqual({
+			external: true,
+			name: "nixploy-network",
+		});
+		expect(out.networks?.backend).toEqual({});
+		expect(out.services?.web?.networks).toEqual({
+			"shop-net": {},
+			"nixploy-network": { aliases: ["shop-web"] },
+		});
+		// db never joins the shared overlay: `db` only resolves inside this stack.
+		expect(out.services?.db?.networks).toEqual({ "shop-net": {} });
+		expect(out.services?.cache?.networks).toEqual({
+			backend: { aliases: ["redis-primary"] },
+			"shop-net": {},
+		});
+	});
+
+	it("drops the shared network entirely when nothing is exposed", () => {
+		const out = injectNetwork(spec, { appName: "shop", composeType: "docker-compose" });
+		expect(out.networks?.["nixploy-network"]).toBeUndefined();
+		for (const service of Object.values(out.services ?? {})) {
+			expect(Object.keys(service.networks ?? {})).not.toContain("nixploy-network");
+		}
+	});
+
+	it("uses an attachable overlay for stacks and still aliases exposed services", () => {
+		const out = injectNetwork(spec, {
+			appName: "shop",
+			composeType: "stack",
+			exposedServices: ["web", "db"],
+		});
+		expect(out.networks?.["shop-net"]).toEqual({
+			name: "shop-net",
+			driver: "overlay",
+			attachable: true,
+		});
+		expect(out.services?.db?.networks).toEqual({
+			"shop-net": {},
+			"nixploy-network": { aliases: ["shop-db"] },
+		});
+		expect(out.services?.cache?.networks).toEqual({
+			backend: { aliases: ["redis-primary"] },
+			"shop-net": {},
+		});
 	});
 });
 
 describe("buildDeployComposeFile", () => {
-	it("attaches every service to the nixploy-network with an alias (docker-compose mode)", () => {
-		const output = buildDeployComposeFile("services:\n  web:\n    image: nginx\n", {
-			appName: "myapp",
-			composeType: "docker-compose",
-		});
+	it("renders env values, escapes leftover dollars and wires networks", () => {
+		const output = buildDeployComposeFile(
+			`services:
+  web:
+    image: "nginx:\${TAG}"
+    command: ["sh", "-c", "echo $$PATH"]
+  db:
+    image: postgres
+`,
+			{
+				appName: "myapp",
+				composeType: "docker-compose",
+				env: { TAG: "1.27" },
+				exposedServices: ["web"],
+			},
+		);
+		expect(output).toContain("nginx:1.27");
+		expect(output).toContain("$$PATH");
+		expect(output).not.toContain(`\${TAG}`);
 		const spec = parseComposeFile(output);
 		expect(spec.networks?.["nixploy-network"]).toEqual({
 			external: true,
 			name: "nixploy-network",
 		});
-		const networks = spec.services?.web?.networks as Record<string, { aliases?: string[] }>;
-		expect(networks["nixploy-network"]?.aliases).toEqual(["myapp-web"]);
+		expect(spec.services?.web?.networks).toEqual({
+			"myapp-net": {},
+			"nixploy-network": { aliases: ["myapp-web"] },
+		});
+		expect(spec.services?.db?.networks).toEqual({ "myapp-net": {} });
 	});
 
-	it("applies the suffix before network injection", () => {
+	it("applies the suffix before network injection and to the exposed set / alias", () => {
 		const output = buildDeployComposeFile("services:\n  web:\n    image: nginx\n", {
 			appName: "myapp",
 			composeType: "docker-compose",
 			suffix: "pr-1",
+			exposedServices: ["web"],
 		});
 		expect(listComposeServices(output)).toEqual(["web-pr-1"]);
+		const spec = parseComposeFile(output);
+		expect(spec.services?.["web-pr-1"]?.networks).toEqual({
+			"myapp-net": {},
+			"nixploy-network": { aliases: ["myapp-web-pr-1"] },
+		});
+	});
+
+	it("normalizes stack files: drops top-level name and flattens long-form depends_on", () => {
+		const output = buildDeployComposeFile(
+			`name: tenant-project
+services:
+  web:
+    image: nginx
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres
+`,
+			{ appName: "myapp", composeType: "stack" },
+		);
+		const spec = parseComposeFile(output);
+		expect(spec.name).toBeUndefined();
+		expect(spec.services?.web?.depends_on).toEqual(["db"]);
+		expect(spec.networks?.["myapp-net"]).toEqual({
+			name: "myapp-net",
+			driver: "overlay",
+			attachable: true,
+		});
 	});
 });
 
-describe("mergeEnvVars", () => {
-	it("later sources override earlier ones, dropping comments and blanks", () => {
+describe("env helpers", () => {
+	it("mergeEnvVars: later sources override earlier ones, dropping comments and blanks", () => {
 		const merged = mergeEnvVars("A=1\nB=base\n# comment\n", "B=override\n\nC=3", null, undefined);
 		expect(merged).toBe("A=1\nB=override\nC=3");
+	});
+
+	it("composeEnvMap strips surrounding matching quotes only", () => {
+		expect(composeEnvMap(`A="quoted"\nB='single'\nC=plain value\nD="unbalanced\nE=`)).toEqual({
+			A: "quoted",
+			B: "single",
+			C: "plain value",
+			D: '"unbalanced',
+			E: "",
+		});
+	});
+
+	it("shouldRedactEnvValue skips short, numeric and boolean tokens", () => {
+		expect(shouldRedactEnvValue("1")).toBe(false);
+		expect(shouldRedactEnvValue("postgres")).toBe(true);
+		expect(shouldRedactEnvValue("30000000")).toBe(false);
+		expect(shouldRedactEnvValue("false")).toBe(false);
+		expect(shouldRedactEnvValue("s3cr3t-pass")).toBe(true);
+		expect(shouldRedactEnvValue("   ")).toBe(false);
 	});
 });

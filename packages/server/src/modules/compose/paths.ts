@@ -10,8 +10,16 @@ export const getComposeBaseDir = (appName: string) => join(getConfigDir(), "comp
 /** Git sources are cloned into `<base>/code`. */
 export const getComposeCodeDir = (appName: string) => join(getComposeBaseDir(appName), "code");
 
-/** Merged `.env` file for a compose project. */
+/** Merged `.env` file for a compose project (operator reference; never loaded by Docker). */
 export const getComposeEnvPath = (appName: string) => join(getComposeBaseDir(appName), ".env");
+
+/**
+ * The rendered file Docker actually deploys (env interpolated, suffix and
+ * networks injected). Kept apart from the source file so git checkouts and
+ * `loadServices` keep seeing the original service names.
+ */
+export const getComposeDeployFilePath = (appName: string) =>
+	join(getComposeBaseDir(appName), "docker-compose.nixploy.yml");
 
 /**
  * Resolve the on-disk compose file path for a compose row.

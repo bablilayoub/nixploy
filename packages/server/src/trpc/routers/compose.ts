@@ -155,7 +155,11 @@ export const composeRouter = router({
 				bitbucketId: z.string().nullish(),
 				giteaId: z.string().nullish(),
 				isolatedDeployment: z.boolean().optional(),
-				suffix: z.string().optional(),
+				/** Generated server-side when isolation is enabled without one. */
+				suffix: z
+					.string()
+					.regex(/^[a-z0-9-]{0,16}$/, "suffix must be lowercase a-z0-9- (max 16 chars)")
+					.optional(),
 				serverId: z.string().nullish(),
 			}),
 		)

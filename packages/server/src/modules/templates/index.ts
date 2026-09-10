@@ -16,7 +16,7 @@ import {
 } from "../compose/compose-file";
 import { createCompose, resyncComposeDomains, updateComposeById } from "../compose/service";
 import { queueDeployment } from "../deployment";
-import { findProjectById } from "../projects";
+import { assertWithinQuota, findProjectById } from "../projects";
 import { findTemplateById, listTemplateSummaries } from "./catalog";
 import { summarizeTemplateServices } from "./services";
 
@@ -71,6 +71,8 @@ export async function deployTemplate(
 
 	// Org-scope: throws NOT_FOUND/FORBIDDEN when the project is not the caller's.
 	await findProjectById(input.projectId, organizationId);
+	// Same service quota `compose.create` enforces — templates are not a bypass.
+	await assertWithinQuota(organizationId, { services: true });
 
 	const environment = await db.query.environments.findFirst({
 		where: and(

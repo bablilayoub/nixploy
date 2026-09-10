@@ -174,12 +174,19 @@ export async function cloneComposeSource(composeRow: ComposeRow): Promise<{
 		const dir = shellQuote(codeDir);
 		const url = shellQuote(source.cloneUrl);
 		const branch = shellQuote(source.branch);
+		const sshEnv = source.env?.GIT_SSH_COMMAND
+			? `GIT_SSH_COMMAND=${shellQuote(source.env.GIT_SSH_COMMAND)} `
+			: "";
 		await execAsyncRemote(
 			composeRow.serverId,
 			`mkdir -p ${dir} && ` +
 				`(if [ -d ${dir}/.git ]; then ` +
-				`git -C ${dir} fetch --depth 1 origin ${branch} && git -C ${dir} reset --hard FETCH_HEAD; ` +
-				`else git clone --branch ${branch} --depth 1 --single-branch ${url} ${dir}; fi)`,
+				// Refresh the remote first: the URL baked in at clone time carries a
+				// short-lived installation token / a rotatable PAT, and the
+				// repository or provider may have changed since.
+				`${sshEnv}git -C ${dir} remote set-url origin ${url} && ` +
+				`${sshEnv}git -C ${dir} fetch --depth 1 origin ${branch} && git -C ${dir} reset --hard FETCH_HEAD; ` +
+				`else ${sshEnv}git clone --branch ${branch} --depth 1 --single-branch ${url} ${dir}; fi)`,
 		);
 		return { codeDir, secrets };
 	}
@@ -189,6 +196,8 @@ export async function cloneComposeSource(composeRow: ComposeRow): Promise<{
 	if (source.env) git.env(source.env);
 	const isRepo = await git.checkIsRepo().catch(() => false);
 	if (isRepo) {
+		// Refresh the remote first (see the remote branch above).
+		await git.remote(["set-url", "origin", source.cloneUrl]);
 		await git.fetch(["origin", source.branch, "--depth", "1"]);
 		await git.reset(["--hard", "FETCH_HEAD"]);
 	} else {
@@ -218,22 +227,29 @@ export async function runComposeCommand(
 	return execAsync(command, { cwd: options.cwd });
 }
 
-/** Write a file on the target server (local fs, or base64 over SSH). */
+/**
+ * Write a file on the target server (local fs, or base64 over SSH).
+ * `mode` is applied after the write so an existing file is tightened too.
+ */
 export async function writeComposeFile(
 	composeRow: ComposeRow,
 	path: string,
 	content: string,
+	options: { mode?: number } = {},
 ): Promise<void> {
 	if (composeRow.serverId) {
 		const base64 = Buffer.from(content, "utf8").toString("base64");
+		const chmodStep =
+			options.mode !== undefined ? ` && chmod ${options.mode.toString(8)} ${shellQuote(path)}` : "";
 		await execAsyncRemote(
 			composeRow.serverId,
-			`mkdir -p ${shellQuote(dirname(path))} && echo ${base64} | base64 -d > ${shellQuote(path)}`,
+			`mkdir -p ${shellQuote(dirname(path))} && echo ${base64} | base64 -d > ${shellQuote(path)}${chmodStep}`,
 		);
 		return;
 	}
 	await mkdir(dirname(path), { recursive: true });
-	await writeFile(path, content, "utf8");
+	await writeFile(path, content, { encoding: "utf8", mode: options.mode });
+	if (options.mode !== undefined) await chmod(path, options.mode);
 }
 
 /** Read a file from the target server (local fs, or `cat` over SSH). */
