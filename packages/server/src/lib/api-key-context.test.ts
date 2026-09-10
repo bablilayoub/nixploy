@@ -104,6 +104,85 @@ describe("buildApiKeyContext", () => {
 		).rejects.toMatchObject({ code: "FORBIDDEN", message: "User is banned" });
 	});
 
+	it("lifts a temporary ban once banExpires has passed", async () => {
+		mocks.verifyApiKey.mockResolvedValue({
+			valid: true,
+			key: { id: "key-1", referenceId: "user-1" },
+		});
+		mocks.sqlClient
+			.mockResolvedValueOnce([{ ...userRow, banned: true, banExpires: new Date(Date.now() - 1) }])
+			.mockResolvedValueOnce([{ organizationId: "org-1" }]);
+		const ctx = await buildApiKeyContext(req({ "x-api-key": "expired-ban" }), {
+			bucket: "test-ban-expired",
+		});
+		expect(ctx.session?.user.id).toBe("user-1");
+		// The user query must select ban_expires, otherwise the ban never lifts.
+		const userQuery = String(mocks.sqlClient.mock.calls[0]?.[0]);
+		expect(userQuery).toContain('ban_expires AS "banExpires"');
+	});
+
+	it("defaults to the oldest membership when no organization is requested", async () => {
+		mocks.verifyApiKey.mockResolvedValue({
+			valid: true,
+			key: { id: "key-1", referenceId: "user-1" },
+		});
+		mocks.sqlClient
+			.mockResolvedValueOnce([userRow])
+			.mockResolvedValueOnce([{ organizationId: "org-oldest" }]);
+		const ctx = await buildApiKeyContext(req({ "x-api-key": "k" }), { bucket: "test-default-org" });
+		expect(ctx.session?.session.activeOrganizationId).toBe("org-oldest");
+		const membershipQuery = String(mocks.sqlClient.mock.calls[1]?.[0]);
+		expect(membershipQuery).toContain("ORDER BY created_at ASC");
+	});
+
+	it("rate-limits per API key, not per (unknown) IP", async () => {
+		const bucket = "test-per-key";
+		const verified = (id: string) => ({ valid: true, key: { id, referenceId: "user-1" } });
+		mocks.verifyApiKey.mockImplementation(async ({ body }: { body: { key: string } }) =>
+			verified(body.key),
+		);
+		mocks.sqlClient.mockImplementation(async (strings: TemplateStringsArray) =>
+			String(strings.join("")).includes('FROM "user"') ? [userRow] : [{ organizationId: "org-1" }],
+		);
+		for (let i = 0; i < 120; i += 1) {
+			await buildApiKeyContext(req({ "x-api-key": "key-a" }), { bucket });
+		}
+		await expect(
+			buildApiKeyContext(req({ "x-api-key": "key-a" }), { bucket }),
+		).rejects.toMatchObject({ code: "TOO_MANY_REQUESTS" });
+		// A different key behind the same (unknown) IP is unaffected.
+		await expect(
+			buildApiKeyContext(req({ "x-api-key": "key-b" }), { bucket }),
+		).resolves.toBeTruthy();
+	});
+
+	it("only counts failed verifications against the per-IP auth bucket", async () => {
+		const bucket = "test-auth-failures";
+		mocks.verifyApiKey.mockImplementation(async ({ body }: { body: { key: string } }) =>
+			body.key === "good"
+				? { valid: true, key: { id: `good-${Math.random()}`, referenceId: "user-1" } }
+				: { valid: false, key: null },
+		);
+		mocks.sqlClient.mockImplementation(async (strings: TemplateStringsArray) =>
+			String(strings.join("")).includes('FROM "user"') ? [userRow] : [{ organizationId: "org-1" }],
+		);
+		// Successful verifications must not consume the failure bucket…
+		for (let i = 0; i < 50; i += 1) {
+			await expect(
+				buildApiKeyContext(req({ "x-api-key": "good" }), { bucket }),
+			).resolves.toBeTruthy();
+		}
+		// …so all 600 (30 × the unknown-IP multiplier) failures still fit.
+		for (let i = 0; i < 600; i += 1) {
+			await expect(
+				buildApiKeyContext(req({ "x-api-key": "bad" }), { bucket }),
+			).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+		}
+		await expect(buildApiKeyContext(req({ "x-api-key": "bad" }), { bucket })).rejects.toMatchObject(
+			{ code: "TOO_MANY_REQUESTS" },
+		);
+	});
+
 	it("rejects x-organization-id the user is not a member of", async () => {
 		mocks.verifyApiKey.mockResolvedValue({
 			valid: true,

@@ -4,8 +4,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
 import { admin, organization, twoFactor } from "better-auth/plugins";
-import { sql } from "drizzle-orm";
-import { db, schema } from "../db";
+import { client, db, schema } from "../db";
 import type { invitations, members } from "../db/schema";
 import { recordAudit } from "../modules/audit";
 import { isInstanceAdminRole } from "../modules/auth/instance-admin";
@@ -14,8 +13,9 @@ import {
 	assertMemberActionRank,
 	loadCallerMembership,
 } from "../modules/auth/org-rank";
-import { canSignUpEmail, hasAnyUsers } from "../modules/auth/setup";
+import { canSignUpWithInvitation, hasAnyUsers, INVITATION_ID_HEADER } from "../modules/auth/setup";
 import { deleteOrganizationCascade, hasCapability } from "../modules/projects";
+import { trustedProxyCidrsForAuth } from "../utils/rate-limit";
 import { orgAc, orgPluginRoles } from "./org-roles";
 
 type MemberRow = typeof members.$inferSelect;
@@ -42,7 +42,7 @@ const isLoopbackHost = (host: string): boolean =>
 	host.startsWith("127.") ||
 	host.endsWith(".localhost");
 
-const trustedOriginsWithDashboardDomain = async (): Promise<string[]> => {
+export const trustedOriginsWithDashboardDomain = async (): Promise<string[]> => {
 	if (Date.now() - originsCache.at > 15_000) {
 		let origins: string[] = [];
 		try {
@@ -88,7 +88,8 @@ export const auth = betterAuth({
 		autoSignIn: true,
 		minPasswordLength: 8,
 		// Public self-serve registration is gated in user.create.before:
-		// first admin only, or a pending organization invitation.
+		// first admin only, or the holder of a pending organization invitation
+		// (the accept page sends its id in INVITATION_ID_HEADER).
 		password: {
 			hash: (password) => bcrypt.hash(password, BCRYPT_ROUNDS),
 			verify: ({ password, hash }) => bcrypt.compare(password, hash),
@@ -176,27 +177,48 @@ export const auth = betterAuth({
 		}),
 	],
 	trustedOrigins: () => trustedOriginsWithDashboardDomain(),
+	advanced: {
+		ipAddress: {
+			// Keep better-auth's limiter and ours (utils/rate-limit.ts) resolving
+			// the same client IP: both read TRUSTED_PROXIES.
+			trustedProxies: trustedProxyCidrsForAuth(),
+		},
+	},
 	databaseHooks: {
 		user: {
 			create: {
-				before: async (user) => {
+				before: async (user, ctx) => {
 					const email = typeof user.email === "string" ? user.email : "";
-					await db.execute(sql`SELECT pg_advisory_lock(${FIRST_USER_LOCK_KEY})`);
+					// Session-level advisory locks are per connection, so lock and
+					// unlock must run on the same one: reserve it from the pool
+					// instead of issuing both through the pooled `db`.
+					const reserved = await client.reserve();
 					try {
-						if (!(await canSignUpEmail(email))) {
-							throw new APIError("FORBIDDEN", {
-								message: "Registration is disabled. Ask an admin to invite you, or sign in.",
-							});
+						await reserved`SELECT pg_advisory_lock(${FIRST_USER_LOCK_KEY})`;
+						try {
+							const isFirst = !(await hasAnyUsers());
+							if (!isFirst) {
+								const invitationId =
+									ctx?.headers?.get(INVITATION_ID_HEADER) ??
+									ctx?.request?.headers?.get(INVITATION_ID_HEADER) ??
+									null;
+								if (!(await canSignUpWithInvitation(email, invitationId))) {
+									throw new APIError("FORBIDDEN", {
+										message: "Registration is disabled. Ask an admin to invite you, or sign in.",
+									});
+								}
+							}
+							return {
+								data: {
+									...user,
+									...(isFirst ? { role: "admin" } : {}),
+								},
+							};
+						} finally {
+							await reserved`SELECT pg_advisory_unlock(${FIRST_USER_LOCK_KEY})`;
 						}
-						const isFirst = !(await hasAnyUsers());
-						return {
-							data: {
-								...user,
-								...(isFirst ? { role: "admin" } : {}),
-							},
-						};
 					} finally {
-						await db.execute(sql`SELECT pg_advisory_unlock(${FIRST_USER_LOCK_KEY})`);
+						reserved.release();
 					}
 				},
 			},

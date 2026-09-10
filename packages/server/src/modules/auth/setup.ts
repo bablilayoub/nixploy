@@ -13,19 +13,29 @@ export async function needsSetup(): Promise<boolean> {
 	return !(await hasAnyUsers());
 }
 
+/** Header the accept-invitation page sends with the sign-up request. */
+export const INVITATION_ID_HEADER = "x-nixploy-invitation-id";
+
 /**
- * Whether email may sign up: only the first user, or someone with a pending
- * organization invitation (Settings → invite).
+ * Whether `email` may sign up through invitation `invitationId`: the
+ * invitation must exist, be pending and unexpired, and be addressed to that
+ * email. Binding the sign-up to a specific invitation id (rather than "any
+ * pending invitation for this email") means only whoever holds the invite
+ * link can register the invitee's address.
  */
-export async function canSignUpEmail(email: string): Promise<boolean> {
-	if (!(await hasAnyUsers())) return true;
+export async function canSignUpWithInvitation(
+	email: string,
+	invitationId: string | null | undefined,
+): Promise<boolean> {
 	const normalized = email.trim().toLowerCase();
-	if (!normalized) return false;
+	const id = invitationId?.trim();
+	if (!normalized || !id) return false;
 	const [invite] = await db
 		.select({ id: invitations.id })
 		.from(invitations)
 		.where(
 			and(
+				eq(invitations.id, id),
 				sql`lower(${invitations.email}) = ${normalized}`,
 				eq(invitations.status, "pending"),
 				gt(invitations.expiresAt, new Date()),

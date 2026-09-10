@@ -125,6 +125,21 @@ export const serverRouter = router({
 				update.metricsConfig = { ...base, metrics: { ...metrics, enabled: metricsEnabled } };
 			}
 			const updated = await updateServerById(serverId, update, organizationId);
+			// Connection changes matter for audit: a swapped IP/key silently
+			// re-targets every SSH command this server row drives.
+			const changed = (["ipAddress", "port", "username", "sshKeyId", "swarmRole"] as const).filter(
+				(key) => values[key] !== undefined && values[key] !== existing[key],
+			);
+			void auditFromSession(ctx, organizationId, {
+				action: "server.update",
+				targetType: "server",
+				targetId: serverId,
+				targetName: updated?.name ?? existing.name,
+				metadata: {
+					changed,
+					...(values.serverStatus !== undefined && { serverStatus: values.serverStatus }),
+				},
+			});
 			return updated ? publicServer(updated) : updated;
 		}),
 

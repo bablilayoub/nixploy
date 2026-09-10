@@ -70,7 +70,7 @@ export async function handleDockerLogs(
 		}
 
 		try {
-			await assertWsDockerContainerAccess(session, serverId);
+			await assertWsDockerContainerAccess(session, containerId, serverId);
 			await assertContainerNotProtected(containerId, serverId);
 			if (serverId) {
 				await streamRemoteLogsById(ws, serverId, containerId, tail);

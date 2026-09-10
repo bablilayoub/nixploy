@@ -77,7 +77,7 @@ export async function handleDockerTerminal(
 		}
 
 		try {
-			await assertWsDockerContainerAccess(session, serverId);
+			await assertWsDockerContainerAccess(session, containerId, serverId);
 			await assertContainerNotProtected(containerId, serverId);
 			if (serverId) {
 				await attachRemoteTerminalById(ws, serverId, containerId);

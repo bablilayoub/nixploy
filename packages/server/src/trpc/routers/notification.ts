@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import { insertNotificationSchema, notifications } from "../../db/schema";
+import { auditFromSession } from "../../modules/audit";
 import {
 	customConfigSchema,
 	discordConfigSchema,
@@ -196,6 +197,13 @@ export const notificationRouter = router({
 		if (!row) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Notification not found" });
 		}
+		void auditFromSession(ctx, orgId, {
+			action: "notification.update",
+			targetType: "notification",
+			targetId: row.notificationId,
+			targetName: row.name,
+			metadata: { type: row.type },
+		});
 		return publicNotification(row, false);
 	}),
 
@@ -204,8 +212,15 @@ export const notificationRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const orgId = await organizationId(ctx);
 			await assertCapability(ctx.session.user.id, orgId, "notifications.manage");
-			await findNotificationInOrg(input.notificationId, orgId);
+			const existing = await findNotificationInOrg(input.notificationId, orgId);
 			await db.delete(notifications).where(eq(notifications.notificationId, input.notificationId));
+			void auditFromSession(ctx, orgId, {
+				action: "notification.delete",
+				targetType: "notification",
+				targetId: existing.notificationId,
+				targetName: existing.name,
+				metadata: { type: existing.type },
+			});
 			return true;
 		}),
 

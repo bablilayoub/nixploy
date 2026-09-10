@@ -7,7 +7,11 @@ import {
 	WebhookIgnored,
 	WebhookUnauthorized,
 } from "@nixploy/server/modules/git/webhook-handler";
-import { clientIpFromRequest, takeRateLimitToken } from "@nixploy/server/utils/rate-limit";
+import {
+	clientIpFromRequest,
+	takeIpRateLimitToken,
+	takeRateLimitToken,
+} from "@nixploy/server/utils/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,10 +73,12 @@ export async function POST(req: Request, { params }: RouteParams) {
 	}
 
 	const ip = clientIpFromRequest(req);
-	// Rate-limit by provider id (unspoofable) and by IP (when trusted proxy is set).
+	// Rate-limit by provider id (unspoofable) and by IP (when a trusted proxy
+	// reveals it; the shared "unknown" bucket is widened so it never undercuts
+	// the per-provider limit).
 	if (
 		!takeRateLimitToken(`webhook:${provider}:${providerId}`, { windowMs: 60_000, max: 120 }) ||
-		!takeRateLimitToken(`webhook:${provider}:${providerId}:${ip}`, { windowMs: 60_000, max: 60 })
+		!takeIpRateLimitToken(`webhook:${provider}:${providerId}`, ip, { windowMs: 60_000, max: 60 })
 	) {
 		return Response.json({ message: "Too many requests" }, { status: 429 });
 	}

@@ -1,9 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { invitations, members, organizations, projects } from "../../db/schema";
-import { auth } from "../../lib/auth";
+import { invitations, members, organizations, projects, users } from "../../db/schema";
 import { auditFromSession } from "../../modules/audit";
 import {
 	assertCapability,
@@ -23,6 +23,9 @@ import {
 import { protectedProcedure, router } from "../init";
 
 const invitableRoleSchema = z.enum(["viewer", "member", "deployer", "admin"]);
+
+/** Outstanding (pending, unexpired) invitations per organization — better-auth's default. */
+const PENDING_INVITATION_LIMIT = 100;
 
 const quotaInputSchema = z.object({
 	maxProjects: z.number().int().min(0).nullable().optional(),
@@ -143,8 +146,11 @@ export const organizationRouter = router({
 		}),
 
 	/**
-	 * Invite a member with a custom expiry. Wraps better-auth createInvitation
-	 * then patches expiresAt (the auth API does not accept expiry in the body).
+	 * Invite a member with a custom expiry. The invitation row is created
+	 * here, in the shape better-auth's organization plugin reads back
+	 * (`acceptInvitation`, `listInvitations`, the accept page), instead of
+	 * through `auth.api.createInvitation`: that endpoint authenticates from
+	 * session cookies, which API-key callers (REST, MCP, CLI) never carry.
 	 */
 	inviteMember: protectedProcedure
 		.input(
@@ -179,26 +185,91 @@ export const organizationRouter = router({
 				});
 			}
 
-			const invitation = await auth.api.createInvitation({
-				body: {
-					email: input.email,
-					role: input.role,
-					organizationId,
-				},
-				headers: ctx.headers,
-			});
+			const email = input.email.trim().toLowerCase();
+			const now = new Date();
 
-			if (!invitation?.id) {
+			// Same guards better-auth applies: no double membership, one pending
+			// invitation per address, and a cap on outstanding invitations.
+			const [existingMember] = await db
+				.select({ id: members.id })
+				.from(members)
+				.innerJoin(users, eq(users.id, members.userId))
+				.where(
+					and(eq(members.organizationId, organizationId), sql`lower(${users.email}) = ${email}`),
+				)
+				.limit(1);
+			if (existingMember) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "User is already a member of this organization",
+				});
+			}
+			const [pending] = await db
+				.select({ id: invitations.id })
+				.from(invitations)
+				.where(
+					and(
+						eq(invitations.organizationId, organizationId),
+						sql`lower(${invitations.email}) = ${email}`,
+						eq(invitations.status, "pending"),
+						gt(invitations.expiresAt, now),
+					),
+				)
+				.limit(1);
+			if (pending) {
+				throw new TRPCError({
+					code: "CONFLICT",
+					message: "User is already invited to this organization",
+				});
+			}
+			const [pendingCount] = await db
+				.select({ value: count() })
+				.from(invitations)
+				.where(
+					and(
+						eq(invitations.organizationId, organizationId),
+						eq(invitations.status, "pending"),
+						gt(invitations.expiresAt, now),
+					),
+				);
+			if ((pendingCount?.value ?? 0) >= PENDING_INVITATION_LIMIT) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: `Pending invitation limit reached (${PENDING_INVITATION_LIMIT})`,
+				});
+			}
+
+			const expiresAt = new Date(now.getTime() + input.expiryDays * 24 * 60 * 60 * 1000);
+			const [invitation] = await db
+				.insert(invitations)
+				.values({
+					id: randomUUID(),
+					organizationId,
+					email,
+					role: input.role,
+					status: "pending",
+					expiresAt,
+					inviterId: ctx.session.user.id,
+				})
+				.returning();
+			if (!invitation) {
 				throw new TRPCError({
 					code: "INTERNAL_SERVER_ERROR",
 					message: "Failed to create invitation",
 				});
 			}
 
-			const expiresAt = new Date(Date.now() + input.expiryDays * 24 * 60 * 60 * 1000);
-			await db.update(invitations).set({ expiresAt }).where(eq(invitations.id, invitation.id));
+			// The `invitation.create.after` database hook only fires for rows
+			// better-auth's adapter writes — record the audit entry here.
+			void auditFromSession(ctx, organizationId, {
+				action: "member.invite",
+				targetType: "invitation",
+				targetId: invitation.id,
+				targetName: invitation.email,
+				metadata: { role: invitation.role },
+			});
 
-			return { ...invitation, expiresAt };
+			return invitation;
 		}),
 
 	/** Catalog of capabilities and role defaults (for the members UI). */

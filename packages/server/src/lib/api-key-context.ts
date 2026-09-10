@@ -1,19 +1,32 @@
 import { TRPCError } from "@trpc/server";
 import { client } from "../db";
 import type { TRPCContext } from "../trpc/init";
-import { clientIpFromRequest, takeRateLimitToken } from "../utils/rate-limit";
+import {
+	clientIpFromRequest,
+	hasRateLimitCapacity,
+	ipRateLimitMax,
+	takeIpRateLimitToken,
+	takeRateLimitToken,
+} from "../utils/rate-limit";
 import { auth } from "./auth";
 
 export interface ApiKeyContextOptions {
 	/**
-	 * Rate-limit bucket prefix (e.g. "rest-api-key", "mcp-api-key"). Two
-	 * buckets are consumed per request: `<bucket>:<ip>` (120/min) and
-	 * `<bucket>-auth:<ip>` (30/min).
+	 * Rate-limit bucket prefix (e.g. "rest-api-key", "mcp-api-key"). Three
+	 * buckets guard a request: `<bucket>:<ip>` (120/min flood guard, widened
+	 * when the IP is unknown), `<bucket>-auth:<ip>` (30 failed key
+	 * verifications/min) and, once authenticated, `<bucket>:key:<id>`
+	 * (120/min per API key) — so one abusive caller cannot 429 every other
+	 * key of the instance behind a proxy that hides client IPs.
 	 */
 	bucket: string;
 	/** Also accept `Authorization: Bearer <key>` next to `x-api-key`. */
 	allowBearer?: boolean;
 }
+
+const REQUESTS_PER_IP_MINUTE = 120;
+const REQUESTS_PER_KEY_MINUTE = 120;
+const AUTH_FAILURES_PER_MINUTE = 30;
 
 /**
  * Authenticate an API-key request (REST adapter, MCP endpoint) and build the
@@ -21,16 +34,18 @@ export interface ApiKeyContextOptions {
  * only read `user.id` and `session.activeOrganizationId`.
  *
  * Org resolution: an explicit `x-organization-id` header wins (membership is
- * verified); otherwise the caller's first membership is used.
+ * verified); otherwise the caller's oldest membership is used.
  */
 export async function buildApiKeyContext(
 	req: Request,
 	options: ApiKeyContextOptions,
 ): Promise<TRPCContext> {
 	const ip = clientIpFromRequest(req);
+	const authFailureKey = `${options.bucket}-auth:${ip}`;
+	const authFailureMax = ipRateLimitMax(ip, AUTH_FAILURES_PER_MINUTE);
 	if (
-		!takeRateLimitToken(`${options.bucket}:${ip}`, { windowMs: 60_000, max: 120 }) ||
-		!takeRateLimitToken(`${options.bucket}-auth:${ip}`, { windowMs: 60_000, max: 30 })
+		!takeIpRateLimitToken(options.bucket, ip, { windowMs: 60_000, max: REQUESTS_PER_IP_MINUTE }) ||
+		!hasRateLimitCapacity(authFailureKey, authFailureMax)
 	) {
 		throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many requests" });
 	}
@@ -58,10 +73,21 @@ export async function buildApiKeyContext(
 		key: { referenceId?: string; userId?: string; id: string } | null;
 	};
 	if (!result.valid || !result.key) {
+		// Only failed verifications count against the per-IP auth bucket, so
+		// legitimate keys behind a shared/unknown IP are never starved by it.
+		takeRateLimitToken(authFailureKey, { windowMs: 60_000, max: authFailureMax });
 		throw new TRPCError({
 			code: "UNAUTHORIZED",
 			message: "Invalid or expired API key",
 		});
+	}
+	if (
+		!takeRateLimitToken(`${options.bucket}:key:${result.key.id}`, {
+			windowMs: 60_000,
+			max: REQUESTS_PER_KEY_MINUTE,
+		})
+	) {
+		throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many requests" });
 	}
 
 	// @better-auth/api-key >= 1.6 exposes the owner as referenceId.
@@ -71,7 +97,8 @@ export async function buildApiKeyContext(
 	}
 	const users = await client`
 		SELECT id, name, email, email_verified AS "emailVerified",
-			image, role, banned, two_factor_enabled AS "twoFactorEnabled",
+			image, role, banned, ban_expires AS "banExpires",
+			two_factor_enabled AS "twoFactorEnabled",
 			created_at AS "createdAt", updated_at AS "updatedAt"
 		FROM "user" WHERE id = ${userId} LIMIT 1
 	`;
@@ -87,7 +114,8 @@ export async function buildApiKeyContext(
 		throw new TRPCError({ code: "FORBIDDEN", message: "User is banned" });
 	}
 
-	// Prefer explicit org from the client (multi-org API keys); otherwise first membership.
+	// Prefer explicit org from the client (multi-org API keys); otherwise the
+	// oldest membership — the same default sessions get (lib/auth.ts).
 	const requestedOrgId = req.headers.get("x-organization-id")?.trim() || null;
 	let activeOrganizationId: string | null = null;
 	if (requestedOrgId) {
@@ -107,7 +135,8 @@ export async function buildApiKeyContext(
 	} else {
 		const memberships = await client`
 			SELECT organization_id AS "organizationId"
-			FROM member WHERE user_id = ${userId} LIMIT 1
+			FROM member WHERE user_id = ${userId}
+			ORDER BY created_at ASC LIMIT 1
 		`;
 		activeOrganizationId =
 			(memberships[0] as { organizationId?: string } | undefined)?.organizationId ?? null;

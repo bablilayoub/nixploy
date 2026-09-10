@@ -289,7 +289,7 @@ export const projectRouter = router({
 			if (input.env !== undefined) {
 				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			}
-			await findProjectById(input.projectId, organizationId);
+			const current = await findProjectById(input.projectId, organizationId);
 			const [updated] = await db
 				.update(projects)
 				.set({
@@ -299,6 +299,14 @@ export const projectRouter = router({
 				})
 				.where(eq(projects.projectId, input.projectId))
 				.returning();
+			if (input.env !== undefined) {
+				void auditFromSession(ctx, organizationId, {
+					action: "project.env.update",
+					targetType: "project",
+					targetId: current.projectId,
+					targetName: current.name,
+				});
+			}
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
 				organizationId,
@@ -347,12 +355,18 @@ export const projectRouter = router({
 				ctx.session.session.activeOrganizationId,
 			);
 			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
-			await findProjectById(input.projectId, organizationId);
+			const current = await findProjectById(input.projectId, organizationId);
 			const [updated] = await db
 				.update(projects)
 				.set({ env: input.env })
 				.where(eq(projects.projectId, input.projectId))
 				.returning();
+			void auditFromSession(ctx, organizationId, {
+				action: "project.env.update",
+				targetType: "project",
+				targetId: current.projectId,
+				targetName: current.name,
+			});
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
 				organizationId,

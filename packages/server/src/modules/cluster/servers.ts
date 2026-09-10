@@ -3,12 +3,9 @@ import { db } from "../../db";
 import { servers, webServerSettings } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { getSwarmNetwork } from "../application/paths";
-import { getTraefikDir } from "../traefik/paths";
-
-export const TRAEFIK_SERVICE_NAME = "nixploy-traefik";
-export const TRAEFIK_IMAGE = "traefik:v3.5.0";
-/** Resolved via `NIXPLOY_CONFIG_DIR` (default `/etc/nixploy/traefik`). */
-export const TRAEFIK_CONFIG_DIR = getTraefikDir();
+import { shellQuote } from "../deployment/paths";
+import { REMOTE_TRAEFIK_DIR } from "../traefik/paths";
+import { buildTraefikStaticConfig } from "../traefik/setup";
 
 export type SwarmRole = "worker" | "manager";
 
@@ -27,36 +24,6 @@ export type UpdateServerInput = Partial<CreateServerInput> & {
 	enableDockerCleanup?: boolean;
 	metricsConfig?: Record<string, unknown>;
 };
-
-/** Traefik static config (`traefik.yml`) written on the Nixploy host. */
-export function buildTraefikStaticConfig(letsEncryptEmail?: string | null): string {
-	const email = letsEncryptEmail?.trim() || "nixploy@localhost";
-	return `global:
-  checkNewVersion: false
-  sendAnonymousUsage: false
-entryPoints:
-  web:
-    address: ":80"
-  websecure:
-    address: ":443"
-    http:
-      tls:
-        certResolver: letsencrypt
-providers:
-  file:
-    directory: /etc/traefik/dynamic
-    watch: true
-certificatesResolvers:
-  letsencrypt:
-    acme:
-      email: ${email}
-      storage: /etc/traefik/dynamic/acme.json
-      httpChallenge:
-        entryPoint: web
-api:
-  dashboard: false
-`;
-}
 
 /** Strip Swarm join tokens from setup logs before API / DB exposure. */
 export function redactServerCommandLog(command: string | null | undefined): string | null {
@@ -99,7 +66,40 @@ export async function updateServerById(
 	return server;
 }
 
+/** Best-effort remote command with a short timeout; never throws. */
+async function tryRemote(serverId: string, command: string): Promise<string | null> {
+	try {
+		return (await execAsyncRemote(serverId, command, { timeoutMs: 30_000 })).trim();
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Detach a managed server: best-effort `docker swarm leave --force` on the
+ * remote and `docker node rm --force` on the primary manager, then delete
+ * the row. Without the leave/rm a deleted server stays an Active node of
+ * the primary Swarm and keeps receiving any tenant's tasks and secrets.
+ * Host errors (unreachable, already left) never block the row deletion.
+ */
 export async function removeServer(serverId: string, organizationId: string) {
+	const existing = await findServerById(serverId, organizationId);
+	if (!existing) return undefined;
+
+	const nodeId = await tryRemote(
+		serverId,
+		`docker info --format '{{if eq .Swarm.LocalNodeState "active"}}{{.Swarm.NodeID}}{{end}}' 2>/dev/null`,
+	);
+	if (nodeId) {
+		await tryRemote(serverId, "docker swarm leave --force");
+		try {
+			// `node rm` only succeeds once the node reports Down (or with --force).
+			await execAsync(`docker node rm --force ${shellQuote(nodeId)}`, { timeout: 30_000 });
+		} catch {
+			// Not a manager here, node already gone, or a different swarm — ignore.
+		}
+	}
+
 	const [server] = await db
 		.delete(servers)
 		.where(and(eq(servers.serverId, serverId), eq(servers.organizationId, organizationId)))
@@ -229,17 +229,20 @@ fi`,
 				`if [ -z "$(docker network ls --filter name=^${network}$ --format '{{.Name}}')" ]; then docker network create --driver overlay --attachable ${network}; else echo "network ${network} already exists"; fi`,
 			);
 
-			// Managers may schedule the global Traefik service; ensure dirs exist
-			// so bind mounts succeed if Traefik lands on this node.
+			// Managers may schedule the global Traefik service; its bind mounts
+			// (traefik.yml, dynamic/, acme.json — same layout ensureTraefikSetup
+			// and install.sh create on the primary) must exist on this node too.
+			const traefikDir = REMOTE_TRAEFIK_DIR;
+			const acmePath = `${traefikDir}/acme.json`;
 			await step(
 				"prepare traefik dirs",
-				`mkdir -p ${TRAEFIK_CONFIG_DIR}/dynamic && touch ${TRAEFIK_CONFIG_DIR}/dynamic/acme.json && chmod 600 ${TRAEFIK_CONFIG_DIR}/dynamic/acme.json`,
+				`mkdir -p ${shellQuote(`${traefikDir}/dynamic`)} && touch ${shellQuote(acmePath)} && chmod 600 ${shellQuote(acmePath)}`,
 			);
 
 			const staticConfig = buildTraefikStaticConfig(await getLetsEncryptEmail());
 			await step(
 				"write traefik static config",
-				`cat > ${TRAEFIK_CONFIG_DIR}/traefik.yml << 'NIXPLOY_TRAEFIK_EOF'\n${staticConfig}NIXPLOY_TRAEFIK_EOF`,
+				`cat > ${shellQuote(`${traefikDir}/traefik.yml`)} << 'NIXPLOY_TRAEFIK_EOF'\n${staticConfig}NIXPLOY_TRAEFIK_EOF`,
 			);
 		} else {
 			log.push("# worker node — overlay network and Traefik stay on managers");

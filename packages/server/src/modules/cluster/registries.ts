@@ -2,7 +2,7 @@ import Docker from "dockerode";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { registry } from "../../db/schema";
-import { execAsyncRemote } from "../../utils/exec";
+import { execAsyncWithStdin } from "../../utils/exec";
 
 export type CreateRegistryInput = {
 	registryName: string;
@@ -77,9 +77,12 @@ export async function testRegistry(input: {
 	if (input.serverId) {
 		const sq = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 		const serverAddress = row.registryUrl || "docker.io";
-		await execAsyncRemote(
-			input.serverId,
-			`printf '%s' ${sq(row.password)} | docker login ${sq(serverAddress)} -u ${sq(row.username)} --password-stdin`,
+		// The password travels on the SSH channel's stdin, never on the remote
+		// argv (visible in `ps` to every user of that host).
+		await execAsyncWithStdin(
+			`docker login ${sq(serverAddress)} -u ${sq(row.username)} --password-stdin`,
+			row.password,
+			{ serverId: input.serverId },
 		);
 		return { success: true };
 	}

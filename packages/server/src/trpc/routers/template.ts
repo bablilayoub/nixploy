@@ -1,7 +1,11 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
-import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
+import {
+	assertCapability,
+	assertWithinQuota,
+	resolveCallerOrganizationId,
+} from "../../modules/projects";
 import {
 	deployTemplate,
 	findTemplateById,
@@ -69,6 +73,8 @@ export const templateRouter = router({
 			if (input.domains && input.domains.length > 0) {
 				await assertCapability(ctx.session.user.id, organizationId, "domains.manage");
 			}
+			// A template becomes one compose service — same cap as compose.create.
+			await assertWithinQuota(organizationId, { services: true });
 			return await deployTemplate(organizationId, input);
 		}),
 });

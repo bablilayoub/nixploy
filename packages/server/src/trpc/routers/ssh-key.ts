@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { auditFromSession } from "../../modules/audit";
 import {
 	createSshKey,
 	findSshKeyById,
@@ -75,6 +76,12 @@ export const sshKeyRouter = router({
 					message: "Failed to create SSH key",
 				});
 			}
+			void auditFromSession(ctx, organizationId, {
+				action: "ssh_key.create",
+				targetType: "ssh_key",
+				targetId: created.sshKeyId,
+				targetName: created.name,
+			});
 			return publicSshKey(created);
 		}),
 
@@ -106,6 +113,12 @@ export const sshKeyRouter = router({
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "SSH key not found" });
 		}
+		void auditFromSession(ctx, organizationId, {
+			action: "ssh_key.delete",
+			targetType: "ssh_key",
+			targetId: removed.sshKeyId,
+			targetName: removed.name,
+		});
 		return publicSshKey(removed);
 	}),
 

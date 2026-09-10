@@ -90,9 +90,15 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 		if (!invitation) return;
 		setFormError(null);
 		try {
+			// Sign-up for an invited address is only allowed when the request
+			// carries the invitation id (verified server-side in user.create.before).
 			const signupRes = await fetch("/api/auth/sign-up/email", {
 				method: "POST",
-				headers: { "Content-Type": "application/json", Origin: window.location.origin },
+				headers: {
+					"Content-Type": "application/json",
+					Origin: window.location.origin,
+					"x-nixploy-invitation-id": invitation.invitationId,
+				},
 				body: JSON.stringify({
 					name: values.name.trim(),
 					email: invitation.email,

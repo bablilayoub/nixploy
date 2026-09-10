@@ -1,5 +1,7 @@
 import { execAsync } from "../../utils/exec";
+import { shellQuote } from "../deployment/paths";
 import { NIXPLOY_SERVICE_NAME } from "./check";
+import { assertValidImageRef } from "./registry";
 import { getUpdateSettings, patchUpdateSettings } from "./settings";
 
 let applyInFlight = false;
@@ -45,11 +47,13 @@ export async function applyUpdate(options?: {
 		};
 	}
 
-	const image = options?.image?.trim() || settings.image;
+	// Validate before anything touches a shell: the ref is stored settings /
+	// caller input, and `exec` runs through `sh -c`.
+	const image = assertValidImageRef(options?.image?.trim() || settings.image).canonical;
 	applyInFlight = true;
 
 	try {
-		await execAsync(`docker pull ${JSON.stringify(image)}`, { timeout: 600_000 });
+		await execAsync(`docker pull ${shellQuote(image)}`, { timeout: 600_000 });
 	} catch (error) {
 		applyInFlight = false;
 		const message = error instanceof Error ? error.message : String(error);
@@ -70,14 +74,20 @@ export async function applyUpdate(options?: {
 	setTimeout(() => {
 		void (async () => {
 			try {
+				// A task that fails to start (bad migration, boot crash) rolls the
+				// service back to the previous spec instead of crash-looping with
+				// the panel down. Rollback must be stop-first for the same
+				// host-mode port reason as the update itself.
 				await execAsync(
 					[
 						"docker service update",
 						"--detach",
 						"--force",
 						"--no-resolve-image",
-						`--image ${JSON.stringify(image)}`,
+						`--image ${shellQuote(image)}`,
 						"--update-order stop-first",
+						"--update-failure-action rollback",
+						"--rollback-order stop-first",
 						NIXPLOY_SERVICE_NAME,
 					].join(" "),
 					{ timeout: 120_000 },

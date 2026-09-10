@@ -11,9 +11,14 @@ import {
 	redis,
 } from "../db/schema";
 import { assertInstanceAdmin } from "../modules/auth/instance-admin";
+import {
+	isTwoFactorGateBlocked,
+	TWO_FACTOR_REQUIRED_MESSAGE,
+} from "../modules/auth/two-factor-gate";
 import { findServerById } from "../modules/cluster/servers";
 import { hasCapability, resolveCallerOrganizationId } from "../modules/projects";
 import type { WsSession } from "./auth";
+import { resolveContainerAppName } from "./docker";
 
 const withTenancy = {
 	with: { environment: { with: { project: true } } },
@@ -21,10 +26,18 @@ const withTenancy = {
 
 /**
  * Resolve the caller's org from the websocket session (same fallback rules
- * as tRPC protected procedures).
+ * as tRPC protected procedures), including the org-level 2FA gate that
+ * `protectedProcedure` enforces — streams and shells are org-scoped too.
  */
 export async function resolveWsOrganizationId(session: WsSession): Promise<string> {
-	return resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
+	const organizationId = await resolveCallerOrganizationId(
+		session.user.id,
+		session.session.activeOrganizationId,
+	);
+	if (await isTwoFactorGateBlocked(session.user.id, organizationId)) {
+		throw new Error(TWO_FACTOR_REQUIRED_MESSAGE);
+	}
+	return organizationId;
 }
 
 /**
@@ -140,10 +153,15 @@ export async function assertWsTerminalAccess(
 
 /**
  * Gate for Docker control-center terminals/logs by raw container ID.
- * Requires `docker.manage` (same as the Docker UI mutations).
+ * Requires `docker.manage` (same as the Docker UI mutations). The container
+ * must resolve (via its Swarm/compose labels) to a service of the caller's
+ * org — remotes join the primary Swarm, so any tenant's task may be
+ * scheduled onto a server another org owns. Unlabelled containers and other
+ * tenants' services remain reachable only for instance admins.
  */
 export async function assertWsDockerContainerAccess(
 	session: WsSession,
+	containerId: string,
 	serverId: string | null | undefined,
 ): Promise<void> {
 	const organizationId = await resolveWsOrganizationId(session);
@@ -151,8 +169,21 @@ export async function assertWsDockerContainerAccess(
 	if (!allowed) {
 		throw new Error('This action requires the "docker.manage" capability');
 	}
-	if (!serverId) {
-		await assertInstanceAdmin(session);
-	}
 	await assertWsServerAccess(serverId, organizationId);
+	if (!serverId) {
+		// Local docker.sock sees every org's containers — instance admins only.
+		await assertInstanceAdmin(session);
+		return;
+	}
+	const appName = await resolveContainerAppName(containerId, serverId);
+	if (appName) {
+		try {
+			await assertWsAppAccess(appName, organizationId);
+			return;
+		} catch {
+			// Another tenant's service on this node — fall through to the
+			// instance-admin check below.
+		}
+	}
+	await assertInstanceAdmin(session);
 }

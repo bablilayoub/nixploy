@@ -2,7 +2,11 @@ import { findApplicationByAppNameForUser } from "@nixploy/server/modules/applica
 import { authenticateApiKey } from "@nixploy/server/modules/auth/api-key";
 import { queueWebhookDeployment } from "@nixploy/server/modules/git/webhook-handler";
 import { hasCapability } from "@nixploy/server/modules/projects/index";
-import { clientIpFromRequest, takeRateLimitToken } from "@nixploy/server/utils/rate-limit";
+import {
+	clientIpFromRequest,
+	takeIpRateLimitToken,
+	takeRateLimitToken,
+} from "@nixploy/server/utils/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,13 +23,23 @@ interface RouteParams {
  * owner is a member of, and the owner must have `service.deploy`.
  */
 export async function POST(req: Request, { params }: RouteParams) {
+	// Per-IP flood guard (widened when no trusted proxy reveals the IP), then a
+	// per-key-owner bucket so one busy CI runner cannot 429 everyone else.
 	const ip = clientIpFromRequest(req);
-	if (!takeRateLimitToken(`deploy-webhook:${ip}`, { windowMs: 60_000, max: 30 })) {
+	if (!takeIpRateLimitToken("deploy-webhook", ip, { windowMs: 60_000, max: 30 })) {
 		return Response.json({ message: "Too many requests" }, { status: 429 });
 	}
 
 	const authenticated = await authenticateApiKey(req);
 	if (authenticated instanceof Response) return authenticated;
+	if (
+		!takeRateLimitToken(`deploy-webhook:user:${authenticated.userId}`, {
+			windowMs: 60_000,
+			max: 30,
+		})
+	) {
+		return Response.json({ message: "Too many requests" }, { status: 429 });
+	}
 
 	const { appName } = await params;
 	const application = await findApplicationByAppNameForUser(appName, authenticated.userId);

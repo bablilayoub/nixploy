@@ -62,9 +62,14 @@ export async function getOrgBranding(organizationId: string): Promise<OrgBrandin
 	};
 }
 
+/**
+ * Reject a create when it would exceed the org's quotas. `services` may be a
+ * count for bulk creates (environment clone, template deploy): the check is
+ * `existing + adding > max`, so `true` means "one more service".
+ */
 export async function assertWithinQuota(
 	organizationId: string,
-	checks: { projects?: boolean; services?: boolean },
+	checks: { projects?: boolean; services?: boolean | number },
 ): Promise<void> {
 	const quotas = await getOrgQuotas(organizationId);
 
@@ -81,9 +86,10 @@ export async function assertWithinQuota(
 		}
 	}
 
-	if (checks.services && quotas.maxServices != null) {
+	const adding = typeof checks.services === "number" ? checks.services : checks.services ? 1 : 0;
+	if (adding > 0 && quotas.maxServices != null) {
 		const serviceCounts = await getOrganizationServiceStatusCounts(organizationId);
-		if (serviceCounts.total >= quotas.maxServices) {
+		if (serviceCounts.total + adding > quotas.maxServices) {
 			throw new TRPCError({
 				code: "BAD_REQUEST",
 				message: `Service limit reached (${quotas.maxServices} max)`,

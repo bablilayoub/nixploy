@@ -18,6 +18,7 @@ import { duplicateCompose } from "../../modules/compose/service";
 import { duplicateDatabase } from "../../modules/databases/engine";
 import {
 	assertCapability,
+	assertWithinQuota,
 	deleteEnvironmentCascade,
 	emptyServiceCounts,
 	findEnvironmentById,
@@ -148,6 +149,14 @@ export const environmentRouter = router({
 				})
 				.where(eq(environments.environmentId, input.environmentId))
 				.returning();
+			if (input.env !== undefined) {
+				void auditFromSession(ctx, organizationId, {
+					action: "environment.env.update",
+					targetType: "environment",
+					targetId: current.environmentId,
+					targetName: current.name,
+				});
+			}
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
 				organizationId,
@@ -170,6 +179,13 @@ export const environmentRouter = router({
 			await assertCapability(ctx.session.user.id, organizationId, "project.delete");
 			const environment = await findEnvironmentById(input.environmentId, organizationId);
 			await deleteEnvironmentCascade(environment.environmentId);
+			void auditFromSession(ctx, organizationId, {
+				action: "environment.delete",
+				targetType: "environment",
+				targetId: environment.environmentId,
+				targetName: environment.name,
+				metadata: { projectId: environment.projectId },
+			});
 			return { ...environment, env: null };
 		}),
 
@@ -231,21 +247,6 @@ export const environmentRouter = router({
 			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			const source = await findEnvironmentById(input.environmentId, organizationId);
 			await assertEnvironmentNameAvailable(source.projectId, input.name);
-			const [environment] = await db
-				.insert(environments)
-				.values({
-					name: input.name,
-					description: source.description,
-					...(source.env ? { env: source.env } : {}),
-					projectId: source.projectId,
-				})
-				.returning();
-			if (!environment) {
-				throw new TRPCError({
-					code: "INTERNAL_SERVER_ERROR",
-					message: "Failed to create environment",
-				});
-			}
 
 			const [apps, composeRows, pg, my, maria, mongoRows, redisRows] = await Promise.all([
 				db.query.applications.findMany({
@@ -270,6 +271,32 @@ export const environmentRouter = router({
 					where: eq(redis.environmentId, source.environmentId),
 				}),
 			]);
+			const cloned =
+				apps.length +
+				composeRows.length +
+				pg.length +
+				my.length +
+				maria.length +
+				mongoRows.length +
+				redisRows.length;
+			// The clone adds every source service at once — the cap applies to the sum.
+			await assertWithinQuota(organizationId, { services: cloned });
+
+			const [environment] = await db
+				.insert(environments)
+				.values({
+					name: input.name,
+					description: source.description,
+					...(source.env ? { env: source.env } : {}),
+					projectId: source.projectId,
+				})
+				.returning();
+			if (!environment) {
+				throw new TRPCError({
+					code: "INTERNAL_SERVER_ERROR",
+					message: "Failed to create environment",
+				});
+			}
 
 			for (const row of apps) {
 				await duplicateApplication(row, environment.environmentId);
@@ -293,14 +320,6 @@ export const environmentRouter = router({
 				await duplicateDatabase("redis", row, environment.environmentId);
 			}
 
-			const cloned =
-				apps.length +
-				composeRows.length +
-				pg.length +
-				my.length +
-				maria.length +
-				mongoRows.length +
-				redisRows.length;
 			await auditFromSession(ctx, organizationId, {
 				action: "environment.clone",
 				targetType: "environment",
@@ -328,12 +347,18 @@ export const environmentRouter = router({
 				ctx.session.session.activeOrganizationId,
 			);
 			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
-			await findEnvironmentById(input.environmentId, organizationId);
+			const current = await findEnvironmentById(input.environmentId, organizationId);
 			const [updated] = await db
 				.update(environments)
 				.set({ env: input.env })
 				.where(eq(environments.environmentId, input.environmentId))
 				.returning();
+			void auditFromSession(ctx, organizationId, {
+				action: "environment.env.update",
+				targetType: "environment",
+				targetId: current.environmentId,
+				targetName: current.name,
+			});
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
 				organizationId,

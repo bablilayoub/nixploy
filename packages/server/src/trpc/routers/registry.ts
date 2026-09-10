@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import {
 	createRegistry,
@@ -123,6 +124,18 @@ export const registryRouter = router({
 			if (!updated) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Registry not found" });
 			}
+			void auditFromSession(ctx, organizationId, {
+				action: "registry.update",
+				targetType: "registry",
+				targetId: registryId,
+				targetName: updated.registryName,
+				metadata: {
+					credentialsChanged: values.password !== undefined || values.username !== undefined,
+					urlChanged:
+						values.registryUrl !== undefined &&
+						values.registryUrl.trim() !== (existing.registryUrl ?? "").trim(),
+				},
+			});
 			return publicRegistry(updated);
 		}),
 
@@ -134,6 +147,12 @@ export const registryRouter = router({
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Registry not found" });
 		}
+		void auditFromSession(ctx, organizationId, {
+			action: "registry.delete",
+			targetType: "registry",
+			targetId: removed.registryId,
+			targetName: removed.registryName,
+		});
 		return publicRegistry(removed);
 	}),
 

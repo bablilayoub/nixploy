@@ -5,11 +5,13 @@ import { assertInstanceAdmin, isInstanceAdminRole } from "../../modules/auth/ins
 import { resolveCallerOrganizationId } from "../../modules/projects";
 import {
 	applyUpdate,
+	assertValidImageRef,
 	checkForUpdates,
 	DEFAULT_CHECK_CRON,
 	DEFAULT_UPDATE_IMAGE,
 	getAppVersion,
 	getUpdateSettings,
+	isValidUpdateCron,
 	patchUpdateSettings,
 	rescheduleUpdateChecker,
 	resolveStuckUpdate,
@@ -24,19 +26,33 @@ async function requireInstanceAdmin(session: Session): Promise<string> {
 	return await resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
 }
 
-/** Only official GHCR image refs — blocks rolling an arbitrary attacker image. */
-function assertAllowedUpdateImage(image: string): void {
-	const trimmed = image.trim();
+/**
+ * Only well-formed official GHCR image refs — blocks rolling an arbitrary
+ * attacker image and anything that is not a plain `repo:tag` / `repo@digest`
+ * (the ref reaches a shell in modules/updates/apply.ts). Returns the
+ * canonical form that is persisted.
+ */
+function assertAllowedUpdateImage(image: string): string {
+	let canonical: string;
+	try {
+		canonical = assertValidImageRef(image).canonical;
+	} catch (error) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: error instanceof Error ? error.message : "Invalid image reference",
+		});
+	}
 	const allowed =
-		trimmed === DEFAULT_UPDATE_IMAGE ||
-		trimmed.startsWith("ghcr.io/bablilayoub/nixploy:") ||
-		trimmed.startsWith("ghcr.io/bablilayoub/nixploy@");
+		canonical === DEFAULT_UPDATE_IMAGE ||
+		canonical.startsWith("ghcr.io/bablilayoub/nixploy:") ||
+		canonical.startsWith("ghcr.io/bablilayoub/nixploy@");
 	if (!allowed) {
 		throw new TRPCError({
 			code: "BAD_REQUEST",
-			message: `Update image must be under ghcr.io/bablilayoub/nixploy (got ${trimmed})`,
+			message: `Update image must be under ghcr.io/bablilayoub/nixploy (got ${image.trim()})`,
 		});
 	}
+	return canonical;
 }
 
 const settingsInput = z.object({
@@ -101,9 +117,14 @@ export const updatesRouter = router({
 
 	/** Toggle auto-check / auto-update and optionally the cron / image. */
 	updateSettings: protectedProcedure.input(settingsInput).mutation(async ({ ctx, input }) => {
-		await requireInstanceAdmin(ctx.session);
-		if (input.image !== undefined) {
-			assertAllowedUpdateImage(input.image);
+		const organizationId = await requireInstanceAdmin(ctx.session);
+		const image = input.image !== undefined ? assertAllowedUpdateImage(input.image) : undefined;
+		const checkCron = input.checkCron?.trim();
+		if (checkCron !== undefined && !isValidUpdateCron(checkCron)) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: `Invalid cron expression "${checkCron}" (expected 5 or 6 fields, e.g. "${DEFAULT_CHECK_CRON}")`,
+			});
 		}
 		const next = await patchUpdateSettings({
 			...(input.autoCheckEnabled !== undefined && {
@@ -112,10 +133,21 @@ export const updatesRouter = router({
 			...(input.autoUpdateEnabled !== undefined && {
 				autoUpdateEnabled: input.autoUpdateEnabled,
 			}),
-			...(input.checkCron !== undefined && { checkCron: input.checkCron.trim() }),
-			...(input.image !== undefined && { image: input.image.trim() }),
+			...(checkCron !== undefined && { checkCron }),
+			...(image !== undefined && { image }),
 		});
 		await rescheduleUpdateChecker();
+		void auditFromSession(ctx, organizationId, {
+			action: "platform.update.settings",
+			targetType: "web_server",
+			targetId: "nixploy",
+			metadata: {
+				autoCheckEnabled: next.autoCheckEnabled,
+				autoUpdateEnabled: next.autoUpdateEnabled,
+				checkCron: next.checkCron,
+				image: next.image,
+			},
+		});
 		return next;
 	}),
 });

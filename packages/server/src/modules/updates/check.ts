@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execAsync } from "../../utils/exec";
+import { shellQuote } from "../deployment/paths";
 import { fetchRemoteDigest, normalizeDigest, parseImageRef } from "./registry";
 import { getUpdateSettings, patchUpdateSettings, type UpdateSettings } from "./settings";
 
@@ -39,25 +40,86 @@ export async function getRunningImageRef(): Promise<string | null> {
 	}
 }
 
+/** Pick the RepoDigest of `repository` (falls back to the first digest). */
+function pickRepoDigest(stdout: string, repository: string): string | null {
+	let first: string | null = null;
+	for (const line of stdout.split("\n")) {
+		const digest = normalizeDigest(line);
+		if (!digest) continue;
+		if (line.trim().startsWith(`${repository}@`)) return digest;
+		first ??= digest;
+	}
+	return first;
+}
+
+/**
+ * Digest of the image the RUNNING task of the service was started from.
+ *
+ * The service spec carries no digest (`--no-resolve-image`) and the local
+ * tag is re-pointed by `docker pull` before the roll — so after a failed or
+ * never-converging update the tag already equals the remote digest while the
+ * old container still runs. Task → container → image ID → RepoDigests is the
+ * only view that reflects what is actually serving.
+ */
+async function getRunningTaskDigest(repository: string): Promise<string | null> {
+	try {
+		const taskIds = (
+			await execAsync(
+				`docker service ps ${shellQuote(NIXPLOY_SERVICE_NAME)} --filter desired-state=running --format '{{.ID}}'`,
+				{ timeout: 15_000 },
+			)
+		)
+			.split("\n")
+			.map((line) => line.trim())
+			.filter(Boolean);
+		for (const taskId of taskIds) {
+			const containerId = (
+				await execAsync(
+					`docker inspect --format '{{.Status.ContainerStatus.ContainerID}}' ${shellQuote(taskId)}`,
+					{ timeout: 15_000 },
+				)
+			).trim();
+			if (!containerId) continue;
+			const imageId = (
+				await execAsync(`docker inspect --format '{{.Image}}' ${shellQuote(containerId)}`, {
+					timeout: 15_000,
+				})
+			).trim();
+			if (!imageId) continue;
+			const digests = await execAsync(
+				`docker image inspect ${shellQuote(imageId)} --format '{{range .RepoDigests}}{{println .}}{{end}}'`,
+				{ timeout: 15_000 },
+			);
+			const digest = pickRepoDigest(digests, repository);
+			if (digest) return digest;
+		}
+	} catch {
+		// Not a manager, task not started yet, or image already pruned.
+	}
+	return null;
+}
+
 /**
  * Resolve the digest the running service is actually on.
- * Prefers an `@sha256` suffix on the service image; otherwise asks the local
- * docker engine for RepoDigests of that tag.
+ * Prefers an `@sha256` suffix on the service image, then the running task's
+ * image (see {@link getRunningTaskDigest}); the local tag's RepoDigests are
+ * only a last resort because `docker pull` re-points them before the roll.
  */
 export async function getRunningDigest(imageRef: string | null): Promise<string | null> {
 	if (!imageRef) return null;
 	const parsed = parseImageRef(imageRef);
 	if (parsed.digest) return normalizeDigest(parsed.digest);
 
+	const repository = `${parsed.registry}/${parsed.repository}`;
+	const running = await getRunningTaskDigest(repository);
+	if (running) return running;
+
 	try {
 		const stdout = await execAsync(
-			`docker image inspect ${JSON.stringify(imageRef)} --format '{{range .RepoDigests}}{{println .}}{{end}}'`,
+			`docker image inspect ${shellQuote(imageRef)} --format '{{range .RepoDigests}}{{println .}}{{end}}'`,
 			{ timeout: 15_000 },
 		);
-		for (const line of stdout.split("\n")) {
-			const digest = normalizeDigest(line);
-			if (digest) return digest;
-		}
+		return pickRepoDigest(stdout, repository);
 	} catch {
 		// Image may not be present locally (rare after a clean prune).
 	}

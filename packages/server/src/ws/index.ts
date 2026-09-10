@@ -1,6 +1,7 @@
 import type { Server as HttpServer, IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { type WebSocket, WebSocketServer } from "ws";
+import { trustedOriginsWithDashboardDomain } from "../lib/auth";
 import { getSessionFromUpgrade, type WsSession } from "./auth";
 import { handleDeploymentLogs } from "./deployment-logs";
 import { handleDockerLogs } from "./docker-logs";
@@ -37,7 +38,10 @@ const servers = new Set<WebSocketServer>();
  *   /ws/terminal?appName=&serverId= — interactive shell in the container
  *
  * Every upgrade is authenticated against the better-auth session cookie;
- * unauthenticated upgrades get a 401 and a destroyed socket.
+ * unauthenticated upgrades get a 401 and a destroyed socket. Browser
+ * upgrades must also come from the panel's own origin (or a configured
+ * trusted origin) — a 403 otherwise — so a third-party page cannot ride the
+ * cookie into a terminal even if cookie SameSite defaults change.
  */
 export function setupWebSocketServer(httpServer: HttpServer): void {
 	httpServer.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
@@ -78,6 +82,12 @@ async function handleUpgrade(
 		return;
 	}
 
+	if (!(await isAllowedUpgradeOrigin(req))) {
+		socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+		socket.destroy();
+		return;
+	}
+
 	const session = await getSessionFromUpgrade(req);
 	if (!session) {
 		socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
@@ -101,6 +111,33 @@ async function handleUpgrade(
 			ws.close(1011);
 		});
 	});
+}
+
+/** `scheme://host[:port]` of a URL, lower-cased, or null when unparsable. */
+function originOf(value: string): string | null {
+	try {
+		const url = new URL(value);
+		return `${url.protocol}//${url.host}`.toLowerCase();
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Browsers always send `Origin` on WebSocket upgrades; non-browser clients
+ * (CLI, curl) usually do not and are allowed through — they cannot carry a
+ * victim's cookie. Same-origin requests (Origin host == Host) and the
+ * better-auth trusted origins (BETTER_AUTH_URL + dashboard domain) pass.
+ */
+export async function isAllowedUpgradeOrigin(req: IncomingMessage): Promise<boolean> {
+	const raw = req.headers.origin;
+	if (!raw) return true;
+	const origin = originOf(raw);
+	if (!origin) return false;
+	const host = req.headers.host?.trim().toLowerCase();
+	if (host && origin.endsWith(`//${host}`)) return true;
+	const trusted = await trustedOriginsWithDashboardDomain();
+	return trusted.some((entry) => originOf(entry) === origin);
 }
 
 /** Graceful shutdown: stop heartbeats and close every endpoint + connection. */

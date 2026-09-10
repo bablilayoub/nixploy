@@ -4,6 +4,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import { destinations } from "../../db/schema";
+import { auditFromSession } from "../../modules/audit";
 import { testDestination } from "../../modules/backups/runner";
 import {
 	assertCapability,
@@ -187,6 +188,12 @@ export const destinationRouter = router({
 					eq(destinations.organizationId, organizationId),
 				),
 			);
+		void auditFromSession(ctx, organizationId, {
+			action: "destination.delete",
+			targetType: "destination",
+			targetId: input.destinationId,
+			targetName: row.name,
+		});
 		return row;
 	}),
 

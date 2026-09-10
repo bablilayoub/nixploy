@@ -13,12 +13,13 @@ export {
 	type UpdateCheckResult,
 } from "./check";
 export {
+	assertValidImageRef,
 	fetchRemoteDigest,
 	normalizeDigest,
 	type ParsedImageRef,
 	parseImageRef,
 } from "./registry";
-export { initUpdateChecker, rescheduleUpdateChecker } from "./scheduler";
+export { initUpdateChecker, isValidUpdateCron, rescheduleUpdateChecker } from "./scheduler";
 export {
 	DEFAULT_CHECK_CRON,
 	DEFAULT_UPDATE_IMAGE,

@@ -57,6 +57,33 @@ export function parseImageRef(raw: string): ParsedImageRef {
 	return { registry, repository, tag: digest ? null : tag, digest, canonical };
 }
 
+const REGISTRY_HOST_RE = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::\d{1,5})?$/i;
+const REPOSITORY_RE =
+	/^[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*(?:\/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*$/;
+const TAG_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/;
+const DIGEST_RE = /^sha256:[a-f0-9]{64}$/i;
+
+/**
+ * Strict image-reference validation (OCI distribution grammar) for refs that
+ * end up on a shell command line or in persisted settings. Returns the parsed
+ * ref; throws on anything that is not `registry/repo[:tag|@digest]`.
+ */
+export function assertValidImageRef(raw: string): ParsedImageRef {
+	const trimmed = raw.trim();
+	if (!trimmed || trimmed.length > 512 || /\s/.test(trimmed)) {
+		throw new Error(`Invalid image reference: ${raw}`);
+	}
+	const ref = parseImageRef(trimmed);
+	const valid =
+		REGISTRY_HOST_RE.test(ref.registry) &&
+		REPOSITORY_RE.test(ref.repository) &&
+		(ref.digest ? DIGEST_RE.test(ref.digest) : ref.tag !== null && TAG_RE.test(ref.tag));
+	if (!valid) {
+		throw new Error(`Invalid image reference: ${raw}`);
+	}
+	return ref;
+}
+
 /** Normalize a digest header / RepoDigest to bare `sha256:…`. */
 export function normalizeDigest(value: string | null | undefined): string | null {
 	if (!value) return null;

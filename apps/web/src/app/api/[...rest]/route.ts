@@ -1,6 +1,7 @@
 import { buildApiKeyContext } from "@nixploy/server/lib/api-key-context";
 import { appRouter } from "@nixploy/server/trpc";
 import type { TRPCContext } from "@nixploy/server/trpc/init";
+import { coerceQueryInput } from "@nixploy/server/trpc/query-input";
 import { getTRPCErrorFromUnknown } from "@trpc/server";
 import superjson, { type SuperJSONResult } from "superjson";
 
@@ -71,6 +72,8 @@ function errorResponse(code: string, message: string) {
 
 interface ResolvedProcedure {
 	type: "query" | "mutation";
+	/** Raw Zod input schema (first tRPC input parser), when the procedure declares one. */
+	inputSchema: unknown;
 	call: (ctx: TRPCContext, input: unknown) => Promise<unknown>;
 }
 
@@ -83,11 +86,12 @@ function resolveProcedure(path: string): ResolvedProcedure | null {
 		node = (node as Record<string, unknown>)?.[segment];
 		if (node === undefined || node === null) return null;
 	}
-	const def = (node as { _def?: { type?: string } })._def;
+	const def = (node as { _def?: { type?: string; inputs?: unknown[] } })._def;
 	if (def?.type !== "query" && def?.type !== "mutation") return null;
 
 	return {
 		type: def.type,
+		inputSchema: def.inputs?.[0],
 		call: async (ctx, input) => {
 			const caller = appRouter.createCaller(ctx) as unknown as Record<
 				string,
@@ -107,27 +111,6 @@ function decodeSerialized(raw: string): unknown {
 		return superjson.deserialize(parsed as SuperJSONResult);
 	}
 	return parsed;
-}
-
-/**
- * Flattened GET query params arrive as strings. Coerce obvious booleans and
- * numbers so Zod schemas (e.g. `z.boolean()`, `z.number()`) accept CLI input.
- * UUID-like and non-numeric strings stay strings.
- */
-function coerceFlattenedParams(params: Record<string, string>): Record<string, unknown> {
-	const out: Record<string, unknown> = {};
-	for (const [key, value] of Object.entries(params)) {
-		if (value === "true") {
-			out[key] = true;
-		} else if (value === "false") {
-			out[key] = false;
-		} else if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) {
-			out[key] = Number(value);
-		} else {
-			out[key] = value;
-		}
-	}
-	return out;
 }
 
 async function buildContext(req: Request): Promise<TRPCContext> {
@@ -169,11 +152,17 @@ async function handle(req: Request, path: string): Promise<Response> {
 			if (rawInput !== null) {
 				input = decodeSerialized(rawInput);
 			} else {
+				// Flattened params arrive as strings; numbers/booleans are coerced
+				// only where the procedure's Zod schema expects them (a `z.string()`
+				// field such as `?search=2024` must stay a string).
 				const params: Record<string, string> = {};
 				for (const [key, value] of url.searchParams.entries()) {
 					params[key] = value;
 				}
-				input = Object.keys(params).length > 0 ? coerceFlattenedParams(params) : undefined;
+				input =
+					Object.keys(params).length > 0
+						? coerceQueryInput(params, procedure.inputSchema)
+						: undefined;
 			}
 		} else {
 			const text = await req.text();

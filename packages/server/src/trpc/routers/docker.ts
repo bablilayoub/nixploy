@@ -9,7 +9,11 @@ import {
 	PROTECTED_NETWORKS,
 	PROTECTED_VOLUMES,
 } from "../../modules/docker/protected";
-import { pruneUnusedVolumes } from "../../modules/docker/prune";
+import {
+	isGuardedVolumeName,
+	listServiceVolumeGuard,
+	pruneUnusedVolumes,
+} from "../../modules/docker/prune";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { assertSafeDockerImageRef } from "../../utils/validators";
@@ -69,15 +73,14 @@ async function resolveOrg(ctx: {
 	);
 }
 
-async function assertAdmin(
-	ctx: {
-		session: {
-			user: { id: string; role?: string | null };
-			session: { activeOrganizationId?: string | null };
-		};
-	},
-	serverId?: string | null,
-) {
+type AdminContext = {
+	session: {
+		user: { id: string; role?: string | null };
+		session: { activeOrganizationId?: string | null };
+	};
+};
+
+async function assertAdmin(ctx: AdminContext, serverId?: string | null) {
 	const organizationId = await resolveOrg(ctx);
 	await assertCapability(ctx.session.user.id, organizationId, "docker.manage");
 	if (!serverId) {
@@ -85,6 +88,27 @@ async function assertAdmin(
 		await assertInstanceAdmin(ctx.session);
 	}
 	return organizationId;
+}
+
+/**
+ * Swarm nodes/services and system prune are cluster-wide: managed servers
+ * join the PRIMARY swarm, so a manager-role remote's engine can drain the
+ * primary node or list every tenant's services. Instance admins only, with
+ * or without a `serverId`.
+ */
+async function assertClusterAdmin(ctx: AdminContext, serverId?: string | null) {
+	const organizationId = await assertAdmin(ctx, serverId);
+	await assertInstanceAdmin(ctx.session);
+	return organizationId;
+}
+
+/** `docker node|service ...` on a worker or non-swarm engine: an empty tab, not an error. */
+function isNotSwarmManagerError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	const stderr = (error as { stderr?: string }).stderr ?? "";
+	return /not a swarm manager|This node is not a swarm manager|not part of a swarm/i.test(
+		`${message}\n${stderr}`,
+	);
 }
 
 export const dockerRouter = router({
@@ -199,8 +223,14 @@ export const dockerRouter = router({
 	// ── Swarm ─────────────────────────────────────────────────────────────────
 
 	swarmServices: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
-		await assertAdmin(ctx, input?.serverId);
-		const out = await runOn(ctx, input.serverId, `docker service ls --format '{{json .}}'`);
+		await assertClusterAdmin(ctx, input?.serverId);
+		let out: string;
+		try {
+			out = await runOn(ctx, input.serverId, `docker service ls --format '{{json .}}'`);
+		} catch (error) {
+			if (isNotSwarmManagerError(error)) return [];
+			throw error;
+		}
 		return parseJsonLines<{
 			ID: string;
 			Name: string;
@@ -215,8 +245,14 @@ export const dockerRouter = router({
 	}),
 
 	nodes: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
-		await assertAdmin(ctx, input?.serverId);
-		const out = await runOn(ctx, input.serverId, `docker node ls --format '{{json .}}'`);
+		await assertClusterAdmin(ctx, input?.serverId);
+		let out: string;
+		try {
+			out = await runOn(ctx, input.serverId, `docker node ls --format '{{json .}}'`);
+		} catch (error) {
+			if (isNotSwarmManagerError(error)) return [];
+			throw error;
+		}
 		return parseJsonLines<{
 			ID: string;
 			Hostname: string;
@@ -235,12 +271,18 @@ export const dockerRouter = router({
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
-			await assertAdmin(ctx, input?.serverId);
+			const organizationId = await assertClusterAdmin(ctx, input?.serverId);
 			await runOn(
 				ctx,
 				input.serverId,
 				`docker node update --availability ${input.availability} ${shq(input.nodeId)}`,
 			);
+			void auditFromSession(ctx, organizationId, {
+				action: "docker.node.update",
+				targetType: "node",
+				targetId: input.nodeId,
+				metadata: { availability: input.availability },
+			});
 			return true;
 		}),
 
@@ -278,37 +320,58 @@ export const dockerRouter = router({
 
 	volumes: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
 		await assertAdmin(ctx, input?.serverId);
-		const out = await runOn(ctx, input.serverId, `docker volume ls --format '{{json .}}'`);
+		const [out, guard] = await Promise.all([
+			runOn(ctx, input.serverId, `docker volume ls --format '{{json .}}'`),
+			listServiceVolumeGuard(),
+		]);
 		return parseJsonLines<{
 			Name: string;
 			Driver: string;
 			Mountpoint: string;
 		}>(out).map((row) => ({
 			...row,
-			protected: PROTECTED_VOLUMES.has(row.Name),
+			protected: isGuardedVolumeName(row.Name, guard),
 		}));
 	}),
 
 	volumeRemove: protectedProcedure
 		.input(serverInput.extend({ name: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
-			await assertAdmin(ctx, input?.serverId);
+			const organizationId = await assertAdmin(ctx, input?.serverId);
 			if (PROTECTED_VOLUMES.has(input.name)) {
 				throw new TRPCError({
 					code: "FORBIDDEN",
 					message: `Volume "${input.name}" is required by Nixploy and cannot be removed`,
 				});
 			}
+			// A stopped service (scaled to zero) has no container holding its
+			// volume, so docker would happily delete its data — refuse here.
+			if (isGuardedVolumeName(input.name, await listServiceVolumeGuard())) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: `Volume "${input.name}" belongs to a Nixploy service — delete the service instead`,
+				});
+			}
 			// In-use volumes are rejected by docker itself; the message surfaces.
 			await runOn(ctx, input.serverId, `docker volume rm ${shq(input.name)}`);
+			void auditFromSession(ctx, organizationId, {
+				action: "docker.volume.remove",
+				targetType: "volume",
+				targetName: input.name,
+			});
 			return true;
 		}),
 
 	volumesPrune: protectedProcedure.input(serverInput).mutation(async ({ ctx, input }) => {
-		await assertAdmin(ctx, input?.serverId);
+		const organizationId = await assertAdmin(ctx, input?.serverId);
 		// Docker 23+ `volume prune -f` only removes anonymous volumes; remove
-		// named unused volumes too while keeping platform volumes safe.
-		return await pruneUnusedVolumes((command) => runOn(ctx, input.serverId, command));
+		// named unused volumes too while keeping platform + service volumes safe.
+		const output = await pruneUnusedVolumes(
+			(command) => runOn(ctx, input.serverId, command),
+			await listServiceVolumeGuard(),
+		);
+		void auditFromSession(ctx, organizationId, { action: "docker.volumes.prune" });
+		return output;
 	}),
 
 	// ── System ────────────────────────────────────────────────────────────────
@@ -337,13 +400,14 @@ export const dockerRouter = router({
 	systemPrune: protectedProcedure
 		.input(serverInput.extend({ volumes: z.boolean().default(false) }))
 		.mutation(async ({ ctx, input }) => {
-			const organizationId = await assertAdmin(ctx, input.serverId);
+			const organizationId = await assertClusterAdmin(ctx, input.serverId);
 			const run = (command: string) => runOn(ctx, input.serverId, command);
-			// system prune --volumes still skips named volumes on Docker 23+.
-			const systemOut = await run(
-				input.volumes ? "docker system prune -f --volumes" : "docker system prune -f",
-			);
-			const volumeOut = input.volumes ? await pruneUnusedVolumes(run) : "";
+			// Volumes go through the guarded pass below instead of `--volumes`,
+			// so data volumes of stopped (scaled-to-zero) services survive.
+			const systemOut = await run("docker system prune -f");
+			const volumeOut = input.volumes
+				? await pruneUnusedVolumes(run, await listServiceVolumeGuard())
+				: "";
 			await auditFromSession(ctx, organizationId, {
 				action: "docker.system.prune",
 				metadata: { volumes: input.volumes },

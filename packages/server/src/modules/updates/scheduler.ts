@@ -2,7 +2,7 @@ import schedule from "node-schedule";
 import { createLogger } from "../../lib/logger";
 import { applyUpdate, clearStaleUpdateFlag } from "./apply";
 import { checkForUpdates } from "./check";
-import { DEFAULT_CHECK_CRON, getUpdateSettings } from "./settings";
+import { DEFAULT_CHECK_CRON, getUpdateSettings, patchUpdateSettings } from "./settings";
 
 const log = createLogger("updates");
 
@@ -40,6 +40,22 @@ async function runUpdatePass(): Promise<void> {
 	}
 }
 
+/**
+ * Whether node-schedule accepts `cron` as a recurring 5/6-field expression.
+ * node-schedule silently falls back to `new Date(spec)` for non-cron strings
+ * (a one-shot job) and returns `null` for garbage — both are rejected here so
+ * a typo cannot silently stop the checker.
+ */
+export function isValidUpdateCron(cron: string): boolean {
+	const trimmed = cron.trim();
+	const fields = trimmed.split(/\s+/).length;
+	if (fields !== 5 && fields !== 6) return false;
+	const probe = schedule.scheduleJob(trimmed, () => {});
+	if (!probe) return false;
+	probe.cancel();
+	return true;
+}
+
 /** Re-read settings and (re)register the cron job when the schedule changes. */
 export async function rescheduleUpdateChecker(): Promise<void> {
 	const settings = await getUpdateSettings();
@@ -52,9 +68,17 @@ export async function rescheduleUpdateChecker(): Promise<void> {
 		log.info("Update checker disabled");
 		return;
 	}
-	job = schedule.scheduleJob("nixploy-update-check", cron, () => {
-		void runUpdatePass();
-	});
+	job = isValidUpdateCron(cron)
+		? schedule.scheduleJob("nixploy-update-check", cron, () => {
+				void runUpdatePass();
+			})
+		: null;
+	if (!job) {
+		const message = `Invalid update check cron "${cron}" — automatic checks are paused until it is fixed`;
+		log.error(message);
+		await patchUpdateSettings({ lastError: message }).catch(() => {});
+		return;
+	}
 	log.info(`Update checker scheduled (${cron})`);
 }
 

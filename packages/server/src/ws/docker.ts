@@ -55,6 +55,40 @@ export async function resolveLocalContainerById(
 	}
 }
 
+/** Labels Nixploy deploys stamp on every task/container, in resolution order. */
+const APP_NAME_LABELS = [
+	"com.docker.stack.namespace",
+	"com.docker.compose.project",
+	"com.docker.swarm.service.name",
+] as const;
+
+/**
+ * Resolve the Nixploy appName a container belongs to from its Swarm/compose
+ * labels, or null when it carries none (platform or hand-run containers).
+ */
+export async function resolveContainerAppName(
+	containerId: string,
+	serverId: string | null | undefined,
+): Promise<string | null> {
+	let labels: Record<string, string> = {};
+	if (serverId) {
+		const format = APP_NAME_LABELS.map((label) => `{{index .Config.Labels "${label}"}}`).join("|");
+		const out = (
+			await execAsyncRemote(serverId, `docker inspect --format ${shq(format)} ${shq(containerId)}`)
+		).trim();
+		const parts = out.split("|");
+		labels = Object.fromEntries(APP_NAME_LABELS.map((label, i) => [label, parts[i] ?? ""]));
+	} else {
+		const info = await getDocker().getContainer(containerId).inspect();
+		labels = info.Config?.Labels ?? {};
+	}
+	for (const label of APP_NAME_LABELS) {
+		const value = labels[label]?.trim();
+		if (value) return value;
+	}
+	return null;
+}
+
 /**
  * Refuse terminal/logs attach to Nixploy platform containers (parity with
  * `docker.containerAction` protection).
