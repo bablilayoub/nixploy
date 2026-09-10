@@ -77,6 +77,30 @@ BASE_URL=http://localhost:3000 node apps/web/e2e/smoke.mjs
 # Fresh DB → /setup; existing users → set SMOKE_EMAIL / SMOKE_PASSWORD
 ```
 
+## Continuous integration
+
+Every pull request and push to `main` runs [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):
+
+| Job | What it proves | Local equivalent |
+| --- | --- | --- |
+| **Checks** (reusable [`checks.yml`](../.github/workflows/checks.yml)) | `pnpm typecheck`, Biome, `pnpm test` with `DATABASE_URL_TEST` on a Postgres 17 service (tenancy suite included), Traefik static-config drift | the verify loop above, plus `DATABASE_URL_TEST=…` |
+| **Build (web / landing / cli)** | `next build` for the panel and landing, `tsup` for the CLI — the panel builds with no env on purpose, like the Dockerfile | `pnpm -F @nixploy/web build` etc. |
+| **Docker image + Trivy** | `docker/Dockerfile` builds (single-arch, not pushed, GHA cache) and a Trivy `CRITICAL,HIGH` scan — advisory (`exit-code: 0`) until the baseline is clean | `docker build -f docker/Dockerfile .` |
+| **ShellCheck** | `install.sh`, `update.sh`, `docker/entrypoint.sh`, `tools/*.sh` at severity `warning` (0 findings today) | `shellcheck --severity=warning install.sh update.sh docker/entrypoint.sh tools/*.sh` |
+| **pnpm audit** | `pnpm audit --prod --audit-level high` — `continue-on-error` until the known advisories are fixed | `pnpm audit --prod --audit-level high` |
+| **Template image health**, **Swarm smoke** | Registry manifests for every template image; Traefik → whoami on a real Swarm; `install.sh`'s static config boots Traefik | `pnpm test:template-images` |
+| **CodeQL** ([`codeql.yml`](../.github/workflows/codeql.yml)) | JavaScript/TypeScript static analysis on PRs, `main` and weekly | — |
+
+The same `checks.yml` gates [`release.yml`](../.github/workflows/release.yml) on the tagged
+ref before an image is built, so PR checks and the release gate cannot drift
+([releases.md](./releases.md)). Superseded PR runs are cancelled; pushes to `main` always
+finish. [Dependabot](../.github/dependabot.yml) opens weekly PRs for npm (minor/patch
+grouped, `better-auth` excluded — bump it by hand), GitHub Actions and the Docker base image.
+
+Validate workflow syntax locally with [`act`](https://github.com/nektos/act):
+`act -l` lists every job and fails on YAML errors; `act -j shellcheck --dryrun` walks a job
+without running it. Do not run the Docker/Postgres jobs under `act`.
+
 ## Useful debugging handles
 
 - Traefik dynamic configs: `$NIXPLOY_CONFIG_DIR/traefik/dynamic/<appName>.yml`

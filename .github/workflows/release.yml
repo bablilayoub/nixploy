@@ -3,10 +3,14 @@ name: Release
 # Tag-driven PaaS release (Dokploy-style):
 #   1. Bump package.json version (e.g. 0.1.0)
 #   2. Commit, then: git tag v0.1.0 && git push origin v0.1.0
-# CI builds/pushes GHCR (:vX.Y.Z, plus :latest for a final-version tag push),
-# creates a GitHub Release with auto-generated notes, and attaches
-# version-pinned install.sh / update.sh. workflow_dispatch re-runs rebuild an
-# existing tag's image and assets without moving :latest.
+# The `checks` gate (typecheck, Biome, vitest incl. tenancy on Postgres 17,
+# Traefik drift — .github/workflows/checks.yml, shared with CI) must pass on
+# the tagged ref before anything is built. CI then builds/pushes GHCR
+# (:vX.Y.Z, plus :latest for a final-version tag push) for linux/amd64 and
+# linux/arm64 with provenance + SBOM attestations, creates a GitHub Release
+# with auto-generated notes, and attaches version-pinned install.sh /
+# update.sh. workflow_dispatch re-runs rebuild an existing tag's image and
+# assets without moving :latest.
 
 on:
   push:
@@ -34,7 +38,16 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  checks:
+    name: Checks
+    # Quality gate on the exact ref being released. A red tree must never
+    # become the :latest channel that every install auto-updates to.
+    uses: ./.github/workflows/checks.yml
+    with:
+      ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
   release:
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - name: Resolve tag
@@ -70,6 +83,15 @@ jobs:
             exit 1
           fi
 
+      - name: Set up QEMU
+        # linux/arm64 is emulated on the amd64 runner: the Next.js build runs
+        # under QEMU and takes several times longer than the native build (expect
+        # 20–40 min for a cold cache). Native `ubuntu-24.04-arm` runners plus a
+        # manifest merge would be the fast path if this becomes a problem.
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -80,36 +102,49 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Image tags
-        id: tags
+      - name: Decide whether :latest moves
+        id: latest
         env:
           TAG: ${{ steps.tag.outputs.tag }}
           EVENT: ${{ github.event_name }}
         run: |
-          IMAGE="${REGISTRY}/${IMAGE_NAME}"
-          TAGS="${IMAGE}:${TAG}"
           # `latest` is the channel the in-app updater tracks: only a real tag
           # push of a final version moves it. Re-running an old tag through
           # workflow_dispatch (asset repair) or a prerelease must not rewind it.
           if [ "$EVENT" = "push" ] && printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-            TAGS="${TAGS}"$'\n'"${IMAGE}:latest"
+            echo "move=true" >> "$GITHUB_OUTPUT"
             echo "moving :latest to ${TAG}"
           else
+            echo "move=false" >> "$GITHUB_OUTPUT"
             echo "not moving :latest (event=${EVENT}, tag=${TAG})"
           fi
-          {
-            echo "tags<<EOF"
-            echo "$TAGS"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+
+      - name: Image tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Tags are decided in the step above; metadata-action only renders
+          # them (ghcr.io/<repo>:vX.Y.Z [+ :latest], same as before) and adds
+          # the OCI labels (source, revision, version, created, licenses).
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ steps.tag.outputs.tag }}
+            type=raw,value=latest,enable=${{ steps.latest.outputs.move }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # SLSA provenance + SPDX SBOM are attached as attestation manifests
+          # (they show up as extra "unknown/unknown" entries in the GHCR UI).
+          provenance: true
+          sbom: true
           build-args: |
             NIXPLOY_APP_VERSION=${{ steps.tag.outputs.version }}
           cache-from: type=gha

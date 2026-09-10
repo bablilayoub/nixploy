@@ -6,38 +6,45 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded PR runs are cancelled; quick successive pushes to main all
+  # finish so a red main is never hidden by a cancelled run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  check:
-    name: Typecheck & test
-    # On push to main, skip release version-bump commits ([skip ci]). PRs always run.
+  # Typecheck + Biome + vitest (tenancy suite against Postgres 17) + Traefik
+  # static-config drift. Same reusable workflow gates release.yml.
+  checks:
+    name: Checks
+    # On push to main, skip release version-bump commits ([skip ci]). PRs always
+    # run. (GitHub also honours [skip ci] natively; this keeps the intent visible.)
+    if: >-
+      github.event_name != 'push' ||
+      (github.event.head_commit &&
+       !contains(github.event.head_commit.message, '[skip ci]') &&
+       !contains(github.event.head_commit.message, '[ci skip]'))
+    uses: ./.github/workflows/checks.yml
+
+  # Production builds of every shippable workspace, so a broken `next build`
+  # or tsup bundle is caught on the PR instead of on main.
+  build:
+    name: Build (${{ matrix.package }})
     if: >-
       github.event_name != 'push' ||
       (github.event.head_commit &&
        !contains(github.event.head_commit.message, '[skip ci]') &&
        !contains(github.event.head_commit.message, '[ci skip]'))
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: nixploy
-          POSTGRES_PASSWORD: nixploy
-          POSTGRES_DB: nixploy_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U nixploy -d nixploy_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [web, landing, cli]
     env:
-      DATABASE_URL: postgres://nixploy:nixploy@localhost:5432/nixploy_test
-      DATABASE_URL_TEST: postgres://nixploy:nixploy@localhost:5432/nixploy_test
-      ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,35 +61,108 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Traefik static config drift
-        # install.sh, update.sh, docker/traefik/traefik.yml and setup.ts each
-        # carry the static config; a stale copy would otherwise ship green.
+      - name: Build
+        # The panel's `next build` runs with no DATABASE_URL / secrets on
+        # purpose: the production image is built the same way (docker/Dockerfile
+        # build stage) and packages/server/src/db/index.ts hands the drizzle
+        # adapter `undefined` when DATABASE_URL is unset. Do not add dummy
+        # secrets here — if a build starts to need them the Dockerfile breaks
+        # too, and that is the bug to fix.
+        run: pnpm -F @nixploy/${{ matrix.package }} build
+
+  # The exact production image, built (not pushed) with the GHA cache, then
+  # scanned. Single-platform here; the multi-arch build lives in docker.yml /
+  # release.yml.
+  image:
+    name: Docker image + Trivy
+    if: >-
+      github.event_name != 'push' ||
+      (github.event.head_commit &&
+       !contains(github.event.head_commit.message, '[skip ci]') &&
+       !contains(github.event.head_commit.message, '[ci skip]'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Read package version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: false
+          load: true
+          tags: nixploy:ci
+          build-args: |
+            NIXPLOY_APP_VERSION=${{ steps.version.outputs.version }}-ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy image scan
+        # Advisory for now (exit-code 0): the report is in the job log. Flip to
+        # exit-code 1 (and consider ignore-unfixed: true for Alpine base CVEs)
+        # once the baseline is clean. No moving major tag exists for this
+        # action, hence the exact version.
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: nixploy:ci
+          scan-type: image
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: ShellCheck
+        # ubuntu-latest ships shellcheck; the apt line only runs if that changes.
+        # Baseline 2026-09-10 (shellcheck 0.11.0): 0 findings at every
+        # severity, so `warning` is a real gate, not a warning sink.
+        # tools/*.sh is a glob because tools/release.sh is not tracked yet
+        # (nullglob keeps the list valid either way).
         run: |
           set -euo pipefail
-          email="drift-check@example.com"
-          NIXPLOY_RENDER_TRAEFIK_ONLY=1 NIXPLOY_LETSENCRYPT_EMAIL="$email" bash install.sh > /tmp/traefik-install.yml
-          NIXPLOY_RENDER_TRAEFIK_ONLY=1 NIXPLOY_LETSENCRYPT_EMAIL="$email" bash update.sh > /tmp/traefik-update.yml
-          sed '/^#/d' docker/traefik/traefik.yml | sed "s/^\( *email: \).*/\1$email/" > /tmp/traefik-template.yml
-          (cd packages/server && EMAIL="$email" env -u DATABASE_URL pnpm exec tsx -e \
-            'import { buildTraefikStaticConfig } from "./src/modules/traefik/setup"; process.stdout.write(buildTraefikStaticConfig(process.env.EMAIL))') \
-            > /tmp/traefik-setup.yml
-          for name in install update template; do
-            diff -u /tmp/traefik-setup.yml "/tmp/traefik-$name.yml" \
-              || { echo "::error::$name traefik.yml drifted from setup.ts#buildTraefikStaticConfig"; exit 1; }
-          done
-          echo "traefik static config: install.sh, update.sh, template and setup.ts agree"
+          command -v shellcheck >/dev/null || sudo apt-get install -y --no-install-recommends shellcheck
+          shellcheck --version
+          shopt -s nullglob
+          files=(install.sh update.sh docker/entrypoint.sh tools/*.sh)
+          printf 'checking: %s\n' "${files[@]}"
+          shellcheck --severity=warning "${files[@]}"
 
-      - name: Biome
-        run: pnpm exec biome check packages/server apps/web apps/cli apps/landing
+  audit:
+    name: pnpm audit (advisory)
+    runs-on: ubuntu-latest
+    # Advisory until the advisories listed in docs/audits/2026-09/security.md
+    # §2.8 (nodemailer, @modelcontextprotocol/sdk → fast-uri/hono/qs, sharp)
+    # are cleared. Remove continue-on-error once `pnpm audit --prod
+    # --audit-level high` is clean so new high advisories fail the PR.
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Typecheck
-        run: pnpm typecheck
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
 
-      - name: Migrate test database
-        run: pnpm db:migrate
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
-      - name: Unit tests
-        run: pnpm test
+      - name: Audit production dependencies
+        # Reads the lockfile only; no install needed.
+        run: pnpm audit --prod --audit-level high
 
   template-images:
     name: Template image health

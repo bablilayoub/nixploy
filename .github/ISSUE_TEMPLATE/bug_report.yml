@@ -1,0 +1,80 @@
+name: Bug report
+description: Something in the panel, installer, CLI or a deploy is broken
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Security issues: do not open an issue** — see [SECURITY.md](https://github.com/bablilayoub/nixploy/blob/main/SECURITY.md).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create an application from a GitHub repository
+        2. Add a domain with HTTPS
+        3. Deploy → error
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Nixploy version
+      description: Settings → Platform → Updates, or `docker service inspect nixploy --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'`
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How is it installed
+      options:
+        - install.sh (Docker Swarm)
+        - docker/docker-compose.dev.yml
+        - Local development (pnpm dev)
+        - Other (say so below)
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host
+      placeholder: Ubuntu 24.04, amd64, Docker 27.x, 4 GB RAM
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Panel UI
+        - Deployments / builds
+        - Domains / Traefik / TLS
+        - Databases
+        - Compose
+        - Backups
+        - Installer / updater
+        - CLI
+        - REST API / MCP
+        - Notifications / monitoring
+        - Other
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Panel logs (`docker service logs nixploy --tail 200`), the deployment log, browser console. Redact secrets and tokens.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues
+          required: true
+        - label: I am on the latest release (or say why not)

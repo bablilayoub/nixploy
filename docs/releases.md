@@ -1,8 +1,9 @@
 # Releases
 
 Nixploy PaaS ships via [GitHub Releases](https://github.com/bablilayoub/nixploy/releases)
-(Dokploy-style): each tag builds the GHCR image, publishes release notes from merged PRs,
-and attaches version-pinned `install.sh` / `update.sh`.
+(Dokploy-style): each tag runs the quality gate, builds the multi-arch GHCR image
+(`linux/amd64` + `linux/arm64`, with provenance and SBOM attestations), publishes
+release notes from merged PRs, and attaches version-pinned `install.sh` / `update.sh`.
 
 ## Version convention
 
@@ -56,12 +57,38 @@ Tag → workflow map (they do not overlap):
 
 Workflow: [`.github/workflows/release.yml`](../.github/workflows/release.yml)
 
-1. Asserts tag ↔ `package.json`
-2. Builds and pushes `ghcr.io/<repo>:vX.Y.Z` — plus `:latest` when the event is a tag push of a final version
-3. Pins `install.sh` / `update.sh` defaults to that tag
-4. Creates the GitHub Release (`generate_release_notes`; marked prerelease when the tag contains `-`) and uploads those scripts as assets
+1. **Quality gate** — the `checks` job calls the reusable
+   [`.github/workflows/checks.yml`](../.github/workflows/checks.yml) on the tagged ref:
+   `pnpm typecheck` (all workspaces), the Biome CI command, `pnpm test` with
+   `DATABASE_URL_TEST` against a Postgres 17 service (so the tenancy-isolation suite
+   really runs), and the Traefik static-config drift check. The same workflow gates every
+   PR, so the release gate cannot drift from CI. The `release` job `needs:` it; a red tree
+   never reaches `:latest`.
+2. Asserts tag ↔ `package.json`
+3. Builds and pushes `ghcr.io/<repo>:vX.Y.Z` — plus `:latest` when the event is a tag push
+   of a final version — for `linux/amd64` **and** `linux/arm64`. arm64 is emulated with
+   QEMU on the amd64 runner, so the release build is slow (expect 20–40 minutes cold; the
+   GHA layer cache helps on re-runs). Native `ubuntu-24.04-arm` runners + a manifest merge
+   are the upgrade path if that becomes painful.
+4. Attaches a SLSA **provenance** attestation and an SPDX **SBOM** to the image
+   (`provenance: true`, `sbom: true`) and stamps the OCI labels
+   (`org.opencontainers.image.source|revision|version|created`) from
+   `docker/metadata-action`. The attestations appear as extra `unknown/unknown` platform
+   entries in the GHCR UI — that is expected. Inspect with
+   `docker buildx imagetools inspect ghcr.io/bablilayoub/nixploy:vX.Y.Z`.
+5. Pins `install.sh` / `update.sh` defaults to that tag
+6. Creates the GitHub Release (`generate_release_notes`; marked prerelease when the tag
+   contains `-`) and uploads those scripts as assets
 
-`main` pushes still build continuous images via [`.github/workflows/docker.yml`](../.github/workflows/docker.yml) (`main` + sha tags, never `latest`) — versioned tags and `latest` are owned by the Release workflow only.
+`main` pushes still build continuous images via
+[`.github/workflows/docker.yml`](../.github/workflows/docker.yml) (`main` + sha tags, never
+`latest`; also multi-arch with provenance + SBOM) — versioned tags and `latest` are owned by
+the Release workflow only. Continuous builds do **not** wait for the CI gate; they are
+throwaway images for testing.
+
+Supported image architectures: `linux/amd64`, `linux/arm64` (Raspberry Pi 4/5, Ampere,
+Graviton, Apple-silicon Docker). `install.sh` already accepts both; before this an arm64 host
+silently fell back to a multi-minute source build.
 
 ### Re-run / repair
 
@@ -69,7 +96,15 @@ Workflow: [`.github/workflows/release.yml`](../.github/workflows/release.yml)
 
 ### `tools/release.sh` notes
 
-`--bump` strips a prerelease/build suffix before bumping (`0.2.0-rc.1 --bump patch` → `0.2.0`, like `npm version`), and a `--version` equal to the current version skips the empty commit instead of failing.
+- Before creating a tag it runs the same gate as CI: `pnpm typecheck`,
+  `pnpm exec biome check packages/server apps/web apps/cli apps/landing`, `pnpm test`.
+  Export `DATABASE_URL_TEST` (see `CLAUDE.md`) if you want the tenancy suite locally; otherwise
+  it is skipped with a note and the Release workflow runs it against Postgres 17 anyway.
+  `--skip-checks` bypasses the local gate with a loud warning (the CI gate still stands).
+  `--dry-run` prints the check commands instead of running them.
+- `--bump` strips a prerelease/build suffix before bumping (`0.2.0-rc.1 --bump patch` →
+  `0.2.0`, like `npm version`), and a `--version` equal to the current version skips the
+  empty commit instead of failing.
 
 ## Install from a release
 

@@ -1,0 +1,41 @@
+# Dependency update PRs. Every PR goes through ci.yml (checks + builds + image),
+# which is the evidence a bump needs. The workspace dependency set is
+# deliberately fixed (CLAUDE.md "Dependencies"): majors arrive one PR each and
+# are evaluated in docs/status.md before merging; minor/patch are grouped.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Pinned to the same exact version in apps/web and packages/server and
+      # bumped by hand with the manual auth loop (CLAUDE.md gotchas).
+      - dependency-name: better-auth
+      - dependency-name: "@better-auth/api-key"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris

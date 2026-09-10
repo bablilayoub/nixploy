@@ -1,0 +1,40 @@
+name: CodeQL
+
+# Static analysis for the TypeScript/JavaScript workspaces (advanced setup, so
+# the language set and schedule live in the repo). If "CodeQL default setup" is
+# switched on under Settings → Code security and analysis, GitHub rejects the
+# upload from this workflow — keep exactly one of the two enabled.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 6 * * 1" # Mondays 06:23 UTC — picks up new queries between pushes
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (JavaScript/TypeScript)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          build-mode: none
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:javascript-typescript"

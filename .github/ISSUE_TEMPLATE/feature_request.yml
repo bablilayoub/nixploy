@@ -1,0 +1,49 @@
+name: Feature request
+description: Propose a change to the panel, installer, CLI, API or templates
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that Nixploy makes hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should happen instead. UI, CLI, API or config sketches welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you use now, or how Dokploy / Coolify / others handle it.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Panel UI
+        - Deployments / builds
+        - Domains / Traefik / TLS
+        - Databases
+        - Compose
+        - Backups
+        - Installer / updater
+        - CLI
+        - REST API / MCP
+        - Templates
+        - Notifications / monitoring
+        - Other
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and the docs
+          required: true
+        - label: I am willing to open a PR for this
