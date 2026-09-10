@@ -4,6 +4,7 @@ import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { GithubIcon } from "@/components/icons";
 
 import { Logo } from "@/components/logo";
 import { navLinks, site } from "@/lib/site";
@@ -32,7 +33,7 @@ export function Navbar() {
 			className={cn(
 				"fixed inset-x-0 top-0 z-50 transition-[background,border-color] duration-300",
 				scrolled || open
-					? "border-b border-border/80 bg-background/85 backdrop-blur-xl"
+					? "border-b border-border bg-background/80 backdrop-blur-xl"
 					: "border-b border-transparent bg-transparent",
 			)}
 		>
@@ -41,7 +42,7 @@ export function Navbar() {
 
 				<div className="hidden items-center gap-1 text-sm text-muted md:flex">
 					{navLinks.map((link) => {
-						const active = pathname === link.href;
+						const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
 						return (
 							<Link
 								key={link.href}
@@ -57,20 +58,21 @@ export function Navbar() {
 					})}
 				</div>
 
-				<div className="flex items-center gap-3">
+				<div className="flex items-center gap-2">
 					<a
 						href={site.github}
 						target="_blank"
 						rel="noreferrer"
-						className="hidden text-sm text-muted transition-colors hover:text-foreground sm:inline"
+						aria-label="GitHub repository"
+						className="hidden size-9 place-items-center rounded-md border border-border text-muted transition-colors hover:border-border-strong hover:text-foreground sm:grid"
 					>
-						GitHub
+						<GithubIcon className="size-4" />
 					</a>
 					<Link
 						href="/docs/install"
-						className="hidden rounded-md bg-foreground px-3.5 py-1.5 text-sm font-medium text-background transition-colors hover:bg-foreground/90 sm:inline-flex"
+						className="hidden h-9 items-center rounded-md bg-accent px-3.5 text-sm font-medium text-[#14100a] transition-colors hover:bg-accent-strong sm:inline-flex"
 					>
-						Get started
+						Install
 					</Link>
 					<button
 						type="button"
@@ -103,6 +105,12 @@ export function Navbar() {
 						>
 							GitHub
 						</a>
+						<Link
+							href="/docs/install"
+							className="mt-2 inline-flex h-10 items-center justify-center rounded-md bg-accent px-3.5 text-sm font-medium text-[#14100a]"
+						>
+							Install Nixploy
+						</Link>
 					</div>
 				</div>
 			) : null}

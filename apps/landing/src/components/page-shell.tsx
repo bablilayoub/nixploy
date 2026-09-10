@@ -45,11 +45,7 @@ export function PageShell({
 				>
 					{title ? (
 						<div className="mb-12">
-							{eyebrow ? (
-								<p className="mb-3 font-mono text-xs tracking-[0.18em] text-muted uppercase">
-									{eyebrow}
-								</p>
-							) : null}
+							{eyebrow ? <p className="mb-3 eyebrow">{eyebrow}</p> : null}
 							<h1 className="font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
 								{title}
 							</h1>
@@ -72,7 +68,7 @@ export function PageShell({
 					<div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
 						<Link
 							href="/docs/install"
-							className="inline-flex h-11 items-center rounded-md bg-foreground px-5 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
+							className="inline-flex h-11 items-center rounded-md bg-accent px-5 text-sm font-medium text-[#14100a] transition-colors hover:bg-accent-strong"
 						>
 							Install guide
 						</Link>

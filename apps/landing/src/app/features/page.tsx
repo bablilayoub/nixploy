@@ -23,7 +23,7 @@ export default function FeaturesPage() {
 				{/* Hero */}
 				<header className="border-b border-border">
 					<div className="mx-auto max-w-6xl px-5 pt-28 pb-14 sm:px-6 sm:pt-36 sm:pb-16">
-						<p className="font-mono text-xs tracking-[0.18em] text-muted uppercase">Features</p>
+						<p className="eyebrow">Features</p>
 						<h1 className="mt-3 max-w-3xl font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
 							The full platform — not a thin wrapper around Docker.
 						</h1>
@@ -80,9 +80,7 @@ export default function FeaturesPage() {
 						<div className="mx-auto max-w-6xl px-5 py-16 sm:px-6 sm:py-20">
 							<div className="grid gap-12 lg:grid-cols-12 lg:gap-14">
 								<div className={section.imageSrc ? "lg:col-span-5" : "lg:col-span-4"}>
-									<p className="font-mono text-xs tracking-[0.18em] text-muted uppercase">
-										{section.eyebrow}
-									</p>
+									<p className="eyebrow">{section.eyebrow}</p>
 									<h2
 										id={`${section.id}-title`}
 										className="mt-3 font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl"
@@ -142,9 +140,7 @@ export default function FeaturesPage() {
 				<section className="border-b border-border" aria-labelledby="why-nixploy">
 					<div className="mx-auto max-w-6xl px-5 py-16 sm:px-6 sm:py-20">
 						<div className="max-w-2xl">
-							<p className="font-mono text-xs tracking-[0.18em] text-muted uppercase">
-								Own the stack
-							</p>
+							<p className="eyebrow">Own the stack</p>
 							<h2
 								id="why-nixploy"
 								className="mt-3 font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl"
@@ -205,7 +201,7 @@ export default function FeaturesPage() {
 						<div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
 							<Link
 								href="/docs/install"
-								className="inline-flex h-11 items-center rounded-md bg-foreground px-5 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
+								className="inline-flex h-11 items-center rounded-md bg-accent px-5 text-sm font-medium text-[#14100a] transition-colors hover:bg-accent-strong"
 							>
 								Install guide
 							</Link>

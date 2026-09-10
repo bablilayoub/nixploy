@@ -1,12 +1,14 @@
-import { Capabilities } from "@/components/capabilities";
-import { Cta } from "@/components/cta";
-import { DeployFlow } from "@/components/deploy-flow";
-import { Faq } from "@/components/faq";
 import { Footer } from "@/components/footer";
-import { Hero } from "@/components/hero";
+import { Automation } from "@/components/home/automation";
+import { Bento } from "@/components/home/bento";
+import { Cta } from "@/components/home/cta";
+import { Faq } from "@/components/home/faq";
+import { Hero } from "@/components/home/hero";
+import { PanelPreview } from "@/components/home/panel-preview";
+import { Pipeline } from "@/components/home/pipeline";
+import { Stats } from "@/components/home/stats";
+import { Templates } from "@/components/home/templates";
 import { Navbar } from "@/components/navbar";
-import { ProductPanels } from "@/components/product-panels";
-import { TemplateStrip } from "@/components/template-strip";
 
 export default function Home() {
 	return (
@@ -16,10 +18,12 @@ export default function Home() {
 				<Navbar />
 				<main>
 					<Hero />
-					<ProductPanels />
-					<DeployFlow />
-					<Capabilities />
-					<TemplateStrip />
+					<Stats />
+					<PanelPreview />
+					<Pipeline />
+					<Bento />
+					<Templates />
+					<Automation />
 					<Faq />
 					<Cta />
 				</main>

@@ -41,3 +41,7 @@ pnpm-debug.log*
 .vscode/
 *.swp
 drizzle/meta/_journal.json.bak
+
+# Next.js 16 dev server writes these agent guides next to each app
+apps/*/AGENTS.md
+apps/*/CLAUDE.md

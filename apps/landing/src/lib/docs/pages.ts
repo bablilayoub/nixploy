@@ -46,7 +46,7 @@ export const docsPages: DocPage[] = [
 				type: "ul",
 				items: [
 					"NIXPLOY_VERSION / NIXPLOY_IMAGE — pin or override the app image",
-					"NIXPLOY_PORT — host port (default 3000)",
+					"NIXPLOY_PORT — opt-in extra host port for plain-HTTP access (unset = Traefik only)",
 					"NIXPLOY_CONFIG_DIR — config root (default /etc/nixploy)",
 					"NIXPLOY_GITHUB_TOKEN — private-repo install/update",
 					"NIXPLOY_SKIP_DOCKER_INSTALL=1 — use an existing Docker daemon",

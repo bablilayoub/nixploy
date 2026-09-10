@@ -61,7 +61,7 @@ function Block({ block }: { block: DocBlock }) {
 export function DocBody({ page }: { page: DocPage }) {
 	return (
 		<article>
-			<p className="mb-3 font-mono text-xs tracking-[0.18em] text-muted uppercase">Docs</p>
+			<p className="mb-3 eyebrow">Docs</p>
 			<h1 className="font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
 				{page.title}
 			</h1>

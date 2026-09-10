@@ -54,9 +54,7 @@ export function DocsShell({
 			{/* Mobile doc nav */}
 			<div className="border-t border-border md:hidden">
 				<details className="mx-auto max-w-6xl px-5 py-4">
-					<summary className="cursor-pointer font-mono text-xs tracking-[0.18em] text-muted uppercase">
-						Docs menu
-					</summary>
+					<summary className="cursor-pointer eyebrow">Docs menu</summary>
 					<nav className="mt-4 grid gap-4" aria-label="Documentation mobile">
 						{docsNav.map((group) => (
 							<div key={group.title}>

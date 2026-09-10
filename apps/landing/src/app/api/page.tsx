@@ -16,7 +16,7 @@ export default function ApiPage() {
 	return (
 		<DocsShell activeHref="/api">
 			<article>
-				<p className="mb-3 font-mono text-xs tracking-[0.18em] text-muted uppercase">API</p>
+				<p className="mb-3 eyebrow">API</p>
 				<h1 className="font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
 					REST API reference
 				</h1>
