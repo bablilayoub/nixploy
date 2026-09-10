@@ -28,7 +28,14 @@ actually needs:
 > at a private bucket with tight IAM.
 
 Retention (`keepLatestCount`) prunes each artifact stream independently, same
-as database backups.
+as database backups. Instance backups can only be created, edited or run by
+the **instance admin** (the first user), never by an org admin — the dump
+contains every tenant.
+
+Every dump pipeline captures the producer's exit status (a failed `pg_dump`
+or `tar` fails the run instead of uploading an empty archive) and rejects
+gzip files that decompress to zero bytes. Restores stream the archive over
+stdin, so large dumps are not limited by the shell's argument size.
 
 ## How the dump runs
 

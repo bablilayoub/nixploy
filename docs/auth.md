@@ -115,6 +115,20 @@ Labels and descriptions live in `CAPABILITY_CATALOG`
 
 ## API keys (REST & CLI)
 
+Rate limits: every API-key request is limited **per key** (120/min) plus a
+per-IP bucket that is only consumed by failed verifications; webhook and
+public setup endpoints keep per-IP buckets. Set `TRUSTED_PROXIES=1` (the
+installer does) or a comma-separated CIDR list so the real client IP is read
+from `X-Forwarded-For`/`X-Real-IP` behind Traefik — the same value feeds
+better-auth's own limiter.
+
+Invitations over API keys: `organization.inviteMember` creates the invitation
+row directly, so CI and MCP clients can invite. The invitee's sign-up must
+carry the header `x-nixploy-invitation-id: <invitationId>` with a pending,
+unexpired invitation for that exact email (the accept-invitation page sends
+it); any other public sign-up is refused once the first admin exists.
+
+
 - Every tRPC procedure is also exposed as REST under `/api/<router>.<procedure>`
   (documented at `/swagger`; see [api.md](./api.md)) and is reachable from
   `@nixploy/cli`.

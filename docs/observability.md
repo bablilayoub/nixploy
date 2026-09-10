@@ -45,6 +45,17 @@ download-as-`.txt`.
   draw dashed peak markers; services with multiple replicas get a
   per-replica breakdown (`monitoring.replicaStats`).
 
+Sampling runs four services at a time locally and every managed server in
+parallel; the remote timeout scales with the number of services (15 s + 3 s
+per service, clamped to 25–180 s). A stopped service at the end of the SSH
+batch no longer discards the whole pass.
+
+Alert rules on `restarts` count the running container's RestartCount plus
+Swarm tasks that exited non-zero in the last hour (Swarm replaces tasks
+rather than restarting in place); `deploy_failure_streak` counts consecutive
+failed deployments. Both are only computed while an enabled rule references
+them.
+
 ## Threshold alerts
 
 - Org-level CPU/memory thresholds live in Settings → Platform → Host health

@@ -55,6 +55,6 @@ up automatically — no frontend changes needed.
 `DeployTemplateDialog` asks for project + environment, the declared env vars
 (`generate: true` values are filled with random secrets), and an optional
 domain. It creates a **compose** service with the template's compose file,
-env, and optional domain, then queues its first deployment. The server side
+env, and optional domain (subject to the org's service quota), then queues its first deployment. The server side
 is the standard compose create + deploy path — templates carry no special
 runtime logic.

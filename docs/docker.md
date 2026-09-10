@@ -21,6 +21,15 @@ host or any managed server (selector in the header).
   managed servers.
 - Reads need any org membership; **mutations require the admin role**
   (`assertOrgRole` in `modules/projects`, see `docs/audit.md`).
+- Cluster-wide procedures — `nodes`, `nodeUpdate`, `swarmServices`, system
+  prune — require the **instance admin** even when a managed server is
+  selected: every remote joins the primary Swarm, so a manager-role remote's
+  engine is the whole cluster. On hosts that are not a Swarm manager the
+  Swarm tab shows its "inactive" state instead of an error.
+- Volume prune/remove never touch volumes owned by services: `<appName>-data`
+  for every database row, `mounts.volumeName`, `<composeApp>_*` prefixes and
+  any source mounted by a Swarm service (`modules/docker/prune.ts`). Those rows
+  are returned with `protected: true`.
 - Container logs/terminal reuse the existing `/ws/logs` and `/ws/terminal`
   endpoints — `resolveLocalContainer` falls back to container-name lookup,
   so any container name works, not just Nixploy `appName`s.

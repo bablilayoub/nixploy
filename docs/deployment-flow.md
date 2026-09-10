@@ -63,17 +63,29 @@ of `/ws/deployment` (`logger.ts`), which the UI renders live.
 
 ## Compose deploy pipeline
 
-`modules/compose/service.ts`: the raw compose file + `.env` are written under
-the app's config dir, then `docker stack deploy` (compose type `stack`) or
-`docker compose up` runs with project name `<appName>`. Service discovery for
+`modules/compose/service.ts`: the compose file is **rendered** first —
+every `${VAR}` / `$VAR` reference is resolved from the merged env
+(`interpolateComposeString`), the safety checks run on the raw *and* the
+rendered spec, and the result is written to `docker-compose.nixploy.yml`
+next to the source (`.env` values are quote-stripped, nothing else is
+interpreted). `buildComposeDeployCommand` then runs `docker stack deploy`
+(compose type `stack`) or `docker compose up` with project name `<appName>`
+under `env -i` so tenant variables never reach the docker CLI's process
+environment. Every service is attached to a private `<appName>-net`; only
+services that have a domain also join `nixploy-network` with the alias
+`<appName>-<service>` (added at runtime when a domain is created later). Service discovery for
 domains uses `<appName>-<service>-1` container names. `resyncComposeDomains`
 writes Traefik config per exposed service.
 
 ## Database lifecycle
 
 `modules/databases/engine.ts`: create inserts the row with generated
-credentials (encrypted); deploy creates the container with a named volume and
-optional external port; start/stop/reload map to docker start/stop/restart;
+credentials (encrypted); deploy creates the swarm service with a named
+`<appName>-data` volume (Postgres ≥ 18 gets `PGDATA` inside it) and an
+optional external port; deploy/remove refuse services that do not carry the
+`nixploy.managed` labels, removal waits for the task before dropping the
+volume, and `appName` is frozen once deployed. Mongo replica sets are not
+supported; start/stop/reload map to docker start/stop/restart;
 status (`running`/`stopped`/`error`) comes from container inspection, and
 `buildConnectionUrl` renders the DSN shown in the Connection tab. Backups run
 through `modules/backups` to S3 destinations on schedules.
@@ -105,14 +117,42 @@ through `modules/backups` to S3 destinations on schedules.
   as `awaiting_approval` without a build until an org member approves in the
   UI — repo collaborators bypass the gate (`modules/preview/fork-gate.ts`,
   see [domains-traefik.md](./domains-traefik.md#fork-pull-requests-require-approval)).
-- Rollback (`modules/deployment` + `rollback` router) redeploys the image of
-  a previous successful deployment — same pipeline, no source fetch.
+  A fork's branch does not exist in the base repository, so fork previews
+  build from the provider's PR head ref (`refs/pull/<n>/head` on GitHub and
+  Gitea, `refs/merge-requests/<iid>/head` on GitLab) or, on Bitbucket Cloud,
+  from the fork repository itself; the encoded source lives in
+  `previewDeployments.branch` (`modules/preview/source-ref.ts`). Metadata-only
+  PR edits never rebuild: GitLab `update` events without `oldrev` and Bitbucket
+  `updated` events whose head commit is already checked out are ignored.
+- Preview services (`<app>-pr-<n>`) run the parent's image and merged env but
+  none of its published ports, volumes or file/bind mounts, as a single
+  replica; their Traefik file forwards to the parent domain's container port
+  and carries the parent's basic-auth and redirects.
+- Every terminal deploy status fans out to the organization's notification
+  channels (`emitDeployNotification`: `appDeploy` on success, `appBuildError`
+  on failure; cancellations stay silent). Compose deploys notify too.
+- Rollback (`modules/deployment/rollback.ts`, `rollback` router,
+  `application.rollback`): every successful application deploy pins the image
+  it runs as a `rollback` row. Built images are retagged
+  `appName:<version>` (`version` = first 12 chars of the deployment id;
+  `appName:latest` is overwritten by the next build), docker sources record
+  the registry digest. The newest 5 pins per app are kept; older rows and
+  their local tags are pruned. Rolling back repoints the swarm service at the
+  pinned image — no source fetch, no build — and records a `Rollback`
+  deployment with a short log.
 
 ## Boot & maintenance
 
 - **Boot recovery** (`modules/deployment/recovery.ts`): deployments left
   `running` by a restart are marked `error` ("Interrupted…") so the status
-  reconciler is not blocked by a deployment that can never finish.
+  reconciler is not blocked by a deployment that can never finish. Interrupted
+  previews land on `previewDeployments.previewStatus = error`; the parent
+  application's status is left alone.
+- **Docker cleanup** (`modules/deployment/cleanup.ts`, cron + manual trigger)
+  prunes dangling images and the BuildKit cache only. Tagged images — a
+  stopped application's `appName:latest`, rollback pins, images pulled for
+  compose stacks — are never pruned: they are the only local copy of built
+  images, and an `image prune -a` broke Start until a full rebuild.
 - **Hourly maintenance cron** (`modules/deployment/maintenance.ts`): tears
   down previews past their `expiresAt`, and prunes deployment log files older
   than 30 days. Deleting an application or compose service also removes its

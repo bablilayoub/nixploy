@@ -56,9 +56,17 @@ internet ─► :80  ─► redirect → :443
   middleware (http→https) and a `websecure` router carries TLS —
   `certResolver: letsencrypt`, an inline custom certificate
   (`tls.certificates`), or the default cert for `certificateType: none`.
-- `internalPath` becomes an `addPrefix` middleware (public `/public/*` →
-  upstream `/internal/*`); redirects and basic auth become named middlewares
-  shared by the app's routers.
+- `internalPath` rewrites the prefix: the public `path` is stripped
+  (`stripPrefix`) and the internal one added (`addPrefix`), so public
+  `/public/*` reaches the container as `/internal/*`; redirects and basic auth
+  become named middlewares shared by the app's routers.
+- The YAML is always written on the Nixploy host, whatever server the app is
+  pinned to: `nixploy-traefik` runs on the primary manager and only its file
+  provider reads the dynamic directory, while `http://<appName>:<port>`
+  resolves cluster-wide through the overlay network's VIP DNS.
+- A host is one shared namespace for the whole instance: `domain.create` /
+  `domain.update` reject (CONFLICT) a host already routed by another
+  organization on any path, and the same host + path on any other service.
 
 ## Localhost / development domains
 

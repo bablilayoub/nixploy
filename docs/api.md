@@ -32,6 +32,14 @@ POST /api/project.create
 
 There is no `/api/v1` prefix.
 
+Flattened GET params are strings; the adapter converts a value to a number or
+boolean **only** when the procedure's Zod schema declares that field as such
+(`packages/server/src/trpc/query-input.ts`), so `?search=2024` stays a string.
+Nested objects go through `?input=<URL-encoded JSON>`.
+
+`/api/openapi.json` and `/swagger` are served to browser sessions only (the
+spec enumerates every procedure); API keys use the endpoints directly.
+
 ## curl examples
 
 ```bash

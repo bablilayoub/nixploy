@@ -98,7 +98,7 @@ Router → module map:
 
 ### `utils/`
 
-`exec.ts` (`execAsync`, `execAsyncRemote`, `execAsyncWithStdin`, TOFU host-key pinning under `<config>/ssh/known_hosts`), `rate-limit.ts` (in-memory sliding window; trusts `X-Forwarded-For` only with `TRUSTED_PROXIES`), `public-url.ts` (base URL + `redactSensitiveText`), `validators.ts` (docker image refs, hostnames, …).
+`exec.ts` (`execAsync`, `execAsyncRemote`, `execAsyncWithStdin` — string or Buffer stdin, TOFU host-key pinning under `<config>/ssh/pinned-hosts/<serverId>.pub` with the legacy `known_hosts/` dir read as fallback; git clones with custom keys use the `<config>/ssh/git_known_hosts` file via `StrictHostKeyChecking=accept-new`), `rate-limit.ts` (in-memory sliding window; trusts `X-Forwarded-For` only with `TRUSTED_PROXIES`), `public-url.ts` (base URL + `redactSensitiveText`), `validators.ts` (docker image refs, hostnames, …).
 
 ### `ws/`
 
@@ -138,7 +138,7 @@ logs/<appName>/<deploymentId>.log
 metrics/<appName>.jsonl, metrics/server-<serverId>.jsonl
 cache/buildkit/<appName>  BuildKit cache-from/cache-to
 tools/                    downloaded nixpacks / railpack binaries
-ssh/                      git-over-ssh keys, known_hosts/<serverId>.pub
+ssh/                      git-over-ssh keys (<sshKeyId>.pem), pinned-hosts/<serverId>.pub, git_known_hosts
 ```
 
 Helpers: `modules/deployment/paths.ts` (canonical `getConfigDir`, apps, logs, ssh, cache), `modules/compose/paths.ts`, `modules/traefik/paths.ts` (both re-export `getConfigDir`), `modules/application/paths.ts` (files dir, canonical `getSwarmNetwork`, wildcard domain).
