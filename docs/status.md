@@ -63,6 +63,7 @@ Image pins to review periodically: `traefik:v3.5.0`, `postgres:17-alpine`, `node
 
 ## Next steps
 
+0. **Work the improvement audit** — [`audits/2026-09/README.md`](./audits/2026-09/README.md): §1 "Do first" (15 small items: 4 security Highs, graceful shutdown, build timeout, queue mutex, health endpoint, pre-upgrade dump, log follower, indexes/retention, atomic Traefik writes, release gate, audit fixes), then product §2, structural §3, refactors §4.
 1. **Merge** `chore/sprint-1-hygiene` then `work/stability-and-landing` into `main`, push, let CI + Docker run; cut a release (`./tools/release.sh paas --bump minor`) — the sweep changes operator-visible behaviour (installer env, compose rendering, remote servers), so `v0.2.0` is the honest number.
 2. **Real multi-node test** of the remote-server path on a second Linux host (join as worker, pin an app + a database, deploy, stop/start, remove server).
 3. Mirror the operator-facing doc changes onto the landing docs.
@@ -72,4 +73,5 @@ Image pins to review periodically: `traefik:v3.5.0`, `postgres:17-alpine`, `node
 
 - **2026-09-10 (audit)** — Initial audit. Added `CLAUDE.md`, `docs/codebase-map.md`, this file.
 - **2026-09-10 (sprint 1, branch `chore/sprint-1-hygiene`)** — hygiene, routine bumps, better-auth 1.7.3, Next 16.3.4 + `src/proxy.ts`, landing → Next 16, commander 15, vitest 5. All gates green.
+- **2026-09-11 (improvement audit)** — six parallel read-only audits (security posture, architecture/scale, product gaps vs Dokploy/Coolify, ops/DX, code health, panel UX) → `docs/audits/2026-09/` with a sequenced plan in its README. Nothing fixed yet.
 - **2026-09-10/11 (stability sweep + landing, branch `work/stability-and-landing`)** — 7 parallel audits → fixes per scope (see "What the stability sweep did"), remote-server redesign (`swarm_node_id` + `node.id` pinning, migration 0018), landing rebuilt then redesigned monochrome (2026-09-11), docs updated. Gates: typecheck 0/0, 886 tests, Biome clean, builds green, REST e2e loop 58/59 (resume artifact), UI driven light + dark. Nothing pushed.

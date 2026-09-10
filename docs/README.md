@@ -29,6 +29,7 @@ Guides for running and developing Nixploy.
 | [observability.md](./observability.md) | Metrics, logs, incidents, uptime |
 | [instance-backup.md](./instance-backup.md) | Instance self-backup (DB + config), restore, Redis |
 | [templates.md](./templates.md) | Adding and validating compose templates |
+| [audits/2026-09/](./audits/2026-09/README.md) | Improvement audit (security, architecture, product gaps, ops/DX, code health, UX) with a sequenced plan |
 
 ## Feature checklist (shipped)
 
