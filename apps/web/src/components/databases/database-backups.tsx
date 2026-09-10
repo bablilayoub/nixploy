@@ -6,6 +6,7 @@ import { DatabaseBackup, Loader2, Pencil, Play, Plus, RotateCcw, Trash2 } from "
 import { useState } from "react";
 import { toast } from "sonner";
 import type { BackupDatabaseType } from "@/components/databases/database-types";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
@@ -16,7 +17,6 @@ import {
 	AlertDialogFooter,
 	AlertDialogHeader,
 	AlertDialogTitle,
-	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 interface DatabaseBackupsProps {
@@ -77,6 +78,9 @@ const emptyForm = (databaseName: string): BackupFormState => ({
 export function DatabaseBackups({ databaseType, serviceId, databaseName }: DatabaseBackupsProps) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	const canManage = can("backups.manage");
+	const manageHint = canManage ? undefined : capabilityHint("backups.manage");
 
 	const listInput = { serviceId, databaseType };
 	const backupsQuery = useQuery(trpc.backup.all.queryOptions(listInput));
@@ -106,6 +110,7 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 		trpc.backup.remove.mutationOptions({
 			onSuccess: () => {
 				toast.success("Backup deleted");
+				setDeleteTarget(null);
 				invalidate();
 			},
 			onError,
@@ -120,6 +125,7 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editingId, setEditingId] = useState<string | null>(null);
+	const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 	const [form, setForm] = useState<BackupFormState>(() => emptyForm(databaseName));
 
 	const openCreate = () => {
@@ -147,7 +153,12 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 				title="Backups"
 				description="Scheduled dumps uploaded to an S3 destination. Restore from any stored dump."
 				actions={
-					<Button size="sm" onClick={openCreate} disabled={destinations.length === 0}>
+					<Button
+						size="sm"
+						onClick={openCreate}
+						disabled={destinations.length === 0 || !canManage}
+						title={manageHint}
+					>
 						<Plus className="size-4" />
 						Create backup
 					</Button>
@@ -220,7 +231,8 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 									<TableCell>
 										<Switch
 											checked={backup.enabled}
-											disabled={updateMutation.isPending}
+											disabled={updateMutation.isPending || !canManage}
+											title={manageHint}
 											onCheckedChange={(enabled) =>
 												updateMutation.mutate({ backupId: backup.backupId, enabled })
 											}
@@ -235,52 +247,38 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 												variant="ghost"
 												size="icon-sm"
 												aria-label="Run backup now"
-												title="Run now"
-												disabled={runMutation.isPending}
+												title={manageHint ?? "Run now"}
+												disabled={runMutation.isPending || !canManage}
 												onClick={() => runMutation.mutate({ backupId: backup.backupId })}
 											>
-												<Play className="size-4" />
+												{runMutation.isPending &&
+												runMutation.variables?.backupId === backup.backupId ? (
+													<Loader2 className="size-4 animate-spin" />
+												) : (
+													<Play className="size-4" />
+												)}
 											</Button>
-											<RestoreDialog backupId={backup.backupId} />
+											<RestoreDialog backupId={backup.backupId} canManage={canManage} />
 											<Button
 												variant="ghost"
 												size="icon-sm"
 												aria-label="Edit backup"
-												title="Edit"
+												title={manageHint ?? "Edit"}
+												disabled={!canManage}
 												onClick={() => openEdit(backup)}
 											>
 												<Pencil className="size-4" />
 											</Button>
-											<AlertDialog>
-												<AlertDialogTrigger asChild>
-													<Button
-														variant="ghost"
-														size="icon-sm"
-														aria-label="Delete backup"
-														title="Delete"
-													>
-														<Trash2 className="size-4 text-destructive" />
-													</Button>
-												</AlertDialogTrigger>
-												<AlertDialogContent>
-													<AlertDialogHeader>
-														<AlertDialogTitle>Delete backup?</AlertDialogTitle>
-														<AlertDialogDescription>
-															This removes the scheduled backup and cancels its cron job. Stored
-															dumps in the destination are kept.
-														</AlertDialogDescription>
-													</AlertDialogHeader>
-													<AlertDialogFooter>
-														<AlertDialogCancel>Cancel</AlertDialogCancel>
-														<AlertDialogAction
-															variant="destructive"
-															onClick={() => removeMutation.mutate({ backupId: backup.backupId })}
-														>
-															Delete
-														</AlertDialogAction>
-													</AlertDialogFooter>
-												</AlertDialogContent>
-											</AlertDialog>
+											<Button
+												variant="ghost"
+												size="icon-sm"
+												aria-label="Delete backup"
+												title={manageHint ?? "Delete"}
+												disabled={!canManage}
+												onClick={() => setDeleteTarget(backup.backupId)}
+											>
+												<Trash2 className="size-4 text-destructive" />
+											</Button>
 										</div>
 									</TableCell>
 								</TableRow>
@@ -289,6 +287,36 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 					</Table>
 				)}
 			</SettingsSection>
+
+			<AlertDialog
+				open={deleteTarget !== null}
+				onOpenChange={(open) => !open && setDeleteTarget(null)}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Delete backup?</AlertDialogTitle>
+						<AlertDialogDescription>
+							This removes the scheduled backup and cancels its cron job. Stored dumps in the
+							destination are kept.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel disabled={removeMutation.isPending}>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							variant="destructive"
+							disabled={removeMutation.isPending}
+							onClick={(event) => {
+								// Keep the dialog open (with its spinner) until the mutation settles.
+								event.preventDefault();
+								if (deleteTarget) removeMutation.mutate({ backupId: deleteTarget });
+							}}
+						>
+							{removeMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+							Delete
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 
 			<BackupFormDialog
 				open={dialogOpen}
@@ -478,7 +506,7 @@ function BackupFormDialog({
 	);
 }
 
-function RestoreDialog({ backupId }: { backupId: string }) {
+function RestoreDialog({ backupId, canManage }: { backupId: string; canManage: boolean }) {
 	const trpc = useTRPC();
 	const [open, setOpen] = useState(false);
 	const [key, setKey] = useState<string>("");
@@ -511,7 +539,8 @@ function RestoreDialog({ backupId }: { backupId: string }) {
 				variant="ghost"
 				size="icon-sm"
 				aria-label="Restore backup"
-				title="Restore"
+				title={canManage ? "Restore" : capabilityHint("backups.manage")}
+				disabled={!canManage}
 				onClick={() => setOpen(true)}
 			>
 				<RotateCcw className="size-4" />
@@ -527,12 +556,21 @@ function RestoreDialog({ backupId }: { backupId: string }) {
 					<Label>Stored dump</Label>
 					{keysQuery.isLoading ? (
 						<Skeleton className="h-9 w-full" />
+					) : keysQuery.isError ? (
+						// An S3 credential/connectivity failure must not read as "no dumps".
+						<div className="flex flex-col items-start gap-2 rounded-md border border-dashed p-3">
+							<p className="text-sm font-medium">Could not list stored dumps</p>
+							<p className="text-sm text-muted-foreground">{keysQuery.error.message}</p>
+							<Button variant="outline" size="sm" onClick={() => keysQuery.refetch()}>
+								Retry
+							</Button>
+						</div>
 					) : keys.length === 0 ? (
 						<p className="text-sm text-muted-foreground">
 							No dumps found in the destination for this backup yet.
 						</p>
 					) : (
-						<Select value={key} onValueChange={setKey}>
+						<Select value={key} onValueChange={setKey} disabled={restoreMutation.isPending}>
 							<SelectTrigger className="w-full">
 								<SelectValue placeholder="Select a dump to restore" />
 							</SelectTrigger>

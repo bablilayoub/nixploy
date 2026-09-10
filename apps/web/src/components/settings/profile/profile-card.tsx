@@ -1,9 +1,11 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { SESSIONS_QUERY_KEY } from "@/components/settings/profile/sessions-card";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +22,13 @@ import { cn } from "@/lib/utils";
 
 export function ProfileCard() {
 	const { data: session, refetch } = useSession();
-	const user = session?.user;
+	// The session store can already be populated when React hydrates while
+	// the server rendered without one — initials, name and email would then
+	// differ between the two and React re-renders the whole tree. Use the
+	// session only after mount so both paints agree.
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => setMounted(true), []);
+	const user = mounted ? session?.user : undefined;
 	const [pending, setPending] = useState(false);
 	const [name, setName] = useState(user?.name ?? "");
 
@@ -155,6 +163,7 @@ export function ProfileCard() {
 }
 
 export function ChangePasswordCard() {
+	const queryClient = useQueryClient();
 	const [currentPassword, setCurrentPassword] = useState("");
 	const [newPassword, setNewPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
@@ -181,6 +190,9 @@ export function ChangePasswordCard() {
 		setCurrentPassword("");
 		setNewPassword("");
 		setConfirmPassword("");
+		// `revokeOtherSessions` just signed every other device out — refresh the
+		// Active sessions card on this page so it stops listing them.
+		await queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
 	}
 
 	return (

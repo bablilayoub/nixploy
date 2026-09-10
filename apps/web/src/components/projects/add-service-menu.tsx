@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -93,24 +93,41 @@ const DATABASE_CREDENTIAL_FIELDS: Record<DatabaseType, CredentialField[]> = {
 	redis: [{ key: "databasePassword", label: "Password", secret: true }],
 };
 
+type ServiceDialog = "application" | "compose" | DatabaseType;
+
 export function AddServiceMenu({
 	projectId,
 	environmentId,
 	environmentName,
-	initialDialog,
+	openDialog,
+	onOpenDialogConsumed,
+	disabled = false,
+	disabledReason,
 }: {
 	projectId: string;
 	environmentId: string;
 	environmentName: string;
-	/** Seed the open dialog on mount (e.g. from a ?new=application deep link). */
-	initialDialog?: "application" | "compose" | DatabaseType;
+	/**
+	 * Request to open a create dialog (e.g. from a ?new=application deep
+	 * link). Reacts to changes, not only to the mount; the parent clears it via
+	 * `onOpenDialogConsumed` so the same request can fire again later.
+	 */
+	openDialog?: ServiceDialog | null;
+	onOpenDialogConsumed?: () => void;
+	/** Member lacks `service.create` — the menu stays visible but inert. */
+	disabled?: boolean;
+	disabledReason?: string;
 }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 
-	const [dialog, setDialog] = useState<"application" | "compose" | DatabaseType | null>(
-		initialDialog ?? null,
-	);
+	const [dialog, setDialog] = useState<ServiceDialog | null>(null);
+
+	useEffect(() => {
+		if (!openDialog) return;
+		setDialog(openDialog);
+		onOpenDialogConsumed?.();
+	}, [openDialog, onOpenDialogConsumed]);
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
 	const [composeType, setComposeType] = useState<"docker-compose" | "stack">("docker-compose");
@@ -271,7 +288,7 @@ export function AddServiceMenu({
 		<>
 			<DropdownMenu>
 				<DropdownMenuTrigger asChild>
-					<Button>
+					<Button disabled={disabled} title={disabled ? disabledReason : undefined}>
 						<Plus className="size-4" />
 						Add Service
 						<ChevronDown className="size-4" />
@@ -373,7 +390,11 @@ export function AddServiceMenu({
 								</div>
 							))}
 						<DialogFooter>
-							<Button type="submit" disabled={!name.trim() || isPending}>
+							<Button
+								type="submit"
+								disabled={!name.trim() || isPending || disabled}
+								title={disabled ? disabledReason : undefined}
+							>
 								{isPending ? "Creating..." : "Create"}
 							</Button>
 						</DialogFooter>

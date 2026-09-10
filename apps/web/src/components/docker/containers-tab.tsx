@@ -47,7 +47,14 @@ import {
 import { TableCard } from "@/components/ui/table-card";
 import { useTRPC } from "@/lib/trpc";
 
-import { DockerError, type DockerTabProps } from "./docker-view";
+import { DockerError, type DockerTabProps, invalidateDockerQueries } from "./docker-view";
+
+const ACTION_DONE: Record<"start" | "stop" | "restart" | "remove", string> = {
+	start: "Container started",
+	stop: "Container stopped",
+	restart: "Container restarted",
+	remove: "Container removed",
+};
 
 type ContainerRow = {
 	ID: string;
@@ -90,11 +97,14 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 	const actionMutation = useMutation(
 		trpc.docker.containerAction.mutationOptions({
 			onSuccess: (_data, variables) => {
-				toast.success(
-					variables.action === "remove" ? "Container removed" : `Container ${variables.action}ed`,
-				);
+				toast.success(ACTION_DONE[variables.action]);
 				setRemoving(null);
-				invalidate();
+				if (variables.action === "remove") {
+					// Disk usage on the System tab changes too.
+					void invalidateDockerQueries(queryClient, trpc, serverId);
+				} else {
+					invalidate();
+				}
 			},
 			onError: (error) => toast.error(error.message),
 		}),

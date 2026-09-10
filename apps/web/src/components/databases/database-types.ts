@@ -99,6 +99,10 @@ export type DatabaseIdInput = any;
  * `buildDatabaseRouter` in @nixploy/server); only the id field name differs.
  */
 export interface DatabaseRouterFacade {
+	/** Project services list — invalidate its path key after delete/rename. */
+	all: {
+		pathKey: () => AnyRpc;
+	};
 	one: {
 		queryOptions: (input: AnyRpc, opts?: AnyRpc) => AnyRpc;
 		queryKey: (input?: AnyRpc) => AnyRpc;

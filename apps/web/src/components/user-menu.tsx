@@ -43,7 +43,12 @@ export function UserMenu() {
 
 	const handleSignOut = async () => {
 		try {
-			await signOut();
+			// better-auth resolves with `{ error }` instead of throwing.
+			const { error } = await signOut();
+			if (error) {
+				toast.error(error.message ?? "Failed to sign out");
+				return;
+			}
 			queryClient.clear();
 			router.push("/login");
 			router.refresh();

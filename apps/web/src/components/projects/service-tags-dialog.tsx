@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
+import { capabilityHint } from "@/components/services/capability-hint";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -15,6 +15,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { ServiceEntry } from "./services-table";
 
@@ -30,6 +31,8 @@ export function ServiceTagsDialog({
 }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	const canManage = can("tags.manage");
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 
 	const tagsQuery = useQuery({
@@ -99,7 +102,8 @@ export function ServiceTagsDialog({
 					</Button>
 					<Button
 						type="button"
-						disabled={saveMutation.isPending || (tagsQuery.data?.length ?? 0) === 0}
+						disabled={saveMutation.isPending || (tagsQuery.data?.length ?? 0) === 0 || !canManage}
+						title={canManage ? undefined : capabilityHint("tags.manage")}
 						onClick={() =>
 							saveMutation.mutate({
 								type: service.type,

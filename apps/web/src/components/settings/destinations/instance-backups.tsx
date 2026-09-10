@@ -3,8 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { DatabaseBackup, Loader2, Pencil, Play, Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { QueryState } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +37,8 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/use-capabilities";
+import { INSTANCE_ADMIN_HINT, missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 /** The `database` column is informational for instance backups (DATABASE_URL is authoritative). */
@@ -60,6 +63,21 @@ const emptyForm: InstanceBackupFormState = {
 export function InstanceBackups() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	// Instance (web-server) backups dump the platform itself: every write on
+	// them needs `backups.manage` plus the instance-admin role.
+	const { can, isInstanceAdmin: sessionIsInstanceAdmin } = useCapabilities();
+	// The session role is only known client-side and can already be cached
+	// when React hydrates — ignore it until mounted so the server-rendered
+	// `disabled`/`title` attributes match the first client paint.
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => setMounted(true), []);
+	const isInstanceAdmin = mounted && sessionIsInstanceAdmin;
+	const canManage = can("backups.manage") && isInstanceAdmin;
+	const manageHint = !can("backups.manage")
+		? missingCapabilityHint("backups.manage")
+		: !isInstanceAdmin
+			? INSTANCE_ADMIN_HINT
+			: undefined;
 
 	const listInput = { databaseType: "web-server" as const };
 	const backupsQuery = useQuery(trpc.backup.all.queryOptions(listInput));
@@ -129,26 +147,47 @@ export function InstanceBackups() {
 				title="Instance backups"
 				description="Scheduled dumps of this Nixploy instance itself — the platform database plus the config directory (Traefik configs, certificates). Restore is manual, see docs/instance-backup.md."
 				actions={
-					<Button size="sm" onClick={openCreate} disabled={destinations.length === 0}>
+					<Button
+						size="sm"
+						onClick={openCreate}
+						disabled={!canManage || destinations.length === 0}
+						title={
+							manageHint ??
+							(destinations.length === 0 ? "Add a backup destination first" : undefined)
+						}
+					>
 						<Plus className="size-4" />
 						Create instance backup
 					</Button>
 				}
 			>
-				{backupsQuery.isLoading ? (
-					<div className="space-y-2">
-						<Skeleton className="h-10 w-full" />
-						<Skeleton className="h-10 w-full" />
-					</div>
-				) : backups.length === 0 ? (
-					<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-10 text-center">
-						<DatabaseBackup className="size-8 text-muted-foreground" />
-						<p className="text-sm font-medium">No instance backups yet</p>
-						<p className="text-sm text-muted-foreground">
-							Protect the platform itself so a failed host does not take your setup with it.
-						</p>
-					</div>
-				) : (
+				{destinationsQuery.isError && (
+					<p className="text-sm text-destructive">
+						Could not load backup destinations: {destinationsQuery.error.message}
+					</p>
+				)}
+				<QueryState
+					isPending={backupsQuery.isPending}
+					isError={backupsQuery.isError}
+					error={backupsQuery.error}
+					onRetry={() => void backupsQuery.refetch()}
+					skeleton={
+						<div className="space-y-2">
+							<Skeleton className="h-10 w-full" />
+							<Skeleton className="h-10 w-full" />
+						</div>
+					}
+					isEmpty={backups.length === 0}
+					empty={
+						<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-10 text-center">
+							<DatabaseBackup className="size-8 text-muted-foreground" />
+							<p className="text-sm font-medium">No instance backups yet</p>
+							<p className="text-sm text-muted-foreground">
+								Protect the platform itself so a failed host does not take your setup with it.
+							</p>
+						</div>
+					}
+				>
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -175,7 +214,8 @@ export function InstanceBackups() {
 									<TableCell>
 										<Switch
 											checked={backup.enabled}
-											disabled={updateMutation.isPending}
+											disabled={!canManage || updateMutation.isPending}
+											title={manageHint}
 											onCheckedChange={(enabled) =>
 												updateMutation.mutate({ backupId: backup.backupId, enabled })
 											}
@@ -190,8 +230,12 @@ export function InstanceBackups() {
 												variant="ghost"
 												size="icon-sm"
 												aria-label="Run instance backup now"
-												title="Run now"
-												disabled={runMutation.isPending}
+												title={manageHint ?? "Run now"}
+												disabled={
+													!canManage ||
+													(runMutation.isPending &&
+														runMutation.variables?.backupId === backup.backupId)
+												}
 												onClick={() => runMutation.mutate({ backupId: backup.backupId })}
 											>
 												<Play className="size-4" />
@@ -200,7 +244,8 @@ export function InstanceBackups() {
 												variant="ghost"
 												size="icon-sm"
 												aria-label="Edit instance backup"
-												title="Edit"
+												title={manageHint ?? "Edit"}
+												disabled={!canManage}
 												onClick={() => openEdit(backup)}
 											>
 												<Pencil className="size-4" />
@@ -208,8 +253,9 @@ export function InstanceBackups() {
 											<ConfirmDeleteDialog
 												title="Delete instance backup?"
 												description="This removes the scheduled backup and cancels its cron job. Stored archives in the destination are kept."
-												isPending={removeMutation.isPending}
-												onConfirm={() => removeMutation.mutate({ backupId: backup.backupId })}
+												disabled={!canManage}
+												disabledReason={manageHint}
+												onConfirm={() => removeMutation.mutateAsync({ backupId: backup.backupId })}
 											/>
 										</div>
 									</TableCell>
@@ -217,7 +263,7 @@ export function InstanceBackups() {
 							))}
 						</TableBody>
 					</Table>
-				)}
+				</QueryState>
 			</SettingsSection>
 
 			<InstanceBackupFormDialog

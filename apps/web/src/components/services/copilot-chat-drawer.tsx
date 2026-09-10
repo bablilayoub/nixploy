@@ -18,9 +18,15 @@ import {
 	SheetTrigger,
 } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+import { capabilityHint } from "./capability-hint";
+
+/** `id` is a per-session counter so repeated identical messages keep distinct React keys. */
+type ChatMessage = { id: number; role: "user" | "assistant"; content: string };
+
+let nextMessageId = 1;
 
 type ProposedAction =
 	| { type: "redeploy" | "deploy" | "start" | "stop"; label: string }
@@ -53,6 +59,8 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 	const router = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
+	const { can } = useCapabilities();
+	const canChat = can("ai.use");
 	const [open, setOpen] = useState(false);
 	const [input, setInput] = useState("");
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -85,12 +93,29 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 	const chat = useMutation(
 		trpc.ai.chat.mutationOptions({
 			onSuccess: (result) => {
-				setMessages((prev) => [...prev, { role: "assistant", content: result.reply }]);
+				setMessages((prev) => [
+					...prev,
+					{ id: nextMessageId++, role: "assistant", content: result.reply },
+				]);
 				setPendingActions((result.proposedActions ?? []) as ProposedAction[]);
 			},
 			onError: (error) => toast.error(error.message),
 		}),
 	);
+
+	/** Capability the server checks for a proposed action. */
+	const actionCapability = (action: ProposedAction): string => {
+		switch (action.type) {
+			case "deploy":
+			case "redeploy":
+				return "service.deploy";
+			case "start":
+			case "stop":
+				return "service.runtime";
+			case "applyComposeDraft":
+				return "service.write";
+		}
+	};
 
 	const appDeploy = useMutation(trpc.application.deploy.mutationOptions({}));
 	const appRedeploy = useMutation(trpc.application.redeploy.mutationOptions({}));
@@ -191,12 +216,15 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 
 	const send = (contentOverride?: string) => {
 		const content = (contentOverride ?? input).trim();
-		if (!content || chat.isPending || !aiEnabled) return;
-		const next: ChatMessage[] = [...messages, { role: "user", content }];
+		if (!content || chat.isPending || !aiEnabled || !canChat) return;
+		const next: ChatMessage[] = [...messages, { id: nextMessageId++, role: "user", content }];
 		setMessages(next);
 		setInput("");
 		setPendingActions([]);
-		chat.mutate({ ...chatPayload, messages: next.slice(-16) });
+		chat.mutate({
+			...chatPayload,
+			messages: next.slice(-16).map(({ role, content: text }) => ({ role, content: text })),
+		});
 	};
 
 	const kindLabel = target.type === "application" ? "application" : "compose stack";
@@ -261,9 +289,10 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 									<button
 										key={suggestion}
 										type="button"
-										className="rounded-md border bg-muted/30 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60"
+										className="rounded-md border bg-muted/30 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60 disabled:opacity-50"
 										onClick={() => send(suggestion)}
-										disabled={chat.isPending}
+										disabled={chat.isPending || !canChat}
+										title={canChat ? undefined : capabilityHint("ai.use")}
 									>
 										{suggestion}
 									</button>
@@ -273,7 +302,7 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 					)}
 					{messages.map((message) => (
 						<div
-							key={`${message.role}-${message.content.slice(0, 48)}`}
+							key={message.id}
 							className={
 								message.role === "user"
 									? "ml-6 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground"
@@ -299,7 +328,12 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 									key={`${action.type}-${action.label}`}
 									size="sm"
 									variant="secondary"
-									disabled={confirmBusy}
+									disabled={confirmBusy || !can(actionCapability(action))}
+									title={
+										can(actionCapability(action))
+											? undefined
+											: capabilityHint(actionCapability(action))
+									}
 									onClick={() => void confirmAction(action)}
 								>
 									{confirmBusy ? <Loader2 className="size-3 animate-spin" /> : null}

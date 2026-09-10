@@ -56,7 +56,13 @@ export function OrgSwitcher({ className }: { className?: string }) {
 	const switchOrganization = async (organizationId: string) => {
 		if (organizationId === active?.id) return;
 		try {
-			await authClient.organization.setActive({ organizationId });
+			// better-auth resolves with `{ error }` instead of throwing — only
+			// refetch the cache once the server actually switched the org.
+			const { error } = await authClient.organization.setActive({ organizationId });
+			if (error) {
+				toast.error(error.message ?? "Failed to switch organization");
+				return;
+			}
 			await queryClient.invalidateQueries();
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : "Failed to switch organization");
@@ -74,7 +80,10 @@ export function OrgSwitcher({ className }: { className?: string }) {
 			});
 			if (error) throw new Error(error.message);
 			if (data?.id) {
-				await authClient.organization.setActive({ organizationId: data.id });
+				const activated = await authClient.organization.setActive({ organizationId: data.id });
+				if (activated.error) {
+					throw new Error(activated.error.message ?? "Failed to switch to the new organization");
+				}
 			}
 			await queryClient.invalidateQueries();
 			toast.success(`Organization "${trimmed}" created`);

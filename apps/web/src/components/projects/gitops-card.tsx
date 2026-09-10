@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link2 } from "lucide-react";
+import { Link2, Loader2 } from "lucide-react";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -29,6 +29,36 @@ type PlanItem = {
 	changes?: string[];
 };
 
+/** One service the server could not apply; the rest of the stack was still written. */
+type ApplyError = { kind: string; name: string; message: string };
+
+function ApplyErrorList({ errors }: { errors: ApplyError[] }) {
+	if (errors.length === 0) return null;
+	return (
+		<div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+			<p className="font-medium text-destructive">
+				{errors.length === 1
+					? "1 service could not be applied"
+					: `${errors.length} services could not be applied`}
+			</p>
+			<p className="text-muted-foreground text-xs">
+				The remaining services were applied; failed ones were not redeployed. Fix the stack and
+				apply again.
+			</p>
+			<ul className="mt-2 space-y-1">
+				{errors.map((error) => (
+					<li key={`${error.kind}-${error.name}`} className="flex flex-col gap-0.5">
+						<span className="font-medium">
+							{error.kind}: {error.name}
+						</span>
+						<span className="text-muted-foreground text-xs">{error.message}</span>
+					</li>
+				))}
+			</ul>
+		</div>
+	);
+}
+
 export type GitopsCardHandle = {
 	exportStack: () => Promise<void>;
 };
@@ -53,6 +83,35 @@ export const GitopsCard = forwardRef<
 	const [stackUrl, setStackUrl] = useState("");
 	const [redeployAfter, setRedeployAfter] = useState(true);
 	const [confirmOpen, setConfirmOpen] = useState(false);
+	// Partial applies resolve (they no longer throw): the dialog that started
+	// the apply stays open and lists what failed instead of closing on success.
+	const [applyErrors, setApplyErrors] = useState<ApplyError[]>([]);
+	const [syncErrors, setSyncErrors] = useState<ApplyError[]>([]);
+
+	const closeImport = (open: boolean) => {
+		if (!open) setSyncErrors([]);
+		onImportOpenChange(open);
+	};
+	const closeConfirm = (open: boolean) => {
+		if (!open) setApplyErrors([]);
+		setConfirmOpen(open);
+	};
+
+	const reportApply = (
+		verb: "Applied" | "Synced",
+		result: { applied: number; errors: ApplyError[]; redeploy: { deploymentIds: string[] } | null },
+	) => {
+		const redeployed = result.redeploy?.deploymentIds.length ?? 0;
+		const summary =
+			redeployed > 0
+				? `${verb} ${result.applied} change(s), queued ${redeployed} redeploy(s)`
+				: `${verb} ${result.applied} change(s)`;
+		if (result.errors.length > 0) {
+			toast.warning(`${summary} — ${result.errors.length} failed`);
+		} else {
+			toast.success(summary);
+		}
+	};
 
 	const exportQuery = useQuery({
 		...trpc.gitops.exportStack.queryOptions({
@@ -79,8 +138,12 @@ export const GitopsCard = forwardRef<
 			const anchor = document.createElement("a");
 			anchor.href = url;
 			anchor.download = `nixploy-${environmentName}.yaml`;
+			// Firefox/Safari need the anchor in the document and abort the download
+			// when the blob URL is revoked synchronously after click().
+			document.body.appendChild(anchor);
 			anchor.click();
-			URL.revokeObjectURL(url);
+			anchor.remove();
+			setTimeout(() => URL.revokeObjectURL(url), 1000);
 			toast.success("Stack exported");
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : "Export failed");
@@ -90,6 +153,29 @@ export const GitopsCard = forwardRef<
 	useImperativeHandle(ref, () => ({
 		exportStack: handleExport,
 	}));
+
+	/**
+	 * A stack can add/remove environments and any service type, so refresh the
+	 * environment strip, the project rows/counts and every service list — not
+	 * only applications and compose.
+	 */
+	const invalidateAfterApply = async () => {
+		const serviceInput = { projectId, environmentName };
+		await Promise.all([
+			queryClient.invalidateQueries({ queryKey: trpc.project.one.queryKey({ projectId }) }),
+			queryClient.invalidateQueries({ queryKey: trpc.project.all.queryKey() }),
+			queryClient.invalidateQueries({
+				queryKey: trpc.environment.byProject.queryKey({ projectId }),
+			}),
+			queryClient.invalidateQueries({ queryKey: trpc.application.all.queryKey(serviceInput) }),
+			queryClient.invalidateQueries({ queryKey: trpc.compose.all.queryKey(serviceInput) }),
+			queryClient.invalidateQueries({ queryKey: trpc.postgres.all.pathKey() }),
+			queryClient.invalidateQueries({ queryKey: trpc.mysql.all.pathKey() }),
+			queryClient.invalidateQueries({ queryKey: trpc.mariadb.all.pathKey() }),
+			queryClient.invalidateQueries({ queryKey: trpc.mongo.all.pathKey() }),
+			queryClient.invalidateQueries({ queryKey: trpc.redis.all.pathKey() }),
+		]);
+	};
 
 	const handlePreview = async () => {
 		if (!yaml.trim()) {
@@ -111,24 +197,18 @@ export const GitopsCard = forwardRef<
 				projectId,
 				redeploy: redeployAfter,
 			});
-			const redeployed = result.redeploy?.deploymentIds.length ?? 0;
-			toast.success(
-				redeployed > 0
-					? `Applied ${result.applied} change(s), queued ${redeployed} redeploy(s)`
-					: `Applied ${result.applied} change(s)`,
-			);
-			setConfirmOpen(false);
-			onImportOpenChange(false);
-			setYaml("");
-			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: trpc.project.one.queryKey({ projectId }) }),
-				queryClient.invalidateQueries({
-					queryKey: trpc.application.all.queryKey({ projectId, environmentName }),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: trpc.compose.all.queryKey({ projectId, environmentName }),
-				}),
-			]);
+			reportApply("Applied", result);
+			if (result.errors.length > 0) {
+				// Keep both dialogs (and the YAML) so the user can read the failures
+				// and re-apply after fixing the stack.
+				setApplyErrors(result.errors);
+			} else {
+				setApplyErrors([]);
+				setConfirmOpen(false);
+				onImportOpenChange(false);
+				setYaml("");
+			}
+			await invalidateAfterApply();
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : "Apply failed");
 		}
@@ -145,22 +225,14 @@ export const GitopsCard = forwardRef<
 				projectId,
 				redeploy: redeployAfter,
 			});
-			const redeployed = result.redeploy?.deploymentIds.length ?? 0;
-			toast.success(
-				redeployed > 0
-					? `Synced ${result.applied} change(s), queued ${redeployed} redeploy(s)`
-					: `Synced ${result.applied} change(s)`,
-			);
-			onImportOpenChange(false);
-			await Promise.all([
-				queryClient.invalidateQueries({ queryKey: trpc.project.one.queryKey({ projectId }) }),
-				queryClient.invalidateQueries({
-					queryKey: trpc.application.all.queryKey({ projectId, environmentName }),
-				}),
-				queryClient.invalidateQueries({
-					queryKey: trpc.compose.all.queryKey({ projectId, environmentName }),
-				}),
-			]);
+			reportApply("Synced", result);
+			if (result.errors.length > 0) {
+				setSyncErrors(result.errors);
+			} else {
+				setSyncErrors([]);
+				onImportOpenChange(false);
+			}
+			await invalidateAfterApply();
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : "Sync failed");
 		}
@@ -170,7 +242,7 @@ export const GitopsCard = forwardRef<
 
 	return (
 		<>
-			<Dialog open={importOpen} onOpenChange={onImportOpenChange}>
+			<Dialog open={importOpen} onOpenChange={closeImport}>
 				<DialogContent className="max-w-2xl">
 					<DialogHeader>
 						<DialogTitle>Import stack</DialogTitle>
@@ -205,6 +277,7 @@ export const GitopsCard = forwardRef<
 								HTTPS raw file only. Applies the stack and redeploys changed apps/compose by
 								default.
 							</p>
+							<ApplyErrorList errors={syncErrors} />
 						</div>
 						<div className="flex items-center gap-2">
 							<input
@@ -248,7 +321,7 @@ export const GitopsCard = forwardRef<
 						</div>
 					</div>
 					<DialogFooter>
-						<Button variant="outline" onClick={() => onImportOpenChange(false)}>
+						<Button variant="outline" onClick={() => closeImport(false)}>
 							Cancel
 						</Button>
 						<Button onClick={() => void handlePreview()} disabled={planMutation.isPending}>
@@ -258,7 +331,7 @@ export const GitopsCard = forwardRef<
 				</DialogContent>
 			</Dialog>
 
-			<Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+			<Dialog open={confirmOpen} onOpenChange={closeConfirm}>
 				<DialogContent className="max-w-xl">
 					<DialogHeader>
 						<DialogTitle>Apply stack?</DialogTitle>
@@ -298,12 +371,14 @@ export const GitopsCard = forwardRef<
 								))
 						)}
 					</div>
+					<ApplyErrorList errors={applyErrors} />
 					<DialogFooter>
-						<Button variant="outline" onClick={() => setConfirmOpen(false)}>
-							Cancel
+						<Button variant="outline" onClick={() => closeConfirm(false)}>
+							{applyErrors.length > 0 ? "Close" : "Cancel"}
 						</Button>
 						<Button onClick={() => void handleApply()} disabled={applyMutation.isPending}>
-							Confirm apply
+							{applyMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+							{applyErrors.length > 0 ? "Apply again" : "Confirm apply"}
 						</Button>
 					</DialogFooter>
 				</DialogContent>

@@ -7,6 +7,7 @@ import { CalendarClock, Loader2, Pencil, Play, Plus, Trash2 } from "lucide-react
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { QueryState } from "@/components/query-state";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { EmptyState } from "@/components/services/empty-state";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { StatusDot } from "@/components/shell";
@@ -50,6 +51,7 @@ import {
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { Textarea } from "@/components/ui/textarea";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { scheduleRunStatusDot } from "@/lib/status";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -87,6 +89,31 @@ export function SchedulesTab({
 }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can, role, isInstanceAdmin, isLoading: capabilitiesLoading } = useCapabilities();
+	// Every schedule mutation needs schedules.manage; managed servers additionally
+	// need an org admin and the Nixploy host an instance admin.
+	const hasManage = can("schedules.manage");
+	const isOrgAdmin = ["admin", "owner"].some((part) =>
+		(role ?? "")
+			.split(",")
+			.map((segment) => segment.trim())
+			.includes(part),
+	);
+	const canManage =
+		hasManage &&
+		(serviceType === "nixploy-server"
+			? isInstanceAdmin
+			: serviceType === "server"
+				? // `role` is null until the capabilities query settles.
+					isOrgAdmin || capabilitiesLoading
+				: true);
+	const manageHint = canManage
+		? undefined
+		: !hasManage
+			? capabilityHint("schedules.manage")
+			: serviceType === "nixploy-server"
+				? "Requires an instance administrator"
+				: "Requires an organization admin";
 
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editing, setEditing] = useState<ScheduleEntry | null>(null);
@@ -224,7 +251,12 @@ export function SchedulesTab({
 							: "Cron shell jobs inside the service container."
 				}
 				actions={
-					<Button size="sm" onClick={() => setDialogOpen(true)}>
+					<Button
+						size="sm"
+						disabled={!canManage}
+						title={manageHint}
+						onClick={() => setDialogOpen(true)}
+					>
 						<Plus className="size-4" />
 						Add Schedule
 					</Button>
@@ -290,7 +322,8 @@ export function SchedulesTab({
 										<TableCell>
 											<Switch
 												checked={schedule.enabled}
-												disabled={setEnabled.isPending || setDisabled.isPending}
+												disabled={setEnabled.isPending || setDisabled.isPending || !canManage}
+												title={manageHint}
 												onCheckedChange={(checked) =>
 													checked
 														? setEnabled.mutate({ scheduleId: schedule.scheduleId })
@@ -304,16 +337,23 @@ export function SchedulesTab({
 													variant="ghost"
 													size="sm"
 													aria-label="Run schedule now"
-													title="Run now"
-													disabled={runNow.isPending}
+													title={manageHint ?? "Run now"}
+													disabled={runNow.isPending || !canManage}
 													onClick={() => runNow.mutate({ scheduleId: schedule.scheduleId })}
 												>
-													<Play className="size-4" />
+													{runNow.isPending &&
+													runNow.variables?.scheduleId === schedule.scheduleId ? (
+														<Loader2 className="size-4 animate-spin" />
+													) : (
+														<Play className="size-4" />
+													)}
 												</Button>
 												<Button
 													variant="ghost"
 													size="sm"
 													aria-label="Edit schedule"
+													title={manageHint}
+													disabled={!canManage}
 													onClick={() => openEdit(schedule)}
 												>
 													<Pencil className="size-4" />
@@ -322,6 +362,8 @@ export function SchedulesTab({
 													variant="ghost"
 													size="sm"
 													aria-label="Delete schedule"
+													title={manageHint}
+													disabled={!canManage}
 													onClick={() => setDeleteTarget(schedule)}
 												>
 													<Trash2 className="size-4 text-destructive" />
@@ -391,7 +433,7 @@ export function SchedulesTab({
 							/>
 							{!looksLikeCron(form.cronExpression) && (
 								<p className="text-xs text-destructive">
-									Expected 5 fields: minute hour day month weekday.
+									Expected 5 or 6 fields: [second] minute hour day month weekday.
 								</p>
 							)}
 						</div>
@@ -457,9 +499,13 @@ export function SchedulesTab({
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							onClick={() => deleteTarget && remove.mutate({ scheduleId: deleteTarget.scheduleId })}
+							onClick={(event) => {
+								// Keep the dialog open (with its spinner) until the mutation settles.
+								event.preventDefault();
+								if (deleteTarget) remove.mutate({ scheduleId: deleteTarget.scheduleId });
+							}}
 							disabled={remove.isPending}
 						>
 							{remove.isPending && <Loader2 className="size-4 animate-spin" />}

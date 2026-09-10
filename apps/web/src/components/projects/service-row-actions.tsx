@@ -5,6 +5,7 @@ import { ArrowRightLeft, Copy, Loader2, MoreHorizontal, Tag } from "lucide-react
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { capabilityHint } from "@/components/services/capability-hint";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -28,6 +29,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 import { ServiceTagsDialog } from "./service-tags-dialog";
 import type { ServiceType } from "./service-types";
@@ -43,30 +45,48 @@ const ID_FIELD: Record<ServiceType, string> = {
 	redis: "redisId",
 };
 
-/** Per-service row menu on the project page: duplicate and move. */
+/** Per-service row menu on the project page: duplicate, tags and move. */
 export function ServiceRowActions({
 	service,
+	projectId,
+	environmentName,
 	currentEnvironmentId,
 }: {
 	service: ServiceEntry;
+	projectId: string;
+	environmentName: string;
 	currentEnvironmentId?: string;
 }) {
 	const trpc = useTRPC();
 	const trpcClient = useTRPCClient();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
 	const [moveOpen, setMoveOpen] = useState(false);
 	const [tagsOpen, setTagsOpen] = useState(false);
 	const [targetEnvironmentId, setTargetEnvironmentId] = useState("");
+
+	// Duplicate copies env/credentials → service.write + secrets.write; move → service.write.
+	const canDuplicate = can("service.write") && can("secrets.write");
+	const canMove = can("service.write");
+	const canTag = can("tags.manage");
 
 	const projectsQuery = useQuery({
 		...trpc.project.all.queryOptions(),
 		enabled: moveOpen,
 	});
 
+	/**
+	 * Duplicate/move only touch this service type's list. Move can land in any
+	 * project/environment, so the `<type>.all` path key (all inputs) plus the
+	 * environment counts of every project are refreshed — never the whole cache.
+	 */
 	const invalidateServices = async () => {
-		// Rare action: a full invalidation refreshes every service list and
-		// the environment counts in one pass.
-		await queryClient.invalidateQueries();
+		await Promise.all([
+			queryClient.invalidateQueries({ queryKey: trpc[service.type].all.pathKey() }),
+			queryClient.invalidateQueries({ queryKey: trpc.environment.byProject.pathKey() }),
+			queryClient.invalidateQueries({ queryKey: trpc.project.all.queryKey() }),
+			queryClient.invalidateQueries({ queryKey: trpc.project.one.queryKey({ projectId }) }),
+		]);
 	};
 
 	const duplicate = useMutation({
@@ -114,22 +134,34 @@ export function ServiceRowActions({
 					<Button
 						variant="ghost"
 						size="icon-sm"
-						aria-label={`Actions for ${service.name}`}
+						aria-label={`Actions for ${service.name} in ${environmentName}`}
 						className="relative z-10"
 					>
 						<MoreHorizontal className="size-4" />
 					</Button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end">
-					<DropdownMenuItem disabled={duplicate.isPending} onClick={() => duplicate.mutate()}>
+					<DropdownMenuItem
+						disabled={duplicate.isPending || !canDuplicate}
+						title={canDuplicate ? undefined : capabilityHint("service.write", "secrets.write")}
+						onClick={() => duplicate.mutate()}
+					>
 						<Copy className="size-4" />
 						Duplicate
 					</DropdownMenuItem>
-					<DropdownMenuItem onClick={() => setTagsOpen(true)}>
+					<DropdownMenuItem
+						disabled={!canTag}
+						title={canTag ? undefined : capabilityHint("tags.manage")}
+						onClick={() => setTagsOpen(true)}
+					>
 						<Tag className="size-4" />
 						Tags…
 					</DropdownMenuItem>
-					<DropdownMenuItem onClick={() => setMoveOpen(true)}>
+					<DropdownMenuItem
+						disabled={!canMove}
+						title={canMove ? undefined : capabilityHint("service.write")}
+						onClick={() => setMoveOpen(true)}
+					>
 						<ArrowRightLeft className="size-4" />
 						Move to environment…
 					</DropdownMenuItem>

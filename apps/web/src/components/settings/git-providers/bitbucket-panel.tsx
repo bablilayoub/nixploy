@@ -28,12 +28,17 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/use-capabilities";
+import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 export function BitbucketPanel() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
+	const { can } = useCapabilities();
+	const canManage = can("git_providers.manage");
+	const manageHint = canManage ? undefined : missingCapabilityHint("git_providers.manage");
 	const [name, setName] = useState("");
 	const [workspace, setWorkspace] = useState("");
 	const [username, setUsername] = useState("");
@@ -93,7 +98,7 @@ export function BitbucketPanel() {
 			actions={
 				<Dialog open={open} onOpenChange={setOpen}>
 					<DialogTrigger asChild>
-						<Button size="sm">
+						<Button size="sm" disabled={!canManage} title={manageHint}>
 							<Plus className="size-4" />
 							Add Bitbucket Provider
 						</Button>
@@ -214,9 +219,11 @@ export function BitbucketPanel() {
 										<Button
 											variant="ghost"
 											size="icon"
+											title={manageHint}
 											disabled={
-												testMutation.isPending &&
-												testMutation.variables?.bitbucketId === bitbucket.bitbucketId
+												!canManage ||
+												(testMutation.isPending &&
+													testMutation.variables?.bitbucketId === bitbucket.bitbucketId)
 											}
 											onClick={() =>
 												testMutation.mutate({
@@ -235,9 +242,10 @@ export function BitbucketPanel() {
 										<ConfirmDeleteDialog
 											title="Remove Bitbucket provider"
 											description={`Remove "${gitProvider.name}"?`}
-											isPending={removeMutation.isPending}
+											disabled={!canManage}
+											disabledReason={manageHint}
 											onConfirm={() =>
-												removeMutation.mutate({
+												removeMutation.mutateAsync({
 													bitbucketId: bitbucket.bitbucketId,
 												})
 											}

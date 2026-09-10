@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { HardDrive, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { QueryState } from "@/components/query-state";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
@@ -43,6 +45,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Mount } from "./types";
@@ -61,6 +64,9 @@ const EMPTY_FORM = {
 export function MountsManager({ applicationId }: { applicationId: string }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	const canWrite = can("service.write");
+	const writeHint = canWrite ? undefined : capabilityHint("service.write");
 
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editing, setEditing] = useState<Mount | null>(null);
@@ -74,9 +80,13 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 		}
 	}, [dialogOpen]);
 
-	const { data: mounts, isLoading } = useQuery(
-		trpc.mount.byApplication.queryOptions({ applicationId }),
-	);
+	const {
+		data: mounts,
+		isLoading,
+		isError,
+		error,
+		refetch,
+	} = useQuery(trpc.mount.byApplication.queryOptions({ applicationId }));
 
 	const invalidate = () =>
 		queryClient.invalidateQueries({
@@ -172,25 +182,38 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 				title="Mounts"
 				description="Persist data with volumes, bind host paths, or inject config files."
 				actions={
-					<Button size="sm" onClick={() => setDialogOpen(true)}>
+					<Button
+						size="sm"
+						onClick={() => setDialogOpen(true)}
+						disabled={!canWrite}
+						title={writeHint}
+					>
 						<Plus className="size-4" />
 						Add Mount
 					</Button>
 				}
 			>
-				{isLoading ? (
-					<div className="flex flex-col gap-2">
-						{Array.from({ length: 2 }).map((_, i) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders
-							<Skeleton key={i} className="h-10 w-full" />
-						))}
-					</div>
-				) : !mounts || mounts.length === 0 ? (
-					<div className="flex flex-col items-center gap-2 py-10 text-center">
-						<HardDrive className="size-8 text-muted-foreground" />
-						<p className="text-sm text-muted-foreground">No mounts configured.</p>
-					</div>
-				) : (
+				<QueryState
+					isPending={isLoading}
+					isError={isError}
+					error={error}
+					onRetry={() => refetch()}
+					isEmpty={!mounts || mounts.length === 0}
+					skeleton={
+						<div className="flex flex-col gap-2">
+							{Array.from({ length: 2 }).map((_, i) => (
+								// biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders
+								<Skeleton key={i} className="h-10 w-full" />
+							))}
+						</div>
+					}
+					empty={
+						<div className="flex flex-col items-center gap-2 py-10 text-center">
+							<HardDrive className="size-8 text-muted-foreground" />
+							<p className="text-sm text-muted-foreground">No mounts configured.</p>
+						</div>
+					}
+				>
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -201,7 +224,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{mounts.map((mount) => (
+							{(mounts ?? []).map((mount) => (
 								<TableRow key={mount.mountId}>
 									<TableCell>
 										<span className="text-sm capitalize">{mount.type}</span>
@@ -214,6 +237,8 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 												variant="ghost"
 												size="sm"
 												aria-label="Edit"
+												disabled={!canWrite}
+												title={writeHint}
 												onClick={() => openEdit(mount)}
 											>
 												<Pencil className="size-4" />
@@ -222,6 +247,8 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 												variant="ghost"
 												size="sm"
 												aria-label="Delete"
+												disabled={!canWrite}
+												title={writeHint}
 												onClick={() => setDeleteTarget(mount)}
 											>
 												<Trash2 className="size-4 text-destructive" />
@@ -232,7 +259,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 							))}
 						</TableBody>
 					</Table>
-				)}
+				</QueryState>
 			</SettingsSection>
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -348,9 +375,13 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							onClick={() => deleteTarget && remove.mutate({ mountId: deleteTarget.mountId })}
+							onClick={(event) => {
+								// Keep the dialog open (with its spinner) until the mutation settles.
+								event.preventDefault();
+								if (deleteTarget) remove.mutate({ mountId: deleteTarget.mountId });
+							}}
 							disabled={remove.isPending}
 						>
 							{remove.isPending && <Loader2 className="size-4 animate-spin" />}

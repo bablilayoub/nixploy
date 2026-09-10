@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { History, Loader2, Trash2, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
@@ -27,6 +28,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 import type { RollbackEntry } from "./types";
@@ -34,6 +36,10 @@ import type { RollbackEntry } from "./types";
 export function RollbacksManager({ applicationId }: { applicationId: string }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	// Rolling back and pruning pinned images are both gated on service.deploy.
+	const canDeploy = can("service.deploy");
+	const deployHint = canDeploy ? undefined : capabilityHint("service.deploy");
 
 	const [rollbackTarget, setRollbackTarget] = useState<RollbackEntry | null>(null);
 	const [deleteTarget, setDeleteTarget] = useState<RollbackEntry | null>(null);
@@ -134,7 +140,13 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 									</TableCell>
 									<TableCell className="text-right">
 										<div className="flex justify-end gap-1">
-											<Button variant="ghost" size="sm" onClick={() => setRollbackTarget(entry)}>
+											<Button
+												variant="ghost"
+												size="sm"
+												disabled={!canDeploy}
+												title={deployHint}
+												onClick={() => setRollbackTarget(entry)}
+											>
 												<Undo2 className="size-4" />
 												Rollback
 											</Button>
@@ -142,6 +154,8 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 												variant="ghost"
 												size="sm"
 												aria-label="Delete rollback image"
+												disabled={!canDeploy}
+												title={deployHint}
 												onClick={() => setDeleteTarget(entry)}
 											>
 												<Trash2 className="size-4 text-destructive" />
@@ -169,12 +183,15 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={rollback.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							onClick={() =>
-								rollbackTarget &&
-								rollback.mutate({ applicationId, rollbackId: rollbackTarget.rollbackId })
-							}
+							onClick={(event) => {
+								// Keep the dialog open (with its spinner) until the mutation settles.
+								event.preventDefault();
+								if (rollbackTarget) {
+									rollback.mutate({ applicationId, rollbackId: rollbackTarget.rollbackId });
+								}
+							}}
 							disabled={rollback.isPending}
 						>
 							{rollback.isPending && <Loader2 className="size-4 animate-spin" />}
@@ -197,9 +214,12 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							onClick={() => deleteTarget && remove.mutate({ rollbackId: deleteTarget.rollbackId })}
+							onClick={(event) => {
+								event.preventDefault();
+								if (deleteTarget) remove.mutate({ rollbackId: deleteTarget.rollbackId });
+							}}
 							disabled={remove.isPending}
 						>
 							{remove.isPending && <Loader2 className="size-4 animate-spin" />}

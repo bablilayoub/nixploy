@@ -29,7 +29,7 @@ import {
 import { TableCard } from "@/components/ui/table-card";
 import { useTRPC } from "@/lib/trpc";
 
-import { DockerError, type DockerTabProps } from "./docker-view";
+import { DockerError, type DockerTabProps, invalidateDockerQueries } from "./docker-view";
 
 type ImageRow = {
 	Repository: string;
@@ -64,7 +64,8 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 		trpc.docker.imageRemove.mutationOptions({
 			onSuccess: () => {
 				toast.success("Image removed");
-				invalidate();
+				// Disk usage on the System tab changes too.
+				void invalidateDockerQueries(queryClient, trpc, serverId);
 			},
 			onError: (error) => toast.error(error.message),
 		}),
@@ -76,7 +77,7 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 					description: output.trim().split("\n").pop() ?? undefined,
 				});
 				setPruneOpen(false);
-				invalidate();
+				void invalidateDockerQueries(queryClient, trpc, serverId);
 			},
 			onError: (error) => toast.error(error.message),
 		}),
@@ -96,7 +97,7 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 					onChange={(event) => setReference(event.target.value)}
 					className="w-64 font-mono text-xs"
 					onKeyDown={(event) => {
-						if (event.key === "Enter" && reference.trim()) {
+						if (event.key === "Enter" && reference.trim() && !pullMutation.isPending) {
 							pullMutation.mutate({ serverId, reference: reference.trim() });
 						}
 					}}

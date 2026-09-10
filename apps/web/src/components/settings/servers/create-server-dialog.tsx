@@ -26,7 +26,14 @@ import {
 } from "@/components/ui/select";
 import { useTRPC } from "@/lib/trpc";
 
-export function CreateServerDialog() {
+export function CreateServerDialog({
+	disabled,
+	disabledReason,
+}: {
+	/** Caller lacks `servers.manage` — keep the trigger visible but inert. */
+	disabled?: boolean;
+	disabledReason?: string;
+}) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
@@ -63,7 +70,7 @@ export function CreateServerDialog() {
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
 			<DialogTrigger asChild>
-				<Button size="sm">
+				<Button size="sm" disabled={disabled} title={disabled ? disabledReason : undefined}>
 					<Plus className="size-4" />
 					Add Server
 				</Button>

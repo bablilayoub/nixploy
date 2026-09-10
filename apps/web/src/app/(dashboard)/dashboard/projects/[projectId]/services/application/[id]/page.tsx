@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { use } from "react";
+import { Suspense, use, useState } from "react";
 
 import { AdvancedTab } from "@/components/application/advanced-tab";
 import { ApplicationHeader } from "@/components/application/application-header";
@@ -20,6 +20,7 @@ import { ServiceAlertRulesCard } from "@/components/services/service-alert-rules
 import { ServiceTerminal } from "@/components/services/service-terminal";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useSyncedTab } from "@/hooks/use-synced-tab";
@@ -46,12 +47,37 @@ const SUB_TAB_DEFAULT: Record<string, string> = {
 	config: "environment",
 };
 
+function PageSkeleton() {
+	return (
+		<div className="flex flex-col gap-6">
+			<div className="flex items-center justify-between">
+				<div className="flex flex-col gap-2">
+					<Skeleton className="h-7 w-48" />
+					<Skeleton className="h-4 w-72" />
+				</div>
+				<Skeleton className="h-9 w-40" />
+			</div>
+			<Skeleton className="h-9 w-full max-w-2xl" />
+			<Skeleton className="h-64 w-full" />
+		</div>
+	);
+}
+
 export default function ApplicationDetailPage({
 	params,
 }: {
 	params: Promise<{ projectId: string; id: string }>;
 }) {
 	const { projectId, id } = use(params);
+	// useSyncedTab reads useSearchParams — needs a Suspense boundary at page level.
+	return (
+		<Suspense fallback={<PageSkeleton />}>
+			<ApplicationDetail projectId={projectId} id={id} />
+		</Suspense>
+	);
+}
+
+function ApplicationDetail({ projectId, id }: { projectId: string; id: string }) {
 	const trpc = useTRPC();
 	const [tab, selectTab] = useSyncedTab(
 		"general",
@@ -60,37 +86,49 @@ export default function ApplicationDetailPage({
 	const topTab = TOP_TABS.includes(tab) ? tab : (SUB_TAB_PARENT[tab] ?? "general");
 	const subTab = (parent: string) =>
 		SUB_TAB_PARENT[tab] === parent ? tab : SUB_TAB_DEFAULT[parent];
-	const { data: application, isLoading } = useQuery(
-		trpc.application.one.queryOptions({ applicationId: id }),
-	);
+	// The worker flips `status` to "running" only when it picks the job up, a
+	// moment after the deploy mutation returns; poll for a bounded window after
+	// queuing so that edge is not missed when the queue is busy.
+	const [pollUntil, setPollUntil] = useState(0);
+	const {
+		data: application,
+		isLoading,
+		isError,
+		error,
+		refetch,
+	} = useQuery({
+		...trpc.application.one.queryOptions({ applicationId: id }),
+		// `status` stays "running" while a deployment builds and settles to
+		// done/error when the worker finishes — poll until it does so the header
+		// and tabs do not show a stale state.
+		refetchInterval: (query) =>
+			query.state.data?.status === "running" || Date.now() < pollUntil ? 5_000 : false,
+	});
 
 	if (isLoading) {
-		return (
-			<div className="flex flex-col gap-6">
-				<div className="flex items-center justify-between">
-					<div className="flex flex-col gap-2">
-						<Skeleton className="h-7 w-48" />
-						<Skeleton className="h-4 w-72" />
-					</div>
-					<Skeleton className="h-9 w-40" />
-				</div>
-				<Skeleton className="h-9 w-full max-w-2xl" />
-				<Skeleton className="h-64 w-full" />
-			</div>
-		);
+		return <PageSkeleton />;
 	}
 
-	if (!application) {
+	if (isError || !application) {
 		return (
-			<div className="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
-				Application not found.
+			<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
+				<p>{error?.message ?? "Application not found."}</p>
+				{isError && (
+					<Button variant="outline" size="sm" onClick={() => refetch()}>
+						Retry
+					</Button>
+				)}
 			</div>
 		);
 	}
 
 	return (
 		<div className="flex flex-col gap-6">
-			<ApplicationHeader application={application} projectId={projectId} />
+			<ApplicationHeader
+				application={application}
+				projectId={projectId}
+				onDeployQueued={() => setPollUntil(Date.now() + 30_000)}
+			/>
 
 			<Tabs value={topTab} onValueChange={selectTab} className="w-full">
 				<UnderlineTabsList>

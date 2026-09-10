@@ -1,8 +1,9 @@
 "use client";
 
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Loader2, Monitor, Smartphone } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { SettingsSection } from "@/components/settings/settings-section";
@@ -19,6 +20,12 @@ interface SessionRow {
 	createdAt: string | Date;
 	expiresAt: string | Date;
 }
+
+/**
+ * Query key for the better-auth session list. Other cards (change password
+ * with `revokeOtherSessions`) invalidate it so this list stays truthful.
+ */
+export const SESSIONS_QUERY_KEY = ["auth", "sessions"] as const;
 
 /** "Chrome on macOS" from a user agent string, best effort. */
 function describeUserAgent(userAgent: string | null | undefined): string {
@@ -54,23 +61,19 @@ function isMobile(userAgent: string | null | undefined): boolean {
 
 export function SessionsCard() {
 	const { data: currentSession } = useSession();
-	const [sessions, setSessions] = useState<SessionRow[]>([]);
-	const [isLoading, setIsLoading] = useState(true);
+	const queryClient = useQueryClient();
 	const [revoking, setRevoking] = useState<string | null>(null);
 
-	const loadSessions = useCallback(async () => {
-		const { data, error } = await authClient.listSessions();
-		if (error) {
-			toast.error(error.message ?? "Failed to load sessions");
-		} else {
-			setSessions((data ?? []) as SessionRow[]);
-		}
-		setIsLoading(false);
-	}, []);
-
-	useEffect(() => {
-		loadSessions();
-	}, [loadSessions]);
+	const sessionsQuery = useQuery({
+		queryKey: SESSIONS_QUERY_KEY,
+		queryFn: async () => {
+			// better-auth resolves with `{ data, error }` — surface the error so
+			// the card shows a retry instead of an empty list.
+			const { data, error } = await authClient.listSessions();
+			if (error) throw new Error(error.message ?? "Failed to load sessions");
+			return (data ?? []) as SessionRow[];
+		},
+	});
 
 	async function revoke(session: SessionRow) {
 		setRevoking(session.id);
@@ -81,12 +84,12 @@ export function SessionsCard() {
 			return;
 		}
 		toast.success("Session revoked");
-		await loadSessions();
+		await queryClient.invalidateQueries({ queryKey: SESSIONS_QUERY_KEY });
 	}
 
 	const currentToken = currentSession?.session?.token;
 	// Pin the current session to the top of the list.
-	const sortedSessions = [...sessions].sort((a, b) =>
+	const sortedSessions = [...(sessionsQuery.data ?? [])].sort((a, b) =>
 		a.token === currentToken ? -1 : b.token === currentToken ? 1 : 0,
 	);
 
@@ -95,10 +98,18 @@ export function SessionsCard() {
 			title="Active sessions"
 			description="Devices currently signed in to your account."
 		>
-			{isLoading ? (
+			{sessionsQuery.isPending ? (
 				<div className="flex flex-col gap-2">
 					<Skeleton className="h-10 w-full" />
 					<Skeleton className="h-10 w-full" />
+				</div>
+			) : sessionsQuery.isError ? (
+				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-8 text-center">
+					<p className="text-sm font-medium">Could not load sessions</p>
+					<p className="text-sm text-muted-foreground">{sessionsQuery.error.message}</p>
+					<Button variant="outline" size="sm" onClick={() => void sessionsQuery.refetch()}>
+						Retry
+					</Button>
 				</div>
 			) : sortedSessions.length === 0 ? (
 				<p className="text-sm text-muted-foreground">No active sessions.</p>

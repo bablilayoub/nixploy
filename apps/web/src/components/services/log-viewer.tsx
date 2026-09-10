@@ -11,8 +11,16 @@ import { cn } from "@/lib/utils";
 
 const MAX_LINES = 5000;
 const MAX_BACKOFF_MS = 15_000;
+/** Transient closes are retried this many times before asking the user. */
+const MAX_RECONNECT_ATTEMPTS = 8;
 /** How often the "nothing deployed" empty state quietly re-checks the stream. */
 const EMPTY_RETRY_MS = 5000;
+/**
+ * Close codes the server uses for permanent failures: 1008 (policy — auth or
+ * an application error sent via `closeWithError`) and 1011 (handler crash).
+ * Reconnecting cannot fix these, so the viewer stops and offers a manual retry.
+ */
+const PERMANENT_CLOSE_CODES = new Set([1008, 1011]);
 
 // Matches CSI sequences and other common ANSI escapes.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping ANSI escapes requires matching the ESC control character
@@ -125,7 +133,7 @@ function LogLine({ line, wrap }: { line: string; wrap: boolean }) {
 	);
 }
 
-type ConnectionStatus = "connecting" | "connected" | "disconnected" | "finished";
+type ConnectionStatus = "connecting" | "connected" | "disconnected" | "finished" | "error";
 
 function wsUrl(path: string, params: Record<string, string | null | undefined>) {
 	const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -141,14 +149,18 @@ export function LogViewer({
 	containerId,
 	serverId,
 	deploymentId,
+	onFinish,
 }: {
 	appName?: string;
 	containerId?: string;
 	serverId?: string | null;
 	deploymentId?: string;
+	/** Called once when a deployment stream sends its terminal `finish` frame. */
+	onFinish?: (status: string) => void;
 }) {
 	const [lines, setLines] = useState<string[]>([]);
 	const [status, setStatus] = useState<ConnectionStatus>("connecting");
+	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [emptyMessage, setEmptyMessage] = useState<string | null>(null);
 	const [pinned, setPinned] = useState(true);
 	const [wrap, setWrap] = useState(false);
@@ -163,6 +175,8 @@ export function LogViewer({
 	const finishedRef = useRef(false);
 	const pinnedRef = useRef(true);
 	pinnedRef.current = pinned;
+	const onFinishRef = useRef(onFinish);
+	onFinishRef.current = onFinish;
 
 	const appendChunk = useCallback((raw: string) => {
 		const text = stripAnsi(raw);
@@ -186,6 +200,7 @@ export function LogViewer({
 		// from the empty state stay invisible until log data actually arrives.
 		finishedRef.current = false;
 		setStatus("connecting");
+		setErrorMessage(null);
 
 		const url = deploymentId
 			? wsUrl("/ws/deployment", { deploymentId })
@@ -221,6 +236,7 @@ export function LogViewer({
 						appendChunk(`\n--- Deployment finished: ${frame.status ?? "done"} ---\n`);
 						finishedRef.current = true;
 						setStatus("finished");
+						onFinishRef.current?.(frame.status ?? "done");
 					} else if (frame.type === "error") {
 						appendChunk(`\n[error] ${frame.message ?? "Unknown error"}\n`);
 					}
@@ -258,15 +274,28 @@ export function LogViewer({
 			appendChunk(data);
 		};
 
-		ws.onclose = () => {
+		ws.onclose = (event: CloseEvent) => {
 			if (wsRef.current !== ws) return; // Stale socket (already replaced/unmounted).
 			wsRef.current = null;
 			if (finishedRef.current) {
 				setStatus("finished");
 				return;
 			}
-			setStatus("disconnected");
+			// Permanent failures (auth/policy, handler crash) never recover by
+			// reconnecting — surface them and wait for a manual retry instead of
+			// looping forever and appending an error line each cycle.
+			if (PERMANENT_CLOSE_CODES.has(event.code)) {
+				setErrorMessage(event.reason || `Connection closed (code ${event.code})`);
+				setStatus("error");
+				return;
+			}
 			const attempt = attemptsRef.current++;
+			if (attempt >= MAX_RECONNECT_ATTEMPTS) {
+				setErrorMessage("Lost connection to the log stream");
+				setStatus("error");
+				return;
+			}
+			setStatus("disconnected");
 			const delay = Math.min(1000 * 2 ** attempt, MAX_BACKOFF_MS);
 			reconnectTimerRef.current = setTimeout(connect, delay);
 		};
@@ -340,14 +369,19 @@ export function LogViewer({
 		const anchor = document.createElement("a");
 		anchor.href = url;
 		anchor.download = `${name}-logs.txt`;
+		document.body.appendChild(anchor);
 		anchor.click();
-		URL.revokeObjectURL(url);
+		anchor.remove();
+		// Revoke after the click has been dispatched; Firefox/Safari abort the
+		// download when the blob URL disappears synchronously.
+		setTimeout(() => URL.revokeObjectURL(url), 1000);
 	};
 
 	const reconnectNow = () => {
 		if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
 		attemptsRef.current = 0;
 		setEmptyMessage(null);
+		setErrorMessage(null);
 		const ws = wsRef.current;
 		wsRef.current = null;
 		ws?.close();
@@ -387,7 +421,7 @@ export function LogViewer({
 								? "success"
 								: status === "connecting"
 									? "warning"
-									: status === "disconnected"
+									: status === "disconnected" || status === "error"
 										? "error"
 										: "neutral"
 						}
@@ -400,21 +434,26 @@ export function LogViewer({
 					)}
 					{status === "disconnected" && "Disconnected — reconnecting…"}
 					{status === "finished" && "Stream finished"}
+					{status === "error" && (
+						<span className="text-destructive" title={errorMessage ?? undefined}>
+							{errorMessage ?? "Connection failed"}
+						</span>
+					)}
 				</div>
 				<div className="flex items-center gap-1">
-					{status === "disconnected" && (
+					{(status === "disconnected" || status === "error") && (
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<Button
 									variant="outline"
 									size="icon-sm"
-									aria-label="Reconnect now"
+									aria-label={status === "error" ? "Retry" : "Reconnect now"}
 									onClick={reconnectNow}
 								>
 									<RefreshCw className="size-3.5" />
 								</Button>
 							</TooltipTrigger>
-							<TooltipContent>Reconnect now</TooltipContent>
+							<TooltipContent>{status === "error" ? "Retry" : "Reconnect now"}</TooltipContent>
 						</Tooltip>
 					)}
 					<Tooltip>
@@ -508,13 +547,26 @@ export function LogViewer({
 				className="h-[28rem] overflow-auto bg-card p-3 font-mono text-xs leading-5 text-foreground"
 			>
 				{visibleLines.length === 0 ? (
-					<span className="text-muted-foreground">
-						{lines.length === 0
-							? status === "connecting"
-								? "Waiting for logs…"
-								: "No logs yet."
-							: "No lines match the current filters."}
-					</span>
+					status === "error" && lines.length === 0 ? (
+						<div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+							<p className="text-sm font-medium text-foreground">Could not open the log stream</p>
+							<p className="max-w-sm text-sm text-muted-foreground">
+								{errorMessage ?? "The connection was closed by the server."}
+							</p>
+							<Button variant="outline" size="sm" onClick={reconnectNow}>
+								<RefreshCw className="size-3.5" />
+								Retry
+							</Button>
+						</div>
+					) : (
+						<span className="text-muted-foreground">
+							{lines.length === 0
+								? status === "connecting"
+									? "Waiting for logs…"
+									: "No logs yet."
+								: "No lines match the current filters."}
+						</span>
+					)
 				) : (
 					visibleLines.map((line, index) => (
 						// biome-ignore lint/suspicious/noArrayIndexKey: log lines are append-only, index keys are stable

@@ -5,7 +5,7 @@ import { Pencil, Settings2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-
+import { capabilityHint } from "@/components/services/capability-hint";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -35,6 +35,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 export function ProjectActions({
@@ -49,6 +50,9 @@ export function ProjectActions({
 	const trpc = useTRPC();
 	const router = useRouter();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	const canWrite = can("project.write");
+	const canDelete = can("project.delete");
 	const [renameOpen, setRenameOpen] = useState(false);
 	const [deleteOpen, setDeleteOpen] = useState(false);
 	const [name, setName] = useState(project.name);
@@ -102,6 +106,8 @@ export function ProjectActions({
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end">
 					<DropdownMenuItem
+						disabled={!canWrite}
+						title={canWrite ? undefined : capabilityHint("project.write")}
 						onSelect={() => {
 							setName(project.name);
 							setDescription(project.description ?? "");
@@ -112,7 +118,12 @@ export function ProjectActions({
 						Rename
 					</DropdownMenuItem>
 					<DropdownMenuSeparator />
-					<DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+					<DropdownMenuItem
+						variant="destructive"
+						disabled={!canDelete}
+						title={canDelete ? undefined : capabilityHint("project.delete")}
+						onSelect={() => setDeleteOpen(true)}
+					>
 						<Trash2 className="size-4" />
 						Delete
 					</DropdownMenuItem>

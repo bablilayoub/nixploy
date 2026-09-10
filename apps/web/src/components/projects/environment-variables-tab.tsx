@@ -2,9 +2,11 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { QueryState } from "@/components/query-state";
 import { EnvEditor } from "@/components/services/env-editor";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 interface EnvironmentInfo {
@@ -23,11 +25,17 @@ export function EnvironmentVariablesTab({
 	environment,
 }: {
 	projectId: string;
+	/** `null` when the server redacted it (member lacks secrets.read). */
 	projectEnv?: string | null;
 	environment?: EnvironmentInfo;
 }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	// The server nulls env values for members without secrets.read; the editor
+	// cannot tell that apart from an unset env, so the capability drives it.
+	const canRead = can("secrets.read");
+	const canEdit = can("secrets.write");
 
 	const resolvedQuery = useQuery({
 		...trpc.project.getResolvedEnvironment.queryOptions({
@@ -81,7 +89,9 @@ export function EnvironmentVariablesTab({
 				<EnvEditor
 					value={projectEnv ?? ""}
 					loading={saveProjectEnv.isPending}
-					onSave={(env) => saveProjectEnv.mutate({ projectId, env })}
+					canRead={canRead}
+					canEdit={canEdit}
+					onSave={(env) => saveProjectEnv.mutateAsync({ projectId, env })}
 				/>
 			</SettingsSection>
 
@@ -94,8 +104,10 @@ export function EnvironmentVariablesTab({
 						key={environment.environmentId}
 						value={environment.env ?? ""}
 						loading={saveEnvironmentEnv.isPending}
+						canRead={canRead}
+						canEdit={canEdit}
 						onSave={(env) =>
-							saveEnvironmentEnv.mutate({
+							saveEnvironmentEnv.mutateAsync({
 								environmentId: environment.environmentId,
 								env,
 							})
@@ -109,13 +121,19 @@ export function EnvironmentVariablesTab({
 					title="Resolved preview"
 					description={`Effective variables for "${environment.name}" after merging organization, project and environment levels. Read-only.`}
 				>
-					{resolvedQuery.isPending ? (
-						<Skeleton className="h-64 rounded-lg" />
-					) : (
+					<QueryState
+						isPending={resolvedQuery.isPending}
+						isError={resolvedQuery.isError}
+						error={resolvedQuery.error}
+						onRetry={() => resolvedQuery.refetch()}
+						skeleton={<Skeleton className="h-64 rounded-lg" />}
+						isEmpty={false}
+						empty={null}
+					>
 						<pre className="max-h-96 overflow-auto rounded-lg border border-border bg-card p-4 font-mono text-[13px] whitespace-pre-wrap text-foreground">
 							{resolvedQuery.data?.env || "# No variables defined"}
 						</pre>
-					)}
+					</QueryState>
 				</SettingsSection>
 			)}
 		</SettingsStack>

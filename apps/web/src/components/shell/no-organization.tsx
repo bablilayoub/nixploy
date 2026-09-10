@@ -41,7 +41,11 @@ export function NoOrganization({ userName }: { userName?: string | null }) {
 			});
 			if (error) throw new Error(error.message);
 			if (data?.id) {
-				await authClient.organization.setActive({ organizationId: data.id });
+				// better-auth resolves with `{ error }` instead of throwing.
+				const activated = await authClient.organization.setActive({ organizationId: data.id });
+				if (activated.error) {
+					throw new Error(activated.error.message ?? "Failed to switch to the new organization");
+				}
 			}
 			await queryClient.invalidateQueries();
 			toast.success(`Organization "${trimmed}" created`);

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Fragment, useState } from "react";
 import { toast } from "sonner";
 
+import { capabilityHint } from "@/components/services/capability-hint";
 import { StatusDot } from "@/components/shell";
 import {
 	AlertDialog,
@@ -21,8 +22,9 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { serviceStatusDot } from "@/lib/status";
-import { useTRPCClient } from "@/lib/trpc";
+import { useTRPC, useTRPCClient } from "@/lib/trpc";
 
 import { ServiceRowActions } from "./service-row-actions";
 import { SERVICE_TYPE_META, type ServiceType } from "./service-types";
@@ -56,18 +58,27 @@ const serviceKey = (service: ServiceEntry) => `${service.type}:${service.id}`;
  */
 export function ServicesTable({
 	projectId,
+	environmentName,
 	services,
 	currentEnvironmentId,
 }: {
 	projectId: string;
+	environmentName: string;
 	services: ServiceEntry[];
 	currentEnvironmentId?: string;
 }) {
+	const trpc = useTRPC();
 	const trpcClient = useTRPCClient();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [bulkPending, setBulkPending] = useState(false);
 	const [confirmStop, setConfirmStop] = useState(false);
+
+	// Bulk start/stop hit the runtime procedures (database `start` additionally
+	// requires service.deploy; the server still reports those per row).
+	const canRuntime = can("service.runtime");
+	const runtimeHint = canRuntime ? undefined : capabilityHint("service.runtime");
 
 	const groups = TYPE_ORDER.map((type) => ({
 		type,
@@ -86,28 +97,48 @@ export function ServicesTable({
 
 	const selectedServices = services.filter((service) => selected.has(serviceKey(service)));
 
+	/** Refresh only the lists the action touched: each affected `<type>.all` plus the environment counts. */
+	const invalidateAffected = async (types: Iterable<ServiceType>) => {
+		const serviceInput = { projectId, environmentName };
+		await Promise.all([
+			...[...new Set(types)].map((type) =>
+				queryClient.invalidateQueries({ queryKey: trpc[type].all.queryKey(serviceInput) }),
+			),
+			queryClient.invalidateQueries({
+				queryKey: trpc.environment.byProject.queryKey({ projectId }),
+			}),
+		]);
+	};
+
 	const runBulk = async (action: "start" | "stop") => {
 		setBulkPending(true);
+		const targets = selectedServices;
 		let failed = 0;
-		for (const service of selectedServices) {
-			try {
-				const payload = { [ID_FIELD[service.type]]: service.id };
-				// biome-ignore lint/suspicious/noExplicitAny: dynamic router access by service type; every service router exposes start/stop
-				await (trpcClient as any)[service.type][action].mutate(payload);
-			} catch {
-				failed += 1;
+		try {
+			for (const service of targets) {
+				try {
+					const payload = { [ID_FIELD[service.type]]: service.id };
+					// biome-ignore lint/suspicious/noExplicitAny: dynamic router access by service type; every service router exposes start/stop
+					await (trpcClient as any)[service.type][action].mutate(payload);
+				} catch {
+					failed += 1;
+				}
 			}
+			if (failed > 0) {
+				toast.error(`${failed} service${failed === 1 ? "" : "s"} failed to ${action}`);
+			} else {
+				toast.success(
+					`${targets.length} service${targets.length === 1 ? "" : "s"} ${action === "start" ? "started" : "stopped"}`,
+				);
+			}
+			await invalidateAffected(targets.map((service) => service.type));
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "Failed to refresh services");
+		} finally {
+			setBulkPending(false);
+			setSelected(new Set());
+			setConfirmStop(false);
 		}
-		setBulkPending(false);
-		setSelected(new Set());
-		if (failed > 0) {
-			toast.error(`${failed} service${failed === 1 ? "" : "s"} failed to ${action}`);
-		} else {
-			toast.success(
-				`${selectedServices.length} service${selectedServices.length === 1 ? "" : "s"} ${action === "start" ? "started" : "stopped"}`,
-			);
-		}
-		await queryClient.invalidateQueries();
 	};
 
 	return (
@@ -125,11 +156,15 @@ export function ServicesTable({
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={bulkPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
 							variant="destructive"
 							disabled={bulkPending}
-							onClick={() => void runBulk("stop")}
+							onClick={(event) => {
+								// Keep the dialog open (with its spinner) until every stop settled.
+								event.preventDefault();
+								void runBulk("stop");
+							}}
 						>
 							{bulkPending && <Loader2 className="size-4 animate-spin" />}
 							Stop
@@ -145,8 +180,9 @@ export function ServicesTable({
 						<Button
 							size="sm"
 							variant="outline"
-							disabled={bulkPending}
-							onClick={() => runBulk("start")}
+							disabled={bulkPending || !canRuntime}
+							title={runtimeHint}
+							onClick={() => void runBulk("start")}
 						>
 							{bulkPending ? (
 								<Loader2 className="size-4 animate-spin" />
@@ -158,7 +194,8 @@ export function ServicesTable({
 						<Button
 							size="sm"
 							variant="outline"
-							disabled={bulkPending}
+							disabled={bulkPending || !canRuntime}
+							title={runtimeHint}
 							onClick={() => setConfirmStop(true)}
 						>
 							<Square className="size-4" />
@@ -236,6 +273,8 @@ export function ServicesTable({
 												<div className="flex items-center justify-end gap-1">
 													<ServiceRowActions
 														service={service}
+														projectId={projectId}
+														environmentName={environmentName}
 														currentEnvironmentId={currentEnvironmentId}
 													/>
 													<Link

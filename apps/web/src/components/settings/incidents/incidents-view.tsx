@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { useState } from "react";
 import { QueryState } from "@/components/query-state";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -125,7 +126,15 @@ function LogSearchSection() {
 				/>
 			</form>
 			{submitted && results.isLoading && <Skeleton className="h-20 w-full" />}
-			{submitted && !results.isLoading && (results.data ?? []).length === 0 && (
+			{submitted && results.isError && (
+				<div className="flex flex-wrap items-center gap-2 text-sm">
+					<span className="text-destructive">Search failed: {results.error.message}</span>
+					<Button variant="outline" size="sm" onClick={() => void results.refetch()}>
+						Retry
+					</Button>
+				</div>
+			)}
+			{submitted && !results.isLoading && !results.isError && (results.data ?? []).length === 0 && (
 				<p className="text-sm text-muted-foreground">No matches.</p>
 			)}
 			{(results.data ?? []).map((row) => (

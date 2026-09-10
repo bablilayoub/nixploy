@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
 import { ComposeDetail } from "@/components/compose/compose-detail";
 
@@ -12,5 +13,10 @@ export default async function ComposeServicePage({
 	params: Promise<{ projectId: string; composeId: string }>;
 }) {
 	const { projectId, composeId } = await params;
-	return <ComposeDetail projectId={projectId} composeId={composeId} />;
+	// ComposeDetail reads useSearchParams (tab deep links) — Suspense boundary required.
+	return (
+		<Suspense>
+			<ComposeDetail projectId={projectId} composeId={composeId} />
+		</Suspense>
+	);
 }

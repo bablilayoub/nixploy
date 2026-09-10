@@ -245,6 +245,16 @@ function buildConfig(
 	}
 }
 
+/**
+ * The router nulls every `*Config` for callers without `secrets.read`. An
+ * edit then starts with empty credential fields that must not be treated as
+ * "missing" — leaving them blank keeps the stored config untouched.
+ */
+function isConfigRedacted(notification: NotificationRow): boolean {
+	const key = `${notification.type}Config` as keyof NotificationRow;
+	return notification[key] === null || notification[key] === undefined;
+}
+
 /** Flatten a channel's config jsonb back into form values (inverse of buildConfig). */
 function extractValues(notification: NotificationRow): Record<string, string> {
 	const asString = (value: unknown) => (value === null || value === undefined ? "" : String(value));
@@ -415,7 +425,14 @@ export function NotificationDialog({
 
 	const saving = createMutation.isPending || updateMutation.isPending;
 	const fields = TYPE_FIELDS[type];
-	const missingRequired = fields.some((field) => field.required && !values[field.key]?.trim());
+	const redacted = Boolean(editing && isConfigRedacted(editing));
+	const anyValueEntered = fields.some((field) => values[field.key]?.trim());
+	// With redacted credentials, an untouched form keeps the stored config;
+	// once anything is typed the whole config is re-entered and re-validated.
+	const keepStoredConfig = redacted && !anyValueEntered;
+	const missingRequired = keepStoredConfig
+		? false
+		: fields.some((field) => field.required && !values[field.key]?.trim());
 
 	const submit = () => {
 		if (editing) {
@@ -423,7 +440,7 @@ export function NotificationDialog({
 				notificationId: editing.notificationId,
 				name,
 				type,
-				...buildConfig(type, values),
+				...(keepStoredConfig ? {} : buildConfig(type, values)),
 				...events,
 			});
 		} else {
@@ -488,6 +505,13 @@ export function NotificationDialog({
 							</Select>
 						</div>
 					</div>
+
+					{redacted && (
+						<p className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+							Credentials are hidden because you cannot view secrets. Leave the fields blank to keep
+							the current configuration, or re-enter every field to replace it.
+						</p>
+					)}
 
 					{fields.map((field) => (
 						<div key={field.key} className="grid gap-2">

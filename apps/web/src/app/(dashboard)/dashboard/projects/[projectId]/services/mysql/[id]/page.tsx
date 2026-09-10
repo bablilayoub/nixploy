@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import { DatabaseDetail } from "@/components/databases/database-detail";
 
 export default async function MysqlServicePage({
@@ -6,5 +8,10 @@ export default async function MysqlServicePage({
 	params: Promise<{ projectId: string; id: string }>;
 }) {
 	const { projectId, id } = await params;
-	return <DatabaseDetail type="mysql" id={id} projectId={projectId} />;
+	// DatabaseDetail reads useSearchParams (tab deep links) — Suspense boundary required.
+	return (
+		<Suspense>
+			<DatabaseDetail type="mysql" id={id} projectId={projectId} />
+		</Suspense>
+	);
 }

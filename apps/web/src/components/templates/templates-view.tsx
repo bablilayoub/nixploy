@@ -3,8 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { ArrowDownAZ, ArrowUpAZ, LayoutGrid } from "lucide-react";
-import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { PageHeader } from "@/components/shell";
@@ -19,10 +19,11 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
-import { DeployTemplateDialog } from "./deploy-template-dialog";
+import { DeployTemplateDialog, templateDeployBlocker } from "./deploy-template-dialog";
 import { TemplateDetailsDialog } from "./template-details-dialog";
 import { TemplateLogo } from "./template-logo";
 
@@ -34,10 +35,13 @@ function TemplateCard({
 	template,
 	onInspect,
 	onDeploy,
+	deployBlocker,
 }: {
 	template: TemplateSummary;
 	onInspect: () => void;
 	onDeploy: () => void;
+	/** Reason the caller cannot deploy (disables the button), or null. */
+	deployBlocker: string | null;
 }) {
 	return (
 		<article className="group flex h-full flex-col rounded-lg border border-border transition-colors hover:border-foreground/20">
@@ -67,7 +71,12 @@ function TemplateCard({
 				<Button variant="ghost" size="sm" className="text-muted-foreground" onClick={onInspect}>
 					Details
 				</Button>
-				<Button size="sm" onClick={onDeploy}>
+				<Button
+					size="sm"
+					onClick={onDeploy}
+					disabled={deployBlocker !== null}
+					title={deployBlocker ?? undefined}
+				>
 					Deploy
 				</Button>
 			</div>
@@ -77,6 +86,9 @@ function TemplateCard({
 
 export function TemplatesView() {
 	const trpc = useTRPC();
+	const router = useRouter();
+	const pathname = usePathname();
+	const access = useCapabilities();
 	const [search, setSearch] = useState("");
 	const [category, setCategory] = useState(ALL_CATEGORIES);
 	const [sort, setSort] = useState<"asc" | "desc">("asc");
@@ -101,6 +113,18 @@ export function TemplatesView() {
 		const match = templates.find((template) => template.id === preselectId);
 		if (match) setSelected(match);
 	}, [preselectId, templates]);
+
+	// Drop `?template=` when the sheet closes so picking the same template
+	// again (e.g. from ⌘K) is a real navigation that re-triggers the effect.
+	const closeDeploy = useCallback(() => {
+		setSelected(null);
+		if (searchParams.has("template")) {
+			const next = new URLSearchParams(searchParams.toString());
+			next.delete("template");
+			const query = next.toString();
+			router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+		}
+	}, [pathname, router, searchParams]);
 
 	const categories = useMemo(() => {
 		const names: string[] = [];
@@ -227,6 +251,7 @@ export function TemplatesView() {
 										<li key={template.id}>
 											<TemplateCard
 												template={template}
+												deployBlocker={templateDeployBlocker(template, access)}
 												onInspect={() => setInspecting(template)}
 												onDeploy={() => setSelected(template)}
 											/>
@@ -242,6 +267,7 @@ export function TemplatesView() {
 							<li key={template.id}>
 								<TemplateCard
 									template={template}
+									deployBlocker={templateDeployBlocker(template, access)}
 									onInspect={() => setInspecting(template)}
 									onDeploy={() => setSelected(template)}
 								/>
@@ -256,7 +282,7 @@ export function TemplatesView() {
 				onClose={() => setInspecting(null)}
 				onDeploy={(template) => setSelected(template)}
 			/>
-			<DeployTemplateDialog template={selected} onClose={() => setSelected(null)} />
+			<DeployTemplateDialog template={selected} onClose={closeDeploy} />
 		</div>
 	);
 }

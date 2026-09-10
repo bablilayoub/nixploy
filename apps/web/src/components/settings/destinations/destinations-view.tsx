@@ -32,6 +32,8 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/use-capabilities";
+import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -41,6 +43,9 @@ export function DestinationsView() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
+	const { can } = useCapabilities();
+	const canManage = can("destinations.manage");
+	const manageHint = canManage ? undefined : missingCapabilityHint("destinations.manage");
 	const [name, setName] = useState("");
 	const [bucket, setBucket] = useState("");
 	const [region, setRegion] = useState("");
@@ -142,7 +147,7 @@ export function DestinationsView() {
 				actions={
 					<Dialog open={open} onOpenChange={setOpen}>
 						<DialogTrigger asChild>
-							<Button size="sm">
+							<Button size="sm" disabled={!canManage} title={manageHint}>
 								<Plus className="size-4" />
 								Add backup destination
 							</Button>
@@ -287,9 +292,11 @@ export function DestinationsView() {
 											<Button
 												variant="ghost"
 												size="icon"
+												title={manageHint}
 												disabled={
-													testMutation.isPending &&
-													testMutation.variables?.destinationId === destination.destinationId
+													!canManage ||
+													(testMutation.isPending &&
+														testMutation.variables?.destinationId === destination.destinationId)
 												}
 												onClick={() =>
 													testMutation.mutate({
@@ -305,16 +312,23 @@ export function DestinationsView() {
 												)}
 												<span className="sr-only">Test connection</span>
 											</Button>
-											<Button variant="ghost" size="icon" onClick={() => setEditing(destination)}>
+											<Button
+												variant="ghost"
+												size="icon"
+												disabled={!canManage}
+												title={manageHint}
+												onClick={() => setEditing(destination)}
+											>
 												<Pencil className="size-4" />
 												<span className="sr-only">Edit destination</span>
 											</Button>
 											<ConfirmDeleteDialog
 												title="Remove destination"
 												description={`Remove "${destination.name}"? Backups pointing at it will be deleted too.`}
-												isPending={removeMutation.isPending}
+												disabled={!canManage}
+												disabledReason={manageHint}
 												onConfirm={() =>
-													removeMutation.mutate({
+													removeMutation.mutateAsync({
 														destinationId: destination.destinationId,
 													})
 												}

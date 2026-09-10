@@ -40,7 +40,9 @@ import {
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { UserAvatar } from "@/components/user-avatar";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { authClient, useSession } from "@/lib/auth-client";
+import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 type InvitableRole = "viewer" | "member" | "deployer" | "admin";
@@ -79,10 +81,14 @@ export function MembersCard() {
 	const { data: session } = useSession();
 	const { data: activeOrganization, isPending: isOrgPending } = authClient.useActiveOrganization();
 	const organizationId = activeOrganization?.id;
+	const { can } = useCapabilities();
+	const canManage = can("members.manage");
+	const manageHint = canManage ? undefined : missingCapabilityHint("members.manage");
 
 	const [members, setMembers] = useState<MemberRow[]>([]);
 	const [invitations, setInvitations] = useState<InvitationRow[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
+	const [loadError, setLoadError] = useState<string | null>(null);
 	const [inviteOpen, setInviteOpen] = useState(false);
 	const [createdLink, setCreatedLink] = useState<string | null>(null);
 	const [email, setEmail] = useState("");
@@ -113,6 +119,7 @@ export function MembersCard() {
 			setIsLoading(false);
 			return;
 		}
+		setIsLoading(true);
 		const [membersResult, invitationsResult] = await Promise.all([
 			authClient.organization.listMembers({
 				query: { organizationId },
@@ -122,11 +129,15 @@ export function MembersCard() {
 			}),
 		]);
 		if (membersResult.error) {
-			toast.error(membersResult.error.message ?? "Failed to load members");
+			// A failed fetch must not read as "this organization has no members".
+			setLoadError(membersResult.error.message ?? "Failed to load members");
 		} else {
+			setLoadError(null);
 			setMembers((membersResult.data?.members ?? []) as unknown as MemberRow[]);
 		}
-		if (!invitationsResult.error) {
+		if (invitationsResult.error) {
+			toast.error(invitationsResult.error.message ?? "Failed to load pending invitations");
+		} else {
 			const all = (invitationsResult.data ?? []) as unknown as InvitationRow[];
 			setInvitations(all.filter((invitation) => invitation.status === "pending"));
 		}
@@ -145,7 +156,7 @@ export function MembersCard() {
 		});
 		if (error) {
 			toast.error(error.message ?? "Failed to remove member");
-			return;
+			throw new Error(error.message ?? "Failed to remove member");
 		}
 		toast.success("Member removed");
 		await loadMembers();
@@ -194,7 +205,7 @@ export function MembersCard() {
 			}}
 		>
 			<DialogTrigger asChild>
-				<Button size="sm">
+				<Button size="sm" disabled={!canManage} title={manageHint}>
 					<Plus className="size-4" />
 					Invite Member
 				</Button>
@@ -312,6 +323,14 @@ export function MembersCard() {
 					<Skeleton className="h-10 w-full" />
 					<Skeleton className="h-10 w-full" />
 				</div>
+			) : loadError ? (
+				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
+					<p className="text-sm font-medium">Could not load members</p>
+					<p className="text-sm text-muted-foreground">{loadError}</p>
+					<Button variant="outline" size="sm" onClick={() => void loadMembers()}>
+						Retry
+					</Button>
+				</div>
 			) : members.length === 0 ? (
 				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
 					<Users className="size-8 text-muted-foreground" />
@@ -360,8 +379,11 @@ export function MembersCard() {
 											{format(new Date(member.createdAt), "MMM d, yyyy")}
 										</TableCell>
 										<TableCell>
-											{isOwner || isSelf ? (
-												<span className="flex items-center gap-2 text-sm capitalize">
+											{isOwner || isSelf || !canManage ? (
+												<span
+													className="flex items-center gap-2 text-sm capitalize"
+													title={!isOwner && !isSelf ? manageHint : undefined}
+												>
 													<StatusDot status={isOwner ? "info" : "neutral"} />
 													{member.role}
 												</span>
@@ -385,7 +407,8 @@ export function MembersCard() {
 										</TableCell>
 										<TableCell>
 											<div className="flex items-center justify-end gap-1">
-												{!isOwner && (
+												{/* The server refuses self-edits, so no Permissions on your own row. */}
+												{!isOwner && !isSelf && canManage && (
 													<MemberCapabilitiesDialog
 														memberId={member.id}
 														memberName={displayName}
@@ -396,6 +419,8 @@ export function MembersCard() {
 													<ConfirmDeleteDialog
 														title="Remove member"
 														description={`Remove ${displayName} from this organization?`}
+														disabled={!canManage}
+														disabledReason={manageHint}
 														onConfirm={() => removeMember(member)}
 													/>
 												)}
@@ -408,7 +433,7 @@ export function MembersCard() {
 					</Table>
 				</TableCard>
 			)}
-			{!isLoading && !isOrgPending && invitations.length > 0 && (
+			{!isLoading && !isOrgPending && !loadError && invitations.length > 0 && (
 				<div className="mt-6 flex flex-col gap-3">
 					<p className="text-sm font-medium text-muted-foreground">Pending invitations</p>
 					<div className="divide-y rounded-lg border">
@@ -423,7 +448,13 @@ export function MembersCard() {
 									</span>
 								</div>
 								<CopyButton value={invitationLink(invitation.id)} label="Copy link" />
-								<Button variant="ghost" size="sm" onClick={() => cancelInvitation(invitation)}>
+								<Button
+									variant="ghost"
+									size="sm"
+									disabled={!canManage}
+									title={manageHint}
+									onClick={() => cancelInvitation(invitation)}
+								>
 									Cancel
 								</Button>
 							</div>

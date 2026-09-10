@@ -36,6 +36,8 @@ import {
 	SheetTitle,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
+import { useCapabilities } from "@/hooks/use-capabilities";
+import { INSTANCE_ADMIN_HINT, missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { TemplateLogo } from "./template-logo";
@@ -45,6 +47,25 @@ import type { TemplateSummary } from "./templates-view";
 const GENERATE_SECRET = "{{generateSecret}}";
 
 type StepId = "destination" | "configure" | "domain";
+
+/**
+ * Why the caller cannot deploy this template, mirroring template.deploy's
+ * server checks — or null when every gate passes. Used to disable Deploy
+ * buttons up front instead of failing at the end of the wizard.
+ */
+export function templateDeployBlocker(
+	template: Pick<TemplateSummary, "hostPrivileged">,
+	access: { can: (capability: string) => boolean; isInstanceAdmin: boolean },
+	options: { withDomain?: boolean } = {},
+): string | null {
+	if (!access.can("templates.deploy")) return missingCapabilityHint("templates.deploy");
+	if (!access.can("secrets.write")) return missingCapabilityHint("secrets.write");
+	if (template.hostPrivileged && !access.isInstanceAdmin) return INSTANCE_ADMIN_HINT;
+	if (options.withDomain && !access.can("domains.manage")) {
+		return missingCapabilityHint("domains.manage");
+	}
+	return null;
+}
 
 export function DeployTemplateDialog({
 	template,
@@ -130,6 +151,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 	const trpcClient = useTRPCClient();
 	const queryClient = useQueryClient();
 	const router = useRouter();
+	const access = useCapabilities();
 
 	const { data: projects } = useQuery(trpc.project.all.queryOptions());
 
@@ -185,12 +207,22 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 
 	const deploy = useMutation(
 		trpc.template.deploy.mutationOptions({
-			onSuccess: async (result) => {
+			onSuccess: async (result, variables) => {
 				toast.success(`Deploying ${template.name} — watch the deployment logs`);
-				await queryClient.invalidateQueries({
-					queryKey: trpc.project.all.queryKey(),
-				});
-				router.push(`/dashboard/projects/${projectId}/services/compose/${result.composeId}`);
+				// A new compose service now exists in the target project — refresh
+				// the project list, the project page and its compose service list.
+				await Promise.all([
+					queryClient.invalidateQueries({ queryKey: trpc.project.all.queryKey() }),
+					queryClient.invalidateQueries({
+						queryKey: trpc.project.one.queryKey({ projectId: variables.projectId }),
+					}),
+					queryClient.invalidateQueries({
+						queryKey: trpc.compose.all.queryKey({ projectId: variables.projectId }),
+					}),
+				]);
+				router.push(
+					`/dashboard/projects/${variables.projectId}/services/compose/${result.composeId}`,
+				);
 			},
 			onError: (error) => toast.error(error.message),
 		}),
@@ -219,8 +251,13 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 	};
 
 	const canContinueDestination = Boolean(projectId && environmentName);
+	const withDomain = domainEnabled && Boolean(domainHost.trim());
+	const blocker = templateDeployBlocker(template, access, { withDomain });
 	const canDeploy =
-		canContinueDestination && !(domainEnabled && !domainHost.trim()) && !generatingHost;
+		canContinueDestination &&
+		!(domainEnabled && !domainHost.trim()) &&
+		!generatingHost &&
+		blocker === null;
 
 	const goNext = () => {
 		const next = steps[stepIndex + 1];
@@ -260,6 +297,12 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 							This template needs elevated host access (Docker socket and/or Linux capabilities).
 							Only the instance admin can deploy it.
 						</p>
+					</div>
+				)}
+				{blocker && !(template.hostPrivileged && blocker === INSTANCE_ADMIN_HINT) && (
+					<div className="mb-5 flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/5 p-3">
+						<ShieldAlert className="mt-0.5 size-4 shrink-0 text-warning" />
+						<p className="text-sm text-muted-foreground">You cannot deploy this: {blocker}.</p>
 					</div>
 				)}
 				{step === "destination" && (
@@ -388,6 +431,12 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 									id="template-domain-toggle"
 									checked={domainEnabled}
 									onCheckedChange={onDomainToggle}
+									disabled={!access.can("domains.manage")}
+									title={
+										access.can("domains.manage")
+											? undefined
+											: missingCapabilityHint("domains.manage")
+									}
 								/>
 							</div>
 							{domainEnabled && (
@@ -438,7 +487,12 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 					Back
 				</Button>
 				{isLastStep ? (
-					<Button type="button" onClick={submit} disabled={!canDeploy || deploy.isPending}>
+					<Button
+						type="button"
+						onClick={submit}
+						disabled={!canDeploy || deploy.isPending}
+						title={blocker ?? undefined}
+					>
 						{deploy.isPending ? (
 							<>
 								<Loader2 className="size-4 animate-spin" />

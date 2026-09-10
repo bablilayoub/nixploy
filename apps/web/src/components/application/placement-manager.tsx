@@ -5,9 +5,11 @@ import { Loader2, Server } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { capabilityHint } from "@/components/services/capability-hint";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -34,6 +36,8 @@ function placementFromConstraints(text: string): PlacementSwarm | null {
 export function PlacementManager({ application }: { application: Application }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	const canWrite = can("service.write");
 	const [text, setText] = useState(() => constraintsFromPlacement(application.placementSwarm));
 
 	const save = useMutation(
@@ -75,7 +79,8 @@ export function PlacementManager({ application }: { application: Application }) 
 				</div>
 				<Button
 					type="button"
-					disabled={save.isPending}
+					disabled={save.isPending || !canWrite}
+					title={canWrite ? undefined : capabilityHint("service.write")}
 					onClick={() =>
 						save.mutate({
 							applicationId: application.applicationId,

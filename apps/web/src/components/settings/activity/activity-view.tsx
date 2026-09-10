@@ -1,8 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { History, Search } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { QueryState } from "@/components/query-state";
 import { PageHeader } from "@/components/shell";
@@ -67,18 +67,28 @@ export function ActivityView() {
 	const [action, setAction] = useState(ALL);
 	const [targetType, setTargetType] = useState(ALL);
 	const [search, setSearch] = useState("");
+	const [debouncedSearch, setDebouncedSearch] = useState("");
 	const [page, setPage] = useState(0);
 
+	// Query on pauses in typing, not on every keystroke.
+	useEffect(() => {
+		const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+		return () => clearTimeout(timer);
+	}, [search]);
+
 	const facetsQuery = useQuery(trpc.audit.facets.queryOptions());
-	const auditQuery = useQuery(
-		trpc.audit.all.queryOptions({
+	const auditQuery = useQuery({
+		...trpc.audit.all.queryOptions({
 			action: action === ALL ? undefined : action,
 			targetType: targetType === ALL ? undefined : targetType,
-			search: search.trim() || undefined,
+			search: debouncedSearch || undefined,
 			limit: PAGE_SIZE,
 			offset: page * PAGE_SIZE,
 		}),
-	);
+		// Keep the current rows on screen while the next filter/page loads
+		// instead of collapsing the table to a skeleton.
+		placeholderData: keepPreviousData,
+	});
 
 	const rows = auditQuery.data?.rows ?? [];
 	const total = auditQuery.data?.total ?? 0;
@@ -152,7 +162,7 @@ export function ActivityView() {
 			</div>
 
 			<QueryState
-				isPending={auditQuery.isLoading}
+				isPending={auditQuery.isPending}
 				isError={auditQuery.isError}
 				error={auditQuery.error}
 				onRetry={() => auditQuery.refetch()}
@@ -177,7 +187,7 @@ export function ActivityView() {
 					</div>
 				}
 			>
-				<TableCard>
+				<TableCard className={auditQuery.isPlaceholderData ? "opacity-60" : undefined}>
 					<Table>
 						<TableHeader>
 							<TableRow>

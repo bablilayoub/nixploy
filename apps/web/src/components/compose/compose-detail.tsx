@@ -18,6 +18,7 @@ import { MonitoringTab } from "@/components/compose/monitoring-tab";
 import { SettingsTab } from "@/components/compose/settings-tab";
 import { TerminalTab } from "@/components/compose/terminal-tab";
 import { SchedulesTab } from "@/components/schedules/schedules-tab";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { CopilotChatDrawer } from "@/components/services/copilot-chat-drawer";
 import { ServiceStatusBadge } from "@/components/services/status-badge";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
@@ -35,6 +36,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSyncedTab } from "@/hooks/use-synced-tab";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -77,13 +79,26 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 	const subTab = (parent: string) =>
 		SUB_TAB_PARENT[tab] === parent ? tab : SUB_TAB_DEFAULT[parent];
 	const [confirmStop, setConfirmStop] = useState(false);
+	const { can } = useCapabilities();
 
-	const { data, isLoading, isError } = useQuery(trpc.compose.one.queryOptions({ composeId }));
+	// The worker flips `status` to "running" only when it picks the job up, a
+	// moment after the deploy mutation returns; poll for a bounded window after
+	// queuing so that edge is not missed when the queue is busy.
+	const [pollUntil, setPollUntil] = useState(0);
+	const { data, isLoading, isError, error, refetch } = useQuery({
+		...trpc.compose.one.queryOptions({ composeId }),
+		// Poll while a deployment is in flight so the header settles on its own.
+		refetchInterval: (query) =>
+			query.state.data?.status === "running" || Date.now() < pollUntil ? 5_000 : false,
+	});
 
-	const invalidate = () =>
+	const invalidate = () => {
 		queryClient.invalidateQueries({
 			queryKey: trpc.compose.one.queryKey({ composeId }),
 		});
+		queryClient.invalidateQueries({ queryKey: trpc.compose.all.pathKey() });
+		queryClient.invalidateQueries({ queryKey: trpc.deployment.byCompose.pathKey() });
+	};
 
 	const onActionError = (error: unknown) =>
 		toast.error(error instanceof Error ? error.message : "Action failed");
@@ -92,6 +107,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 		trpc.compose.deploy.mutationOptions({
 			onSuccess: () => {
 				toast.success("Deployment queued");
+				setPollUntil(Date.now() + 30_000);
 				invalidate();
 			},
 			onError: onActionError,
@@ -101,6 +117,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 		trpc.compose.redeploy.mutationOptions({
 			onSuccess: () => {
 				toast.success("Redeployment queued");
+				setPollUntil(Date.now() + 30_000);
 				invalidate();
 			},
 			onError: onActionError,
@@ -110,6 +127,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 		trpc.compose.stop.mutationOptions({
 			onSuccess: () => {
 				toast.success("Compose service stopped");
+				setConfirmStop(false);
 				invalidate();
 			},
 			onError: onActionError,
@@ -147,8 +165,13 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 				<Layers className="size-8 text-muted-foreground" />
 				<p className="font-medium">Compose service not found</p>
 				<p className="text-sm text-muted-foreground">
-					It may have been deleted, or you don't have access to it.
+					{error?.message ?? "It may have been deleted, or you don't have access to it."}
 				</p>
+				{isError && (
+					<Button variant="outline" size="sm" onClick={() => refetch()}>
+						Retry
+					</Button>
+				)}
 			</div>
 		);
 	}
@@ -160,6 +183,10 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 		stopMutation.isPending ||
 		startMutation.isPending;
 	const isRunning = compose.status === "running" || compose.status === "done";
+	const canDeploy = can("service.deploy");
+	const canRuntime = can("service.runtime");
+	const deployHint = canDeploy ? undefined : capabilityHint("service.deploy");
+	const runtimeHint = canRuntime ? undefined : capabilityHint("service.runtime");
 
 	return (
 		<div className="flex flex-col gap-6">
@@ -187,7 +214,8 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 					<>
 						<CopilotChatDrawer target={{ type: "compose", id: composeId, name: compose.name }} />
 						<Button
-							disabled={anyActionPending}
+							disabled={anyActionPending || !canDeploy}
+							title={deployHint}
 							onClick={() => deployMutation.mutate({ composeId })}
 						>
 							{deployMutation.isPending ? (
@@ -200,7 +228,8 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 						<Button
 							variant="outline"
 							className="hidden sm:inline-flex"
-							disabled={anyActionPending}
+							disabled={anyActionPending || !canDeploy}
+							title={deployHint}
 							onClick={() => redeployMutation.mutate({ composeId })}
 						>
 							{redeployMutation.isPending ? (
@@ -214,7 +243,8 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 							<Button
 								variant="outline"
 								className="hidden sm:inline-flex"
-								disabled={anyActionPending}
+								disabled={anyActionPending || !canRuntime}
+								title={runtimeHint}
 								onClick={() => setConfirmStop(true)}
 							>
 								{stopMutation.isPending ? (
@@ -228,7 +258,8 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 							<Button
 								variant="outline"
 								className="hidden sm:inline-flex"
-								disabled={anyActionPending}
+								disabled={anyActionPending || !canRuntime}
+								title={runtimeHint}
 								onClick={() => startMutation.mutate({ composeId })}
 							>
 								{startMutation.isPending ? (
@@ -315,11 +346,14 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={stopMutation.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
 							variant="destructive"
 							disabled={stopMutation.isPending}
-							onClick={() => stopMutation.mutate({ composeId })}
+							onClick={(event) => {
+								event.preventDefault();
+								stopMutation.mutate({ composeId });
+							}}
 						>
 							{stopMutation.isPending && <Loader2 className="size-4 animate-spin" />}
 							Stop

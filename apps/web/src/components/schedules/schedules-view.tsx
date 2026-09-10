@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { QueryState } from "@/components/query-state";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { PageHeader, StatusDot } from "@/components/shell";
 import {
 	AlertDialog,
@@ -49,6 +50,7 @@ import {
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { Textarea } from "@/components/ui/textarea";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { scheduleRunStatusDot } from "@/lib/status";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -81,10 +83,54 @@ const EMPTY_FORM = {
 export function SchedulesView() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can, role, isInstanceAdmin, isLoading: capabilitiesLoading } = useCapabilities();
+	// Every schedule mutation needs schedules.manage. On top of that, "This
+	// Nixploy host" schedules run a shell next to docker.sock — instance admins
+	// only — and managed-server schedules need an org admin.
+	const hasManage = can("schedules.manage");
+	const isOrgAdmin = ["admin", "owner"].some((part) =>
+		(role ?? "")
+			.split(",")
+			.map((segment) => segment.trim())
+			.includes(part),
+	);
+	// `role` is null until the capabilities query settles — do not flash the
+	// org-admin controls disabled in the meantime.
+	const orgAdminOrLoading = isOrgAdmin || capabilitiesLoading;
+	const canCreateHost = hasManage && isInstanceAdmin;
+	const canCreateServer = hasManage && orgAdminOrLoading;
+	const canCreate = canCreateHost || canCreateServer;
+	const createHint = canCreate
+		? undefined
+		: hasManage
+			? "Requires an organization or instance admin"
+			: capabilityHint("schedules.manage");
+	/** Row-level gate: the target kind decides which admin level applies. */
+	const canManageRow = (schedule: ScheduleRow) =>
+		hasManage &&
+		(schedule.scheduleType === "nixploy-server"
+			? isInstanceAdmin
+			: schedule.scheduleType === "server"
+				? orgAdminOrLoading
+				: true);
+	const rowHint = (schedule: ScheduleRow) =>
+		canManageRow(schedule)
+			? undefined
+			: !hasManage
+				? capabilityHint("schedules.manage")
+				: schedule.scheduleType === "nixploy-server"
+					? "Requires an instance administrator"
+					: "Requires an organization admin";
+	const defaultScheduleType: ScheduleType = canCreateHost ? "nixploy-server" : "server";
 
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editing, setEditing] = useState<ScheduleRow | null>(null);
-	const [form, setForm] = useState(EMPTY_FORM);
+	// Typed explicitly: `defaultScheduleType` is narrowed to two members by the
+	// assignment above, which would otherwise narrow the form's union too.
+	const [form, setForm] = useState<typeof EMPTY_FORM>({
+		...EMPTY_FORM,
+		scheduleType: defaultScheduleType,
+	});
 	const [deleteTarget, setDeleteTarget] = useState<ScheduleRow | null>(null);
 
 	const {
@@ -105,9 +151,9 @@ export function SchedulesView() {
 	useEffect(() => {
 		if (!dialogOpen) {
 			setEditing(null);
-			setForm(EMPTY_FORM);
+			setForm({ ...EMPTY_FORM, scheduleType: defaultScheduleType });
 		}
-	}, [dialogOpen]);
+	}, [dialogOpen, defaultScheduleType]);
 
 	const invalidate = () =>
 		queryClient.invalidateQueries({ queryKey: trpc.schedule.all.queryKey() });
@@ -169,11 +215,14 @@ export function SchedulesView() {
 
 	const saving = create.isPending || update.isPending;
 	const needsTarget = form.scheduleType === "server";
+	const targetAllowed =
+		editing !== null || (form.scheduleType === "nixploy-server" ? canCreateHost : canCreateServer);
 	const isValid =
 		form.name.trim() !== "" &&
 		looksLikeCron(form.cronExpression) &&
 		form.command.trim() !== "" &&
-		(!needsTarget || form.targetId.trim() !== "");
+		(!needsTarget || form.targetId.trim() !== "") &&
+		targetAllowed;
 
 	const presetValue = CRON_PRESETS.some((preset) => preset.value === form.cronExpression)
 		? form.cronExpression
@@ -223,7 +272,12 @@ export function SchedulesView() {
 				title="Schedules"
 				description="Cron jobs for services, servers, and this host."
 				actions={
-					<Button size="sm" onClick={() => setDialogOpen(true)}>
+					<Button
+						size="sm"
+						disabled={!canCreate}
+						title={createHint}
+						onClick={() => setDialogOpen(true)}
+					>
 						<Plus className="size-4" />
 						Add Schedule
 					</Button>
@@ -247,7 +301,13 @@ export function SchedulesView() {
 					<div className="flex flex-col items-center gap-2 rounded-xl border border-dashed py-16 text-center">
 						<CalendarClock className="size-8 text-muted-foreground" />
 						<p className="text-sm text-muted-foreground">No schedules yet.</p>
-						<Button size="sm" variant="outline" onClick={() => setDialogOpen(true)}>
+						<Button
+							size="sm"
+							variant="outline"
+							disabled={!canCreate}
+							title={createHint}
+							onClick={() => setDialogOpen(true)}
+						>
 							<Plus className="size-4" />
 							Add Schedule
 						</Button>
@@ -278,21 +338,30 @@ export function SchedulesView() {
 									</TableCell>
 									<TableCell className="font-mono text-xs">{schedule.cronExpression}</TableCell>
 									<TableCell>
-										<span
-											className="flex items-center gap-2 text-sm"
-											title={schedule.lastError ?? undefined}
-										>
-											<StatusDot
-												status={scheduleRunStatusDot[schedule.lastStatus ?? ""] ?? "neutral"}
-											/>
-											{schedule.lastRunAt
-												? formatDistanceToNow(new Date(schedule.lastRunAt), { addSuffix: true })
-												: schedule.lastStatus}
-										</span>
+										{schedule.lastStatus ? (
+											<span
+												className="flex items-center gap-2 text-sm"
+												title={schedule.lastError ?? undefined}
+											>
+												<StatusDot
+													status={scheduleRunStatusDot[schedule.lastStatus] ?? "neutral"}
+												/>
+												{schedule.lastRunAt
+													? formatDistanceToNow(new Date(schedule.lastRunAt), { addSuffix: true })
+													: schedule.lastStatus}
+											</span>
+										) : (
+											<span className="text-sm text-muted-foreground">Never</span>
+										)}
 									</TableCell>
 									<TableCell>
 										<Switch
 											checked={schedule.enabled}
+											// Double-clicks would otherwise queue enable + disable back to back.
+											disabled={
+												setEnabled.isPending || setDisabled.isPending || !canManageRow(schedule)
+											}
+											title={rowHint(schedule)}
 											onCheckedChange={(enabled) =>
 												enabled
 													? setEnabled.mutate({ scheduleId: schedule.scheduleId })
@@ -306,11 +375,12 @@ export function SchedulesView() {
 												variant="ghost"
 												size="sm"
 												aria-label="Run schedule now"
-												title="Run now"
-												disabled={runNow.isPending}
+												title={rowHint(schedule) ?? "Run now"}
+												disabled={runNow.isPending || !canManageRow(schedule)}
 												onClick={() => runNow.mutate({ scheduleId: schedule.scheduleId })}
 											>
-												{runNow.isPending ? (
+												{runNow.isPending &&
+												runNow.variables?.scheduleId === schedule.scheduleId ? (
 													<Loader2 className="size-4 animate-spin" />
 												) : (
 													<Play className="size-4" />
@@ -320,6 +390,8 @@ export function SchedulesView() {
 												variant="ghost"
 												size="sm"
 												aria-label="Edit schedule"
+												disabled={!canManageRow(schedule)}
+												title={rowHint(schedule)}
 												onClick={() => openEdit(schedule)}
 											>
 												<Pencil className="size-4" />
@@ -328,6 +400,8 @@ export function SchedulesView() {
 												variant="ghost"
 												size="sm"
 												aria-label="Delete schedule"
+												disabled={!canManageRow(schedule)}
+												title={rowHint(schedule)}
 												onClick={() => setDeleteTarget(schedule)}
 											>
 												<Trash2 className="size-4 text-destructive" />
@@ -369,10 +443,19 @@ export function SchedulesView() {
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
-										<SelectItem value="nixploy-server">This Nixploy host</SelectItem>
-										<SelectItem value="server">Managed server</SelectItem>
+										{canCreateHost && (
+											<SelectItem value="nixploy-server">This Nixploy host</SelectItem>
+										)}
+										<SelectItem value="server" disabled={!canCreateServer}>
+											Managed server
+										</SelectItem>
 									</SelectContent>
 								</Select>
+								{!canCreateHost && (
+									<p className="text-xs text-muted-foreground">
+										Schedules on the Nixploy host itself are limited to instance administrators.
+									</p>
+								)}
 							</div>
 						)}
 						{!editing && form.scheduleType === "server" && (
@@ -494,11 +577,15 @@ export function SchedulesView() {
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
 							variant="destructive"
 							disabled={remove.isPending}
-							onClick={() => deleteTarget && remove.mutate({ scheduleId: deleteTarget.scheduleId })}
+							onClick={(event) => {
+								// Keep the dialog open (with its spinner) until the mutation settles.
+								event.preventDefault();
+								if (deleteTarget) remove.mutate({ scheduleId: deleteTarget.scheduleId });
+							}}
 						>
 							{remove.isPending && <Loader2 className="size-4 animate-spin" />}
 							Delete

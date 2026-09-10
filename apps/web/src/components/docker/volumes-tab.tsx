@@ -29,7 +29,7 @@ import {
 import { TableCard } from "@/components/ui/table-card";
 import { useTRPC } from "@/lib/trpc";
 
-import { DockerError, type DockerTabProps } from "./docker-view";
+import { DockerError, type DockerTabProps, invalidateDockerQueries } from "./docker-view";
 
 type VolumeRow = {
 	Name: string;
@@ -54,7 +54,8 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 			onSuccess: () => {
 				toast.success("Volume removed");
 				setRemoving(null);
-				invalidate();
+				// Disk usage on the System tab changes too.
+				void invalidateDockerQueries(queryClient, trpc, serverId);
 			},
 			onError: (error) => toast.error(error.message),
 		}),
@@ -66,7 +67,7 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 					description: output.trim().split("\n").pop() ?? undefined,
 				});
 				setPruneOpen(false);
-				invalidate();
+				void invalidateDockerQueries(queryClient, trpc, serverId);
 			},
 			onError: (error) => toast.error(error.message),
 		}),

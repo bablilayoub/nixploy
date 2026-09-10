@@ -15,6 +15,7 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { QueryState } from "@/components/query-state";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { EmptyState } from "@/components/services/empty-state";
 import { SettingsSection } from "@/components/settings/settings-section";
 import {
@@ -56,6 +57,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 
 type CertificateType = "letsencrypt" | "none" | "custom";
@@ -72,6 +74,11 @@ export function DomainManager({
 	const trpc = useTRPC();
 	const trpcClient = useTRPCClient();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	const canManage = can("domains.manage");
+	const manageHint = canManage ? undefined : capabilityHint("domains.manage");
+	// Uptime probes are project settings (project.write on the server).
+	const canProbe = can("project.write");
 
 	const domainsQuery = useQuery(
 		serviceType === "application"
@@ -278,7 +285,7 @@ export function DomainManager({
 				title="Domains"
 				description="Route traffic to this service through Traefik."
 				actions={
-					<Button size="sm" onClick={openCreate}>
+					<Button size="sm" onClick={openCreate} disabled={!canManage} title={manageHint}>
 						<Plus className="size-4" />
 						Add Domain
 					</Button>
@@ -301,7 +308,13 @@ export function DomainManager({
 							title="No domains yet"
 							description="Add a domain to expose this service over HTTP(S)."
 							action={
-								<Button size="sm" variant="outline" onClick={openCreate}>
+								<Button
+									size="sm"
+									variant="outline"
+									onClick={openCreate}
+									disabled={!canManage}
+									title={manageHint}
+								>
 									<Plus className="size-4" />
 									Add Domain
 								</Button>
@@ -359,7 +372,8 @@ export function DomainManager({
 													<div className="flex items-center gap-2">
 														<Switch
 															checked={Boolean(probe?.enabled)}
-															disabled={setProbe.isPending}
+															disabled={setProbe.isPending || !canProbe}
+															title={canProbe ? undefined : capabilityHint("project.write")}
 															onCheckedChange={(enabled) =>
 																setProbe.mutate({ domainId: domain.domainId, enabled })
 															}
@@ -377,6 +391,8 @@ export function DomainManager({
 													variant="ghost"
 													size="icon-sm"
 													aria-label={`Edit domain ${domain.host}`}
+													disabled={!canManage}
+													title={manageHint}
 													onClick={() => openEdit(domain)}
 												>
 													<Pencil className="size-3.5" />
@@ -385,6 +401,8 @@ export function DomainManager({
 													variant="ghost"
 													size="icon-sm"
 													aria-label={`Delete domain ${domain.host}`}
+													disabled={!canManage}
+													title={manageHint}
 													onClick={() => setDeleting(domain)}
 												>
 													<Trash2 className="size-3.5 text-destructive" />
@@ -579,11 +597,13 @@ export function DomainManager({
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
 							variant="destructive"
 							disabled={deleteMutation.isPending}
-							onClick={() => {
+							onClick={(event) => {
+								// Keep the dialog open (with its spinner) until the mutation settles.
+								event.preventDefault();
 								if (deleting) deleteMutation.mutate({ domainId: deleting.domainId });
 							}}
 						>

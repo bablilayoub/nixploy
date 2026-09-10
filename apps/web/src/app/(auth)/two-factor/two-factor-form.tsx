@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -17,10 +17,14 @@ import {
 } from "@/components/ui/form";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { authClient } from "@/lib/auth-client";
+import { safeNextPath } from "@/lib/safe-next-path";
 import { type TwoFactorInput, twoFactorSchema } from "@/server/actions/auth.schema";
 
 export function TwoFactorForm() {
 	const router = useRouter();
+	const searchParams = useSearchParams();
+	// Login forwards its own `?next=` here so deep links survive the 2FA hop.
+	const nextPath = safeNextPath(searchParams.get("next"));
 	const form = useForm<TwoFactorInput>({
 		resolver: zodResolver(twoFactorSchema),
 		defaultValues: { code: "" },
@@ -35,7 +39,7 @@ export function TwoFactorForm() {
 			return;
 		}
 		toast.success("Verified");
-		router.push("/dashboard");
+		router.push(nextPath);
 		router.refresh();
 	}
 

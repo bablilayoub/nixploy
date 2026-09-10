@@ -5,7 +5,7 @@ import { Loader2, Tags } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
+import { capabilityHint } from "@/components/services/capability-hint";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 const DEFAULT_COLOR = "#6366f1";
@@ -29,6 +30,9 @@ export function ManageTagsDialog() {
 	const router = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
+	const { can } = useCapabilities();
+	const canManage = can("tags.manage");
+	const manageHint = canManage ? undefined : capabilityHint("tags.manage");
 	const [open, setOpen] = useState(false);
 	const [name, setName] = useState("");
 	const [color, setColor] = useState(DEFAULT_COLOR);
@@ -111,7 +115,8 @@ export function ManageTagsDialog() {
 										type="button"
 										size="sm"
 										variant="ghost"
-										disabled={deleteMutation.isPending}
+										disabled={deleteMutation.isPending || !canManage}
+										title={manageHint}
 										onClick={() => deleteMutation.mutate({ tagId: tag.tagId })}
 									>
 										Delete
@@ -140,7 +145,8 @@ export function ManageTagsDialog() {
 							<Button
 								type="button"
 								size="sm"
-								disabled={name.trim().length === 0 || createMutation.isPending}
+								disabled={name.trim().length === 0 || createMutation.isPending || !canManage}
+								title={manageHint}
 								onClick={() => createMutation.mutate({ name: name.trim(), color })}
 							>
 								{createMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : "Add"}

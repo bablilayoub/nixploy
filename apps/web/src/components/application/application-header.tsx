@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { capabilityHint } from "@/components/services/capability-hint";
 import { CopilotChatDrawer } from "@/components/services/copilot-chat-drawer";
 import { PageHeader, StatusDot, type StatusDotStatus } from "@/components/shell";
 import {
@@ -25,6 +26,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -39,12 +41,16 @@ const STATUS_CONFIG: Record<string, { label: string; status: StatusDotStatus }> 
 export function ApplicationHeader({
 	application,
 	projectId,
+	onDeployQueued,
 }: {
 	application: Application;
 	projectId: string;
+	/** A deploy/redeploy was queued — the page uses it to poll `application.one` for a while. */
+	onDeployQueued?: () => void;
 }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
 	const applicationId = application.applicationId;
 	const [confirmStop, setConfirmStop] = useState(false);
 
@@ -52,6 +58,7 @@ export function ApplicationHeader({
 		queryClient.invalidateQueries({
 			queryKey: trpc.application.one.queryKey({ applicationId }),
 		});
+		queryClient.invalidateQueries({ queryKey: trpc.application.all.pathKey() });
 		queryClient.invalidateQueries({
 			queryKey: trpc.deployment.byApplication.pathKey(),
 		});
@@ -63,6 +70,7 @@ export function ApplicationHeader({
 		trpc.application.deploy.mutationOptions({
 			onSuccess: () => {
 				toast.success("Deployment queued");
+				onDeployQueued?.();
 				invalidate();
 			},
 			onError,
@@ -72,6 +80,7 @@ export function ApplicationHeader({
 		trpc.application.redeploy.mutationOptions({
 			onSuccess: () => {
 				toast.success("Redeployment queued");
+				onDeployQueued?.();
 				invalidate();
 			},
 			onError,
@@ -90,6 +99,7 @@ export function ApplicationHeader({
 		trpc.application.stop.mutationOptions({
 			onSuccess: () => {
 				toast.success("Application stopped");
+				setConfirmStop(false);
 				invalidate();
 			},
 			onError,
@@ -99,6 +109,11 @@ export function ApplicationHeader({
 	const isRunning = application.status === "running" || application.status === "done";
 	const isBusy = deploy.isPending || redeploy.isPending || start.isPending || stop.isPending;
 	const statusConfig = STATUS_CONFIG[application.status ?? "idle"] ?? STATUS_CONFIG.idle;
+
+	const canDeploy = can("service.deploy");
+	const canRuntime = can("service.runtime");
+	const deployHint = canDeploy ? undefined : capabilityHint("service.deploy");
+	const runtimeHint = canRuntime ? undefined : capabilityHint("service.runtime");
 
 	return (
 		<>
@@ -136,7 +151,11 @@ export function ApplicationHeader({
 								name: application.name,
 							}}
 						/>
-						<Button onClick={() => deploy.mutate({ applicationId })} disabled={isBusy}>
+						<Button
+							onClick={() => deploy.mutate({ applicationId })}
+							disabled={isBusy || !canDeploy}
+							title={deployHint}
+						>
 							{deploy.isPending ? (
 								<Loader2 className="size-4 animate-spin" />
 							) : (
@@ -148,7 +167,8 @@ export function ApplicationHeader({
 							variant="outline"
 							className="hidden sm:inline-flex"
 							onClick={() => redeploy.mutate({ applicationId })}
-							disabled={isBusy}
+							disabled={isBusy || !canDeploy}
+							title={deployHint}
 						>
 							{redeploy.isPending ? (
 								<Loader2 className="size-4 animate-spin" />
@@ -162,7 +182,8 @@ export function ApplicationHeader({
 								variant="outline"
 								className="hidden sm:inline-flex"
 								onClick={() => setConfirmStop(true)}
-								disabled={isBusy}
+								disabled={isBusy || !canRuntime}
+								title={runtimeHint}
 							>
 								{stop.isPending ? (
 									<Loader2 className="size-4 animate-spin" />
@@ -176,7 +197,8 @@ export function ApplicationHeader({
 								variant="outline"
 								className="hidden sm:inline-flex"
 								onClick={() => start.mutate({ applicationId })}
-								disabled={isBusy}
+								disabled={isBusy || !canRuntime}
+								title={runtimeHint}
 							>
 								{start.isPending ? (
 									<Loader2 className="size-4 animate-spin" />
@@ -200,20 +222,26 @@ export function ApplicationHeader({
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="end">
 								<DropdownMenuItem
-									disabled={isBusy}
+									disabled={isBusy || !canDeploy}
+									title={deployHint}
 									onClick={() => redeploy.mutate({ applicationId })}
 								>
 									<RefreshCw className="size-4" />
 									Redeploy
 								</DropdownMenuItem>
 								{isRunning ? (
-									<DropdownMenuItem disabled={isBusy} onClick={() => setConfirmStop(true)}>
+									<DropdownMenuItem
+										disabled={isBusy || !canRuntime}
+										title={runtimeHint}
+										onClick={() => setConfirmStop(true)}
+									>
 										<Square className="size-4" />
 										Stop
 									</DropdownMenuItem>
 								) : (
 									<DropdownMenuItem
-										disabled={isBusy}
+										disabled={isBusy || !canRuntime}
+										title={runtimeHint}
 										onClick={() => start.mutate({ applicationId })}
 									>
 										<Play className="size-4" />
@@ -234,11 +262,14 @@ export function ApplicationHeader({
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={stop.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
 							variant="destructive"
 							disabled={stop.isPending}
-							onClick={() => stop.mutate({ applicationId })}
+							onClick={(event) => {
+								event.preventDefault();
+								stop.mutate({ applicationId });
+							}}
 						>
 							{stop.isPending && <Loader2 className="size-4 animate-spin" />}
 							Stop

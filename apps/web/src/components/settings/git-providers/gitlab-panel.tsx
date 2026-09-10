@@ -28,12 +28,17 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/use-capabilities";
+import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 export function GitlabPanel() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
+	const { can } = useCapabilities();
+	const canManage = can("git_providers.manage");
+	const manageHint = canManage ? undefined : missingCapabilityHint("git_providers.manage");
 	const [name, setName] = useState("");
 	const [gitlabUrl, setGitlabUrl] = useState("https://gitlab.com");
 	const [accessToken, setAccessToken] = useState("");
@@ -93,7 +98,7 @@ export function GitlabPanel() {
 			actions={
 				<Dialog open={open} onOpenChange={setOpen}>
 					<DialogTrigger asChild>
-						<Button size="sm">
+						<Button size="sm" disabled={!canManage} title={manageHint}>
 							<Plus className="size-4" />
 							Add GitLab Provider
 						</Button>
@@ -200,9 +205,11 @@ export function GitlabPanel() {
 										<Button
 											variant="ghost"
 											size="icon"
+											title={manageHint}
 											disabled={
-												testMutation.isPending &&
-												testMutation.variables?.gitlabId === gitlab.gitlabId
+												!canManage ||
+												(testMutation.isPending &&
+													testMutation.variables?.gitlabId === gitlab.gitlabId)
 											}
 											onClick={() =>
 												testMutation.mutate({
@@ -221,9 +228,10 @@ export function GitlabPanel() {
 										<ConfirmDeleteDialog
 											title="Remove GitLab provider"
 											description={`Remove "${gitProvider.name}"?`}
-											isPending={removeMutation.isPending}
+											disabled={!canManage}
+											disabledReason={manageHint}
 											onConfirm={() =>
-												removeMutation.mutate({
+												removeMutation.mutateAsync({
 													gitlabId: gitlab.gitlabId,
 												})
 											}

@@ -39,11 +39,25 @@ export function DangerZoneCard() {
 			return;
 		}
 		let cancelled = false;
-		authClient.organization.listMembers({ query: { organizationId } }).then(({ data }) => {
-			if (cancelled) return;
-			const self = data?.members?.find((member) => member.userId === userId);
-			setIsOwner(self?.role === "owner");
-		});
+		authClient.organization
+			.listMembers({ query: { organizationId } })
+			.then(({ data, error }) => {
+				if (cancelled) return;
+				if (error) {
+					// The card is owner-only; without a member list we cannot prove
+					// ownership, so stay hidden but say why.
+					setIsOwner(false);
+					toast.error(error.message ?? "Failed to load organization members");
+					return;
+				}
+				const self = data?.members?.find((member) => member.userId === userId);
+				setIsOwner(self?.role === "owner");
+			})
+			.catch((error: unknown) => {
+				if (cancelled) return;
+				setIsOwner(false);
+				toast.error(error instanceof Error ? error.message : "Failed to load organization members");
+			});
 		return () => {
 			cancelled = true;
 		};

@@ -28,12 +28,17 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/use-capabilities";
+import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 export function GiteaPanel() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
+	const { can } = useCapabilities();
+	const canManage = can("git_providers.manage");
+	const manageHint = canManage ? undefined : missingCapabilityHint("git_providers.manage");
 	const [name, setName] = useState("");
 	const [giteaUrl, setGiteaUrl] = useState("https://gitea.com");
 	const [accessToken, setAccessToken] = useState("");
@@ -86,7 +91,7 @@ export function GiteaPanel() {
 			actions={
 				<Dialog open={open} onOpenChange={setOpen}>
 					<DialogTrigger asChild>
-						<Button size="sm">
+						<Button size="sm" disabled={!canManage} title={manageHint}>
 							<Plus className="size-4" />
 							Add Gitea Provider
 						</Button>
@@ -181,8 +186,11 @@ export function GiteaPanel() {
 										<Button
 											variant="ghost"
 											size="icon"
+											title={manageHint}
 											disabled={
-												testMutation.isPending && testMutation.variables?.giteaId === gitea.giteaId
+												!canManage ||
+												(testMutation.isPending &&
+													testMutation.variables?.giteaId === gitea.giteaId)
 											}
 											onClick={() =>
 												testMutation.mutate({
@@ -201,9 +209,10 @@ export function GiteaPanel() {
 										<ConfirmDeleteDialog
 											title="Remove Gitea provider"
 											description={`Remove "${gitProvider.name}"?`}
-											isPending={removeMutation.isPending}
+											disabled={!canManage}
+											disabledReason={manageHint}
 											onConfirm={() =>
-												removeMutation.mutate({
+												removeMutation.mutateAsync({
 													giteaId: gitea.giteaId,
 												})
 											}

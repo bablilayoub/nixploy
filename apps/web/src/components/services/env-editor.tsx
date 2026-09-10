@@ -1,8 +1,9 @@
 "use client";
 
-import { Loader2, Save, X } from "lucide-react";
+import { EyeOff, Loader2, Save, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { capabilityHint } from "@/components/services/capability-hint";
 import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/code-editor";
 
@@ -10,29 +11,51 @@ export function EnvEditor({
 	value,
 	onSave,
 	loading,
+	canRead = true,
+	canEdit = true,
 }: {
-	value: string;
-	onSave: (value: string) => void | Promise<void>;
+	/**
+	 * Current server value. `null` is ambiguous — it is both "never set" and
+	 * "redacted" (the server nulls it for members without `secrets.read`), so
+	 * the hidden state is driven by `canRead`, never by the value.
+	 */
+	value: string | null;
+	/**
+	 * Persist the draft. Must return the mutation promise (`mutateAsync`) so the
+	 * editor only leaves edit mode once the save succeeded; a rejected promise
+	 * keeps the draft and stays in edit mode (the caller toasts the error).
+	 */
+	onSave: (value: string) => Promise<unknown>;
 	loading?: boolean;
+	/**
+	 * Member has `secrets.read`. When false the server redacted the value, so a
+	 * read-only notice replaces the editor — otherwise a save could wipe the
+	 * stored variables with an empty draft.
+	 */
+	canRead?: boolean;
+	/** Member has `secrets.write`; when false the editor stays locked. */
+	canEdit?: boolean;
 }) {
-	const [draft, setDraft] = useState(value);
+	const serverValue = value ?? "";
+	const [draft, setDraft] = useState(serverValue);
 	const [saving, setSaving] = useState(false);
 	const [editing, setEditing] = useState(false);
 
 	useEffect(() => {
-		if (!editing) setDraft(value);
-	}, [value, editing]);
+		if (!editing) setDraft(serverValue);
+	}, [serverValue, editing]);
 
-	const dirty = draft !== value;
+	const dirty = draft !== serverValue;
 	const busy = Boolean(loading) || saving;
 
 	const startEditing = () => {
-		setDraft(value);
+		if (!canEdit) return;
+		setDraft(serverValue);
 		setEditing(true);
 	};
 
 	const stopEditing = (reset: boolean) => {
-		if (reset) setDraft(value);
+		if (reset) setDraft(serverValue);
 		setEditing(false);
 	};
 
@@ -41,10 +64,25 @@ export function EnvEditor({
 		try {
 			await onSave(draft);
 			stopEditing(false);
+		} catch {
+			// Keep the draft and stay in edit mode; the caller surfaces the error.
 		} finally {
 			setSaving(false);
 		}
 	};
+
+	if (!canRead) {
+		return (
+			<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border bg-card py-10 text-center">
+				<EyeOff className="size-6 text-muted-foreground" />
+				<p className="text-sm font-medium">Environment variables are hidden</p>
+				<p className="max-w-sm text-sm text-muted-foreground">
+					Viewing values requires the "secrets.read" capability. Editing is disabled so the stored
+					variables cannot be overwritten blindly.
+				</p>
+			</div>
+		);
+	}
 
 	return (
 		<div className="space-y-3">
@@ -63,7 +101,11 @@ export function EnvEditor({
 					lineNumbers: true,
 					foldGutter: false,
 				}}
-				lockMessage="Locked to prevent accidental edits."
+				lockMessage={
+					canEdit
+						? "Locked to prevent accidental edits."
+						: `Read-only — ${capabilityHint("secrets.write")}.`
+				}
 			/>
 			<div className="flex items-center justify-between gap-3">
 				<p className="text-xs text-muted-foreground">
@@ -82,7 +124,12 @@ export function EnvEditor({
 							<X className="size-3.5" />
 							Cancel
 						</Button>
-						<Button onClick={handleSave} disabled={!dirty || busy} size="sm">
+						<Button
+							onClick={() => void handleSave()}
+							disabled={!dirty || busy || !canEdit}
+							size="sm"
+							title={canEdit ? undefined : capabilityHint("secrets.write")}
+						>
 							{busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
 							Save
 						</Button>

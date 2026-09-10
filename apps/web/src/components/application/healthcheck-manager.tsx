@@ -5,11 +5,13 @@ import { HeartPulse, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { capabilityHint } from "@/components/services/capability-hint";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -61,6 +63,8 @@ function parseExisting(config: HealthConfig | null): {
 export function HealthcheckManager({ application }: { application: Application }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	const canWrite = can("service.write");
 
 	const existing = parseExisting(application.healthCheckSwarm as HealthConfig | null);
 	const [enabled, setEnabled] = useState(existing.enabled);
@@ -204,7 +208,12 @@ export function HealthcheckManager({ application }: { application: Application }
 					</>
 				)}
 
-				<Button size="sm" disabled={save.isPending} onClick={handleSave}>
+				<Button
+					size="sm"
+					disabled={save.isPending || !canWrite}
+					title={canWrite ? undefined : capabilityHint("service.write")}
+					onClick={handleSave}
+				>
 					{save.isPending && <Loader2 className="size-4 animate-spin" />}
 					Save healthcheck
 				</Button>

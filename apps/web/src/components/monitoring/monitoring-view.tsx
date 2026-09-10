@@ -11,6 +11,7 @@ import { ServiceStatusBadge } from "@/components/services/status-badge";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { formatBytes } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -63,10 +64,18 @@ function serviceHref(row: { kind: string; serviceId: string; projectId: string }
 export function MonitoringView() {
 	const trpc = useTRPC();
 	const [selectedKey, setSelectedKey] = useState<string | null>(null);
+	const { isInstanceAdmin } = useCapabilities();
+	// The session role is only known client-side; wait for mount so SSR and
+	// the first client paint agree on whether the host block exists.
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => setMounted(true), []);
+	// Host metrics without a serverId read the Nixploy host — instance admin only.
+	const showHost = mounted && isInstanceAdmin;
 
 	const hostQuery = useQuery({
 		...trpc.monitoring.serverStats.queryOptions({}),
 		refetchInterval: 30_000,
+		enabled: showHost,
 	});
 	const fleetQuery = useQuery({
 		...trpc.monitoring.fleetOverview.queryOptions(),
@@ -102,56 +111,64 @@ export function MonitoringView() {
 		<div className="flex flex-col gap-5">
 			<PageHeader
 				title="Monitoring"
-				description="Host health and live metrics across every service in this organization."
+				description={
+					showHost
+						? "Host health and live metrics across every service in this organization."
+						: "Live metrics across every service in this organization."
+				}
 			/>
 
-			<QueryState
-				isPending={hostQuery.isPending}
-				isError={hostQuery.isError}
-				error={hostQuery.error}
-				onRetry={() => hostQuery.refetch()}
-				skeleton={<Skeleton className="h-[4.5rem] w-full rounded-lg" />}
-				isEmpty={!host}
-				empty={
-					<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-6 text-center">
-						<p className="text-sm text-muted-foreground">Unable to read host metrics</p>
-					</div>
-				}
-			>
-				{host ? (
-					<div className="flex flex-col overflow-hidden rounded-xl border bg-card sm:flex-row">
-						<HostStat
-							icon={MemoryStick}
-							label="Memory"
-							value={`${formatBytes(host.memory.usedBytes)} / ${formatBytes(host.memory.totalBytes)}`}
-							percent={memoryPercent}
-							hint={memoryPercent != null ? `${memoryPercent.toFixed(0)}% used` : undefined}
-						/>
-						<HostStat
-							icon={HardDrive}
-							label="Disk"
-							value={
-								host.disk.totalBytes
-									? `${formatBytes(host.disk.usedBytes)} / ${formatBytes(host.disk.totalBytes)}`
-									: "Unavailable"
-							}
-							percent={diskPercent}
-							hint={
-								diskPercent != null
-									? `${diskPercent.toFixed(0)}% used`
-									: host.disk.usedPercent || undefined
-							}
-						/>
-						<HostStat
-							icon={Cpu}
-							label="Load"
-							value={host.loadAverage.map((v) => v.toFixed(2)).join(" · ")}
-							percent={null}
-							hint={`${host.containersRunning}/${host.containers} containers · ${host.cpus} CPUs`}
-						/>
-					</div>
-				) : null}
-			</QueryState>
+			{!mounted ? (
+				<Skeleton className="h-[4.5rem] w-full rounded-lg" />
+			) : showHost ? (
+				<QueryState
+					isPending={hostQuery.isPending}
+					isError={hostQuery.isError}
+					error={hostQuery.error}
+					onRetry={() => hostQuery.refetch()}
+					skeleton={<Skeleton className="h-[4.5rem] w-full rounded-lg" />}
+					isEmpty={!host}
+					empty={
+						<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-6 text-center">
+							<p className="text-sm text-muted-foreground">Unable to read host metrics</p>
+						</div>
+					}
+				>
+					{host ? (
+						<div className="flex flex-col overflow-hidden rounded-xl border bg-card sm:flex-row">
+							<HostStat
+								icon={MemoryStick}
+								label="Memory"
+								value={`${formatBytes(host.memory.usedBytes)} / ${formatBytes(host.memory.totalBytes)}`}
+								percent={memoryPercent}
+								hint={memoryPercent != null ? `${memoryPercent.toFixed(0)}% used` : undefined}
+							/>
+							<HostStat
+								icon={HardDrive}
+								label="Disk"
+								value={
+									host.disk.totalBytes
+										? `${formatBytes(host.disk.usedBytes)} / ${formatBytes(host.disk.totalBytes)}`
+										: "Unavailable"
+								}
+								percent={diskPercent}
+								hint={
+									diskPercent != null
+										? `${diskPercent.toFixed(0)}% used`
+										: host.disk.usedPercent || undefined
+								}
+							/>
+							<HostStat
+								icon={Cpu}
+								label="Load"
+								value={host.loadAverage.map((v) => v.toFixed(2)).join(" · ")}
+								percent={null}
+								hint={`${host.containersRunning}/${host.containers} containers · ${host.cpus} CPUs`}
+							/>
+						</div>
+					) : null}
+				</QueryState>
+			) : null}
 
 			<div className="grid items-start gap-5 lg:grid-cols-[minmax(16rem,18rem)_minmax(0,1fr)]">
 				<aside className="rounded-lg border">

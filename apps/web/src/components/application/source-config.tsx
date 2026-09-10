@@ -12,6 +12,7 @@ import {
 	splitRepoSelection,
 } from "@/components/git-provider-repo-picker";
 
+import { capabilityHint } from "@/components/services/capability-hint";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -51,9 +53,27 @@ function isGitProviderSource(sourceType: SourceType): sourceType is GitProviderS
 	);
 }
 
+/** Provider id stored for the application's current provider-backed source. */
+function storedProviderId(application: Application): string {
+	return (
+		application.githubId ??
+		application.gitlabId ??
+		application.bitbucketId ??
+		application.giteaId ??
+		""
+	);
+}
+
+function storedRepoSelection(application: Application): string {
+	return application.owner && application.repository
+		? `${application.owner}/${application.repository}`
+		: "";
+}
+
 export function SourceConfig({ application }: { application: Application }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
 	const applicationId = application.applicationId;
 
 	const [sourceType, setSourceType] = useState<SourceType>(application.sourceType);
@@ -62,18 +82,8 @@ export function SourceConfig({ application }: { application: Application }) {
 	const [gitBranch, setGitBranch] = useState(application.gitBranch ?? "");
 	const [sshKeyId, setSshKeyId] = useState(application.customGitSSHKeyId ?? NONE);
 	// provider-backed git
-	const [providerId, setProviderId] = useState(
-		application.githubId ??
-			application.gitlabId ??
-			application.bitbucketId ??
-			application.giteaId ??
-			"",
-	);
-	const [repoSelection, setRepoSelection] = useState(
-		application.owner && application.repository
-			? `${application.owner}/${application.repository}`
-			: "",
-	);
+	const [providerId, setProviderId] = useState(storedProviderId(application));
+	const [repoSelection, setRepoSelection] = useState(storedRepoSelection(application));
 	const [branch, setBranch] = useState(application.branch ?? "");
 	const [buildPath, setBuildPath] = useState(application.buildPath ?? "/");
 	const [autoDeploy, setAutoDeploy] = useState(application.autoDeploy);
@@ -88,24 +98,29 @@ export function SourceConfig({ application }: { application: Application }) {
 	const [dockerUsername, setDockerUsername] = useState(application.username ?? "");
 	const [dockerPassword, setDockerPassword] = useState("");
 	const [registryId, setRegistryId] = useState(application.registryId ?? NONE);
+	// Only mirror server values while the user is not editing — background
+	// refetches (deploy status flips, window focus) must not wipe typed text.
+	const [dirty, setDirty] = useState(false);
+
+	/** Wrap a setter so any user edit marks the form dirty. */
+	const edit =
+		<T,>(setter: (value: T) => void) =>
+		(value: T) => {
+			setDirty(true);
+			setter(value);
+		};
+
+	const serverProviderId = storedProviderId(application);
+	const serverRepoSelection = storedRepoSelection(application);
 
 	useEffect(() => {
+		if (dirty) return;
 		setSourceType(application.sourceType);
 		setGitUrl(application.gitUrl ?? "");
 		setGitBranch(application.gitBranch ?? "");
 		setSshKeyId(application.customGitSSHKeyId ?? NONE);
-		setProviderId(
-			application.githubId ??
-				application.gitlabId ??
-				application.bitbucketId ??
-				application.giteaId ??
-				"",
-		);
-		setRepoSelection(
-			application.owner && application.repository
-				? `${application.owner}/${application.repository}`
-				: "",
-		);
+		setProviderId(serverProviderId);
+		setRepoSelection(serverRepoSelection);
 		setBranch(application.branch ?? "");
 		setBuildPath(application.buildPath ?? "/");
 		setAutoDeploy(application.autoDeploy);
@@ -115,7 +130,46 @@ export function SourceConfig({ application }: { application: Application }) {
 		setDockerUsername(application.username ?? "");
 		setDockerPassword("");
 		setRegistryId(application.registryId ?? NONE);
-	}, [application]);
+	}, [
+		dirty,
+		application.sourceType,
+		application.gitUrl,
+		application.gitBranch,
+		application.customGitSSHKeyId,
+		serverProviderId,
+		serverRepoSelection,
+		application.branch,
+		application.buildPath,
+		application.autoDeploy,
+		application.isPreviewDeploymentsActive,
+		application.previewForksRequireApproval,
+		application.dockerImage,
+		application.username,
+		application.registryId,
+	]);
+
+	/**
+	 * Switching the source type must not carry the previous provider's id /
+	 * owner / repository along — the Select would render blank (the id is not
+	 * in the new provider list) while Save silently sent the stale values.
+	 * Fields are re-seeded from the stored application only when switching
+	 * back to its persisted source type.
+	 */
+	const changeSourceType = (next: SourceType) => {
+		setDirty(true);
+		setSourceType(next);
+		const restore = next === application.sourceType;
+		setProviderId(restore ? serverProviderId : "");
+		setRepoSelection(restore ? serverRepoSelection : "");
+		setBranch(restore ? (application.branch ?? "") : "");
+		setGitUrl(restore ? (application.gitUrl ?? "") : "");
+		setGitBranch(restore ? (application.gitBranch ?? "") : "");
+		setSshKeyId(restore ? (application.customGitSSHKeyId ?? NONE) : NONE);
+		setDockerImage(restore ? (application.dockerImage ?? "") : "");
+		setDockerUsername(restore ? (application.username ?? "") : "");
+		setDockerPassword("");
+		setRegistryId(restore ? (application.registryId ?? NONE) : NONE);
+	};
 
 	// ── pickers ─────────────────────────────────────────────────────────────
 	const sshKeys = useQuery(trpc.sshKey.all.queryOptions());
@@ -153,15 +207,28 @@ export function SourceConfig({ application }: { application: Application }) {
 	// ── save ────────────────────────────────────────────────────────────────
 	const saveSource = useMutation(
 		trpc.application.saveSource.mutationOptions({
-			onSuccess: () => {
+			onSuccess: async () => {
 				toast.success("Source configuration saved");
-				queryClient.invalidateQueries({
+				await queryClient.invalidateQueries({
 					queryKey: trpc.application.one.queryKey({ applicationId }),
 				});
+				// Refetch is done: the server now holds what was typed.
+				setDirty(false);
 			},
 			onError: (error) => toast.error(error.message),
 		}),
 	);
+
+	const canWrite = can("service.write");
+	const canWriteSecrets = can("secrets.write");
+	// A docker password is a secret; the server additionally requires secrets.write for it.
+	const needsSecrets = sourceType === "docker" && dockerPassword !== "";
+	const saveBlocked = !canWrite || (needsSecrets && !canWriteSecrets);
+	const saveHint = !canWrite
+		? capabilityHint("service.write")
+		: needsSecrets && !canWriteSecrets
+			? capabilityHint("secrets.write")
+			: undefined;
 
 	const onSave = () => {
 		const base = {
@@ -227,7 +294,7 @@ export function SourceConfig({ application }: { application: Application }) {
 			<div className="flex flex-col gap-4">
 				<div className="flex flex-col gap-2">
 					<Label>Source Type</Label>
-					<Select value={sourceType} onValueChange={(v) => setSourceType(v as SourceType)}>
+					<Select value={sourceType} onValueChange={(v) => changeSourceType(v as SourceType)}>
 						<SelectTrigger className="w-full sm:max-w-xs">
 							<SelectValue />
 						</SelectTrigger>
@@ -249,7 +316,7 @@ export function SourceConfig({ application }: { application: Application }) {
 								id="git-url"
 								placeholder="https://github.com/user/repo.git"
 								value={gitUrl}
-								onChange={(e) => setGitUrl(e.target.value)}
+								onChange={(e) => edit(setGitUrl)(e.target.value)}
 							/>
 						</div>
 						<div className="grid gap-4 sm:grid-cols-2">
@@ -259,12 +326,12 @@ export function SourceConfig({ application }: { application: Application }) {
 									id="git-branch"
 									placeholder="main"
 									value={gitBranch}
-									onChange={(e) => setGitBranch(e.target.value)}
+									onChange={(e) => edit(setGitBranch)(e.target.value)}
 								/>
 							</div>
 							<div className="flex flex-col gap-2">
 								<Label>SSH Key (optional)</Label>
-								<Select value={sshKeyId} onValueChange={setSshKeyId}>
+								<Select value={sshKeyId} onValueChange={edit(setSshKeyId)}>
 									<SelectTrigger className="w-full">
 										<SelectValue placeholder="None" />
 									</SelectTrigger>
@@ -286,7 +353,7 @@ export function SourceConfig({ application }: { application: Application }) {
 					<>
 						<div className="flex flex-col gap-2">
 							<Label>{GIT_PROVIDER_LABELS[sourceType]} Provider</Label>
-							<Select value={providerId} onValueChange={setProviderId}>
+							<Select value={providerId} onValueChange={edit(setProviderId)}>
 								<SelectTrigger className="w-full sm:max-w-xs">
 									<SelectValue placeholder="Select a provider" />
 								</SelectTrigger>
@@ -309,9 +376,9 @@ export function SourceConfig({ application }: { application: Application }) {
 							sourceType={sourceType}
 							providerId={providerId}
 							repoSelection={repoSelection}
-							onRepoSelectionChange={setRepoSelection}
+							onRepoSelectionChange={edit(setRepoSelection)}
 							branch={branch}
-							onBranchChange={setBranch}
+							onBranchChange={edit(setBranch)}
 						/>
 					</>
 				)}
@@ -324,12 +391,12 @@ export function SourceConfig({ application }: { application: Application }) {
 								id="docker-image"
 								placeholder="nginx:latest"
 								value={dockerImage}
-								onChange={(e) => setDockerImage(e.target.value)}
+								onChange={(e) => edit(setDockerImage)(e.target.value)}
 							/>
 						</div>
 						<div className="flex flex-col gap-2">
 							<Label>Registry (optional)</Label>
-							<Select value={registryId} onValueChange={setRegistryId}>
+							<Select value={registryId} onValueChange={edit(setRegistryId)}>
 								<SelectTrigger className="w-full sm:max-w-xs">
 									<SelectValue placeholder="None" />
 								</SelectTrigger>
@@ -350,7 +417,7 @@ export function SourceConfig({ application }: { application: Application }) {
 									<Input
 										id="docker-username"
 										value={dockerUsername}
-										onChange={(e) => setDockerUsername(e.target.value)}
+										onChange={(e) => edit(setDockerUsername)(e.target.value)}
 									/>
 								</div>
 								<div className="flex flex-col gap-2">
@@ -360,7 +427,7 @@ export function SourceConfig({ application }: { application: Application }) {
 										type="password"
 										placeholder={application.password ? "••••••••" : ""}
 										value={dockerPassword}
-										onChange={(e) => setDockerPassword(e.target.value)}
+										onChange={(e) => edit(setDockerPassword)(e.target.value)}
 									/>
 								</div>
 							</div>
@@ -389,7 +456,7 @@ export function SourceConfig({ application }: { application: Application }) {
 								placeholder="/"
 								className="sm:max-w-xs"
 								value={buildPath}
-								onChange={(e) => setBuildPath(e.target.value)}
+								onChange={(e) => edit(setBuildPath)(e.target.value)}
 							/>
 						</div>
 						<div className="flex items-center justify-between rounded-md border p-3">
@@ -399,7 +466,7 @@ export function SourceConfig({ application }: { application: Application }) {
 									Deploy automatically when new commits are pushed.
 								</p>
 							</div>
-							<Switch id="auto-deploy" checked={autoDeploy} onCheckedChange={setAutoDeploy} />
+							<Switch id="auto-deploy" checked={autoDeploy} onCheckedChange={edit(setAutoDeploy)} />
 						</div>
 						{isGitProviderSource(sourceType) && (
 							<>
@@ -413,7 +480,7 @@ export function SourceConfig({ application }: { application: Application }) {
 									<Switch
 										id="preview-deploys"
 										checked={isPreviewDeploymentsActive}
-										onCheckedChange={setIsPreviewDeploymentsActive}
+										onCheckedChange={edit(setIsPreviewDeploymentsActive)}
 									/>
 								</div>
 								<div className="flex items-center justify-between rounded-md border p-3">
@@ -427,7 +494,7 @@ export function SourceConfig({ application }: { application: Application }) {
 									<Switch
 										id="preview-fork-gate"
 										checked={previewForksRequireApproval}
-										onCheckedChange={setPreviewForksRequireApproval}
+										onCheckedChange={edit(setPreviewForksRequireApproval)}
 									/>
 								</div>
 							</>
@@ -436,7 +503,7 @@ export function SourceConfig({ application }: { application: Application }) {
 				)}
 
 				<div className="flex justify-end">
-					<Button onClick={onSave} disabled={saveSource.isPending}>
+					<Button onClick={onSave} disabled={saveSource.isPending || saveBlocked} title={saveHint}>
 						{saveSource.isPending && <Loader2 className="size-4 animate-spin" />}
 						Save Source
 					</Button>

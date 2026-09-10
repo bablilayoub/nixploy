@@ -25,7 +25,7 @@ import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { settingsNavItems } from "@/components/nav-settings";
+import { isSettingsNavItemAllowed, settingsNavItems } from "@/components/nav-settings";
 import { SERVICE_TYPE_META, type ServiceType } from "@/components/projects/service-types";
 import {
 	CommandDialog,
@@ -37,6 +37,7 @@ import {
 	CommandSeparator,
 	CommandShortcut,
 } from "@/components/ui/command";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { signOut } from "@/lib/auth-client";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -85,6 +86,7 @@ export function CommandPalette({ className }: { className?: string }) {
 	const queryClient = useQueryClient();
 	const pathname = usePathname();
 	const { resolvedTheme, setTheme } = useTheme();
+	const { can, isInstanceAdmin } = useCapabilities();
 
 	const [open, setOpen] = useState(false);
 	const [recentIds, setRecentIds] = useState<string[]>([]);
@@ -178,7 +180,12 @@ export function CommandPalette({ className }: { className?: string }) {
 
 	const handleSignOut = useCallback(async () => {
 		try {
-			await signOut();
+			// better-auth resolves with `{ error }` instead of throwing.
+			const { error } = await signOut();
+			if (error) {
+				toast.error(error.message ?? "Failed to sign out");
+				return;
+			}
 			queryClient.clear();
 			router.push("/login");
 			router.refresh();
@@ -379,7 +386,9 @@ export function CommandPalette({ className }: { className?: string }) {
 				],
 				run: go("/dashboard/settings/organization"),
 			},
-			{
+		);
+		if (isInstanceAdmin) {
+			list.push({
 				id: "page:ai-settings",
 				label: "AI / Deploy Copilot settings",
 				hint: "Platform",
@@ -387,9 +396,10 @@ export function CommandPalette({ className }: { className?: string }) {
 				icon: Bot,
 				keywords: ["ai", "openai", "ollama", "anthropic", "copilot", "llm"],
 				run: go("/dashboard/settings/server"),
-			},
-		);
+			});
+		}
 		for (const item of settingsNavItems) {
+			if (!isSettingsNavItemAllowed(item, { can, isInstanceAdmin })) continue;
 			list.push({
 				id: `page:settings:${item.href}`,
 				label: `Settings — ${item.label}`,
@@ -466,6 +476,8 @@ export function CommandPalette({ className }: { className?: string }) {
 		templatesQuery.data,
 		applicationId,
 		composeId,
+		can,
+		isInstanceAdmin,
 	]);
 
 	// Live org-wide service matches while typing (debounced server search).
@@ -515,7 +527,9 @@ export function CommandPalette({ className }: { className?: string }) {
 
 	const runItem = (item: PaletteItem) => {
 		setOpen(false);
-		pushRecentId(item.id);
+		// Org-wide search hits only exist while a query is typed, so they can
+		// never resolve from the static item list — keep them out of recents.
+		if (!item.id.startsWith("search:")) pushRecentId(item.id);
 		item.run();
 	};
 

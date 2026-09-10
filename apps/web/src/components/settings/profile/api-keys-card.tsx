@@ -53,6 +53,7 @@ type ApiKeyListItem = Omit<ApiKey, "key">;
 export function ApiKeysCard() {
 	const [keys, setKeys] = useState<ApiKeyListItem[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
+	const [loadError, setLoadError] = useState<string | null>(null);
 	const [createOpen, setCreateOpen] = useState(false);
 	const [name, setName] = useState("");
 	const [expiration, setExpiration] = useState("never");
@@ -61,10 +62,14 @@ export function ApiKeysCard() {
 	const [copied, setCopied] = useState(false);
 
 	const loadKeys = useCallback(async () => {
+		setIsLoading(true);
 		const { data, error } = await authClient.apiKey.list();
 		if (error) {
-			toast.error(error.message ?? "Failed to load API keys");
+			// Keep the previous list out of view: a failed fetch must not look
+			// like "you have no API keys".
+			setLoadError(error.message ?? "Failed to load API keys");
 		} else {
+			setLoadError(null);
 			setKeys(data?.apiKeys ?? []);
 		}
 		setIsLoading(false);
@@ -105,9 +110,15 @@ export function ApiKeysCard() {
 
 	async function copyKey() {
 		if (!createdKey) return;
-		await navigator.clipboard.writeText(createdKey);
-		setCopied(true);
-		setTimeout(() => setCopied(false), 2000);
+		try {
+			await navigator.clipboard.writeText(createdKey);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		} catch {
+			// Clipboard access is denied on plain-HTTP origins — the key stays
+			// visible in the dialog so it can still be copied by hand.
+			toast.error("Failed to copy to clipboard — select the key and copy it manually");
+		}
 	}
 
 	return (
@@ -213,6 +224,14 @@ export function ApiKeysCard() {
 				<div className="grid gap-2">
 					<Skeleton className="h-9 w-full" />
 					<Skeleton className="h-9 w-full" />
+				</div>
+			) : loadError ? (
+				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-8 text-center">
+					<p className="text-sm font-medium">Could not load API keys</p>
+					<p className="text-sm text-muted-foreground">{loadError}</p>
+					<Button variant="outline" size="sm" onClick={() => void loadKeys()}>
+						Retry
+					</Button>
 				</div>
 			) : keys.length === 0 ? (
 				<p className="text-sm text-muted-foreground">

@@ -6,12 +6,14 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import type { ComposeService } from "@/components/compose/compose-detail";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { DangerZone } from "@/components/services/danger-zone";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 export function SettingsTab({
@@ -24,21 +26,31 @@ export function SettingsTab({
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const router = useRouter();
+	const { can } = useCapabilities();
+	const canWrite = can("service.write");
+	const canDelete = can("service.delete");
 
 	const [name, setName] = useState(compose.name);
 	const [description, setDescription] = useState(compose.description ?? "");
+	// Only mirror server values while the user is not editing.
+	const [dirty, setDirty] = useState(false);
 	useEffect(() => {
+		if (dirty) return;
 		setName(compose.name);
 		setDescription(compose.description ?? "");
-	}, [compose.name, compose.description]);
+	}, [dirty, compose.name, compose.description]);
 
 	const updateMutation = useMutation(
 		trpc.compose.update.mutationOptions({
-			onSuccess: () => {
+			onSuccess: async () => {
 				toast.success("Compose service updated");
-				queryClient.invalidateQueries({
-					queryKey: trpc.compose.one.queryKey({ composeId: compose.composeId }),
-				});
+				await Promise.all([
+					queryClient.invalidateQueries({
+						queryKey: trpc.compose.one.queryKey({ composeId: compose.composeId }),
+					}),
+					queryClient.invalidateQueries({ queryKey: trpc.compose.all.pathKey() }),
+				]);
+				setDirty(false);
 			},
 			onError: (error) => toast.error(error.message),
 		}),
@@ -66,7 +78,10 @@ export function SettingsTab({
 						<Input
 							id="name"
 							value={name}
-							onChange={(e) => setName(e.target.value)}
+							onChange={(e) => {
+								setDirty(true);
+								setName(e.target.value);
+							}}
 							className="max-w-sm"
 						/>
 					</div>
@@ -75,14 +90,18 @@ export function SettingsTab({
 						<Textarea
 							id="description"
 							value={description}
-							onChange={(e) => setDescription(e.target.value)}
+							onChange={(e) => {
+								setDirty(true);
+								setDescription(e.target.value);
+							}}
 							placeholder="Optional description"
 							rows={3}
 						/>
 					</div>
 					<div className="flex justify-end">
 						<Button
-							disabled={updateMutation.isPending || !name.trim()}
+							disabled={updateMutation.isPending || !name.trim() || !canWrite}
+							title={canWrite ? undefined : capabilityHint("service.write")}
 							onClick={() =>
 								updateMutation.mutate({
 									composeId: compose.composeId,
@@ -102,9 +121,9 @@ export function SettingsTab({
 				description="Deleting a compose service tears down its deployment and removes its domains. This cannot be undone."
 				actionLabel="Delete Compose Service"
 				requireText={compose.name}
-				onConfirm={async () => {
-					await deleteMutation.mutateAsync({ composeId: compose.composeId });
-				}}
+				disabled={!canDelete}
+				disabledReason={capabilityHint("service.delete")}
+				onConfirm={() => deleteMutation.mutateAsync({ composeId: compose.composeId })}
 			/>
 		</SettingsStack>
 	);

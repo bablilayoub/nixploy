@@ -32,6 +32,8 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { useCapabilities } from "@/hooks/use-capabilities";
+import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -45,9 +47,13 @@ function CopyButton({ value }: { value: string }) {
 			variant="outline"
 			size="icon"
 			onClick={async () => {
-				await navigator.clipboard.writeText(value);
-				setCopied(true);
-				setTimeout(() => setCopied(false), 2000);
+				try {
+					await navigator.clipboard.writeText(value);
+					setCopied(true);
+					setTimeout(() => setCopied(false), 2000);
+				} catch {
+					toast.error("Failed to copy to clipboard — select the text and copy it manually");
+				}
 			}}
 		>
 			{copied ? <Check className="size-4" /> : <Copy className="size-4" />}
@@ -60,6 +66,9 @@ export function SshKeysView() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
+	const { can } = useCapabilities();
+	const canManage = can("ssh_keys.manage");
+	const manageHint = canManage ? undefined : missingCapabilityHint("ssh_keys.manage");
 	const [name, setName] = useState("");
 	const [generated, setGenerated] = useState<{
 		privateKey: string;
@@ -145,7 +154,7 @@ export function SshKeysView() {
 				actions={
 					<Dialog open={open} onOpenChange={setOpen}>
 						<DialogTrigger asChild>
-							<Button size="sm">
+							<Button size="sm" disabled={!canManage} title={manageHint}>
 								<Plus className="size-4" />
 								Create SSH Key
 							</Button>
@@ -278,15 +287,22 @@ export function SshKeysView() {
 									</TableCell>
 									<TableCell>
 										<div className="flex items-center justify-end">
-											<Button variant="ghost" size="icon" onClick={() => setEditing(key)}>
+											<Button
+												variant="ghost"
+												size="icon"
+												disabled={!canManage}
+												title={manageHint}
+												onClick={() => setEditing(key)}
+											>
 												<Pencil className="size-4" />
 												<span className="sr-only">Edit SSH key</span>
 											</Button>
 											<ConfirmDeleteDialog
 												title="Delete SSH key"
 												description={`Delete "${key.name}"? Servers referencing it keep working until edited.`}
-												isPending={removeMutation.isPending}
-												onConfirm={() => removeMutation.mutate({ sshKeyId: key.sshKeyId })}
+												disabled={!canManage}
+												disabledReason={manageHint}
+												onConfirm={() => removeMutation.mutateAsync({ sshKeyId: key.sshKeyId })}
 											/>
 										</div>
 									</TableCell>

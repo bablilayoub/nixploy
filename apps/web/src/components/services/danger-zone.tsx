@@ -25,13 +25,23 @@ export function DangerZone({
 	actionLabel,
 	onConfirm,
 	requireText,
+	disabled = false,
+	disabledReason,
 }: {
 	title: string;
 	description: string;
 	actionLabel: string;
-	onConfirm: () => void | Promise<void>;
+	/**
+	 * Run the destructive action. Return the mutation promise (`mutateAsync`)
+	 * so the dialog stays open with a spinner until it settles; a rejection
+	 * keeps the dialog open (the caller toasts the error).
+	 */
+	onConfirm: () => void | Promise<unknown>;
 	/** When set, the user must type this exact text to enable the action. */
 	requireText?: string;
+	/** Disable the trigger (e.g. the member lacks the delete capability). */
+	disabled?: boolean;
+	disabledReason?: string;
 }) {
 	const [open, setOpen] = useState(false);
 	const [confirmation, setConfirmation] = useState("");
@@ -45,6 +55,8 @@ export function DangerZone({
 			await onConfirm();
 			setOpen(false);
 			setConfirmation("");
+		} catch {
+			// The caller's onError toast already reported it; keep the dialog open.
 		} finally {
 			setPending(false);
 		}
@@ -68,6 +80,8 @@ export function DangerZone({
 							variant="outline"
 							size="sm"
 							className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+							disabled={disabled}
+							title={disabled ? disabledReason : undefined}
 						>
 							{actionLabel}
 						</Button>

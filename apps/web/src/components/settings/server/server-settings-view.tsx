@@ -327,11 +327,24 @@ export function ServerSettingsView() {
 	};
 
 	const saveHealth = () => {
-		const cpuAlert = Number.parseInt(cpuAlertPercent, 10);
-		const memoryAlert = Number.parseInt(memoryAlertPercent, 10);
+		// The API accepts 1–100; empty or 0 means "off" (null). Anything above
+		// 100 is a typo we surface instead of bouncing a raw zod error.
+		const parseThreshold = (raw: string): number | null | "invalid" => {
+			const trimmed = raw.trim();
+			if (!trimmed) return null;
+			const value = Number.parseInt(trimmed, 10);
+			if (!Number.isFinite(value) || value <= 0) return null;
+			return value > 100 ? "invalid" : value;
+		};
+		const cpuAlert = parseThreshold(cpuAlertPercent);
+		const memoryAlert = parseThreshold(memoryAlertPercent);
+		if (cpuAlert === "invalid" || memoryAlert === "invalid") {
+			toast.error("Alert thresholds must be between 1 and 100 percent");
+			return;
+		}
 		updateMutation.mutate({
-			cpuAlertPercent: Number.isFinite(cpuAlert) ? cpuAlert : null,
-			memoryAlertPercent: Number.isFinite(memoryAlert) ? memoryAlert : null,
+			cpuAlertPercent: cpuAlert,
+			memoryAlertPercent: memoryAlert,
 		});
 	};
 
@@ -358,7 +371,7 @@ export function ServerSettingsView() {
 						</p>
 						<p className="text-sm text-muted-foreground">
 							{forbidden
-								? "Platform settings are only available to organization owners and admins."
+								? "Platform settings are only available to the instance admin."
 								: (settingsQuery.error?.message ?? traefikQuery.error?.message)}
 						</p>
 					</div>
@@ -541,6 +554,9 @@ export function ServerSettingsView() {
 								<Label htmlFor="cpu-alert">CPU alert %</Label>
 								<Input
 									id="cpu-alert"
+									type="number"
+									min={1}
+									max={100}
 									inputMode="numeric"
 									placeholder="Empty = off"
 									value={cpuAlertPercent}
@@ -551,6 +567,9 @@ export function ServerSettingsView() {
 								<Label htmlFor="memory-alert">Memory alert %</Label>
 								<Input
 									id="memory-alert"
+									type="number"
+									min={1}
+									max={100}
 									inputMode="numeric"
 									placeholder="Empty = off"
 									value={memoryAlertPercent}

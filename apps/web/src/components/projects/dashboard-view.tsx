@@ -7,11 +7,13 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { QueryState } from "@/components/query-state";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { EmptyState } from "@/components/services/empty-state";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 import { CreateProjectDialog } from "./create-project-dialog";
@@ -20,6 +22,9 @@ import { OverviewCards, RecentDeployments } from "./overview-section";
 
 export function DashboardView() {
 	const trpc = useTRPC();
+	const { can } = useCapabilities();
+	const canCreate = can("project.write");
+	const createHint = canCreate ? undefined : capabilityHint("project.write");
 	const [search, setSearch] = useState("");
 	const {
 		data: projects,
@@ -50,7 +55,7 @@ export function DashboardView() {
 							/>
 						</div>
 						<CreateProjectDialog>
-							<Button size="sm">
+							<Button size="sm" disabled={!canCreate} title={createHint}>
 								<Plus className="size-4" />
 								New Project
 							</Button>
@@ -101,7 +106,7 @@ export function DashboardView() {
 							description="Group environments and services, then deploy an app or database."
 							action={
 								<CreateProjectDialog>
-									<Button size="sm">
+									<Button size="sm" disabled={!canCreate} title={createHint}>
 										<Plus className="size-4" />
 										New Project
 									</Button>

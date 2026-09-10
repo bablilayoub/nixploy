@@ -3,9 +3,10 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Ban, Bot, ChevronDown, Loader2, RefreshCw, ScrollText } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { capabilityHint } from "@/components/services/capability-hint";
 import { LogViewer } from "@/components/services/log-viewer";
 import { DeploymentStatusBadge } from "@/components/services/status-badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { formatDuration } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
 
@@ -71,6 +73,7 @@ export function DeploymentHistory({
 }: DeploymentHistoryProps) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
 	const [logDeployment, setLogDeployment] = useState<DeploymentRow | null>(null);
 	const [explainResult, setExplainResult] = useState<ExplainResult | null>(null);
 
@@ -81,6 +84,26 @@ export function DeploymentHistory({
 
 	const invalidateList = () => {
 		queryClient.invalidateQueries({ queryKey: listPathKey });
+	};
+
+	/**
+	 * The service header and the project services table read `status` from
+	 * `<kind>.one` / `<kind>.all`, which nothing refreshes once a deployment
+	 * settles — refresh them whenever the list observes a running → terminal
+	 * transition or the log stream sends its `finish` frame.
+	 */
+	const invalidateServiceStatus = () => {
+		if (kind === "application") {
+			queryClient.invalidateQueries({
+				queryKey: trpc.application.one.queryKey({ applicationId: serviceId }),
+			});
+			queryClient.invalidateQueries({ queryKey: trpc.application.all.pathKey() });
+		} else {
+			queryClient.invalidateQueries({
+				queryKey: trpc.compose.one.queryKey({ composeId: serviceId }),
+			});
+			queryClient.invalidateQueries({ queryKey: trpc.compose.all.pathKey() });
+		}
 	};
 
 	const applicationQuery = useInfiniteQuery({
@@ -173,6 +196,22 @@ export function DeploymentHistory({
 	const deployments =
 		(deploymentsQuery.data?.pages.flatMap((page) => page.deployments) as DeploymentRow[]) ?? [];
 	const latestError = deployments.find((deployment) => deployment.status === "error");
+	const hasRunning = deployments.some((deployment) => deployment.status === "running");
+
+	// Running → settled: the list polls every 2s while a deployment is in
+	// flight, so this edge fires within seconds of the worker finishing.
+	const hadRunningRef = useRef(false);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: only the running edge matters; the invalidation helper reads stable ids
+	useEffect(() => {
+		if (hadRunningRef.current && !hasRunning) {
+			invalidateServiceStatus();
+		}
+		hadRunningRef.current = hasRunning;
+	}, [hasRunning]);
+
+	const canDeploy = can("service.deploy");
+	const canExplain = can("ai.use");
+	const canApplyPatch = can("ai.use") && can("secrets.write") && can("service.deploy");
 
 	const cachedExplanation = useQuery({
 		...trpc.ai.getExplanation.queryOptions({
@@ -275,7 +314,8 @@ export function DeploymentHistory({
 												<Button
 													variant="ghost"
 													size="sm"
-													disabled={explain.isPending}
+													disabled={explain.isPending || !canExplain}
+													title={canExplain ? undefined : capabilityHint("ai.use")}
 													onClick={() => explain.mutate({ deploymentId: deployment.deploymentId })}
 												>
 													{explain.isPending &&
@@ -296,7 +336,8 @@ export function DeploymentHistory({
 															deploymentId: deployment.deploymentId,
 														})
 													}
-													disabled={cancel.isPending}
+													disabled={cancel.isPending || !canDeploy}
+													title={canDeploy ? undefined : capabilityHint("service.deploy")}
 												>
 													<Ban className="size-4" />
 													Cancel
@@ -338,7 +379,15 @@ export function DeploymentHistory({
 						</DialogDescription>
 					</DialogHeader>
 					<div className="min-h-0 flex-1">
-						{logDeployment && <LogViewer deploymentId={logDeployment.deploymentId} />}
+						{logDeployment && (
+							<LogViewer
+								deploymentId={logDeployment.deploymentId}
+								onFinish={() => {
+									invalidateList();
+									invalidateServiceStatus();
+								}}
+							/>
+						)}
 					</div>
 				</DialogContent>
 			</Dialog>
@@ -371,8 +420,9 @@ export function DeploymentHistory({
 								<div>
 									<p className="mb-1 font-medium">Suggested steps</p>
 									<ol className="list-decimal space-y-1 pl-5 text-muted-foreground">
-										{explainResult.steps.map((step) => (
-											<li key={step}>{step}</li>
+										{explainResult.steps.map((step, index) => (
+											// biome-ignore lint/suspicious/noArrayIndexKey: model-generated free text can repeat; the list is static once rendered
+											<li key={index}>{step}</li>
 										))}
 									</ol>
 								</div>
@@ -394,7 +444,12 @@ export function DeploymentHistory({
 						<div className="flex flex-wrap gap-2">
 							{explainResult?.suggestedPatch && (
 								<Button
-									disabled={applyPatch.isPending || redeployPending}
+									disabled={applyPatch.isPending || redeployPending || !canApplyPatch}
+									title={
+										canApplyPatch
+											? undefined
+											: capabilityHint("ai.use", "secrets.write", "service.deploy")
+									}
 									onClick={() =>
 										applyPatch.mutate({
 											deploymentId: explainResult.deploymentId,
@@ -413,7 +468,8 @@ export function DeploymentHistory({
 							)}
 							<Button
 								variant={explainResult?.suggestedPatch ? "outline" : "default"}
-								disabled={redeployPending || applyPatch.isPending}
+								disabled={redeployPending || applyPatch.isPending || !canDeploy}
+								title={canDeploy ? undefined : capabilityHint("service.deploy")}
 								onClick={onRedeploy}
 							>
 								{redeployPending ? (

@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 import { ProjectDetail } from "@/components/projects/project-detail";
 
 export default async function ProjectPage({
@@ -10,5 +12,10 @@ export default async function ProjectPage({
 	const { projectId } = await params;
 	const { env, tab } = await searchParams;
 
-	return <ProjectDetail projectId={projectId} initialEnvironment={env} initialTab={tab} />;
+	// ProjectDetail reads useSearchParams (?new= deep link) — Suspense boundary required.
+	return (
+		<Suspense>
+			<ProjectDetail projectId={projectId} initialEnvironment={env} initialTab={tab} />
+		</Suspense>
+	);
 }

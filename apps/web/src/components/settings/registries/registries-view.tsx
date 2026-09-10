@@ -39,6 +39,8 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/use-capabilities";
+import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -48,6 +50,9 @@ export function RegistriesView() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
+	const { can } = useCapabilities();
+	const canManage = can("registries.manage");
+	const manageHint = canManage ? undefined : missingCapabilityHint("registries.manage");
 	const [registryName, setRegistryName] = useState("");
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
@@ -147,7 +152,7 @@ export function RegistriesView() {
 				actions={
 					<Dialog open={open} onOpenChange={setOpen}>
 						<DialogTrigger asChild>
-							<Button size="sm">
+							<Button size="sm" disabled={!canManage} title={manageHint}>
 								<Plus className="size-4" />
 								Add Registry
 							</Button>
@@ -297,9 +302,11 @@ export function RegistriesView() {
 											<Button
 												variant="ghost"
 												size="icon"
+												title={manageHint}
 												disabled={
-													testMutation.isPending &&
-													testMutation.variables?.registryId === registry.registryId
+													!canManage ||
+													(testMutation.isPending &&
+														testMutation.variables?.registryId === registry.registryId)
 												}
 												onClick={() =>
 													testMutation.mutate({
@@ -315,16 +322,23 @@ export function RegistriesView() {
 												)}
 												<span className="sr-only">Test registry</span>
 											</Button>
-											<Button variant="ghost" size="icon" onClick={() => setEditing(registry)}>
+											<Button
+												variant="ghost"
+												size="icon"
+												disabled={!canManage}
+												title={manageHint}
+												onClick={() => setEditing(registry)}
+											>
 												<Pencil className="size-4" />
 												<span className="sr-only">Edit registry</span>
 											</Button>
 											<ConfirmDeleteDialog
 												title="Remove registry"
 												description={`Remove "${registry.registryName}"? Builds and pulls using it will fail.`}
-												isPending={removeMutation.isPending}
+												disabled={!canManage}
+												disabledReason={manageHint}
 												onConfirm={() =>
-													removeMutation.mutate({
+													removeMutation.mutateAsync({
 														registryId: registry.registryId,
 													})
 												}
@@ -354,7 +368,7 @@ export function RegistriesView() {
 									registryName: editName.trim(),
 									username: editUsername.trim(),
 									...(editPassword ? { password: editPassword } : {}),
-									registryUrl: editUrl || undefined,
+									registryUrl: editUrl.trim(),
 									registryType: editType,
 									imagePrefix: editPrefix || null,
 								});

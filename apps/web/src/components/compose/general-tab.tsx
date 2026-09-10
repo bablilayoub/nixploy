@@ -11,6 +11,7 @@ import {
 	type GitProviderSourceType,
 	splitRepoSelection,
 } from "@/components/git-provider-repo-picker";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 type SourceType = ComposeService["sourceType"];
@@ -34,9 +36,19 @@ function isGitProviderSource(sourceType: SourceType): sourceType is GitProviderS
 	return (GIT_PROVIDER_SOURCES as readonly string[]).includes(sourceType);
 }
 
+function storedProviderId(compose: ComposeService): string {
+	return compose.githubId ?? compose.gitlabId ?? compose.bitbucketId ?? compose.giteaId ?? "";
+}
+
+function storedRepoSelection(compose: ComposeService): string {
+	return compose.owner && compose.repository ? `${compose.owner}/${compose.repository}` : "";
+}
+
 export function GeneralTab({ compose }: { compose: ComposeService }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	const canWrite = can("service.write");
 
 	const [composeType, setComposeType] = useState(compose.composeType);
 	const [isolatedDeployment, setIsolatedDeployment] = useState(compose.isolatedDeployment);
@@ -44,32 +56,67 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 	const [sourceType, setSourceType] = useState<SourceType>(compose.sourceType);
 	const [gitUrl, setGitUrl] = useState(compose.gitUrl ?? "");
 	const [gitBranch, setGitBranch] = useState(compose.gitBranch ?? "");
-	const [repoSelection, setRepoSelection] = useState(
-		compose.owner && compose.repository ? `${compose.owner}/${compose.repository}` : "",
-	);
+	const [repoSelection, setRepoSelection] = useState(storedRepoSelection(compose));
 	const [branch, setBranch] = useState(compose.branch ?? "");
 	const [composePath, setComposePath] = useState(compose.composePath);
-	const [providerId, setProviderId] = useState(
-		compose.githubId ?? compose.gitlabId ?? compose.bitbucketId ?? compose.giteaId ?? "",
-	);
+	const [providerId, setProviderId] = useState(storedProviderId(compose));
+	// Only mirror server values while the user is not editing — the header's
+	// Deploy/Stop invalidate compose.one and a status flip must not wipe the
+	// form (the whole `compose` object changes identity on every refetch).
+	const [dirty, setDirty] = useState(false);
 
-	// Reset the form when the service data changes (e.g. after a save).
+	/** Wrap a setter so any user edit marks the form dirty. */
+	const edit =
+		<T,>(setter: (value: T) => void) =>
+		(value: T) => {
+			setDirty(true);
+			setter(value);
+		};
+
+	const serverProviderId = storedProviderId(compose);
+	const serverRepoSelection = storedRepoSelection(compose);
+
 	useEffect(() => {
+		if (dirty) return;
 		setComposeType(compose.composeType);
 		setIsolatedDeployment(compose.isolatedDeployment);
 		setAutoDeploy(compose.autoDeploy);
 		setSourceType(compose.sourceType);
 		setGitUrl(compose.gitUrl ?? "");
 		setGitBranch(compose.gitBranch ?? "");
-		setRepoSelection(
-			compose.owner && compose.repository ? `${compose.owner}/${compose.repository}` : "",
-		);
+		setRepoSelection(serverRepoSelection);
 		setBranch(compose.branch ?? "");
 		setComposePath(compose.composePath);
-		setProviderId(
-			compose.githubId ?? compose.gitlabId ?? compose.bitbucketId ?? compose.giteaId ?? "",
-		);
-	}, [compose]);
+		setProviderId(serverProviderId);
+	}, [
+		dirty,
+		compose.composeType,
+		compose.isolatedDeployment,
+		compose.autoDeploy,
+		compose.sourceType,
+		compose.gitUrl,
+		compose.gitBranch,
+		serverRepoSelection,
+		compose.branch,
+		compose.composePath,
+		serverProviderId,
+	]);
+
+	/**
+	 * Switching the source type must not carry the previous provider's id /
+	 * owner / repository along; re-seed from the stored service only when
+	 * switching back to its persisted source type.
+	 */
+	const changeSourceType = (next: SourceType) => {
+		setDirty(true);
+		setSourceType(next);
+		const restore = next === compose.sourceType;
+		setProviderId(restore ? serverProviderId : "");
+		setRepoSelection(restore ? serverRepoSelection : "");
+		setBranch(restore ? (compose.branch ?? "") : "");
+		setGitUrl(restore ? (compose.gitUrl ?? "") : "");
+		setGitBranch(restore ? (compose.gitBranch ?? "") : "");
+	};
 
 	const githubQuery = useQuery({
 		...trpc.github.all.queryOptions(),
@@ -120,11 +167,13 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 
 	const updateMutation = useMutation(
 		trpc.compose.update.mutationOptions({
-			onSuccess: () => {
+			onSuccess: async () => {
 				toast.success("Compose service updated");
-				queryClient.invalidateQueries({
+				await queryClient.invalidateQueries({
 					queryKey: trpc.compose.one.queryKey({ composeId: compose.composeId }),
 				});
+				// Refetch is done: the server now holds what was typed.
+				setDirty(false);
 			},
 			onError: (error) => toast.error(error.message),
 		}),
@@ -170,7 +219,9 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 						<Label htmlFor="compose-type">Compose Type</Label>
 						<Select
 							value={composeType}
-							onValueChange={(value) => setComposeType(value as ComposeService["composeType"])}
+							onValueChange={(value) =>
+								edit(setComposeType)(value as ComposeService["composeType"])
+							}
 						>
 							<SelectTrigger id="compose-type" className="max-w-sm">
 								<SelectValue />
@@ -196,7 +247,7 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 						<Switch
 							id="isolated-deployment"
 							checked={isolatedDeployment}
-							onCheckedChange={setIsolatedDeployment}
+							onCheckedChange={edit(setIsolatedDeployment)}
 						/>
 					</div>
 					<div className="flex items-center justify-between gap-4 rounded-lg border p-4">
@@ -206,7 +257,7 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 								Deploy automatically when the source repository changes.
 							</p>
 						</div>
-						<Switch id="auto-deploy" checked={autoDeploy} onCheckedChange={setAutoDeploy} />
+						<Switch id="auto-deploy" checked={autoDeploy} onCheckedChange={edit(setAutoDeploy)} />
 					</div>
 				</div>
 			</SettingsSection>
@@ -217,7 +268,7 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 						<Label htmlFor="source-type">Source Type</Label>
 						<Select
 							value={sourceType}
-							onValueChange={(value) => setSourceType(value as SourceType)}
+							onValueChange={(value) => changeSourceType(value as SourceType)}
 						>
 							<SelectTrigger id="source-type" className="max-w-sm">
 								<SelectValue />
@@ -248,7 +299,7 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 									id="git-url"
 									placeholder="https://github.com/org/repo.git"
 									value={gitUrl}
-									onChange={(e) => setGitUrl(e.target.value)}
+									onChange={(e) => edit(setGitUrl)(e.target.value)}
 								/>
 							</div>
 							<div className="flex flex-col gap-2">
@@ -257,7 +308,7 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 									id="git-branch"
 									placeholder="main"
 									value={gitBranch}
-									onChange={(e) => setGitBranch(e.target.value)}
+									onChange={(e) => edit(setGitBranch)(e.target.value)}
 								/>
 							</div>
 						</>
@@ -267,7 +318,7 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 						<>
 							<div className="flex flex-col gap-2">
 								<Label htmlFor="provider">Provider</Label>
-								<Select value={providerId} onValueChange={setProviderId}>
+								<Select value={providerId} onValueChange={edit(setProviderId)}>
 									<SelectTrigger id="provider" className="max-w-sm">
 										<SelectValue
 											placeholder={providersLoading ? "Loading providers…" : "Select a provider"}
@@ -292,9 +343,9 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 								sourceType={sourceType}
 								providerId={providerId}
 								repoSelection={repoSelection}
-								onRepoSelectionChange={setRepoSelection}
+								onRepoSelectionChange={edit(setRepoSelection)}
 								branch={branch}
-								onBranchChange={setBranch}
+								onBranchChange={edit(setBranch)}
 							/>
 						</>
 					)}
@@ -306,13 +357,17 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 								id="compose-path"
 								placeholder="./docker-compose.yml"
 								value={composePath}
-								onChange={(e) => setComposePath(e.target.value)}
+								onChange={(e) => edit(setComposePath)(e.target.value)}
 							/>
 						</div>
 					)}
 
 					<div className="flex justify-end">
-						<Button onClick={onSave} disabled={updateMutation.isPending}>
+						<Button
+							onClick={onSave}
+							disabled={updateMutation.isPending || !canWrite}
+							title={canWrite ? undefined : capabilityHint("service.write")}
+						>
 							{updateMutation.isPending ? "Saving…" : "Save"}
 						</Button>
 					</div>

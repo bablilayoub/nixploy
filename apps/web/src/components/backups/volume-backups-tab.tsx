@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { QueryState } from "@/components/query-state";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { EmptyState } from "@/components/services/empty-state";
 import { SettingsSection } from "@/components/settings/settings-section";
 import {
@@ -47,6 +48,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -84,6 +86,9 @@ export function VolumeBackupsTab({
 }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	const canManage = can("backups.manage");
+	const manageHint = canManage ? undefined : capabilityHint("backups.manage");
 
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editing, setEditing] = useState<VolumeBackupEntry | null>(null);
@@ -107,13 +112,16 @@ export function VolumeBackupsTab({
 		error,
 		refetch,
 	} = useQuery(trpc.volumeBackup.all.queryOptions(queryInput));
-	const { data: destinations } = useQuery(trpc.destination.all.queryOptions());
-	const { data: backupKeys, isPending: keysPending } = useQuery({
+	const destinationsQuery = useQuery(trpc.destination.all.queryOptions());
+	const destinations = destinationsQuery.data;
+	const keysQuery = useQuery({
 		...trpc.volumeBackup.listBackups.queryOptions({
 			volumeBackupId: restoreTarget?.volumeBackupId ?? "",
 		}),
 		enabled: restoreTarget !== null,
 	});
+	const backupKeys = keysQuery.data;
+	const keysPending = keysQuery.isPending;
 
 	const destinationName = (destinationId: string) =>
 		destinations?.find((destination) => destination.destinationId === destinationId)?.name ??
@@ -157,7 +165,9 @@ export function VolumeBackupsTab({
 	const runNow = useMutation(
 		trpc.volumeBackup.runManually.mutationOptions({
 			onSuccess: () => toast.success("Backup uploaded"),
-			onError: (mutationError) => toast.error(`Backup failed: ${mutationError.message}`),
+			// The server answers BAD_REQUEST "already running" while a run is in
+			// flight — its message is already user-facing, so show it verbatim.
+			onError: (mutationError) => toast.error(mutationError.message),
 		}),
 	);
 	const restore = useMutation(
@@ -238,7 +248,12 @@ export function VolumeBackupsTab({
 				title="Volume Backups"
 				description="Volume archives to S3 on a cron."
 				actions={
-					<Button size="sm" disabled={noDestinations} onClick={() => setDialogOpen(true)}>
+					<Button
+						size="sm"
+						disabled={noDestinations || !canManage}
+						title={manageHint}
+						onClick={() => setDialogOpen(true)}
+					>
 						<Plus className="size-4" />
 						Add Backup
 					</Button>
@@ -252,10 +267,14 @@ export function VolumeBackupsTab({
 					/>
 				) : (
 					<QueryState
-						isPending={isPending}
-						isError={isError}
-						error={error}
-						onRetry={() => refetch()}
+						// A failed destinations fetch would otherwise render every row as "Unknown".
+						isPending={isPending || destinationsQuery.isPending}
+						isError={isError || destinationsQuery.isError}
+						error={error ?? destinationsQuery.error}
+						onRetry={() => {
+							void refetch();
+							void destinationsQuery.refetch();
+						}}
 						isEmpty={!backups || backups.length === 0}
 						skeleton={
 							<div className="flex flex-col gap-2">
@@ -296,7 +315,8 @@ export function VolumeBackupsTab({
 										<TableCell>
 											<Switch
 												checked={backup.enabled}
-												disabled={toggleEnabled.isPending}
+												disabled={toggleEnabled.isPending || !canManage}
+												title={manageHint}
 												onCheckedChange={(checked) =>
 													toggleEnabled.mutate({
 														volumeBackupId: backup.volumeBackupId,
@@ -311,17 +331,23 @@ export function VolumeBackupsTab({
 													variant="ghost"
 													size="sm"
 													aria-label="Back up now"
-													title="Back up now"
-													disabled={runNow.isPending}
+													title={manageHint ?? "Back up now"}
+													disabled={runNow.isPending || !canManage}
 													onClick={() => runNow.mutate({ volumeBackupId: backup.volumeBackupId })}
 												>
-													<Play className="size-4" />
+													{runNow.isPending &&
+													runNow.variables?.volumeBackupId === backup.volumeBackupId ? (
+														<Loader2 className="size-4 animate-spin" />
+													) : (
+														<Play className="size-4" />
+													)}
 												</Button>
 												<Button
 													variant="ghost"
 													size="sm"
 													aria-label="Restore volume backup"
-													title="Restore"
+													title={manageHint ?? "Restore"}
+													disabled={!canManage}
 													onClick={() => {
 														setRestoreKey("");
 														setRestoreTarget(backup);
@@ -333,6 +359,8 @@ export function VolumeBackupsTab({
 													variant="ghost"
 													size="sm"
 													aria-label="Edit volume backup"
+													title={manageHint}
+													disabled={!canManage}
 													onClick={() => openEdit(backup)}
 												>
 													<Pencil className="size-4" />
@@ -341,6 +369,8 @@ export function VolumeBackupsTab({
 													variant="ghost"
 													size="sm"
 													aria-label="Delete volume backup"
+													title={manageHint}
+													disabled={!canManage}
 													onClick={() => setDeleteTarget(backup)}
 												>
 													<Trash2 className="size-4 text-destructive" />
@@ -419,7 +449,7 @@ export function VolumeBackupsTab({
 							/>
 							{!looksLikeCron(form.cronExpression) && (
 								<p className="text-xs text-destructive">
-									Expected 5 fields: minute hour day month weekday.
+									Expected 5 or 6 fields: [second] minute hour day month weekday.
 								</p>
 							)}
 						</div>
@@ -504,6 +534,15 @@ export function VolumeBackupsTab({
 							<Skeleton className="h-9 w-full" />
 							<Skeleton className="h-9 w-full" />
 						</div>
+					) : keysQuery.isError ? (
+						// An S3 credential/connectivity failure must not read as "no archives".
+						<div className="flex flex-col items-start gap-2 rounded-md border border-dashed p-3">
+							<p className="text-sm font-medium">Could not list stored archives</p>
+							<p className="text-sm text-muted-foreground">{keysQuery.error.message}</p>
+							<Button variant="outline" size="sm" onClick={() => keysQuery.refetch()}>
+								Retry
+							</Button>
+						</div>
 					) : !backupKeys || backupKeys.length === 0 ? (
 						<p className="py-4 text-center text-sm text-muted-foreground">
 							No stored archives found for this backup yet.
@@ -511,7 +550,7 @@ export function VolumeBackupsTab({
 					) : (
 						<div className="flex flex-col gap-2">
 							<Label htmlFor="vb-restore-key">Archive</Label>
-							<Select value={restoreKey} onValueChange={setRestoreKey}>
+							<Select value={restoreKey} onValueChange={setRestoreKey} disabled={restore.isPending}>
 								<SelectTrigger id="vb-restore-key">
 									<SelectValue placeholder="Select an archive" />
 								</SelectTrigger>
@@ -552,11 +591,13 @@ export function VolumeBackupsTab({
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							onClick={() =>
-								deleteTarget && remove.mutate({ volumeBackupId: deleteTarget.volumeBackupId })
-							}
+							onClick={(event) => {
+								// Keep the dialog open (with its spinner) until the mutation settles.
+								event.preventDefault();
+								if (deleteTarget) remove.mutate({ volumeBackupId: deleteTarget.volumeBackupId });
+							}}
 							disabled={remove.isPending}
 						>
 							{remove.isPending && <Loader2 className="size-4 animate-spin" />}

@@ -29,12 +29,17 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/use-capabilities";
+import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 export function GithubPanel() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
+	const { can } = useCapabilities();
+	const canManage = can("git_providers.manage");
+	const manageHint = canManage ? undefined : missingCapabilityHint("git_providers.manage");
 	const [name, setName] = useState("");
 
 	const {
@@ -120,7 +125,7 @@ export function GithubPanel() {
 			actions={
 				<Dialog open={open} onOpenChange={setOpen}>
 					<DialogTrigger asChild>
-						<Button size="sm">
+						<Button size="sm" disabled={!canManage} title={manageHint}>
 							<Plus className="size-4" />
 							Add GitHub Provider
 						</Button>
@@ -209,9 +214,11 @@ export function GithubPanel() {
 											<Button
 												variant="outline"
 												size="sm"
+												title={manageHint}
 												disabled={
-													manifestMutation.isPending &&
-													manifestMutation.variables?.githubId === github.githubId
+													!canManage ||
+													(manifestMutation.isPending &&
+														manifestMutation.variables?.githubId === github.githubId)
 												}
 												onClick={() =>
 													manifestMutation.mutate({
@@ -231,7 +238,8 @@ export function GithubPanel() {
 												<Button
 													variant="ghost"
 													size="icon"
-													disabled={syncMutation.isPending}
+													title={manageHint}
+													disabled={!canManage || syncMutation.isPending}
 													onClick={() =>
 														syncMutation.mutate({
 															githubId: github.githubId,
@@ -247,9 +255,10 @@ export function GithubPanel() {
 											<ConfirmDeleteDialog
 												title="Remove GitHub provider"
 												description={`Remove "${gitProvider.name}"? Applications using it will lose their GitHub source.`}
-												isPending={removeMutation.isPending}
+												disabled={!canManage}
+												disabledReason={manageHint}
 												onConfirm={() =>
-													removeMutation.mutate({
+													removeMutation.mutateAsync({
 														githubId: github.githubId,
 													})
 												}

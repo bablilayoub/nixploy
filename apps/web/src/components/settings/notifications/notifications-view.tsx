@@ -25,12 +25,17 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/use-capabilities";
+import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 export function NotificationsView() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [createOpen, setCreateOpen] = useState(false);
+	const { can } = useCapabilities();
+	const canManage = can("notifications.manage");
+	const manageHint = canManage ? undefined : missingCapabilityHint("notifications.manage");
 	const [editing, setEditing] = useState<NotificationRow | null>(null);
 
 	const {
@@ -88,7 +93,12 @@ export function NotificationsView() {
 				}
 				description="Notification channels grouped by type."
 				actions={
-					<Button size="sm" onClick={() => setCreateOpen(true)}>
+					<Button
+						size="sm"
+						disabled={!canManage}
+						title={manageHint}
+						onClick={() => setCreateOpen(true)}
+					>
 						<Plus className="size-4" />
 						Add Notification
 					</Button>
@@ -162,10 +172,12 @@ export function NotificationsView() {
 															<Button
 																variant="ghost"
 																size="icon"
+																title={manageHint}
 																disabled={
-																	testMutation.isPending &&
-																	testMutation.variables?.notificationId ===
-																		notification.notificationId
+																	!canManage ||
+																	(testMutation.isPending &&
+																		testMutation.variables?.notificationId ===
+																			notification.notificationId)
 																}
 																onClick={() =>
 																	testMutation.mutate({
@@ -185,6 +197,8 @@ export function NotificationsView() {
 															<Button
 																variant="ghost"
 																size="icon"
+																disabled={!canManage}
+																title={manageHint}
 																onClick={() => setEditing(notification)}
 															>
 																<Pencil className="size-4" />
@@ -193,9 +207,10 @@ export function NotificationsView() {
 															<ConfirmDeleteDialog
 																title="Remove notification channel"
 																description={`Remove "${notification.name}"?`}
-																isPending={removeMutation.isPending}
+																disabled={!canManage}
+																disabledReason={manageHint}
 																onConfirm={() =>
-																	removeMutation.mutate({
+																	removeMutation.mutateAsync({
 																		notificationId: notification.notificationId,
 																	})
 																}

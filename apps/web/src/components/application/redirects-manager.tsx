@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRightLeft, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { QueryState } from "@/components/query-state";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
@@ -36,6 +38,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 import type { RedirectEntry } from "./types";
@@ -45,6 +48,9 @@ const EMPTY_FORM = { regex: "", replacement: "", permanent: false };
 export function RedirectsManager({ applicationId }: { applicationId: string }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	const canWrite = can("service.write");
+	const writeHint = canWrite ? undefined : capabilityHint("service.write");
 
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editing, setEditing] = useState<RedirectEntry | null>(null);
@@ -58,9 +64,13 @@ export function RedirectsManager({ applicationId }: { applicationId: string }) {
 		}
 	}, [dialogOpen]);
 
-	const { data: redirects, isLoading } = useQuery(
-		trpc.redirect.byApplication.queryOptions({ applicationId }),
-	);
+	const {
+		data: redirects,
+		isLoading,
+		isError,
+		error,
+		refetch,
+	} = useQuery(trpc.redirect.byApplication.queryOptions({ applicationId }));
 
 	const invalidate = () =>
 		queryClient.invalidateQueries({
@@ -125,25 +135,38 @@ export function RedirectsManager({ applicationId }: { applicationId: string }) {
 				title="Redirects"
 				description="Regex-based URL redirects applied at the reverse proxy."
 				actions={
-					<Button size="sm" onClick={() => setDialogOpen(true)}>
+					<Button
+						size="sm"
+						onClick={() => setDialogOpen(true)}
+						disabled={!canWrite}
+						title={writeHint}
+					>
 						<Plus className="size-4" />
 						Add Redirect
 					</Button>
 				}
 			>
-				{isLoading ? (
-					<div className="flex flex-col gap-2">
-						{Array.from({ length: 2 }).map((_, i) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders
-							<Skeleton key={i} className="h-10 w-full" />
-						))}
-					</div>
-				) : !redirects || redirects.length === 0 ? (
-					<div className="flex flex-col items-center gap-2 py-10 text-center">
-						<ArrowRightLeft className="size-8 text-muted-foreground" />
-						<p className="text-sm text-muted-foreground">No redirects configured.</p>
-					</div>
-				) : (
+				<QueryState
+					isPending={isLoading}
+					isError={isError}
+					error={error}
+					onRetry={() => refetch()}
+					isEmpty={!redirects || redirects.length === 0}
+					skeleton={
+						<div className="flex flex-col gap-2">
+							{Array.from({ length: 2 }).map((_, i) => (
+								// biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders
+								<Skeleton key={i} className="h-10 w-full" />
+							))}
+						</div>
+					}
+					empty={
+						<div className="flex flex-col items-center gap-2 py-10 text-center">
+							<ArrowRightLeft className="size-8 text-muted-foreground" />
+							<p className="text-sm text-muted-foreground">No redirects configured.</p>
+						</div>
+					}
+				>
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -154,7 +177,7 @@ export function RedirectsManager({ applicationId }: { applicationId: string }) {
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{redirects.map((redirect) => (
+							{(redirects ?? []).map((redirect) => (
 								<TableRow key={redirect.redirectId}>
 									<TableCell className="max-w-56 truncate font-mono text-xs">
 										{redirect.regex}
@@ -171,6 +194,8 @@ export function RedirectsManager({ applicationId }: { applicationId: string }) {
 												variant="ghost"
 												size="sm"
 												aria-label="Edit"
+												disabled={!canWrite}
+												title={writeHint}
 												onClick={() => openEdit(redirect)}
 											>
 												<Pencil className="size-4" />
@@ -179,6 +204,8 @@ export function RedirectsManager({ applicationId }: { applicationId: string }) {
 												variant="ghost"
 												size="sm"
 												aria-label="Delete"
+												disabled={!canWrite}
+												title={writeHint}
 												onClick={() => setDeleteTarget(redirect)}
 											>
 												<Trash2 className="size-4 text-destructive" />
@@ -189,7 +216,7 @@ export function RedirectsManager({ applicationId }: { applicationId: string }) {
 							))}
 						</TableBody>
 					</Table>
-				)}
+				</QueryState>
 			</SettingsSection>
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -263,9 +290,13 @@ export function RedirectsManager({ applicationId }: { applicationId: string }) {
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							onClick={() => deleteTarget && remove.mutate({ redirectId: deleteTarget.redirectId })}
+							onClick={(event) => {
+								// Keep the dialog open (with its spinner) until the mutation settles.
+								event.preventDefault();
+								if (deleteTarget) remove.mutate({ redirectId: deleteTarget.redirectId });
+							}}
 							disabled={remove.isPending}
 						>
 							{remove.isPending && <Loader2 className="size-4 animate-spin" />}

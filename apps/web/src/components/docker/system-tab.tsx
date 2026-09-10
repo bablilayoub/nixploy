@@ -25,14 +25,18 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
-import { DockerError, type DockerTabProps } from "./docker-view";
+import { DockerError, type DockerTabProps, invalidateDockerQueries } from "./docker-view";
 
 export function SystemTab({ serverId }: DockerTabProps) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [pruneOpen, setPruneOpen] = useState<"simple" | "volumes" | null>(null);
+	// docker.systemPrune is cluster-wide and rejects everyone but the instance
+	// admin (with or without a serverId) — keep the controls out of sight.
+	const { isInstanceAdmin } = useCapabilities();
 
 	const infoQuery = useQuery(trpc.docker.systemInfo.queryOptions({ serverId }));
 
@@ -43,9 +47,9 @@ export function SystemTab({ serverId }: DockerTabProps) {
 					description: output.trim().split("\n").pop() ?? undefined,
 				});
 				setPruneOpen(null);
-				queryClient.invalidateQueries({
-					queryKey: trpc.docker.systemInfo.queryKey({ serverId }),
-				});
+				// Prune removes containers, networks, images and (optionally)
+				// volumes — every cached list for this daemon is stale now.
+				void invalidateDockerQueries(queryClient, trpc, serverId);
 			},
 			onError: (error) => toast.error(error.message),
 		}),
@@ -74,20 +78,22 @@ export function SystemTab({ serverId }: DockerTabProps) {
 				</div>
 			</SettingsSection>
 
-			<SettingsSection
-				title="Cleanup"
-				description="Remove stopped containers, unused networks and dangling images."
-				actions={
-					<div className="flex gap-2">
-						<Button variant="outline" size="sm" onClick={() => setPruneOpen("simple")}>
-							System prune
-						</Button>
-						<Button variant="outline" size="sm" onClick={() => setPruneOpen("volumes")}>
-							Prune incl. volumes
-						</Button>
-					</div>
-				}
-			/>
+			{isInstanceAdmin && (
+				<SettingsSection
+					title="Cleanup"
+					description="Remove stopped containers, unused networks and dangling images."
+					actions={
+						<div className="flex gap-2">
+							<Button variant="outline" size="sm" onClick={() => setPruneOpen("simple")}>
+								System prune
+							</Button>
+							<Button variant="outline" size="sm" onClick={() => setPruneOpen("volumes")}>
+								Prune incl. volumes
+							</Button>
+						</div>
+					}
+				/>
+			)}
 
 			<SettingsSection title="Disk usage" className="lg:col-span-2">
 				<Table>

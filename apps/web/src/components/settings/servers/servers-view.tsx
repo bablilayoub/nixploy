@@ -43,6 +43,8 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useCapabilities } from "@/hooks/use-capabilities";
+import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -51,6 +53,9 @@ type ServerRow = inferRouterOutputs<AppRouter>["server"]["all"][number];
 export function ServersView() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	const canManage = can("servers.manage");
+	const manageHint = canManage ? undefined : missingCapabilityHint("servers.manage");
 
 	const {
 		data: servers,
@@ -151,7 +156,7 @@ export function ServersView() {
 			<SettingsSection
 				title="Servers"
 				description="Remote Docker hosts connected over SSH."
-				actions={<CreateServerDialog />}
+				actions={<CreateServerDialog disabled={!canManage} disabledReason={manageHint} />}
 			>
 				<QueryState
 					isPending={isPending}
@@ -230,9 +235,11 @@ export function ServersView() {
 													<Button
 														variant="ghost"
 														size="icon"
+														title={manageHint}
 														disabled={
-															testMutation.isPending &&
-															testMutation.variables?.serverId === server.serverId
+															!canManage ||
+															(testMutation.isPending &&
+																testMutation.variables?.serverId === server.serverId)
 														}
 														onClick={() =>
 															testMutation.mutate({
@@ -256,9 +263,11 @@ export function ServersView() {
 													<Button
 														variant="ghost"
 														size="icon"
+														title={manageHint}
 														disabled={
-															setupMutation.isPending &&
-															setupMutation.variables?.serverId === server.serverId
+															!canManage ||
+															(setupMutation.isPending &&
+																setupMutation.variables?.serverId === server.serverId)
 														}
 														onClick={() =>
 															setupMutation.mutate({
@@ -279,7 +288,13 @@ export function ServersView() {
 											</Tooltip>
 											<Tooltip>
 												<TooltipTrigger asChild>
-													<Button variant="ghost" size="icon" onClick={() => setEditing(server)}>
+													<Button
+														variant="ghost"
+														size="icon"
+														title={manageHint}
+														disabled={!canManage}
+														onClick={() => setEditing(server)}
+													>
 														<Pencil className="size-4" />
 														<span className="sr-only">Edit server</span>
 													</Button>
@@ -289,9 +304,10 @@ export function ServersView() {
 											<ConfirmDeleteDialog
 												title="Remove server"
 												description={`Remove "${server.name}" from this organization? The host itself is not touched.`}
-												isPending={removeMutation.isPending}
+												disabled={!canManage}
+												disabledReason={manageHint}
 												onConfirm={() =>
-													removeMutation.mutate({
+													removeMutation.mutateAsync({
 														serverId: server.serverId,
 													})
 												}
@@ -320,7 +336,8 @@ export function ServersView() {
 									description: editDescription.trim() || null,
 									ipAddress: editIpAddress.trim(),
 									port: Number(editPort) || 22,
-									username: editUsername.trim() || undefined,
+									// The API requires a non-empty username; Save is disabled when blank.
+									username: editUsername.trim(),
 									sshKeyId: editSshKeyId,
 									swarmRole: editSwarmRole,
 									metricsEnabled: editMetricsEnabled,
@@ -371,8 +388,12 @@ export function ServersView() {
 							<Input
 								id="edit-server-username"
 								value={editUsername}
+								required
 								onChange={(e) => setEditUsername(e.target.value)}
 							/>
+							{!editUsername.trim() && (
+								<p className="text-xs text-destructive">An SSH username is required.</p>
+							)}
 						</div>
 						<div className="grid gap-2">
 							<Label>SSH key</Label>
@@ -427,7 +448,12 @@ export function ServersView() {
 						<DialogFooter>
 							<Button
 								type="submit"
-								disabled={updateMutation.isPending || !editName.trim() || !editIpAddress.trim()}
+								disabled={
+									updateMutation.isPending ||
+									!editName.trim() ||
+									!editIpAddress.trim() ||
+									!editUsername.trim()
+								}
 							>
 								{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
 								Save

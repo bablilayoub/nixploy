@@ -103,9 +103,15 @@ export function TwoFactorCard() {
 
 	async function copyUri() {
 		if (!totpURI) return;
-		await navigator.clipboard.writeText(totpURI);
-		setCopied(true);
-		setTimeout(() => setCopied(false), 2000);
+		try {
+			await navigator.clipboard.writeText(totpURI);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		} catch {
+			// Clipboard access is denied on plain-HTTP origins — the URI stays
+			// visible above so it can still be copied by hand.
+			toast.error("Failed to copy to clipboard — select the URI and copy it manually");
+		}
 	}
 
 	return (

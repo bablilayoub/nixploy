@@ -16,8 +16,10 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
+import { templateDeployBlocker } from "./deploy-template-dialog";
 import { TemplateLogo } from "./template-logo";
 import type { TemplateSummary } from "./templates-view";
 
@@ -91,7 +93,16 @@ function ServiceCard({ service }: { service: TemplateDetails["services"][number]
 	);
 }
 
-function DetailsBody({ template, onDeploy }: { template: TemplateDetails; onDeploy: () => void }) {
+function DetailsBody({
+	template,
+	onDeploy,
+	deployBlocker,
+}: {
+	template: TemplateDetails;
+	onDeploy: () => void;
+	/** Reason the caller cannot deploy (disables the button), or null. */
+	deployBlocker: string | null;
+}) {
 	const links = [
 		template.links.website ? { href: template.links.website, label: "Website" } : null,
 		template.links.docs ? { href: template.links.docs, label: "Docs" } : null,
@@ -192,8 +203,17 @@ function DetailsBody({ template, onDeploy }: { template: TemplateDetails; onDepl
 				</pre>
 			</details>
 
-			<DialogFooter>
-				<Button onClick={onDeploy}>Deploy</Button>
+			<DialogFooter className="items-center gap-3">
+				{deployBlocker ? (
+					<p className="text-xs text-muted-foreground sm:mr-auto">{deployBlocker}</p>
+				) : null}
+				<Button
+					onClick={onDeploy}
+					disabled={deployBlocker !== null}
+					title={deployBlocker ?? undefined}
+				>
+					Deploy
+				</Button>
 			</DialogFooter>
 		</>
 	);
@@ -209,6 +229,7 @@ export function TemplateDetailsDialog({
 	onDeploy: (template: TemplateSummary) => void;
 }) {
 	const trpc = useTRPC();
+	const access = useCapabilities();
 	const detailsQuery = useQuery({
 		...trpc.template.one.queryOptions({ templateId: template?.id ?? "" }),
 		enabled: template !== null,
@@ -242,6 +263,7 @@ export function TemplateDetailsDialog({
 				{detailsQuery.data && template && (
 					<DetailsBody
 						template={detailsQuery.data}
+						deployBlocker={templateDeployBlocker(template, access)}
 						onDeploy={() => {
 							onClose();
 							onDeploy(template);

@@ -5,6 +5,8 @@ import { format } from "date-fns";
 import { Check, ExternalLink, GitPullRequest, Loader2, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { QueryState } from "@/components/query-state";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { StatusDot, type StatusDotStatus } from "@/components/shell";
 import {
@@ -38,6 +40,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application, PreviewDeployment } from "./types";
@@ -63,6 +66,9 @@ function parseExpiry(days: string): Date | null {
 export function PreviewDeploymentsTab({ application }: { application: Application }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	const canDeploy = can("service.deploy");
+	const deployHint = canDeploy ? undefined : capabilityHint("service.deploy");
 	const applicationId = application.applicationId;
 
 	const [createOpen, setCreateOpen] = useState(false);
@@ -73,9 +79,13 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 	const [expiresInDays, setExpiresInDays] = useState("");
 	const [deleteTarget, setDeleteTarget] = useState<PreviewDeployment | null>(null);
 
-	const { data: previews, isLoading } = useQuery(
-		trpc.previewDeployment.byApplication.queryOptions({ applicationId }),
-	);
+	const {
+		data: previews,
+		isLoading,
+		isError,
+		error,
+		refetch,
+	} = useQuery(trpc.previewDeployment.byApplication.queryOptions({ applicationId }));
 
 	const invalidate = () =>
 		queryClient.invalidateQueries({
@@ -136,7 +146,7 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 			actions={
 				<Dialog open={createOpen} onOpenChange={setCreateOpen}>
 					<DialogTrigger asChild>
-						<Button size="sm">
+						<Button size="sm" disabled={!canDeploy} title={deployHint}>
 							<Plus className="size-4" />
 							Create Preview
 						</Button>
@@ -223,20 +233,28 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 				</Dialog>
 			}
 		>
-			{isLoading ? (
-				<div className="flex flex-col gap-2">
-					{["sk-a", "sk-b"].map((id) => (
-						<Skeleton key={id} className="h-10 w-full" />
-					))}
-				</div>
-			) : !previews || previews.length === 0 ? (
-				<div className="flex flex-col items-center gap-2 py-10 text-center">
-					<GitPullRequest className="size-8 text-muted-foreground" />
-					<p className="text-sm text-muted-foreground">
-						No preview deployments. Create one to test a pull request in isolation.
-					</p>
-				</div>
-			) : (
+			<QueryState
+				isPending={isLoading}
+				isError={isError}
+				error={error}
+				onRetry={() => refetch()}
+				isEmpty={!previews || previews.length === 0}
+				skeleton={
+					<div className="flex flex-col gap-2">
+						{["sk-a", "sk-b"].map((id) => (
+							<Skeleton key={id} className="h-10 w-full" />
+						))}
+					</div>
+				}
+				empty={
+					<div className="flex flex-col items-center gap-2 py-10 text-center">
+						<GitPullRequest className="size-8 text-muted-foreground" />
+						<p className="text-sm text-muted-foreground">
+							No preview deployments. Create one to test a pull request in isolation.
+						</p>
+					</div>
+				}
+			>
 				<Table>
 					<TableHeader>
 						<TableRow>
@@ -250,7 +268,7 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{previews.map((preview) => (
+						{(previews ?? []).map((preview) => (
 							<TableRow key={preview.previewDeploymentId}>
 								<TableCell className="font-medium">
 									#{preview.pullRequestNumber}
@@ -301,7 +319,8 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 											<Button
 												variant="outline"
 												size="sm"
-												disabled={approve.isPending || deny.isPending}
+												disabled={approve.isPending || deny.isPending || !canDeploy}
+												title={deployHint}
 												onClick={() =>
 													approve.mutate({ previewDeploymentId: preview.previewDeploymentId })
 												}
@@ -316,7 +335,8 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 											<Button
 												variant="ghost"
 												size="sm"
-												disabled={approve.isPending || deny.isPending}
+												disabled={approve.isPending || deny.isPending || !canDeploy}
+												title={deployHint}
 												onClick={() =>
 													deny.mutate({ previewDeploymentId: preview.previewDeploymentId })
 												}
@@ -329,6 +349,8 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 										<Button
 											variant="ghost"
 											size="sm"
+											disabled={!canDeploy}
+											title={deployHint}
 											onClick={() => setDeleteTarget(preview)}
 											aria-label={`Delete preview for PR #${preview.pullRequestNumber}`}
 										>
@@ -340,7 +362,7 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 						))}
 					</TableBody>
 				</Table>
-			)}
+			</QueryState>
 
 			<AlertDialog
 				open={deleteTarget !== null}
@@ -355,13 +377,16 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
 							variant="destructive"
-							onClick={() =>
-								deleteTarget &&
-								remove.mutate({ previewDeploymentId: deleteTarget.previewDeploymentId })
-							}
+							onClick={(event) => {
+								// Keep the dialog open (with its spinner) until the mutation settles.
+								event.preventDefault();
+								if (deleteTarget) {
+									remove.mutate({ previewDeploymentId: deleteTarget.previewDeploymentId });
+								}
+							}}
 							disabled={remove.isPending}
 						>
 							{remove.isPending && <Loader2 className="size-4 animate-spin" />}

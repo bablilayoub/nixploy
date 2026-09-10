@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-
+import { capabilityHint } from "@/components/services/capability-hint";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -43,8 +43,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
-
 import { GitopsCard, type GitopsCardHandle } from "./gitops-card";
 
 export interface EnvironmentRow {
@@ -74,6 +74,12 @@ export function EnvironmentActions({
 }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	const canWrite = can("project.write");
+	// Duplicate/clone copy env vars → the server also requires secrets.write.
+	const canCopy = canWrite && can("secrets.write");
+	const canDelete = can("project.delete");
+	const canGitops = can("gitops.manage");
 
 	const [renameOpen, setRenameOpen] = useState(false);
 	const [duplicateOpen, setDuplicateOpen] = useState(false);
@@ -98,6 +104,14 @@ export function EnvironmentActions({
 			setDuplicateName(`${environment.name} copy`);
 		}
 	}, [duplicateOpen, environment.name]);
+
+	// This component is reused across environment switches (no key), so the
+	// clone name must follow the active environment like the other dialogs.
+	useEffect(() => {
+		if (cloneOpen) {
+			setCloneName(`${environment.name}-clone`);
+		}
+	}, [cloneOpen, environment.name]);
 
 	const invalidate = () =>
 		Promise.all([
@@ -172,20 +186,34 @@ export function EnvironmentActions({
 					</Button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="start">
-					<DropdownMenuItem onClick={() => setRenameOpen(true)}>
+					<DropdownMenuItem
+						disabled={!canWrite}
+						title={canWrite ? undefined : capabilityHint("project.write")}
+						onClick={() => setRenameOpen(true)}
+					>
 						<Pencil className="size-4" />
 						Rename
 					</DropdownMenuItem>
-					<DropdownMenuItem onClick={() => setDuplicateOpen(true)}>
+					<DropdownMenuItem
+						disabled={!canCopy}
+						title={canCopy ? undefined : capabilityHint("project.write", "secrets.write")}
+						onClick={() => setDuplicateOpen(true)}
+					>
 						<Copy className="size-4" />
 						Duplicate
 					</DropdownMenuItem>
-					<DropdownMenuItem onClick={() => setCloneOpen(true)}>
+					<DropdownMenuItem
+						disabled={!canCopy}
+						title={canCopy ? undefined : capabilityHint("project.write", "secrets.write")}
+						onClick={() => setCloneOpen(true)}
+					>
 						<CopyPlus className="size-4" />
 						Clone with services
 					</DropdownMenuItem>
 					<DropdownMenuSeparator />
 					<DropdownMenuItem
+						disabled={!canGitops}
+						title={canGitops ? undefined : capabilityHint("gitops.manage")}
 						onSelect={(event) => {
 							event.preventDefault();
 							void gitopsRef.current?.exportStack();
@@ -194,14 +222,25 @@ export function EnvironmentActions({
 						<Download className="size-4" />
 						Export stack
 					</DropdownMenuItem>
-					<DropdownMenuItem onSelect={() => setGitopsImportOpen(true)}>
+					<DropdownMenuItem
+						disabled={!canGitops}
+						title={canGitops ? undefined : capabilityHint("gitops.manage")}
+						onSelect={() => setGitopsImportOpen(true)}
+					>
 						<Upload className="size-4" />
 						Import stack
 					</DropdownMenuItem>
 					<DropdownMenuSeparator />
 					<DropdownMenuItem
 						variant="destructive"
-						disabled={isOnlyEnvironment}
+						disabled={isOnlyEnvironment || !canDelete}
+						title={
+							!canDelete
+								? capabilityHint("project.delete")
+								: isOnlyEnvironment
+									? "A project needs at least one environment"
+									: undefined
+						}
 						onClick={() => setDeleteOpen(true)}
 					>
 						<Trash2 className="size-4" />
@@ -351,9 +390,15 @@ export function EnvironmentActions({
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							onClick={() => remove.mutate({ environmentId: environment.environmentId })}
+							variant="destructive"
+							onClick={(event) => {
+								// The cascade can take many seconds — keep the dialog (and its
+								// spinner) open until onSuccess closes it.
+								event.preventDefault();
+								remove.mutate({ environmentId: environment.environmentId });
+							}}
 							disabled={remove.isPending}
 						>
 							{remove.isPending && <Loader2 className="size-4 animate-spin" />}

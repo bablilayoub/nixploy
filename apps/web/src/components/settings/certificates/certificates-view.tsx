@@ -33,6 +33,8 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { useCapabilities } from "@/hooks/use-capabilities";
+import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -42,6 +44,9 @@ export function CertificatesView() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
+	const { can } = useCapabilities();
+	const canManage = can("certificates.manage");
+	const manageHint = canManage ? undefined : missingCapabilityHint("certificates.manage");
 	const [name, setName] = useState("");
 	const [certificateData, setCertificateData] = useState("");
 	const [privateKey, setPrivateKey] = useState("");
@@ -129,7 +134,7 @@ export function CertificatesView() {
 					description="Certificates stored on this server."
 					actions={
 						<DialogTrigger asChild>
-							<Button size="sm">
+							<Button size="sm" disabled={!canManage} title={manageHint}>
 								<Plus className="size-4" />
 								Add Certificate
 							</Button>
@@ -191,16 +196,23 @@ export function CertificatesView() {
 										</TableCell>
 										<TableCell>
 											<div className="flex items-center justify-end">
-												<Button variant="ghost" size="icon" onClick={() => setEditing(certificate)}>
+												<Button
+													variant="ghost"
+													size="icon"
+													disabled={!canManage}
+													title={manageHint}
+													onClick={() => setEditing(certificate)}
+												>
 													<Pencil className="size-4" />
 													<span className="sr-only">Edit certificate</span>
 												</Button>
 												<ConfirmDeleteDialog
 													title="Remove certificate"
 													description={`Remove "${certificate.name}"? Domains using it will fall back to the default certificate.`}
-													isPending={deleteMutation.isPending}
+													disabled={!canManage}
+													disabledReason={manageHint}
 													onConfirm={() =>
-														deleteMutation.mutate({
+														deleteMutation.mutateAsync({
 															certificateId: certificate.certificateId,
 														})
 													}

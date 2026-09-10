@@ -1,9 +1,10 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Lock, RefreshCw } from "lucide-react";
+import { Boxes, Lock, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
+import { EmptyState } from "@/components/services/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +47,16 @@ type NodeRow = {
 	EngineVersion: string;
 };
 
+/**
+ * `docker node ls` / `docker service ls` exit non-zero on a host that is not
+ * a swarm manager. That is the normal state of a plain worker or standalone
+ * daemon, not an unreachable engine — render the empty state instead.
+ */
+function isSwarmInactiveError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error ?? "");
+	return /not a swarm manager|not part of a swarm|swarm mode|swarm is not active/i.test(message);
+}
+
 export function SwarmTab({ serverId }: DockerTabProps) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
@@ -73,11 +84,34 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 	if (servicesQuery.isLoading || nodesQuery.isLoading) {
 		return <Skeleton className="h-64 w-full" />;
 	}
-	if (servicesQuery.isError) return <DockerError error={servicesQuery.error} />;
-	if (nodesQuery.isError) return <DockerError error={nodesQuery.error} />;
+	if (servicesQuery.isError && !isSwarmInactiveError(servicesQuery.error)) {
+		return <DockerError error={servicesQuery.error} />;
+	}
+	if (nodesQuery.isError && !isSwarmInactiveError(nodesQuery.error)) {
+		return <DockerError error={nodesQuery.error} />;
+	}
 
-	const services = (servicesQuery.data ?? []) as ServiceRow[];
-	const nodes = (nodesQuery.data ?? []) as NodeRow[];
+	const services = (servicesQuery.isError ? [] : (servicesQuery.data ?? [])) as ServiceRow[];
+	const nodes = (nodesQuery.isError ? [] : (nodesQuery.data ?? [])) as NodeRow[];
+
+	// The router answers `[]` for both lists on a worker or standalone engine.
+	if (nodes.length === 0 && services.length === 0) {
+		return (
+			<div className="pt-4">
+				<EmptyState
+					icon={Boxes}
+					title="Swarm mode is inactive on this server"
+					description="This engine is not a swarm manager, so it cannot list nodes or services. Pick the Nixploy host or a manager node to inspect the cluster."
+					action={
+						<Button variant="outline" size="sm" onClick={invalidate}>
+							<RefreshCw className="size-3.5" />
+							Refresh
+						</Button>
+					}
+				/>
+			</div>
+		);
+	}
 
 	return (
 		<div className="space-y-6 pt-4">

@@ -28,6 +28,8 @@ import {
 	type DatabaseType,
 	type ServiceStatus,
 } from "@/components/databases/database-types";
+import { QueryState } from "@/components/query-state";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { DangerZone } from "@/components/services/danger-zone";
 import { EnvEditor } from "@/components/services/env-editor";
 import { LogViewer } from "@/components/services/log-viewer";
@@ -59,6 +61,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSyncedTab } from "@/hooks/use-synced-tab";
 import { useTRPC } from "@/lib/trpc";
 
@@ -136,6 +139,13 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const router = useRouter();
+	const { can } = useCapabilities();
+	// Database `start` deploys the swarm service (service.deploy); stop/reload
+	// are runtime actions (service.runtime).
+	const canDeploy = can("service.deploy");
+	const canRuntime = can("service.runtime");
+	const deployHint = canDeploy ? undefined : capabilityHint("service.deploy");
+	const runtimeHint = canRuntime ? undefined : capabilityHint("service.runtime");
 
 	const ns = useMemo(() => trpc[type] as unknown as DatabaseRouterFacade, [trpc, type]);
 	const idInput: DatabaseIdInput = useMemo(() => ({ [cfg.idField]: id }), [cfg.idField, id]);
@@ -153,6 +163,8 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 	const invalidate = () => {
 		queryClient.invalidateQueries({ queryKey: ns.one.queryKey(idInput) });
 		queryClient.invalidateQueries({ queryKey: ns.getStatus.queryKey(idInput) });
+		// The project services table reads name/status from `<engine>.all`.
+		queryClient.invalidateQueries({ queryKey: ns.all.pathKey() });
 	};
 
 	const onError = (error: { message?: string }) =>
@@ -171,6 +183,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 		ns.stop.mutationOptions({
 			onSuccess: () => {
 				toast.success(`${cfg.label} stopped`);
+				setConfirmStop(false);
 				invalidate();
 			},
 			onError,
@@ -189,6 +202,13 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 		ns.remove.mutationOptions({
 			onSuccess: () => {
 				toast.success(`${cfg.label} deleted`);
+				// Drop the row from the project services list (30s staleTime would
+				// otherwise keep showing it) and the environment counts.
+				queryClient.invalidateQueries({ queryKey: ns.all.pathKey() });
+				queryClient.invalidateQueries({
+					queryKey: trpc.environment.byProject.queryKey({ projectId }),
+				});
+				queryClient.invalidateQueries({ queryKey: trpc.project.all.queryKey() });
 				router.push(`/dashboard/projects/${projectId}`);
 			},
 			onError,
@@ -238,9 +258,16 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 				<p className="text-sm text-muted-foreground">
 					{rowQuery.error?.message ?? "This database does not exist or you don't have access."}
 				</p>
-				<Button variant="outline" onClick={() => router.push(`/dashboard/projects/${projectId}`)}>
-					Back to project
-				</Button>
+				<div className="flex gap-2">
+					{rowQuery.isError && (
+						<Button variant="outline" onClick={() => rowQuery.refetch()}>
+							Retry
+						</Button>
+					)}
+					<Button variant="outline" onClick={() => router.push(`/dashboard/projects/${projectId}`)}>
+						Back to project
+					</Button>
+				</div>
 			</div>
 		);
 	}
@@ -273,7 +300,8 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 							<Button
 								variant="outline"
 								size="sm"
-								disabled={actionPending}
+								disabled={actionPending || !canRuntime}
+								title={runtimeHint}
 								onClick={() => setConfirmStop(true)}
 							>
 								{stopMutation.isPending ? (
@@ -287,7 +315,8 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 							<Button
 								variant="outline"
 								size="sm"
-								disabled={actionPending}
+								disabled={actionPending || !canDeploy}
+								title={deployHint}
 								onClick={() => startMutation.mutate(idInput)}
 							>
 								{startMutation.isPending ? (
@@ -302,7 +331,8 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 							variant="outline"
 							size="sm"
 							className="hidden sm:inline-flex"
-							disabled={actionPending || (status !== "running" && status !== "done")}
+							disabled={actionPending || (status !== "running" && status !== "done") || !canRuntime}
+							title={runtimeHint}
 							onClick={() => reloadMutation.mutate(idInput)}
 						>
 							{reloadMutation.isPending ? (
@@ -326,7 +356,10 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="end">
 								<DropdownMenuItem
-									disabled={actionPending || (status !== "running" && status !== "done")}
+									disabled={
+										actionPending || (status !== "running" && status !== "done") || !canRuntime
+									}
+									title={runtimeHint}
 									onClick={() => reloadMutation.mutate(idInput)}
 								>
 									<RefreshCw className="size-4" />
@@ -347,11 +380,14 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={stopMutation.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
 							variant="destructive"
 							disabled={stopMutation.isPending}
-							onClick={() => stopMutation.mutate(idInput)}
+							onClick={(event) => {
+								event.preventDefault();
+								stopMutation.mutate(idInput);
+							}}
 						>
 							{stopMutation.isPending && <Loader2 className="size-4 animate-spin" />}
 							Stop
@@ -435,7 +471,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 						db={db}
 						label={cfg.label}
 						invalidate={invalidate}
-						onRemove={() => removeMutation.mutate(idInput)}
+						onRemove={() => removeMutation.mutateAsync(idInput)}
 					/>
 				</TabsContent>
 			</Tabs>
@@ -465,6 +501,9 @@ function GeneralTab({
 	hasUser: boolean;
 	hasRootPassword: boolean;
 }) {
+	const { can } = useCapabilities();
+	const canWrite = can("service.write");
+	const writeHint = canWrite ? undefined : capabilityHint("service.write");
 	const [name, setName] = useState(db.name);
 	const [description, setDescription] = useState(db.description ?? "");
 	const [dockerImage, setDockerImage] = useState(db.dockerImage);
@@ -526,12 +565,19 @@ function GeneralTab({
 					</div>
 					<div className="flex justify-end">
 						<Button
-							disabled={updateMutation.isPending || !name.trim() || !dockerImage.trim()}
+							disabled={
+								updateMutation.isPending || !name.trim() || !dockerImage.trim() || !canWrite
+							}
+							title={writeHint}
 							onClick={() =>
 								updateMutation.mutate({
 									...idInput,
 									name: name.trim(),
-									description: description.trim() || undefined,
+									// `undefined` is dropped from the SET clause, so a cleared
+									// description could never be persisted. The router's zod
+									// schema is `z.string().optional()` (rejects null), so an
+									// empty string is the only value that clears it.
+									description: description.trim(),
 									dockerImage: dockerImage.trim(),
 								})
 							}
@@ -581,7 +627,8 @@ function GeneralTab({
 					</div>
 					<div className="flex justify-end">
 						<Button
-							disabled={portMutation.isPending || !portValid}
+							disabled={portMutation.isPending || !portValid || !canWrite}
+							title={writeHint}
 							onClick={() => portMutation.mutate({ ...idInput, externalPort: parsedPort })}
 						>
 							{portMutation.isPending && <Loader2 className="size-4 animate-spin" />}
@@ -606,48 +653,69 @@ function ConnectionTab({
 	const urlsQuery = useQuery(ns.getConnectionUrl.queryOptions(idInput));
 	const urls = urlsQuery.data as ConnectionUrls | undefined;
 
+	// One QueryState for both sections: the procedure requires secrets.read, so
+	// a FORBIDDEN must read as "you cannot see this" (with Retry), not as
+	// "no URL configured".
 	return (
-		<SettingsStack>
-			<SettingsSection
-				title="Internal connection URL"
-				description="Use this URL from services deployed on the internal network."
-			>
-				{urlsQuery.isLoading ? (
-					<Skeleton className="h-9 w-full" />
-				) : urls ? (
+		<QueryState
+			isPending={urlsQuery.isLoading}
+			isError={urlsQuery.isError}
+			error={urlsQuery.error as { message?: string } | null}
+			onRetry={() => urlsQuery.refetch()}
+			skeleton={
+				<SettingsStack>
+					<SettingsSection
+						title="Internal connection URL"
+						description="Use this URL from services deployed on the internal network."
+					>
+						<Skeleton className="h-9 w-full" />
+					</SettingsSection>
+					<SettingsSection
+						title="External connection URL"
+						description="Use this URL to connect from outside this server (requires an external port)."
+					>
+						<Skeleton className="h-9 w-full" />
+					</SettingsSection>
+				</SettingsStack>
+			}
+			isEmpty={!urls}
+			empty={<p className="text-sm text-muted-foreground">Connection URL unavailable.</p>}
+		>
+			<SettingsStack>
+				<SettingsSection
+					title="Internal connection URL"
+					description="Use this URL from services deployed on the internal network."
+				>
 					<div className="flex items-center gap-1">
-						<Input readOnly value={urls.internal} className="font-mono text-xs" />
-						<CopyButton value={urls.internal} />
+						<Input readOnly value={urls?.internal ?? ""} className="font-mono text-xs" />
+						<CopyButton value={urls?.internal ?? ""} />
 					</div>
-				) : (
-					<p className="text-sm text-muted-foreground">Connection URL unavailable.</p>
-				)}
-			</SettingsSection>
+				</SettingsSection>
 
-			<SettingsSection
-				title="External connection URL"
-				description="Use this URL to connect from outside this server (requires an external port)."
-			>
-				{urlsQuery.isLoading ? (
-					<Skeleton className="h-9 w-full" />
-				) : urls?.external ? (
-					<div className="flex items-center gap-1">
-						<Input readOnly value={urls.external} className="font-mono text-xs" />
-						<CopyButton value={urls.external} />
-					</div>
-				) : (
-					<p className="text-sm text-muted-foreground">
-						{hasExternalPort
-							? "External URL unavailable."
-							: "No external port configured. Set one in the General tab to enable external access."}
-					</p>
-				)}
-			</SettingsSection>
-		</SettingsStack>
+				<SettingsSection
+					title="External connection URL"
+					description="Use this URL to connect from outside this server (requires an external port)."
+				>
+					{urls?.external ? (
+						<div className="flex items-center gap-1">
+							<Input readOnly value={urls.external} className="font-mono text-xs" />
+							<CopyButton value={urls.external} />
+						</div>
+					) : (
+						<p className="text-sm text-muted-foreground">
+							{hasExternalPort
+								? "External URL unavailable."
+								: "No external port configured. Set one in the General tab to enable external access."}
+						</p>
+					)}
+				</SettingsSection>
+			</SettingsStack>
+		</QueryState>
 	);
 }
 
 function EnvironmentTab({ ns, idInput, env, invalidate }: TabProps & { env: string | null }) {
+	const { can } = useCapabilities();
 	const saveMutation = useMutation(
 		ns.saveEnvironment.mutationOptions({
 			onSuccess: () => {
@@ -664,9 +732,13 @@ function EnvironmentTab({ ns, idInput, env, invalidate }: TabProps & { env: stri
 			description="Service-level variables. Reload the service to apply changes."
 		>
 			<EnvEditor
-				value={env ?? ""}
+				value={env}
 				loading={saveMutation.isPending}
-				onSave={(nextEnv) => saveMutation.mutate({ ...idInput, env: nextEnv })}
+				// The server nulls `env` for members without secrets.read; the editor
+				// cannot tell that apart from an unset env, so pass the capability.
+				canRead={can("secrets.read")}
+				canEdit={can("secrets.write")}
+				onSave={(nextEnv) => saveMutation.mutateAsync({ ...idInput, env: nextEnv })}
 			/>
 		</SettingsSection>
 	);
@@ -682,8 +754,12 @@ function SettingsTab({
 }: TabProps & {
 	db: DatabaseRow;
 	label: string;
-	onRemove: () => void;
+	/** Must return the delete promise (`mutateAsync`) so DangerZone can await it. */
+	onRemove: () => Promise<unknown>;
 }) {
+	const { can } = useCapabilities();
+	const canWrite = can("service.write");
+	const canDelete = can("service.delete");
 	const [name, setName] = useState(db.name);
 
 	const renameMutation = useMutation(
@@ -709,7 +785,10 @@ function SettingsTab({
 					</div>
 					<div className="flex justify-end">
 						<Button
-							disabled={renameMutation.isPending || !name.trim() || name.trim() === db.name}
+							disabled={
+								renameMutation.isPending || !name.trim() || name.trim() === db.name || !canWrite
+							}
+							title={canWrite ? undefined : capabilityHint("service.write")}
 							onClick={() => renameMutation.mutate({ ...idInput, name: name.trim() })}
 						>
 							{renameMutation.isPending && <Loader2 className="size-4 animate-spin" />}
@@ -724,9 +803,9 @@ function SettingsTab({
 				description={`Permanently delete this ${label} instance, its container and its data volume. This action cannot be undone.`}
 				actionLabel="Delete database"
 				requireText={db.name}
-				onConfirm={async () => {
-					onRemove();
-				}}
+				disabled={!canDelete}
+				disabledReason={capabilityHint("service.delete")}
+				onConfirm={onRemove}
 			/>
 		</SettingsStack>
 	);

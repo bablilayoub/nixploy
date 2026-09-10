@@ -60,6 +60,10 @@ export function SetupForm() {
 	const [formError, setFormError] = useState<string | null>(null);
 	const [submitting, setSubmitting] = useState(false);
 	const [complete, setComplete] = useState(false);
+	// Progress markers so a retry after a partial failure resumes instead of
+	// re-running sign-up (which would fail with "user already exists").
+	const [ownerCreated, setOwnerCreated] = useState(false);
+	const [createdOrgId, setCreatedOrgId] = useState<string | null>(null);
 
 	const status = useQuery(trpc.setup.needsSetup.queryOptions());
 
@@ -120,48 +124,66 @@ export function SetupForm() {
 		const owner = ownerForm.getValues();
 		const { orgName } = orgForm.getValues();
 		setSubmitting(true);
+		const headers = { "Content-Type": "application/json", Origin: window.location.origin };
+		const readJson = async <T,>(res: Response): Promise<T | null> => {
+			try {
+				return (await res.json()) as T;
+			} catch {
+				return null;
+			}
+		};
 		try {
-			const signupRes = await fetch("/api/auth/sign-up/email", {
-				method: "POST",
-				headers: { "Content-Type": "application/json", Origin: window.location.origin },
-				body: JSON.stringify({
-					name: owner.name.trim(),
-					email: owner.email,
-					password: owner.password,
-				}),
-			});
-			const signup = (await signupRes.json()) as { message?: string };
-			if (!signupRes.ok) {
-				const msg = signup.message ?? `Setup failed (${signupRes.status})`;
-				toast.error(msg);
-				setFormError(msg);
-				setStep("owner");
-				return;
+			if (!ownerCreated) {
+				const signupRes = await fetch("/api/auth/sign-up/email", {
+					method: "POST",
+					headers,
+					body: JSON.stringify({
+						name: owner.name.trim(),
+						email: owner.email,
+						password: owner.password,
+					}),
+				});
+				const signup = await readJson<{ message?: string }>(signupRes);
+				if (!signupRes.ok) {
+					const msg = signup?.message ?? `Setup failed (${signupRes.status})`;
+					toast.error(msg);
+					setFormError(msg);
+					setStep("owner");
+					return;
+				}
+				setOwnerCreated(true);
 			}
 
-			const slug = buildOrgSlug(orgName);
-			const orgRes = await fetch("/api/auth/organization/create", {
-				method: "POST",
-				headers: { "Content-Type": "application/json", Origin: window.location.origin },
-				body: JSON.stringify({ name: orgName.trim(), slug }),
-			});
-			const org = (await orgRes.json()) as { id?: string; message?: string } | null;
-			if (!orgRes.ok || !org?.id) {
-				const msg = org?.message ?? "Failed to create organization";
-				toast.error(msg);
-				setFormError(msg);
-				setStep("org");
-				return;
+			let organizationId = createdOrgId;
+			if (!organizationId) {
+				const slug = buildOrgSlug(orgName);
+				const orgRes = await fetch("/api/auth/organization/create", {
+					method: "POST",
+					headers,
+					body: JSON.stringify({ name: orgName.trim(), slug }),
+				});
+				const org = await readJson<{ id?: string; message?: string }>(orgRes);
+				if (!orgRes.ok || !org?.id) {
+					const msg =
+						org?.message ?? `Failed to create organization (${orgRes.status}) — try again`;
+					toast.error(msg);
+					setFormError(msg);
+					setStep("org");
+					return;
+				}
+				organizationId = org.id;
+				setCreatedOrgId(org.id);
 			}
 
 			const setRes = await fetch("/api/auth/organization/set-active", {
 				method: "POST",
-				headers: { "Content-Type": "application/json", Origin: window.location.origin },
-				body: JSON.stringify({ organizationId: org.id }),
+				headers,
+				body: JSON.stringify({ organizationId }),
 			});
 			if (!setRes.ok) {
-				const setData = (await setRes.json()) as { message?: string };
-				const msg = setData.message ?? "Failed to activate organization";
+				const setData = await readJson<{ message?: string }>(setRes);
+				const msg =
+					setData?.message ?? `Failed to activate organization (${setRes.status}) — try again`;
 				toast.error(msg);
 				setFormError(msg);
 				return;
@@ -254,6 +276,12 @@ export function SetupForm() {
 									className="grid gap-4"
 								>
 									{formError && step === "owner" && <FormError message={formError} />}
+									{ownerCreated && (
+										<p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+											The owner account was already created. Changes here are not applied — continue
+											to finish setting up the organization.
+										</p>
+									)}
 									<FormField
 										control={ownerForm.control}
 										name="name"
@@ -261,7 +289,12 @@ export function SetupForm() {
 											<FormItem>
 												<FormLabel>Name</FormLabel>
 												<FormControl>
-													<Input placeholder="Ada Lovelace" autoComplete="name" {...field} />
+													<Input
+														placeholder="Ada Lovelace"
+														autoComplete="name"
+														disabled={ownerCreated}
+														{...field}
+													/>
 												</FormControl>
 												<FormMessage />
 											</FormItem>
@@ -278,6 +311,7 @@ export function SetupForm() {
 														type="email"
 														placeholder="you@example.com"
 														autoComplete="email"
+														disabled={ownerCreated}
 														{...field}
 													/>
 												</FormControl>
@@ -292,7 +326,12 @@ export function SetupForm() {
 											<FormItem>
 												<FormLabel>Password</FormLabel>
 												<FormControl>
-													<Input type="password" autoComplete="new-password" {...field} />
+													<Input
+														type="password"
+														autoComplete="new-password"
+														disabled={ownerCreated}
+														{...field}
+													/>
 												</FormControl>
 												<FormMessage />
 											</FormItem>
@@ -305,7 +344,12 @@ export function SetupForm() {
 											<FormItem>
 												<FormLabel>Confirm password</FormLabel>
 												<FormControl>
-													<Input type="password" autoComplete="new-password" {...field} />
+													<Input
+														type="password"
+														autoComplete="new-password"
+														disabled={ownerCreated}
+														{...field}
+													/>
 												</FormControl>
 												<FormMessage />
 											</FormItem>
@@ -350,6 +394,11 @@ export function SetupForm() {
 									className="grid gap-4"
 								>
 									{formError && step === "org" && <FormError message={formError} />}
+									{createdOrgId && (
+										<p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+											The organization was already created — continue to finish setup.
+										</p>
+									)}
 									<FormField
 										control={orgForm.control}
 										name="orgName"
@@ -357,7 +406,12 @@ export function SetupForm() {
 											<FormItem>
 												<FormLabel>Organization name</FormLabel>
 												<FormControl>
-													<Input placeholder="Acme Ops" autoComplete="organization" {...field} />
+													<Input
+														placeholder="Acme Ops"
+														autoComplete="organization"
+														disabled={Boolean(createdOrgId)}
+														{...field}
+													/>
 												</FormControl>
 												<FormMessage />
 											</FormItem>
@@ -428,7 +482,7 @@ export function SetupForm() {
 									disabled={submitting}
 									onClick={() => void createInstance()}
 								>
-									{submitting ? "Creating…" : "Create instance"}
+									{submitting ? "Creating…" : ownerCreated ? "Retry setup" : "Create instance"}
 								</Button>
 							</div>
 						</CardContent>

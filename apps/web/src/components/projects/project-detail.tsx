@@ -6,10 +6,12 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { capabilityHint } from "@/components/services/capability-hint";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
@@ -91,19 +93,23 @@ export function ProjectDetail({
 	const trpc = useTRPC();
 	const router = useRouter();
 	const searchParams = useSearchParams();
+	const { can } = useCapabilities();
 	const [search, setSearch] = useState("");
 	const [tagFilter, setTagFilter] = useState<string | null>(null);
 	const [environmentName, setEnvironmentName] = useState(initialEnvironment || "production");
 	const [tab, setTab] = useState<ProjectTab>(isProjectTab(initialTab) ? initialTab : "services");
-	// Deep link (?new=application|compose|<db>) opens the matching create dialog once.
-	const [initialDialog] = useState<NewServiceDialog | null>(() =>
-		parseNewParam(searchParams.get("new")),
-	);
+	// Deep link (?new=application|compose|<db>) from the command palette. Held
+	// here (not seeded once into AddServiceMenu) so a same-route push from the
+	// palette re-triggers it, and handed to exactly one menu instance.
+	const [pendingDialog, setPendingDialog] = useState<NewServiceDialog | null>(null);
 
 	useEffect(() => {
-		if (!initialDialog) {
+		const requested = parseNewParam(searchParams.get("new"));
+		if (!requested) {
 			return;
 		}
+		setPendingDialog(requested);
+		setTab("services");
 		// Strip the param so a refresh doesn't reopen the dialog.
 		const params = new URLSearchParams(searchParams.toString());
 		params.delete("new");
@@ -111,7 +117,7 @@ export function ProjectDetail({
 		router.replace(`/dashboard/projects/${projectId}${query ? `?${query}` : ""}`, {
 			scroll: false,
 		});
-	}, [initialDialog, projectId, router, searchParams]);
+	}, [projectId, router, searchParams]);
 
 	const projectQuery = useQuery(trpc.project.one.queryOptions({ projectId }));
 	const environmentsQuery = useQuery(trpc.environment.byProject.queryOptions({ projectId }));
@@ -290,6 +296,8 @@ export function ProjectDetail({
 	};
 
 	const project = projectQuery.data;
+	const canWriteProject = can("project.write");
+	const canCreateService = can("service.create");
 
 	if (projectQuery.isError || (!projectQuery.isPending && !project)) {
 		return (
@@ -362,7 +370,12 @@ export function ProjectDetail({
 					{tab === "services" && (
 						<div className="flex items-center gap-2">
 							<CreateEnvironmentDialog projectId={projectId} onCreated={selectEnvironment}>
-								<Button variant="outline" size="sm">
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={!canWriteProject}
+									title={canWriteProject ? undefined : capabilityHint("project.write")}
+								>
 									<Plus className="size-4" />
 									Environment
 								</Button>
@@ -415,7 +428,10 @@ export function ProjectDetail({
 										projectId={projectId}
 										environmentId={activeEnvironment.environmentId}
 										environmentName={activeEnvironment.name}
-										initialDialog={initialDialog ?? undefined}
+										disabled={!canCreateService}
+										disabledReason={capabilityHint("service.create")}
+										openDialog={pendingDialog}
+										onOpenDialogConsumed={() => setPendingDialog(null)}
 									/>
 								</>
 							)}
@@ -438,6 +454,7 @@ export function ProjectDetail({
 				) : filteredServices.length > 0 ? (
 					<ServicesTable
 						projectId={projectId}
+						environmentName={activeEnvironmentName}
 						services={filteredServices}
 						currentEnvironmentId={activeEnvironment?.environmentId}
 					/>
@@ -456,12 +473,14 @@ export function ProjectDetail({
 									: `Add an application, compose stack or database to "${activeEnvironmentName}".`}
 							</p>
 						</div>
+						{/* The toolbar instance owns the ?new= deep link — never seed both. */}
 						{!search && activeEnvironment && (
 							<AddServiceMenu
 								projectId={projectId}
 								environmentId={activeEnvironment.environmentId}
 								environmentName={activeEnvironment.name}
-								initialDialog={initialDialog ?? undefined}
+								disabled={!canCreateService}
+								disabledReason={capabilityHint("service.create")}
 							/>
 						)}
 					</div>

@@ -2,27 +2,43 @@
 
 import { yaml } from "@codemirror/lang-yaml";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import type { ComposeService } from "@/components/compose/compose-detail";
 import { GenerateComposeDialog } from "@/components/compose/generate-compose-dialog";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/code-editor";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
+	// The server nulls `composeFile` for members without secrets.read; the
+	// editor cannot tell that apart from an empty file, so the capability
+	// decides whether to show the (read-only) notice instead.
+	const canRead = can("secrets.read");
+	// Git-backed services are edited in the repository: the checkout is reset on
+	// every deploy, and the server rejects saveComposeFile for them.
+	const isGitSource = compose.sourceType !== "raw";
+	const canWrite = canRead && can("service.write") && !isGitSource;
+	const writeHint = isGitSource
+		? "Edit the compose file in the repository — switch the source type to raw to edit it here"
+		: capabilityHint("service.write");
 
-	const [value, setValue] = useState(compose.composeFile);
+	const serverFile = compose.composeFile ?? "";
+	const [value, setValue] = useState(serverFile);
 	const [locked, setLocked] = useState(true);
 	useEffect(() => {
-		if (locked) setValue(compose.composeFile);
-	}, [compose.composeFile, locked]);
+		if (locked) setValue(serverFile);
+	}, [serverFile, locked]);
 
 	const servicesQuery = useQuery(
 		trpc.compose.loadServices.queryOptions({ composeId: compose.composeId }),
@@ -30,28 +46,37 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 
 	const saveMutation = useMutation(
 		trpc.compose.saveComposeFile.mutationOptions({
-			onSuccess: () => {
+			onSuccess: async () => {
 				toast.success("Compose file saved");
-				setLocked(true);
-				queryClient.invalidateQueries({
-					queryKey: trpc.compose.one.queryKey({ composeId: compose.composeId }),
-				});
-				queryClient.invalidateQueries({
-					queryKey: trpc.compose.loadServices.queryKey({
-						composeId: compose.composeId,
+				// Lock only after compose.one holds the new YAML — locking first would
+				// make the sync effect revert the editor to the previous file until
+				// the refetch lands.
+				await Promise.all([
+					queryClient.invalidateQueries({
+						queryKey: trpc.compose.one.queryKey({ composeId: compose.composeId }),
 					}),
-				});
+					queryClient.invalidateQueries({
+						queryKey: trpc.compose.loadServices.queryKey({
+							composeId: compose.composeId,
+						}),
+					}),
+				]);
+				setLocked(true);
 			},
 			onError: (error) => toast.error(error.message),
 		}),
 	);
 
 	const cancelEditing = () => {
-		setValue(compose.composeFile);
+		setValue(serverFile);
 		setLocked(true);
 	};
 
 	const acceptDraft = (composeFile: string) => {
+		if (!canWrite) {
+			toast.error(writeHint);
+			return;
+		}
 		setValue(composeFile);
 		setLocked(false);
 	};
@@ -61,16 +86,20 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 			<SettingsSection
 				title="Compose File"
 				description={
-					<>
-						{compose.sourceType === "raw"
-							? "This file is stored directly on the service."
-							: "Overwrites the compose file inside the local clone of the source."}{" "}
-						Use Copilot to draft or rewrite YAML.
-					</>
+					isGitSource ? (
+						<>
+							Read-only copy of{" "}
+							<span className="font-mono">{compose.composePath || "docker-compose.yml"}</span> from
+							the last checkout. Git-backed services are edited in the repository; switch the source
+							type to raw to edit the file here.
+						</>
+					) : (
+						<>This file is stored directly on the service. Use Copilot to draft or rewrite YAML.</>
+					)
 				}
 				actions={
 					<div className="flex items-center gap-2">
-						<GenerateComposeDialog onAccept={acceptDraft} />
+						{canRead && !isGitSource && <GenerateComposeDialog onAccept={acceptDraft} />}
 						{!locked && (
 							<>
 								<Button
@@ -83,7 +112,8 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 								</Button>
 								<Button
 									size="sm"
-									disabled={saveMutation.isPending || value === compose.composeFile}
+									disabled={saveMutation.isPending || value === serverFile || !canWrite}
+									title={canWrite ? undefined : writeHint}
 									onClick={() =>
 										saveMutation.mutate({
 											composeId: compose.composeId,
@@ -98,20 +128,38 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 					</div>
 				}
 			>
-				<CodeEditor
-					value={value}
-					onChange={setValue}
-					locked={locked}
-					onLockedChange={(next) => {
-						if (!next) setValue(compose.composeFile);
-						setLocked(next);
-					}}
-					extensions={[yaml()]}
-					height="60vh"
-					className="[&_.cm-editor]:min-h-[60vh] [&_.cm-editor]:text-sm"
-					basicSetup={{ lineNumbers: true, foldGutter: true }}
-					lockMessage="Locked to prevent accidental edits. Unlock to change the compose file."
-				/>
+				{!canRead ? (
+					<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border bg-card py-10 text-center">
+						<EyeOff className="size-6 text-muted-foreground" />
+						<p className="text-sm font-medium">Compose file is hidden</p>
+						<p className="max-w-sm text-sm text-muted-foreground">
+							Viewing it requires the "secrets.read" capability. Editing is disabled so the stored
+							file cannot be overwritten blindly.
+						</p>
+					</div>
+				) : (
+					<CodeEditor
+						value={value}
+						onChange={setValue}
+						locked={locked}
+						onLockedChange={(next) => {
+							// Git-backed files and members without service.write can view but never unlock.
+							if (!next && !canWrite) return;
+							if (!next) setValue(serverFile);
+							setLocked(next);
+						}}
+						readOnly={!canWrite}
+						extensions={[yaml()]}
+						height="60vh"
+						className="[&_.cm-editor]:min-h-[60vh] [&_.cm-editor]:text-sm"
+						basicSetup={{ lineNumbers: true, foldGutter: true }}
+						lockMessage={
+							canWrite
+								? "Locked to prevent accidental edits. Unlock to change the compose file."
+								: `Read-only — ${writeHint}.`
+						}
+					/>
+				)}
 			</SettingsSection>
 
 			<SettingsSection

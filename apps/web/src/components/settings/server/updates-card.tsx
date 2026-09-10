@@ -46,13 +46,6 @@ export function UpdatesCard() {
 	const [autoCheck, setAutoCheck] = useState(true);
 	const [autoUpdate, setAutoUpdate] = useState(false);
 
-	useEffect(() => {
-		const data = statusQuery.data;
-		if (!data) return;
-		setAutoCheck(data.autoCheckEnabled);
-		setAutoUpdate(data.autoUpdateEnabled);
-	}, [statusQuery.data]);
-
 	const invalidate = async () => {
 		await queryClient.invalidateQueries({ queryKey: trpc.updates.getStatus.queryKey() });
 	};
@@ -66,6 +59,17 @@ export function UpdatesCard() {
 			onError: (error) => toast.error(error.message),
 		}),
 	);
+
+	// Seed the switches from the server, but not while a toggle is in flight:
+	// the 60s poll would otherwise flip an optimistic switch back until the
+	// mutation's own invalidate lands.
+	const settingsPending = settingsMutation.isPending;
+	useEffect(() => {
+		const data = statusQuery.data;
+		if (!data || settingsPending) return;
+		setAutoCheck(data.autoCheckEnabled);
+		setAutoUpdate(data.autoUpdateEnabled);
+	}, [statusQuery.data, settingsPending]);
 
 	const checkMutation = useMutation(
 		trpc.updates.check.mutationOptions({
