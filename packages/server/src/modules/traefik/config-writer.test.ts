@@ -201,6 +201,33 @@ describe("buildTraefikFileConfig", () => {
 		]);
 	});
 
+	it("rewrites the public path prefix to the internal one (strip, then add)", async () => {
+		const config = await buildTraefikFileConfig({
+			appName: "myapp",
+			domains: [{ ...baseDomain, path: "/public", internalPath: "/internal" }],
+		});
+		expect(config.http.middlewares?.["strip-myapp-0"]).toEqual({
+			stripPrefix: { prefixes: ["/public"] },
+		});
+		expect(config.http.middlewares?.["addprefix-myapp-0"]).toEqual({
+			addPrefix: { prefix: "/internal" },
+		});
+		// addPrefix alone would send /internal/public/*; strip runs first.
+		expect(config.http.routers["myapp-router-0"]?.middlewares).toEqual([
+			"strip-myapp-0",
+			"addprefix-myapp-0",
+		]);
+	});
+
+	it("only adds the internal prefix when the public path is the root", async () => {
+		const config = await buildTraefikFileConfig({
+			appName: "myapp",
+			domains: [{ ...baseDomain, path: "/", internalPath: "/internal" }],
+		});
+		expect(config.http.middlewares?.["strip-myapp-0"]).toBeUndefined();
+		expect(config.http.routers["myapp-router-0"]?.middlewares).toEqual(["addprefix-myapp-0"]);
+	});
+
 	it("produces YAML Traefik's file provider can parse", async () => {
 		const { stringify } = await import("yaml");
 		const config = await buildTraefikFileConfig({
@@ -240,6 +267,21 @@ describe("writeAppTraefikConfig", () => {
 			http: { routers: Record<string, { rule: string }> };
 		};
 		expect(parsed.http.routers["myapp-router-0"]?.rule).toBe("Host(`app.example.com`)");
+	});
+
+	it("always writes on the Nixploy host, even for apps pinned to a managed server", async () => {
+		// nixploy-traefik runs on the primary; a YAML pushed over SSH onto the
+		// app's server is a file nothing reads. (The mocked db has no server
+		// lookup, so any SSH attempt here would throw.)
+		await writeAppTraefikConfig({
+			appName: "remote-app",
+			serverId: "srv-1",
+			domains: [baseDomain],
+		});
+		const content = await readFile(`${configDir}/traefik/dynamic/remote-app.yml`, "utf8");
+		expect(content).toContain("Host(`app.example.com`)");
+		await writeAppTraefikConfig({ appName: "remote-app", serverId: "srv-1", domains: [] });
+		await expect(readFile(`${configDir}/traefik/dynamic/remote-app.yml`, "utf8")).rejects.toThrow();
 	});
 
 	it("removes the config file when the app has no domains", async () => {

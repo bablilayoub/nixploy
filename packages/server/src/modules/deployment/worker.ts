@@ -11,8 +11,14 @@ import {
 	security,
 } from "../../db/schema";
 import { redactSensitiveText } from "../../utils/public-url";
-import { shellQuote as composeShellQuote } from "../compose/paths";
-import { prepareComposeFiles, resyncComposeDomains } from "../compose/service";
+import {
+	buildComposeDeployCommand,
+	prepareComposeFiles,
+	resyncComposeDomains,
+} from "../compose/service";
+import { parsePreviewSourceRef } from "../preview/source-ref";
+import { syncPreviewTraefik } from "../preview/traefik";
+import { DEFAULT_CONTAINER_PORT, writeAppTraefikConfig } from "../traefik/config-writer";
 import { buildImage } from "./builders";
 import type { DeploymentContext } from "./context";
 import { CommandError, spawnTargeted } from "./docker";
@@ -27,6 +33,7 @@ import {
 	setJobRunner,
 	throwIfCancelled,
 } from "./queue";
+import { pinRollbackImage, recordRollback } from "./rollback";
 import {
 	type ApplicationRow,
 	cloneGitSource,
@@ -37,41 +44,15 @@ import {
 import { upsertSwarmService } from "./swarm";
 
 /* -------------------------------------------------------------------------- */
-/*  Traefik adapter (sibling module may land after this one mid-flight)       */
+/*  Traefik                                                                   */
 /* -------------------------------------------------------------------------- */
 
-interface TraefikModule {
-	writeAppTraefikConfig(input: {
-		appName: string;
-		serverId?: string | null;
-		domains: Array<{
-			host: string;
-			port: number;
-			path?: string | null;
-			https: boolean;
-			certificateType: "letsencrypt" | "none" | "custom";
-			certificateId?: string | null;
-		}>;
-		redirects?: Array<{ regex: string; replacement: string; permanent: boolean }>;
-		basicAuth?: Array<{ username: string; password: string }>;
-	}): Promise<void>;
-}
-
-async function getTraefik(): Promise<TraefikModule | null> {
-	try {
-		// Resolved dynamically so this module runs whether or not the sibling
-		// Traefik writer has landed yet (it is built in parallel).
-		const mod = (await import("../traefik/index")) as Partial<TraefikModule>;
-		return typeof mod?.writeAppTraefikConfig === "function" ? (mod as TraefikModule) : null;
-	} catch {
-		return null;
-	}
-}
-
-/** Re-write the application's Traefik config after a successful deploy. */
+/**
+ * Re-write the application's Traefik config after a successful deploy.
+ * The YAML is always written on the Nixploy host (where Traefik runs) — the
+ * writer ignores serverId; see `traefik/config-writer.ts`.
+ */
 async function syncApplicationTraefik(application: ApplicationRow): Promise<void> {
-	const traefik = await getTraefik();
-	if (!traefik) return;
 	const [appDomains, appRedirects, appSecurity] = await Promise.all([
 		db.query.domains.findMany({ where: eq(domains.applicationId, application.applicationId) }),
 		db.query.redirects.findMany({
@@ -80,15 +61,15 @@ async function syncApplicationTraefik(application: ApplicationRow): Promise<void
 		db.query.security.findMany({ where: eq(security.applicationId, application.applicationId) }),
 	]);
 	if (appDomains.length === 0) return;
-	await traefik.writeAppTraefikConfig({
+	await writeAppTraefikConfig({
 		appName: application.appName,
-		serverId: application.serverId,
 		domains: appDomains
 			.filter((domain) => domain.domainType !== "preview" && !domain.previewDeploymentId)
 			.map((domain) => ({
 				host: domain.host,
-				port: domain.port ?? 80,
+				port: domain.port ?? DEFAULT_CONTAINER_PORT,
 				path: domain.path,
+				internalPath: domain.internalPath,
 				https: domain.https,
 				certificateType: domain.certificateType,
 				certificateId: domain.certificateId,
@@ -121,6 +102,36 @@ const resolveBuildDir = (codeDir: string, buildPath: string): string => {
 	return resolved;
 };
 
+type PreviewRow = typeof previewDeployments.$inferSelect;
+
+/**
+ * The row the source/build steps see for a preview job: the parent's config
+ * under the preview's appName, pointed at the PR's source. Fork PRs fetch
+ * the provider's PR head ref from the base repo, or (Bitbucket) clone the
+ * head repository itself — see `preview/source-ref.ts`.
+ */
+export function buildPreviewDeployTarget(
+	application: ApplicationRow,
+	preview: Pick<PreviewRow, "appName" | "branch">,
+): ApplicationRow {
+	const source = parsePreviewSourceRef(preview.branch);
+	if (!source) {
+		return { ...application, appName: preview.appName };
+	}
+	if (source.kind === "fork") {
+		return {
+			...application,
+			appName: preview.appName,
+			owner: source.owner,
+			repository: source.repository,
+			branch: source.branch,
+			gitBranch: source.branch,
+		};
+	}
+	const ref = source.kind === "ref" ? source.ref : source.branch;
+	return { ...application, appName: preview.appName, branch: ref, gitBranch: ref };
+}
+
 async function runApplicationJob(ctx: DeploymentContext, job: QueueJob): Promise<void> {
 	const application = await db.query.applications.findFirst({
 		where: eq(applications.applicationId, job.applicationId ?? ""),
@@ -143,18 +154,14 @@ async function runApplicationJob(ctx: DeploymentContext, job: QueueJob): Promise
 	}
 
 	// Preview deploys an isolated Swarm service under preview.appName and
-	// clones the PR branch — never mutate the production service.
+	// builds the PR source — never mutate the production service.
 	const deployTarget: ApplicationRow = preview
-		? {
-				...application,
-				appName: preview.appName,
-				branch: preview.branch ?? application.branch,
-				gitBranch: preview.branch ?? application.gitBranch,
-			}
+		? buildPreviewDeployTarget(application, preview)
 		: application;
 
 	// Register every secret that could leak into command output: the fully
 	// merged env (project → environment → application), not just the app's own.
+	// The logger applies a redaction floor (short/numeric values are skipped).
 	const mergedEnv = mergeEnv(
 		application.environment.project.env,
 		application.environment.env,
@@ -186,30 +193,16 @@ async function runApplicationJob(ctx: DeploymentContext, job: QueueJob): Promise
 	}
 	throwIfCancelled(job.deploymentId);
 
-	await upsertSwarmService(ctx, deployTarget, imageTag);
+	await upsertSwarmService(ctx, deployTarget, imageTag, { preview: Boolean(preview) });
 	throwIfCancelled(job.deploymentId);
 
 	if (preview) {
-		const domain = await db.query.domains.findFirst({
-			where: eq(domains.previewDeploymentId, preview.previewDeploymentId),
+		// Route (parent's container port) + parent's basic-auth/redirects.
+		await syncPreviewTraefik(preview.previewDeploymentId).catch((error) => {
+			ctx.logger.line(
+				`Warning: failed to sync preview Traefik config: ${error instanceof Error ? error.message : String(error)}`,
+			);
 		});
-		const traefik = await getTraefik();
-		if (traefik && domain) {
-			await traefik.writeAppTraefikConfig({
-				appName: preview.appName,
-				serverId: application.serverId,
-				domains: [
-					{
-						host: domain.host,
-						port: domain.port ?? 3000,
-						path: domain.path,
-						https: domain.https,
-						certificateType: domain.certificateType,
-						certificateId: domain.certificateId,
-					},
-				],
-			});
-		}
 		await db
 			.update(previewDeployments)
 			.set({ previewStatus: "done" })
@@ -221,6 +214,29 @@ async function runApplicationJob(ctx: DeploymentContext, job: QueueJob): Promise
 				`Warning: failed to sync Traefik config: ${error instanceof Error ? error.message : String(error)}`,
 			);
 		});
+
+		// Pin the running image as a rollback target (best effort: a failed
+		// pin must not fail a deployment that is already serving traffic).
+		try {
+			const pinned = await pinRollbackImage(ctx, application, job.deploymentId, imageTag);
+			await recordRollback({
+				applicationId: application.applicationId,
+				appName: application.appName,
+				deploymentId: job.deploymentId,
+				image: pinned,
+				serverId: ctx.serverId,
+				fullContext: {
+					sourceType: application.sourceType,
+					branch: application.branch ?? application.gitBranch ?? null,
+					dockerImage: application.dockerImage ?? null,
+				},
+			});
+			ctx.logger.line(`Rollback target pinned: ${pinned}`);
+		} catch (error) {
+			ctx.logger.line(
+				`Warning: could not pin rollback image: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
 	}
 
 	ctx.logger.line("Deployment successful");
@@ -246,14 +262,9 @@ async function runComposeJob(ctx: DeploymentContext, job: QueueJob): Promise<voi
 	for (const secret of files.secrets) ctx.logger.addSecret(secret);
 	throwIfCancelled(job.deploymentId);
 
-	const f = composeShellQuote(files.composeFilePath);
-	const env = composeShellQuote(files.envFilePath);
-	const command =
-		row.composeType === "stack"
-			? // `docker stack deploy` has no --env-file; render the interpolated
-				// file with `docker compose config` and feed it via stdin instead.
-				`docker compose -f ${f} --env-file ${env} config | docker stack deploy --with-registry-auth --prune -c - ${composeShellQuote(row.appName)}`
-			: `docker compose -p ${composeShellQuote(row.appName)} -f ${f} --env-file ${env} up -d --remove-orphans`;
+	// The compose module owns the command line (stack vs compose, env
+	// isolation, rendered file) — see modules/compose/commands.ts.
+	const command = buildComposeDeployCommand(row, files);
 
 	ctx.logger.line(
 		row.composeType === "stack" ? "Deploying stack..." : "Starting compose project...",
@@ -306,39 +317,147 @@ async function setPreviewStatus(job: QueueJob, terminalStatus: TerminalStatus): 
 }
 
 /**
- * Execute one queued job end-to-end: source → build → swarm/compose →
- * status bookkeeping. Registered with the queue at module import time.
+ * Fan the outcome out to the org's notification channels (`appDeploy` on
+ * success, `appBuildError` on failure — the per-channel toggles are applied
+ * by `notifyEvent`). Cancellations are user actions and stay silent.
  */
-async function processJob(job: QueueJob): Promise<void> {
+async function notifyDeployOutcome(
+	job: QueueJob,
+	status: "done" | "error",
+	errorMessage: string | null,
+): Promise<void> {
+	const { emitDeployNotification } = await import("../notifications");
+	if (job.applicationId) {
+		const application = await db.query.applications.findFirst({
+			where: eq(applications.applicationId, job.applicationId),
+			columns: { name: true, appName: true, environmentId: true },
+		});
+		if (!application) return;
+		const preview = job.previewDeploymentId
+			? await db.query.previewDeployments.findFirst({
+					where: eq(previewDeployments.previewDeploymentId, job.previewDeploymentId),
+					columns: { appName: true, pullRequestNumber: true },
+				})
+			: null;
+		await emitDeployNotification(
+			preview
+				? {
+						name: `${application.name} (PR #${preview.pullRequestNumber ?? "?"} preview)`,
+						appName: preview.appName,
+						environmentId: application.environmentId,
+					}
+				: application,
+			status,
+			{ errorMessage, type: "application" },
+		);
+		return;
+	}
+	if (job.composeId) {
+		const row = await db.query.compose.findFirst({
+			where: eq(compose.composeId, job.composeId),
+			columns: { name: true, appName: true, environmentId: true },
+		});
+		if (!row) return;
+		await emitDeployNotification(row, status, { errorMessage, type: "compose" });
+	}
+}
+
+/** Incident + log ingestion + Deploy Copilot for a failed deployment. */
+async function recordDeployFailure(job: QueueJob): Promise<void> {
+	const { recordIncident, ingestServiceLog } = await import("../observability");
 	const deployment = await db.query.deployments.findFirst({
 		where: eq(deployments.deploymentId, job.deploymentId),
-	});
-	if (!deployment) return;
-	// Already finalized (e.g. cancelled while pending) — nothing to do.
-	if (deployment.status !== "running") return;
-
-	const logger = new DeploymentLogger(deployment.logPath);
-	const ctx: DeploymentContext = {
-		serverId: job.serverId,
-		logger,
-		run: async (command, opts) => {
-			const proc = await spawnTargeted(job.serverId, command, {
-				cwd: opts?.cwd,
-				onData: (chunk) => logger.write(chunk),
-			});
-			registerDeploymentProcess(job.deploymentId, proc);
-			await proc.done;
+		with: {
+			application: { with: { environment: { with: { project: true } } } },
+			compose: { with: { environment: { with: { project: true } } } },
 		},
-	};
+	});
+	const orgId =
+		deployment?.application?.environment.project.organizationId ??
+		deployment?.compose?.environment.project.organizationId;
+	const projectId =
+		deployment?.application?.environment.project.projectId ??
+		deployment?.compose?.environment.project.projectId;
+	const serviceName = deployment?.application?.name ?? deployment?.compose?.name ?? "service";
+	const serviceId = job.applicationId ?? job.composeId ?? null;
+	if (!orgId) return;
+	await recordIncident({
+		organizationId: orgId,
+		projectId,
+		kind: "deploy_failure",
+		severity: "critical",
+		title: `Deploy failed: ${serviceName}`,
+		message: deployment?.errorMessage ?? "Deployment failed",
+		serviceId,
+		serviceName,
+		metadata: { deploymentId: job.deploymentId },
+	});
+	if (deployment?.logPath) {
+		const { readFile } = await import("node:fs/promises");
+		const body = await readFile(deployment.logPath, "utf8").catch(() => "");
+		if (body && serviceId) {
+			await ingestServiceLog({
+				organizationId: orgId,
+				serviceId,
+				serviceType: job.applicationId ? "application" : "compose",
+				deploymentId: job.deploymentId,
+				body,
+			});
+		}
+	}
+	const { maybeAutoExplainOnFailure } = await import("../ai");
+	void maybeAutoExplainOnFailure(job.deploymentId, orgId).catch((aiError) => {
+		console.error("Deploy Copilot auto-explain failed:", aiError);
+	});
+}
 
+/**
+ * Execute one queued job end-to-end: source → build → swarm/compose →
+ * status bookkeeping. Registered with the queue at module import time.
+ *
+ * Everything that can fail — including loading the row and opening the log
+ * file — runs inside the try, so the deployment is ALWAYS finalized (row
+ * status, service status, `finish` event). Before, an unwritable log dir or
+ * a transient DB error left the row `running` forever, which also froze the
+ * status reconciler for that service.
+ */
+async function processJob(job: QueueJob): Promise<void> {
+	let logger: DeploymentLogger | null = null;
 	let terminalStatus: TerminalStatus = "done";
+	let errorMessage: string | null = null;
+	// Set once the job is confirmed live; an already-finalized row (cancelled
+	// while pending) must not be re-finalized by the `finally` block.
+	let started = false;
+
 	try {
+		const deployment = await db.query.deployments.findFirst({
+			where: eq(deployments.deploymentId, job.deploymentId),
+		});
+		if (!deployment) return;
+		if (deployment.status !== "running") return;
+		started = true;
+
+		logger = new DeploymentLogger(deployment.logPath);
+		const log = logger;
+		const ctx: DeploymentContext = {
+			serverId: job.serverId,
+			logger: log,
+			run: async (command, opts) => {
+				const proc = await spawnTargeted(job.serverId, command, {
+					cwd: opts?.cwd,
+					onData: (chunk) => log.write(chunk),
+				});
+				registerDeploymentProcess(job.deploymentId, proc);
+				await proc.done;
+			},
+		};
+
 		await db
 			.update(deployments)
 			.set({ startedAt: new Date() })
 			.where(eq(deployments.deploymentId, job.deploymentId));
 		await setServiceStatus(job, "running");
-		logger.line(
+		log.line(
 			`Deployment ${job.deploymentId} started (${job.type}${job.serverId ? `, server ${job.serverId}` : ", local"})`,
 		);
 
@@ -350,85 +469,55 @@ async function processJob(job: QueueJob): Promise<void> {
 			throw new Error("Deployment job targets neither an application nor a compose service");
 		}
 	} catch (error) {
+		started = true;
 		const cancelled =
 			error instanceof DeploymentCancelledError ||
 			isDeploymentCancelled(job.deploymentId) ||
 			(error instanceof CommandError && error.killed);
 		terminalStatus = cancelled ? "cancelled" : "error";
 		const rawMessage = error instanceof Error ? error.message : String(error);
-		const message = redactSensitiveText(rawMessage, logger.listSecrets());
-		logger.line(cancelled ? "Deployment cancelled" : `Deployment failed: ${message}`);
-		await db
-			.update(deployments)
-			.set({ errorMessage: cancelled ? null : message })
-			.where(eq(deployments.deploymentId, job.deploymentId));
-	} finally {
-		if (terminalStatus === "done" && isDeploymentCancelled(job.deploymentId)) {
-			terminalStatus = "cancelled";
+		const message = redactSensitiveText(rawMessage, logger?.listSecrets() ?? []);
+		errorMessage = cancelled ? null : message;
+		if (logger) {
+			logger.line(cancelled ? "Deployment cancelled" : `Deployment failed: ${message}`);
+		} else {
+			console.error(`Deployment ${job.deploymentId} failed before its log was opened:`, message);
 		}
 		await db
 			.update(deployments)
-			.set({ status: terminalStatus, finishedAt: new Date() })
-			.where(eq(deployments.deploymentId, job.deploymentId));
-		// Without this, failed previews stayed "running" forever.
-		await setPreviewStatus(job, terminalStatus).catch(() => {});
-		await setServiceStatus(
-			job,
-			terminalStatus === "done" ? "running" : terminalStatus === "cancelled" ? "idle" : "error",
-		).catch(() => {});
-		logger.close();
-		deploymentEvents.emit("finish", { deploymentId: job.deploymentId, status: terminalStatus });
-
-		if (terminalStatus === "error") {
-			try {
-				const { recordIncident, ingestServiceLog } = await import("../observability");
-				const deployment = await db.query.deployments.findFirst({
-					where: eq(deployments.deploymentId, job.deploymentId),
-					with: {
-						application: { with: { environment: { with: { project: true } } } },
-						compose: { with: { environment: { with: { project: true } } } },
-					},
+			.set({ errorMessage })
+			.where(eq(deployments.deploymentId, job.deploymentId))
+			.catch(() => {});
+	} finally {
+		if (started) {
+			if (terminalStatus === "done" && isDeploymentCancelled(job.deploymentId)) {
+				terminalStatus = "cancelled";
+			}
+			await db
+				.update(deployments)
+				.set({ status: terminalStatus, finishedAt: new Date() })
+				.where(eq(deployments.deploymentId, job.deploymentId))
+				.catch((dbError) => {
+					console.error(`Failed to finalize deployment ${job.deploymentId}:`, dbError);
 				});
-				const orgId =
-					deployment?.application?.environment.project.organizationId ??
-					deployment?.compose?.environment.project.organizationId;
-				const projectId =
-					deployment?.application?.environment.project.projectId ??
-					deployment?.compose?.environment.project.projectId;
-				const serviceName = deployment?.application?.name ?? deployment?.compose?.name ?? "service";
-				const serviceId = job.applicationId ?? job.composeId ?? null;
-				if (orgId) {
-					await recordIncident({
-						organizationId: orgId,
-						projectId,
-						kind: "deploy_failure",
-						severity: "critical",
-						title: `Deploy failed: ${serviceName}`,
-						message: deployment?.errorMessage ?? "Deployment failed",
-						serviceId,
-						serviceName,
-						metadata: { deploymentId: job.deploymentId },
-					});
-					if (deployment?.logPath) {
-						const { readFile } = await import("node:fs/promises");
-						const body = await readFile(deployment.logPath, "utf8").catch(() => "");
-						if (body && serviceId) {
-							await ingestServiceLog({
-								organizationId: orgId,
-								serviceId,
-								serviceType: job.applicationId ? "application" : "compose",
-								deploymentId: job.deploymentId,
-								body,
-							});
-						}
-					}
-					const { maybeAutoExplainOnFailure } = await import("../ai");
-					void maybeAutoExplainOnFailure(job.deploymentId, orgId).catch((aiError) => {
-						console.error("Deploy Copilot auto-explain failed:", aiError);
-					});
-				}
-			} catch (obsError) {
-				console.error("Failed to record deploy observability:", obsError);
+			// Without this, failed previews stayed "running" forever.
+			await setPreviewStatus(job, terminalStatus).catch(() => {});
+			await setServiceStatus(
+				job,
+				terminalStatus === "done" ? "running" : terminalStatus === "cancelled" ? "idle" : "error",
+			).catch(() => {});
+			logger?.close();
+			deploymentEvents.emit("finish", { deploymentId: job.deploymentId, status: terminalStatus });
+
+			if (terminalStatus !== "cancelled") {
+				await notifyDeployOutcome(job, terminalStatus, errorMessage).catch((notifyError) => {
+					console.error("Failed to send deploy notification:", notifyError);
+				});
+			}
+			if (terminalStatus === "error") {
+				await recordDeployFailure(job).catch((obsError) => {
+					console.error("Failed to record deploy observability:", obsError);
+				});
 			}
 		}
 	}

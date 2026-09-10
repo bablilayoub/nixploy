@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -10,6 +12,7 @@ import {
 	registry,
 	rollbacks,
 } from "../../db/schema";
+import { generateId } from "../../db/schema/utils";
 import {
 	assertApplicationAccess,
 	assertEnvironmentAccess,
@@ -32,6 +35,7 @@ import {
 	cancelDeployment as cancelQueuedDeployment,
 	queueDeployment,
 } from "../../modules/deployment";
+import { getDeploymentLogPath } from "../../modules/deployment/paths";
 import { assertCapability, assertWithinQuota, hasCapability } from "../../modules/projects";
 import { assertSafeGitCloneUrl } from "../../utils/public-url";
 import { appNameSchema, assertSafeDockerImageRef } from "../../utils/validators";
@@ -81,6 +85,16 @@ const swarmSpecFields = {
 
 /** Verify a git provider connection (github/gitlab/bitbucket/gitea row) belongs to the org. */
 const assertGitProviderAccess = assertGitProviderInOrganization;
+
+/** Rollbacks skip the deploy worker, so their (short) log is written here. */
+const writeRollbackLog = async (logPath: string, lines: string[]): Promise<void> => {
+	try {
+		await mkdir(dirname(logPath), { recursive: true });
+		await writeFile(logPath, `${lines.join("\n")}\n`, "utf8");
+	} catch (error) {
+		console.error(`Failed to write rollback log ${logPath}:`, error);
+	}
+};
 
 export const applicationRouter = router({
 	/** All applications of a project (optionally one environment). */
@@ -731,7 +745,12 @@ export const applicationRouter = router({
 			return { deployments: rows, total: countRows[0]?.count ?? 0 };
 		}),
 
-	/** Roll back to a pinned image and record it as a deployment. */
+	/**
+	 * Roll back to a pinned image (recorded by the deploy engine after every
+	 * successful build — `appName:<version>` tags / registry digests) and
+	 * record it as a deployment. The swarm service is repointed in place; no
+	 * source fetch or build happens.
+	 */
 	rollback: protectedProcedure
 		.input(applicationIdInput.extend({ rollbackId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
@@ -748,22 +767,65 @@ export const applicationRouter = router({
 			if (!rollback) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Rollback not found" });
 			}
+			if (!(await inspectSwarmService(application.appName, application.serverId))) {
+				throw new TRPCError({
+					code: "PRECONDITION_FAILED",
+					message: "Application has no running service to roll back — deploy it first",
+				});
+			}
 
-			await updateSwarmServiceImage(application.appName, rollback.image, application.serverId);
+			const deploymentId = generateId();
+			const logPath = getDeploymentLogPath(application.appName, deploymentId);
+			const startedAt = new Date();
+			const lines = [`Rollback ${deploymentId} started`, `Rolling back to image ${rollback.image}`];
+			try {
+				await updateSwarmServiceImage(application.appName, rollback.image, application.serverId);
+				lines.push("Swarm service updated", "Rollback successful");
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				lines.push(`Rollback failed: ${message}`);
+				await writeRollbackLog(logPath, lines);
+				await db.insert(deployments).values({
+					deploymentId,
+					title: "Rollback",
+					description: `Rollback to ${rollback.image}`,
+					status: "error",
+					errorMessage: message,
+					logPath,
+					applicationId: application.applicationId,
+					serverId: application.serverId,
+					startedAt,
+					finishedAt: new Date(),
+				});
+				throw new TRPCError({
+					code: "INTERNAL_SERVER_ERROR",
+					message: `Rollback failed: ${message}`,
+				});
+			}
+			await writeRollbackLog(logPath, lines);
 
 			const [deployment] = await db
 				.insert(deployments)
 				.values({
+					deploymentId,
 					title: "Rollback",
 					description: `Rolled back to ${rollback.image}`,
 					status: "done",
-					logPath: "",
+					logPath,
 					applicationId: application.applicationId,
 					serverId: application.serverId,
-					startedAt: new Date(),
+					startedAt,
 					finishedAt: new Date(),
 				})
 				.returning();
+			await updateApplication(application.applicationId, { status: "running" });
+			await auditFromSession(ctx, organizationId, {
+				action: "application.rollback",
+				targetType: "application",
+				targetId: application.applicationId,
+				targetName: application.name,
+				metadata: { rollbackId: rollback.rollbackId, image: rollback.image, deploymentId },
+			});
 
 			return { rollback, deployment };
 		}),

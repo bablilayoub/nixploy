@@ -15,6 +15,7 @@ export type {
 } from "./config-writer";
 export {
 	buildTraefikFileConfig,
+	DEFAULT_CONTAINER_PORT,
 	removeFileOnServer,
 	removeTraefikConfig,
 	writeAppTraefikConfig,
@@ -39,6 +40,7 @@ export {
 export {
 	buildTraefikStaticConfig,
 	ensureTraefikSetup,
+	restartTraefik,
 	TRAEFIK_IMAGE,
 	TRAEFIK_SERVICE_NAME,
 } from "./setup";

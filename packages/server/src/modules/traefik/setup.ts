@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { db } from "../../db";
 import { webServerSettings } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
@@ -75,6 +76,44 @@ const getLetsEncryptEmail = async (): Promise<string | null> => {
 	return settings?.letsEncryptEmail ?? null;
 };
 
+/** Current `traefik.yml` on the target host; `null` when missing or empty. */
+const readStaticConfig = async (
+	serverId: string | null | undefined,
+	filePath: string,
+): Promise<string | null> => {
+	if (serverId) {
+		const content = await runOn(serverId, `cat ${shq(filePath)} 2>/dev/null || true`);
+		return content || null;
+	}
+	return readFile(filePath, "utf8").catch(() => null);
+};
+
+/**
+ * Whether the proxy service exists on the target. `service ls` filters names
+ * by prefix and rejects regex anchors, so the exact match is done here.
+ */
+const traefikServiceExists = async (serverId: string | null | undefined): Promise<boolean> => {
+	const existing = await runOn(
+		serverId,
+		`docker service ls --filter name=${TRAEFIK_SERVICE_NAME} --format '{{.Name}}'`,
+	);
+	return existing
+		.split("\n")
+		.map((name) => name.trim())
+		.includes(TRAEFIK_SERVICE_NAME);
+};
+
+/**
+ * Restart the proxy so it re-reads `traefik.yml`. Traefik loads its static
+ * configuration (ACME email/resolver, entrypoints) once at start — only the
+ * dynamic directory hot-reloads — so a changed Let's Encrypt email has no
+ * effect until the tasks are recreated. `--detach` returns as soon as the
+ * update is accepted; the global service rolls its (single) task over.
+ */
+export const restartTraefik = async (serverId?: string | null): Promise<void> => {
+	await runOn(serverId, `docker service update --force --detach ${TRAEFIK_SERVICE_NAME}`);
+};
+
 /**
  * Self-signed default cert + dashboard routing (catch-all for bare-IP HTTPS
  * plus the configured domain, if any). The cert is generated only when
@@ -130,19 +169,26 @@ const ensureDefaultTlsAndDashboard = async (serverId?: string | null): Promise<v
  * 2. create the dynamic dir + a `chmod 600` acme.json;
  * 3. ensure self-signed default TLS + dashboard catch-all router;
  * 4. create the shared overlay network if missing;
- * 5. create the global `nixploy-traefik` swarm service if missing.
+ * 5. create the global `nixploy-traefik` swarm service if missing — or, when
+ *    it exists and the static config changed, restart it so the change is
+ *    actually picked up (unchanged content, i.e. every normal boot, leaves
+ *    the running proxy alone).
  *
  * Swarm itself must already be active (install.sh / cluster setupServer).
  */
 export const ensureTraefikSetup = async (serverId?: string | null): Promise<void> => {
 	const traefikDir = serverId ? REMOTE_TRAEFIK_DIR : getTraefikDir();
 	const dynamicDir = serverId ? `${REMOTE_TRAEFIK_DIR}/dynamic` : getDynamicDir();
+	const staticPath = `${traefikDir}/traefik.yml`;
 	const acmePath = `${traefikDir}/acme.json`;
 	const network = getSwarmNetwork();
 
 	// 1. Static config (rewritten every call so settings changes take effect).
+	// An unset email keeps the `nixploy@localhost` sentinel, so the content —
+	// and therefore the restart decision below — only moves when it changes.
 	const staticConfig = buildTraefikStaticConfig(await getLetsEncryptEmail());
-	await writeFileOnServer(`${traefikDir}/traefik.yml`, staticConfig, serverId);
+	const staticChanged = (await readStaticConfig(serverId, staticPath)) !== staticConfig;
+	await writeFileOnServer(staticPath, staticConfig, serverId);
 
 	// 2. Dynamic dir + ACME storage (must exist with tight perms before mount).
 	await runOn(
@@ -159,19 +205,14 @@ export const ensureTraefikSetup = async (serverId?: string | null): Promise<void
 		`if [ -z "$(docker network ls --filter name=^${network}$ --format '{{.Name}}')" ]; then docker network create --driver overlay --attachable ${network}; fi`,
 	);
 
-	// 5. The proxy service itself — created once, then left alone. `service ls`
-	// filters names by prefix and rejects regex anchors, so the exact match is
-	// done here instead of in the filter.
-	const existing = await runOn(
-		serverId,
-		`docker service ls --filter name=${TRAEFIK_SERVICE_NAME} --format '{{.Name}}'`,
-	);
-	if (
-		existing
-			.split("\n")
-			.map((name) => name.trim())
-			.includes(TRAEFIK_SERVICE_NAME)
-	) {
+	// 5. The proxy service itself — created once. Afterwards only a changed
+	// traefik.yml (new ACME email from Settings, a template change shipped by
+	// an upgrade) touches it, via a restart: the static config is read once at
+	// start, so rewriting the file alone changed nothing for the running proxy.
+	if (await traefikServiceExists(serverId)) {
+		if (staticChanged) {
+			await restartTraefik(serverId);
+		}
 		return;
 	}
 
@@ -188,7 +229,7 @@ export const ensureTraefikSetup = async (serverId?: string | null): Promise<void
 			`--network ${network}`,
 			"--publish mode=host,target=80,published=80",
 			"--publish mode=host,target=443,published=443",
-			`--mount type=bind,source=${traefikDir}/traefik.yml,destination=/etc/traefik/traefik.yml,readonly`,
+			`--mount type=bind,source=${staticPath},destination=/etc/traefik/traefik.yml,readonly`,
 			`--mount type=bind,source=${dynamicDir},destination=${TRAEFIK_DYNAMIC_CONTAINER_DIR}`,
 			`--mount type=bind,source=${acmePath},destination=${TRAEFIK_ACME_CONTAINER_PATH}`,
 			TRAEFIK_IMAGE,

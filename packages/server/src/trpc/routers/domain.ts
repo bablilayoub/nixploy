@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray, ne, or } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import {
@@ -19,6 +19,7 @@ import {
 } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
 import { resyncComposeDomains } from "../../modules/compose/service";
+import { syncPreviewTraefik } from "../../modules/preview/traefik";
 import { assertCapability } from "../../modules/projects";
 import {
 	assertComposeServiceName,
@@ -82,11 +83,20 @@ const assertComposeAccess = async (composeId: string, organizationId: string) =>
 	return context;
 };
 
-/** Rewrite the Traefik file-provider config of the domain's parent service. */
+/**
+ * Rewrite the Traefik file-provider config of the domain's parent service.
+ * Preview domain rows belong to `<app>-pr-<n>.yml`, not the parent's file
+ * (the parent sync filters them out), so they rewrite the preview's own YAML.
+ */
 const resyncServiceTraefik = async (domain: {
 	applicationId: string | null;
 	composeId: string | null;
+	previewDeploymentId?: string | null;
 }): Promise<void> => {
+	if (domain.previewDeploymentId) {
+		await syncPreviewTraefik(domain.previewDeploymentId);
+		return;
+	}
 	if (domain.applicationId) {
 		const application = await db.query.applications.findFirst({
 			where: eq(applications.applicationId, domain.applicationId),
@@ -114,6 +124,51 @@ const assertCertificateExists = async (
 	});
 	if (!certificate) {
 		throw new TRPCError({ code: "NOT_FOUND", message: "Certificate not found" });
+	}
+};
+
+/**
+ * Traefik routing is one shared namespace for the whole instance: two files
+ * carrying routers for the same host steal traffic from each other (the
+ * longer PathPrefix wins, equal rules are nondeterministic). The DB index
+ * only covers (host, path, port) and NULL ports never conflict, so the
+ * check is done here, case-folded and regardless of port:
+ * - the same host + path on ANY other service (same org included) conflicts;
+ * - a host already routed by ANOTHER organization conflicts on every path —
+ *   a sub-path is exactly how a tenant would hijack `/api` of someone else's
+ *   domain. Within one org, several services may share a host by path
+ *   (frontend at `/`, API at `/api`).
+ * The error never reveals who owns the conflicting row.
+ */
+const assertHostPathAvailable = async (
+	host: string,
+	path: string,
+	organizationId: string,
+	excludeDomainId?: string,
+): Promise<void> => {
+	const conditions = [sql`lower(${domains.host}) = lower(${host})`];
+	if (excludeDomainId) {
+		conditions.push(ne(domains.domainId, excludeDomainId));
+	}
+	const rows = await db.query.domains.findMany({
+		where: and(...conditions),
+		with: {
+			application: { with: { environment: { with: { project: true } } } },
+			compose: { with: { environment: { with: { project: true } } } },
+		},
+	});
+	const wanted = path || "/";
+	for (const row of rows) {
+		const owner =
+			row.application?.environment.project.organizationId ??
+			row.compose?.environment.project.organizationId ??
+			null;
+		if (owner !== organizationId || (row.path ?? "/") === wanted) {
+			throw new TRPCError({
+				code: "CONFLICT",
+				message: "This host (or host + path) is already routed on this instance",
+			});
+		}
 	}
 };
 
@@ -301,6 +356,7 @@ export const domainRouter = router({
 				}
 				await assertCertificateExists(input.certificateId, organizationId);
 			}
+			await assertHostPathAvailable(host, path, organizationId);
 
 			const values = {
 				host,
@@ -370,11 +426,13 @@ export const domainRouter = router({
 
 			const certificateType = input.certificateType ?? existing.certificateType;
 			let nextHost: string;
+			let nextPath: string;
 			try {
 				nextHost = input.host !== undefined ? assertTraefikHost(input.host) : existing.host;
-				if (input.path !== undefined) {
-					assertTraefikPath(input.path);
-				}
+				nextPath =
+					input.path !== undefined
+						? (assertTraefikPath(input.path) ?? "/")
+						: (existing.path ?? "/");
 				if (input.internalPath !== undefined) {
 					assertTraefikPath(input.internalPath);
 				}
@@ -399,15 +457,26 @@ export const domainRouter = router({
 				}
 				await assertCertificateExists(certificateId, organizationId);
 			}
+			if (input.host !== undefined || input.path !== undefined) {
+				await assertHostPathAvailable(nextHost, nextPath, organizationId, existing.domainId);
+			}
 
 			const { domainId, ...fields } = input;
 			const data: Partial<typeof domains.$inferInsert> = {
 				...fields,
 				...(input.host !== undefined ? { host: nextHost } : {}),
-				...(input.path !== undefined ? { path: assertTraefikPath(input.path) ?? "/" } : {}),
+				...(input.path !== undefined ? { path: nextPath } : {}),
 				...(input.internalPath !== undefined
 					? { internalPath: assertTraefikPath(input.internalPath) }
 					: {}),
+				// serviceName only means something for compose domains; on an
+				// application domain it would retarget the router to
+				// `<app>-<name>-1`, a container that does not exist.
+				serviceName: existing.composeId
+					? input.serviceName !== undefined
+						? input.serviceName
+						: existing.serviceName
+					: null,
 				certificateType,
 				certificateId,
 			};

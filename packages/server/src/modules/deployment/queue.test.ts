@@ -105,6 +105,36 @@ describe("deployment queue", () => {
 		expect(queue.queueDepth("server-a")).toEqual({ pending: 1, running: 2 });
 	});
 
+	it("starts every job the concurrency allows in one drain pass", async () => {
+		const { runner, started, finish } = controlledRunner();
+		queue.setJobRunner(runner);
+		queue.setServerConcurrency("server-a", 3);
+
+		for (const id of ["a1", "a2", "a3", "a4", "a5"]) queue.enqueue(job(id, "server-a"));
+		await flush();
+
+		// Before the drain loop, one enqueue started at most one job.
+		expect(started.sort()).toEqual(["a1", "a2", "a3"]);
+		expect(queue.queueDepth("server-a")).toEqual({ pending: 2, running: 3 });
+
+		await finish("a1");
+		expect(started).toContain("a4");
+		expect(queue.queueDepth("server-a")).toEqual({ pending: 1, running: 3 });
+	});
+
+	it("raising the concurrency of a backed-up server starts the extra jobs at once", async () => {
+		const { runner, started } = controlledRunner();
+		queue.setJobRunner(runner);
+
+		for (const id of ["a1", "a2", "a3", "a4"]) queue.enqueue(job(id, "server-a"));
+		await flush();
+		expect(started).toEqual(["a1"]);
+
+		queue.setServerConcurrency("server-a", 3);
+		await flush();
+		expect(started.sort()).toEqual(["a1", "a2", "a3"]);
+	});
+
 	it("cancels a pending job so it never runs", async () => {
 		const { runner, started, finish } = controlledRunner();
 		queue.setJobRunner(runner);

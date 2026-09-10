@@ -72,24 +72,39 @@ export function enqueue(job: QueueJob): void {
 	void drain(key);
 }
 
+/** Start as many pending jobs as the server's concurrency allows. */
 function drain(key: string): void {
-	const queue = pendingByServer.get(key);
-	if (!queue || queue.length === 0 || !runner) return;
+	if (!runner) return;
+	for (;;) {
+		const queue = pendingByServer.get(key);
+		if (!queue || queue.length === 0) return;
 
-	const running = runningCountByServer.get(key) ?? 0;
-	if (running >= getConcurrency(key)) return;
+		const running = runningCountByServer.get(key) ?? 0;
+		if (running >= getConcurrency(key)) return;
 
-	const job = queue.shift();
-	if (!job) return;
-	runningCountByServer.set(key, running + 1);
+		const job = queue.shift();
+		if (!job) return;
+		startJob(key, job);
+	}
+}
+
+function startJob(key: string, job: QueueJob): void {
+	runningCountByServer.set(key, (runningCountByServer.get(key) ?? 0) + 1);
 	// Mark as running immediately so cancellation works even before the
 	// worker spawns its first child process.
 	processesByDeployment.set(job.deploymentId, new Set());
 
-	// Never let a rejected job take down the drain loop.
+	// Never let a rejected job take down the drain loop. The worker finalizes
+	// its own deployment row; a rejection here means it failed before it
+	// could (DB down, unwritable log dir) — say so instead of hiding it.
 	Promise.resolve()
 		.then(() => runner?.(job))
-		.catch(() => {})
+		.catch((error: unknown) => {
+			console.error(
+				`Deployment ${job.deploymentId} crashed outside the worker's error handling:`,
+				error instanceof Error ? error.message : error,
+			);
+		})
 		.finally(() => {
 			runningCountByServer.set(key, Math.max(0, (runningCountByServer.get(key) ?? 1) - 1));
 			processesByDeployment.delete(job.deploymentId);

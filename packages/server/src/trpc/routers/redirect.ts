@@ -30,6 +30,18 @@ function assertSafeRedirectRule(regex: string, replacement: string): void {
 			message: "Redirect regex contains invalid characters",
 		});
 	}
+	// The whitelist admits syntactically broken patterns (`[`, `a{2,1}`).
+	// Traefik then fails to build the middleware and, since it is attached
+	// to every router of the app, the whole app 404s. JS and RE2 agree on
+	// the allowed character set closely enough to catch these up front.
+	try {
+		new RegExp(regex);
+	} catch {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Redirect regex is not a valid regular expression",
+		});
+	}
 	if (replacement.includes("://") && !/^https?:\/\/[^\s]+$/i.test(replacement)) {
 		throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid redirect replacement URL" });
 	}

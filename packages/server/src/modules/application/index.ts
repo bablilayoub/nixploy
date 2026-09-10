@@ -28,10 +28,13 @@ export {
 } from "./paths";
 export type { Application, CreateApplicationInput } from "./service";
 export {
+	buildApplicationSwarmSpec,
 	createApplication,
 	deleteApplication,
 	duplicateApplication,
+	loadMergedApplicationEnv,
 	materializeFileMount,
+	materializeFileMounts,
 	parseCpuNano,
 	parseDotEnv,
 	parseMemoryBytes,

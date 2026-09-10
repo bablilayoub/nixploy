@@ -6,6 +6,7 @@ import { db } from "../../db";
 import {
 	applications,
 	domains,
+	environments,
 	mounts,
 	ports,
 	previewDeployments,
@@ -13,19 +14,35 @@ import {
 	security,
 } from "../../db/schema";
 import { assertSafeAppName, assertSafePublishedPort } from "../../utils/validators";
+import { unregisterBackupsForService } from "../backups/scheduler";
+import { envToArray, mergeEnv } from "../deployment/env";
 import { removeServiceLogs } from "../deployment/maintenance";
-import { sanitizeNetworkAttachments, sanitizeSwarmLabels } from "../deployment/swarm";
+import {
+	buildContainerSpec,
+	sanitizeNetworkAttachments,
+	sanitizeSwarmLabels,
+} from "../deployment/swarm";
 import { deletePreviewDeployment } from "../preview";
-import { removeTraefikConfig, writeAppTraefikConfig } from "../traefik";
+import { unregisterSchedulesForService } from "../schedules";
+import {
+	DEFAULT_CONTAINER_PORT,
+	removeFileOnServer,
+	removeTraefikConfig,
+	writeAppTraefikConfig,
+	writeFileOnServer,
+} from "../traefik";
 import { generateAppName, isAppNameTaken } from "./app-name";
 import type { ServiceInspectInfo } from "./docker";
-import { getDocker, inspectSwarmService, removeSwarmService, scaleSwarmService } from "./docker";
+import {
+	getDocker,
+	inspectSwarmService,
+	removeApplicationImages,
+	removeSwarmService,
+	scaleSwarmService,
+} from "./docker";
 import { getApplicationDir, resolveFileMountPath } from "./paths";
 
 export type Application = typeof applications.$inferSelect;
-
-/** Default container port when a domain row does not specify one. */
-const DEFAULT_CONTAINER_PORT = 3000;
 
 /* -------------------------------------------------------------------------- */
 /*  Parsing helpers                                                           */
@@ -72,23 +89,59 @@ export const parseCpuNano = (value: string | null): number | undefined => {
 /*  File mounts                                                               */
 /* -------------------------------------------------------------------------- */
 
-/** Write (or overwrite) the host file backing a `file` mount. */
+/**
+ * Write (or overwrite) the host file backing a `file` mount — on the Nixploy
+ * host, or on the managed server the application is pinned to (the bind
+ * source must exist where the task runs; the deploy engine never writes it).
+ */
 export const materializeFileMount = async (
 	appName: string,
 	filePath: string,
 	content: string,
+	serverId?: string | null,
 ): Promise<void> => {
 	const absolute = resolveFileMountPath(appName, filePath);
+	if (serverId) {
+		await writeFileOnServer(absolute, content, serverId);
+		return;
+	}
 	await fs.mkdir(path.dirname(absolute), { recursive: true });
 	await fs.writeFile(absolute, content, "utf8");
 };
 
 /** Remove the host file backing a `file` mount (best effort). */
-export const removeFileMount = async (appName: string, filePath: string): Promise<void> => {
+export const removeFileMount = async (
+	appName: string,
+	filePath: string,
+	serverId?: string | null,
+): Promise<void> => {
 	try {
-		await fs.rm(resolveFileMountPath(appName, filePath), { force: true });
+		const absolute = resolveFileMountPath(appName, filePath);
+		if (serverId) {
+			await removeFileOnServer(absolute, serverId);
+			return;
+		}
+		await fs.rm(absolute, { force: true });
 	} catch {
 		// best effort
+	}
+};
+
+/** Materialize every `file` mount row of an application on its target server. */
+export const materializeFileMounts = async (
+	application: Pick<Application, "applicationId" | "appName" | "serverId">,
+): Promise<void> => {
+	const rows = await db.query.mounts.findMany({
+		where: eq(mounts.applicationId, application.applicationId),
+	});
+	for (const mount of rows) {
+		if (mount.type !== "file" || !mount.filePath) continue;
+		await materializeFileMount(
+			application.appName,
+			mount.filePath,
+			mount.content ?? "",
+			application.serverId,
+		);
 	}
 };
 
@@ -100,6 +153,7 @@ type ApplicationRow = Pick<
 	Application,
 	| "applicationId"
 	| "appName"
+	| "environmentId"
 	| "env"
 	| "replicas"
 	| "command"
@@ -119,14 +173,39 @@ type ApplicationRow = Pick<
 	| "serverId"
 >;
 
-const buildSwarmSpec = (
-	application: ApplicationRow,
-	applicationMounts: Array<typeof mounts.$inferSelect>,
-	applicationPorts: Array<typeof ports.$inferSelect>,
-	image: string,
-): Docker.ServiceSpec => {
-	const env = parseDotEnv(application.env);
+/**
+ * Fully merged runtime env of an application: project → environment →
+ * service (service wins) — the same inheritance the deploy engine applies.
+ * Building the spec from the app's own vars alone silently dropped every
+ * project/environment-level variable on the next port/mount/env edit.
+ */
+export const loadMergedApplicationEnv = async (
+	application: Pick<Application, "environmentId" | "env">,
+): Promise<string[]> => {
+	const environment = await db.query.environments.findFirst({
+		where: eq(environments.environmentId, application.environmentId),
+		with: { project: true },
+	});
+	return envToArray(mergeEnv(environment?.project.env, environment?.env, application.env));
+};
 
+/**
+ * Swarm service spec from DB state. The ContainerSpec carries explicit
+ * empties (`Env: []`, `Command: null`, ...): `undefined` keys vanish in
+ * JSON and the engine then keeps the OLD value on update — or, when spread
+ * over the current spec, the key is simply lost.
+ */
+export const buildApplicationSwarmSpec = (
+	application: ApplicationRow,
+	applicationMounts: Array<
+		Pick<typeof mounts.$inferSelect, "type" | "volumeName" | "filePath" | "hostPath" | "mountPath">
+	>,
+	applicationPorts: Array<
+		Pick<typeof ports.$inferSelect, "protocol" | "publishedPort" | "targetPort" | "publishMode">
+	>,
+	image: string,
+	env: string[],
+): Docker.ServiceSpec => {
 	const mountSpecs: Docker.MountSettings[] = applicationMounts.map(
 		(mount): Docker.MountSettings => {
 			if (mount.type === "volume") {
@@ -178,17 +257,13 @@ const buildSwarmSpec = (
 		Name: application.appName,
 		Labels: sanitizeSwarmLabels(application.labelsSwarm),
 		TaskTemplate: {
-			ContainerSpec: {
-				Image: image,
-				Env: env.length > 0 ? env : undefined,
-				Mounts: mountSpecs.length > 0 ? mountSpecs : undefined,
-				Command: application.command ? ["/bin/sh", "-c", application.command] : undefined,
-				// The Engine API field is `Healthcheck`; dockerode's typings
-				// (incorrectly) call it `HealthCheck`.
-				...({
-					Healthcheck: (application.healthCheckSwarm as Docker.HealthConfig | null) ?? undefined,
-				} as Partial<Docker.ContainerSpec>),
-			},
+			ContainerSpec: buildContainerSpec({
+				imageTag: image,
+				env,
+				mounts: mountSpecs,
+				command: application.command,
+				healthCheck: (application.healthCheckSwarm as Docker.HealthConfig | null) ?? null,
+			}),
 			Resources: {
 				Limits: Object.keys(limits).length > 0 ? limits : undefined,
 				Reservations: Object.keys(reservations).length > 0 ? reservations : undefined,
@@ -223,9 +298,10 @@ export const upsertApplicationSwarmService = async (application: ApplicationRow)
 	const docker = await getDocker(application.serverId);
 	const service = docker.getService(application.appName);
 
-	const [applicationMounts, applicationPorts] = await Promise.all([
+	const [applicationMounts, applicationPorts, env] = await Promise.all([
 		db.query.mounts.findMany({ where: eq(mounts.applicationId, application.applicationId) }),
 		db.query.ports.findMany({ where: eq(ports.applicationId, application.applicationId) }),
+		loadMergedApplicationEnv(application),
 	]);
 
 	let current: ServiceInspectInfo | null = null;
@@ -252,13 +328,21 @@ export const upsertApplicationSwarmService = async (application: ApplicationRow)
 		return;
 	}
 
-	const spec = buildSwarmSpec(application, applicationMounts, applicationPorts, image);
+	const spec = buildApplicationSwarmSpec(
+		application,
+		applicationMounts,
+		applicationPorts,
+		image,
+		env,
+	);
 
 	if (!current) {
 		await docker.createService(spec);
 		return;
 	}
 
+	// Every key of `spec` is explicit (see buildApplicationSwarmSpec), so the
+	// spread only preserves engine-managed fields such as ForceUpdate.
 	const merged: Docker.ServiceSpec = {
 		...current.Spec,
 		...spec,
@@ -281,10 +365,11 @@ export const upsertApplicationSwarmService = async (application: ApplicationRow)
 /**
  * Re-write the Traefik dynamic config for an application from the current
  * domains/redirects/security rows. Call after every routing-affecting
- * mutation.
+ * mutation. The YAML always lands on the Nixploy host, whatever server the
+ * app is pinned to — that is where `nixploy-traefik` reads it.
  */
 export const syncApplicationTraefik = async (
-	application: Pick<Application, "applicationId" | "appName" | "serverId">,
+	application: Pick<Application, "applicationId" | "appName">,
 ): Promise<void> => {
 	const [appDomains, appRedirects, appSecurity] = await Promise.all([
 		db.query.domains.findMany({
@@ -300,13 +385,13 @@ export const syncApplicationTraefik = async (
 
 	await writeAppTraefikConfig({
 		appName: application.appName,
-		serverId: application.serverId,
 		domains: appDomains
 			.filter((domain) => domain.domainType !== "preview" && !domain.previewDeploymentId)
 			.map((domain) => ({
 				host: domain.host,
 				port: domain.port ?? DEFAULT_CONTAINER_PORT,
 				path: domain.path,
+				internalPath: domain.internalPath,
 				https: domain.https,
 				certificateType: domain.certificateType,
 				certificateId: domain.certificateId,
@@ -420,6 +505,9 @@ export const duplicateApplication = async (
 				applicationId: created.applicationId,
 			})),
 		);
+		// File mounts bind `<files dir>/<newAppName>/<filePath>`: the rows alone
+		// leave that path missing and the first deploy binds an empty directory.
+		await materializeFileMounts(created);
 	}
 
 	const sourcePorts = await db.query.ports.findMany({
@@ -441,13 +529,26 @@ export const duplicateApplication = async (
 };
 
 /**
- * Delete an application: tear down its PR preview deployments, remove the
- * swarm service (local or remote), drop its Traefik config, wipe on-disk
- * state, then delete the row (mounts, ports, domains, deployments... cascade).
+ * Delete an application: cancel its in-process cron jobs, tear down its PR
+ * preview deployments, remove the swarm service (local or remote) and its
+ * images, drop its Traefik config, wipe on-disk state, then delete the row
+ * (mounts, ports, domains, deployments... cascade).
  */
 export const deleteApplication = async (
 	application: Pick<Application, "applicationId" | "appName" | "serverId">,
 ): Promise<void> => {
+	// Schedules and backups are node-schedule jobs held in memory: the row
+	// cascade never reaches them, so a job firing after the delete would exec
+	// into a container that no longer exists (and keep failing every tick).
+	unregisterSchedulesForService({
+		applicationId: application.applicationId,
+		appName: application.appName,
+	});
+	unregisterBackupsForService({
+		appName: application.appName,
+		applicationId: application.applicationId,
+	});
+
 	const previews = await db.query.previewDeployments.findMany({
 		where: eq(previewDeployments.applicationId, application.applicationId),
 	});
@@ -465,7 +566,9 @@ export const deleteApplication = async (
 	await removeSwarmService(application.appName, application.serverId).catch(() => {
 		// service may never have been deployed
 	});
-	await removeTraefikConfig(application.appName, application.serverId);
+	// Built images + rollback pins are not swept by the (dangling-only) cleanup cron.
+	await removeApplicationImages(application.appName, application.serverId).catch(() => {});
+	await removeTraefikConfig(application.appName);
 
 	if (!application.serverId) {
 		await fs.rm(getApplicationDir(application.appName), { recursive: true, force: true });

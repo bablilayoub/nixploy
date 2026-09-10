@@ -2,6 +2,39 @@ import fs from "node:fs";
 import path from "node:path";
 import { ensureDir } from "./paths";
 
+/** Shortest value worth redacting; shorter strings shred the log instead. */
+export const MIN_SECRET_LENGTH = 8;
+
+const NON_SECRET_LITERALS = new Set([
+	"true",
+	"false",
+	"yes",
+	"no",
+	"on",
+	"off",
+	"null",
+	"undefined",
+	"production",
+	"development",
+	"test",
+	"localhost",
+]);
+
+/**
+ * Whether a value is worth registering for redaction. Every merged env value
+ * is registered by the worker, so `PORT=3000`, `DEBUG=1`, `NODE_ENV=production`
+ * would otherwise turn every "3000", "1" and "production" in a build log into
+ * asterisks. Short, purely numeric and boolean-ish values are never secrets.
+ */
+export function isRedactableSecret(value: string | null | undefined): value is string {
+	if (!value) return false;
+	const trimmed = value.trim();
+	if (trimmed.length < MIN_SECRET_LENGTH) return false;
+	if (/^[\d.,_\s-]+$/.test(trimmed)) return false;
+	if (NON_SECRET_LITERALS.has(trimmed.toLowerCase())) return false;
+	return true;
+}
+
 /**
  * Append-only deployment log. Every chunk is:
  * 1. redacted (registered secrets never hit disk or the wire),
@@ -20,9 +53,12 @@ export class DeploymentLogger {
 		}
 	}
 
-	/** Register a secret (token, password, key) to scrub from all output. */
+	/**
+	 * Register a secret (token, password, key) to scrub from all output.
+	 * Values below the redaction floor ({@link isRedactableSecret}) are ignored.
+	 */
 	addSecret(secret: string | null | undefined): void {
-		if (secret && secret.length > 0 && !this.secrets.includes(secret)) {
+		if (isRedactableSecret(secret) && !this.secrets.includes(secret)) {
 			this.secrets.push(secret);
 		}
 	}

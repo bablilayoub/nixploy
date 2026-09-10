@@ -70,16 +70,45 @@ function commandLabel(command: string): string {
 }
 
 /**
+ * Directory holding the TOFU host-key pins of managed servers:
+ * `<configDir>/ssh/pinned-hosts/<serverId>.pub`.
+ *
+ * Earlier releases wrote them under `<configDir>/ssh/known_hosts/`, which
+ * collided with the OpenSSH `UserKnownHostsFile` git clones need (that path
+ * must be a file, not a directory). The old location is still read as a
+ * fallback so existing pins keep working after an upgrade.
+ */
+export const getPinnedHostsDir = (): string => path.join(getSshKeysPath(), "pinned-hosts");
+
+const legacyPinnedHostFile = (serverId: string): string =>
+	path.join(getSshKeysPath(), "known_hosts", `${serverId}.pub`);
+
+/**
+ * OpenSSH known_hosts file used by git-over-ssh clones (custom SSH keys):
+ * `<configDir>/ssh/git_known_hosts`. Populated by ssh itself through
+ * `StrictHostKeyChecking=accept-new` (first contact pins, later mismatches fail).
+ */
+export const getGitKnownHostsPath = (): string => path.join(getSshKeysPath(), "git_known_hosts");
+
+/**
  * Trust-on-first-use host key pinning for managed servers.
- * Keys live under `<configDir>/ssh/known_hosts/<serverId>.pub`.
+ * Keys live under `<configDir>/ssh/pinned-hosts/<serverId>.pub`.
  */
 export function verifyRemoteHostKey(serverId: string, key: Buffer): boolean {
-	const dir = path.join(getSshKeysPath(), "known_hosts");
+	const dir = getPinnedHostsDir();
 	mkdirSync(dir, { recursive: true });
 	const file = path.join(dir, `${serverId}.pub`);
 	const encoded = key.toString("base64");
 	if (existsSync(file)) {
 		return readFileSync(file, "utf8").trim() === encoded;
+	}
+	// Pre-rename installs: honor (and migrate) the legacy pin.
+	const legacy = legacyPinnedHostFile(serverId);
+	if (existsSync(legacy)) {
+		const pinned = readFileSync(legacy, "utf8").trim();
+		if (pinned !== encoded) return false;
+		writeFileSync(file, `${pinned}\n`, { mode: 0o600 });
+		return true;
 	}
 	writeFileSync(file, `${encoded}\n`, { mode: 0o600 });
 	return true;
@@ -87,11 +116,15 @@ export function verifyRemoteHostKey(serverId: string, key: Buffer): boolean {
 
 /** Clear a pinned host key (e.g. after intentional server rebuild). */
 export function clearRemoteHostKey(serverId: string): void {
-	const file = path.join(getSshKeysPath(), "known_hosts", `${serverId}.pub`);
-	try {
-		unlinkSync(file);
-	} catch {
-		// missing is fine
+	for (const file of [
+		path.join(getPinnedHostsDir(), `${serverId}.pub`),
+		legacyPinnedHostFile(serverId),
+	]) {
+		try {
+			unlinkSync(file);
+		} catch {
+			// missing is fine
+		}
 	}
 }
 
@@ -204,11 +237,13 @@ export async function execAsyncRemote(
 
 /**
  * Like {@link execAsync} / {@link execAsyncRemote}, but writes `stdin` to the
- * process before closing the stream. Used so DB passwords never appear on argv.
+ * process before closing the stream. Used so DB passwords never appear on
+ * argv, and so file payloads (certificates, drop archives, SSH keys) are not
+ * bounded by the 128 KiB `MAX_ARG_STRLEN` cap of a single shell argument.
  */
 export async function execAsyncWithStdin(
 	command: string,
-	stdin: string,
+	stdin: string | Buffer,
 	options: ExecOptions & { serverId?: string | null } = {},
 ): Promise<string> {
 	const { serverId, ...localOptions } = options;
@@ -244,10 +279,11 @@ export async function execAsyncWithStdin(
 	});
 }
 
-async function execAsyncRemoteWithStdin(
+/** SSH variant of {@link execAsyncWithStdin}: `stdin` is streamed over the channel. */
+export async function execAsyncRemoteWithStdin(
 	serverId: string,
 	command: string,
-	stdin: string,
+	stdin: string | Buffer,
 ): Promise<string> {
 	const server = await db.query.servers.findFirst({
 		where: eq(servers.serverId, serverId),

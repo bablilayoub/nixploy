@@ -1,14 +1,29 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, domains, previewDeployments } from "../../db/schema";
-import { removeSwarmService } from "../application/docker";
+import { removeApplicationImages, removeSwarmService } from "../application/docker";
 import { getWildcardDomain } from "../application/paths";
 import { queueDeployment } from "../deployment";
-import { removeTraefikConfig, writeAppTraefikConfig } from "../traefik";
+import { removeTraefikConfig } from "../traefik";
+import { syncPreviewTraefik } from "./traefik";
+
+export {
+	encodePreviewSourceRef,
+	isMetadataOnlyPullRequestUpdate,
+	type PreviewSourceRef,
+	parsePreviewSourceRef,
+	previewSourceRefForPullRequest,
+	pullRequestHeadRef,
+} from "./source-ref";
+export { syncPreviewTraefik } from "./traefik";
 
 export type CreatePreviewInput = {
 	applicationId: string;
 	pullRequestNumber: string;
+	/**
+	 * Source to build: a branch name, a provider PR ref (`refs/pull/<n>/head`)
+	 * or a Bitbucket fork spec — see `source-ref.ts`.
+	 */
 	branch?: string | null;
 	pullRequestId?: string | null;
 	pullRequestTitle?: string | null;
@@ -94,7 +109,8 @@ export async function createPreviewDeployment(
 	}
 
 	const host = previewHost(application.appName, input.pullRequestNumber);
-	// Prefer parent app's first production domain TLS settings when available.
+	// The parent's first production domain tells us the container port the
+	// app listens on and which TLS settings to mirror.
 	const parentDomain = await db.query.domains.findFirst({
 		where: and(
 			eq(domains.applicationId, application.applicationId),
@@ -134,7 +150,9 @@ export async function createPreviewDeployment(
 			.values({
 				host,
 				path: "/",
-				port: null,
+				// Same container port as production: a static build serves on
+				// nginx:80, a Go app on 8080 — hardcoding 3000 502'd all of them.
+				port: parentDomain?.port ?? null,
 				https,
 				certificateType,
 				certificateId: https ? (parentDomain?.certificateId ?? null) : null,
@@ -151,20 +169,9 @@ export async function createPreviewDeployment(
 				.where(eq(previewDeployments.previewDeploymentId, preview.previewDeploymentId));
 		}
 
-		await writeAppTraefikConfig({
-			appName: variantAppName,
-			serverId: application.serverId,
-			domains: [
-				{
-					host,
-					port: 3000,
-					path: "/",
-					https,
-					certificateType,
-					certificateId: https ? (parentDomain?.certificateId ?? null) : null,
-				},
-			],
-		});
+		// Route + the parent's basic-auth/redirects (the preview runs the
+		// parent's production env, so it must not be reachable without auth).
+		await syncPreviewTraefik(preview.previewDeploymentId);
 
 		if (input.deferDeploy) {
 			// Awaiting approval: route exists but nothing was built. Approving
@@ -185,7 +192,7 @@ export async function createPreviewDeployment(
 			deploymentId,
 		};
 	} catch (error) {
-		await removeTraefikConfig(variantAppName, application.serverId).catch(() => {});
+		await removeTraefikConfig(variantAppName).catch(() => {});
 		await db
 			.delete(domains)
 			.where(eq(domains.previewDeploymentId, preview.previewDeploymentId))
@@ -305,7 +312,10 @@ export async function deletePreviewDeployment(
 	await removeSwarmService(preview.appName, serverId).catch(() => {
 		// variant may never have been deployed
 	});
-	await removeTraefikConfig(preview.appName, serverId);
+	// The PR build is tagged `<app>-pr-<n>:latest`; nothing else references it.
+	await removeApplicationImages(preview.appName, serverId).catch(() => {});
+	// Routing YAML always lives on the Nixploy host (where Traefik runs).
+	await removeTraefikConfig(preview.appName);
 	await db.delete(domains).where(eq(domains.previewDeploymentId, preview.previewDeploymentId));
 	await db
 		.delete(previewDeployments)

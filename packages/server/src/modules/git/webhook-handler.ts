@@ -11,7 +11,9 @@ import {
 	gitlab,
 	previewDeployments,
 } from "../../db/schema";
+import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { queueDeployment } from "../deployment";
+import { getAppCodePath, shellQuote } from "../deployment/paths";
 import {
 	classifyPullRequestAction,
 	createOrRedeployPreview,
@@ -25,6 +27,10 @@ import {
 	type ForkGateDecision,
 	isForkPullRequest,
 } from "../preview/fork-gate";
+import {
+	isMetadataOnlyPullRequestUpdate,
+	previewSourceRefForPullRequest,
+} from "../preview/source-ref";
 import { isBitbucketCollaborator } from "./bitbucket";
 import { isGiteaCollaborator } from "./gitea";
 import { isGithubCollaborator } from "./github";
@@ -41,6 +47,16 @@ export type PullRequestWebhookInfo = {
 	url?: string | null;
 	/** PR head lives in a different repository than the base (fork PR). */
 	isFork?: boolean;
+	/** `owner/repo` of the head repository (Bitbucket fork previews clone it). */
+	headRepoFullName?: string | null;
+	/** Head commit sha, when the provider sends it (metadata-only update detection). */
+	headCommit?: string | null;
+	/**
+	 * Encoded source the preview must build (`preview/source-ref.ts`): the
+	 * branch for same-repo PRs, the provider PR head ref or the fork repo for
+	 * fork PRs. Set by `handleGitWebhook`.
+	 */
+	sourceRef?: string | null;
 	/** Provider login of the PR author (collaborator bypass + UI display). */
 	authorLogin?: string | null;
 };
@@ -181,6 +197,9 @@ async function verifyAndExtractGithub(
 					baseRepoFullName: fullName || null,
 					headRepoForkFlag: typeof pr.head?.repo?.fork === "boolean" ? pr.head.repo.fork : null,
 				}),
+				headRepoFullName:
+					typeof pr.head?.repo?.full_name === "string" ? pr.head.repo.full_name : null,
+				headCommit: typeof pr.head?.sha === "string" ? pr.head.sha : null,
 				authorLogin: typeof pr.user?.login === "string" ? pr.user.login : null,
 			},
 		};
@@ -240,13 +259,20 @@ async function verifyAndExtractGitlab(
 		const pathWithNamespace: string = payload.project?.path_with_namespace ?? "";
 		const parts = pathWithNamespace.split("/");
 		const attrs = payload.object_attributes ?? {};
+		const action = asString(attrs.action);
+		// GitLab fires `update` for title/description/label/reviewer edits as
+		// well as for pushes; only a push carries `oldrev`. Rebuilding on every
+		// label change turns label-heavy workflows into build storms.
+		if (isGitlabMetadataOnlyUpdate(action, attrs.oldrev)) {
+			throw new WebhookIgnored("gitlab merge_request update without oldrev (metadata only)");
+		}
 		return {
 			branch: attrs.source_branch ?? "",
 			type: "pull_request",
 			repository: parts[parts.length - 1] ?? "",
 			owner: parts.slice(0, -1).join("/"),
 			pullRequest: {
-				action: asString(attrs.action),
+				action,
 				number: asString(attrs.iid ?? attrs.id),
 				id: asString(attrs.id) || null,
 				title: typeof attrs.title === "string" ? attrs.title : null,
@@ -255,11 +281,21 @@ async function verifyAndExtractGitlab(
 					attrs.source_project_id != null &&
 					attrs.target_project_id != null &&
 					attrs.source_project_id !== attrs.target_project_id,
+				headRepoFullName:
+					typeof attrs.source?.path_with_namespace === "string"
+						? attrs.source.path_with_namespace
+						: null,
+				headCommit: typeof attrs.last_commit?.id === "string" ? attrs.last_commit.id : null,
 				authorLogin: typeof payload.user?.username === "string" ? payload.user.username : null,
 			},
 		};
 	}
 	throw new WebhookIgnored(`unsupported gitlab event: ${event}`);
+}
+
+/** GitLab MR `update` events without `object_attributes.oldrev` did not push code. */
+export function isGitlabMetadataOnlyUpdate(action: string, oldrev: unknown): boolean {
+	return action.toLowerCase() === "update" && !(typeof oldrev === "string" && oldrev.length > 0);
 }
 
 async function verifyAndExtractBitbucket(
@@ -330,6 +366,8 @@ async function verifyAndExtractBitbucket(
 					headRepoFullName: headFullName || null,
 					baseRepoFullName: baseFullName || null,
 				}),
+				headRepoFullName: headFullName || null,
+				headCommit: typeof pr.source?.commit?.hash === "string" ? pr.source.commit.hash : null,
 				authorLogin: typeof pr.author?.nickname === "string" ? pr.author.nickname : null,
 			},
 		};
@@ -409,6 +447,9 @@ async function verifyAndExtractGitea(
 					baseRepoFullName: fullName || null,
 					headRepoForkFlag: typeof pr.head?.repo?.fork === "boolean" ? pr.head.repo.fork : null,
 				}),
+				headRepoFullName:
+					typeof pr.head?.repo?.full_name === "string" ? pr.head.repo.full_name : null,
+				headCommit: typeof pr.head?.sha === "string" ? pr.head.sha : null,
 				authorLogin: typeof pr.user?.login === "string" ? pr.user.login : null,
 			},
 		};
@@ -589,6 +630,18 @@ export async function handleGitWebhook(
 		if (kind === "upsert" && !extracted.branch) {
 			throw new WebhookIgnored("pull_request webhook carried no branch");
 		}
+		// Fork PRs cannot be fetched by branch name from the base repo: pin the
+		// provider's PR head ref (or the fork repository on Bitbucket) instead.
+		extracted.pullRequest.sourceRef = previewSourceRefForPullRequest({
+			provider,
+			number: extracted.pullRequest.number,
+			branch: extracted.branch,
+			isFork: Boolean(extracted.pullRequest.isFork),
+			headRepoFullName: extracted.pullRequest.headRepoFullName,
+		});
+		if (kind === "upsert" && !extracted.pullRequest.sourceRef) {
+			throw new WebhookIgnored("fork pull_request webhook carried no fetchable source");
+		}
 
 		const conditions = [
 			eq(applications.sourceType, provider),
@@ -741,6 +794,27 @@ async function evaluateForkGate(
 }
 
 /**
+ * Commit the preview's checkout currently sits at (the deploy engine leaves
+ * `<code dir>` reset to the last fetched head). Null when unknown — never
+ * deployed, checkout wiped, server unreachable — which always rebuilds.
+ */
+async function readCheckoutCommit(preview: {
+	appName: string;
+	serverId: string | null;
+}): Promise<string | null> {
+	const command = `git -C ${shellQuote(getAppCodePath(preview.appName))} rev-parse HEAD`;
+	try {
+		const out = preview.serverId
+			? await execAsyncRemote(preview.serverId, command, { timeoutMs: 15_000 })
+			: await execAsync(command, { timeout: 15_000 });
+		const sha = out.trim();
+		return /^[0-9a-f]{7,64}$/i.test(sha) ? sha : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Apply a verified pull_request webhook to one application: create/redeploy
  * on open/sync, delete on close. Returns a short status string for the HTTP
  * response.
@@ -774,13 +848,31 @@ export async function handlePreviewWebhookForApplication(
 		};
 	}
 
+	// Bitbucket's `pullrequest:updated` also fires for title/description/
+	// reviewer edits; skip the rebuild when the head commit is what the
+	// preview already checked out.
+	const existingPreview = await findPreviewByPullRequest(applicationId, pr.number);
+	if (existingPreview && pr.headCommit) {
+		const deployedCommit = await readCheckoutCommit(existingPreview);
+		if (
+			isMetadataOnlyPullRequestUpdate({
+				action: pr.action,
+				headCommit: pr.headCommit,
+				deployedCommit,
+			})
+		) {
+			return { action: "ignored", previewDeploymentId: existingPreview.previewDeploymentId };
+		}
+	}
+
+	const sourceRef = pr.sourceRef ?? webhook.branch ?? null;
 	const result = await (async () => {
 		const gate = await evaluateForkGate(applicationId, pr);
 		if (gate === "allow") {
 			return await createOrRedeployPreview({
 				applicationId,
 				pullRequestNumber: pr.number,
-				branch: webhook.branch || null,
+				branch: sourceRef || null,
 				pullRequestId: pr.id ?? null,
 				pullRequestTitle: pr.title ?? null,
 				pullRequestURL: pr.url ?? null,
@@ -793,13 +885,13 @@ export async function handlePreviewWebhookForApplication(
 		const gatedInput = {
 			applicationId,
 			pullRequestNumber: pr.number,
-			branch: webhook.branch || null,
+			branch: sourceRef || null,
 			pullRequestId: pr.id ?? null,
 			pullRequestTitle: pr.title ?? null,
 			pullRequestURL: pr.url ?? null,
 			pullRequestAuthor: pr.authorLogin ?? null,
 		};
-		const existing = await findPreviewByPullRequest(applicationId, pr.number);
+		const existing = existingPreview;
 		if (existing && existing.previewStatus !== "awaiting_approval") {
 			// Approved earlier (or predates the gate) — keep it redeploying.
 			return await createOrRedeployPreview(gatedInput);

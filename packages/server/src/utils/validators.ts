@@ -29,7 +29,21 @@ export const RESERVED_APP_NAMES = new Set([
 	"mongo",
 	"mysql",
 	"mariadb",
+	// Basenames of the platform's own Traefik dynamic files (see
+	// modules/traefik/dashboard.ts): an app with either name would overwrite
+	// the panel's routing / default TLS store on its first domain.
+	"00-nixploy-dashboard",
+	"00-default-tls",
 ]);
+
+/**
+ * Name shapes owned by the platform: `<app>-pr-<n>` is the swarm service +
+ * Traefik file of a PR preview.
+ */
+export const RESERVED_APP_NAME_PATTERNS: readonly RegExp[] = [/-pr-\d+$/];
+
+export const isReservedAppName = (value: string): boolean =>
+	RESERVED_APP_NAMES.has(value) || RESERVED_APP_NAME_PATTERNS.some((re) => re.test(value));
 
 /** Zod-friendly appName schema shared by routers + GitOps. */
 export const appNameSchema = z
@@ -37,7 +51,7 @@ export const appNameSchema = z
 	.min(3)
 	.max(63)
 	.regex(APP_NAME_RE, "appName must be a lowercase DNS label (a-z0-9-)")
-	.refine((value) => !RESERVED_APP_NAMES.has(value), "appName is reserved")
+	.refine((value) => !isReservedAppName(value), "appName is reserved")
 	.refine((value) => !value.includes(".."), "appName must not contain '..'");
 
 export function assertSafeAppName(appName: string): string {

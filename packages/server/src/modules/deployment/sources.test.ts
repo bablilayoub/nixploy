@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { imageRegistryHost, shouldAttachRegistryAuth } from "./sources";
+import { buildGitSshCommand, imageRegistryHost, shouldAttachRegistryAuth } from "./sources";
+
+describe("buildGitSshCommand", () => {
+	it("pins git hosts into a real known_hosts FILE on first contact", () => {
+		const command = buildGitSshCommand("/etc/nixploy/ssh/key-1.pem");
+		expect(command).toContain("-i '/etc/nixploy/ssh/key-1.pem'");
+		expect(command).toContain("-o IdentitiesOnly=yes");
+		// `yes` + an unpopulated file (or the old known_hosts DIRECTORY) failed
+		// every custom-key clone with "Host key verification failed".
+		expect(command).toContain("-o StrictHostKeyChecking=accept-new");
+		expect(command).toMatch(/-o UserKnownHostsFile='[^']*\/ssh\/git_known_hosts'/);
+		// Never the legacy `<ssh>/known_hosts` path — that is a directory of pins.
+		expect(command).not.toMatch(/\/known_hosts'/);
+	});
+});
 
 describe("imageRegistryHost", () => {
 	it("defaults bare and namespaced images to docker.io", () => {

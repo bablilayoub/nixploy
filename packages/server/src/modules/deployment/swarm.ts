@@ -93,32 +93,38 @@ export function buildContainerSpec(input: ContainerSpecInput): Docker.ContainerS
 	} as unknown as Docker.ContainerSpec;
 }
 
+export interface UpsertSwarmServiceOptions {
+	/**
+	 * PR preview variant: runs the parent's image/env under `<app>-pr-<n>`
+	 * but must never share its published ports, volumes or host mounts.
+	 */
+	preview?: boolean;
+}
+
+type MountRow = Pick<
+	typeof mounts.$inferSelect,
+	"type" | "volumeName" | "filePath" | "hostPath" | "mountPath"
+>;
+type PortRow = Pick<
+	typeof ports.$inferSelect,
+	"protocol" | "publishedPort" | "targetPort" | "publishMode"
+>;
+
 /**
- * Create or update the application's swarm service from the current DB
- * state (env, mounts, ports, resources, replicas, raw swarm overrides)
- * pinned to `imageTag`. Updates roll start-first with a stop-first
- * rollback config; published ports go through the routing mesh.
+ * Mount and port specs for a service. Preview variants get NONE of the
+ * parent's: a published port would collide with production on the ingress
+ * network (Swarm rejects the service), a named volume would let the PR
+ * build write into production data, and file/bind mounts resolve under the
+ * preview appName where nothing was materialized (`CreateHostPath` would
+ * bind an empty directory). Mirrors what `cloneSwarmService` strips.
  */
-export async function upsertSwarmService(
-	ctx: DeploymentContext,
-	application: ApplicationRow,
-	imageTag: string,
-): Promise<void> {
-	const docker = await getDocker(ctx.serverId);
-	await ensureSwarmNetwork(docker);
-
-	const [applicationMounts, applicationPorts, environment] = await Promise.all([
-		db.query.mounts.findMany({ where: eq(mounts.applicationId, application.applicationId) }),
-		db.query.ports.findMany({ where: eq(ports.applicationId, application.applicationId) }),
-		db.query.environments.findFirst({
-			where: eq(environments.environmentId, application.environmentId),
-			with: { project: true },
-		}),
-	]);
-
-	// Env inheritance: project → environment → service (service wins).
-	const mergedEnv = mergeEnv(environment?.project.env, environment?.env, application.env);
-	const env = envToArray(mergedEnv);
+export function buildRuntimeSpecs(
+	appName: string,
+	applicationMounts: MountRow[],
+	applicationPorts: PortRow[],
+	options: UpsertSwarmServiceOptions = {},
+): { mounts: Docker.MountSettings[]; ports: Docker.PortConfig[] } {
+	if (options.preview) return { mounts: [], ports: [] };
 
 	const mountSpecs: Docker.MountSettings[] = applicationMounts.map(
 		(mount): Docker.MountSettings => {
@@ -127,7 +133,7 @@ export async function upsertSwarmService(
 			}
 			const source =
 				mount.type === "file"
-					? resolveFileMountPath(application.appName, mount.filePath ?? "")
+					? resolveFileMountPath(appName, mount.filePath ?? "")
 					: (mount.hostPath ?? "");
 			return {
 				Type: "bind",
@@ -147,6 +153,44 @@ export async function upsertSwarmService(
 		TargetPort: port.targetPort,
 		PublishMode: port.publishMode,
 	}));
+
+	return { mounts: mountSpecs, ports: portSpecs };
+}
+
+/**
+ * Create or update the application's swarm service from the current DB
+ * state (env, mounts, ports, resources, replicas, raw swarm overrides)
+ * pinned to `imageTag`. Updates roll start-first with a stop-first
+ * rollback config; published ports go through the routing mesh.
+ */
+export async function upsertSwarmService(
+	ctx: DeploymentContext,
+	application: ApplicationRow,
+	imageTag: string,
+	options: UpsertSwarmServiceOptions = {},
+): Promise<void> {
+	const docker = await getDocker(ctx.serverId);
+	await ensureSwarmNetwork(docker);
+
+	const [applicationMounts, applicationPorts, environment] = await Promise.all([
+		db.query.mounts.findMany({ where: eq(mounts.applicationId, application.applicationId) }),
+		db.query.ports.findMany({ where: eq(ports.applicationId, application.applicationId) }),
+		db.query.environments.findFirst({
+			where: eq(environments.environmentId, application.environmentId),
+			with: { project: true },
+		}),
+	]);
+
+	// Env inheritance: project → environment → service (service wins).
+	const mergedEnv = mergeEnv(environment?.project.env, environment?.env, application.env);
+	const env = envToArray(mergedEnv);
+
+	const { mounts: mountSpecs, ports: portSpecs } = buildRuntimeSpecs(
+		application.appName,
+		applicationMounts,
+		applicationPorts,
+		options,
+	);
 
 	const limits: Docker.ResourceLimits = {};
 	const memoryLimit = parseMemoryBytes(application.memoryLimit);
@@ -180,9 +224,13 @@ export async function upsertSwarmService(
 			Placement: (application.placementSwarm as Docker.Placement | null) ?? undefined,
 			Networks: sanitizeNetworkAttachments(application.networkSwarm),
 		},
-		Mode: (application.modeSwarm as Docker.ServiceMode | null) ?? {
-			Replicated: { Replicas: application.replicas },
-		},
+		// Previews are throwaway single replicas; the parent's mode/replica
+		// overrides (global mode, N replicas) are production sizing.
+		Mode: options.preview
+			? { Replicated: { Replicas: 1 } }
+			: ((application.modeSwarm as Docker.ServiceMode | null) ?? {
+					Replicated: { Replicas: application.replicas },
+				}),
 		UpdateConfig: (application.updateConfigSwarm as Docker.UpdateConfig | null) ?? {
 			Parallelism: 1,
 			Order: "start-first",

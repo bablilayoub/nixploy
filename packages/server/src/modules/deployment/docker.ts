@@ -7,6 +7,7 @@ import { servers } from "../../db/schema";
 import {
 	execAsync,
 	execAsyncRemote,
+	execAsyncWithStdin,
 	remoteCommandTimeoutMs,
 	verifyRemoteHostKey,
 } from "../../utils/exec";
@@ -213,32 +214,76 @@ async function spawnRemote(
 			});
 	});
 
-	const stream = await new Promise<import("ssh2").ClientChannel>((resolve, reject) => {
-		// The first stderr line carries the remote shell's pid so kill() can
-		// terminate the actual command tree, not just the SSH channel.
-		const remoteCommand =
-			`printf '%s\\n' '${REMOTE_PID_MARKER}'"$$" >&2; ` +
-			(options.cwd ? `cd ${shellQuote(options.cwd)} && ${command}` : command);
-		conn.exec(remoteCommand, (err, s) => (err ? reject(err) : resolve(s)));
-	});
+	let stream: import("ssh2").ClientChannel;
+	try {
+		stream = await new Promise<import("ssh2").ClientChannel>((resolve, reject) => {
+			// The first stderr line carries the remote shell's pid so kill() can
+			// terminate the actual command tree, not just the SSH channel.
+			const remoteCommand =
+				`printf '%s\\n' '${REMOTE_PID_MARKER}'"$$" >&2; ` +
+				(options.cwd ? `cd ${shellQuote(options.cwd)} && ${command}` : command);
+			conn.exec(remoteCommand, (err, s) => (err ? reject(err) : resolve(s)));
+		});
+	} catch (error) {
+		// The handshake succeeded but the channel could not be opened: without
+		// this the authenticated socket leaks until the remote side times out.
+		conn.end();
+		throw error;
+	}
 
 	let killed = false;
 	let remotePid: number | null = null;
+	/** Kill of the remote command tree requested before the pid marker arrived. */
+	let killPending = false;
+	const timeoutMs = remoteCommandTimeoutMs(options.timeoutMs);
+
+	/**
+	 * Terminate the remote command tree (the shell and every child) and then
+	 * tear the channel down. Closing the channel alone leaves builds/clones
+	 * running on the server; the `pkill` runs on a second exec channel over
+	 * the same connection.
+	 */
+	const killRemoteTree = (pid: number) => {
+		let closed = false;
+		const closeChannel = () => {
+			if (closed) return;
+			closed = true;
+			stream.close();
+			conn.end();
+		};
+		try {
+			conn.exec(`pkill -TERM -P ${pid} ; kill -TERM ${pid} ; true`, () => closeChannel());
+			// Fallback: never leave the channel open if the kill exec stalls.
+			setTimeout(closeChannel, 2_000).unref();
+		} catch {
+			closeChannel();
+		}
+	};
+
 	const parsePid = createPidParser((pid) => {
 		remotePid = pid;
+		// kill() raced the marker: now that the pid is known, finish the job.
+		if (killPending) killRemoteTree(pid);
 	});
-	const timeoutMs = remoteCommandTimeoutMs(options.timeoutMs);
 
 	const done = new Promise<void>((resolve, reject) => {
 		let settled = false;
 		const timer = setTimeout(() => {
-			fail(
-				new CommandError(
-					`Remote command timed out after ${Math.round(timeoutMs / 1000)}s on server ${server.name}`,
-					null,
-					false,
-				),
+			const error = new CommandError(
+				`Remote command timed out after ${Math.round(timeoutMs / 1000)}s on server ${server.name}`,
+				null,
+				false,
 			);
+			if (remotePid) {
+				// Stop the remote process too — a timed-out build must not keep
+				// consuming the server after we gave up on it. killRemoteTree
+				// owns the teardown (it closes the connection once pkill ran),
+				// so settle without destroying the socket underneath it.
+				killRemoteTree(remotePid);
+				finish(() => reject(error));
+				return;
+			}
+			fail(error);
 		}, timeoutMs);
 		timer.unref?.();
 
@@ -292,27 +337,23 @@ async function spawnRemote(
 	return {
 		kill: () => {
 			killed = true;
-			// Kill the remote command tree first — closing the channel alone
-			// leaves builds/clones running on the server.
 			if (remotePid) {
-				const pid = remotePid;
-				try {
-					conn.exec(`pkill -TERM -P ${pid} ; kill -TERM ${pid} ; true`, () => {
-						stream.close();
-						conn.end();
-					});
-					// Fallback: never leave the channel open if the kill exec stalls.
-					setTimeout(() => {
-						stream.close();
-						conn.end();
-					}, 2_000).unref();
-					return;
-				} catch {
-					// fall through to closing the channel
-				}
+				killRemoteTree(remotePid);
+				return;
 			}
-			stream.close();
-			conn.end();
+			// The pid marker has not arrived yet (cancelled right after spawn):
+			// keep the channel open so the marker can still be read, then pkill
+			// the tree from the parser callback. Closing the channel first
+			// would drop the marker and leave the remote command running.
+			killPending = true;
+			setTimeout(() => {
+				// Marker never showed up (shell noise, connection wedged): give
+				// up on a targeted kill and at least release the channel.
+				if (!remotePid) {
+					stream.close();
+					conn.end();
+				}
+			}, 5_000).unref();
 		},
 		done,
 	};
@@ -337,8 +378,10 @@ export async function commandExists(
 }
 
 /**
- * Write a text file on the target server (base64 through the shell, so it
- * works identically locally and over SSH). Parent dirs are created.
+ * Write a file on the target server. The payload is streamed over stdin
+ * (`cat > file`) rather than embedded in the command line: keys and drop
+ * archives must not sit on argv (`ps`), and a single shell argument is capped
+ * at 128 KiB by Linux (`MAX_ARG_STRLEN`). Parent dirs are created.
  */
 export async function writeFileTargeted(
 	serverId: string | null | undefined,
@@ -347,14 +390,7 @@ export async function writeFileTargeted(
 	mode?: string,
 ): Promise<void> {
 	const dir = absPath.slice(0, absPath.lastIndexOf("/")) || "/";
-	const b64 = (Buffer.isBuffer(content) ? content : Buffer.from(content, "utf8")).toString(
-		"base64",
-	);
 	const chmod = mode ? ` && chmod ${mode} ${shellQuote(absPath)}` : "";
-	const cmd = `mkdir -p ${shellQuote(dir)} && printf %s ${shellQuote(b64)} | base64 -d > ${shellQuote(absPath)}${chmod}`;
-	if (serverId) {
-		await execAsyncRemote(serverId, cmd);
-	} else {
-		await execAsync(cmd);
-	}
+	const cmd = `mkdir -p ${shellQuote(dir)} && cat > ${shellQuote(absPath)}${chmod}`;
+	await execAsyncWithStdin(cmd, content, { serverId: serverId ?? null });
 }

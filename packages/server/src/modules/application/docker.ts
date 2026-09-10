@@ -82,6 +82,35 @@ export const removeSwarmService = async (
 	}
 };
 
+/**
+ * Untag every locally built image of a service: `appName:latest` plus the
+ * `appName:<version>` rollback pins. Images pulled for docker-source apps
+ * carry their own repository name and are never touched. The cleanup cron
+ * only prunes DANGLING images now (a full `image prune -a` deleted stopped
+ * apps' only image), so without this a deleted service's images stayed on
+ * disk forever. Untagging is forced so it succeeds while the service's last
+ * tasks are still shutting down; the layers become dangling and are
+ * reclaimed by the next cleanup pass.
+ */
+export const removeApplicationImages = async (
+	appName: string,
+	serverId?: string | null,
+): Promise<void> => {
+	const docker = await getDocker(serverId);
+	const images = await docker.listImages({ filters: { reference: [`${appName}:*`] } });
+	for (const image of images) {
+		for (const tag of image.RepoTags ?? []) {
+			if (!tag.startsWith(`${appName}:`)) continue;
+			await docker
+				.getImage(tag)
+				.remove({ force: true })
+				.catch(() => {
+					// in use by a build, or already gone — best effort
+				});
+		}
+	}
+};
+
 /** Scale a swarm service to `replicas` (0 = stopped). */
 export const scaleSwarmService = async (
 	appName: string,

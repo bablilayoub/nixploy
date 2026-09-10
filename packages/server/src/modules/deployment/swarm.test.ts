@@ -1,5 +1,51 @@
 import { describe, expect, it } from "vitest";
-import { buildContainerSpec } from "./swarm";
+import { buildContainerSpec, buildRuntimeSpecs } from "./swarm";
+
+describe("buildRuntimeSpecs", () => {
+	const mounts = [
+		{
+			type: "volume" as const,
+			volumeName: "app-data",
+			filePath: null,
+			hostPath: null,
+			mountPath: "/data",
+		},
+		{
+			type: "file" as const,
+			volumeName: null,
+			filePath: "config.json",
+			hostPath: null,
+			mountPath: "/app/config.json",
+		},
+	];
+	const ports = [
+		{
+			protocol: "tcp" as const,
+			publishedPort: 8080,
+			targetPort: 80,
+			publishMode: "ingress" as const,
+		},
+	];
+
+	it("maps the application's mounts and published ports for production", () => {
+		const specs = buildRuntimeSpecs("myapp", mounts, ports);
+		expect(specs.ports).toEqual([
+			{ Protocol: "tcp", PublishedPort: 8080, TargetPort: 80, PublishMode: "ingress" },
+		]);
+		expect(specs.mounts.map((m) => m.Type)).toEqual(["volume", "bind"]);
+		expect(specs.mounts[0]).toMatchObject({ Source: "app-data", Target: "/data" });
+	});
+
+	it("strips ports, volumes and file mounts for PR previews", () => {
+		// A published port collides with production on the ingress network, a
+		// volume would let the PR build write into production data, and file
+		// mounts were never materialized under the preview appName.
+		expect(buildRuntimeSpecs("myapp-pr-7", mounts, ports, { preview: true })).toEqual({
+			mounts: [],
+			ports: [],
+		});
+	});
+});
 
 describe("buildContainerSpec", () => {
 	it("keeps explicit empties through JSON serialization so updates clear old values", () => {

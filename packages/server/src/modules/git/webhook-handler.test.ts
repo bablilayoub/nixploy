@@ -7,10 +7,12 @@ vi.mock("../application/paths", () => ({
 }));
 vi.mock("../application/docker", () => ({
 	removeSwarmService: vi.fn(),
+	removeApplicationImages: vi.fn(),
 }));
 vi.mock("../traefik", () => ({
 	writeAppTraefikConfig: vi.fn(),
 	removeTraefikConfig: vi.fn(),
+	DEFAULT_CONTAINER_PORT: 80,
 }));
 
 import { createHmac } from "node:crypto";
@@ -20,6 +22,7 @@ import {
 	applicationMatchesPreviewWebhook,
 	applicationMatchesWebhook,
 	handleGitWebhook,
+	isGitlabMetadataOnlyUpdate,
 	type PreviewWebhookCandidate,
 	type WebhookApplicationCandidate,
 	WebhookIgnored,
@@ -175,6 +178,16 @@ describe("classifyPullRequestAction", () => {
 	});
 });
 
+describe("isGitlabMetadataOnlyUpdate", () => {
+	it("flags `update` events without oldrev and nothing else", () => {
+		expect(isGitlabMetadataOnlyUpdate("update", undefined)).toBe(true);
+		expect(isGitlabMetadataOnlyUpdate("update", "")).toBe(true);
+		expect(isGitlabMetadataOnlyUpdate("update", "abc123")).toBe(false);
+		expect(isGitlabMetadataOnlyUpdate("open", undefined)).toBe(false);
+		expect(isGitlabMetadataOnlyUpdate("reopen", undefined)).toBe(false);
+	});
+});
+
 describe("preview naming helpers", () => {
 	it("builds variant app names and hosts", () => {
 		expect(previewAppName("myapp-aa11bb", "42")).toBe("myapp-aa11bb-pr-42");
@@ -260,6 +273,58 @@ describe("provider webhook verification", () => {
 				"gt1",
 			),
 		).rejects.toBeInstanceOf(WebhookUnauthorized);
+	});
+
+	const mergeRequestBody = (attrs: Record<string, unknown>) =>
+		JSON.stringify({
+			object_kind: "merge_request",
+			project: { path_with_namespace: "acme/api" },
+			user: { username: "dev" },
+			object_attributes: {
+				iid: 7,
+				id: 700,
+				source_branch: "feat",
+				title: "Feature",
+				source_project_id: 1,
+				target_project_id: 1,
+				...attrs,
+			},
+		});
+
+	it("ignores a gitlab merge_request `update` without oldrev (metadata-only edit)", async () => {
+		mockSelects([{ gitlabId: "gl1", secret: "s3cret" }], []);
+		await expect(
+			handleGitWebhook(
+				"gitlab",
+				{ "x-gitlab-token": "s3cret" },
+				mergeRequestBody({ action: "update" }),
+				"gl1",
+			),
+		).rejects.toThrow(/oldrev/);
+	});
+
+	it("handles a gitlab merge_request `update` that carries oldrev (a push)", async () => {
+		mockSelects([{ gitlabId: "gl1", secret: "s3cret" }], []);
+		const result = await handleGitWebhook(
+			"gitlab",
+			{ "x-gitlab-token": "s3cret" },
+			mergeRequestBody({ action: "update", oldrev: "0123456789abcdef" }),
+			"gl1",
+		);
+		expect(result.type).toBe("pull_request");
+		expect(result.pullRequest?.sourceRef).toBe("feat");
+	});
+
+	it("points fork merge requests at the provider's MR head ref", async () => {
+		mockSelects([{ gitlabId: "gl1", secret: "s3cret" }], []);
+		const result = await handleGitWebhook(
+			"gitlab",
+			{ "x-gitlab-token": "s3cret" },
+			mergeRequestBody({ action: "open", source_project_id: 2, target_project_id: 1 }),
+			"gl1",
+		);
+		expect(result.pullRequest?.isFork).toBe(true);
+		expect(result.pullRequest?.sourceRef).toBe("refs/merge-requests/7/head");
 	});
 
 	it("accepts a gitea delivery signed with the dedicated webhook secret", async () => {

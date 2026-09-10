@@ -4,17 +4,28 @@ import { inArray } from "drizzle-orm";
 import { stringify } from "yaml";
 import { db } from "../../db";
 import { certificates } from "../../db/schema";
-import { execAsyncRemote } from "../../utils/exec";
+import { execAsyncRemote, execAsyncWithStdin } from "../../utils/exec";
 import { getDynamicDir } from "./paths";
+
+/**
+ * Container port a router forwards to when the domain row has none. Every
+ * writer (deploy engine, router syncs, previews, compose) must use this one
+ * constant — the deploy path used 80 while router edits used 3000, so a
+ * port-less domain flapped between the two on every edit.
+ */
+export const DEFAULT_CONTAINER_PORT = 80;
 
 // ─── Public contract types ───────────────────────────────────────────────────
 
 export interface TraefikDomainEntry {
 	host: string;
-	/** Container port the router forwards to (defaults to 80). */
+	/** Container port the router forwards to (defaults to {@link DEFAULT_CONTAINER_PORT}). */
 	port: number;
 	path?: string | null;
-	/** Internal path prefix prepended to the request before forwarding. */
+	/**
+	 * Upstream path prefix: the public `path` prefix is stripped and this one
+	 * prepended before forwarding (`/public/x` → `/internal/x`).
+	 */
 	internalPath?: string | null;
 	https: boolean;
 	certificateType: "letsencrypt" | "none" | "custom";
@@ -40,7 +51,11 @@ export interface TraefikBasicAuthEntry {
 
 export interface WriteAppTraefikConfigInput {
 	appName: string;
-	/** null/undefined = the Nixploy host itself; otherwise a managed server. */
+	/**
+	 * Accepted for contract compatibility and IGNORED: app routing YAML is
+	 * always written on the Nixploy host, where `nixploy-traefik` runs (see
+	 * {@link writeAppTraefikConfig}).
+	 */
 	serverId?: string | null;
 	domains: TraefikDomainEntry[];
 	redirects?: TraefikRedirectEntry[];
@@ -68,6 +83,7 @@ type HttpMiddleware =
 	| { redirectScheme: { scheme: string; permanent: boolean } }
 	| { redirectRegex: { regex: string; replacement: string; permanent: boolean } }
 	| { basicAuth: { removeHeader: boolean; users: string[] } }
+	| { stripPrefix: { prefixes: string[] } }
 	| { addPrefix: { prefix: string } };
 
 interface FileConfig {
@@ -110,17 +126,22 @@ const toPunycode = (host: string): string => {
 	}
 };
 
-/** Write a file on the Nixploy host (local fs) or a managed server (SSH). */
+/**
+ * Write a file on the Nixploy host (local fs) or a managed server (SSH).
+ * Remote content goes over stdin, never on argv: certificates carry private
+ * keys and basic-auth files carry password hashes, both visible in `ps`
+ * (and capped at 128 KiB) when embedded in the command line.
+ */
 export const writeFileOnServer = async (
 	absolutePath: string,
 	content: string,
 	serverId?: string | null,
 ): Promise<void> => {
 	if (serverId) {
-		const encoded = Buffer.from(content, "utf8").toString("base64");
-		await execAsyncRemote(
-			serverId,
-			`mkdir -p ${shq(dirname(absolutePath))} && echo ${shq(encoded)} | base64 -d > ${shq(absolutePath)}`,
+		await execAsyncWithStdin(
+			`mkdir -p ${shq(dirname(absolutePath))} && cat > ${shq(absolutePath)}`,
+			content,
+			{ serverId },
 		);
 		return;
 	}
@@ -219,18 +240,31 @@ export const buildTraefikFileConfig = async (
 		const target = domain.serviceName ? `${appName}-${domain.serviceName}-1` : appName;
 		config.http.services[serviceName] = {
 			loadBalancer: {
-				servers: [{ url: `http://${target}:${domain.port ?? 80}` }],
+				servers: [{ url: `http://${target}:${domain.port ?? DEFAULT_CONTAINER_PORT}` }],
 				passHostHeader: true,
 			},
 		};
 
-		// Per-domain internal-path middleware: /public/* → /internal/* upstream.
+		// Per-domain internal-path rewrite: public `<path>/*` → upstream
+		// `<internalPath>/*`. addPrefix alone would yield `/internal/public/*`,
+		// so the public prefix is stripped first (Traefik applies middlewares
+		// in list order).
 		const domainMiddlewares = [...sharedMiddlewareNames];
 		if (domain.internalPath && domain.internalPath !== "/" && domain.internalPath !== domain.path) {
-			const name = `addprefix-${sanitizeName(appName)}-${key}`;
-			middlewares[name] = { addPrefix: { prefix: domain.internalPath } };
-			// addPrefix runs before redirects/auth so upstream sees the real path.
-			domainMiddlewares.unshift(name);
+			const internalPath = sanitizeRuleValue(domain.internalPath);
+			if (!internalPath.startsWith("/") || internalPath.includes("..")) {
+				throw new Error(`Invalid Traefik internal path: ${domain.internalPath}`);
+			}
+			const addName = `addprefix-${sanitizeName(appName)}-${key}`;
+			middlewares[addName] = { addPrefix: { prefix: internalPath } };
+			const rewrite = [addName];
+			if (path) {
+				const stripName = `strip-${sanitizeName(appName)}-${key}`;
+				middlewares[stripName] = { stripPrefix: { prefixes: [path] } };
+				rewrite.unshift(stripName);
+			}
+			// The rewrite runs before redirects/auth so upstream sees the real path.
+			domainMiddlewares.unshift(...rewrite);
 		}
 
 		if (domain.https) {
@@ -312,26 +346,38 @@ export const buildTraefikFileConfig = async (
 // ─── Contract functions ──────────────────────────────────────────────────────
 
 /**
- * (Re)generate `<configDir>/traefik/dynamic/<appName>.yml` from scratch —
- * locally or over SSH. Traefik's file provider watches the directory and
- * hot-reloads. With no domains the config file is removed instead.
+ * (Re)generate `<configDir>/traefik/dynamic/<appName>.yml` from scratch.
+ * Traefik's file provider watches the directory and hot-reloads. With no
+ * domains the config file is removed instead.
+ *
+ * ALWAYS written on the Nixploy host, whatever server the app runs on:
+ * `nixploy-traefik` is a manager-constrained service on the primary node
+ * and its file provider only sees the local dynamic dir, while the
+ * `http://<appName>:<port>` upstream resolves cluster-wide through the
+ * overlay network's VIP DNS. Writing the YAML onto a managed server (the
+ * previous behaviour when `serverId` was set) produced a file nothing ever
+ * read, and the domain fell through to the dashboard catch-all.
  */
 export const writeAppTraefikConfig = async (input: WriteAppTraefikConfigInput): Promise<void> => {
 	if (input.domains.length === 0) {
-		await removeTraefikConfig(input.appName, input.serverId);
+		await removeTraefikConfig(input.appName);
 		return;
 	}
 	const config = await buildTraefikFileConfig(input);
 	const yamlStr = stringify(config);
 	const configPath = `${getDynamicDir()}/${input.appName}.yml`;
-	await writeFileOnServer(configPath, yamlStr, input.serverId);
+	await writeFileOnServer(configPath, yamlStr, null);
 };
 
-/** Delete an app's dynamic config file (all its routes disappear). */
+/**
+ * Delete an app's dynamic config file (all its routes disappear). `serverId`
+ * is accepted for contract compatibility and ignored — see
+ * {@link writeAppTraefikConfig}.
+ */
 export const removeTraefikConfig = async (
 	appName: string,
-	serverId?: string | null,
+	_serverId?: string | null,
 ): Promise<void> => {
 	const configPath = `${getDynamicDir()}/${appName}.yml`;
-	await removeFileOnServer(configPath, serverId);
+	await removeFileOnServer(configPath, null);
 };

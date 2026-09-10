@@ -15,8 +15,10 @@ import {
 	redis,
 } from "../../db/schema";
 import { deleteApplication } from "../application/service";
+import { unregisterBackupsForService } from "../backups/scheduler";
 import { deleteCompose } from "../compose/service";
-import { removeDatabase } from "../databases/engine";
+import { type DatabaseKind, removeDatabase } from "../databases/engine";
+import { unregisterSchedulesForService } from "../schedules";
 import { getCertificatesDir, REMOTE_TRAEFIK_DIR, removeFileOnServer } from "../traefik";
 import type { OrgRole } from "./roles";
 import { ORG_ROLE_RANK, orgRoleRank } from "./roles";
@@ -404,6 +406,18 @@ async function bestEffort(label: string, task: () => Promise<unknown>): Promise<
 export async function deleteEnvironmentCascade(environmentId: string): Promise<void> {
 	const services = await getEnvironmentServices(environmentId);
 
+	// Schedules and backups are in-memory node-schedule jobs the DB cascade
+	// never reaches. deleteApplication cancels its own; compose and database
+	// teardown do not, so theirs are cancelled here before anything is torn
+	// down — a job firing mid-delete would exec into a vanishing container.
+	for (const composeRow of services.compose) {
+		unregisterSchedulesForService({
+			composeId: composeRow.composeId,
+			appName: composeRow.appName,
+		});
+		unregisterBackupsForService({ appName: composeRow.appName, composeId: composeRow.composeId });
+	}
+
 	await Promise.all(
 		services.applications.map((application) =>
 			bestEffort(`application ${application.appName}`, () => deleteApplication(application)),
@@ -415,15 +429,23 @@ export async function deleteEnvironmentCascade(environmentId: string): Promise<v
 		),
 	);
 
-	const removeRows = (rows: Array<{ appName: string; serverId: string | null }>) =>
+	// `kind` lets removeDatabase verify it is tearing down a managed database
+	// service of that engine and not an unrelated swarm service of the same name.
+	const removeRows = (
+		kind: DatabaseKind,
+		rows: Array<{ appName: string; serverId: string | null }>,
+	) =>
 		Promise.all(
-			rows.map((row) =>
-				bestEffort(`database ${row.appName}`, () => removeDatabase(row.appName, row.serverId)),
-			),
+			rows.map((row) => {
+				unregisterBackupsForService({ appName: row.appName });
+				return bestEffort(`database ${row.appName}`, () =>
+					removeDatabase(row.appName, row.serverId, kind),
+				);
+			}),
 		);
 
 	if (services.postgres.length > 0) {
-		await removeRows(services.postgres);
+		await removeRows("postgres", services.postgres);
 		await db.delete(postgres).where(
 			inArray(
 				postgres.postgresId,
@@ -432,7 +454,7 @@ export async function deleteEnvironmentCascade(environmentId: string): Promise<v
 		);
 	}
 	if (services.mysql.length > 0) {
-		await removeRows(services.mysql);
+		await removeRows("mysql", services.mysql);
 		await db.delete(mysql).where(
 			inArray(
 				mysql.mysqlId,
@@ -441,7 +463,7 @@ export async function deleteEnvironmentCascade(environmentId: string): Promise<v
 		);
 	}
 	if (services.mariadb.length > 0) {
-		await removeRows(services.mariadb);
+		await removeRows("mariadb", services.mariadb);
 		await db.delete(mariadb).where(
 			inArray(
 				mariadb.mariadbId,
@@ -450,7 +472,7 @@ export async function deleteEnvironmentCascade(environmentId: string): Promise<v
 		);
 	}
 	if (services.mongo.length > 0) {
-		await removeRows(services.mongo);
+		await removeRows("mongo", services.mongo);
 		await db.delete(mongo).where(
 			inArray(
 				mongo.mongoId,
@@ -459,7 +481,7 @@ export async function deleteEnvironmentCascade(environmentId: string): Promise<v
 		);
 	}
 	if (services.redis.length > 0) {
-		await removeRows(services.redis);
+		await removeRows("redis", services.redis);
 		await db.delete(redis).where(
 			inArray(
 				redis.redisId,

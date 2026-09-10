@@ -276,10 +276,15 @@ export const mountRouter = router({
 				});
 			}
 
-			// File mounts live on the nixploy host; remote servers get their
-			// files materialized by the deploy engine.
-			if (mount.type === "file" && mount.filePath && !application.serverId) {
-				await materializeFileMount(application.appName, mount.filePath, mount.content ?? "");
+			// The bind source must exist on the server the task runs on — the
+			// deploy engine only resolves the path, it never writes the file.
+			if (mount.type === "file" && mount.filePath) {
+				await materializeFileMount(
+					application.appName,
+					mount.filePath,
+					mount.content ?? "",
+					application.serverId,
+				);
 			}
 			await upsertApplicationSwarmService(application);
 			await auditFromSession(ctx, organizationId, {
@@ -345,18 +350,21 @@ export const mountRouter = router({
 				.where(eq(mounts.mountId, mount.mountId))
 				.returning();
 
-			if (!application.serverId) {
-				// Clean up the old backing file when the mount no longer uses it.
-				if (
-					mount.type === "file" &&
-					mount.filePath &&
-					(next.type !== "file" || next.filePath !== mount.filePath)
-				) {
-					await removeFileMount(application.appName, mount.filePath);
-				}
-				if (next.type === "file" && next.filePath) {
-					await materializeFileMount(application.appName, next.filePath, next.content ?? "");
-				}
+			// Clean up the old backing file when the mount no longer uses it.
+			if (
+				mount.type === "file" &&
+				mount.filePath &&
+				(next.type !== "file" || next.filePath !== mount.filePath)
+			) {
+				await removeFileMount(application.appName, mount.filePath, application.serverId);
+			}
+			if (next.type === "file" && next.filePath) {
+				await materializeFileMount(
+					application.appName,
+					next.filePath,
+					next.content ?? "",
+					application.serverId,
+				);
 			}
 			await upsertApplicationSwarmService(application);
 			await auditFromSession(ctx, organizationId, {
@@ -382,8 +390,8 @@ export const mountRouter = router({
 
 			await db.delete(mounts).where(eq(mounts.mountId, mount.mountId));
 
-			if (mount.type === "file" && mount.filePath && !application.serverId) {
-				await removeFileMount(application.appName, mount.filePath);
+			if (mount.type === "file" && mount.filePath) {
+				await removeFileMount(application.appName, mount.filePath, application.serverId);
 			}
 			await upsertApplicationSwarmService(application);
 			await auditFromSession(ctx, organizationId, {

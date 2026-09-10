@@ -10,6 +10,7 @@ import {
 	registry,
 	sshKeys,
 } from "../../db/schema";
+import { getGitKnownHostsPath } from "../../utils/exec";
 import type { DeploymentContext } from "./context";
 import { getDocker, writeFileTargeted } from "./docker";
 import { getAppCodePath, getDropZipPath, getSshKeysPath, shellQuote } from "./paths";
@@ -18,6 +19,10 @@ export type ApplicationRow = typeof applications.$inferSelect;
 
 interface GitSource {
 	cloneUrl: string;
+	/**
+	 * What to fetch: a branch name, or a full ref such as `refs/pull/12/head`
+	 * (fork pull-request previews). Both are valid `git fetch` refspecs.
+	 */
 	branch: string;
 	/** Credentials embedded in the URL — registered as logger secrets. */
 	secrets: string[];
@@ -28,11 +33,27 @@ interface GitSource {
 const stripProtocol = (url: string) => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 
 /**
+ * `GIT_SSH_COMMAND` for clones with a custom deploy key. Host keys are
+ * pinned on first contact into a real known_hosts FILE
+ * (`<configDir>/ssh/git_known_hosts`); a later mismatch fails the clone.
+ * `IdentitiesOnly` keeps ssh-agent keys of the panel user out of the picture.
+ */
+export function buildGitSshCommand(keyPath: string): string {
+	return (
+		`ssh -i ${shellQuote(keyPath)} -o IdentitiesOnly=yes ` +
+		`-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${shellQuote(getGitKnownHostsPath())}`
+	);
+}
+
+/**
  * Build an authenticated clone URL for the application's git source.
  * Mirrors the compose module's provider handling: GitHub App installation
  * tokens, GitLab/Gitea PATs, Bitbucket app passwords, custom SSH keys.
  */
-async function resolveGitSource(application: ApplicationRow): Promise<GitSource> {
+async function resolveGitSource(
+	ctx: DeploymentContext,
+	application: ApplicationRow,
+): Promise<GitSource> {
 	switch (application.sourceType) {
 		case "git": {
 			if (!application.gitUrl) throw new Error("Git source requires a gitUrl");
@@ -47,10 +68,10 @@ async function resolveGitSource(application: ApplicationRow): Promise<GitSource>
 				});
 				if (!key) throw new Error("Custom git SSH key not found");
 				const keyPath = `${getSshKeysPath()}/${key.sshKeyId}.pem`;
-				await writeFileTargeted(null, keyPath, key.privateKey, "600");
-				source.env = {
-					GIT_SSH_COMMAND: `ssh -i ${shellQuote(keyPath)} -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${shellQuote(`${getSshKeysPath()}/known_hosts`)}`,
-				};
+				// The clone runs on the target server, so the identity file must
+				// exist there — not only on the Nixploy host.
+				await writeFileTargeted(ctx.serverId, keyPath, key.privateKey, "600");
+				source.env = { GIT_SSH_COMMAND: buildGitSshCommand(keyPath) };
 			}
 			return source;
 		}
@@ -64,20 +85,36 @@ async function resolveGitSource(application: ApplicationRow): Promise<GitSource>
 				const gh = await db.query.github.findFirst({
 					where: eq(github.githubId, application.githubId),
 				});
-				if (gh?.githubAppId && gh.githubPrivateKey && gh.githubInstallationId) {
-					try {
-						const { createAppAuth } = await import("@octokit/auth-app");
-						const appAuth = createAppAuth({
-							appId: gh.githubAppId,
-							privateKey: gh.githubPrivateKey,
-							installationId: gh.githubInstallationId,
-						});
-						const { token } = (await appAuth({ type: "installation" })) as { token: string };
-						cloneUrl = `https://x-access-token:${token}@github.com/${application.owner}/${application.repository}.git`;
-						secrets.push(token);
-					} catch {
-						// fall back to the unauthenticated URL (public repos)
-					}
+				// A configured integration must work or the deploy must say why —
+				// silently falling back to the anonymous URL turns a rotated key
+				// or uninstalled app into a misleading "Repository not found".
+				if (!gh) {
+					throw new Error(
+						"The GitHub integration linked to this application no longer exists — re-link it in the Source tab",
+					);
+				}
+				const label = gh.githubAppName ?? gh.githubId;
+				if (!gh.githubAppId || !gh.githubPrivateKey || !gh.githubInstallationId) {
+					throw new Error(
+						`GitHub App "${label}" is not installed on any account yet — finish the installation before deploying`,
+					);
+				}
+				try {
+					const { createAppAuth } = await import("@octokit/auth-app");
+					const appAuth = createAppAuth({
+						appId: gh.githubAppId,
+						privateKey: gh.githubPrivateKey,
+						installationId: gh.githubInstallationId,
+					});
+					const { token } = (await appAuth({ type: "installation" })) as { token: string };
+					cloneUrl = `https://x-access-token:${token}@github.com/${application.owner}/${application.repository}.git`;
+					secrets.push(token);
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					ctx.logger.line(`GitHub App "${label}" authentication failed: ${message}`);
+					throw new Error(
+						`GitHub App "${label}" could not mint an installation token (${message}). Check the app's private key and that it is still installed on ${application.owner}.`,
+					);
 				}
 			}
 			return { cloneUrl, branch: application.branch ?? "main", secrets };
@@ -156,68 +193,68 @@ async function resolveGitSource(application: ApplicationRow): Promise<GitSource>
 }
 
 /**
- * Clone (or fast-forward an existing checkout of) the application's git
- * source into `<configDir>/applications/<appName>/code`, depth 1.
- * Local apps use simple-git; apps pinned to a remote server are cloned with
- * the system git client over SSH.
+ * Check out the application's git source into
+ * `<configDir>/applications/<appName>/code`, depth 1.
+ *
+ * Always `init` + `fetch <ref>` + `reset --hard FETCH_HEAD` rather than
+ * `git clone --branch`: clone only accepts branch/tag names, while fork
+ * pull-request previews fetch `refs/pull/<n>/head` /
+ * `refs/merge-requests/<n>/head`, which only `fetch` understands. The same
+ * sequence refreshes an existing checkout (origin URL is re-set first so
+ * repository/provider/token changes take effect on redeploy).
+ *
+ * Local apps use simple-git; apps pinned to a remote server run the system
+ * git client over SSH.
  */
 export async function cloneGitSource(
 	ctx: DeploymentContext,
 	application: ApplicationRow,
 ): Promise<string> {
-	const source = await resolveGitSource(application);
+	const source = await resolveGitSource(ctx, application);
 	for (const secret of source.secrets) ctx.logger.addSecret(secret);
 	const codeDir = getAppCodePath(application.appName);
+	const label = `${application.owner ?? "repository"}/${application.repository ?? ""}`;
 
 	if (ctx.serverId) {
 		const dir = shellQuote(codeDir);
 		const url = shellQuote(source.cloneUrl);
-		const branch = shellQuote(source.branch);
+		const ref = shellQuote(source.branch);
 		const sshEnv = source.env?.GIT_SSH_COMMAND
 			? `GIT_SSH_COMMAND=${shellQuote(source.env.GIT_SSH_COMMAND)} `
 			: "";
 		await ctx.run(
-			`mkdir -p ${dir} && ` +
-				`(if [ -d ${dir}/.git ]; then ` +
-				// Refresh the remote first: repository/provider/token changes must
-				// take effect on redeploy, not keep fetching the stale origin.
-				`${sshEnv}git -C ${dir} remote set-url origin ${url} && ` +
-				`${sshEnv}git -C ${dir} fetch --depth 1 origin ${branch} && git -C ${dir} reset --hard FETCH_HEAD; ` +
-				`else ${sshEnv}git clone --branch ${branch} --depth 1 --single-branch ${url} ${dir}; fi)`,
+			`(if [ -d ${dir}/.git ]; then git -C ${dir} remote set-url origin ${url}; ` +
+				`else rm -rf ${dir} && mkdir -p ${dir} && git init -q ${dir} && git -C ${dir} remote add origin ${url}; fi) && ` +
+				`${sshEnv}git -C ${dir} fetch --depth 1 origin ${ref} && git -C ${dir} reset --hard FETCH_HEAD`,
 		);
-		ctx.logger.line(
-			`Cloned ${application.owner ?? source.cloneUrl}/${application.repository ?? ""} (${source.branch})`,
-		);
+		ctx.logger.line(`Checked out ${label} (${source.branch})`);
 		return codeDir;
 	}
 
 	// Local: the URL may carry a token — keep it out of the log by not
 	// echoing the command (simple-git instead of a shell command).
-	ctx.logger.line(
-		`Cloning ${application.owner ?? "repository"}/${application.repository ?? ""} (branch: ${source.branch})`,
-	);
+	ctx.logger.line(`Fetching ${label} (${source.branch})`);
 	const fs = await import("node:fs/promises");
-	await fs.mkdir(codeDir, { recursive: true });
-	const git = simpleGit({ baseDir: codeDir });
-	if (source.env) git.env(source.env);
-	const isRepo = await git.checkIsRepo().catch(() => false);
-	if (isRepo) {
-		// Refresh the remote first: repository/provider/token changes must
-		// take effect on redeploy, not keep fetching the stale origin.
-		await git.remote(["set-url", "origin", source.cloneUrl]);
-		await git.fetch(["origin", source.branch, "--depth", "1"]);
-		await git.reset(["--hard", "FETCH_HEAD"]);
-	} else {
+	const path = await import("node:path");
+	const hasRepo = await fs
+		.stat(path.join(codeDir, ".git"))
+		.then((stat) => stat.isDirectory())
+		.catch(() => false);
+	if (!hasRepo) {
 		await fs.rm(codeDir, { recursive: true, force: true });
 		await fs.mkdir(codeDir, { recursive: true });
-		await git.clone(source.cloneUrl, codeDir, [
-			"--branch",
-			source.branch,
-			"--depth",
-			"1",
-			"--single-branch",
-		]);
 	}
+	const git = simpleGit({ baseDir: codeDir });
+	// simple-git's env() replaces the child environment wholesale — keep PATH.
+	if (source.env) git.env({ ...process.env, ...source.env });
+	if (hasRepo) {
+		await git.remote(["set-url", "origin", source.cloneUrl]);
+	} else {
+		await git.init();
+		await git.addRemote("origin", source.cloneUrl);
+	}
+	await git.fetch(["--depth", "1", "origin", source.branch]);
+	await git.reset(["--hard", "FETCH_HEAD"]);
 	return codeDir;
 }
 
