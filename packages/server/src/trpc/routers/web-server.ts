@@ -14,10 +14,9 @@ import {
 	getDynamicDir,
 	getTraefikDir,
 	normalizeDashboardDomain,
-	TRAEFIK_SERVICE_NAME,
+	restartTraefik,
 	writeDashboardRouterConfig,
 } from "../../modules/traefik";
-import { execAsync } from "../../utils/exec";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -112,8 +111,9 @@ export const webServerRouter = router({
 	/**
 	 * Upsert the singleton settings row. When the Let's Encrypt email
 	 * changes, the Traefik bootstrap re-runs so the static traefik.yml is
-	 * rewritten with the new ACME account (the running proxy picks it up on
-	 * the next `restartTraefik`).
+	 * rewritten with the new ACME account and the running proxy is
+	 * force-updated to load it (`ensureTraefikSetup` restarts only when the
+	 * rendered file actually changed).
 	 */
 	updateSettings: protectedProcedure.input(updateSettingsInput).mutation(async ({ ctx, input }) => {
 		await requireInstanceAdmin(ctx.session);
@@ -253,8 +253,8 @@ export const webServerRouter = router({
 	/** Force-restart the global Traefik swarm service (picks up static config changes). */
 	restartTraefik: protectedProcedure.mutation(async ({ ctx }) => {
 		await requireInstanceAdmin(ctx.session);
-		const output = await execAsync(`docker service update --force ${TRAEFIK_SERVICE_NAME}`);
-		return { success: true, output };
+		await restartTraefik();
+		return { success: true };
 	}),
 
 	/** Prune unused images and build cache on the Nixploy host, on demand. */

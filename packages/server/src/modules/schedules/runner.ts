@@ -1,7 +1,12 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, compose } from "../../db/schema";
-import { execAsync, execAsyncRemote, remoteCommandTimeoutMs } from "../../utils/exec";
+import {
+	execAsync,
+	execAsyncRemote,
+	execAsyncWithStdin,
+	remoteCommandTimeoutMs,
+} from "../../utils/exec";
 
 /**
  * Executes a schedule's command/script against its target:
@@ -27,13 +32,13 @@ function shQuote(value: string): string {
 	return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-/** Inline script execution: decode a base64 payload and pipe it to the shell. */
+/**
+ * Inline scripts are streamed to the shell on stdin (`sh -s`) instead of
+ * being base64-embedded in argv, which capped them at the kernel's
+ * MAX_ARG_STRLEN and exposed them in `ps`.
+ */
 function buildInnerCommand(target: ScheduleTarget): string {
-	if (target.script) {
-		const encoded = Buffer.from(target.script, "utf8").toString("base64");
-		return `echo ${encoded} | base64 -d | ${target.shellType}`;
-	}
-	return target.command;
+	return target.script ? `${target.shellType} -s` : target.command;
 }
 
 async function resolveAppName(target: ScheduleTarget): Promise<string> {
@@ -110,6 +115,13 @@ export async function runScheduleCommand(target: ScheduleTarget): Promise<string
 				resolveServiceServerId(target),
 			]);
 			const containerId = await findContainerId(target, appName, serviceServerId);
+			if (target.script) {
+				const dockerCmd = `docker exec -i ${shQuote(containerId)} ${target.shellType} -s`;
+				return execAsyncWithStdin(dockerCmd, target.script, {
+					serverId: serviceServerId,
+					timeout: remoteCommandTimeoutMs(),
+				});
+			}
 			const dockerCmd = `docker exec ${shQuote(containerId)} ${target.shellType} -c ${shQuote(inner)}`;
 			return serviceServerId
 				? execAsyncRemote(serviceServerId, dockerCmd)
@@ -119,11 +131,17 @@ export async function runScheduleCommand(target: ScheduleTarget): Promise<string
 			if (!target.serverId) {
 				throw new Error("Server schedule is missing serverId");
 			}
+			if (target.script) {
+				return execAsyncWithStdin(inner, target.script, { serverId: target.serverId });
+			}
 			return execAsyncRemote(target.serverId, inner);
 		}
 		case "nixploy-server": {
 			// Same hard timeout as remote commands: a hung command must not pin
 			// the schedule's in-flight guard forever.
+			if (target.script) {
+				return execAsyncWithStdin(inner, target.script, { timeout: remoteCommandTimeoutMs() });
+			}
 			return execAsync(inner, { timeout: remoteCommandTimeoutMs() });
 		}
 	}

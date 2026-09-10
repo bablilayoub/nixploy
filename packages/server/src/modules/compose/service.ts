@@ -3,10 +3,14 @@ import { mkdir, rm } from "node:fs/promises";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
-import { applications, compose, deployments, domains, environments, mounts } from "../../db/schema";
+import { compose, deployments, domains, environments, mounts } from "../../db/schema";
 import { assertSafeAppName } from "../../utils/validators";
+import { isAppNameTaken as isAnyAppNameTaken } from "../application/app-name";
 import { getSwarmNetwork } from "../application/paths";
+import { unregisterBackupsForService } from "../backups/scheduler";
 import { removeServiceLogs } from "../deployment/maintenance";
+import { unregisterSchedulesForService } from "../schedules";
+import { DEFAULT_CONTAINER_PORT } from "../traefik/config-writer";
 import { getTraefik } from "./adapters";
 import {
 	buildComposeDeployCommand,
@@ -78,13 +82,13 @@ const slugify = (name: string) =>
 
 export const randomSuffix = () => randomBytes(3).toString("hex");
 
-/** appName is shared across compose + application swarm namespaces. */
+/**
+ * appName is shared across every swarm namespace (applications, compose
+ * stacks and their `<app>-<service>` Traefik keys, databases, previews) —
+ * delegate to the single cross-table check in application/app-name.ts.
+ */
 export async function isAppNameTaken(appName: string): Promise<boolean> {
-	const [c, a] = await Promise.all([
-		db.query.compose.findFirst({ where: eq(compose.appName, appName) }),
-		db.query.applications.findFirst({ where: eq(applications.appName, appName) }),
-	]);
-	return Boolean(c || a);
+	return isAnyAppNameTaken(appName);
 }
 
 export async function generateUniqueAppName(name: string): Promise<string> {
@@ -389,6 +393,10 @@ export async function stopCompose(composeRow: ComposeRow): Promise<void> {
  * never blocks deletion.
  */
 export async function deleteCompose(composeRow: ComposeRow): Promise<void> {
+	// Stop cron work that targets this stack before its containers go away;
+	// the rows cascade with the compose row, the in-memory jobs do not.
+	unregisterSchedulesForService({ composeId: composeRow.composeId, appName: composeRow.appName });
+	unregisterBackupsForService({ appName: composeRow.appName, composeId: composeRow.composeId });
 	const composeDomains = await db.query.domains.findMany({
 		where: eq(domains.composeId, composeRow.composeId),
 	});
@@ -533,8 +541,9 @@ export async function resyncComposeDomains(composeId: string): Promise<void> {
 			serverId: row.serverId,
 			domains: serviceDomains.map((d) => ({
 				host: d.host,
-				port: d.port ?? 80,
+				port: d.port ?? DEFAULT_CONTAINER_PORT,
 				path: d.path,
+				internalPath: d.internalPath,
 				https: d.https,
 				certificateType: d.certificateType,
 				certificateId: d.certificateId,

@@ -6,7 +6,9 @@ import { db } from "../../db";
 import type { compose } from "../../db/schema";
 import { bitbucket, gitea, github, gitlab, sshKeys } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { writeFileTargeted } from "../deployment/docker";
 import { getSshKeysPath } from "../deployment/paths";
+import { buildGitSshCommand } from "../deployment/sources";
 import { getComposeCodeDir, shellQuote } from "./paths";
 
 export type ComposeRow = typeof compose.$inferSelect;
@@ -41,12 +43,10 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 				});
 				if (!key) throw new Error("Custom git SSH key not found");
 				const keyPath = join(getSshKeysPath(), `${key.sshKeyId}.pem`);
-				await mkdir(dirname(keyPath), { recursive: true });
-				await writeFile(keyPath, key.privateKey, { mode: 0o600 });
-				await chmod(keyPath, 0o600);
-				source.env = {
-					GIT_SSH_COMMAND: `ssh -i ${shellQuote(keyPath)} -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${shellQuote(join(getSshKeysPath(), "known_hosts"))}`,
-				};
+				// The key must exist where git runs: on the managed server for
+				// remote rows, on the Nixploy host otherwise.
+				await writeFileTargeted(composeRow.serverId, keyPath, key.privateKey, "600");
+				source.env = { GIT_SSH_COMMAND: buildGitSshCommand(keyPath) };
 			}
 			return source;
 		}
@@ -238,13 +238,9 @@ export async function writeComposeFile(
 	options: { mode?: number } = {},
 ): Promise<void> {
 	if (composeRow.serverId) {
-		const base64 = Buffer.from(content, "utf8").toString("base64");
-		const chmodStep =
-			options.mode !== undefined ? ` && chmod ${options.mode.toString(8)} ${shellQuote(path)}` : "";
-		await execAsyncRemote(
-			composeRow.serverId,
-			`mkdir -p ${shellQuote(dirname(path))} && echo ${base64} | base64 -d > ${shellQuote(path)}${chmodStep}`,
-		);
+		// Streamed over the SSH channel's stdin: compose files and .env can
+		// exceed the remote shell's argv limit and must never sit in `ps`.
+		await writeFileTargeted(composeRow.serverId, path, content, options.mode?.toString(8));
 		return;
 	}
 	await mkdir(dirname(path), { recursive: true });
