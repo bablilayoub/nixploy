@@ -35,3 +35,9 @@ host or any managed server (selector in the header).
   so any container name works, not just Nixploy `appName`s.
 - Destructive actions (container remove, prunes) are written to the audit
   log.
+- Joining a host to the primary Swarm (`server.setup`) and the `manager` role on
+  `server.create` / `server.update` require the **instance admin** as well — a manager
+  controls every tenant's services and even a worker runs other orgs' unpinned tasks as
+  root. `servers.manage` still covers registering, editing and removing server rows. Every
+  setup run is audited as `server.setup` with `{ swarmRole, result }`. See docs/auth.md
+  "Instance admin".

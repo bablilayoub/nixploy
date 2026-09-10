@@ -309,7 +309,8 @@ export const docsPages: DocPage[] = [
 				items: [
 					"Settings → Backup storage → Instance backups",
 					"pg_dump of Nixploy's own database + tar of the config dir (Traefik/ACME/SSH)",
-					"Requires org admin — captures every tenant's data",
+					"Instance admin only — captures every tenant's data",
+					"The config archive never includes /etc/nixploy/.env (ENCRYPTION_KEY, BETTER_AUTH_SECRET, DATABASE_URL) — back that file up separately; a restore without the original ENCRYPTION_KEY cannot decrypt stored secrets",
 					"Restore is intentional/manual onto a fresh host (same ENCRYPTION_KEY)",
 				],
 			},
@@ -351,7 +352,7 @@ export const docsPages: DocPage[] = [
 			{
 				type: "ul",
 				items: [
-					"Add a host with SSH key → Setup joins the primary Swarm (worker or manager)",
+					"Add a host with SSH key → Setup joins the primary Swarm (worker or manager; the join and the manager role are instance-admin only)",
 					"Capacity cells and drain via Docker / Swarm UI",
 					"Placement constraints pin apps to node labels",
 					"nixploy doctor (CLI) checks Swarm / disk / Docker health",
