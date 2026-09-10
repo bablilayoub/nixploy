@@ -93,6 +93,11 @@ Details and status live in `docs/status.md`; this is the short list you must not
 - The tenancy suite (13 tests) silently skips without `DATABASE_URL_TEST`. A green local `pnpm test` does not prove tenant isolation.
 - `docker/Dockerfile` deps stage copies only `apps/web`, `apps/cli`, `packages/server` package manifests (no `apps/landing`); CI image builds are green, so leave it unless adding a workspace the image needs.
 - The in-memory deploy queue and rate limiters are process-local: multi-replica `nixploy` is unsupported by design.
+- Compose files are **rendered** before validation and deploy (`modules/compose/compose-file.ts`): every `$VAR`/`${VAR}` is resolved from the merged env, the safety checks run on raw + rendered specs, and docker commands run under `env -i` with `--env-file /dev/null`. Never pass tenant env into the docker CLI's process environment, never validate only the raw file. Every service gets a private `<appName>-net`; only Traefik targets join `nixploy-network`.
+- Server host-key pins live in `<config>/ssh/pinned-hosts/`; git clones use `<config>/ssh/git_known_hosts` via `buildGitSshCommand` (`modules/deployment/sources.ts`). Do not point `UserKnownHostsFile` at a directory again.
+- Anything that can exceed a few KB (archives, certificates, scripts, compose files) is sent to remote shells over stdin (`execAsyncWithStdin` / `writeFileTargeted`), never as a base64 argv blob (128 KiB kernel cap, visible in `ps`).
+- The web app gates controls with `useCapabilities()` (`apps/web/src/hooks/use-capabilities.ts`, backed by `organization.myCapabilities` + the session role). Hide or disable, never rely on it alone — the server checks stay authoritative.
+- `TRUSTED_PROXIES=1` is set by the installer (panel is only reachable through Traefik). Without it every client IP is "unknown"; API-key limits are per key anyway, webhook/setup limits degrade to a wide shared bucket.
 
 ## Working agreement for Claude
 

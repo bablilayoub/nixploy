@@ -79,16 +79,16 @@ Router → module map:
 | Router | Backing module(s) |
 | --- | --- |
 | `application`, `mount`, `port`, `redirect`, `security`, `rollback` | `modules/application/*` (create/start/stop/delete, `service.ts` swarm+traefik sync, `docker.ts`, `app-name.ts`, `org.ts` access helpers), `modules/deployment/*` |
-| `compose` | `modules/compose/*` (`service.ts`, `compose-file.ts` parse/rewrite, `containers.ts`, `source.ts`, `adapters.ts`) |
+| `compose` | `modules/compose/*` (`service.ts`, `compose-file.ts` parse/interpolate/validate/inject-networks, `commands.ts` deploy/down commands + Traefik keys, `containers.ts`, `source.ts`, `adapters.ts`) |
 | `postgres`, `mysql`, `mariadb`, `mongo`, `redis` | `modules/databases/engine.ts` (all five engines) + `router.ts` (`buildDatabaseRouter` factory) |
-| `deployment`, `previewDeployment` | `modules/deployment/{queue,worker,queries,recovery,reconciler,maintenance,events,logger,cleanup}.ts`, `modules/preview/*` (PR lifecycle, fork gate, PR comments) |
+| `deployment`, `previewDeployment`, `rollback` | `modules/deployment/{queue,worker,queries,recovery,reconciler,maintenance,events,logger,cleanup,rollback}.ts`, `modules/preview/*` (PR lifecycle, fork gate, PR comments, `source-ref.ts` fork/PR head refs, `traefik.ts` preview YAML) |
 | `domain`, `certificate` | `modules/traefik/*` (`config-writer.ts` YAML, `dashboard.ts`, `setup.ts` static config + swarm service, `paths.ts`) |
 | `project`, `environment`, `organization`, `tag` | `modules/projects/*` (org resolution, roles, capabilities, quotas, env-var inheritance, cascade deletes, overview counts), `modules/tags/index.ts` |
 | `template` | `modules/templates/*` (`catalog.ts` = 15 categories, 86 templates in `data/*.ts`; `services.ts` deploy-as-compose; `images.ts` registry probe) |
-| `backup`, `volumeBackup`, `destination` | `modules/backups/*` (`runner.ts` dump/restore incl. Redis + instance self-backup, `scheduler.ts`, `dump-commands.ts`) |
-| `schedule` | `modules/schedules/*` (node-schedule jobs running shell in containers/servers) |
+| `backup`, `volumeBackup`, `destination` | `modules/backups/*` (`runner.ts` dump/restore incl. Redis + instance self-backup, `pipeline.ts` exit-status trailer + empty-gzip guard, `scheduler.ts`, `dump-commands.ts`) |
+| `schedule` | `modules/schedules/*` (node-schedule jobs running shell in containers/servers; `cron.ts` strict cron validation; scripts streamed over stdin) |
 | `notification` | `modules/notifications/{index,providers}.ts` (slack, discord, telegram, email, gotify, ntfy, pushover, mattermost, lark, teams, custom) |
-| `server`, `sshKey`, `registry`, `docker` | `modules/cluster/*` (`servers.ts` SSH setup + swarm join + batched stats cache, `ssh-keys.ts`, `registries.ts`), `modules/docker/*` (protected names, prune) |
+| `server`, `sshKey`, `registry`, `docker` | `modules/cluster/*` (`servers.ts` SSH setup + swarm join/leave + batched stats cache, `ssh-keys.ts`, `registries.ts`), `modules/docker/*` (protected names, prune with the service-volume guard) |
 | `monitoring`, `observability` | `modules/monitoring/{history,remote}.ts` (30 s snapshots, 48 h JSONL, threshold alerts), `modules/observability/index.ts` (incidents, alert rules, uptime probes, log search) |
 | `github`, `gitlab`, `bitbucket`, `gitea` | `modules/git/*` (provider APIs, `webhook-handler.ts`, `webhook-secret.ts`) |
 | `gitops` | `modules/gitops/*` (`schema.ts` nixploy.yaml, `export`, `plan`, `apply`, `redeploy`) |
@@ -102,7 +102,7 @@ Router → module map:
 
 ### `ws/`
 
-`index.ts` (routes, heartbeat 30 s, leaves non-Nixploy upgrades to Next HMR), `auth.ts`, `access.ts`, `deployment-logs.ts` (replay file + follow `deploymentEvents`), `docker-logs.ts`, `docker-stats.ts`, `docker-terminal.ts` (exec into container), `docker.ts`, `utils.ts`.
+`index.ts` (routes, heartbeat 30 s, Origin check against the trusted origins, leaves non-Nixploy upgrades to Next HMR), `auth.ts`, `access.ts` (org resolution incl. the 2FA gate, capability checks, container-label ownership for control-center streams), `deployment-logs.ts` (replay file + follow `deploymentEvents`), `docker-logs.ts`, `docker-stats.ts`, `docker-terminal.ts` (exec into container), `docker.ts`, `utils.ts`.
 
 ## 4. Deploy pipeline in one screen
 
@@ -132,7 +132,7 @@ traefik/dynamic/*.yml     one file per app / compose service; 00-default-tls.yml
 traefik/dynamic/certificates/<id>.{crt,key}
 traefik/acme.json
 applications/<appName>/{code,code.zip,files}
-compose/<appName>/{docker-compose.yml,.env,code}
+compose/<appName>/{docker-compose.yml,docker-compose.nixploy.yml (rendered),.env,code}
 files/<appName>/          materialized file mounts
 logs/<appName>/<deploymentId>.log
 metrics/<appName>.jsonl, metrics/server-<serverId>.jsonl
