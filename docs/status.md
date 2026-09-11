@@ -63,7 +63,7 @@ Image pins to review periodically: `traefik:v3.5.0`, `postgres:17-alpine`, `node
 
 ## Next steps
 
-0. **Work the improvement audit** — [`audits/2026-09/README.md`](./audits/2026-09/README.md): §1 "Do first" (15 small items: 4 security Highs, graceful shutdown, build timeout, queue mutex, health endpoint, pre-upgrade dump, log follower, indexes/retention, atomic Traefik writes, release gate, audit fixes), then product §2, structural §3, refactors §4.
+0. **Work the improvement audit** — [`audits/2026-09/README.md`](./audits/2026-09/README.md). Sprint A (§1, all 15 items) landed 2026-09-11 (commits `8b5c899`…`3844db6`); Sprint B (error boundary, deploy provenance + pre-flight, backup run history, half-built features, shared org env) in progress; then structural §3, refactors §4, remaining product §2 and UX §6.
 1. **Merge** `chore/sprint-1-hygiene` then `work/stability-and-landing` into `main`, push, let CI + Docker run; cut a release (`./tools/release.sh paas --bump minor`) — the sweep changes operator-visible behaviour (installer env, compose rendering, remote servers), so `v0.2.0` is the honest number.
 2. **Real multi-node test** of the remote-server path on a second Linux host (join as worker, pin an app + a database, deploy, stop/start, remove server).
 3. Mirror the operator-facing doc changes onto the landing docs.
@@ -73,5 +73,6 @@ Image pins to review periodically: `traefik:v3.5.0`, `postgres:17-alpine`, `node
 
 - **2026-09-10 (audit)** — Initial audit. Added `CLAUDE.md`, `docs/codebase-map.md`, this file.
 - **2026-09-10 (sprint 1, branch `chore/sprint-1-hygiene`)** — hygiene, routine bumps, better-auth 1.7.3, Next 16.3.4 + `src/proxy.ts`, landing → Next 16, commander 15, vitest 5. All gates green.
+- **2026-09-11 (Sprint A of the audit)** — CI gate + PR builds + multi-arch + scans; four security Highs closed + input caps + headers; `queued` status, per-app mutex, graceful shutdown, timeouts, offset log follower (migration 0019); health/ready/version endpoints, pre-upgrade dump, downgrade guard, retention, atomic Traefik writes; panel UX safety batch. Gates: typecheck 0, Biome 1 pre-existing warning, 986 tests with Postgres, web/landing/cli builds, Docker image build, REST e2e loop all green, real SIGTERM drain verified. Leftover Swarm service from the smoke: `demo-app-4ae3a9` (nixploy_e2e's demo-app).
 - **2026-09-11 (improvement audit)** — six parallel read-only audits (security posture, architecture/scale, product gaps vs Dokploy/Coolify, ops/DX, code health, panel UX) → `docs/audits/2026-09/` with a sequenced plan in its README. Nothing fixed yet.
 - **2026-09-10/11 (stability sweep + landing, branch `work/stability-and-landing`)** — 7 parallel audits → fixes per scope (see "What the stability sweep did"), remote-server redesign (`swarm_node_id` + `node.id` pinning, migration 0018), landing rebuilt then redesigned monochrome (2026-09-11), docs updated. Gates: typecheck 0/0, 886 tests, Biome clean, builds green, REST e2e loop 58/59 (resume artifact), UI driven light + dark. Nothing pushed.
