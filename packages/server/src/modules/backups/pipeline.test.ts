@@ -72,6 +72,12 @@ describe("buildStreamPipeline / assertStreamExit", () => {
 	it("accepts a zero producer status and refuses anything else", () => {
 		expect(() => assertStreamExit(`noise\n${PIPELINE_EXIT_MARKER}0\n`, "Dump")).not.toThrow();
 		expect(() => assertStreamExit(`${PIPELINE_EXIT_MARKER}1\n`, "Dump")).toThrow(/status 1/);
+		expect(() =>
+			assertStreamExit(
+				`pg_dump: error: connection failed: the database system is starting up\n${PIPELINE_EXIT_MARKER}1\n`,
+				"Dump",
+			),
+		).toThrow(/status 1 — pg_dump: error: connection failed: the database system is starting up/);
 		expect(() => assertStreamExit("no trailer", "Dump")).toThrow(/did not report an exit status/);
 	});
 });

@@ -13,6 +13,7 @@ import {
 	redis,
 	type volumeBackups,
 } from "../../db/schema";
+import { createLogger } from "../../lib/logger";
 import { execAsync, execAsyncRemote, execAsyncWithStdin } from "../../utils/exec";
 import { assertDockerVolumeName } from "../../utils/validators";
 import { shellQuote } from "../compose/paths";
@@ -55,6 +56,8 @@ import {
 	livenessAnswered,
 	type VerifyTarget,
 } from "./verify-commands";
+
+const log = createLogger("backups");
 
 /**
  * Backup runner: database dumps and volume archives to a destination
@@ -325,10 +328,48 @@ async function runDatabaseDump(
 
 	const label = `Dump of ${backupRow.appName}`;
 	const key = buildBackupKey(backupRow.prefix, backupRow.appName);
-	const proc = await spawnStreamingCommand(linked.serverId, command, { stdin });
-	const bytes = await storeStreamedDump(store, key, proc, label);
-	await pruneOldBackups(store, backupPrefix(backupRow), backupRow.keepLatestCount);
-	return { key, bytes };
+	// A backup triggered right after the service started (first deploy, a
+	// restart, the CI golden path) meets a database that is still initialising
+	// its data directory or not yet accepting connections. The dump itself is
+	// the readiness probe: a "starting up" failure is retried for a bounded
+	// window instead of failing the run. A failed attempt never reaches the
+	// store's finalize step, so nothing partial is left behind.
+	const deadline = Date.now() + databaseReadyTimeoutMs();
+	for (let attempt = 1; ; attempt++) {
+		const proc = await spawnStreamingCommand(linked.serverId, command, { stdin });
+		try {
+			const bytes = await storeStreamedDump(store, key, proc, label);
+			await pruneOldBackups(store, backupPrefix(backupRow), backupRow.keepLatestCount);
+			return { key, bytes };
+		} catch (error) {
+			if (!isDatabaseStartingError(error) || Date.now() >= deadline) throw error;
+			log.info(
+				`${label}: database not ready yet (attempt ${attempt}), retrying in ${DATABASE_READY_POLL_MS / 1000}s`,
+			);
+			await new Promise((resolve) => setTimeout(resolve, DATABASE_READY_POLL_MS));
+		}
+	}
+}
+
+/** How long a dump keeps retrying a database that is still starting (default 90 s). */
+export const DEFAULT_DATABASE_READY_TIMEOUT_MS = 90_000;
+const DATABASE_READY_POLL_MS = 5_000;
+
+export function databaseReadyTimeoutMs(): number {
+	const fromEnv = Number.parseInt(process.env.NIXPLOY_BACKUP_READY_TIMEOUT_MS ?? "", 10);
+	return Number.isFinite(fromEnv) && fromEnv >= 0 ? fromEnv : DEFAULT_DATABASE_READY_TIMEOUT_MS;
+}
+
+/**
+ * Does a failed dump look like "the database is not up yet" rather than a
+ * real dump problem? Matched against the producer's stderr that
+ * `assertStreamExit` folds into the error message.
+ */
+export function isDatabaseStartingError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return /starting up|shutting down|connection refused|could not connect|can't connect|cannot connect|ECONNREFUSED|not yet accept|is the server running|MongoNetworkError|MongoServerSelectionError|Connection reset|No such file or directory.*\.s\.PGSQL|Lost connection/i.test(
+		message,
+	);
 }
 
 /**

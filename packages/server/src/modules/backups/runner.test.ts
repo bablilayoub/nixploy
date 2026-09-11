@@ -78,7 +78,13 @@ vi.mock("../../utils/exec", () => ({
 vi.mock("../notifications", () => ({ notifyEvent: vi.fn(async () => {}) }));
 vi.mock("../traefik/paths", () => ({ getConfigDir: () => state.configDir }));
 
-import { runVolumeBackup, type VolumeBackupRow } from "./runner";
+import {
+	DEFAULT_DATABASE_READY_TIMEOUT_MS,
+	databaseReadyTimeoutMs,
+	isDatabaseStartingError,
+	runVolumeBackup,
+	type VolumeBackupRow,
+} from "./runner";
 
 const volumeBackup: VolumeBackupRow = {
 	volumeBackupId: "vb-1",
@@ -195,5 +201,39 @@ describe("runVolumeBackup", () => {
 			runVolumeBackup({ ...volumeBackup, volumeName: "nixploy-postgres-data" }),
 		).rejects.toThrow(/platform volume/);
 		expect(state.inserted).toEqual([]);
+	});
+});
+
+describe("dump readiness retry", () => {
+	it("classifies a database that is still starting as retryable", () => {
+		expect(
+			isDatabaseStartingError(
+				new Error(
+					"Dump of db: the dump command exited with status 1 — pg_dump: error: connection to server on socket failed: the database system is starting up",
+				),
+			),
+		).toBe(true);
+		expect(
+			isDatabaseStartingError(
+				new Error("mysqldump: Got error: 2002: Can't connect to local server"),
+			),
+		).toBe(true);
+		expect(
+			isDatabaseStartingError(
+				new Error(
+					'Dump of db: the dump command exited with status 1 — pg_dump: error: database "x" does not exist',
+				),
+			),
+		).toBe(false);
+	});
+
+	it("reads the retry window from the environment", () => {
+		const previous = process.env.NIXPLOY_BACKUP_READY_TIMEOUT_MS;
+		process.env.NIXPLOY_BACKUP_READY_TIMEOUT_MS = "0";
+		expect(databaseReadyTimeoutMs()).toBe(0);
+		process.env.NIXPLOY_BACKUP_READY_TIMEOUT_MS = "abc";
+		expect(databaseReadyTimeoutMs()).toBe(DEFAULT_DATABASE_READY_TIMEOUT_MS);
+		if (previous === undefined) delete process.env.NIXPLOY_BACKUP_READY_TIMEOUT_MS;
+		else process.env.NIXPLOY_BACKUP_READY_TIMEOUT_MS = previous;
 	});
 });

@@ -83,7 +83,19 @@ export function assertStreamExit(stderr: string, label: string): void {
 		.trim()
 		.split(/\s/, 1)[0];
 	if (status !== "0") {
-		throw new Error(`${label}: the dump command exited with status ${status || "unknown"}`);
+		// The producer's own stderr (pg_dump: "the database system is starting
+		// up", "role … does not exist", …) is the only clue an operator gets.
+		const detail = stderr
+			.slice(0, index)
+			.split("\n")
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.slice(-3)
+			.join(" | ")
+			.slice(0, 500);
+		throw new Error(
+			`${label}: the dump command exited with status ${status || "unknown"}${detail ? ` — ${detail}` : ""}`,
+		);
 	}
 }
 
