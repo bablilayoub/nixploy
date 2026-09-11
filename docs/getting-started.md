@@ -58,6 +58,77 @@ Swagger lives at `/swagger` on your panel.
 | Duplicate / move a service | any application, compose or database Settings tab |
 | Watch paths | Application → Source — only deploy a push when a changed file matches |
 
+## 6. Managed databases
+
+New database → pick an engine (Postgres, MySQL, MariaDB, MongoDB, Redis) →
+**Start**. Everything below lives on the service page.
+
+### Version picker
+
+**General → Version** offers a short list of curated tags per engine
+(`packages/server/src/modules/databases/versions.ts`) with an end-of-life note
+where one applies. Picking one fills the **Docker image** field for you
+(`postgres:17`); choosing **Custom image…** unlocks the field again for a
+variant, a fork or a pinned digest (`timescale/timescaledb:2.17-pg17`,
+`postgres:17-alpine`, …). The curated version is stored in `engine_version`;
+a custom image clears it, and the image stays the only source of truth.
+
+Changing the version on a **running** instance is a data-directory migration,
+not a config change:
+
+- **Downgrades are refused.** The volume is already written in the newer
+  on-disk format and the container would crash-loop. Create a new service on
+  the older version and restore a backup into it.
+- **Major upgrades ask for a confirmation.** Postgres in particular will not
+  start on a `pgdata` directory initialised by an older major — it needs a dump
+  and restore (or `pg_upgrade` by hand). Take a backup, tick *I have a current
+  backup*, then reload the service. (Nixploy already pins `PGDATA` under the
+  mounted volume so Postgres 18's image layout change does not silently start
+  an empty cluster; see `postgresPgdata()` in `modules/databases/engine.ts`.)
+- Bumps inside the same major (`8.0 → 8.4`, `11.4 → 11.8`) and any Redis change
+  go through without a prompt.
+
+The image only takes effect on the next **Reload**.
+
+### Additional databases
+
+One instance can host more than one logical database. **Connection → Additional
+databases → Add database** creates a database plus an owning user inside the
+running container:
+
+| Engine | What is created |
+| --- | --- |
+| Postgres | `CREATE ROLE … LOGIN PASSWORD …` + `CREATE DATABASE … OWNER …` |
+| MySQL / MariaDB | `CREATE DATABASE`, `CREATE USER …@'%'`, `GRANT ALL` on that database |
+| MongoDB | `db.createUser` with the `dbOwner` role on that database |
+| Redis | not offered — Redis has one keyspace |
+
+Notes:
+
+- The service must be **running**: Nixploy reaches the engine with `docker exec`
+  into the task container, never over the network (the panel is not on the
+  environment's private overlay — see [hardening](./hardening.md)).
+- The password is generated server-side, stored encrypted and shown with the
+  same rules as the primary credentials — members without `secrets.read` see a
+  redacted row and no connection URL.
+- Names and usernames are restricted to `^[a-z_][a-z0-9_]{0,62}$` and
+  engine-owned names (`postgres`, `mysql`, `admin`, …) are rejected. The SQL is
+  piped over **stdin**, so no password ever appears in `ps` on the host.
+- Deleting drops the database *and* its user. There is no undo, and the
+  scheduled backups only cover the instance's primary database — dump extra
+  databases yourself if they matter.
+
+REST/CLI: `<engine>.engineVersions`, `<engine>.listLogicalDatabases`,
+`<engine>.createLogicalDatabase`, `<engine>.deleteLogicalDatabase`.
+
+### Reaching a database from outside
+
+Prefer the internal URL (`<appName>:5432`) from services in the same
+environment. **General → External port** publishes the port on the host for
+external tools; it binds every interface, so firewall it. For SNI-based routing
+of several TCP services behind one port, see
+[TCP and UDP routing](./domains-traefik.md#tcp-and-udp-routing-layer-4).
+
 ## Next reading
 
 - [Install](./install.md)

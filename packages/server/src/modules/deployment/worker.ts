@@ -22,7 +22,7 @@ import {
 import { invalidateDockerListings } from "../docker/containers";
 import { parsePreviewSourceRef } from "../preview/source-ref";
 import { syncPreviewTraefik } from "../preview/traefik";
-import { DEFAULT_CONTAINER_PORT, writeAppTraefikConfig } from "../traefik/config-writer";
+import { toTraefikDomainEntry, writeAppTraefikConfig } from "../traefik/config-writer";
 import { buildImage } from "./builders";
 import type { DeploymentContext } from "./context";
 import { CommandError, spawnTargeted } from "./docker";
@@ -107,18 +107,10 @@ async function syncApplicationTraefik(application: ApplicationRow): Promise<void
 		appName: application.appName,
 		domains: appDomains
 			.filter((domain) => domain.domainType !== "preview" && !domain.previewDeploymentId)
-			.map((domain) => ({
-				host: domain.host,
-				port: domain.port ?? DEFAULT_CONTAINER_PORT,
-				path: domain.path,
-				internalPath: domain.internalPath,
-				https: domain.https,
-				certificateType: domain.certificateType,
-				certificateId: domain.certificateId,
-				// Without this a deploy would drop the domain's middleware chain
-				// from the YAML until the next domain/redirect edit re-synced it.
-				middlewares: domain.middlewares,
-			})),
+			// The mapper carries every routing column (middlewares, protocol,
+			// entrypoint, tlsMode); a literal here used to drop new ones and a
+			// deploy then quietly rewrote the YAML without them.
+			.map(toTraefikDomainEntry),
 		redirects: appRedirects.map((redirect) => ({
 			regex: redirect.regex,
 			replacement: redirect.replacement,

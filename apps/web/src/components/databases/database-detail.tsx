@@ -1,5 +1,11 @@
 "use client";
 
+import {
+	classifyVersionChange,
+	DATABASE_VERSIONS,
+	imageForVersion,
+	versionFromImage,
+} from "@nixploy/server/modules/databases/versions";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Eye, EyeOff, Loader2, Play, RefreshCw, Square } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -41,10 +47,27 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -390,6 +413,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 						ns={ns}
 						idInput={idInput}
 						db={db}
+						type={type}
 						label={cfg.label}
 						hasDatabaseName={cfg.hasDatabaseName}
 						hasUser={cfg.hasUser}
@@ -402,8 +426,11 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 					<ConnectionTab
 						ns={ns}
 						idInput={idInput}
+						type={type}
+						label={cfg.label}
 						hasExternalPort={db.externalPort != null}
 						onOpenGeneral={() => selectTab("general")}
+						invalidate={invalidate}
 					/>
 				</SaveBarTabsContent>
 
@@ -492,10 +519,14 @@ interface TabProps {
 	invalidate: () => void;
 }
 
+/** Sentinel for the version picker's "no curated version" option. */
+const CUSTOM_IMAGE = "__custom__";
+
 function GeneralTab({
 	ns,
 	idInput,
 	db,
+	type,
 	label,
 	hasDatabaseName,
 	hasUser,
@@ -503,6 +534,7 @@ function GeneralTab({
 	invalidate,
 }: TabProps & {
 	db: DatabaseRow;
+	type: DatabaseType;
 	label: string;
 	hasDatabaseName: boolean;
 	hasUser: boolean;
@@ -515,9 +547,17 @@ function GeneralTab({
 		name: db.name,
 		description: db.description ?? "",
 		dockerImage: db.dockerImage,
+		// "" = custom image; a curated tag otherwise. Rows created before the
+		// picker existed are matched back from their image where possible.
+		engineVersion: db.engineVersion ?? versionFromImage(type, db.dockerImage) ?? "",
 	});
-	const { name, description, dockerImage } = general.value;
+	const { name, description, dockerImage, engineVersion } = general.value;
 	const port = useDraft(db.externalPort?.toString() ?? "");
+	const savedVersion = db.engineVersion ?? versionFromImage(type, db.dockerImage);
+	const versionChange = engineVersion
+		? classifyVersionChange(type, savedVersion, engineVersion)
+		: ({ kind: "none" } as const);
+	const [upgradeAcknowledged, setUpgradeAcknowledged] = useState(false);
 
 	const updateMutation = useSaveMutation(ns.update.mutationOptions(), {
 		successMessage: "Settings saved",
@@ -541,6 +581,10 @@ function GeneralTab({
 		parsedPort === null || (Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535);
 
 	const saveGeneral = () =>
+		// The five database routers share one generated input whose computed
+		// `<kind>Id` key collapses the inferred type to `{ [x: string]: string }`,
+		// so the boolean confirmation flag has to be cast in. The runtime schema
+		// does accept it (`buildDatabaseRouter`).
 		updateMutation.mutate({
 			...idInput,
 			name: name.trim(),
@@ -550,9 +594,19 @@ function GeneralTab({
 			// only value that clears it.
 			description: description.trim(),
 			dockerImage: dockerImage.trim(),
-		});
+			// Sent only when a curated version is selected: the server derives the
+			// image from it and refuses a downgrade.
+			...(engineVersion
+				? { engineVersion, ...(upgradeAcknowledged ? { confirmMajorUpgrade: true } : {}) }
+				: {}),
+		} as unknown as Parameters<typeof updateMutation.mutate>[0]);
 	const savePort = () => portMutation.mutate({ ...idInput, externalPort: parsedPort });
-	const generalBlocked = !canWrite || !name.trim() || !dockerImage.trim();
+	const generalBlocked =
+		!canWrite ||
+		!name.trim() ||
+		!dockerImage.trim() ||
+		versionChange.kind === "blocked" ||
+		(versionChange.kind === "confirm" && !upgradeAcknowledged);
 
 	useSaveBar(general, {
 		onSave: saveGeneral,
@@ -588,15 +642,77 @@ function GeneralTab({
 						/>
 					</div>
 					<div className="space-y-1.5">
+						<Label htmlFor="db-version">Version</Label>
+						<Select
+							value={engineVersion || CUSTOM_IMAGE}
+							onValueChange={(value) => {
+								setUpgradeAcknowledged(false);
+								if (value === CUSTOM_IMAGE) {
+									general.patch({ engineVersion: "" });
+									return;
+								}
+								// Keep the two fields in step: the server derives the image
+								// from the version, so showing a stale one would lie.
+								general.patch({
+									engineVersion: value,
+									dockerImage: imageForVersion(type, value),
+								});
+							}}
+						>
+							<SelectTrigger id="db-version">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{DATABASE_VERSIONS[type].map((entry) => (
+									<SelectItem key={entry.version} value={entry.version}>
+										{label} {entry.version}
+										{entry.note ? ` — ${entry.note}` : ""}
+									</SelectItem>
+								))}
+								<SelectItem value={CUSTOM_IMAGE}>Custom image…</SelectItem>
+							</SelectContent>
+						</Select>
+						<p className="text-sm text-muted-foreground">
+							Pick a version and the image follows. Choose “Custom image” for a variant such as
+							Alpine, a fork or a pinned digest.
+						</p>
+					</div>
+
+					{versionChange.kind === "blocked" && (
+						<div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+							{versionChange.reason}
+						</div>
+					)}
+
+					{versionChange.kind === "confirm" && (
+						<div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+							<p className="text-sm text-amber-700 dark:text-amber-400">{versionChange.reason}</p>
+							<div className="flex items-start gap-2 text-sm">
+								<Checkbox
+									id="db-upgrade-ack"
+									checked={upgradeAcknowledged}
+									onCheckedChange={(checked) => setUpgradeAcknowledged(checked === true)}
+								/>
+								<Label htmlFor="db-upgrade-ack" className="font-normal">
+									I have a current backup of this database
+								</Label>
+							</div>
+						</div>
+					)}
+
+					<div className="space-y-1.5">
 						<Label htmlFor="db-image">Docker image</Label>
 						<Input
 							id="db-image"
 							value={dockerImage}
+							disabled={Boolean(engineVersion)}
 							onChange={(e) => general.patch({ dockerImage: e.target.value })}
 							className="font-mono"
 						/>
 						<p className="text-sm text-muted-foreground">
-							Reload the service after changing the image for it to take effect.
+							{engineVersion
+								? "Derived from the version above. Switch to “Custom image” to edit it."
+								: "Reload the service after changing the image for it to take effect."}
 						</p>
 					</div>
 					<div className="flex items-center justify-end gap-3">
@@ -672,17 +788,262 @@ function GeneralTab({
 	);
 }
 
-function ConnectionTab({
+/**
+ * Extra logical databases (and their owning users) inside one engine. Redis
+ * has no equivalent, so the section is not rendered for it.
+ *
+ * Creating one runs `CREATE DATABASE` / `CREATE USER` inside the running
+ * container, so the service has to be up; the generated password follows the
+ * same reveal rules as the primary credentials (nulled without
+ * `secrets.read`).
+ */
+function LogicalDatabasesSection({
 	ns,
 	idInput,
-	hasExternalPort,
-	onOpenGeneral,
+	label,
+	invalidate,
 }: {
 	ns: DatabaseRouterFacade;
 	idInput: DatabaseIdInput;
+	label: string;
+	invalidate: () => void;
+}) {
+	const { can } = useCapabilities();
+	const canWrite = can("service.write");
+	const canDelete = can("service.delete");
+	const canReadSecrets = can("secrets.read");
+
+	// `listLogicalDatabases` is generated by the same factory as the rest of
+	// the router but is not on the facade's postgres shape yet.
+	const logicalNs = ns as unknown as {
+		listLogicalDatabases: DatabaseRouterFacade["one"];
+		createLogicalDatabase: DatabaseRouterFacade["update"];
+		deleteLogicalDatabase: DatabaseRouterFacade["update"];
+	};
+	type LogicalRow = {
+		databaseLogicalId: string;
+		name: string;
+		username: string;
+		password: string | null;
+		connectionUrl: string | null;
+	};
+
+	const listQuery = useQuery(logicalNs.listLogicalDatabases.queryOptions(idInput));
+	const rows = (listQuery.data ?? []) as unknown as LogicalRow[];
+
+	const [dialogOpen, setDialogOpen] = useState(false);
+	const [name, setName] = useState("");
+	const [username, setUsername] = useState("");
+	const [deleting, setDeleting] = useState<LogicalRow | null>(null);
+
+	const refresh = () => {
+		listQuery.refetch();
+		invalidate();
+	};
+	const createMutation = useSaveMutation(
+		logicalNs.createLogicalDatabase.mutationOptions({ onSuccess: () => setDialogOpen(false) }),
+		{ successMessage: "Database created", errorMessage: "Failed to create the database" },
+	);
+	const deleteMutation = useSaveMutation(
+		logicalNs.deleteLogicalDatabase.mutationOptions({ onSuccess: () => setDeleting(null) }),
+		{ successMessage: "Database deleted", errorMessage: "Failed to delete the database" },
+	);
+
+	const submit = () => {
+		const trimmed = name.trim().toLowerCase();
+		if (!/^[a-z_][a-z0-9_]{0,62}$/.test(trimmed)) {
+			toast.error("Use lowercase letters, digits and underscores, starting with a letter");
+			return;
+		}
+		const trimmedUser = username.trim().toLowerCase();
+		if (trimmedUser && !/^[a-z_][a-z0-9_]{0,62}$/.test(trimmedUser)) {
+			toast.error("Username must use lowercase letters, digits and underscores");
+			return;
+		}
+		createMutation.mutate(
+			{
+				...idInput,
+				name: trimmed,
+				...(trimmedUser ? { username: trimmedUser } : {}),
+			} as unknown as Parameters<typeof createMutation.mutate>[0],
+			{ onSuccess: refresh },
+		);
+	};
+
+	return (
+		<SettingsSection
+			title="Additional databases"
+			description={`Extra logical databases inside this ${label} instance, each with its own owning user.`}
+			actions={
+				<DisabledHint hint={canWrite ? undefined : capabilityHint("service.write")}>
+					<Button
+						size="sm"
+						disabled={!canWrite}
+						onClick={() => {
+							setName("");
+							setUsername("");
+							setDialogOpen(true);
+						}}
+					>
+						Add database
+					</Button>
+				</DisabledHint>
+			}
+		>
+			<QueryState
+				isPending={listQuery.isLoading}
+				isError={listQuery.isError}
+				error={listQuery.error as { message?: string } | null}
+				onRetry={() => listQuery.refetch()}
+				skeleton={<Skeleton className="h-16 w-full" />}
+				isEmpty={rows.length === 0}
+				empty={
+					<p className="text-sm text-muted-foreground">
+						No additional databases. The instance must be running to create one.
+					</p>
+				}
+			>
+				<div className="space-y-4">
+					{rows.map((row) => (
+						<div key={row.databaseLogicalId} className="space-y-2 rounded-lg border p-3">
+							<div className="flex items-center justify-between gap-2">
+								<div className="flex items-center gap-2">
+									<span className="font-mono text-sm">{row.name}</span>
+									<Badge variant="outline" className="text-xs">
+										{row.username}
+									</Badge>
+								</div>
+								<DisabledHint hint={canDelete ? undefined : capabilityHint("service.delete")}>
+									<Button
+										variant="ghost"
+										size="sm"
+										disabled={!canDelete}
+										onClick={() => setDeleting(row)}
+									>
+										Delete
+									</Button>
+								</DisabledHint>
+							</div>
+							{row.connectionUrl ? (
+								<ConnectionUrlField url={row.connectionUrl} />
+							) : (
+								<p className="text-sm text-muted-foreground">
+									{canReadSecrets
+										? "Connection URL unavailable."
+										: "The connection URL is hidden — it needs the secrets.read capability."}
+								</p>
+							)}
+						</div>
+					))}
+				</div>
+			</QueryState>
+
+			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+				<DialogContent className="sm:max-w-md">
+					<DialogHeader>
+						<DialogTitle>Add database</DialogTitle>
+						<DialogDescription>
+							Creates a database and an owning user inside the running {label} container. The
+							password is generated and stored encrypted.
+						</DialogDescription>
+					</DialogHeader>
+					<form
+						onSubmit={(event) => {
+							event.preventDefault();
+							submit();
+						}}
+						className="space-y-4"
+					>
+						<div className="space-y-1.5">
+							<Label htmlFor="logical-name">Database name</Label>
+							<Input
+								id="logical-name"
+								placeholder="analytics"
+								value={name}
+								onChange={(event) => setName(event.target.value)}
+								className="font-mono"
+							/>
+						</div>
+						<div className="space-y-1.5">
+							<Label htmlFor="logical-user">Username (optional)</Label>
+							<Input
+								id="logical-user"
+								placeholder={`${name.trim().toLowerCase() || "analytics"}_user`}
+								value={username}
+								onChange={(event) => setUsername(event.target.value)}
+								className="font-mono"
+							/>
+							<p className="text-sm text-muted-foreground">
+								Leave empty to name the user after the database.
+							</p>
+						</div>
+						<DialogFooter>
+							<Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+								Cancel
+							</Button>
+							<Button type="submit" disabled={createMutation.isPending}>
+								{createMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+								Create
+							</Button>
+						</DialogFooter>
+					</form>
+				</DialogContent>
+			</Dialog>
+
+			<AlertDialog open={deleting !== null} onOpenChange={(open) => !open && setDeleting(null)}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Delete database</AlertDialogTitle>
+						<AlertDialogDescription>
+							Drop <span className="font-mono">{deleting?.name}</span> and its user{" "}
+							<span className="font-mono">{deleting?.username}</span>? Everything in it is deleted
+							permanently.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							variant="destructive"
+							disabled={deleteMutation.isPending}
+							onClick={(event) => {
+								event.preventDefault();
+								if (!deleting) return;
+								deleteMutation.mutate(
+									{
+										...idInput,
+										databaseLogicalId: deleting.databaseLogicalId,
+									} as unknown as Parameters<typeof deleteMutation.mutate>[0],
+									{ onSuccess: refresh },
+								);
+							}}
+						>
+							{deleteMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+							Delete
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+		</SettingsSection>
+	);
+}
+
+function ConnectionTab({
+	ns,
+	idInput,
+	type,
+	label,
+	hasExternalPort,
+	onOpenGeneral,
+	invalidate,
+}: {
+	ns: DatabaseRouterFacade;
+	idInput: DatabaseIdInput;
+	type: DatabaseType;
+	label: string;
 	hasExternalPort: boolean;
 	/** Jump to the General tab, where the external port is configured. */
 	onOpenGeneral: () => void;
+	invalidate: () => void;
 }) {
 	const urlsQuery = useQuery(ns.getConnectionUrl.queryOptions(idInput));
 	const urls = urlsQuery.data as ConnectionUrls | undefined;
@@ -744,6 +1105,15 @@ function ConnectionTab({
 						</p>
 					)}
 				</SettingsSection>
+
+				{type !== "redis" && (
+					<LogicalDatabasesSection
+						ns={ns}
+						idInput={idInput}
+						label={label}
+						invalidate={invalidate}
+					/>
+				)}
 			</SettingsStack>
 		</QueryState>
 	);

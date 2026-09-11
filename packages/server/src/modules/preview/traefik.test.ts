@@ -32,11 +32,16 @@ vi.mock("../../db", () => ({
 		},
 	},
 }));
-vi.mock("../traefik", () => ({
-	writeAppTraefikConfig,
-	removeTraefikConfig,
-	DEFAULT_CONTAINER_PORT: 80,
-}));
+vi.mock("../traefik", async (importOriginal) => {
+	const actual = (await importOriginal()) as Record<string, unknown>;
+	return {
+		// The real `toTraefikDomainEntry` mapper (and its default port) runs;
+		// only the writer side effects are stubbed.
+		...actual,
+		writeAppTraefikConfig,
+		removeTraefikConfig,
+	};
+});
 
 import { syncPreviewTraefik } from "./traefik";
 

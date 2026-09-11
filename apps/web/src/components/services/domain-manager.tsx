@@ -40,6 +40,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -66,6 +67,16 @@ import { toastError } from "@/lib/describe-error";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 
 type CertificateType = "letsencrypt" | "none" | "custom";
+type RouteProtocol = "http" | "tcp" | "udp";
+type TlsMode = "none" | "terminate" | "passthrough";
+
+/**
+ * Prefilled container port for a new HTTP domain. It used to be a
+ * placeholder only, so submitting the untouched form failed server-side with
+ * "port is required" (CI audit). A real default is what the placeholder
+ * always implied.
+ */
+const DEFAULT_HTTP_PORT = "3000";
 
 /* -------------------------------------------------------------------------- */
 /*  Per-domain Traefik middlewares                                            */
@@ -688,6 +699,9 @@ export function DomainManager({
 			: trpc.domain.byCompose.queryOptions({ composeId: serviceId }),
 	);
 	const certificatesQuery = useQuery(trpc.certificate.all.queryOptions());
+	// Layer-4 entrypoints are instance-level; any member may read them so the
+	// form can offer the ones the admin created.
+	const entrypointsQuery = useQuery(trpc.traefik.listEntrypoints.queryOptions());
 	const probesQuery = useQuery(trpc.observability.uptimeProbes.queryOptions());
 	const setProbe = useSaveMutation(trpc.observability.setUptimeProbe.mutationOptions(), {
 		successMessage: "Uptime probe updated",
@@ -703,7 +717,10 @@ export function DomainManager({
 	const [host, setHost] = useState("");
 	const [path, setPath] = useState("/");
 	const [internalPath, setInternalPath] = useState("");
-	const [port, setPort] = useState("");
+	const [port, setPort] = useState(DEFAULT_HTTP_PORT);
+	const [protocol, setProtocol] = useState<RouteProtocol>("http");
+	const [entrypoint, setEntrypoint] = useState<string | null>(null);
+	const [tlsMode, setTlsMode] = useState<TlsMode>("none");
 	const [https, setHttps] = useState(false);
 	const [certificateType, setCertificateType] = useState<CertificateType>("none");
 	const [certificateId, setCertificateId] = useState<string | null>(null);
@@ -717,7 +734,10 @@ export function DomainManager({
 			setHost("");
 			setPath("/");
 			setInternalPath("");
-			setPort("");
+			setPort(DEFAULT_HTTP_PORT);
+			setProtocol("http");
+			setEntrypoint(null);
+			setTlsMode("none");
 			setHttps(false);
 			setCertificateType("none");
 			setCertificateId(null);
@@ -767,7 +787,10 @@ export function DomainManager({
 		setHost("");
 		setPath("/");
 		setInternalPath("");
-		setPort("");
+		setPort(DEFAULT_HTTP_PORT);
+		setProtocol("http");
+		setEntrypoint(null);
+		setTlsMode("none");
 		setHttps(false);
 		setCertificateType("none");
 		setCertificateId(null);
@@ -780,7 +803,10 @@ export function DomainManager({
 		setHost(domain.host);
 		setPath(domain.path ?? "/");
 		setInternalPath(domain.internalPath ?? "");
-		setPort(domain.port != null ? String(domain.port) : "");
+		setPort(domain.port != null ? String(domain.port) : DEFAULT_HTTP_PORT);
+		setProtocol((domain.protocol ?? "http") as RouteProtocol);
+		setEntrypoint(domain.entrypoint ?? null);
+		setTlsMode((domain.tlsMode ?? "none") as TlsMode);
 		setHttps(domain.https);
 		setCertificateType(domain.certificateType as CertificateType);
 		setCertificateId(domain.certificateId);
@@ -818,14 +844,23 @@ export function DomainManager({
 			toast.error("Port must be between 1 and 65535");
 			return;
 		}
-		if (certificateType === "custom" && !certificateId) {
+		const layer4 = protocol !== "http";
+		if (layer4 && !entrypoint) {
+			toast.error("Pick a Traefik entrypoint for TCP or UDP routing");
+			return;
+		}
+		if (layer4 && protocol === "tcp" && tlsMode === "none" && trimmedHost.startsWith("*.")) {
+			toast.error("A wildcard host needs TLS: plain TCP cannot match a hostname");
+			return;
+		}
+		if (!layer4 && certificateType === "custom" && !certificateId) {
 			toast.error("Select a certificate for custom certificate type");
 			return;
 		}
 		const isTraefikMe =
 			trimmedHost.toLowerCase().endsWith(".traefik.me") ||
 			trimmedHost.toLowerCase() === "traefik.me";
-		if (isTraefikMe && certificateType === "letsencrypt") {
+		if (!layer4 && isTraefikMe && certificateType === "letsencrypt") {
 			toast.error(
 				"Let's Encrypt cannot issue for *.traefik.me (localhost). Use certificate “None”.",
 			);
@@ -837,13 +872,23 @@ export function DomainManager({
 			toast.error("Internal path must start with /");
 			return;
 		}
+		// Layer-4 routers have no path, no HTTP→HTTPS redirect and no
+		// middlewares; the server rejects those fields rather than ignoring
+		// them, so they are cleared here instead of being sent along.
 		const shared = {
 			host: trimmedHost,
-			path: path.trim() || "/",
+			path: layer4 ? "/" : path.trim() || "/",
 			// Empty or "/" means no rewrite: the request path is forwarded as-is.
-			internalPath: trimmedInternalPath && trimmedInternalPath !== "/" ? trimmedInternalPath : null,
+			internalPath: layer4
+				? null
+				: trimmedInternalPath && trimmedInternalPath !== "/"
+					? trimmedInternalPath
+					: null,
 			port: parsedPort,
-			https,
+			protocol,
+			entrypoint: layer4 ? entrypoint : null,
+			tlsMode: protocol === "tcp" ? tlsMode : ("none" as TlsMode),
+			https: layer4 ? false : https,
 			certificateType,
 			certificateId: certificateType === "custom" ? certificateId : null,
 			serviceName: serviceType === "compose" ? serviceName : null,
@@ -908,6 +953,7 @@ export function DomainManager({
 							<TableHeader>
 								<TableRow>
 									<TableHead>Host</TableHead>
+									<TableHead>Protocol</TableHead>
 									<TableHead>Path</TableHead>
 									<TableHead>Port</TableHead>
 									{serviceType === "compose" && <TableHead>Service</TableHead>}
@@ -921,18 +967,38 @@ export function DomainManager({
 								{domains.map((domain) => (
 									<TableRow key={domain.domainId}>
 										<TableCell>
-											<a
-												href={`${domain.https ? "https" : "http"}://${domain.host}`}
-												target="_blank"
-												rel="noreferrer"
-												className="inline-flex items-center gap-1.5 font-mono text-xs hover:underline"
-											>
-												{domain.https && <Lock className="size-3 text-success" />}
-												{domain.host}
-											</a>
+											{(domain.protocol ?? "http") === "http" ? (
+												<a
+													href={`${domain.https ? "https" : "http"}://${domain.host}`}
+													target="_blank"
+													rel="noreferrer"
+													className="inline-flex items-center gap-1.5 font-mono text-xs hover:underline"
+												>
+													{domain.https && <Lock className="size-3 text-success" />}
+													{domain.host}
+												</a>
+											) : (
+												// A layer-4 route is not a URL a browser can open; a plain
+												// TCP router does not even match on the host.
+												<span className="inline-flex items-center gap-1.5 font-mono text-xs">
+													{domain.tlsMode !== "none" && <Lock className="size-3 text-success" />}
+													{domain.tlsMode === "none" ? "any host" : domain.host}
+												</span>
+											)}
+										</TableCell>
+										<TableCell>
+											{(domain.protocol ?? "http") === "http" ? (
+												<Badge variant="outline" className="text-xs">
+													{domain.https ? "HTTPS" : "HTTP"}
+												</Badge>
+											) : (
+												<Badge variant="outline" className="text-xs">
+													{domain.protocol.toUpperCase()} · {domain.entrypoint}
+												</Badge>
+											)}
 										</TableCell>
 										<TableCell className="font-mono text-xs">
-											{domain.path ?? "/"}
+											{(domain.protocol ?? "http") !== "http" ? "—" : (domain.path ?? "/")}
 											{domain.internalPath && domain.internalPath !== "/" ? (
 												<span
 													className="text-muted-foreground"
@@ -951,18 +1017,26 @@ export function DomainManager({
 										)}
 										<TableCell>
 											<Badge variant="outline" className="text-xs capitalize">
-												{domain.certificateType === "letsencrypt"
-													? "Let's Encrypt"
-													: domain.certificateType}
+												{(domain.protocol ?? "http") !== "http" && domain.tlsMode === "passthrough"
+													? "Passthrough"
+													: domain.certificateType === "letsencrypt"
+														? "Let's Encrypt"
+														: domain.certificateType}
 											</Badge>
 										</TableCell>
 										<TableCell>
-											<DomainMiddlewaresCell
-												domainId={domain.domainId}
-												host={domain.host}
-												canManage={canManage}
-												manageHint={manageHint}
-											/>
+											{(domain.protocol ?? "http") === "http" ? (
+												<DomainMiddlewaresCell
+													domainId={domain.domainId}
+													host={domain.host}
+													canManage={canManage}
+													manageHint={manageHint}
+												/>
+											) : (
+												// Middlewares are an HTTP concept: Traefik has no
+												// equivalent chain on tcp/udp routers.
+												<span className="text-xs text-muted-foreground">—</span>
+											)}
 										</TableCell>
 										<TableCell>
 											{(() => {
@@ -1070,21 +1144,97 @@ export function DomainManager({
 							)}
 						</div>
 
-						<div className="grid grid-cols-2 gap-3">
+						<div className="space-y-1.5">
+							<Label>Protocol</Label>
+							<Select
+								value={protocol}
+								onValueChange={(value) => setProtocol(value as RouteProtocol)}
+							>
+								<SelectTrigger>
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="http">HTTP / HTTPS</SelectItem>
+									<SelectItem value="tcp">TCP (raw stream)</SelectItem>
+									<SelectItem value="udp">UDP (datagrams)</SelectItem>
+								</SelectContent>
+							</Select>
+							<p className="text-xs text-muted-foreground">
+								{protocol === "http"
+									? "Layer 7: paths, middlewares and certificates apply."
+									: "Layer 4: Traefik forwards the raw stream on a dedicated entrypoint. No paths, redirects or middlewares."}{" "}
+								<HelpLink slug="domains" />
+							</p>
+						</div>
+
+						{protocol !== "http" && (
 							<div className="space-y-1.5">
-								<Label htmlFor="domain-path">Path</Label>
-								<Input
-									id="domain-path"
-									placeholder="/"
-									value={path}
-									onChange={(event) => setPath(event.target.value)}
-								/>
+								<Label>Entrypoint</Label>
+								<Select
+									value={entrypoint ?? ""}
+									onValueChange={(value) => setEntrypoint(value || null)}
+								>
+									<SelectTrigger>
+										<SelectValue placeholder="Select an entrypoint" />
+									</SelectTrigger>
+									<SelectContent>
+										{(entrypointsQuery.data ?? [])
+											.filter((row) => row.protocol === protocol)
+											.map((row) => (
+												<SelectItem key={row.traefikEntrypointId} value={row.name}>
+													{row.name} — port {row.port}/{row.protocol}
+												</SelectItem>
+											))}
+									</SelectContent>
+								</Select>
+								<p className="text-xs text-muted-foreground">
+									{(entrypointsQuery.data ?? []).some((row) => row.protocol === protocol)
+										? "The host port clients connect to. Entrypoints are instance-wide."
+										: `No ${protocol.toUpperCase()} entrypoint exists yet — the instance administrator adds one under Settings → Server.`}
+								</p>
 							</div>
+						)}
+
+						{protocol === "tcp" && (
+							<div className="space-y-1.5">
+								<Label>TLS</Label>
+								<Select value={tlsMode} onValueChange={(value) => setTlsMode(value as TlsMode)}>
+									<SelectTrigger>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="none">None — forward every connection</SelectItem>
+										<SelectItem value="terminate">Terminate at Traefik</SelectItem>
+										<SelectItem value="passthrough">Pass through to the service</SelectItem>
+									</SelectContent>
+								</Select>
+								<p className="text-xs text-muted-foreground">
+									{tlsMode === "none"
+										? "The entrypoint's port is the only selector: this router takes every connection on it, whatever the host above says."
+										: "Traefik matches the host from the TLS handshake (SNI), so several services can share one port."}
+								</p>
+							</div>
+						)}
+
+						<div
+							className={protocol === "http" ? "grid grid-cols-2 gap-3" : "grid grid-cols-1 gap-3"}
+						>
+							{protocol === "http" && (
+								<div className="space-y-1.5">
+									<Label htmlFor="domain-path">Path</Label>
+									<Input
+										id="domain-path"
+										placeholder="/"
+										value={path}
+										onChange={(event) => setPath(event.target.value)}
+									/>
+								</div>
+							)}
 							<div className="space-y-1.5">
 								<Label htmlFor="domain-port">Container port</Label>
 								<Input
 									id="domain-port"
-									placeholder="3000"
+									placeholder={DEFAULT_HTTP_PORT}
 									inputMode="numeric"
 									value={port}
 									onChange={(event) => setPort(event.target.value)}
@@ -1092,28 +1242,30 @@ export function DomainManager({
 							</div>
 						</div>
 						<p className="text-xs text-muted-foreground">
-							The port your app listens on inside the container. Traffic to the host is forwarded to
-							this port.
+							The port your service listens on inside the container. Traffic to the host is
+							forwarded to this port.
 						</p>
 
-						<div className="space-y-1.5">
-							<Label htmlFor="domain-internal-path">Internal path (optional)</Label>
-							<Input
-								id="domain-internal-path"
-								placeholder="/"
-								value={internalPath}
-								onChange={(event) => setInternalPath(event.target.value)}
-							/>
-							<p className="text-xs text-muted-foreground">
-								Rewrite the prefix before the request reaches the container: the public path above
-								is stripped and this one is added, so{" "}
-								<code className="font-mono">{path.trim() || "/"}api/x</code> arrives as{" "}
-								<code className="font-mono">
-									{(internalPath.trim() || "/").replace(/\/+$/, "")}/api/x
-								</code>
-								. Leave empty to forward the path unchanged.
-							</p>
-						</div>
+						{protocol === "http" && (
+							<div className="space-y-1.5">
+								<Label htmlFor="domain-internal-path">Internal path (optional)</Label>
+								<Input
+									id="domain-internal-path"
+									placeholder="/"
+									value={internalPath}
+									onChange={(event) => setInternalPath(event.target.value)}
+								/>
+								<p className="text-xs text-muted-foreground">
+									Rewrite the prefix before the request reaches the container: the public path above
+									is stripped and this one is added, so{" "}
+									<code className="font-mono">{path.trim() || "/"}api/x</code> arrives as{" "}
+									<code className="font-mono">
+										{(internalPath.trim() || "/").replace(/\/+$/, "")}/api/x
+									</code>
+									. Leave empty to forward the path unchanged.
+								</p>
+							</div>
+						)}
 
 						{serviceType === "compose" && (
 							<div className="space-y-1.5">
@@ -1136,45 +1288,49 @@ export function DomainManager({
 							</div>
 						)}
 
-						<div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
-							<div>
-								<Label htmlFor="domain-https">HTTPS</Label>
-								<p className="text-xs text-muted-foreground">Serve this domain over TLS.</p>
+						{protocol === "http" && (
+							<div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+								<div>
+									<Label htmlFor="domain-https">HTTPS</Label>
+									<p className="text-xs text-muted-foreground">Serve this domain over TLS.</p>
+								</div>
+								<Switch id="domain-https" checked={https} onCheckedChange={setHttps} />
 							</div>
-							<Switch id="domain-https" checked={https} onCheckedChange={setHttps} />
-						</div>
+						)}
 
-						<div className="space-y-1.5">
-							<Label>Certificate</Label>
-							<Select
-								value={certificateType}
-								onValueChange={(value) => setCertificateType(value as CertificateType)}
-							>
-								<SelectTrigger>
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="none">None (self-signed / default)</SelectItem>
-									<SelectItem value="letsencrypt">Let's Encrypt</SelectItem>
-									<SelectItem value="custom">Custom</SelectItem>
-								</SelectContent>
-							</Select>
-							{host.trim().toLowerCase().endsWith(".traefik.me") && (
-								<p className="text-xs text-amber-600 dark:text-amber-400">
-									*.traefik.me is for localhost only — keep certificate on “None”. Open the HTTPS
-									URL and accept the browser warning for Traefik’s default cert.
-								</p>
-							)}
-							{certificateType === "letsencrypt" && (
-								<p className="text-xs text-muted-foreground">
-									Point the domain's DNS A record to this server's public IP and make sure a Let's
-									Encrypt email is set in Settings → Platform. HTTP-01 challenge requires port 80
-									reachable from the internet.
-								</p>
-							)}
-						</div>
+						{(protocol === "http" || tlsMode === "terminate") && (
+							<div className="space-y-1.5">
+								<Label>Certificate</Label>
+								<Select
+									value={certificateType}
+									onValueChange={(value) => setCertificateType(value as CertificateType)}
+								>
+									<SelectTrigger>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="none">None (self-signed / default)</SelectItem>
+										<SelectItem value="letsencrypt">Let's Encrypt</SelectItem>
+										<SelectItem value="custom">Custom</SelectItem>
+									</SelectContent>
+								</Select>
+								{host.trim().toLowerCase().endsWith(".traefik.me") && (
+									<p className="text-xs text-amber-600 dark:text-amber-400">
+										*.traefik.me is for localhost only — keep certificate on “None”. Open the HTTPS
+										URL and accept the browser warning for Traefik’s default cert.
+									</p>
+								)}
+								{certificateType === "letsencrypt" && (
+									<p className="text-xs text-muted-foreground">
+										Point the domain's DNS A record to this server's public IP and make sure a Let's
+										Encrypt email is set in Settings → Platform. HTTP-01 challenge requires port 80
+										reachable from the internet.
+									</p>
+								)}
+							</div>
+						)}
 
-						{certificateType === "custom" && (
+						{certificateType === "custom" && (protocol === "http" || tlsMode === "terminate") && (
 							<div className="space-y-1.5">
 								<Label>Custom certificate</Label>
 								<Select

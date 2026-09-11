@@ -21,7 +21,7 @@ import { removeServiceLogs } from "../deployment/maintenance";
 import { ensureEnvironmentNetworkById, pruneEnvironmentNetwork } from "../deployment/network";
 import { badRequest, conflict, notFound, preconditionFailed } from "../errors";
 import { unregisterSchedulesForService } from "../schedules";
-import { DEFAULT_CONTAINER_PORT } from "../traefik/config-writer";
+import { toTraefikDomainEntry } from "../traefik/config-writer";
 import { getTraefik } from "./adapters";
 import {
 	buildComposeDeployCommand,
@@ -722,16 +722,7 @@ export async function resyncComposeDomains(composeId: string): Promise<void> {
 		await traefik.writeAppTraefikConfig({
 			appName: traefikAppName(row, serviceName),
 			serverId: row.serverId,
-			domains: serviceDomains.map((d) => ({
-				host: d.host,
-				port: d.port ?? DEFAULT_CONTAINER_PORT,
-				path: d.path,
-				internalPath: d.internalPath,
-				https: d.https,
-				certificateType: d.certificateType,
-				certificateId: d.certificateId,
-				middlewares: d.middlewares,
-			})),
+			domains: serviceDomains.map(toTraefikDomainEntry),
 			redirects: composeRedirects
 				.filter((redirect) => redirect.serviceName === serviceName)
 				.map((redirect) => ({

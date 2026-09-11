@@ -63,6 +63,8 @@ export interface DatabaseRow {
 	env: string | null;
 	status: ServiceStatus;
 	dockerImage: string;
+	/** Curated engine version the image was derived from; null for custom images. */
+	engineVersion?: string | null;
 	databaseName?: string;
 	databaseUser?: string;
 	databasePassword?: string;

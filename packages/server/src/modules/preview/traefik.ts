@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { domains, previewDeployments, redirects, security } from "../../db/schema";
-import { DEFAULT_CONTAINER_PORT, removeTraefikConfig, writeAppTraefikConfig } from "../traefik";
+import { removeTraefikConfig, toTraefikDomainEntry, writeAppTraefikConfig } from "../traefik";
 
 /**
  * (Re)write the Traefik YAML of one PR preview from its own domain row plus
@@ -41,18 +41,7 @@ export async function syncPreviewTraefik(previewDeploymentId: string): Promise<v
 
 	await writeAppTraefikConfig({
 		appName: preview.appName,
-		domains: [
-			{
-				host: domain.host,
-				port: domain.port ?? DEFAULT_CONTAINER_PORT,
-				path: domain.path,
-				internalPath: domain.internalPath,
-				https: domain.https,
-				certificateType: domain.certificateType,
-				certificateId: domain.certificateId,
-				middlewares: domain.middlewares,
-			},
-		],
+		domains: [toTraefikDomainEntry(domain)],
 		redirects: parentRedirects.map((redirect) => ({
 			regex: redirect.regex,
 			replacement: redirect.replacement,

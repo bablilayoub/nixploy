@@ -15,6 +15,8 @@ const { state, execAsync, writeFileOnServer, readFile } = vi.hoisted(() => ({
 		existingStatic: null as string | null,
 		serviceExists: true,
 		commands: [] as string[],
+		/** `traefik_entrypoint` rows the setup renders into the static config. */
+		entrypoints: [] as Array<{ name: string; port: number; protocol: "tcp" | "udp" }>,
 	},
 	execAsync: vi.fn(),
 	writeFileOnServer: vi.fn(async () => {}),
@@ -22,6 +24,8 @@ const { state, execAsync, writeFileOnServer, readFile } = vi.hoisted(() => ({
 }));
 
 vi.mock("node:fs/promises", () => ({ readFile }));
+// Two shapes are read: the singleton settings row (`.limit(1)`) and the
+// entrypoint rows (`.orderBy(...)`).
 vi.mock("../../db", () => ({
 	db: {
 		select: () => ({
@@ -29,12 +33,16 @@ vi.mock("../../db", () => ({
 				limit: async () => [
 					{ letsEncryptEmail: state.email, acmeDnsProvider: state.acmeDnsProvider },
 				],
+				orderBy: async () => state.entrypoints,
 			}),
 		}),
 	},
 }));
 vi.mock("../../utils/exec", () => ({ execAsync, execAsyncRemote: vi.fn() }));
-vi.mock("./config-writer", () => ({ writeFileOnServer }));
+vi.mock("./config-writer", () => ({
+	writeFileOnServer,
+	assertEntrypointName: (name: string) => name,
+}));
 vi.mock("./dashboard", () => ({
 	buildDefaultTlsYaml: () => "tls: {}\n",
 	DEFAULT_TLS_CONFIG_FILE: "00-default-tls.yml",
@@ -105,6 +113,7 @@ describe("ensureTraefikSetup", () => {
 		state.acmeDnsProvider = null;
 		state.existingStatic = null;
 		state.serviceExists = true;
+		state.entrypoints.length = 0;
 		writeFileOnServer.mockClear();
 		readFile.mockImplementation(async () => {
 			if (state.existingStatic === null) throw new Error("ENOENT");

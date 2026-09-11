@@ -37,9 +37,9 @@ import { deletePreviewDeployment } from "../preview";
 import type { QuotaResourceDefaults } from "../projects/quotas";
 import { unregisterSchedulesForService } from "../schedules";
 import {
-	DEFAULT_CONTAINER_PORT,
 	removeFileOnServer,
 	removeTraefikConfig,
+	toTraefikDomainEntry,
 	writeAppTraefikConfig,
 	writeFileOnServer,
 } from "../traefik";
@@ -498,16 +498,9 @@ export const syncApplicationTraefik = async (
 		appName: application.appName,
 		domains: appDomains
 			.filter((domain) => domain.domainType !== "preview" && !domain.previewDeploymentId)
-			.map((domain) => ({
-				host: domain.host,
-				port: domain.port ?? DEFAULT_CONTAINER_PORT,
-				path: domain.path,
-				internalPath: domain.internalPath,
-				https: domain.https,
-				certificateType: domain.certificateType,
-				certificateId: domain.certificateId,
-				middlewares: domain.middlewares,
-			})),
+			// One mapper for every routing column (protocol/entrypoint/tlsMode
+			// included) — a hand-written literal here silently dropped new fields.
+			.map(toTraefikDomainEntry),
 		redirects: appRedirects.map((redirect) => ({
 			regex: redirect.regex,
 			replacement: redirect.replacement,

@@ -11,6 +11,11 @@ import {
 	writeDashboardRouterConfig,
 } from "./dashboard";
 import {
+	loadTraefikEntrypoints,
+	renderEntrypointsYaml,
+	type TraefikEntrypointSpec,
+} from "./entrypoints";
+import {
 	getDynamicDir,
 	getTraefikDir,
 	REMOTE_TRAEFIK_DIR,
@@ -80,13 +85,16 @@ const normalizeDnsProvider = (provider: string | null | undefined): string | nul
  * attach `certResolver: letsencrypt` per-router in dynamic YAML.
  *
  * With a DNS provider configured a **second** resolver `letsencrypt-dns` is
- * appended for wildcard hosts (HTTP-01 cannot validate `*.example.com`). With
- * none — the default, and what CI diffs against `docker/traefik/traefik.yml`,
- * `install.sh` and `update.sh` — the rendered file is unchanged.
+ * appended for wildcard hosts (HTTP-01 cannot validate `*.example.com`).
+ * `entrypoints` adds one `entryPoints:` entry per `traefik_entrypoint` row for
+ * layer-4 (TCP/UDP) routing. With neither — the default, and what CI diffs
+ * against `docker/traefik/traefik.yml`, `install.sh` and `update.sh` — the
+ * rendered file is unchanged.
  */
 export const buildTraefikStaticConfig = (
 	letsEncryptEmail?: string | null,
 	acmeDns?: AcmeDnsSettings | null,
+	entrypoints: readonly TraefikEntrypointSpec[] = [],
 ): string => {
 	const email = letsEncryptEmail?.trim() || "nixploy@localhost";
 	const dnsProvider = normalizeDnsProvider(acmeDns?.provider);
@@ -111,7 +119,7 @@ entryPoints:
     address: ":80"
   websecure:
     address: ":443"
-providers:
+${renderEntrypointsYaml(entrypoints)}providers:
   file:
     directory: ${TRAEFIK_DYNAMIC_CONTAINER_DIR}
     watch: true
@@ -128,7 +136,7 @@ ${dnsResolver}api:
 };
 
 /** ACME email + DNS-01 provider from the singleton settings row. */
-const getAcmeSettings = async (): Promise<{
+export const getAcmeSettings = async (): Promise<{
 	email: string | null;
 	dns: AcmeDnsSettings | null;
 }> => {
@@ -250,7 +258,8 @@ export const ensureTraefikSetup = async (serverId?: string | null): Promise<void
 	// An unset email keeps the `nixploy@localhost` sentinel, so the content —
 	// and therefore the restart decision below — only moves when it changes.
 	const acme = await getAcmeSettings();
-	const staticConfig = buildTraefikStaticConfig(acme.email, acme.dns);
+	const entrypoints = await loadTraefikEntrypoints();
+	const staticConfig = buildTraefikStaticConfig(acme.email, acme.dns, entrypoints);
 	const staticChanged = (await readStaticConfig(serverId, staticPath)) !== staticConfig;
 	await writeFileOnServer(staticPath, staticConfig, serverId);
 
@@ -293,6 +302,12 @@ export const ensureTraefikSetup = async (serverId?: string | null): Promise<void
 			`--network ${network}`,
 			"--publish mode=host,target=80,published=80",
 			"--publish mode=host,target=443,published=443",
+			// Layer-4 entrypoints declared in the static config above must also
+			// be published, or the port is open inside the container only.
+			...entrypoints.map(
+				(entry) =>
+					`--publish mode=host,target=${entry.port},published=${entry.port},protocol=${entry.protocol}`,
+			),
 			`--mount type=bind,source=${staticPath},destination=/etc/traefik/traefik.yml,readonly`,
 			`--mount type=bind,source=${dynamicDir},destination=${TRAEFIK_DYNAMIC_CONTAINER_DIR}`,
 			`--mount type=bind,source=${acmePath},destination=${TRAEFIK_ACME_CONTAINER_PATH}`,

@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { environments, projects } from "../../db/schema";
+import { databaseLogicals, environments, projects } from "../../db/schema";
 import { assertServerInOrganization } from "../../trpc/assert-org-refs";
 import type { TRPCContext } from "../../trpc/init";
 import { protectedProcedure, router } from "../../trpc/init";
@@ -12,14 +12,21 @@ import { appNameSchema, assertSafeDockerImageRef } from "../../utils/validators"
 import { isAppNameTaken } from "../application/app-name";
 import { auditFromSession } from "../audit";
 import { unregisterBackupsForService } from "../backups/scheduler";
-import { badRequest, conflict, notFound, unauthorized } from "../errors";
+import {
+	badRequest,
+	conflict,
+	isUniqueViolation,
+	notFound,
+	preconditionFailed,
+	unauthorized,
+} from "../errors";
 import {
 	assertCapability,
 	assertWithinQuota,
 	hasCapability,
 	resolveCallerOrganizationId,
 } from "../projects";
-import { SERVICE_REGISTRY } from "../services/registry";
+import { SERVICE_REGISTRY, type ServiceIdColumn } from "../services/registry";
 import {
 	assertSafeDatabaseExternalPort,
 	buildConnectionUrl,
@@ -36,6 +43,25 @@ import {
 	startDatabase,
 	stopDatabase,
 } from "./engine";
+import {
+	assertLogicalIdentifier,
+	assertLogicalNameAvailable,
+	buildCreateLogicalCommand,
+	buildDropLogicalCommand,
+	buildLogicalConnectionUrl,
+	findDatabaseContainerId,
+	generateLogicalPassword,
+	type LogicalDatabaseKind,
+	runLogicalCommand,
+	supportsLogicalDatabases,
+} from "./logical";
+import {
+	classifyVersionChange,
+	DATABASE_VERSIONS,
+	imageForVersion,
+	isCuratedVersion,
+	versionFromImage,
+} from "./versions";
 
 /**
  * `getStatus` inspects the swarm service (one dockerode listServices +
@@ -117,15 +143,59 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 	// untyped input records, where the `\`${K}Id\`` literal buys nothing.
 	const idField: string = SERVICE_REGISTRY[kind].idField;
 	const config = DATABASE_CONFIGS[kind];
+	/** FK column on `database_logical` for this engine (null for redis). */
+	const logicalColumn = (
+		databaseLogicals as unknown as Record<string, ServiceIdColumn | undefined>
+	)[idField];
 
 	/** Primary key of a row of this engine (`row.postgresId`, …). */
 	const rowId = (row: Row): string => (row as Record<string, unknown>)[idField] as string;
+
+	/**
+	 * Resolve the image/version pair a create or update should store.
+	 *
+	 * `engineVersion` is the curated path (`postgres:17`); a `dockerImage`
+	 * the caller typed always wins and clears the version unless it happens to
+	 * be exactly the curated tag. That keeps the two columns from disagreeing,
+	 * which is what makes the picker able to preselect the right option.
+	 */
+	function resolveImageAndVersion(input: {
+		dockerImage?: string | null;
+		engineVersion?: string | null;
+		currentImage?: string;
+	}): { dockerImage?: string; engineVersion?: string | null } {
+		const explicitImage =
+			typeof input.dockerImage === "string" && input.dockerImage !== input.currentImage
+				? input.dockerImage
+				: undefined;
+		if (input.engineVersion != null && explicitImage === undefined) {
+			if (!isCuratedVersion(kind, input.engineVersion)) {
+				throw badRequest(
+					`Unknown ${kind} version "${input.engineVersion}". Pick one of the offered versions or set a custom image.`,
+				);
+			}
+			return {
+				dockerImage: imageForVersion(kind, input.engineVersion),
+				engineVersion: input.engineVersion,
+			};
+		}
+		if (explicitImage !== undefined) {
+			// A custom image drops the curated version unless it IS one.
+			return { dockerImage: explicitImage, engineVersion: versionFromImage(kind, explicitImage) };
+		}
+		return {};
+	}
 
 	const createSchema = z.object({
 		name: z.string().min(1),
 		description: z.string().nullish(),
 		appName: appNameSchema.optional(),
 		dockerImage: z.string().min(1).default(config.defaultImage),
+		/**
+		 * Curated engine version (see `versions.ts`). When given without an
+		 * explicit `dockerImage`, the image is derived from it.
+		 */
+		engineVersion: z.string().min(1).max(32).nullish(),
 		environmentId: z.string().min(1),
 		serverId: z.string().nullish(),
 		externalPort: z.number().int().min(1).max(65535).nullish(),
@@ -138,7 +208,16 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 	});
 
 	const idSchema = z.object({ [idField]: z.string().min(1) });
-	const updateSchema = createSchema.partial().extend({ [idField]: z.string().min(1) });
+	// Two `extend` calls on purpose: mixing the computed `[idField]` key with a
+	// differently-typed literal one in a single object literal widens every
+	// field of the inferred input to `string | boolean`.
+	const updateSchema = createSchema
+		.partial()
+		.extend({ [idField]: z.string().min(1) })
+		.extend({
+			/** Acknowledges the data-loss risk of a major engine upgrade. */
+			confirmMajorUpgrade: z.boolean().optional(),
+		});
 
 	/** Fetch a row by id and verify it lives in the caller's organization. */
 	async function findRowOrThrow(id: string, organizationId: string): Promise<Row> {
@@ -232,17 +311,25 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			if (input.externalPort != null) {
 				assertSafeDatabaseExternalPort(input.externalPort);
 			}
+			const resolved = resolveImageAndVersion({
+				dockerImage: input.dockerImage,
+				engineVersion: input.engineVersion,
+				// On create the schema default counts as "not explicit", so a
+				// version alone still picks the image.
+				currentImage: input.engineVersion ? config.defaultImage : undefined,
+			});
 			let dockerImage: string;
 			try {
-				dockerImage = assertSafeDockerImageRef(input.dockerImage);
+				dockerImage = assertSafeDockerImageRef(resolved.dockerImage ?? input.dockerImage);
 			} catch (error) {
 				throw badRequest(error instanceof Error ? error.message : "Invalid docker image");
 			}
+			const engineVersion = resolved.engineVersion ?? versionFromImage(kind, dockerImage);
 			const appName = await resolveNewAppName(input.appName, input.name);
 			try {
 				const inserted = (await db
 					.insert(table)
-					.values({ ...input, appName, dockerImage })
+					.values({ ...input, appName, dockerImage, engineVersion })
 					.returning()) as Row[];
 				const createdRow = inserted[0] as Row;
 				await auditFromSession(ctx, organizationId, {
@@ -260,11 +347,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 					? createdRow
 					: (redactDatabaseSecrets(createdRow as Record<string, unknown>) as Row);
 			} catch (error) {
-				if (
-					typeof error === "object" &&
-					error !== null &&
-					(error as { code?: string }).code === "23505"
-				) {
+				if (isUniqueViolation(error)) {
 					throw conflict(`appName "${appName}" is already in use`);
 				}
 				throw error;
@@ -282,6 +365,12 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			}
 			await assertServerInOrganization(input.serverId, organizationId);
 			const { [idField]: _id, ...values } = input as Record<string, unknown>;
+			// Not a column: it only gates the major-upgrade check below.
+			delete values.confirmMajorUpgrade;
+			// `resolveImageAndVersion` is the single source of truth for the
+			// image/version pair; a raw `engineVersion` in the input must not
+			// reach the row without going through it.
+			delete values.engineVersion;
 			if (typeof values.appName === "string" && values.appName !== existing.appName) {
 				// The swarm service, its `<appName>-data` volume and every backup
 				// row are keyed by appName: renaming a deployed database would
@@ -298,11 +387,38 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			if (typeof values.externalPort === "number") {
 				assertSafeDatabaseExternalPort(values.externalPort);
 			}
+			// Read from the widened record: the computed-key zod shape above
+			// erases the per-field types on `input`.
+			const raw = input as Record<string, unknown>;
+			const resolved = resolveImageAndVersion({
+				dockerImage: typeof raw.dockerImage === "string" ? raw.dockerImage : undefined,
+				engineVersion: typeof raw.engineVersion === "string" ? raw.engineVersion : undefined,
+				currentImage: existing.dockerImage,
+			});
+			if (resolved.dockerImage !== undefined) {
+				values.dockerImage = resolved.dockerImage;
+			}
+			if (resolved.engineVersion !== undefined) {
+				values.engineVersion = resolved.engineVersion;
+			}
 			if (typeof values.dockerImage === "string") {
 				try {
 					values.dockerImage = assertSafeDockerImageRef(values.dockerImage);
 				} catch (error) {
 					throw badRequest(error instanceof Error ? error.message : "Invalid docker image");
+				}
+			}
+			// Changing the engine version on a service that already has data is a
+			// data-directory migration, not a config change: block the direction
+			// that can never work and make the risky one explicit.
+			const nextVersion = resolved.engineVersion ?? null;
+			if (nextVersion && nextVersion !== existing.engineVersion) {
+				const verdict = classifyVersionChange(kind, existing.engineVersion, nextVersion);
+				if (verdict.kind === "blocked") throw badRequest(verdict.reason);
+				if (verdict.kind === "confirm" && raw.confirmMajorUpgrade !== true) {
+					throw preconditionFailed(
+						`${verdict.reason} Re-send with confirmMajorUpgrade: true once a backup exists.`,
+					);
 				}
 			}
 			const touchesSecrets =
@@ -543,6 +659,198 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 				: null;
 			return { internal, external };
 		}),
+
+		/**
+		 * Curated engine versions offered by the picker, plus the one this
+		 * instance recommends. Free of side effects and cheap — the create
+		 * dialog and the General tab both read it.
+		 */
+		engineVersions: protectedProcedure.query(() => ({
+			kind,
+			versions: DATABASE_VERSIONS[kind],
+			defaultImage: config.defaultImage,
+		})),
+
+		/**
+		 * Additional logical databases inside this instance. Passwords follow
+		 * the same rule as the primary credentials: nulled for callers without
+		 * `secrets.read`, never omitted.
+		 */
+		listLogicalDatabases: protectedProcedure.input(idSchema).query(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx);
+			const row = await findRowOrThrow(input[idField] as string, organizationId);
+			if (!logicalColumn || !supportsLogicalDatabases(kind)) return [];
+			const rows = await db
+				.select()
+				.from(databaseLogicals)
+				.where(eq(logicalColumn, rowId(row)))
+				.orderBy(databaseLogicals.createdAt);
+			const canSeeSecrets = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
+			const host = row.appName;
+			const port = config.internalPort;
+			return rows.map((logical) => ({
+				...logical,
+				password: canSeeSecrets ? logical.password : null,
+				connectionUrl: canSeeSecrets
+					? buildLogicalConnectionUrl(
+							kind as LogicalDatabaseKind,
+							{ name: logical.name, username: logical.username, password: logical.password },
+							host,
+							port,
+						)
+					: null,
+			}));
+		}),
+
+		/**
+		 * Create another database + owning user inside the running container.
+		 * The password is generated here (never supplied by the caller) and
+		 * stored encrypted; the SQL travels over stdin, never on argv.
+		 */
+		createLogicalDatabase: protectedProcedure
+			.input(
+				z.object({
+					[idField]: z.string().min(1),
+					name: z.string().min(1).max(63),
+					username: z.string().min(1).max(63).optional(),
+				}),
+			)
+			.mutation(async ({ ctx, input }) => {
+				const organizationId = await getOrganizationId(ctx);
+				await assertCapability(ctx.session.user.id, organizationId, "service.write");
+				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+				if (!logicalColumn || !supportsLogicalDatabases(kind)) {
+					throw badRequest(`${kind} has no additional databases`);
+				}
+				const row = await findRowOrThrow(input[idField] as string, organizationId);
+
+				const name = assertLogicalNameAvailable(
+					assertLogicalIdentifier((input.name as string).trim().toLowerCase(), "database name"),
+					"database name",
+				);
+				const username = assertLogicalNameAvailable(
+					assertLogicalIdentifier(
+						((input.username as string | undefined)?.trim().toLowerCase() || `${name}_user`).slice(
+							0,
+							63,
+						),
+						"username",
+					),
+					"username",
+				);
+				if (name === (row as { databaseName?: string }).databaseName) {
+					throw conflict(`"${name}" is this instance's primary database`);
+				}
+				const password = generateLogicalPassword();
+
+				const containerId = await findDatabaseContainerId(row.appName, row.serverId);
+				// The row is written first so a crash between the two leaves a
+				// visible (deletable) row rather than an invisible database; the
+				// insert is rolled back when the engine refuses.
+				const [created] = await db
+					.insert(databaseLogicals)
+					.values({
+						serviceType: kind,
+						name,
+						username,
+						password,
+						[idField]: rowId(row),
+					})
+					.returning()
+					.catch((error: unknown) => {
+						if (isUniqueViolation(error)) {
+							throw conflict(`A database named "${name}" already exists on this instance`);
+						}
+						throw error;
+					});
+				if (!created) throw new Error("Failed to record the logical database");
+
+				try {
+					await runLogicalCommand(
+						containerId,
+						row.serverId,
+						buildCreateLogicalCommand(kind as LogicalDatabaseKind, { name, username, password }),
+					);
+				} catch (error) {
+					await db
+						.delete(databaseLogicals)
+						.where(eq(databaseLogicals.databaseLogicalId, created.databaseLogicalId))
+						.catch(() => {});
+					throw badRequest(
+						`Could not create database "${name}": ${error instanceof Error ? error.message : String(error)}`,
+					);
+				}
+
+				await auditFromSession(ctx, organizationId, {
+					action: `${kind}.createLogicalDatabase`,
+					targetType: kind,
+					targetId: rowId(row),
+					targetName: row.name,
+					metadata: { database: name, username },
+				});
+				return {
+					...created,
+					connectionUrl: buildLogicalConnectionUrl(
+						kind as LogicalDatabaseKind,
+						{ name, username, password },
+						row.appName,
+						config.internalPort,
+					),
+				};
+			}),
+
+		/** Drop a logical database and its owning user, then forget the row. */
+		deleteLogicalDatabase: protectedProcedure
+			.input(
+				z.object({
+					[idField]: z.string().min(1),
+					databaseLogicalId: z.string().min(1),
+				}),
+			)
+			.mutation(async ({ ctx, input }) => {
+				const organizationId = await getOrganizationId(ctx);
+				await assertCapability(ctx.session.user.id, organizationId, "service.delete");
+				if (!logicalColumn || !supportsLogicalDatabases(kind)) {
+					throw badRequest(`${kind} has no additional databases`);
+				}
+				const row = await findRowOrThrow(input[idField] as string, organizationId);
+				const [logical] = await db
+					.select()
+					.from(databaseLogicals)
+					.where(
+						and(
+							eq(databaseLogicals.databaseLogicalId, input.databaseLogicalId as string),
+							eq(logicalColumn, rowId(row)),
+						),
+					)
+					.limit(1);
+				if (!logical) throw notFound("Database not found");
+
+				const containerId = await findDatabaseContainerId(row.appName, row.serverId);
+				await runLogicalCommand(
+					containerId,
+					row.serverId,
+					buildDropLogicalCommand(kind as LogicalDatabaseKind, {
+						name: logical.name,
+						username: logical.username,
+					}),
+				);
+				await db
+					.delete(databaseLogicals)
+					.where(eq(databaseLogicals.databaseLogicalId, logical.databaseLogicalId));
+				await auditFromSession(ctx, organizationId, {
+					action: `${kind}.deleteLogicalDatabase`,
+					targetType: kind,
+					targetId: rowId(row),
+					targetName: row.name,
+					metadata: { database: logical.name },
+				});
+				return { databaseLogicalId: logical.databaseLogicalId };
+			}),
 
 		/** Live status from the swarm service (also synced back onto the row). */
 		getStatus: protectedProcedure.input(idSchema).query(async ({ ctx, input }) => {

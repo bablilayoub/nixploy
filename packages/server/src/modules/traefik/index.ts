@@ -10,17 +10,24 @@
 export type {
 	TraefikBasicAuthEntry,
 	TraefikDomainEntry,
+	TraefikDomainRow,
 	TraefikMiddlewareEntry,
 	TraefikRedirectEntry,
+	TraefikRouteProtocol,
+	TraefikTlsMode,
 	WriteAppTraefikConfigInput,
 } from "./config-writer";
 export {
+	assertEntrypointName,
 	buildTraefikFileConfig,
 	DEFAULT_CONTAINER_PORT,
 	DNS_CERT_RESOLVER,
 	isWildcardHost,
+	RESERVED_ENTRYPOINT_NAMES,
 	removeFileOnServer,
 	removeTraefikConfig,
+	TRAEFIK_ENTRYPOINT_NAME_RE,
+	toTraefikDomainEntry,
 	writeAppTraefikConfig,
 	writeFileOnServer,
 } from "./config-writer";
@@ -30,6 +37,16 @@ export {
 	normalizeDashboardDomain,
 	writeDashboardRouterConfig,
 } from "./dashboard";
+export type { EntrypointProtocol, TraefikEntrypointSpec } from "./entrypoints";
+export {
+	applyTraefikEntrypoints,
+	assertEntrypointUnused,
+	assertValidEntrypoint,
+	buildPublishUpdateArgs,
+	desiredPublishedPorts,
+	loadTraefikEntrypoints,
+	renderEntrypointsYaml,
+} from "./entrypoints";
 export type { DomainMiddlewareKind } from "./middlewares";
 export {
 	DOMAIN_MIDDLEWARE_KINDS,

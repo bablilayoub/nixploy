@@ -80,6 +80,23 @@ export const certificateType = pgEnum("certificate_type", ["letsencrypt", "custo
 export const domainType = pgEnum("domain_type", ["application", "compose", "preview"]);
 
 /**
+ * Layer-4 vs layer-7 routing for a domain row. `http` is the historical
+ * behaviour (Traefik `http.routers` on `web`/`websecure`); `tcp`/`udp` emit
+ * `tcp.routers`/`udp.routers` bound to a named entrypoint from
+ * `traefik_entrypoint` (see `modules/traefik/entrypoints.ts`).
+ */
+export const domainProtocol = pgEnum("domain_protocol", ["http", "tcp", "udp"]);
+
+/**
+ * TLS handling for a TCP router. `none` matches every connection on the
+ * entrypoint (`HostSNI(\`*\`)`); `terminate` lets Traefik present the
+ * certificate and speak plaintext to the backend; `passthrough` forwards the
+ * TLS stream untouched. Only `terminate`/`passthrough` can match a hostname —
+ * SNI is the only thing a TCP router can read. UDP has no TLS at all.
+ */
+export const domainTlsMode = pgEnum("domain_tls_mode", ["none", "terminate", "passthrough"]);
+
+/**
  * Traefik middleware kinds a domain can opt into. The set is closed on
  * purpose: every kind maps to one hand-written renderer + zod schema in
  * `modules/traefik/middlewares.ts`, so no tenant string ever reaches the

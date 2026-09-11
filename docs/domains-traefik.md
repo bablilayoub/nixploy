@@ -188,6 +188,97 @@ label, the same span a wildcard certificate covers — with
   so **wildcard rows are instance-admin only**. Ordinary members keep adding
   concrete hosts.
 
+## TCP and UDP routing (layer 4)
+
+A domain is an HTTP route by default. Set its **Protocol** to `TCP` or `UDP`
+and Traefik forwards the raw stream instead: Postgres, Redis, SMTP, a game
+server, a DNS resolver — anything that is not HTTP.
+
+Layer-4 routing needs a **dedicated entrypoint**, because Traefik cannot tell
+two TCP services apart on one port unless they use TLS with SNI.
+
+### Entrypoints
+
+Settings → Server → **TCP and UDP entrypoints** (instance admin only). An
+entrypoint is a name plus a port plus a protocol, e.g. `pg-15432` on
+`15432/tcp`. Creating one does two things at once:
+
+1. it is rendered into the **static** `traefik.yml`
+   (`modules/traefik/entrypoints.ts` → `buildTraefikStaticConfig`);
+2. the port is published on the `nixploy-traefik` swarm service
+   (`--publish-add published=15432,target=15432,protocol=tcp,mode=host`).
+
+> **Both changes restart the proxy.** Traefik reads its static configuration
+> once at start — only the dynamic directory hot-reloads — and a published-port
+> change recreates the task anyway. Nixploy issues a single
+> `docker service update --detach --force …` so it happens once, but **every
+> route on the instance is unavailable for a few seconds** (~9 s measured on a
+> local swarm). Plan entrypoint changes like a restart, not like a config edit.
+>
+> The same restart is what the panel warns about before you save.
+
+Entrypoints are **instance-level**: host ports are one shared namespace across
+tenants. Privileged ports, the well-known database ports and the platform's own
+ports are rejected (`assertSafePublishedPort` + `BUILTIN_ENTRYPOINT_PORTS`).
+Deleting an entrypoint is refused while a domain still routes through it.
+
+The two built-ins, `web` (:80) and `websecure` (:443), are reserved and cannot
+be used by a tcp/udp domain.
+
+### TLS modes
+
+A TCP router can only match on the hostname in the TLS handshake (SNI). The
+domain's **TLS** setting decides both the rule and what Traefik does with the
+stream:
+
+| TLS mode | Rule | Behaviour |
+| --- | --- | --- |
+| `none` | ``HostSNI(`*`)`` | Every connection on that entrypoint goes to this service. The host you typed is **ignored** — the port is the only selector, so one entrypoint serves exactly one service. This is what you want for Postgres, Redis, MySQL. |
+| `terminate` | ``HostSNI(`db.example.com`)`` | Traefik presents the certificate (Let's Encrypt, custom or the self-signed default) and speaks **plaintext** to the container. Several services can share one port, told apart by SNI. |
+| `passthrough` | ``HostSNI(`db.example.com`)`` | The encrypted stream is forwarded untouched; the backend owns the certificate. Traefik never sees plaintext, so no cert resolver is attached. |
+
+UDP has no TLS and no rule at all — the entrypoint *is* the match, so one UDP
+entrypoint serves one service.
+
+Because a `none` router matches everything on its port, a wildcard host is
+rejected for it: there is nothing to match on.
+
+### Generated YAML
+
+```yaml
+tcp:
+  routers:
+    myapp-tcp-router-<key>:
+      rule: HostSNI(`*`)
+      service: myapp-tcp-service-<key>
+      entryPoints:
+        - pg-15432
+  services:
+    myapp-tcp-service-<key>:
+      loadBalancer:
+        servers:
+          - address: myapp:5432
+```
+
+`udp.routers` are the same without `rule` and without `tls`. Layer-4 rows live
+in the same per-app file as the HTTP ones and are written by the same single
+writer (`writeAppTraefikConfig`).
+
+### What does not apply
+
+Paths, internal-path rewrites, redirects, basic-auth, the HTTPS toggle and the
+whole middleware chain are HTTP concepts. The domain form hides them for
+tcp/udp rows and the server rejects them rather than ignoring them, so a route
+never silently does less than the form suggested.
+
+### Databases
+
+Managed databases still use their own **external port** (Settings → General on
+the database), which publishes the port directly on the host — that path does
+not go through Traefik at all and needs no entrypoint. Use a TCP domain when
+you want several services behind one port with SNI, or when the database is an
+application/compose service you deploy yourself.
+
 ## Localhost / development domains
 
 Use the **generate** button in the domain dialog: it creates a

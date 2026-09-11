@@ -21,6 +21,7 @@ import { useSaveBar } from "@/components/services/save-bar";
 import { AcmeDnsCard } from "@/components/settings/server/acme-dns-card";
 import { AiSettingsCard } from "@/components/settings/server/ai-settings-card";
 import { HostMonitoringBody } from "@/components/settings/server/host-monitoring-card";
+import { TraefikEntrypointsCard } from "@/components/settings/server/traefik-entrypoints-card";
 import { UpdatesCard } from "@/components/settings/server/updates-card";
 import { UsersCard } from "@/components/settings/server/users-card";
 import { PageHeader } from "@/components/shell";
@@ -462,6 +463,7 @@ export function ServerSettingsView() {
 
 				{/* Wildcard certificates: DNS-01 provider + credentials */}
 				<AcmeDnsCard />
+				<TraefikEntrypointsCard />
 
 				{/* Proxy: Traefik dashboard + collapsed config + restart */}
 				<SettingsSection

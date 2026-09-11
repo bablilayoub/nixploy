@@ -91,3 +91,19 @@ export const timeout = (message: string, cause?: unknown): DomainError =>
 /** Too much data for the panel to accept (HTTP 413). */
 export const payloadTooLarge = (message: string, cause?: unknown): DomainError =>
 	new DomainError("PAYLOAD_TOO_LARGE", message, { cause });
+
+/**
+ * Postgres unique-violation (`23505`) detection. drizzle wraps the driver
+ * error, so the SQLSTATE lives on `error.cause.code`; a bare
+ * `error.code === "23505"` never matches and the raw `Failed query: …` SQL
+ * (with bound parameters) used to leak to the client.
+ */
+export function isUniqueViolation(error: unknown): boolean {
+	const codeOf = (value: unknown): string | undefined =>
+		typeof value === "object" && value !== null && "code" in value
+			? String((value as { code?: unknown }).code)
+			: undefined;
+	return (
+		codeOf(error) === "23505" || codeOf((error as { cause?: unknown } | null)?.cause) === "23505"
+	);
+}

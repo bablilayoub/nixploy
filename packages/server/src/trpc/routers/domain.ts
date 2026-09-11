@@ -11,6 +11,7 @@ import {
 	domains,
 	environments,
 	projects,
+	traefikEntrypoints,
 	webServerSettings,
 } from "../../db/schema";
 import {
@@ -22,7 +23,7 @@ import {
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { resyncComposeDomains } from "../../modules/compose/service";
-import { isDomainError } from "../../modules/errors";
+import { isDomainError, isUniqueViolation } from "../../modules/errors";
 import { syncPreviewTraefik } from "../../modules/preview/traefik";
 import { assertCapability } from "../../modules/projects";
 import {
@@ -43,6 +44,92 @@ import { protectedProcedure, router } from "../init";
 const domainIdInput = z.object({ domainId: z.string().min(1) });
 
 const certificateTypeSchema = z.enum(["letsencrypt", "none", "custom"]);
+
+const domainProtocolSchema = z.enum(["http", "tcp", "udp"]);
+const domainTlsModeSchema = z.enum(["none", "terminate", "passthrough"]);
+
+/**
+ * Layer-4 rows (`tcp`/`udp`) need an entrypoint that actually exists in
+ * Traefik's static config with the matching protocol — otherwise the router
+ * is written and silently never served. UDP has no TLS at all, so a UDP row
+ * is pinned to `tlsMode: "none"`; a TCP row without TLS cannot read SNI and
+ * therefore claims the whole entrypoint (`HostSNI(\`*\`)`), which is fine —
+ * the entrypoint's port is what selects the service.
+ *
+ * Returns the normalized `{ protocol, entrypoint, tlsMode }` triple to store.
+ */
+const resolveRouteProtocol = async (input: {
+	protocol: z.infer<typeof domainProtocolSchema>;
+	entrypoint?: string | null;
+	tlsMode?: z.infer<typeof domainTlsModeSchema> | null;
+	host: string;
+	https?: boolean;
+	path?: string | null;
+}): Promise<{
+	protocol: "http" | "tcp" | "udp";
+	entrypoint: string | null;
+	tlsMode: "none" | "terminate" | "passthrough";
+}> => {
+	if (input.protocol === "http") {
+		return { protocol: "http", entrypoint: null, tlsMode: "none" };
+	}
+	const name = input.entrypoint?.trim().toLowerCase() ?? "";
+	if (!name) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "A TCP or UDP domain needs a Traefik entrypoint",
+		});
+	}
+	const entrypoint = await db.query.traefikEntrypoints.findFirst({
+		where: eq(traefikEntrypoints.name, name),
+	});
+	if (!entrypoint) {
+		throw new TRPCError({
+			code: "NOT_FOUND",
+			message: `No Traefik entrypoint named “${name}”. Create it under Settings → Server first.`,
+		});
+	}
+	if (entrypoint.protocol !== input.protocol) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: `Entrypoint “${name}” is ${entrypoint.protocol}, not ${input.protocol}`,
+		});
+	}
+	if (input.protocol === "udp") {
+		if (input.tlsMode && input.tlsMode !== "none") {
+			throw new TRPCError({ code: "BAD_REQUEST", message: "UDP routing has no TLS" });
+		}
+		return { protocol: "udp", entrypoint: name, tlsMode: "none" };
+	}
+	const tlsMode = input.tlsMode ?? "none";
+	if (tlsMode === "none" && isWildcardHost(input.host)) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "A wildcard host needs TLS: a plain TCP router cannot match a hostname",
+		});
+	}
+	return { protocol: "tcp", entrypoint: name, tlsMode };
+};
+
+/** HTTP-only options are refused on a layer-4 row instead of being ignored. */
+const assertNoHttpOnlyFields = (
+	protocol: "http" | "tcp" | "udp",
+	fields: { https?: boolean; path?: string | null; internalPath?: string | null },
+): void => {
+	if (protocol === "http") return;
+	if (fields.https) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "“Redirect to HTTPS” only applies to HTTP domains; use the TLS mode instead",
+		});
+	}
+	if ((fields.path && fields.path !== "/") || fields.internalPath) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "TCP and UDP routing has no paths — only the host (SNI) and the entrypoint",
+		});
+	}
+};
 
 /**
  * Let's Encrypt issuance budget per organization. The instance shares one ACME
@@ -323,11 +410,7 @@ const assertForwardAuthAllowed = async (address: string, organizationId: string)
 
 /** Postgres unique_violation → tRPC CONFLICT (host/path/port unique index). */
 const rethrowUniqueViolation = (error: unknown): never => {
-	if (
-		typeof error === "object" &&
-		error !== null &&
-		(error as { code?: string }).code === "23505"
-	) {
+	if (isUniqueViolation(error)) {
 		throw new TRPCError({
 			code: "CONFLICT",
 			message: "A domain with this host, path and port already exists",
@@ -444,6 +527,10 @@ export const domainRouter = router({
 					internalPath: z.string().nullable().optional(),
 					port: z.number().int().min(1).max(65535).nullable().optional(),
 					https: z.boolean().optional(),
+					protocol: domainProtocolSchema.optional(),
+					/** Named Traefik entrypoint; required for tcp/udp. */
+					entrypoint: z.string().max(32).nullable().optional(),
+					tlsMode: domainTlsModeSchema.optional(),
 					certificateType: certificateTypeSchema.optional(),
 					certificateId: z.string().nullable().optional(),
 					/** Compose only: which compose-file service to route to. */
@@ -496,7 +583,22 @@ export const domainRouter = router({
 					});
 				}
 			}
-			assertCertificateAllowedForHost(host, certificateType);
+			const route = await resolveRouteProtocol({
+				protocol: input.protocol ?? "http",
+				entrypoint: input.entrypoint,
+				tlsMode: input.tlsMode,
+				host,
+			});
+			assertNoHttpOnlyFields(route.protocol, {
+				https: input.https,
+				path: input.path,
+				internalPath: input.internalPath,
+			});
+			// A layer-4 router never speaks HTTP-01, so the ACME guards below
+			// only make sense once TLS is actually terminated by Traefik.
+			if (route.protocol === "http" || route.tlsMode === "terminate") {
+				assertCertificateAllowedForHost(host, certificateType);
+			}
 			await assertWildcardAllowed(ctx.session, host, certificateType);
 			if (certificateType === "custom") {
 				if (!input.certificateId) {
@@ -508,7 +610,7 @@ export const domainRouter = router({
 				await assertCertificateExists(input.certificateId, organizationId);
 			}
 			await assertHostPathAvailable(host, path, organizationId);
-			if (certificateType === "letsencrypt") {
+			if (certificateType === "letsencrypt" && route.tlsMode !== "passthrough") {
 				assertLetsEncryptBudget(organizationId);
 			}
 
@@ -517,6 +619,9 @@ export const domainRouter = router({
 				path,
 				internalPath,
 				port: input.port ?? null,
+				protocol: route.protocol,
+				entrypoint: route.entrypoint,
+				tlsMode: route.tlsMode,
 				https: input.https ?? false,
 				certificateType,
 				certificateId: certificateType === "custom" ? (input.certificateId ?? null) : null,
@@ -568,6 +673,9 @@ export const domainRouter = router({
 				internalPath: z.string().nullable().optional(),
 				port: z.number().int().min(1).max(65535).nullable().optional(),
 				https: z.boolean().optional(),
+				protocol: domainProtocolSchema.optional(),
+				entrypoint: z.string().max(32).nullable().optional(),
+				tlsMode: domainTlsModeSchema.optional(),
 				certificateType: certificateTypeSchema.optional(),
 				certificateId: z.string().nullable().optional(),
 				serviceName: z.string().nullable().optional(),
@@ -601,11 +709,28 @@ export const domainRouter = router({
 					message: error instanceof Error ? error.message : "Invalid domain host/path",
 				});
 			}
-			assertCertificateAllowedForHost(nextHost, certificateType);
+			const route = await resolveRouteProtocol({
+				protocol: input.protocol ?? existing.protocol,
+				entrypoint: input.entrypoint !== undefined ? input.entrypoint : existing.entrypoint,
+				tlsMode: input.tlsMode ?? existing.tlsMode,
+				host: nextHost,
+			});
+			assertNoHttpOnlyFields(route.protocol, {
+				https: input.https ?? existing.https,
+				path: input.path !== undefined ? nextPath : existing.path,
+				internalPath: input.internalPath !== undefined ? input.internalPath : existing.internalPath,
+			});
+			if (route.protocol === "http" || route.tlsMode === "terminate") {
+				assertCertificateAllowedForHost(nextHost, certificateType);
+			}
 			if (nextHost !== existing.host || certificateType !== existing.certificateType) {
 				await assertWildcardAllowed(ctx.session, nextHost, certificateType);
 			}
-			if (certificateType === "letsencrypt" && existing.certificateType !== "letsencrypt") {
+			if (
+				certificateType === "letsencrypt" &&
+				existing.certificateType !== "letsencrypt" &&
+				route.tlsMode !== "passthrough"
+			) {
 				assertLetsEncryptBudget(organizationId);
 			}
 			const certificateId =
@@ -626,6 +751,11 @@ export const domainRouter = router({
 			const { domainId, ...fields } = input;
 			const data: Partial<typeof domains.$inferInsert> = {
 				...fields,
+				// Always written together: a protocol switch must clear the
+				// entrypoint/TLS of the shape it left behind.
+				protocol: route.protocol,
+				entrypoint: route.entrypoint,
+				tlsMode: route.tlsMode,
 				...(input.host !== undefined ? { host: nextHost } : {}),
 				...(input.path !== undefined ? { path: nextPath } : {}),
 				...(input.internalPath !== undefined

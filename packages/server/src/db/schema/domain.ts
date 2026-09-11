@@ -6,7 +6,14 @@ import { applications } from "./application";
 import { organizations } from "./auth";
 import { compose } from "./compose";
 import { previewDeployments } from "./deployment";
-import { certificateType, domainMiddlewareKind, domainType } from "./enums";
+import {
+	certificateType,
+	domainMiddlewareKind,
+	domainProtocol,
+	domainTlsMode,
+	domainType,
+	portProtocol,
+} from "./enums";
 import { servers } from "./server";
 import { createdAt, idColumn } from "./utils";
 
@@ -21,6 +28,20 @@ export const domains = pgTable(
 		internalPath: text("internal_path"),
 		/** Container port the router forwards to. */
 		port: integer("port"),
+		/**
+		 * Layer the router lives on. `http` (the default, and what every row
+		 * created before migration 0026 is) keeps the existing HTTP behaviour;
+		 * `tcp`/`udp` route raw streams on a named entrypoint instead.
+		 */
+		protocol: domainProtocol("protocol").notNull().default("http"),
+		/**
+		 * Traefik entrypoint name for `tcp`/`udp` rows (`traefik_entrypoint.name`,
+		 * e.g. `pg-15432`). Always null for `http` rows, which use the built-in
+		 * `web`/`websecure` entrypoints.
+		 */
+		entrypoint: text("entrypoint"),
+		/** TCP TLS handling; `none` for plain TCP and for every UDP row. */
+		tlsMode: domainTlsMode("tls_mode").notNull().default("none"),
 		https: boolean("https").notNull().default(false),
 		certificateType: certificateType("certificate_type").notNull().default("none"),
 		customCertResolver: text("custom_cert_resolver"),
@@ -68,6 +89,30 @@ export const domainMiddlewares = pgTable(
 		createdAt: createdAt(),
 	},
 	(table) => [index("domain_middleware_domain_id_idx").on(table.domainId)],
+);
+
+/**
+ * An extra Traefik entrypoint (`tcp`/`udp`) for layer-4 routing.
+ *
+ * Instance-level and admin-managed: entrypoints live in Traefik's **static**
+ * configuration, which is read once at start, and the port has to be
+ * published by the `nixploy-traefik` swarm service — so every write here
+ * recreates the proxy task (~9 s outage). `name` is rendered verbatim into
+ * the static YAML, so it is restricted to `[a-z0-9-]` on write.
+ */
+export const traefikEntrypoints = pgTable(
+	"traefik_entrypoint",
+	{
+		traefikEntrypointId: idColumn("traefik_entrypoint_id"),
+		name: text("name").notNull(),
+		port: integer("port").notNull(),
+		protocol: portProtocol("protocol").notNull().default("tcp"),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		uniqueIndex("traefik_entrypoint_name_unique").on(table.name),
+		uniqueIndex("traefik_entrypoint_port_unique").on(table.port, table.protocol),
+	],
 );
 
 /** Manually uploaded TLS certificates. */
@@ -127,6 +172,8 @@ export const certificatesRelations = relations(certificates, ({ one }) => ({
 	}),
 }));
 
+export const insertTraefikEntrypointSchema = createInsertSchema(traefikEntrypoints);
+export const selectTraefikEntrypointSchema = createSelectSchema(traefikEntrypoints);
 export const insertDomainSchema = createInsertSchema(domains);
 export const selectDomainSchema = createSelectSchema(domains);
 export const insertCertificateSchema = createInsertSchema(certificates);

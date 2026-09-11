@@ -30,10 +30,28 @@ export interface TraefikMiddlewareEntry {
 	enabled?: boolean;
 }
 
+/** Layer a domain routes on — see the `domain_protocol` pgEnum. */
+export type TraefikRouteProtocol = "http" | "tcp" | "udp";
+
+/** TCP TLS handling — see the `domain_tls_mode` pgEnum. */
+export type TraefikTlsMode = "none" | "terminate" | "passthrough";
+
 export interface TraefikDomainEntry {
 	host: string;
 	/** Container port the router forwards to (defaults to {@link DEFAULT_CONTAINER_PORT}). */
 	port: number;
+	/**
+	 * Layer this domain routes on. Omitted/`"http"` keeps the historical
+	 * behaviour (`http.routers` on `web`/`websecure`); `"tcp"`/`"udp"` emit
+	 * `tcp.`/`udp.` routers on {@link TraefikDomainEntry.entrypoint} and ignore
+	 * every HTTP-only field (path, internalPath, middlewares, redirects,
+	 * basic-auth, https).
+	 */
+	protocol?: TraefikRouteProtocol | null;
+	/** Named Traefik entrypoint for `tcp`/`udp` rows (`traefik_entrypoint.name`). */
+	entrypoint?: string | null;
+	/** TCP TLS handling; ignored for `http` and `udp`. */
+	tlsMode?: TraefikTlsMode | null;
 	path?: string | null;
 	/**
 	 * Upstream path prefix: the public `path` prefix is stripped and this one
@@ -110,11 +128,48 @@ type HttpMiddleware =
 	| { addPrefix: { prefix: string } }
 	| RenderedMiddleware;
 
+/**
+ * A TCP router. Traefik matches TCP only by SNI, so `HostSNI(`*`)` (the
+ * catch-all, the only rule allowed without TLS) or `HostSNI(`host`)` are the
+ * two shapes Nixploy emits. `tls.passthrough` forwards the encrypted stream
+ * untouched; without it Traefik terminates and speaks plaintext upstream.
+ */
+interface TcpRouter {
+	rule: string;
+	service: string;
+	entryPoints: string[];
+	tls?: { passthrough?: boolean; certResolver?: string; domains?: TlsDomain[] };
+}
+
+/** Layer-4 services address the backend as `host:port`, not as a URL. */
+interface Layer4Service {
+	loadBalancer: { servers: Array<{ address: string }> };
+}
+
+interface UdpRouter {
+	service: string;
+	entryPoints: string[];
+}
+
 interface FileConfig {
-	http: {
+	/**
+	 * Omitted entirely for an app with only layer-4 domains: Traefik v3
+	 * rejects a file whose `http` section has an empty `routers` map with
+	 * "routers cannot be a standalone element" and then drops the WHOLE file —
+	 * including the tcp/udp routers that were the point of it.
+	 */
+	http?: {
 		routers: Record<string, HttpRouter>;
 		services: Record<string, HttpService>;
 		middlewares?: Record<string, HttpMiddleware>;
+	};
+	tcp?: {
+		routers: Record<string, TcpRouter>;
+		services: Record<string, Layer4Service>;
+	};
+	udp?: {
+		routers: Record<string, UdpRouter>;
+		services: Record<string, Layer4Service>;
 	};
 	tls?: {
 		certificates: Array<{ certFile: string; keyFile: string }>;
@@ -139,6 +194,30 @@ export const DNS_CERT_RESOLVER = "letsencrypt-dns";
 
 /** `*.example.com` — exactly one leading wildcard label. */
 export const isWildcardHost = (host: string): boolean => host.trim().startsWith("*.");
+
+/**
+ * Traefik entrypoint names are rendered verbatim into both the static config
+ * and every `entryPoints:` list, so they are restricted to a lowercase slug.
+ * The same expression gates `traefik_entrypoint.name` on write.
+ */
+export const TRAEFIK_ENTRYPOINT_NAME_RE = /^[a-z][a-z0-9-]{0,30}[a-z0-9]$/;
+
+/** Built-in entrypoints from the static config; a tcp/udp row may not use them. */
+export const RESERVED_ENTRYPOINT_NAMES: ReadonlySet<string> = new Set(["web", "websecure"]);
+
+/** Validate an entrypoint name before it reaches YAML. */
+export const assertEntrypointName = (name: string): string => {
+	const value = name.trim().toLowerCase();
+	if (!TRAEFIK_ENTRYPOINT_NAME_RE.test(value)) {
+		throw badRequest(
+			`Invalid Traefik entrypoint name "${name}": use 2–32 lowercase letters, digits and dashes`,
+		);
+	}
+	if (RESERVED_ENTRYPOINT_NAMES.has(value)) {
+		throw badRequest(`Entrypoint name "${value}" is reserved for HTTP routing`);
+	}
+	return value;
+};
 
 /**
  * Traefik v3 dropped the named-group HostRegexp syntax, so a wildcard host
@@ -300,12 +379,21 @@ export function assertSafeRedirectReplacement(
 export const buildTraefikFileConfig = async (
 	input: WriteAppTraefikConfigInput,
 ): Promise<FileConfig> => {
-	const { appName, domains, redirects = [], basicAuth = [] } = input;
+	const { appName, domains: allDomains, redirects = [], basicAuth = [] } = input;
 
-	const config: FileConfig = {
-		http: { routers: {}, services: {}, middlewares: {} },
+	const http = {
+		routers: {} as Record<string, HttpRouter>,
+		services: {} as Record<string, HttpService>,
+		middlewares: {} as Record<string, HttpMiddleware> | undefined,
 	};
-	const middlewares = config.http.middlewares as Record<string, HttpMiddleware>;
+	const config: FileConfig = { http };
+	const middlewares = http.middlewares as Record<string, HttpMiddleware>;
+
+	// Layer-4 rows share nothing with the HTTP pipeline (no path, no
+	// middlewares, no redirect-to-https), so they are split off first and
+	// rendered by their own emitter below.
+	const domains = allDomains.filter((domain) => (domain.protocol ?? "http") === "http");
+	const layer4Domains = allDomains.filter((domain) => (domain.protocol ?? "http") !== "http");
 
 	const usesHttps = domains.some((d) => d.https);
 	const redirectToHttpsName = `${sanitizeName(appName)}-redirect-to-https`;
@@ -378,7 +466,7 @@ export const buildTraefikFileConfig = async (
 				passHostHeader: true,
 			},
 		};
-		config.http.services[serviceName] = service;
+		http.services[serviceName] = service;
 
 		// Per-domain internal-path rewrite: public `<path>/*` → upstream
 		// `<internalPath>/*`. addPrefix alone would yield `/internal/public/*`,
@@ -424,7 +512,7 @@ export const buildTraefikFileConfig = async (
 		if (domain.https) {
 			// Plain-HTTP router only bounces to https; everything else happens
 			// on the websecure router where the request actually lands.
-			config.http.routers[routerName] = {
+			http.routers[routerName] = {
 				rule,
 				service: serviceName,
 				entryPoints: ["web"],
@@ -452,9 +540,9 @@ export const buildTraefikFileConfig = async (
 				// (which does declare tls) swallows every HTTPS request → 502.
 				secureRouter.tls = {};
 			}
-			config.http.routers[routerNameSecure] = secureRouter;
+			http.routers[routerNameSecure] = secureRouter;
 		} else {
-			config.http.routers[routerName] = {
+			http.routers[routerName] = {
 				rule,
 				service: serviceName,
 				entryPoints: ["web"],
@@ -462,7 +550,7 @@ export const buildTraefikFileConfig = async (
 			};
 			// The platform redirects :80→:443 globally, so an https-off domain
 			// still needs a websecure router; it serves the default cert.
-			config.http.routers[routerNameSecure] = {
+			http.routers[routerNameSecure] = {
 				rule,
 				service: serviceName,
 				entryPoints: ["websecure"],
@@ -473,13 +561,100 @@ export const buildTraefikFileConfig = async (
 	});
 
 	if (Object.keys(middlewares).length === 0) {
-		delete config.http.middlewares;
+		http.middlewares = undefined;
+		delete (http as { middlewares?: unknown }).middlewares;
 	}
 
-	// Inline custom certificates referenced by the domains.
+	// ── layer-4 (tcp / udp) ───────────────────────────────────────────────
+	//
+	// TCP can only be matched by SNI, so a router either claims the whole
+	// entrypoint (`HostSNI(`*`)`, the only rule Traefik accepts on a
+	// non-TLS TCP router) or one hostname when TLS is terminated/passed
+	// through. UDP is connectionless: no rule at all, the entrypoint IS the
+	// match, so one UDP router per entrypoint is all that can ever work.
+	const tcpRouters: Record<string, TcpRouter> = {};
+	const tcpServices: Record<string, Layer4Service> = {};
+	const udpRouters: Record<string, UdpRouter> = {};
+	const udpServices: Record<string, Layer4Service> = {};
+	layer4Domains.forEach((domain, index) => {
+		const key = sanitizeName(domain.uniqueConfigKey || `l4-${index}`);
+		const protocol = domain.protocol === "udp" ? "udp" : "tcp";
+		const entrypoint = assertEntrypointName(domain.entrypoint ?? "");
+		if (domain.serviceName && !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(domain.serviceName)) {
+			throw badRequest(`Invalid compose service name: ${domain.serviceName}`);
+		}
+		const target = domain.serviceName ? `${appName}-${domain.serviceName}-1` : appName;
+		const serviceName = `${sanitizeName(appName)}-${protocol}-service-${key}`;
+		const routerName = `${sanitizeName(appName)}-${protocol}-router-${key}`;
+		const service: Layer4Service = {
+			loadBalancer: {
+				servers: [{ address: `${target}:${domain.port ?? DEFAULT_CONTAINER_PORT}` }],
+			},
+		};
+
+		if (protocol === "udp") {
+			udpServices[serviceName] = service;
+			udpRouters[routerName] = { service: serviceName, entryPoints: [entrypoint] };
+			return;
+		}
+
+		tcpServices[serviceName] = service;
+		const tlsMode = domain.tlsMode ?? "none";
+		const router: TcpRouter = {
+			// A plain TCP router cannot read a hostname: with no TLS the only
+			// legal rule is the catch-all, and the entrypoint's port is what
+			// distinguishes services.
+			rule: "HostSNI(`*`)",
+			service: serviceName,
+			entryPoints: [entrypoint],
+		};
+		if (tlsMode !== "none") {
+			const rawHost = sanitizeRuleValue(domain.host);
+			const wildcard = isWildcardHost(rawHost);
+			const host = sanitizeRuleValue(toPunycode(wildcard ? rawHost.slice(2) : rawHost));
+			if (host.includes("*") || !/^[a-zA-Z0-9.-]+(\.[a-zA-Z0-9.-]+)*\.?$/.test(host)) {
+				throw badRequest(`Invalid Traefik host after punycode: ${domain.host}`);
+			}
+			const matchHost = wildcard ? `*.${host}` : host;
+			router.rule = `HostSNI(\`${matchHost}\`)`;
+			if (tlsMode === "passthrough") {
+				// The backend owns the certificate; Traefik never sees plaintext,
+				// so a certResolver here would be issued and never used.
+				router.tls = { passthrough: true };
+			} else if (domain.certificateType === "letsencrypt") {
+				router.tls = wildcard
+					? { certResolver: DNS_CERT_RESOLVER, domains: [{ main: matchHost }] }
+					: { certResolver: "letsencrypt" };
+			} else {
+				// "custom" certs are inlined in tls.certificates below; "none"
+				// serves the self-signed default certificate.
+				router.tls = {};
+			}
+		}
+		tcpRouters[routerName] = router;
+	});
+
+	// An `http:` section whose `routers` map is empty makes Traefik v3 reject
+	// the entire file ("routers cannot be a standalone element"), taking the
+	// tcp/udp routers down with it — so an app with only layer-4 domains gets
+	// no `http:` key at all.
+	if (Object.keys(http.routers).length === 0) {
+		delete config.http;
+	}
+
+	// Only emitted when there is something to route: an empty `tcp:` block
+	// makes Traefik log a warning on every reload.
+	if (Object.keys(tcpRouters).length > 0) {
+		config.tcp = { routers: tcpRouters, services: tcpServices };
+	}
+	if (Object.keys(udpRouters).length > 0) {
+		config.udp = { routers: udpRouters, services: udpServices };
+	}
+
+	// Inline custom certificates referenced by the domains (http and tcp).
 	const certificateIds = [
 		...new Set(
-			domains
+			allDomains
 				.filter((d) => d.certificateType === "custom" && d.certificateId)
 				.map((d) => d.certificateId as string),
 		),
@@ -501,6 +676,46 @@ export const buildTraefikFileConfig = async (
 
 	return config;
 };
+
+/**
+ * The `domain` columns the writer consumes, so a call site can hand a raw
+ * Drizzle row to {@link toTraefikDomainEntry} instead of spelling the mapping
+ * out. Adding a routing column means adding it here once — the previous
+ * per-call-site object literals silently dropped every new field (that is how
+ * a deploy used to erase a domain's middleware chain).
+ */
+export interface TraefikDomainRow {
+	host: string;
+	port: number | null;
+	path: string | null;
+	internalPath: string | null;
+	https: boolean;
+	certificateType: "letsencrypt" | "none" | "custom";
+	certificateId: string | null;
+	serviceName?: string | null;
+	uniqueConfigKey?: string | null;
+	protocol?: TraefikRouteProtocol | null;
+	entrypoint?: string | null;
+	tlsMode?: TraefikTlsMode | null;
+	middlewares?: TraefikMiddlewareEntry[];
+}
+
+/** Map one `domain` row onto the writer's input shape. */
+export const toTraefikDomainEntry = (row: TraefikDomainRow): TraefikDomainEntry => ({
+	host: row.host,
+	port: row.port ?? DEFAULT_CONTAINER_PORT,
+	path: row.path,
+	internalPath: row.internalPath,
+	https: row.https,
+	certificateType: row.certificateType,
+	certificateId: row.certificateId,
+	serviceName: row.serviceName ?? null,
+	uniqueConfigKey: row.uniqueConfigKey ?? null,
+	protocol: row.protocol ?? "http",
+	entrypoint: row.entrypoint ?? null,
+	tlsMode: row.tlsMode ?? "none",
+	middlewares: row.middlewares,
+});
 
 // ─── Contract functions ──────────────────────────────────────────────────────
 
