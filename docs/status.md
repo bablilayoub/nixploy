@@ -5,7 +5,7 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
-## Snapshot — 2026-09-11 (end of the stability sweep + landing rebuild)
+## Snapshot — 2026-09-11 (end of the audit implementation: Sprints A–E + final wave)
 
 | Item | Value |
 | --- | --- |
@@ -14,14 +14,14 @@ file is for **state** and **tasks**.
 | Local toolchain | Node 22.21.0, pnpm 10.33.0, Docker 29.7.2, Swarm active |
 | Key versions | Next 16.3.4 (web + landing), better-auth + api-key 1.7.3, React 19.2.8, Biome 2.5.12, zod 4.6.1, TanStack Query 5.102, lucide 1.43, commander 15, vitest 5.0.0, TypeScript 5.9.3, drizzle-orm 0.45.2 |
 | `pnpm typecheck` | ✅ all 4 workspaces |
-| `pnpm test` / `pnpm test:db` | ✅ 118 files, 1559 passed with `DATABASE_URL_TEST` (1 skipped) — DB-backed files run with `fileParallelism: false`; run the DB suite alone, it shares `nixploy_test` |
-| Biome (CI command) | ✅ 0 errors, 1 pre-existing warning (`services/danger-zone.tsx` `void \| Promise` onConfirm) |
+| `pnpm test` / `pnpm test:db` | ✅ 145 files, 1904 passed with `DATABASE_URL_TEST` (1 skipped) — DB-backed files run with `fileParallelism: false`; run the DB suite alone, it shares `nixploy_test`. CLI 91, web 65 |
+| Biome (CI command, `--error-on-warnings`) + knip | ✅ 0 errors, 0 warnings; knip 5.88.1 clean |
 | Builds | ✅ web (also without `DATABASE_URL`, the Docker scenario), landing (31 static routes), cli; Docker image built and booted healthy from a clean tree by the ops pass |
 | REST e2e loop (`traefik/whoami` app → traefik.me domain → HTTPS via Traefik → stop/start/reload → env + port edit keeps inherited env → redeploy → rollback; uptime-kuma template → private net + Traefik → stop/start; compose safety probe → 400; postgres create/start/exec/stop/start/rename-guard/protected volume; docker/gitops/audit/monitoring/schedule (command + stdin script); cascade cleanup incl. volumes, YAML, dirs) | ✅ 58/59 on the final tree — the one miss is a resume artifact (latest deployment was the rollback), not a bug |
 | UI verification | Both UI agents drove every touched page in light + dark (Playwright + in-app browser); 0 console / hydration errors after fixing three real hydration mismatches |
-| Dev DB | `nixploy-dev-pg` (127.0.0.1:54329): `nixploy` (dev), `nixploy_test` (tenancy suite), `nixploy_e2e` (e2e user e2e@example.test) — all migrated to `0025` |
-| Schema | 26 migrations (`0000`…`0025_overconfident_jimmy_woo` = audit ip/user-agent, nullable org, `allow_private_egress`); the final wave adds 0026–0028 |
-| Product | Phases 1–10 of `PLAN.md` shipped; 42 routers / ~300 procedures; 86 templates; 11 notification providers; MCP with 32 tools |
+| Dev DB | `nixploy-dev-pg` (127.0.0.1:54329): `nixploy` (dev), `nixploy_test` (tenancy suite), `nixploy_e2e` (e2e user e2e@example.test) — all migrated to `0028` |
+| Schema | 29 migrations (`0000`…`0028_ancient_shatterstar` = compose previews); 0026 layer-4 routing + engine versions + logical DBs, 0027 compose snapshots + template sources + image schedules + preview commit columns |
+| Product | Phases 1–10 of `PLAN.md` shipped plus the 2026-09 audit plan; 44 routers / 390 procedures; 86 templates + org template sources; 11 notification providers; MCP with 32 tools; CLI 194+ registry commands |
 
 ## What the stability sweep did (2026-09-10/11)
 
