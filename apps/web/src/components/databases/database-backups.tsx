@@ -418,7 +418,7 @@ function BackupFormDialog({
 				</DialogHeader>
 				<div className="space-y-4">
 					<div className="space-y-1.5">
-						<Label htmlFor="backup-schedule">Schedule (cron)</Label>
+						<Label htmlFor="backup-schedule">Schedule (cron, UTC)</Label>
 						<Input
 							id="backup-schedule"
 							value={form.schedule}
@@ -428,7 +428,7 @@ function BackupFormDialog({
 						/>
 						<p className="text-sm text-muted-foreground">
 							Examples: <code>0 3 * * *</code> daily at 3:00, <code>0 */6 * * *</code> every 6
-							hours, <code>0 0 * * 0</code> weekly on Sunday.
+							hours, <code>0 0 * * 0</code> weekly on Sunday. Times are UTC.
 						</p>
 					</div>
 					<div className="space-y-1.5">

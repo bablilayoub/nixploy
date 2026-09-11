@@ -8,6 +8,7 @@ node_modules
 
 # Build output
 .next
+**/.next
 **/dist
 **/tsconfig.tsbuildinfo
 
@@ -20,3 +21,16 @@ node_modules
 # Env / secrets
 .env
 **/.env
+
+# Not part of the image (docker/Dockerfile copies only apps/web, apps/cli and
+# packages/server manifests, then the tree for the web build): the landing
+# site, operator docs, release/screenshot tooling, agent config and root docs.
+apps/landing
+docs
+tools
+.github
+.claude
+.cursor
+.agents
+.vscode
+*.md

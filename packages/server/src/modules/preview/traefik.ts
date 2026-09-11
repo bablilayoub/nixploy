@@ -8,7 +8,9 @@ import { DEFAULT_CONTAINER_PORT, removeTraefikConfig, writeAppTraefikConfig } fr
  * the PARENT application's redirects and basic-auth rows: the preview runs
  * the parent's fully merged env (production secrets), so it must sit behind
  * the same auth at its predictable `pr-<n>-<app>.<wildcard>` host. The
- * file is removed when the preview has no domain.
+ * file is removed when the preview has no domain. Writes go through
+ * `writeAppTraefikConfig`, so they are atomic (tmp + rename) and skipped
+ * when the rendered YAML is unchanged — safe to call on every worker pass.
  *
  * Leaf module (no deploy-engine import) so the worker, the preview
  * lifecycle and the domain router can all call it without cycles.

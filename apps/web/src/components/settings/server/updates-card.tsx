@@ -45,6 +45,8 @@ export function UpdatesCard() {
 
 	const [autoCheck, setAutoCheck] = useState(true);
 	const [autoUpdate, setAutoUpdate] = useState(false);
+	// Deployments in flight when the update was requested; opens the "update anyway?" confirm.
+	const [blockedBy, setBlockedBy] = useState<number | null>(null);
 
 	const invalidate = async () => {
 		await queryClient.invalidateQueries({ queryKey: trpc.updates.getStatus.queryKey() });
@@ -92,6 +94,8 @@ export function UpdatesCard() {
 			onSuccess: async (result) => {
 				if (result.started) {
 					toast.success(result.message);
+				} else if (result.blockedByDeployments) {
+					setBlockedBy(result.activeDeployments ?? 1);
 				} else {
 					toast.message(result.message);
 				}
@@ -169,10 +173,40 @@ export function UpdatesCard() {
 										<AlertDialogAction
 											onClick={(event) => {
 												event.preventDefault();
-												applyMutation.mutate();
+												applyMutation.mutate({});
 											}}
 										>
 											{data.updateAvailable ? "Update now" : "Reinstall"}
+										</AlertDialogAction>
+									</AlertDialogFooter>
+								</AlertDialogContent>
+							</AlertDialog>
+							<AlertDialog
+								open={blockedBy !== null}
+								onOpenChange={(open) => {
+									if (!open) setBlockedBy(null);
+								}}
+							>
+								<AlertDialogContent>
+									<AlertDialogHeader>
+										<AlertDialogTitle>Deployments are running</AlertDialogTitle>
+										<AlertDialogDescription>
+											{blockedBy ?? 0} deployment{blockedBy === 1 ? " is" : "s are"} in progress.
+											Updating now restarts Nixploy and marks {blockedBy === 1 ? "it" : "them"} as
+											interrupted. Wait for {blockedBy === 1 ? "it" : "them"} to finish, or update
+											anyway.
+										</AlertDialogDescription>
+									</AlertDialogHeader>
+									<AlertDialogFooter>
+										<AlertDialogCancel>Wait</AlertDialogCancel>
+										<AlertDialogAction
+											onClick={(event) => {
+												event.preventDefault();
+												setBlockedBy(null);
+												applyMutation.mutate({ force: true });
+											}}
+										>
+											Update anyway
 										</AlertDialogAction>
 									</AlertDialogFooter>
 								</AlertDialogContent>
@@ -219,7 +253,9 @@ export function UpdatesCard() {
 					<div className="flex items-center justify-between gap-4">
 						<div className="grid gap-0.5">
 							<Label htmlFor="auto-check">Automatic checks</Label>
-							<p className="text-xs text-muted-foreground">Periodically look for a newer image.</p>
+							<p className="text-xs text-muted-foreground">
+								Periodically look for a newer image. The check schedule runs in UTC.
+							</p>
 						</div>
 						<Switch
 							id="auto-check"

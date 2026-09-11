@@ -1,4 +1,5 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { inArray } from "drizzle-orm";
 import { stringify } from "yaml";
@@ -126,11 +127,45 @@ const toPunycode = (host: string): string => {
 	}
 };
 
+export type AtomicWriteResult = "written" | "unchanged";
+
+/**
+ * Write `content` to a local file atomically and idempotently:
+ * - identical content → no write at all (`"unchanged"`), so a redeploy of an
+ *   unchanged app does not make Traefik's file provider re-parse the whole
+ *   dynamic directory;
+ * - otherwise the content goes to a `.tmp` sibling (an extension the file
+ *   provider ignores) and is `rename`d into place, so a watcher can never
+ *   read a truncated YAML.
+ */
+export const writeLocalFileAtomic = async (
+	absolutePath: string,
+	content: string,
+): Promise<AtomicWriteResult> => {
+	await mkdir(dirname(absolutePath), { recursive: true });
+	try {
+		if ((await readFile(absolutePath, "utf8")) === content) return "unchanged";
+	} catch {
+		// missing or unreadable — write it
+	}
+	const tmpPath = `${absolutePath}.${process.pid}-${randomBytes(4).toString("hex")}.tmp`;
+	try {
+		await writeFile(tmpPath, content, "utf8");
+		await rename(tmpPath, absolutePath);
+	} catch (error) {
+		await rm(tmpPath, { force: true }).catch(() => {});
+		throw error;
+	}
+	return "written";
+};
+
 /**
  * Write a file on the Nixploy host (local fs) or a managed server (SSH).
- * Remote content goes over stdin, never on argv: certificates carry private
- * keys and basic-auth files carry password hashes, both visible in `ps`
- * (and capped at 128 KiB) when embedded in the command line.
+ * Both paths are atomic (tmp + rename / `mv -f`); the local one also skips
+ * unchanged content — see {@link writeLocalFileAtomic}. Remote content goes
+ * over stdin, never on argv: certificates carry private keys and basic-auth
+ * files carry password hashes, both visible in `ps` (and capped at 128 KiB)
+ * when embedded in the command line.
  */
 export const writeFileOnServer = async (
 	absolutePath: string,
@@ -138,15 +173,15 @@ export const writeFileOnServer = async (
 	serverId?: string | null,
 ): Promise<void> => {
 	if (serverId) {
+		const tmpPath = `${absolutePath}.tmp`;
 		await execAsyncWithStdin(
-			`mkdir -p ${shq(dirname(absolutePath))} && cat > ${shq(absolutePath)}`,
+			`mkdir -p ${shq(dirname(absolutePath))} && cat > ${shq(tmpPath)} && mv -f ${shq(tmpPath)} ${shq(absolutePath)}`,
 			content,
 			{ serverId },
 		);
 		return;
 	}
-	await mkdir(dirname(absolutePath), { recursive: true });
-	await writeFile(absolutePath, content, "utf8");
+	await writeLocalFileAtomic(absolutePath, content);
 };
 
 /** Delete a file on the Nixploy host or a managed server. Missing files are OK. */
@@ -366,7 +401,9 @@ export const writeAppTraefikConfig = async (input: WriteAppTraefikConfigInput): 
 	const config = await buildTraefikFileConfig(input);
 	const yamlStr = stringify(config);
 	const configPath = `${getDynamicDir()}/${input.appName}.yml`;
-	await writeFileOnServer(configPath, yamlStr, null);
+	// Atomic and idempotent: a deploy storm of unchanged apps is not a
+	// Traefik reload storm, and the watcher never sees a half-written file.
+	await writeLocalFileAtomic(configPath, yamlStr);
 };
 
 /**

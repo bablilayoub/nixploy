@@ -25,6 +25,11 @@
 #   NIXPLOY_UPDATE_TRAEFIK       1 = also pull & force Traefik  (default: 1)
 #   NIXPLOY_REFRESH_TRAEFIK_YML  1 = re-render static traefik.yml, keeping the ACME email (default: 1)
 #   NIXPLOY_PRUNE                1 = prune dangling images     (default: 1)
+#   NIXPLOY_PRE_UPDATE_BACKUP    1 = pg_dump the platform DB to <config>/backups before
+#                                rolling (default: 1; the last 3 dumps are kept)
+#   NIXPLOY_ALLOW_DOWNGRADE      1 = allow rolling to a LOWER semver tag (default: refuse —
+#                                migrations are forward-only; restore a dump first)
+#   NIXPLOY_MEMORY_LIMIT         Memory limit of the nixploy service (default: 2g)
 #   NIXPLOY_BUILD_FROM_SOURCE    1 = build locally instead of pull (opt-in only)
 #   NIXPLOY_REPO                 GitHub org/repo               (default: bablilayoub/nixploy)
 #   NIXPLOY_BRANCH               Branch for source builds      (default: the image tag)
@@ -47,6 +52,8 @@ NIXPLOY_BRANCH="${NIXPLOY_BRANCH:-$NIXPLOY_VERSION}"
 NIXPLOY_UPDATE_TRAEFIK="${NIXPLOY_UPDATE_TRAEFIK:-1}"
 NIXPLOY_REFRESH_TRAEFIK_YML="${NIXPLOY_REFRESH_TRAEFIK_YML:-1}"
 NIXPLOY_PRUNE="${NIXPLOY_PRUNE:-1}"
+NIXPLOY_PRE_UPDATE_BACKUP="${NIXPLOY_PRE_UPDATE_BACKUP:-1}"
+NIXPLOY_MEMORY_LIMIT="${NIXPLOY_MEMORY_LIMIT:-2g}"
 
 APP_IMAGE="${NIXPLOY_IMAGE:-ghcr.io/bablilayoub/nixploy:${NIXPLOY_VERSION}}"
 TRAEFIK_IMAGE="traefik:${TRAEFIK_VERSION}"
@@ -66,7 +73,7 @@ else
 fi
 
 STEP=0
-TOTAL_STEPS=5
+TOTAL_STEPS=6
 
 banner() {
 	printf '\n%s' "${C_CYAN}${C_BOLD}"
@@ -179,6 +186,54 @@ require_install() {
 	current="$(docker service inspect nixploy --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null || true)"
 	ok "Current image: ${current:-unknown}"
 	ok "Target image:  ${APP_IMAGE}"
+	check_downgrade "${current}"
+}
+
+# Tag of an image ref: "ghcr.io/x/nixploy:v0.2.0@sha256:…" → "v0.2.0" ("" when untagged).
+image_tag() {
+	local ref="${1%%@*}"
+	ref="${ref##*/}"
+	case "${ref}" in
+		*:*) printf '%s' "${ref##*:}" ;;
+		*) printf '' ;;
+	esac
+}
+
+is_semver() {
+	[[ "${1:-}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([-+].*)?$ ]]
+}
+
+# True when $1 < $2 (semver, optional "v" prefix, pre-release/build ignored).
+semver_lt() {
+	local a="${1#v}" b="${2#v}" a1 a2 a3 b1 b2 b3
+	a="${a%%[-+]*}"; b="${b%%[-+]*}"
+	IFS=. read -r a1 a2 a3 <<<"${a}"
+	IFS=. read -r b1 b2 b3 <<<"${b}"
+	[ "${a1}" -lt "${b1}" ] && return 0
+	[ "${a1}" -gt "${b1}" ] && return 1
+	[ "${a2}" -lt "${b2}" ] && return 0
+	[ "${a2}" -gt "${b2}" ] && return 1
+	[ "${a3}" -lt "${b3}" ]
+}
+
+# Migrations are forward-only: older code on a newer schema is undefined.
+# Refuse a lower semver tag unless NIXPLOY_ALLOW_DOWNGRADE=1 (after restoring
+# the matching pre-update dump — see docs/install.md).
+check_downgrade() {
+	local current_tag target_tag
+	current_tag="$(image_tag "${1:-}")"
+	target_tag="$(image_tag "${APP_IMAGE}")"
+	if ! is_semver "${current_tag}" || ! is_semver "${target_tag}"; then
+		info "Downgrade guard skipped (${current_tag:-untagged} → ${target_tag:-untagged}: not both semver)"
+		return 0
+	fi
+	if semver_lt "${target_tag}" "${current_tag}"; then
+		if [ "${NIXPLOY_ALLOW_DOWNGRADE:-0}" = "1" ]; then
+			warn "Downgrading ${current_tag} → ${target_tag} (NIXPLOY_ALLOW_DOWNGRADE=1). Restore the pre-update dump taken before ${current_tag} first, or the old code runs on a newer schema."
+		else
+			die "Refusing to downgrade ${current_tag} → ${target_tag}: migrations are forward-only. Restore the matching dump from ${HOST_CONFIG_DIR}/backups (docs/install.md → Downgrade), then re-run with NIXPLOY_ALLOW_DOWNGRADE=1."
+		fi
+	fi
 }
 
 # ── image ────────────────────────────────────────────────────────────────────
@@ -295,6 +350,56 @@ refresh_traefik_yml() {
 	fi
 }
 
+# ── pre-update backup ────────────────────────────────────────────────────────
+# Swarm's rollback restores the previous IMAGE, not the previous database:
+# a migration that partially applied stays applied. A pg_dump right before
+# the roll makes "roll back" mean the previous state too.
+BACKUP_DIR="${HOST_CONFIG_DIR}/backups"
+BACKUP_FILE=""
+BACKUP_KEEP=3
+
+postgres_container() {
+	docker ps --filter label=com.docker.swarm.service.name=nixploy-postgres --format '{{.ID}}' 2>/dev/null | head -n 1 || true
+}
+
+backup_database() {
+	if [ "${NIXPLOY_PRE_UPDATE_BACKUP}" != "1" ]; then
+		warn "Pre-update database backup skipped (NIXPLOY_PRE_UPDATE_BACKUP=0)"
+		return 0
+	fi
+	local container tag stamp size
+	container="$(postgres_container)"
+	[ -n "${container}" ] || die "nixploy-postgres container not found on this node — cannot take the pre-update backup (NIXPLOY_PRE_UPDATE_BACKUP=0 skips it)"
+	tag="$(image_tag "${APP_IMAGE}")"
+	tag="$(printf '%s' "${tag:-image}" | tr -c 'A-Za-z0-9._-' '-')"
+	stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+	mkdir -p "${BACKUP_DIR}"
+	chmod 700 "${BACKUP_DIR}"
+	BACKUP_FILE="${BACKUP_DIR}/pre-update-${tag}-${stamp}.sql.gz"
+	# --clean --if-exists: the dump restores over a non-empty database with a
+	# single psql. Credentials stay inside the postgres container.
+	if ! docker exec "${container}" sh -c 'pg_dump --clean --if-exists -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+		| gzip > "${BACKUP_FILE}"; then
+		rm -f "${BACKUP_FILE}"
+		die "pg_dump failed — not rolling. Check: docker service logs nixploy-postgres (NIXPLOY_PRE_UPDATE_BACKUP=0 skips the backup)"
+	fi
+	size="$(wc -c < "${BACKUP_FILE}" | tr -d ' ')"
+	if [ "${size:-0}" -lt 200 ]; then
+		rm -f "${BACKUP_FILE}"
+		die "pg_dump produced an empty dump — not rolling (NIXPLOY_PRE_UPDATE_BACKUP=0 skips the backup)"
+	fi
+	chmod 600 "${BACKUP_FILE}"
+	ok "Database dumped to ${BACKUP_FILE} ($((size / 1024)) KiB)"
+	info "Restore: gunzip -c ${BACKUP_FILE} | docker exec -i \$(docker ps -q -f label=com.docker.swarm.service.name=nixploy-postgres) psql -q -U ${POSTGRES_USER:-nixploy} -d ${POSTGRES_DB:-nixploy}"
+	# Keep the newest BACKUP_KEEP dumps. The names are generated above from
+	# [A-Za-z0-9._-] plus a UTC stamp, so sorting ls output by mtime is safe.
+	local old
+	# shellcheck disable=SC2012
+	ls -1t "${BACKUP_DIR}"/pre-update-*.sql.gz 2>/dev/null | tail -n +"$((BACKUP_KEEP + 1))" | while IFS= read -r old; do
+		rm -f "${old}"
+	done
+}
+
 # ── roll services ────────────────────────────────────────────────────────────
 LOG_ARGS=(--log-driver json-file --log-opt max-size=10m --log-opt max-file=3)
 ROLL_ARGS=(
@@ -302,6 +407,14 @@ ROLL_ARGS=(
 	--update-failure-action rollback
 	--update-monitor 60s
 	--rollback-order stop-first
+)
+# Service spec: 90 s for the SIGTERM handler to finish in-flight deploys; a
+# memory ceiling so a runaway build log cannot take the host down with the
+# panel, and a reservation so Swarm never co-schedules it onto nothing.
+SERVICE_ARGS=(
+	--stop-grace-period 90s
+	--limit-memory "${NIXPLOY_MEMORY_LIMIT}"
+	--reserve-memory 512m
 )
 
 # Env forwarded to the app: documented knobs, only when set (values already on
@@ -340,6 +453,7 @@ update_app() {
 		--no-resolve-image \
 		--image "${APP_IMAGE}" \
 		"${ROLL_ARGS[@]}" \
+		"${SERVICE_ARGS[@]}" \
 		"${LOG_ARGS[@]}" \
 		"${APP_ENV_ARGS[@]}" \
 		nixploy >/dev/null
@@ -373,15 +487,17 @@ app_published_port() {
 }
 
 # Through Traefik on loopback with the real host name: works before DNS has
-# propagated and does not need :3000 published. Prints the HTTP status.
+# propagated and does not need :3000 published. $1 = host, $2 = path. Prints
+# the HTTP status ("" on connection failure).
 probe_via_traefik() {
-	curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 8 \
-		--resolve "${1}:443:127.0.0.1" "https://${1}/setup" 2>/dev/null || true
+	curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 12 \
+		--resolve "${1}:443:127.0.0.1" "https://${1}${2}" 2>/dev/null || true
 }
 
+# $1 = host port, $2 = path.
 probe_via_port() {
-	curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 8 \
-		"http://127.0.0.1:${1}/setup" 2>/dev/null || true
+	curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 12 \
+		"http://127.0.0.1:${1}${2}" 2>/dev/null || true
 }
 
 # /setup answers 200 (first boot) or a redirect to /login once an owner exists.
@@ -390,10 +506,24 @@ is_ready_code() {
 	return 1
 }
 
+# Readiness is GET /api/ready — 200 only when Postgres, the docker socket and
+# the migration state are healthy (docs/observability.md). Images that predate
+# the endpoint answer 404; those fall back to the /setup probe.
+# $1 = probe function, $2 = its target (host or port).
+probe_ready() {
+	local code
+	code="$("$1" "$2" /api/ready)"
+	case "${code}" in
+		200) return 0 ;;
+		404) is_ready_code "$("$1" "$2" /setup)" && return 0 ;;
+	esac
+	return 1
+}
+
 app_is_ready() {
 	local host="$1" port="${2:-}"
-	is_ready_code "$(probe_via_traefik "${host}")" && return 0
-	[ -n "${port}" ] && is_ready_code "$(probe_via_port "${port}")" && return 0
+	probe_ready probe_via_traefik "${host}" && return 0
+	[ -n "${port}" ] && probe_ready probe_via_port "${port}" && return 0
 	return 1
 }
 
@@ -496,6 +626,9 @@ print_summary() {
 	printf '   %sYour data, secrets and certificates were kept.%s\n' "${C_DIM}" "${C_RESET}"
 	printf '   %sDB migrations (if any) ran on container start.%s\n' "${C_DIM}" "${C_RESET}"
 	printf '   %sRoll back by hand: docker service rollback nixploy%s\n' "${C_DIM}" "${C_RESET}"
+	if [ -n "${BACKUP_FILE}" ]; then
+		printf '   %sPre-update DB dump: %s (restore + pin the old tag to downgrade)%s\n' "${C_DIM}" "${BACKUP_FILE}" "${C_RESET}"
+	fi
 	printf '\n'
 }
 
@@ -514,6 +647,9 @@ main() {
 
 	step "App image"
 	pull_app_image
+
+	step "Database backup"
+	backup_database
 
 	step "Config"
 	refresh_traefik_yml

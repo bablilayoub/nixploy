@@ -1,5 +1,17 @@
 import { resolveApiKey, resolveApiUrl } from "./config.js";
 
+declare const __CLI_VERSION__: string;
+
+/** CLI version baked in by tsup (`"dev"` when running from source). */
+export const CLI_VERSION: string =
+	typeof __CLI_VERSION__ === "string" && __CLI_VERSION__ ? __CLI_VERSION__ : "dev";
+
+/** Sent on every request so panel logs can tell CLI versions apart. */
+export const USER_AGENT = `nixploy-cli/${CLI_VERSION}`;
+
+/** Hard cap per request; the panel answers in milliseconds, deploys are queued. */
+export const REQUEST_TIMEOUT_MS = 30_000;
+
 export class ApiError extends Error {
 	constructor(
 		message: string,
@@ -38,9 +50,11 @@ export async function api<T = unknown>(path: string, options: RequestOptions = {
 		method: options.method ?? (options.body !== undefined ? "POST" : "GET"),
 		headers: {
 			"x-api-key": apiKey,
+			"user-agent": USER_AGENT,
 			...(options.body !== undefined ? { "content-type": "application/json" } : {}),
 		},
 		body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 	});
 
 	const text = await response.text();
@@ -113,3 +127,29 @@ export const apiPost = <T>(
 	body?: unknown,
 	options?: Pick<RequestOptions, "apiUrl" | "apiKey">,
 ): Promise<T> => api<T>(path, { ...options, method: "POST", body });
+
+/**
+ * Unauthenticated GET against the panel (`/api/version`, `/api/ready`,
+ * `/api/health`): needs the base URL only, no API key. Non-2xx responses
+ * still resolve — readiness returns 503 with a body worth showing.
+ */
+export async function apiPublic<T = unknown>(
+	path: string,
+	options?: Pick<RequestOptions, "apiUrl">,
+): Promise<{ status: number; data: T | null }> {
+	const baseUrl = resolveApiUrl(options?.apiUrl);
+	const response = await fetch(`${baseUrl}/api/${path}`, {
+		headers: { "user-agent": USER_AGENT },
+		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+	});
+	const text = await response.text();
+	let data: T | null = null;
+	if (text.length > 0) {
+		try {
+			data = JSON.parse(text) as T;
+		} catch {
+			data = null;
+		}
+	}
+	return { status: response.status, data };
+}

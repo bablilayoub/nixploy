@@ -403,7 +403,7 @@ export function SchedulesTab({
 							/>
 						</div>
 						<div className="flex flex-col gap-2">
-							<Label htmlFor="schedule-cron">Cron expression</Label>
+							<Label htmlFor="schedule-cron">Cron expression (UTC)</Label>
 							<Select
 								value={presetValue}
 								onValueChange={(value) => {

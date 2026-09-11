@@ -49,7 +49,11 @@ Public `/register` is disabled after that.
    secrets under `/etc/nixploy/.env` (or `$NIXPLOY_CONFIG_DIR`)
 5. Starts `nixploy` + Postgres + Traefik from GHCR (builds from source if the
    image pull fails), then waits for the panel **through Traefik on
-   loopback** — public DNS does not have to be propagated yet
+   loopback** (`GET /api/ready`) — public DNS does not have to be propagated
+   yet. The `nixploy` service gets a 90 s stop grace period, a memory limit
+   (`NIXPLOY_MEMORY_LIMIT`, default `2g`, `512m` reserved) and rotated JSON
+   logs; `nixploy-postgres` gets a `pg_isready` healthcheck, the same log
+   rotation and a 60 s stop grace period so a checkpoint can finish
 
 The script is **idempotent** — safe to re-run. A re-run keeps the existing
 secrets, `BETTER_AUTH_URL`, the dashboard router (`00-nixploy-dashboard.yml`)
@@ -100,6 +104,7 @@ nixploy doctor
 | `DATABASE_POOL_MAX` | Postgres pool size in the Nixploy process (default `10`). Raise on busy single-node installs that share web + deploy worker + crons. Forwarded when set |
 | `LOG_LEVEL` | `debug` \| `info` \| `warn` \| `error` (default `info`) for the process logger. Forwarded when set |
 | `LOG_FORMAT` | Set to `json` for one JSON object per log line (default: plain text with `[subsystem]` prefix). Forwarded when set |
+| `NIXPLOY_MEMORY_LIMIT` | Memory limit of the `nixploy` Swarm service (default `2g`, with a `512m` reservation). Raise on hosts that build large images inside the panel |
 
 Forwarded variables become part of the `nixploy` service spec, so they
 survive later `update.sh` runs; `update.sh` only adds/overwrites the ones set
@@ -126,11 +131,55 @@ Keeps secrets, Postgres data, ACME certs, and Traefik routes. Migrations run on
 boot. Or use **Settings → Platform → Updates** in the UI.
 
 The roll is `stop-first` with `--update-failure-action rollback`: the image's
-`HEALTHCHECK` (`/api/auth/ok`) gates readiness, and a new container that dies
-within the 60 s monitor window makes Swarm restore the previous version
-automatically — `update.sh` reports this as a failed update. Readiness is
-probed through Traefik on loopback, so `:3000` does not need to be published.
-To roll back by hand: `docker service rollback nixploy`.
+`HEALTHCHECK` (`GET /api/ready`, see [observability.md](./observability.md#platform-health-endpoints))
+gates readiness — it answers 503 while Postgres, the Docker socket or the
+migration state is broken — and a new container that dies within the 60 s
+monitor window makes Swarm restore the previous version automatically;
+`update.sh` reports this as a failed update. Readiness is probed through
+Traefik on loopback (`https://<host>/api/ready`, with a `/setup` fallback for
+images that predate the endpoint), so `:3000` does not need to be published.
+The service has a 90 s stop grace period so an in-flight deploy can finish
+or be marked as interrupted cleanly. To roll back by hand:
+`docker service rollback nixploy`.
+
+### Upgrade safety
+
+Swarm's rollback restores the previous **image**, not the previous
+**database**: a migration that partially applied stays applied. Both update
+paths therefore dump the platform database right before the roll:
+
+- `update.sh` runs `pg_dump --clean --if-exists` inside `nixploy-postgres`
+  into `<config>/backups/pre-update-<tag>-<timestamp>.sql.gz` (mode `600`,
+  the newest 3 are kept) and prints the restore command. A failed or empty
+  dump aborts the update; `NIXPLOY_PRE_UPDATE_BACKUP=0` skips it.
+- The in-app updater (Settings → Updates) does the same through the Docker
+  socket. When no `nixploy-postgres` container is on the node (development
+  against a plain Postgres) it logs a warning and continues.
+- The in-app updater also refuses to roll while deployments are running — the
+  restart would interrupt them — and asks for confirmation ("Update anyway")
+  first. Automatic updates never force; they retry on the next check.
+
+Restore a dump (stops nothing; run it before pinning an older tag):
+
+```bash
+gunzip -c /etc/nixploy/backups/pre-update-v0.2.0-20260910T120000Z.sql.gz \
+  | docker exec -i "$(docker ps -q -f label=com.docker.swarm.service.name=nixploy-postgres)" \
+      psql -q -U nixploy -d nixploy
+```
+
+### Downgrade
+
+Migrations are forward-only, so `update.sh` refuses to roll to a **lower**
+semver tag (`NIXPLOY_VERSION=v0.1.0` while `v0.2.0` runs). To go back:
+
+1. Restore the pre-update dump that was taken **before** the version you are
+   leaving was installed (command above).
+2. Re-run with the old tag and the guard disabled:
+   `NIXPLOY_VERSION=v0.1.0 NIXPLOY_ALLOW_DOWNGRADE=1 … update.sh`.
+
+`/api/ready` reports `migrations.state: "ahead"` (a warning, not a failure)
+while old code runs on a newer schema. Non-semver tags (`latest`, digests)
+skip the guard.
 
 ### Update overrides
 
@@ -144,6 +193,9 @@ To roll back by hand: `docker service rollback nixploy`.
 | `NIXPLOY_UPDATE_TRAEFIK` | `1` | Also pull & force Traefik service |
 | `NIXPLOY_REFRESH_TRAEFIK_YML` | `1` | Re-render static `traefik.yml` locally (same content as the app writes), keeping the ACME email |
 | `NIXPLOY_PRUNE` | `1` | Prune dangling images after roll |
+| `NIXPLOY_PRE_UPDATE_BACKUP` | `1` | `pg_dump` the platform DB to `<config>/backups` before rolling (keeps 3) |
+| `NIXPLOY_ALLOW_DOWNGRADE` | `0` | Allow rolling to a lower semver tag (restore a dump first — see above) |
+| `NIXPLOY_MEMORY_LIMIT` | `2g` | Memory limit of the `nixploy` service (`512m` reserved) |
 | `NIXPLOY_BUILD_FROM_SOURCE` | `0` | Build locally instead of pulling GHCR |
 | `NIXPLOY_REPO` / `NIXPLOY_BRANCH` | `bablilayoub/nixploy` / image tag | Source for local builds |
 
@@ -155,7 +207,9 @@ See the header comments in [`update.sh`](../update.sh).
 | --- | --- |
 | Can't reach panel | `docker service ls`, `docker service logs nixploy`, firewall 80/443 |
 | Setup URL shows a private IP / "Invalid origin" on sign-in | `BETTER_AUTH_URL` in `/etc/nixploy/.env` must be the address you browse to: re-run with `NIXPLOY_PUBLIC_IP=…` or `NIXPLOY_DOMAIN=…` |
-| Update rolled back | `docker service ps nixploy --no-trunc` shows the failed task; `docker service logs nixploy` has the boot/migration error |
+| Update rolled back | `docker service ps nixploy --no-trunc` shows the failed task; `docker service logs nixploy` has the boot/migration error; restore the pre-update dump if a migration half-applied (see Upgrade safety) |
+| Panel unhealthy / restart loop | `curl -s https://<host>/api/ready` lists the failing check (Postgres, docker socket, migrations); `nixploy doctor` prints the same plus versions |
+| Panel boots before Postgres after a reboot | Expected: the entrypoint waits up to 60 s (`NIXPLOY_DB_WAIT_SECONDS`) and the migrator retries connection errors before giving up |
 | TLS stuck | DNS A record, Let's Encrypt email (not `nixploy@localhost`), Traefik logs |
 | Deploy never finishes | Application → Deployments → Logs; Docker disk space |
 | Traefik not routing | Domain attached? Service status `done`? `nixploy-network` connected? |

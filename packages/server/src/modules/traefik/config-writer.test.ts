@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,7 +25,10 @@ import {
 	buildTraefikFileConfig,
 	type TraefikDomainEntry,
 	writeAppTraefikConfig,
+	writeLocalFileAtomic,
 } from "./config-writer";
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const baseDomain: TraefikDomainEntry = {
 	host: "app.example.com",
@@ -292,5 +295,56 @@ describe("writeAppTraefikConfig", () => {
 
 	it("removing a config that does not exist is a no-op", async () => {
 		await expect(writeAppTraefikConfig({ appName: "ghost", domains: [] })).resolves.toBeUndefined();
+	});
+
+	it("skips the write when the rendered YAML is unchanged and rewrites when it changes", async () => {
+		const file = `${configDir}/traefik/dynamic/myapp.yml`;
+		await writeAppTraefikConfig({ appName: "myapp", domains: [baseDomain] });
+		const first = await stat(file);
+		await sleep(30);
+
+		// Same input → identical YAML → the file is left untouched (no reload).
+		await writeAppTraefikConfig({ appName: "myapp", domains: [baseDomain] });
+		expect((await stat(file)).mtimeMs).toBe(first.mtimeMs);
+
+		await writeAppTraefikConfig({
+			appName: "myapp",
+			domains: [{ ...baseDomain, host: "new.example.com" }],
+		});
+		expect((await stat(file)).mtimeMs).not.toBe(first.mtimeMs);
+		expect(await readFile(file, "utf8")).toContain("new.example.com");
+		// No temp files linger in the watched directory.
+		expect(await readdir(`${configDir}/traefik/dynamic`)).toEqual(["myapp.yml"]);
+	});
+});
+
+describe("writeLocalFileAtomic", () => {
+	let dir: string;
+
+	beforeEach(async () => {
+		dir = await mkdtemp(join(tmpdir(), "nixploy-atomic-test-"));
+	});
+	afterEach(async () => {
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	it("creates parent directories, writes once, then reports unchanged content", async () => {
+		const file = join(dir, "nested", "app.yml");
+		expect(await writeLocalFileAtomic(file, "a: 1\n")).toBe("written");
+		expect(await writeLocalFileAtomic(file, "a: 1\n")).toBe("unchanged");
+		expect(await writeLocalFileAtomic(file, "a: 2\n")).toBe("written");
+		expect(await readFile(file, "utf8")).toBe("a: 2\n");
+		expect(await readdir(join(dir, "nested"))).toEqual(["app.yml"]);
+	});
+
+	it("never leaves a partial file behind when the temp write fails", async () => {
+		const file = join(dir, "app.yml");
+		await writeLocalFileAtomic(file, "keep\n");
+		// A directory at the temp path's parent cannot be created because
+		// `file` itself is the parent → writeFile fails, the original stays.
+		const bad = join(file, "child.yml");
+		await expect(writeLocalFileAtomic(bad, "x")).rejects.toThrow();
+		expect(await readFile(file, "utf8")).toBe("keep\n");
+		expect(await readdir(dir)).toEqual(["app.yml"]);
 	});
 });

@@ -509,7 +509,7 @@ export function SchedulesView() {
 							</Select>
 						</div>
 						<div className="grid gap-2">
-							<Label htmlFor="schedule-cron">Cron</Label>
+							<Label htmlFor="schedule-cron">Cron (UTC)</Label>
 							<Input
 								id="schedule-cron"
 								value={form.cronExpression}

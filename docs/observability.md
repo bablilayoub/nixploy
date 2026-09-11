@@ -81,6 +81,56 @@ them.
   Deploy success/failure notifications come separately from the deploy
   worker (`modules/deployment/events.ts`).
 
+## Platform health endpoints
+
+Three unauthenticated routes describe the panel itself (never tenant data,
+never configuration). All answer `cache-control: no-store`.
+
+| Route | Purpose | Status |
+| --- | --- | --- |
+| `GET /api/health` | Liveness — the process serves HTTP. `{ ok: true, uptimeSeconds }` | always 200 |
+| `GET /api/ready` | Readiness — per-check report (below) | 200, or **503** with `failing: [...]` |
+| `GET /api/version` | `{ version, commit?, node, nextjs }` for `nixploy doctor` and support | 200 |
+
+`/api/ready` (logic in `packages/server/src/modules/observability/health.ts`,
+results cached 5 s so Swarm, `update.sh` and dashboards polling together cost
+one pass; every probe is bounded to 4 s):
+
+| Check | What | Fails readiness? |
+| --- | --- | --- |
+| `database` | `SELECT 1` through the pool | yes |
+| `docker` | `docker.ping()` on the host socket | yes |
+| `migrations` | journal shipped with the build vs `drizzle.__drizzle_migrations` (`state`: `current` / `behind` / `ahead` / `unknown`, plus `applied` / `expected` counts) | `behind` only — `ahead` (old code on a newer schema, i.e. a downgrade) and `unknown` are warnings |
+| `queue` | in-memory deploy queue (`pending` / `running`) and rows still `running` after 90 min (`stuck`) | never — warning only |
+| `traefik` | `nixploy-traefik` Swarm service present (`docker service ls`, cached 10 s) | only when the panel bootstraps Traefik itself (`NIXPLOY_DISABLE_TRAEFIK_BOOT` unset); the production image sets it, so there a missing proxy is a warning |
+
+Consumers: the image `HEALTHCHECK` (Swarm restarts a task that stays 503 and
+`--update-failure-action rollback` reverts a bad update), the post-roll
+probes in `install.sh` / `update.sh`, and `nixploy doctor`, which prints the
+report next to the server/CLI versions and warns on a major-version mismatch.
+
+## Cron schedules run in UTC
+
+Every cron expression in the panel — database and volume backups,
+schedules, the update checker — runs in the process time zone, which is UTC
+in the production image (Alpine, no `TZ`). `0 3 * * *` is 03:00 UTC, not
+local time; the inputs are labelled accordingly.
+
+## Retention
+
+The hourly maintenance cron (`modules/deployment/maintenance.ts`, `7 * * * *`):
+
+- deletes `deployment` rows older than 30 days beyond the newest 50 per
+  application / compose / schedule, together with their `.log` and
+  `.explain.json` files (rows still `running` or referenced by a rollback
+  snapshot are kept);
+- removes orphaned or > 30-day-old build logs under `<config>/logs` (one
+  anti-join per directory, the table is never loaded into memory);
+- removes schedule run output under `<config>/schedules` older than 30 days;
+- drops incidents resolved more than 90 days ago or older than 180 days;
+- drops `audit_log` rows older than `NIXPLOY_AUDIT_RETENTION_DAYS` (default
+  `365`; `0` keeps them forever).
+
 ## Healthchecks
 
 Applications → Advanced → Healthcheck writes a Docker `Healthcheck`

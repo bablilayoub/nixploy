@@ -100,20 +100,36 @@ export const updatesRouter = router({
 		return checkForUpdates({ persist: true });
 	}),
 
-	/** Pull + roll the nixploy Swarm service. The process will restart shortly after. */
-	runUpdate: protectedProcedure.mutation(async ({ ctx }) => {
-		const organizationId = await requireInstanceAdmin(ctx.session);
-		const settings = await getUpdateSettings();
-		const result = await applyUpdate();
-		void auditFromSession(ctx, organizationId, {
-			action: "platform.update",
-			targetType: "web_server",
-			targetId: "nixploy",
-			targetName: settings.image,
-			metadata: { started: result.started, image: result.image },
-		});
-		return result;
-	}),
+	/**
+	 * Pull + dump the database + roll the nixploy Swarm service. The process
+	 * restarts shortly after. Refused while deployments are running unless
+	 * `force` is set (the UI asks for confirmation first).
+	 */
+	runUpdate: protectedProcedure
+		.input(z.object({ force: z.boolean().optional() }).optional())
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await requireInstanceAdmin(ctx.session);
+			const settings = await getUpdateSettings();
+			const force = input?.force ?? false;
+			const result = await applyUpdate({ force });
+			void auditFromSession(ctx, organizationId, {
+				action: "platform.update",
+				targetType: "web_server",
+				targetId: "nixploy",
+				targetName: settings.image,
+				metadata: {
+					started: result.started,
+					image: result.image,
+					force,
+					...(result.blockedByDeployments && {
+						blockedByDeployments: true,
+						activeDeployments: result.activeDeployments,
+					}),
+					...(result.backupPath && { backupPath: result.backupPath }),
+				},
+			});
+			return result;
+		}),
 
 	/** Toggle auto-check / auto-update and optionally the cron / image. */
 	updateSettings: protectedProcedure.input(settingsInput).mutation(async ({ ctx, input }) => {

@@ -420,7 +420,7 @@ export function VolumeBackupsTab({
 							/>
 						</div>
 						<div className="flex flex-col gap-2">
-							<Label htmlFor="vb-cron">Cron expression</Label>
+							<Label htmlFor="vb-cron">Cron expression (UTC)</Label>
 							<Select
 								value={presetValue}
 								onValueChange={(value) => {

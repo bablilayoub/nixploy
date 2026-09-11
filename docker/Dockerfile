@@ -50,6 +50,9 @@ ENV NIXPLOY_DISABLE_TRAEFIK_BOOT=1
 # Surfaced in Settings → Updates. install.sh / update.sh / CI pass --build-arg.
 ARG NIXPLOY_APP_VERSION=0.1.0
 ENV NIXPLOY_APP_VERSION=$NIXPLOY_APP_VERSION
+# Optional git SHA for /api/version (`--build-arg NIXPLOY_GIT_COMMIT=$(git rev-parse HEAD)`).
+ARG NIXPLOY_GIT_COMMIT=""
+ENV NIXPLOY_GIT_COMMIT=$NIXPLOY_GIT_COMMIT
 
 # Docker CLI talks to the host socket (Swarm, builds, logs).
 # git/openssh used when cloning app sources during deploys.
@@ -81,12 +84,12 @@ EXPOSE 3000
 
 # Swarm keeps a task out of the service VIP until this passes and, with
 # --update-failure-action rollback (install.sh / update.sh), rolls a failing
-# update back. /api/auth/ok is better-auth's static 200; /setup (200 on first
-# boot, redirect afterwards) is the fallback for images without it.
-HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=3 \
-	CMD curl -fsS -o /dev/null http://127.0.0.1:3000/api/auth/ok \
-		|| curl -fsS -o /dev/null http://127.0.0.1:3000/setup \
-		|| exit 1
+# update back. /api/ready answers 503 when Postgres, the docker socket or the
+# migration state is broken (see packages/server/src/modules/observability/health.ts);
+# the generous start period covers a cold host where migrations wait for
+# Postgres to come up.
+HEALTHCHECK --interval=15s --timeout=10s --start-period=180s --retries=3 \
+	CMD curl -fsS -o /dev/null http://127.0.0.1:3000/api/ready || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 # tsx straight from the workspace install (pnpm shim with absolute NODE_PATH).

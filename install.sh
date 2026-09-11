@@ -29,6 +29,7 @@
 #   TRUSTED_PROXIES              Forwarded to the app            (default: 1 — Traefik fronts it)
 #   LOG_LEVEL / LOG_FORMAT       Forwarded to the app when set (debug|info|warn|error / json)
 #   DATABASE_POOL_MAX            Forwarded to the app when set
+#   NIXPLOY_MEMORY_LIMIT         Memory limit of the nixploy service (default: 2g)
 #   POSTGRES_VERSION             Postgres image tag             (default: 17-alpine)
 #   TRAEFIK_VERSION              Traefik image tag              (default: v3.5.0)
 #   NIXPLOY_SKIP_DOCKER_INSTALL  1 = require pre-installed Docker (skip get.docker.com)
@@ -51,6 +52,7 @@ NIXPLOY_CONFIG_DIR="${NIXPLOY_CONFIG_DIR:-/etc/nixploy}"
 HOST_CONFIG_DIR="${NIXPLOY_CONFIG_DIR}"
 POSTGRES_VERSION="${POSTGRES_VERSION:-17-alpine}"
 TRAEFIK_VERSION="${TRAEFIK_VERSION:-v3.5.0}"
+NIXPLOY_MEMORY_LIMIT="${NIXPLOY_MEMORY_LIMIT:-2g}"
 NIXPLOY_REPO="${NIXPLOY_REPO:-bablilayoub/nixploy}"
 # Pin assets to the same release tag as the image unless overridden.
 NIXPLOY_BRANCH="${NIXPLOY_BRANCH:-$NIXPLOY_VERSION}"
@@ -641,6 +643,14 @@ ROLL_ARGS=(
 	--update-monitor 60s
 	--rollback-order stop-first
 )
+# Service spec: 90 s for the SIGTERM handler to finish in-flight deploys; a
+# memory ceiling so a runaway build log cannot take the host down with the
+# panel, and a reservation so Swarm never co-schedules it onto nothing.
+SERVICE_ARGS=(
+	--stop-grace-period 90s
+	--limit-memory "${NIXPLOY_MEMORY_LIMIT}"
+	--reserve-memory 512m
+)
 
 # Env forwarded to the app: documented knobs, only when the operator set them.
 # $1 is the flag to emit (--env for create, --env-add for update).
@@ -665,6 +675,8 @@ create_postgres() {
 	fi
 	# Only the three POSTGRES_* values (exported from .env) — never the whole
 	# file, which would put the panel's secrets into the database container.
+	# Health: pg_isready inside the container (env expands there, hence the
+	# single quotes). 60 s grace lets a checkpoint finish on stop.
 	docker service create \
 		--name nixploy-postgres \
 		--network "${NETWORK_NAME}" \
@@ -673,6 +685,10 @@ create_postgres() {
 		--detach \
 		--env POSTGRES_USER --env POSTGRES_PASSWORD --env POSTGRES_DB \
 		--mount type=volume,source=nixploy-postgres-data,target=/var/lib/postgresql/data \
+		--health-cmd 'pg_isready -q -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+		--health-interval 10s --health-timeout 5s --health-retries 5 --health-start-period 30s \
+		--stop-grace-period 60s \
+		"${LOG_ARGS[@]}" \
 		"${POSTGRES_IMAGE}" >/dev/null
 	ok "Created nixploy-postgres"
 }
@@ -753,6 +769,7 @@ create_app() {
 			--detach --force --no-resolve-image \
 			--image "${APP_IMAGE}" \
 			"${ROLL_ARGS[@]}" \
+			"${SERVICE_ARGS[@]}" \
 			"${LOG_ARGS[@]}" \
 			--env-add "BETTER_AUTH_URL=${BETTER_AUTH_URL}" \
 			--env-add NIXPLOY_CONFIG_DIR=/etc/nixploy \
@@ -782,6 +799,7 @@ create_app() {
 		--mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
 		--mount type=bind,source="${NIXPLOY_CONFIG_DIR}",target=/etc/nixploy \
 		"${ROLL_ARGS[@]}" \
+		"${SERVICE_ARGS[@]}" \
 		"${LOG_ARGS[@]}" \
 		"${APP_IMAGE}" >/dev/null
 	ok "Created nixploy"
@@ -789,16 +807,17 @@ create_app() {
 
 # ── readiness ────────────────────────────────────────────────────────────────
 # Through Traefik on loopback with the real host name: works before DNS has
-# propagated and does not need :3000 published. Prints the HTTP status ("" on
-# connection failure).
+# propagated and does not need :3000 published. $1 = host, $2 = path. Prints
+# the HTTP status ("" on connection failure).
 probe_via_traefik() {
-	curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 8 \
-		--resolve "${1}:443:127.0.0.1" "https://${1}/setup" 2>/dev/null || true
+	curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 12 \
+		--resolve "${1}:443:127.0.0.1" "https://${1}${2}" 2>/dev/null || true
 }
 
+# $1 = host port, $2 = path.
 probe_via_port() {
-	curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 8 \
-		"http://127.0.0.1:${1}/setup" 2>/dev/null || true
+	curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 12 \
+		"http://127.0.0.1:${1}${2}" 2>/dev/null || true
 }
 
 # /setup answers 200 (first boot) or a redirect to /login once an owner exists.
@@ -807,10 +826,24 @@ is_ready_code() {
 	return 1
 }
 
+# Readiness is GET /api/ready — 200 only when Postgres, the docker socket and
+# the migration state are healthy (docs/observability.md). Images that predate
+# the endpoint answer 404; those fall back to the /setup probe.
+# $1 = probe function, $2 = its target (host or port).
+probe_ready() {
+	local code
+	code="$("$1" "$2" /api/ready)"
+	case "${code}" in
+		200) return 0 ;;
+		404) is_ready_code "$("$1" "$2" /setup)" && return 0 ;;
+	esac
+	return 1
+}
+
 app_is_ready() {
 	local host="$1" port="${2:-}"
-	is_ready_code "$(probe_via_traefik "${host}")" && return 0
-	[ -n "${port}" ] && is_ready_code "$(probe_via_port "${port}")" && return 0
+	probe_ready probe_via_traefik "${host}" && return 0
+	[ -n "${port}" ] && probe_ready probe_via_port "${port}" && return 0
 	return 1
 }
 

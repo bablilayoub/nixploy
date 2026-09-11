@@ -1,18 +1,125 @@
+import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
+import path from "node:path";
+import { createLogger } from "../../lib/logger";
 import { execAsync } from "../../utils/exec";
-import { shellQuote } from "../deployment/paths";
+import { getConfigDir, shellQuote } from "../deployment/paths";
+import { countActiveDeployments } from "../observability/health";
 import { NIXPLOY_SERVICE_NAME } from "./check";
 import { assertValidImageRef } from "./registry";
 import { getUpdateSettings, patchUpdateSettings } from "./settings";
+
+const log = createLogger("updates");
 
 let applyInFlight = false;
 
 /** Consider an update stuck after this long and clear the flag. */
 const UPDATE_STUCK_AFTER_MS = 15 * 60 * 1000;
 
+/** Pre-update dumps kept under `<config>/backups` (oldest pruned first). */
+export const PRE_UPDATE_BACKUP_KEEP = 3;
+const PRE_UPDATE_BACKUP_PREFIX = "pre-update-";
+const POSTGRES_SERVICE_LABEL = "com.docker.swarm.service.name=nixploy-postgres";
+
 export interface ApplyUpdateResult {
 	started: boolean;
 	image: string;
 	message: string;
+	/** True when the roll was refused because deployments are in flight (pass `force`). */
+	blockedByDeployments?: boolean;
+	activeDeployments?: number;
+	/** Path of the pre-update database dump, `null` when it was skipped (no postgres container). */
+	backupPath?: string | null;
+}
+
+/** Tag of an image ref: `ghcr.io/x/nixploy:v0.2.0@sha256:…` → `v0.2.0` (`""` when untagged). */
+export function imageTag(image: string): string {
+	const withoutDigest = image.split("@")[0] ?? "";
+	const last = withoutDigest.slice(withoutDigest.lastIndexOf("/") + 1);
+	const colon = last.indexOf(":");
+	return colon === -1 ? "" : last.slice(colon + 1);
+}
+
+/** Delete all but the newest `keep` pre-update dumps in `dir` (by mtime). */
+export async function prunePreUpdateDumps(
+	dir: string,
+	keep = PRE_UPDATE_BACKUP_KEEP,
+): Promise<string[]> {
+	let names: string[];
+	try {
+		names = await readdir(dir);
+	} catch {
+		return [];
+	}
+	const dumps = await Promise.all(
+		names
+			.filter((name) => name.startsWith(PRE_UPDATE_BACKUP_PREFIX) && name.endsWith(".sql.gz"))
+			.map(async (name) => {
+				const file = path.join(dir, name);
+				const info = await stat(file);
+				return { file, mtimeMs: info.mtimeMs };
+			}),
+	);
+	dumps.sort((a, b) => b.mtimeMs - a.mtimeMs);
+	const removed: string[] = [];
+	for (const dump of dumps.slice(Math.max(0, keep))) {
+		await rm(dump.file, { force: true });
+		removed.push(dump.file);
+	}
+	return removed;
+}
+
+/**
+ * `pg_dump` the platform database through the `nixploy-postgres` container
+ * into `<config>/backups/pre-update-<tag>-<timestamp>.sql.gz`, mirroring
+ * update.sh: Swarm's rollback restores the previous image, this restores
+ * the previous state. Skipped (with a warning) when the container is not on
+ * this node — e.g. development against a plain Postgres; any other failure
+ * aborts the update. Credentials never leave the postgres container.
+ */
+export async function preUpdateDatabaseDump(image: string): Promise<string | null> {
+	const containerId = (
+		await execAsync(`docker ps --filter label=${POSTGRES_SERVICE_LABEL} --format '{{.ID}}'`, {
+			timeout: 15_000,
+		})
+	)
+		.split("\n")[0]
+		?.trim();
+	if (!containerId) {
+		log.warn(
+			"nixploy-postgres container not found on this node — skipping the pre-update database dump",
+		);
+		return null;
+	}
+	const dir = path.join(getConfigDir(), "backups");
+	await mkdir(dir, { recursive: true, mode: 0o700 });
+	const tag = imageTag(image).replace(/[^A-Za-z0-9._-]/g, "-") || "image";
+	const stamp = new Date()
+		.toISOString()
+		.replace(/[-:]/g, "")
+		.replace(/\.\d{3}Z$/, "Z");
+	const file = path.join(dir, `${PRE_UPDATE_BACKUP_PREFIX}${tag}-${stamp}.sql.gz`);
+	try {
+		// --clean --if-exists: restores over a non-empty database with one psql.
+		await execAsync(
+			`set -o pipefail; docker exec ${shellQuote(containerId)} sh -c 'pg_dump --clean --if-exists -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > ${shellQuote(file)}`,
+			{ timeout: 600_000 },
+		);
+		const { size } = await stat(file);
+		if (size < 200) throw new Error("pg_dump produced an empty dump");
+		await chmod(file, 0o600);
+	} catch (error) {
+		await rm(file, { force: true }).catch(() => {});
+		throw new Error(
+			`Pre-update database dump failed: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+	log.info(`Pre-update database dump written to ${file}`);
+	await prunePreUpdateDumps(dir).catch((error: unknown) => {
+		log.warn("Could not prune old pre-update dumps", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+	});
+	return file;
 }
 
 /**
@@ -22,13 +129,20 @@ export interface ApplyUpdateResult {
  * `stop-first`: with start-first the new task can never bind the port while
  * the old one holds it and the update deadlocks (spinner forever).
  *
- * The pull happens synchronously so failures surface to the caller; the
- * actual `docker service update` is delayed a couple of seconds so the HTTP
- * response reaches the browser before this very process is stopped.
+ * The pull and the pre-update database dump happen synchronously so failures
+ * surface to the caller; the actual `docker service update` is delayed a
+ * couple of seconds so the HTTP response reaches the browser before this
+ * very process is stopped.
+ *
+ * Refused while deployments are in flight (the restart would interrupt
+ * them — see `deployment/recovery.ts`) unless `force` is set; the automatic
+ * updater never forces and simply retries on its next tick.
  */
 export async function applyUpdate(options?: {
 	/** Override the image from settings (rarely needed). */
 	image?: string;
+	/** Roll even while deployments are running. */
+	force?: boolean;
 }): Promise<ApplyUpdateResult> {
 	if (applyInFlight) {
 		return {
@@ -50,6 +164,24 @@ export async function applyUpdate(options?: {
 	// Validate before anything touches a shell: the ref is stored settings /
 	// caller input, and `exec` runs through `sh -c`.
 	const image = assertValidImageRef(options?.image?.trim() || settings.image).canonical;
+
+	if (!options?.force) {
+		const active = await countActiveDeployments().catch((error: unknown) => {
+			log.warn("Could not count active deployments before the update", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return 0;
+		});
+		if (active > 0) {
+			return {
+				started: false,
+				image,
+				message: `${active} deployment(s) are running — wait for them to finish or force the update`,
+				blockedByDeployments: true,
+				activeDeployments: active,
+			};
+		}
+	}
 	applyInFlight = true;
 
 	try {
@@ -58,6 +190,16 @@ export async function applyUpdate(options?: {
 		applyInFlight = false;
 		const message = error instanceof Error ? error.message : String(error);
 		await patchUpdateSettings({ lastError: `Image pull failed: ${message}` });
+		throw error;
+	}
+
+	let backupPath: string | null = null;
+	try {
+		backupPath = await preUpdateDatabaseDump(image);
+	} catch (error) {
+		applyInFlight = false;
+		const message = error instanceof Error ? error.message : String(error);
+		await patchUpdateSettings({ lastError: message });
 		throw error;
 	}
 
@@ -87,6 +229,9 @@ export async function applyUpdate(options?: {
 						`--image ${shellQuote(image)}`,
 						"--update-order stop-first",
 						"--update-failure-action rollback",
+						// Same monitor window as install.sh / update.sh (ROLL_ARGS): a
+						// task that passes HEALTHCHECK and dies within 60 s still rolls back.
+						"--update-monitor 60s",
 						"--rollback-order stop-first",
 						NIXPLOY_SERVICE_NAME,
 					].join(" "),
@@ -108,7 +253,10 @@ export async function applyUpdate(options?: {
 	return {
 		started: true,
 		image,
-		message: "Update started — the dashboard restarts in a few seconds",
+		message: backupPath
+			? "Update started — database dumped, the dashboard restarts in a few seconds"
+			: "Update started — the dashboard restarts in a few seconds",
+		backupPath,
 	};
 }
 
