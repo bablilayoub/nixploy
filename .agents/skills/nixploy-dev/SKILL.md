@@ -36,6 +36,12 @@ Org `<name>'s Org` is created during setup.
 Production build before shipping big UI changes:
 `cd apps/web && set -a && . ./.env && set +a && pnpm build`.
 
+## Server conventions (2026-09)
+
+- **Errors**: modules throw `DomainError` (`modules/errors.ts` helpers `badRequest` / `notFound` / `conflict` / `forbidden` / `preconditionFailed` / `timeout`), never `TRPCError` (Biome blocks `@trpc/server` under `modules/**`); `trpc/init.ts` is the single mapping point and REST/MCP inherit it. Best-effort teardown goes through `bestEffort(label, fn)` (`utils/best-effort.ts`).
+- **Service kinds**: never hand-write the seven-way `application | compose | postgres | mysql | mariadb | mongo | redis` union or a `switch` over it — import `SERVICE_KINDS` / `ServiceKind` from `modules/services/kinds` (import-free, bundled by the panel) and dispatch through `SERVICE_REGISTRY[kind]` (`modules/services/registry`); zod inputs use `serviceKindSchema` / `databaseKindSchema`.
+- **Transactions**: multi-row writes take `executor: DbExecutor = db` (from `db/index.ts`) and the caller wraps them in `db.transaction(...)`; Swarm, Traefik and file side effects stay outside (best-effort, not rollback-able).
+
 ## Feature recipes
 
 - **New tRPC router**: `packages/server/src/trpc/routers/<kebab>.ts`, export
