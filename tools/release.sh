@@ -192,16 +192,18 @@ ensure_clean_enough() {
 }
 
 # Push only what is needed so we don't kick off CI/Docker/etc.
-# Version commits use [skip ci]. Tag push alone runs Release or Publish CLI.
+# Version commits carry [release]: ci.yml and docker.yml skip them, while the tag push
+# still runs Release / Publish CLI. Never use [skip ci] here — GitHub applies it to the
+# tag push as well, so the release workflow would be skipped.
 push_release() {
 	local tag="$1"
 	if [[ "$NO_PUSH" -eq 1 ]]; then
 		info "skipped push (--no-push); local tag $tag"
 		return
 	fi
-	# Push commits first (if any). [skip ci] in the message prevents CI + Docker.
+	# Push commits first (if any). [release] in the message prevents CI + Docker.
 	if [[ "$DRY_RUN" -eq 1 ]]; then
-		printf '+ git push origin HEAD   # commit should include [skip ci]\n'
+		printf '+ git push origin HEAD   # commit should include [release]\n'
 		printf '+ git push origin %s   # only Release / Publish CLI for this tag\n' "$tag"
 		return
 	fi
@@ -246,7 +248,7 @@ release_paas() {
 		if [[ "$DRY_RUN" -eq 1 ]]; then
 			info "would set version $next in root + apps/web + apps/landing + packages/server"
 			info "would pin install.sh / update.sh to $tag"
-			info "would commit: chore: release $tag [skip ci]"
+			info "would commit: chore: release $tag [release]"
 		else
 			set_json_version "$ROOT/package.json" "$next"
 			set_json_version "$ROOT/apps/web/package.json" "$next"
@@ -257,7 +259,7 @@ release_paas() {
 			# --version equal to the current version edits nothing: skip the commit
 			# instead of failing "nothing to commit" with a half-done tree.
 			git diff --quiet --cached || git commit -m "$(cat <<EOF
-chore: release ${tag} [skip ci]
+chore: release ${tag} [release]
 
 EOF
 )"
@@ -270,7 +272,7 @@ EOF
 			pin_install_defaults "$tag"
 			git add install.sh update.sh
 			git diff --quiet --cached || git commit -m "$(cat <<EOF
-chore: pin install defaults to ${tag} [skip ci]
+chore: pin install defaults to ${tag} [release]
 
 EOF
 )"
@@ -313,12 +315,12 @@ release_cli() {
 	if [[ "$next" != "$current" || -n "$BUMP" || -n "$SET_VERSION" ]]; then
 		if [[ "$DRY_RUN" -eq 1 ]]; then
 			info "would set apps/cli version to $next"
-			info "would commit: chore(cli): release $tag [skip ci]"
+			info "would commit: chore(cli): release $tag [release]"
 		else
 			set_json_version "$pkg" "$next"
 			git add apps/cli/package.json
 			git diff --quiet --cached || git commit -m "$(cat <<EOF
-chore(cli): release ${tag} [skip ci]
+chore(cli): release ${tag} [release]
 
 EOF
 )"

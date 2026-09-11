@@ -20,12 +20,13 @@ jobs:
   # static-config drift. Same reusable workflow gates release.yml.
   checks:
     name: Checks
-    # On push to main, skip release version-bump commits ([skip ci]). PRs always
-    # run. (GitHub also honours [skip ci] natively; this keeps the intent visible.)
+    # On push to main, skip release version-bump commits ([release]). PRs always
+    # run. [release] is our own marker — never [skip ci], which GitHub also applies to
+    # the tag push and would skip the Release workflow.
     if: >-
       github.event_name != 'push' ||
       (github.event.head_commit &&
-       !contains(github.event.head_commit.message, '[skip ci]') &&
+       !contains(github.event.head_commit.message, '[release]') &&
        !contains(github.event.head_commit.message, '[ci skip]'))
     uses: ./.github/workflows/checks.yml
 
@@ -36,7 +37,7 @@ jobs:
     if: >-
       github.event_name != 'push' ||
       (github.event.head_commit &&
-       !contains(github.event.head_commit.message, '[skip ci]') &&
+       !contains(github.event.head_commit.message, '[release]') &&
        !contains(github.event.head_commit.message, '[ci skip]'))
     runs-on: ubuntu-latest
     strategy:
@@ -78,7 +79,7 @@ jobs:
     if: >-
       github.event_name != 'push' ||
       (github.event.head_commit &&
-       !contains(github.event.head_commit.message, '[skip ci]') &&
+       !contains(github.event.head_commit.message, '[release]') &&
        !contains(github.event.head_commit.message, '[ci skip]'))
     runs-on: ubuntu-latest
     steps:
@@ -147,7 +148,7 @@ jobs:
     if: >-
       github.event_name != 'push' ||
       (github.event.head_commit &&
-       !contains(github.event.head_commit.message, '[skip ci]') &&
+       !contains(github.event.head_commit.message, '[release]') &&
        !contains(github.event.head_commit.message, '[ci skip]'))
     runs-on: ubuntu-latest
     timeout-minutes: 25

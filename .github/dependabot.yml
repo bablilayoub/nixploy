@@ -39,3 +39,8 @@ updates:
       day: monday
       time: "06:00"
       timezone: Europe/Paris
+    ignore:
+      # Node majors track .nvmrc / the LTS line by hand (Node 25+ drops corepack, which
+      # the Dockerfile relies on); minors and patches are welcome.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
