@@ -57,7 +57,9 @@ ENV NIXPLOY_GIT_COMMIT=$NIXPLOY_GIT_COMMIT
 # Docker CLI talks to the host socket (Swarm, builds, logs).
 # git/openssh used when cloning app sources during deploys.
 # curl: HEALTHCHECK below. postgresql-client: instance backups prefer local pg_dump.
-RUN apk add --no-cache docker-cli docker-cli-compose git openssh-client curl postgresql-client
+# tzdata: without the zoneinfo database Alpine ignores TZ and every cron
+# (backups, schedules, platform alerts) silently runs in UTC.
+RUN apk add --no-cache docker-cli docker-cli-compose git openssh-client curl postgresql-client tzdata
 
 # Migration runner with its own small node_modules (does not share the app tree).
 COPY docker/entrypoint.sh /app/entrypoint.sh
