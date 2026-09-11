@@ -1,17 +1,16 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 
+import { SettingsSection } from "@/components/layout/settings-section";
 import { EnvEditor } from "@/components/services/env-editor";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { HelpLink } from "@/components/ui/help-link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useMounted } from "@/hooks/use-mounted";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { missingCapabilityHint } from "@/lib/capabilities";
-import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 const TITLE = "Shared variables";
@@ -25,11 +24,9 @@ const DESCRIPTION = (
 /** Organization-level env vars (the lowest level of the env inheritance chain). */
 export function SharedVariablesCard() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	// Keep the server-rendered skeleton until mount so both paints agree.
-	const [mounted, setMounted] = useState(false);
-	useEffect(() => setMounted(true), []);
+	const mounted = useMounted();
 
 	const envQuery = useQuery(trpc.organization.environment.queryOptions());
 	const canRead = can("secrets.read");
@@ -37,21 +34,14 @@ export function SharedVariablesCard() {
 	const canWriteSecrets = can("secrets.write");
 	const canEdit = canManage && canWriteSecrets;
 
-	const save = useMutation(
-		trpc.organization.saveEnvironment.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Shared variables saved");
-				await Promise.all([
-					queryClient.invalidateQueries({ queryKey: trpc.organization.environment.queryKey() }),
-					// Every resolved preview merges the org level in.
-					queryClient.invalidateQueries({
-						queryKey: trpc.project.getResolvedEnvironment.queryKey(),
-					}),
-				]);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const save = useSaveMutation(trpc.organization.saveEnvironment.mutationOptions(), {
+		successMessage: "Shared variables saved",
+		invalidate: [
+			trpc.organization.environment.queryKey(),
+			// Every resolved preview merges the org level in.
+			trpc.project.getResolvedEnvironment.queryKey(),
+		],
+	});
 
 	if (!mounted || envQuery.isPending) {
 		return (

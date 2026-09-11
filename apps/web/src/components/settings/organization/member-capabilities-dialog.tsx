@@ -1,9 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, RotateCcw, Shield } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +15,7 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
@@ -72,18 +71,11 @@ export function MemberCapabilitiesDialog({
 		setEnabled(next);
 	}, [capsQuery.data, capsQuery.isFetching, catalogQuery.data, memberRole]);
 
-	const saveMutation = useMutation(
-		trpc.organization.setMemberCapabilities.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Permissions updated");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.organization.memberCapabilities.queryKey({ memberId }),
-				});
-				setOpen(false);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const saveMutation = useSaveMutation(trpc.organization.setMemberCapabilities.mutationOptions(), {
+		successMessage: "Permissions updated",
+		invalidate: [trpc.organization.memberCapabilities.queryKey({ memberId })],
+		onSuccess: () => setOpen(false),
+	});
 
 	const defaults = useMemo(
 		() => new Set<string>(capsQuery.data?.defaults ?? []),

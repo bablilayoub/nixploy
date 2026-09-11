@@ -1,12 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowRightLeft, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
-import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -39,7 +38,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import type { TraefikParent } from "./traefik-parent";
@@ -55,7 +54,6 @@ const EMPTY_FORM = { regex: "", replacement: "", permanent: false };
 export function RedirectsManager(parent: TraefikParent) {
 	const { applicationId, composeId, serviceName } = parent;
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const canWrite = can("service.write");
 	const writeHint = canWrite ? undefined : capabilityHint("service.write");
@@ -80,45 +78,26 @@ export function RedirectsManager(parent: TraefikParent) {
 			});
 	const { data: redirects, isLoading, isError, error, refetch } = useQuery(queryOptions);
 
-	const invalidate = () =>
-		queryClient.invalidateQueries({
-			queryKey: applicationId
-				? trpc.redirect.byApplication.queryKey({ applicationId })
-				: trpc.redirect.byCompose.queryKey({
-						composeId: composeId as string,
-						serviceName: serviceName as string,
-					}),
-		});
+	const invalidate = [
+		applicationId
+			? trpc.redirect.byApplication.queryKey({ applicationId })
+			: trpc.redirect.byCompose.queryKey({
+					composeId: composeId as string,
+					serviceName: serviceName as string,
+				}),
+	];
 
-	const create = useMutation(
-		trpc.redirect.create.mutationOptions({
-			onSuccess: () => {
-				toast.success("Redirect created");
-				setDialogOpen(false);
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const create = useSaveMutation(
+		trpc.redirect.create.mutationOptions({ onSuccess: () => setDialogOpen(false) }),
+		{ successMessage: "Redirect created", invalidate },
 	);
-	const update = useMutation(
-		trpc.redirect.update.mutationOptions({
-			onSuccess: () => {
-				toast.success("Redirect updated");
-				setDialogOpen(false);
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const update = useSaveMutation(
+		trpc.redirect.update.mutationOptions({ onSuccess: () => setDialogOpen(false) }),
+		{ successMessage: "Redirect updated", invalidate },
 	);
-	const remove = useMutation(
-		trpc.redirect.delete.mutationOptions({
-			onSuccess: () => {
-				toast.success("Redirect deleted");
-				setDeleteTarget(null);
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const remove = useSaveMutation(
+		trpc.redirect.delete.mutationOptions({ onSuccess: () => setDeleteTarget(null) }),
+		{ successMessage: "Redirect deleted", invalidate },
 	);
 
 	const isPending = create.isPending || update.isPending;
@@ -161,7 +140,7 @@ export function RedirectsManager(parent: TraefikParent) {
 						title={writeHint}
 					>
 						<Plus className="size-4" />
-						Add Redirect
+						Add redirect
 					</Button>
 				}
 			>
@@ -241,7 +220,7 @@ export function RedirectsManager(parent: TraefikParent) {
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>{editing ? "Edit Redirect" : "Add Redirect"}</DialogTitle>
+						<DialogTitle>{editing ? "Edit redirect" : "Add redirect"}</DialogTitle>
 						<DialogDescription>
 							Example: regex <code className="rounded bg-muted px-1">^/old/(.*)$</code> →{" "}
 							<code className="rounded bg-muted px-1">/new/$1</code>

@@ -1,65 +1,55 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
 
-import { SettingsSection } from "@/components/settings/settings-section";
+import { SettingsSection } from "@/components/layout/settings-section";
+import { useSaveBar } from "@/components/services/save-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useDraft } from "@/hooks/use-draft";
+import { useMounted } from "@/hooks/use-mounted";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { missingCapabilityHint } from "@/lib/capabilities";
-import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
+
+function parseLimit(value: string): number | null {
+	const trimmed = value.trim();
+	if (!trimmed) return null;
+	const parsed = Number.parseInt(trimmed, 10);
+	return Number.isNaN(parsed) ? null : parsed;
+}
 
 export function QuotasCard() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const settingsQuery = useQuery(trpc.organization.settings.queryOptions());
 	// The dashboard layout (branding provider) starts this same query, so it
 	// can already be resolved when this page segment hydrates — keep the
 	// server-rendered skeleton until mount so both paints agree.
-	const [mounted, setMounted] = useState(false);
-	useEffect(() => setMounted(true), []);
+	const mounted = useMounted();
 	const { can } = useCapabilities();
 	const canManage = can("settings.manage");
 	const manageHint = canManage ? undefined : missingCapabilityHint("settings.manage");
 
-	const [maxProjects, setMaxProjects] = useState("");
-	const [maxServices, setMaxServices] = useState("");
-	const [maxCpuShares, setMaxCpuShares] = useState("");
-	const [maxMemoryMb, setMaxMemoryMb] = useState("");
+	const quotas = settingsQuery.data?.quotas;
+	const draft = useDraft({
+		maxProjects: quotas?.maxProjects?.toString() ?? "",
+		maxServices: quotas?.maxServices?.toString() ?? "",
+		maxCpuShares: quotas?.maxCpuShares?.toString() ?? "",
+		maxMemoryMb: quotas?.maxMemoryMb?.toString() ?? "",
+	});
+	const { maxProjects, maxServices, maxCpuShares, maxMemoryMb } = draft.value;
 
-	useEffect(() => {
-		if (!settingsQuery.data) return;
-		const { quotas } = settingsQuery.data;
-		setMaxProjects(quotas.maxProjects?.toString() ?? "");
-		setMaxServices(quotas.maxServices?.toString() ?? "");
-		setMaxCpuShares(quotas.maxCpuShares?.toString() ?? "");
-		setMaxMemoryMb(quotas.maxMemoryMb?.toString() ?? "");
-	}, [settingsQuery.data]);
-
-	const save = useMutation({
-		...trpc.organization.updateSettings.mutationOptions(),
-		onSuccess: async () => {
-			toast.success("Quotas updated");
-			await queryClient.invalidateQueries({ queryKey: trpc.organization.settings.queryKey() });
-		},
-		onError: (error) => toastError(error),
+	const save = useSaveMutation(trpc.organization.updateSettings.mutationOptions(), {
+		successMessage: "Quotas updated",
+		invalidate: [trpc.organization.settings.queryKey()],
+		onSuccess: draft.markSaved,
 	});
 
-	function parseLimit(value: string): number | null {
-		const trimmed = value.trim();
-		if (!trimmed) return null;
-		const parsed = Number.parseInt(trimmed, 10);
-		return Number.isNaN(parsed) ? null : parsed;
-	}
-
-	function onSubmit(event: React.FormEvent) {
-		event.preventDefault();
+	const onSave = () =>
 		save.mutate({
 			quotas: {
 				maxProjects: parseLimit(maxProjects),
@@ -68,6 +58,12 @@ export function QuotasCard() {
 				maxMemoryMb: parseLimit(maxMemoryMb),
 			},
 		});
+
+	useSaveBar(draft, { onSave, pending: save.isPending, disabled: !canManage });
+
+	function onSubmit(event: React.FormEvent) {
+		event.preventDefault();
+		onSave();
 	}
 
 	if (!mounted || settingsQuery.isPending) {
@@ -122,7 +118,7 @@ export function QuotasCard() {
 							min={0}
 							placeholder="Unlimited"
 							value={maxProjects}
-							onChange={(e) => setMaxProjects(e.target.value)}
+							onChange={(e) => draft.patch({ maxProjects: e.target.value })}
 						/>
 					</div>
 					<div className="grid gap-2">
@@ -133,7 +129,7 @@ export function QuotasCard() {
 							min={0}
 							placeholder="Unlimited"
 							value={maxServices}
-							onChange={(e) => setMaxServices(e.target.value)}
+							onChange={(e) => draft.patch({ maxServices: e.target.value })}
 						/>
 					</div>
 					<div className="grid gap-2">
@@ -144,7 +140,7 @@ export function QuotasCard() {
 							min={0}
 							placeholder="Unlimited"
 							value={maxCpuShares}
-							onChange={(e) => setMaxCpuShares(e.target.value)}
+							onChange={(e) => draft.patch({ maxCpuShares: e.target.value })}
 						/>
 					</div>
 					<div className="grid gap-2">
@@ -155,7 +151,7 @@ export function QuotasCard() {
 							min={0}
 							placeholder="Unlimited"
 							value={maxMemoryMb}
-							onChange={(e) => setMaxMemoryMb(e.target.value)}
+							onChange={(e) => draft.patch({ maxMemoryMb: e.target.value })}
 						/>
 					</div>
 				</fieldset>

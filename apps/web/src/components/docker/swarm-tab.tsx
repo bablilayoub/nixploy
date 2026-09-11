@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Boxes, Lock, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/services/empty-state";
@@ -23,7 +23,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps } from "./docker-view";
@@ -73,14 +73,17 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 		});
 	};
 
-	const nodeMutation = useMutation(
+	const nodeMutation = useSaveMutation(
 		trpc.docker.nodeUpdate.mutationOptions({
-			onSuccess: (_data, variables) => {
-				toast.success(`Node set to ${variables.availability}`);
-				invalidate();
-			},
-			onError: (error) => toastError(error),
+			// Dynamic text, so it stays here instead of `successMessage`.
+			onSuccess: (_data, variables) => toast.success(`Node set to ${variables.availability}`),
 		}),
+		{
+			invalidate: [
+				trpc.docker.swarmServices.queryKey({ serverId }),
+				trpc.docker.nodes.queryKey({ serverId }),
+			],
+		},
 	);
 
 	if (servicesQuery.isLoading || nodesQuery.isLoading) {

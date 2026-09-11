@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -26,7 +26,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps, invalidateDockerQueries } from "./docker-view";
@@ -52,37 +52,29 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 			queryKey: trpc.docker.images.queryKey({ serverId }),
 		});
 
-	const pullMutation = useMutation(
-		trpc.docker.imagePull.mutationOptions({
-			onSuccess: () => {
-				toast.success("Image pulled");
-				setReference("");
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const pullMutation = useSaveMutation(
+		trpc.docker.imagePull.mutationOptions({ onSuccess: () => setReference("") }),
+		{ successMessage: "Image pulled", invalidate: [trpc.docker.images.queryKey({ serverId })] },
 	);
-	const removeMutation = useMutation(
-		trpc.docker.imageRemove.mutationOptions({
-			onSuccess: () => {
-				toast.success("Image removed");
-				// Disk usage on the System tab changes too.
-				void invalidateDockerQueries(queryClient, trpc, serverId);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
-	const pruneMutation = useMutation(
+	const removeMutation = useSaveMutation(trpc.docker.imageRemove.mutationOptions(), {
+		successMessage: "Image removed",
+		// Disk usage on the System tab changes too.
+		onSuccess: () => void invalidateDockerQueries(queryClient, trpc, serverId),
+	});
+	const pruneMutation = useSaveMutation(
 		trpc.docker.imagesPrune.mutationOptions({
-			onSuccess: (output) => {
+			// The toast carries the pruned size, so it stays here.
+			onSuccess: (output) =>
 				toast.success("Dangling images pruned", {
 					description: output.trim().split("\n").pop() ?? undefined,
-				});
+				}),
+		}),
+		{
+			onSuccess: () => {
 				setPruneOpen(false);
 				void invalidateDockerQueries(queryClient, trpc, serverId);
 			},
-			onError: (error) => toastError(error),
-		}),
+		},
 	);
 
 	if (imagesQuery.isLoading) return <Skeleton className="h-64 w-full" />;

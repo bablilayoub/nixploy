@@ -1,17 +1,21 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
+import { SettingsSection } from "@/components/layout/settings-section";
+import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useDraft } from "@/hooks/use-draft";
+import { useMounted } from "@/hooks/use-mounted";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { authClient } from "@/lib/auth-client";
 import { isOrgAdminRole, missingCapabilityHint } from "@/lib/capabilities";
 import { toastError } from "@/lib/describe-error";
@@ -19,7 +23,6 @@ import { useTRPC } from "@/lib/trpc";
 
 export function OrganizationCard() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { data: activeOrganization, isPending: isOrgPending } = authClient.useActiveOrganization();
 	const settingsQuery = useQuery(trpc.organization.settings.queryOptions());
 	const { can, role } = useCapabilities();
@@ -33,47 +36,29 @@ export function OrganizationCard() {
 	// better-auth's org store can already be populated when React hydrates, so
 	// anything derived from `activeOrganization` in the markup (the placeholder
 	// below) must wait for mount to match the server-rendered HTML.
-	const [mounted, setMounted] = useState(false);
-	useEffect(() => setMounted(true), []);
+	const mounted = useMounted();
 
-	const [name, setName] = useState("");
-	const [displayName, setDisplayName] = useState("");
-	const [logoUrl, setLogoUrl] = useState("");
-	const [accentColor, setAccentColor] = useState("#1c1917");
+	// Both drafts stay blank until mount for the same reason: seeding them from
+	// an already-resolved store/query on the first client render would not match
+	// the server-rendered HTML.
+	const nameDraft = useDraft(mounted ? (activeOrganization?.name ?? "") : "");
+	const name = nameDraft.value;
+	const settings = mounted ? settingsQuery.data : undefined;
+	const brandingDraft = useDraft({
+		displayName: settings?.branding.displayName ?? "",
+		logoUrl: settings?.logo ?? "",
+		accentColor: settings?.branding.accentColor ?? "#1c1917",
+	});
+	const { displayName, logoUrl, accentColor } = brandingDraft.value;
 	const [isNamePending, setIsNamePending] = useState(false);
-	// Set inside the sync effects, so "dirty" can only be computed against a
-	// seeded form: comparing the blank initial state with store data would
-	// flag the form dirty during hydration (the org store is already filled)
-	// and render the pill on the client only.
-	const [nameSeeded, setNameSeeded] = useState(false);
-	const [brandingSeeded, setBrandingSeeded] = useState(false);
 
-	useEffect(() => {
-		if (activeOrganization?.name) {
-			setName(activeOrganization.name);
-			setNameSeeded(true);
-		}
-	}, [activeOrganization?.name]);
-
-	useEffect(() => {
-		if (!settingsQuery.data) return;
-		setDisplayName(settingsQuery.data.branding.displayName ?? "");
-		setLogoUrl(settingsQuery.data.logo ?? "");
-		setAccentColor(settingsQuery.data.branding.accentColor ?? "#1c1917");
-		setBrandingSeeded(true);
-	}, [settingsQuery.data]);
-
-	const saveBranding = useMutation({
-		...trpc.organization.updateSettings.mutationOptions(),
-		onSuccess: async () => {
-			toast.success("Branding updated");
-			await queryClient.invalidateQueries({ queryKey: trpc.organization.settings.queryKey() });
-		},
-		onError: (error) => toastError(error),
+	const saveBranding = useSaveMutation(trpc.organization.updateSettings.mutationOptions(), {
+		successMessage: "Branding updated",
+		invalidate: [trpc.organization.settings.queryKey()],
+		onSuccess: brandingDraft.markSaved,
 	});
 
-	async function onNameSubmit(event: React.FormEvent) {
-		event.preventDefault();
+	async function saveName() {
 		if (!activeOrganization) return;
 		setIsNamePending(true);
 		const { error } = await authClient.organization.update({
@@ -86,10 +71,15 @@ export function OrganizationCard() {
 			return;
 		}
 		toast.success("Organization updated");
+		nameDraft.markSaved();
 	}
 
-	function onBrandingSubmit(event: React.FormEvent) {
+	function onNameSubmit(event: React.FormEvent) {
 		event.preventDefault();
+		void saveName();
+	}
+
+	function onSaveBranding() {
 		const accent =
 			accentColor.trim() && /^#[0-9A-Fa-f]{6}$/.test(accentColor.trim())
 				? accentColor.trim()
@@ -103,19 +93,29 @@ export function OrganizationCard() {
 		});
 	}
 
+	function onBrandingSubmit(event: React.FormEvent) {
+		event.preventDefault();
+		onSaveBranding();
+	}
+
 	// Never let the form submit values seeded from a failed load — saving
 	// would overwrite the real branding with blanks. `mounted` keeps the
 	// server-rendered `disabled` attributes in step with the first client
 	// paint when the layout already resolved the settings query.
 	const brandingReady = mounted && settingsQuery.isSuccess;
 	const brandingDisabled = !brandingReady || !canBrand;
-	const nameDirty = nameSeeded && name !== activeOrganization?.name;
-	const brandingDirty =
-		brandingReady &&
-		brandingSeeded &&
-		(displayName !== (settingsQuery.data?.branding.displayName ?? "") ||
-			logoUrl !== (settingsQuery.data?.logo ?? "") ||
-			accentColor !== (settingsQuery.data?.branding.accentColor ?? "#1c1917"));
+	const nameSaveDisabled = !canRename || !name || name === activeOrganization?.name;
+
+	useSaveBar(nameDraft, {
+		onSave: () => void saveName(),
+		pending: isNamePending,
+		disabled: nameSaveDisabled,
+	});
+	useSaveBar(brandingDraft, {
+		onSave: onSaveBranding,
+		pending: saveBranding.isPending,
+		disabled: brandingDisabled,
+	});
 
 	return (
 		<>
@@ -132,7 +132,7 @@ export function OrganizationCard() {
 							disabled={isOrgPending || !activeOrganization || !canRename}
 							title={renameHint}
 							value={name}
-							onChange={(e) => setName(e.target.value)}
+							onChange={(e) => nameDraft.set(e.target.value)}
 						/>
 					</div>
 					<div className="grid gap-2">
@@ -141,15 +141,12 @@ export function OrganizationCard() {
 					</div>
 					<div className="flex items-center gap-3">
 						<DisabledHint hint={renameHint}>
-							<Button
-								type="submit"
-								disabled={!canRename || isNamePending || !name || name === activeOrganization?.name}
-							>
+							<Button type="submit" disabled={nameSaveDisabled || isNamePending}>
 								{isNamePending && <Loader2 className="size-4 animate-spin" />}
 								Save name
 							</Button>
 						</DisabledHint>
-						<UnsavedChangesPill dirty={nameDirty} />
+						<UnsavedChangesPill dirty={nameDraft.dirty} />
 					</div>
 				</form>
 			</SettingsSection>
@@ -177,7 +174,7 @@ export function OrganizationCard() {
 							disabled={brandingDisabled}
 							title={brandHint}
 							value={displayName}
-							onChange={(e) => setDisplayName(e.target.value)}
+							onChange={(e) => brandingDraft.patch({ displayName: e.target.value })}
 						/>
 					</div>
 					<div className="grid gap-2">
@@ -189,7 +186,7 @@ export function OrganizationCard() {
 							disabled={brandingDisabled}
 							title={brandHint}
 							value={logoUrl}
-							onChange={(e) => setLogoUrl(e.target.value)}
+							onChange={(e) => brandingDraft.patch({ logoUrl: e.target.value })}
 						/>
 					</div>
 					<div className="grid gap-2">
@@ -206,11 +203,11 @@ export function OrganizationCard() {
 								disabled={brandingDisabled}
 								title={brandHint}
 								value={accentColor}
-								onChange={(e) => setAccentColor(e.target.value)}
+								onChange={(e) => brandingDraft.patch({ accentColor: e.target.value })}
 							/>
 							<Input
 								value={accentColor}
-								onChange={(e) => setAccentColor(e.target.value)}
+								onChange={(e) => brandingDraft.patch({ accentColor: e.target.value })}
 								placeholder="#1c1917"
 								disabled={brandingDisabled}
 								title={brandHint}
@@ -224,7 +221,7 @@ export function OrganizationCard() {
 								Save branding
 							</Button>
 						</DisabledHint>
-						<UnsavedChangesPill dirty={brandingDirty} />
+						<UnsavedChangesPill dirty={brandingDraft.dirty} />
 					</div>
 				</form>
 			</SettingsSection>

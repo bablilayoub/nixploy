@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useMounted } from "@/hooks/use-mounted";
 import { formatBytes } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -158,8 +159,7 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 	const { isInstanceAdmin } = useCapabilities();
 	// The session role is only known client-side; wait for mount so SSR and
 	// the first client paint agree on whether the host block exists.
-	const [mounted, setMounted] = useState(false);
-	useEffect(() => setMounted(true), []);
+	const mounted = useMounted();
 	// Host metrics without a serverId read the Nixploy host — instance admin only.
 	const showHost = mounted && isInstanceAdmin;
 

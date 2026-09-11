@@ -1,9 +1,9 @@
 "use client";
 
 import type { ComposeService } from "@/components/compose/compose-detail";
+import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
 import { ServiceAlertRulesCard } from "@/components/services/service-alert-rules-card";
-import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 
 export function MonitoringTab({ compose }: { compose: ComposeService }) {
 	return (

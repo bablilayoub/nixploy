@@ -1,10 +1,9 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
-import { SettingsSection } from "@/components/settings/settings-section";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 type Metric = "cpu" | "memory" | "restarts" | "deploy_failure_streak";
@@ -30,35 +29,21 @@ export function ServiceAlertRulesCard({
 	composeId?: string;
 }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const [metric, setMetric] = useState<Metric>("cpu");
 	const [threshold, setThreshold] = useState("80");
 
 	const rules = useQuery(trpc.observability.alertRules.queryOptions({ applicationId, composeId }));
 
-	const invalidate = () =>
-		queryClient.invalidateQueries({
-			queryKey: trpc.observability.alertRules.pathKey(),
-		});
+	const invalidate = [trpc.observability.alertRules.pathKey()];
 
-	const upsert = useMutation(
-		trpc.observability.upsertAlertRule.mutationOptions({
-			onSuccess: () => {
-				toast.success("Alert rule saved");
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
-	const remove = useMutation(
-		trpc.observability.deleteAlertRule.mutationOptions({
-			onSuccess: () => {
-				toast.success("Alert rule removed");
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const upsert = useSaveMutation(trpc.observability.upsertAlertRule.mutationOptions(), {
+		successMessage: "Alert rule saved",
+		invalidate,
+	});
+	const remove = useSaveMutation(trpc.observability.deleteAlertRule.mutationOptions(), {
+		successMessage: "Alert rule removed",
+		invalidate,
+	});
 
 	return (
 		<SettingsSection

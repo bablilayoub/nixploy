@@ -33,6 +33,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
@@ -145,45 +146,40 @@ export function AddServiceMenu({
 
 	const serviceInput = { projectId, environmentName };
 
-	/** Invalidate the .all list of the created type plus the count sources. */
+	/** The .all list of the created type plus the count sources. */
+	const serviceKeys = (type: "application" | "compose" | DatabaseType) => [
+		trpc[type].all.queryKey(serviceInput),
+		trpc.environment.byProject.queryKey({ projectId }),
+		trpc.project.all.queryKey(),
+	];
+
 	const invalidateServices = async (type: "application" | "compose" | DatabaseType) => {
-		await Promise.all([
-			queryClient.invalidateQueries({
-				queryKey: trpc[type].all.queryKey(serviceInput),
-			}),
-			queryClient.invalidateQueries({
-				queryKey: trpc.environment.byProject.queryKey({ projectId }),
-			}),
-			queryClient.invalidateQueries({
-				queryKey: trpc.project.all.queryKey(),
-			}),
-		]);
+		await Promise.all(
+			serviceKeys(type).map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+		);
 	};
 
 	const onMutationError = (error: { message: string }) => toastError(error);
 
-	const createApplication = useMutation(
+	const closeDialog = () => {
+		setDialog(null);
+		resetForm();
+	};
+
+	const createApplication = useSaveMutation(
 		trpc.application.create.mutationOptions({
-			onSuccess: async (application) => {
-				toast.success(`Application "${application.name}" created`);
-				await invalidateServices("application");
-				setDialog(null);
-				resetForm();
-			},
-			onError: onMutationError,
+			// Dynamic text, so it stays here instead of `successMessage`.
+			onSuccess: (application) => toast.success(`Application "${application.name}" created`),
 		}),
+		{ invalidate: serviceKeys("application"), onSuccess: closeDialog },
 	);
 
-	const createCompose = useMutation(
+	const createCompose = useSaveMutation(
 		trpc.compose.create.mutationOptions({
-			onSuccess: async (service) => {
-				toast.success(`Compose service "${service.name}" created`);
-				await invalidateServices("compose");
-				setDialog(null);
-				resetForm();
-			},
-			onError: onMutationError,
+			// Dynamic text, so it stays here instead of `successMessage`.
+			onSuccess: (service) => toast.success(`Compose service "${service.name}" created`),
 		}),
+		{ invalidate: serviceKeys("compose"), onSuccess: closeDialog },
 	);
 
 	const handleDatabaseCreated = async (
@@ -193,8 +189,7 @@ export function AddServiceMenu({
 	) => {
 		toast.success(`${SERVICE_TYPE_META[type].label} "${serviceName}" created`);
 		await invalidateServices(type);
-		setDialog(null);
-		resetForm();
+		closeDialog();
 		// Credentials are stored encrypted; show them once so the user can copy.
 		setCreatedDatabase({ type, name: serviceName, credentials });
 	};

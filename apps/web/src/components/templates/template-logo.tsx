@@ -1,8 +1,9 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
+import { useMounted } from "@/hooks/use-mounted";
 import { cn } from "@/lib/utils";
 
 /**
@@ -50,12 +51,8 @@ export function TemplateLogo({
 	fallbackClassName?: string;
 }) {
 	const { resolvedTheme } = useTheme();
-	const [mounted, setMounted] = useState(false);
+	const mounted = useMounted();
 	const [failed, setFailed] = useState(false);
-
-	useEffect(() => {
-		setMounted(true);
-	}, []);
 
 	// Avoid SSR/client theme mismatch: render the light-mode URL until mounted.
 	const darkMode = mounted && resolvedTheme === "dark";

@@ -5,9 +5,9 @@ import { RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { ComposeService } from "@/components/compose/compose-detail";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { LogViewer } from "@/components/services/log-viewer";
 import { ServiceTerminal } from "@/components/services/service-terminal";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {

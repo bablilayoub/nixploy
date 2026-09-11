@@ -1,13 +1,12 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { GitBranch, Loader2, Plus, RefreshCw, Rocket } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { EditProviderDialog } from "@/components/settings/git-providers/edit-provider-dialog";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,8 +30,8 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { missingCapabilityHint } from "@/lib/capabilities";
-import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 const GITHUB_EDIT_FIELDS = [
@@ -45,7 +44,6 @@ const GITHUB_EDIT_FIELDS = [
 
 export function GithubPanel() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
 	const { can } = useCapabilities();
 	const canManage = can("git_providers.manage");
@@ -60,21 +58,18 @@ export function GithubPanel() {
 		refetch,
 	} = useQuery(trpc.github.all.queryOptions());
 
-	const invalidate = () => queryClient.invalidateQueries({ queryKey: trpc.github.all.queryKey() });
+	const listKey = trpc.github.all.queryKey();
 
-	const createMutation = useMutation(
-		trpc.github.create.mutationOptions({
-			onSuccess: async () => {
-				toast.success("GitHub provider added");
-				await invalidate();
-				setOpen(false);
-				setName("");
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const createMutation = useSaveMutation(trpc.github.create.mutationOptions(), {
+		successMessage: "GitHub provider added",
+		invalidate: [listKey],
+		onSuccess: () => {
+			setOpen(false);
+			setName("");
+		},
+	});
 
-	const manifestMutation = useMutation(
+	const manifestMutation = useSaveMutation(
 		trpc.github.createAppManifest.mutationOptions({
 			onSuccess: ({ url, manifest, state }) => {
 				// Auto-submit the manifest to GitHub's app creation page.
@@ -99,39 +94,23 @@ export function GithubPanel() {
 				document.body.appendChild(form);
 				form.submit();
 			},
-			onError: (error) => toastError(error),
 		}),
 	);
 
-	const syncMutation = useMutation(
-		trpc.github.syncInstallation.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Installation synced");
-				await invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const syncMutation = useSaveMutation(trpc.github.syncInstallation.mutationOptions(), {
+		successMessage: "Installation synced",
+		invalidate: [listKey],
+	});
 
-	const updateMutation = useMutation(
-		trpc.github.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("GitHub provider renamed");
-				await invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const updateMutation = useSaveMutation(trpc.github.update.mutationOptions(), {
+		successMessage: "GitHub provider renamed",
+		invalidate: [listKey],
+	});
 
-	const removeMutation = useMutation(
-		trpc.github.remove.mutationOptions({
-			onSuccess: async () => {
-				toast.success("GitHub provider removed");
-				await invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const removeMutation = useSaveMutation(trpc.github.remove.mutationOptions(), {
+		successMessage: "GitHub provider removed",
+		invalidate: [listKey],
+	});
 
 	return (
 		<SettingsSection

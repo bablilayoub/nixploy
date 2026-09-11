@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { UnderlineTabsList, UnderlineTabsTrigger } from "@/components/application/underline-tabs";
-import { DatabaseBackups } from "@/components/databases/database-backups";
+import { BackupsPanel } from "@/components/backups/backups-panel";
 import {
 	type ConnectionUrls,
 	DATABASE_TYPES,
@@ -14,8 +14,10 @@ import {
 	type DatabaseRouterFacade,
 	type DatabaseRow,
 	type DatabaseType,
+	databaseIdInput,
 	type ServiceStatus,
 } from "@/components/databases/database-types";
+import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { CopyButton } from "@/components/services/copy-button";
@@ -23,12 +25,12 @@ import { DangerZone } from "@/components/services/danger-zone";
 import { EnvEditor } from "@/components/services/env-editor";
 import { LogViewer } from "@/components/services/log-viewer";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
+import { SaveBarTabsContent, useSaveBar } from "@/components/services/save-bar";
 import { ServiceActionsCard } from "@/components/services/service-actions-card";
 import { type ServiceActions, ServicePageHeader } from "@/components/services/service-page-header";
 import { ServiceTerminal } from "@/components/services/service-terminal";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
-import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -47,6 +49,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useDraft } from "@/hooks/use-draft";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { SERVICE_TAB_ALIASES, useSyncedTab } from "@/hooks/use-synced-tab";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
@@ -154,7 +158,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 	const runtimeHint = canRuntime ? undefined : capabilityHint("service.runtime");
 
 	const ns = useMemo(() => trpc[type] as unknown as DatabaseRouterFacade, [trpc, type]);
-	const idInput: DatabaseIdInput = useMemo(() => ({ [cfg.idField]: id }), [cfg.idField, id]);
+	const idInput = useMemo(() => databaseIdInput(type, id), [type, id]);
 
 	const rowQuery = useQuery(ns.one.queryOptions(idInput));
 	const db = rowQuery.data as DatabaseRow | undefined;
@@ -381,7 +385,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 					<UnderlineTabsTrigger value="settings">Settings</UnderlineTabsTrigger>
 				</UnderlineTabsList>
 
-				<TabsContent value="general" className="mt-6">
+				<SaveBarTabsContent value="general" className="mt-6">
 					<GeneralTab
 						ns={ns}
 						idInput={idInput}
@@ -392,32 +396,35 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 						hasRootPassword={cfg.hasRootPassword}
 						invalidate={invalidate}
 					/>
-				</TabsContent>
+				</SaveBarTabsContent>
 
-				<TabsContent value="connection" className="mt-6">
+				<SaveBarTabsContent value="connection" className="mt-6">
 					<ConnectionTab
 						ns={ns}
 						idInput={idInput}
 						hasExternalPort={db.externalPort != null}
 						onOpenGeneral={() => selectTab("general")}
 					/>
-				</TabsContent>
+				</SaveBarTabsContent>
 
-				<TabsContent value="environment" className="mt-6">
+				<SaveBarTabsContent value="environment" className="mt-6">
 					<EnvironmentTab ns={ns} idInput={idInput} env={db.env} invalidate={invalidate} />
-				</TabsContent>
+				</SaveBarTabsContent>
 
 				{cfg.supportsBackups && (
-					<TabsContent value="backups" className="mt-6">
-						<DatabaseBackups
-							databaseType={type}
-							serviceId={id}
-							databaseName={type === "redis" ? "0" : (db.databaseName ?? "admin")}
+					<SaveBarTabsContent value="backups" className="mt-6">
+						<BackupsPanel
+							target={{
+								kind: "database",
+								databaseType: type,
+								serviceId: id,
+								databaseName: type === "redis" ? "0" : (db.databaseName ?? "admin"),
+							}}
 						/>
-					</TabsContent>
+					</SaveBarTabsContent>
 				)}
 
-				<TabsContent value="runtime" className="mt-6">
+				<SaveBarTabsContent value="runtime" className="mt-6">
 					<Tabs value={runtimeTab} onValueChange={selectTab} className="w-full gap-4">
 						<SubTabsList>
 							<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
@@ -455,9 +462,9 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 							</SettingsSection>
 						</TabsContent>
 					</Tabs>
-				</TabsContent>
+				</SaveBarTabsContent>
 
-				<TabsContent value="settings" className="mt-6">
+				<SaveBarTabsContent value="settings" className="mt-6">
 					<SettingsTab
 						ns={ns}
 						idInput={idInput}
@@ -468,7 +475,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 						invalidate={invalidate}
 						onRemove={() => removeMutation.mutateAsync(idInput)}
 					/>
-				</TabsContent>
+				</SaveBarTabsContent>
 			</Tabs>
 		</div>
 	);
@@ -499,36 +506,59 @@ function GeneralTab({
 	const { can } = useCapabilities();
 	const canWrite = can("service.write");
 	const writeHint = canWrite ? undefined : capabilityHint("service.write");
-	const [name, setName] = useState(db.name);
-	const [description, setDescription] = useState(db.description ?? "");
-	const [dockerImage, setDockerImage] = useState(db.dockerImage);
-	const [externalPort, setExternalPort] = useState(db.externalPort?.toString() ?? "");
+	const general = useDraft({
+		name: db.name,
+		description: db.description ?? "",
+		dockerImage: db.dockerImage,
+	});
+	const { name, description, dockerImage } = general.value;
+	const port = useDraft(db.externalPort?.toString() ?? "");
 
-	const updateMutation = useMutation(
-		ns.update.mutationOptions({
-			onSuccess: () => {
-				toast.success("Settings saved");
-				invalidate();
-			},
-			onError: (error: { message?: string }) => toastError(error, "Failed to save"),
-		}),
-	);
-	const portMutation = useMutation(
-		ns.saveExternalPort.mutationOptions({
-			onSuccess: () => {
-				toast.success("External port saved");
-				invalidate();
-			},
-			onError: (error: { message?: string }) => toastError(error, "Failed to save external port"),
-		}),
-	);
+	const updateMutation = useSaveMutation(ns.update.mutationOptions(), {
+		successMessage: "Settings saved",
+		errorMessage: "Failed to save",
+		onSuccess: () => {
+			general.markSaved();
+			invalidate();
+		},
+	});
+	const portMutation = useSaveMutation(ns.saveExternalPort.mutationOptions(), {
+		successMessage: "External port saved",
+		errorMessage: "Failed to save external port",
+		onSuccess: () => {
+			port.markSaved();
+			invalidate();
+		},
+	});
 
-	const parsedPort = externalPort.trim() === "" ? null : Number(externalPort);
+	const parsedPort = port.value.trim() === "" ? null : Number(port.value);
 	const portValid =
 		parsedPort === null || (Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535);
-	const generalDirty =
-		name !== db.name || description !== (db.description ?? "") || dockerImage !== db.dockerImage;
-	const portDirty = externalPort !== (db.externalPort?.toString() ?? "");
+
+	const saveGeneral = () =>
+		updateMutation.mutate({
+			...idInput,
+			name: name.trim(),
+			// `undefined` is dropped from the SET clause, so a cleared description
+			// could never be persisted. The router's zod schema is
+			// `z.string().optional()` (rejects null), so an empty string is the
+			// only value that clears it.
+			description: description.trim(),
+			dockerImage: dockerImage.trim(),
+		});
+	const savePort = () => portMutation.mutate({ ...idInput, externalPort: parsedPort });
+	const generalBlocked = !canWrite || !name.trim() || !dockerImage.trim();
+
+	useSaveBar(general, {
+		onSave: saveGeneral,
+		pending: updateMutation.isPending,
+		disabled: generalBlocked,
+	});
+	useSaveBar(port, {
+		onSave: savePort,
+		pending: portMutation.isPending,
+		disabled: !canWrite || !portValid,
+	});
 
 	return (
 		<SettingsStack>
@@ -536,14 +566,18 @@ function GeneralTab({
 				<div className="space-y-4">
 					<div className="space-y-1.5">
 						<Label htmlFor="db-name">Name</Label>
-						<Input id="db-name" value={name} onChange={(e) => setName(e.target.value)} />
+						<Input
+							id="db-name"
+							value={name}
+							onChange={(e) => general.patch({ name: e.target.value })}
+						/>
 					</div>
 					<div className="space-y-1.5">
 						<Label htmlFor="db-description">Description</Label>
 						<Textarea
 							id="db-description"
 							value={description}
-							onChange={(e) => setDescription(e.target.value)}
+							onChange={(e) => general.patch({ description: e.target.value })}
 							placeholder="Optional description"
 							rows={3}
 						/>
@@ -553,7 +587,7 @@ function GeneralTab({
 						<Input
 							id="db-image"
 							value={dockerImage}
-							onChange={(e) => setDockerImage(e.target.value)}
+							onChange={(e) => general.patch({ dockerImage: e.target.value })}
 							className="font-mono"
 						/>
 						<p className="text-sm text-muted-foreground">
@@ -561,25 +595,9 @@ function GeneralTab({
 						</p>
 					</div>
 					<div className="flex items-center justify-end gap-3">
-						<UnsavedChangesPill dirty={generalDirty} />
+						<UnsavedChangesPill dirty={general.dirty} />
 						<DisabledHint hint={writeHint}>
-							<Button
-								disabled={
-									updateMutation.isPending || !name.trim() || !dockerImage.trim() || !canWrite
-								}
-								onClick={() =>
-									updateMutation.mutate({
-										...idInput,
-										name: name.trim(),
-										// `undefined` is dropped from the SET clause, so a cleared
-										// description could never be persisted. The router's zod
-										// schema is `z.string().optional()` (rejects null), so an
-										// empty string is the only value that clears it.
-										description: description.trim(),
-										dockerImage: dockerImage.trim(),
-									})
-								}
-							>
+							<Button disabled={updateMutation.isPending || generalBlocked} onClick={saveGeneral}>
 								{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
 								Save
 							</Button>
@@ -617,8 +635,8 @@ function GeneralTab({
 							min={1}
 							max={65535}
 							placeholder="e.g. 35432"
-							value={externalPort}
-							onChange={(e) => setExternalPort(e.target.value)}
+							value={port.value}
+							onChange={(e) => port.set(e.target.value)}
 						/>
 						<p className="text-sm text-muted-foreground">
 							Swarm publishes host ports on <strong>every</strong> network interface — there is no
@@ -632,11 +650,11 @@ function GeneralTab({
 						)}
 					</div>
 					<div className="flex items-center justify-end gap-3">
-						<UnsavedChangesPill dirty={portDirty} />
+						<UnsavedChangesPill dirty={port.dirty} />
 						<DisabledHint hint={writeHint}>
 							<Button
 								disabled={portMutation.isPending || !portValid || !canWrite}
-								onClick={() => portMutation.mutate({ ...idInput, externalPort: parsedPort })}
+								onClick={savePort}
 							>
 								{portMutation.isPending && <Loader2 className="size-4 animate-spin" />}
 								Save port
@@ -728,15 +746,11 @@ function ConnectionTab({
 
 function EnvironmentTab({ ns, idInput, env, invalidate }: TabProps & { env: string | null }) {
 	const { can } = useCapabilities();
-	const saveMutation = useMutation(
-		ns.saveEnvironment.mutationOptions({
-			onSuccess: () => {
-				toast.success("Environment variables saved");
-				invalidate();
-			},
-			onError: (error: { message?: string }) => toastError(error, "Failed to save"),
-		}),
-	);
+	const saveMutation = useSaveMutation(ns.saveEnvironment.mutationOptions(), {
+		successMessage: "Environment variables saved",
+		errorMessage: "Failed to save",
+		onSuccess: invalidate,
+	});
 
 	return (
 		<SettingsSection
@@ -758,8 +772,8 @@ function EnvironmentTab({ ns, idInput, env, invalidate }: TabProps & { env: stri
 
 /** `duplicate` / `move` exist on every database router but not on the facade type. */
 interface DatabaseMoveDuplicateFacade {
-	duplicate: { mutationOptions: (opts?: DatabaseIdInput) => DatabaseIdInput };
-	move: { mutationOptions: (opts?: DatabaseIdInput) => DatabaseIdInput };
+	duplicate: DatabaseRouterFacade["duplicate"];
+	move: DatabaseRouterFacade["move"];
 }
 
 function SettingsTab({
@@ -782,7 +796,8 @@ function SettingsTab({
 	const { can } = useCapabilities();
 	const canWrite = can("service.write");
 	const canDelete = can("service.delete");
-	const [name, setName] = useState(db.name);
+	const nameDraft = useDraft(db.name);
+	const name = nameDraft.value;
 	const cfg = DATABASE_TYPES[type];
 	const actions = ns as unknown as DatabaseMoveDuplicateFacade;
 	const duplicateMutation = useMutation(actions.duplicate.mutationOptions());
@@ -796,15 +811,22 @@ function SettingsTab({
 	// The normalized row type omits environmentId; every engine row carries it.
 	const environmentId = (db as { environmentId?: string }).environmentId ?? "";
 
-	const renameMutation = useMutation(
-		ns.update.mutationOptions({
-			onSuccess: () => {
-				toast.success("Database renamed");
-				invalidate();
-			},
-			onError: (error: { message?: string }) => toastError(error, "Failed to rename"),
-		}),
-	);
+	const renameMutation = useSaveMutation(ns.update.mutationOptions(), {
+		successMessage: "Database renamed",
+		errorMessage: "Failed to rename",
+		onSuccess: () => {
+			nameDraft.markSaved();
+			invalidate();
+		},
+	});
+
+	const renameBlocked = !canWrite || !name.trim() || name.trim() === db.name;
+	const onRename = () => renameMutation.mutate({ ...idInput, name: name.trim() });
+	useSaveBar(nameDraft, {
+		onSave: onRename,
+		pending: renameMutation.isPending,
+		disabled: renameBlocked,
+	});
 
 	return (
 		<SettingsStack>
@@ -815,17 +837,12 @@ function SettingsTab({
 				<div className="space-y-4">
 					<div className="space-y-1.5">
 						<Label htmlFor="rename-input">Name</Label>
-						<Input id="rename-input" value={name} onChange={(e) => setName(e.target.value)} />
+						<Input id="rename-input" value={name} onChange={(e) => nameDraft.set(e.target.value)} />
 					</div>
 					<div className="flex items-center justify-end gap-3">
-						<UnsavedChangesPill dirty={name !== db.name} />
+						<UnsavedChangesPill dirty={nameDraft.dirty} />
 						<DisabledHint hint={canWrite ? undefined : capabilityHint("service.write")}>
-							<Button
-								disabled={
-									renameMutation.isPending || !name.trim() || name.trim() === db.name || !canWrite
-								}
-								onClick={() => renameMutation.mutate({ ...idInput, name: name.trim() })}
-							>
+							<Button disabled={renameMutation.isPending || renameBlocked} onClick={onRename}>
 								{renameMutation.isPending && <Loader2 className="size-4 animate-spin" />}
 								Rename
 							</Button>
@@ -848,7 +865,7 @@ function SettingsTab({
 				}}
 				onRename={(id, nextName) => {
 					// Keyed id input ({ postgresId } / { mysqlId } / …) — untyped behind the facade.
-					const input: DatabaseIdInput = { [cfg.idField]: id, name: nextName };
+					const input = { ...databaseIdInput(type, id), name: nextName };
 					return renameCopyMutation.mutateAsync(input);
 				}}
 				onMove={(targetEnvironmentId) =>

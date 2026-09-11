@@ -1,9 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,7 +24,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 export function CreateServerDialog({
@@ -37,7 +36,6 @@ export function CreateServerDialog({
 	disabledReason?: string;
 }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
@@ -49,25 +47,20 @@ export function CreateServerDialog({
 
 	const { data: sshKeys } = useQuery(trpc.sshKey.all.queryOptions());
 
-	const createMutation = useMutation(
-		trpc.server.create.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Server added");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.server.all.queryKey(),
-				});
-				setOpen(false);
-				setName("");
-				setDescription("");
-				setIpAddress("");
-				setPort("22");
-				setUsername("root");
-				setSshKeyId(null);
-				setSwarmRole("worker");
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const createMutation = useSaveMutation(trpc.server.create.mutationOptions(), {
+		successMessage: "Server added",
+		invalidate: [trpc.server.all.queryKey()],
+		onSuccess: () => {
+			setOpen(false);
+			setName("");
+			setDescription("");
+			setIpAddress("");
+			setPort("22");
+			setUsername("root");
+			setSshKeyId(null);
+			setSwarmRole("worker");
+		},
+	});
 
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>

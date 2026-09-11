@@ -3,9 +3,8 @@
 import { Webhook } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-
+import { SettingsSection } from "@/components/layout/settings-section";
 import { CopyButton } from "@/components/services/copy-button";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";

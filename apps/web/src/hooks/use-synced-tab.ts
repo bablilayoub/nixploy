@@ -16,6 +16,21 @@ export const SERVICE_TAB_ALIASES: Record<string, string> = {
 };
 
 /**
+ * The `?tab=` value a page should render: the raw param with `aliases`
+ * applied, or `defaultValue` when it is missing or `isValid` rejects it.
+ * Pure, so the tab resolution has unit tests of its own.
+ */
+export function resolveTabParam(
+	raw: string | null,
+	defaultValue: string,
+	isValid?: (value: string) => boolean,
+	aliases?: Record<string, string>,
+): string {
+	const param = raw ? (aliases?.[raw] ?? raw) : null;
+	return param && (!isValid || isValid(param)) ? param : defaultValue;
+}
+
+/**
  * Syncs a tab selection to the `?tab=` query param so detail-page tabs are
  * deep-linkable (mirrors the project page's tab sync). The value may be a
  * top-level tab or a nested sub-tab — callers derive which is which.
@@ -42,9 +57,12 @@ export function useSyncedTab(
 	const router = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
-	const raw = searchParams.get(paramName);
-	const param = raw ? (options.aliases?.[raw] ?? raw) : raw;
-	const resolved = param && (!isValid || isValid(param)) ? param : defaultValue;
+	const resolved = resolveTabParam(
+		searchParams.get(paramName),
+		defaultValue,
+		isValid,
+		options.aliases,
+	);
 	const [value, setValue] = useState(resolved);
 
 	useEffect(() => {

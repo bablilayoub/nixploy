@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
-import { SchedulesView } from "@/components/schedules/schedules-view";
+import { SchedulesPanel } from "@/components/schedules/schedules-panel";
 
 export const metadata: Metadata = {
 	title: "Schedules",
 };
 
 export default function SchedulesPage() {
-	return <SchedulesView />;
+	return <SchedulesPanel source={{ kind: "global" }} />;
 }

@@ -1,8 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
+import { useMounted } from "@/hooks/use-mounted";
 import { useSession } from "@/lib/auth-client";
 import { useTRPC } from "@/lib/trpc";
 
@@ -44,8 +45,7 @@ export function useCapabilities(options: { strict?: boolean } = {}) {
 		() => new Set<string>(query.data?.capabilities ?? []),
 		[query.data?.capabilities],
 	);
-	const [mounted, setMounted] = useState(false);
-	useEffect(() => setMounted(true), []);
+	const mounted = useMounted();
 	const loaded = mounted && query.isSuccess;
 	const strict = options.strict ?? false;
 

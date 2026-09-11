@@ -17,6 +17,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useMounted } from "@/hooks/use-mounted";
 import { authClient } from "@/lib/auth-client";
 import { capabilityLabel } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
@@ -67,8 +68,7 @@ export function DockerView() {
 
 	// The session role only exists client-side; keep SSR and the first client
 	// paint identical by rendering the skeleton until mounted.
-	const [mounted, setMounted] = useState(false);
-	useEffect(() => setMounted(true), []);
+	const mounted = useMounted();
 
 	// A server picked in one organization does not exist in the next one —
 	// forget it when the active org changes (state adjusted during render, per

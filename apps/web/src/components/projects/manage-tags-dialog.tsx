@@ -1,10 +1,9 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Check, Loader2, Pencil, Tags, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 const DEFAULT_COLOR = "#6366f1";
@@ -27,7 +26,6 @@ const DEFAULT_COLOR = "#6366f1";
 /** Create / delete org tags from the project services toolbar. */
 export function ManageTagsDialog() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const router = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
@@ -60,32 +58,22 @@ export function ManageTagsDialog() {
 		enabled: open,
 	});
 
-	const invalidate = async () => {
-		await queryClient.invalidateQueries({ queryKey: trpc.tag.all.queryKey() });
-		await queryClient.invalidateQueries({ queryKey: trpc.tag.forServices.queryKey() });
-	};
+	// The tag list and every service's tag chips both go stale on any write.
+	const tagKeys = [trpc.tag.all.queryKey(), trpc.tag.forServices.queryKey()];
 
-	const createMutation = useMutation(
+	const createMutation = useSaveMutation(
 		trpc.tag.create.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Tag created");
+			onSuccess: () => {
 				setName("");
 				setColor(DEFAULT_COLOR);
-				await invalidate();
 			},
-			onError: (error) => toastError(error),
 		}),
+		{ successMessage: "Tag created", invalidate: tagKeys },
 	);
 
-	const updateMutation = useMutation(
-		trpc.tag.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Tag updated");
-				setEditingId(null);
-				await invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const updateMutation = useSaveMutation(
+		trpc.tag.update.mutationOptions({ onSuccess: () => setEditingId(null) }),
+		{ successMessage: "Tag updated", invalidate: tagKeys },
 	);
 
 	const startEdit = (tag: { tagId: string; name: string; color: string }) => {
@@ -94,15 +82,10 @@ export function ManageTagsDialog() {
 		setEditColor(tag.color);
 	};
 
-	const deleteMutation = useMutation(
-		trpc.tag.delete.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Tag deleted");
-				await invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const deleteMutation = useSaveMutation(trpc.tag.delete.mutationOptions(), {
+		successMessage: "Tag deleted",
+		invalidate: tagKeys,
+	});
 
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>

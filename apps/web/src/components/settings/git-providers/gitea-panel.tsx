@@ -1,14 +1,13 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Loader2, Plug, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useState } from "react";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { EditProviderDialog } from "@/components/settings/git-providers/edit-provider-dialog";
 import { WebhookSecretDialog } from "@/components/settings/git-providers/webhook-secret-dialog";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -31,8 +30,9 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useMounted } from "@/hooks/use-mounted";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { missingCapabilityHint } from "@/lib/capabilities";
-import { toastError } from "@/lib/describe-error";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 
 const GITEA_EDIT_FIELDS = [
@@ -49,7 +49,6 @@ const GITEA_EDIT_FIELDS = [
 export function GiteaPanel() {
 	const trpc = useTRPC();
 	const trpcClient = useTRPCClient();
-	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
 	const { can } = useCapabilities();
 	const canManage = can("git_providers.manage");
@@ -57,8 +56,8 @@ export function GiteaPanel() {
 	const [name, setName] = useState("");
 	const [giteaUrl, setGiteaUrl] = useState("https://gitea.com");
 	// Webhook payload URLs need the browser origin; resolved after mount.
-	const [origin, setOrigin] = useState("");
-	useEffect(() => setOrigin(window.location.origin), []);
+	const mounted = useMounted();
+	const origin = mounted ? window.location.origin : "";
 	const [accessToken, setAccessToken] = useState("");
 
 	const {
@@ -69,48 +68,32 @@ export function GiteaPanel() {
 		refetch,
 	} = useQuery(trpc.gitea.all.queryOptions());
 
-	const invalidate = () => queryClient.invalidateQueries({ queryKey: trpc.gitea.all.queryKey() });
+	const listKey = trpc.gitea.all.queryKey();
 
-	const createMutation = useMutation(
-		trpc.gitea.create.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Gitea provider added");
-				await invalidate();
-				setOpen(false);
-				setName("");
-				setGiteaUrl("https://gitea.com");
-				setAccessToken("");
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const createMutation = useSaveMutation(trpc.gitea.create.mutationOptions(), {
+		successMessage: "Gitea provider added",
+		invalidate: [listKey],
+		onSuccess: () => {
+			setOpen(false);
+			setName("");
+			setGiteaUrl("https://gitea.com");
+			setAccessToken("");
+		},
+	});
 
-	const testMutation = useMutation(
-		trpc.gitea.testConnection.mutationOptions({
-			onSuccess: () => toast.success("Connection successful"),
-			onError: (error) => toastError(error),
-		}),
-	);
+	const testMutation = useSaveMutation(trpc.gitea.testConnection.mutationOptions(), {
+		successMessage: "Connection successful",
+	});
 
-	const updateMutation = useMutation(
-		trpc.gitea.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Gitea provider updated");
-				await invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const updateMutation = useSaveMutation(trpc.gitea.update.mutationOptions(), {
+		successMessage: "Gitea provider updated",
+		invalidate: [listKey],
+	});
 
-	const removeMutation = useMutation(
-		trpc.gitea.remove.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Gitea provider removed");
-				await invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const removeMutation = useSaveMutation(trpc.gitea.remove.mutationOptions(), {
+		successMessage: "Gitea provider removed",
+		invalidate: [listKey],
+	});
 
 	return (
 		<SettingsSection

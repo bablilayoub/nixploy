@@ -1,16 +1,16 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Building2 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { EnvEditor } from "@/components/services/env-editor";
-import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { parseEnvFile } from "@/lib/env-file";
 import { useTRPC } from "@/lib/trpc";
 
@@ -35,7 +35,6 @@ export function EnvironmentVariablesTab({
 	environment?: EnvironmentInfo;
 }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	// The server nulls env values for members without secrets.read; the editor
 	// cannot tell that apart from an unset env, so the capability drives it.
@@ -53,39 +52,20 @@ export function EnvironmentVariablesTab({
 	const orgEnvQuery = useQuery(trpc.organization.environment.queryOptions());
 	const orgKeys = orgEnvQuery.data?.env ? parseEnvFile(orgEnvQuery.data.env) : [];
 
-	const invalidateResolved = () =>
-		queryClient.invalidateQueries({
-			queryKey: trpc.project.getResolvedEnvironment.queryKey(),
-		});
+	// Every level feeds the merged preview, so each save refreshes it too.
+	const resolvedKey = trpc.project.getResolvedEnvironment.queryKey();
 
-	const saveProjectEnv = useMutation(
-		trpc.project.saveEnvironment.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Project variables saved");
-				await Promise.all([
-					queryClient.invalidateQueries({
-						queryKey: trpc.project.one.queryKey({ projectId }),
-					}),
-					invalidateResolved(),
-				]);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const saveProjectEnv = useSaveMutation(trpc.project.saveEnvironment.mutationOptions(), {
+		successMessage: "Project variables saved",
+		invalidate: [trpc.project.one.queryKey({ projectId }), resolvedKey],
+	});
 
-	const saveEnvironmentEnv = useMutation(
+	const saveEnvironmentEnv = useSaveMutation(
 		trpc.environment.saveEnvironment.mutationOptions({
-			onSuccess: async () => {
-				toast.success(`Variables saved for "${environment?.name}"`);
-				await Promise.all([
-					queryClient.invalidateQueries({
-						queryKey: trpc.environment.byProject.queryKey({ projectId }),
-					}),
-					invalidateResolved(),
-				]);
-			},
-			onError: (error) => toastError(error),
+			// Dynamic text, so it stays here instead of `successMessage`.
+			onSuccess: () => toast.success(`Variables saved for "${environment?.name}"`),
 		}),
+		{ invalidate: [trpc.environment.byProject.queryKey({ projectId }), resolvedKey] },
 	);
 
 	return (

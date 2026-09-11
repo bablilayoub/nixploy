@@ -1,8 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import type { ComposeService } from "@/components/compose/compose-detail";
 import {
 	GIT_PROVIDER_LABELS,
@@ -10,9 +8,10 @@ import {
 	type GitProviderSourceType,
 	splitRepoSelection,
 } from "@/components/git-provider-repo-picker";
+import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
+import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
-import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { HelpLink } from "@/components/ui/help-link";
@@ -28,7 +27,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useDraft } from "@/hooks/use-draft";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 type SourceType = ComposeService["sourceType"];
@@ -57,67 +57,44 @@ export function GeneralTab({
 	onOpenComposeFile?: () => void;
 }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const canWrite = can("service.write");
-
-	const [composeType, setComposeType] = useState(compose.composeType);
-	const [isolatedDeployment, setIsolatedDeployment] = useState(compose.isolatedDeployment);
-	const [autoDeploy, setAutoDeploy] = useState(compose.autoDeploy);
-	const [sourceType, setSourceType] = useState<SourceType>(compose.sourceType);
-	const [gitUrl, setGitUrl] = useState(compose.gitUrl ?? "");
-	const [gitBranch, setGitBranch] = useState(compose.gitBranch ?? "");
-	const [repoSelection, setRepoSelection] = useState(storedRepoSelection(compose));
-	const [branch, setBranch] = useState(compose.branch ?? "");
-	const [composePath, setComposePath] = useState(compose.composePath);
-	const [providerId, setProviderId] = useState(storedProviderId(compose));
-	const [preDeployCommand, setPreDeployCommand] = useState(compose.preDeployCommand ?? "");
-	const [postDeployCommand, setPostDeployCommand] = useState(compose.postDeployCommand ?? "");
-	// Only mirror server values while the user is not editing — the header's
-	// Deploy/Stop invalidate compose.one and a status flip must not wipe the
-	// form (the whole `compose` object changes identity on every refetch).
-	const [dirty, setDirty] = useState(false);
-
-	/** Wrap a setter so any user edit marks the form dirty. */
-	const edit =
-		<T,>(setter: (value: T) => void) =>
-		(value: T) => {
-			setDirty(true);
-			setter(value);
-		};
 
 	const serverProviderId = storedProviderId(compose);
 	const serverRepoSelection = storedRepoSelection(compose);
 
-	useEffect(() => {
-		if (dirty) return;
-		setComposeType(compose.composeType);
-		setIsolatedDeployment(compose.isolatedDeployment);
-		setAutoDeploy(compose.autoDeploy);
-		setSourceType(compose.sourceType);
-		setGitUrl(compose.gitUrl ?? "");
-		setGitBranch(compose.gitBranch ?? "");
-		setRepoSelection(serverRepoSelection);
-		setBranch(compose.branch ?? "");
-		setComposePath(compose.composePath);
-		setProviderId(serverProviderId);
-		setPreDeployCommand(compose.preDeployCommand ?? "");
-		setPostDeployCommand(compose.postDeployCommand ?? "");
-	}, [
-		dirty,
-		compose.composeType,
-		compose.isolatedDeployment,
-		compose.autoDeploy,
-		compose.sourceType,
-		compose.gitUrl,
-		compose.gitBranch,
-		serverRepoSelection,
-		compose.branch,
-		compose.composePath,
-		serverProviderId,
-		compose.preDeployCommand,
-		compose.postDeployCommand,
-	]);
+	// The draft mirrors server values while the user is not editing — the
+	// header's Deploy/Stop invalidate compose.one and a status flip must not
+	// wipe the form (the whole `compose` object changes identity on every
+	// refetch).
+	const draft = useDraft({
+		composeType: compose.composeType,
+		isolatedDeployment: compose.isolatedDeployment,
+		autoDeploy: compose.autoDeploy,
+		sourceType: compose.sourceType,
+		gitUrl: compose.gitUrl ?? "",
+		gitBranch: compose.gitBranch ?? "",
+		repoSelection: serverRepoSelection,
+		branch: compose.branch ?? "",
+		composePath: compose.composePath,
+		providerId: serverProviderId,
+		preDeployCommand: compose.preDeployCommand ?? "",
+		postDeployCommand: compose.postDeployCommand ?? "",
+	});
+	const {
+		composeType,
+		isolatedDeployment,
+		autoDeploy,
+		sourceType,
+		gitUrl,
+		gitBranch,
+		repoSelection,
+		branch,
+		composePath,
+		providerId,
+		preDeployCommand,
+		postDeployCommand,
+	} = draft.value;
 
 	/**
 	 * Switching the source type must not carry the previous provider's id /
@@ -125,14 +102,15 @@ export function GeneralTab({
 	 * switching back to its persisted source type.
 	 */
 	const changeSourceType = (next: SourceType) => {
-		setDirty(true);
-		setSourceType(next);
 		const restore = next === compose.sourceType;
-		setProviderId(restore ? serverProviderId : "");
-		setRepoSelection(restore ? serverRepoSelection : "");
-		setBranch(restore ? (compose.branch ?? "") : "");
-		setGitUrl(restore ? (compose.gitUrl ?? "") : "");
-		setGitBranch(restore ? (compose.gitBranch ?? "") : "");
+		draft.patch({
+			sourceType: next,
+			providerId: restore ? serverProviderId : "",
+			repoSelection: restore ? serverRepoSelection : "",
+			branch: restore ? (compose.branch ?? "") : "",
+			gitUrl: restore ? (compose.gitUrl ?? "") : "",
+			gitBranch: restore ? (compose.gitBranch ?? "") : "",
+		});
 	};
 
 	const githubQuery = useQuery({
@@ -182,19 +160,12 @@ export function GeneralTab({
 		bitbucketQuery.isLoading ||
 		giteaQuery.isLoading;
 
-	const updateMutation = useMutation(
-		trpc.compose.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Compose service updated");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.compose.one.queryKey({ composeId: compose.composeId }),
-				});
-				// Refetch is done: the server now holds what was typed.
-				setDirty(false);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const updateMutation = useSaveMutation(trpc.compose.update.mutationOptions(), {
+		successMessage: "Compose service updated",
+		invalidate: [trpc.compose.one.queryKey({ composeId: compose.composeId })],
+		// Refetch is done: the server now holds what was typed.
+		onSuccess: draft.markSaved,
+	});
 
 	const onSave = () => {
 		const providerIds: Record<GitProviderSource, string | null> = {
@@ -230,6 +201,8 @@ export function GeneralTab({
 		});
 	};
 
+	useSaveBar(draft, { onSave, pending: updateMutation.isPending, disabled: !canWrite });
+
 	return (
 		<SettingsStack>
 			<SettingsSection title="General" description="How this compose file is deployed.">
@@ -239,7 +212,7 @@ export function GeneralTab({
 						<Select
 							value={composeType}
 							onValueChange={(value) =>
-								edit(setComposeType)(value as ComposeService["composeType"])
+								draft.patch({ composeType: value as ComposeService["composeType"] })
 							}
 						>
 							<SelectTrigger id="compose-type" className="max-w-sm">
@@ -266,7 +239,7 @@ export function GeneralTab({
 						<Switch
 							id="isolated-deployment"
 							checked={isolatedDeployment}
-							onCheckedChange={edit(setIsolatedDeployment)}
+							onCheckedChange={(checked) => draft.patch({ isolatedDeployment: checked })}
 						/>
 					</div>
 					<div className="flex items-center justify-between gap-4 rounded-lg border p-4">
@@ -276,7 +249,11 @@ export function GeneralTab({
 								Deploy automatically when the source repository changes.
 							</p>
 						</div>
-						<Switch id="auto-deploy" checked={autoDeploy} onCheckedChange={edit(setAutoDeploy)} />
+						<Switch
+							id="auto-deploy"
+							checked={autoDeploy}
+							onCheckedChange={(checked) => draft.patch({ autoDeploy: checked })}
+						/>
 					</div>
 					<div className="flex flex-col gap-2">
 						<Label htmlFor="compose-pre-deploy">Pre-deploy command</Label>
@@ -286,7 +263,7 @@ export function GeneralTab({
 							placeholder="php artisan down"
 							value={preDeployCommand}
 							disabled={!canWrite}
-							onChange={(event) => edit(setPreDeployCommand)(event.target.value)}
+							onChange={(event) => draft.patch({ preDeployCommand: event.target.value })}
 						/>
 						<p className="text-sm text-muted-foreground">
 							Runs in a container of the project that is currently running, before it is replaced
@@ -302,7 +279,7 @@ export function GeneralTab({
 							placeholder="php artisan migrate --force"
 							value={postDeployCommand}
 							disabled={!canWrite}
-							onChange={(event) => edit(setPostDeployCommand)(event.target.value)}
+							onChange={(event) => draft.patch({ postDeployCommand: event.target.value })}
 						/>
 						<p className="text-sm text-muted-foreground">
 							Runs in a container of the project that was just brought up. A non-zero exit marks the
@@ -361,7 +338,7 @@ export function GeneralTab({
 									id="git-url"
 									placeholder="https://github.com/org/repo.git"
 									value={gitUrl}
-									onChange={(e) => edit(setGitUrl)(e.target.value)}
+									onChange={(e) => draft.patch({ gitUrl: e.target.value })}
 								/>
 							</div>
 							<div className="flex flex-col gap-2">
@@ -370,7 +347,7 @@ export function GeneralTab({
 									id="git-branch"
 									placeholder="main"
 									value={gitBranch}
-									onChange={(e) => edit(setGitBranch)(e.target.value)}
+									onChange={(e) => draft.patch({ gitBranch: e.target.value })}
 								/>
 							</div>
 						</>
@@ -380,7 +357,10 @@ export function GeneralTab({
 						<>
 							<div className="flex flex-col gap-2">
 								<Label htmlFor="provider">Provider</Label>
-								<Select value={providerId} onValueChange={edit(setProviderId)}>
+								<Select
+									value={providerId}
+									onValueChange={(value) => draft.patch({ providerId: value })}
+								>
 									<SelectTrigger id="provider" className="max-w-sm">
 										<SelectValue
 											placeholder={providersLoading ? "Loading providers…" : "Select a provider"}
@@ -405,9 +385,9 @@ export function GeneralTab({
 								sourceType={sourceType}
 								providerId={providerId}
 								repoSelection={repoSelection}
-								onRepoSelectionChange={edit(setRepoSelection)}
+								onRepoSelectionChange={(value) => draft.patch({ repoSelection: value })}
 								branch={branch}
-								onBranchChange={edit(setBranch)}
+								onBranchChange={(value) => draft.patch({ branch: value })}
 							/>
 						</>
 					)}
@@ -419,13 +399,13 @@ export function GeneralTab({
 								id="compose-path"
 								placeholder="./docker-compose.yml"
 								value={composePath}
-								onChange={(e) => edit(setComposePath)(e.target.value)}
+								onChange={(e) => draft.patch({ composePath: e.target.value })}
 							/>
 						</div>
 					)}
 
 					<div className="flex items-center justify-end gap-3">
-						<UnsavedChangesPill dirty={dirty} />
+						<UnsavedChangesPill dirty={draft.dirty} />
 						<DisabledHint hint={canWrite ? undefined : capabilityHint("service.write")}>
 							<Button onClick={onSave} disabled={updateMutation.isPending || !canWrite}>
 								{updateMutation.isPending ? "Saving…" : "Save"}

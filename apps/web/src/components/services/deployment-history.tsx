@@ -32,6 +32,7 @@ import {
 import { TableCard } from "@/components/ui/table-card";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { describeTriggeredBy, firstLine, TRIGGER_LABELS } from "@/hooks/use-running-deployments";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { toastError } from "@/lib/describe-error";
 import { formatDuration } from "@/lib/format";
 import { deploymentStatusLabel } from "@/lib/status";
@@ -251,36 +252,28 @@ export function DeploymentHistory({
 
 	const deploymentsQuery = kind === "application" ? applicationQuery : composeQuery;
 
-	const cancel = useMutation(
-		trpc.application.cancelDeployment.mutationOptions({
-			onSuccess: () => {
-				toast.success("Deployment cancelled");
-				invalidateList();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const cancel = useSaveMutation(trpc.application.cancelDeployment.mutationOptions(), {
+		successMessage: "Deployment cancelled",
+		invalidate: [listPathKey],
+	});
 
-	const explain = useMutation(
+	const explain = useSaveMutation(
 		trpc.ai.explainDeployment.mutationOptions({
 			onSuccess: (result) => setExplainResult(result),
-			onError: (error) => toastError(error),
 		}),
 	);
 
-	const redeployHandlers = {
-		onSuccess: () => {
-			toast.success("Redeploy queued");
-			setExplainResult(null);
-			invalidateList();
-		},
-		onError: (error: { message: string }) => toastError(error),
-	};
+	const redeployHandlers = { onSuccess: () => setExplainResult(null) };
+	const redeployConfig = { successMessage: "Redeploy queued", invalidate: [listPathKey] };
 
-	const redeployApplication = useMutation(
+	const redeployApplication = useSaveMutation(
 		trpc.application.redeploy.mutationOptions(redeployHandlers),
+		redeployConfig,
 	);
-	const redeployCompose = useMutation(trpc.compose.redeploy.mutationOptions(redeployHandlers));
+	const redeployCompose = useSaveMutation(
+		trpc.compose.redeploy.mutationOptions(redeployHandlers),
+		redeployConfig,
+	);
 	const redeployPending =
 		kind === "application" ? redeployApplication.isPending : redeployCompose.isPending;
 
@@ -295,7 +288,9 @@ export function DeploymentHistory({
 				setExplainResult(null);
 				invalidateList();
 				if (kind === "application") {
-					queryClient.invalidateQueries({ queryKey: trpc.application.one.queryKey() });
+					queryClient.invalidateQueries({
+						queryKey: trpc.application.one.queryKey({ applicationId: serviceId }),
+					});
 				}
 			},
 			onError: (error) => toastError(error),

@@ -1,14 +1,13 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { format } from "date-fns";
 import { Award, Loader2, Pencil, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { PageHeader, StatusDot } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,8 +33,8 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { missingCapabilityHint } from "@/lib/capabilities";
-import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -43,7 +42,6 @@ type CertificateRow = inferRouterOutputs<AppRouter>["certificate"]["all"][number
 
 export function CertificatesView() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
 	const { can } = useCapabilities();
 	const canManage = can("certificates.manage");
@@ -68,30 +66,16 @@ export function CertificatesView() {
 		}
 	}, [open]);
 
-	const createMutation = useMutation(
-		trpc.certificate.create.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Certificate added");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.certificate.all.queryKey(),
-				});
-				setOpen(false);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const createMutation = useSaveMutation(trpc.certificate.create.mutationOptions(), {
+		successMessage: "Certificate added",
+		invalidate: [trpc.certificate.all.queryKey()],
+		onSuccess: () => setOpen(false),
+	});
 
-	const deleteMutation = useMutation(
-		trpc.certificate.delete.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Certificate removed");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.certificate.all.queryKey(),
-				});
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const deleteMutation = useSaveMutation(trpc.certificate.delete.mutationOptions(), {
+		successMessage: "Certificate removed",
+		invalidate: [trpc.certificate.all.queryKey()],
+	});
 
 	const [editing, setEditing] = useState<CertificateRow | null>(null);
 	const [editName, setEditName] = useState("");
@@ -108,18 +92,11 @@ export function CertificatesView() {
 		}
 	}, [editing]);
 
-	const updateMutation = useMutation(
-		trpc.certificate.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Certificate updated");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.certificate.all.queryKey(),
-				});
-				setEditing(null);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const updateMutation = useSaveMutation(trpc.certificate.update.mutationOptions(), {
+		successMessage: "Certificate updated",
+		invalidate: [trpc.certificate.all.queryKey()],
+		onSuccess: () => setEditing(null),
+	});
 
 	return (
 		<div className="flex flex-col gap-8">

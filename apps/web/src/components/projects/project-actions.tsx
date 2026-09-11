@@ -1,6 +1,5 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Pencil, Settings2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -36,7 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import { describeServiceCounts, type ServiceCounts, sumServiceCounts } from "./service-summary";
@@ -57,7 +56,6 @@ export function ProjectActions({
 }) {
 	const trpc = useTRPC();
 	const router = useRouter();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const canWrite = can("project.write");
 	const canDelete = can("project.delete");
@@ -74,41 +72,24 @@ export function ProjectActions({
 	const [name, setName] = useState(project.name);
 	const [description, setDescription] = useState(project.description ?? "");
 
-	const invalidateProjects = async () => {
-		await Promise.all([
-			queryClient.invalidateQueries({
-				queryKey: trpc.project.all.queryKey(),
-			}),
-			queryClient.invalidateQueries({
-				queryKey: trpc.project.one.queryKey({
-					projectId: project.projectId,
-				}),
-			}),
-		]);
-	};
+	const updateProject = useSaveMutation(trpc.project.update.mutationOptions(), {
+		successMessage: "Project updated",
+		invalidate: [
+			trpc.project.all.queryKey(),
+			trpc.project.one.queryKey({ projectId: project.projectId }),
+		],
+		onSuccess: () => setRenameOpen(false),
+	});
 
-	const updateProject = useMutation(
-		trpc.project.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Project updated");
-				await invalidateProjects();
-				setRenameOpen(false);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
-
-	const deleteProject = useMutation(
+	const deleteProject = useSaveMutation(
 		trpc.project.delete.mutationOptions({
-			onSuccess: async () => {
-				toast.success(`Project "${project.name}" deleted`);
-				await queryClient.invalidateQueries({
-					queryKey: trpc.project.all.queryKey(),
-				});
-				router.push("/dashboard");
-			},
-			onError: (error) => toastError(error),
+			// Dynamic text, so it stays here instead of `successMessage`.
+			onSuccess: () => toast.success(`Project "${project.name}" deleted`),
 		}),
+		{
+			invalidate: [trpc.project.all.queryKey()],
+			onSuccess: () => router.push("/dashboard"),
+		},
 	);
 
 	return (

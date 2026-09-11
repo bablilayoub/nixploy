@@ -1,15 +1,14 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Server } from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
-import { SettingsSection } from "@/components/settings/settings-section";
+import { useSaveBar } from "@/components/services/save-bar";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useDraft } from "@/hooks/use-draft";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -35,22 +34,25 @@ function placementFromConstraints(text: string): PlacementSwarm | null {
 /** Swarm placement constraints (node.labels / node.role / …). */
 export function PlacementManager({ application }: { application: Application }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const canWrite = can("service.write");
-	const [text, setText] = useState(() => constraintsFromPlacement(application.placementSwarm));
+	const applicationId = application.applicationId;
+	const draft = useDraft(constraintsFromPlacement(application.placementSwarm));
+	const text = draft.value;
 
-	const save = useMutation(
-		trpc.application.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Placement constraints saved");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.application.one.queryKey(),
-				});
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const save = useSaveMutation(trpc.application.update.mutationOptions(), {
+		successMessage: "Placement constraints saved",
+		invalidate: [trpc.application.one.queryKey({ applicationId })],
+		onSuccess: draft.markSaved,
+	});
+
+	const onSave = () =>
+		save.mutate({
+			applicationId,
+			placementSwarm: placementFromConstraints(text),
+		});
+
+	useSaveBar(draft, { onSave, pending: save.isPending, disabled: !canWrite });
 
 	return (
 		<SettingsSection
@@ -75,7 +77,7 @@ export function PlacementManager({ application }: { application: Application }) 
 						id="placement-constraints"
 						className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-28 w-full rounded-md border px-3 py-2 font-mono text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
 						value={text}
-						onChange={(event) => setText(event.target.value)}
+						onChange={(event) => draft.set(event.target.value)}
 						placeholder={"node.role==worker\nnode.labels.disk==ssd"}
 					/>
 				</div>
@@ -83,12 +85,7 @@ export function PlacementManager({ application }: { application: Application }) 
 					type="button"
 					disabled={save.isPending || !canWrite}
 					title={canWrite ? undefined : capabilityHint("service.write")}
-					onClick={() =>
-						save.mutate({
-							applicationId: application.applicationId,
-							placementSwarm: placementFromConstraints(text),
-						})
-					}
+					onClick={onSave}
 					className="self-start"
 				>
 					{save.isPending ? <Loader2 className="size-4 animate-spin" /> : null}

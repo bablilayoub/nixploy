@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
@@ -92,7 +93,7 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 		[target],
 	);
 
-	const chat = useMutation(
+	const chat = useSaveMutation(
 		trpc.ai.chat.mutationOptions({
 			onSuccess: (result) => {
 				setMessages((prev) => [
@@ -101,7 +102,6 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 				]);
 				setPendingActions((result.proposedActions ?? []) as ProposedAction[]);
 			},
-			onError: (error) => toastError(error),
 		}),
 	);
 

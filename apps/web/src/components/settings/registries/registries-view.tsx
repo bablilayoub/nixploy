@@ -1,14 +1,13 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { format } from "date-fns";
 import { Database, Loader2, Pencil, Plug, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { PageHeader } from "@/components/shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,8 +39,8 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { missingCapabilityHint } from "@/lib/capabilities";
-import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -49,7 +48,6 @@ type RegistryRow = inferRouterOutputs<AppRouter>["registry"]["all"][number];
 
 export function RegistriesView() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
 	const { can } = useCapabilities();
 	const canManage = can("registries.manage");
@@ -69,42 +67,30 @@ export function RegistriesView() {
 		refetch,
 	} = useQuery(trpc.registry.all.queryOptions());
 
-	const invalidate = () =>
-		queryClient.invalidateQueries({ queryKey: trpc.registry.all.queryKey() });
+	const listKey = trpc.registry.all.queryKey();
 
-	const createMutation = useMutation(
-		trpc.registry.create.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Registry added");
-				await invalidate();
-				setOpen(false);
-				setRegistryName("");
-				setUsername("");
-				setPassword("");
-				setRegistryUrl("");
-				setRegistryType("cloud");
-				setImagePrefix("");
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const createMutation = useSaveMutation(trpc.registry.create.mutationOptions(), {
+		successMessage: "Registry added",
+		invalidate: [listKey],
+		onSuccess: () => {
+			setOpen(false);
+			setRegistryName("");
+			setUsername("");
+			setPassword("");
+			setRegistryUrl("");
+			setRegistryType("cloud");
+			setImagePrefix("");
+		},
+	});
 
-	const testMutation = useMutation(
-		trpc.registry.test.mutationOptions({
-			onSuccess: () => toast.success("Registry login successful"),
-			onError: (error) => toastError(error),
-		}),
-	);
+	const testMutation = useSaveMutation(trpc.registry.test.mutationOptions(), {
+		successMessage: "Registry login successful",
+	});
 
-	const removeMutation = useMutation(
-		trpc.registry.remove.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Registry removed");
-				await invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const removeMutation = useSaveMutation(trpc.registry.remove.mutationOptions(), {
+		successMessage: "Registry removed",
+		invalidate: [listKey],
+	});
 
 	const [editing, setEditing] = useState<RegistryRow | null>(null);
 	const [editName, setEditName] = useState("");
@@ -125,16 +111,11 @@ export function RegistriesView() {
 		}
 	}, [editing]);
 
-	const updateMutation = useMutation(
-		trpc.registry.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Registry updated");
-				await invalidate();
-				setEditing(null);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const updateMutation = useSaveMutation(trpc.registry.update.mutationOptions(), {
+		successMessage: "Registry updated",
+		invalidate: [listKey],
+		onSuccess: () => setEditing(null),
+	});
 
 	return (
 		<div className="flex flex-col gap-6">

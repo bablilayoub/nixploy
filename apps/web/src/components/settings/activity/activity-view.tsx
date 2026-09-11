@@ -2,7 +2,7 @@
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { History, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { QueryState } from "@/components/query-state";
 import { PageHeader } from "@/components/shell";
@@ -26,6 +26,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useTRPC } from "@/lib/trpc";
 
 const PAGE_SIZE = 50;
@@ -71,14 +72,10 @@ export function ActivityView({ embedded = false }: { embedded?: boolean } = {}) 
 	const [action, setAction] = useState(ALL);
 	const [targetType, setTargetType] = useState(ALL);
 	const [search, setSearch] = useState("");
-	const [debouncedSearch, setDebouncedSearch] = useState("");
 	const [page, setPage] = useState(0);
 
 	// Query on pauses in typing, not on every keystroke.
-	useEffect(() => {
-		const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
-		return () => clearTimeout(timer);
-	}, [search]);
+	const debouncedSearch = useDebouncedValue(search.trim(), 300);
 
 	const facetsQuery = useQuery(trpc.audit.facets.queryOptions());
 	const auditQuery = useQuery({

@@ -2,14 +2,17 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
+import { useSaveBar } from "@/components/services/save-bar";
 import { SESSIONS_QUERY_KEY } from "@/components/settings/profile/sessions-card";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserAvatar } from "@/components/user-avatar";
+import { useDraft } from "@/hooks/use-draft";
+import { useMounted } from "@/hooks/use-mounted";
 import { authClient, useSession } from "@/lib/auth-client";
 import { toastError } from "@/lib/describe-error";
 import {
@@ -26,15 +29,11 @@ export function ProfileCard() {
 	// the server rendered without one — initials, name and email would then
 	// differ between the two and React re-renders the whole tree. Use the
 	// session only after mount so both paints agree.
-	const [mounted, setMounted] = useState(false);
-	useEffect(() => setMounted(true), []);
+	const mounted = useMounted();
 	const user = mounted ? session?.user : undefined;
 	const [pending, setPending] = useState(false);
-	const [name, setName] = useState(user?.name ?? "");
-
-	useEffect(() => {
-		setName(user?.name ?? "");
-	}, [user?.name]);
+	const nameDraft = useDraft(user?.name ?? "");
+	const name = nameDraft.value;
 
 	async function saveImage(image: string | null) {
 		setPending(true);
@@ -48,8 +47,7 @@ export function ProfileCard() {
 		toast.success(image ? "Avatar updated" : "Avatar cleared");
 	}
 
-	async function saveName(event: React.FormEvent) {
-		event.preventDefault();
+	async function saveName() {
 		const trimmed = name.trim();
 		if (!trimmed) {
 			toast.error("Name is required");
@@ -64,11 +62,24 @@ export function ProfileCard() {
 		}
 		await refetch?.();
 		toast.success("Profile updated");
+		nameDraft.markSaved();
+	}
+
+	function onNameSubmit(event: React.FormEvent) {
+		event.preventDefault();
+		void saveName();
 	}
 
 	const currentImage = user?.image ?? null;
 	const usingGravatar = isGravatarImage(currentImage);
 	const usingInitials = !currentImage;
+	const nameUnchanged = name.trim() === user?.name;
+
+	useSaveBar(nameDraft, {
+		onSave: () => void saveName(),
+		pending,
+		disabled: nameUnchanged,
+	});
 
 	return (
 		<SettingsSection title="Profile" description="Your name and avatar.">
@@ -86,19 +97,19 @@ export function ProfileCard() {
 					</div>
 				</div>
 
-				<form onSubmit={saveName} className="grid max-w-sm gap-3">
+				<form onSubmit={onNameSubmit} className="grid max-w-sm gap-3">
 					<div className="grid gap-2">
 						<Label htmlFor="profile-name">Display name</Label>
 						<Input
 							id="profile-name"
 							value={name}
-							onChange={(event) => setName(event.target.value)}
+							onChange={(event) => nameDraft.set(event.target.value)}
 							disabled={pending}
 							required
 						/>
 					</div>
 					<div>
-						<Button type="submit" size="sm" disabled={pending || name.trim() === user?.name}>
+						<Button type="submit" size="sm" disabled={pending || nameUnchanged}>
 							{pending && <Loader2 className="size-4 animate-spin" />}
 							Save name
 						</Button>

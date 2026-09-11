@@ -13,9 +13,8 @@ import {
 	XAxis,
 	YAxis,
 } from "recharts";
-
+import { SettingsSection } from "@/components/layout/settings-section";
 import { NotRunningState, type RuntimeEmptyProps } from "@/components/services/not-running-state";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { formatBytes } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";

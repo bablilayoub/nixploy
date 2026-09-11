@@ -1,13 +1,12 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DatabaseBackup, Loader2, Pencil, Play, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useState } from "react";
 import { BackupRunsSheet, LastRunBadge } from "@/components/backups/backup-runs";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DateTime } from "@/components/ui/date-time";
@@ -39,8 +38,9 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useMounted } from "@/hooks/use-mounted";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { INSTANCE_ADMIN_HINT, missingCapabilityHint } from "@/lib/capabilities";
-import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 /** The `database` column is informational for instance backups (DATABASE_URL is authoritative). */
@@ -71,8 +71,7 @@ export function InstanceBackups() {
 	// The session role is only known client-side and can already be cached
 	// when React hydrates — ignore it until mounted so the server-rendered
 	// `disabled`/`title` attributes match the first client paint.
-	const [mounted, setMounted] = useState(false);
-	useEffect(() => setMounted(true), []);
+	const mounted = useMounted();
 	const isInstanceAdmin = mounted && sessionIsInstanceAdmin;
 	const canManage = can("backups.manage") && isInstanceAdmin;
 	const manageHint = !can("backups.manage")
@@ -93,38 +92,27 @@ export function InstanceBackups() {
 	const invalidate = () =>
 		queryClient.invalidateQueries({ queryKey: trpc.backup.all.queryKey(listInput) });
 
-	const onError = (error: { message?: string }) => toastError(error, "Something went wrong");
+	const listKey = trpc.backup.all.queryKey(listInput);
 
-	const updateMutation = useMutation(
-		trpc.backup.update.mutationOptions({
-			onSuccess: () => {
-				toast.success("Instance backup updated");
-				invalidate();
-			},
-			onError,
-		}),
-	);
-	const removeMutation = useMutation(
-		trpc.backup.remove.mutationOptions({
-			onSuccess: () => {
-				toast.success("Instance backup deleted");
-				invalidate();
-			},
-			onError,
-		}),
-	);
-	const runMutation = useMutation(
-		trpc.backup.runManually.mutationOptions({
+	const updateMutation = useSaveMutation(trpc.backup.update.mutationOptions(), {
+		successMessage: "Instance backup updated",
+		invalidate: [listKey],
+		errorMessage: "Something went wrong",
+	});
+	const removeMutation = useSaveMutation(trpc.backup.remove.mutationOptions(), {
+		successMessage: "Instance backup deleted",
+		invalidate: [listKey],
+		errorMessage: "Something went wrong",
+	});
+	const runMutation = useSaveMutation(
+		// A failed run still changes the run history, so it refreshes either way.
+		trpc.backup.runManually.mutationOptions({ onError: () => void invalidate() }),
+		{
 			// The server answers once both artifacts are stored — the run row is final.
-			onSuccess: () => {
-				toast.success("Instance backup finished");
-				invalidate();
-			},
-			onError: (error) => {
-				onError(error);
-				invalidate();
-			},
-		}),
+			successMessage: "Instance backup finished",
+			invalidate: [listKey],
+			errorMessage: "Something went wrong",
+		},
 	);
 
 	const [dialogOpen, setDialogOpen] = useState(false);
@@ -317,28 +305,21 @@ function InstanceBackupFormDialog({
 }) {
 	const trpc = useTRPC();
 
-	const onError = (error: { message?: string }) => toastError(error, "Something went wrong");
+	const afterSave = () => {
+		onSaved();
+		onOpenChange(false);
+	};
 
-	const createMutation = useMutation(
-		trpc.backup.create.mutationOptions({
-			onSuccess: () => {
-				toast.success("Instance backup created");
-				onSaved();
-				onOpenChange(false);
-			},
-			onError,
-		}),
-	);
-	const updateMutation = useMutation(
-		trpc.backup.update.mutationOptions({
-			onSuccess: () => {
-				toast.success("Instance backup updated");
-				onSaved();
-				onOpenChange(false);
-			},
-			onError,
-		}),
-	);
+	const createMutation = useSaveMutation(trpc.backup.create.mutationOptions(), {
+		successMessage: "Instance backup created",
+		onSuccess: afterSave,
+		errorMessage: "Something went wrong",
+	});
+	const updateMutation = useSaveMutation(trpc.backup.update.mutationOptions(), {
+		successMessage: "Instance backup updated",
+		onSuccess: afterSave,
+		errorMessage: "Something went wrong",
+	});
 
 	const isPending = createMutation.isPending || updateMutation.isPending;
 	const keepLatestCount = form.keepLatestCount.trim() === "" ? null : Number(form.keepLatestCount);

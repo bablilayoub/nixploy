@@ -1,9 +1,7 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { useFollowDeployment } from "@/hooks/use-running-deployments";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 /**
@@ -14,61 +12,36 @@ import { useTRPC } from "@/lib/trpc";
  */
 export function useApplicationActions({ applicationId }: { applicationId: string }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const followDeployment = useFollowDeployment();
 
-	const invalidate = () => {
-		queryClient.invalidateQueries({
-			queryKey: trpc.application.one.queryKey({ applicationId }),
-		});
-		queryClient.invalidateQueries({ queryKey: trpc.application.all.pathKey() });
-		queryClient.invalidateQueries({
-			queryKey: trpc.deployment.byApplication.pathKey(),
-		});
+	const invalidate = [
+		trpc.application.one.queryKey({ applicationId }),
+		trpc.application.all.pathKey(),
+		trpc.deployment.byApplication.pathKey(),
 		// Wakes the shared running-deployments query (hairline, header, services table).
-		queryClient.invalidateQueries({
-			queryKey: trpc.deployment.recent.pathKey(),
-		});
-	};
+		trpc.deployment.recent.pathKey(),
+	];
 
-	const onError = (error: { message: string }) => toastError(error);
+	// `followDeployment` stays inside `mutationOptions` so the log drawer opens
+	// as soon as the job is queued, without waiting for the invalidations.
+	const follow = (result: { deploymentId: string }) => followDeployment(result.deploymentId);
 
-	const queued = (message: string) => (result: { deploymentId: string }) => {
-		toast.success(message);
-		invalidate();
-		followDeployment(result.deploymentId);
-	};
-
-	const deploy = useMutation(
-		trpc.application.deploy.mutationOptions({
-			onSuccess: queued("Deployment queued"),
-			onError,
-		}),
+	const deploy = useSaveMutation(trpc.application.deploy.mutationOptions({ onSuccess: follow }), {
+		successMessage: "Deployment queued",
+		invalidate,
+	});
+	const redeploy = useSaveMutation(
+		trpc.application.redeploy.mutationOptions({ onSuccess: follow }),
+		{ successMessage: "Redeployment queued", invalidate },
 	);
-	const redeploy = useMutation(
-		trpc.application.redeploy.mutationOptions({
-			onSuccess: queued("Redeployment queued"),
-			onError,
-		}),
-	);
-	const start = useMutation(
-		trpc.application.start.mutationOptions({
-			onSuccess: () => {
-				toast.success("Application started");
-				invalidate();
-			},
-			onError,
-		}),
-	);
-	const stop = useMutation(
-		trpc.application.stop.mutationOptions({
-			onSuccess: () => {
-				toast.success("Application stopped");
-				invalidate();
-			},
-			onError,
-		}),
-	);
+	const start = useSaveMutation(trpc.application.start.mutationOptions(), {
+		successMessage: "Application started",
+		invalidate,
+	});
+	const stop = useSaveMutation(trpc.application.stop.mutationOptions(), {
+		successMessage: "Application stopped",
+		invalidate,
+	});
 
 	const isBusy = deploy.isPending || redeploy.isPending || start.isPending || stop.isPending;
 

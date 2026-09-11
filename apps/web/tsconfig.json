@@ -19,7 +19,10 @@
 			}
 		],
 		"paths": {
-			"@/*": ["./src/*"]
+			"@/*": ["./src/*"],
+			// `apps/web` has no vitest dependency of its own — the runner and its
+			// types are borrowed from `@nixploy/server` (see vitest.config.ts).
+			"vitest": ["../../packages/server/node_modules/vitest"]
 		}
 	},
 	"include": [

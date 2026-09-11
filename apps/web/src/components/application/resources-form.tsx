@@ -1,18 +1,17 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
+import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useDraft } from "@/hooks/use-draft";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -72,56 +71,31 @@ function RangeNotice({ label, value }: { label: string; value: string }) {
 
 export function ResourcesForm({ application }: { application: Application }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const applicationId = application.applicationId;
 
-	const [replicas, setReplicas] = useState(application.replicas);
-	const [memoryReservation, setMemoryReservation] = useState(
-		parseMemoryMb(application.memoryReservation),
-	);
-	const [memoryLimit, setMemoryLimit] = useState(parseMemoryMb(application.memoryLimit));
-	const [cpuReservation, setCpuReservation] = useState(parseCpuCores(application.cpuReservation));
-	const [cpuLimit, setCpuLimit] = useState(parseCpuCores(application.cpuLimit));
-	// Only mirror server values while the user is not editing — background
-	// refetches (deploy status flips, window focus) must not reset the sliders.
-	const [dirty, setDirty] = useState(false);
+	// The draft mirrors server values while the user is not editing —
+	// background refetches (deploy status flips, window focus) must not reset
+	// the sliders.
+	const draft = useDraft({
+		replicas: application.replicas,
+		memoryReservation: parseMemoryMb(application.memoryReservation),
+		memoryLimit: parseMemoryMb(application.memoryLimit),
+		cpuReservation: parseCpuCores(application.cpuReservation),
+		cpuLimit: parseCpuCores(application.cpuLimit),
+	});
+	const { replicas, memoryReservation, memoryLimit, cpuReservation, cpuLimit } = draft.value;
 
 	const edit =
-		(setter: (value: number) => void) =>
-		([value]: number[]) => {
-			setDirty(true);
-			setter(value);
-		};
+		(field: keyof typeof draft.value) =>
+		([value]: number[]) =>
+			draft.patch({ [field]: value });
 
-	useEffect(() => {
-		if (dirty) return;
-		setReplicas(application.replicas);
-		setMemoryReservation(parseMemoryMb(application.memoryReservation));
-		setMemoryLimit(parseMemoryMb(application.memoryLimit));
-		setCpuReservation(parseCpuCores(application.cpuReservation));
-		setCpuLimit(parseCpuCores(application.cpuLimit));
-	}, [
-		dirty,
-		application.replicas,
-		application.memoryReservation,
-		application.memoryLimit,
-		application.cpuReservation,
-		application.cpuLimit,
-	]);
-
-	const update = useMutation(
-		trpc.application.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Resources updated");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.application.one.queryKey({ applicationId }),
-				});
-				setDirty(false);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const update = useSaveMutation(trpc.application.update.mutationOptions(), {
+		successMessage: "Resources updated",
+		invalidate: [trpc.application.one.queryKey({ applicationId })],
+		onSuccess: draft.markSaved,
+	});
 
 	const onSave = () =>
 		update.mutate({
@@ -134,6 +108,7 @@ export function ResourcesForm({ application }: { application: Application }) {
 		});
 
 	const canWrite = can("service.write");
+	useSaveBar(draft, { onSave, pending: update.isPending, disabled: !canWrite });
 
 	// Stored values (not the draft) decide whether the range needs extending.
 	const storedMemoryReservation = parseMemoryMb(application.memoryReservation);
@@ -154,7 +129,7 @@ export function ResourcesForm({ application }: { application: Application }) {
 					</div>
 					<Slider
 						value={[replicas]}
-						onValueChange={edit(setReplicas)}
+						onValueChange={edit("replicas")}
 						min={0}
 						max={Math.max(10, application.replicas)}
 						step={1}
@@ -174,7 +149,7 @@ export function ResourcesForm({ application }: { application: Application }) {
 						</div>
 						<Slider
 							value={[memoryReservation]}
-							onValueChange={edit(setMemoryReservation)}
+							onValueChange={edit("memoryReservation")}
 							min={0}
 							max={sliderMax(storedMemoryReservation, MEMORY_MAX_MB, MEMORY_STEP_MB)}
 							step={MEMORY_STEP_MB}
@@ -190,7 +165,7 @@ export function ResourcesForm({ application }: { application: Application }) {
 						</div>
 						<Slider
 							value={[memoryLimit]}
-							onValueChange={edit(setMemoryLimit)}
+							onValueChange={edit("memoryLimit")}
 							min={0}
 							max={sliderMax(storedMemoryLimit, MEMORY_MAX_MB, MEMORY_STEP_MB)}
 							step={MEMORY_STEP_MB}
@@ -208,7 +183,7 @@ export function ResourcesForm({ application }: { application: Application }) {
 						</div>
 						<Slider
 							value={[cpuReservation]}
-							onValueChange={edit(setCpuReservation)}
+							onValueChange={edit("cpuReservation")}
 							min={0}
 							max={sliderMax(storedCpuReservation, CPU_MAX_CORES, CPU_STEP)}
 							step={CPU_STEP}
@@ -224,7 +199,7 @@ export function ResourcesForm({ application }: { application: Application }) {
 						</div>
 						<Slider
 							value={[cpuLimit]}
-							onValueChange={edit(setCpuLimit)}
+							onValueChange={edit("cpuLimit")}
 							min={0}
 							max={sliderMax(storedCpuLimit, CPU_MAX_CORES, CPU_STEP)}
 							step={CPU_STEP}
@@ -236,7 +211,7 @@ export function ResourcesForm({ application }: { application: Application }) {
 				</div>
 
 				<div className="flex items-center justify-end gap-3">
-					<UnsavedChangesPill dirty={dirty} />
+					<UnsavedChangesPill dirty={draft.dirty} />
 					<DisabledHint hint={canWrite ? undefined : capabilityHint("service.write")}>
 						<Button onClick={onSave} disabled={update.isPending || !canWrite}>
 							{update.isPending && <Loader2 className="size-4 animate-spin" />}

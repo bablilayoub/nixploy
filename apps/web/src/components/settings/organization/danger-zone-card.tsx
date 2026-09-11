@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { SettingsSection } from "@/components/settings/settings-section";
+import { SettingsSection } from "@/components/layout/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,

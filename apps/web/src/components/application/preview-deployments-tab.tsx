@@ -1,14 +1,14 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Check, ExternalLink, GitPullRequest, Loader2, Plus, Trash2, X } from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useState } from "react";
+import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
+import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
-import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { StatusDot, type StatusDotStatus } from "@/components/shell";
 import {
 	AlertDialog,
@@ -44,7 +44,8 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useDraft } from "@/hooks/use-draft";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application, PreviewDeployment } from "./types";
@@ -69,7 +70,6 @@ function parseExpiry(days: string): Date | null {
 
 export function PreviewDeploymentsTab({ application }: { application: Application }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const canDeploy = can("service.deploy");
 	const deployHint = canDeploy ? undefined : capabilityHint("service.deploy");
@@ -91,59 +91,36 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 		refetch,
 	} = useQuery(trpc.previewDeployment.byApplication.queryOptions({ applicationId }));
 
-	const invalidate = () =>
-		queryClient.invalidateQueries({
-			queryKey: trpc.previewDeployment.byApplication.queryKey({
-				applicationId,
-			}),
-		});
+	const invalidate = [trpc.previewDeployment.byApplication.queryKey({ applicationId })];
 
-	const create = useMutation(
+	const create = useSaveMutation(
 		trpc.previewDeployment.create.mutationOptions({
 			onSuccess: () => {
-				toast.success("Preview deployment queued");
 				setCreateOpen(false);
 				setPrNumber("");
 				setBranch("");
 				setPrTitle("");
 				setPrUrl("");
 				setExpiresInDays("");
-				invalidate();
 			},
-			onError: (error) => toastError(error),
 		}),
+		{ successMessage: "Preview deployment queued", invalidate },
 	);
 
-	const remove = useMutation(
-		trpc.previewDeployment.delete.mutationOptions({
-			onSuccess: () => {
-				toast.success("Preview deployment deleted");
-				setDeleteTarget(null);
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const remove = useSaveMutation(
+		trpc.previewDeployment.delete.mutationOptions({ onSuccess: () => setDeleteTarget(null) }),
+		{ successMessage: "Preview deployment deleted", invalidate },
 	);
 
-	const approve = useMutation(
-		trpc.previewDeployment.approve.mutationOptions({
-			onSuccess: () => {
-				toast.success("Preview approved — deployment queued");
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const approve = useSaveMutation(trpc.previewDeployment.approve.mutationOptions(), {
+		successMessage: "Preview approved — deployment queued",
+		invalidate,
+	});
 
-	const deny = useMutation(
-		trpc.previewDeployment.deny.mutationOptions({
-			onSuccess: () => {
-				toast.success("Preview denied and removed");
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const deny = useSaveMutation(trpc.previewDeployment.deny.mutationOptions(), {
+		successMessage: "Preview denied and removed",
+		invalidate,
+	});
 
 	return (
 		<SettingsStack>
@@ -421,42 +398,42 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
  */
 function PreviewSettingsCard({ application }: { application: Application }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const applicationId = application.applicationId;
 
-	const [previewEnv, setPreviewEnv] = useState(application.previewEnv ?? "");
-	const [limit, setLimit] = useState(String(application.previewLimit ?? 3));
-	const [ttlHours, setTtlHours] = useState(
-		application.previewTtlHours ? String(application.previewTtlHours) : "",
-	);
-	const [dirty, setDirty] = useState(false);
+	// Background refetches must not wipe what is being typed.
+	const draft = useDraft({
+		previewEnv: application.previewEnv ?? "",
+		limit: String(application.previewLimit ?? 3),
+		ttlHours: application.previewTtlHours ? String(application.previewTtlHours) : "",
+	});
+	const { previewEnv, limit, ttlHours } = draft.value;
 
-	useEffect(() => {
-		if (dirty) return;
-		setPreviewEnv(application.previewEnv ?? "");
-		setLimit(String(application.previewLimit ?? 3));
-		setTtlHours(application.previewTtlHours ? String(application.previewTtlHours) : "");
-	}, [dirty, application.previewEnv, application.previewLimit, application.previewTtlHours]);
-
-	const update = useMutation(
-		trpc.application.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Preview settings saved");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.application.one.queryKey({ applicationId }),
-				});
-				setDirty(false);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const update = useSaveMutation(trpc.application.update.mutationOptions(), {
+		successMessage: "Preview settings saved",
+		invalidate: [trpc.application.one.queryKey({ applicationId })],
+		onSuccess: draft.markSaved,
+	});
 
 	const canWrite = can("service.write") && can("secrets.write");
 	const parsedLimit = Number.parseInt(limit, 10);
 	const parsedTtl = ttlHours.trim() ? Number.parseInt(ttlHours, 10) : null;
 	const limitValid = Number.isFinite(parsedLimit) && parsedLimit >= 0 && parsedLimit <= 100;
 	const ttlValid = parsedTtl === null || (Number.isFinite(parsedTtl) && parsedTtl >= 1);
+
+	const onSave = () =>
+		update.mutate({
+			applicationId,
+			previewEnv: previewEnv.trim() || null,
+			previewLimit: parsedLimit,
+			previewTtlHours: parsedTtl,
+		});
+
+	useSaveBar(draft, {
+		onSave,
+		pending: update.isPending,
+		disabled: !canWrite || !limitValid || !ttlValid,
+	});
 
 	return (
 		<SettingsSection
@@ -472,10 +449,7 @@ function PreviewSettingsCard({ application }: { application: Application }) {
 						placeholder={"DATABASE_URL=postgres://preview\nSTRIPE_KEY=sk_test_..."}
 						value={previewEnv}
 						disabled={!canWrite}
-						onChange={(event) => {
-							setDirty(true);
-							setPreviewEnv(event.target.value);
-						}}
+						onChange={(event) => draft.patch({ previewEnv: event.target.value })}
 					/>
 					<p className="text-xs text-muted-foreground">
 						Merged over the inherited project, environment and service variables for preview builds
@@ -491,10 +465,7 @@ function PreviewSettingsCard({ application }: { application: Application }) {
 							inputMode="numeric"
 							value={limit}
 							disabled={!canWrite}
-							onChange={(event) => {
-								setDirty(true);
-								setLimit(event.target.value);
-							}}
+							onChange={(event) => draft.patch({ limit: event.target.value })}
 						/>
 						<p className="text-xs text-muted-foreground">0 means no limit.</p>
 					</div>
@@ -506,10 +477,7 @@ function PreviewSettingsCard({ application }: { application: Application }) {
 							placeholder="never"
 							value={ttlHours}
 							disabled={!canWrite}
-							onChange={(event) => {
-								setDirty(true);
-								setTtlHours(event.target.value);
-							}}
+							onChange={(event) => draft.patch({ ttlHours: event.target.value })}
 						/>
 						<p className="text-xs text-muted-foreground">
 							Applied when a pull request creates the preview.
@@ -518,18 +486,11 @@ function PreviewSettingsCard({ application }: { application: Application }) {
 				</div>
 
 				<div className="flex items-center justify-end gap-3">
-					<UnsavedChangesPill dirty={dirty} />
+					<UnsavedChangesPill dirty={draft.dirty} />
 					<DisabledHint hint={canWrite ? undefined : capabilityHint("secrets.write")}>
 						<Button
 							disabled={!canWrite || !limitValid || !ttlValid || update.isPending}
-							onClick={() =>
-								update.mutate({
-									applicationId,
-									previewEnv: previewEnv.trim() || null,
-									previewLimit: parsedLimit,
-									previewTtlHours: parsedTtl,
-								})
-							}
+							onClick={onSave}
 						>
 							{update.isPending && <Loader2 className="size-4 animate-spin" />}
 							Save

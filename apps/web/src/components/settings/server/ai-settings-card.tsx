@@ -1,10 +1,10 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
-import { SettingsSection } from "@/components/settings/settings-section";
+import { useState } from "react";
+import { SettingsSection } from "@/components/layout/settings-section";
+import { useSaveBar } from "@/components/services/save-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,41 +17,35 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { toastError } from "@/lib/describe-error";
+import { useDraft } from "@/hooks/use-draft";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 type Provider = "openai" | "anthropic" | "openai-compatible" | "ollama";
 
 export function AiSettingsCard() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const statusQuery = useQuery(trpc.ai.getSettings.queryOptions());
 
-	const [enabled, setEnabled] = useState(false);
-	const [provider, setProvider] = useState<Provider>("openai");
-	const [baseUrl, setBaseUrl] = useState("");
-	const [model, setModel] = useState("gpt-4o-mini");
+	const settings = statusQuery.data;
+	const draft = useDraft({
+		enabled: settings?.enabled ?? false,
+		provider: settings?.provider ?? ("openai" as Provider),
+		baseUrl: settings?.baseUrl ?? "",
+		model: settings?.model ?? "gpt-4o-mini",
+		autoExplain: settings?.autoExplainOnFailure ?? false,
+	});
+	const { enabled, provider, baseUrl, model, autoExplain } = draft.value;
+	// Write-only secret: never seeded from the server, cleared after a save.
 	const [apiKey, setApiKey] = useState("");
-	const [autoExplain, setAutoExplain] = useState(false);
 
-	useEffect(() => {
-		if (!statusQuery.data) return;
-		setEnabled(statusQuery.data.enabled);
-		setProvider(statusQuery.data.provider);
-		setBaseUrl(statusQuery.data.baseUrl ?? "");
-		setModel(statusQuery.data.model);
-		setAutoExplain(statusQuery.data.autoExplainOnFailure);
-		setApiKey("");
-	}, [statusQuery.data]);
-
-	const save = useMutation({
-		...trpc.ai.updateSettings.mutationOptions(),
-		onSuccess: async () => {
-			toast.success("Copilot settings saved");
+	const save = useSaveMutation(trpc.ai.updateSettings.mutationOptions(), {
+		successMessage: "Copilot settings saved",
+		invalidate: [trpc.ai.getSettings.queryKey()],
+		onSuccess: () => {
 			setApiKey("");
-			await queryClient.invalidateQueries({ queryKey: trpc.ai.getSettings.queryKey() });
+			draft.markSaved();
 		},
-		onError: (error) => toastError(error),
 	});
 
 	const persist = (next?: { enabled?: boolean }) => {
@@ -65,6 +59,8 @@ export function AiSettingsCard() {
 			autoExplainOnFailure: autoExplain,
 		});
 	};
+
+	useSaveBar(draft, { onSave: () => persist(), pending: save.isPending });
 
 	if (statusQuery.isPending) {
 		return (
@@ -115,7 +111,7 @@ export function AiSettingsCard() {
 						checked={enabled}
 						disabled={save.isPending}
 						onCheckedChange={(checked) => {
-							setEnabled(checked);
+							draft.patch({ enabled: checked });
 							save.mutate({
 								enabled: checked,
 								provider,
@@ -134,7 +130,10 @@ export function AiSettingsCard() {
 					<div className="grid gap-3 sm:grid-cols-2">
 						<div className="grid gap-2">
 							<Label>Provider</Label>
-							<Select value={provider} onValueChange={(v) => setProvider(v as Provider)}>
+							<Select
+								value={provider}
+								onValueChange={(v) => draft.patch({ provider: v as Provider })}
+							>
 								<SelectTrigger>
 									<SelectValue />
 								</SelectTrigger>
@@ -151,7 +150,7 @@ export function AiSettingsCard() {
 							<Input
 								id="ai-model"
 								value={model}
-								onChange={(e) => setModel(e.target.value)}
+								onChange={(e) => draft.patch({ model: e.target.value })}
 								placeholder="gpt-4o-mini"
 							/>
 						</div>
@@ -163,7 +162,7 @@ export function AiSettingsCard() {
 							<Input
 								id="ai-base"
 								value={baseUrl}
-								onChange={(e) => setBaseUrl(e.target.value)}
+								onChange={(e) => draft.patch({ baseUrl: e.target.value })}
 								placeholder={
 									provider === "ollama" ? "http://127.0.0.1:11434/v1" : "https://api.example.com/v1"
 								}
@@ -195,7 +194,11 @@ export function AiSettingsCard() {
 								Analyze deploy logs when a build fails.
 							</p>
 						</div>
-						<Switch id="ai-auto" checked={autoExplain} onCheckedChange={setAutoExplain} />
+						<Switch
+							id="ai-auto"
+							checked={autoExplain}
+							onCheckedChange={(checked) => draft.patch({ autoExplain: checked })}
+						/>
 					</div>
 
 					<div className="flex flex-wrap gap-2">

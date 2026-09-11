@@ -1,27 +1,27 @@
 "use client";
 
 import { yaml } from "@codemirror/lang-yaml";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { ComposeService } from "@/components/compose/compose-detail";
 import { GenerateComposeDialog } from "@/components/compose/generate-compose-dialog";
+import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
+import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
-import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/code-editor";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	// The server nulls `composeFile` for members without secrets.read; the
 	// editor cannot tell that apart from an empty file, so the capability
@@ -52,35 +52,31 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 		trpc.compose.loadServices.queryOptions({ composeId: compose.composeId }),
 	);
 
-	const saveMutation = useMutation(
-		trpc.compose.saveComposeFile.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Compose file saved");
-				// Lock only after compose.one holds the new YAML — locking first would
-				// make the sync effect revert the editor to the previous file until
-				// the refetch lands.
-				await Promise.all([
-					queryClient.invalidateQueries({
-						queryKey: trpc.compose.one.queryKey({
-							composeId: compose.composeId,
-						}),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.compose.loadServices.queryKey({
-							composeId: compose.composeId,
-						}),
-					}),
-				]);
-				setLocked(true);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const saveMutation = useSaveMutation(trpc.compose.saveComposeFile.mutationOptions(), {
+		successMessage: "Compose file saved",
+		invalidate: [
+			trpc.compose.one.queryKey({ composeId: compose.composeId }),
+			trpc.compose.loadServices.queryKey({ composeId: compose.composeId }),
+		],
+		// Lock only after compose.one holds the new YAML — locking first would
+		// make the sync effect revert the editor to the previous file until the
+		// refetch lands.
+		onSuccess: () => setLocked(true),
+	});
+
+	const onSave = () => saveMutation.mutate({ composeId: compose.composeId, composeFile: value });
 
 	const cancelEditing = () => {
 		setValue(serverFile);
 		setLocked(true);
 	};
+
+	// The editor is lock-based rather than draft-based, so the save bar reads
+	// the same "content differs from the stored file" flag as the buttons.
+	useSaveBar(
+		{ dirty: dirty && editable, reset: cancelEditing },
+		{ onSave, pending: saveMutation.isPending, disabled: !canWrite },
+	);
 
 	const acceptDraft = (composeFile: string) => {
 		if (!canWrite) {
@@ -127,12 +123,7 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 									<Button
 										size="sm"
 										disabled={saveMutation.isPending || !dirty || !canWrite}
-										onClick={() =>
-											saveMutation.mutate({
-												composeId: compose.composeId,
-												composeFile: value,
-											})
-										}
+										onClick={onSave}
 									>
 										{saveMutation.isPending ? "Saving…" : "Save"}
 									</Button>

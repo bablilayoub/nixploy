@@ -1,10 +1,8 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -26,7 +24,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -362,7 +360,6 @@ export function NotificationDialog({
 	editing?: NotificationRow | null;
 }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const [name, setName] = useState("");
 	const [type, setType] = useState<NotificationType>("slack");
 	const [values, setValues] = useState<Record<string, string>>({});
@@ -397,32 +394,20 @@ export function NotificationDialog({
 		}
 	}, [open, editing]);
 
-	const invalidate = () =>
-		queryClient.invalidateQueries({
-			queryKey: trpc.notification.all.queryKey(),
-		});
+	const listKey = trpc.notification.all.queryKey();
+	const close = () => onOpenChange(false);
 
-	const createMutation = useMutation(
-		trpc.notification.create.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Notification channel created");
-				await invalidate();
-				onOpenChange(false);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const createMutation = useSaveMutation(trpc.notification.create.mutationOptions(), {
+		successMessage: "Notification channel created",
+		invalidate: [listKey],
+		onSuccess: close,
+	});
 
-	const updateMutation = useMutation(
-		trpc.notification.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Notification channel updated");
-				await invalidate();
-				onOpenChange(false);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const updateMutation = useSaveMutation(trpc.notification.update.mutationOptions(), {
+		successMessage: "Notification channel updated",
+		invalidate: [listKey],
+		onSuccess: close,
+	});
 
 	const saving = createMutation.isPending || updateMutation.isPending;
 	const fields = TYPE_FIELDS[type];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 /**
@@ -39,10 +39,9 @@ export function GenerateComposeDialog({ onAccept }: { onAccept: (composeFile: st
 	});
 	const aiEnabled = Boolean(aiSettings.data?.enabled);
 
-	const generate = useMutation(
+	const generate = useSaveMutation(
 		trpc.ai.generateCompose.mutationOptions({
 			onSuccess: (result) => setDraft(result),
-			onError: (error) => toastError(error),
 		}),
 	);
 

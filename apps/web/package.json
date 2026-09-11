@@ -6,7 +6,8 @@
 		"dev": "NODE_OPTIONS='--max-old-space-size=8192' tsx watch server.ts",
 		"build": "next build",
 		"start": "NODE_ENV=production tsx server.ts",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"test": "pnpm -F @nixploy/server exec vitest run --config ../../apps/web/vitest.config.ts"
 	},
 	"dependencies": {
 		"@better-auth/api-key": "1.7.3",

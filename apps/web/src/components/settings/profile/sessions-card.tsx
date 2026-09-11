@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { Loader2, Monitor, Smartphone } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { SettingsSection } from "@/components/settings/settings-section";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";

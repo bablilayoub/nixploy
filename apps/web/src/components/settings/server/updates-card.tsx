@@ -1,11 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
-import { SettingsSection } from "@/components/settings/settings-section";
+import { SettingsSection } from "@/components/layout/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -23,7 +23,8 @@ import { HelpLink } from "@/components/ui/help-link";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { toastError } from "@/lib/describe-error";
+import { useDraft } from "@/hooks/use-draft";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { formatRelative } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
 
@@ -37,46 +38,39 @@ function formatWhen(iso: string | null | undefined): string {
 /** Platform self-update: check GHCR digests, toggle auto-update, roll the service. */
 export function UpdatesCard() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 
 	const statusQuery = useQuery({
 		...trpc.updates.getStatus.queryOptions(),
 		refetchInterval: (query) => (query.state.data?.updateInProgress ? 5_000 : 60_000),
 	});
 
-	const [autoCheck, setAutoCheck] = useState(true);
-	const [autoUpdate, setAutoUpdate] = useState(false);
 	// Deployments in flight when the update was requested; opens the "update anyway?" confirm.
 	const [blockedBy, setBlockedBy] = useState<number | null>(null);
 
-	const invalidate = async () => {
-		await queryClient.invalidateQueries({ queryKey: trpc.updates.getStatus.queryKey() });
-	};
+	// The switches mirror the server, but a dirty draft is not re-seeded: the
+	// 60s poll would otherwise flip an optimistic switch back until the
+	// mutation's own invalidate lands. A failed save resets to the server value.
+	const toggles = useDraft({
+		autoCheck: statusQuery.data?.autoCheckEnabled ?? true,
+		autoUpdate: statusQuery.data?.autoUpdateEnabled ?? false,
+	});
+	const { autoCheck, autoUpdate } = toggles.value;
 
-	const settingsMutation = useMutation(
-		trpc.updates.updateSettings.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Update settings saved");
-				await invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const statusKey = trpc.updates.getStatus.queryKey();
+
+	const settingsMutation = useSaveMutation(
+		trpc.updates.updateSettings.mutationOptions({ onError: () => toggles.reset() }),
+		{
+			successMessage: "Update settings saved",
+			invalidate: [statusKey],
+			onSuccess: toggles.markSaved,
+		},
 	);
 
-	// Seed the switches from the server, but not while a toggle is in flight:
-	// the 60s poll would otherwise flip an optimistic switch back until the
-	// mutation's own invalidate lands.
-	const settingsPending = settingsMutation.isPending;
-	useEffect(() => {
-		const data = statusQuery.data;
-		if (!data || settingsPending) return;
-		setAutoCheck(data.autoCheckEnabled);
-		setAutoUpdate(data.autoUpdateEnabled);
-	}, [statusQuery.data, settingsPending]);
-
-	const checkMutation = useMutation(
+	const checkMutation = useSaveMutation(
 		trpc.updates.check.mutationOptions({
-			onSuccess: async (result) => {
+			// The toast depends on the result, so it stays next to the call.
+			onSuccess: (result) => {
 				if (result.error) {
 					toast.error(result.error);
 				} else if (result.updateAvailable) {
@@ -84,15 +78,14 @@ export function UpdatesCard() {
 				} else {
 					toast.success("You're on the latest version");
 				}
-				await invalidate();
 			},
-			onError: (error) => toastError(error),
 		}),
+		{ invalidate: [statusKey] },
 	);
 
-	const applyMutation = useMutation(
+	const applyMutation = useSaveMutation(
 		trpc.updates.runUpdate.mutationOptions({
-			onSuccess: async (result) => {
+			onSuccess: (result) => {
 				if (result.started) {
 					toast.success(result.message);
 				} else if (result.blockedByDeployments) {
@@ -100,10 +93,9 @@ export function UpdatesCard() {
 				} else {
 					toast.message(result.message);
 				}
-				await invalidate();
 			},
-			onError: (error) => toastError(error),
 		}),
+		{ invalidate: [statusKey] },
 	);
 
 	const data = statusQuery.data;
@@ -263,8 +255,9 @@ export function UpdatesCard() {
 							checked={autoCheck}
 							disabled={busy}
 							onCheckedChange={(checked) => {
-								setAutoCheck(checked);
-								if (!checked) setAutoUpdate(false);
+								toggles.patch(
+									checked ? { autoCheck: true } : { autoCheck: false, autoUpdate: false },
+								);
 								settingsMutation.mutate({
 									autoCheckEnabled: checked,
 									...(checked ? {} : { autoUpdateEnabled: false }),
@@ -284,7 +277,7 @@ export function UpdatesCard() {
 							checked={autoUpdate}
 							disabled={busy || !autoCheck}
 							onCheckedChange={(checked) => {
-								setAutoUpdate(checked);
+								toggles.patch({ autoUpdate: checked });
 								settingsMutation.mutate({ autoUpdateEnabled: checked });
 							}}
 						/>

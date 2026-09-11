@@ -1,15 +1,14 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { format } from "date-fns";
 import { HardDrive, Loader2, Pencil, Plug, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { InstanceBackups } from "@/components/settings/destinations/instance-backups";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,8 +39,8 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { INSTANCE_ADMIN_HINT, missingCapabilityHint } from "@/lib/capabilities";
-import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -53,7 +52,6 @@ const isLocal = (destination: Pick<DestinationRow, "provider">) => destination.p
 
 export function DestinationsView() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
 	// `isInstanceAdmin` is already mounted-gated by the hook, so the
 	// server-rendered option state matches the first client paint.
@@ -76,45 +74,29 @@ export function DestinationsView() {
 		refetch,
 	} = useQuery(trpc.destination.all.queryOptions());
 
-	const invalidate = () =>
-		queryClient.invalidateQueries({
-			queryKey: trpc.destination.all.queryKey(),
-		});
+	const createMutation = useSaveMutation(trpc.destination.create.mutationOptions(), {
+		successMessage: "Backup destination added",
+		invalidate: [trpc.destination.all.queryKey()],
+		onSuccess: () => {
+			setOpen(false);
+			setProvider("s3");
+			setName("");
+			setBucket("");
+			setRegion("");
+			setEndpoint("");
+			setAccessKey("");
+			setSecretAccessKey("");
+		},
+	});
 
-	const createMutation = useMutation(
-		trpc.destination.create.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Backup destination added");
-				await invalidate();
-				setOpen(false);
-				setProvider("s3");
-				setName("");
-				setBucket("");
-				setRegion("");
-				setEndpoint("");
-				setAccessKey("");
-				setSecretAccessKey("");
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const testMutation = useSaveMutation(trpc.destination.testConnection.mutationOptions(), {
+		successMessage: "Connection successful",
+	});
 
-	const testMutation = useMutation(
-		trpc.destination.testConnection.mutationOptions({
-			onSuccess: () => toast.success("Connection successful"),
-			onError: (error) => toastError(error),
-		}),
-	);
-
-	const removeMutation = useMutation(
-		trpc.destination.remove.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Backup destination removed");
-				await invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const removeMutation = useSaveMutation(trpc.destination.remove.mutationOptions(), {
+		successMessage: "Backup destination removed",
+		invalidate: [trpc.destination.all.queryKey()],
+	});
 
 	const [editing, setEditing] = useState<DestinationRow | null>(null);
 	const [editName, setEditName] = useState("");
@@ -135,16 +117,11 @@ export function DestinationsView() {
 		}
 	}, [editing]);
 
-	const updateMutation = useMutation(
-		trpc.destination.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Backup destination updated");
-				await invalidate();
-				setEditing(null);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const updateMutation = useSaveMutation(trpc.destination.update.mutationOptions(), {
+		successMessage: "Backup destination updated",
+		invalidate: [trpc.destination.all.queryKey()],
+		onSuccess: () => setEditing(null),
+	});
 
 	return (
 		<div className="flex flex-col gap-6">

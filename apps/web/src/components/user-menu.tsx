@@ -4,7 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Bell, KeyRound, LogOut, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -16,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/user-avatar";
+import { useMounted } from "@/hooks/use-mounted";
 import { signOut, useSession } from "@/lib/auth-client";
 import { toastError } from "@/lib/describe-error";
 
@@ -36,8 +36,7 @@ export function UserMenu() {
 	// Render the skeleton until mounted so SSR and the first client render
 	// match (useSession resolves synchronously on the client → hydration
 	// mismatch otherwise).
-	const [mounted, setMounted] = useState(false);
-	useEffect(() => setMounted(true), []);
+	const mounted = useMounted();
 
 	const user = session?.user;
 

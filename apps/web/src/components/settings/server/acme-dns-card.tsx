@@ -1,10 +1,10 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
-import { SettingsSection } from "@/components/settings/settings-section";
+import { useState } from "react";
+import { SettingsSection } from "@/components/layout/settings-section";
+import { useSaveBar } from "@/components/services/save-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +16,8 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toastError } from "@/lib/describe-error";
+import { useDraft } from "@/hooks/use-draft";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 const NONE = "none";
@@ -33,30 +34,23 @@ const NONE = "none";
  */
 export function AcmeDnsCard() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 
 	const settingsQuery = useQuery(trpc.webServer.getSettings.queryOptions());
 	const providersQuery = useQuery(trpc.webServer.acmeDnsProviders.queryOptions());
 
-	const [provider, setProvider] = useState<string>(NONE);
+	const providerDraft = useDraft<string>(settingsQuery.data?.acmeDnsProvider ?? NONE);
+	const provider = providerDraft.value;
+	// Write-only secrets: never seeded from the server, cleared after a save.
 	const [credentials, setCredentials] = useState<Record<string, string>>({});
 
-	useEffect(() => {
-		if (settingsQuery.data === undefined) return;
-		setProvider(settingsQuery.data?.acmeDnsProvider ?? NONE);
-		setCredentials({});
-	}, [settingsQuery.data]);
-
-	const save = useMutation(
-		trpc.webServer.updateSettings.mutationOptions({
-			onSuccess: async () => {
-				toast.success("DNS provider saved — Traefik reloads its static config");
-				await queryClient.invalidateQueries({ queryKey: trpc.webServer.getSettings.queryKey() });
-				setCredentials({});
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const save = useSaveMutation(trpc.webServer.updateSettings.mutationOptions(), {
+		successMessage: "DNS provider saved — Traefik reloads its static config",
+		invalidate: [trpc.webServer.getSettings.queryKey()],
+		onSuccess: () => {
+			providerDraft.markSaved();
+			setCredentials({});
+		},
+	});
 
 	const providers = providersQuery.data ?? [];
 	const selected = providers.find((entry) => entry.code === provider);
@@ -76,6 +70,12 @@ export function AcmeDnsCard() {
 			...(Object.keys(filled).length > 0 ? { acmeDnsCredentials: filled } : {}),
 		});
 	};
+
+	useSaveBar(providerDraft, {
+		onSave,
+		pending: save.isPending,
+		disabled: settingsQuery.isPending,
+	});
 
 	const envCommand =
 		selected && selected.envKeys.length > 0
@@ -110,7 +110,7 @@ export function AcmeDnsCard() {
 				<div className="grid gap-4">
 					<div className="grid gap-2">
 						<Label htmlFor="acme-dns-provider">DNS provider</Label>
-						<Select value={provider} onValueChange={setProvider}>
+						<Select value={provider} onValueChange={providerDraft.set}>
 							<SelectTrigger id="acme-dns-provider">
 								<SelectValue />
 							</SelectTrigger>

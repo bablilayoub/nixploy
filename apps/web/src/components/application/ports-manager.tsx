@@ -1,12 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, Network, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
-import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -46,7 +45,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import type { ServicePort } from "./types";
@@ -60,7 +59,6 @@ const EMPTY_FORM = {
 
 export function PortsManager({ applicationId }: { applicationId: string }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const canWrite = can("service.write");
 	const writeHint = canWrite ? undefined : capabilityHint("service.write");
@@ -85,40 +83,19 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 		refetch,
 	} = useQuery(trpc.port.byApplication.queryOptions({ applicationId }));
 
-	const invalidate = () =>
-		queryClient.invalidateQueries({
-			queryKey: trpc.port.byApplication.queryKey({ applicationId }),
-		});
+	const invalidate = [trpc.port.byApplication.queryKey({ applicationId })];
 
-	const create = useMutation(
-		trpc.port.create.mutationOptions({
-			onSuccess: () => {
-				toast.success("Port created");
-				setDialogOpen(false);
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const create = useSaveMutation(
+		trpc.port.create.mutationOptions({ onSuccess: () => setDialogOpen(false) }),
+		{ successMessage: "Port created", invalidate },
 	);
-	const update = useMutation(
-		trpc.port.update.mutationOptions({
-			onSuccess: () => {
-				toast.success("Port updated");
-				setDialogOpen(false);
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const update = useSaveMutation(
+		trpc.port.update.mutationOptions({ onSuccess: () => setDialogOpen(false) }),
+		{ successMessage: "Port updated", invalidate },
 	);
-	const remove = useMutation(
-		trpc.port.delete.mutationOptions({
-			onSuccess: () => {
-				toast.success("Port deleted");
-				setDeleteTarget(null);
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const remove = useSaveMutation(
+		trpc.port.delete.mutationOptions({ onSuccess: () => setDeleteTarget(null) }),
+		{ successMessage: "Port deleted", invalidate },
 	);
 
 	const isPending = create.isPending || update.isPending;

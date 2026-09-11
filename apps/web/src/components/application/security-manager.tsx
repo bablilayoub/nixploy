@@ -1,12 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
-import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -38,7 +37,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import type { TraefikParent } from "./traefik-parent";
@@ -53,7 +52,6 @@ const EMPTY_FORM = { username: "", password: "" };
 export function SecurityManager(parent: TraefikParent) {
 	const { applicationId, composeId, serviceName } = parent;
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	// Credentials are secrets: create/update need service.write + secrets.write.
 	const canWrite = can("service.write") && can("secrets.write");
@@ -88,45 +86,26 @@ export function SecurityManager(parent: TraefikParent) {
 				}),
 	);
 
-	const invalidate = () =>
-		queryClient.invalidateQueries({
-			queryKey: applicationId
-				? trpc.security.byApplication.queryKey({ applicationId })
-				: trpc.security.byCompose.queryKey({
-						composeId: composeId as string,
-						serviceName: serviceName as string,
-					}),
-		});
+	const invalidate = [
+		applicationId
+			? trpc.security.byApplication.queryKey({ applicationId })
+			: trpc.security.byCompose.queryKey({
+					composeId: composeId as string,
+					serviceName: serviceName as string,
+				}),
+	];
 
-	const create = useMutation(
-		trpc.security.create.mutationOptions({
-			onSuccess: () => {
-				toast.success("Credentials created");
-				setDialogOpen(false);
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const create = useSaveMutation(
+		trpc.security.create.mutationOptions({ onSuccess: () => setDialogOpen(false) }),
+		{ successMessage: "Credentials created", invalidate },
 	);
-	const update = useMutation(
-		trpc.security.update.mutationOptions({
-			onSuccess: () => {
-				toast.success("Credentials updated");
-				setDialogOpen(false);
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const update = useSaveMutation(
+		trpc.security.update.mutationOptions({ onSuccess: () => setDialogOpen(false) }),
+		{ successMessage: "Credentials updated", invalidate },
 	);
-	const remove = useMutation(
-		trpc.security.delete.mutationOptions({
-			onSuccess: () => {
-				toast.success("Credentials deleted");
-				setDeleteTarget(null);
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const remove = useSaveMutation(
+		trpc.security.delete.mutationOptions({ onSuccess: () => setDeleteTarget(null) }),
+		{ successMessage: "Credentials deleted", invalidate },
 	);
 
 	const isPending = create.isPending || update.isPending;
@@ -178,7 +157,7 @@ export function SecurityManager(parent: TraefikParent) {
 						title={writeHint}
 					>
 						<Plus className="size-4" />
-						Add Credentials
+						Add credentials
 					</Button>
 				}
 			>
@@ -252,7 +231,7 @@ export function SecurityManager(parent: TraefikParent) {
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>{editing ? "Edit Credentials" : "Add Credentials"}</DialogTitle>
+						<DialogTitle>{editing ? "Edit credentials" : "Add credentials"}</DialogTitle>
 						<DialogDescription>
 							{editing
 								? "Leave the password empty to keep the current one."

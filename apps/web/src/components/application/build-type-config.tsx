@@ -10,11 +10,11 @@ import {
 	Sparkles,
 	Boxes as StackIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
+import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useDraft } from "@/hooks/use-draft";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -80,47 +81,38 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 	const { can } = useCapabilities();
 	const applicationId = application.applicationId;
 
-	const [buildType, setBuildType] = useState<BuildType>(application.buildType);
-	const [dockerfile, setDockerfile] = useState(application.dockerfile ?? "Dockerfile");
-	const [dockerContextPath, setDockerContextPath] = useState(application.dockerContextPath ?? "");
-	const [dockerBuildStage, setDockerBuildStage] = useState(application.dockerBuildStage ?? "");
-	const [publishDirectory, setPublishDirectory] = useState(application.publishDirectory ?? "");
-	const [isStaticSpa, setIsStaticSpa] = useState(application.isStaticSpa ?? false);
-	const [buildArgs, setBuildArgs] = useState(application.buildArgs ?? "");
-	const [useBuildCache, setUseBuildCache] = useState(application.useBuildCache ?? true);
-	// Only mirror server values while the user is not editing — background
-	// refetches (deploy status flips, window focus) must not wipe typed text.
-	const [dirty, setDirty] = useState(false);
-
-	/** Wrap a setter so any user edit marks the form dirty. */
-	const edit =
-		<T,>(setter: (value: T) => void) =>
-		(value: T) => {
-			setDirty(true);
-			setter(value);
-		};
-
-	useEffect(() => {
-		if (dirty) return;
-		setBuildType(application.buildType);
-		setDockerfile(application.dockerfile ?? "Dockerfile");
-		setDockerContextPath(application.dockerContextPath ?? "");
-		setDockerBuildStage(application.dockerBuildStage ?? "");
-		setPublishDirectory(application.publishDirectory ?? "");
-		setIsStaticSpa(application.isStaticSpa ?? false);
-		setBuildArgs(application.buildArgs ?? "");
-		setUseBuildCache(application.useBuildCache ?? true);
-	}, [
-		dirty,
-		application.buildType,
-		application.dockerfile,
-		application.dockerContextPath,
-		application.dockerBuildStage,
-		application.publishDirectory,
-		application.isStaticSpa,
-		application.buildArgs,
-		application.useBuildCache,
-	]);
+	// The draft mirrors server values while the user is not editing —
+	// background refetches (deploy status flips, window focus) must not wipe
+	// typed text.
+	const draft = useDraft<{
+		buildType: BuildType;
+		dockerfile: string;
+		dockerContextPath: string;
+		dockerBuildStage: string;
+		publishDirectory: string;
+		isStaticSpa: boolean;
+		buildArgs: string;
+		useBuildCache: boolean;
+	}>({
+		buildType: application.buildType,
+		dockerfile: application.dockerfile ?? "Dockerfile",
+		dockerContextPath: application.dockerContextPath ?? "",
+		dockerBuildStage: application.dockerBuildStage ?? "",
+		publishDirectory: application.publishDirectory ?? "",
+		isStaticSpa: application.isStaticSpa ?? false,
+		buildArgs: application.buildArgs ?? "",
+		useBuildCache: application.useBuildCache ?? true,
+	});
+	const {
+		buildType,
+		dockerfile,
+		dockerContextPath,
+		dockerBuildStage,
+		publishDirectory,
+		isStaticSpa,
+		buildArgs,
+		useBuildCache,
+	} = draft.value;
 
 	const invalidate = () =>
 		queryClient.invalidateQueries({
@@ -171,11 +163,13 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 			toast.success("Build configuration saved");
 			await invalidate();
 			// Refetch is done: the server now holds what was typed.
-			setDirty(false);
+			draft.markSaved();
 		} catch {
 			// errors are surfaced via onError toasts
 		}
 	};
+
+	useSaveBar(draft, { onSave, pending: isPending, disabled: saveBlocked });
 
 	return (
 		<SettingsSection title="Build" description="How the source is built into a deployable image.">
@@ -185,7 +179,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 						<button
 							key={option.value}
 							type="button"
-							onClick={() => edit(setBuildType)(option.value)}
+							onClick={() => draft.patch({ buildType: option.value })}
 							className={cn(
 								"flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors",
 								buildType === option.value
@@ -210,7 +204,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 								id="dockerfile"
 								placeholder="Dockerfile"
 								value={dockerfile}
-								onChange={(e) => edit(setDockerfile)(e.target.value)}
+								onChange={(e) => draft.patch({ dockerfile: e.target.value })}
 							/>
 						</div>
 						<div className="flex flex-col gap-2">
@@ -219,7 +213,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 								id="docker-context"
 								placeholder="."
 								value={dockerContextPath}
-								onChange={(e) => edit(setDockerContextPath)(e.target.value)}
+								onChange={(e) => draft.patch({ dockerContextPath: e.target.value })}
 							/>
 						</div>
 						<div className="flex flex-col gap-2">
@@ -228,7 +222,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 								id="docker-stage"
 								placeholder="builder"
 								value={dockerBuildStage}
-								onChange={(e) => edit(setDockerBuildStage)(e.target.value)}
+								onChange={(e) => draft.patch({ dockerBuildStage: e.target.value })}
 							/>
 						</div>
 					</div>
@@ -243,7 +237,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 								placeholder="dist"
 								className="sm:max-w-xs"
 								value={publishDirectory}
-								onChange={(e) => edit(setPublishDirectory)(e.target.value)}
+								onChange={(e) => draft.patch({ publishDirectory: e.target.value })}
 							/>
 							<p className="text-xs text-muted-foreground">
 								Directory with the compiled assets, relative to the repo root. No build step runs.
@@ -256,7 +250,11 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 									Rewrite all paths to index.html (React, Vue, etc.).
 								</p>
 							</div>
-							<Switch id="is-spa" checked={isStaticSpa} onCheckedChange={edit(setIsStaticSpa)} />
+							<Switch
+								id="is-spa"
+								checked={isStaticSpa}
+								onCheckedChange={(checked) => draft.patch({ isStaticSpa: checked })}
+							/>
 						</div>
 					</>
 				)}
@@ -274,7 +272,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 							<Switch
 								id="use-build-cache"
 								checked={useBuildCache}
-								onCheckedChange={edit(setUseBuildCache)}
+								onCheckedChange={(checked) => draft.patch({ useBuildCache: checked })}
 							/>
 						</div>
 						<div className="flex flex-col gap-2">
@@ -284,7 +282,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 								placeholder={"NODE_ENV=production\nSOME_FLAG=1"}
 								className="min-h-24 font-mono text-sm"
 								value={buildArgs}
-								onChange={(e) => edit(setBuildArgs)(e.target.value)}
+								onChange={(e) => draft.patch({ buildArgs: e.target.value })}
 							/>
 							<p className="text-xs text-muted-foreground">
 								One KEY=value pair per line, passed to the builder at build time.
@@ -294,7 +292,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 				)}
 
 				<div className="flex items-center justify-end gap-3">
-					<UnsavedChangesPill dirty={dirty} />
+					<UnsavedChangesPill dirty={draft.dirty} />
 					<DisabledHint hint={saveHint}>
 						<Button onClick={onSave} disabled={isPending || saveBlocked}>
 							{isPending && <Loader2 className="size-4 animate-spin" />}

@@ -1,12 +1,12 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Check, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { StatusPageCard } from "@/components/monitoring/status-page-card";
 import { QueryState } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
-import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { PageHeader } from "@/components/shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 /**
@@ -31,7 +31,6 @@ import { useTRPC } from "@/lib/trpc";
  */
 export function IncidentsView({ embedded = false }: { embedded?: boolean } = {}) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const [projectId, setProjectId] = useState<string>("all");
 	const projects = useQuery(trpc.project.all.queryOptions());
@@ -42,21 +41,14 @@ export function IncidentsView({ embedded = false }: { embedded?: boolean } = {})
 		}),
 	);
 
-	const refresh = () =>
-		queryClient.invalidateQueries({ queryKey: trpc.observability.incidents.queryKey() });
+	const incidentsKey = trpc.observability.incidents.queryKey();
 
-	const acknowledge = useMutation(
-		trpc.observability.acknowledgeIncident.mutationOptions({
-			onSuccess: () => refresh(),
-			onError: (error) => toastError(error),
-		}),
-	);
-	const resolve = useMutation(
-		trpc.observability.resolveIncident.mutationOptions({
-			onSuccess: () => refresh(),
-			onError: (error) => toastError(error),
-		}),
-	);
+	const acknowledge = useSaveMutation(trpc.observability.acknowledgeIncident.mutationOptions(), {
+		invalidate: [incidentsKey],
+	});
+	const resolve = useSaveMutation(trpc.observability.resolveIncident.mutationOptions(), {
+		invalidate: [incidentsKey],
+	});
 
 	const canManage = can("project.write");
 	const manageHint = canManage ? undefined : capabilityHint("project.write");

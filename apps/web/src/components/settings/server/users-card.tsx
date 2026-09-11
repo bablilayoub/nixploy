@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { Loader2, LogIn, Search, ShieldAlert, ShieldCheck, ShieldOff } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { SettingsSection } from "@/components/settings/settings-section";
+import { SettingsSection } from "@/components/layout/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -36,6 +36,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { useMounted } from "@/hooks/use-mounted";
 import { authClient, useSession } from "@/lib/auth-client";
 import { toastError } from "@/lib/describe-error";
 
@@ -121,8 +122,7 @@ export function UsersCard() {
 	// The session resolves client-side only, so the server renders "no session"
 	// and the client would immediately render the admin branch — a hydration
 	// mismatch. Hold the neutral loading shell until both agree.
-	const [mounted, setMounted] = useState(false);
-	useEffect(() => setMounted(true), []);
+	const mounted = useMounted();
 	const ready = mounted && !sessionPending;
 
 	const [users, setUsers] = useState<AdminUser[]>([]);

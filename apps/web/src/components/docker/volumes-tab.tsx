@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Lock, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -26,7 +26,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps, invalidateDockerQueries } from "./docker-view";
@@ -51,28 +51,28 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 			queryKey: trpc.docker.volumes.queryKey({ serverId }),
 		});
 
-	const removeMutation = useMutation(
-		trpc.docker.volumeRemove.mutationOptions({
-			onSuccess: () => {
-				toast.success("Volume removed");
-				setRemoving(null);
-				// Disk usage on the System tab changes too.
-				void invalidateDockerQueries(queryClient, trpc, serverId);
-			},
-			onError: (error) => toastError(error),
-		}),
+	const removeMutation = useSaveMutation(
+		trpc.docker.volumeRemove.mutationOptions({ onSuccess: () => setRemoving(null) }),
+		{
+			successMessage: "Volume removed",
+			// Disk usage on the System tab changes too.
+			onSuccess: () => void invalidateDockerQueries(queryClient, trpc, serverId),
+		},
 	);
-	const pruneMutation = useMutation(
+	const pruneMutation = useSaveMutation(
 		trpc.docker.volumesPrune.mutationOptions({
-			onSuccess: (output) => {
+			// The toast carries the reclaimed size, so it stays here.
+			onSuccess: (output) =>
 				toast.success("Unused volumes pruned", {
 					description: output.trim().split("\n").pop() ?? undefined,
-				});
+				}),
+		}),
+		{
+			onSuccess: () => {
 				setPruneOpen(false);
 				void invalidateDockerQueries(queryClient, trpc, serverId);
 			},
-			onError: (error) => toastError(error),
-		}),
+		},
 	);
 
 	if (volumesQuery.isLoading) return <Skeleton className="h-64 w-full" />;

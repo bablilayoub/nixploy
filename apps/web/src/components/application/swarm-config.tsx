@@ -1,12 +1,11 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layers, Loader2, Network, Plus, RotateCcw, Tag, Trash2, Waypoints } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
-import { toast } from "sonner";
+import { type ReactNode, useMemo } from "react";
+import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
+import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
-import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { HelpLink } from "@/components/ui/help-link";
@@ -21,8 +20,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
-import { toastError } from "@/lib/describe-error";
+import { useDraft } from "@/hooks/use-draft";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -93,18 +92,10 @@ const stripUndefined = <T extends object>(value: T): T =>
 
 function useSaveOverride(applicationId: string, successMessage: string) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
-	return useMutation(
-		trpc.application.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success(successMessage);
-				await queryClient.invalidateQueries({
-					queryKey: trpc.application.one.queryKey({ applicationId }),
-				});
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	return useSaveMutation(trpc.application.update.mutationOptions(), {
+		successMessage,
+		invalidate: [trpc.application.one.queryKey({ applicationId })],
+	});
 }
 
 function Field({
@@ -203,19 +194,13 @@ function RolloutForm({
 		maxFailureRatio: config?.MaxFailureRatio === undefined ? "" : String(config.MaxFailureRatio),
 		order: config?.Order ?? "",
 	});
-	const [form, setForm] = useState(() => seed(stored));
-	const [dirty, setDirty] = useState(false);
-	useUnsavedChanges(dirty);
-	const storedKey = JSON.stringify(stored);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: re-seed only when the stored override changes
-	useEffect(() => {
-		if (!dirty) setForm(seed(stored));
-	}, [storedKey, dirty]);
+	// The draft re-seeds only while clean, so a background refetch cannot wipe
+	// what is being typed.
+	const draft = useDraft(seed(stored), { key: JSON.stringify(stored) });
+	const form = draft.value;
 
-	const set = (key: keyof typeof form) => (value: string) => {
-		setDirty(true);
-		setForm((current) => ({ ...current, [key]: value }));
-	};
+	const set = (key: keyof typeof form) => (value: string) =>
+		draft.set((current) => ({ ...current, [key]: value }));
 
 	const build = (): RolloutConfig | null => {
 		const config = stripUndefined<RolloutConfig>({
@@ -230,6 +215,19 @@ function RolloutForm({
 	};
 
 	const prefix = field === "updateConfigSwarm" ? "update" : "rollback";
+
+	const onSave = () =>
+		save.mutate(
+			{ applicationId: application.applicationId, [field]: build() },
+			{ onSuccess: () => draft.markSaved() },
+		);
+	const onReset = () =>
+		save.mutate(
+			{ applicationId: application.applicationId, [field]: null },
+			{ onSuccess: () => draft.markSaved() },
+		);
+
+	useSaveBar(draft, { onSave, pending: save.isPending, disabled: !canWrite });
 
 	return (
 		<SettingsSection
@@ -341,22 +339,12 @@ function RolloutForm({
 				</Field>
 			</div>
 			<FormFooter
-				dirty={dirty}
+				dirty={draft.dirty}
 				pending={save.isPending}
 				canWrite={canWrite}
 				hasOverride={stored !== null}
-				onSave={() =>
-					save.mutate(
-						{ applicationId: application.applicationId, [field]: build() },
-						{ onSuccess: () => setDirty(false) },
-					)
-				}
-				onReset={() =>
-					save.mutate(
-						{ applicationId: application.applicationId, [field]: null },
-						{ onSuccess: () => setDirty(false) },
-					)
-				}
+				onSave={onSave}
+				onReset={onReset}
 			/>
 		</SettingsSection>
 	);
@@ -376,19 +364,11 @@ function RestartPolicyForm({ application }: { application: Application }) {
 		maxAttempts: policy?.MaxAttempts === undefined ? "" : String(policy.MaxAttempts),
 		window: toSeconds(policy?.Window),
 	});
-	const [form, setForm] = useState(() => seed(stored));
-	const [dirty, setDirty] = useState(false);
-	useUnsavedChanges(dirty);
-	const storedKey = JSON.stringify(stored);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: re-seed only when the stored override changes
-	useEffect(() => {
-		if (!dirty) setForm(seed(stored));
-	}, [storedKey, dirty]);
+	const draft = useDraft(seed(stored), { key: JSON.stringify(stored) });
+	const form = draft.value;
 
-	const set = (key: keyof typeof form) => (value: string) => {
-		setDirty(true);
-		setForm((current) => ({ ...current, [key]: value }));
-	};
+	const set = (key: keyof typeof form) => (value: string) =>
+		draft.set((current) => ({ ...current, [key]: value }));
 
 	const build = (): RestartPolicy | null => {
 		const policy = stripUndefined<RestartPolicy>({
@@ -399,6 +379,25 @@ function RestartPolicyForm({ application }: { application: Application }) {
 		});
 		return Object.keys(policy).length > 0 ? policy : null;
 	};
+
+	const onSave = () =>
+		save.mutate(
+			{
+				applicationId: application.applicationId,
+				restartPolicySwarm: build(),
+			},
+			{ onSuccess: () => draft.markSaved() },
+		);
+	const onReset = () =>
+		save.mutate(
+			{
+				applicationId: application.applicationId,
+				restartPolicySwarm: null,
+			},
+			{ onSuccess: () => draft.markSaved() },
+		);
+
+	useSaveBar(draft, { onSave, pending: save.isPending, disabled: !canWrite });
 
 	return (
 		<SettingsSection
@@ -469,28 +468,12 @@ function RestartPolicyForm({ application }: { application: Application }) {
 				</Field>
 			</div>
 			<FormFooter
-				dirty={dirty}
+				dirty={draft.dirty}
 				pending={save.isPending}
 				canWrite={canWrite}
 				hasOverride={stored !== null}
-				onSave={() =>
-					save.mutate(
-						{
-							applicationId: application.applicationId,
-							restartPolicySwarm: build(),
-						},
-						{ onSuccess: () => setDirty(false) },
-					)
-				}
-				onReset={() =>
-					save.mutate(
-						{
-							applicationId: application.applicationId,
-							restartPolicySwarm: null,
-						},
-						{ onSuccess: () => setDirty(false) },
-					)
-				}
+				onSave={onSave}
+				onReset={onReset}
 			/>
 		</SettingsSection>
 	);
@@ -511,14 +494,8 @@ function ModeForm({ application }: { application: Application }) {
 				? String(mode.Replicated.Replicas)
 				: String(application.replicas),
 	});
-	const [form, setForm] = useState(() => seed(stored));
-	const [dirty, setDirty] = useState(false);
-	useUnsavedChanges(dirty);
-	const storedKey = JSON.stringify(stored);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: re-seed only when the stored override changes
-	useEffect(() => {
-		if (!dirty) setForm(seed(stored));
-	}, [storedKey, dirty]);
+	const draft = useDraft(seed(stored), { key: JSON.stringify(stored) });
+	const form = draft.value;
 
 	const build = (): ModeSwarm | null => {
 		if (form.mode === "global") return { Global: {} };
@@ -532,6 +509,19 @@ function ModeForm({ application }: { application: Application }) {
 		return null;
 	};
 
+	const onSave = () =>
+		save.mutate(
+			{ applicationId: application.applicationId, modeSwarm: build() },
+			{ onSuccess: () => draft.markSaved() },
+		);
+	const onReset = () =>
+		save.mutate(
+			{ applicationId: application.applicationId, modeSwarm: null },
+			{ onSuccess: () => draft.markSaved() },
+		);
+
+	useSaveBar(draft, { onSave, pending: save.isPending, disabled: !canWrite });
+
 	return (
 		<SettingsSection
 			title={
@@ -544,13 +534,7 @@ function ModeForm({ application }: { application: Application }) {
 		>
 			<div className="grid gap-4 sm:grid-cols-2">
 				<Field id="mode-kind" label="Scheduling">
-					<Select
-						value={form.mode}
-						onValueChange={(value) => {
-							setDirty(true);
-							setForm((current) => ({ ...current, mode: value }));
-						}}
-					>
+					<Select value={form.mode} onValueChange={(value) => draft.patch({ mode: value })}>
 						<SelectTrigger id="mode-kind" className="w-full">
 							<SelectValue />
 						</SelectTrigger>
@@ -574,34 +558,18 @@ function ModeForm({ application }: { application: Application }) {
 							type="number"
 							min={0}
 							value={form.replicas}
-							onChange={(e) => {
-								setDirty(true);
-								setForm((current) => ({
-									...current,
-									replicas: e.target.value,
-								}));
-							}}
+							onChange={(e) => draft.patch({ replicas: e.target.value })}
 						/>
 					</Field>
 				)}
 			</div>
 			<FormFooter
-				dirty={dirty}
+				dirty={draft.dirty}
 				pending={save.isPending}
 				canWrite={canWrite}
 				hasOverride={stored !== null}
-				onSave={() =>
-					save.mutate(
-						{ applicationId: application.applicationId, modeSwarm: build() },
-						{ onSuccess: () => setDirty(false) },
-					)
-				}
-				onReset={() =>
-					save.mutate(
-						{ applicationId: application.applicationId, modeSwarm: null },
-						{ onSuccess: () => setDirty(false) },
-					)
-				}
+				onSave={onSave}
+				onReset={onReset}
 			/>
 		</SettingsSection>
 	);
@@ -630,19 +598,16 @@ function LabelsForm({ application }: { application: Application }) {
 
 	const seed = (labels: Record<string, string> | null) =>
 		Object.entries(labels ?? {}).map(([key, value]) => nextLabelRow(key, value));
-	const [rows, setRows] = useState<LabelRow[]>(() => seed(stored));
-	const [dirty, setDirty] = useState(false);
-	useUnsavedChanges(dirty);
 	const storedKey = JSON.stringify(stored);
+	// Row ids come from a counter, so the seed has to be stable across renders:
+	// rebuild it only when the stored labels change.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: re-seed only when the stored override changes
-	useEffect(() => {
-		if (!dirty) setRows(seed(stored));
-	}, [storedKey, dirty]);
+	const seededRows = useMemo(() => seed(stored), [storedKey]);
+	const draft = useDraft<LabelRow[]>(seededRows, { key: storedKey });
+	const rows = draft.value;
 
-	const update = (id: number, patch: Partial<LabelRow>) => {
-		setDirty(true);
-		setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
-	};
+	const update = (id: number, patch: Partial<LabelRow>) =>
+		draft.set((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
 
 	const build = (): Record<string, string> | null => {
 		const labels: Record<string, string> = {};
@@ -656,6 +621,23 @@ function LabelsForm({ application }: { application: Application }) {
 	const problem = rows.find((row) => row.key.trim().toLowerCase().startsWith("traefik."))
 		? "traefik.* labels are managed by Nixploy and cannot be set here"
 		: null;
+
+	const onSave = () =>
+		save.mutate(
+			{ applicationId: application.applicationId, labelsSwarm: build() },
+			{ onSuccess: () => draft.markSaved() },
+		);
+	const onReset = () =>
+		save.mutate(
+			{ applicationId: application.applicationId, labelsSwarm: null },
+			{ onSuccess: () => draft.markSaved() },
+		);
+
+	useSaveBar(draft, {
+		onSave,
+		pending: save.isPending,
+		disabled: !canWrite || problem !== null,
+	});
 
 	return (
 		<SettingsSection
@@ -691,10 +673,7 @@ function LabelsForm({ application }: { application: Application }) {
 							variant="ghost"
 							size="icon"
 							aria-label="Remove label"
-							onClick={() => {
-								setDirty(true);
-								setRows((current) => current.filter((item) => item.id !== row.id));
-							}}
+							onClick={() => draft.set((current) => current.filter((item) => item.id !== row.id))}
 						>
 							<Trash2 className="size-4 text-destructive" />
 						</Button>
@@ -706,10 +685,7 @@ function LabelsForm({ application }: { application: Application }) {
 						variant="outline"
 						size="sm"
 						disabled={!canWrite}
-						onClick={() => {
-							setDirty(true);
-							setRows((current) => [...current, nextLabelRow()]);
-						}}
+						onClick={() => draft.set((current) => [...current, nextLabelRow()])}
 					>
 						<Plus className="size-3.5" />
 						Add label
@@ -718,23 +694,13 @@ function LabelsForm({ application }: { application: Application }) {
 				{problem && <p className="text-xs text-destructive">{problem}</p>}
 			</div>
 			<FormFooter
-				dirty={dirty}
+				dirty={draft.dirty}
 				pending={save.isPending}
 				canWrite={canWrite && !problem}
 				hasOverride={stored !== null}
 				resetLabel="Clear labels"
-				onSave={() =>
-					save.mutate(
-						{ applicationId: application.applicationId, labelsSwarm: build() },
-						{ onSuccess: () => setDirty(false) },
-					)
-				}
-				onReset={() =>
-					save.mutate(
-						{ applicationId: application.applicationId, labelsSwarm: null },
-						{ onSuccess: () => setDirty(false) },
-					)
-				}
+				onSave={onSave}
+				onReset={onReset}
 			/>
 		</SettingsSection>
 	);
@@ -750,14 +716,8 @@ function NetworksForm({ application }: { application: Application }) {
 
 	const seed = (attachments: NetworkAttachment[] | null) =>
 		(attachments ?? []).map((attachment) => attachment.Target).join("\n");
-	const [text, setText] = useState(() => seed(stored));
-	const [dirty, setDirty] = useState(false);
-	useUnsavedChanges(dirty);
-	const storedKey = JSON.stringify(stored);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: re-seed only when the stored override changes
-	useEffect(() => {
-		if (!dirty) setText(seed(stored));
-	}, [storedKey, dirty]);
+	const draft = useDraft(seed(stored), { key: JSON.stringify(stored) });
+	const text = draft.value;
 
 	const targets = text
 		.split("\n")
@@ -767,6 +727,26 @@ function NetworksForm({ application }: { application: Application }) {
 	const problem = invalid
 		? `"${invalid}" is not allowed — only attachable networks named nixploy-* can be joined`
 		: null;
+
+	const onSave = () =>
+		save.mutate(
+			{
+				applicationId: application.applicationId,
+				networkSwarm: targets.length > 0 ? targets.map((target) => ({ Target: target })) : null,
+			},
+			{ onSuccess: () => draft.markSaved() },
+		);
+	const onReset = () =>
+		save.mutate(
+			{ applicationId: application.applicationId, networkSwarm: null },
+			{ onSuccess: () => draft.markSaved() },
+		);
+
+	useSaveBar(draft, {
+		onSave,
+		pending: save.isPending,
+		disabled: !canWrite || problem !== null,
+	});
 
 	return (
 		<SettingsSection
@@ -791,37 +771,20 @@ function NetworksForm({ application }: { application: Application }) {
 					id="swarm-networks"
 					className="min-h-24 font-mono text-xs"
 					value={text}
-					onChange={(event) => {
-						setDirty(true);
-						setText(event.target.value);
-					}}
+					onChange={(event) => draft.set(event.target.value)}
 					placeholder={"nixploy-internal\nnixploy-metrics"}
 					aria-invalid={problem ? true : undefined}
 				/>
 				{problem && <p className="text-xs text-destructive">{problem}</p>}
 			</div>
 			<FormFooter
-				dirty={dirty}
+				dirty={draft.dirty}
 				pending={save.isPending}
 				canWrite={canWrite && !problem}
 				hasOverride={stored !== null}
 				resetLabel="Clear networks"
-				onSave={() =>
-					save.mutate(
-						{
-							applicationId: application.applicationId,
-							networkSwarm:
-								targets.length > 0 ? targets.map((target) => ({ Target: target })) : null,
-						},
-						{ onSuccess: () => setDirty(false) },
-					)
-				}
-				onReset={() =>
-					save.mutate(
-						{ applicationId: application.applicationId, networkSwarm: null },
-						{ onSuccess: () => setDirty(false) },
-					)
-				}
+				onSave={onSave}
+				onReset={onReset}
 			/>
 		</SettingsSection>
 	);

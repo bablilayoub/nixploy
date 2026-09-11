@@ -1,18 +1,19 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
 
-import { SettingsSection } from "@/components/settings/settings-section";
+import { SettingsSection } from "@/components/layout/settings-section";
+import { useSaveBar } from "@/components/services/save-bar";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useDraft } from "@/hooks/use-draft";
+import { useMounted } from "@/hooks/use-mounted";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { missingCapabilityHint } from "@/lib/capabilities";
-import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 const DESCRIPTION =
@@ -20,31 +21,30 @@ const DESCRIPTION =
 
 export function SecurityCard() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const settingsQuery = useQuery(trpc.organization.settings.queryOptions());
 	// The dashboard layout (branding provider) starts this same query, so it
 	// can already be resolved when this page segment hydrates — keep the
 	// server-rendered skeleton until mount so both paints agree.
-	const [mounted, setMounted] = useState(false);
-	useEffect(() => setMounted(true), []);
+	const mounted = useMounted();
 	const { can } = useCapabilities();
 	const canManage = can("settings.manage");
 	const manageHint = canManage ? undefined : missingCapabilityHint("settings.manage");
 
-	const [requireTwoFactor, setRequireTwoFactor] = useState(false);
+	const draft = useDraft(settingsQuery.data?.requireTwoFactor ?? false);
+	const requireTwoFactor = draft.value;
 
-	useEffect(() => {
-		if (!settingsQuery.data) return;
-		setRequireTwoFactor(settingsQuery.data.requireTwoFactor);
-	}, [settingsQuery.data]);
+	const save = useSaveMutation(trpc.organization.updateSettings.mutationOptions(), {
+		successMessage: "Security settings updated",
+		invalidate: [trpc.organization.settings.queryKey()],
+		onSuccess: draft.markSaved,
+	});
 
-	const save = useMutation({
-		...trpc.organization.updateSettings.mutationOptions(),
-		onSuccess: async () => {
-			toast.success("Security settings updated");
-			await queryClient.invalidateQueries({ queryKey: trpc.organization.settings.queryKey() });
-		},
-		onError: (error) => toastError(error),
+	const unchanged = requireTwoFactor === settingsQuery.data?.requireTwoFactor;
+	const onSave = () => save.mutate({ requireTwoFactor });
+	useSaveBar(draft, {
+		onSave,
+		pending: save.isPending,
+		disabled: !canManage || unchanged,
 	});
 
 	if (!mounted || settingsQuery.isPending) {
@@ -87,18 +87,14 @@ export function SecurityCard() {
 						checked={requireTwoFactor}
 						disabled={!canManage}
 						title={manageHint}
-						onCheckedChange={setRequireTwoFactor}
+						onCheckedChange={draft.set}
 					/>
 				</div>
 				<div>
 					<Button
-						onClick={() => save.mutate({ requireTwoFactor })}
+						onClick={onSave}
 						title={manageHint}
-						disabled={
-							!canManage ||
-							save.isPending ||
-							requireTwoFactor === settingsQuery.data.requireTwoFactor
-						}
+						disabled={!canManage || save.isPending || unchanged}
 					>
 						{save.isPending && <Loader2 className="size-4 animate-spin" />}
 						Save security settings

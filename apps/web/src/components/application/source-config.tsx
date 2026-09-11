@@ -1,8 +1,7 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -11,10 +10,10 @@ import {
 	type GitProviderSourceType,
 	splitRepoSelection,
 } from "@/components/git-provider-repo-picker";
-
+import { SettingsSection } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
+import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { HelpLink } from "@/components/ui/help-link";
@@ -30,7 +29,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useDraft } from "@/hooks/use-draft";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -114,88 +114,57 @@ function storedRepoSelection(application: Application): string {
 
 export function SourceConfig({ application }: { application: Application }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const applicationId = application.applicationId;
-
-	const [sourceType, setSourceType] = useState<SourceType>(application.sourceType);
-	// generic git
-	const [gitUrl, setGitUrl] = useState(application.gitUrl ?? "");
-	const [gitBranch, setGitBranch] = useState(application.gitBranch ?? "");
-	const [sshKeyId, setSshKeyId] = useState(application.customGitSSHKeyId ?? NONE);
-	// provider-backed git
-	const [providerId, setProviderId] = useState(storedProviderId(application));
-	const [repoSelection, setRepoSelection] = useState(storedRepoSelection(application));
-	const [branch, setBranch] = useState(application.branch ?? "");
-	const [buildPath, setBuildPath] = useState(application.buildPath ?? "/");
-	const [autoDeploy, setAutoDeploy] = useState(application.autoDeploy);
-	const [isPreviewDeploymentsActive, setIsPreviewDeploymentsActive] = useState(
-		application.isPreviewDeploymentsActive,
-	);
-	const [previewForksRequireApproval, setPreviewForksRequireApproval] = useState(
-		application.previewForksRequireApproval,
-	);
-	const [watchPathsText, setWatchPathsText] = useState((application.watchPaths ?? []).join("\n"));
-	// docker
-	const [dockerImage, setDockerImage] = useState(application.dockerImage ?? "");
-	const [dockerUsername, setDockerUsername] = useState(application.username ?? "");
-	const [dockerPassword, setDockerPassword] = useState("");
-	const [registryId, setRegistryId] = useState(application.registryId ?? NONE);
-	const [autoUpdateImage, setAutoUpdateImage] = useState(application.autoUpdateImage);
-	// Only mirror server values while the user is not editing — background
-	// refetches (deploy status flips, window focus) must not wipe typed text.
-	const [dirty, setDirty] = useState(false);
-
-	/** Wrap a setter so any user edit marks the form dirty. */
-	const edit =
-		<T,>(setter: (value: T) => void) =>
-		(value: T) => {
-			setDirty(true);
-			setter(value);
-		};
 
 	const serverProviderId = storedProviderId(application);
 	const serverRepoSelection = storedRepoSelection(application);
 	const serverWatchPaths = (application.watchPaths ?? []).join("\n");
 
-	useEffect(() => {
-		if (dirty) return;
-		setSourceType(application.sourceType);
-		setGitUrl(application.gitUrl ?? "");
-		setGitBranch(application.gitBranch ?? "");
-		setSshKeyId(application.customGitSSHKeyId ?? NONE);
-		setProviderId(serverProviderId);
-		setRepoSelection(serverRepoSelection);
-		setBranch(application.branch ?? "");
-		setBuildPath(application.buildPath ?? "/");
-		setAutoDeploy(application.autoDeploy);
-		setIsPreviewDeploymentsActive(application.isPreviewDeploymentsActive);
-		setPreviewForksRequireApproval(application.previewForksRequireApproval);
-		setWatchPathsText(serverWatchPaths);
-		setDockerImage(application.dockerImage ?? "");
-		setDockerUsername(application.username ?? "");
-		setDockerPassword("");
-		setRegistryId(application.registryId ?? NONE);
-		setAutoUpdateImage(application.autoUpdateImage);
-	}, [
-		dirty,
-		serverWatchPaths,
-		application.sourceType,
-		application.gitUrl,
-		application.gitBranch,
-		application.customGitSSHKeyId,
-		serverProviderId,
-		serverRepoSelection,
-		application.branch,
-		application.buildPath,
-		application.autoDeploy,
-		application.isPreviewDeploymentsActive,
-		application.previewForksRequireApproval,
-		application.dockerImage,
-		application.username,
-		application.registryId,
-		application.autoUpdateImage,
-	]);
+	// The draft mirrors server values while the user is not editing —
+	// background refetches (deploy status flips, window focus) must not wipe
+	// typed text.
+	const draft = useDraft({
+		sourceType: application.sourceType,
+		// generic git
+		gitUrl: application.gitUrl ?? "",
+		gitBranch: application.gitBranch ?? "",
+		sshKeyId: application.customGitSSHKeyId ?? NONE,
+		// provider-backed git
+		providerId: serverProviderId,
+		repoSelection: serverRepoSelection,
+		branch: application.branch ?? "",
+		buildPath: application.buildPath ?? "/",
+		autoDeploy: application.autoDeploy,
+		isPreviewDeploymentsActive: application.isPreviewDeploymentsActive,
+		previewForksRequireApproval: application.previewForksRequireApproval,
+		watchPathsText: serverWatchPaths,
+		// docker
+		dockerImage: application.dockerImage ?? "",
+		dockerUsername: application.username ?? "",
+		dockerPassword: "",
+		registryId: application.registryId ?? NONE,
+		autoUpdateImage: application.autoUpdateImage,
+	});
+	const {
+		sourceType,
+		gitUrl,
+		gitBranch,
+		sshKeyId,
+		providerId,
+		repoSelection,
+		branch,
+		buildPath,
+		autoDeploy,
+		isPreviewDeploymentsActive,
+		previewForksRequireApproval,
+		watchPathsText,
+		dockerImage,
+		dockerUsername,
+		dockerPassword,
+		registryId,
+		autoUpdateImage,
+	} = draft.value;
 
 	/**
 	 * Switching the source type must not carry the previous provider's id /
@@ -205,19 +174,20 @@ export function SourceConfig({ application }: { application: Application }) {
 	 * back to its persisted source type.
 	 */
 	const changeSourceType = (next: SourceType) => {
-		setDirty(true);
-		setSourceType(next);
 		const restore = next === application.sourceType;
-		setProviderId(restore ? serverProviderId : "");
-		setRepoSelection(restore ? serverRepoSelection : "");
-		setBranch(restore ? (application.branch ?? "") : "");
-		setGitUrl(restore ? (application.gitUrl ?? "") : "");
-		setGitBranch(restore ? (application.gitBranch ?? "") : "");
-		setSshKeyId(restore ? (application.customGitSSHKeyId ?? NONE) : NONE);
-		setDockerImage(restore ? (application.dockerImage ?? "") : "");
-		setDockerUsername(restore ? (application.username ?? "") : "");
-		setDockerPassword("");
-		setRegistryId(restore ? (application.registryId ?? NONE) : NONE);
+		draft.patch({
+			sourceType: next,
+			providerId: restore ? serverProviderId : "",
+			repoSelection: restore ? serverRepoSelection : "",
+			branch: restore ? (application.branch ?? "") : "",
+			gitUrl: restore ? (application.gitUrl ?? "") : "",
+			gitBranch: restore ? (application.gitBranch ?? "") : "",
+			sshKeyId: restore ? (application.customGitSSHKeyId ?? NONE) : NONE,
+			dockerImage: restore ? (application.dockerImage ?? "") : "",
+			dockerUsername: restore ? (application.username ?? "") : "",
+			dockerPassword: "",
+			registryId: restore ? (application.registryId ?? NONE) : NONE,
+		});
 	};
 
 	// ── pickers ─────────────────────────────────────────────────────────────
@@ -254,19 +224,12 @@ export function SourceConfig({ application }: { application: Application }) {
 						: [];
 
 	// ── save ────────────────────────────────────────────────────────────────
-	const saveSource = useMutation(
-		trpc.application.saveSource.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Source configuration saved");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.application.one.queryKey({ applicationId }),
-				});
-				// Refetch is done: the server now holds what was typed.
-				setDirty(false);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const saveSource = useSaveMutation(trpc.application.saveSource.mutationOptions(), {
+		successMessage: "Source configuration saved",
+		invalidate: [trpc.application.one.queryKey({ applicationId })],
+		// Refetch is done: the server now holds what was typed.
+		onSuccess: draft.markSaved,
+	});
 
 	const canWrite = can("service.write");
 	const canWriteSecrets = can("secrets.write");
@@ -340,6 +303,8 @@ export function SourceConfig({ application }: { application: Application }) {
 
 	const isGitLike = isGitLikeSource(sourceType);
 
+	useSaveBar(draft, { onSave, pending: saveSource.isPending, disabled: saveBlocked });
+
 	return (
 		<SettingsSection
 			title="Source"
@@ -370,7 +335,7 @@ export function SourceConfig({ application }: { application: Application }) {
 								id="git-url"
 								placeholder="https://github.com/user/repo.git"
 								value={gitUrl}
-								onChange={(e) => edit(setGitUrl)(e.target.value)}
+								onChange={(e) => draft.patch({ gitUrl: e.target.value })}
 							/>
 						</div>
 						<div className="grid gap-4 sm:grid-cols-2">
@@ -380,12 +345,15 @@ export function SourceConfig({ application }: { application: Application }) {
 									id="git-branch"
 									placeholder="main"
 									value={gitBranch}
-									onChange={(e) => edit(setGitBranch)(e.target.value)}
+									onChange={(e) => draft.patch({ gitBranch: e.target.value })}
 								/>
 							</div>
 							<div className="flex flex-col gap-2">
 								<Label>SSH key (optional)</Label>
-								<Select value={sshKeyId} onValueChange={edit(setSshKeyId)}>
+								<Select
+									value={sshKeyId}
+									onValueChange={(value) => draft.patch({ sshKeyId: value })}
+								>
 									<SelectTrigger className="w-full">
 										<SelectValue placeholder="None" />
 									</SelectTrigger>
@@ -407,7 +375,10 @@ export function SourceConfig({ application }: { application: Application }) {
 					<>
 						<div className="flex flex-col gap-2">
 							<Label>{GIT_PROVIDER_LABELS[sourceType]} Provider</Label>
-							<Select value={providerId} onValueChange={edit(setProviderId)}>
+							<Select
+								value={providerId}
+								onValueChange={(value) => draft.patch({ providerId: value })}
+							>
 								<SelectTrigger className="w-full sm:max-w-xs">
 									<SelectValue placeholder="Select a provider" />
 								</SelectTrigger>
@@ -430,9 +401,9 @@ export function SourceConfig({ application }: { application: Application }) {
 							sourceType={sourceType}
 							providerId={providerId}
 							repoSelection={repoSelection}
-							onRepoSelectionChange={edit(setRepoSelection)}
+							onRepoSelectionChange={(value) => draft.patch({ repoSelection: value })}
 							branch={branch}
-							onBranchChange={edit(setBranch)}
+							onBranchChange={(value) => draft.patch({ branch: value })}
 						/>
 					</>
 				)}
@@ -445,12 +416,15 @@ export function SourceConfig({ application }: { application: Application }) {
 								id="docker-image"
 								placeholder="nginx:latest"
 								value={dockerImage}
-								onChange={(e) => edit(setDockerImage)(e.target.value)}
+								onChange={(e) => draft.patch({ dockerImage: e.target.value })}
 							/>
 						</div>
 						<div className="flex flex-col gap-2">
 							<Label>Registry (optional)</Label>
-							<Select value={registryId} onValueChange={edit(setRegistryId)}>
+							<Select
+								value={registryId}
+								onValueChange={(value) => draft.patch({ registryId: value })}
+							>
 								<SelectTrigger className="w-full sm:max-w-xs">
 									<SelectValue placeholder="None" />
 								</SelectTrigger>
@@ -475,7 +449,7 @@ export function SourceConfig({ application }: { application: Application }) {
 							<Switch
 								id="auto-update-image"
 								checked={autoUpdateImage}
-								onCheckedChange={edit(setAutoUpdateImage)}
+								onCheckedChange={(checked) => draft.patch({ autoUpdateImage: checked })}
 							/>
 						</div>
 						{registryId === NONE && (
@@ -485,7 +459,7 @@ export function SourceConfig({ application }: { application: Application }) {
 									<Input
 										id="docker-username"
 										value={dockerUsername}
-										onChange={(e) => edit(setDockerUsername)(e.target.value)}
+										onChange={(e) => draft.patch({ dockerUsername: e.target.value })}
 									/>
 								</div>
 								<div className="flex flex-col gap-2">
@@ -495,7 +469,7 @@ export function SourceConfig({ application }: { application: Application }) {
 										type="password"
 										placeholder={application.password ? "••••••••" : ""}
 										value={dockerPassword}
-										onChange={(e) => edit(setDockerPassword)(e.target.value)}
+										onChange={(e) => draft.patch({ dockerPassword: e.target.value })}
 									/>
 								</div>
 							</div>
@@ -524,7 +498,7 @@ export function SourceConfig({ application }: { application: Application }) {
 								placeholder="/"
 								className="sm:max-w-xs"
 								value={buildPath}
-								onChange={(e) => edit(setBuildPath)(e.target.value)}
+								onChange={(e) => draft.patch({ buildPath: e.target.value })}
 							/>
 						</div>
 						<div className="flex items-center justify-between rounded-md border p-3">
@@ -534,7 +508,11 @@ export function SourceConfig({ application }: { application: Application }) {
 									Deploy automatically when new commits are pushed.
 								</p>
 							</div>
-							<Switch id="auto-deploy" checked={autoDeploy} onCheckedChange={edit(setAutoDeploy)} />
+							<Switch
+								id="auto-deploy"
+								checked={autoDeploy}
+								onCheckedChange={(checked) => draft.patch({ autoDeploy: checked })}
+							/>
 						</div>
 						<div className="flex flex-col gap-2">
 							<Label htmlFor="watch-paths">Watch paths (optional)</Label>
@@ -543,7 +521,7 @@ export function SourceConfig({ application }: { application: Application }) {
 								className="min-h-24 font-mono text-xs sm:max-w-lg"
 								placeholder={"apps/web/**\npackages/shared/**\n!**/*.md"}
 								value={watchPathsText}
-								onChange={(e) => edit(setWatchPathsText)(e.target.value)}
+								onChange={(e) => draft.patch({ watchPathsText: e.target.value })}
 								aria-invalid={watchPathsProblem ? true : undefined}
 							/>
 							<p className="text-xs text-muted-foreground">
@@ -567,7 +545,9 @@ export function SourceConfig({ application }: { application: Application }) {
 									<Switch
 										id="preview-deploys"
 										checked={isPreviewDeploymentsActive}
-										onCheckedChange={edit(setIsPreviewDeploymentsActive)}
+										onCheckedChange={(checked) =>
+											draft.patch({ isPreviewDeploymentsActive: checked })
+										}
 									/>
 								</div>
 								<div className="flex items-center justify-between rounded-md border p-3">
@@ -581,7 +561,9 @@ export function SourceConfig({ application }: { application: Application }) {
 									<Switch
 										id="preview-fork-gate"
 										checked={previewForksRequireApproval}
-										onCheckedChange={edit(setPreviewForksRequireApproval)}
+										onCheckedChange={(checked) =>
+											draft.patch({ previewForksRequireApproval: checked })
+										}
 									/>
 								</div>
 							</>
@@ -590,7 +572,7 @@ export function SourceConfig({ application }: { application: Application }) {
 				)}
 
 				<div className="flex items-center justify-end gap-3">
-					<UnsavedChangesPill dirty={dirty} />
+					<UnsavedChangesPill dirty={draft.dirty} />
 					<DisabledHint hint={saveHint}>
 						<Button onClick={onSave} disabled={saveSource.isPending || saveBlocked}>
 							{saveSource.isPending && <Loader2 className="size-4 animate-spin" />}

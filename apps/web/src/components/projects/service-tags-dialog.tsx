@@ -1,9 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,7 +15,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 import type { ServiceEntry } from "./services-table";
 
@@ -31,7 +30,6 @@ export function ServiceTagsDialog({
 	onOpenChange: (open: boolean) => void;
 }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const canManage = can("tags.manage");
 	const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -46,18 +44,11 @@ export function ServiceTagsDialog({
 		setSelected(new Set(service.tags?.map((tag) => tag.tagId) ?? []));
 	}, [open, service.tags]);
 
-	const saveMutation = useMutation(
-		trpc.tag.setServiceTags.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Tags updated");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.tag.forServices.queryKey(),
-				});
-				onOpenChange(false);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const saveMutation = useSaveMutation(trpc.tag.setServiceTags.mutationOptions(), {
+		successMessage: "Tags updated",
+		invalidate: [trpc.tag.forServices.queryKey()],
+		onSuccess: () => onOpenChange(false),
+	});
 
 	const toggle = (tagId: string, checked: boolean) => {
 		setSelected((previous) => {

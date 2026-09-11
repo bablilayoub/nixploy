@@ -1,12 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { HardDrive, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
-import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -46,7 +45,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Mount } from "./types";
@@ -64,7 +63,6 @@ const EMPTY_FORM = {
 
 export function MountsManager({ applicationId }: { applicationId: string }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const canWrite = can("service.write");
 	const writeHint = canWrite ? undefined : capabilityHint("service.write");
@@ -89,40 +87,19 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 		refetch,
 	} = useQuery(trpc.mount.byApplication.queryOptions({ applicationId }));
 
-	const invalidate = () =>
-		queryClient.invalidateQueries({
-			queryKey: trpc.mount.byApplication.queryKey({ applicationId }),
-		});
+	const invalidate = [trpc.mount.byApplication.queryKey({ applicationId })];
 
-	const create = useMutation(
-		trpc.mount.create.mutationOptions({
-			onSuccess: () => {
-				toast.success("Mount created");
-				setDialogOpen(false);
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const create = useSaveMutation(
+		trpc.mount.create.mutationOptions({ onSuccess: () => setDialogOpen(false) }),
+		{ successMessage: "Mount created", invalidate },
 	);
-	const update = useMutation(
-		trpc.mount.update.mutationOptions({
-			onSuccess: () => {
-				toast.success("Mount updated");
-				setDialogOpen(false);
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const update = useSaveMutation(
+		trpc.mount.update.mutationOptions({ onSuccess: () => setDialogOpen(false) }),
+		{ successMessage: "Mount updated", invalidate },
 	);
-	const remove = useMutation(
-		trpc.mount.delete.mutationOptions({
-			onSuccess: () => {
-				toast.success("Mount deleted");
-				setDeleteTarget(null);
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const remove = useSaveMutation(
+		trpc.mount.delete.mutationOptions({ onSuccess: () => setDeleteTarget(null) }),
+		{ successMessage: "Mount deleted", invalidate },
 	);
 
 	const isPending = create.isPending || update.isPending;

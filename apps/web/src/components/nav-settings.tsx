@@ -12,10 +12,10 @@ import {
 	ShieldCheck,
 	User,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 
 import { SubNav, type SubNavGroup, type SubNavItem } from "@/components/shell/sub-nav";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useMounted } from "@/hooks/use-mounted";
 
 /** Who may open a settings page. Read views stay open to every member. */
 export interface SettingsNavGate {
@@ -116,8 +116,7 @@ export function filterSettingsNavGroups(
  */
 export function NavSettings({ className }: { className?: string }) {
 	const { can, isInstanceAdmin } = useCapabilities();
-	const [mounted, setMounted] = useState(false);
-	useEffect(() => setMounted(true), []);
+	const mounted = useMounted();
 
 	const groups = filterSettingsNavGroups(settingsNavGroups, {
 		can,

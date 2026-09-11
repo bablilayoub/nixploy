@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/command";
 import { docsUrl } from "@/components/ui/help-link";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { signOut } from "@/lib/auth-client";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
@@ -129,20 +130,13 @@ export function CommandPalette({ className }: { className?: string }) {
 	const [open, setOpen] = useState(false);
 	const [recentIds, setRecentIds] = useState<string[]>([]);
 	const [query, setQuery] = useState("");
-	const [debouncedQuery, setDebouncedQuery] = useState("");
 
 	// Debounce the search text driving the cross-project service search.
-	useEffect(() => {
-		const timer = setTimeout(() => setDebouncedQuery(query.trim()), 250);
-		return () => clearTimeout(timer);
-	}, [query]);
+	const debouncedQuery = useDebouncedValue(query.trim(), 250);
 
 	// Reset the search text whenever the palette closes.
 	useEffect(() => {
-		if (!open) {
-			setQuery("");
-			setDebouncedQuery("");
-		}
+		if (!open) setQuery("");
 	}, [open]);
 
 	useEffect(() => {

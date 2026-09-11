@@ -1,17 +1,17 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { HeartPulse, Loader2 } from "lucide-react";
-import { useState } from "react";
 import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
-import { SettingsSection } from "@/components/settings/settings-section";
+import { useSaveBar } from "@/components/services/save-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useDraft } from "@/hooks/use-draft";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -62,32 +62,21 @@ function parseExisting(config: HealthConfig | null): {
 /** Healthcheck config → swarm Healthcheck on the application's service. */
 export function HealthcheckManager({ application }: { application: Application }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const canWrite = can("service.write");
 
-	const existing = parseExisting(application.healthCheckSwarm as HealthConfig | null);
-	const [enabled, setEnabled] = useState(existing.enabled);
-	const [path, setPath] = useState(existing.path);
-	const [port, setPort] = useState(existing.port);
-	const [interval, setInterval] = useState(existing.interval);
-	const [timeout, setTimeout] = useState(existing.timeout);
-	const [retries, setRetries] = useState(existing.retries);
-	const [startPeriod, setStartPeriod] = useState(existing.startPeriod);
+	const draft = useDraft(parseExisting(application.healthCheckSwarm as HealthConfig | null));
+	const { enabled, path, port, interval, timeout, retries, startPeriod } = draft.value;
 
-	const save = useMutation(
-		trpc.application.update.mutationOptions({
-			onSuccess: () => {
-				toast.success(enabled ? "Healthcheck saved" : "Healthcheck disabled");
-				queryClient.invalidateQueries({
-					queryKey: trpc.application.one.queryKey({
-						applicationId: application.applicationId,
-					}),
-				});
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const save = useSaveMutation(trpc.application.update.mutationOptions(), {
+		successMessage: enabled ? "Healthcheck saved" : "Healthcheck disabled",
+		invalidate: [
+			trpc.application.one.queryKey({
+				applicationId: application.applicationId,
+			}),
+		],
+		onSuccess: draft.markSaved,
+	});
 
 	const handleSave = () => {
 		if (!enabled) {
@@ -118,6 +107,8 @@ export function HealthcheckManager({ application }: { application: Application }
 		});
 	};
 
+	useSaveBar(draft, { onSave: handleSave, pending: save.isPending, disabled: !canWrite });
+
 	return (
 		<SettingsSection
 			title={
@@ -144,7 +135,11 @@ export function HealthcheckManager({ application }: { application: Application }
 							Applied on save; the service is updated in place.
 						</p>
 					</div>
-					<Switch id="hc-enabled" checked={enabled} onCheckedChange={setEnabled} />
+					<Switch
+						id="hc-enabled"
+						checked={enabled}
+						onCheckedChange={(checked) => draft.patch({ enabled: checked })}
+					/>
 				</div>
 
 				{enabled && (
@@ -156,7 +151,7 @@ export function HealthcheckManager({ application }: { application: Application }
 									id="hc-path"
 									placeholder="/health"
 									value={path}
-									onChange={(e) => setPath(e.target.value)}
+									onChange={(e) => draft.patch({ path: e.target.value })}
 								/>
 							</div>
 							<div className="space-y-1.5">
@@ -166,7 +161,7 @@ export function HealthcheckManager({ application }: { application: Application }
 									inputMode="numeric"
 									placeholder="3000"
 									value={port}
-									onChange={(e) => setPort(e.target.value)}
+									onChange={(e) => draft.patch({ port: e.target.value })}
 								/>
 							</div>
 						</div>
@@ -177,7 +172,7 @@ export function HealthcheckManager({ application }: { application: Application }
 									id="hc-interval"
 									inputMode="numeric"
 									value={interval}
-									onChange={(e) => setInterval(e.target.value)}
+									onChange={(e) => draft.patch({ interval: e.target.value })}
 								/>
 							</div>
 							<div className="space-y-1.5">
@@ -186,7 +181,7 @@ export function HealthcheckManager({ application }: { application: Application }
 									id="hc-timeout"
 									inputMode="numeric"
 									value={timeout}
-									onChange={(e) => setTimeout(e.target.value)}
+									onChange={(e) => draft.patch({ timeout: e.target.value })}
 								/>
 							</div>
 							<div className="space-y-1.5">
@@ -195,7 +190,7 @@ export function HealthcheckManager({ application }: { application: Application }
 									id="hc-retries"
 									inputMode="numeric"
 									value={retries}
-									onChange={(e) => setRetries(e.target.value)}
+									onChange={(e) => draft.patch({ retries: e.target.value })}
 								/>
 							</div>
 							<div className="space-y-1.5">
@@ -204,7 +199,7 @@ export function HealthcheckManager({ application }: { application: Application }
 									id="hc-start"
 									inputMode="numeric"
 									value={startPeriod}
-									onChange={(e) => setStartPeriod(e.target.value)}
+									onChange={(e) => draft.patch({ startPeriod: e.target.value })}
 								/>
 							</div>
 						</div>

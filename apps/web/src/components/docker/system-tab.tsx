@@ -1,10 +1,10 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
+import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -26,7 +26,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps, invalidateDockerQueries } from "./docker-view";
@@ -41,19 +41,22 @@ export function SystemTab({ serverId }: DockerTabProps) {
 
 	const infoQuery = useQuery(trpc.docker.systemInfo.queryOptions({ serverId }));
 
-	const pruneMutation = useMutation(
+	const pruneMutation = useSaveMutation(
 		trpc.docker.systemPrune.mutationOptions({
-			onSuccess: (output) => {
+			// The toast carries the reclaimed size, so it stays here.
+			onSuccess: (output) =>
 				toast.success("System pruned", {
 					description: output.trim().split("\n").pop() ?? undefined,
-				});
+				}),
+		}),
+		{
+			onSuccess: () => {
 				setPruneOpen(null);
 				// Prune removes containers, networks, images and (optionally)
 				// volumes — every cached list for this daemon is stale now.
 				void invalidateDockerQueries(queryClient, trpc, serverId);
 			},
-			onError: (error) => toastError(error),
-		}),
+		},
 	);
 
 	if (infoQuery.isLoading) return <Skeleton className="h-64 w-full" />;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
 	CheckCircle2,
 	Globe,
@@ -15,10 +15,10 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { EmptyState } from "@/components/services/empty-state";
-import { SettingsSection } from "@/components/settings/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -61,6 +61,7 @@ import {
 import { TableCard } from "@/components/ui/table-card";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 
@@ -493,7 +494,6 @@ function DomainMiddlewaresCell({
 	manageHint?: string;
 }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
 	const [drafts, setDrafts] = useState<MiddlewareDraft[]>([]);
 
@@ -520,17 +520,12 @@ function DomainMiddlewaresCell({
 		);
 	}, [open, query.data]);
 
-	const save = useMutation(
-		trpc.domain.saveMiddlewares.mutationOptions({
-			onSuccess: () => {
-				toast.success("Middlewares saved");
-				void queryClient.invalidateQueries({
-					queryKey: trpc.domain.middlewares.queryKey({ domainId }),
-				});
-				setOpen(false);
-			},
-			onError: (error) => toastError(error),
-		}),
+	const save = useSaveMutation(
+		trpc.domain.saveMiddlewares.mutationOptions({ onSuccess: () => setOpen(false) }),
+		{
+			successMessage: "Middlewares saved",
+			invalidate: [trpc.domain.middlewares.queryKey({ domainId })],
+		},
 	);
 
 	const activeCount = rows.filter((row) => row.enabled).length;
@@ -681,7 +676,6 @@ export function DomainManager({
 }) {
 	const trpc = useTRPC();
 	const trpcClient = useTRPCClient();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const canManage = can("domains.manage");
 	const manageHint = canManage ? undefined : capabilityHint("domains.manage");
@@ -695,15 +689,10 @@ export function DomainManager({
 	);
 	const certificatesQuery = useQuery(trpc.certificate.all.queryOptions());
 	const probesQuery = useQuery(trpc.observability.uptimeProbes.queryOptions());
-	const setProbe = useMutation(
-		trpc.observability.setUptimeProbe.mutationOptions({
-			onSuccess: () => {
-				queryClient.invalidateQueries({ queryKey: trpc.observability.uptimeProbes.pathKey() });
-				toast.success("Uptime probe updated");
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const setProbe = useSaveMutation(trpc.observability.setUptimeProbe.mutationOptions(), {
+		successMessage: "Uptime probe updated",
+		invalidate: [trpc.observability.uptimeProbes.pathKey()],
+	});
 
 	type DomainRow = NonNullable<typeof domainsQuery.data>[number];
 
@@ -753,51 +742,24 @@ export function DomainManager({
 		return () => clearTimeout(timer);
 	}, [dialogOpen, host, editing, trpcClient]);
 
-	const invalidate = () => {
-		if (serviceType === "application") {
-			void queryClient.invalidateQueries({
-				queryKey: trpc.domain.byApplication.queryKey({ applicationId: serviceId }),
-			});
-		} else {
-			void queryClient.invalidateQueries({
-				queryKey: trpc.domain.byCompose.queryKey({ composeId: serviceId }),
-			});
-		}
-	};
+	const invalidate = [
+		serviceType === "application"
+			? trpc.domain.byApplication.queryKey({ applicationId: serviceId })
+			: trpc.domain.byCompose.queryKey({ composeId: serviceId }),
+	];
+	const errorMessage = "Something went wrong";
 
-	const onMutationError = (error: { message?: string }) => {
-		toastError(error, "Something went wrong");
-	};
-
-	const createMutation = useMutation(
-		trpc.domain.create.mutationOptions({
-			onSuccess: () => {
-				toast.success("Domain created");
-				invalidate();
-				setDialogOpen(false);
-			},
-			onError: onMutationError,
-		}),
+	const createMutation = useSaveMutation(
+		trpc.domain.create.mutationOptions({ onSuccess: () => setDialogOpen(false) }),
+		{ successMessage: "Domain created", invalidate, errorMessage },
 	);
-	const updateMutation = useMutation(
-		trpc.domain.update.mutationOptions({
-			onSuccess: () => {
-				toast.success("Domain updated");
-				invalidate();
-				setDialogOpen(false);
-			},
-			onError: onMutationError,
-		}),
+	const updateMutation = useSaveMutation(
+		trpc.domain.update.mutationOptions({ onSuccess: () => setDialogOpen(false) }),
+		{ successMessage: "Domain updated", invalidate, errorMessage },
 	);
-	const deleteMutation = useMutation(
-		trpc.domain.delete.mutationOptions({
-			onSuccess: () => {
-				toast.success("Domain deleted");
-				invalidate();
-				setDeleting(null);
-			},
-			onError: onMutationError,
-		}),
+	const deleteMutation = useSaveMutation(
+		trpc.domain.delete.mutationOptions({ onSuccess: () => setDeleting(null) }),
+		{ successMessage: "Domain deleted", invalidate, errorMessage },
 	);
 
 	const openCreate = () => {
@@ -906,7 +868,7 @@ export function DomainManager({
 				actions={
 					<Button size="sm" onClick={openCreate} disabled={!canManage} title={manageHint}>
 						<Plus className="size-4" />
-						Add Domain
+						Add domain
 					</Button>
 				}
 			>
@@ -935,7 +897,7 @@ export function DomainManager({
 									title={manageHint}
 								>
 									<Plus className="size-4" />
-									Add Domain
+									Add domain
 								</Button>
 							}
 						/>

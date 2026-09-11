@@ -1,13 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
-
+import { SettingsSection } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
+import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Label } from "@/components/ui/label";
@@ -20,7 +18,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useDraft } from "@/hooks/use-draft";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -34,48 +33,40 @@ const NO_REGISTRY = "none";
  */
 export function DeployCommandsCard({ application }: { application: Application }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const applicationId = application.applicationId;
 
-	const [preDeploy, setPreDeploy] = useState(application.preDeployCommand ?? "");
-	const [postDeploy, setPostDeploy] = useState(application.postDeployCommand ?? "");
-	const [pushRegistryId, setPushRegistryId] = useState(application.pushRegistryId ?? NO_REGISTRY);
-	const [dirty, setDirty] = useState(false);
-
 	// Background refetches must not wipe what is being typed.
-	useEffect(() => {
-		if (dirty) return;
-		setPreDeploy(application.preDeployCommand ?? "");
-		setPostDeploy(application.postDeployCommand ?? "");
-		setPushRegistryId(application.pushRegistryId ?? NO_REGISTRY);
-	}, [
-		dirty,
-		application.preDeployCommand,
-		application.postDeployCommand,
-		application.pushRegistryId,
-	]);
+	const draft = useDraft({
+		preDeploy: application.preDeployCommand ?? "",
+		postDeploy: application.postDeployCommand ?? "",
+		pushRegistryId: application.pushRegistryId ?? NO_REGISTRY,
+	});
+	const { preDeploy, postDeploy, pushRegistryId } = draft.value;
 
 	const registries = useQuery(trpc.registry.all.queryOptions());
 	// Only a registry with a namespace can be a push target — the pushed tag is
 	// `<imagePrefix>/<appName>:<version>`.
 	const pushable = (registries.data ?? []).filter((row) => Boolean(row.imagePrefix?.trim()));
 
-	const update = useMutation(
-		trpc.application.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Deploy settings saved");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.application.one.queryKey({ applicationId }),
-				});
-				setDirty(false);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const update = useSaveMutation(trpc.application.update.mutationOptions(), {
+		successMessage: "Deploy settings saved",
+		invalidate: [trpc.application.one.queryKey({ applicationId })],
+		onSuccess: draft.markSaved,
+	});
 
 	const canWrite = can("service.write") && can("secrets.write");
 	const hint = canWrite ? undefined : capabilityHint("secrets.write");
+
+	const onSave = () =>
+		update.mutate({
+			applicationId,
+			preDeployCommand: preDeploy.trim() || null,
+			postDeployCommand: postDeploy.trim() || null,
+			pushRegistryId: pushRegistryId === NO_REGISTRY ? null : pushRegistryId,
+		});
+
+	useSaveBar(draft, { onSave, pending: update.isPending, disabled: !canWrite });
 
 	return (
 		<SettingsSection
@@ -91,10 +82,7 @@ export function DeployCommandsCard({ application }: { application: Application }
 						placeholder="npm run migrate"
 						value={preDeploy}
 						disabled={!canWrite}
-						onChange={(event) => {
-							setDirty(true);
-							setPreDeploy(event.target.value);
-						}}
+						onChange={(event) => draft.patch({ preDeploy: event.target.value })}
 					/>
 					<p className="text-xs text-muted-foreground">
 						Runs in a throwaway container from the image this deploy built, on the environment's
@@ -112,10 +100,7 @@ export function DeployCommandsCard({ application }: { application: Application }
 						placeholder="npm run cache:warm"
 						value={postDeploy}
 						disabled={!canWrite}
-						onChange={(event) => {
-							setDirty(true);
-							setPostDeploy(event.target.value);
-						}}
+						onChange={(event) => draft.patch({ postDeploy: event.target.value })}
 					/>
 					<p className="text-xs text-muted-foreground">
 						Runs inside one running container once the rollout has converged. A non-zero exit marks
@@ -128,10 +113,7 @@ export function DeployCommandsCard({ application }: { application: Application }
 					<Select
 						value={pushRegistryId}
 						disabled={!canWrite}
-						onValueChange={(value) => {
-							setDirty(true);
-							setPushRegistryId(value);
-						}}
+						onValueChange={(value) => draft.patch({ pushRegistryId: value })}
 					>
 						<SelectTrigger id="push-registry" className="sm:max-w-sm">
 							<SelectValue placeholder="Don't push" />
@@ -153,19 +135,9 @@ export function DeployCommandsCard({ application }: { application: Application }
 				</div>
 
 				<div className="flex items-center justify-end gap-3">
-					<UnsavedChangesPill dirty={dirty} />
+					<UnsavedChangesPill dirty={draft.dirty} />
 					<DisabledHint hint={hint}>
-						<Button
-							disabled={!canWrite || update.isPending}
-							onClick={() =>
-								update.mutate({
-									applicationId,
-									preDeployCommand: preDeploy.trim() || null,
-									postDeployCommand: postDeploy.trim() || null,
-									pushRegistryId: pushRegistryId === NO_REGISTRY ? null : pushRegistryId,
-								})
-							}
-						>
+						<Button disabled={!canWrite || update.isPending} onClick={onSave}>
 							{update.isPending && <Loader2 className="size-4 animate-spin" />}
 							Save
 						</Button>

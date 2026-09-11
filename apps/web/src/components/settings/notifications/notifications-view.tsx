@@ -1,10 +1,10 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Bell, Loader2, Pencil, Plus, Send } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import {
@@ -13,7 +13,6 @@ import {
 	type NotificationRow,
 	type NotificationType,
 } from "@/components/settings/notifications/notification-dialog";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,13 +25,12 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { missingCapabilityHint } from "@/lib/capabilities";
-import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 export function NotificationsView() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const [createOpen, setCreateOpen] = useState(false);
 	const { can } = useCapabilities();
 	const canManage = can("notifications.manage");
@@ -47,27 +45,14 @@ export function NotificationsView() {
 		refetch,
 	} = useQuery(trpc.notification.all.queryOptions());
 
-	const invalidate = () =>
-		queryClient.invalidateQueries({
-			queryKey: trpc.notification.all.queryKey(),
-		});
+	const testMutation = useSaveMutation(trpc.notification.test.mutationOptions(), {
+		successMessage: "Test notification sent",
+	});
 
-	const testMutation = useMutation(
-		trpc.notification.test.mutationOptions({
-			onSuccess: () => toast.success("Test notification sent"),
-			onError: (error) => toastError(error),
-		}),
-	);
-
-	const removeMutation = useMutation(
-		trpc.notification.remove.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Notification channel removed");
-				await invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const removeMutation = useSaveMutation(trpc.notification.remove.mutationOptions(), {
+		successMessage: "Notification channel removed",
+		invalidate: [trpc.notification.all.queryKey()],
+	});
 
 	const grouped = (notifications ?? []).reduce<Record<string, NonNullable<typeof notifications>>>(
 		(acc, notification) => {

@@ -1,13 +1,12 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { GitMerge, Loader2, Plug, Plus } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { EditProviderDialog } from "@/components/settings/git-providers/edit-provider-dialog";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -30,8 +29,8 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { missingCapabilityHint } from "@/lib/capabilities";
-import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 const GITLAB_EDIT_FIELDS = [
@@ -48,7 +47,6 @@ const GITLAB_EDIT_FIELDS = [
 
 export function GitlabPanel() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
 	const { can } = useCapabilities();
 	const canManage = can("git_providers.manage");
@@ -66,49 +64,33 @@ export function GitlabPanel() {
 		refetch,
 	} = useQuery(trpc.gitlab.all.queryOptions());
 
-	const invalidate = () => queryClient.invalidateQueries({ queryKey: trpc.gitlab.all.queryKey() });
+	const listKey = trpc.gitlab.all.queryKey();
 
-	const createMutation = useMutation(
-		trpc.gitlab.create.mutationOptions({
-			onSuccess: async () => {
-				toast.success("GitLab provider added");
-				await invalidate();
-				setOpen(false);
-				setName("");
-				setGitlabUrl("https://gitlab.com");
-				setAccessToken("");
-				setGroupName("");
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const createMutation = useSaveMutation(trpc.gitlab.create.mutationOptions(), {
+		successMessage: "GitLab provider added",
+		invalidate: [listKey],
+		onSuccess: () => {
+			setOpen(false);
+			setName("");
+			setGitlabUrl("https://gitlab.com");
+			setAccessToken("");
+			setGroupName("");
+		},
+	});
 
-	const testMutation = useMutation(
-		trpc.gitlab.testConnection.mutationOptions({
-			onSuccess: () => toast.success("Connection successful"),
-			onError: (error) => toastError(error),
-		}),
-	);
+	const testMutation = useSaveMutation(trpc.gitlab.testConnection.mutationOptions(), {
+		successMessage: "Connection successful",
+	});
 
-	const updateMutation = useMutation(
-		trpc.gitlab.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("GitLab provider updated");
-				await invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const updateMutation = useSaveMutation(trpc.gitlab.update.mutationOptions(), {
+		successMessage: "GitLab provider updated",
+		invalidate: [listKey],
+	});
 
-	const removeMutation = useMutation(
-		trpc.gitlab.remove.mutationOptions({
-			onSuccess: async () => {
-				toast.success("GitLab provider removed");
-				await invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const removeMutation = useSaveMutation(trpc.gitlab.remove.mutationOptions(), {
+		successMessage: "GitLab provider removed",
+		invalidate: [listKey],
+	});
 
 	return (
 		<SettingsSection

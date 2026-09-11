@@ -3,6 +3,7 @@
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useSyncedTab } from "@/hooks/use-synced-tab";
 
+import { useApplication } from "./application-context";
 import { HealthcheckManager } from "./healthcheck-manager";
 import { MountsManager } from "./mounts-manager";
 import { PlacementManager } from "./placement-manager";
@@ -11,7 +12,6 @@ import { RedirectsManager } from "./redirects-manager";
 import { RollbacksManager } from "./rollbacks-manager";
 import { SecurityManager } from "./security-manager";
 import { SwarmConfig } from "./swarm-config";
-import type { Application } from "./types";
 import { UnderlineTabsList, UnderlineTabsTrigger } from "./underline-tabs";
 
 const ADVANCED_TABS = [
@@ -25,7 +25,8 @@ const ADVANCED_TABS = [
 	"rollbacks",
 ];
 
-export function AdvancedTab({ application }: { application: Application }) {
+export function AdvancedTab() {
+	const application = useApplication();
 	const applicationId = application.applicationId;
 	// Third level of the page's tabs: kept in its own `?advanced=` param so
 	// `?tab=advanced&advanced=swarm` deep-links without touching `?tab=`.

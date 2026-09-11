@@ -1,19 +1,18 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { format } from "date-fns";
 import { Loader2, Pencil, Plug, Server, Wrench } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { CreateServerDialog } from "@/components/settings/servers/create-server-dialog";
 import { ServerCapacityCell } from "@/components/settings/servers/server-capacity-cell";
 import { ServerHistoryDialog } from "@/components/settings/servers/server-history-dialog";
 import { ServerStatsPopover } from "@/components/settings/servers/server-stats-popover";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { PageHeader, StatusDot } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,8 +45,8 @@ import {
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { missingCapabilityHint } from "@/lib/capabilities";
-import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -59,7 +58,6 @@ const isMetricsEnabled = (server: ServerRow): boolean =>
 
 export function ServersView() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const canManage = can("servers.manage");
 	const manageHint = canManage ? undefined : missingCapabilityHint("servers.manage");
@@ -80,34 +78,21 @@ export function ServersView() {
 		retry: false,
 	});
 
-	const invalidate = () => queryClient.invalidateQueries({ queryKey: trpc.server.all.queryKey() });
+	const listKey = trpc.server.all.queryKey();
 
-	const testMutation = useMutation(
-		trpc.server.testConnection.mutationOptions({
-			onSuccess: () => toast.success("Connection successful"),
-			onError: (error) => toastError(error),
-		}),
-	);
+	const testMutation = useSaveMutation(trpc.server.testConnection.mutationOptions(), {
+		successMessage: "Connection successful",
+	});
 
-	const setupMutation = useMutation(
-		trpc.server.setup.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Server setup complete");
-				await invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const setupMutation = useSaveMutation(trpc.server.setup.mutationOptions(), {
+		successMessage: "Server setup complete",
+		invalidate: [listKey],
+	});
 
-	const removeMutation = useMutation(
-		trpc.server.remove.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Server removed");
-				await invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const removeMutation = useSaveMutation(trpc.server.remove.mutationOptions(), {
+		successMessage: "Server removed",
+		invalidate: [listKey],
+	});
 
 	const [editing, setEditing] = useState<ServerRow | null>(null);
 	const [editName, setEditName] = useState("");
@@ -135,16 +120,11 @@ export function ServersView() {
 		}
 	}, [editing]);
 
-	const updateMutation = useMutation(
-		trpc.server.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Server updated");
-				await invalidate();
-				setEditing(null);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const updateMutation = useSaveMutation(trpc.server.update.mutationOptions(), {
+		successMessage: "Server updated",
+		invalidate: [listKey],
+		onSuccess: () => setEditing(null),
+	});
 
 	return (
 		<div className="flex flex-col gap-8">

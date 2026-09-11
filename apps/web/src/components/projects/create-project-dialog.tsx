@@ -1,8 +1,7 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,51 +16,62 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
-export function CreateProjectDialog({ children }: { children: React.ReactNode }) {
-	const trpc = useTRPC();
-	const queryClient = useQueryClient();
+/**
+ * `?new=project` (from the command palette) opens the dialog once and strips
+ * the param so a refresh does not reopen it. `useSearchParams` bails the whole
+ * route out of static rendering unless it sits under its own Suspense
+ * boundary, so it lives in this leaf rather than in the dialog (code-health
+ * F13 — the other nine call sites were already wrapped).
+ */
+function NewProjectDeepLink({ onOpen }: { onOpen: () => void }) {
 	const router = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
+
+	useEffect(() => {
+		if (searchParams.get("new") !== "project") return;
+		onOpen();
+		const params = new URLSearchParams(searchParams.toString());
+		params.delete("new");
+		const query = params.toString();
+		router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+	}, [searchParams, router, pathname, onOpen]);
+
+	return null;
+}
+
+export function CreateProjectDialog({ children }: { children: React.ReactNode }) {
+	const trpc = useTRPC();
 	const [open, setOpen] = useState(false);
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
 
-	// Deep link from the command palette (?new=project) opens the dialog once.
-	useEffect(() => {
-		if (searchParams.get("new") !== "project") {
-			return;
-		}
-		setOpen(true);
-		// Strip the param so a refresh doesn't reopen the dialog.
-		const params = new URLSearchParams(searchParams.toString());
-		params.delete("new");
-		const query = params.toString();
-		router.replace(query ? `${pathname}?${query}` : pathname, {
-			scroll: false,
-		});
-	}, [searchParams, router, pathname]);
-
-	const createProject = useMutation(
+	const createProject = useSaveMutation(
 		trpc.project.create.mutationOptions({
-			onSuccess: async (project) => {
-				toast.success(`Project "${project.name}" created`);
-				await queryClient.invalidateQueries({
-					queryKey: trpc.project.all.queryKey(),
-				});
+			onSuccess: () => {
 				setOpen(false);
 				setName("");
 				setDescription("");
 			},
-			onError: (error) => toastError(error),
 		}),
+		{
+			// Success text names the project, so it is toasted here rather than
+			// through `successMessage`.
+			invalidate: [trpc.project.all.queryKey()],
+			onSuccess: (project) => {
+				toast.success(`Project "${project.name}" created`);
+			},
+		},
 	);
 
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
+			<Suspense fallback={null}>
+				<NewProjectDeepLink onOpen={() => setOpen(true)} />
+			</Suspense>
 			<DialogTrigger asChild>{children}</DialogTrigger>
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>

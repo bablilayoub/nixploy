@@ -1,29 +1,19 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import type { ComposeService } from "@/components/compose/compose-detail";
 import { EnvEditor } from "@/components/services/env-editor";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 export function EnvironmentTab({ compose }: { compose: ComposeService }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 
-	const saveMutation = useMutation(
-		trpc.compose.saveEnvironment.mutationOptions({
-			onSuccess: async () => {
-				toast.success("Environment saved");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.compose.one.queryKey({ composeId: compose.composeId }),
-				});
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const saveMutation = useSaveMutation(trpc.compose.saveEnvironment.mutationOptions(), {
+		successMessage: "Environment saved",
+		invalidate: [trpc.compose.one.queryKey({ composeId: compose.composeId })],
+	});
 
 	return (
 		<EnvEditor

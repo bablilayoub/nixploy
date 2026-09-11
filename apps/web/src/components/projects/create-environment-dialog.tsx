@@ -1,6 +1,5 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -16,7 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 export function CreateEnvironmentDialog({
@@ -29,30 +28,24 @@ export function CreateEnvironmentDialog({
 	onCreated?: (name: string) => void;
 }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
 
-	const createEnvironment = useMutation(
+	const createEnvironment = useSaveMutation(
 		trpc.environment.create.mutationOptions({
-			onSuccess: async (environment) => {
-				toast.success(`Environment "${environment.name}" created`);
-				await Promise.all([
-					queryClient.invalidateQueries({
-						queryKey: trpc.environment.byProject.queryKey({ projectId }),
-					}),
-					queryClient.invalidateQueries({
-						queryKey: trpc.project.all.queryKey(),
-					}),
-				]);
+			// Dynamic text, so it stays here instead of `successMessage`.
+			onSuccess: (environment) => toast.success(`Environment "${environment.name}" created`),
+		}),
+		{
+			invalidate: [trpc.environment.byProject.queryKey({ projectId }), trpc.project.all.queryKey()],
+			onSuccess: (environment) => {
 				setOpen(false);
 				setName("");
 				setDescription("");
 				onCreated?.(environment.name);
 			},
-			onError: (error) => toastError(error),
-		}),
+		},
 	);
 
 	return (

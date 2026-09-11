@@ -1,6 +1,5 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
 	Copy,
 	CopyPlus,
@@ -45,7 +44,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 import { GitopsCard, type GitopsCardHandle } from "./gitops-card";
 import { describeServiceCounts, type ServiceCounts } from "./service-summary";
@@ -78,7 +77,6 @@ export function EnvironmentActions({
 	onDeleted: () => void;
 }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const router = useRouter();
 	const { can } = useCapabilities();
 	const canWrite = can("project.write");
@@ -124,76 +122,78 @@ export function EnvironmentActions({
 		}
 	}, [cloneOpen, environment.name]);
 
-	const invalidate = () =>
-		Promise.all([
-			queryClient.invalidateQueries({
-				queryKey: trpc.environment.byProject.queryKey({ projectId }),
-			}),
-			queryClient.invalidateQueries({
-				queryKey: trpc.project.one.queryKey({ projectId }),
-			}),
-			queryClient.invalidateQueries({
-				queryKey: trpc.project.all.queryKey(),
-			}),
-		]);
+	// Every write here changes the environment list and both project views.
+	const environmentKeys = [
+		trpc.environment.byProject.queryKey({ projectId }),
+		trpc.project.one.queryKey({ projectId }),
+		trpc.project.all.queryKey(),
+	];
 
-	const rename = useMutation(
-		trpc.environment.update.mutationOptions({
-			onSuccess: async (updated) => {
-				toast.success("Environment updated");
-				await invalidate();
-				setRenameOpen(false);
-				onRenamed(updated?.name ?? name.trim());
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
-	const duplicate = useMutation(
+	const rename = useSaveMutation(trpc.environment.update.mutationOptions(), {
+		successMessage: "Environment updated",
+		invalidate: environmentKeys,
+		onSuccess: (updated) => {
+			setRenameOpen(false);
+			onRenamed(updated?.name ?? name.trim());
+		},
+	});
+	const duplicate = useSaveMutation(
 		trpc.environment.duplicate.mutationOptions({
-			onSuccess: async (created) => {
-				toast.success(`Environment "${created?.name ?? duplicateName.trim()}" created`);
-				await invalidate();
+			// Dynamic text, so it stays here instead of `successMessage`.
+			onSuccess: (created) =>
+				toast.success(`Environment "${created?.name ?? duplicateName.trim()}" created`),
+		}),
+		{
+			invalidate: environmentKeys,
+			onSuccess: (created) => {
 				setDuplicateOpen(false);
 				if (created?.name) {
 					onDuplicated(created.name);
 				}
 			},
-			onError: (error) => toastError(error),
-		}),
+		},
 	);
-	const remove = useMutation(
+	const remove = useSaveMutation(
 		trpc.environment.delete.mutationOptions({
-			onSuccess: async () => {
-				toast.success(`Environment "${environment.name}" deleted`);
-				await invalidate();
+			// Dynamic text, so it stays here instead of `successMessage`.
+			onSuccess: () => toast.success(`Environment "${environment.name}" deleted`),
+		}),
+		{
+			invalidate: environmentKeys,
+			onSuccess: () => {
 				setDeleteOpen(false);
 				onDeleted();
 			},
-			onError: (error) => toastError(error),
-		}),
+		},
 	);
-	const clone = useMutation(
+	const clone = useSaveMutation(
 		trpc.environment.clone.mutationOptions({
-			onSuccess: async (created) => {
-				const name = created?.name ?? cloneName.trim();
+			// Dynamic text plus a "View" action, so it stays here.
+			onSuccess: (created) => {
+				const clonedName = created?.name ?? cloneName.trim();
 				toast.success(
-					`Environment "${name}" cloned with ${created?.servicesCloned ?? 0} services`,
+					`Environment "${clonedName}" cloned with ${created?.servicesCloned ?? 0} services`,
 					{
 						action: {
 							label: "View",
 							onClick: () =>
-								router.push(`/dashboard/projects/${projectId}?env=${encodeURIComponent(name)}`),
+								router.push(
+									`/dashboard/projects/${projectId}?env=${encodeURIComponent(clonedName)}`,
+								),
 						},
 					},
 				);
-				await invalidate();
+			},
+		}),
+		{
+			invalidate: environmentKeys,
+			onSuccess: (created) => {
 				setCloneOpen(false);
 				if (created?.name) {
 					onDuplicated(created.name);
 				}
 			},
-			onError: (error) => toastError(error),
-		}),
+		},
 	);
 
 	return (

@@ -3,7 +3,7 @@
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 
-import { SettingsSection } from "@/components/settings/settings-section";
+import { SettingsSection } from "@/components/layout/settings-section";
 import {
 	AlertDialog,
 	AlertDialogAction,

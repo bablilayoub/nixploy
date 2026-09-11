@@ -1,12 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { Layers, Loader2, Play, RefreshCw, Rocket, Square } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 import { UnderlineTabsList, UnderlineTabsTrigger } from "@/components/application/underline-tabs";
-import { VolumeBackupsTab } from "@/components/backups/volume-backups-tab";
+import { BackupsPanel } from "@/components/backups/backups-panel";
 import { ComposeFileTab } from "@/components/compose/compose-file-tab";
 import { DeploymentsTab } from "@/components/compose/deployments-tab";
 import { DomainsTab } from "@/components/compose/domains-tab";
@@ -16,9 +15,10 @@ import { LogsTab } from "@/components/compose/logs-tab";
 import { MonitoringTab } from "@/components/compose/monitoring-tab";
 import { SettingsTab } from "@/components/compose/settings-tab";
 import { TerminalTab } from "@/components/compose/terminal-tab";
-import { SchedulesTab } from "@/components/schedules/schedules-tab";
+import { SchedulesPanel } from "@/components/schedules/schedules-panel";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { CopilotChatDrawer } from "@/components/services/copilot-chat-drawer";
+import { SaveBarTabsContent } from "@/components/services/save-bar";
 import { type ServiceActions, ServicePageHeader } from "@/components/services/service-page-header";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
 import {
@@ -40,8 +40,8 @@ import {
 	useFollowDeployment,
 	useRunningDeployments,
 } from "@/hooks/use-running-deployments";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { SERVICE_TAB_ALIASES, useSyncedTab } from "@/hooks/use-synced-tab";
-import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -78,7 +78,6 @@ const SUB_TAB_DEFAULT: Record<string, string> = {
 
 export function ComposeDetail({ projectId, composeId }: { projectId: string; composeId: string }) {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const [tab, selectTab] = useSyncedTab(
 		"general",
 		(value) => TOP_TABS.includes(value) || value in SUB_TAB_PARENT,
@@ -106,55 +105,36 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 	});
 	const lastDeployment = recentDeployments.data?.deployments[0] ?? null;
 
-	const invalidate = () => {
-		queryClient.invalidateQueries({
-			queryKey: trpc.compose.one.queryKey({ composeId }),
-		});
-		queryClient.invalidateQueries({ queryKey: trpc.compose.all.pathKey() });
-		queryClient.invalidateQueries({ queryKey: trpc.deployment.byCompose.pathKey() });
+	const invalidate = [
+		trpc.compose.one.queryKey({ composeId }),
+		trpc.compose.all.pathKey(),
+		trpc.deployment.byCompose.pathKey(),
 		// Wakes the shared running-deployments query (hairline, header, services table).
-		queryClient.invalidateQueries({ queryKey: trpc.deployment.recent.pathKey() });
-	};
+		trpc.deployment.recent.pathKey(),
+	];
+	const errorMessage = "Action failed";
 
-	const onActionError = (error: unknown) => toastError(error, "Action failed");
+	// `followDeployment` stays inside `mutationOptions` so the log drawer opens
+	// as soon as the job is queued, without waiting for the invalidations.
+	const follow = (result: { deploymentId: string }) => followDeployment(result.deploymentId);
 
-	const queued = (message: string) => (result: { deploymentId: string }) => {
-		toast.success(message);
-		invalidate();
-		followDeployment(result.deploymentId);
-	};
-
-	const deployMutation = useMutation(
-		trpc.compose.deploy.mutationOptions({
-			onSuccess: queued("Deployment queued"),
-			onError: onActionError,
-		}),
+	const deployMutation = useSaveMutation(
+		trpc.compose.deploy.mutationOptions({ onSuccess: follow }),
+		{ successMessage: "Deployment queued", invalidate, errorMessage },
 	);
-	const redeployMutation = useMutation(
-		trpc.compose.redeploy.mutationOptions({
-			onSuccess: queued("Redeployment queued"),
-			onError: onActionError,
-		}),
+	const redeployMutation = useSaveMutation(
+		trpc.compose.redeploy.mutationOptions({ onSuccess: follow }),
+		{ successMessage: "Redeployment queued", invalidate, errorMessage },
 	);
-	const stopMutation = useMutation(
-		trpc.compose.stop.mutationOptions({
-			onSuccess: () => {
-				toast.success("Compose service stopped");
-				setConfirmStop(false);
-				invalidate();
-			},
-			onError: onActionError,
-		}),
+	const stopMutation = useSaveMutation(
+		trpc.compose.stop.mutationOptions({ onSuccess: () => setConfirmStop(false) }),
+		{ successMessage: "Compose service stopped", invalidate, errorMessage },
 	);
-	const startMutation = useMutation(
-		trpc.compose.start.mutationOptions({
-			onSuccess: () => {
-				toast.success("Compose service started");
-				invalidate();
-			},
-			onError: onActionError,
-		}),
-	);
+	const startMutation = useSaveMutation(trpc.compose.start.mutationOptions(), {
+		successMessage: "Compose service started",
+		invalidate,
+		errorMessage,
+	});
 
 	if (isLoading) {
 		return (
@@ -289,13 +269,13 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 					<UnderlineTabsTrigger value="backups">Backups</UnderlineTabsTrigger>
 					<UnderlineTabsTrigger value="settings">Settings</UnderlineTabsTrigger>
 				</UnderlineTabsList>
-				<TabsContent value="general" className="mt-6">
+				<SaveBarTabsContent value="general" className="mt-6">
 					<GeneralTab compose={compose} onOpenComposeFile={() => selectTab("compose-file")} />
-				</TabsContent>
-				<TabsContent value="compose-file" className="mt-6">
+				</SaveBarTabsContent>
+				<SaveBarTabsContent value="compose-file" className="mt-6">
 					<ComposeFileTab compose={compose} />
-				</TabsContent>
-				<TabsContent value="deploy" className="mt-6">
+				</SaveBarTabsContent>
+				<SaveBarTabsContent value="deploy" className="mt-6">
 					<Tabs value={subTab("deploy")} onValueChange={selectTab} className="w-full gap-4">
 						<SubTabsList>
 							<SubTabsTrigger value="deployments">Deployments</SubTabsTrigger>
@@ -305,11 +285,13 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 							<DeploymentsTab compose={compose} />
 						</TabsContent>
 						<TabsContent value="schedules" className="mt-0">
-							<SchedulesTab serviceType="compose" serviceId={compose.composeId} />
+							<SchedulesPanel
+								source={{ kind: "service", serviceType: "compose", serviceId: compose.composeId }}
+							/>
 						</TabsContent>
 					</Tabs>
-				</TabsContent>
-				<TabsContent value="runtime" className="mt-6">
+				</SaveBarTabsContent>
+				<SaveBarTabsContent value="runtime" className="mt-6">
 					<Tabs value={subTab("runtime")} onValueChange={selectTab} className="w-full gap-4">
 						<SubTabsList>
 							<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
@@ -326,19 +308,21 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 							<TerminalTab compose={compose} />
 						</TabsContent>
 					</Tabs>
-				</TabsContent>
-				<TabsContent value="domains" className="mt-6">
+				</SaveBarTabsContent>
+				<SaveBarTabsContent value="domains" className="mt-6">
 					<DomainsTab compose={compose} />
-				</TabsContent>
-				<TabsContent value="environment" className="mt-6">
+				</SaveBarTabsContent>
+				<SaveBarTabsContent value="environment" className="mt-6">
 					<EnvironmentTab compose={compose} />
-				</TabsContent>
-				<TabsContent value="backups" className="mt-6">
-					<VolumeBackupsTab serviceType="compose" serviceId={compose.composeId} />
-				</TabsContent>
-				<TabsContent value="settings" className="mt-6">
+				</SaveBarTabsContent>
+				<SaveBarTabsContent value="backups" className="mt-6">
+					<BackupsPanel
+						target={{ kind: "volume", serviceType: "compose", serviceId: compose.composeId }}
+					/>
+				</SaveBarTabsContent>
+				<SaveBarTabsContent value="settings" className="mt-6">
 					<SettingsTab projectId={projectId} compose={compose} />
-				</TabsContent>
+				</SaveBarTabsContent>
 			</Tabs>
 
 			<AlertDialog open={confirmStop} onOpenChange={setConfirmStop}>

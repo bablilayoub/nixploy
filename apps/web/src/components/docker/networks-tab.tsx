@@ -1,9 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Lock, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -26,7 +25,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
-import { toastError } from "@/lib/describe-error";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps } from "./docker-view";
@@ -51,15 +50,12 @@ export function NetworksTab({ serverId }: DockerTabProps) {
 			queryKey: trpc.docker.networks.queryKey({ serverId }),
 		});
 
-	const removeMutation = useMutation(
-		trpc.docker.networkRemove.mutationOptions({
-			onSuccess: () => {
-				toast.success("Network removed");
-				setRemoving(null);
-				invalidate();
-			},
-			onError: (error) => toastError(error),
-		}),
+	const removeMutation = useSaveMutation(
+		trpc.docker.networkRemove.mutationOptions({ onSuccess: () => setRemoving(null) }),
+		{
+			successMessage: "Network removed",
+			invalidate: [trpc.docker.networks.queryKey({ serverId })],
+		},
 	);
 
 	if (networksQuery.isLoading) return <Skeleton className="h-64 w-full" />;

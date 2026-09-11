@@ -14,8 +14,8 @@ import { Check, Copy, ExternalLink, Loader2, Plus } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {

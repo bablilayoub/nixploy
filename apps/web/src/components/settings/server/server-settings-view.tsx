@@ -1,7 +1,7 @@
 "use client";
 
 import { yaml } from "@codemirror/lang-yaml";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 	CheckCircle2,
 	ChevronDown,
@@ -16,12 +16,13 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
+import { useSaveBar } from "@/components/services/save-bar";
 import { AcmeDnsCard } from "@/components/settings/server/acme-dns-card";
 import { AiSettingsCard } from "@/components/settings/server/ai-settings-card";
 import { HostMonitoringBody } from "@/components/settings/server/host-monitoring-card";
 import { UpdatesCard } from "@/components/settings/server/updates-card";
 import { UsersCard } from "@/components/settings/server/users-card";
-import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { PageHeader } from "@/components/shell";
 import {
 	AlertDialog,
@@ -41,6 +42,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { useDraft } from "@/hooks/use-draft";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
@@ -124,14 +127,18 @@ function DashboardDomainFields({
 }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
-	const [domain, setDomain] = useState("");
+	const domainDraft = useDraft(savedDomain ?? "");
+	const domain = domainDraft.value;
 	const [dnsResult, setDnsResult] = useState<DnsCheckResult | null>(null);
 	const [checking, setChecking] = useState(false);
 
+	// A newly saved domain re-seeds the field (clearing `dirty`, which the
+	// render-time re-seed cannot do) and drops the now-stale DNS check.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: savedDomain is the trigger, not a value read inside
 	useEffect(() => {
-		setDomain(savedDomain ?? "");
+		domainDraft.reset();
 		setDnsResult(null);
-	}, [savedDomain]);
+	}, [savedDomain, domainDraft.reset]);
 
 	const checkDns = async () => {
 		const value = domain.trim();
@@ -176,7 +183,7 @@ function DashboardDomainFields({
 						placeholder="panel.nixploy.com"
 						value={domain}
 						onChange={(event) => {
-							setDomain(event.target.value);
+							domainDraft.set(event.target.value);
 							setDnsResult(null);
 						}}
 					/>
@@ -262,72 +269,64 @@ function DashboardDomainFields({
 
 export function ServerSettingsView() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 
 	const settingsQuery = useQuery(trpc.webServer.getSettings.queryOptions());
 	const traefikQuery = useQuery(trpc.webServer.getTraefikConfig.queryOptions());
 
-	const [letsEncryptEmail, setLetsEncryptEmail] = useState("");
-	const [traefikDashboardEnabled, setTraefikDashboardEnabled] = useState(false);
-	const [cleanupCronEnabled, setCleanupCronEnabled] = useState(false);
-	const [cleanupCronExpression, setCleanupCronExpression] = useState("");
-	const [cpuAlertPercent, setCpuAlertPercent] = useState("");
-	const [memoryAlertPercent, setMemoryAlertPercent] = useState("");
+	// One draft per card, so each save button (and the save bar) only ever
+	// reports the fields it actually writes.
+	const settings = settingsQuery.data;
+	const accessDraft = useDraft(settings?.letsEncryptEmail ?? "");
+	const letsEncryptEmail = accessDraft.value;
+	const proxyDraft = useDraft(settings?.traefikDashboardEnabled ?? false);
+	const traefikDashboardEnabled = proxyDraft.value;
+	const healthDraft = useDraft({
+		cpuAlertPercent: settings?.cpuAlertPercent ? String(settings.cpuAlertPercent) : "",
+		memoryAlertPercent: settings?.memoryAlertPercent ? String(settings.memoryAlertPercent) : "",
+	});
+	const { cpuAlertPercent, memoryAlertPercent } = healthDraft.value;
+	const maintenanceDraft = useDraft({
+		cleanupCronEnabled: settings?.cleanupCronEnabled ?? false,
+		cleanupCronExpression: settings?.cleanupCronExpression ?? "",
+	});
+	const { cleanupCronEnabled, cleanupCronExpression } = maintenanceDraft.value;
 
-	useEffect(() => {
-		const settings = settingsQuery.data;
-		if (settings === undefined) return;
-		setLetsEncryptEmail(settings?.letsEncryptEmail ?? "");
-		setTraefikDashboardEnabled(settings?.traefikDashboardEnabled ?? false);
-		setCleanupCronEnabled(settings?.cleanupCronEnabled ?? false);
-		setCleanupCronExpression(settings?.cleanupCronExpression ?? "");
-		setCpuAlertPercent(settings?.cpuAlertPercent ? String(settings.cpuAlertPercent) : "");
-		setMemoryAlertPercent(settings?.memoryAlertPercent ? String(settings.memoryAlertPercent) : "");
-	}, [settingsQuery.data]);
-
-	const invalidate = async () => {
-		await queryClient.invalidateQueries({ queryKey: trpc.webServer.getSettings.queryKey() });
-		await queryClient.invalidateQueries({ queryKey: trpc.webServer.getTraefikConfig.queryKey() });
-	};
-
-	const updateMutation = useMutation(
+	const updateMutation = useSaveMutation(
 		trpc.webServer.updateSettings.mutationOptions({
-			onSuccess: async (result) => {
+			// The toast text depends on the result, so it stays next to the call.
+			onSuccess: (result) => {
 				toast.success(
 					result.traefikConfigRewritten
 						? "Settings saved — routing updated (no restart needed)"
 						: "Settings saved",
 				);
-				await invalidate();
 			},
-			onError: (error) => toastError(error),
 		}),
+		{
+			invalidate: [
+				trpc.webServer.getSettings.queryKey(),
+				trpc.webServer.getTraefikConfig.queryKey(),
+			],
+		},
 	);
 
-	const restartMutation = useMutation(
-		trpc.webServer.restartTraefik.mutationOptions({
-			onSuccess: () => toast.success("Traefik restart triggered"),
-			onError: (error) => toastError(error),
-		}),
-	);
+	const restartMutation = useSaveMutation(trpc.webServer.restartTraefik.mutationOptions(), {
+		successMessage: "Traefik restart triggered",
+	});
 
-	const cleanupMutation = useMutation(
-		trpc.webServer.dockerCleanupNow.mutationOptions({
-			onSuccess: () => toast.success("Docker cleanup complete"),
-			onError: (error) => toastError(error),
-		}),
-	);
+	const cleanupMutation = useSaveMutation(trpc.webServer.dockerCleanupNow.mutationOptions(), {
+		successMessage: "Docker cleanup complete",
+	});
 
 	const saveAccess = () => {
-		updateMutation.mutate({
-			letsEncryptEmail: letsEncryptEmail.trim() || null,
-		});
+		updateMutation.mutate(
+			{ letsEncryptEmail: letsEncryptEmail.trim() || null },
+			{ onSuccess: () => accessDraft.markSaved() },
+		);
 	};
 
 	const saveProxy = () => {
-		updateMutation.mutate({
-			traefikDashboardEnabled,
-		});
+		updateMutation.mutate({ traefikDashboardEnabled }, { onSuccess: () => proxyDraft.markSaved() });
 	};
 
 	const saveHealth = () => {
@@ -346,18 +345,32 @@ export function ServerSettingsView() {
 			toast.error("Alert thresholds must be between 1 and 100 percent");
 			return;
 		}
-		updateMutation.mutate({
-			cpuAlertPercent: cpuAlert,
-			memoryAlertPercent: memoryAlert,
-		});
+		updateMutation.mutate(
+			{ cpuAlertPercent: cpuAlert, memoryAlertPercent: memoryAlert },
+			{ onSuccess: () => healthDraft.markSaved() },
+		);
 	};
 
 	const saveMaintenance = () => {
-		updateMutation.mutate({
-			cleanupCronEnabled,
-			cleanupCronExpression: cleanupCronExpression.trim() || null,
-		});
+		updateMutation.mutate(
+			{
+				cleanupCronEnabled,
+				cleanupCronExpression: cleanupCronExpression.trim() || null,
+			},
+			{ onSuccess: () => maintenanceDraft.markSaved() },
+		);
 	};
+
+	const savePending = updateMutation.isPending;
+	const saveDisabled = settingsQuery.isPending;
+	useSaveBar(accessDraft, { onSave: saveAccess, pending: savePending, disabled: saveDisabled });
+	useSaveBar(proxyDraft, { onSave: saveProxy, pending: savePending, disabled: saveDisabled });
+	useSaveBar(healthDraft, { onSave: saveHealth, pending: savePending, disabled: saveDisabled });
+	useSaveBar(maintenanceDraft, {
+		onSave: saveMaintenance,
+		pending: savePending,
+		disabled: saveDisabled,
+	});
 
 	if (settingsQuery.error || traefikQuery.error) {
 		const forbidden = isForbidden(settingsQuery.error) || isForbidden(traefikQuery.error);
@@ -433,7 +446,7 @@ export function ServerSettingsView() {
 									type="email"
 									placeholder="admin@example.com"
 									value={letsEncryptEmail}
-									onChange={(event) => setLetsEncryptEmail(event.target.value)}
+									onChange={(event) => accessDraft.set(event.target.value)}
 								/>
 							</div>
 						</>
@@ -490,7 +503,7 @@ export function ServerSettingsView() {
 							<Switch
 								id="traefik-dashboard"
 								checked={traefikDashboardEnabled}
-								onCheckedChange={setTraefikDashboardEnabled}
+								onCheckedChange={proxyDraft.set}
 							/>
 						</div>
 					)}
@@ -571,7 +584,7 @@ export function ServerSettingsView() {
 									inputMode="numeric"
 									placeholder="Empty = off"
 									value={cpuAlertPercent}
-									onChange={(event) => setCpuAlertPercent(event.target.value)}
+									onChange={(event) => healthDraft.patch({ cpuAlertPercent: event.target.value })}
 								/>
 							</div>
 							<div className="grid gap-2">
@@ -584,7 +597,9 @@ export function ServerSettingsView() {
 									inputMode="numeric"
 									placeholder="Empty = off"
 									value={memoryAlertPercent}
-									onChange={(event) => setMemoryAlertPercent(event.target.value)}
+									onChange={(event) =>
+										healthDraft.patch({ memoryAlertPercent: event.target.value })
+									}
 								/>
 							</div>
 						</div>
@@ -641,7 +656,9 @@ export function ServerSettingsView() {
 								<Switch
 									id="cleanup-cron"
 									checked={cleanupCronEnabled}
-									onCheckedChange={setCleanupCronEnabled}
+									onCheckedChange={(checked) =>
+										maintenanceDraft.patch({ cleanupCronEnabled: checked })
+									}
 								/>
 							</div>
 							{cleanupCronEnabled && (
@@ -651,7 +668,9 @@ export function ServerSettingsView() {
 										id="cleanup-cron-expression"
 										placeholder="0 3 * * *"
 										value={cleanupCronExpression}
-										onChange={(event) => setCleanupCronExpression(event.target.value)}
+										onChange={(event) =>
+											maintenanceDraft.patch({ cleanupCronExpression: event.target.value })
+										}
 										className="font-mono"
 									/>
 								</div>

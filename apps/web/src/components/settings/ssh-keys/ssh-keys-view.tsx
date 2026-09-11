@@ -1,14 +1,14 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { format } from "date-fns";
 import { Check, Copy, KeyRound, Loader2, Pencil, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
-import { SettingsSection } from "@/components/settings/settings-section";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,8 +33,8 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { missingCapabilityHint } from "@/lib/capabilities";
-import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -66,7 +66,6 @@ function CopyButton({ value }: { value: string }) {
 
 export function SshKeysView() {
 	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
 	const { can } = useCapabilities();
 	const canManage = can("ssh_keys.manage");
@@ -92,36 +91,20 @@ export function SshKeysView() {
 		}
 	}, [open]);
 
-	const generateMutation = useMutation(
-		trpc.sshKey.generate.mutationOptions({
-			onError: (error) => toastError(error),
-		}),
-	);
+	const listKey = trpc.sshKey.all.queryKey();
 
-	const createMutation = useMutation(
-		trpc.sshKey.create.mutationOptions({
-			onSuccess: async () => {
-				toast.success("SSH key saved");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.sshKey.all.queryKey(),
-				});
-				setOpen(false);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const generateMutation = useSaveMutation(trpc.sshKey.generate.mutationOptions());
 
-	const removeMutation = useMutation(
-		trpc.sshKey.remove.mutationOptions({
-			onSuccess: async () => {
-				toast.success("SSH key removed");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.sshKey.all.queryKey(),
-				});
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const createMutation = useSaveMutation(trpc.sshKey.create.mutationOptions(), {
+		successMessage: "SSH key saved",
+		invalidate: [listKey],
+		onSuccess: () => setOpen(false),
+	});
+
+	const removeMutation = useSaveMutation(trpc.sshKey.remove.mutationOptions(), {
+		successMessage: "SSH key removed",
+		invalidate: [listKey],
+	});
 
 	const [editing, setEditing] = useState<SshKeyRow | null>(null);
 	const [editName, setEditName] = useState("");
@@ -134,18 +117,11 @@ export function SshKeysView() {
 		}
 	}, [editing]);
 
-	const updateMutation = useMutation(
-		trpc.sshKey.update.mutationOptions({
-			onSuccess: async () => {
-				toast.success("SSH key updated");
-				await queryClient.invalidateQueries({
-					queryKey: trpc.sshKey.all.queryKey(),
-				});
-				setEditing(null);
-			},
-			onError: (error) => toastError(error),
-		}),
-	);
+	const updateMutation = useSaveMutation(trpc.sshKey.update.mutationOptions(), {
+		successMessage: "SSH key updated",
+		invalidate: [listKey],
+		onSuccess: () => setEditing(null),
+	});
 
 	return (
 		<div className="flex flex-col gap-8">

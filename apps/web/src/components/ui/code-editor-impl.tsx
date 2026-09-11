@@ -7,6 +7,7 @@ import { useTheme } from "next-themes";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useMounted } from "@/hooks/use-mounted";
 import { nixployCodeMirrorDark, nixployCodeMirrorLight } from "@/lib/codemirror-theme";
 import { cn } from "@/lib/utils";
 
@@ -45,9 +46,8 @@ export function CodeEditor({
 	...props
 }: CodeEditorProps) {
 	const { resolvedTheme } = useTheme();
-	const [mounted, setMounted] = useState(false);
+	const mounted = useMounted();
 	const [unlockedInternal, setUnlockedInternal] = useState(!protect);
-	useEffect(() => setMounted(true), []);
 
 	const isControlled = lockedProp !== undefined;
 	const locked = isControlled ? lockedProp : !unlockedInternal;

@@ -4,7 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Bell, KeyRound, LogOut, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -17,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/user-avatar";
+import { useMounted } from "@/hooks/use-mounted";
 import { signOut, useSession } from "@/lib/auth-client";
 import { toastError } from "@/lib/describe-error";
 
@@ -35,8 +35,7 @@ export function ProfileDropdown() {
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const { data: session, isPending } = useSession();
-	const [mounted, setMounted] = useState(false);
-	useEffect(() => setMounted(true), []);
+	const mounted = useMounted();
 
 	const user = session?.user;
 
