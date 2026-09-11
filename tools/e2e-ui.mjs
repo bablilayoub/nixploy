@@ -145,33 +145,40 @@ async function main() {
 			.isVisible()
 			.catch(() => false);
 
+		// Signed-in landing: the dashboard shell renders this control on every
+		// dashboard route. Sign-in and the wizard navigate client-side, which
+		// never fires a `load` event, so wait for the element, not the URL.
+		const dashboardReady = () =>
+			page.getByRole("button", { name: "New project" }).first().waitFor({ timeout: 60_000 });
+
 		if (onSetup) {
+			// Four steps (`setup-form.tsx`): welcome → owner → org → ready.
+			await page.getByRole("button", { name: /^continue$/i }).click();
 			await page.getByLabel("Name", { exact: true }).fill("E2E Owner");
-			await page.getByLabel(/email/i).fill(EMAIL);
+			await page.getByLabel("Email").fill(EMAIL);
 			await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
 			await page.getByLabel(/confirm password/i).fill(PASSWORD);
 			const token = process.env.NIXPLOY_SETUP_TOKEN;
 			if (token) await page.getByLabel(/setup token/i).fill(token);
-			await page
-				.getByRole("button", { name: /continue|next|create/i })
-				.first()
-				.click();
+			await page.getByRole("button", { name: /^continue$/i }).click();
 			await page.getByLabel(/organization name/i).fill(ORG);
-			await page
-				.getByRole("button", { name: /create|finish|continue/i })
-				.first()
-				.click();
-			await page.waitForURL(/\/dashboard/, { timeout: 60_000 });
+			await page.getByRole("button", { name: /^continue$/i }).click();
+			await page.getByRole("button", { name: /create instance/i }).click();
+			await page.getByRole("button", { name: /open dashboard/i }).click({ timeout: 60_000 });
+			await dashboardReady();
 			ok(`setup wizard completed as ${EMAIL}`);
 		} else {
 			await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded" });
+			// react-hook-form re-seeds the fields on hydration; a fill that lands
+			// before that is silently discarded ("Enter a valid email address").
+			await page.waitForTimeout(1500);
 			await page.getByLabel(/email/i).fill(EMAIL);
 			await page.locator('input[type="password"]').first().fill(PASSWORD);
 			await page
 				.getByRole("button", { name: /sign in|log in/i })
 				.first()
 				.click();
-			await page.waitForURL(/\/dashboard/, { timeout: 60_000 });
+			await dashboardReady();
 			ok(`signed in as ${EMAIL}`);
 		}
 		await shot(page, "01-dashboard");
@@ -185,12 +192,11 @@ async function main() {
 		await projectDialog.getByLabel("Name", { exact: true }).fill(projectName);
 		await projectDialog.getByRole("button", { name: "Create", exact: true }).click();
 		await page.getByText(`Project "${projectName}" created`).waitFor({ timeout: 30_000 });
-		// Reload before opening it. On an instance whose project list was empty,
-		// the dashboard keeps rendering its "Create your first project" empty
-		// state after the create mutation invalidates `project.all` — the row
-		// only appears on the next load (observed 2026-09-11, reported in the
-		// CI handoff). Reloading also proves the project survived the round trip.
-		await page.reload({ waitUntil: "domcontentloaded" });
+		// No reload on purpose: on an instance whose project list was empty the
+		// row used to appear only on the next load (query-core de-duplicated the
+		// invalidation onto the in-flight empty-state request; fixed 2026-09-11
+		// in create-project-dialog.tsx). Opening it straight away is the
+		// regression check for that fix.
 		await page
 			.locator('a[href*="/dashboard/projects/"]')
 			.filter({ hasText: projectName })
