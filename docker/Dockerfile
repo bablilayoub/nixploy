@@ -59,7 +59,7 @@ ENV NIXPLOY_GIT_COMMIT=$NIXPLOY_GIT_COMMIT
 # curl: HEALTHCHECK below. postgresql-client: instance backups prefer local pg_dump.
 # tzdata: without the zoneinfo database Alpine ignores TZ and every cron
 # (backups, schedules, platform alerts) silently runs in UTC.
-RUN apk add --no-cache docker-cli docker-cli-compose git openssh-client curl postgresql-client tzdata
+RUN apk add --no-cache docker-cli docker-cli-compose git openssh-client openssl curl postgresql-client tzdata
 
 # Migration runner with its own small node_modules (does not share the app tree).
 # The manifest and lockfile are vendored in docker/migrate-deps/ so the whole
