@@ -19,6 +19,7 @@ import {
 	hasCapability,
 	resolveCallerOrganizationId,
 } from "../projects";
+import { SERVICE_REGISTRY } from "../services/registry";
 import {
 	assertSafeDatabaseExternalPort,
 	buildConnectionUrl,
@@ -60,14 +61,6 @@ function invalidateDatabaseStatus(appName: string): void {
 
 interface DatabaseRouterOptions<K extends DatabaseKind> {
 	kind: K;
-	/** Drizzle pg table for this database type. */
-	// biome-ignore lint/suspicious/noExplicitAny: drizzle table generics differ per type
-	table: any;
-	/** Primary key column of the table (e.g. `postgres.postgresId`). */
-	// biome-ignore lint/suspicious/noExplicitAny: drizzle column generics differ per type
-	idColumn: any;
-	/** Key used for the id in procedure inputs (e.g. `"postgresId"`). */
-	idField: string;
 	/** Extra credential fields for the create/update inputs (e.g. databaseName). */
 	createFields: z.ZodRawShape;
 }
@@ -116,8 +109,17 @@ async function resolveNewAppName(requested: string | undefined, name: string): P
 export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRouterOptions<K>) {
 	type Row = DatabaseRowMap[K];
 
-	const { kind, table, idColumn, idField } = options;
+	// Table, primary-key column and input key all come from the service
+	// registry, so a new engine cannot be wired up with a typo'd id field.
+	const { kind } = options;
+	const { table, idColumn } = SERVICE_REGISTRY[kind];
+	// Widened to `string`: it is used as a computed key on zod shapes and on
+	// untyped input records, where the `\`${K}Id\`` literal buys nothing.
+	const idField: string = SERVICE_REGISTRY[kind].idField;
 	const config = DATABASE_CONFIGS[kind];
+
+	/** Primary key of a row of this engine (`row.postgresId`, …). */
+	const rowId = (row: Row): string => (row as Record<string, unknown>)[idField] as string;
 
 	const createSchema = z.object({
 		name: z.string().min(1),
@@ -246,7 +248,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 				await auditFromSession(ctx, organizationId, {
 					action: `${kind}.create`,
 					targetType: kind,
-					targetId: (createdRow as unknown as Record<string, unknown>)[idField] as string,
+					targetId: rowId(createdRow),
 					targetName: createdRow.name,
 				});
 				const canSeeSecrets = await hasCapability(
@@ -346,7 +348,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 				await auditFromSession(ctx, organizationId, {
 					action: `${kind}.duplicate`,
 					targetType: kind,
-					targetId: (created as unknown as Record<string, unknown>)[idField] as string,
+					targetId: rowId(created),
 					targetName: created.name,
 					metadata: { sourceId: input[idField] as string },
 				});

@@ -1,26 +1,22 @@
-import { and, asc, count, eq, inArray } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "../../db";
-import {
-	applications,
-	certificates,
-	compose,
-	environments,
-	mariadb,
-	members,
-	mongo,
-	mysql,
-	postgres,
-	projects,
-	redis,
-} from "../../db/schema";
+import { certificates, environments, members, projects } from "../../db/schema";
 import { bestEffort } from "../../utils/best-effort";
 import { deleteApplication } from "../application/service";
 import { unregisterBackupsForService } from "../backups/scheduler";
 import { deleteCompose } from "../compose/service";
-import { type DatabaseKind, removeDatabase } from "../databases/engine";
+import { removeDatabase } from "../databases/engine";
 import { pruneEnvironmentNetwork } from "../deployment/network";
 import { forbidden, notFound } from "../errors";
 import { unregisterSchedulesForService } from "../schedules";
+import {
+	DATABASE_DEFS,
+	type DatabaseServiceKind,
+	SERVICE_DEFS,
+	SERVICE_REGISTRY,
+	type ServiceKind,
+	type ServiceRow,
+} from "../services/registry";
 import { getCertificatesDir, REMOTE_TRAEFIK_DIR, removeFileOnServer } from "../traefik";
 import type { OrgRole } from "./roles";
 import { ORG_ROLE_RANK, orgRoleRank } from "./roles";
@@ -151,13 +147,13 @@ export async function findEnvironmentById(environmentId: string, organizationId:
 export async function getEnvironmentServices(environmentId: string) {
 	const [applicationRows, composeRows, postgresRows, mysqlRows, mariadbRows, mongoRows, redisRows] =
 		await Promise.all([
-			db.select().from(applications).where(eq(applications.environmentId, environmentId)),
-			db.select().from(compose).where(eq(compose.environmentId, environmentId)),
-			db.select().from(postgres).where(eq(postgres.environmentId, environmentId)),
-			db.select().from(mysql).where(eq(mysql.environmentId, environmentId)),
-			db.select().from(mariadb).where(eq(mariadb.environmentId, environmentId)),
-			db.select().from(mongo).where(eq(mongo.environmentId, environmentId)),
-			db.select().from(redis).where(eq(redis.environmentId, environmentId)),
+			SERVICE_REGISTRY.application.module.listByEnvironment(environmentId),
+			SERVICE_REGISTRY.compose.module.listByEnvironment(environmentId),
+			SERVICE_REGISTRY.postgres.module.listByEnvironment(environmentId),
+			SERVICE_REGISTRY.mysql.module.listByEnvironment(environmentId),
+			SERVICE_REGISTRY.mariadb.module.listByEnvironment(environmentId),
+			SERVICE_REGISTRY.mongo.module.listByEnvironment(environmentId),
+			SERVICE_REGISTRY.redis.module.listByEnvironment(environmentId),
 		]);
 	return {
 		applications: applicationRows,
@@ -192,6 +188,17 @@ export const emptyServiceCounts = (): EnvironmentServiceCounts => ({
 	total: 0,
 });
 
+/** Counts key of a service kind (`application` is the only plural one). */
+const COUNT_KEY_BY_KIND: Record<ServiceKind, keyof Omit<EnvironmentServiceCounts, "total">> = {
+	application: "applications",
+	compose: "compose",
+	postgres: "postgres",
+	mysql: "mysql",
+	mariadb: "mariadb",
+	mongo: "mongo",
+	redis: "redis",
+};
+
 /** Per-environment service counts for a batch of environment ids. */
 export async function getServiceCountsByEnvironment(
 	environmentIds: string[],
@@ -201,71 +208,21 @@ export async function getServiceCountsByEnvironment(
 		return countsByEnvironment;
 	}
 
-	const [
-		applicationCounts,
-		composeCounts,
-		postgresCounts,
-		mysqlCounts,
-		mariadbCounts,
-		mongoCounts,
-		redisCounts,
-	] = await Promise.all([
-		db
-			.select({ environmentId: applications.environmentId, value: count() })
-			.from(applications)
-			.where(inArray(applications.environmentId, environmentIds))
-			.groupBy(applications.environmentId),
-		db
-			.select({ environmentId: compose.environmentId, value: count() })
-			.from(compose)
-			.where(inArray(compose.environmentId, environmentIds))
-			.groupBy(compose.environmentId),
-		db
-			.select({ environmentId: postgres.environmentId, value: count() })
-			.from(postgres)
-			.where(inArray(postgres.environmentId, environmentIds))
-			.groupBy(postgres.environmentId),
-		db
-			.select({ environmentId: mysql.environmentId, value: count() })
-			.from(mysql)
-			.where(inArray(mysql.environmentId, environmentIds))
-			.groupBy(mysql.environmentId),
-		db
-			.select({ environmentId: mariadb.environmentId, value: count() })
-			.from(mariadb)
-			.where(inArray(mariadb.environmentId, environmentIds))
-			.groupBy(mariadb.environmentId),
-		db
-			.select({ environmentId: mongo.environmentId, value: count() })
-			.from(mongo)
-			.where(inArray(mongo.environmentId, environmentIds))
-			.groupBy(mongo.environmentId),
-		db
-			.select({ environmentId: redis.environmentId, value: count() })
-			.from(redis)
-			.where(inArray(redis.environmentId, environmentIds))
-			.groupBy(redis.environmentId),
-	]);
+	const perKind = await Promise.all(
+		SERVICE_DEFS.map(async (def) => ({
+			key: COUNT_KEY_BY_KIND[def.kind],
+			rows: await def.module.countByEnvironment(environmentIds),
+		})),
+	);
 
-	const apply = (
-		rows: Array<{ environmentId: string; value: number }>,
-		key: keyof Omit<EnvironmentServiceCounts, "total">,
-	) => {
+	for (const { key, rows } of perKind) {
 		for (const row of rows) {
 			const entry = countsByEnvironment.get(row.environmentId) ?? emptyServiceCounts();
 			entry[key] = row.value;
 			entry.total += row.value;
 			countsByEnvironment.set(row.environmentId, entry);
 		}
-	};
-
-	apply(applicationCounts, "applications");
-	apply(composeCounts, "compose");
-	apply(postgresCounts, "postgres");
-	apply(mysqlCounts, "mysql");
-	apply(mariadbCounts, "mariadb");
-	apply(mongoCounts, "mongo");
-	apply(redisCounts, "redis");
+	}
 
 	return countsByEnvironment;
 }
@@ -308,68 +265,10 @@ export function mergeServiceStatusRows(
 export async function getOrganizationServiceStatusCounts(
 	organizationId: string,
 ): Promise<ServiceStatusCounts> {
-	const [applicationRows, composeRows, postgresRows, mysqlRows, mariadbRows, mongoRows, redisRows] =
-		await Promise.all([
-			db
-				.select({ status: applications.status, value: count() })
-				.from(applications)
-				.innerJoin(environments, eq(applications.environmentId, environments.environmentId))
-				.innerJoin(projects, eq(environments.projectId, projects.projectId))
-				.where(eq(projects.organizationId, organizationId))
-				.groupBy(applications.status),
-			db
-				.select({ status: compose.status, value: count() })
-				.from(compose)
-				.innerJoin(environments, eq(compose.environmentId, environments.environmentId))
-				.innerJoin(projects, eq(environments.projectId, projects.projectId))
-				.where(eq(projects.organizationId, organizationId))
-				.groupBy(compose.status),
-			db
-				.select({ status: postgres.status, value: count() })
-				.from(postgres)
-				.innerJoin(environments, eq(postgres.environmentId, environments.environmentId))
-				.innerJoin(projects, eq(environments.projectId, projects.projectId))
-				.where(eq(projects.organizationId, organizationId))
-				.groupBy(postgres.status),
-			db
-				.select({ status: mysql.status, value: count() })
-				.from(mysql)
-				.innerJoin(environments, eq(mysql.environmentId, environments.environmentId))
-				.innerJoin(projects, eq(environments.projectId, projects.projectId))
-				.where(eq(projects.organizationId, organizationId))
-				.groupBy(mysql.status),
-			db
-				.select({ status: mariadb.status, value: count() })
-				.from(mariadb)
-				.innerJoin(environments, eq(mariadb.environmentId, environments.environmentId))
-				.innerJoin(projects, eq(environments.projectId, projects.projectId))
-				.where(eq(projects.organizationId, organizationId))
-				.groupBy(mariadb.status),
-			db
-				.select({ status: mongo.status, value: count() })
-				.from(mongo)
-				.innerJoin(environments, eq(mongo.environmentId, environments.environmentId))
-				.innerJoin(projects, eq(environments.projectId, projects.projectId))
-				.where(eq(projects.organizationId, organizationId))
-				.groupBy(mongo.status),
-			db
-				.select({ status: redis.status, value: count() })
-				.from(redis)
-				.innerJoin(environments, eq(redis.environmentId, environments.environmentId))
-				.innerJoin(projects, eq(environments.projectId, projects.projectId))
-				.where(eq(projects.organizationId, organizationId))
-				.groupBy(redis.status),
-		]);
-
-	return mergeServiceStatusRows(
-		applicationRows,
-		composeRows,
-		postgresRows,
-		mysqlRows,
-		mariadbRows,
-		mongoRows,
-		redisRows,
+	const perKind = await Promise.all(
+		SERVICE_DEFS.map((def) => def.module.statusCounts(organizationId)),
 	);
+	return mergeServiceStatusRows(...perKind);
 }
 
 // ── cascade deletion ────────────────────────────────────────────────────────
@@ -416,70 +315,37 @@ export async function deleteEnvironmentCascade(environmentId: string): Promise<v
 
 	// `kind` lets removeDatabase verify it is tearing down a managed database
 	// service of that engine and not an unrelated swarm service of the same name.
-	const removeRows = (
-		kind: DatabaseKind,
-		rows: Array<{ appName: string; serverId: string | null }>,
-	) =>
-		Promise.all(
+	const databaseIds = new Map<DatabaseServiceKind, string[]>();
+	for (const def of DATABASE_DEFS) {
+		const rows: Array<ServiceRow<DatabaseServiceKind>> = services[def.kind];
+		if (rows.length === 0) continue;
+		databaseIds.set(
+			def.kind,
+			rows.map((row) => def.module.rowId(row)),
+		);
+		await Promise.all(
 			rows.map((row) => {
 				unregisterBackupsForService({ appName: row.appName });
 				return tearDown(`database ${row.appName}`, () =>
-					removeDatabase(row.appName, row.serverId, kind, environmentId),
+					removeDatabase(row.appName, row.serverId, def.kind, environmentId),
 				);
 			}),
 		);
-
-	if (services.postgres.length > 0) {
-		await removeRows("postgres", services.postgres);
-		await db.delete(postgres).where(
-			inArray(
-				postgres.postgresId,
-				services.postgres.map((row) => row.postgresId),
-			),
-		);
-	}
-	if (services.mysql.length > 0) {
-		await removeRows("mysql", services.mysql);
-		await db.delete(mysql).where(
-			inArray(
-				mysql.mysqlId,
-				services.mysql.map((row) => row.mysqlId),
-			),
-		);
-	}
-	if (services.mariadb.length > 0) {
-		await removeRows("mariadb", services.mariadb);
-		await db.delete(mariadb).where(
-			inArray(
-				mariadb.mariadbId,
-				services.mariadb.map((row) => row.mariadbId),
-			),
-		);
-	}
-	if (services.mongo.length > 0) {
-		await removeRows("mongo", services.mongo);
-		await db.delete(mongo).where(
-			inArray(
-				mongo.mongoId,
-				services.mongo.map((row) => row.mongoId),
-			),
-		);
-	}
-	if (services.redis.length > 0) {
-		await removeRows("redis", services.redis);
-		await db.delete(redis).where(
-			inArray(
-				redis.redisId,
-				services.redis.map((row) => row.redisId),
-			),
-		);
 	}
 
-	// Every service left the environment overlay; drop it before the row goes.
+	// Every service left the environment overlay; drop it before the rows go
+	// (it is resolved from the environment row, which the transaction removes).
 	await pruneEnvironmentNetwork(environmentId);
 
-	// The environment itself (remaining FK children — domains, mounts... — cascade in the DB).
-	await db.delete(environments).where(eq(environments.environmentId, environmentId));
+	// Row deletions only — the Swarm/Traefik/volume teardown above is
+	// best-effort and stays outside, so a DB failure here cannot roll it back.
+	await db.transaction(async (tx) => {
+		for (const [kind, ids] of databaseIds) {
+			await SERVICE_REGISTRY[kind].module.deleteByIds(ids, tx);
+		}
+		// The environment itself (remaining FK children — domains, mounts... — cascade in the DB).
+		await tx.delete(environments).where(eq(environments.environmentId, environmentId));
+	});
 }
 
 /**
@@ -490,6 +356,9 @@ export async function deleteProjectCascade(projectId: string): Promise<void> {
 	const environmentList = await db.query.environments.findMany({
 		where: eq(environments.projectId, projectId),
 	});
+	// Each environment commits its own row deletions once its infra is gone;
+	// one transaction around every environment would hold locks across minutes
+	// of Swarm teardown.
 	for (const environment of environmentList) {
 		await deleteEnvironmentCascade(environment.environmentId);
 	}

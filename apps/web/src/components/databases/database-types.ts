@@ -1,8 +1,20 @@
+import {
+	DATABASE_KIND_CREDENTIALS,
+	DATABASE_KINDS,
+	type DatabaseServiceKind,
+	SERVICE_KIND_ID_FIELDS,
+} from "@nixploy/server/modules/services/kinds";
 import type { LucideIcon } from "lucide-react";
 
 import { SERVICE_TYPE_META } from "@/components/projects/service-types";
 
-export type DatabaseType = "postgres" | "mysql" | "mariadb" | "mongo" | "redis";
+/**
+ * The five one-click engines, their id field and which credential inputs each
+ * one actually has, all derived from the server's service registry
+ * (`@nixploy/server/modules/services/kinds`). Adding an engine there makes it
+ * appear here — and the compiler flags anything still missing.
+ */
+export type DatabaseType = DatabaseServiceKind;
 
 /** Database types supported by the `backup` router (all five engines). */
 export type BackupDatabaseType = DatabaseType;
@@ -21,48 +33,23 @@ export interface DatabaseTypeConfig {
 	hasRootPassword: boolean;
 }
 
-export const DATABASE_TYPES: Record<DatabaseType, DatabaseTypeConfig> = {
-	postgres: {
-		idField: "postgresId",
-		...SERVICE_TYPE_META.postgres,
-		supportsBackups: true,
-		hasDatabaseName: true,
-		hasUser: true,
-		hasRootPassword: false,
-	},
-	mysql: {
-		idField: "mysqlId",
-		...SERVICE_TYPE_META.mysql,
-		supportsBackups: true,
-		hasDatabaseName: true,
-		hasUser: true,
-		hasRootPassword: true,
-	},
-	mariadb: {
-		idField: "mariadbId",
-		...SERVICE_TYPE_META.mariadb,
-		supportsBackups: true,
-		hasDatabaseName: true,
-		hasUser: true,
-		hasRootPassword: true,
-	},
-	mongo: {
-		idField: "mongoId",
-		...SERVICE_TYPE_META.mongo,
-		supportsBackups: true,
-		hasDatabaseName: false,
-		hasUser: true,
-		hasRootPassword: false,
-	},
-	redis: {
-		idField: "redisId",
-		...SERVICE_TYPE_META.redis,
-		supportsBackups: true,
-		hasDatabaseName: false,
-		hasUser: false,
-		hasRootPassword: false,
-	},
-};
+export const DATABASE_TYPES: Record<DatabaseType, DatabaseTypeConfig> = Object.fromEntries(
+	DATABASE_KINDS.map((kind) => {
+		const credentials = DATABASE_KIND_CREDENTIALS[kind];
+		return [
+			kind,
+			{
+				idField: SERVICE_KIND_ID_FIELDS[kind],
+				...SERVICE_TYPE_META[kind],
+				// Every engine has a dump/restore command in DB_DUMP_CONFIG.
+				supportsBackups: true,
+				hasDatabaseName: credentials.databaseName !== null,
+				hasUser: credentials.databaseUser !== null,
+				hasRootPassword: credentials.rootPassword,
+			},
+		];
+	}),
+) as Record<DatabaseType, DatabaseTypeConfig>;
 
 export { SERVICE_TYPE_META };
 

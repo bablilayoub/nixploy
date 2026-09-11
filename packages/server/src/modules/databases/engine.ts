@@ -2,7 +2,15 @@ import { randomBytes } from "node:crypto";
 import Docker from "dockerode";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
-import { environments, mariadb, mongo, mysql, postgres, redis, servers } from "../../db/schema";
+import {
+	environments,
+	type mariadb,
+	type mongo,
+	type mysql,
+	type postgres,
+	type redis,
+	servers,
+} from "../../db/schema";
 import { bestEffort } from "../../utils/best-effort";
 import { execAsyncRemote } from "../../utils/exec";
 import { assertSafePublishedPort } from "../../utils/validators";
@@ -20,6 +28,7 @@ import {
 } from "../deployment/swarm";
 import { badRequest, conflict, notFound, preconditionFailed } from "../errors";
 import type { QuotaResourceDefaults } from "../projects/quotas";
+import { SERVICE_REGISTRY } from "../services/registry";
 
 /**
  * Shared engine for the five one-click database services (postgres, mysql,
@@ -68,8 +77,6 @@ export function generateDatabaseAppName(name: string): string {
 	return `${slug}-${randomBytes(3).toString("hex")}`;
 }
 
-const TABLE_BY_KIND = { postgres, mysql, mariadb, mongo, redis } as const;
-
 /**
  * Clone a database row into `environmentId`: fresh appName and timestamps,
  * status `idle`, no external port (it would collide with the source). The
@@ -82,8 +89,7 @@ export async function duplicateDatabase<K extends DatabaseKind>(
 	source: DatabaseRowMap[K],
 	environmentId: string,
 ): Promise<DatabaseRowMap[K]> {
-	// biome-ignore lint/suspicious/noExplicitAny: drizzle table generics differ per kind
-	const table = TABLE_BY_KIND[kind] as any;
+	const { table } = SERVICE_REGISTRY[kind];
 	const values: Record<string, unknown> = { ...source };
 	// Identity/status fields reset to schema defaults (or explicit values below).
 	delete values[`${kind}Id`];

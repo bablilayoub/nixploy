@@ -32,18 +32,8 @@ import { useCapabilities } from "@/hooks/use-capabilities";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 import { ServiceTagsDialog } from "./service-tags-dialog";
-import type { ServiceType } from "./service-types";
+import { ID_FIELD, serviceRouterClient } from "./service-types";
 import type { ServiceEntry } from "./services-table";
-
-const ID_FIELD: Record<ServiceType, string> = {
-	application: "applicationId",
-	compose: "composeId",
-	postgres: "postgresId",
-	mysql: "mysqlId",
-	mariadb: "mariadbId",
-	mongo: "mongoId",
-	redis: "redisId",
-};
 
 /** Per-service row menu on the project page: duplicate, tags and move. */
 export function ServiceRowActions({
@@ -97,9 +87,9 @@ export function ServiceRowActions({
 
 	const duplicate = useMutation({
 		mutationFn: async () => {
-			const payload = { [ID_FIELD[service.type]]: service.id };
-			// biome-ignore lint/suspicious/noExplicitAny: dynamic router access by service type; every service router exposes duplicate
-			return await (trpcClient as any)[service.type].duplicate.mutate(payload);
+			return await serviceRouterClient(trpcClient, service.type).duplicate.mutate({
+				[ID_FIELD[service.type]]: service.id,
+			});
 		},
 		onSuccess: async () => {
 			toast.success(`${service.name} duplicated`);
@@ -110,12 +100,10 @@ export function ServiceRowActions({
 
 	const move = useMutation({
 		mutationFn: async () => {
-			const payload = {
+			return await serviceRouterClient(trpcClient, service.type).move.mutate({
 				[ID_FIELD[service.type]]: service.id,
 				environmentId: targetEnvironmentId,
-			};
-			// biome-ignore lint/suspicious/noExplicitAny: dynamic router access by service type; every service router exposes move
-			return await (trpcClient as any)[service.type].move.mutate(payload);
+			});
 		},
 		onSuccess: async () => {
 			toast.success(`${service.name} moved`);

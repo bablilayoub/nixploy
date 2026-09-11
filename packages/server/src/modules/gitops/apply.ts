@@ -1,17 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { db } from "../../db";
-import {
-	applications,
-	compose,
-	domains,
-	environments,
-	mariadb,
-	mongo,
-	mysql,
-	postgres,
-	redis,
-} from "../../db/schema";
+import { type DbExecutor, db } from "../../db";
+import { applications, compose, domains, environments } from "../../db/schema";
 import {
 	assertComposeServiceName,
 	assertSafeDockerImageRef,
@@ -33,6 +23,12 @@ import {
 import { DATABASE_CONFIGS, generateDatabaseAppName } from "../databases/engine";
 import { notFound, preconditionFailed } from "../errors";
 import { getEnvironmentServices } from "../projects";
+import {
+	DATABASE_KIND_CREDENTIALS,
+	DATABASE_KINDS,
+	type DatabaseServiceKind,
+	databaseDef,
+} from "../services/registry";
 import { randomPassword, resolveEnvironmentId, resolveProjectForStack } from "./export";
 import { buildPlan, type GitopsPlanItem, type GitopsPlanResult, type LiveStackState } from "./plan";
 import type { GitopsDomain, NixployStack } from "./schema";
@@ -119,13 +115,18 @@ export const loadLiveStackState = async (
 	);
 	const domainsByCompose = new Map(composeDomains.map((entry) => [entry.composeId, entry.domains]));
 
-	const pick = (row: Record<string, unknown>, fields: readonly string[]) => {
+	/** Project a Drizzle row onto the manifest fields the plan diffs. */
+	const pick = (row: object, fields: readonly string[]) => {
+		const source = row as Record<string, unknown>;
 		const result: Record<string, unknown> = {};
 		for (const field of fields) {
-			result[field] = row[field] ?? null;
+			result[field] = source[field] ?? null;
 		}
 		return result;
 	};
+
+	const liveDatabases = (kind: DatabaseServiceKind) =>
+		services[kind].map((row) => ({ name: row.name, row: pick(row, DATABASE_FIELDS) }));
 
 	return {
 		projectId,
@@ -133,7 +134,7 @@ export const loadLiveStackState = async (
 		applications: services.applications.map((row) => ({
 			name: row.name,
 			appName: row.appName,
-			row: pick(row as unknown as Record<string, unknown>, APPLICATION_FIELDS),
+			row: pick(row, APPLICATION_FIELDS),
 			domains: (domainsByApplication.get(row.applicationId) ?? []).map((domain) => ({
 				host: domain.host,
 				path: domain.path ?? "/",
@@ -147,7 +148,7 @@ export const loadLiveStackState = async (
 			name: row.name,
 			appName: row.appName,
 			row: {
-				...pick(row as unknown as Record<string, unknown>, COMPOSE_FIELDS),
+				...pick(row, COMPOSE_FIELDS),
 				composeFile: row.sourceType === "raw" ? row.composeFile : null,
 			},
 			domains: (domainsByCompose.get(row.composeId) ?? []).map((domain) => ({
@@ -160,47 +161,32 @@ export const loadLiveStackState = async (
 			})),
 		})),
 		databases: {
-			postgres: services.postgres.map((row) => ({
-				name: row.name,
-				row: pick(row as unknown as Record<string, unknown>, DATABASE_FIELDS),
-			})),
-			mysql: services.mysql.map((row) => ({
-				name: row.name,
-				row: pick(row as unknown as Record<string, unknown>, DATABASE_FIELDS),
-			})),
-			mariadb: services.mariadb.map((row) => ({
-				name: row.name,
-				row: pick(row as unknown as Record<string, unknown>, DATABASE_FIELDS),
-			})),
-			mongo: services.mongo.map((row) => ({
-				name: row.name,
-				row: pick(row as unknown as Record<string, unknown>, DATABASE_FIELDS),
-			})),
-			redis: services.redis.map((row) => ({
-				name: row.name,
-				row: pick(row as unknown as Record<string, unknown>, DATABASE_FIELDS),
-			})),
+			postgres: liveDatabases("postgres"),
+			mysql: liveDatabases("mysql"),
+			mariadb: liveDatabases("mariadb"),
+			mongo: liveDatabases("mongo"),
+			redis: liveDatabases("redis"),
 		},
 	};
 };
 
-const createDomain = async (
+/** Row values for a domain the manifest declares but the environment lacks. */
+const newDomainValues = (
 	domain: GitopsDomain,
 	parent: { applicationId?: string; composeId?: string },
-): Promise<void> => {
+): typeof domains.$inferInsert => {
 	const host = assertTraefikHost(domain.host);
 	const path = assertTraefikPath(domain.path ?? "/") ?? "/";
 	const serviceName = parent.composeId ? (domain.serviceName ?? null) : null;
 	if (serviceName) {
 		assertComposeServiceName(serviceName);
 	}
-	const certificateType = domain.certificateType ?? "none";
-	const values = {
+	return {
 		host,
 		path,
 		port: domain.port ?? null,
 		https: domain.https ?? false,
-		certificateType,
+		certificateType: domain.certificateType ?? "none",
 		certificateId: null,
 		serviceName,
 		domainType: parent.applicationId ? ("application" as const) : ("compose" as const),
@@ -208,24 +194,6 @@ const createDomain = async (
 		applicationId: parent.applicationId ?? null,
 		composeId: parent.composeId ?? null,
 	};
-
-	const [created] = await db.insert(domains).values(values).returning();
-	if (!created) {
-		throw new Error(`Failed to create domain ${domain.host}`);
-	}
-
-	if (parent.applicationId) {
-		const application = await db.query.applications.findFirst({
-			where: eq(applications.applicationId, parent.applicationId),
-		});
-		if (application) {
-			await syncApplicationTraefik(application);
-		}
-		return;
-	}
-	if (parent.composeId) {
-		await resyncComposeDomains(parent.composeId);
-	}
 };
 
 /**
@@ -249,6 +217,16 @@ export const domainUpdatePatch = (
 	return patch;
 };
 
+/**
+ * Reconcile one service's domain rows against the manifest: create what is
+ * missing, patch what changed, delete what the manifest dropped.
+ *
+ * All three run in ONE transaction so a failure part-way cannot leave the
+ * service with half its routes (the delete pass runs last, so without it a
+ * crash used to drop live domains before their replacements existed). The
+ * Traefik rewrite is a file-system side effect and stays outside, after the
+ * commit — it is derived from the rows, so it is correct either way.
+ */
 const syncDomains = async (
 	desired: GitopsDomain[] | undefined,
 	liveDomains: Array<{
@@ -258,29 +236,38 @@ const syncDomains = async (
 		port: number | null;
 	}>,
 	parent: { applicationId?: string; composeId?: string },
+	executor: DbExecutor = db,
 ): Promise<void> => {
 	const liveByKey = new Map(
 		liveDomains.map((row) => [`${row.host}|${row.path ?? "/"}|${row.port ?? ""}`, row]),
 	);
 
-	for (const domain of desired ?? []) {
-		const key = domainKey(domain);
-		const existing = liveByKey.get(key);
-		if (!existing) {
-			await createDomain(domain, parent);
-			continue;
+	await executor.transaction(async (tx) => {
+		for (const domain of desired ?? []) {
+			const key = domainKey(domain);
+			const existing = liveByKey.get(key);
+			if (!existing) {
+				const [created] = await tx
+					.insert(domains)
+					.values(newDomainValues(domain, parent))
+					.returning();
+				if (!created) {
+					throw new Error(`Failed to create domain ${domain.host}`);
+				}
+				continue;
+			}
+			const patch = domainUpdatePatch(domain, parent);
+			if (Object.keys(patch).length > 0) {
+				await tx.update(domains).set(patch).where(eq(domains.domainId, existing.domainId));
+			}
+			liveByKey.delete(key);
 		}
-		const patch = domainUpdatePatch(domain, parent);
-		if (Object.keys(patch).length > 0) {
-			await db.update(domains).set(patch).where(eq(domains.domainId, existing.domainId));
-		}
-		liveByKey.delete(key);
-	}
 
-	// GitOps semantics: live domains absent from the desired stack are removed.
-	for (const leftover of liveByKey.values()) {
-		await db.delete(domains).where(eq(domains.domainId, leftover.domainId));
-	}
+		// GitOps semantics: live domains absent from the desired stack are removed.
+		for (const leftover of liveByKey.values()) {
+			await tx.delete(domains).where(eq(domains.domainId, leftover.domainId));
+		}
+	});
 
 	if (parent.applicationId) {
 		const application = await db.query.applications.findFirst({
@@ -396,24 +383,21 @@ const applyCompose = async (
 	await syncDomains(desired.domains, liveDomains, { composeId });
 };
 
-type DatabaseKind = "postgres" | "mysql" | "mariadb" | "mongo" | "redis";
-
-const TABLE_BY_KIND = { postgres, mysql, mariadb, mongo, redis } as const;
-
 const applyDatabase = async (
-	kind: DatabaseKind,
+	kind: DatabaseServiceKind,
 	desired: Record<string, unknown>,
 	environmentId: string,
 	live?: { name: string; row: Record<string, unknown> },
 ): Promise<void> => {
+	const { module } = databaseDef(kind);
+
 	if (!live) {
-		const password = randomPassword();
-		const rootPassword = randomPassword();
+		const credentials = DATABASE_KIND_CREDENTIALS[kind];
 		const config = DATABASE_CONFIGS[kind];
 		const dockerImage = assertSafeDockerImageRef(
 			(desired.dockerImage as string | undefined) ?? config.defaultImage,
 		);
-		const base = {
+		await module.insert({
 			name: String(desired.name),
 			description: (desired.description as string | null | undefined) ?? null,
 			environmentId,
@@ -430,63 +414,22 @@ const applyDatabase = async (
 			memoryLimit: (desired.memoryLimit as string | null | undefined) ?? null,
 			cpuReservation: (desired.cpuReservation as string | null | undefined) ?? null,
 			cpuLimit: (desired.cpuLimit as string | null | undefined) ?? null,
-		};
-
-		if (kind === "postgres") {
-			await db.insert(postgres).values({
-				...base,
-				databaseName: (desired.databaseName as string | undefined) ?? "postgres",
-				databaseUser: (desired.databaseUser as string | undefined) ?? "postgres",
-				databasePassword: password,
-			});
-			return;
-		}
-		if (kind === "mysql") {
-			await db.insert(mysql).values({
-				...base,
-				databaseName: (desired.databaseName as string | undefined) ?? "mysql",
-				databaseUser: (desired.databaseUser as string | undefined) ?? "mysql",
-				databasePassword: password,
-				databaseRootPassword: rootPassword,
-			});
-			return;
-		}
-		if (kind === "mariadb") {
-			await db.insert(mariadb).values({
-				...base,
-				databaseName: (desired.databaseName as string | undefined) ?? "mariadb",
-				databaseUser: (desired.databaseUser as string | undefined) ?? "mariadb",
-				databasePassword: password,
-				databaseRootPassword: rootPassword,
-			});
-			return;
-		}
-		if (kind === "mongo") {
-			await db.insert(mongo).values({
-				...base,
-				databaseUser: (desired.databaseUser as string | undefined) ?? "mongo",
-				databasePassword: password,
-			});
-			return;
-		}
-		await db.insert(redis).values({
-			...base,
-			databasePassword: password,
+			// Only the columns the engine actually has (redis has neither user
+			// nor database name, mongo has no database name, mysql/mariadb add a
+			// root password) — see DATABASE_KIND_CREDENTIALS.
+			...(credentials.databaseName !== null
+				? {
+						databaseName: (desired.databaseName as string | undefined) ?? credentials.databaseName,
+					}
+				: {}),
+			...(credentials.databaseUser !== null
+				? { databaseUser: (desired.databaseUser as string | undefined) ?? credentials.databaseUser }
+				: {}),
+			databasePassword: randomPassword(),
+			...(credentials.rootPassword ? { databaseRootPassword: randomPassword() } : {}),
 		});
 		return;
 	}
-
-	// biome-ignore lint/suspicious/noExplicitAny: drizzle table generics differ per kind
-	const table = TABLE_BY_KIND[kind] as any;
-	const idColumn = `${kind}Id`;
-	const existing = (
-		await db
-			.select()
-			.from(table)
-			.where(and(eq(table.environmentId, environmentId), eq(table.name, String(desired.name))))
-			.limit(1)
-	)[0] as Record<string, unknown> | undefined;
-	if (!existing) return;
 
 	const patch: Record<string, unknown> = {};
 	for (const field of DATABASE_FIELDS) {
@@ -501,9 +444,15 @@ const applyDatabase = async (
 	if (typeof patch.dockerImage === "string" && patch.dockerImage.length > 0) {
 		patch.dockerImage = assertSafeDockerImageRef(patch.dockerImage);
 	}
-	if (Object.keys(patch).length > 0) {
-		await db.update(table).set(patch).where(eq(table[idColumn], existing[idColumn]));
-	}
+	if (Object.keys(patch).length === 0) return;
+
+	// Look the row up and patch it in one transaction: the row a concurrent
+	// apply/rename could move out from under us is the row we write.
+	await db.transaction(async (tx) => {
+		const existing = await module.findByName(environmentId, String(desired.name), tx);
+		if (!existing) return;
+		await module.updateById(module.rowId(existing), patch, tx);
+	});
 };
 
 export const planStack = async (
@@ -542,11 +491,17 @@ const planAction = (
  * Apply a desired stack to the live project/environment (no deploy engine).
  *
  * The service writers (`createApplication`, `updateComposeById`, …) run on the
- * shared `db` handle with Traefik/file side effects, so the apply cannot be a
- * single transaction. Instead every service is applied independently: a
- * failure (e.g. a domain host already taken by another service) is recorded
- * on that item and in `errors`, its domains are left untouched, and the
- * remaining services still apply. Failed items are never redeployed.
+ * shared `db` handle with Traefik/file side effects, so the apply is not one
+ * big transaction. Instead every service is applied independently: a failure
+ * (e.g. a domain host already taken by another service) is recorded on that
+ * item and in `errors`, and the remaining services still apply. Failed items
+ * are never redeployed.
+ *
+ * Atomicity is per service instead: a service's domain set is reconciled in
+ * one transaction ({@link syncDomains}) and a database patch in another, so a
+ * failed item leaves no half-written rows behind. Threading one transaction
+ * through the application/compose writers as well is follow-up work — they
+ * interleave file and Swarm side effects with their row writes.
  */
 export const applyStack = async (
 	stack: NixployStack,
@@ -622,8 +577,7 @@ export const applyStack = async (
 		});
 	}
 
-	const databaseKinds: DatabaseKind[] = ["postgres", "mysql", "mariadb", "mongo", "redis"];
-	for (const kind of databaseKinds) {
+	for (const kind of DATABASE_KINDS) {
 		for (const dbDesired of stack.databases?.[kind] ?? []) {
 			if (dbDesired.environment !== environmentName) continue;
 			const existing = live.databases[kind].find((entry) => entry.name === dbDesired.name);

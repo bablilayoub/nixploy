@@ -97,3 +97,15 @@ export const client: SqlClient = new Proxy((() => {}) as unknown as SqlClient, {
 
 export { schema };
 export type Database = Db;
+
+/**
+ * Anything that can run a query: the shared {@link db} handle or an open
+ * transaction. Write helpers take `executor: DbExecutor = db` so a caller can
+ * pull several of them into one `db.transaction(...)`; callers that do not
+ * care keep passing nothing.
+ *
+ * Note that `executor.transaction()` on a transaction opens a SAVEPOINT
+ * rather than a second top-level transaction, so helpers may wrap their own
+ * writes unconditionally and still compose.
+ */
+export type DbExecutor = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];

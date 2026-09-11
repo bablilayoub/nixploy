@@ -30,7 +30,12 @@ import { toastError } from "@/lib/describe-error";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 
 import { ServiceRowActions } from "./service-row-actions";
-import { SERVICE_TYPE_META, type ServiceType } from "./service-types";
+import {
+	ID_FIELD,
+	SERVICE_TYPE_META,
+	type ServiceType,
+	serviceRouterClient,
+} from "./service-types";
 
 export interface ServiceEntry {
 	type: ServiceType;
@@ -42,16 +47,6 @@ export interface ServiceEntry {
 }
 
 const TYPE_ORDER = Object.keys(SERVICE_TYPE_META) as ServiceType[];
-
-const ID_FIELD: Record<ServiceType, string> = {
-	application: "applicationId",
-	compose: "composeId",
-	postgres: "postgresId",
-	mysql: "mysqlId",
-	mariadb: "mariadbId",
-	mongo: "mongoId",
-	redis: "redisId",
-};
 
 const serviceKey = (service: ServiceEntry) => `${service.type}:${service.id}`;
 
@@ -144,9 +139,9 @@ export function ServicesTable({
 		try {
 			for (const service of targets) {
 				try {
-					const payload = { [ID_FIELD[service.type]]: service.id };
-					// biome-ignore lint/suspicious/noExplicitAny: dynamic router access by service type; every service router exposes start/stop
-					await (trpcClient as any)[service.type][action].mutate(payload);
+					await serviceRouterClient(trpcClient, service.type)[action].mutate({
+						[ID_FIELD[service.type]]: service.id,
+					});
 				} catch {
 					failed += 1;
 				}

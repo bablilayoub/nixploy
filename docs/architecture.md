@@ -70,8 +70,24 @@ organizationId` (see `assertApplicationAccess` and friends in
   - `traefik/` — static + dynamic config writers, file-provider sync.
   - `projects/` — project/environment CRUD, org resolution, env-var
     inheritance (org → project → environment → service).
+  - `services/` — the service-kind registry (see below).
   - `backups/`, `schedules/`, `notifications/`, `git/`, `cluster/`,
     `templates/` — see their READMEs/tests.
+
+A service is one of seven kinds (`application`, `compose` and the five
+database engines), and each kind has its own Drizzle table with its own
+`<kind>Id` primary key. `modules/services/` keeps that fan-out in one place:
+`kinds.ts` holds the kind tuple, labels and id fields with no imports at all
+(the panel reads it too, so it must stay out of the browser bundle's way),
+and `registry.ts` maps each kind to its table, primary-key column, tag join
+table, backup FK and a small set of row operations. Tenancy lookups, tag
+writes, project counts, cascade deletes, the fleet view, the backup router
+and GitOps apply all dispatch through `SERVICE_REGISTRY[kind]` instead of
+repeating a seven-way switch, and the `service_type` pgEnum is asserted
+against the tuple at import. Every registry write takes an optional
+`DbExecutor` (`db` or an open transaction, exported from `db/index.ts`) so
+related row writes commit together while Swarm, Traefik and file side effects
+stay outside the transaction, where they remain best-effort.
 
 ## Realtime & background work
 

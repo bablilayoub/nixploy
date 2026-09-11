@@ -5,17 +5,7 @@ import Docker from "dockerode";
 import { eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import {
-	applications,
-	compose,
-	environments,
-	mariadb,
-	mongo,
-	mysql,
-	postgres,
-	projects,
-	redis,
-} from "../../db/schema";
+import { environments, projects } from "../../db/schema";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { findServerById, getServerStatsCached, type ServerStats } from "../../modules/cluster";
 import { shellQuote } from "../../modules/compose/paths";
@@ -26,6 +16,7 @@ import {
 } from "../../modules/monitoring/history";
 import { parseDockerStatsJsonLine } from "../../modules/monitoring/remote";
 import { resolveCallerOrganizationId } from "../../modules/projects";
+import { findServiceByAppName, SERVICE_DEFS } from "../../modules/services/registry";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { mapDockerStats } from "../../ws/docker-stats";
 import type { TRPCContext } from "../init";
@@ -219,42 +210,8 @@ export const monitoringRouter = router({
 		.input(z.object({ appName: z.string().min(1), serverId: z.string().nullish() }))
 		.query(async ({ ctx, input }): Promise<ReplicaStat[]> => {
 			const organizationId = await getOrganizationId(ctx.session);
-			const withTenancy = {
-				with: { environment: { with: { project: true } } },
-			} as const;
-			const candidates = await Promise.all([
-				db.query.applications.findFirst({
-					where: eq(applications.appName, input.appName),
-					...withTenancy,
-				}),
-				db.query.compose.findFirst({
-					where: eq(compose.appName, input.appName),
-					...withTenancy,
-				}),
-				db.query.postgres.findFirst({
-					where: eq(postgres.appName, input.appName),
-					...withTenancy,
-				}),
-				db.query.mysql.findFirst({
-					where: eq(mysql.appName, input.appName),
-					...withTenancy,
-				}),
-				db.query.mariadb.findFirst({
-					where: eq(mariadb.appName, input.appName),
-					...withTenancy,
-				}),
-				db.query.mongo.findFirst({
-					where: eq(mongo.appName, input.appName),
-					...withTenancy,
-				}),
-				db.query.redis.findFirst({
-					where: eq(redis.appName, input.appName),
-					...withTenancy,
-				}),
-			]);
-			const owner = candidates.find(
-				(row) => row && row.environment.project.organizationId === organizationId,
-			);
+			const found = await findServiceByAppName(input.appName);
+			const owner = found?.organizationId === organizationId ? found : undefined;
 			if (!owner) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Service not found" });
 			}
@@ -302,42 +259,8 @@ export const monitoringRouter = router({
 		.input(z.object({ appName: z.string().min(1), hours: z.number().min(0.5).max(48) }))
 		.query(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			const withTenancy = {
-				with: { environment: { with: { project: true } } },
-			} as const;
-			const candidates = await Promise.all([
-				db.query.applications.findFirst({
-					where: eq(applications.appName, input.appName),
-					...withTenancy,
-				}),
-				db.query.compose.findFirst({
-					where: eq(compose.appName, input.appName),
-					...withTenancy,
-				}),
-				db.query.postgres.findFirst({
-					where: eq(postgres.appName, input.appName),
-					...withTenancy,
-				}),
-				db.query.mysql.findFirst({
-					where: eq(mysql.appName, input.appName),
-					...withTenancy,
-				}),
-				db.query.mariadb.findFirst({
-					where: eq(mariadb.appName, input.appName),
-					...withTenancy,
-				}),
-				db.query.mongo.findFirst({
-					where: eq(mongo.appName, input.appName),
-					...withTenancy,
-				}),
-				db.query.redis.findFirst({
-					where: eq(redis.appName, input.appName),
-					...withTenancy,
-				}),
-			]);
-			const owner = candidates.find(
-				(row) => row && row.environment.project.organizationId === organizationId,
-			);
+			const found = await findServiceByAppName(input.appName);
+			const owner = found?.organizationId === organizationId ? found : undefined;
 			if (!owner) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Service not found" });
 			}
@@ -379,161 +302,9 @@ export const monitoringRouter = router({
 		const envIds = environmentRows.map((row) => row.environmentId);
 		const envById = new Map(environmentRows.map((row) => [row.environmentId, row]));
 
-		const [appRows, composeRows, postgresRows, mysqlRows, mariadbRows, mongoRows, redisRows] =
-			await Promise.all([
-				db.query.applications.findMany({
-					where: inArray(applications.environmentId, envIds),
-					columns: {
-						applicationId: true,
-						name: true,
-						appName: true,
-						status: true,
-						serverId: true,
-						environmentId: true,
-					},
-				}),
-				db.query.compose.findMany({
-					where: inArray(compose.environmentId, envIds),
-					columns: {
-						composeId: true,
-						name: true,
-						appName: true,
-						status: true,
-						serverId: true,
-						environmentId: true,
-					},
-				}),
-				db.query.postgres.findMany({
-					where: inArray(postgres.environmentId, envIds),
-					columns: {
-						postgresId: true,
-						name: true,
-						appName: true,
-						status: true,
-						serverId: true,
-						environmentId: true,
-					},
-				}),
-				db.query.mysql.findMany({
-					where: inArray(mysql.environmentId, envIds),
-					columns: {
-						mysqlId: true,
-						name: true,
-						appName: true,
-						status: true,
-						serverId: true,
-						environmentId: true,
-					},
-				}),
-				db.query.mariadb.findMany({
-					where: inArray(mariadb.environmentId, envIds),
-					columns: {
-						mariadbId: true,
-						name: true,
-						appName: true,
-						status: true,
-						serverId: true,
-						environmentId: true,
-					},
-				}),
-				db.query.mongo.findMany({
-					where: inArray(mongo.environmentId, envIds),
-					columns: {
-						mongoId: true,
-						name: true,
-						appName: true,
-						status: true,
-						serverId: true,
-						environmentId: true,
-					},
-				}),
-				db.query.redis.findMany({
-					where: inArray(redis.environmentId, envIds),
-					columns: {
-						redisId: true,
-						name: true,
-						appName: true,
-						status: true,
-						serverId: true,
-						environmentId: true,
-					},
-				}),
-			]);
-
-		type FleetKind =
-			| "application"
-			| "compose"
-			| "postgres"
-			| "mysql"
-			| "mariadb"
-			| "mongo"
-			| "redis";
-
-		const base = [
-			...appRows.map((row) => ({
-				kind: "application" as FleetKind,
-				serviceId: row.applicationId,
-				name: row.name,
-				appName: row.appName,
-				status: row.status,
-				serverId: row.serverId,
-				environmentId: row.environmentId,
-			})),
-			...composeRows.map((row) => ({
-				kind: "compose" as FleetKind,
-				serviceId: row.composeId,
-				name: row.name,
-				appName: row.appName,
-				status: row.status,
-				serverId: row.serverId,
-				environmentId: row.environmentId,
-			})),
-			...postgresRows.map((row) => ({
-				kind: "postgres" as FleetKind,
-				serviceId: row.postgresId,
-				name: row.name,
-				appName: row.appName,
-				status: row.status,
-				serverId: row.serverId,
-				environmentId: row.environmentId,
-			})),
-			...mysqlRows.map((row) => ({
-				kind: "mysql" as FleetKind,
-				serviceId: row.mysqlId,
-				name: row.name,
-				appName: row.appName,
-				status: row.status,
-				serverId: row.serverId,
-				environmentId: row.environmentId,
-			})),
-			...mariadbRows.map((row) => ({
-				kind: "mariadb" as FleetKind,
-				serviceId: row.mariadbId,
-				name: row.name,
-				appName: row.appName,
-				status: row.status,
-				serverId: row.serverId,
-				environmentId: row.environmentId,
-			})),
-			...mongoRows.map((row) => ({
-				kind: "mongo" as FleetKind,
-				serviceId: row.mongoId,
-				name: row.name,
-				appName: row.appName,
-				status: row.status,
-				serverId: row.serverId,
-				environmentId: row.environmentId,
-			})),
-			...redisRows.map((row) => ({
-				kind: "redis" as FleetKind,
-				serviceId: row.redisId,
-				name: row.name,
-				appName: row.appName,
-				status: row.status,
-				serverId: row.serverId,
-				environmentId: row.environmentId,
-			})),
-		];
+		const base = (
+			await Promise.all(SERVICE_DEFS.map((def) => def.module.listSummaries(envIds)))
+		).flat();
 
 		return await Promise.all(
 			base.map(async (row) => {

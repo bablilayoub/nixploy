@@ -1,32 +1,8 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { db } from "../../db";
-import {
-	applicationTags,
-	composeTags,
-	mariadb,
-	mariadbTags,
-	mongo,
-	mongoTags,
-	mysql,
-	mysqlTags,
-	postgres,
-	postgresTags,
-	redis,
-	redisTags,
-	tags,
-} from "../../db/schema";
-import { assertApplicationAccess } from "../application";
-import { findComposeForOrg } from "../compose/service";
+import { type DbExecutor, db } from "../../db";
+import { tags } from "../../db/schema";
 import { badRequest, notFound } from "../errors";
-
-export type TaggableServiceType =
-	| "application"
-	| "compose"
-	| "postgres"
-	| "mysql"
-	| "mariadb"
-	| "mongo"
-	| "redis";
+import { SERVICE_REGISTRY, type ServiceKind } from "../services/registry";
 
 async function assertTagInOrg(tagId: string, organizationId: string) {
 	const tag = await db.query.tags.findFirst({ where: eq(tags.tagId, tagId) });
@@ -82,57 +58,32 @@ export async function deleteTag(tagId: string, organizationId: string) {
 	return { tagId };
 }
 
+/**
+ * Verify the service exists and belongs to the caller's organization. The
+ * message is deliberately the same for every kind and for "does not exist" so
+ * a tag mutation cannot be used to probe ids across tenants.
+ */
 async function assertServiceInOrg(
-	type: TaggableServiceType,
+	type: ServiceKind,
 	serviceId: string,
 	organizationId: string,
-) {
-	if (type === "application") {
-		await assertApplicationAccess(serviceId, organizationId);
-		return;
-	}
-	if (type === "compose") {
-		await findComposeForOrg(serviceId, organizationId);
-		return;
-	}
-
-	const withEnv = { environment: { with: { project: true } } } as const;
-	const row =
-		type === "postgres"
-			? await db.query.postgres.findFirst({
-					where: eq(postgres.postgresId, serviceId),
-					with: withEnv,
-				})
-			: type === "mysql"
-				? await db.query.mysql.findFirst({
-						where: eq(mysql.mysqlId, serviceId),
-						with: withEnv,
-					})
-				: type === "mariadb"
-					? await db.query.mariadb.findFirst({
-							where: eq(mariadb.mariadbId, serviceId),
-							with: withEnv,
-						})
-					: type === "mongo"
-						? await db.query.mongo.findFirst({
-								where: eq(mongo.mongoId, serviceId),
-								with: withEnv,
-							})
-						: await db.query.redis.findFirst({
-								where: eq(redis.redisId, serviceId),
-								with: withEnv,
-							});
-
-	if (!row || row.environment.project.organizationId !== organizationId) {
+): Promise<void> {
+	const row = await SERVICE_REGISTRY[type].module.findTenancy(serviceId);
+	if (!row || row.organizationId !== organizationId) {
 		throw notFound("Service not found");
 	}
 }
 
+/**
+ * Replace a service's tag set. The delete + insert run in one transaction so
+ * a crash between them cannot leave the service with no tags at all.
+ */
 export async function setServiceTags(
 	organizationId: string,
-	type: TaggableServiceType,
+	type: ServiceKind,
 	serviceId: string,
 	tagIds: string[],
+	executor: DbExecutor = db,
 ) {
 	await assertServiceInOrg(type, serviceId, organizationId);
 	if (tagIds.length > 0) {
@@ -144,148 +95,28 @@ export async function setServiceTags(
 		}
 	}
 
-	if (type === "application") {
-		await db.delete(applicationTags).where(eq(applicationTags.applicationId, serviceId));
-		if (tagIds.length) {
-			await db
-				.insert(applicationTags)
-				.values(tagIds.map((tagId) => ({ applicationId: serviceId, tagId })));
-		}
-	} else if (type === "compose") {
-		await db.delete(composeTags).where(eq(composeTags.composeId, serviceId));
-		if (tagIds.length) {
-			await db.insert(composeTags).values(tagIds.map((tagId) => ({ composeId: serviceId, tagId })));
-		}
-	} else if (type === "postgres") {
-		await db.delete(postgresTags).where(eq(postgresTags.postgresId, serviceId));
-		if (tagIds.length) {
-			await db
-				.insert(postgresTags)
-				.values(tagIds.map((tagId) => ({ postgresId: serviceId, tagId })));
-		}
-	} else if (type === "mysql") {
-		await db.delete(mysqlTags).where(eq(mysqlTags.mysqlId, serviceId));
-		if (tagIds.length) {
-			await db.insert(mysqlTags).values(tagIds.map((tagId) => ({ mysqlId: serviceId, tagId })));
-		}
-	} else if (type === "mariadb") {
-		await db.delete(mariadbTags).where(eq(mariadbTags.mariadbId, serviceId));
-		if (tagIds.length) {
-			await db.insert(mariadbTags).values(tagIds.map((tagId) => ({ mariadbId: serviceId, tagId })));
-		}
-	} else if (type === "mongo") {
-		await db.delete(mongoTags).where(eq(mongoTags.mongoId, serviceId));
-		if (tagIds.length) {
-			await db.insert(mongoTags).values(tagIds.map((tagId) => ({ mongoId: serviceId, tagId })));
-		}
-	} else {
-		await db.delete(redisTags).where(eq(redisTags.redisId, serviceId));
-		if (tagIds.length) {
-			await db.insert(redisTags).values(tagIds.map((tagId) => ({ redisId: serviceId, tagId })));
-		}
-	}
+	await executor.transaction(async (tx) => {
+		await SERVICE_REGISTRY[type].module.setTags(serviceId, tagIds, tx);
+	});
 	return { type, serviceId, tagIds };
 }
 
 export async function tagsForServices(
 	organizationId: string,
-	services: Array<{ type: TaggableServiceType; id: string }>,
+	services: Array<{ type: ServiceKind; id: string }>,
 ) {
 	const byKey: Record<string, Array<{ tagId: string; name: string; color: string }>> = {};
-	const appIds = services.filter((s) => s.type === "application").map((s) => s.id);
-	const composeIds = services.filter((s) => s.type === "compose").map((s) => s.id);
-
-	if (appIds.length) {
-		const rows = await db
-			.select({
-				applicationId: applicationTags.applicationId,
-				tagId: tags.tagId,
-				name: tags.name,
-				color: tags.color,
-			})
-			.from(applicationTags)
-			.innerJoin(tags, eq(applicationTags.tagId, tags.tagId))
-			.where(
-				and(
-					eq(tags.organizationId, organizationId),
-					inArray(applicationTags.applicationId, appIds),
-				),
-			);
-		for (const row of rows) {
-			const key = `application:${row.applicationId}`;
-			const list = byKey[key] ?? [];
-			list.push({ tagId: row.tagId, name: row.name, color: row.color });
-			byKey[key] = list;
-		}
-	}
-	if (composeIds.length) {
-		const rows = await db
-			.select({
-				composeId: composeTags.composeId,
-				tagId: tags.tagId,
-				name: tags.name,
-				color: tags.color,
-			})
-			.from(composeTags)
-			.innerJoin(tags, eq(composeTags.tagId, tags.tagId))
-			.where(
-				and(eq(tags.organizationId, organizationId), inArray(composeTags.composeId, composeIds)),
-			);
-		for (const row of rows) {
-			const key = `compose:${row.composeId}`;
-			const list = byKey[key] ?? [];
-			list.push({ tagId: row.tagId, name: row.name, color: row.color });
-			byKey[key] = list;
-		}
+	const byKind = new Map<ServiceKind, string[]>();
+	for (const service of services) {
+		const ids = byKind.get(service.type) ?? [];
+		ids.push(service.id);
+		byKind.set(service.type, ids);
 	}
 
-	const dbKinds = [
-		{
-			type: "postgres" as const,
-			join: postgresTags,
-			idCol: postgresTags.postgresId,
-			ids: services.filter((s) => s.type === "postgres").map((s) => s.id),
-		},
-		{
-			type: "mysql" as const,
-			join: mysqlTags,
-			idCol: mysqlTags.mysqlId,
-			ids: services.filter((s) => s.type === "mysql").map((s) => s.id),
-		},
-		{
-			type: "mariadb" as const,
-			join: mariadbTags,
-			idCol: mariadbTags.mariadbId,
-			ids: services.filter((s) => s.type === "mariadb").map((s) => s.id),
-		},
-		{
-			type: "mongo" as const,
-			join: mongoTags,
-			idCol: mongoTags.mongoId,
-			ids: services.filter((s) => s.type === "mongo").map((s) => s.id),
-		},
-		{
-			type: "redis" as const,
-			join: redisTags,
-			idCol: redisTags.redisId,
-			ids: services.filter((s) => s.type === "redis").map((s) => s.id),
-		},
-	];
-
-	for (const kind of dbKinds) {
-		if (!kind.ids.length) continue;
-		const rows = await db
-			.select({
-				serviceId: kind.idCol,
-				tagId: tags.tagId,
-				name: tags.name,
-				color: tags.color,
-			})
-			.from(kind.join)
-			.innerJoin(tags, eq(kind.join.tagId, tags.tagId))
-			.where(and(eq(tags.organizationId, organizationId), inArray(kind.idCol, kind.ids)));
+	for (const [kind, ids] of byKind) {
+		const rows = await SERVICE_REGISTRY[kind].module.listTagAssignments(organizationId, ids);
 		for (const row of rows) {
-			const key = `${kind.type}:${row.serviceId}`;
+			const key = `${kind}:${row.serviceId}`;
 			const list = byKey[key] ?? [];
 			list.push({ tagId: row.tagId, name: row.name, color: row.color });
 			byKey[key] = list;

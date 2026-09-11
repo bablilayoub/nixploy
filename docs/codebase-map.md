@@ -224,3 +224,24 @@ Next 16 App Router, Tailwind v4, Motion, magicui components. Pages: `/`, `/featu
 ## Error boundary (2026-09-11)
 
 `modules/errors.ts` defines `DomainError` (tRPC code + cause) and helpers; the existing `ComposeValidationError`, `Preview*Error`, `RemoteExecError`, `ServerNotInSwarmError`, `WebhookUnauthorized` extend it. `trpc/init.ts` normalises everything once (`normalizeTRPCError` middleware + `errorFormatter`): `DomainError` → its code, `ZodError` → `"path: message"` lines with `data.zodIssues`, anything else → INTERNAL_SERVER_ERROR (generic message in production, logged with the procedure path). REST (`apps/web/src/app/api/[...rest]/route.ts`) and MCP (`modules/mcp/server.ts`) call the same router, so they inherit the mapping; `trpc/error-boundary.test.ts` proves all three transports. `utils/best-effort.ts` wraps teardown side effects; `apps/web/src/lib/describe-error.ts` turns client errors into readable toasts.
+
+## Service registry (2026-09-11)
+
+`modules/services/` is the single source of truth for "what kinds of service exist".
+
+- **`kinds.ts`** — dependency-free on purpose (the panel imports it through `@nixploy/server/modules/services/kinds`, so anything pulled in here lands in the browser bundle). Exports `SERVICE_KINDS` (`application compose postgres mysql mariadb mongo redis`), `DATABASE_KINDS` (the five engines), `ServiceKind`, `SERVICE_KIND_LABELS`, `SERVICE_KIND_ID_FIELDS` / `serviceIdField()` (every table and every procedure input uses `<kind>Id`), `DATABASE_KIND_CREDENTIALS` (which credential columns an engine has + their defaults) and the `isServiceKind` / `isDatabaseServiceKind` guards.
+- **`registry.ts`** — `SERVICE_REGISTRY[kind]` → `{ kind, table, idColumn, idField, label, isDatabase, tagTable, backupColumn, module }`. `module` carries the row operations the kind-agnostic call sites need (`rowId findById findByName findTenancy findTenancyByAppName listByEnvironment listSummaries countByEnvironment statusCounts insert updateById deleteByIds setTags listTagAssignments`), each taking an optional `DbExecutor` so several can share one transaction. Also exports `SERVICE_DEFS` / `DATABASE_DEFS` (tuple order), the `serviceDef()` / `databaseDef()` widening accessors for a kind only known at runtime, and the shared zod enums `serviceKindSchema` / `databaseKindSchema`. Importing it asserts that the `service_type` pgEnum and `SERVICE_KINDS` describe the same set.
+- It deliberately imports **no** lifecycle module (`application/service`, `compose/service`, `databases/engine` pull dockerode, Traefik and preview). Start/stop/remove stay where they are; the registry only supplies the row plumbing they are dispatched with. `databases/engine.ts` and `databases/router.ts` import the registry, not the other way round.
+
+Callers: `application/org.ts` (`getServiceContext`), `tags/index.ts`, `projects/index.ts` (environment services, counts, status counts, cascade delete), `routers/monitoring.ts` (fleet overview, appName lookups), `routers/backup.ts` (backup FK + zod enum), `routers/tag.ts`, `gitops/apply.ts`, `databases/{engine,router}.ts`, and on the panel side `components/projects/service-types.ts` + `components/databases/database-types.ts`.
+
+**Adding a service kind:**
+
+1. Add the value to `SERVICE_KINDS` in `kinds.ts`, plus its label, and (for a database engine) an entry in `DATABASE_KINDS` + `DATABASE_KIND_CREDENTIALS`.
+2. Add the value to the `service_type` pgEnum in `db/schema/enums.ts` and generate the migration (`pnpm db:generate`) — the registry throws at import if the two lists diverge, and `modules/services/registry.test.ts` fails.
+3. Add the table (`<kind>Id` primary key plus the shared `name appName description status environmentId serverId` columns) and its `<kind>_tag` join table; add the `<kind>Id` FK to `backup` if it can be backed up.
+4. Add the `SERVICE_REGISTRY` entry in `registry.ts` — TypeScript flags every hole.
+5. Panel: add the icon in `components/projects/service-types.ts` (label, id field and the kind list come from the registry).
+6. Register its tRPC router in `trpc/root.ts` and add the route segment under `/dashboard/projects/[projectId]/services/<kind>/[id]`.
+
+Transactions: `db/index.ts` exports `DbExecutor` (`db` or an open transaction). Write helpers take `executor: DbExecutor = db`, so a caller can pull several into one `db.transaction(...)`; on a transaction handle `executor.transaction()` opens a SAVEPOINT, so helpers may wrap their own writes and still compose. Wrapped so far: `setServiceTags` (delete + insert), the environment cascade's row deletions in `projects/index.ts`, and GitOps `syncDomains` / `applyDatabase`. Swarm, Traefik and file side effects stay outside the transaction (they are best-effort and cannot be rolled back).

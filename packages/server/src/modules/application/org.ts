@@ -1,19 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
-import {
-	applications,
-	compose,
-	environments,
-	mariadb,
-	members,
-	mongo,
-	mysql,
-	postgres,
-	redis,
-} from "../../db/schema";
+import { applications, environments, members } from "../../db/schema";
 import type { TRPCContext } from "../../trpc/init";
 import { notFound } from "../errors";
 import { resolveCallerOrganizationId } from "../projects";
+import { SERVICE_REGISTRY, type ServiceKind } from "../services/registry";
 
 type Session = NonNullable<TRPCContext["session"]>;
 
@@ -117,14 +108,8 @@ export const findEnvironmentByName = async (
 	return environment;
 };
 
-export type ServiceType =
-	| "application"
-	| "compose"
-	| "postgres"
-	| "mysql"
-	| "mariadb"
-	| "mongo"
-	| "redis";
+/** @deprecated Use `ServiceKind` from `modules/services/registry`. */
+export type ServiceType = ServiceKind;
 
 export interface ServiceContext {
 	serviceId: string;
@@ -138,66 +123,10 @@ export interface ServiceContext {
  * Every mount/port mutation is org-scoped through this.
  */
 export const getServiceContext = async (
-	serviceType: ServiceType,
+	serviceType: ServiceKind,
 	serviceId: string,
 ): Promise<ServiceContext> => {
-	const withTenancy = {
-		with: { environment: { with: { project: true } } },
-	} as const;
-
-	let row:
-		| {
-				appName: string;
-				serverId: string | null;
-				environment: { project: { organizationId: string } };
-		  }
-		| undefined;
-
-	switch (serviceType) {
-		case "application":
-			row = await db.query.applications.findFirst({
-				where: eq(applications.applicationId, serviceId),
-				...withTenancy,
-			});
-			break;
-		case "compose":
-			row = await db.query.compose.findFirst({
-				where: eq(compose.composeId, serviceId),
-				...withTenancy,
-			});
-			break;
-		case "postgres":
-			row = await db.query.postgres.findFirst({
-				where: eq(postgres.postgresId, serviceId),
-				...withTenancy,
-			});
-			break;
-		case "mysql":
-			row = await db.query.mysql.findFirst({
-				where: eq(mysql.mysqlId, serviceId),
-				...withTenancy,
-			});
-			break;
-		case "mariadb":
-			row = await db.query.mariadb.findFirst({
-				where: eq(mariadb.mariadbId, serviceId),
-				...withTenancy,
-			});
-			break;
-		case "mongo":
-			row = await db.query.mongo.findFirst({
-				where: eq(mongo.mongoId, serviceId),
-				...withTenancy,
-			});
-			break;
-		case "redis":
-			row = await db.query.redis.findFirst({
-				where: eq(redis.redisId, serviceId),
-				...withTenancy,
-			});
-			break;
-	}
-
+	const row = await SERVICE_REGISTRY[serviceType].module.findTenancy(serviceId);
 	if (!row) {
 		throw notFound(`${serviceType} service not found`);
 	}
@@ -205,6 +134,6 @@ export const getServiceContext = async (
 		serviceId,
 		appName: row.appName,
 		serverId: row.serverId,
-		organizationId: row.environment.project.organizationId,
+		organizationId: row.organizationId,
 	};
 };

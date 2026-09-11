@@ -16,6 +16,11 @@ import {
 	unregisterBackupSchedule,
 } from "../../modules/backups/scheduler";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
+import {
+	type DatabaseServiceKind,
+	databaseKindSchema,
+	SERVICE_REGISTRY,
+} from "../../modules/services/registry";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 import { redactDestinationSecrets } from "../redact-secrets";
@@ -27,7 +32,7 @@ async function getOrganizationId(session: Session): Promise<string> {
 }
 
 /** Database services that map to a linked service row (instance backups excluded). */
-const backupDatabaseTypeSchema = z.enum(["postgres", "mysql", "mariadb", "mongo", "redis"]);
+const backupDatabaseTypeSchema = databaseKindSchema;
 
 /** Org scope travels through the destination (and the linked DB service). */
 async function findBackupOrThrow(backupId: string, organizationId: string) {
@@ -53,7 +58,7 @@ async function assertDestinationAccess(destinationId: string, organizationId: st
 
 /** Verify the linked database service belongs to the caller's org. */
 async function assertDatabaseServiceAccess(
-	databaseType: z.infer<typeof backupDatabaseTypeSchema>,
+	databaseType: DatabaseServiceKind,
 	serviceId: string,
 	organizationId: string,
 ) {
@@ -64,17 +69,17 @@ async function assertDatabaseServiceAccess(
 	return context;
 }
 
-/** FK column matching a database type. */
-const serviceIdColumn = (databaseType: z.infer<typeof backupDatabaseTypeSchema>) =>
-	databaseType === "postgres"
-		? backups.postgresId
-		: databaseType === "mysql"
-			? backups.mysqlId
-			: databaseType === "mariadb"
-				? backups.mariadbId
-				: databaseType === "mongo"
-					? backups.mongoId
-					: backups.redisId;
+/** FK column on `backup` matching a database type (`backups.postgresId`, …). */
+const serviceIdColumn = (databaseType: DatabaseServiceKind) => {
+	const column = SERVICE_REGISTRY[databaseType].backupColumn;
+	if (!column) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: `${databaseType} services cannot be backed up`,
+		});
+	}
+	return column;
+};
 
 /** `web-server` backups point at the instance itself — no service FK. */
 const allInputSchema = z.discriminatedUnion("databaseType", [
