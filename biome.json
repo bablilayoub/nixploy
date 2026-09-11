@@ -17,16 +17,49 @@
 			"!.nixploy-data"
 		]
 	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"preset": "recommended",
+			"complexity": {
+				"useOptionalChain": "error"
+			},
+			"correctness": {
+				"noUnusedFunctionParameters": "error",
+				"noUnusedImports": "error",
+				"noUnusedInstantiation": "error",
+				"noUnusedPrivateClassMembers": "error",
+				"noUnusedVariables": "error"
+			},
+			"performance": {
+				"noAccumulatingSpread": "error"
+			},
+			"style": {
+				"noCommonJs": "error",
+				"noNonNullAssertion": "error",
+				"noParameterAssign": "error",
+				"useConst": "error",
+				"useExportType": "error",
+				"useImportType": "error",
+				"useNodejsImportProtocol": "error",
+				"useThrowNewError": "error",
+				"useThrowOnlyError": "error"
+			},
+			"suspicious": {
+				"noConfusingVoidType": "error",
+				"noEvolvingTypes": "error",
+				"noExplicitAny": "error",
+				"noReturnAssign": "error",
+				"noSkippedTests": "error",
+				"noTsIgnore": "error",
+				"useErrorMessage": "error"
+			}
+		}
+	},
 	"formatter": {
 		"enabled": true,
 		"indentStyle": "tab",
 		"lineWidth": 100
-	},
-	"linter": {
-		"enabled": true,
-		"rules": {
-			"preset": "recommended"
-		}
 	},
 	"javascript": {
 		"formatter": {
@@ -50,7 +83,13 @@
 	},
 	"overrides": [
 		{
-			"includes": ["packages/server/src/modules/**", "!packages/server/src/modules/mcp/server.ts"],
+			"includes": [
+				"packages/server/src/modules/**",
+				"!packages/server/src/modules/**/*.test.ts",
+				"!packages/server/src/modules/mcp/server.ts",
+				"!packages/server/src/modules/deployment/docker.ts",
+				"!packages/server/src/modules/backups/stream-exec.ts"
+			],
 			"linter": {
 				"rules": {
 					"style": {
@@ -58,7 +97,9 @@
 							"level": "error",
 							"options": {
 								"paths": {
-									"@trpc/server": "Modules must not import @trpc/server: throw a DomainError from modules/errors.ts (badRequest, notFound, conflict, …) and trpc/init.ts maps it to the right code for tRPC, REST and MCP."
+									"@trpc/server": "Modules must not import @trpc/server: throw a DomainError from modules/errors.ts (badRequest, notFound, conflict, …) and trpc/init.ts maps it to the right code for tRPC, REST and MCP.",
+									"node:child_process": "Feature code must not spawn processes directly: use execAsync / execAsyncRemote / execAsyncWithStdin (utils/exec.ts) or spawnTargeted (modules/deployment/docker.ts) so quoting, timeouts and the remote/local split stay in one place.",
+									"child_process": "Feature code must not spawn processes directly: use execAsync / execAsyncRemote / execAsyncWithStdin (utils/exec.ts) or spawnTargeted (modules/deployment/docker.ts) so quoting, timeouts and the remote/local split stay in one place."
 								}
 							}
 						}

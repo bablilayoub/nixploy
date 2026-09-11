@@ -10,6 +10,7 @@ import { writeFileTargeted } from "../deployment/docker";
 import { getSshKeysPath } from "../deployment/paths";
 import {
 	buildGitSshCommand,
+	envPrefix,
 	gitProcessEnv,
 	gitProtocolEnv,
 	hardenedSimpleGit,
@@ -201,9 +202,7 @@ export async function cloneComposeSource(composeRow: ComposeRow): Promise<{
 		const dir = shellQuote(codeDir);
 		const url = shellQuote(source.cloneUrl);
 		const branch = shellQuote(source.branch);
-		const prefix = Object.entries(gitEnv)
-			.map(([key, value]) => `${key}=${shellQuote(value)} `)
-			.join("");
+		const prefix = envPrefix(gitEnv);
 		await execAsyncRemote(
 			composeRow.serverId,
 			// Refresh the remote first: the URL baked in at clone time carries a

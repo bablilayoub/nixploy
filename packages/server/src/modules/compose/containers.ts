@@ -1,5 +1,6 @@
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { createTtlCache, DOCKER_LISTING_TTL_MS } from "../../utils/ttl-cache";
+import { invalidateDockerListings } from "../docker/containers";
 import { notFound } from "../errors";
 
 export type ComposeContainerRow = {
@@ -84,7 +85,15 @@ const containerCache = createTtlCache<ComposeContainerRow[]>({ ttlMs: DOCKER_LIS
 const cacheKey = (appName: string, serverId: string | null | undefined): string =>
 	`${serverId ?? "__local__"}:${appName}`;
 
-/** Forget a compose project's cached container list (deploy, start/stop, delete). */
+/**
+ * Forget a compose project's cached container list (deploy, start/stop, delete).
+ *
+ * Anything that changes a stack's containers also changes what `docker ps` /
+ * `docker service ls` report for that server, so the Docker control center's
+ * listing cache (`modules/docker/containers.ts`) is dropped in the same call —
+ * otherwise the Docker tab keeps rendering containers that are already gone for
+ * up to one TTL window.
+ */
 export function invalidateComposeContainers(
 	appName: string,
 	serverId?: string | null | undefined,
@@ -94,6 +103,7 @@ export function invalidateComposeContainers(
 		return;
 	}
 	containerCache.invalidate(cacheKey(appName, serverId));
+	invalidateDockerListings(serverId);
 }
 
 /**

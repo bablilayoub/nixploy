@@ -9,21 +9,6 @@ export const loginSchema = z.object({
 	password: z.string().min(1, "Password is required"),
 });
 
-export const registerSchema = z
-	.object({
-		name: z.string().min(1, "Name is required").max(64),
-		email: z.email("Enter a valid email address"),
-		password: z.string().min(8, "Password must be at least 8 characters"),
-		confirmPassword: z.string(),
-	})
-	.refine((data) => data.password === data.confirmPassword, {
-		message: "Passwords do not match",
-		path: ["confirmPassword"],
-	});
-
-/** Alias used by the first-admin onboarding form (owner account step). */
-export const setupSchema = registerSchema;
-
 /** Organization name collected on the setup wizard org step. */
 export const setupOrgSchema = z.object({
 	orgName: z.string().min(1, "Organization name is required").max(64),
@@ -53,7 +38,5 @@ export const twoFactorSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
-export type RegisterInput = z.infer<typeof registerSchema>;
-export type SetupInput = RegisterInput;
 export type SetupOrgInput = z.infer<typeof setupOrgSchema>;
 export type TwoFactorInput = z.infer<typeof twoFactorSchema>;

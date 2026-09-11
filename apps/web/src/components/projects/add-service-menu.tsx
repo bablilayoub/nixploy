@@ -247,10 +247,12 @@ export function AddServiceMenu({
 		// User-provided credentials win; blank fields are auto-generated.
 		const fields = DATABASE_CREDENTIAL_FIELDS[databaseDialog];
 		const values: Record<string, string> = {};
+		const display: Record<string, string> = {};
 		for (const field of fields) {
-			values[field.key] = credentials[field.key]?.trim() || (field.secret ? randomSecret() : slug);
+			const value = credentials[field.key]?.trim() || (field.secret ? randomSecret() : slug);
+			values[field.key] = value;
+			display[field.label] = value;
 		}
-		const display = Object.fromEntries(fields.map((field) => [field.label, values[field.key]]));
 		const onSuccess = (row: { name: string }) =>
 			handleDatabaseCreated(databaseDialog, row.name, display);
 		switch (databaseDialog) {

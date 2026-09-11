@@ -50,7 +50,9 @@ function assertSafeRedirectRule(regex: string, replacement: string, ownHosts: st
 	// to every router of the app, the whole app 404s. JS and RE2 agree on
 	// the allowed character set closely enough to catch these up front.
 	try {
-		new RegExp(regex);
+		// `RegExp(...)` without `new` parses the pattern just the same; the
+		// object is thrown away, only the SyntaxError matters here.
+		RegExp(regex);
 	} catch {
 		throw new TRPCError({
 			code: "BAD_REQUEST",
@@ -220,14 +222,7 @@ export const redirectRouter = router({
 						message: "serviceName is required for compose redirects",
 					});
 				}
-				try {
-					assertComposeServiceName(input.serviceName);
-				} catch (error) {
-					throw new TRPCError({
-						code: "BAD_REQUEST",
-						message: error instanceof Error ? error.message : "Invalid serviceName",
-					});
-				}
+				assertComposeServiceName(input.serviceName);
 			}
 			assertSafeRedirectRule(
 				input.regex,

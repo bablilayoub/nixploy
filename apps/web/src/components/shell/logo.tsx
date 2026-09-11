@@ -6,9 +6,6 @@ import { cn } from "@/lib/utils";
 export const NIXPLOY_MARK_DARK_SRC = "/brand/nixploy-mark-dark.png";
 /** Light mark (for dark UI backgrounds). */
 export const NIXPLOY_MARK_LIGHT_SRC = "/brand/nixploy-mark-light.png";
-/** Default / favicon: light mark on dark square. */
-export const NIXPLOY_MARK_SRC = "/brand/nixploy-mark.png";
-
 /**
  * Nixploy cheetah mark — theme-aware (dark mark in light mode, light mark in dark mode).
  */

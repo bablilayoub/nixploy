@@ -1,16 +1,10 @@
 {
+	// Same shared strictness as the panel and the server; see tsconfig.base.json.
+	"extends": "../../tsconfig.base.json",
 	"compilerOptions": {
-		"target": "ES2022",
-		"lib": ["dom", "dom.iterable", "esnext"],
+		// Next-specific overrides only.
+		"lib": ["dom", "dom.iterable", "ES2023"],
 		"allowJs": true,
-		"skipLibCheck": true,
-		"strict": true,
-		"noEmit": true,
-		"esModuleInterop": true,
-		"module": "esnext",
-		"moduleResolution": "bundler",
-		"resolveJsonModule": true,
-		"isolatedModules": true,
 		"jsx": "react-jsx",
 		"incremental": true,
 		"plugins": [

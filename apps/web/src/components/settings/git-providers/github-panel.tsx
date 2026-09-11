@@ -260,7 +260,7 @@ export function GithubPanel() {
 												onSubmit={(values) =>
 													updateMutation.mutateAsync({
 														githubId: github.githubId,
-														name: values.name,
+														name: values.name ?? "",
 													})
 												}
 											/>

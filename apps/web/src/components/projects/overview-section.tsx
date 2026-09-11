@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Container, FolderGit2, Rocket, Server } from "lucide-react";
+import { Container, FolderGit2, Rocket, Server } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
@@ -291,56 +291,6 @@ export function RecentDeployments() {
 					})}
 				</div>
 			</QueryState>
-		</section>
-	);
-}
-
-/** Docker daemon health: running containers + reclaimable space, links to the Docker tab. */
-export function DockerHealthCard() {
-	const trpc = useTRPC();
-	const containersQuery = useQuery(trpc.docker.containers.queryOptions({}));
-	const infoQuery = useQuery(trpc.docker.systemInfo.queryOptions({}));
-
-	const containers = containersQuery.data ?? [];
-	const running = containers.filter((container) => container.State === "running").length;
-	const reclaimable = (infoQuery.data?.df ?? [])
-		.map((row) => row.Reclaimable)
-		.find((value) => value && value !== "0B");
-
-	return (
-		<section className="rounded-lg border border-border p-4 sm:p-5">
-			<div className="mb-3 space-y-1">
-				<h3 className="text-sm font-medium">Docker</h3>
-				<p className="text-sm text-muted-foreground">Daemon health on this host</p>
-			</div>
-			<Link
-				href="/dashboard/docker"
-				className="block space-y-3 transition-opacity hover:opacity-80"
-			>
-				{containersQuery.isPending ? (
-					<Skeleton className="h-8 w-24" />
-				) : containersQuery.isError ? (
-					<span className="text-sm text-muted-foreground">Daemon unreachable</span>
-				) : (
-					<span className="text-2xl font-semibold tabular-nums">
-						{running}
-						<span className="text-base font-normal text-muted-foreground">
-							{" "}
-							/ {containers.length} running
-						</span>
-					</span>
-				)}
-				<p className="text-xs text-muted-foreground">
-					{infoQuery.data?.version?.Server?.Version
-						? `Engine ${infoQuery.data.version.Server.Version}`
-						: "Engine —"}
-					{reclaimable ? ` · ${reclaimable} reclaimable` : ""}
-				</p>
-				<span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-					Open Docker
-					<ChevronRight className="size-4" />
-				</span>
-			</Link>
 		</section>
 	);
 }

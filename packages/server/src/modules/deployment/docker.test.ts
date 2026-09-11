@@ -191,3 +191,26 @@ describe("dockerode over the pooled SSH transport", () => {
 		expect(getServerTransportState("srv-1").connected).toBe(true);
 	});
 });
+
+describe("CommandError", () => {
+	it("is a DomainError so the boundary keeps its message and code", async () => {
+		const { CommandError } = await import("./docker");
+		const { isDomainError } = await import("../errors");
+
+		const failed = new CommandError("Command failed (exit 1)", 1, false);
+		expect(isDomainError(failed)).toBe(true);
+		expect(failed.code).toBe("INTERNAL_SERVER_ERROR");
+		expect(failed.exitCode).toBe(1);
+		expect(failed.killed).toBe(false);
+		expect(failed).toBeInstanceOf(CommandError);
+		expect(failed.name).toBe("CommandError");
+
+		// A timeout is a TIMEOUT, not a bug — REST returns 408, MCP says TIMEOUT.
+		const timedOut = new CommandError("Command timed out after 30m", null, false, "TIMEOUT");
+		expect(timedOut.code).toBe("TIMEOUT");
+
+		// `killed` still tells a user cancel from a real failure (worker.ts, hooks.ts).
+		const cancelled = new CommandError("Command was cancelled", null, true);
+		expect(cancelled.killed).toBe(true);
+	});
+});

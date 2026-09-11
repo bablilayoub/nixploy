@@ -195,7 +195,7 @@ function buildConfig(
 			return {
 				emailConfig: {
 					fromAddress: v.fromAddress,
-					toAddresses: v.toAddresses
+					toAddresses: (v.toAddresses ?? "")
 						.split(",")
 						.map((address) => address.trim())
 						.filter(Boolean),

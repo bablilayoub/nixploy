@@ -26,7 +26,7 @@ const parseMemoryMb = (value: string | null): number => {
 	if (!value) return 0;
 	const match = /^(\d+(?:\.\d+)?)\s*(m|mb|mi|g|gb|gi)?$/i.exec(value.trim());
 	if (!match) return 0;
-	const amount = Number.parseFloat(match[1]);
+	const amount = Number.parseFloat(match[1] ?? "0");
 	const unit = (match[2] ?? "m").toLowerCase();
 	return unit.startsWith("g") ? Math.round(amount * 1024) : Math.round(amount);
 };

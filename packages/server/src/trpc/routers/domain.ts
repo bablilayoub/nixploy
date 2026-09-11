@@ -23,7 +23,7 @@ import {
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { resyncComposeDomains } from "../../modules/compose/service";
-import { isDomainError, isUniqueViolation } from "../../modules/errors";
+import { isUniqueViolation } from "../../modules/errors";
 import { syncPreviewTraefik } from "../../modules/preview/traefik";
 import { assertCapability } from "../../modules/projects";
 import {
@@ -356,15 +356,7 @@ const assertHostPathAvailable = async (
  *   ranges denied (no loopback, no RFC1918, no metadata).
  */
 const assertForwardAuthAllowed = async (address: string, organizationId: string): Promise<void> => {
-	let target: ReturnType<typeof parseForwardAuthAddress>;
-	try {
-		target = parseForwardAuthAddress(address);
-	} catch (error) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: error instanceof Error ? error.message : "Invalid forwardAuth address",
-		});
-	}
+	const target = parseForwardAuthAddress(address);
 	if (target.scope === "external") {
 		try {
 			await assertSafeOutboundUrl(target.url.toString(), { allowPrivate: false });
@@ -559,29 +551,11 @@ export const domainRouter = router({
 			}
 
 			const certificateType = input.certificateType ?? "none";
-			let host: string;
-			let path: string;
-			let internalPath: string | null;
-			try {
-				host = assertHostAllowingWildcard(input.host);
-				path = assertTraefikPath(input.path ?? "/") ?? "/";
-				internalPath = assertTraefikPath(input.internalPath);
-			} catch (error) {
-				if (error instanceof TRPCError) throw error;
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: error instanceof Error ? error.message : "Invalid domain host/path",
-				});
-			}
+			const host = assertHostAllowingWildcard(input.host);
+			const path = assertTraefikPath(input.path ?? "/") ?? "/";
+			const internalPath = assertTraefikPath(input.internalPath);
 			if (input.serviceName) {
-				try {
-					assertComposeServiceName(input.serviceName);
-				} catch (error) {
-					throw new TRPCError({
-						code: "BAD_REQUEST",
-						message: error instanceof Error ? error.message : "Invalid serviceName",
-					});
-				}
+				assertComposeServiceName(input.serviceName);
 			}
 			const route = await resolveRouteProtocol({
 				protocol: input.protocol ?? "http",
@@ -687,27 +661,15 @@ export const domainRouter = router({
 			const existing = await assertDomainAccess(input.domainId, organizationId);
 
 			const certificateType = input.certificateType ?? existing.certificateType;
-			let nextHost: string;
-			let nextPath: string;
-			try {
-				nextHost =
-					input.host !== undefined ? assertHostAllowingWildcard(input.host) : existing.host;
-				nextPath =
-					input.path !== undefined
-						? (assertTraefikPath(input.path) ?? "/")
-						: (existing.path ?? "/");
-				if (input.internalPath !== undefined) {
-					assertTraefikPath(input.internalPath);
-				}
-				if (input.serviceName) {
-					assertComposeServiceName(input.serviceName);
-				}
-			} catch (error) {
-				if (error instanceof TRPCError) throw error;
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: error instanceof Error ? error.message : "Invalid domain host/path",
-				});
+			const nextHost =
+				input.host !== undefined ? assertHostAllowingWildcard(input.host) : existing.host;
+			const nextPath =
+				input.path !== undefined ? (assertTraefikPath(input.path) ?? "/") : (existing.path ?? "/");
+			if (input.internalPath !== undefined) {
+				assertTraefikPath(input.internalPath);
+			}
+			if (input.serviceName) {
+				assertComposeServiceName(input.serviceName);
 			}
 			const route = await resolveRouteProtocol({
 				protocol: input.protocol ?? existing.protocol,
@@ -868,18 +830,7 @@ export const domainRouter = router({
 				enabled: boolean;
 			}> = [];
 			for (const row of input.middlewares) {
-				let config: unknown;
-				try {
-					config = parseMiddlewareConfig(row.kind, row.config ?? {});
-				} catch (error) {
-					throw new TRPCError({
-						code: "BAD_REQUEST",
-						message:
-							isDomainError(error) || error instanceof Error
-								? error.message
-								: `Invalid ${row.kind} middleware`,
-					});
-				}
+				const config = parseMiddlewareConfig(row.kind, row.config ?? {});
 				if (row.kind === "forwardAuth") {
 					await assertForwardAuthAllowed((config as { address: string }).address, organizationId);
 				}

@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import Docker from "dockerode";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
@@ -28,6 +27,7 @@ import {
 } from "../deployment/swarm";
 import { badRequest, conflict, notFound, preconditionFailed } from "../errors";
 import type { QuotaResourceDefaults } from "../projects/quotas";
+import { randomAppNameSuffix, slugifyName } from "../services/app-name";
 import { SERVICE_REGISTRY } from "../services/registry";
 
 /**
@@ -68,13 +68,7 @@ export type DatabaseStatus = "idle" | "running" | "done" | "error";
 
 /** Generate a swarm-safe unique appName from the service name. */
 export function generateDatabaseAppName(name: string): string {
-	const slug =
-		name
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, "-")
-			.replace(/^-+|-+$/g, "")
-			.slice(0, 40) || "db";
-	return `${slug}-${randomBytes(3).toString("hex")}`;
+	return `${slugifyName(name, "db")}-${randomAppNameSuffix()}`;
 }
 
 /**

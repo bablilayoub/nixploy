@@ -185,10 +185,12 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 	// The destination step should not ask when there is nothing to choose:
 	// preselect the only project and the only environment.
 	useEffect(() => {
-		if (!projectId && projects?.length === 1) setProjectId(projects[0].projectId);
+		const only = projects?.length === 1 ? projects[0] : undefined;
+		if (!projectId && only) setProjectId(only.projectId);
 	}, [projectId, projects]);
 	useEffect(() => {
-		if (!environmentName && environments.length === 1) setEnvironmentName(environments[0].name);
+		const only = environments.length === 1 ? environments[0] : undefined;
+		if (!environmentName && only) setEnvironmentName(only.name);
 	}, [environmentName, environments]);
 	const stepIndex = steps.findIndex((entry) => entry.id === step);
 	const isLastStep = stepIndex === steps.length - 1;

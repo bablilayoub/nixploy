@@ -18,8 +18,6 @@ import { AppWindow, Boxes, Database, type LucideIcon } from "lucide-react";
 /** Service kinds shown on the project page; route segment under /services/<type>/<id>. */
 export type ServiceType = ServiceKind;
 
-export const SERVICE_TYPES = SERVICE_KINDS;
-
 export const DATABASE_TYPES = DATABASE_KINDS;
 
 export type DatabaseType = (typeof DATABASE_TYPES)[number];

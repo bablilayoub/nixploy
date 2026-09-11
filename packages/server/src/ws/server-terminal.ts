@@ -1,17 +1,14 @@
 import type { IncomingMessage } from "node:http";
-import { eq } from "drizzle-orm";
-import { Client } from "ssh2";
+import type { ClientChannel } from "ssh2";
 import type { WebSocket } from "ws";
-import { db } from "../db";
-import { servers } from "../db/schema";
 import { recordAudit } from "../modules/audit";
 import { assertInstanceAdmin } from "../modules/auth/instance-admin";
 import { findServerById } from "../modules/cluster/servers";
 import { hasCapability } from "../modules/projects";
-import { verifyRemoteHostKey } from "../utils/exec";
 import { clientIpFromHeaders, userAgentFromHeaders } from "../utils/rate-limit";
 import { resolveWsOrganizationId } from "./access";
 import type { WsSession } from "./auth";
+import { acquireServerSsh } from "./docker";
 import { closeWithError, requestHeaders, safeSend, upgradeSearchParams } from "./utils";
 
 /**
@@ -46,7 +43,6 @@ interface TerminalInput {
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
-const SSH_READY_TIMEOUT_MS = 30_000;
 
 /**
  * A forgotten browser tab must not hold a root shell open forever. Any
@@ -102,21 +98,6 @@ export async function assertServerTerminalAccess(
 	return { organizationId, serverName: server.name };
 }
 
-/** Server row + decrypted SSH key, or a readable error. */
-async function loadServerConnection(serverId: string) {
-	const server = await db.query.servers.findFirst({
-		where: eq(servers.serverId, serverId),
-		with: { sshKey: true },
-	});
-	if (!server) {
-		throw new Error(`Server not found: ${serverId}`);
-	}
-	if (!server.sshKey) {
-		throw new Error(`Server ${server.name} has no SSH key attached`);
-	}
-	return server;
-}
-
 export async function handleServerTerminal(
 	ws: WebSocket,
 	req: IncomingMessage,
@@ -163,34 +144,34 @@ export async function handleServerTerminal(
 }
 
 /**
- * Open a dedicated SSH connection and a PTY on it.
+ * Open a PTY on the server's pooled SSH connection.
  *
- * Deliberately *not* the pooled client (`utils/ssh-pool.ts`): a shell holds
- * its channel for as long as the operator types, and the pool's channel
- * budget exists to keep short commands (`docker ps`, the metrics batch)
- * flowing. One connection per open terminal, ended with the socket.
+ * One channel of the shared client (`utils/ssh-pool.ts`), exactly like the
+ * container shell in `docker-terminal.ts`: the pool owns the handshake, the
+ * host-key pin and the circuit breaker, so a terminal cannot drift from the
+ * transport every other remote path uses. The channel is held for as long as
+ * the operator types and given back — never `end()` on the shared client — when
+ * the browser goes away, the remote shell exits or the idle timer fires.
  */
 async function attachServerShell(ws: WebSocket, serverId: string): Promise<void> {
-	const server = await loadServerConnection(serverId);
-	const privateKey = server.sshKey?.privateKey;
-	if (!privateKey) {
-		throw new Error(`Server ${server.name} has no SSH key attached`);
-	}
+	const lease = await acquireServerSsh(serverId);
 
-	const conn = new Client();
 	let closed = false;
+	let channel: ClientChannel | null = null;
+	let idleTimer: NodeJS.Timeout | null = null;
+
 	const shutdown = () => {
 		if (closed) return;
 		closed = true;
 		if (idleTimer) clearTimeout(idleTimer);
 		try {
-			conn.end();
+			channel?.close();
 		} catch {
-			// already gone
+			// channel already gone
 		}
+		lease.release();
 	};
 
-	let idleTimer: NodeJS.Timeout | null = null;
 	const touch = () => {
 		if (idleTimer) clearTimeout(idleTimer);
 		idleTimer = setTimeout(() => {
@@ -203,55 +184,47 @@ async function attachServerShell(ws: WebSocket, serverId: string): Promise<void>
 	touch();
 
 	ws.on("close", shutdown);
+	// The shared connection died under us (network drop, sshd restart): the
+	// lease is already gone, so only the socket needs telling.
+	lease.onConnectionLost((error) => {
+		if (closed) return;
+		closed = true;
+		if (idleTimer) clearTimeout(idleTimer);
+		closeWithError(ws, `SSH connection lost: ${error.message}`);
+	});
 
-	conn
-		.on("ready", () => {
-			conn.shell(
-				{ term: "xterm-256color", cols: DEFAULT_COLS, rows: DEFAULT_ROWS },
-				(err, stream) => {
-					if (err) {
-						shutdown();
-						closeWithError(ws, err.message);
-						return;
-					}
-					stream
-						.on("data", (data: Buffer) => safeSend(ws, data))
-						.on("close", () => {
-							shutdown();
-							ws.close(1000);
-						});
-					stream.stderr.on("data", (data: Buffer) => safeSend(ws, data));
+	lease.client.shell(
+		{ term: "xterm-256color", cols: DEFAULT_COLS, rows: DEFAULT_ROWS },
+		(err, stream) => {
+			if (err) {
+				shutdown();
+				closeWithError(ws, err.message);
+				return;
+			}
+			channel = stream;
+			stream
+				.on("data", (data: Buffer) => safeSend(ws, data))
+				.on("close", () => {
+					shutdown();
+					ws.close(1000);
+				});
+			stream.stderr.on("data", (data: Buffer) => safeSend(ws, data));
 
-					ws.on("message", (raw: Buffer) => {
-						const input = parseTerminalInput(raw);
-						if (!input) return;
-						touch();
-						if (input.type === "stdin") {
-							stream.write(input.data);
-						} else {
-							stream.setWindow(
-								clampDimension(input.rows, DEFAULT_ROWS),
-								clampDimension(input.cols, DEFAULT_COLS),
-								0,
-								0,
-							);
-						}
-					});
-				},
-			);
-		})
-		.on("error", (err: Error) => {
-			shutdown();
-			closeWithError(ws, `SSH connection failed: ${err.message}`);
-		})
-		.connect({
-			host: server.ipAddress,
-			port: server.port,
-			username: server.username,
-			privateKey,
-			readyTimeout: SSH_READY_TIMEOUT_MS,
-			// Same trust-on-first-use pin every other SSH path uses; a swapped
-			// host key closes the socket instead of typing into a stranger.
-			hostVerifier: (key: Buffer) => verifyRemoteHostKey(serverId, key),
-		});
+			ws.on("message", (raw: Buffer) => {
+				const input = parseTerminalInput(raw);
+				if (!input) return;
+				touch();
+				if (input.type === "stdin") {
+					stream.write(input.data);
+				} else {
+					stream.setWindow(
+						clampDimension(input.rows, DEFAULT_ROWS),
+						clampDimension(input.cols, DEFAULT_COLS),
+						0,
+						0,
+					);
+				}
+			});
+		},
+	);
 }

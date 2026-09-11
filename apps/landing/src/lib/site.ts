@@ -18,13 +18,6 @@ export const site = {
 	inspiredBy: "Inspired by Dokploy and Coolify — built to be better.",
 } as const;
 
-export const navLinks = [
-	{ href: "/features", label: "Features" },
-	{ href: "/docs", label: "Docs" },
-	{ href: "/api", label: "API" },
-	{ href: "/docs/install", label: "Install" },
-] as const;
-
 export const footerLinks = [
 	{ href: "/features", label: "Features" },
 	{ href: "/docs", label: "Docs" },

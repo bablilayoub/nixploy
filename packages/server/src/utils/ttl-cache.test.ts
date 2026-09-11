@@ -4,7 +4,12 @@ import { createTtlCache } from "./ttl-cache";
 const withClock = (ttlMs = 1_000) => {
 	let now = 0;
 	const cache = createTtlCache<string>({ ttlMs, clock: () => now });
-	return { cache, advance: (ms: number) => (now += ms) };
+	return {
+		cache,
+		advance: (ms: number) => {
+			now += ms;
+		},
+	};
 };
 
 describe("createTtlCache", () => {

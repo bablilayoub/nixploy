@@ -287,16 +287,3 @@ export function subscribeToLiveEventsConnection(listener: ConnectionListener): (
 export function isLiveEventsConnected(): boolean {
 	return connected;
 }
-
-/** Test hook: drop all state between cases. */
-export function __resetLiveEventsForTest(): void {
-	if (reconnectTimer) clearTimeout(reconnectTimer);
-	if (closeTimer) clearTimeout(closeTimer);
-	reconnectTimer = null;
-	closeTimer = null;
-	socket = null;
-	attempts = 0;
-	connected = false;
-	eventListeners.clear();
-	connectionListeners.clear();
-}

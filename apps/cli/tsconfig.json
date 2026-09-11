@@ -1,16 +1,8 @@
 {
+	// Same shared strictness as the panel and the server; see tsconfig.base.json.
+	"extends": "../../tsconfig.base.json",
 	"compilerOptions": {
-		"target": "ES2022",
-		"module": "ESNext",
-		"moduleResolution": "Bundler",
-		"lib": ["ES2022"],
 		"types": ["node"],
-		"strict": true,
-		"noUncheckedIndexedAccess": true,
-		"esModuleInterop": true,
-		"skipLibCheck": true,
-		"forceConsistentCasingInFileNames": true,
-		"noEmit": true,
 		// The CLI ships with one runtime dependency (commander) and no test
 		// runner of its own: `pnpm -F @nixploy/cli test` borrows the vitest
 		// binary from @nixploy/server. Point the type resolver at the same

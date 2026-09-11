@@ -35,15 +35,7 @@ async function requireInstanceAdmin(session: Session): Promise<string> {
  * canonical form that is persisted.
  */
 function assertAllowedUpdateImage(image: string): string {
-	let canonical: string;
-	try {
-		canonical = assertValidImageRef(image).canonical;
-	} catch (error) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: error instanceof Error ? error.message : "Invalid image reference",
-		});
-	}
+	const canonical = assertValidImageRef(image).canonical;
 	const allowed =
 		canonical === DEFAULT_UPDATE_IMAGE ||
 		canonical.startsWith("ghcr.io/bablilayoub/nixploy:") ||

@@ -35,9 +35,10 @@ export function DangerZone({
 	/**
 	 * Run the destructive action. Return the mutation promise (`mutateAsync`)
 	 * so the dialog stays open with a spinner until it settles; a rejection
-	 * keeps the dialog open (the caller toasts the error).
+	 * keeps the dialog open (the caller toasts the error). Returning nothing
+	 * closes it immediately — hence `unknown` rather than `void | Promise<…>`.
 	 */
-	onConfirm: () => void | Promise<unknown>;
+	onConfirm: () => unknown;
 	/** When set, the user must type this exact text to enable the action. */
 	requireText?: string;
 	/** Disable the trigger (e.g. the member lacks the delete capability). */

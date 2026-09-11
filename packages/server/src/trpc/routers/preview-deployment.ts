@@ -9,9 +9,6 @@ import { findComposeForOrg } from "../../modules/compose/service";
 import {
 	createPreviewDeployment,
 	deletePreviewDeployment,
-	PreviewConflictError,
-	PreviewLimitError,
-	PreviewNotFoundError,
 	type PreviewParentRef,
 	previewParentRef,
 	redeployPreviewDeployment,
@@ -140,35 +137,22 @@ export const previewDeploymentRouter = router({
 			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 			const parent = await assertPreviewParentAccess(input, organizationId);
 
-			try {
-				// Manual preview: the deployment row is attributed to this user
-				// (webhook-driven previews pass `webhook:<provider>` instead).
-				const preview = await createPreviewDeployment({
-					...input,
-					triggeredBy: ctx.session.user.id,
-				});
-				void auditFromSession(ctx, organizationId, {
-					action: "previewDeployment.create",
-					...auditTarget(parent),
-					targetName: preview.appName,
-					metadata: {
-						previewDeploymentId: preview.previewDeploymentId,
-						pullRequestNumber: input.pullRequestNumber,
-					},
-				});
-				return preview;
-			} catch (error) {
-				if (error instanceof PreviewConflictError) {
-					throw new TRPCError({ code: "CONFLICT", message: error.message });
-				}
-				if (error instanceof PreviewLimitError) {
-					throw new TRPCError({ code: "PRECONDITION_FAILED", message: error.message });
-				}
-				if (error instanceof PreviewNotFoundError) {
-					throw new TRPCError({ code: "NOT_FOUND", message: error.message });
-				}
-				throw error;
-			}
+			// Manual preview: the deployment row is attributed to this user
+			// (webhook-driven previews pass `webhook:<provider>` instead).
+			const preview = await createPreviewDeployment({
+				...input,
+				triggeredBy: ctx.session.user.id,
+			});
+			void auditFromSession(ctx, organizationId, {
+				action: "previewDeployment.create",
+				...auditTarget(parent),
+				targetName: preview.appName,
+				metadata: {
+					previewDeploymentId: preview.previewDeploymentId,
+					pullRequestNumber: input.pullRequestNumber,
+				},
+			});
+			return preview;
 		}),
 
 	/** Tear down a preview: remove the variant service / project, its routes and rows. */
@@ -179,24 +163,17 @@ export const previewDeploymentRouter = router({
 			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 			const { preview, parent } = await findPreview(input.previewDeploymentId, organizationId);
 
-			try {
-				const result = await deletePreviewDeployment(input.previewDeploymentId);
-				void auditFromSession(ctx, organizationId, {
-					action: "previewDeployment.delete",
-					...auditTarget(parent),
-					targetName: preview.appName,
-					metadata: {
-						previewDeploymentId: preview.previewDeploymentId,
-						pullRequestNumber: preview.pullRequestNumber,
-					},
-				});
-				return result;
-			} catch (error) {
-				if (error instanceof PreviewNotFoundError) {
-					throw new TRPCError({ code: "NOT_FOUND", message: error.message });
-				}
-				throw error;
-			}
+			const result = await deletePreviewDeployment(input.previewDeploymentId);
+			void auditFromSession(ctx, organizationId, {
+				action: "previewDeployment.delete",
+				...auditTarget(parent),
+				targetName: preview.appName,
+				metadata: {
+					previewDeploymentId: preview.previewDeploymentId,
+					pullRequestNumber: preview.pullRequestNumber,
+				},
+			});
+			return result;
 		}),
 
 	/**
@@ -259,23 +236,16 @@ export const previewDeploymentRouter = router({
 					status: "removed",
 				});
 			}
-			try {
-				const result = await deletePreviewDeployment(input.previewDeploymentId);
-				void auditFromSession(ctx, organizationId, {
-					action: "previewDeployment.deny",
-					...auditTarget(parent),
-					targetName: preview.appName,
-					metadata: {
-						previewDeploymentId: preview.previewDeploymentId,
-						pullRequestNumber: preview.pullRequestNumber,
-					},
-				});
-				return result;
-			} catch (error) {
-				if (error instanceof PreviewNotFoundError) {
-					throw new TRPCError({ code: "NOT_FOUND", message: error.message });
-				}
-				throw error;
-			}
+			const result = await deletePreviewDeployment(input.previewDeploymentId);
+			void auditFromSession(ctx, organizationId, {
+				action: "previewDeployment.deny",
+				...auditTarget(parent),
+				targetName: preview.appName,
+				metadata: {
+					previewDeploymentId: preview.previewDeploymentId,
+					pullRequestNumber: preview.pullRequestNumber,
+				},
+			});
+			return result;
 		}),
 });

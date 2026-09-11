@@ -16,6 +16,7 @@ import { duplicateApplication } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
 import { duplicateCompose } from "../../modules/compose/service";
 import { duplicateDatabase } from "../../modules/databases/engine";
+import { conflict } from "../../modules/errors";
 import {
 	assertCapability,
 	assertWithinQuota,
@@ -110,6 +111,8 @@ export const environmentRouter = router({
 					projectId: project.projectId,
 				})
 				.returning();
+			// `.returning()` is typed as an array; the insert either yields the row or throws.
+			if (!environment) throw conflict("Environment could not be created");
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
 				organizationId,

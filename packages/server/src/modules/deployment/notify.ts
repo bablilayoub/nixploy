@@ -603,6 +603,11 @@ export async function stopEventBridge(): Promise<void> {
 	const subscriptions = bus.subscriptions.splice(0);
 	bus.bridgeStarted = false;
 	await Promise.all(subscriptions.map((entry) => entry.unsubscribe()));
+	// `unlisten` releases the channels but leaves the dedicated `max: 1`
+	// listener connection open; close it too so a SIGTERM does not leave a
+	// half-open session on Postgres (`db/listen.ts` reopens it lazily).
+	const { closeListener } = await import("../../db/listen");
+	await closeListener();
 }
 
 /**

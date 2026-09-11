@@ -21,15 +21,18 @@ import { conflict } from "../errors";
  */
 export const MAX_APP_NAME_SLUG_LENGTH = 40;
 
-/** Convert a display name into a dns-safe slug (swarm service names). */
-export const slugifyName = (name: string): string =>
+/**
+ * Convert a display name into a dns-safe slug (swarm service names).
+ * `fallback` is what an all-punctuation name collapses to.
+ */
+export const slugifyName = (name: string, fallback = "app"): string =>
 	name
 		.toLowerCase()
 		.trim()
 		.replace(/[^a-z0-9]+/g, "-")
 		.replace(/^-+|-+$/g, "")
 		.slice(0, MAX_APP_NAME_SLUG_LENGTH)
-		.replace(/-+$/g, "") || "app";
+		.replace(/-+$/g, "") || fallback;
 
 /**
  * appName must be unique across every deployable service kind — including
@@ -85,14 +88,18 @@ export const isAppNameTaken = async (appName: string): Promise<boolean> => {
 	return checks.some(Boolean);
 };
 
+/** Six hex characters — the disambiguating suffix of every generated appName. */
+export const randomAppNameSuffix = (): string => randomBytes(3).toString("hex");
+
 /**
  * Generate a unique appName for a service: `<slug>-<6 hex chars>`,
- * retried on the (astronomically unlikely) collision.
+ * retried on the (astronomically unlikely) collision. Shared by applications,
+ * compose stacks and databases — the namespace is one, so the generator is too.
  */
-export const generateAppName = async (name: string): Promise<string> => {
-	const slug = slugifyName(name);
+export const generateAppName = async (name: string, fallback = "app"): Promise<string> => {
+	const slug = slugifyName(name, fallback);
 	for (let attempt = 0; attempt < 10; attempt++) {
-		const candidate = `${slug}-${randomBytes(3).toString("hex")}`;
+		const candidate = `${slug}-${randomAppNameSuffix()}`;
 		if (!(await isAppNameTaken(candidate))) {
 			return candidate;
 		}

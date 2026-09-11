@@ -247,15 +247,7 @@ export const dockerRouter = router({
 		.input(serverInput.extend({ reference: z.string().min(1).max(512) }))
 		.mutation(async ({ ctx, input }) => {
 			await assertAdmin(ctx, input?.serverId);
-			let reference: string;
-			try {
-				reference = assertSafeDockerImageRef(input.reference);
-			} catch (error) {
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: error instanceof Error ? error.message : "Invalid image reference",
-				});
-			}
+			const reference = assertSafeDockerImageRef(input.reference);
 			const output = await runOn(ctx, input.serverId, `docker pull ${shq(reference)}`);
 			invalidateDockerListings(input.serverId);
 			return output;

@@ -81,10 +81,23 @@ jobs:
           echo "traefik static config: install.sh, update.sh, template and setup.ts agree"
 
       - name: Biome
-        run: pnpm exec biome check packages/server apps/web apps/cli apps/landing
+        # `--error-on-warnings`: most recommended rules default to `warn`, which
+        # biome exits 0 on — a warning would otherwise ship green forever (the
+        # `noConfusingVoidType` one did). biome.json raises the rules we care
+        # about to `error` on top of this for the editor.
+        run: pnpm exec biome check --error-on-warnings packages/server apps/web apps/cli apps/landing
 
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Dead code (knip, pinned)
+        # Pinned exactly, and via `pnpm dlx` rather than a devDependency: the
+        # workspace dependency set is deliberately fixed (CLAUDE.md). knip.json
+        # carries the entry points (Next apps, the tsx `server.ts`/`worker.ts`,
+        # vitest, the CLI bin, tools/ and docker/migrate.mjs) and the
+        # deliberate exceptions; it gates unused files, unlisted/unused
+        # dependencies and exports with no consumer anywhere.
+        run: pnpm dlx knip@5.88.1 --reporter compact
 
       - name: Migrate test database
         run: pnpm db:migrate

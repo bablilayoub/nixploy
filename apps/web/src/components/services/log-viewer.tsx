@@ -41,7 +41,7 @@ const TIMESTAMP_REGEX = /^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s
 const classifyLine = (line: string): { level: LineLevel; text: string } => {
 	const prefix = line.match(PREFIX_TAG_REGEX);
 	if (prefix) {
-		const tag = prefix[1].toLowerCase();
+		const tag = (prefix[1] ?? "").toLowerCase();
 		const level: LineLevel =
 			tag === "error"
 				? "error"

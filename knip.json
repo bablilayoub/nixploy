@@ -1,0 +1,102 @@
+{
+	"$schema": "https://unpkg.com/knip@5/schema.json",
+	"exclude": [
+		"duplicates"
+	],
+	"ignoreExportsUsedInFile": true,
+	"workspaces": {
+		".": {
+			"entry": [
+				"tools/*.mjs",
+				"docker/migrate.mjs"
+			],
+			"project": [
+				"tools/*.mjs",
+				"docker/migrate.mjs"
+			],
+			"ignoreDependencies": [
+				"drizzle-orm",
+				"postgres"
+			]
+		},
+		"apps/web": {
+			"entry": [
+				"server.ts",
+				"worker.ts",
+				"next.config.ts",
+				"vitest.config.ts",
+				"postcss.config.mjs",
+				"e2e/*.mjs",
+				"scripts/*.mjs",
+				"src/**/*.test.ts"
+			],
+			"project": [
+				"**/*.{ts,tsx,mjs}"
+			],
+			"ignore": [
+				"next-env.d.ts",
+				"src/components/ui/**"
+			],
+			"ignoreDependencies": [
+				"@tanstack/react-table",
+				"bcryptjs",
+				"playwright-core",
+				"postgres",
+				"shadcn",
+				"tailwindcss",
+				"tw-animate-css",
+				"vitest"
+			]
+		},
+		"apps/landing": {
+			"entry": [
+				"next.config.ts",
+				"postcss.config.mjs",
+				"scripts/*.mts"
+			],
+			"project": [
+				"**/*.{ts,tsx,mts,mjs}"
+			],
+			"ignore": [
+				"next-env.d.ts"
+			],
+			"ignoreDependencies": [
+				"postcss",
+				"tailwindcss"
+			]
+		},
+		"apps/cli": {
+			"entry": [
+				"src/index.ts",
+				"tsup.config.ts",
+				"vitest.config.ts",
+				"src/**/*.test.ts"
+			],
+			"project": [
+				"src/**/*.ts",
+				"*.ts"
+			]
+		},
+		"packages/server": {
+			"entry": [
+				"src/index.ts",
+				"src/scripts/*.ts",
+				"drizzle.config.ts",
+				"vitest.config.ts",
+				"src/**/*.test.ts"
+			],
+			"project": [
+				"src/**/*.ts",
+				"*.ts"
+			],
+			"ignoreBinaries": [
+				"tsx"
+			],
+			"ignoreDependencies": [
+				"@trpc/client",
+				"@types/adm-zip",
+				"node-os-utils"
+			]
+		}
+	}
+}

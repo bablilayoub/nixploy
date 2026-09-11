@@ -152,14 +152,7 @@ const validateMountFields = (input: {
 
 const assertSafeVolumeName = (volumeName: string | null | undefined, appName: string) => {
 	if (!volumeName) return;
-	try {
-		assertDockerVolumeName(volumeName);
-	} catch (error) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: error instanceof Error ? error.message : "Invalid volume name",
-		});
-	}
+	assertDockerVolumeName(volumeName);
 	if (PROTECTED_VOLUMES.has(volumeName)) {
 		throw new TRPCError({
 			code: "FORBIDDEN",

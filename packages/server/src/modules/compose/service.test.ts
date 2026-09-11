@@ -34,7 +34,11 @@ vi.mock("../backups/scheduler", () => ({ unregisterBackupsForService: vi.fn() })
 vi.mock("../schedules", () => ({ unregisterSchedulesForService: vi.fn() }));
 vi.mock("../deployment/maintenance", () => ({ removeServiceLogs: vi.fn() }));
 vi.mock("../cluster/swarm-node", () => ({ getServerSwarmNodeId: vi.fn() }));
-vi.mock("../application/app-name", () => ({ isAppNameTaken: vi.fn(async () => false) }));
+vi.mock("../services/app-name", () => ({
+	isAppNameTaken: vi.fn(async () => false),
+	generateAppName: vi.fn(async (name: string) => `${name}-abc123`),
+	randomAppNameSuffix: () => "abc123",
+}));
 
 import { ComposeValidationError } from "./compose-file";
 import {

@@ -21,14 +21,6 @@ export const deploymentStatusLabel: Record<string, string> = {
 	cancelled: "Cancelled",
 };
 
-/** Service status ("idle" | "running" | "done" | "error") → StatusDot. */
-export const serviceStatusDot: Record<string, StatusDotStatus> = {
-	idle: "neutral",
-	running: "success",
-	done: "info",
-	error: "error",
-};
-
 /** Schedule run status ("running" | "success" | "error") → StatusDot. */
 export const scheduleRunStatusDot: Record<string, StatusDotStatus> = {
 	running: "info",

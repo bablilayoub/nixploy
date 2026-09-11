@@ -71,17 +71,6 @@ const findSecurity = async (securityId: string, organizationId: string) => {
 	return entry;
 };
 
-const assertUsername = (username: string): void => {
-	try {
-		assertBasicAuthUsername(username);
-	} catch (error) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: error instanceof Error ? error.message : "Invalid username",
-		});
-	}
-};
-
 export const securityRouter = router({
 	byApplication: protectedProcedure
 		.input(z.object({ applicationId: z.string().min(1) }))
@@ -154,16 +143,9 @@ export const securityRouter = router({
 						message: "serviceName is required for compose basic auth",
 					});
 				}
-				try {
-					assertComposeServiceName(input.serviceName);
-				} catch (error) {
-					throw new TRPCError({
-						code: "BAD_REQUEST",
-						message: error instanceof Error ? error.message : "Invalid serviceName",
-					});
-				}
+				assertComposeServiceName(input.serviceName);
 			}
-			assertUsername(input.username);
+			assertBasicAuthUsername(input.username);
 
 			// Traefik's basicAuth middleware expects bcrypt-hashed passwords.
 			const hashed = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
@@ -220,7 +202,7 @@ export const securityRouter = router({
 				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			}
 			if (input.username) {
-				assertUsername(input.username);
+				assertBasicAuthUsername(input.username);
 			}
 
 			const [updated] = await db

@@ -82,19 +82,6 @@ export function Button({
 	);
 }
 
-export function Pill({ children, className }: { children: ReactNode; className?: string }) {
-	return (
-		<span
-			className={cn(
-				"inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs text-muted",
-				className,
-			)}
-		>
-			{children}
-		</span>
-	);
-}
-
 /** App-window frame around a screenshot, with a soft halo behind it. */
 export function WindowFrame({
 	src,

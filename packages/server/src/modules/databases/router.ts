@@ -9,9 +9,9 @@ import { redactDatabaseSecrets } from "../../trpc/redact-secrets";
 import { textBlobSchema } from "../../utils/input-limits";
 import { createTtlCache, DOCKER_LISTING_TTL_MS } from "../../utils/ttl-cache";
 import { appNameSchema, assertSafeDockerImageRef } from "../../utils/validators";
-import { isAppNameTaken } from "../application/app-name";
 import { auditFromSession } from "../audit";
 import { unregisterBackupsForService } from "../backups/scheduler";
+import { invalidateDockerListings } from "../docker/containers";
 import {
 	badRequest,
 	conflict,
@@ -26,6 +26,7 @@ import {
 	hasCapability,
 	resolveCallerOrganizationId,
 } from "../projects";
+import { generateAppName, isAppNameTaken } from "../services/app-name";
 import { SERVICE_REGISTRY, type ServiceIdColumn } from "../services/registry";
 import {
 	assertSafeDatabaseExternalPort,
@@ -36,7 +37,6 @@ import {
 	databaseServiceExists,
 	deployDatabase,
 	duplicateDatabase,
-	generateDatabaseAppName,
 	getDatabaseStatus,
 	reloadDatabase,
 	removeDatabase,
@@ -73,9 +73,16 @@ const statusCache = createTtlCache<Awaited<ReturnType<typeof getDatabaseStatus>>
 	ttlMs: DOCKER_LISTING_TTL_MS,
 });
 
-/** Forget a database's cached swarm status (lifecycle mutations). */
-function invalidateDatabaseStatus(appName: string): void {
+/**
+ * Forget a database's cached swarm status (lifecycle mutations).
+ *
+ * A lifecycle change also changes what `docker ps` / `docker service ls` report
+ * for that server, so the Docker control center's listing cache is dropped in
+ * the same call — the same pairing `invalidateComposeContainers` does.
+ */
+function invalidateDatabaseStatus(appName: string, serverId: string | null | undefined): void {
 	statusCache.invalidate(appName);
+	invalidateDockerListings(serverId);
 }
 
 /**
@@ -125,11 +132,7 @@ async function resolveNewAppName(requested: string | undefined, name: string): P
 		}
 		return requested;
 	}
-	for (let attempt = 0; attempt < 10; attempt++) {
-		const candidate = generateDatabaseAppName(name);
-		if (!(await isAppNameTaken(candidate))) return candidate;
-	}
-	throw new Error(`Could not generate a unique appName for "${name}"`);
+	return generateAppName(name, "db");
 }
 
 export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRouterOptions<K>) {
@@ -521,7 +524,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			// Cancel the row's backup crons first so they cannot fire mid-teardown.
 			unregisterBackupsForService({ appName: row.appName });
 			await removeDatabase(row.appName, row.serverId, kind, row.environmentId);
-			invalidateDatabaseStatus(row.appName);
+			invalidateDatabaseStatus(row.appName, row.serverId);
 			await db.delete(table).where(eq(idColumn, id));
 			await auditFromSession(ctx, organizationId, {
 				action: `${kind}.delete`,
@@ -539,7 +542,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
 			await startDatabase(kind, row);
-			invalidateDatabaseStatus(row.appName);
+			invalidateDatabaseStatus(row.appName, row.serverId);
 			const updated = await updateRow(id, { status: "running" });
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
@@ -558,7 +561,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
 			await stopDatabase(row.appName);
-			invalidateDatabaseStatus(row.appName);
+			invalidateDatabaseStatus(row.appName, row.serverId);
 			const updated = await updateRow(id, { status: "idle" });
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
@@ -612,7 +615,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 				const row = await updateRow(id, { externalPort });
 				if (await databaseServiceExists(row.appName)) {
 					await deployDatabase(kind, row);
-					invalidateDatabaseStatus(row.appName);
+					invalidateDatabaseStatus(row.appName, row.serverId);
 				}
 				const canSeeSecrets = await hasCapability(
 					ctx.session.user.id,
@@ -632,7 +635,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 				throw badRequest("Database is not deployed; use start instead");
 			}
 			await reloadDatabase(row.appName);
-			invalidateDatabaseStatus(row.appName);
+			invalidateDatabaseStatus(row.appName, row.serverId);
 			const updated = await updateRow(id, { status: "running" });
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,

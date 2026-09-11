@@ -13,6 +13,7 @@ import {
 	remoteCommandTimeoutMs,
 } from "../../utils/exec";
 import { acquireSsh, type SshLease, sshPoolLimits } from "../../utils/ssh-pool";
+import { DomainError, type DomainErrorCode } from "../errors";
 import { shellQuote } from "./paths";
 
 /**
@@ -127,14 +128,24 @@ export function forgetRemoteDocker(serverId: string): void {
 	agent?.destroy();
 }
 
-/** Error thrown when a spawned command exits non-zero (or is killed). */
-export class CommandError extends Error {
+/**
+ * Error thrown when a spawned command exits non-zero (or is killed).
+ *
+ * A `DomainError` so the failure keeps its message through the error boundary
+ * (`trpc/init.ts`) and reaches REST/MCP/CLI callers as a real code instead of
+ * the generic 500 an unknown `Error` gets in production — no router has to
+ * re-wrap it. Messages never carry the command line (it embeds registry
+ * passwords and dump credentials); `exitCode` and `killed` stay the machine-
+ * readable half the deploy worker and the hook runner branch on.
+ */
+export class CommandError extends DomainError {
 	constructor(
 		message: string,
 		readonly exitCode: number | null,
 		readonly killed: boolean,
+		code: DomainErrorCode = "INTERNAL_SERVER_ERROR",
 	) {
-		super(message);
+		super(code, message);
 		this.name = "CommandError";
 	}
 }
@@ -243,7 +254,12 @@ function spawnLocal(command: string, options: SpawnOptions): TargetedProcess {
 			clearTimeout(timer);
 			if (timedOut) {
 				reject(
-					new CommandError(`Command timed out after ${describeTimeout(timeoutMs)}`, code, false),
+					new CommandError(
+						`Command timed out after ${describeTimeout(timeoutMs)}`,
+						code,
+						false,
+						"TIMEOUT",
+					),
 				);
 			} else if (code === 0) {
 				resolve();
@@ -350,6 +366,7 @@ async function spawnRemote(
 				`Remote command timed out after ${Math.round(timeoutMs / 1000)}s on server ${serverName}`,
 				null,
 				false,
+				"TIMEOUT",
 			);
 			if (remotePid) {
 				// Stop the remote process too — a timed-out build must not keep

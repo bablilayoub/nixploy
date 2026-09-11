@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../../db";
@@ -14,7 +13,6 @@ import {
 } from "../../db/schema";
 import { bestEffort } from "../../utils/best-effort";
 import { assertSafeAppName } from "../../utils/validators";
-import { isAppNameTaken as isAnyAppNameTaken } from "../application/app-name";
 import { getSwarmNetwork } from "../application/paths";
 import { unregisterBackupsForService } from "../backups/scheduler";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
@@ -22,6 +20,7 @@ import { removeServiceLogs } from "../deployment/maintenance";
 import { ensureEnvironmentNetworkById, pruneEnvironmentNetwork } from "../deployment/network";
 import { badRequest, conflict, notFound, preconditionFailed } from "../errors";
 import { unregisterSchedulesForService } from "../schedules";
+import { generateAppName, isAppNameTaken, randomAppNameSuffix } from "../services/app-name";
 import { toTraefikDomainEntry } from "../traefik/config-writer";
 import { getTraefik } from "./adapters";
 import {
@@ -100,31 +99,13 @@ export async function findComposeForOrg(
 	return row;
 }
 
-const slugify = (name: string) =>
-	name
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "")
-		.slice(0, 40) || "compose";
-
-export const randomSuffix = () => randomBytes(3).toString("hex");
-
 /**
- * appName is shared across every swarm namespace (applications, compose
- * stacks and their `<app>-<service>` Traefik keys, databases, previews) —
- * delegate to the single cross-table check in application/app-name.ts.
+ * appName is shared across every swarm namespace (applications, compose stacks
+ * and their `<app>-<service>` Traefik keys, databases, previews), so the
+ * generator is the shared one in `modules/services/app-name.ts` — only the
+ * fallback for an all-punctuation name differs.
  */
-export async function isAppNameTaken(appName: string): Promise<boolean> {
-	return isAnyAppNameTaken(appName);
-}
-
-export async function generateUniqueAppName(name: string): Promise<string> {
-	for (let attempt = 0; attempt < 10; attempt++) {
-		const candidate = `${slugify(name)}-${randomSuffix()}`;
-		if (!(await isAppNameTaken(candidate))) return candidate;
-	}
-	throw conflict("Could not allocate a unique appName");
-}
+const generateUniqueAppName = (name: string): Promise<string> => generateAppName(name, "compose");
 
 export interface CreateComposeInput {
 	name: string;
@@ -316,7 +297,7 @@ export async function updateComposeById(
 		(values.isolatedDeployment ?? existing.isolatedDeployment) &&
 		!(values.suffix || existing.suffix)
 	) {
-		values.suffix = randomSuffix();
+		values.suffix = randomAppNameSuffix();
 	}
 	if (
 		existing.hostPrivileged &&

@@ -70,11 +70,6 @@ export function callerCanReadSecrets(): Promise<boolean> {
 	return secretsReadCache;
 }
 
-/** Test seam: forget the memoized capability probe. */
-export function resetSecretsReadCache(): void {
-	secretsReadCache = null;
-}
-
 /** Read the raw `.env` blob of one scope. `null` means "redacted for this caller". */
 export async function readScopeEnv(options: ScopeOptions): Promise<string | null> {
 	switch (options.scope ?? "service") {

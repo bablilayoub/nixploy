@@ -21,7 +21,7 @@ import {
 	duplicateApplication,
 	getOrganizationId,
 	inspectSwarmService,
-	reloadSwarmService,
+	reloadApplication,
 	saveEnvironment,
 	startApplication,
 	stopApplication,
@@ -658,14 +658,7 @@ export const applicationRouter = router({
 			switch (input.sourceType) {
 				case "git":
 					if (input.gitUrl) {
-						try {
-							await assertSafeGitCloneUrl(input.gitUrl);
-						} catch (error) {
-							throw new TRPCError({
-								code: "BAD_REQUEST",
-								message: error instanceof Error ? error.message : "Invalid git URL",
-							});
-						}
+						await assertSafeGitCloneUrl(input.gitUrl);
 					}
 					data.gitUrl = input.gitUrl ?? null;
 					data.gitBranch = input.gitBranch ?? null;
@@ -682,14 +675,7 @@ export const applicationRouter = router({
 					break;
 				case "docker":
 					if (input.dockerImage) {
-						try {
-							assertSafeDockerImageRef(input.dockerImage);
-						} catch (error) {
-							throw new TRPCError({
-								code: "BAD_REQUEST",
-								message: error instanceof Error ? error.message : "Invalid docker image",
-							});
-						}
+						assertSafeDockerImageRef(input.dockerImage);
 					}
 					data.dockerImage = input.dockerImage ?? null;
 					data.username = input.username ?? null;
@@ -714,8 +700,7 @@ export const applicationRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 		const application = await assertApplicationAccess(input.applicationId, organizationId);
-		await reloadSwarmService(application.appName);
-		const updated = await updateApplication(application.applicationId, { status: "running" });
+		const updated = await reloadApplication(application);
 		const canSeeSecrets = await hasCapability(ctx.session.user.id, organizationId, "secrets.read");
 		return canSeeSecrets ? updated : redactApplicationSecrets(updated);
 	}),

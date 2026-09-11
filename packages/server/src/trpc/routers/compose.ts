@@ -6,7 +6,6 @@ import { compose, environments, projects } from "../../db/schema";
 import { assertEnvironmentAccess } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
-import { ComposeValidationError } from "../../modules/compose/compose-file";
 import { listComposeContainers } from "../../modules/compose/containers";
 import { fetchComposeFromUrl } from "../../modules/compose/remote";
 import {
@@ -212,14 +211,7 @@ export const composeRouter = router({
 			}
 
 			if (input.gitUrl) {
-				try {
-					await assertSafeGitCloneUrl(input.gitUrl);
-				} catch (error) {
-					throw new TRPCError({
-						code: "BAD_REQUEST",
-						message: error instanceof Error ? error.message : "Invalid git URL",
-					});
-				}
+				await assertSafeGitCloneUrl(input.gitUrl);
 			}
 
 			if (
@@ -415,14 +407,7 @@ export const composeRouter = router({
 				await assertInstanceAdmin(ctx.session);
 				callerIsInstanceAdmin = true;
 			}
-			try {
-				await saveComposeFile(row, input.composeFile, { callerIsInstanceAdmin });
-			} catch (error) {
-				if (error instanceof ComposeValidationError) {
-					throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
-				}
-				throw error;
-			}
+			await saveComposeFile(row, input.composeFile, { callerIsInstanceAdmin });
 			return true;
 		}),
 
@@ -558,9 +543,6 @@ export const composeRouter = router({
 				await bestEffort(`roll back compose row ${created.composeId}`, () =>
 					deleteCompose(created),
 				);
-				if (error instanceof ComposeValidationError) {
-					throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
-				}
 				throw error;
 			}
 			await auditFromSession(ctx, organizationId, {

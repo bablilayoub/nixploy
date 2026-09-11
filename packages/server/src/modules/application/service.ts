@@ -32,10 +32,12 @@ import {
 	sanitizeSwarmLabels,
 	withNodeConstraint,
 } from "../deployment/swarm";
+import { invalidateDockerListings } from "../docker/containers";
 import { conflict, notFound, preconditionFailed } from "../errors";
 import { deletePreviewDeployment } from "../preview";
 import type { QuotaResourceDefaults } from "../projects/quotas";
 import { unregisterSchedulesForService } from "../schedules";
+import { generateAppName, isAppNameTaken } from "../services/app-name";
 import {
 	removeFileOnServer,
 	removeTraefikConfig,
@@ -43,11 +45,11 @@ import {
 	writeAppTraefikConfig,
 	writeFileOnServer,
 } from "../traefik";
-import { generateAppName, isAppNameTaken } from "./app-name";
 import type { ServiceInspectInfo } from "./docker";
 import {
 	getDocker,
 	inspectSwarmService,
+	reloadSwarmService,
 	removeApplicationImages,
 	removeSwarmService,
 	scaleSwarmService,
@@ -704,25 +706,42 @@ export const deleteApplication = async (
 
 /** Start a stopped application by scaling back to its configured replicas. */
 export const startApplication = async (
-	application: Pick<Application, "applicationId" | "appName" | "replicas">,
+	application: Pick<Application, "applicationId" | "appName" | "replicas" | "serverId">,
 ): Promise<void> => {
 	const service = await inspectSwarmService(application.appName);
 	if (!service) {
 		throw preconditionFailed("Application has not been deployed yet — deploy it first");
 	}
 	await scaleSwarmService(application.appName, application.replicas || 1);
+	// What runs on that server just changed: drop the Docker tab's listing cache
+	// so it does not keep showing the stopped state for up to one TTL window.
+	invalidateDockerListings(application.serverId);
 	await updateApplication(application.applicationId, { status: "running" });
 };
 
 /** Stop an application by scaling its swarm service to 0. */
 export const stopApplication = async (
-	application: Pick<Application, "applicationId" | "appName">,
+	application: Pick<Application, "applicationId" | "appName" | "serverId">,
 ): Promise<void> => {
 	// Never-deployed apps have no service to scale; the row still flips to idle.
 	if (await inspectSwarmService(application.appName)) {
 		await scaleSwarmService(application.appName, 0);
 	}
+	invalidateDockerListings(application.serverId);
 	await updateApplication(application.applicationId, { status: "idle" });
+};
+
+/**
+ * Force-restart every task (`docker service update --force`) and flip the row
+ * back to `running`. Lives here, not in the router, so the Docker listing cache
+ * is dropped on every transport (panel, REST, CLI, MCP).
+ */
+export const reloadApplication = async (
+	application: Pick<Application, "applicationId" | "appName" | "serverId">,
+): Promise<Application> => {
+	await reloadSwarmService(application.appName);
+	invalidateDockerListings(application.serverId);
+	return updateApplication(application.applicationId, { status: "running" });
 };
 
 /** Store the service-level dotenv string (encrypted at rest by the column). */

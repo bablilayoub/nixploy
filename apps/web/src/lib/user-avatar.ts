@@ -55,10 +55,6 @@ export function presetImageValue(id: string): string {
 	return `${PRESET_IMAGE_PREFIX}${id}`;
 }
 
-export function isPresetImage(image: string | null | undefined): boolean {
-	return Boolean(image?.startsWith(PRESET_IMAGE_PREFIX));
-}
-
 export function isGravatarImage(image: string | null | undefined): boolean {
 	if (!image) return false;
 	return image === GRAVATAR_IMAGE_MARKER || image.startsWith("https://www.gravatar.com/avatar/");

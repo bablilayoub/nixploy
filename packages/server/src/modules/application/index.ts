@@ -1,4 +1,4 @@
-export { generateAppName, isAppNameTaken, slugifyName } from "./app-name";
+export { generateAppName, isAppNameTaken, slugifyName } from "../services/app-name";
 export {
 	cloneSwarmService,
 	getDocker,
@@ -38,6 +38,7 @@ export {
 	parseCpuNano,
 	parseDotEnv,
 	parseMemoryBytes,
+	reloadApplication,
 	removeFileMount,
 	saveEnvironment,
 	startApplication,

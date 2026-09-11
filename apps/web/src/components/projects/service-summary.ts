@@ -47,7 +47,8 @@ export function describeServiceCounts(counts: ServiceCounts): string | null {
 	if (counts.applications > 0) parts.push(plural(counts.applications, "application"));
 	if (counts.compose > 0) parts.push(plural(counts.compose, "compose stack"));
 	if (databases > 0) parts.push(plural(databases, "database"));
-	if (parts.length === 0) return null;
-	if (parts.length === 1) return parts[0];
-	return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+	const last = parts.pop();
+	if (!last) return null;
+	if (parts.length === 0) return last;
+	return `${parts.join(", ")} and ${last}`;
 }

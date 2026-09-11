@@ -108,8 +108,12 @@ export function gitProcessEnv(gitEnv: Record<string, string>): Record<string, st
 	return { ...passthrough, ...gitEnv };
 }
 
-/** `KEY=value ` prefix for a remote shell command. */
-const envPrefix = (env: Record<string, string>): string =>
+/**
+ * `KEY=value ` prefix for a remote shell command. Exported because the compose
+ * source fetcher builds the same git command line (`modules/compose/source.ts`)
+ * — one quoting rule, not two.
+ */
+export const envPrefix = (env: Record<string, string>): string =>
 	Object.entries(env)
 		.map(([key, value]) => `${key}=${shellQuote(value)} `)
 		.join("");
