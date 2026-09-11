@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import { gitProviders } from "../../db/schema";
+import { auditFromSession } from "../../modules/audit";
 import {
 	assertPublicBaseUrl,
 	createGithub,
@@ -101,6 +102,12 @@ export const githubRouter = router({
 					message: "Failed to create GitHub provider",
 				});
 			}
+			void auditFromSession(ctx, organizationId, {
+				action: "github.create",
+				targetType: "gitProvider",
+				targetId: created.github.githubId,
+				targetName: created.gitProvider.name,
+			});
 			return { gitProvider: created.gitProvider, github: publicGithub(created.github) };
 		}),
 
@@ -119,6 +126,12 @@ export const githubRouter = router({
 				.set({ name: input.name })
 				.where(eq(gitProviders.gitProviderId, row.gitProviderId))
 				.returning();
+			void auditFromSession(ctx, organizationId, {
+				action: "github.update",
+				targetType: "gitProvider",
+				targetId: input.githubId,
+				targetName: input.name,
+			});
 			return { gitProvider: provider, github: publicGithub(row) };
 		}),
 
@@ -130,6 +143,11 @@ export const githubRouter = router({
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "GitHub provider not found" });
 		}
+		void auditFromSession(ctx, organizationId, {
+			action: "github.delete",
+			targetType: "gitProvider",
+			targetId: input.githubId,
+		});
 		return publicGithub(removed);
 	}),
 
@@ -168,6 +186,12 @@ export const githubRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
+			void auditFromSession(ctx, organizationId, {
+				action: "github.createAppManifest",
+				targetType: "gitProvider",
+				targetId: input.githubId,
+				targetName: input.appName ?? null,
+			});
 			return await getGithubAppManifest({
 				githubId: input.githubId,
 				organizationId,
@@ -191,6 +215,12 @@ export const githubRouter = router({
 				message: "Failed to sync installation",
 			});
 		}
+		void auditFromSession(ctx, organizationId, {
+			action: "github.syncInstallation",
+			targetType: "gitProvider",
+			targetId: input.githubId,
+			targetName: synced.githubAppName ?? null,
+		});
 		return publicGithub(synced);
 	}),
 });

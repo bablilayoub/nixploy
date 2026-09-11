@@ -8,6 +8,7 @@ import {
 	getOrganizationId,
 	upsertApplicationSwarmService,
 } from "../../modules/application";
+import { auditFromSession } from "../../modules/audit";
 import { assertCapability } from "../../modules/projects";
 import { assertSafePublishedPort } from "../../utils/validators";
 import { protectedProcedure, router } from "../init";
@@ -77,6 +78,18 @@ export const portRouter = router({
 			}
 
 			await upsertApplicationSwarmService(application);
+			void auditFromSession(ctx, organizationId, {
+				action: "port.create",
+				targetType: "application",
+				targetId: application.applicationId,
+				targetName: application.appName,
+				metadata: {
+					portId: port.portId,
+					publishedPort: port.publishedPort,
+					targetPort: port.targetPort,
+					protocol: port.protocol,
+				},
+			});
 			return port;
 		}),
 
@@ -109,6 +122,13 @@ export const portRouter = router({
 				.returning();
 
 			await upsertApplicationSwarmService(application);
+			void auditFromSession(ctx, organizationId, {
+				action: "port.update",
+				targetType: "application",
+				targetId: application.applicationId,
+				targetName: application.appName,
+				metadata: { portId: port.portId, publishedPort },
+			});
 			return updated;
 		}),
 
@@ -121,6 +141,13 @@ export const portRouter = router({
 
 			await db.delete(ports).where(eq(ports.portId, port.portId));
 			await upsertApplicationSwarmService(application);
+			void auditFromSession(ctx, organizationId, {
+				action: "port.delete",
+				targetType: "application",
+				targetId: application.applicationId,
+				targetName: application.appName,
+				metadata: { portId: port.portId, publishedPort: port.publishedPort },
+			});
 			return { portId: port.portId };
 		}),
 });

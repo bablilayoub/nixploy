@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import { webServerSettings } from "../../db/schema";
+import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { dockerCleanup } from "../../modules/deployment";
 import { emitDockerCleanupNotification } from "../../modules/notifications";
@@ -19,6 +20,7 @@ import {
 	restartTraefik,
 	writeDashboardRouterConfig,
 } from "../../modules/traefik";
+import { invalidatePrivateEgressCache } from "../../utils/public-url";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -98,6 +100,12 @@ const updateSettingsInput = z.object({
 	cleanupCronExpression: z.string().nullish(),
 	cpuAlertPercent: z.number().int().min(1).max(100).nullish(),
 	memoryAlertPercent: z.number().int().min(1).max(100).nullish(),
+	/**
+	 * Instance-wide opt-in for outbound requests to private/LAN addresses
+	 * (self-hosted MinIO, Gotify, Gitea, SMTP). Off by default — see
+	 * `utils/public-url.ts` and docs/hardening.md.
+	 */
+	allowPrivateEgress: z.boolean().optional(),
 });
 
 export const webServerRouter = router({
@@ -148,7 +156,7 @@ export const webServerRouter = router({
 	 * rendered file actually changed).
 	 */
 	updateSettings: protectedProcedure.input(updateSettingsInput).mutation(async ({ ctx, input }) => {
-		await requireInstanceAdmin(ctx.session);
+		const organizationId = await requireInstanceAdmin(ctx.session);
 		const [existing] = await db.select().from(webServerSettings).limit(1);
 
 		const extras: WebServerExtras = {
@@ -200,6 +208,9 @@ export const webServerRouter = router({
 			...(input.acmeDnsCredentials !== undefined && {
 				acmeDnsCredentials: input.acmeDnsCredentials ?? null,
 			}),
+			...(input.allowPrivateEgress !== undefined && {
+				allowPrivateEgress: input.allowPrivateEgress,
+			}),
 			metricsConfig,
 		};
 
@@ -210,6 +221,11 @@ export const webServerRouter = router({
 				.where(eq(webServerSettings.webServerSettingsId, existing.webServerSettingsId));
 		} else {
 			await db.insert(webServerSettings).values(values);
+		}
+		if (input.allowPrivateEgress !== undefined) {
+			// The guard caches the flag for 30s; drop it so the next outbound
+			// check sees the new value immediately.
+			invalidatePrivateEgressCache();
 		}
 
 		// Rewrite traefik.yml when the ACME account email changed, and the
@@ -243,6 +259,20 @@ export const webServerRouter = router({
 			}
 		}
 
+		void auditFromSession(ctx, organizationId, {
+			action: "webServer.updateSettings",
+			targetType: "webServerSettings",
+			targetId: existing?.webServerSettingsId ?? null,
+			targetName: host ?? existing?.host ?? null,
+			metadata: {
+				certificateType: input.certificateType,
+				acmeDnsProviderChanged: dnsProviderChanged,
+				acmeDnsCredentialsChanged: input.acmeDnsCredentials !== undefined,
+				allowPrivateEgress: input.allowPrivateEgress,
+				hostChanged,
+				traefikConfigRewritten,
+			},
+		});
 		return { success: true, traefikConfigRewritten, host: host ?? existing?.host ?? null };
 	}),
 
@@ -296,8 +326,12 @@ export const webServerRouter = router({
 
 	/** Force-restart the global Traefik swarm service (picks up static config changes). */
 	restartTraefik: protectedProcedure.mutation(async ({ ctx }) => {
-		await requireInstanceAdmin(ctx.session);
+		const organizationId = await requireInstanceAdmin(ctx.session);
 		await restartTraefik();
+		void auditFromSession(ctx, organizationId, {
+			action: "webServer.restartTraefik",
+			targetType: "webServerSettings",
+		});
 		return { success: true };
 	}),
 
@@ -309,6 +343,11 @@ export const webServerRouter = router({
 			scope: "build-cache",
 			serverId: null,
 			actor: ctx.session.user.email,
+		});
+		void auditFromSession(ctx, organizationId, {
+			action: "webServer.dockerCleanup",
+			targetType: "webServerSettings",
+			metadata: { scope: "build-cache" },
 		});
 		return { success: true };
 	}),

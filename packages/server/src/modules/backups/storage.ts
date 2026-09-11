@@ -1,5 +1,8 @@
-import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import {
 	DeleteObjectsCommand,
 	GetObjectCommand,
@@ -9,6 +12,7 @@ import {
 } from "@aws-sdk/client-s3";
 import type { destinations } from "../../db/schema";
 import { getConfigDir } from "../traefik/paths";
+import { uploadStream } from "./s3";
 
 /**
  * Where backup archives live. Two providers share one key space
@@ -29,7 +33,16 @@ export const LOCAL_PROVIDER = "local";
 
 export interface BackupStore {
 	put(key: string, body: Buffer): Promise<void>;
+	/**
+	 * Store `source` without ever holding the whole archive in memory
+	 * (architecture audit #18). Returns the number of bytes stored; a source
+	 * that throws leaves NOTHING behind (no `.part` file, no multipart
+	 * upload to complete).
+	 */
+	putStream(key: string, source: AsyncIterable<Buffer>): Promise<number>;
 	get(key: string): Promise<Buffer>;
+	/** Streaming counterpart of {@link BackupStore.get}, for restores. */
+	getStream(key: string): Promise<Readable>;
 	/** Keys under `prefix`, oldest first (retention deletes from the front). */
 	list(prefix: string): Promise<string[]>;
 	remove(keys: string[]): Promise<void>;
@@ -97,8 +110,44 @@ export class LocalBackupStore implements BackupStore {
 		await rename(tmp, file);
 	}
 
+	async putStream(key: string, source: AsyncIterable<Buffer>): Promise<number> {
+		const file = this.fileOf(key);
+		await mkdir(path.dirname(file), { recursive: true });
+		const tmp = `${file}.part`;
+		let bytes = 0;
+		const sink = createWriteStream(tmp, { mode: 0o600 });
+		// `createWriteStream` opens lazily: unlinking while an `open(2)` is
+		// still in flight re-creates the file behind us, so wait for the sink
+		// to be closed before cleaning up a failed write.
+		const closed = new Promise<void>((resolve) => {
+			if (sink.closed) resolve();
+			else sink.once("close", () => resolve());
+		});
+		try {
+			await pipeline(
+				(async function* counted() {
+					for await (const chunk of source) {
+						bytes += chunk.length;
+						yield chunk;
+					}
+				})(),
+				sink,
+			);
+		} catch (error) {
+			await closed;
+			await rm(tmp, { force: true }).catch(() => {});
+			throw error;
+		}
+		await rename(tmp, file);
+		return bytes;
+	}
+
 	async get(key: string): Promise<Buffer> {
 		return await readFile(this.fileOf(key));
+	}
+
+	async getStream(key: string): Promise<Readable> {
+		return createReadStream(this.fileOf(key));
 	}
 
 	async list(prefix: string): Promise<string[]> {
@@ -173,6 +222,21 @@ export class S3BackupStore implements BackupStore {
 		await this.client.send(
 			new PutObjectCommand({ Bucket: this.destination.bucket, Key: key, Body: body }),
 		);
+	}
+
+	async putStream(key: string, source: AsyncIterable<Buffer>): Promise<number> {
+		return await uploadStream(this.client, this.destination.bucket, key, source);
+	}
+
+	async getStream(key: string): Promise<Readable> {
+		const response = await this.client.send(
+			new GetObjectCommand({ Bucket: this.destination.bucket, Key: key }),
+		);
+		const body = response.Body as Readable | undefined;
+		if (!body || typeof body.pipe !== "function") {
+			throw new Error(`Empty response when fetching ${this.describe(key)}`);
+		}
+		return body;
 	}
 
 	async get(key: string): Promise<Buffer> {

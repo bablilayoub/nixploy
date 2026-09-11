@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import {
 	assertCapability,
@@ -75,6 +76,20 @@ export const templateRouter = router({
 			}
 			// A template becomes one compose service — same cap as compose.create.
 			await assertWithinQuota(organizationId, { services: true });
-			return await deployTemplate(organizationId, input);
+			const deployed = await deployTemplate(organizationId, input);
+			void auditFromSession(ctx, organizationId, {
+				action: "template.deploy",
+				targetType: "compose",
+				targetId: deployed.composeId,
+				targetName: deployed.appName,
+				metadata: {
+					templateId: template.id,
+					projectId: input.projectId,
+					environmentName: input.environmentName,
+					hostPrivileged: template.hostPrivileged ?? false,
+					domains: input.domains?.length ?? 0,
+				},
+			});
+			return deployed;
 		}),
 });

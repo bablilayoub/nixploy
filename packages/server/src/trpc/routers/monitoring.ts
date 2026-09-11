@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { freemem, loadavg, totalmem } from "node:os";
 import { TRPCError } from "@trpc/server";
 import Docker from "dockerode";
 import { eq, inArray } from "drizzle-orm";
@@ -7,25 +5,26 @@ import { z } from "zod";
 import { db } from "../../db";
 import { environments, projects } from "../../db/schema";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
-import { findServerById, getServerStatsCached, type ServerStats } from "../../modules/cluster";
+import { findServerById, getServerStatsCached } from "../../modules/cluster";
 import { shellQuote } from "../../modules/compose/paths";
+import { mapDockerStats } from "../../modules/docker/stats";
 import {
 	readLatestMetricsSample,
 	readMetricsHistory,
 	readServerMetricsHistory,
 } from "../../modules/monitoring/history";
+import { getLocalServerStats } from "../../modules/monitoring/local-host";
 import { parseDockerStatsJsonLine } from "../../modules/monitoring/remote";
 import { resolveCallerOrganizationId } from "../../modules/projects";
 import { findServiceByAppName, SERVICE_DEFS } from "../../modules/services/registry";
-import { execAsync, execAsyncRemote } from "../../utils/exec";
-import { mapDockerStats } from "../../ws/docker-stats";
+import { execAsyncRemote } from "../../utils/exec";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
 /**
  * Host/container metrics. Remote managed servers are queried over SSH (via
- * the cluster module); the Nixploy host itself is measured locally with
- * dockerode + /proc + `df` (node-os-utils breaks in Alpine containers).
+ * the cluster module); the Nixploy host itself is measured by
+ * `modules/monitoring/local-host.ts`.
  */
 
 type Session = NonNullable<TRPCContext["session"]>;
@@ -43,93 +42,6 @@ async function findServerOrThrow(serverId: string, organizationId: string) {
 }
 
 const docker = new Docker();
-
-/** Host memory from /proc/meminfo (works in Alpine containers; reflects the host). */
-async function readMemoryStats(): Promise<ServerStats["memory"]> {
-	try {
-		const text = await readFile("/proc/meminfo", "utf8");
-		const kb = (key: string): number => {
-			const match = text.match(new RegExp(`^${key}:\\s+(\\d+)`, "m"));
-			return match ? Number(match[1]) * 1024 : 0;
-		};
-		const totalBytes = kb("MemTotal");
-		const availableBytes = kb("MemAvailable") || kb("MemFree");
-		if (totalBytes > 0) {
-			return {
-				totalBytes,
-				usedBytes: Math.max(0, totalBytes - availableBytes),
-				availableBytes,
-			};
-		}
-	} catch {
-		// Non-Linux /proc — fall through to Node os.
-	}
-	const totalBytes = totalmem();
-	const availableBytes = freemem();
-	return {
-		totalBytes,
-		usedBytes: Math.max(0, totalBytes - availableBytes),
-		availableBytes,
-	};
-}
-
-/**
- * Disk usage for `/` via `df`. Soft-fails to zeros so a missing `df` never
- * blanks the whole Host monitoring card (the old node-os-utils path threw
- * "Command execution failed: getDiskInfo" inside Alpine).
- *
- * Uses POSIX `df -Pk` (1024-byte blocks) — portable across GNU coreutils and
- * BusyBox (Alpine), unlike `df -B1`.
- */
-async function readDiskStats(): Promise<ServerStats["disk"]> {
-	try {
-		const stdout = await execAsync("df -Pk / 2>/dev/null | tail -n 1", { timeout: 5_000 });
-		const parts = stdout.trim().split(/\s+/);
-		// Filesystem 1024-blocks Used Available Use% Mounted
-		if (parts.length >= 5) {
-			const totalKb = Number(parts[1] ?? 0);
-			const usedKb = Number(parts[2] ?? 0);
-			const availableKb = Number(parts[3] ?? 0);
-			if (Number.isFinite(totalKb) && totalKb > 0) {
-				return {
-					totalBytes: totalKb * 1024,
-					usedBytes: Number.isFinite(usedKb) ? usedKb * 1024 : 0,
-					availableBytes: Number.isFinite(availableKb) ? availableKb * 1024 : 0,
-					usedPercent: parts[4] ?? "",
-				};
-			}
-		}
-	} catch {
-		// ignore
-	}
-	return { totalBytes: 0, usedBytes: 0, availableBytes: 0, usedPercent: "" };
-}
-
-/** Live metrics of the Nixploy host itself. */
-async function getLocalServerStats(): Promise<ServerStats> {
-	const [info, memory, disk] = await Promise.all([
-		docker.info(),
-		readMemoryStats(),
-		readDiskStats(),
-	]);
-	const load = loadavg();
-
-	return {
-		dockerVersion: info.ServerVersion ?? "",
-		operatingSystem: info.OperatingSystem ?? "",
-		architecture: info.Architecture ?? "",
-		cpus: info.NCPU ?? 0,
-		memTotalBytes: memory.totalBytes,
-		containers: info.Containers ?? 0,
-		containersRunning: info.ContainersRunning ?? 0,
-		containersStopped: info.ContainersStopped ?? 0,
-		images: info.Images ?? 0,
-		swarmNodeState: info.Swarm?.LocalNodeState ?? "",
-		memory,
-		disk,
-		loadAverage: [load[0] ?? 0, load[1] ?? 0, load[2] ?? 0],
-	};
-}
 
 /** Container labels a service's replicas carry, in resolution order (Swarm, compose, stack). */
 const REPLICA_LABEL_FILTERS = (appName: string) => [

@@ -1,6 +1,7 @@
 import { normalize } from "node:path";
 import { parseEnv } from "../env";
 import { shellQuote } from "../paths";
+import { withBuildArgFlags } from "./build-env";
 import { prepareBuildCache } from "./cache";
 import type { BuildInput } from "./index";
 
@@ -31,12 +32,8 @@ export async function buildWithDockerfile(input: BuildInput, imageTag: string): 
 		? resolveInside(buildDir, application.dockerContextPath)
 		: buildDir;
 
-	const buildArgs = parseEnv(application.buildArgs)
-		.map(([key, value]) => {
-			ctx.logger.addSecret(value);
-			return `--build-arg ${shellQuote(`${key}=${value}`)}`;
-		})
-		.join(" ");
+	const entries = parseEnv(application.buildArgs);
+	for (const [, value] of entries) ctx.logger.addSecret(value);
 	const target = application.dockerBuildStage
 		? ` --target ${shellQuote(application.dockerBuildStage)}`
 		: "";
@@ -44,7 +41,18 @@ export async function buildWithDockerfile(input: BuildInput, imageTag: string): 
 	const cache = await prepareBuildCache(input);
 	const cacheFlags = cache.buildxCacheFlags ? ` ${cache.buildxCacheFlags}` : "";
 
-	await ctx.run(
-		`docker buildx build --load -f ${shellQuote(dockerfilePath)} -t ${shellQuote(imageTag)}${target} ${buildArgs}${cacheFlags} ${shellQuote(contextPath)}`,
-	);
+	// Secret-looking build args go through BuildKit `--secret` (a 0600 file on
+	// the target server, never on argv and never in `docker history`); the
+	// rest stay plain `--build-arg`s (security audit 2.4).
+	await withBuildArgFlags(ctx, application.appName, entries, async (flags) => {
+		if (flags.secretIds.length > 0) {
+			ctx.logger.line(
+				`Build secrets available to BuildKit: ${flags.secretIds.join(", ")} — ` +
+					"read them with RUN --mount=type=secret,id=<NAME> cat /run/secrets/<NAME>",
+			);
+		}
+		await ctx.run(
+			`docker buildx build --load -f ${shellQuote(dockerfilePath)} -t ${shellQuote(imageTag)}${target}${flags.buildArgs}${flags.secrets}${cacheFlags} ${shellQuote(contextPath)}`,
+		);
+	});
 }

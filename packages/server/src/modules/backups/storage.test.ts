@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -125,5 +125,48 @@ describe("storeFor", () => {
 		const store = storeFor({ ...base, provider: "s3", bucket: "b" });
 		expect(store).not.toBeInstanceOf(LocalBackupStore);
 		expect(store.describe("k")).toBe("s3://b/k");
+	});
+});
+
+describe("LocalBackupStore streaming", () => {
+	it("writes a streamed archive 0600 and leaves nothing behind on failure", async () => {
+		const root = await mkdtemp(path.join(tmpdir(), "nixploy-stream-"));
+		try {
+			const store = new LocalBackupStore(root);
+			async function* source(): AsyncGenerator<Buffer> {
+				yield Buffer.from("hello ");
+				yield Buffer.from("world");
+			}
+			const bytes = await store.putStream("app/ok.gz", source());
+			expect(bytes).toBe(11);
+			expect((await store.get("app/ok.gz")).toString()).toBe("hello world");
+			const mode = (await stat(path.join(root, "app", "ok.gz"))).mode & 0o777;
+			expect(mode).toBe(0o600);
+
+			async function* failing(): AsyncGenerator<Buffer> {
+				yield Buffer.from("partial");
+				throw new Error("dump failed");
+			}
+			await expect(store.putStream("app/bad.gz", failing())).rejects.toThrow(/dump failed/);
+			await expect(stat(path.join(root, "app", "bad.gz"))).rejects.toThrow();
+			await expect(stat(path.join(root, "app", "bad.gz.part"))).rejects.toThrow();
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("streams a stored archive back for restores", async () => {
+		const root = await mkdtemp(path.join(tmpdir(), "nixploy-stream-"));
+		try {
+			const store = new LocalBackupStore(root);
+			await store.put("app/dump.gz", Buffer.from("restore me"));
+			const chunks: Buffer[] = [];
+			for await (const chunk of await store.getStream("app/dump.gz")) {
+				chunks.push(Buffer.from(chunk as Buffer));
+			}
+			expect(Buffer.concat(chunks).toString()).toBe("restore me");
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
 	});
 });

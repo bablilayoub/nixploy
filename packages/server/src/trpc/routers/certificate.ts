@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import { certificates, generateId, servers } from "../../db/schema";
 import { getOrganizationId } from "../../modules/application";
+import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { assertCapability } from "../../modules/projects";
 import {
@@ -170,6 +171,13 @@ export const certificateRouter = router({
 						message: "Failed to create certificate",
 					});
 				}
+				void auditFromSession(ctx, organizationId, {
+					action: "certificate.create",
+					targetType: "certificate",
+					targetId: certificate.certificateId,
+					targetName: certificate.name,
+					metadata: { serverId, autoRenew: certificate.autoRenew },
+				});
 				return publicCertificate(certificate);
 			} catch (error) {
 				await removeCertificateFiles(certificateId, serverId);
@@ -228,6 +236,16 @@ export const certificateRouter = router({
 					message: "Failed to update certificate",
 				});
 			}
+			void auditFromSession(ctx, organizationId, {
+				action: "certificate.update",
+				targetType: "certificate",
+				targetId: certificate.certificateId,
+				targetName: certificate.name,
+				metadata: {
+					serverId: nextServerId,
+					materialChanged: input.certificateData !== undefined || input.privateKey !== undefined,
+				},
+			});
 			return publicCertificate(certificate);
 		}),
 
@@ -241,6 +259,13 @@ export const certificateRouter = router({
 
 		await db.delete(certificates).where(eq(certificates.certificateId, input.certificateId));
 		await removeCertificateFiles(certificate.certificateId, certificate.serverId);
+		void auditFromSession(ctx, organizationId, {
+			action: "certificate.delete",
+			targetType: "certificate",
+			targetId: certificate.certificateId,
+			targetName: certificate.name,
+			metadata: { serverId: certificate.serverId },
+		});
 		return { certificateId: input.certificateId };
 	}),
 });

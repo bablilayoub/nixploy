@@ -102,6 +102,12 @@ export const sshKeyRouter = router({
 			if (!updated) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "SSH key not found" });
 			}
+			void auditFromSession(ctx, organizationId, {
+				action: "ssh_key.update",
+				targetType: "ssh_key",
+				targetId: updated.sshKeyId,
+				targetName: updated.name,
+			});
 			return publicSshKey(updated);
 		}),
 
@@ -131,6 +137,11 @@ export const sshKeyRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "ssh_keys.manage");
+			void auditFromSession(ctx, organizationId, {
+				action: "ssh_key.generate",
+				targetType: "ssh_key",
+				targetName: input?.name ?? null,
+			});
 			return await generateSshKeyPair(input?.name);
 		}),
 });

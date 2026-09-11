@@ -246,7 +246,20 @@ export const observabilityRouter = router({
 			if (input.composeId) {
 				await assertComposeAccess(input.composeId, organizationId);
 			}
-			return upsertAlertRule({ organizationId, ...input });
+			const rule = await upsertAlertRule({ organizationId, ...input });
+			void auditFromSession(ctx, organizationId, {
+				action: "alertRule.upsert",
+				targetType: "alertRule",
+				targetId: rule?.alertRuleId ?? input.alertRuleId ?? null,
+				targetName: input.metric,
+				metadata: {
+					applicationId: input.applicationId ?? null,
+					composeId: input.composeId ?? null,
+					threshold: input.threshold,
+					enabled: input.enabled,
+				},
+			});
+			return rule;
 		}),
 
 	deleteAlertRule: protectedProcedure
@@ -258,6 +271,11 @@ export const observabilityRouter = router({
 			);
 			await assertCapability(ctx.session.user.id, organizationId, "project.write");
 			await deleteAlertRule(input.alertRuleId, organizationId);
+			void auditFromSession(ctx, organizationId, {
+				action: "alertRule.delete",
+				targetType: "alertRule",
+				targetId: input.alertRuleId,
+			});
 			return { ok: true };
 		}),
 
@@ -300,8 +318,22 @@ export const observabilityRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			await assertCapability(ctx.session.user.id, organizationId, "project.write");
 			await assertDomainAccess(input.domainId, organizationId);
-			return setUptimeProbe({ organizationId, ...input });
+			const probe = await setUptimeProbe({
+				organizationId,
+				actorUserId: ctx.session.user.id,
+				...input,
+			});
+			void auditFromSession(ctx, organizationId, {
+				action: "uptimeProbe.set",
+				targetType: "domain",
+				targetId: input.domainId,
+				metadata: {
+					enabled: input.enabled,
+					path: input.path ?? "/",
+					intervalSeconds: input.intervalSeconds,
+				},
+			});
+			return probe;
 		}),
 });

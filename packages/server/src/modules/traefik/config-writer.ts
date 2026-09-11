@@ -192,7 +192,9 @@ export const writeLocalFileAtomic = async (
 	}
 	const tmpPath = `${absolutePath}.${process.pid}-${randomBytes(4).toString("hex")}.tmp`;
 	try {
-		await writeFile(tmpPath, content, "utf8");
+		// 0600: per-app YAML carries basic-auth bcrypt hashes and inlined TLS
+		// private keys (security audit 2.4).
+		await writeFile(tmpPath, content, { encoding: "utf8", mode: 0o600 });
 		await rename(tmpPath, absolutePath);
 	} catch (error) {
 		await rm(tmpPath, { force: true }).catch(() => {});
@@ -217,7 +219,8 @@ export const writeFileOnServer = async (
 	if (serverId) {
 		const tmpPath = `${absolutePath}.tmp`;
 		await execAsyncWithStdin(
-			`mkdir -p ${shq(dirname(absolutePath))} && cat > ${shq(tmpPath)} && mv -f ${shq(tmpPath)} ${shq(absolutePath)}`,
+			`mkdir -p ${shq(dirname(absolutePath))} && (umask 077 && cat > ${shq(tmpPath)}) && ` +
+				`chmod 600 ${shq(tmpPath)} && mv -f ${shq(tmpPath)} ${shq(absolutePath)}`,
 			content,
 			{ serverId },
 		);
@@ -239,6 +242,49 @@ export const removeFileOnServer = async (
 };
 
 // ─── Config generation ───────────────────────────────────────────────────────
+
+/**
+ * `redirectRegex.replacement` is written verbatim into the tenant's own
+ * Traefik router, so an unvalidated value is an open redirect on a domain the
+ * organization controls (security audit 2.6). Allow only:
+ *
+ * - a relative target (`/somewhere`, `${1}/x`) — same host by construction;
+ * - an absolute `https://` target whose host is one of this app's own domains.
+ *
+ * Capture-group references are preserved, but a replacement that builds its
+ * HOST from a capture group is refused: the resulting host is not knowable
+ * here, so it cannot be checked against the service's domains.
+ */
+export function assertSafeRedirectReplacement(
+	replacement: string,
+	ownHosts: ReadonlySet<string>,
+): string {
+	const value = replacement.trim();
+	if (!value) throw badRequest("Redirect replacement must not be empty");
+	const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(value)?.[1]?.toLowerCase();
+	if (!scheme) {
+		if (value.startsWith("//")) {
+			throw badRequest("Redirect replacement must not be protocol-relative");
+		}
+		return value;
+	}
+	if (scheme !== "http" && scheme !== "https") {
+		throw badRequest("Redirect replacement must be an http(s) URL or a same-host path");
+	}
+	const host =
+		value
+			.slice(scheme.length + 3)
+			.split(/[/?#]/, 1)[0]
+			?.toLowerCase() ?? "";
+	if (!host || host.includes("$")) {
+		throw badRequest("Redirect replacement must name a literal host");
+	}
+	const bareHost = host.replace(/:\d+$/, "");
+	if (scheme === "https" || ownHosts.has(host) || ownHosts.has(bareHost)) return value;
+	throw badRequest(
+		`Redirect replacement host "${host}" must be https or one of this service's own domains`,
+	);
+}
 
 /**
  * Build the Traefik v3 file-provider config for one app, modeled on Dokploy's
@@ -271,12 +317,13 @@ export const buildTraefikFileConfig = async (
 
 	// Shared middlewares referenced by every router of this app.
 	const sharedMiddlewareNames: string[] = [];
+	const ownHosts = new Set(domains.map((domain) => domain.host.toLowerCase()));
 	redirects.forEach((redirect, index) => {
 		const name = `redirect-${sanitizeName(appName)}-${index}`;
 		middlewares[name] = {
 			redirectRegex: {
 				regex: redirect.regex,
-				replacement: redirect.replacement,
+				replacement: assertSafeRedirectReplacement(redirect.replacement, ownHosts),
 				permanent: redirect.permanent,
 			},
 		};

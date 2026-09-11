@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { gitlab, gitProviders } from "../../db/schema";
+import { type PinnedResponse, safeFetch } from "../../utils/public-url";
 
 export type CreateGitlabInput = {
 	name: string;
@@ -99,16 +100,23 @@ const GITLAB_REQUEST_TIMEOUT_MS = 15_000;
 const GITLAB_PAGE_SIZE = 100;
 const GITLAB_MAX_PAGES = 20;
 
-function gitlabApi(row: GitlabRow, path: string) {
+/**
+ * One authenticated GitLab call. The base URL is re-validated on every request
+ * and the connection is pinned to the vetted address (security audit 2.6).
+ */
+function gitlabApi(row: GitlabRow, path: string): Promise<PinnedResponse> {
 	const base = row.gitlabUrl.replace(/\/$/, "");
-	return fetch(`${base}/api/v4${path}`, {
-		headers: { "PRIVATE-TOKEN": row.accessToken ?? "" },
-		redirect: "error",
-		signal: AbortSignal.timeout(GITLAB_REQUEST_TIMEOUT_MS),
-	});
+	return safeFetch(
+		`${base}/api/v4${path}`,
+		{ allowPrivate: true, allowHttp: true },
+		{
+			headers: { "PRIVATE-TOKEN": row.accessToken ?? "" },
+			timeoutMs: GITLAB_REQUEST_TIMEOUT_MS,
+		},
+	);
 }
 
-async function assertOk(response: Response, what: string) {
+async function assertOk(response: PinnedResponse, what: string) {
 	if (!response.ok) {
 		throw new Error(`GitLab ${what} failed: ${response.status}`);
 	}

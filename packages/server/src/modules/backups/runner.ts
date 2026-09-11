@@ -31,9 +31,17 @@ import {
 	parseInstanceDatabaseUrl,
 	WEB_SERVER_CONFIG_SUFFIX,
 } from "./instance-backup";
-import { assertNonEmptyGzip, buildEncodedPipeline, decodePipelineOutput } from "./pipeline";
+import {
+	assertNonEmptyGzip,
+	assertStreamExit,
+	buildEncodedPipeline,
+	buildStreamPipeline,
+	decodePipelineOutput,
+	GzipShapeCheck,
+} from "./pipeline";
 import { type BackupRunHandle, type BackupRunTrigger, withBackupRun } from "./runs";
 import { type BackupStore, type DestinationRow, storeFor } from "./storage";
+import { type StreamingCommand, spawnStreamingCommand } from "./stream-exec";
 import {
 	buildVerifyCleanupCommand,
 	buildVerifyContainerName,
@@ -54,13 +62,16 @@ import {
  *
  * Transport strategy (works identically for the local Docker daemon and for
  * remote managed servers over SSH): the dump/archive command runs inside a
- * container on the target server, its bytes are gzipped + base64-encoded in
- * the same shell pipeline (see pipeline.ts — the producer's exit status is
- * carried along so a failed dump never uploads an empty archive), the (text)
- * result travels back through execAsync/execAsyncRemote, and the decoded
- * buffer is written to the destination. Restore runs the exact reverse
- * pipeline with the base64 archive fed through stdin — never inlined on
- * argv, which Linux caps at 128 KiB per argument (E2BIG).
+ * container on the target server and its bytes are gzipped in the same shell
+ * pipeline (see pipeline.ts — the producer's exit status is carried along so
+ * a failed dump never uploads an empty archive).
+ *
+ * Database dumps and their restores STREAM (architecture audit #18): stdout
+ * goes straight into an S3 multipart upload (8 MiB parts) or a local file,
+ * and a restore streams the stored object back into the container's stdin.
+ * Nothing is buffered, so the old ~37 MB ceiling (base64 through a 50 MB
+ * `maxBuffer`) is gone. The exit-status trailer moved to stderr so stdout
+ * stays binary. Volume/instance archives still use the base64 pipeline.
  *
  * Every run is recorded as a `backup_run` row (runs.ts): `running` while the
  * dump is in flight, then `success` with the object key and size, or
@@ -296,36 +307,59 @@ async function runDatabaseDump(
 	const dumpCommand = engine.dumpCommand(params);
 	const passwordEnv = engine.passwordEnv?.(params) ?? {};
 	const passwordEntries = Object.entries(passwordEnv);
-	let encoded: string;
+
+	let command: string;
+	let stdin: string | undefined;
 	if (passwordEntries.length > 0) {
 		// Password on stdin (first line) — never on docker/ps argv.
 		const exports = passwordEntries.map(([key]) => key).join(" ");
 		const reader = passwordEntries.map(([key]) => `IFS= read -r ${key}`).join("; ");
 		const inner = `${reader}; export ${exports}; ${dumpCommand}`;
-		const pipeline = buildEncodedPipeline(
-			`docker exec -i ${shellQuote(containerId)} sh -c ${sq(inner)}`,
-		);
-		encoded = await execAsyncWithStdin(
-			pipeline,
-			`${passwordEntries.map(([, v]) => v).join("\n")}\n`,
-			{
-				serverId: linked.serverId,
-			},
-		);
+		command = buildStreamPipeline(`docker exec -i ${shellQuote(containerId)} sh -c ${sq(inner)}`);
+		stdin = `${passwordEntries.map(([, v]) => v).join("\n")}\n`;
 	} else {
-		const pipeline = buildEncodedPipeline(
+		command = buildStreamPipeline(
 			`docker exec ${shellQuote(containerId)} sh -c ${sq(dumpCommand)}`,
 		);
-		encoded = await run(linked.serverId, pipeline);
 	}
-	const label = `Dump of ${backupRow.appName}`;
-	const archive = decodePipelineOutput(encoded, label);
-	assertNonEmptyGzip(archive, label);
 
+	const label = `Dump of ${backupRow.appName}`;
 	const key = buildBackupKey(backupRow.prefix, backupRow.appName);
-	await store.put(key, archive);
+	const proc = await spawnStreamingCommand(linked.serverId, command, { stdin });
+	const bytes = await storeStreamedDump(store, key, proc, label);
 	await pruneOldBackups(store, backupPrefix(backupRow), backupRow.keepLatestCount);
-	return { key, bytes: archive.length };
+	return { key, bytes };
+}
+
+/**
+ * Pipe a streaming dump into the destination. The exit-status trailer and the
+ * gzip shape are checked at the END of the source generator, i.e. BEFORE the
+ * store finalizes (`CompleteMultipartUpload` / `rename`), so a failed dump
+ * aborts the upload instead of replacing a good archive with an empty one.
+ */
+async function storeStreamedDump(
+	store: BackupStore,
+	key: string,
+	proc: StreamingCommand,
+	label: string,
+): Promise<number> {
+	const shape = new GzipShapeCheck();
+	async function* guarded(): AsyncGenerator<Buffer> {
+		for await (const chunk of proc.stdout) {
+			const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string);
+			shape.update(buffer);
+			yield buffer;
+		}
+		// Throws when the pipeline (or the producer inside it) failed.
+		assertStreamExit(await proc.done, label);
+		shape.assert(label);
+	}
+	try {
+		return await store.putStream(key, guarded());
+	} catch (error) {
+		proc.abort();
+		throw error;
+	}
 }
 
 /** Keys of every stored dump of a backup row, newest first. */
@@ -366,7 +400,7 @@ export async function restoreBackup(backupRow: BackupRow, key?: string): Promise
 	const destination = await findDestinationOrThrow(backupRow.destinationId);
 	const targetKey = await resolveStoredKey(backupRow, key);
 
-	const archive = await storeFor(destination).get(targetKey);
+	const store = storeFor(destination);
 	const linked = await findLinkedDatabase(backupRow);
 	const containerId = await findContainerId(backupRow.appName, linked.serverId);
 
@@ -374,7 +408,22 @@ export async function restoreBackup(backupRow: BackupRow, key?: string): Promise
 	const restoreCommand = engine.restoreCommand(params);
 	const passwordEnv = engine.passwordEnv?.(params) ?? {};
 	const passwordEntries = Object.entries(passwordEnv);
-	const archiveB64 = archive.toString("base64");
+
+	// The archive STREAMS from the destination into the container's stdin:
+	// nothing is held in memory, and inlining it on argv would fail with
+	// E2BIG anyway (architecture audit #18).
+	const streamRestore = async (inner: string): Promise<void> => {
+		const archive = await store.getStream(targetKey);
+		const proc = await spawnStreamingCommand(
+			linked.serverId,
+			`gunzip | docker exec -i ${shellQuote(containerId)} sh -c ${sq(inner)}`,
+			{ stdin: archive },
+		);
+		// Nothing useful on stdout; drain it so the command can finish.
+		proc.stdout.resume();
+		await proc.done;
+	};
+
 	if (passwordEntries.length > 0) {
 		const passFile = "/tmp/.nixploy-db-pass";
 		await execAsyncWithStdin(
@@ -392,22 +441,12 @@ export async function restoreBackup(backupRow: BackupRow, key?: string): Promise
 				.join("; ");
 			// Preserve the restore tool's exit status past the cleanup.
 			const wrapped = `${exports}; export ${passwordEntries.map(([key]) => key).join(" ")}; ${restoreCommand}; __rc=$?; rm -f ${passFile}; exit $__rc`;
-			await execAsyncWithStdin(
-				`base64 -d | gunzip | docker exec -i ${shellQuote(containerId)} sh -c ${sq(wrapped)}`,
-				archiveB64,
-				{ serverId: linked.serverId },
-			);
+			await streamRestore(wrapped);
 		} finally {
 			await run(linked.serverId, `docker exec ${shellQuote(containerId)} rm -f ${passFile}`);
 		}
 	} else {
-		// The archive travels through stdin: inlining it on argv fails with
-		// E2BIG once the base64 exceeds ~128 KiB (i.e. every real database).
-		await execAsyncWithStdin(
-			`base64 -d | gunzip | docker exec -i ${shellQuote(containerId)} sh -c ${sq(restoreCommand)}`,
-			archiveB64,
-			{ serverId: linked.serverId },
-		);
+		await streamRestore(restoreCommand);
 	}
 	return { key: targetKey };
 }

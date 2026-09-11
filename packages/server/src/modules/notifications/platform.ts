@@ -31,7 +31,8 @@ export type PlatformAlertKind =
 	| "queueStalled"
 	| "certExpiry"
 	| "platformService"
-	| "instanceBackup";
+	| "instanceBackup"
+	| "auditForward";
 
 export interface PlatformAlert {
 	kind: PlatformAlertKind;
@@ -52,6 +53,7 @@ const KIND_LABEL: Record<PlatformAlertKind, string> = {
 	certExpiry: "Certificate expiring",
 	platformService: "Platform service degraded",
 	instanceBackup: "Instance backup missing",
+	auditForward: "Audit trail",
 };
 
 /** Human label of an alert kind (UI + payload titles). */

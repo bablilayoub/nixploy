@@ -1,5 +1,7 @@
+import { isIP } from "node:net";
 import { z } from "zod";
 import { badRequest } from "../modules/errors";
+import { classifyIpAddress } from "./public-url";
 
 /** Docker named volume / compose service name character set. */
 export const DOCKER_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
@@ -133,6 +135,69 @@ export function assertSafePublishedPort(port: number, label = "publishedPort"): 
  * (flag injection), and only common OCI ref characters.
  */
 export const DOCKER_IMAGE_REF_RE = /^[a-zA-Z0-9][a-zA-Z0-9._\-/:@+]*$/;
+
+/**
+ * Registry host of an image reference (Docker's own rule: the first path
+ * component is a registry only when it contains `.` / `:` or is `localhost`).
+ * Duplicated from `modules/deployment/sources.ts` so validators stay free of
+ * deployment imports; both are covered by tests.
+ */
+function registryHostOf(reference: string): { host: string; explicit: boolean } {
+	const slash = reference.indexOf("/");
+	if (slash === -1) return { host: "docker.io", explicit: false };
+	const first = reference.slice(0, slash).toLowerCase();
+	if (first.includes(".") || first.includes(":") || first === "localhost") {
+		return { host: first.replace(/:\d+$/, ""), explicit: true };
+	}
+	return { host: "docker.io", explicit: false };
+}
+
+/**
+ * True when pulling from this registry host would make the Docker daemon
+ * reach into the LAN / the Swarm overlay — a blind SSRF primitive with the
+ * daemon's network position (security audit 2.6).
+ */
+export function isPrivateRegistryHost(host: string): boolean {
+	const value = host
+		.trim()
+		.toLowerCase()
+		.replace(/^\[|\]$/g, "")
+		.replace(/:\d+$/, "");
+	if (!value) return false;
+	if (value === "localhost" || value.endsWith(".localhost")) return true;
+	if (value.endsWith(".local") || value.endsWith(".internal")) return true;
+	if (!value.includes(".") && !value.includes(":")) return true; // bare label = overlay service
+	if (isIP(value)) return classifyIpAddress(value) !== "public";
+	return false;
+}
+
+/**
+ * Charset check plus: an image whose registry host is private is only
+ * pullable when the organization has a matching `selfHosted` registry row.
+ * `allowedHosts` holds those hosts (bare, no port, no scheme).
+ */
+export function assertPullableImageRef(
+	reference: string,
+	allowedHosts: Iterable<string> = [],
+): string {
+	const trimmed = assertSafeDockerImageRef(reference);
+	const { host, explicit } = registryHostOf(trimmed);
+	if (!explicit || !isPrivateRegistryHost(host)) return trimmed;
+	const allowed = new Set(
+		[...allowedHosts].map((value) =>
+			value
+				.trim()
+				.toLowerCase()
+				.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "")
+				.split("/")[0]
+				?.replace(/:\d+$/, ""),
+		),
+	);
+	if (allowed.has(host)) return trimmed;
+	throw badRequest(
+		`Image ${reference} points at the private registry "${host}". Add it as a self-hosted registry first.`,
+	);
+}
 
 export function assertSafeDockerImageRef(reference: string): string {
 	const trimmed = reference.trim();

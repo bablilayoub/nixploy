@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import { previewDeployments } from "../../db/schema";
 import { assertApplicationAccess, getOrganizationId } from "../../modules/application";
+import { auditFromSession } from "../../modules/audit";
 import {
 	createPreviewDeployment,
 	deletePreviewDeployment,
@@ -78,7 +79,21 @@ export const previewDeploymentRouter = router({
 			try {
 				// Manual preview: the deployment row is attributed to this user
 				// (webhook-driven previews pass `webhook:<provider>` instead).
-				return await createPreviewDeployment({ ...input, triggeredBy: ctx.session.user.id });
+				const preview = await createPreviewDeployment({
+					...input,
+					triggeredBy: ctx.session.user.id,
+				});
+				void auditFromSession(ctx, organizationId, {
+					action: "previewDeployment.create",
+					targetType: "application",
+					targetId: input.applicationId,
+					targetName: preview.appName,
+					metadata: {
+						previewDeploymentId: preview.previewDeploymentId,
+						pullRequestNumber: input.pullRequestNumber,
+					},
+				});
+				return preview;
 			} catch (error) {
 				if (error instanceof PreviewConflictError) {
 					throw new TRPCError({ code: "CONFLICT", message: error.message });
@@ -99,10 +114,21 @@ export const previewDeploymentRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
-			await findApplicationPreview(input.previewDeploymentId, organizationId);
+			const { preview } = await findApplicationPreview(input.previewDeploymentId, organizationId);
 
 			try {
-				return await deletePreviewDeployment(input.previewDeploymentId);
+				const result = await deletePreviewDeployment(input.previewDeploymentId);
+				void auditFromSession(ctx, organizationId, {
+					action: "previewDeployment.delete",
+					targetType: "application",
+					targetId: preview.applicationId,
+					targetName: preview.appName,
+					metadata: {
+						previewDeploymentId: preview.previewDeploymentId,
+						pullRequestNumber: preview.pullRequestNumber,
+					},
+				});
+				return result;
 			} catch (error) {
 				if (error instanceof PreviewNotFoundError) {
 					throw new TRPCError({ code: "NOT_FOUND", message: error.message });
@@ -137,6 +163,16 @@ export const previewDeploymentRouter = router({
 					status: "deploying",
 				});
 			}
+			void auditFromSession(ctx, organizationId, {
+				action: "previewDeployment.approve",
+				targetType: "application",
+				targetId: preview.applicationId,
+				targetName: preview.appName,
+				metadata: {
+					previewDeploymentId: preview.previewDeploymentId,
+					pullRequestNumber: preview.pullRequestNumber,
+				},
+			});
 			return result;
 		}),
 
@@ -161,7 +197,18 @@ export const previewDeploymentRouter = router({
 				});
 			}
 			try {
-				return await deletePreviewDeployment(input.previewDeploymentId);
+				const result = await deletePreviewDeployment(input.previewDeploymentId);
+				void auditFromSession(ctx, organizationId, {
+					action: "previewDeployment.deny",
+					targetType: "application",
+					targetId: preview.applicationId,
+					targetName: preview.appName,
+					metadata: {
+						previewDeploymentId: preview.previewDeploymentId,
+						pullRequestNumber: preview.pullRequestNumber,
+					},
+				});
+				return result;
 			} catch (error) {
 				if (error instanceof PreviewNotFoundError) {
 					throw new TRPCError({ code: "NOT_FOUND", message: error.message });

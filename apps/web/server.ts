@@ -6,6 +6,7 @@ import next from "next";
 // module instance as the tRPC/cron graph under tsx) — see initBackgroundSchedules.
 import { shutdownGraceMs, stopScheduledJobs } from "../../packages/server/src/lib/shutdown";
 import { drainQueue } from "../../packages/server/src/modules/deployment/queue";
+import { PEER_IP_HEADER } from "../../packages/server/src/utils/rate-limit";
 
 const log = createLogger("server");
 
@@ -264,6 +265,14 @@ async function main() {
 	await app.prepare();
 
 	const server = createServer((req, res) => {
+		// The Fetch `Request` a route handler receives carries no socket, so
+		// the real TCP peer travels as a header: `clientIpFromRequest` only
+		// trusts forwarded headers when the peer is itself a trusted proxy
+		// (security audit 2.10). Drop any client-supplied copy first — this
+		// header must never be attacker-controlled.
+		delete req.headers[PEER_IP_HEADER];
+		const peer = req.socket.remoteAddress;
+		if (peer) req.headers[PEER_IP_HEADER] = peer;
 		void handle(req, res);
 	});
 	registerShutdownHandlers(server);

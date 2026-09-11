@@ -22,6 +22,7 @@ vi.mock("../../db", () => ({
 }));
 
 import {
+	assertSafeRedirectReplacement,
 	buildTraefikFileConfig,
 	type TraefikDomainEntry,
 	writeAppTraefikConfig,
@@ -442,5 +443,41 @@ describe("writeLocalFileAtomic", () => {
 		await expect(writeLocalFileAtomic(bad, "x")).rejects.toThrow();
 		expect(await readFile(file, "utf8")).toBe("keep\n");
 		expect(await readdir(dir)).toEqual(["app.yml"]);
+	});
+});
+
+describe("assertSafeRedirectReplacement", () => {
+	const own = new Set(["app.example.com"]);
+
+	it("allows relative targets and capture groups", () => {
+		// `${1}` spelled out so biome does not read it as a template placeholder.
+		const braced = `$${"{1}"}/x`;
+		expect(assertSafeRedirectReplacement("/moved/$1", own)).toBe("/moved/$1");
+		expect(assertSafeRedirectReplacement(braced, own)).toBe(braced);
+	});
+
+	it("allows https anywhere and http only on the service's own hosts", () => {
+		expect(assertSafeRedirectReplacement("https://elsewhere.example/x", own)).toBe(
+			"https://elsewhere.example/x",
+		);
+		expect(assertSafeRedirectReplacement("http://app.example.com/$1", own)).toBe(
+			"http://app.example.com/$1",
+		);
+	});
+
+	it("refuses cross-host http, protocol-relative and non-http schemes", () => {
+		expect(() => assertSafeRedirectReplacement("http://evil.example/x", own)).toThrow(
+			/own domains/,
+		);
+		expect(() => assertSafeRedirectReplacement("//evil.example/x", own)).toThrow(
+			/protocol-relative/,
+		);
+		expect(() => assertSafeRedirectReplacement("javascript://evil/x", own)).toThrow(/http\(s\)/);
+	});
+
+	it("refuses a host built from a capture group", () => {
+		expect(() => assertSafeRedirectReplacement("https://$1.example/x", own)).toThrow(
+			/literal host/,
+		);
 	});
 });

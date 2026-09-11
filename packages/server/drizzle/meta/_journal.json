@@ -176,6 +176,13 @@
       "when": 1789134330762,
       "tag": "0024_condemned_tarot",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789141444736,
+      "tag": "0025_overconfident_jimmy_woo",
+      "breakpoints": true
     }
   ]
 }

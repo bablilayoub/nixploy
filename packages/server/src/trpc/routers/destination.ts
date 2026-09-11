@@ -227,6 +227,17 @@ export const destinationRouter = router({
 				),
 			)
 			.returning();
+		void auditFromSession(ctx, organizationId, {
+			action: "destination.update",
+			targetType: "destination",
+			targetId: destinationId,
+			targetName: row?.name ?? existing.name,
+			metadata: {
+				provider: existing.provider,
+				credentialsChanged: values.accessKey !== undefined || values.secretAccessKey !== undefined,
+				endpointChanged: values.endpoint !== undefined,
+			},
+		});
 		return row ? await publicDestination(row, ctx.session.user.id, organizationId) : row;
 	}),
 
@@ -261,6 +272,13 @@ export const destinationRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "destinations.manage");
 		const row = await findDestinationOrThrow(input.destinationId, organizationId);
+		void auditFromSession(ctx, organizationId, {
+			action: "destination.testConnection",
+			targetType: "destination",
+			targetId: row.destinationId,
+			targetName: row.name,
+			metadata: { provider: row.provider },
+		});
 		return await testDestination(row);
 	}),
 });

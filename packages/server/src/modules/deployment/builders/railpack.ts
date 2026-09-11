@@ -1,5 +1,6 @@
 import { commandExists } from "../docker";
 import { shellQuote } from "../paths";
+import { withSourcedBuildEnv } from "./build-env";
 import { prepareBuildCache } from "./cache";
 import type { BuildInput } from "./index";
 import { ensureToolBinary, RAILPACK_TOOL } from "./tools";
@@ -16,7 +17,6 @@ const BUILDKIT_CONTAINER = "nixploy-buildkit";
 
 export async function buildWithRailpack(input: BuildInput, imageTag: string): Promise<void> {
 	const { ctx, buildDir, env } = input;
-	const envFlags = env.map((entry) => `--env ${shellQuote(entry)}`).join(" ");
 
 	let binary: string;
 	if (await commandExists(ctx.serverId, "railpack")) {
@@ -39,7 +39,10 @@ export async function buildWithRailpack(input: BuildInput, imageTag: string): Pr
 	const cache = await prepareBuildCache(input);
 	const noCache = cache.noCacheFlag ? ` ${cache.noCacheFlag}` : "";
 
-	await ctx.run(
-		`BUILDKIT_HOST=docker-container://${BUILDKIT_CONTAINER} ${binary} build ${shellQuote(buildDir)} --name ${shellQuote(imageTag)} ${envFlags}${noCache}`,
-	);
+	// Same as nixpacks: values through a 0600 env file, names on argv.
+	await withSourcedBuildEnv(ctx, input.application.appName, env, async ({ prefix, flags }) => {
+		await ctx.run(
+			`${prefix}BUILDKIT_HOST=docker-container://${BUILDKIT_CONTAINER} ${binary} build ${shellQuote(buildDir)} --name ${shellQuote(imageTag)}${flags}${noCache}`,
+		);
+	});
 }

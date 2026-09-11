@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import { rollbacks } from "../../db/schema";
 import { assertApplicationAccess, getOrganizationId } from "../../modules/application";
+import { auditFromSession } from "../../modules/audit";
 import { assertCapability } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
 
@@ -46,8 +47,18 @@ export const rollbackRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
-			const { rollback } = await findApplicationRollback(input.rollbackId, organizationId);
+			const { rollback, application } = await findApplicationRollback(
+				input.rollbackId,
+				organizationId,
+			);
 			await db.delete(rollbacks).where(eq(rollbacks.rollbackId, rollback.rollbackId));
+			void auditFromSession(ctx, organizationId, {
+				action: "rollback.delete",
+				targetType: "application",
+				targetId: rollback.applicationId,
+				targetName: application.appName,
+				metadata: { rollbackId: rollback.rollbackId, image: rollback.image },
+			});
 			return { rollbackId: rollback.rollbackId };
 		}),
 });

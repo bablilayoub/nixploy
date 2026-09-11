@@ -81,3 +81,22 @@ describe("DeploymentLogger", () => {
 		}
 	});
 });
+
+describe("redaction floor (security audit 2.4)", () => {
+	it("redacts short secret-shaped values", () => {
+		expect(isRedactableSecret("s3cr")).toBe(true);
+		expect(isRedactableSecret("a1b2")).toBe(true);
+		expect(isRedactableSecret("p@ss")).toBe(true);
+		expect(isRedactableSecret("hunter22")).toBe(true);
+	});
+
+	it("still ignores numbers, booleans and short plain words", () => {
+		expect(isRedactableSecret("3000")).toBe(false);
+		expect(isRedactableSecret("true")).toBe(false);
+		expect(isRedactableSecret("main")).toBe(false);
+		expect(isRedactableSecret("prod")).toBe(false);
+		expect(isRedactableSecret("utf8")).toBe(true);
+		expect(isRedactableSecret("abc")).toBe(false);
+		expect(isRedactableSecret("")).toBe(false);
+	});
+});

@@ -80,7 +80,7 @@ Router → module map:
 | Router | Backing module(s) |
 | --- | --- |
 | `application`, `mount`, `port`, `redirect`, `security`, `rollback` | `modules/application/*` (create/start/stop/delete, `service.ts` swarm+traefik sync, `docker.ts`, `app-name.ts`, `org.ts` access helpers), `modules/deployment/*` |
-| `compose` | `modules/compose/*` (`service.ts`, `compose-file.ts` parse/interpolate/validate/inject-networks, `commands.ts` deploy/down commands + Traefik keys, `containers.ts`, `source.ts`, `adapters.ts`) |
+| `compose` | `modules/compose/*` (`service.ts`; the compose-file pipeline split into `parse.ts` (YAML + spec shape + `ComposeValidationError`), `interpolate.ts` (env merge + compose-go interpolation/escaping), `safety.ts` (deny/limit lists + hardening injection), `rewrite.ts` (service renaming, network/node wiring, `buildDeployComposeFile`), with `compose-file.ts` kept as the barrel every caller imports; `commands.ts` deploy/down commands + Traefik keys, `containers.ts`, `source.ts`, `adapters.ts`) |
 | `postgres`, `mysql`, `mariadb`, `mongo`, `redis` | `modules/databases/engine.ts` (all five engines) + `router.ts` (`buildDatabaseRouter` factory) |
 | `deployment`, `previewDeployment`, `rollback` | `modules/deployment/{queue,worker,queries,recovery,reconciler,maintenance,events,logger,cleanup,rollback}.ts`, `modules/preview/*` (PR lifecycle, fork gate, PR comments, `source-ref.ts` fork/PR head refs, `traefik.ts` preview YAML) |
 | `domain`, `certificate` | `modules/traefik/*` (`config-writer.ts` YAML, `dashboard.ts`, `setup.ts` static config + swarm service, `paths.ts`) |
@@ -89,9 +89,9 @@ Router → module map:
 | `backup`, `volumeBackup`, `destination` | `modules/backups/*` (`runner.ts` dump/restore incl. Redis + instance self-backup, `pipeline.ts` exit-status trailer + empty-gzip guard, `scheduler.ts`, `dump-commands.ts`) |
 | `schedule` | `modules/schedules/*` (node-schedule jobs running shell in containers/servers; `cron.ts` strict cron validation; scripts streamed over stdin) |
 | `notification` | `modules/notifications/{index,providers}.ts` (slack, discord, telegram, email, gotify, ntfy, pushover, mattermost, lark, teams, custom) |
-| `server`, `sshKey`, `registry`, `docker` | `modules/cluster/*` (`servers.ts` SSH setup + swarm join/leave + batched stats cache, `ssh-keys.ts`, `registries.ts`), `modules/docker/*` (protected names, prune with the service-volume guard) |
-| `monitoring`, `observability` | `modules/monitoring/{history,remote}.ts` (30 s snapshots, 48 h JSONL, threshold alerts), `modules/observability/index.ts` (incidents, alert rules, uptime probes, log search), `modules/observability/health.ts` (`/api/health` · `/api/ready` · `/api/version`: DB / docker / migrations / queue / Traefik probes, 5 s cache, used by HEALTHCHECK, the installers and `nixploy doctor`) |
-| `github`, `gitlab`, `bitbucket`, `gitea` | `modules/git/*` (provider APIs, `webhook-handler.ts`, `webhook-secret.ts`) |
+| `server`, `sshKey`, `registry`, `docker` | `modules/cluster/*` (`servers.ts` SSH setup + swarm join/leave + batched stats cache, `ssh-keys.ts`, `registries.ts`), `modules/docker/*` (`protected.ts` platform names, `prune.ts` with the service-volume guard, `stats.ts` `mapDockerStats`, `containers.ts` local dockerode client + `resolveLocalContainer` — both re-exported by `ws/docker*.ts`, so nothing under `modules/` imports the transport layer) |
+| `monitoring`, `observability` | `modules/monitoring/*` — `store.ts` (append-only JSONL store, metrics file layout, the read API), `sampler.ts` (30 s Docker/SSH pass + cron), `alerts.ts` (org thresholds, per-service rules, the per-pass context), `history.ts` (barrel), `remote.ts` (SSH sample command + parser), `local-host.ts` (`getLocalServerStats` for the Nixploy host itself), `host.ts` (disk probe for platform alerts), `platform-alerts.ts`; `modules/observability/index.ts` (incidents, alert rules, uptime probes, log search), `modules/observability/health.ts` (`/api/health` · `/api/ready` · `/api/version`: DB / docker / migrations / queue / Traefik probes, 5 s cache, used by HEALTHCHECK, the installers and `nixploy doctor`) |
+| `github`, `gitlab`, `bitbucket`, `gitea` | `modules/git/*` (provider APIs, `webhook-secret.ts`; the webhook pipeline split into `providers/shared.ts` (types, header helpers, `WebhookUnauthorized`/`WebhookIgnored`), `providers/{github,gitlab,bitbucket,gitea}.ts` (verify + extract), `match.ts` (watch-path globs + the pure repo→application predicates), `handler.ts` (dispatcher, provenance, deploy enqueue) and `preview-flow.ts` (fork gate + preview create/redeploy/delete), with `webhook-handler.ts` kept as the barrel the web routes import) |
 | `gitops` | `modules/gitops/*` (`schema.ts` nixploy.yaml, `export`, `plan`, `apply`, `redeploy`) |
 | `ai` | `modules/ai/*` (OpenAI-compatible + Anthropic client, explain/auto-explain with cache, chat, `apply-patch` env patches, `generate-compose`, `settings`) |
 | `audit` | `modules/audit/index.ts` (`recordAudit`, `auditFromSession`) |
@@ -99,7 +99,7 @@ Router → module map:
 
 ### `utils/`
 
-`exec.ts` (`execAsync`, `execAsyncRemote`, `execAsyncWithStdin` — string or Buffer stdin, TOFU host-key pinning under `<config>/ssh/pinned-hosts/<serverId>.pub` with the legacy `known_hosts/` dir read as fallback; git clones with custom keys use the `<config>/ssh/git_known_hosts` file via `StrictHostKeyChecking=accept-new`), `rate-limit.ts` (in-memory sliding window; trusts `X-Forwarded-For` only with `TRUSTED_PROXIES`), `public-url.ts` (base URL + `redactSensitiveText`), `validators.ts` (docker image refs, hostnames, …).
+`exec.ts` (`execAsync`, `execAsyncRemote`, `execAsyncWithStdin` — string or Buffer stdin, TOFU host-key pinning under `<config>/ssh/pinned-hosts/<serverId>.pub` with the legacy `known_hosts/` dir read as fallback; git clones with custom keys use the `<config>/ssh/git_known_hosts` file via `StrictHostKeyChecking=accept-new`), `rate-limit.ts` (in-memory sliding window; trusts `X-Forwarded-For` only with `TRUSTED_PROXIES`), `public-url.ts` (the single outbound/SSRF guard: IP classification, the instance `allowPrivateEgress` toggle, address-pinned `pinnedFetch`/`safeFetch`, `assertSafeGitRef`, `redactSensitiveText`), `validators.ts` (docker image refs incl. private-registry hosts, hostnames, ports, …).
 
 ### `ws/`
 
@@ -158,7 +158,7 @@ Helpers: `modules/deployment/paths.ts` (canonical `getConfigDir`, apps, logs, ss
 | --- | --- | --- |
 | Backup schedules | `modules/backups/scheduler.ts` | per-row cron (`backup-<id>`, volume backups, instance self-backup) |
 | Service schedules | `modules/schedules/index.ts` | per-row cron |
-| Metrics history | `modules/monitoring/history.ts` | every 30 s (`SAMPLE_CRON`), 48 h retention, threshold alerts every 30 min per service/metric |
+| Metrics history | `modules/monitoring/sampler.ts` (via the `history.ts` barrel) | every 30 s (`SAMPLE_CRON`), 48 h retention, threshold alerts every 30 min per service/metric |
 | Status reconciler | `modules/deployment/reconciler.ts` | every 1 min |
 | Deployment maintenance | `modules/deployment/maintenance.ts` | hourly (`MAINTENANCE_CRON`): preview expiry, deployment-row cap (newest 50 per service + 30 d, files removed), build/schedule log prune (30 d), incidents (resolved > 90 d), audit (`NIXPLOY_AUDIT_RETENTION_DAYS`) |
 | Update checker | `modules/updates/scheduler.ts` | cron from settings (`nixploy-update-check`) |
@@ -171,7 +171,8 @@ Helpers: `modules/deployment/paths.ts` (canonical `getConfigDir`, apps, logs, ss
 | `DATABASE_URL`, `DATABASE_POOL_MAX` | db, migrate | Postgres DSN, pool size |
 | `DATABASE_URL_TEST` | vitest tenancy suite | throwaway DB for isolation tests |
 | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | auth, SSR tRPC URL, public-url | auth signing + canonical base URL |
-| `ENCRYPTION_KEY` | encryption | AES key for `encryptedText` (hex; losing it = secrets unreadable) |
+| `ENCRYPTION_KEY` | encryption | AES key for `encryptedText`/`encryptedJson` (64-char hex, or a 32+ char passphrase stretched with scrypt; losing it = secrets unreadable). Placeholder values from `.env.example` are refused at boot |
+| `ENCRYPTION_KEYS` | encryption | Comma list for a rotation window: the FIRST entry encrypts, every entry decrypts. Overrides `ENCRYPTION_KEY`. See `pnpm -F @nixploy/server nixploy:rotate-key` and docs/auth.md |
 | `NIXPLOY_CONFIG_DIR` (`NIXPLOY_DIR` legacy alias in one helper) | paths | state root |
 | `NIXPLOY_NETWORK` | swarm, compose, traefik | overlay network (default `nixploy-network`) |
 | `NIXPLOY_WILDCARD_DOMAIN` | previews | default `traefik.me` |
@@ -187,12 +188,15 @@ Helpers: `modules/deployment/paths.ts` (canonical `getConfigDir`, apps, logs, ss
 | `NIXPLOY_GIT_COMMIT` | `/api/version` | optional git SHA baked in with `--build-arg` |
 | `NIXPLOY_DB_WAIT_SECONDS` | entrypoint, migrate.mjs | how long to wait for Postgres before migrating (default 60) |
 | `NIXPLOY_AUDIT_RETENTION_DAYS` | deployment maintenance | audit log retention (default 365, `0` = forever) |
+| `NIXPLOY_AUDIT_FORWARD` | audit | `1` mirrors every audit row to the instance-admin notification channels, batched once a minute |
+| `NIXPLOY_ALLOW_PRIVATE_EGRESS` | public-url | `1` forces the private-egress toggle on (normally the instance-admin `web_server_settings.allow_private_egress`, default off) |
+| `NIXPLOY_MAX_PROBES_PER_ORG` | observability | cap on uptime probes per organization (default 50, `0` = unlimited) |
 | `NIXPLOY_MEMORY_LIMIT` | install.sh / update.sh | `--limit-memory` of the `nixploy` service (default `2g`) |
 | `NIXPLOY_PRE_UPDATE_BACKUP`, `NIXPLOY_ALLOW_DOWNGRADE` | update.sh | pre-roll `pg_dump` (default on) / allow a lower semver tag (default off) |
 | `NIXPLOY_BASE_URL` | public-url | explicit public base URL override |
 | `NIXPLOY_SCHEDULES_LOG_PATH` | schedules | override schedule log location |
 | `DOCKER_SOCKET` | dockerode | default `/var/run/docker.sock` |
-| `TRUSTED_PROXIES` | rate-limit | trust `X-Real-IP` / `X-Forwarded-For` |
+| `TRUSTED_PROXIES` | rate-limit | trust `X-Real-IP` / `X-Forwarded-For`, and only from a socket peer inside the trusted ranges (`x-nixploy-peer-ip`, see rate-limit.ts) |
 | `LOG_LEVEL`, `LOG_FORMAT` | logger | `debug|info|warn|error`, `json` |
 | `PORT`, `LISTEN_HOST` | server.ts | default 3000 / 0.0.0.0 |
 | `TEMPLATE_IMAGE_CHECK` | images-health test | enable registry probes |
@@ -220,7 +224,9 @@ Next 16 App Router, Tailwind v4, Motion, magicui components. Pages: `/`, `/featu
 
 ## 11. Tests
 
-44 vitest files in `packages/server/src` (714 passing, 13 skipped offline). Coverage areas: builders, swarm spec, Traefik YAML, compose file rewriting, database engine commands, backups/dump commands, webhook handling, preview fork gate/comments, gitops plan/redeploy, MCP tools/server, AI patch/compose/settings, capabilities, env resolution, encryption, api-key context, openapi generation, queue/worker/reconciler, template catalog + image health, tenancy isolation (DB-backed). Playwright smoke: `apps/web/e2e/smoke.mjs` (needs `playwright-core`, which lives only in `tools/screenshots`).
+Vitest files live next to the code in `packages/server/src` (two projects, see `vitest.config.ts`: `unit` in parallel, `*.db.test.ts` + `trpc/tenancy.test.ts` serialized behind `DATABASE_URL_TEST`). Coverage areas: builders, swarm spec, Traefik YAML, compose file parse/safety/rewrite, database engine commands, backups/dump commands, webhook handling, preview fork gate/comments, gitops plan/redeploy, MCP tools/server, AI patch/compose/settings, capabilities, env resolution, encryption, api-key context, openapi generation, queue/worker/reconciler, template catalog + image health, websocket access gates, schedule command building, notification payloads, observability (incidents, alert rules, uptime probes), the mutation capability matrix, tenancy isolation (DB-backed). Playwright smoke: `apps/web/e2e/smoke.mjs` (needs `playwright-core`, which lives only in `tools/screenshots`).
+
+Shared doubles live in `packages/server/src/test-utils/` (not a test directory — `*.test.ts` is what vitest collects): `fake-db.ts` (`createFakeDb` drizzle double recording writes, plus `whereValues` to read the literals bound in a `where` clause), `fake-session.ts` (`fakeSession`/`fakeTRPCContext`/`fakeWsSession` for cookie, API-key and instance-admin callers), `fake-docker.ts` (`listContainers`/`listServices`/`listTasks` stub) and `tmpdir.ts` (`useTempDir`). Two cross-cutting suites hang off the registries: `trpc/tenancy-coverage.ts` (every `*.all|one|list` must be COVERED or EXEMPT) and `trpc/capability-matrix.test.ts` (every mutation is called as a viewer against a database that throws on write — it must reject, and it must never write).
 
 ## Error boundary (2026-09-11)
 

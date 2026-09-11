@@ -132,11 +132,19 @@ or `tar` fails the run instead of uploading an empty archive) and rejects
 gzip files that decompress to zero bytes. Restores stream the archive over
 stdin, so large dumps are not limited by the shell's argument size.
 
-> **Size ceiling.** Dumps and archives are still buffered in the panel
-> process: the gzipped bytes travel back base64-encoded through a 50 MB
-> `maxBuffer`, so a raw dump much above ~37 MB compressed fails and peak
-> memory is roughly 3× the archive. Multipart streaming to S3 is tracked in
-> docs/status.md; until then keep an eye on run sizes in the history.
+> **Database dumps stream; instance archives still buffer.** A database dump
+> now goes straight from `docker exec … pg_dump | gzip` into the destination —
+> an S3 multipart upload in 8 MiB parts, or a `0600` file on disk — and a
+> restore streams the stored object back into the container's stdin. Nothing
+> is held in memory, so the old ~37 MB ceiling is gone; the exit-status trailer
+> moved to stderr so stdout stays binary, and a failed dump aborts the upload
+> (`AbortMultipartUpload`) instead of replacing a good archive.
+>
+> The **instance** (`web-server`) backup and volume archives still use the
+> base64 pipeline through a 50 MB `maxBuffer`, i.e. roughly ~37 MB compressed
+> and peak memory ≈ 3× the archive. Keep an eye on run sizes in the history
+> for those two; moving them onto the same streaming path is tracked in
+> docs/status.md.
 
 ## How the dump runs
 

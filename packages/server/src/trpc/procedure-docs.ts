@@ -1056,6 +1056,12 @@ const docs: Record<string, ProcedureDoc> = {
 		description: "Distinct actions and target types present in the organization's trail.",
 		capability: ["audit.read"],
 	},
+	"audit.export": {
+		summary: "Export the audit trail as CSV",
+		description:
+			"The organization's audit rows rendered as CSV (header + one line per event), newest first, capped by `limit`. Returns `{ filename, rows, csv }`.",
+		capability: ["audit.read"],
+	},
 	"updates.banner": {
 		summary: "Get the update banner state",
 		description: "Whether a newer panel image is available, for the in-app banner.",

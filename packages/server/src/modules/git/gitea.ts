@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { gitea, gitProviders } from "../../db/schema";
+import { type PinnedResponse, safeFetch } from "../../utils/public-url";
 
 export type CreateGiteaInput = {
 	name: string;
@@ -95,13 +96,22 @@ const GITEA_REQUEST_TIMEOUT_MS = 15_000;
 const GITEA_PAGE_SIZE = 50;
 const GITEA_MAX_PAGES = 40;
 
-async function giteaApi(row: GiteaRow, path: string) {
+/**
+ * One authenticated Gitea call. The base URL is re-validated on every request
+ * (not only when the provider row was saved) and the connection is pinned to
+ * the address that was vetted, so a self-hosted host name cannot be
+ * re-pointed at the overlay between save and use (security audit 2.6).
+ */
+async function giteaApi(row: GiteaRow, path: string): Promise<PinnedResponse> {
 	const base = row.giteaUrl.replace(/\/$/, "");
-	const response = await fetch(`${base}/api/v1${path}`, {
-		headers: { Authorization: `token ${row.accessToken ?? ""}` },
-		redirect: "error",
-		signal: AbortSignal.timeout(GITEA_REQUEST_TIMEOUT_MS),
-	});
+	const response = await safeFetch(
+		`${base}/api/v1${path}`,
+		{ allowPrivate: true, allowHttp: true },
+		{
+			headers: { Authorization: `token ${row.accessToken ?? ""}` },
+			timeoutMs: GITEA_REQUEST_TIMEOUT_MS,
+		},
+	);
 	if (!response.ok) {
 		throw new Error(`Gitea API request failed: ${response.status}`);
 	}
@@ -199,12 +209,12 @@ export async function isGiteaCollaborator(input: {
 		const [row] = await db.select().from(gitea).where(eq(gitea.giteaId, input.giteaId)).limit(1);
 		if (!row?.accessToken) return null;
 		const base = row.giteaUrl.replace(/\/$/, "");
-		const response = await fetch(
+		const response = await safeFetch(
 			`${base}/api/v1/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/collaborators/${encodeURIComponent(input.username)}`,
+			{ allowPrivate: true, allowHttp: true },
 			{
 				headers: { Authorization: `token ${row.accessToken}` },
-				redirect: "error",
-				signal: AbortSignal.timeout(GITEA_REQUEST_TIMEOUT_MS),
+				timeoutMs: GITEA_REQUEST_TIMEOUT_MS,
 			},
 		);
 		if (response.status === 204 || response.ok) return true;

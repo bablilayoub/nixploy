@@ -1,5 +1,6 @@
 import { commandExists } from "../docker";
 import { shellQuote } from "../paths";
+import { withEnvFileFlag } from "./build-env";
 import type { BuildInput } from "./index";
 
 const PACK_IMAGE = "buildpacksio/pack:latest";
@@ -16,19 +17,26 @@ export async function buildWithPack(
 	builder: string,
 ): Promise<void> {
 	const { ctx, buildDir, env } = input;
-	const envFlags = env.map((entry) => `--env ${shellQuote(entry)}`).join(" ");
 
-	if (!ctx.serverId && (await commandExists(null, "pack"))) {
+	// `pack` reads build variables from a file (`--env-file`), so no value
+	// ever reaches argv (security audit 2.4).
+	await withEnvFileFlag(ctx, input.application.appName, env, async ({ flag, path }) => {
+		if (!ctx.serverId && (await commandExists(null, "pack"))) {
+			await ctx.run(
+				`pack build ${shellQuote(imageTag)} --path ${shellQuote(buildDir)} --builder ${shellQuote(builder)}${flag}`,
+			);
+			return;
+		}
+
+		// The containerized `pack` needs the file visible inside the container:
+		// bind it read-only at the same absolute path the flag names.
+		const mount = path ? `-v ${shellQuote(`${path}:${path}:ro`)} ` : "";
 		await ctx.run(
-			`pack build ${shellQuote(imageTag)} --path ${shellQuote(buildDir)} --builder ${shellQuote(builder)} ${envFlags}`,
+			`docker run --rm ` +
+				`-v ${shellQuote(DOCKER_SOCKET)}:/var/run/docker.sock ` +
+				`-v ${shellQuote(buildDir)}:/workspace ` +
+				mount +
+				`${PACK_IMAGE} build ${shellQuote(imageTag)} --path /workspace --builder ${shellQuote(builder)}${flag}`,
 		);
-		return;
-	}
-
-	await ctx.run(
-		`docker run --rm ` +
-			`-v ${shellQuote(DOCKER_SOCKET)}:/var/run/docker.sock ` +
-			`-v ${shellQuote(buildDir)}:/workspace ` +
-			`${PACK_IMAGE} build ${shellQuote(imageTag)} --path /workspace --builder ${shellQuote(builder)} ${envFlags}`,
-	);
+	});
 }

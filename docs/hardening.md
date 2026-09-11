@@ -150,7 +150,67 @@ the panel's own port (3000 or whatever `NIXPLOY_PORT`/`PORT` is set to).
 
 If you do open one, firewall it at the host and keep the generated password.
 
-## 4. What is still open
+## 4. Outbound requests (egress)
+
+Everything the panel fetches on a tenant's behalf goes through one guard
+(`packages/server/src/utils/public-url.ts`). Full policy and the toggle:
+[auth.md § Outbound requests](./auth.md#outbound-requests-egress-policy).
+The short version:
+
+| Target | Reachable |
+| --- | --- |
+| Public addresses | always |
+| `169.254/16`, multicast, `240/4`, `192.0.0/24`, `198.18/15`, TEST-NET, IPv6 link-local / documentation | never |
+| `10.0.0.0/8` **as an IP literal** (the Swarm overlay) | never |
+| A bare service name the org deployed (`my-gotify`) | always |
+| `nixploy`, `nixploy-postgres`, `nixploy-traefik`, `traefik`, `postgres` | never |
+| Other private / LAN / loopback | only with **Allow private egress** (instance admin, default off) |
+
+The vetted address is what the socket dials, so DNS rebinding between the check
+and the connect does not work. Transports with their own resolver (SMTP, git,
+the AWS SDK) re-resolve and compare instead.
+
+Two more egress limits live outside the guard:
+
+- **Uptime probes** need `domains.manage` (not the softer `project.write`) and
+  are capped per organization — `NIXPLOY_MAX_PROBES_PER_ORG`, default 50.
+- **Image references** whose registry host is private (`10.0.1.5:5000/x`,
+  `registry:5000/x`) are refused at pull time unless the application's
+  registry row is `selfHosted` and its host matches. The *daemon* performs the
+  pull, from its own network position, so this is not covered by the panel's
+  own egress policy.
+
+## 5. Build-time secrets
+
+Build variables never travel on argv:
+
+| Builder | Mechanism |
+| --- | --- |
+| nixpacks, railpack | 0600 env file on the target server, sourced with `set -a`; only the NAMES reach argv (`--env KEY`) |
+| Cloud Native Buildpacks (`pack`) | `--env-file <0600 file>` |
+| Dockerfile | secret-looking keys (`*PASS*`, `*SECRET*`, `*TOKEN*`, `*KEY*`, `*CREDENTIAL*`, `*AUTH*`, `*PRIVATE*`, `*SALT*`, `*SIGNATURE*`) become BuildKit `--secret`; the rest stay `--build-arg` |
+
+Every file is written over stdin, `chmod 600`, and deleted when the build
+finishes or throws.
+
+A BuildKit secret is **not** an environment variable inside the build — the
+Dockerfile has to mount it:
+
+```dockerfile
+RUN --mount=type=secret,id=NPM_TOKEN \
+    NPM_TOKEN="$(cat /run/secrets/NPM_TOKEN)" npm ci
+```
+
+Unlike `--build-arg`, a mounted secret never appears in `docker history`.
+
+## 6. File modes on the host
+
+Artifacts written under `<config>` are `0600`: per-app Traefik YAML (basic-auth
+bcrypt hashes, inlined TLS keys), materialised `file` mounts, pre-deploy and
+build env files, SSH keys and host-key pins. Remote writes go through
+`umask 077` + `chmod 600` before the atomic rename.
+
+## 7. What is still open
 
 - The panel process runs as root with the Docker socket; a socket-holding
   sidecar is the long-term fix (audit §3.15).

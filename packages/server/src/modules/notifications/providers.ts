@@ -1,9 +1,11 @@
 import nodemailer from "nodemailer";
 import { z } from "zod";
 import {
-	assertPublicHttpsUrl,
+	assertAddressesUnchanged,
 	assertSafeOutboundUrl,
 	assertSafeSmtpHostname,
+	pinnedFetch,
+	type SafeTarget,
 } from "../../utils/public-url";
 import { badRequest } from "../errors";
 
@@ -137,21 +139,55 @@ function sanitizeCustomHeaders(headers: Record<string, string>): Record<string, 
 	return out;
 }
 
+/**
+ * Egress options of a provider. `allowPrivate` is a *request* — the instance
+ * admin's `allowPrivateEgress` setting decides (see `utils/public-url.ts`);
+ * before that change every self-hosted provider defaulted to "yes" and turned
+ * `notification.test` into a port scanner (security audit 2.6).
+ */
+const SELF_HOSTED: { allowPrivate: true; allowHttp: true } = {
+	allowPrivate: true,
+	allowHttp: true,
+};
+
+/**
+ * POST a body to a user-configured endpoint. The URL is vetted and the
+ * connection is pinned to the address that was vetted, so the name cannot be
+ * re-pointed at 127.0.0.1 between the check and the connect.
+ */
+async function postTo(
+	url: string,
+	init: { body: string; contentType: string; headers?: Record<string, string> },
+	options: { allowPrivate?: boolean; allowHttp?: boolean } = {},
+	label = "Notification request",
+): Promise<void> {
+	const target = await assertSafeOutboundUrl(url, options);
+	const response = await pinnedFetch(target, {
+		method: "POST",
+		headers: {
+			"Content-Type": init.contentType,
+			"Content-Length": String(Buffer.byteLength(init.body)),
+			...sanitizeCustomHeaders(init.headers ?? {}),
+		},
+		body: init.body,
+		timeoutMs: REQUEST_TIMEOUT_MS,
+	});
+	if (!response.ok) {
+		throw new Error(`${label} failed: ${response.status} ${response.statusText}`);
+	}
+}
+
 async function postJson(
 	url: string,
 	body: unknown,
 	headers: Record<string, string> = {},
+	options: { allowPrivate?: boolean; allowHttp?: boolean } = {},
 ): Promise<void> {
-	const response = await fetch(url, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", ...sanitizeCustomHeaders(headers) },
-		body: JSON.stringify(body),
-		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-		redirect: "error",
-	});
-	if (!response.ok) {
-		throw new Error(`Notification request failed: ${response.status} ${response.statusText}`);
-	}
+	await postTo(
+		url,
+		{ body: JSON.stringify(body), contentType: "application/json", headers },
+		options,
+	);
 }
 
 function escapeHtml(value: string): string {
@@ -168,7 +204,6 @@ export async function sendSlackNotification(
 	config: SlackConfig,
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
-	await assertPublicHttpsUrl(config.webhookUrl);
 	const blocks: unknown[] = [
 		{ type: "header", text: { type: "plain_text", text: title, emoji: true } },
 		{ type: "section", text: { type: "mrkdwn", text: message } },
@@ -196,7 +231,6 @@ export async function sendDiscordNotification(
 	config: DiscordConfig,
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
-	await assertPublicHttpsUrl(config.webhookUrl);
 	if (config.decoration === false) {
 		const lines = [`**${title}**`, message, fieldsAsMarkdown(fields, (s) => `**${s}**`)]
 			.filter(Boolean)
@@ -224,22 +258,25 @@ export async function sendMattermostNotification(
 	config: MattermostConfig,
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
-	await assertSafeOutboundUrl(config.webhookUrl, { allowPrivate: true, allowHttp: true });
 	const text = [`#### ${title}`, message, fieldsAsMarkdown(fields, (s) => `**${s}**`)]
 		.filter(Boolean)
 		.join("\n");
-	await postJson(config.webhookUrl, {
-		text,
-		...(config.channel ? { channel: config.channel } : {}),
-		...(config.username ? { username: config.username } : {}),
-	});
+	await postJson(
+		config.webhookUrl,
+		{
+			text,
+			...(config.channel ? { channel: config.channel } : {}),
+			...(config.username ? { username: config.username } : {}),
+		},
+		{},
+		SELF_HOSTED,
+	);
 }
 
 export async function sendLarkNotification(
 	config: LarkConfig,
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
-	await assertPublicHttpsUrl(config.webhookUrl);
 	const lines = [message, (fields ?? []).map((f) => `${f.name}: ${f.value}`).join("\n")]
 		.filter(Boolean)
 		.join("\n");
@@ -259,7 +296,6 @@ export async function sendTeamsNotification(
 	config: TeamsConfig,
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
-	await assertPublicHttpsUrl(config.webhookUrl);
 	await postJson(config.webhookUrl, {
 		"@type": "MessageCard",
 		"@context": "http://schema.org/extensions",
@@ -293,21 +329,20 @@ export async function sendTelegramNotification(
 	]
 		.filter(Boolean)
 		.join("\n");
-	const response = await fetch(`https://api.telegram.org/bot${config.botToken}/sendMessage`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({
-			chat_id: config.chatId,
-			text: lines,
-			parse_mode: "HTML",
-			disable_web_page_preview: true,
-		}),
-		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-		redirect: "error",
-	});
-	if (!response.ok) {
-		throw new Error(`Telegram sendMessage failed: ${response.status}`);
-	}
+	await postTo(
+		`https://api.telegram.org/bot${config.botToken}/sendMessage`,
+		{
+			body: JSON.stringify({
+				chat_id: config.chatId,
+				text: lines,
+				parse_mode: "HTML",
+				disable_web_page_preview: true,
+			}),
+			contentType: "application/json",
+		},
+		{},
+		"Telegram sendMessage",
+	);
 }
 
 // ── email (SMTP via nodemailer, or Resend HTTPS) ─────────────────────────────
@@ -359,7 +394,10 @@ export async function sendEmailNotification(
 	if (!config.smtpServer || !config.smtpPort) {
 		throw badRequest("Email notification requires either a Resend API key or SMTP server/port");
 	}
-	await assertSafeSmtpHostname(config.smtpServer);
+	// nodemailer resolves the host itself, so the rebinding guard is a
+	// re-resolve + compare immediately before the connection is opened.
+	const smtpTarget: SafeTarget = await assertSafeSmtpHostname(config.smtpServer);
+	await assertAddressesUnchanged(config.smtpServer, smtpTarget, "SMTP server host");
 	const transporter = nodemailer.createTransport({
 		host: config.smtpServer,
 		port: config.smtpPort,
@@ -381,17 +419,21 @@ export async function sendGotifyNotification(
 	config: GotifyConfig,
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
-	await assertSafeOutboundUrl(config.serverUrl, { allowPrivate: true, allowHttp: true });
 	const body = [message, fieldsAsMarkdown(fields, (s) => `**${s}**`)].filter(Boolean).join("\n\n");
 	const base = config.serverUrl.replace(/\/+$/, "");
-	await postJson(`${base}/message?token=${encodeURIComponent(config.appToken)}`, {
-		title,
-		message: body,
-		priority: config.priority,
-		...(config.decoration
-			? { extras: { "client::display": { contentType: "text/markdown" } } }
-			: {}),
-	});
+	await postJson(
+		`${base}/message?token=${encodeURIComponent(config.appToken)}`,
+		{
+			title,
+			message: body,
+			priority: config.priority,
+			...(config.decoration
+				? { extras: { "client::display": { contentType: "text/markdown" } } }
+				: {}),
+		},
+		{},
+		SELF_HOSTED,
+	);
 }
 
 // ── ntfy ─────────────────────────────────────────────────────────────────────
@@ -400,28 +442,22 @@ export async function sendNtfyNotification(
 	config: NtfyConfig,
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
-	await assertSafeOutboundUrl(config.serverUrl, { allowPrivate: true, allowHttp: true });
 	const body = [message, fieldsAsMarkdown(fields, (s) => s)].filter(Boolean).join("\n");
 	const base = config.serverUrl.replace(/\/+$/, "");
 	const headers: Record<string, string> = {
 		Title: title,
 		Priority: String(config.priority),
 		Tags: "rocket",
-		"Content-Type": "text/plain; charset=utf-8",
 	};
 	if (config.accessToken) {
 		headers.Authorization = `Bearer ${config.accessToken}`;
 	}
-	const response = await fetch(`${base}/${encodeURIComponent(config.topic)}`, {
-		method: "POST",
-		headers,
-		body,
-		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-		redirect: "error",
-	});
-	if (!response.ok) {
-		throw new Error(`ntfy publish failed: ${response.status}`);
-	}
+	await postTo(
+		`${base}/${encodeURIComponent(config.topic)}`,
+		{ body, contentType: "text/plain; charset=utf-8", headers },
+		SELF_HOSTED,
+		"ntfy publish",
+	);
 }
 
 // ── pushover ─────────────────────────────────────────────────────────────────
@@ -453,7 +489,6 @@ export async function sendCustomNotification(
 	{ title, message, fields }: NotifyPayload,
 ): Promise<void> {
 	// Custom endpoints are attacker-controlled — block private/metadata SSRF.
-	await assertPublicHttpsUrl(config.endpoint);
 	await postJson(
 		config.endpoint,
 		{

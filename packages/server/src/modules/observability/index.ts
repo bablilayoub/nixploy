@@ -1,9 +1,10 @@
-import { and, desc, eq, gt, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, ilike, isNull, or, sql } from "drizzle-orm";
 import { db } from "../../db";
 import { alertRules, deployments, incidents, serviceLogs, uptimeProbes } from "../../db/schema";
-import { assertSafeOutboundUrl } from "../../utils/public-url";
-import { notFound } from "../errors";
+import { assertSafeOutboundUrl, pinnedFetch } from "../../utils/public-url";
+import { badRequest, notFound } from "../errors";
 import { notifyEvent } from "../notifications";
+import { assertCapability } from "../projects/capabilities";
 
 export {
 	disableStatusPage,
@@ -469,6 +470,16 @@ export async function listUptimeProbes(organizationId: string) {
 	});
 }
 
+/** Default cap on uptime probes per organization (`NIXPLOY_MAX_PROBES_PER_ORG`). */
+export const DEFAULT_MAX_PROBES_PER_ORG = 50;
+
+/** Resolve the per-org probe cap; `0` disables the cap. */
+export function maxProbesPerOrg(raw = process.env.NIXPLOY_MAX_PROBES_PER_ORG): number {
+	const parsed = Number.parseInt(raw ?? "", 10);
+	if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_MAX_PROBES_PER_ORG;
+	return parsed;
+}
+
 export async function setUptimeProbe(input: {
 	organizationId: string;
 	domainId: string;
@@ -476,7 +487,13 @@ export async function setUptimeProbe(input: {
 	path?: string;
 	expectedStatus?: number;
 	intervalSeconds?: number;
+	/** Caller, for the capability gate. */
+	actorUserId: string;
 }) {
+	// Probes are outbound requests from the panel's IP with a status-code
+	// read-back, so they belong to whoever owns the domains — not to every
+	// `project.write` holder — and they are capped (security audit 2.6).
+	await assertCapability(input.actorUserId, input.organizationId, "domains.manage");
 	const existing = await db.query.uptimeProbes.findFirst({
 		where: and(
 			eq(uptimeProbes.domainId, input.domainId),
@@ -495,6 +512,18 @@ export async function setUptimeProbe(input: {
 			.where(eq(uptimeProbes.uptimeProbeId, existing.uptimeProbeId))
 			.returning();
 		return row;
+	}
+	const cap = maxProbesPerOrg();
+	if (cap > 0) {
+		const [existingCount] = await db
+			.select({ value: count() })
+			.from(uptimeProbes)
+			.where(eq(uptimeProbes.organizationId, input.organizationId));
+		if ((existingCount?.value ?? 0) >= cap) {
+			throw badRequest(
+				`This organization already has ${cap} uptime probes (NIXPLOY_MAX_PROBES_PER_ORG). Remove one before adding another.`,
+			);
+		}
 	}
 	const [row] = await db
 		.insert(uptimeProbes)
@@ -524,8 +553,9 @@ async function runOneProbe(probe: UptimeProbeWithDomain): Promise<void> {
 	const scheme = domain.https ? "https" : "http";
 	const path = probe.path.startsWith("/") ? probe.path : `/${probe.path}`;
 	const url = `${scheme}://${host}${path}`;
+	let target: Awaited<ReturnType<typeof assertSafeOutboundUrl>>;
 	try {
-		await assertSafeOutboundUrl(url, { allowHttp: !domain.https });
+		target = await assertSafeOutboundUrl(url, { allowHttp: !domain.https });
 	} catch {
 		await db
 			.update(uptimeProbes)
@@ -541,14 +571,14 @@ async function runOneProbe(probe: UptimeProbeWithDomain): Promise<void> {
 
 	let nextStatus: "up" | "down" = "down";
 	let lastError: string | null = null;
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), probe.timeoutMs);
 	try {
-		const res = await fetch(url, {
+		// Pinned to the address the guard vetted: a probe host with a 0-TTL
+		// record cannot re-point at the overlay between check and connect.
+		const res = await pinnedFetch(target, {
 			method: "GET",
-			redirect: "error",
-			signal: controller.signal,
 			headers: { "user-agent": "nixploy-uptime/1.0" },
+			timeoutMs: probe.timeoutMs,
+			maxBytes: 8 * 1024,
 		});
 		nextStatus = res.status === probe.expectedStatus ? "up" : "down";
 		if (nextStatus === "down") {
@@ -557,8 +587,6 @@ async function runOneProbe(probe: UptimeProbeWithDomain): Promise<void> {
 	} catch (error) {
 		nextStatus = "down";
 		lastError = error instanceof Error ? error.message : String(error);
-	} finally {
-		clearTimeout(timer);
 	}
 
 	const flipped = probe.status !== "unknown" && probe.status !== nextStatus;

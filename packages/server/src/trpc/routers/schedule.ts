@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../../db";
 import { applications, compose, environments, projects, schedules, servers } from "../../db/schema";
 import { assertApplicationAccess } from "../../modules/application";
+import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { findServerById } from "../../modules/cluster";
 import { findComposeForOrg } from "../../modules/compose/service";
@@ -391,6 +392,19 @@ export const scheduleRouter = router({
 				throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 			}
 			registerSchedule(row);
+			void auditFromSession(ctx, organizationId, {
+				action: "schedule.create",
+				targetType: "schedule",
+				targetId: row.scheduleId,
+				targetName: row.name,
+				metadata: {
+					scheduleType: row.scheduleType,
+					cronExpression: row.cronExpression,
+					appName: row.appName,
+					serverId: row.serverId,
+					enabled: row.enabled,
+				},
+			});
 			return await publicSchedule(row, ctx.session.user.id, organizationId, row.scheduleType);
 		}),
 
@@ -433,6 +447,16 @@ export const scheduleRouter = router({
 				throw new TRPCError({ code: "NOT_FOUND", message: "Schedule not found" });
 			}
 			registerSchedule(updated);
+			void auditFromSession(ctx, organizationId, {
+				action: "schedule.update",
+				targetType: "schedule",
+				targetId: updated.scheduleId,
+				targetName: updated.name,
+				metadata: {
+					cronExpression: updated.cronExpression,
+					commandChanged: input.command !== undefined || input.script !== undefined,
+				},
+			});
 			return await publicSchedule(
 				updated,
 				ctx.session.user.id,
@@ -451,6 +475,13 @@ export const scheduleRouter = router({
 			await assertScheduleAccess(ctx.session, row);
 			unregisterSchedule(row.scheduleId);
 			await db.delete(schedules).where(eq(schedules.scheduleId, row.scheduleId));
+			void auditFromSession(ctx, organizationId, {
+				action: "schedule.remove",
+				targetType: "schedule",
+				targetId: row.scheduleId,
+				targetName: row.name,
+				metadata: { scheduleType: row.scheduleType, appName: row.appName },
+			});
 			return true;
 		}),
 
@@ -462,6 +493,13 @@ export const scheduleRouter = router({
 			await assertCapability(ctx.session.user.id, organizationId, "schedules.manage");
 			const row = await findScheduleOrThrow(input.scheduleId);
 			await assertScheduleAccess(ctx.session, row);
+			void auditFromSession(ctx, organizationId, {
+				action: "schedule.runManually",
+				targetType: "schedule",
+				targetId: row.scheduleId,
+				targetName: row.name,
+				metadata: { scheduleType: row.scheduleType, appName: row.appName },
+			});
 			return await runSchedule(row, "manual");
 		}),
 
@@ -482,6 +520,12 @@ export const scheduleRouter = router({
 				throw new TRPCError({ code: "NOT_FOUND", message: "Schedule not found" });
 			}
 			registerSchedule(updated);
+			void auditFromSession(ctx, organizationId, {
+				action: "schedule.enable",
+				targetType: "schedule",
+				targetId: updated.scheduleId,
+				targetName: updated.name,
+			});
 			return await publicSchedule(
 				updated,
 				ctx.session.user.id,
@@ -507,6 +551,12 @@ export const scheduleRouter = router({
 			if (!updated) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Schedule not found" });
 			}
+			void auditFromSession(ctx, organizationId, {
+				action: "schedule.disable",
+				targetType: "schedule",
+				targetId: updated.scheduleId,
+				targetName: updated.name,
+			});
 			return await publicSchedule(
 				updated,
 				ctx.session.user.id,

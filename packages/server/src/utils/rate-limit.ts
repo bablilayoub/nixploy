@@ -4,9 +4,33 @@
  * Nixploy instance without adding Redis.
  */
 
+import { ipToBytes } from "./public-url";
+
 type Bucket = { count: number; resetAt: number };
 
 const buckets = new Map<string, Bucket>();
+
+/**
+ * Expired buckets are only overwritten when their key is hit again, so a
+ * scanner rotating keys (or IPs) grows the map forever. Sweep every minute,
+ * and never more often than that — the sweep is O(size).
+ */
+const BUCKET_SWEEP_INTERVAL_MS = 60_000;
+let lastSweepAt = 0;
+
+function sweepExpiredBuckets(now: number): void {
+	if (now - lastSweepAt < BUCKET_SWEEP_INTERVAL_MS) return;
+	lastSweepAt = now;
+	for (const [key, bucket] of buckets) {
+		if (bucket.resetAt <= now) buckets.delete(key);
+	}
+}
+
+/** Test helper — drop every rate-limit bucket. */
+export function resetRateLimitBuckets(): void {
+	buckets.clear();
+	lastSweepAt = 0;
+}
 
 /** Sentinel returned by {@link clientIpFromRequest} when no trusted IP is available. */
 export const UNKNOWN_IP = "unknown";
@@ -23,6 +47,7 @@ export function takeRateLimitToken(
 	options: { windowMs: number; max: number } = { windowMs: 60_000, max: 60 },
 ): boolean {
 	const now = Date.now();
+	sweepExpiredBuckets(now);
 	const existing = buckets.get(key);
 	if (!existing || existing.resetAt <= now) {
 		buckets.set(key, { count: 1, resetAt: now + options.windowMs });
@@ -189,20 +214,93 @@ export function trustedProxyCidrsForAuth(
 	return undefined;
 }
 
+/** True when `ip` falls inside `cidr` (v4 or v6, prefix length in bits). */
+export function ipInCidr(ip: string, cidr: string): boolean {
+	const slash = cidr.lastIndexOf("/");
+	const network = slash === -1 ? cidr : cidr.slice(0, slash);
+	const bits = slash === -1 ? null : Number.parseInt(cidr.slice(slash + 1), 10);
+	const ipBytes = ipToBytes(ip);
+	const netBytes = ipToBytes(network);
+	if (!ipBytes || !netBytes) return false;
+	// Compare an IPv4-mapped IPv6 peer (::ffff:10.0.0.1) against IPv4 CIDRs.
+	const unmap = (bytes: Uint8Array): Uint8Array =>
+		bytes.length === 16 &&
+		bytes.slice(0, 10).every((b) => b === 0) &&
+		bytes[10] === 0xff &&
+		bytes[11] === 0xff
+			? bytes.slice(12)
+			: bytes;
+	const a = unmap(ipBytes);
+	const b = unmap(netBytes);
+	if (a.length !== b.length) return false;
+	const prefix = bits === null || !Number.isFinite(bits) ? a.length * 8 : bits;
+	if (prefix < 0 || prefix > a.length * 8) return false;
+	const fullBytes = prefix >> 3;
+	for (let i = 0; i < fullBytes; i += 1) {
+		if (a[i] !== b[i]) return false;
+	}
+	const remainder = prefix & 7;
+	if (remainder === 0) return true;
+	const mask = 0xff << (8 - remainder);
+	return ((a[fullBytes] ?? 0) & mask) === ((b[fullBytes] ?? 0) & mask);
+}
+
+/**
+ * Header `apps/web/server.ts` sets from `req.socket.remoteAddress` before
+ * handing the request to Next: the Fetch `Request` a route handler receives
+ * carries no socket, so the actual TCP peer has to travel as a header.
+ *
+ * Absent header ⇒ the check is a no-op and behaviour matches the previous
+ * releases (forwarded headers trusted whenever `TRUSTED_PROXIES` is set).
+ * Present header ⇒ forwarded headers are trusted only when the peer itself is
+ * a trusted proxy, which is what stops a tenant container from reaching the
+ * panel directly at `nixploy:3000` with a forged `X-Forwarded-For`
+ * (security audit 2.10).
+ */
+export const PEER_IP_HEADER = "x-nixploy-peer-ip";
+
+/** True when the TCP peer may set forwarded headers under `config`. */
+export function isTrustedProxyPeer(
+	peerIp: string | null | undefined,
+	config: TrustedProxyConfig = parseTrustedProxies(),
+): boolean {
+	if (config.mode === "none") return false;
+	const peer = peerIp?.trim();
+	// No peer information available (older server.ts, non-HTTP transports):
+	// fall back to the configured policy rather than dropping every limit.
+	if (!peer) return true;
+	const ranges: string[] = config.mode === "all" ? [...PRIVATE_PROXY_RANGES] : config.cidrs;
+	return ranges.some((range) => ipInCidr(peer, range));
+}
+
 /**
  * Client IP for rate limiting. Never trust raw `X-Forwarded-For` from the
- * client unless `TRUSTED_PROXIES=1` (or a non-empty list) is set — otherwise
- * attackers rotate forged IPs and bypass the bucket.
+ * client unless `TRUSTED_PROXIES=1` (or a non-empty list) is set **and** the
+ * socket peer is itself one of those proxies — otherwise attackers rotate
+ * forged IPs and bypass the bucket.
  */
 export function clientIpFromRequest(req: Request): string {
+	return clientIpFromHeaders(req.headers);
+}
+
+/** {@link clientIpFromRequest} for callers that only hold the headers. */
+export function clientIpFromHeaders(headers: Headers): string {
 	const config = parseTrustedProxies();
 	if (config.mode === "none") return UNKNOWN_IP;
-	const realIp = req.headers.get("x-real-ip")?.trim();
+	const peer = headers.get(PEER_IP_HEADER);
+	if (!isTrustedProxyPeer(peer, config)) return UNKNOWN_IP;
+	const realIp = headers.get("x-real-ip")?.trim();
 	if (realIp) return realIp;
-	const forwarded = req.headers.get("x-forwarded-for");
+	const forwarded = headers.get("x-forwarded-for");
 	if (forwarded) {
 		const first = forwarded.split(",")[0]?.trim();
 		if (first) return first;
 	}
 	return UNKNOWN_IP;
+}
+
+/** Raw `User-Agent`, trimmed to a column-friendly length. */
+export function userAgentFromHeaders(headers: Headers | null | undefined): string | null {
+	const value = headers?.get("user-agent")?.trim();
+	return value ? value.slice(0, 512) : null;
 }

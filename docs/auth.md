@@ -279,9 +279,100 @@ them — see [status.md](./status.md)):
 `auth.impersonation.stopped`, `admin.user.banned` / `admin.user.unbanned` /
 `admin.user.role.set` / `admin.user.removed` / `admin.user.password.set`.
 
-Rows are attributed to the actor's oldest organization membership; events by a
-user who belongs to no organization (the moment between first sign-up and org
-creation) are dropped, because `audit_log.organization_id` is `NOT NULL`.
+Rows are attributed to the actor's oldest organization membership.
+`audit_log.organization_id` is **nullable** since migration `0025`, so an
+instance-level event (a failed login for an account that belongs to no
+organization) is representable; `recordAuthEvent` still resolves a membership
+first, so wiring org-less events through it is a follow-up.
+
+The table has `ip` and `user_agent` columns of its own (migration `0025`);
+`auditFromSession` fills them from the request headers, honouring
+`TRUSTED_PROXIES` and the socket-peer check, so a forged `X-Forwarded-For`
+never lands in the trail. The auth hooks still write them into `metadata`.
+
+Deleting an organization no longer erases its trail: the FK is
+`ON DELETE SET NULL` and `organization_name` keeps a readable label.
+
+### Retention, export and forwarding
+
+- Retention: `NIXPLOY_AUDIT_RETENTION_DAYS` (default 365, `0` = forever),
+  enforced by the hourly maintenance cron.
+- Export: `audit.export` returns the org's trail as CSV
+  (`{ filename, rows, csv }`), same `audit.read` gate as `audit.all`.
+- Forwarding: `NIXPLOY_AUDIT_FORWARD=1` mirrors every new row to the
+  instance-admin notification channels, batched once a minute (max 50 rows per
+  message, the rest summarised as "…and N more"). Use it when the trail must
+  survive a compromised instance admin — the panel can delete its own table,
+  it cannot delete a Slack message.
+
+## Encryption key rotation
+
+`ENCRYPTION_KEYS` is a comma-separated list: **the first entry encrypts, every
+entry can decrypt**. `ENCRYPTION_KEY` remains the single-key form and is used
+when `ENCRYPTION_KEYS` is unset. That is what makes a rotation possible without
+downtime:
+
+```sh
+# 1. generate the new key
+openssl rand -hex 32
+
+# 2. /etc/nixploy/.env — NEW key first, current key second
+ENCRYPTION_KEYS=<new>,<current>
+
+# 3. restart the panel so it reads both
+docker service update --force nixploy
+
+# 4. rewrite every secret column with the new key
+docker exec nixploy pnpm -F @nixploy/server nixploy:rotate-key
+#   --dry-run             report what would change, write nothing
+#   --batch-size=500      rows per transaction (default 500)
+#   --table=notification  one table only
+#   --skip-undecryptable  leave rows no configured key can read (a lost key)
+
+# 5. /etc/nixploy/.env — drop the old key, restart again
+ENCRYPTION_KEYS=<new>
+```
+
+The script discovers the columns from the Drizzle schema (every
+`encryptedText` / `encryptedJson` column — 47 of them across 20 tables today),
+so a new secret column needs no change to it. Each batch is one transaction; a
+row that no configured key can authenticate aborts the run and names the table,
+column and row id.
+
+Keys may also be passphrases of 32+ characters. Those are stretched with
+**scrypt** and written with a `v2:` prefix; 64-char hex keys keep writing `v1:`
+(there is no KDF to strengthen). Both versions are readable forever, so
+switching a passphrase install to a hex key is just another rotation.
+
+The panel **refuses to boot** on the placeholder keys from
+`apps/web/.env.example` (`change-me-…`) or a single repeated character
+(`assertEncryptionKeyLooksReal`, run at module load).
+
+## Outbound requests (egress policy)
+
+User-configured endpoints — notification webhooks, SMTP, Gotify/ntfy/Mattermost,
+self-hosted Gitea/GitLab, S3 destinations, uptime probes, git clone URLs — all
+go through `utils/public-url.ts`:
+
+- cloud metadata, link-local, multicast, benchmarking and documentation ranges
+  are **never** reachable, on any setting;
+- the Swarm overlay (`10.0.0.0/8`) is never reachable as an **IP literal** —
+  only through a bare service name the organization deployed;
+- `nixploy`, `nixploy-postgres`, `nixploy-traefik`, `traefik` and `postgres` are
+  never reachable by name;
+- other private/LAN addresses (127/8, 192.168/16, 172.16/12, CGNAT, IPv6 ULA)
+  need the instance-admin toggle **Settings → Web server → Allow private
+  egress** (`web_server_settings.allow_private_egress`, default **off**;
+  `NIXPLOY_ALLOW_PRIVATE_EGRESS=1` forces it on for installs without UI
+  access).
+
+Once a target passes, the connection is **pinned to the address that was
+vetted** (`pinnedFetch` — a `node:http`/`node:https` request with a custom
+`lookup`), so a 0-TTL name cannot be re-pointed between the check and the
+connect. nodemailer, git and the AWS SDK resolve on their own, so those paths
+re-resolve and compare instead (`assertAddressesUnchanged`).
+
+
 
 ## API keys (REST & CLI)
 
@@ -341,10 +432,11 @@ it); any other public sign-up is refused once the first admin exists.
 ## Secrets at rest
 
 Columns holding secrets (env vars, database passwords, registry credentials,
-tokens) use the `encryptedText` column helper
-(`packages/server/src/db/custom-columns.ts`), AES-encrypted with
-`ENCRYPTION_KEY`. Losing that key makes stored secrets unreadable — back it up
-with the same care as the database.
+tokens) use the `encryptedText` / `encryptedJson` column helpers
+(`packages/server/src/db/custom-columns.ts`), AES-256-GCM with `ENCRYPTION_KEY`
+(or the first entry of `ENCRYPTION_KEYS`). Losing that key makes stored secrets
+unreadable — back it up with the same care as the database, and see
+[Encryption key rotation](#encryption-key-rotation) for replacing it.
 
 Production install (`install.sh`) writes `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`,
 Postgres password and `BETTER_AUTH_URL` to `/etc/nixploy/.env`.

@@ -278,6 +278,17 @@ export const volumeBackupRouter = router({
 				throw new TRPCError({ code: "NOT_FOUND", message: "Volume backup not found" });
 			}
 			registerVolumeBackupSchedule(row);
+			void auditFromSession(ctx, organizationId, {
+				action: "volumeBackup.update",
+				targetType: "volumeBackup",
+				targetId: row.volumeBackupId,
+				targetName: row.volumeName,
+				metadata: {
+					cronExpression: row.cronExpression,
+					enabled: row.enabled,
+					destinationChanged: input.destinationId !== undefined,
+				},
+			});
 			return row;
 		}),
 

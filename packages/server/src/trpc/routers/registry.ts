@@ -90,6 +90,13 @@ export const registryRouter = router({
 				message: "Failed to create registry",
 			});
 		}
+		void auditFromSession(ctx, organizationId, {
+			action: "registry.create",
+			targetType: "registry",
+			targetId: created.registryId,
+			targetName: created.registryName,
+			metadata: { registryUrl: created.registryUrl, registryType: created.registryType },
+		});
 		return publicRegistry(created);
 	}),
 
@@ -180,6 +187,13 @@ export const registryRouter = router({
 			} else {
 				await assertInstanceAdmin(ctx.session);
 			}
+			void auditFromSession(ctx, organizationId, {
+				action: "registry.test",
+				targetType: "registry",
+				targetId: row.registryId,
+				targetName: row.registryName,
+				metadata: { serverId: input.serverId ?? null },
+			});
 			return await testRegistry({
 				registryId: input.registryId,
 				organizationId,

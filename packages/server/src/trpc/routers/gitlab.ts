@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { auditFromSession } from "../../modules/audit";
 import {
 	createGitlab,
 	findGitlabById,
@@ -99,6 +100,12 @@ export const gitlabRouter = router({
 				message: "Failed to create GitLab provider",
 			});
 		}
+		void auditFromSession(ctx, organizationId, {
+			action: "gitlab.create",
+			targetType: "gitProvider",
+			targetId: created.gitlab.gitlabId,
+			targetName: created.gitProvider.name,
+		});
 		return { gitProvider: created.gitProvider, gitlab: publicGitlab(created.gitlab) };
 	}),
 
@@ -125,6 +132,16 @@ export const gitlabRouter = router({
 			if (!updated) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "GitLab provider not found" });
 			}
+			void auditFromSession(ctx, organizationId, {
+				action: "gitlab.update",
+				targetType: "gitProvider",
+				targetId: gitlabId,
+				targetName: name ?? null,
+				metadata: {
+					credentialsChanged: values.accessToken !== undefined || values.refreshToken !== undefined,
+					urlChanged: values.gitlabUrl !== undefined,
+				},
+			});
 			return publicGitlab(updated);
 		}),
 
@@ -136,6 +153,11 @@ export const gitlabRouter = router({
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "GitLab provider not found" });
 		}
+		void auditFromSession(ctx, organizationId, {
+			action: "gitlab.delete",
+			targetType: "gitProvider",
+			targetId: input.gitlabId,
+		});
 		return publicGitlab(removed);
 	}),
 
@@ -163,6 +185,11 @@ export const gitlabRouter = router({
 	testConnection: protectedProcedure.input(gitlabIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
+		void auditFromSession(ctx, organizationId, {
+			action: "gitlab.testConnection",
+			targetType: "gitProvider",
+			targetId: input.gitlabId,
+		});
 		return await testGitlabConnection(input.gitlabId, organizationId);
 	}),
 });

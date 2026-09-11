@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { auditFromSession } from "../../modules/audit";
 import {
 	createBitbucket,
 	findBitbucketById,
@@ -83,6 +84,12 @@ export const bitbucketRouter = router({
 				message: "Failed to create Bitbucket provider",
 			});
 		}
+		void auditFromSession(ctx, organizationId, {
+			action: "bitbucket.create",
+			targetType: "gitProvider",
+			targetId: created.bitbucket.bitbucketId,
+			targetName: created.gitProvider.name,
+		});
 		return { gitProvider: created.gitProvider, bitbucket: publicBitbucket(created.bitbucket) };
 	}),
 
@@ -100,6 +107,15 @@ export const bitbucketRouter = router({
 			if (!updated) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Bitbucket provider not found" });
 			}
+			void auditFromSession(ctx, organizationId, {
+				action: "bitbucket.update",
+				targetType: "gitProvider",
+				targetId: bitbucketId,
+				targetName: name ?? null,
+				metadata: {
+					credentialsChanged: values.apiToken !== undefined || values.appPassword !== undefined,
+				},
+			});
 			return publicBitbucket(updated);
 		}),
 
@@ -111,6 +127,11 @@ export const bitbucketRouter = router({
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Bitbucket provider not found" });
 		}
+		void auditFromSession(ctx, organizationId, {
+			action: "bitbucket.delete",
+			targetType: "gitProvider",
+			targetId: input.bitbucketId,
+		});
 		return publicBitbucket(removed);
 	}),
 
@@ -139,6 +160,11 @@ export const bitbucketRouter = router({
 	testConnection: protectedProcedure.input(bitbucketIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
+		void auditFromSession(ctx, organizationId, {
+			action: "bitbucket.testConnection",
+			targetType: "gitProvider",
+			targetId: input.bitbucketId,
+		});
 		return await testBitbucketConnection(input.bitbucketId, organizationId);
 	}),
 

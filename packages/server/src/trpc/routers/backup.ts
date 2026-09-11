@@ -268,6 +268,18 @@ export const backupRouter = router({
 				throw new TRPCError({ code: "NOT_FOUND", message: "Backup not found" });
 			}
 			registerBackupSchedule(row);
+			void auditFromSession(ctx, organizationId, {
+				action: "backup.update",
+				targetType: "backup",
+				targetId: row.backupId,
+				targetName: row.appName,
+				metadata: {
+					databaseType: row.databaseType,
+					schedule: row.schedule,
+					enabled: row.enabled,
+					destinationChanged: input.destinationId !== undefined,
+				},
+			});
 			return row;
 		}),
 

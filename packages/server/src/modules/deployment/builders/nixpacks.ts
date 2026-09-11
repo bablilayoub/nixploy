@@ -1,5 +1,6 @@
 import { commandExists } from "../docker";
 import { shellQuote } from "../paths";
+import { withSourcedBuildEnv } from "./build-env";
 import { prepareBuildCache } from "./cache";
 import type { BuildInput } from "./index";
 import { ensureToolBinary, NIXPACKS_TOOL } from "./tools";
@@ -14,7 +15,6 @@ import { ensureToolBinary, NIXPACKS_TOOL } from "./tools";
 
 export async function buildWithNixpacks(input: BuildInput, imageTag: string): Promise<void> {
 	const { ctx, buildDir, env } = input;
-	const envFlags = env.map((entry) => `--env ${shellQuote(entry)}`).join(" ");
 
 	let binary: string;
 	if (await commandExists(ctx.serverId, "nixpacks")) {
@@ -36,7 +36,11 @@ export async function buildWithNixpacks(input: BuildInput, imageTag: string): Pr
 		? ` --cache-key ${shellQuote(`nixploy-${input.application.appName}`)}`
 		: "";
 
-	await ctx.run(
-		`${binary} build ${shellQuote(buildDir)} --name ${shellQuote(imageTag)} ${envFlags}${noCache}${cacheKey}`,
-	);
+	// Values go through a 0600 env file the CLI reads from its own
+	// environment; only the NAMES are on argv (security audit 2.4).
+	await withSourcedBuildEnv(ctx, input.application.appName, env, async ({ prefix, flags }) => {
+		await ctx.run(
+			`${prefix}${binary} build ${shellQuote(buildDir)} --name ${shellQuote(imageTag)}${flags}${noCache}${cacheKey}`,
+		);
+	});
 }

@@ -118,7 +118,13 @@ export const materializeFileMount = async (
 		return;
 	}
 	await fs.mkdir(path.dirname(absolute), { recursive: true });
-	await fs.writeFile(absolute, content, "utf8");
+	// 0600: `file` mounts are `secrets.write`-gated user content (TLS keys,
+	// app config with credentials) and used to land world-readable on the host
+	// (security audit 2.4). `chmod` as well, so existing files are tightened.
+	await fs.writeFile(absolute, content, { encoding: "utf8", mode: 0o600 });
+	await fs.chmod(absolute, 0o600).catch(() => {
+		// Best effort on filesystems without POSIX modes.
+	});
 };
 
 /** Remove the host file backing a `file` mount (best effort). */

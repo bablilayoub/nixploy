@@ -11,6 +11,8 @@ import {
 	sshKeys,
 } from "../../db/schema";
 import { execAsync, execAsyncRemote, getGitKnownHostsPath } from "../../utils/exec";
+import { assertSafeGitCloneUrl, assertSafeGitRef } from "../../utils/public-url";
+import { assertPullableImageRef } from "../../utils/validators";
 import type { DeploymentContext } from "./context";
 import { getDocker, writeFileTargeted } from "./docker";
 import { getAppCodePath, getDropZipPath, getSshKeysPath, shellQuote } from "./paths";
@@ -44,6 +46,51 @@ export function buildGitSshCommand(keyPath: string): string {
 		`ssh -i ${shellQuote(keyPath)} -o IdentitiesOnly=yes ` +
 		`-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${shellQuote(getGitKnownHostsPath())}`
 	);
+}
+
+/**
+ * Environment every `git` invocation runs with: only https and ssh are
+ * transports we accept, and the URL is never treated as "from the user" — so
+ * `ext::`, `file://`, `git://` and the helper-executing schemes are refused by
+ * git itself rather than only by our URL regex (security audit 2.6).
+ *
+ * `GIT_CONFIG_COUNT`/`_KEY_n`/`_VALUE_n` is git's own env-only config channel:
+ * nothing is written to a config file and no argv carries it.
+ */
+export function gitProtocolEnv(): Record<string, string> {
+	const entries: Array<[string, string]> = [
+		["protocol.allow", "never"],
+		["protocol.https.allow", "always"],
+		["protocol.ssh.allow", "always"],
+		["protocol.file.allow", "never"],
+	];
+	const env: Record<string, string> = {
+		GIT_PROTOCOL_FROM_USER: "0",
+		GIT_CONFIG_COUNT: String(entries.length),
+		GIT_TERMINAL_PROMPT: "0",
+	};
+	entries.forEach(([key, value], index) => {
+		env[`GIT_CONFIG_KEY_${index}`] = key;
+		env[`GIT_CONFIG_VALUE_${index}`] = value;
+	});
+	return env;
+}
+
+/** `KEY=value ` prefix for a remote shell command. */
+const envPrefix = (env: Record<string, string>): string =>
+	Object.entries(env)
+		.map(([key, value]) => `${key}=${shellQuote(value)} `)
+		.join("");
+
+/**
+ * Clone URLs are validated when they are saved, but rows predating the guard
+ * (and provider base URLs edited later) would otherwise be trusted forever.
+ * Re-validate right before the fetch, with any embedded credentials stripped
+ * so a token never has to survive `new URL()`.
+ */
+async function assertCloneTargetAllowed(cloneUrl: string): Promise<void> {
+	const withoutCredentials = cloneUrl.replace(/^(https?:\/\/)[^/]*@/i, "$1");
+	await assertSafeGitCloneUrl(withoutCredentials);
 }
 
 /**
@@ -213,20 +260,22 @@ export async function cloneGitSource(
 ): Promise<string> {
 	const source = await resolveGitSource(ctx, application);
 	for (const secret of source.secrets) ctx.logger.addSecret(secret);
+	// Re-check the stored URL and the ref at USE time, not only at save time.
+	await assertCloneTargetAllowed(source.cloneUrl);
+	source.branch = assertSafeGitRef(source.branch);
 	const codeDir = getAppCodePath(application.appName);
 	const label = `${application.owner ?? "repository"}/${application.repository ?? ""}`;
+	const gitEnv = { ...gitProtocolEnv(), ...(source.env ?? {}) };
 
 	if (ctx.serverId) {
 		const dir = shellQuote(codeDir);
 		const url = shellQuote(source.cloneUrl);
 		const ref = shellQuote(source.branch);
-		const sshEnv = source.env?.GIT_SSH_COMMAND
-			? `GIT_SSH_COMMAND=${shellQuote(source.env.GIT_SSH_COMMAND)} `
-			: "";
+		const prefix = envPrefix(gitEnv);
 		await ctx.run(
-			`(if [ -d ${dir}/.git ]; then git -C ${dir} remote set-url origin ${url}; ` +
-				`else rm -rf ${dir} && mkdir -p ${dir} && git init -q ${dir} && git -C ${dir} remote add origin ${url}; fi) && ` +
-				`${sshEnv}git -C ${dir} fetch --depth 1 origin ${ref} && git -C ${dir} reset --hard FETCH_HEAD`,
+			`(if [ -d ${dir}/.git ]; then ${prefix}git -C ${dir} remote set-url origin ${url}; ` +
+				`else rm -rf ${dir} && mkdir -p ${dir} && ${prefix}git init -q ${dir} && ${prefix}git -C ${dir} remote add origin ${url}; fi) && ` +
+				`${prefix}git -C ${dir} fetch --depth 1 origin ${ref} && ${prefix}git -C ${dir} reset --hard FETCH_HEAD`,
 		);
 		ctx.logger.line(`Checked out ${label} (${source.branch})`);
 		return codeDir;
@@ -247,7 +296,7 @@ export async function cloneGitSource(
 	}
 	const git = simpleGit({ baseDir: codeDir });
 	// simple-git's env() replaces the child environment wholesale — keep PATH.
-	if (source.env) git.env({ ...process.env, ...source.env });
+	git.env({ ...process.env, ...gitEnv });
 	if (hasRepo) {
 		await git.remote(["set-url", "origin", source.cloneUrl]);
 	} else {
@@ -387,6 +436,8 @@ export interface RegistryAuth {
 	/** Registry row metadata used to scope where credentials may be sent. */
 	registryUrl?: string | null;
 	imagePrefix?: string | null;
+	/** `selfHosted` rows are what makes a private registry host pullable. */
+	registryType?: "cloud" | "selfHosted" | null;
 }
 
 /**
@@ -461,6 +512,7 @@ export async function resolveRegistryAuth(
 			serveraddress: reg.registryUrl || undefined,
 			registryUrl: reg.registryUrl || null,
 			imagePrefix: reg.imagePrefix,
+			registryType: reg.registryType,
 		};
 	}
 	if (application.username && application.password) {
@@ -477,10 +529,17 @@ export async function pullDockerImage(
 	ctx: DeploymentContext,
 	application: ApplicationRow,
 ): Promise<string> {
-	const image = application.dockerImage;
-	if (!image) throw new Error("Docker source requires a dockerImage");
+	if (!application.dockerImage) throw new Error("Docker source requires a dockerImage");
 
 	const auth = await resolveRegistryAuth(application);
+	// The DAEMON performs the pull, from its own network position — a
+	// `10.0.1.5:5000/x` image would be a blind internal probe. Private hosts
+	// are only pullable through a self-hosted registry row (audit 2.6).
+	const allowedRegistryHosts =
+		auth?.registryType === "selfHosted"
+			? [auth.registryUrl ?? "", auth.imagePrefix ?? ""].filter(Boolean)
+			: [];
+	const image = assertPullableImageRef(application.dockerImage, allowedRegistryHosts);
 	if (auth) ctx.logger.addSecret(auth.password);
 	// Never send registry credentials to a registry the image does not
 	// belong to — the daemon forwards authconfig to the image's registry.

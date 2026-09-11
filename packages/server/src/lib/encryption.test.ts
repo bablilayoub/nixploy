@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { decrypt, encrypt, isEncrypted } from "./encryption";
+import {
+	assertEncryptionKeyLooksReal,
+	decrypt,
+	encrypt,
+	encryptionKeyList,
+	encryptionVersionOf,
+	isEncrypted,
+} from "./encryption";
 
 // vitest.config.ts pins ENCRYPTION_KEY to a fixed 64-char hex string.
 
@@ -57,18 +64,23 @@ describe("encryption", () => {
 		expect(() => decrypt("v1:::")).toThrow("Malformed encrypted payload");
 	});
 
-	it("isEncrypted only flags the v1: prefix", () => {
+	it("isEncrypted flags both versioned prefixes", () => {
 		expect(isEncrypted(encrypt("x"))).toBe(true);
 		expect(isEncrypted("v1:abc")).toBe(true);
+		expect(isEncrypted("v2:abc")).toBe(true);
 		expect(isEncrypted("plain")).toBe(false);
-		expect(isEncrypted("v2:abc")).toBe(false);
+		expect(encryptionVersionOf("v1:a:b:c")).toBe("v1");
+		expect(encryptionVersionOf("v2:a:b:c")).toBe("v2");
+		expect(encryptionVersionOf("plain")).toBe(null);
 	});
 
-	it("derives a key from a non-hex passphrase of sufficient length", () => {
+	it("derives a key from a non-hex passphrase with scrypt and writes v2", () => {
 		const original = process.env.ENCRYPTION_KEY;
 		process.env.ENCRYPTION_KEY = "a-human-passphrase-at-least-32-chars!!";
 		try {
-			expect(decrypt(encrypt("passphrase round-trip"))).toBe("passphrase round-trip");
+			const payload = encrypt("passphrase round-trip");
+			expect(payload.startsWith("v2:")).toBe(true);
+			expect(decrypt(payload)).toBe("passphrase round-trip");
 		} finally {
 			process.env.ENCRYPTION_KEY = original;
 		}
@@ -92,5 +104,82 @@ describe("encryption", () => {
 		} finally {
 			process.env.ENCRYPTION_KEY = original;
 		}
+	});
+});
+
+describe("key list and rotation window", () => {
+	const withEnv = (env: Record<string, string | undefined>, run: () => void) => {
+		const previous: Record<string, string | undefined> = {};
+		for (const [key, value] of Object.entries(env)) {
+			previous[key] = process.env[key];
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+		}
+		try {
+			run();
+		} finally {
+			for (const [key, value] of Object.entries(previous)) {
+				if (value === undefined) delete process.env[key];
+				else process.env[key] = value;
+			}
+		}
+	};
+
+	const KEY_A = "11111111111111111111111111111111111111111111111111111111111111aa";
+	const KEY_B = "22222222222222222222222222222222222222222222222222222222222222bb";
+
+	it("parses ENCRYPTION_KEYS, primary first, and falls back to ENCRYPTION_KEY", () => {
+		withEnv({ ENCRYPTION_KEYS: ` ${KEY_A} , ${KEY_B} ,, ` }, () => {
+			expect(encryptionKeyList()).toEqual([KEY_A, KEY_B]);
+		});
+		withEnv({ ENCRYPTION_KEYS: "", ENCRYPTION_KEY: KEY_B }, () => {
+			expect(encryptionKeyList()).toEqual([KEY_B]);
+		});
+		withEnv({ ENCRYPTION_KEYS: "", ENCRYPTION_KEY: "" }, () => {
+			expect(encryptionKeyList()).toEqual([]);
+		});
+	});
+
+	it("encrypts with the first key and decrypts with any of them", () => {
+		let underOld = "";
+		withEnv({ ENCRYPTION_KEYS: KEY_B, ENCRYPTION_KEY: undefined }, () => {
+			underOld = encrypt("rotate me");
+		});
+		withEnv({ ENCRYPTION_KEYS: `${KEY_A},${KEY_B}`, ENCRYPTION_KEY: undefined }, () => {
+			// Old ciphertext still readable, new ciphertext uses the new key.
+			expect(decrypt(underOld)).toBe("rotate me");
+			const underNew = encrypt("rotate me");
+			expect(underNew).not.toBe(underOld);
+			withEnv({ ENCRYPTION_KEYS: KEY_A }, () => {
+				expect(decrypt(underNew)).toBe("rotate me");
+				expect(() => decrypt(underOld)).toThrow();
+			});
+		});
+	});
+});
+
+describe("assertEncryptionKeyLooksReal", () => {
+	it("refuses the .env.example placeholder", () => {
+		expect(() =>
+			assertEncryptionKeyLooksReal({
+				ENCRYPTION_KEY: "change-me-32-byte-hex-key-for-secrets-at-rest",
+			}),
+		).toThrow(/placeholder/);
+	});
+
+	it("refuses a repeated-character hex key and a short passphrase", () => {
+		expect(() => assertEncryptionKeyLooksReal({ ENCRYPTION_KEY: "a".repeat(64) })).toThrow(
+			/repeated character/,
+		);
+		expect(() => assertEncryptionKeyLooksReal({ ENCRYPTION_KEY: "short" })).toThrow(/too weak/);
+	});
+
+	it("accepts a real key and an unset key", () => {
+		expect(() =>
+			assertEncryptionKeyLooksReal({
+				ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			}),
+		).not.toThrow();
+		expect(() => assertEncryptionKeyLooksReal({})).not.toThrow();
 	});
 });

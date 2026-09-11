@@ -68,6 +68,15 @@ export const webServerSettings = pgTable("web_server_settings", {
 	acmeDnsProvider: text("acme_dns_provider"),
 	/** Provider credentials (`{ CF_DNS_API_TOKEN: "…" }`), encrypted at rest. */
 	acmeDnsCredentials: encryptedJson("acme_dns_credentials"),
+	/**
+	 * Instance-wide opt-in for outbound requests to private/LAN addresses
+	 * (self-hosted MinIO, Gotify, Gitea, SMTP on the same network). Off by
+	 * default: without it every provider that used to default to
+	 * `allowPrivate: true` was an org-admin port scanner (security audit 2.6).
+	 * The Swarm overlay (10.0.0.0/8) stays unreachable as a literal even when
+	 * this is on — see `utils/public-url.ts`.
+	 */
+	allowPrivateEgress: boolean("allow_private_egress").notNull().default(false),
 	metricsConfig: jsonb("metrics_config"),
 	createdAt: createdAt(),
 });

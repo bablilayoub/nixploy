@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { auditFromSession } from "../../modules/audit";
 import {
 	createGitea,
 	findGiteaById,
@@ -97,6 +98,12 @@ export const giteaRouter = router({
 				message: "Failed to create Gitea provider",
 			});
 		}
+		void auditFromSession(ctx, organizationId, {
+			action: "gitea.create",
+			targetType: "gitProvider",
+			targetId: created.gitea.giteaId,
+			targetName: created.gitProvider.name,
+		});
 		return { gitProvider: created.gitProvider, gitea: publicGitea(created.gitea) };
 	}),
 
@@ -123,6 +130,16 @@ export const giteaRouter = router({
 			if (!updated) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Gitea provider not found" });
 			}
+			void auditFromSession(ctx, organizationId, {
+				action: "gitea.update",
+				targetType: "gitProvider",
+				targetId: giteaId,
+				targetName: name ?? null,
+				metadata: {
+					credentialsChanged: values.accessToken !== undefined || values.refreshToken !== undefined,
+					urlChanged: values.giteaUrl !== undefined,
+				},
+			});
 			return publicGitea(updated);
 		}),
 
@@ -134,6 +151,11 @@ export const giteaRouter = router({
 		if (!removed) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Gitea provider not found" });
 		}
+		void auditFromSession(ctx, organizationId, {
+			action: "gitea.delete",
+			targetType: "gitProvider",
+			targetId: input.giteaId,
+		});
 		return publicGitea(removed);
 	}),
 
@@ -162,6 +184,11 @@ export const giteaRouter = router({
 	testConnection: protectedProcedure.input(giteaIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
+		void auditFromSession(ctx, organizationId, {
+			action: "gitea.testConnection",
+			targetType: "gitProvider",
+			targetId: input.giteaId,
+		});
 		return await testGiteaConnection(input.giteaId, organizationId);
 	}),
 
