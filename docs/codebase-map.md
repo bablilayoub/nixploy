@@ -255,6 +255,9 @@ Shared doubles live in `packages/server/src/test-utils/` (not a test directory �
 
 ## Service registry (2026-09-11)
 
+`modules/services/app-name.ts` generates the swarm/compose `appName` for every kind (one namespace across all seven — applications, compose and databases used to have three copies). Lifecycle mutations that change what runs (`application.start/stop/reload`, compose up/down/restart, database start/stop) call `invalidateDockerListings(serverId)` (`modules/docker/containers.ts`) so the cached `docker ps` listings refresh before the next push frame.
+
+
 `modules/services/` is the single source of truth for "what kinds of service exist".
 
 - **`kinds.ts`** — dependency-free on purpose (the panel imports it through `@nixploy/server/modules/services/kinds`, so anything pulled in here lands in the browser bundle). Exports `SERVICE_KINDS` (`application compose postgres mysql mariadb mongo redis`), `DATABASE_KINDS` (the five engines), `ServiceKind`, `SERVICE_KIND_LABELS`, `SERVICE_KIND_ID_FIELDS` / `serviceIdField()` (every table and every procedure input uses `<kind>Id`), `DATABASE_KIND_CREDENTIALS` (which credential columns an engine has + their defaults) and the `isServiceKind` / `isDatabaseServiceKind` guards.

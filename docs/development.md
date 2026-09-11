@@ -267,3 +267,9 @@ to "skip"). Do not run the Docker/Postgres jobs under `act` — it segfaults on 
 Operator-facing: `docs/install.md` (including the runtime-environment
 reference) · `docs/troubleshooting.md` · `docs/upgrade-notes.md` ·
 `docs/instance-backup.md` · `docs/releases.md` · [`CHANGELOG.md`](../CHANGELOG.md)
+
+## Local equivalent of the CI checks
+
+```bash
+pnpm typecheck && pnpm exec biome check --error-on-warnings packages/server apps/web apps/cli apps/landing && pnpm knip && DATABASE_URL_TEST=postgres://nixploy:nixploy@127.0.0.1:54329/nixploy_test pnpm test:db && pnpm -F @nixploy/cli test && pnpm -F @nixploy/web test
+```
