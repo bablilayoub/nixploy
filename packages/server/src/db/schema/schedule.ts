@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { boolean, pgTable, text } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { applications } from "./application";
 import { users } from "./auth";
@@ -30,6 +30,13 @@ export const schedules = pgTable("schedule", {
 		onDelete: "cascade",
 	}),
 	userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+	/**
+	 * Written at the START of every run (`modules/schedules#runSchedule`), which
+	 * is what makes the boot catch-up replay idempotent: a process that dies
+	 * mid-run still moved the marker, so the next boot does not replay it
+	 * forever. Null for rows that never ran (and for rows older than 0023).
+	 */
+	lastRunAt: timestamp("last_run_at", { withTimezone: true }),
 	createdAt: createdAt(),
 });
 

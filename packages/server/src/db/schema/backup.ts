@@ -54,6 +54,8 @@ export const backups = pgTable("backup", {
 	redisId: text("redis_id").references(() => redis.redisId, {
 		onDelete: "cascade",
 	}),
+	/** Written when a run starts — see `schedule.last_run_at` for why. */
+	lastRunAt: timestamp("last_run_at", { withTimezone: true }),
 	createdAt: createdAt(),
 });
 
@@ -77,6 +79,8 @@ export const volumeBackups = pgTable("volume_backup", {
 	composeId: text("compose_id").references(() => compose.composeId, {
 		onDelete: "cascade",
 	}),
+	/** Written when a run starts — see `schedule.last_run_at` for why. */
+	lastRunAt: timestamp("last_run_at", { withTimezone: true }),
 	createdAt: createdAt(),
 });
 

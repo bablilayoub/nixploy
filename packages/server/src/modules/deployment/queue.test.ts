@@ -6,19 +6,21 @@ import type { QueueJob } from "./queue";
  *
  * The queue's ordering rules live in one SQL statement, so this suite runs
  * against a fake `db.execute` that models that statement's semantics: FIFO
- * per server, the `NOT EXISTS … status = 'running'` per-app mutex, the
- * `blocked` id list and the `row_number()` position snapshot. The real
- * statement (and `FOR UPDATE SKIP LOCKED` under concurrency) is exercised
- * against Postgres in `queue.db.test.ts`.
+ * per server, the `NOT EXISTS … status = 'running'` per-app mutex on the row's
+ * own `app_name` and the `row_number()` position snapshot. The real statement
+ * (and `FOR UPDATE SKIP LOCKED` under concurrency) is exercised against
+ * Postgres in `queue.db.test.ts`.
  */
 
 interface FakeRow {
 	deploymentId: string;
+	/** `deployment.app_name` — the PREVIEW name for preview rows (0023). */
 	appName: string;
 	serverId: string | null;
 	status: "queued" | "running" | "done" | "cancelled";
 	createdAt: number;
-	isPreview: boolean;
+	previewDeploymentId: string | null;
+	title: string;
 }
 
 const { table } = vi.hoisted(() => ({ table: { rows: [] as FakeRow[] } }));
@@ -76,7 +78,7 @@ vi.mock("../../db", () => ({
 				});
 			}
 			if (text.includes(`set "status" = 'running'`)) {
-				const [serverId, blocked] = params as [string | null, string[]];
+				const [serverId] = params as [string | null];
 				const busy = new Set(
 					table.rows.filter((row) => row.status === "running").map((row) => row.appName),
 				);
@@ -85,7 +87,6 @@ vi.mock("../../db", () => ({
 						(row) =>
 							row.status === "queued" &&
 							row.serverId === (serverId ?? null) &&
-							!blocked.includes(row.deploymentId) &&
 							!busy.has(row.appName),
 					)
 					.sort(
@@ -98,10 +99,10 @@ vi.mock("../../db", () => ({
 						deployment_id: candidate.deploymentId,
 						application_id: `app-${candidate.appName}`,
 						compose_id: null,
-						is_preview: candidate.isPreview,
-						title: "Deployment",
+						title: candidate.title,
 						server_id: candidate.serverId,
 						app_name: candidate.appName,
+						preview_deployment_id: candidate.previewDeploymentId,
 					},
 				];
 			}
@@ -128,7 +129,7 @@ const enqueueRow = (
 	deploymentId: string,
 	appName: string,
 	serverId: string | null = null,
-	isPreview = false,
+	extra: { previewDeploymentId?: string; title?: string } = {},
 ): void => {
 	table.rows.push({
 		deploymentId,
@@ -136,7 +137,8 @@ const enqueueRow = (
 		serverId,
 		status: "queued",
 		createdAt: ++clock,
-		isPreview,
+		previewDeploymentId: extra.previewDeploymentId ?? null,
+		title: extra.title ?? "Deployment",
 	});
 };
 
@@ -274,25 +276,25 @@ describe("durable queue: per-app mutex and positions", () => {
 		expect(started).toEqual(["x1", "y1", "x2"]);
 	});
 
-	it("blocks a queued preview whose real service name is already building", async () => {
+	it("holds a queued preview back while the same PR service is building", async () => {
 		const { runner, started, finish } = controlledRunner();
 		queue.setJobRunner(runner);
 		queue.setServerConcurrency("server-a", 2);
-		// Both rows carry the PARENT application, so SQL cannot tell them
-		// apart — the registry's appName does.
-		enqueueRow("p1", "parent", "server-a", true);
-		enqueueRow("p2", "parent", "server-a", true);
-		queue.rememberJobDetails("p1", { appName: "parent-pr-7", type: "deploy" });
-		queue.rememberJobDetails("p2", { appName: "parent-pr-7", type: "deploy" });
+		// Both rows carry the PARENT application id, but since 0023 the row's
+		// own `app_name` is the PR service — so the SQL mutex sees the clash.
+		enqueueRow("p1", "parent-pr-7", "server-a", { previewDeploymentId: "prev-7" });
+		enqueueRow("p2", "parent-pr-7", "server-a", { previewDeploymentId: "prev-7" });
+		// A job for the parent itself is a different app: it runs in parallel.
+		enqueueRow("prod", "parent", "server-a");
 
 		queue.startQueueLoop();
 		await settle();
 
-		expect(started).toEqual(["p1"]);
-		expect(queue.queueDepth("server-a")).toEqual({ pending: 1, running: 1 });
+		expect([...started].sort()).toEqual(["p1", "prod"]);
+		expect(queue.queueDepth("server-a")).toEqual({ pending: 1, running: 2 });
 
 		await finish("p1");
-		expect(started).toEqual(["p1", "p2"]);
+		expect(started).toContain("p2");
 	});
 
 	it("reports 1-based queue positions per server line", async () => {
@@ -312,23 +314,34 @@ describe("durable queue: per-app mutex and positions", () => {
 		expect(queue.getQueuePosition("b1")).toBeNull(); // running on its own server
 	});
 
-	it("exposes the preview appName and preview id from the registry", async () => {
+	it("reads the preview appName and preview id straight off the row", async () => {
 		const { runner } = controlledRunner();
 		queue.setJobRunner(runner);
-		enqueueRow("p1", "parent", null, true);
-		queue.rememberJobDetails("p1", {
-			appName: "parent-pr-3",
+		enqueueRow("p1", "parent-pr-3", null, {
 			previewDeploymentId: "prev-3",
-			type: "redeploy",
+			title: "Preview redeploy",
 		});
 
-		const job = await queue.claimNextDeployment(null, []);
+		const job = await queue.claimNextDeployment(null);
 		expect(job).toMatchObject({
 			deploymentId: "p1",
 			appName: "parent-pr-3",
 			previewDeploymentId: "prev-3",
 			type: "redeploy",
 		});
+	});
+
+	it("reads a plain job's type off its title", async () => {
+		const { runner } = controlledRunner();
+		queue.setJobRunner(runner);
+		enqueueRow("j1", "app-1");
+		enqueueRow("j2", "app-2", null, { title: "Redeploy" });
+
+		expect(await queue.claimNextDeployment(null)).toMatchObject({
+			type: "deploy",
+			previewDeploymentId: undefined,
+		});
+		expect(await queue.claimNextDeployment(null)).toMatchObject({ type: "redeploy" });
 	});
 });
 

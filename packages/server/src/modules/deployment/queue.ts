@@ -25,17 +25,16 @@ import { deploymentEvents } from "./events";
  *   next app's row takes the free slot.
  * - **SKIP LOCKED** — two claimers can never be handed the same row.
  *
+ * Since migration 0023 the row carries `app_name` (the service the job really
+ * builds — `<app>-pr-<n>` for a preview) and `preview_deployment_id`, so all
+ * three rules are plain predicates on `deployment` with no joins and no
+ * in-process registry. Previews are ordinary rows now: they coalesce against
+ * their own siblings, take part in the same mutex, and survive a restart.
+ *
  * What is still process-local, and why:
  * - the slot accounting per server (`NIXPLOY_DEPLOY_CONCURRENCY`), the set of
  *   running jobs, their child processes and their cancellation state — all of
  *   it only has meaning inside the process that is actually building;
- * - `details`, a small registry of `deploymentId → { appName,
- *   previewDeploymentId }` filled at enqueue time. The `deployment` row does
- *   not carry either column yet (see the handoff note in
- *   `docs/deployment-flow.md`), so the *preview* appName and the preview id
- *   are recovered from here. Queued previews never survive a restart (boot
- *   recovery fails them, exactly as before), so a queued preview row always
- *   has its registry entry;
  * - the queue-position / depth snapshot, which is *computed in SQL* on every
  *   pass and cached so `getQueuePosition` / `queueDepth` can stay synchronous
  *   for their tRPC and `/api/ready` callers.
@@ -66,14 +65,6 @@ export type CancelReason = "user" | "shutdown" | "timeout";
 /** Runs a claimed job to completion. Registered by worker.ts at import time. */
 type JobRunner = (job: QueueJob) => Promise<void>;
 
-/** What the `deployment` row cannot tell us yet — filled at enqueue time. */
-export interface JobDetails {
-	/** Real service name: the PREVIEW appName for preview jobs. */
-	appName: string;
-	previewDeploymentId?: string;
-	type: "deploy" | "redeploy";
-}
-
 const serverKey = (serverId: string | null): string => serverId ?? "__local__";
 const serverIdFromKey = (key: string): string | null => (key === "__local__" ? null : key);
 
@@ -89,11 +80,7 @@ interface QueueState {
 	runner: JobRunner | null;
 	runningCountByServer: Map<string, number>;
 	runningJobs: Map<string, RunningJob>;
-	/** appNames with a job in flight (per-app mutex, process side). */
-	runningApps: Set<string>;
 	concurrencyByServer: Map<string, number>;
-	/** deploymentId → what the row does not store (preview id, preview appName). */
-	details: Map<string, JobDetails>;
 	processesByDeployment: Map<string, Set<TargetedProcess>>;
 	cancelledDeployments: Map<string, CancelReason>;
 	cancelHooks: Map<string, Set<() => void>>;
@@ -125,9 +112,7 @@ const state: QueueState = globalForQueue.__nixployDeploymentQueue ?? {
 	runner: null,
 	runningCountByServer: new Map(),
 	runningJobs: new Map(),
-	runningApps: new Set(),
 	concurrencyByServer: new Map(),
-	details: new Map(),
 	processesByDeployment: new Map(),
 	cancelledDeployments: new Map(),
 	cancelHooks: new Map(),
@@ -146,7 +131,6 @@ if (!globalForQueue.__nixployDeploymentQueue) {
 const {
 	runningCountByServer,
 	runningJobs,
-	runningApps,
 	concurrencyByServer,
 	processesByDeployment,
 	cancelledDeployments,
@@ -200,54 +184,18 @@ export function isQueueDraining(): boolean {
 	return state.draining;
 }
 
-/**
- * Remember what the `deployment` row cannot store (the preview id and, for a
- * preview, its own appName). Called by `queueDeployment` right after the
- * insert; dropped when the job settles.
- */
-export function rememberJobDetails(deploymentId: string, details: JobDetails): void {
-	state.details.set(deploymentId, details);
-}
-
-/**
- * deploymentIds of queued rows whose real (registry) appName matches — the
- * coalescing key for preview jobs, which SQL cannot derive from the row.
- */
-export function queuedSiblingsForApp(appName: string, exceptDeploymentId: string): string[] {
-	const ids: string[] = [];
-	for (const [deploymentId, details] of state.details) {
-		if (deploymentId === exceptDeploymentId) continue;
-		if (details.appName !== appName) continue;
-		if (runningJobs.has(deploymentId)) continue;
-		ids.push(deploymentId);
-	}
-	return ids;
-}
-
 /* -------------------------------------------------------------------------- */
 /*  SQL: claim, snapshot                                                      */
 /* -------------------------------------------------------------------------- */
-
-/**
- * The app a deployment row belongs to, as SQL can see it: applications and
- * compose services carry a unique `app_name`. Preview rows point at the
- * PARENT application, so their derived name is the parent's — which is why
- * previews are excluded from the SQL coalescing and carry their real name in
- * the in-process registry instead.
- */
-const APP_NAME_JOIN = sql`
-	left join "application" a on a."application_id" = q."application_id"
-	left join "compose" c on c."compose_id" = q."compose_id"
-`;
 
 interface ClaimedRow {
 	deployment_id: string;
 	application_id: string | null;
 	compose_id: string | null;
-	is_preview: boolean;
 	title: string | null;
 	server_id: string | null;
 	app_name: string | null;
+	preview_deployment_id: string | null;
 }
 
 /**
@@ -256,54 +204,46 @@ interface ClaimedRow {
  * (empty line, every candidate's app already building, every row locked by
  * another claimer).
  *
- * `blocked` carries deploymentIds the caller knows must wait even though SQL
- * cannot tell: queued previews whose real appName is already building.
+ * `app_name is not null` is the orphan guard: every row the queue writes
+ * carries one, so a NULL means a row the queue can no longer place (a legacy
+ * preview from before migration 0023). Boot recovery finalizes those.
  */
-export async function claimNextDeployment(
-	serverId: string | null,
-	blocked: string[] = [],
-): Promise<QueueJob | null> {
+export async function claimNextDeployment(serverId: string | null): Promise<QueueJob | null> {
 	const rows = (await db.execute(sql`
 		update "deployment" d
 		set "status" = 'running', "started_at" = now()
 		from (
-			select q."deployment_id", coalesce(a."app_name", c."app_name") as app_name
+			select q."deployment_id"
 			from "deployment" q
-			${APP_NAME_JOIN}
 			where q."status" = 'queued'
 				and q."server_id" is not distinct from ${serverId}::text
-				and coalesce(a."app_name", c."app_name") is not null
-				and not (q."deployment_id" = any(${sql.param(blocked)}::text[]))
+				and q."app_name" is not null
 				and not exists (
 					select 1
 					from "deployment" r
-					left join "application" ra on ra."application_id" = r."application_id"
-					left join "compose" rc on rc."compose_id" = r."compose_id"
-					where r."status" = 'running'
-						and coalesce(ra."app_name", rc."app_name") = coalesce(a."app_name", c."app_name")
+					where r."status" = 'running' and r."app_name" = q."app_name"
 				)
 			order by q."created_at", q."deployment_id"
-			for update of q skip locked
+			for update skip locked
 			limit 1
 		) s
 		where d."deployment_id" = s."deployment_id"
-		returning d."deployment_id", d."application_id", d."compose_id", d."is_preview",
-			d."title", d."server_id", s."app_name"
+		returning d."deployment_id", d."application_id", d."compose_id",
+			d."title", d."server_id", d."app_name", d."preview_deployment_id"
 	`)) as unknown as ClaimedRow[];
 
 	const row = rows[0];
 	if (!row?.app_name) return null;
 
-	const details = state.details.get(row.deployment_id);
 	return {
 		deploymentId: row.deployment_id,
-		// Previews build under their own service name, which only the registry
-		// knows (the row carries the parent's application id).
-		appName: details?.appName ?? row.app_name,
+		appName: row.app_name,
 		applicationId: row.application_id ?? undefined,
 		composeId: row.compose_id ?? undefined,
-		previewDeploymentId: details?.previewDeploymentId,
-		type: details?.type ?? (row.title === "Redeploy" ? "redeploy" : "deploy"),
+		previewDeploymentId: row.preview_deployment_id ?? undefined,
+		// Cosmetic only (the worker prints it): the row records the title, not
+		// the verb, and every redeploy title ends in "redeploy".
+		type: row.title?.toLowerCase().endsWith("redeploy") ? "redeploy" : "deploy",
 		serverId: row.server_id,
 	};
 }
@@ -337,14 +277,6 @@ export async function refreshQueueSnapshot(): Promise<number> {
 	}
 	state.positions = positions;
 	state.pendingByServer = pending;
-
-	// GC the detail registry: a row that is neither waiting nor running was
-	// cancelled, superseded or finished elsewhere, and would otherwise leak
-	// (and skew the preview coalescing) for the life of the process.
-	for (const deploymentId of state.details.keys()) {
-		if (positions.has(deploymentId) || runningJobs.has(deploymentId)) continue;
-		state.details.delete(deploymentId);
-	}
 	return rows.length;
 }
 
@@ -382,7 +314,7 @@ async function runClaimPass(): Promise<void> {
 			while (!state.draining) {
 				const running = runningCountByServer.get(key) ?? 0;
 				if (running >= getConcurrency(key)) break;
-				const job = await claimNextDeployment(serverIdFromKey(key), blockedDeploymentIds());
+				const job = await claimNextDeployment(serverIdFromKey(key));
 				if (!job) break;
 				startJob(key, job);
 			}
@@ -398,20 +330,6 @@ async function runClaimPass(): Promise<void> {
 		state.loopBusy = false;
 		scheduleNextPass(waiting > 0 ? BUSY_POLL_MS : IDLE_POLL_MS);
 	}
-}
-
-/**
- * Queued rows SQL must skip: previews whose real service name is already
- * building (their row names the parent application, so the `NOT EXISTS`
- * mutex in the claim query cannot see the collision).
- */
-function blockedDeploymentIds(): string[] {
-	const blocked: string[] = [];
-	for (const [deploymentId, details] of state.details) {
-		if (runningJobs.has(deploymentId)) continue;
-		if (runningApps.has(details.appName)) blocked.push(deploymentId);
-	}
-	return blocked;
 }
 
 /**
@@ -460,7 +378,6 @@ export function stopQueueLoop(): void {
  */
 export function startJob(key: string, job: QueueJob): void {
 	runningCountByServer.set(key, (runningCountByServer.get(key) ?? 0) + 1);
-	runningApps.add(job.appName);
 	// Mark as running immediately so cancellation works even before the
 	// worker spawns its first child process.
 	processesByDeployment.set(job.deploymentId, new Set());
@@ -484,12 +401,10 @@ export function startJob(key: string, job: QueueJob): void {
 		})
 		.finally(() => {
 			runningCountByServer.set(key, Math.max(0, (runningCountByServer.get(key) ?? 1) - 1));
-			runningApps.delete(job.appName);
 			runningJobs.delete(job.deploymentId);
 			processesByDeployment.delete(job.deploymentId);
 			cancelledDeployments.delete(job.deploymentId);
 			cancelHooks.delete(job.deploymentId);
-			state.details.delete(job.deploymentId);
 			release();
 			// A freed slot may unblock the next row (and the per-app mutex).
 			pokeQueue();

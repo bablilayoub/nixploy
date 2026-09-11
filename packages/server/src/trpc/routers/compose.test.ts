@@ -46,7 +46,10 @@ vi.mock("../../modules/compose/service", () => ({
 	startCompose: vi.fn(),
 	stopCompose: vi.fn(),
 }));
-vi.mock("../../modules/compose/containers", () => ({ listComposeContainers: vi.fn() }));
+vi.mock("../../modules/compose/containers", () => ({
+	listComposeContainers: vi.fn(),
+	invalidateComposeContainers: vi.fn(),
+}));
 vi.mock("../../modules/deployment", () => ({ queueDeployment: vi.fn() }));
 vi.mock("../../modules/audit", () => ({ auditFromSession: vi.fn(async () => {}) }));
 

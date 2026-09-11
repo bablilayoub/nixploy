@@ -19,29 +19,23 @@ and the next boot picks them up.
 update "deployment" d
 set "status" = 'running', "started_at" = now()
 from (
-  select q."deployment_id", coalesce(a."app_name", c."app_name") as app_name
+  select q."deployment_id"
   from "deployment" q
-  left join "application" a on a."application_id" = q."application_id"
-  left join "compose" c on c."compose_id" = q."compose_id"
   where q."status" = 'queued'
     and q."server_id" is not distinct from $1::text
-    and coalesce(a."app_name", c."app_name") is not null
-    and not (q."deployment_id" = any($2::text[]))
+    and q."app_name" is not null
     and not exists (
       select 1
       from "deployment" r
-      left join "application" ra on ra."application_id" = r."application_id"
-      left join "compose" rc on rc."compose_id" = r."compose_id"
-      where r."status" = 'running'
-        and coalesce(ra."app_name", rc."app_name") = coalesce(a."app_name", c."app_name")
+      where r."status" = 'running' and r."app_name" = q."app_name"
     )
   order by q."created_at", q."deployment_id"
-  for update of q skip locked
+  for update skip locked
   limit 1
 ) s
 where d."deployment_id" = s."deployment_id"
-returning d."deployment_id", d."application_id", d."compose_id", d."is_preview",
-  d."title", d."server_id", s."app_name"
+returning d."deployment_id", d."application_id", d."compose_id",
+  d."title", d."server_id", d."app_name", d."preview_deployment_id"
 ```
 
 What each clause buys:
@@ -53,26 +47,26 @@ What each clause buys:
   `NIXPLOY_DEPLOY_CONCURRENCY` says (they would race on the code checkout and
   the `<appName>:latest` tag). A busy app's row stays in line and the next
   app's row takes the free slot.
-- `for update of q skip locked` — two claimers can never be handed the same
-  row. (`of q`: Postgres refuses `FOR UPDATE` on the nullable side of an
-  outer join.)
-- `$2::text[]` — ids the caller knows must wait even though SQL cannot tell;
-  see "previews" below.
+- `for update skip locked` — two claimers can never be handed the same row.
+- `app_name is not null` — the orphan guard. Every row `queueDeployment`
+  writes carries one, so a NULL marks a row the queue can no longer place
+  (a preview queued by a pre-0023 process); boot recovery finalizes those.
+
+`deployment.app_name` is the service the job really builds — the application
+or compose `app_name`, and `<app>-pr-<n>` for a preview, whose row points at
+the PARENT application. Storing it (with `preview_deployment_id`, migration
+0023) is what removes every join from the claim and lets a **queued preview
+survive a restart** like any other job. The partial index
+`deployment_queued_app_idx (app_name) WHERE status NOT IN
+('done','error','cancelled')` serves both the ordering and the mutex; its
+predicate names the terminal labels because Postgres refuses to reference an
+enum value added inside the migrator's transaction.
 
 ### What is still in process memory, and why
 
 - **Slot accounting** per server (`NIXPLOY_DEPLOY_CONCURRENCY`, default 1),
   the set of running jobs, their child processes and their cancellation
   state. All of it only means anything inside the process that is building.
-- **Job details the row does not carry**: `previewDeploymentId` and, for a
-  preview, its own `appName`. The `deployment` table has neither column, so
-  `queueDeployment` records them in a small `globalThis` registry and the
-  claim reads them back. Queued previews never survive a restart (boot
-  recovery fails them, as before), so a queued preview row always has its
-  entry. **Open schema item**: adding `app_name text` and
-  `preview_deployment_id text` to `deployment` would delete the registry,
-  make preview coalescing pure SQL, and let queued previews survive a
-  restart like everything else.
 - **The queue-position / depth snapshot**, which *is* computed in SQL
   (`row_number() over (partition by server_id order by created_at,
   deployment_id)`) on every claim pass and after every enqueue, then cached
@@ -91,10 +85,10 @@ What each clause buys:
   safe against a concurrent claim: exactly one of "cancelled" and "claimed"
   can win. A burst of N pushes therefore yields at most one running + one
   queued job per app.
-- **Previews** coalesce and mutex on the *preview* appName, which SQL cannot
-  derive (their row names the parent application): the sibling ids come from
-  the in-process registry, and the claim's `$2` blocked-id list keeps a
-  queued preview waiting while its own service is building.
+- **Previews** are ordinary rows: `app_name` holds the PR service name, so a
+  second push to the same PR supersedes the first, two builds of one PR never
+  overlap, and neither ever collides with the parent application's own line
+  (a different `app_name`). They survive a restart like everything else.
 - **Cancellation** — a `queued` row is finalized by a conditional
   `UPDATE … WHERE status = 'queued'` (atomic against a concurrent claim); a
   running job has every registered child process killed and the worker
@@ -345,13 +339,14 @@ through `modules/backups` to S3 destinations on schedules.
   `running` by a restart are marked `error` ("Interrupted…") — not just
   cosmetic: the status reconciler skips a service with a running deployment,
   and the queue's per-app mutex would refuse to ever build that app again.
-  Rows left `queued` need nothing; the claim loop picks them up in creation
-  order, which is what makes the backlog survive a restart. Two exceptions
-  are failed instead: queued **previews** (the row carries neither the
-  preview id nor the preview appName) and queued rows whose service no
-  longer exists (invisible to the claim query otherwise). Interrupted
-  previews land on `previewDeployments.previewStatus = error`; the parent
-  application's status is left alone.
+  Rows left `queued` need nothing — previews included since migration 0023;
+  the claim loop picks them up in creation order, which is what makes the
+  backlog survive a restart. The one exception failed instead: a queued row
+  with `app_name IS NULL`, which the claim query can never place (a preview
+  queued by a pre-0023 process, or a row whose service is gone). Interrupted
+  previews land on `previewDeployments.previewStatus = error`; a preview
+  whose job is still *waiting* keeps its `running` status and is left to the
+  claim loop, and the parent application's status is never touched.
 - **Docker cleanup** (`modules/deployment/cleanup.ts`, cron + manual trigger)
   prunes dangling images and the BuildKit cache only. Tagged images — a
   stopped application's `appName:latest`, rollback pins, images pulled for

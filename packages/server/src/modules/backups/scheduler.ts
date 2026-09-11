@@ -3,7 +3,7 @@ import schedule from "node-schedule";
 import { db } from "../../db";
 import { backupRuns, backups, destinations, volumeBackups } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
-import { cronIntervalMs } from "../schedules";
+import { cronCatchUpEnabled, cronIntervalMs } from "../schedules";
 import { isValidCronExpression } from "../schedules/cron";
 import {
 	type BackupRow,
@@ -65,8 +65,30 @@ async function guarded(key: string, trigger: "cron" | "manual", fn: () => Promis
 const runTrigger = (trigger: "cron" | "manual") =>
 	trigger === "cron" ? ("schedule" as const) : ("manual" as const);
 
+/**
+ * Stamp `last_run_at` before the dump starts. Written first, not last, so the
+ * boot catch-up cannot replay the same window twice after a crash mid-run;
+ * a failed write never fails the backup (the marker is advisory).
+ */
+async function markRun(
+	table: typeof backups | typeof volumeBackups,
+	column: typeof backups.backupId | typeof volumeBackups.volumeBackupId,
+	id: string,
+): Promise<void> {
+	await db
+		.update(table)
+		.set({ lastRunAt: new Date() })
+		.where(eq(column, id))
+		.catch((error: unknown) => {
+			log.error(`Failed to stamp last_run_at for ${id}`, {
+				error: error instanceof Error ? error.message : String(error),
+			});
+		});
+}
+
 async function executeBackup(backupRow: BackupRow, trigger: "cron" | "manual"): Promise<void> {
 	const destination = await loadDestination(backupRow);
+	await markRun(backups, backups.backupId, backupRow.backupId);
 	try {
 		await runBackup(backupRow, { trigger: runTrigger(trigger) });
 		if (destination) {
@@ -98,6 +120,7 @@ async function executeVolumeBackup(
 	trigger: "cron" | "manual",
 ): Promise<void> {
 	const destination = await loadDestination(volumeBackup);
+	await markRun(volumeBackups, volumeBackups.volumeBackupId, volumeBackup.volumeBackupId);
 	try {
 		await runVolumeBackup(volumeBackup, { trigger: runTrigger(trigger) });
 		if (destination) {
@@ -258,9 +281,10 @@ export function unregisterBackupsForService(service: {
 }
 
 /**
- * Last recorded run per backup / volume backup. `backup_run` is the durable
- * trace — neither `backup` nor `volume_backup` carries a `last_run_at` column
- * yet (audit #17; see the handoff note in `docs/observability.md`).
+ * Last recorded run per backup / volume backup, derived from `backup_run`.
+ * Only needed for rows that predate migration 0023 — `backup.last_run_at` /
+ * `volume_backup.last_run_at` are the authoritative markers now, and they are
+ * the ones the catch-up replay trusts (written before the dump starts).
  */
 async function lastRunAt(
 	column: typeof backupRuns.backupId | typeof backupRuns.volumeBackupId,
@@ -281,13 +305,19 @@ async function lastRunAt(
 
 export interface OverdueBackup {
 	id: string;
+	/** Which table the id belongs to — the catch-up replay needs to know. */
+	kind: "database" | "volume";
 	label: string;
 	cronExpression: string;
 	lastRunAt: Date | null;
 	missedIntervals: number;
 }
 
-/** Backups whose last run is more than one interval old (missed ticks). */
+/**
+ * Backups whose last run is more than one interval old (missed ticks).
+ * `last_run_at` is the reference; rows older than migration 0023 have none and
+ * fall back to the derived `backup_run` lookup, then to their creation time.
+ */
 export async function findOverdueBackups(now: Date = new Date()): Promise<OverdueBackup[]> {
 	const [backupRows, volumeRows] = await Promise.all([
 		db.query.backups.findMany({ where: eq(backups.enabled, true) }),
@@ -296,42 +326,62 @@ export async function findOverdueBackups(now: Date = new Date()): Promise<Overdu
 	const [backupRunsById, volumeRunsById] = await Promise.all([
 		lastRunAt(
 			backupRuns.backupId,
-			backupRows.map((row) => row.backupId),
+			backupRows.filter((row) => !row.lastRunAt).map((row) => row.backupId),
 		),
 		lastRunAt(
 			backupRuns.volumeBackupId,
-			volumeRows.map((row) => row.volumeBackupId),
+			volumeRows.filter((row) => !row.lastRunAt).map((row) => row.volumeBackupId),
 		),
 	]);
 
 	const overdue: OverdueBackup[] = [];
 	const check = (
+		kind: OverdueBackup["kind"],
 		id: string,
 		label: string,
 		cronExpression: string,
+		stamped: Date | null,
 		createdAt: Date | null,
 		runs: Map<string, Date>,
 	) => {
 		const interval = cronIntervalMs(cronExpression, now);
 		if (!interval) return;
-		const reference = runs.get(id) ?? createdAt;
+		const lastRun = stamped ?? runs.get(id) ?? null;
+		const reference = lastRun ?? createdAt;
 		if (!reference) return;
 		const elapsed = now.getTime() - reference.getTime();
 		if (elapsed <= interval * 2) return;
 		overdue.push({
 			id,
+			kind,
 			label,
 			cronExpression,
-			lastRunAt: runs.get(id) ?? null,
+			lastRunAt: lastRun,
 			missedIntervals: Math.floor(elapsed / interval),
 		});
 	};
 
 	for (const row of backupRows) {
-		check(row.backupId, row.appName, row.schedule, row.createdAt, backupRunsById);
+		check(
+			"database",
+			row.backupId,
+			row.appName,
+			row.schedule,
+			row.lastRunAt,
+			row.createdAt,
+			backupRunsById,
+		);
 	}
 	for (const row of volumeRows) {
-		check(row.volumeBackupId, row.volumeName, row.cronExpression, row.createdAt, volumeRunsById);
+		check(
+			"volume",
+			row.volumeBackupId,
+			row.volumeName,
+			row.cronExpression,
+			row.lastRunAt,
+			row.createdAt,
+			volumeRunsById,
+		);
 	}
 	return overdue;
 }
@@ -365,17 +415,55 @@ export async function initBackupSchedules(): Promise<void> {
 	);
 
 	// node-schedule has no catch-up: a nightly dump that coincided with an
-	// update never ran and never will (audit #17). Surface it at boot.
+	// update never ran and never will (audit #17). Surface it at boot, and
+	// replay it once when the operator opted in with NIXPLOY_CRON_CATCH_UP=1.
 	try {
-		for (const entry of await findOverdueBackups()) {
+		const overdue = await findOverdueBackups();
+		const replay = cronCatchUpEnabled();
+		for (const entry of overdue) {
 			log.warn(
 				`Backup "${entry.label}" (${entry.cronExpression}) has not run for ~${entry.missedIntervals} intervals`,
-				{ id: entry.id, lastRunAt: entry.lastRunAt?.toISOString() ?? "never" },
+				{
+					id: entry.id,
+					lastRunAt: entry.lastRunAt?.toISOString() ?? "never",
+					catchUp: replay,
+				},
 			);
+		}
+		// Detached: a dump can take minutes and must not hold up boot.
+		if (replay && overdue.length > 0) {
+			void replayOverdueBackups(overdue, backupRows, volumeBackupRows);
 		}
 	} catch (error) {
 		log.error("Could not check for overdue backups", {
 			error: error instanceof Error ? error.message : String(error),
 		});
+	}
+}
+
+/**
+ * Run each overdue backup once, one after the other (never in parallel: a
+ * dump is IO-heavy and the in-flight guard is per row, not global).
+ * Idempotent across a crash loop — `executeBackup` stamps `last_run_at`
+ * before the dump starts, so the next boot no longer sees it as overdue.
+ */
+async function replayOverdueBackups(
+	overdue: OverdueBackup[],
+	backupRows: BackupRow[],
+	volumeBackupRows: VolumeBackupRow[],
+): Promise<void> {
+	const byBackupId = new Map(backupRows.map((row) => [row.backupId, row]));
+	const byVolumeId = new Map(volumeBackupRows.map((row) => [row.volumeBackupId, row]));
+	for (const entry of overdue) {
+		log.info(`Catching up backup "${entry.label}" (${entry.missedIntervals} intervals missed)`, {
+			id: entry.id,
+		});
+		if (entry.kind === "database") {
+			const row = byBackupId.get(entry.id);
+			if (row) await tickBackup(row.backupId);
+			continue;
+		}
+		const row = byVolumeId.get(entry.id);
+		if (row) await tickVolumeBackup(row.volumeBackupId);
 	}
 }

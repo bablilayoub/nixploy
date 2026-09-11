@@ -65,7 +65,7 @@ Exports (`package.json#exports`): `.` (db, auth, encryption, exec), `./db`, `./s
 - `custom-columns.ts` — `encryptedText`, `encryptedJson` (AES-256-GCM via `lib/encryption.ts`).
 - `migrate.ts` — dev/CI migrator (`drizzle-kit migrate` is what `pnpm db:migrate` runs; this file is the programmatic twin used by the image).
 - `schema/` (one file per domain, barrel in `index.ts`): `auth.ts` (better-auth tables incl. `member.capability_overrides`, `organization.require_two_factor`, `apikey`, `two_factor`), `project.ts` (`project`, `environment`), `application.ts`, `compose.ts`, `database.ts` (`postgres|mysql|mariadb|mongo|redis`), `deployment.ts` (`deployment`, `preview_deployment`, `rollback`), `domain.ts` (+ `certificate`), `mount.ts`, `port.ts`, `redirect.ts`, `security.ts` (basic-auth), `registry.ts`, `server.ts` (`server`, `ssh_key`), `git-provider.ts` (`git_provider`, `github`, `gitlab`, `bitbucket`, `gitea`), `backup.ts` (`backup`, `volume_backup`, `destination`), `schedule.ts`, `notification.ts`, `observability.ts` (`incident`, `alert_rule`, `uptime_probe`, `service_log` with tsvector GIN), `audit.ts`, `tag.ts` (tags + M2M), `enums.ts` (all pg enums), `utils.ts` (`idColumn`, `createdAt`, `updatedAt`, `generateId`).
-- Migrations: `packages/server/drizzle/0000…0017_*.sql` + `meta/` (journal + snapshots). `0010` added the hot indexes, `0013` API-key rate-limit columns, `0017` is the latest.
+- Migrations: `packages/server/drizzle/0000…0023_*.sql` + `meta/` (journal + snapshots). `0010` added the hot indexes, `0013` API-key rate-limit columns, `0019` the `queued` deployment status, `0023` is the latest: `deployment.app_name` + `deployment.preview_deployment_id` (the durable queue's key and preview link — backfilled in two passes, previews deliberately left NULL) with the partial index `deployment_queued_app_idx`, plus `last_run_at` on `schedule`, `backup` and `volume_backup` (stamped at run start, see `docs/observability.md`).
 
 ### `lib/`
 
@@ -113,10 +113,12 @@ router → queueDeployment()  modules/deployment/index.ts
 queue.ts claim loop (woken by deploymentEvents "enqueued", polls 2 s busy / 15 s idle)
         └─ UPDATE deployment SET status='running', started_at=now()
              WHERE deployment_id = (SELECT … status='queued' AND server matches
+                                    AND app_name IS NOT NULL
                                     AND NOT EXISTS (same app_name already running)
-                                    ORDER BY created_at FOR UPDATE OF q SKIP LOCKED LIMIT 1)
-           → per-server FIFO + per-app mutex + exactly-once, all in SQL
-             (slots per server: NIXPLOY_DEPLOY_CONCURRENCY, default 1)
+                                    ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1)
+           → per-server FIFO + per-app mutex + exactly-once, all in SQL, no joins
+             (deployment.app_name = the service the job builds, `<app>-pr-<n>` for
+              previews; slots per server: NIXPLOY_DEPLOY_CONCURRENCY, default 1)
 worker.ts processJob()
   application: context → sources.ts (git clone / docker pull / drop zip)
              → builders/{nixpacks,railpack,dockerfile-builder,buildpacks,static}.ts  (image `<appName>:latest`)
@@ -128,7 +130,7 @@ worker.ts processJob()
                on error: incident + service_log ingest + Copilot auto-explain
 ```
 
-Cancellation: a `queued` row is finalized by a conditional `UPDATE … WHERE status = 'queued'` (atomic against a concurrent claim); `requestCancellation(id, reason)` kills the registered child processes (`registerDeploymentProcess`) and fires `onDeploymentCancelled` hooks; the worker races the pipeline against that signal and its `NIXPLOY_DEPLOY_TIMEOUT_MS` deadline, and checks a checkpoint between steps. Shutdown: `drainQueue({ graceMs })` (called from `server.ts` on SIGTERM) stops claiming, waits, then cancels stragglers with reason `shutdown`; the backlog is left `queued` in Postgres for the next boot. The queue's process-local state (running jobs, slots, cancellation, the preview-detail registry, the SQL position snapshot — and `deploymentEvents`) lives on `globalThis` (`__nixployDeploymentQueue`): `transpilePackages` bundles `@nixploy/server` into the Next route chunks, so the tRPC/REST/webhook graph and the tsx-loaded `server.ts` are two module instances that must share one set of running jobs and run exactly one claim loop. Logs: `<config>/logs/<appName>/<deploymentId>.log` (+ `.explain.json` sidecar), streamed via `/ws/deployment`.
+Cancellation: a `queued` row is finalized by a conditional `UPDATE … WHERE status = 'queued'` (atomic against a concurrent claim); `requestCancellation(id, reason)` kills the registered child processes (`registerDeploymentProcess`) and fires `onDeploymentCancelled` hooks; the worker races the pipeline against that signal and its `NIXPLOY_DEPLOY_TIMEOUT_MS` deadline, and checks a checkpoint between steps. Shutdown: `drainQueue({ graceMs })` (called from `server.ts` on SIGTERM) stops claiming, waits, then cancels stragglers with reason `shutdown`; the backlog is left `queued` in Postgres for the next boot. The queue's process-local state (running jobs, slots, cancellation, the SQL position snapshot — and `deploymentEvents`) lives on `globalThis` (`__nixployDeploymentQueue`): `transpilePackages` bundles `@nixploy/server` into the Next route chunks, so the tRPC/REST/webhook graph and the tsx-loaded `server.ts` are two module instances that must share one set of running jobs and run exactly one claim loop. Logs: `<config>/logs/<appName>/<deploymentId>.log` (+ `.explain.json` sidecar), streamed via `/ws/deployment`.
 
 ## 5. On-disk layout (`NIXPLOY_CONFIG_DIR`, default `/etc/nixploy`, dev `.nixploy-data/`)
 
@@ -179,6 +181,7 @@ Helpers: `modules/deployment/paths.ts` (canonical `getConfigDir`, apps, logs, ss
 | `NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS` | exec | SSH command hard timeout (default 30 min) |
 | `NIXPLOY_DEPLOY_TIMEOUT_MS` | worker | per-deployment deadline, job cancelled + row `error` on expiry (default 60 min) |
 | `NIXPLOY_SHUTDOWN_GRACE_MS` | server.ts, queue | SIGTERM wait for running deploys before they are cancelled (default 60 s; keep below Swarm `--stop-grace-period`). Rows still `queued` are never touched — the next boot claims them |
+| `NIXPLOY_CRON_CATCH_UP` | schedules, backups | `1` replays every overdue schedule/backup ONCE at boot (sequentially, detached). Default off: ticks missed while the panel was down are only warned about. Safe against double runs because `last_run_at` is stamped before the run starts |
 | `NIXPLOY_MIGRATIONS_DIR`, `NIXPLOY_APP_VERSION`, `NIXPLOY_IMAGE` | image, updates | set by Dockerfile / install |
 | `NIXPLOY_GIT_COMMIT` | `/api/version` | optional git SHA baked in with `--build-arg` |
 | `NIXPLOY_DB_WAIT_SECONDS` | entrypoint, migrate.mjs | how long to wait for Postgres before migrating (default 60) |

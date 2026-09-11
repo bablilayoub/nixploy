@@ -5,13 +5,7 @@ import { generateId } from "../../db/schema/utils";
 import { deploymentEvents } from "./events";
 import { getDeploymentLogPath } from "./paths";
 import type { DeploymentProvenance, DeploymentTrigger } from "./provenance";
-import {
-	queuedSiblingsForApp,
-	refreshQueueSnapshot,
-	rememberJobDetails,
-	requestCancellation,
-	startQueueLoop,
-} from "./queue";
+import { refreshQueueSnapshot, requestCancellation, startQueueLoop } from "./queue";
 // Importing the worker registers its job runner with the queue (side effect).
 import "./worker";
 
@@ -65,47 +59,28 @@ export const SUPERSEDED_MESSAGE = "Superseded by a newer deployment";
  * ran, so they end as `cancelled` (not `error` — a push burst must not count
  * as failures in stats, streak alerts or Deploy Copilot).
  *
- * Both statements are guarded on `status = 'queued'`, so a row the worker
- * already claimed (it is `running`) or the user cancelled meanwhile is left
- * alone — that guard is what makes coalescing safe against a concurrent
- * claim. Runs inside `queueDeployment`'s transaction, under an advisory lock
- * on the app name, so two simultaneous pushes cannot supersede each other.
+ * Guarded on `status = 'queued'`, so a row the worker already claimed (it is
+ * `running`) or the user cancelled meanwhile is left alone — that guard is
+ * what makes coalescing safe against a concurrent claim. Runs inside
+ * `queueDeployment`'s transaction, under an advisory lock on the app name, so
+ * two simultaneous pushes cannot supersede each other.
+ *
+ * Since migration 0023 the row stores the service name the job really builds,
+ * so previews coalesce exactly like everything else: a second push to the same
+ * PR replaces the first, and neither touches the parent application's line.
  */
 async function supersedeQueuedJobs(
 	tx: Pick<typeof db, "execute">,
-	target: { appName: string; deploymentId: string; isPreview: boolean },
+	target: { appName: string; deploymentId: string },
 ): Promise<string[]> {
-	// Previews build under their own appName but their row names the PARENT
-	// application, so SQL cannot derive their coalescing key — the queue's
-	// in-process registry supplies the sibling ids instead. (Queued previews
-	// never survive a restart, so the registry is always authoritative here.)
-	const rows = target.isPreview
-		? await (async () => {
-				const ids = queuedSiblingsForApp(target.appName, target.deploymentId);
-				if (ids.length === 0) return [];
-				return (await tx.execute(sql`
-					update "deployment"
-					set "status" = 'cancelled', "error_message" = ${SUPERSEDED_MESSAGE}, "finished_at" = now()
-					where "status" = 'queued' and "deployment_id" = any(${sql.param(ids)}::text[])
-					returning "deployment_id"
-				`)) as unknown as { deployment_id: string }[];
-			})()
-		: ((await tx.execute(sql`
-				update "deployment" d
-				set "status" = 'cancelled', "error_message" = ${SUPERSEDED_MESSAGE}, "finished_at" = now()
-				from (
-					select q."deployment_id"
-					from "deployment" q
-					left join "application" a on a."application_id" = q."application_id"
-					left join "compose" c on c."compose_id" = q."compose_id"
-					where q."status" = 'queued'
-						and q."is_preview" = false
-						and q."deployment_id" <> ${target.deploymentId}
-						and coalesce(a."app_name", c."app_name") = ${target.appName}
-				) s
-				where d."deployment_id" = s."deployment_id"
-				returning d."deployment_id"
-			`)) as unknown as { deployment_id: string }[]);
+	const rows = (await tx.execute(sql`
+		update "deployment"
+		set "status" = 'cancelled', "error_message" = ${SUPERSEDED_MESSAGE}, "finished_at" = now()
+		where "status" = 'queued'
+			and "deployment_id" <> ${target.deploymentId}
+			and "app_name" = ${target.appName}
+		returning "deployment_id"
+	`)) as unknown as { deployment_id: string }[];
 
 	return rows.map((row) => row.deployment_id);
 }
@@ -180,6 +155,14 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
 			applicationId: job.applicationId ?? null,
 			composeId: job.composeId ?? null,
 			isPreview,
+			// The queue reads both straight off the row: `appName` is the service
+			// this job builds (the PREVIEW name for preview jobs, whose
+			// applicationId is the parent's) and drives coalescing + the per-app
+			// mutex; `previewDeploymentId` is what the worker needs to deploy the
+			// isolated PR service. Storing them is what lets a queued preview
+			// survive a restart.
+			appName,
+			previewDeploymentId: job.previewDeploymentId ?? null,
 			serverId,
 			// Provenance: who started it and, when the caller already knows (webhook
 			// payloads), which commit. Git clones fill the commit fields later
@@ -190,17 +173,7 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
 			commitMessage: job.commitMessage ?? null,
 			commitAuthor: job.commitAuthor ?? null,
 		});
-		return await supersedeQueuedJobs(tx, { appName, deploymentId, isPreview });
-	});
-
-	// Registered only once the row is committed: the claim loop's snapshot GC
-	// drops registry entries for deployments it cannot see as queued/running.
-	// The row does not carry the preview id or the preview's own appName —
-	// this is where the claim loop finds them (see queue.ts).
-	rememberJobDetails(deploymentId, {
-		appName,
-		previewDeploymentId: job.previewDeploymentId,
-		type: job.type,
+		return await supersedeQueuedJobs(tx, { appName, deploymentId });
 	});
 
 	for (const id of superseded) {

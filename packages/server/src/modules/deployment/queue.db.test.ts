@@ -99,19 +99,33 @@ describe.skipIf(!testUrl)("durable deploy queue (postgres)", () => {
 		if (tenant) await harness.wipeTenant(tenant);
 	});
 
+	/**
+	 * Insert a queued row the way `queueDeployment` does — `app_name` included,
+	 * because since migration 0023 that column IS the queue's key (a NULL row
+	 * is deliberately unclaimable).
+	 */
 	const insertQueued = async (
 		deploymentId: string,
 		applicationId: string,
 		createdAt: Date,
-		serverId: string = lineA,
+		options: { serverId?: string; appName?: string | null; previewDeploymentId?: string } = {},
 	): Promise<void> => {
+		const appName =
+			options.appName === undefined
+				? applicationId === tenant.applicationId
+					? appNameOne
+					: appNameTwo
+				: options.appName;
 		await dbModule.db.insert(schema.deployments).values({
 			deploymentId,
 			title: "Deployment",
 			status: "queued",
 			logPath: `/tmp/${deploymentId}.log`,
 			applicationId,
-			serverId,
+			appName,
+			isPreview: Boolean(options.previewDeploymentId),
+			previewDeploymentId: options.previewDeploymentId ?? null,
+			serverId: options.serverId ?? lineA,
 			createdAt,
 		});
 	};
@@ -153,16 +167,16 @@ describe.skipIf(!testUrl)("durable deploy queue (postgres)", () => {
 		await insertQueued("q-old", tenant.applicationId, new Date(base - 2000));
 		await insertQueued("q-new", otherApplicationId, new Date(base - 1000));
 
-		const first = await queue.claimNextDeployment(lineA, []);
+		const first = await queue.claimNextDeployment(lineA);
 		expect(first?.deploymentId).toBe("q-old");
 		expect(first?.appName).toBe(appNameOne);
 		expect((await statusOf("q-old"))?.status).toBe("running");
 
-		const second = await queue.claimNextDeployment(lineA, []);
+		const second = await queue.claimNextDeployment(lineA);
 		expect(second?.deploymentId).toBe("q-new");
 		expect(second?.appName).toBe(appNameTwo);
 
-		expect(await queue.claimNextDeployment(lineA, [])).toBeNull();
+		expect(await queue.claimNextDeployment(lineA)).toBeNull();
 	});
 
 	it("never hands the same row to two concurrent claimers (FOR UPDATE SKIP LOCKED)", async () => {
@@ -171,8 +185,8 @@ describe.skipIf(!testUrl)("durable deploy queue (postgres)", () => {
 		await insertQueued("c-2", otherApplicationId, new Date(base - 1000));
 
 		const [a, b] = await Promise.all([
-			queue.claimNextDeployment(lineA, []),
-			queue.claimNextDeployment(lineA, []),
+			queue.claimNextDeployment(lineA),
+			queue.claimNextDeployment(lineA),
 		]);
 
 		const claimed = [a?.deploymentId, b?.deploymentId].filter(Boolean).sort();
@@ -186,43 +200,68 @@ describe.skipIf(!testUrl)("durable deploy queue (postgres)", () => {
 		await insertQueued("m-2", tenant.applicationId, new Date(base - 2000));
 		await insertQueued("m-3", otherApplicationId, new Date(base - 1000));
 
-		expect((await queue.claimNextDeployment(lineA, []))?.deploymentId).toBe("m-1");
+		expect((await queue.claimNextDeployment(lineA))?.deploymentId).toBe("m-1");
 		// m-2 is the oldest remaining row, but its app is building: m-3 wins.
-		expect((await queue.claimNextDeployment(lineA, []))?.deploymentId).toBe("m-3");
-		expect(await queue.claimNextDeployment(lineA, [])).toBeNull();
+		expect((await queue.claimNextDeployment(lineA))?.deploymentId).toBe("m-3");
+		expect(await queue.claimNextDeployment(lineA)).toBeNull();
 
 		// Once m-1 finishes, m-2 becomes claimable.
 		await dbModule.db
 			.update(schema.deployments)
 			.set({ status: "done", finishedAt: new Date() })
 			.where(eq(schema.deployments.deploymentId, "m-1"));
-		expect((await queue.claimNextDeployment(lineA, []))?.deploymentId).toBe("m-2");
+		expect((await queue.claimNextDeployment(lineA))?.deploymentId).toBe("m-2");
 	});
 
 	it("keeps each target server's line separate", async () => {
 		const base = Date.now();
-		await insertQueued("s-a", tenant.applicationId, new Date(base - 2000), lineA);
-		await insertQueued("s-b", otherApplicationId, new Date(base - 1000), lineB);
+		await insertQueued("s-a", tenant.applicationId, new Date(base - 2000), { serverId: lineA });
+		await insertQueued("s-b", otherApplicationId, new Date(base - 1000), { serverId: lineB });
 
 		// The newer row is claimed first because it is first in ITS line.
-		expect((await queue.claimNextDeployment(lineB, []))?.deploymentId).toBe("s-b");
-		expect((await queue.claimNextDeployment(lineA, []))?.deploymentId).toBe("s-a");
+		expect((await queue.claimNextDeployment(lineB))?.deploymentId).toBe("s-b");
+		expect((await queue.claimNextDeployment(lineA))?.deploymentId).toBe("s-a");
 	});
 
-	it("skips the deployment ids the caller blocked", async () => {
+	it("never claims a row without an app_name (the orphan guard)", async () => {
 		const base = Date.now();
-		await insertQueued("b-1", tenant.applicationId, new Date(base - 2000));
+		await insertQueued("b-1", tenant.applicationId, new Date(base - 2000), { appName: null });
 		await insertQueued("b-2", otherApplicationId, new Date(base - 1000));
 
-		expect((await queue.claimNextDeployment(lineA, ["b-1"]))?.deploymentId).toBe("b-2");
+		// b-1 is older but unplaceable — boot recovery finalizes rows like it.
+		expect((await queue.claimNextDeployment(lineA))?.deploymentId).toBe("b-2");
+		expect(await queue.claimNextDeployment(lineA)).toBeNull();
 		expect((await statusOf("b-1"))?.status).toBe("queued");
+	});
+
+	it("treats a preview as its own app: its own mutex, its own coalescing line", async () => {
+		const base = Date.now();
+		const previewApp = `${appNameOne}-pr-7`;
+		// Both PR rows carry the PARENT applicationId, exactly like a real preview.
+		await insertQueued("pr-1", tenant.applicationId, new Date(base - 3000), {
+			appName: previewApp,
+		});
+		await insertQueued("pr-2", tenant.applicationId, new Date(base - 2000), {
+			appName: previewApp,
+		});
+		await insertQueued("pr-prod", tenant.applicationId, new Date(base - 1000));
+
+		const first = await queue.claimNextDeployment(lineA);
+		expect(first?.deploymentId).toBe("pr-1");
+		expect(first?.appName).toBe(previewApp);
+
+		// The PARENT is a different app_name, so it is NOT blocked by the PR build…
+		expect((await queue.claimNextDeployment(lineA))?.deploymentId).toBe("pr-prod");
+		// …while the PR's own sibling waits on the mutex.
+		expect(await queue.claimNextDeployment(lineA)).toBeNull();
+		expect((await statusOf("pr-2"))?.status).toBe("queued");
 	});
 
 	it("computes 1-based queue positions per server from SQL", async () => {
 		const base = Date.now();
-		await insertQueued("p-1", tenant.applicationId, new Date(base - 3000), lineA);
-		await insertQueued("p-2", otherApplicationId, new Date(base - 2000), lineA);
-		await insertQueued("p-3", tenant.applicationId, new Date(base - 1000), lineB);
+		await insertQueued("p-1", tenant.applicationId, new Date(base - 3000), { serverId: lineA });
+		await insertQueued("p-2", otherApplicationId, new Date(base - 2000), { serverId: lineA });
+		await insertQueued("p-3", tenant.applicationId, new Date(base - 1000), { serverId: lineB });
 
 		await queue.refreshQueueSnapshot();
 		expect(queue.getQueuePosition("p-1")).toBe(1);
@@ -244,7 +283,7 @@ describe.skipIf(!testUrl)("durable deploy queue (postgres)", () => {
 		expect((await statusOf(second))?.status).toBe("queued");
 
 		// A row the worker already claimed is never superseded.
-		const claimed = await queue.claimNextDeployment(lineA, []);
+		const claimed = await queue.claimNextDeployment(lineA);
 		expect(claimed?.deploymentId).toBe(second);
 		const third = await queueDeployment({ applicationId: tenant.applicationId, type: "deploy" });
 		expect((await statusOf(second))?.status).toBe("running");
@@ -259,5 +298,60 @@ describe.skipIf(!testUrl)("durable deploy queue (postgres)", () => {
 
 		expect((await statusOf(other))?.status).toBe("queued");
 		expect((await statusOf(first))?.status).toBe("cancelled");
+	});
+
+	it("records app_name + preview id on enqueue and coalesces previews per PR", async () => {
+		const { queueDeployment } = await import("./index");
+		const previewId = `queue_prev_${suffix}`;
+		const previewApp = `${appNameOne}-pr-9`;
+		await dbModule.db.insert(schema.previewDeployments).values({
+			previewDeploymentId: previewId,
+			appName: previewApp,
+			applicationId: tenant.applicationId,
+			serverId: lineA,
+		});
+
+		const parent = await queueDeployment({ applicationId: tenant.applicationId, type: "deploy" });
+		const firstPr = await queueDeployment({
+			applicationId: tenant.applicationId,
+			previewDeploymentId: previewId,
+			type: "deploy",
+		});
+		const secondPr = await queueDeployment({
+			applicationId: tenant.applicationId,
+			previewDeploymentId: previewId,
+			type: "redeploy",
+		});
+
+		// The PR's own line coalesced; the parent application's row is untouched.
+		expect((await statusOf(firstPr))?.status).toBe("cancelled");
+		expect((await statusOf(parent))?.status).toBe("queued");
+
+		const [row] = await dbModule.db
+			.select({
+				appName: schema.deployments.appName,
+				previewDeploymentId: schema.deployments.previewDeploymentId,
+				isPreview: schema.deployments.isPreview,
+			})
+			.from(schema.deployments)
+			.where(eq(schema.deployments.deploymentId, secondPr));
+		expect(row).toEqual({
+			appName: previewApp,
+			previewDeploymentId: previewId,
+			isPreview: true,
+		});
+
+		// And the claim hands the worker the preview job back, rebuilt from SQL
+		// alone — which is what makes a queued preview survive a restart. The
+		// parent row is older, so it goes first; the PR is a different app and
+		// follows immediately.
+		expect((await queue.claimNextDeployment(lineA))?.deploymentId).toBe(parent);
+		const claimed = await queue.claimNextDeployment(lineA);
+		expect(claimed).toMatchObject({
+			deploymentId: secondPr,
+			appName: previewApp,
+			previewDeploymentId: previewId,
+			type: "redeploy",
+		});
 	});
 });

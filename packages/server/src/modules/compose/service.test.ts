@@ -25,7 +25,10 @@ vi.mock("../../db", () => ({
 	},
 }));
 vi.mock("./source", () => ({}));
-vi.mock("./containers", () => ({ listComposeContainers: vi.fn(async () => []) }));
+vi.mock("./containers", () => ({
+	listComposeContainers: vi.fn(async () => []),
+	invalidateComposeContainers: vi.fn(),
+}));
 vi.mock("./adapters", () => ({ getTraefik: vi.fn() }));
 vi.mock("../backups/scheduler", () => ({ unregisterBackupsForService: vi.fn() }));
 vi.mock("../schedules", () => ({ unregisterSchedulesForService: vi.fn() }));

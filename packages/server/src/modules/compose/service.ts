@@ -45,7 +45,7 @@ import {
 	parseComposeFile,
 	shouldRedactEnvValue,
 } from "./compose-file";
-import { listComposeContainers } from "./containers";
+import { invalidateComposeContainers, listComposeContainers } from "./containers";
 import {
 	getComposeBaseDir,
 	getComposeDeployFilePath,
@@ -227,6 +227,9 @@ async function hasBeenDeployed(row: ComposeRow): Promise<boolean> {
 		columns: { deploymentId: true },
 	});
 	if (deployment) return true;
+	// This decides whether the row has EVER run, so it must not be answered from
+	// the 10 s listing cache a concurrent runtime-tab poll may have just filled.
+	invalidateComposeContainers(row.appName, row.serverId);
 	const containers = await listComposeContainers(row.appName, row.serverId).catch(() => []);
 	return containers.length > 0;
 }
@@ -465,6 +468,11 @@ export async function startCompose(composeRow: ComposeRow): Promise<void> {
 	} catch (error) {
 		await updateStatus(composeRow.composeId, "error");
 		throw error;
+	} finally {
+		// Every container of the project was just replaced (or failed to come
+		// up): drop the 10 s listing cache so the runtime tab does not keep
+		// rendering the previous container ids.
+		invalidateComposeContainers(composeRow.appName, composeRow.serverId);
 	}
 }
 
@@ -478,6 +486,7 @@ export async function stopCompose(composeRow: ComposeRow): Promise<void> {
 		});
 	} finally {
 		await updateStatus(composeRow.composeId, "idle");
+		invalidateComposeContainers(composeRow.appName, composeRow.serverId);
 	}
 }
 
@@ -518,6 +527,7 @@ export async function deleteCompose(composeRow: ComposeRow): Promise<void> {
 	} catch {
 		// best-effort teardown
 	}
+	invalidateComposeContainers(composeRow.appName, composeRow.serverId);
 
 	const traefik = await getTraefik();
 	if (traefik) {

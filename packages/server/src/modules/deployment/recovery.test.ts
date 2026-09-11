@@ -1,21 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Boot recovery with the durable queue: `running` rows are failed (their
- * build died with the old process, and the per-app mutex would otherwise
- * refuse to ever rebuild that service), queued previews are failed (the row
- * carries neither the preview id nor the preview appName), queued rows whose
- * service is gone are failed — and everything else is simply left `queued`
- * for the claim loop, which is what makes the backlog survive a restart.
+ * Boot recovery with the durable queue: `running` rows are failed (their build
+ * died with the old process, and the per-app mutex would otherwise refuse to
+ * ever rebuild that service) and queued rows the claim query can never place
+ * (`app_name IS NULL`) are failed. Everything else — previews included since
+ * migration 0023 — is simply left `queued` for the claim loop, which is what
+ * makes the backlog survive a restart.
  */
 
 const { state } = vi.hoisted(() => ({
 	state: {
 		updates: [] as Array<{ table: string; values: Record<string, unknown> }>,
-		/** Rows returned by successive `deployment` updates that use `.returning()`. */
+		/**
+		 * Rows returned by the successive `deployment` updates, in order:
+		 * [0] the `running` → error sweep, [1] the unplaceable-queued sweep.
+		 */
 		returning: [] as Array<Array<Record<string, unknown>>>,
-		/** Rows the orphan-cleanup statement reports. */
-		orphans: [] as Array<{ deployment_id: string }>,
 		/** Rows the queue-position snapshot query reports. */
 		queued: [] as Array<{ deployment_id: string; server_id: string | null; pos: number }>,
 		loopStarted: 0,
@@ -39,10 +40,10 @@ vi.mock("../../db", () => {
 					};
 				},
 			}),
-			execute: async (query: unknown) => {
-				const text = JSON.stringify(query);
-				return text.includes("row_number") ? state.queued : state.orphans;
-			},
+			// Only used to build the `notExists` sub-select that spares previews
+			// whose job is still waiting; the mocked `where` ignores it.
+			select: () => ({ from: () => ({ where: () => ({}) }) }),
+			execute: async () => state.queued,
 		},
 	};
 });
@@ -68,12 +69,11 @@ describe("recoverInterruptedDeployments", () => {
 		globals.__nixployDeploymentEvents = undefined;
 		state.updates.length = 0;
 		state.returning.length = 0;
-		state.orphans.length = 0;
 		state.queued.length = 0;
 		state.loopStarted = 0;
 	});
 
-	it("fails interrupted and orphaned rows, leaves the backlog queued and starts the loop", async () => {
+	it("fails interrupted and unplaceable rows, leaves the backlog queued and starts the loop", async () => {
 		const { deploymentEvents } = await import("./events");
 		const finished: Array<{ deploymentId: string; status: string }> = [];
 		const onFinish = (event: { deploymentId: string; status: string }) => {
@@ -84,10 +84,9 @@ describe("recoverInterruptedDeployments", () => {
 		state.returning.push(
 			// 1. running → error
 			[{ deploymentId: "r1", applicationId: "app-one", composeId: null, isPreview: false }],
-			// 2. queued previews → error
-			[{ deploymentId: "p1" }],
+			// 2. queued rows with no app_name → error
+			[{ deploymentId: "o1" }],
 		);
-		state.orphans.push({ deployment_id: "o1" });
 		state.queued.push(
 			{ deployment_id: "q1", server_id: null, pos: 1 },
 			{ deployment_id: "q2", server_id: null, pos: 2 },
@@ -98,7 +97,7 @@ describe("recoverInterruptedDeployments", () => {
 			const { recoverInterruptedDeployments } = await import("./recovery");
 			const result = await recoverInterruptedDeployments();
 
-			expect(result).toEqual({ interrupted: 2, requeued: 3 });
+			expect(result).toEqual({ interrupted: 1, requeued: 3 });
 			expect(state.loopStarted).toBe(1);
 
 			expect(state.updates[0]).toMatchObject({
@@ -121,10 +120,33 @@ describe("recoverInterruptedDeployments", () => {
 			expect(finished).toEqual(
 				expect.arrayContaining([
 					{ deploymentId: "r1", status: "error" },
-					{ deploymentId: "p1", status: "error" },
 					{ deploymentId: "o1", status: "error" },
 				]),
 			);
+		} finally {
+			deploymentEvents.off("finish", onFinish);
+		}
+	});
+
+	it("never fails a queued row just because it is a preview", async () => {
+		const { deploymentEvents } = await import("./events");
+		const finished: string[] = [];
+		const onFinish = (event: { deploymentId: string }) => {
+			finished.push(event.deploymentId);
+		};
+		deploymentEvents.on("finish", onFinish);
+		try {
+			// Nothing was running and nothing is unplaceable: both sweeps return
+			// empty even though a queued preview is waiting.
+			state.queued.push({ deployment_id: "prev-1", server_id: null, pos: 1 });
+
+			const { recoverInterruptedDeployments } = await import("./recovery");
+			expect(await recoverInterruptedDeployments()).toEqual({ interrupted: 0, requeued: 1 });
+			expect(finished).toEqual([]);
+
+			// The row is in the claim loop's line, not in an error state.
+			const queue = await import("./queue");
+			expect(queue.getQueuePosition("prev-1")).toBe(1);
 		} finally {
 			deploymentEvents.off("finish", onFinish);
 		}

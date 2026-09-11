@@ -95,11 +95,12 @@ async function initBackgroundSchedules() {
 }
 
 /**
- * The deploy queue is in-memory, so anything that was *building* when this
- * process last stopped is gone: fail those rows before serving traffic (they
- * would otherwise show as "running" forever and block the status
- * reconciler). Rows that were still `queued` never started and are put back
- * on the queue, so a restart keeps the backlog.
+ * The queue itself lives in Postgres, but the BUILDS do not: anything that was
+ * running when this process last stopped died with it. Fail those rows before
+ * serving traffic (they would otherwise show as "running" forever, block the
+ * status reconciler and hold the queue's per-app mutex). Rows still `queued`
+ * are left exactly as they are — the claim loop picks them up in order, which
+ * is what makes the backlog survive a restart.
  */
 async function recoverDeployments() {
 	try {
@@ -111,7 +112,7 @@ async function recoverDeployments() {
 			console.log(`▲ Marked ${interrupted} interrupted deployment(s) as failed`);
 		}
 		if (requeued > 0) {
-			console.log(`▲ Re-queued ${requeued} deployment(s) left waiting by the last shutdown`);
+			console.log(`▲ ${requeued} queued deployment(s) waiting — the worker will claim them`);
 		}
 	} catch (error) {
 		console.error("Failed to recover interrupted deployments:", error);

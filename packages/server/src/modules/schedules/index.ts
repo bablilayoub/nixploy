@@ -109,6 +109,19 @@ async function recordRun(
 	}
 }
 
+/** Stamp `schedule.last_run_at`. Never fails a run: the marker is advisory. */
+async function markScheduleRun(scheduleId: string, at: Date): Promise<void> {
+	await db
+		.update(schedules)
+		.set({ lastRunAt: at })
+		.where(eq(schedules.scheduleId, scheduleId))
+		.catch((error: unknown) => {
+			log.error(`Failed to stamp last_run_at for schedule ${scheduleId}`, {
+				error: error instanceof Error ? error.message : String(error),
+			});
+		});
+}
+
 export interface ScheduleRunResult {
 	success: boolean;
 	output: string;
@@ -134,6 +147,10 @@ export async function runSchedule(
 	state.lastRunAt = startedAt;
 	state.lastStatus = "running";
 	state.lastError = null;
+	// Written BEFORE the command runs, not after: the boot catch-up replays
+	// overdue schedules, and a process killed mid-run must not leave a marker
+	// that makes the next boot replay the same tick again.
+	await markScheduleRun(row.scheduleId, startedAt);
 
 	try {
 		const output = await runScheduleCommand(row);
@@ -309,10 +326,10 @@ export function cronIntervalMs(expression: string, from: Date = new Date()): num
 }
 
 /**
- * Last recorded run per schedule: every run writes a `deployment` row
- * (`recordRun`), which is the only durable trace we have — the `schedule`
- * table has no `last_run_at` column yet (audit #17; see the handoff note in
- * `docs/observability.md`).
+ * Last recorded run per schedule, derived from the `deployment` row every run
+ * writes (`recordRun`). Only needed for rows that predate migration 0023 —
+ * `schedule.last_run_at` is the authoritative marker now, and it is the one
+ * the catch-up replay trusts because it is written before the command runs.
  */
 async function lastRunByScheduleId(scheduleIds: string[]): Promise<Map<string, Date>> {
 	if (scheduleIds.length === 0) return new Map();
@@ -337,21 +354,27 @@ export interface OverdueSchedule {
 }
 
 /**
- * Schedules whose last run is older than one full interval — i.e. ticks the
+ * Schedules whose last run is more than one full interval old — i.e. ticks the
  * panel missed while it was down. node-schedule has no catch-up, so these
- * simply never ran (audit #17). Reported, not replayed: re-running an
- * arbitrary shell command hours late is rarely what the operator wants, and
- * the decision needs a `last_run_at` column to be safe against double runs.
+ * simply never ran (audit #17). Always reported at boot; replayed once each
+ * only when `NIXPLOY_CRON_CATCH_UP=1` (see {@link initSchedules}).
+ *
+ * `schedule.last_run_at` is the reference. Rows that predate migration 0023
+ * have none, so those fall back to the derived lookup (the `deployment` row
+ * each run writes) and finally to the row's own creation time. The grace is a
+ * full extra interval, so a schedule that fired on time is never reported.
  */
 export async function findOverdueSchedules(now: Date = new Date()): Promise<OverdueSchedule[]> {
 	const rows = await db.query.schedules.findMany({ where: eq(schedules.enabled, true) });
-	const lastRuns = await lastRunByScheduleId(rows.map((row) => row.scheduleId));
+	const legacy = rows.filter((row) => !row.lastRunAt).map((row) => row.scheduleId);
+	const derived = await lastRunByScheduleId(legacy);
 	const overdue: OverdueSchedule[] = [];
 	for (const row of rows) {
 		const interval = cronIntervalMs(row.cronExpression, now);
 		if (!interval) continue;
+		const lastRunAt = row.lastRunAt ?? derived.get(row.scheduleId) ?? null;
 		// Never ran at all: use the row's creation time as the reference.
-		const reference = lastRuns.get(row.scheduleId) ?? row.createdAt;
+		const reference = lastRunAt ?? row.createdAt;
 		if (!reference) continue;
 		const elapsed = now.getTime() - reference.getTime();
 		if (elapsed <= interval * 2) continue;
@@ -359,11 +382,22 @@ export async function findOverdueSchedules(now: Date = new Date()): Promise<Over
 			scheduleId: row.scheduleId,
 			name: row.name,
 			cronExpression: row.cronExpression,
-			lastRunAt: lastRuns.get(row.scheduleId) ?? null,
+			lastRunAt,
 			missedIntervals: Math.floor(elapsed / interval),
 		});
 	}
 	return overdue;
+}
+
+/**
+ * Replay overdue jobs once at boot. Off by default: re-running an arbitrary
+ * shell command hours late is rarely what an operator wants, and a nightly
+ * dump that missed its window may be better skipped than run at 11:00. One
+ * run per schedule, never one per missed interval, and sequential so a
+ * backlog cannot saturate the host.
+ */
+export function cronCatchUpEnabled(): boolean {
+	return process.env.NIXPLOY_CRON_CATCH_UP === "1";
 }
 
 /** Register every enabled schedule at process boot. */
@@ -383,20 +417,52 @@ export async function initSchedules(): Promise<void> {
 	log.info(`Initialized ${jobs.size} schedules`);
 
 	// node-schedule has no catch-up: ticks missed while the panel was down are
-	// gone. Say so instead of leaving the operator to notice a silent gap.
+	// gone. Say so instead of leaving the operator to notice a silent gap, and
+	// replay them once when the operator opted in.
 	try {
-		for (const entry of await findOverdueSchedules()) {
+		const overdue = await findOverdueSchedules();
+		const replay = cronCatchUpEnabled();
+		for (const entry of overdue) {
 			log.warn(
 				`Schedule "${entry.name}" (${entry.cronExpression}) has not run for ~${entry.missedIntervals} intervals`,
 				{
 					scheduleId: entry.scheduleId,
 					lastRunAt: entry.lastRunAt?.toISOString() ?? "never",
+					catchUp: replay,
 				},
 			);
+		}
+		// Detached: a replay is a real command run and must not hold up boot.
+		if (replay && overdue.length > 0) {
+			const byId = new Map(rows.map((row) => [row.scheduleId, row]));
+			void replayOverdueSchedules(overdue, byId);
 		}
 	} catch (error) {
 		log.error("Could not check for overdue schedules", {
 			error: error instanceof Error ? error.message : String(error),
+		});
+	}
+}
+
+/**
+ * Run each overdue schedule once, one after the other. Idempotent across a
+ * crash loop: `runSchedule` stamps `last_run_at` before the command starts, so
+ * the next boot no longer sees the schedule as overdue.
+ */
+async function replayOverdueSchedules(
+	overdue: OverdueSchedule[],
+	byId: Map<string, ScheduleRow>,
+): Promise<void> {
+	for (const entry of overdue) {
+		const row = byId.get(entry.scheduleId);
+		if (!row) continue;
+		log.info(`Catching up schedule "${row.name}" (${entry.missedIntervals} intervals missed)`, {
+			scheduleId: row.scheduleId,
+		});
+		await runSchedule(row, "cron").catch((error: unknown) => {
+			log.error(`Catch-up run of schedule ${row.scheduleId} failed`, {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		});
 	}
 }

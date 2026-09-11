@@ -92,6 +92,7 @@ const volumeBackup: VolumeBackupRow = {
 	destinationId: "d1",
 	applicationId: "app-1",
 	composeId: null,
+	lastRunAt: null,
 	createdAt: new Date(),
 };
 

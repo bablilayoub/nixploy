@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { applications } from "./application";
 import { compose } from "./compose";
@@ -30,6 +30,20 @@ export const deployments = pgTable(
 		trigger: deploymentTrigger("trigger"),
 		/** User id for `manual`/`api`, `webhook:<provider>` for pushes, `system` otherwise. */
 		triggeredBy: text("triggered_by"),
+		/**
+		 * Service name this job builds — the queue's coalescing key and its
+		 * per-app mutex key. Equal to the application/compose `app_name` for a
+		 * normal job and to `<app>-pr-<n>` for a preview, which is exactly why
+		 * the queue can no longer derive it from a join: a preview row carries
+		 * the PARENT application's id. Nullable — rows written by schedule runs
+		 * (`modules/schedules#recordRun`) never enter the queue.
+		 */
+		appName: text("app_name"),
+		/** Set for preview (per-PR) jobs; the row's `applicationId` is the PARENT's. */
+		previewDeploymentId: text("preview_deployment_id").references(
+			(): AnyPgColumn => previewDeployments.previewDeploymentId,
+			{ onDelete: "set null" },
+		),
 		startedAt: timestamp("started_at", { withTimezone: true }),
 		finishedAt: timestamp("finished_at", { withTimezone: true }),
 		applicationId: text("application_id").references(() => applications.applicationId, {
@@ -54,6 +68,13 @@ export const deployments = pgTable(
 		// transaction ("unsafe use of new value") — see drizzle/0019.
 		index("deployment_active_status_idx")
 			.on(table.status)
+			.where(sql`"status" NOT IN ('done', 'error', 'cancelled')`),
+		// The durable queue's hot path: the claim statement orders the in-flight
+		// rows of one server line and its `NOT EXISTS` per-app mutex looks up
+		// `app_name` among them. Same terminal-label predicate as above — an
+		// enum value added in the migrator's transaction cannot be referenced.
+		index("deployment_queued_app_idx")
+			.on(table.appName)
 			.where(sql`"status" NOT IN ('done', 'error', 'cancelled')`),
 		index("deployment_created_idx").on(table.createdAt.desc()),
 		index("deployment_schedule_created_idx").on(table.scheduleId, table.createdAt.desc()),
