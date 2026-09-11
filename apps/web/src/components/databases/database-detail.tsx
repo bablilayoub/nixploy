@@ -3,8 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 	AlertTriangle,
-	Check,
-	Copy,
 	Eye,
 	EyeOff,
 	Loader2,
@@ -30,6 +28,7 @@ import {
 } from "@/components/databases/database-types";
 import { QueryState } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
+import { CopyButton } from "@/components/services/copy-button";
 import { DangerZone } from "@/components/services/danger-zone";
 import { EnvEditor } from "@/components/services/env-editor";
 import { LogViewer } from "@/components/services/log-viewer";
@@ -37,6 +36,7 @@ import { MonitoringCharts } from "@/components/services/monitoring-charts";
 import { ServiceTerminal } from "@/components/services/service-terminal";
 import { ServiceStatusBadge } from "@/components/services/status-badge";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
+import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { PageHeader } from "@/components/shell";
 import {
@@ -50,6 +50,7 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -79,22 +80,26 @@ const SUB_TAB_PARENT: Record<string, string> = {
 	terminal: "runtime",
 };
 
-function CopyButton({ value }: { value: string }) {
-	const [copied, setCopied] = useState(false);
+function RevealButton({
+	revealed,
+	onToggle,
+	what = "password",
+}: {
+	revealed: boolean;
+	onToggle: () => void;
+	what?: string;
+}) {
 	return (
 		<Button
 			type="button"
 			variant="ghost"
 			size="icon"
 			className="size-7 shrink-0"
-			onClick={async () => {
-				await navigator.clipboard.writeText(value);
-				setCopied(true);
-				setTimeout(() => setCopied(false), 1500);
-			}}
+			aria-label={revealed ? `Hide ${what}` : `Reveal ${what}`}
+			aria-pressed={revealed}
+			onClick={onToggle}
 		>
-			{copied ? <Check className="size-3.5 text-green-500" /> : <Copy className="size-3.5" />}
-			<span className="sr-only">Copy</span>
+			{revealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
 		</Button>
 	);
 }
@@ -106,18 +111,34 @@ function SecretField({ label, value }: { label: string; value: string }) {
 			<Label>{label}</Label>
 			<div className="flex items-center gap-1">
 				<Input readOnly value={revealed ? value : "••••••••••••"} className="font-mono" />
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon"
-					className="size-7 shrink-0"
-					onClick={() => setRevealed((v) => !v)}
-				>
-					{revealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-					<span className="sr-only">{revealed ? "Hide" : "Reveal"}</span>
-				</Button>
-				<CopyButton value={value} />
+				<RevealButton revealed={revealed} onToggle={() => setRevealed((v) => !v)} />
+				<CopyButton value={value} label={`Copy ${label.toLowerCase()}`} />
 			</div>
+		</div>
+	);
+}
+
+const URL_PASSWORD = /^([a-z][a-z0-9+.-]*:\/\/[^/?#@]*?:)([^@/?#]+)(@)/i;
+
+/** `postgres://user:•••@host/db` — the credential stays out of screenshots and shoulder-surfing. */
+function maskUrlPassword(url: string): string {
+	return url.replace(URL_PASSWORD, "$1••••••••$3");
+}
+
+/** Connection URL with the password masked by default, a reveal toggle and copy (copies the real URL). */
+function ConnectionUrlField({ url }: { url: string }) {
+	const [revealed, setRevealed] = useState(false);
+	const masked = maskUrlPassword(url);
+	const hasPassword = masked !== url;
+	return (
+		<div className="flex items-center gap-1">
+			<Input
+				readOnly
+				value={revealed || !hasPassword ? url : masked}
+				className="font-mono text-xs"
+			/>
+			{hasPassword && <RevealButton revealed={revealed} onToggle={() => setRevealed((v) => !v)} />}
+			<CopyButton value={url} label="Copy connection URL" />
 		</div>
 	);
 }
@@ -128,7 +149,7 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 			<Label>{label}</Label>
 			<div className="flex items-center gap-1">
 				<Input readOnly value={value} className="font-mono" />
-				<CopyButton value={value} />
+				<CopyButton value={value} label={`Copy ${label.toLowerCase()}`} />
 			</div>
 		</div>
 	);
@@ -218,6 +239,24 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 	const actionPending =
 		startMutation.isPending || stopMutation.isPending || reloadMutation.isPending;
 	const [confirmStop, setConfirmStop] = useState(false);
+	const isRunning = status === "running" || status === "done";
+	// CTA for the runtime empty states — database `start` deploys the service.
+	const runtimeAction = (
+		<DisabledHint hint={deployHint}>
+			<Button
+				size="sm"
+				disabled={actionPending || !canDeploy}
+				onClick={() => startMutation.mutate(idInput)}
+			>
+				{startMutation.isPending ? (
+					<Loader2 className="size-4 animate-spin" />
+				) : (
+					<Play className="size-4" />
+				)}
+				Start
+			</Button>
+		</DisabledHint>
+	);
 
 	const topTabs = [
 		"general",
@@ -296,52 +335,57 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 				description={`${cfg.label} · ${db.appName}`}
 				actions={
 					<>
-						{status === "running" || status === "done" ? (
-							<Button
-								variant="outline"
-								size="sm"
-								disabled={actionPending || !canRuntime}
-								title={runtimeHint}
-								onClick={() => setConfirmStop(true)}
-							>
-								{stopMutation.isPending ? (
-									<Loader2 className="size-4 animate-spin" />
-								) : (
-									<Square className="size-4" />
-								)}
-								Stop
-							</Button>
+						{isRunning ? (
+							<DisabledHint hint={runtimeHint}>
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={actionPending || !canRuntime}
+									onClick={() => setConfirmStop(true)}
+								>
+									{stopMutation.isPending ? (
+										<Loader2 className="size-4 animate-spin" />
+									) : (
+										<Square className="size-4" />
+									)}
+									Stop
+								</Button>
+							</DisabledHint>
 						) : (
+							<DisabledHint hint={deployHint}>
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={actionPending || !canDeploy}
+									onClick={() => startMutation.mutate(idInput)}
+								>
+									{startMutation.isPending ? (
+										<Loader2 className="size-4 animate-spin" />
+									) : (
+										<Play className="size-4" />
+									)}
+									Start
+								</Button>
+							</DisabledHint>
+						)}
+						<DisabledHint
+							hint={!canRuntime ? runtimeHint : isRunning ? undefined : "Start the database first"}
+							className="hidden sm:inline-flex"
+						>
 							<Button
 								variant="outline"
 								size="sm"
-								disabled={actionPending || !canDeploy}
-								title={deployHint}
-								onClick={() => startMutation.mutate(idInput)}
+								disabled={actionPending || !isRunning || !canRuntime}
+								onClick={() => reloadMutation.mutate(idInput)}
 							>
-								{startMutation.isPending ? (
+								{reloadMutation.isPending ? (
 									<Loader2 className="size-4 animate-spin" />
 								) : (
-									<Play className="size-4" />
+									<RefreshCw className="size-4" />
 								)}
-								Start
+								Reload
 							</Button>
-						)}
-						<Button
-							variant="outline"
-							size="sm"
-							className="hidden sm:inline-flex"
-							disabled={actionPending || (status !== "running" && status !== "done") || !canRuntime}
-							title={runtimeHint}
-							onClick={() => reloadMutation.mutate(idInput)}
-						>
-							{reloadMutation.isPending ? (
-								<Loader2 className="size-4 animate-spin" />
-							) : (
-								<RefreshCw className="size-4" />
-							)}
-							Reload
-						</Button>
+						</DisabledHint>
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
 								<Button
@@ -422,7 +466,12 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 				</TabsContent>
 
 				<TabsContent value="connection" className="mt-6">
-					<ConnectionTab ns={ns} idInput={idInput} hasExternalPort={db.externalPort != null} />
+					<ConnectionTab
+						ns={ns}
+						idInput={idInput}
+						hasExternalPort={db.externalPort != null}
+						onOpenGeneral={() => selectTab("general")}
+					/>
 				</TabsContent>
 
 				<TabsContent value="environment" className="mt-6">
@@ -448,17 +497,32 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 						</SubTabsList>
 						<TabsContent value="logs" className="mt-0">
 							<SettingsSection bare title="Logs" description="Live container output.">
-								<LogViewer appName={db.appName} serverId={db.serverId} />
+								<LogViewer
+									appName={db.appName}
+									serverId={db.serverId}
+									serviceStatus={status}
+									notRunningAction={runtimeAction}
+								/>
 							</SettingsSection>
 						</TabsContent>
 						<TabsContent value="monitoring" className="mt-0">
 							<SettingsSection bare title="Monitoring" description="CPU, memory, and network.">
-								<MonitoringCharts appName={db.appName} serverId={db.serverId} />
+								<MonitoringCharts
+									appName={db.appName}
+									serverId={db.serverId}
+									serviceStatus={status}
+									notRunningAction={runtimeAction}
+								/>
 							</SettingsSection>
 						</TabsContent>
 						<TabsContent value="terminal" className="mt-0">
 							<SettingsSection bare title="Terminal" description="Shell into the container.">
-								<ServiceTerminal appName={db.appName} serverId={db.serverId} />
+								<ServiceTerminal
+									appName={db.appName}
+									serverId={db.serverId}
+									serviceStatus={status}
+									notRunningAction={runtimeAction}
+								/>
 							</SettingsSection>
 						</TabsContent>
 					</Tabs>
@@ -532,6 +596,9 @@ function GeneralTab({
 	const parsedPort = externalPort.trim() === "" ? null : Number(externalPort);
 	const portValid =
 		parsedPort === null || (Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535);
+	const generalDirty =
+		name !== db.name || description !== (db.description ?? "") || dockerImage !== db.dockerImage;
+	const portDirty = externalPort !== (db.externalPort?.toString() ?? "");
 
 	return (
 		<SettingsStack>
@@ -563,28 +630,30 @@ function GeneralTab({
 							Reload the service after changing the image for it to take effect.
 						</p>
 					</div>
-					<div className="flex justify-end">
-						<Button
-							disabled={
-								updateMutation.isPending || !name.trim() || !dockerImage.trim() || !canWrite
-							}
-							title={writeHint}
-							onClick={() =>
-								updateMutation.mutate({
-									...idInput,
-									name: name.trim(),
-									// `undefined` is dropped from the SET clause, so a cleared
-									// description could never be persisted. The router's zod
-									// schema is `z.string().optional()` (rejects null), so an
-									// empty string is the only value that clears it.
-									description: description.trim(),
-									dockerImage: dockerImage.trim(),
-								})
-							}
-						>
-							{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-							Save
-						</Button>
+					<div className="flex items-center justify-end gap-3">
+						<UnsavedChangesPill dirty={generalDirty} />
+						<DisabledHint hint={writeHint}>
+							<Button
+								disabled={
+									updateMutation.isPending || !name.trim() || !dockerImage.trim() || !canWrite
+								}
+								onClick={() =>
+									updateMutation.mutate({
+										...idInput,
+										name: name.trim(),
+										// `undefined` is dropped from the SET clause, so a cleared
+										// description could never be persisted. The router's zod
+										// schema is `z.string().optional()` (rejects null), so an
+										// empty string is the only value that clears it.
+										description: description.trim(),
+										dockerImage: dockerImage.trim(),
+									})
+								}
+							>
+								{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+								Save
+							</Button>
+						</DisabledHint>
 					</div>
 				</div>
 			</SettingsSection>
@@ -625,15 +694,17 @@ function GeneralTab({
 							<p className="text-sm text-destructive">Enter a port between 1 and 65535.</p>
 						)}
 					</div>
-					<div className="flex justify-end">
-						<Button
-							disabled={portMutation.isPending || !portValid || !canWrite}
-							title={writeHint}
-							onClick={() => portMutation.mutate({ ...idInput, externalPort: parsedPort })}
-						>
-							{portMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-							Save port
-						</Button>
+					<div className="flex items-center justify-end gap-3">
+						<UnsavedChangesPill dirty={portDirty} />
+						<DisabledHint hint={writeHint}>
+							<Button
+								disabled={portMutation.isPending || !portValid || !canWrite}
+								onClick={() => portMutation.mutate({ ...idInput, externalPort: parsedPort })}
+							>
+								{portMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+								Save port
+							</Button>
+						</DisabledHint>
 					</div>
 				</div>
 			</SettingsSection>
@@ -645,10 +716,13 @@ function ConnectionTab({
 	ns,
 	idInput,
 	hasExternalPort,
+	onOpenGeneral,
 }: {
 	ns: DatabaseRouterFacade;
 	idInput: DatabaseIdInput;
 	hasExternalPort: boolean;
+	/** Jump to the General tab, where the external port is configured. */
+	onOpenGeneral: () => void;
 }) {
 	const urlsQuery = useQuery(ns.getConnectionUrl.queryOptions(idInput));
 	const urls = urlsQuery.data as ConnectionUrls | undefined;
@@ -686,10 +760,7 @@ function ConnectionTab({
 					title="Internal connection URL"
 					description="Use this URL from services deployed on the internal network."
 				>
-					<div className="flex items-center gap-1">
-						<Input readOnly value={urls?.internal ?? ""} className="font-mono text-xs" />
-						<CopyButton value={urls?.internal ?? ""} />
-					</div>
+					<ConnectionUrlField url={urls?.internal ?? ""} />
 				</SettingsSection>
 
 				<SettingsSection
@@ -697,15 +768,19 @@ function ConnectionTab({
 					description="Use this URL to connect from outside this server (requires an external port)."
 				>
 					{urls?.external ? (
-						<div className="flex items-center gap-1">
-							<Input readOnly value={urls.external} className="font-mono text-xs" />
-							<CopyButton value={urls.external} />
-						</div>
+						<ConnectionUrlField url={urls.external} />
+					) : hasExternalPort ? (
+						<p className="text-sm text-muted-foreground">External URL unavailable.</p>
 					) : (
 						<p className="text-sm text-muted-foreground">
-							{hasExternalPort
-								? "External URL unavailable."
-								: "No external port configured. Set one in the General tab to enable external access."}
+							No external port configured.{" "}
+							<button
+								type="button"
+								onClick={onOpenGeneral}
+								className="font-medium text-foreground underline-offset-4 hover:underline"
+							>
+								Set one in the General tab →
+							</button>
 						</p>
 					)}
 				</SettingsSection>
@@ -783,17 +858,19 @@ function SettingsTab({
 						<Label htmlFor="rename-input">Name</Label>
 						<Input id="rename-input" value={name} onChange={(e) => setName(e.target.value)} />
 					</div>
-					<div className="flex justify-end">
-						<Button
-							disabled={
-								renameMutation.isPending || !name.trim() || name.trim() === db.name || !canWrite
-							}
-							title={canWrite ? undefined : capabilityHint("service.write")}
-							onClick={() => renameMutation.mutate({ ...idInput, name: name.trim() })}
-						>
-							{renameMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-							Rename
-						</Button>
+					<div className="flex items-center justify-end gap-3">
+						<UnsavedChangesPill dirty={name !== db.name} />
+						<DisabledHint hint={canWrite ? undefined : capabilityHint("service.write")}>
+							<Button
+								disabled={
+									renameMutation.isPending || !name.trim() || name.trim() === db.name || !canWrite
+								}
+								onClick={() => renameMutation.mutate({ ...idInput, name: name.trim() })}
+							>
+								{renameMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+								Rename
+							</Button>
+						</DisabledHint>
 					</div>
 				</div>
 			</SettingsSection>

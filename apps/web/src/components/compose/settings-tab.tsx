@@ -8,8 +8,10 @@ import { toast } from "sonner";
 import type { ComposeService } from "@/components/compose/compose-detail";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { DangerZone } from "@/components/services/danger-zone";
+import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -98,20 +100,22 @@ export function SettingsTab({
 							rows={3}
 						/>
 					</div>
-					<div className="flex justify-end">
-						<Button
-							disabled={updateMutation.isPending || !name.trim() || !canWrite}
-							title={canWrite ? undefined : capabilityHint("service.write")}
-							onClick={() =>
-								updateMutation.mutate({
-									composeId: compose.composeId,
-									name: name.trim(),
-									description: description.trim() || null,
-								})
-							}
-						>
-							{updateMutation.isPending ? "Saving…" : "Save"}
-						</Button>
+					<div className="flex items-center justify-end gap-3">
+						<UnsavedChangesPill dirty={dirty} />
+						<DisabledHint hint={canWrite ? undefined : capabilityHint("service.write")}>
+							<Button
+								disabled={updateMutation.isPending || !name.trim() || !canWrite}
+								onClick={() =>
+									updateMutation.mutate({
+										composeId: compose.composeId,
+										name: name.trim(),
+										description: description.trim() || null,
+									})
+								}
+							>
+								{updateMutation.isPending ? "Saving…" : "Save"}
+							</Button>
+						</DisabledHint>
 					</div>
 				</div>
 			</SettingsSection>

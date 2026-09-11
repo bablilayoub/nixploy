@@ -22,7 +22,7 @@ export function TableCard({
 	return (
 		<div className={cn("flex flex-col gap-4", className)}>
 			{toolbar ? <div className="flex flex-wrap items-center gap-2">{toolbar}</div> : null}
-			{framed ? <div className="overflow-hidden rounded-md border">{children}</div> : children}
+			{framed ? <div className="overflow-x-auto rounded-md border">{children}</div> : children}
 			{footer}
 		</div>
 	);

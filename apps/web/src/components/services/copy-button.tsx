@@ -1,50 +1,65 @@
 "use client";
 
 import { Check, Copy } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
-export function CopyButton({ value, label }: { value: string; label?: string }) {
+/**
+ * Clipboard button with an accessible name and a 1.5 s "copied" tick.
+ * Icon-only by default (next to read-only inputs); `showLabel` renders the
+ * label as visible text for standalone buttons ("Copy link").
+ */
+export function CopyButton({
+	value,
+	label = "Copy",
+	variant,
+	showLabel = false,
+	className,
+}: {
+	value: string;
+	label?: string;
+	variant?: "ghost" | "outline";
+	showLabel?: boolean;
+	className?: string;
+}) {
 	const [copied, setCopied] = useState(false);
-	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-	useEffect(() => {
-		return () => {
-			if (timerRef.current) clearTimeout(timerRef.current);
-		};
-	}, []);
-
 	const copy = async () => {
 		try {
 			await navigator.clipboard.writeText(value);
 			setCopied(true);
-			if (timerRef.current) clearTimeout(timerRef.current);
-			timerRef.current = setTimeout(() => setCopied(false), 1500);
+			setTimeout(() => setCopied(false), 1500);
 		} catch {
-			toast.error("Failed to copy to clipboard");
+			toast.error("Failed to copy — select the text and copy it manually");
 		}
 	};
-
-	if (label) {
+	if (showLabel) {
 		return (
-			<Button variant="outline" size="sm" onClick={copy}>
+			<Button
+				type="button"
+				variant={variant ?? "outline"}
+				size="sm"
+				className={cn("shrink-0", className)}
+				onClick={copy}
+			>
 				{copied ? <Check className="size-4 text-success" /> : <Copy className="size-4" />}
-				{label}
+				{copied ? "Copied" : label}
 			</Button>
 		);
 	}
-
 	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<Button variant="ghost" size="icon-sm" aria-label="Copy to clipboard" onClick={copy}>
-					{copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
-				</Button>
-			</TooltipTrigger>
-			<TooltipContent>{copied ? "Copied" : "Copy"}</TooltipContent>
-		</Tooltip>
+		<Button
+			type="button"
+			variant={variant ?? "ghost"}
+			size="icon"
+			className={cn("size-7 shrink-0", className)}
+			aria-label={copied ? "Copied" : label}
+			title={label}
+			onClick={copy}
+		>
+			{copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
+		</Button>
 	);
 }

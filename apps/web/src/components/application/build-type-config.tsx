@@ -14,8 +14,10 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { capabilityHint } from "@/components/services/capability-hint";
+import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -288,11 +290,14 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 					</>
 				)}
 
-				<div className="flex justify-end">
-					<Button onClick={onSave} disabled={isPending || saveBlocked} title={saveHint}>
-						{isPending && <Loader2 className="size-4 animate-spin" />}
-						Save Build
-					</Button>
+				<div className="flex items-center justify-end gap-3">
+					<UnsavedChangesPill dirty={dirty} />
+					<DisabledHint hint={saveHint}>
+						<Button onClick={onSave} disabled={isPending || saveBlocked}>
+							{isPending && <Loader2 className="size-4 animate-spin" />}
+							Save Build
+						</Button>
+					</DisabledHint>
 				</div>
 			</div>
 		</SettingsSection>

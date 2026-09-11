@@ -9,10 +9,12 @@ import { toast } from "sonner";
 import type { ComposeService } from "@/components/compose/compose-detail";
 import { GenerateComposeDialog } from "@/components/compose/generate-compose-dialog";
 import { capabilityHint } from "@/components/services/capability-hint";
+import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/code-editor";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
@@ -39,6 +41,12 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 	useEffect(() => {
 		if (locked) setValue(serverFile);
 	}, [serverFile, locked]);
+	// The blur lock only guards an existing file against accidental edits; an
+	// empty (raw) file is editable right away. Read-only members keep the lock
+	// with its hint.
+	const hasContent = serverFile.trim().length > 0;
+	const editable = canWrite && (!locked || !hasContent);
+	const dirty = value !== serverFile;
 
 	const servicesQuery = useQuery(
 		trpc.compose.loadServices.queryOptions({ composeId: compose.composeId }),
@@ -100,29 +108,33 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 				actions={
 					<div className="flex items-center gap-2">
 						{canRead && !isGitSource && <GenerateComposeDialog onAccept={acceptDraft} />}
-						{!locked && (
+						{editable && (
 							<>
-								<Button
-									size="sm"
-									variant="secondary"
-									disabled={saveMutation.isPending}
-									onClick={cancelEditing}
-								>
-									Cancel
-								</Button>
-								<Button
-									size="sm"
-									disabled={saveMutation.isPending || value === serverFile || !canWrite}
-									title={canWrite ? undefined : writeHint}
-									onClick={() =>
-										saveMutation.mutate({
-											composeId: compose.composeId,
-											composeFile: value,
-										})
-									}
-								>
-									{saveMutation.isPending ? "Saving…" : "Save"}
-								</Button>
+								<UnsavedChangesPill dirty={dirty} />
+								{(!locked || dirty) && (
+									<Button
+										size="sm"
+										variant="secondary"
+										disabled={saveMutation.isPending}
+										onClick={cancelEditing}
+									>
+										Cancel
+									</Button>
+								)}
+								<DisabledHint hint={canWrite ? undefined : writeHint}>
+									<Button
+										size="sm"
+										disabled={saveMutation.isPending || !dirty || !canWrite}
+										onClick={() =>
+											saveMutation.mutate({
+												composeId: compose.composeId,
+												composeFile: value,
+											})
+										}
+									>
+										{saveMutation.isPending ? "Saving…" : "Save"}
+									</Button>
+								</DisabledHint>
 							</>
 						)}
 					</div>
@@ -141,7 +153,10 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 					<CodeEditor
 						value={value}
 						onChange={setValue}
-						locked={locked}
+						locked={!editable}
+						placeholder={
+							hasContent ? undefined : "No compose file yet — paste or generate YAML here"
+						}
 						onLockedChange={(next) => {
 							// Git-backed files and members without service.write can view but never unlock.
 							if (!next && !canWrite) return;

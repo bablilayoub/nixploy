@@ -16,6 +16,7 @@ import {
 	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -75,17 +76,18 @@ export function DangerZone({
 						if (!next) setConfirmation("");
 					}}
 				>
-					<AlertDialogTrigger asChild>
-						<Button
-							variant="outline"
-							size="sm"
-							className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-							disabled={disabled}
-							title={disabled ? disabledReason : undefined}
-						>
-							{actionLabel}
-						</Button>
-					</AlertDialogTrigger>
+					<DisabledHint hint={disabled ? disabledReason : undefined}>
+						<AlertDialogTrigger asChild>
+							<Button
+								variant="outline"
+								size="sm"
+								className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+								disabled={disabled}
+							>
+								{actionLabel}
+							</Button>
+						</AlertDialogTrigger>
+					</DisabledHint>
 					<AlertDialogContent>
 						<AlertDialogHeader>
 							<AlertDialogTitle>{title}</AlertDialogTitle>

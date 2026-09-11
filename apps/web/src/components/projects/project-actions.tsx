@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Settings2, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Settings2, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -38,6 +38,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
+import { describeServiceCounts, type ServiceCounts, sumServiceCounts } from "./service-summary";
+
 export function ProjectActions({
 	project,
 }: {
@@ -45,6 +47,11 @@ export function ProjectActions({
 		projectId: string;
 		name: string;
 		description: string | null;
+		/** `project.one` environments — used to list what a delete removes. */
+		environments?: Array<{
+			name: string;
+			services: { [K in keyof ServiceCounts]: unknown[] | number };
+		}>;
 	};
 }) {
 	const trpc = useTRPC();
@@ -55,6 +62,14 @@ export function ProjectActions({
 	const canDelete = can("project.delete");
 	const [renameOpen, setRenameOpen] = useState(false);
 	const [deleteOpen, setDeleteOpen] = useState(false);
+	// Deleting cascades over every environment, service, volume and domain —
+	// the same type-the-name friction as a single service delete (DangerZone).
+	const [confirmation, setConfirmation] = useState("");
+	const deleteConfirmed = confirmation === project.name;
+	const environmentCount = project.environments?.length ?? 0;
+	const serviceSummary = project.environments
+		? describeServiceCounts(sumServiceCounts(project.environments))
+		: null;
 	const [name, setName] = useState(project.name);
 	const [description, setDescription] = useState(project.description ?? "");
 
@@ -174,26 +189,58 @@ export function ProjectActions({
 				</DialogContent>
 			</Dialog>
 
-			<AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+			<AlertDialog
+				open={deleteOpen}
+				onOpenChange={(next) => {
+					setDeleteOpen(next);
+					if (!next) setConfirmation("");
+				}}
+			>
 				<AlertDialogContent>
 					<AlertDialogHeader>
 						<AlertDialogTitle>Delete project</AlertDialogTitle>
 						<AlertDialogDescription>
-							This permanently deletes "{project.name}", all of its environments and every service
-							inside them. This action cannot be undone.
+							This permanently deletes "{project.name}" and everything inside it. This action cannot
+							be undone.
 						</AlertDialogDescription>
 					</AlertDialogHeader>
+					<ul className="list-disc space-y-1 ps-5 text-sm text-muted-foreground">
+						<li>
+							{environmentCount > 0
+								? `${environmentCount} environment${environmentCount === 1 ? "" : "s"} (${project.environments
+										?.map((environment) => environment.name)
+										.join(", ")})`
+								: "All environments"}
+						</li>
+						<li>{serviceSummary ?? "All services"}, including their containers and volumes</li>
+						<li>Every domain, route and deployment history of those services</li>
+					</ul>
+					<div className="space-y-1.5">
+						<Label htmlFor="delete-project-confirm">
+							Type <span className="font-mono font-semibold">{project.name}</span> to confirm
+						</Label>
+						<Input
+							id="delete-project-confirm"
+							value={confirmation}
+							onChange={(event) => setConfirmation(event.target.value)}
+							placeholder={project.name}
+							autoComplete="off"
+						/>
+					</div>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={deleteProject.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
 							variant="destructive"
-							disabled={deleteProject.isPending}
+							disabled={!deleteConfirmed || deleteProject.isPending}
 							onClick={(event) => {
+								// The cascade can take many seconds — keep the dialog (and its
+								// spinner) open until the mutation settles.
 								event.preventDefault();
 								deleteProject.mutate({ projectId: project.projectId });
 							}}
 						>
-							{deleteProject.isPending ? "Deleting..." : "Delete"}
+							{deleteProject.isPending && <Loader2 className="size-4 animate-spin" />}
+							Delete project
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

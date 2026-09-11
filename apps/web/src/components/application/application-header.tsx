@@ -1,10 +1,8 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, MoreVertical, Play, RefreshCw, Rocket, Square } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { toast } from "sonner";
 
 import { capabilityHint } from "@/components/services/capability-hint";
 import { CopilotChatDrawer } from "@/components/services/copilot-chat-drawer";
@@ -20,6 +18,7 @@ import {
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -27,9 +26,9 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
+import type { ApplicationActions } from "./use-application-actions";
 
 const STATUS_CONFIG: Record<string, { label: string; status: StatusDotStatus }> = {
 	idle: { label: "Idle", status: "neutral" },
@@ -41,73 +40,25 @@ const STATUS_CONFIG: Record<string, { label: string; status: StatusDotStatus }> 
 export function ApplicationHeader({
 	application,
 	projectId,
-	onDeployQueued,
+	actions,
+	hasDeployed,
 }: {
 	application: Application;
 	projectId: string;
-	/** A deploy/redeploy was queued — the page uses it to poll `application.one` for a while. */
-	onDeployQueued?: () => void;
+	/** Lifecycle mutations owned by the page (shared with the runtime empty states). */
+	actions: ApplicationActions;
+	/**
+	 * A successful deployment exists, so Start / Redeploy can succeed. Before
+	 * that the server answers PRECONDITION_FAILED — the buttons stay hidden.
+	 */
+	hasDeployed: boolean;
 }) {
-	const trpc = useTRPC();
-	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
 	const applicationId = application.applicationId;
 	const [confirmStop, setConfirmStop] = useState(false);
-
-	const invalidate = () => {
-		queryClient.invalidateQueries({
-			queryKey: trpc.application.one.queryKey({ applicationId }),
-		});
-		queryClient.invalidateQueries({ queryKey: trpc.application.all.pathKey() });
-		queryClient.invalidateQueries({
-			queryKey: trpc.deployment.byApplication.pathKey(),
-		});
-	};
-
-	const onError = (error: { message: string }) => toast.error(error.message);
-
-	const deploy = useMutation(
-		trpc.application.deploy.mutationOptions({
-			onSuccess: () => {
-				toast.success("Deployment queued");
-				onDeployQueued?.();
-				invalidate();
-			},
-			onError,
-		}),
-	);
-	const redeploy = useMutation(
-		trpc.application.redeploy.mutationOptions({
-			onSuccess: () => {
-				toast.success("Redeployment queued");
-				onDeployQueued?.();
-				invalidate();
-			},
-			onError,
-		}),
-	);
-	const start = useMutation(
-		trpc.application.start.mutationOptions({
-			onSuccess: () => {
-				toast.success("Application started");
-				invalidate();
-			},
-			onError,
-		}),
-	);
-	const stop = useMutation(
-		trpc.application.stop.mutationOptions({
-			onSuccess: () => {
-				toast.success("Application stopped");
-				setConfirmStop(false);
-				invalidate();
-			},
-			onError,
-		}),
-	);
+	const { deploy, redeploy, start, stop, isBusy } = actions;
 
 	const isRunning = application.status === "running" || application.status === "done";
-	const isBusy = deploy.isPending || redeploy.isPending || start.isPending || stop.isPending;
 	const statusConfig = STATUS_CONFIG[application.status ?? "idle"] ?? STATUS_CONFIG.idle;
 
 	const canDeploy = can("service.deploy");
@@ -151,105 +102,112 @@ export function ApplicationHeader({
 								name: application.name,
 							}}
 						/>
-						<Button
-							onClick={() => deploy.mutate({ applicationId })}
-							disabled={isBusy || !canDeploy}
-							title={deployHint}
-						>
-							{deploy.isPending ? (
-								<Loader2 className="size-4 animate-spin" />
-							) : (
-								<Rocket className="size-4" />
-							)}
-							Deploy
-						</Button>
-						<Button
-							variant="outline"
-							className="hidden sm:inline-flex"
-							onClick={() => redeploy.mutate({ applicationId })}
-							disabled={isBusy || !canDeploy}
-							title={deployHint}
-						>
-							{redeploy.isPending ? (
-								<Loader2 className="size-4 animate-spin" />
-							) : (
-								<RefreshCw className="size-4" />
-							)}
-							Redeploy
-						</Button>
-						{isRunning ? (
+						<DisabledHint hint={deployHint}>
 							<Button
-								variant="outline"
-								className="hidden sm:inline-flex"
-								onClick={() => setConfirmStop(true)}
-								disabled={isBusy || !canRuntime}
-								title={runtimeHint}
+								onClick={() => deploy.mutate({ applicationId })}
+								disabled={isBusy || !canDeploy}
 							>
-								{stop.isPending ? (
+								{deploy.isPending ? (
 									<Loader2 className="size-4 animate-spin" />
 								) : (
-									<Square className="size-4" />
+									<Rocket className="size-4" />
 								)}
-								Stop
+								Deploy
 							</Button>
-						) : (
-							<Button
-								variant="outline"
-								className="hidden sm:inline-flex"
-								onClick={() => start.mutate({ applicationId })}
-								disabled={isBusy || !canRuntime}
-								title={runtimeHint}
-							>
-								{start.isPending ? (
-									<Loader2 className="size-4 animate-spin" />
-								) : (
-									<Play className="size-4" />
-								)}
-								Start
-							</Button>
-						)}
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
+						</DisabledHint>
+						{hasDeployed && (
+							<DisabledHint hint={deployHint} className="hidden sm:inline-flex">
 								<Button
 									variant="outline"
-									size="icon"
-									className="sm:hidden"
-									aria-label="More actions"
-									disabled={isBusy}
-								>
-									<MoreVertical className="size-4" />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end">
-								<DropdownMenuItem
-									disabled={isBusy || !canDeploy}
-									title={deployHint}
 									onClick={() => redeploy.mutate({ applicationId })}
+									disabled={isBusy || !canDeploy}
 								>
-									<RefreshCw className="size-4" />
+									{redeploy.isPending ? (
+										<Loader2 className="size-4 animate-spin" />
+									) : (
+										<RefreshCw className="size-4" />
+									)}
 									Redeploy
-								</DropdownMenuItem>
-								{isRunning ? (
-									<DropdownMenuItem
-										disabled={isBusy || !canRuntime}
-										title={runtimeHint}
-										onClick={() => setConfirmStop(true)}
-									>
+								</Button>
+							</DisabledHint>
+						)}
+						{isRunning ? (
+							<DisabledHint hint={runtimeHint} className="hidden sm:inline-flex">
+								<Button
+									variant="outline"
+									onClick={() => setConfirmStop(true)}
+									disabled={isBusy || !canRuntime}
+								>
+									{stop.isPending ? (
+										<Loader2 className="size-4 animate-spin" />
+									) : (
 										<Square className="size-4" />
-										Stop
-									</DropdownMenuItem>
-								) : (
-									<DropdownMenuItem
-										disabled={isBusy || !canRuntime}
-										title={runtimeHint}
-										onClick={() => start.mutate({ applicationId })}
-									>
+									)}
+									Stop
+								</Button>
+							</DisabledHint>
+						) : hasDeployed ? (
+							<DisabledHint hint={runtimeHint} className="hidden sm:inline-flex">
+								<Button
+									variant="outline"
+									onClick={() => start.mutate({ applicationId })}
+									disabled={isBusy || !canRuntime}
+								>
+									{start.isPending ? (
+										<Loader2 className="size-4 animate-spin" />
+									) : (
 										<Play className="size-4" />
-										Start
-									</DropdownMenuItem>
-								)}
-							</DropdownMenuContent>
-						</DropdownMenu>
+									)}
+									Start
+								</Button>
+							</DisabledHint>
+						) : null}
+						{(hasDeployed || isRunning) && (
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button
+										variant="outline"
+										size="icon"
+										className="sm:hidden"
+										aria-label="More actions"
+										disabled={isBusy}
+									>
+										<MoreVertical className="size-4" />
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="end">
+									{hasDeployed && (
+										<DropdownMenuItem
+											disabled={isBusy || !canDeploy}
+											title={deployHint}
+											onClick={() => redeploy.mutate({ applicationId })}
+										>
+											<RefreshCw className="size-4" />
+											Redeploy
+										</DropdownMenuItem>
+									)}
+									{isRunning ? (
+										<DropdownMenuItem
+											disabled={isBusy || !canRuntime}
+											title={runtimeHint}
+											onClick={() => setConfirmStop(true)}
+										>
+											<Square className="size-4" />
+											Stop
+										</DropdownMenuItem>
+									) : (
+										<DropdownMenuItem
+											disabled={isBusy || !canRuntime}
+											title={runtimeHint}
+											onClick={() => start.mutate({ applicationId })}
+										>
+											<Play className="size-4" />
+											Start
+										</DropdownMenuItem>
+									)}
+								</DropdownMenuContent>
+							</DropdownMenu>
+						)}
 					</>
 				}
 			/>
@@ -268,7 +226,7 @@ export function ApplicationHeader({
 							disabled={stop.isPending}
 							onClick={(event) => {
 								event.preventDefault();
-								stop.mutate({ applicationId });
+								stop.mutate({ applicationId }, { onSuccess: () => setConfirmStop(false) });
 							}}
 						>
 							{stop.isPending && <Loader2 className="size-4 animate-spin" />}

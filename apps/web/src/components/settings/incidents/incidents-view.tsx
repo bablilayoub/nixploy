@@ -1,11 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
 import { useState } from "react";
 import { QueryState } from "@/components/query-state";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
+import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
+import { DateTime } from "@/components/ui/date-time";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -29,72 +30,79 @@ export function IncidentsView() {
 	);
 
 	return (
-		<SettingsStack>
-			<SettingsSection
-				title="Incident timeline"
-				description="Deploy failures, threshold trips, watchdog events, and uptime flips."
-				actions={
-					<Select value={projectId} onValueChange={setProjectId}>
-						<SelectTrigger className="w-48">
-							<SelectValue placeholder="All projects" />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="all">All projects</SelectItem>
-							{(projects.data ?? []).map((project) => (
-								<SelectItem key={project.projectId} value={project.projectId}>
-									{project.name}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-				}
-			>
-				<QueryState
-					isPending={incidents.isPending}
-					isError={incidents.isError}
-					error={incidents.error}
-					onRetry={() => void incidents.refetch()}
-					skeleton={
-						<div className="flex flex-col gap-3">
-							{["a", "b", "c"].map((key) => (
-								<Skeleton key={key} className="h-16 w-full" />
-							))}
-						</div>
-					}
-					isEmpty={(incidents.data ?? []).length === 0}
-					empty={
-						<p className="py-8 text-center text-sm text-muted-foreground">
-							No incidents yet. Alerts and failed deploys will appear here.
-						</p>
+		<div className="flex flex-col gap-8">
+			<PageHeader
+				title="Incidents"
+				description="Failed deploys, alert-rule trips, watchdog events and uptime flips across your projects."
+			/>
+			<SettingsStack>
+				<SettingsSection
+					title="Incident timeline"
+					description="Deploy failures, threshold trips, watchdog events, and uptime flips."
+					actions={
+						<Select value={projectId} onValueChange={setProjectId}>
+							<SelectTrigger className="w-48">
+								<SelectValue placeholder="All projects" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="all">All projects</SelectItem>
+								{(projects.data ?? []).map((project) => (
+									<SelectItem key={project.projectId} value={project.projectId}>
+										{project.name}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
 					}
 				>
-					<div className="flex flex-col gap-3">
-						{(incidents.data ?? []).map((incident) => (
-							<div key={incident.incidentId} className="rounded-lg border px-4 py-3 text-sm">
-								<div className="flex flex-wrap items-center justify-between gap-2">
-									<p className="font-medium">{incident.title}</p>
-									<span className="text-xs text-muted-foreground">
-										{format(new Date(incident.createdAt), "MMM d, HH:mm")}
-									</span>
-								</div>
-								<p className="mt-1 text-muted-foreground">
-									{incident.kind}
-									{incident.serviceName ? ` · ${incident.serviceName}` : ""}
-									{incident.severity ? ` · ${incident.severity}` : ""}
-								</p>
-								{incident.message && (
-									<p className="mt-2 whitespace-pre-wrap text-muted-foreground">
-										{incident.message}
-									</p>
-								)}
+					<QueryState
+						isPending={incidents.isPending}
+						isError={incidents.isError}
+						error={incidents.error}
+						onRetry={() => void incidents.refetch()}
+						skeleton={
+							<div className="flex flex-col gap-3">
+								{["a", "b", "c"].map((key) => (
+									<Skeleton key={key} className="h-16 w-full" />
+								))}
 							</div>
-						))}
-					</div>
-				</QueryState>
-			</SettingsSection>
+						}
+						isEmpty={(incidents.data ?? []).length === 0}
+						empty={
+							<p className="py-8 text-center text-sm text-muted-foreground">
+								No incidents yet. Alerts and failed deploys will appear here.
+							</p>
+						}
+					>
+						<div className="flex flex-col gap-3">
+							{(incidents.data ?? []).map((incident) => (
+								<div key={incident.incidentId} className="rounded-lg border px-4 py-3 text-sm">
+									<div className="flex flex-wrap items-center justify-between gap-2">
+										<p className="font-medium">{incident.title}</p>
+										<DateTime
+											value={incident.createdAt}
+											className="text-xs text-muted-foreground"
+										/>
+									</div>
+									<p className="mt-1 text-muted-foreground">
+										{incident.kind}
+										{incident.serviceName ? ` · ${incident.serviceName}` : ""}
+										{incident.severity ? ` · ${incident.severity}` : ""}
+									</p>
+									{incident.message && (
+										<p className="mt-2 whitespace-pre-wrap text-muted-foreground">
+											{incident.message}
+										</p>
+									)}
+								</div>
+							))}
+						</div>
+					</QueryState>
+				</SettingsSection>
 
-			<LogSearchSection />
-		</SettingsStack>
+				<LogSearchSection />
+			</SettingsStack>
+		</div>
 	);
 }
 

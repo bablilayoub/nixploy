@@ -12,8 +12,10 @@ import {
 	splitRepoSelection,
 } from "@/components/git-provider-repo-picker";
 import { capabilityHint } from "@/components/services/capability-hint";
+import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -44,7 +46,14 @@ function storedRepoSelection(compose: ComposeService): string {
 	return compose.owner && compose.repository ? `${compose.owner}/${compose.repository}` : "";
 }
 
-export function GeneralTab({ compose }: { compose: ComposeService }) {
+export function GeneralTab({
+	compose,
+	onOpenComposeFile,
+}: {
+	compose: ComposeService;
+	/** Switch to the Compose File tab (raw sources are edited there). */
+	onOpenComposeFile?: () => void;
+}) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
@@ -286,8 +295,20 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 
 					{sourceType === "raw" && (
 						<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-							The compose file is stored directly on this service. Edit it in the{" "}
-							<span className="font-medium">Compose File</span> tab.
+							The compose file is stored directly on this service.{" "}
+							{onOpenComposeFile ? (
+								<button
+									type="button"
+									onClick={onOpenComposeFile}
+									className="font-medium text-foreground underline-offset-4 hover:underline"
+								>
+									Edit it in the Compose File tab →
+								</button>
+							) : (
+								<>
+									Edit it in the <span className="font-medium">Compose File</span> tab.
+								</>
+							)}
 						</p>
 					)}
 
@@ -362,14 +383,13 @@ export function GeneralTab({ compose }: { compose: ComposeService }) {
 						</div>
 					)}
 
-					<div className="flex justify-end">
-						<Button
-							onClick={onSave}
-							disabled={updateMutation.isPending || !canWrite}
-							title={canWrite ? undefined : capabilityHint("service.write")}
-						>
-							{updateMutation.isPending ? "Saving…" : "Save"}
-						</Button>
+					<div className="flex items-center justify-end gap-3">
+						<UnsavedChangesPill dirty={dirty} />
+						<DisabledHint hint={canWrite ? undefined : capabilityHint("service.write")}>
+							<Button onClick={onSave} disabled={updateMutation.isPending || !canWrite}>
+								{updateMutation.isPending ? "Saving…" : "Save"}
+							</Button>
+						</DisabledHint>
 					</div>
 				</div>
 			</SettingsSection>

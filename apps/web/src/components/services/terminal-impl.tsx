@@ -6,6 +6,7 @@ import { Loader2, RotateCcw } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 
+import { NotRunningState, type RuntimeEmptyProps } from "@/components/services/not-running-state";
 import { Button } from "@/components/ui/button";
 import { nixployTerminalTheme } from "@/lib/codemirror-theme";
 import { cn } from "@/lib/utils";
@@ -29,11 +30,13 @@ export function ServiceTerminal({
 	appName,
 	containerId,
 	serverId,
+	serviceStatus,
+	notRunningAction,
 }: {
 	appName?: string;
 	containerId?: string;
 	serverId?: string | null;
-}) {
+} & RuntimeEmptyProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const terminalRef = useRef<Terminal | null>(null);
 	const [status, setStatus] = useState<TerminalStatus>("connecting");
@@ -137,9 +140,9 @@ export function ServiceTerminal({
 						try {
 							const frame = JSON.parse(event.data) as { type?: string; message?: string };
 							if (frame.type === "error") {
-								const message = frame.message ?? "Unknown error";
-								setLastError(message);
-								terminal?.writeln(`\r\n\x1b[31m${message}\x1b[0m`);
+								// The overlay prints it once the socket closes — no red xterm
+								// line as well.
+								setLastError(frame.message ?? "Unknown error");
 								return;
 							}
 						} catch {
@@ -173,6 +176,27 @@ export function ServiceTerminal({
 		};
 	}, [appName, containerId, serverId, session]);
 
+	const startNewSession = () => {
+		setStatus("connecting");
+		setLastError(null);
+		setSession((current) => current + 1);
+	};
+	// The server closes with "No running container found …" when nothing is
+	// deployed; a never-deployed service (`idle`) cannot be retried either way.
+	const notRunning =
+		status === "disconnected" &&
+		(serviceStatus === "idle" || /no running container/i.test(lastError ?? ""));
+
+	if (notRunning) {
+		return (
+			<NotRunningState
+				action={notRunningAction}
+				onRetry={serviceStatus === "idle" ? undefined : startNewSession}
+				className="min-h-[26rem]"
+			/>
+		);
+	}
+
 	return (
 		<div className="relative overflow-hidden rounded-lg border border-border bg-card">
 			{status !== "connected" && (
@@ -196,15 +220,7 @@ export function ServiceTerminal({
 									Deploy the service first, then start a new session.
 								</p>
 							)}
-							<Button
-								size="sm"
-								variant="secondary"
-								onClick={() => {
-									setStatus("connecting");
-									setLastError(null);
-									setSession((current) => current + 1);
-								}}
-							>
+							<Button size="sm" variant="secondary" onClick={startNewSession}>
 								<RotateCcw className="size-4" />
 								Start new session
 							</Button>

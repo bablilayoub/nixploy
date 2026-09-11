@@ -6,14 +6,17 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { UnderlineTabsList, UnderlineTabsTrigger } from "@/components/application/underline-tabs";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { confirmDiscardUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { useTRPC } from "@/lib/trpc";
-import { cn } from "@/lib/utils";
 
 import { AddServiceMenu } from "./add-service-menu";
 import { CreateEnvironmentDialog } from "./create-environment-dialog";
@@ -48,37 +51,6 @@ const PROJECT_TABS: { value: ProjectTab; label: string }[] = [
 
 function isProjectTab(value: string | undefined): value is ProjectTab {
 	return PROJECT_TABS.some((tab) => tab.value === value);
-}
-
-/** SubNav-style underline tabs rendered as buttons (state-driven, not routes). */
-function UnderlineTabs({
-	items,
-	value,
-	onChange,
-}: {
-	items: { value: string; label: string }[];
-	value: string;
-	onChange: (value: string) => void;
-}) {
-	return (
-		<nav className="flex items-center gap-1 overflow-x-auto">
-			{items.map((item) => (
-				<button
-					key={item.value}
-					type="button"
-					onClick={() => onChange(item.value)}
-					className={cn(
-						"whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors",
-						item.value === value
-							? "border-foreground font-medium text-foreground"
-							: "border-transparent text-muted-foreground hover:text-foreground",
-					)}
-				>
-					{item.label}
-				</button>
-			))}
-		</nav>
-	);
 }
 
 export function ProjectDetail({
@@ -289,8 +261,17 @@ export function ProjectDetail({
 		syncUrl(name, tab);
 	};
 
+	// User-driven switches unmount the tab's forms (the env editor is keyed by
+	// environment), so they go through the unsaved-changes guard; the
+	// programmatic calls after rename/duplicate/create do not.
+	const switchEnvironment = (name: string) => {
+		if (name === activeEnvironmentName || !confirmDiscardUnsavedChanges()) return;
+		selectEnvironment(name);
+	};
+
 	const selectTab = (value: string) => {
 		const nextTab = value as ProjectTab;
+		if (nextTab === tab || !confirmDiscardUnsavedChanges()) return;
 		setTab(nextTab);
 		syncUrl(activeEnvironmentName, nextTab);
 	};
@@ -329,24 +310,35 @@ export function ProjectDetail({
 				actions={project ? <ProjectActions project={project} /> : undefined}
 			/>
 
-			<div className="border-b">
-				<UnderlineTabs items={PROJECT_TABS} value={tab} onChange={selectTab} />
-			</div>
+			<Tabs value={tab} onValueChange={selectTab}>
+				<UnderlineTabsList aria-label="Project sections">
+					{PROJECT_TABS.map((item) => (
+						<UnderlineTabsTrigger key={item.value} value={item.value}>
+							{item.label}
+						</UnderlineTabsTrigger>
+					))}
+				</UnderlineTabsList>
+			</Tabs>
 
 			{tab !== "deployments" && (
 				<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 					{environmentsQuery.isPending ? (
 						<Skeleton className="h-9 w-64" />
 					) : (
-						<div className="flex items-center gap-1">
-							<UnderlineTabs
-								items={(environments ?? []).map((environment) => ({
-									value: environment.name,
-									label: environment.name,
-								}))}
+						<div className="flex min-w-0 items-center gap-1">
+							<Tabs
 								value={activeEnvironmentName}
-								onChange={selectEnvironment}
-							/>
+								onValueChange={switchEnvironment}
+								className="min-w-0"
+							>
+								<UnderlineTabsList aria-label="Environments" className="w-auto border-0">
+									{(environments ?? []).map((environment) => (
+										<UnderlineTabsTrigger key={environment.environmentId} value={environment.name}>
+											{environment.name}
+										</UnderlineTabsTrigger>
+									))}
+								</UnderlineTabsList>
+							</Tabs>
 							{activeEnvironment && (
 								<EnvironmentActions
 									projectId={projectId}
@@ -369,17 +361,14 @@ export function ProjectDetail({
 					)}
 					{tab === "services" && (
 						<div className="flex items-center gap-2">
-							<CreateEnvironmentDialog projectId={projectId} onCreated={selectEnvironment}>
-								<Button
-									variant="outline"
-									size="sm"
-									disabled={!canWriteProject}
-									title={canWriteProject ? undefined : capabilityHint("project.write")}
-								>
-									<Plus className="size-4" />
-									Environment
-								</Button>
-							</CreateEnvironmentDialog>
+							<DisabledHint hint={canWriteProject ? undefined : capabilityHint("project.write")}>
+								<CreateEnvironmentDialog projectId={projectId} onCreated={selectEnvironment}>
+									<Button variant="outline" size="sm" disabled={!canWriteProject}>
+										<Plus className="size-4" />
+										Environment
+									</Button>
+								</CreateEnvironmentDialog>
+							</DisabledHint>
 							<div className="relative">
 								<Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 								<Input

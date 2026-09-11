@@ -7,8 +7,10 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { DangerZone } from "@/components/services/danger-zone";
+import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -109,21 +111,23 @@ export function SettingsTab({
 							}}
 						/>
 					</div>
-					<div className="flex justify-end">
-						<Button
-							onClick={() =>
-								update.mutate({
-									applicationId,
-									name: name.trim(),
-									description: description.trim() || null,
-								})
-							}
-							disabled={!name.trim() || update.isPending || !canWrite}
-							title={canWrite ? undefined : capabilityHint("service.write")}
-						>
-							{update.isPending && <Loader2 className="size-4 animate-spin" />}
-							Save
-						</Button>
+					<div className="flex items-center justify-end gap-3">
+						<UnsavedChangesPill dirty={dirty} />
+						<DisabledHint hint={canWrite ? undefined : capabilityHint("service.write")}>
+							<Button
+								onClick={() =>
+									update.mutate({
+										applicationId,
+										name: name.trim(),
+										description: description.trim() || null,
+									})
+								}
+								disabled={!name.trim() || update.isPending || !canWrite}
+							>
+								{update.isPending && <Loader2 className="size-4 animate-spin" />}
+								Save
+							</Button>
+						</DisabledHint>
 					</div>
 				</div>
 			</SettingsSection>

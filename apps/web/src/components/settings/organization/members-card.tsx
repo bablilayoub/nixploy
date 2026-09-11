@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
 import { Link2, Loader2, Plus, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -11,6 +10,7 @@ import { MemberCapabilitiesDialog } from "@/components/settings/organization/mem
 import { SettingsSection } from "@/components/settings/settings-section";
 import { StatusDot } from "@/components/shell";
 import { Button } from "@/components/ui/button";
+import { DateTime } from "@/components/ui/date-time";
 import {
 	Dialog,
 	DialogContent,
@@ -223,7 +223,7 @@ export function MembersCard() {
 						<div className="grid gap-3">
 							<div className="flex gap-2">
 								<Input value={createdLink} readOnly className="font-mono text-xs" />
-								<CopyButton value={createdLink} label="Copy" />
+								<CopyButton value={createdLink} label="Copy" showLabel />
 							</div>
 						</div>
 						<DialogFooter>
@@ -376,7 +376,7 @@ export function MembersCard() {
 											</div>
 										</TableCell>
 										<TableCell className="text-muted-foreground">
-											{format(new Date(member.createdAt), "MMM d, yyyy")}
+											<DateTime value={member.createdAt} />
 										</TableCell>
 										<TableCell>
 											{isOwner || isSelf || !canManage ? (
@@ -442,12 +442,12 @@ export function MembersCard() {
 								<Link2 className="size-4 shrink-0 text-muted-foreground" />
 								<div className="flex min-w-0 flex-1 flex-col">
 									<span className="truncate text-sm font-medium">{invitation.email}</span>
-									<span className="text-xs text-muted-foreground capitalize">
-										{invitation.role} · expires{" "}
-										{format(new Date(invitation.expiresAt), "MMM d, yyyy 'at' h:mm a")}
+									<span className="text-xs text-muted-foreground">
+										<span className="capitalize">{invitation.role}</span> · expires{" "}
+										<DateTime value={invitation.expiresAt} mode="absolute" />
 									</span>
 								</div>
-								<CopyButton value={invitationLink(invitation.id)} label="Copy link" />
+								<CopyButton value={invitationLink(invitation.id)} label="Copy link" showLabel />
 								<Button
 									variant="ghost"
 									size="sm"

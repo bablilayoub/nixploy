@@ -285,7 +285,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 					<UnderlineTabsTrigger value="settings">Settings</UnderlineTabsTrigger>
 				</UnderlineTabsList>
 				<TabsContent value="general" className="mt-6">
-					<GeneralTab compose={compose} />
+					<GeneralTab compose={compose} onOpenComposeFile={() => selectTab("compose-file")} />
 				</TabsContent>
 				<TabsContent value="compose-file" className="mt-6">
 					<ComposeFileTab compose={compose} />

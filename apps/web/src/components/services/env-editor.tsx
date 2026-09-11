@@ -4,8 +4,10 @@ import { EyeOff, Loader2, Save, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { capabilityHint } from "@/components/services/capability-hint";
+import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/code-editor";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 
 export function EnvEditor({
 	value,
@@ -47,6 +49,12 @@ export function EnvEditor({
 
 	const dirty = draft !== serverValue;
 	const busy = Boolean(loading) || saving;
+	// The blur lock only guards existing content against accidental edits: an
+	// empty editor is editable right away (the lock read as a loading
+	// skeleton and cost a click). Members without secrets.write always see the
+	// read-only lock with its hint.
+	const hasContent = serverValue.trim().length > 0;
+	const unlocked = canEdit && (editing || !hasContent);
 
 	const startEditing = () => {
 		if (!canEdit) return;
@@ -89,50 +97,59 @@ export function EnvEditor({
 			<CodeEditor
 				value={draft}
 				onChange={setDraft}
-				protect={!editing}
-				locked={!editing}
+				locked={!unlocked}
 				onLockedChange={(nextLocked) => {
 					if (!nextLocked) startEditing();
 				}}
-				readOnly={!editing}
+				// The capability, not the lock, decides the overlay's verb: writers
+				// see "Edit" on a locked editor, read-only members see "View".
+				readOnly={!canEdit}
+				lockMessage={
+					canEdit
+						? "Locked to prevent accidental edits. Unlock to change the variables."
+						: `Read-only — ${capabilityHint("secrets.write")}.`
+				}
 				minHeight="16rem"
-				placeholder={"KEY=value\nANOTHER_KEY=another value"}
+				placeholder={
+					hasContent
+						? "KEY=value\nANOTHER_KEY=another value"
+						: "No variables yet — one KEY=VALUE per line"
+				}
 				basicSetup={{
 					lineNumbers: true,
 					foldGutter: false,
 				}}
-				lockMessage={
-					canEdit
-						? "Locked to prevent accidental edits."
-						: `Read-only — ${capabilityHint("secrets.write")}.`
-				}
 			/>
 			<div className="flex items-center justify-between gap-3">
 				<p className="text-xs text-muted-foreground">
 					One <code className="font-mono">KEY=VALUE</code> pair per line. Lines starting with{" "}
 					<code className="font-mono">#</code> are comments.
 				</p>
-				{editing && (
+				{unlocked && (
 					<div className="flex items-center gap-2">
-						<Button
-							type="button"
-							variant="secondary"
-							size="sm"
-							onClick={() => stopEditing(true)}
-							disabled={busy}
-						>
-							<X className="size-3.5" />
-							Cancel
-						</Button>
-						<Button
-							onClick={() => void handleSave()}
-							disabled={!dirty || busy || !canEdit}
-							size="sm"
-							title={canEdit ? undefined : capabilityHint("secrets.write")}
-						>
-							{busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-							Save
-						</Button>
+						<UnsavedChangesPill dirty={dirty} />
+						{(editing || dirty) && (
+							<Button
+								type="button"
+								variant="secondary"
+								size="sm"
+								onClick={() => stopEditing(true)}
+								disabled={busy}
+							>
+								<X className="size-3.5" />
+								Cancel
+							</Button>
+						)}
+						<DisabledHint hint={canEdit ? undefined : capabilityHint("secrets.write")}>
+							<Button
+								onClick={() => void handleSave()}
+								disabled={!dirty || busy || !canEdit}
+								size="sm"
+							>
+								{busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+								Save
+							</Button>
+						</DisabledHint>
 					</div>
 				)}
 			</div>

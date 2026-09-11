@@ -1,4 +1,6 @@
-/** Shared display formatters — single source for byte/duration strings. */
+/** Shared display formatters — single source for byte, duration and date strings. */
+
+import { format, formatDistanceToNow } from "date-fns";
 
 /** "0 B" / "1.5 GB" — binary units, one decimal. */
 export function formatBytes(bytes: number): string {
@@ -28,4 +30,18 @@ export function formatDuration(
 		return `${seconds}s`;
 	}
 	return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+/** Absolute timestamp — "Sep 10, 2026 14:05" (viewer's timezone, 24 h). */
+export function formatDateTime(value: Date | string | number): string {
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return "—";
+	return format(date, "MMM d, yyyy HH:mm");
+}
+
+/** Relative timestamp — "3 hours ago" / "in 2 days". */
+export function formatRelative(value: Date | string | number): string {
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return "—";
+	return formatDistanceToNow(date, { addSuffix: true });
 }

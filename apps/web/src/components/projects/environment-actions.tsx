@@ -46,11 +46,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 import { GitopsCard, type GitopsCardHandle } from "./gitops-card";
+import { describeServiceCounts, type ServiceCounts } from "./service-summary";
 
 export interface EnvironmentRow {
 	environmentId: string;
 	name: string;
 	description: string | null;
+	/** Per-kind counts from `environment.byProject` — listed in the delete dialog. */
+	services?: ServiceCounts;
 }
 
 /**
@@ -85,6 +88,11 @@ export function EnvironmentActions({
 	const [duplicateOpen, setDuplicateOpen] = useState(false);
 	const [cloneOpen, setCloneOpen] = useState(false);
 	const [deleteOpen, setDeleteOpen] = useState(false);
+	// Deleting cascades over every service, volume and domain in the
+	// environment — the same type-the-name friction as a service delete.
+	const [deleteConfirmation, setDeleteConfirmation] = useState("");
+	const deleteConfirmed = deleteConfirmation === environment.name;
+	const serviceSummary = environment.services ? describeServiceCounts(environment.services) : null;
 	const [gitopsImportOpen, setGitopsImportOpen] = useState(false);
 	const gitopsRef = useRef<GitopsCardHandle>(null);
 	const [name, setName] = useState(environment.name);
@@ -380,15 +388,38 @@ export function EnvironmentActions({
 				</DialogContent>
 			</Dialog>
 
-			<AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+			<AlertDialog
+				open={deleteOpen}
+				onOpenChange={(next) => {
+					setDeleteOpen(next);
+					if (!next) setDeleteConfirmation("");
+				}}
+			>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Delete environment?</AlertDialogTitle>
+						<AlertDialogTitle>Delete environment</AlertDialogTitle>
 						<AlertDialogDescription>
-							Every service inside "{environment.name}" — applications, compose stacks, databases
-							and their deployment history — will be permanently deleted.
+							This permanently deletes "{environment.name}" and everything inside it. This action
+							cannot be undone.
 						</AlertDialogDescription>
 					</AlertDialogHeader>
+					<ul className="list-disc space-y-1 ps-5 text-sm text-muted-foreground">
+						<li>{serviceSummary ?? "All services"}, including their containers and volumes</li>
+						<li>Every domain, route and deployment history of those services</li>
+						<li>The environment's own variables</li>
+					</ul>
+					<div className="space-y-1.5">
+						<Label htmlFor="delete-environment-confirm">
+							Type <span className="font-mono font-semibold">{environment.name}</span> to confirm
+						</Label>
+						<Input
+							id="delete-environment-confirm"
+							value={deleteConfirmation}
+							onChange={(event) => setDeleteConfirmation(event.target.value)}
+							placeholder={environment.name}
+							autoComplete="off"
+						/>
+					</div>
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
@@ -399,10 +430,10 @@ export function EnvironmentActions({
 								event.preventDefault();
 								remove.mutate({ environmentId: environment.environmentId });
 							}}
-							disabled={remove.isPending}
+							disabled={!deleteConfirmed || remove.isPending}
 						>
 							{remove.isPending && <Loader2 className="size-4 animate-spin" />}
-							Delete
+							Delete environment
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

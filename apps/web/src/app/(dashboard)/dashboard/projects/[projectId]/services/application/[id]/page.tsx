@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { Loader2, Play, Rocket } from "lucide-react";
 import { Suspense, use, useState } from "react";
 
 import { AdvancedTab } from "@/components/application/advanced-tab";
@@ -11,8 +12,10 @@ import { GeneralTab } from "@/components/application/general-tab";
 import { PreviewDeploymentsTab } from "@/components/application/preview-deployments-tab";
 import { SettingsTab } from "@/components/application/settings-tab";
 import { UnderlineTabsList, UnderlineTabsTrigger } from "@/components/application/underline-tabs";
+import { useApplicationActions } from "@/components/application/use-application-actions";
 import { VolumeBackupsTab } from "@/components/backups/volume-backups-tab";
 import { SchedulesTab } from "@/components/schedules/schedules-tab";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { DomainManager } from "@/components/services/domain-manager";
 import { LogViewer } from "@/components/services/log-viewer";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
@@ -21,8 +24,10 @@ import { ServiceTerminal } from "@/components/services/service-terminal";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSyncedTab } from "@/hooks/use-synced-tab";
 import { useTRPC } from "@/lib/trpc";
 
@@ -104,6 +109,22 @@ function ApplicationDetail({ projectId, id }: { projectId: string; id: string })
 		refetchInterval: (query) =>
 			query.state.data?.status === "running" || Date.now() < pollUntil ? 5_000 : false,
 	});
+	const actions = useApplicationActions({
+		applicationId: id,
+		onDeployQueued: () => setPollUntil(Date.now() + 30_000),
+	});
+	const { can } = useCapabilities();
+	// Start / Redeploy only make sense once a deployment succeeded (the swarm
+	// service exists). `application.one` carries no such flag, so read the
+	// recent deployments; `status` alone cannot tell (stop resets it to idle).
+	const recentDeployments = useQuery({
+		...trpc.deployment.byApplication.queryOptions({ applicationId: id, limit: 20 }),
+		enabled: Boolean(application),
+	});
+	const hasDeployed =
+		application?.status === "done" ||
+		application?.status === "running" ||
+		(recentDeployments.data?.deployments ?? []).some((deployment) => deployment.status === "done");
 
 	if (isLoading) {
 		return <PageSkeleton />;
@@ -122,12 +143,48 @@ function ApplicationDetail({ projectId, id }: { projectId: string; id: string })
 		);
 	}
 
+	const canDeploy = can("service.deploy");
+	const canRuntime = can("service.runtime");
+	// One CTA for every runtime empty state: Start once deployed, Deploy before.
+	const runtimeAction = hasDeployed ? (
+		<DisabledHint hint={canRuntime ? undefined : capabilityHint("service.runtime")}>
+			<Button
+				size="sm"
+				disabled={actions.isBusy || !canRuntime}
+				onClick={() => actions.start.mutate({ applicationId: id })}
+			>
+				{actions.start.isPending ? (
+					<Loader2 className="size-4 animate-spin" />
+				) : (
+					<Play className="size-4" />
+				)}
+				Start
+			</Button>
+		</DisabledHint>
+	) : (
+		<DisabledHint hint={canDeploy ? undefined : capabilityHint("service.deploy")}>
+			<Button
+				size="sm"
+				disabled={actions.isBusy || !canDeploy}
+				onClick={() => actions.deploy.mutate({ applicationId: id })}
+			>
+				{actions.deploy.isPending ? (
+					<Loader2 className="size-4 animate-spin" />
+				) : (
+					<Rocket className="size-4" />
+				)}
+				Deploy
+			</Button>
+		</DisabledHint>
+	);
+
 	return (
 		<div className="flex flex-col gap-6">
 			<ApplicationHeader
 				application={application}
 				projectId={projectId}
-				onDeployQueued={() => setPollUntil(Date.now() + 30_000)}
+				actions={actions}
+				hasDeployed={hasDeployed}
 			/>
 
 			<Tabs value={topTab} onValueChange={selectTab} className="w-full">
@@ -176,20 +233,35 @@ function ApplicationDetail({ projectId, id }: { projectId: string; id: string })
 						</SubTabsList>
 						<TabsContent value="logs" className="mt-0">
 							<SettingsSection bare title="Logs" description="Live container output.">
-								<LogViewer appName={application.appName} serverId={application.serverId} />
+								<LogViewer
+									appName={application.appName}
+									serverId={application.serverId}
+									serviceStatus={application.status}
+									notRunningAction={runtimeAction}
+								/>
 							</SettingsSection>
 						</TabsContent>
 						<TabsContent value="monitoring" className="mt-0">
 							<SettingsStack>
 								<SettingsSection bare title="Monitoring" description="CPU, memory, and network.">
-									<MonitoringCharts appName={application.appName} serverId={application.serverId} />
+									<MonitoringCharts
+										appName={application.appName}
+										serverId={application.serverId}
+										serviceStatus={application.status}
+										notRunningAction={runtimeAction}
+									/>
 								</SettingsSection>
 								<ServiceAlertRulesCard applicationId={application.applicationId} />
 							</SettingsStack>
 						</TabsContent>
 						<TabsContent value="terminal" className="mt-0">
 							<SettingsSection bare title="Terminal" description="Shell into the container.">
-								<ServiceTerminal appName={application.appName} serverId={application.serverId} />
+								<ServiceTerminal
+									appName={application.appName}
+									serverId={application.serverId}
+									serviceStatus={application.status}
+									notRunningAction={runtimeAction}
+								/>
 							</SettingsSection>
 						</TabsContent>
 					</Tabs>

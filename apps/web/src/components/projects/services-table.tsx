@@ -3,11 +3,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Loader2, Play, Square } from "lucide-react";
 import Link from "next/link";
-import { Fragment, useState } from "react";
+import { type ComponentProps, Fragment, useState } from "react";
 import { toast } from "sonner";
 
 import { capabilityHint } from "@/components/services/capability-hint";
-import { StatusDot } from "@/components/shell";
+import { ServiceStatusBadge } from "@/components/services/status-badge";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -20,10 +20,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { serviceStatusDot } from "@/lib/status";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 
 import { ServiceRowActions } from "./service-row-actions";
@@ -51,6 +51,8 @@ const ID_FIELD: Record<ServiceType, string> = {
 };
 
 const serviceKey = (service: ServiceEntry) => `${service.type}:${service.id}`;
+
+type BadgeStatus = ComponentProps<typeof ServiceStatusBadge>["status"];
 
 /**
  * Services table — one hairline row per service, grouped by service type.
@@ -177,30 +179,32 @@ export function ServicesTable({
 				<div className="flex items-center justify-between rounded-lg border border-border bg-secondary/40 px-3 py-2">
 					<span className="text-sm text-muted-foreground">{selected.size} selected</span>
 					<div className="flex items-center gap-2">
-						<Button
-							size="sm"
-							variant="outline"
-							disabled={bulkPending || !canRuntime}
-							title={runtimeHint}
-							onClick={() => void runBulk("start")}
-						>
-							{bulkPending ? (
-								<Loader2 className="size-4 animate-spin" />
-							) : (
-								<Play className="size-4" />
-							)}
-							Start
-						</Button>
-						<Button
-							size="sm"
-							variant="outline"
-							disabled={bulkPending || !canRuntime}
-							title={runtimeHint}
-							onClick={() => setConfirmStop(true)}
-						>
-							<Square className="size-4" />
-							Stop
-						</Button>
+						<DisabledHint hint={runtimeHint}>
+							<Button
+								size="sm"
+								variant="outline"
+								disabled={bulkPending || !canRuntime}
+								onClick={() => void runBulk("start")}
+							>
+								{bulkPending ? (
+									<Loader2 className="size-4 animate-spin" />
+								) : (
+									<Play className="size-4" />
+								)}
+								Start
+							</Button>
+						</DisabledHint>
+						<DisabledHint hint={runtimeHint}>
+							<Button
+								size="sm"
+								variant="outline"
+								disabled={bulkPending || !canRuntime}
+								onClick={() => setConfirmStop(true)}
+							>
+								<Square className="size-4" />
+								Stop
+							</Button>
+						</DisabledHint>
 						<Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
 							Clear
 						</Button>
@@ -235,9 +239,9 @@ export function ServicesTable({
 												/>
 											</TableCell>
 											<TableCell className="w-36">
-												<span className="flex items-center gap-2 text-sm capitalize">
-													<StatusDot status={serviceStatusDot[service.status] ?? "neutral"} />
-													{service.status}
+												{/* Same vocabulary as the service headers; only the header dot pulses, not every row. */}
+												<span className="[&_.animate-pulse]:animate-none">
+													<ServiceStatusBadge status={service.status as BadgeStatus} />
 												</span>
 											</TableCell>
 											<TableCell>

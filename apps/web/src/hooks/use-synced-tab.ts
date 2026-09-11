@@ -3,6 +3,8 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { confirmDiscardUnsavedChanges } from "@/hooks/use-unsaved-changes";
+
 /**
  * Syncs a tab selection to the `?tab=` query param so detail-page tabs are
  * deep-linkable (mirrors the project page's tab sync). The value may be a
@@ -10,6 +12,9 @@ import { useCallback, useEffect, useState } from "react";
  * `isValid` rejects unknown param values; selecting the default tab removes
  * the param. A `?tab=` change from outside (same-route navigation, browser
  * back/forward) re-syncs the selected value.
+ *
+ * Switching unmounts the previous `TabsContent`, so a dirty form there would
+ * lose its edits: `select` first asks through the unsaved-changes guard.
  */
 export function useSyncedTab(defaultValue: string, isValid?: (value: string) => boolean) {
 	const router = useRouter();
@@ -25,6 +30,7 @@ export function useSyncedTab(defaultValue: string, isValid?: (value: string) => 
 
 	const select = useCallback(
 		(next: string) => {
+			if (next !== value && !confirmDiscardUnsavedChanges()) return;
 			setValue(next);
 			const params = new URLSearchParams(searchParams.toString());
 			if (next === defaultValue) {
@@ -35,7 +41,7 @@ export function useSyncedTab(defaultValue: string, isValid?: (value: string) => 
 			const query = params.toString();
 			router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
 		},
-		[defaultValue, pathname, router, searchParams],
+		[defaultValue, pathname, router, searchParams, value],
 	);
 
 	return [value, select] as const;

@@ -5,8 +5,10 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCapabilities } from "@/hooks/use-capabilities";
@@ -38,10 +40,17 @@ export function OrganizationCard() {
 	const [logoUrl, setLogoUrl] = useState("");
 	const [accentColor, setAccentColor] = useState("#1c1917");
 	const [isNamePending, setIsNamePending] = useState(false);
+	// Set inside the sync effects, so "dirty" can only be computed against a
+	// seeded form: comparing the blank initial state with store data would
+	// flag the form dirty during hydration (the org store is already filled)
+	// and render the pill on the client only.
+	const [nameSeeded, setNameSeeded] = useState(false);
+	const [brandingSeeded, setBrandingSeeded] = useState(false);
 
 	useEffect(() => {
 		if (activeOrganization?.name) {
 			setName(activeOrganization.name);
+			setNameSeeded(true);
 		}
 	}, [activeOrganization?.name]);
 
@@ -50,6 +59,7 @@ export function OrganizationCard() {
 		setDisplayName(settingsQuery.data.branding.displayName ?? "");
 		setLogoUrl(settingsQuery.data.logo ?? "");
 		setAccentColor(settingsQuery.data.branding.accentColor ?? "#1c1917");
+		setBrandingSeeded(true);
 	}, [settingsQuery.data]);
 
 	const saveBranding = useMutation({
@@ -98,6 +108,13 @@ export function OrganizationCard() {
 	// paint when the layout already resolved the settings query.
 	const brandingReady = mounted && settingsQuery.isSuccess;
 	const brandingDisabled = !brandingReady || !canBrand;
+	const nameDirty = nameSeeded && name !== activeOrganization?.name;
+	const brandingDirty =
+		brandingReady &&
+		brandingSeeded &&
+		(displayName !== (settingsQuery.data?.branding.displayName ?? "") ||
+			logoUrl !== (settingsQuery.data?.logo ?? "") ||
+			accentColor !== (settingsQuery.data?.branding.accentColor ?? "#1c1917"));
 
 	return (
 		<>
@@ -121,15 +138,17 @@ export function OrganizationCard() {
 						<Label htmlFor="org-slug">Slug</Label>
 						<Input id="org-slug" disabled value={activeOrganization?.slug ?? ""} />
 					</div>
-					<div>
-						<Button
-							type="submit"
-							title={renameHint}
-							disabled={!canRename || isNamePending || !name || name === activeOrganization?.name}
-						>
-							{isNamePending && <Loader2 className="size-4 animate-spin" />}
-							Save name
-						</Button>
+					<div className="flex items-center gap-3">
+						<DisabledHint hint={renameHint}>
+							<Button
+								type="submit"
+								disabled={!canRename || isNamePending || !name || name === activeOrganization?.name}
+							>
+								{isNamePending && <Loader2 className="size-4 animate-spin" />}
+								Save name
+							</Button>
+						</DisabledHint>
+						<UnsavedChangesPill dirty={nameDirty} />
 					</div>
 				</form>
 			</SettingsSection>
@@ -193,15 +212,14 @@ export function OrganizationCard() {
 							/>
 						</div>
 					</div>
-					<div>
-						<Button
-							type="submit"
-							title={brandHint}
-							disabled={brandingDisabled || saveBranding.isPending}
-						>
-							{saveBranding.isPending && <Loader2 className="size-4 animate-spin" />}
-							Save branding
-						</Button>
+					<div className="flex items-center gap-3">
+						<DisabledHint hint={brandHint}>
+							<Button type="submit" disabled={brandingDisabled || saveBranding.isPending}>
+								{saveBranding.isPending && <Loader2 className="size-4 animate-spin" />}
+								Save branding
+							</Button>
+						</DisabledHint>
+						<UnsavedChangesPill dirty={brandingDirty} />
 					</div>
 				</form>
 			</SettingsSection>

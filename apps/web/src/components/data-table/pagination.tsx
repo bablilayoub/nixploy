@@ -117,6 +117,8 @@ export function DataTablePagination<TData>({ table, className }: DataTablePagina
 								variant={currentPage === page ? "default" : "outline"}
 								size="icon-sm"
 								className="size-8"
+								aria-label={`Page ${page}`}
+								aria-current={currentPage === page ? "page" : undefined}
 								onClick={() => table.setPageIndex(page - 1)}
 							>
 								{page}

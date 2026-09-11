@@ -13,8 +13,10 @@ import {
 } from "@/components/git-provider-repo-picker";
 
 import { capabilityHint } from "@/components/services/capability-hint";
+import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -502,11 +504,14 @@ export function SourceConfig({ application }: { application: Application }) {
 					</>
 				)}
 
-				<div className="flex justify-end">
-					<Button onClick={onSave} disabled={saveSource.isPending || saveBlocked} title={saveHint}>
-						{saveSource.isPending && <Loader2 className="size-4 animate-spin" />}
-						Save Source
-					</Button>
+				<div className="flex items-center justify-end gap-3">
+					<UnsavedChangesPill dirty={dirty} />
+					<DisabledHint hint={saveHint}>
+						<Button onClick={onSave} disabled={saveSource.isPending || saveBlocked}>
+							{saveSource.isPending && <Loader2 className="size-4 animate-spin" />}
+							Save Source
+						</Button>
+					</DisabledHint>
 				</div>
 			</div>
 		</SettingsSection>

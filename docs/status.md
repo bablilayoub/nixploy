@@ -58,7 +58,7 @@ Image pins to review periodically: `traefik:v3.5.0`, `postgres:17-alpine`, `node
 - [ ] Landing docs (`apps/landing/src/lib/docs/pages.ts`) still hand-duplicate `docs/*`; the sweep's operator-facing changes (TRUSTED_PROXIES, invitation header, PG 18, mongo replica sets, instance backups admin-only, GitOps partial apply, remote-server placement) are in `docs/` but not mirrored on the site yet.
 - [ ] `NEXT_PUBLIC_APP_URL` third fallback in the GitHub callback; better-auth logs `ERROR … Failed to validate API key` on every bad key.
 - [ ] Large files still unsplit: `git/webhook-handler.ts`, `databases/engine.ts`, `routers/application.ts`.
-- [ ] `deploymentStatus` has no `queued` value (queued rows show `running`).
+- [x] `deploymentStatus` has a `queued` value since migration 0019 (2026-09-11): queued rows are re-enqueued at boot, running rows are failed; one queued + one running job per app.
 - [ ] Local swarm leftovers from earlier smokes: service `hello-ac7e44`, stale `.nixploy-data/metrics/*.jsonl` (harmless).
 
 ## Next steps

@@ -13,7 +13,7 @@ import {
 	ShieldAlert,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -180,7 +180,15 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 	const [generatingHost, setGeneratingHost] = useState(false);
 
 	const project = projects?.find((p) => p.projectId === projectId);
-	const environments = project?.environments ?? [];
+	const environments = useMemo(() => project?.environments ?? [], [project]);
+	// The destination step should not ask when there is nothing to choose:
+	// preselect the only project and the only environment.
+	useEffect(() => {
+		if (!projectId && projects?.length === 1) setProjectId(projects[0].projectId);
+	}, [projectId, projects]);
+	useEffect(() => {
+		if (!environmentName && environments.length === 1) setEnvironmentName(environments[0].name);
+	}, [environmentName, environments]);
 	const stepIndex = steps.findIndex((entry) => entry.id === step);
 	const isLastStep = stepIndex === steps.length - 1;
 

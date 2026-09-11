@@ -1,16 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import {
-	Activity,
-	ArrowDown,
-	ArrowUp,
-	Cpu,
-	Database,
-	HardDrive,
-	ListOrdered,
-	RefreshCw,
-} from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, Cpu, Database, HardDrive, ListOrdered } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	Area,
@@ -23,8 +14,8 @@ import {
 	YAxis,
 } from "recharts";
 
+import { NotRunningState, type RuntimeEmptyProps } from "@/components/services/not-running-state";
 import { SettingsSection } from "@/components/settings/settings-section";
-import { Button } from "@/components/ui/button";
 import { formatBytes } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -305,10 +296,12 @@ const RANGES: { value: Range; label: string }[] = [
 export function MonitoringCharts({
 	appName,
 	serverId,
+	serviceStatus,
+	notRunningAction,
 }: {
 	appName: string;
 	serverId?: string | null;
-}) {
+} & RuntimeEmptyProps) {
 	const trpc = useTRPC();
 	const [range, setRange] = useState<Range>("live");
 	const [liveSamples, setLiveSamples] = useState<Sample[]>([]);
@@ -520,71 +513,74 @@ export function MonitoringCharts({
 				</div>
 			</div>
 
-			<div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-				<KpiCard
-					icon={Cpu}
-					label="CPU"
-					value={latest ? `${latest.cpu.toFixed(1)}%` : "—"}
-					sub={samples.length > 1 ? `peak ${peakCpu.toFixed(0)}%` : undefined}
-					color={METRICS.cpu}
-					samples={samples}
-					dataKey="cpu"
-					gradientId="spark-cpu"
-					meter={latest?.cpu}
-				/>
-				<KpiCard
-					icon={HardDrive}
-					label="Memory"
-					value={latest ? formatBytes(latest.memoryUsed) : "—"}
-					sub={
-						latest
-							? `${latest.memoryPercent.toFixed(1)}% · peak ${peakMemory.toFixed(0)}%`
-							: undefined
-					}
-					color={METRICS.memory}
-					samples={samples}
-					dataKey="memoryPercent"
-					gradientId="spark-mem"
-					meter={latest?.memoryPercent}
-				/>
-				<KpiCard
-					icon={ArrowDown}
-					label="Network in"
-					value={latest ? `${formatBytes(latest.rxRate)}/s` : "—"}
-					color={METRICS.rx}
-					samples={samples}
-					dataKey="rxRate"
-					gradientId="spark-rx"
-				/>
-				<KpiCard
-					icon={ArrowUp}
-					label="Network out"
-					value={latest ? `${formatBytes(latest.txRate)}/s` : "—"}
-					color={METRICS.tx}
-					samples={samples}
-					dataKey="txRate"
-					gradientId="spark-tx"
-				/>
-				<KpiCard
-					icon={Database}
-					label="Disk I/O"
-					value={latest ? `${formatBytes(latest.diskWriteRate)}/s` : "—"}
-					sub={latest ? `read ${formatBytes(latest.diskReadRate)}/s` : undefined}
-					color={METRICS.disk}
-					samples={samples}
-					dataKey="diskWriteRate"
-					gradientId="spark-disk"
-				/>
-				<KpiCard
-					icon={ListOrdered}
-					label="Processes"
-					value={latest ? String(latest.pids) : "—"}
-					color={METRICS.pids}
-					samples={samples}
-					dataKey="pids"
-					gradientId="spark-pids"
-				/>
-			</div>
+			{/* Stat cards only once a sample exists — six "—" tiles say nothing. */}
+			{latest && (
+				<div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+					<KpiCard
+						icon={Cpu}
+						label="CPU"
+						value={latest ? `${latest.cpu.toFixed(1)}%` : "—"}
+						sub={samples.length > 1 ? `peak ${peakCpu.toFixed(0)}%` : undefined}
+						color={METRICS.cpu}
+						samples={samples}
+						dataKey="cpu"
+						gradientId="spark-cpu"
+						meter={latest?.cpu}
+					/>
+					<KpiCard
+						icon={HardDrive}
+						label="Memory"
+						value={latest ? formatBytes(latest.memoryUsed) : "—"}
+						sub={
+							latest
+								? `${latest.memoryPercent.toFixed(1)}% · peak ${peakMemory.toFixed(0)}%`
+								: undefined
+						}
+						color={METRICS.memory}
+						samples={samples}
+						dataKey="memoryPercent"
+						gradientId="spark-mem"
+						meter={latest?.memoryPercent}
+					/>
+					<KpiCard
+						icon={ArrowDown}
+						label="Network in"
+						value={latest ? `${formatBytes(latest.rxRate)}/s` : "—"}
+						color={METRICS.rx}
+						samples={samples}
+						dataKey="rxRate"
+						gradientId="spark-rx"
+					/>
+					<KpiCard
+						icon={ArrowUp}
+						label="Network out"
+						value={latest ? `${formatBytes(latest.txRate)}/s` : "—"}
+						color={METRICS.tx}
+						samples={samples}
+						dataKey="txRate"
+						gradientId="spark-tx"
+					/>
+					<KpiCard
+						icon={Database}
+						label="Disk I/O"
+						value={latest ? `${formatBytes(latest.diskWriteRate)}/s` : "—"}
+						sub={latest ? `read ${formatBytes(latest.diskReadRate)}/s` : undefined}
+						color={METRICS.disk}
+						samples={samples}
+						dataKey="diskWriteRate"
+						gradientId="spark-disk"
+					/>
+					<KpiCard
+						icon={ListOrdered}
+						label="Processes"
+						value={latest ? String(latest.pids) : "—"}
+						color={METRICS.pids}
+						samples={samples}
+						dataKey="pids"
+						gradientId="spark-pids"
+					/>
+				</div>
+			)}
 
 			{replicas.length > 1 && (
 				<SettingsSection title={`Replicas · ${replicas.length}`}>
@@ -614,23 +610,17 @@ export function MonitoringCharts({
 			)}
 
 			{notRunningMessage && range === "live" ? (
-				<div className="flex h-40 flex-col items-center justify-center gap-3 rounded-lg border border-border p-4 text-center">
-					<p className="text-sm font-medium">Service is not running</p>
-					<p className="max-w-sm text-xs text-muted-foreground">
-						Metrics appear once a container is up. Deploy or start the service first.
-					</p>
-					<Button
-						variant="outline"
-						size="sm"
-						onClick={() => {
-							setNotRunningMessage(null);
-							setRetryNonce((value) => value + 1);
-						}}
-					>
-						<RefreshCw className="size-3.5" />
-						Retry
-					</Button>
-				</div>
+				<NotRunningState
+					action={notRunningAction}
+					onRetry={
+						serviceStatus === "idle"
+							? undefined
+							: () => {
+									setNotRunningMessage(null);
+									setRetryNonce((value) => value + 1);
+								}
+					}
+				/>
 			) : ((range === "live" && !connected) || (range !== "live" && historyQuery.isLoading)) &&
 				samples.length === 0 ? (
 				<div className="flex h-40 items-center justify-center gap-2 rounded-lg border border-border p-4 text-sm text-muted-foreground">

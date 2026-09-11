@@ -65,8 +65,9 @@ export function CreateProjectDialog({ children }: { children: React.ReactNode })
 				<DialogHeader>
 					<DialogTitle>Create project</DialogTitle>
 					<DialogDescription>
-						A project groups environments and services. A `production` environment is created
-						automatically.
+						A project groups environments and services. A{" "}
+						<code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">production</code>{" "}
+						environment is created automatically.
 					</DialogDescription>
 				</DialogHeader>
 				<form

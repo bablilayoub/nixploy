@@ -46,6 +46,8 @@ function CopyButton({ value }: { value: string }) {
 			type="button"
 			variant="outline"
 			size="icon"
+			aria-label={copied ? "Copied" : "Copy"}
+			title="Copy"
 			onClick={async () => {
 				try {
 					await navigator.clipboard.writeText(value);
@@ -57,7 +59,6 @@ function CopyButton({ value }: { value: string }) {
 			}}
 		>
 			{copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-			<span className="sr-only">Copy</span>
 		</Button>
 	);
 }

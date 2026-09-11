@@ -5,6 +5,7 @@ import { ChevronDown, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { CopyButton } from "@/components/services/copy-button";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -424,8 +425,16 @@ export function AddServiceMenu({
 						{createdDatabase &&
 							Object.entries(createdDatabase.credentials).map(([label, value]) => (
 								<div key={label} className="flex flex-col gap-1.5">
-									<Label>{label}</Label>
-									<Input readOnly value={value} className="font-mono" />
+									<Label htmlFor={`credential-${label}`}>{label}</Label>
+									<div className="flex items-center gap-1">
+										<Input
+											id={`credential-${label}`}
+											readOnly
+											value={value}
+											className="font-mono"
+										/>
+										<CopyButton value={value} label={`Copy ${label.toLowerCase()}`} />
+									</div>
 								</div>
 							))}
 					</div>

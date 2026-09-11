@@ -3,6 +3,7 @@
 import { ArrowDownToLine, Download, Loader2, RefreshCw, Trash2, WrapText } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { NotRunningState, type RuntimeEmptyProps } from "@/components/services/not-running-state";
 import { StatusDot } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -150,6 +151,8 @@ export function LogViewer({
 	serverId,
 	deploymentId,
 	onFinish,
+	serviceStatus,
+	notRunningAction,
 }: {
 	appName?: string;
 	containerId?: string;
@@ -157,7 +160,7 @@ export function LogViewer({
 	deploymentId?: string;
 	/** Called once when a deployment stream sends its terminal `finish` frame. */
 	onFinish?: (status: string) => void;
-}) {
+} & RuntimeEmptyProps) {
 	const [lines, setLines] = useState<string[]>([]);
 	const [status, setStatus] = useState<ConnectionStatus>("connecting");
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -397,17 +400,13 @@ export function LogViewer({
 	}
 
 	if (emptyMessage) {
+		// The stream re-checks itself every EMPTY_RETRY_MS; Retry only makes
+		// sense once the service has been deployed at least once.
 		return (
-			<div className="flex h-64 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-card text-center">
-				<p className="text-sm font-medium text-foreground">Nothing deployed yet</p>
-				<p className="max-w-sm text-sm text-muted-foreground">
-					Deploy the service first — live logs will appear here once a container is running.
-				</p>
-				<Button variant="outline" size="sm" onClick={reconnectNow}>
-					<RefreshCw className="size-3.5" />
-					Retry
-				</Button>
-			</div>
+			<NotRunningState
+				action={notRunningAction}
+				onRetry={serviceStatus === "idle" ? undefined : reconnectNow}
+			/>
 		);
 	}
 
