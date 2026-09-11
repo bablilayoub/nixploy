@@ -38,7 +38,6 @@
 				"src/components/ui/**"
 			],
 			"ignoreDependencies": [
-				"@tanstack/react-table",
 				"bcryptjs",
 				"playwright-core",
 				"postgres",
@@ -93,9 +92,7 @@
 				"tsx"
 			],
 			"ignoreDependencies": [
-				"@trpc/client",
 				"@types/adm-zip",
-				"node-os-utils"
 			]
 		}
 	}
