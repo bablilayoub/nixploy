@@ -38,3 +38,31 @@ describe("spawnLocal cancellation", () => {
 		await expect(proc.done).rejects.toMatchObject({ exitCode: 3, killed: false });
 	});
 });
+
+describe("spawnLocal timeout", () => {
+	it("kills the whole tree and rejects as a failure (not a cancellation) when the timeout expires", async () => {
+		const startedAt = Date.now();
+		const proc = await spawnTargeted(null, "sleep 60 & wait", { timeoutMs: 100 });
+		const pid = proc.pid;
+		await expect(proc.done).rejects.toMatchObject({
+			killed: false,
+			message: expect.stringMatching(/^Command timed out after 0s/),
+		});
+		// A hung build must not wait for the child to exit on its own.
+		expect(Date.now() - startedAt).toBeLessThan(5_000);
+
+		await new Promise((resolve) => setTimeout(resolve, 200));
+		let groupAlive = true;
+		try {
+			if (pid) process.kill(-pid, 0);
+		} catch {
+			groupAlive = false;
+		}
+		expect(groupAlive).toBe(false);
+	});
+
+	it("does not fire for commands that finish in time", async () => {
+		const proc = await spawnTargeted(null, "true", { timeoutMs: 5_000 });
+		await expect(proc.done).resolves.toBeUndefined();
+	});
+});

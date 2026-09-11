@@ -125,7 +125,9 @@ export function DeploymentsTab({ projectId }: { projectId: string }) {
 										<TableCell className="w-32">
 											<span className="flex items-center gap-2 text-sm capitalize">
 												<StatusDot status={deploymentStatusDot[deployment.status] ?? "neutral"} />
-												{deployment.status}
+												{deployment.status === "queued" && deployment.queuePosition
+													? `queued (#${deployment.queuePosition})`
+													: deployment.status}
 											</span>
 										</TableCell>
 										<TableCell>
@@ -142,8 +144,9 @@ export function DeploymentsTab({ projectId }: { projectId: string }) {
 														{deployment.service.name ?? deployment.service.appName ?? "Service"}
 													</span>
 												)}
-												<span className="text-xs text-muted-foreground capitalize">
-													{serviceType} · {deployment.environment.name}
+												<span className="text-xs text-muted-foreground">
+													<span className="capitalize">{serviceType}</span> ·{" "}
+													{deployment.environment.name}
 												</span>
 											</div>
 										</TableCell>

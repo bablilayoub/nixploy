@@ -32,6 +32,7 @@ Boot order: `app.prepare()` → WS attach → deployment recovery → crons → 
 | `/api/mcp` | `api/mcp/route.ts` | Streamable-HTTP MCP, stateless; tools in `modules/mcp/tools.ts`, transport in `modules/mcp/server.ts` |
 | `/api/auth/*` | `api/auth/[...all]/route.ts` | better-auth handler |
 | `/api/github/callback` | `api/github/callback/route.ts` | GitHub App install callback |
+| `/api/health`, `/api/ready`, `/api/version` | `api/{health,ready,version}/route.ts` | Unauthenticated platform probes (liveness, readiness with 503 + `failing[]`, build identity); logic in `modules/observability/health.ts`. Static routes, so the REST catch-all never sees them |
 | `/api/webhooks/<provider>/<providerId>` | `api/webhooks/[provider]/[providerId]/route.ts` | Git push / PR webhooks, signature-verified, 1 MiB body cap, rate-limited → `modules/git/webhook-handler.ts` |
 | `/api/webhooks/deploy/<appName>` | `api/webhooks/deploy/[appName]/route.ts` | Generic API-key deploy hook (org-scoped via `findApplicationByAppNameForUser`) |
 | `/ws/{deployment,logs,stats,terminal}` | `packages/server/src/ws/*.ts` | Upgrade auth = session cookie (`ws/auth.ts`); access checks in `ws/access.ts` (org + capability `service.runtime` / `docker.manage`) |
@@ -89,7 +90,7 @@ Router → module map:
 | `schedule` | `modules/schedules/*` (node-schedule jobs running shell in containers/servers; `cron.ts` strict cron validation; scripts streamed over stdin) |
 | `notification` | `modules/notifications/{index,providers}.ts` (slack, discord, telegram, email, gotify, ntfy, pushover, mattermost, lark, teams, custom) |
 | `server`, `sshKey`, `registry`, `docker` | `modules/cluster/*` (`servers.ts` SSH setup + swarm join/leave + batched stats cache, `ssh-keys.ts`, `registries.ts`), `modules/docker/*` (protected names, prune with the service-volume guard) |
-| `monitoring`, `observability` | `modules/monitoring/{history,remote}.ts` (30 s snapshots, 48 h JSONL, threshold alerts), `modules/observability/index.ts` (incidents, alert rules, uptime probes, log search) |
+| `monitoring`, `observability` | `modules/monitoring/{history,remote}.ts` (30 s snapshots, 48 h JSONL, threshold alerts), `modules/observability/index.ts` (incidents, alert rules, uptime probes, log search), `modules/observability/health.ts` (`/api/health` · `/api/ready` · `/api/version`: DB / docker / migrations / queue / Traefik probes, 5 s cache, used by HEALTHCHECK, the installers and `nixploy doctor`) |
 | `github`, `gitlab`, `bitbucket`, `gitea` | `modules/git/*` (provider APIs, `webhook-handler.ts`, `webhook-secret.ts`) |
 | `gitops` | `modules/gitops/*` (`schema.ts` nixploy.yaml, `export`, `plan`, `apply`, `redeploy`) |
 | `ai` | `modules/ai/*` (OpenAI-compatible + Anthropic client, explain/auto-explain with cache, chat, `apply-patch` env patches, `generate-compose`, `settings`) |
@@ -108,8 +109,8 @@ Router → module map:
 
 ```
 router → queueDeployment()  modules/deployment/index.ts
-        ├─ insert deployment row (status "running" — there is no "queued" enum value)
-        └─ enqueue() per-server FIFO  queue.ts  (concurrency NIXPLOY_DEPLOY_CONCURRENCY, default 1)
+        ├─ insert deployment row (status "queued"; boot recovery re-enqueues leftovers, "running" leftovers are failed)
+        └─ enqueue() per-server FIFO  queue.ts  (row status queued→running; coalesces pending jobs per app, per-app mutex, concurrency NIXPLOY_DEPLOY_CONCURRENCY default 1)
 worker.ts processJob()
   application: context → sources.ts (git clone / docker pull / drop zip)
              → builders/{nixpacks,railpack,dockerfile-builder,buildpacks,static}.ts  (image `<appName>:latest`)
@@ -121,7 +122,7 @@ worker.ts processJob()
                on error: incident + service_log ingest + Copilot auto-explain
 ```
 
-Cancellation: `requestCancellation` dequeues pending jobs or kills registered child processes (`registerDeploymentProcess`); the worker checks `throwIfCancelled` between steps. Logs: `<config>/logs/<appName>/<deploymentId>.log` (+ `.explain.json` sidecar), streamed via `/ws/deployment`.
+Cancellation: `requestCancellation(id, reason)` dequeues pending jobs or kills registered child processes (`registerDeploymentProcess`) and fires `onDeploymentCancelled` hooks; the worker races the pipeline against that signal and its `NIXPLOY_DEPLOY_TIMEOUT_MS` deadline, and checks a checkpoint between steps. Shutdown: `drainQueue({ graceMs })` (called from `server.ts` on SIGTERM) stops dequeuing, waits, then cancels stragglers with reason `shutdown`. The queue's state (and `deploymentEvents`) lives on `globalThis` (`__nixployDeploymentQueue`): `transpilePackages` bundles `@nixploy/server` into the Next route chunks, so the tRPC/REST/webhook graph and the tsx-loaded `server.ts` are two module instances that must share one queue. Logs: `<config>/logs/<appName>/<deploymentId>.log` (+ `.explain.json` sidecar), streamed via `/ws/deployment`.
 
 ## 5. On-disk layout (`NIXPLOY_CONFIG_DIR`, default `/etc/nixploy`, dev `.nixploy-data/`)
 
@@ -151,7 +152,7 @@ Helpers: `modules/deployment/paths.ts` (canonical `getConfigDir`, apps, logs, ss
 | Service schedules | `modules/schedules/index.ts` | per-row cron |
 | Metrics history | `modules/monitoring/history.ts` | every 30 s (`SAMPLE_CRON`), 48 h retention, threshold alerts every 30 min per service/metric |
 | Status reconciler | `modules/deployment/reconciler.ts` | every 1 min |
-| Deployment maintenance | `modules/deployment/maintenance.ts` | hourly (`MAINTENANCE_CRON`): preview expiry, 30-day log prune |
+| Deployment maintenance | `modules/deployment/maintenance.ts` | hourly (`MAINTENANCE_CRON`): preview expiry, deployment-row cap (newest 50 per service + 30 d, files removed), build/schedule log prune (30 d), incidents (resolved > 90 d), audit (`NIXPLOY_AUDIT_RETENTION_DAYS`) |
 | Update checker | `modules/updates/scheduler.ts` | cron from settings (`nixploy-update-check`) |
 | Uptime probes | `modules/observability/index.ts` | every 30 s |
 
@@ -167,9 +168,17 @@ Helpers: `modules/deployment/paths.ts` (canonical `getConfigDir`, apps, logs, ss
 | `NIXPLOY_NETWORK` | swarm, compose, traefik | overlay network (default `nixploy-network`) |
 | `NIXPLOY_WILDCARD_DOMAIN` | previews | default `traefik.me` |
 | `NIXPLOY_DISABLE_TRAEFIK_BOOT` | server.ts | skip Traefik bootstrap (set in the image) |
-| `NIXPLOY_DEPLOY_CONCURRENCY` | queue | per-server parallel deploys (default 1) |
+| `NIXPLOY_DEPLOY_CONCURRENCY` | queue | per-server parallel deploys (default 1; same app never runs twice at once) |
+| `NIXPLOY_COMMAND_TIMEOUT_MS` | exec, docker | local spawn hard timeout, process tree killed on expiry (default 30 min; fallback for SSH too) |
 | `NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS` | exec | SSH command hard timeout (default 30 min) |
+| `NIXPLOY_DEPLOY_TIMEOUT_MS` | worker | per-deployment deadline, job cancelled + row `error` on expiry (default 60 min) |
+| `NIXPLOY_SHUTDOWN_GRACE_MS` | server.ts, queue | SIGTERM wait for running deploys before they are cancelled (default 60 s; keep below Swarm `--stop-grace-period`) |
 | `NIXPLOY_MIGRATIONS_DIR`, `NIXPLOY_APP_VERSION`, `NIXPLOY_IMAGE` | image, updates | set by Dockerfile / install |
+| `NIXPLOY_GIT_COMMIT` | `/api/version` | optional git SHA baked in with `--build-arg` |
+| `NIXPLOY_DB_WAIT_SECONDS` | entrypoint, migrate.mjs | how long to wait for Postgres before migrating (default 60) |
+| `NIXPLOY_AUDIT_RETENTION_DAYS` | deployment maintenance | audit log retention (default 365, `0` = forever) |
+| `NIXPLOY_MEMORY_LIMIT` | install.sh / update.sh | `--limit-memory` of the `nixploy` service (default `2g`) |
+| `NIXPLOY_PRE_UPDATE_BACKUP`, `NIXPLOY_ALLOW_DOWNGRADE` | update.sh | pre-roll `pg_dump` (default on) / allow a lower semver tag (default off) |
 | `NIXPLOY_BASE_URL` | public-url | explicit public base URL override |
 | `NIXPLOY_SCHEDULES_LOG_PATH` | schedules | override schedule log location |
 | `DOCKER_SOCKET` | dockerode | default `/var/run/docker.sock` |

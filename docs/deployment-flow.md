@@ -6,15 +6,71 @@ How a service goes from "click Deploy" to a running container behind Traefik.
 
 `packages/server/src/modules/deployment/queue.ts` is an in-process FIFO queue
 (one per server: local host is the `null` key, managed servers are keyed by
-`serverId`). Routers call `queueDeployment(...)`, which inserts a `deployment`
-row (`status: queued`) and enqueues a job. `worker.ts` dequeues and runs jobs;
-a job can be cancelled while pending (dequeued) or running (its child
-processes are killed). Queue depth per server is exposed for monitoring
-(`queueDepth`).
+`serverId`; `NIXPLOY_DEPLOY_CONCURRENCY` slots per server, default 1).
+Routers call `queueDeployment(...)`, which inserts a `deployment` row with
+`status: queued` and enqueues a job. `worker.ts` dequeues, flips the row to
+`running` (`startedAt`), runs the pipeline and finalizes it as `done` /
+`error` / `cancelled`. Queue depth per server is exposed for monitoring
+(`queueDepth`); each queued row's place in its server's line is returned as
+`queuePosition` by `deployment.byApplication` / `byCompose` / `byProject` /
+`recent` / `getLogs` and rendered as "Queued (#n)" in the history table.
 
-Being in-process means: queue state does not survive an app restart. Rows
-left in `queued`/`running` at shutdown should be treated as failed on boot —
-the status reconciler (see `docs/architecture.md`) owns that cleanup.
+Rules the queue enforces:
+
+- **Coalescing** — enqueueing a job for an app that already has a *queued*
+  (not running) job replaces it: the old row ends as `cancelled` with
+  `errorMessage = "Superseded by a newer deployment"` (not `error`, so a push
+  burst never counts as failures in stats, streak alerts or Deploy Copilot).
+  A burst of N pushes therefore yields at most one running + one queued job
+  per app.
+- **Per-app mutex** — two jobs for the same `appName` never run at once, even
+  with `NIXPLOY_DEPLOY_CONCURRENCY > 1`; a busy app's job stays in line and the
+  next app's job takes the free slot.
+- **Cancellation** — a queued job is dequeued and its row finalized by the
+  caller; a running job has every registered child process killed and the
+  worker finalizes it. Cancellations carry a reason (`user`, `timeout`,
+  `shutdown`) so the worker records the right outcome.
+- **Restart safety** — queued rows stay `queued` across a restart and boot
+  recovery (`recovery.ts`) re-enqueues them oldest-first (previews excepted:
+  the row does not carry the previewDeploymentId, so they are failed). Rows
+  that were `running` are failed ("Interrupted: Nixploy restarted…").
+- **One queue per process** — the state lives on `globalThis`
+  (`__nixployDeploymentQueue`), like `deploymentEvents`. Next transpiles
+  `@nixploy/server` into its route bundles, so the request graph that
+  enqueues jobs and the custom server (`server.ts`, loaded through tsx) that
+  recovers and drains them are two instances of `queue.ts`; module-level
+  state would give each its own invisible queue and a SIGTERM drain would
+  miss every real build.
+
+### Timeouts
+
+| Knob | Default | Scope |
+| --- | --- | --- |
+| `NIXPLOY_COMMAND_TIMEOUT_MS` | 30 min | Every local spawn (`execAsync`, `execAsyncWithStdin`, `spawnTargeted`): on expiry the whole process group is SIGTERMed (SIGKILL 5 s later) and the call rejects with a "timed out" error. Also the fallback for SSH commands. |
+| `NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS` | 30 min | SSH commands (`execAsyncRemote`, `execAsyncRemoteWithStdin`, remote `spawnTargeted`); overrides the generic knob. |
+| `NIXPLOY_DEPLOY_TIMEOUT_MS` | 60 min | Per-job deadline from the moment the worker picks a job up. On expiry the job is cancelled with reason `timeout` and finalized as `error` ("Deployment exceeded 60 minutes"). |
+
+The worker races the pipeline against the queue's cancellation signal, so a
+job stuck in a step that is not process-bound (hung SSH handshake, Docker API
+call, DB query) still finalizes on cancel/deadline/shutdown; the abandoned
+pipeline dies at its next `ctx.run` / checkpoint. Notifications and incident
+recording run detached after the `finish` event, so the queue slot is released
+without waiting on a slow notification channel.
+
+### Graceful shutdown
+
+`apps/web/server.ts` handles `SIGTERM`/`SIGINT` (Swarm updates, `update.sh`,
+Ctrl-C): stop dequeuing and stop accepting HTTP connections → cancel the
+node-schedule crons (`lib/shutdown.ts`, bounded wait for a running tick) →
+close websocket clients with `1001` (the log viewer reconnects after the
+restart) → wait up to `NIXPLOY_SHUTDOWN_GRACE_MS` (default 60 s) for running
+deployments; whatever is still building is cancelled with reason `shutdown`
+and finalized as `error` ("Interrupted by panel shutdown") → `exit 0`. A
+second signal forces an immediate exit; a backstop timer (grace + 30 s) exits
+`1` if anything hangs. Keep the Swarm `--stop-grace-period` of the `nixploy`
+service above the grace (the installer sets 90 s) or Docker kills the process
+mid-finalization. `unhandledRejection` is logged and survived;
+`uncaughtException` is logged and exits `1`.
 
 ## Application deploy pipeline (`worker.ts`)
 
@@ -60,8 +116,12 @@ the status reconciler (see `docs/architecture.md`) owns that cleanup.
    `done`; on failure → `error`, with the error message on the deployment row.
    `events.ts` fans out to notification channels (deploy success/failure).
 
-The full log stream goes both to the deployment log file and to subscribers
-of `/ws/deployment` (`logger.ts`), which the UI renders live.
+The full log stream is appended to the deployment log file by `logger.ts`,
+which also emits a `log` event on `deploymentEvents` per chunk. `/ws/deployment`
+(`ws/deployment-logs.ts`) replays the file, then follows it by byte offset
+(`stat` size + positional read) woken by those events — no per-client file
+re-read or DB poll; a 5 s status check remains as a safety net. `deployment.getLogs`
+reads from the byte `offset` it returned last time for the same reason.
 
 ## Compose deploy pipeline
 
@@ -147,7 +207,8 @@ through `modules/backups` to S3 destinations on schedules.
 
 - **Boot recovery** (`modules/deployment/recovery.ts`): deployments left
   `running` by a restart are marked `error` ("Interrupted…") so the status
-  reconciler is not blocked by a deployment that can never finish. Interrupted
+  reconciler is not blocked by a deployment that can never finish; rows left
+  `queued` are re-enqueued oldest-first (see "The queue"). Interrupted
   previews land on `previewDeployments.previewStatus = error`; the parent
   application's status is left alone.
 - **Docker cleanup** (`modules/deployment/cleanup.ts`, cron + manual trigger)

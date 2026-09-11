@@ -38,6 +38,7 @@ export interface DeploymentListResult {
 }
 
 export interface DeploymentStats {
+	queued: number;
 	running: number;
 	done: number;
 	error: number;
@@ -246,7 +247,14 @@ export async function getDeploymentStatsSince(
 export function mergeDeploymentStatusRows(
 	rows: Array<{ status: DeploymentRow["status"]; value: number }>,
 ): DeploymentStats {
-	const stats: DeploymentStats = { running: 0, done: 0, error: 0, cancelled: 0, total: 0 };
+	const stats: DeploymentStats = {
+		queued: 0,
+		running: 0,
+		done: 0,
+		error: 0,
+		cancelled: 0,
+		total: 0,
+	};
 	for (const row of rows) {
 		stats[row.status] += row.value;
 		stats.total += row.value;

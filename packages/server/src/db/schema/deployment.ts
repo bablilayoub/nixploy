@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { applications } from "./application";
@@ -38,47 +38,65 @@ export const deployments = pgTable(
 	(table) => [
 		index("deployment_app_created_idx").on(table.applicationId, table.createdAt.desc()),
 		index("deployment_compose_created_idx").on(table.composeId, table.createdAt.desc()),
+		// In-flight rows (queued/running) for the reconciler, boot recovery and
+		// queue-position lookups. The predicate names the TERMINAL labels on
+		// purpose: the migrator applies every pending file in one transaction,
+		// and Postgres refuses to reference an enum value added in that same
+		// transaction ("unsafe use of new value") — see drizzle/0019.
+		index("deployment_active_status_idx")
+			.on(table.status)
+			.where(sql`"status" NOT IN ('done', 'error', 'cancelled')`),
+		index("deployment_created_idx").on(table.createdAt.desc()),
+		index("deployment_schedule_created_idx").on(table.scheduleId, table.createdAt.desc()),
 	],
 );
 
 /** A preview (per-PR) instance of an application. */
-export const previewDeployments = pgTable("preview_deployment", {
-	previewDeploymentId: idColumn("preview_deployment_id"),
-	appName: text("app_name").notNull(),
-	branch: text("branch"),
-	pullRequestId: text("pull_request_id"),
-	pullRequestNumber: text("pull_request_number"),
-	pullRequestTitle: text("pull_request_title"),
-	pullRequestURL: text("pull_request_url"),
-	/** Provider login of the PR author (shown on the approval gate). */
-	pullRequestAuthor: text("pull_request_author"),
-	previewStatus: previewStatus("preview_status").notNull().default("idle"),
-	domainId: text("domain_id"),
-	expiresAt: timestamp("expires_at", { withTimezone: true }),
-	applicationId: text("application_id")
-		.notNull()
-		.references(() => applications.applicationId, { onDelete: "cascade" }),
-	serverId: text("server_id").references(() => servers.serverId, {
-		onDelete: "set null",
-	}),
-	createdAt: createdAt(),
-});
+export const previewDeployments = pgTable(
+	"preview_deployment",
+	{
+		previewDeploymentId: idColumn("preview_deployment_id"),
+		appName: text("app_name").notNull(),
+		branch: text("branch"),
+		pullRequestId: text("pull_request_id"),
+		pullRequestNumber: text("pull_request_number"),
+		pullRequestTitle: text("pull_request_title"),
+		pullRequestURL: text("pull_request_url"),
+		/** Provider login of the PR author (shown on the approval gate). */
+		pullRequestAuthor: text("pull_request_author"),
+		previewStatus: previewStatus("preview_status").notNull().default("idle"),
+		domainId: text("domain_id"),
+		expiresAt: timestamp("expires_at", { withTimezone: true }),
+		applicationId: text("application_id")
+			.notNull()
+			.references(() => applications.applicationId, { onDelete: "cascade" }),
+		serverId: text("server_id").references(() => servers.serverId, {
+			onDelete: "set null",
+		}),
+		createdAt: createdAt(),
+	},
+	(table) => [index("preview_deployment_application_id_idx").on(table.applicationId)],
+);
 
 /** A pinned image a service can be rolled back to. */
-export const rollbacks = pgTable("rollback", {
-	rollbackId: idColumn("rollback_id"),
-	/** Full image reference, e.g. `registry/app@sha256:...` or tagged image. */
-	image: text("image").notNull(),
-	fullContext: text("full_context"),
-	version: text("version"),
-	applicationId: text("application_id")
-		.notNull()
-		.references(() => applications.applicationId, { onDelete: "cascade" }),
-	deploymentId: text("deployment_id").references(() => deployments.deploymentId, {
-		onDelete: "set null",
-	}),
-	createdAt: createdAt(),
-});
+export const rollbacks = pgTable(
+	"rollback",
+	{
+		rollbackId: idColumn("rollback_id"),
+		/** Full image reference, e.g. `registry/app@sha256:...` or tagged image. */
+		image: text("image").notNull(),
+		fullContext: text("full_context"),
+		version: text("version"),
+		applicationId: text("application_id")
+			.notNull()
+			.references(() => applications.applicationId, { onDelete: "cascade" }),
+		deploymentId: text("deployment_id").references(() => deployments.deploymentId, {
+			onDelete: "set null",
+		}),
+		createdAt: createdAt(),
+	},
+	(table) => [index("rollback_application_id_idx").on(table.applicationId)],
+);
 
 export const deploymentsRelations = relations(deployments, ({ one }) => ({
 	application: one(applications, {

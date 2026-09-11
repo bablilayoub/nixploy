@@ -700,7 +700,7 @@ export const applicationRouter = router({
 		const running = await db.query.deployments.findMany({
 			where: and(
 				eq(deployments.applicationId, application.applicationId),
-				eq(deployments.status, "running"),
+				inArray(deployments.status, ["queued", "running"]),
 			),
 			columns: { deploymentId: true },
 		});

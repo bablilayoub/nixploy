@@ -15,6 +15,14 @@ export type WsConnectionHandler = (
 ) => void | Promise<void>;
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
+/**
+ * Largest inbound frame accepted. Browsers only send small control frames
+ * (terminal keystrokes, resize) on these endpoints; anything bigger is a
+ * client trying to grow server memory (security audit 2.7).
+ */
+const MAX_PAYLOAD_BYTES = 64 * 1024;
+/** How long a graceful close waits for clients to acknowledge before terminating. */
+const CLOSE_GRACE_MS = 1_000;
 
 interface TrackedSocket extends WebSocket {
 	isAlive?: boolean;
@@ -97,7 +105,7 @@ async function handleUpgrade(
 
 	let wss = [...servers].find((s) => s.options.path === pathname);
 	if (!wss) {
-		wss = new WebSocketServer({ noServer: true, path: pathname });
+		wss = new WebSocketServer({ noServer: true, path: pathname, maxPayload: MAX_PAYLOAD_BYTES });
 		servers.add(wss);
 	}
 
@@ -140,11 +148,29 @@ export async function isAllowedUpgradeOrigin(req: IncomingMessage): Promise<bool
 	return trusted.some((entry) => originOf(entry) === origin);
 }
 
-/** Graceful shutdown: stop heartbeats and close every endpoint + connection. */
-export function closeWebSocketServer(): void {
+/**
+ * Graceful shutdown: stop heartbeats, tell every client we are going away
+ * (1001 — the log viewer reconnects with backoff once the panel is back),
+ * then terminate whatever has not acknowledged within {@link CLOSE_GRACE_MS}.
+ * Resolves with the number of connections that were open.
+ */
+export async function closeWebSocketServer(): Promise<number> {
 	if (heartbeat) {
 		clearInterval(heartbeat);
 		heartbeat = null;
+	}
+	const open = [...servers].flatMap((wss) => [...wss.clients]);
+	for (const ws of open) {
+		try {
+			ws.close(1001, "Server restarting");
+		} catch {
+			ws.terminate();
+		}
+	}
+	if (open.length > 0) {
+		await new Promise<void>((resolve) => {
+			setTimeout(resolve, CLOSE_GRACE_MS);
+		});
 	}
 	for (const wss of servers) {
 		for (const ws of wss.clients) {
@@ -153,6 +179,7 @@ export function closeWebSocketServer(): void {
 		wss.close();
 	}
 	servers.clear();
+	return open.length;
 }
 
 /** Number of live websocket connections across all endpoints (health/metrics). */

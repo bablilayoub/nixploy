@@ -33,7 +33,13 @@ export const buildType = pgEnum("build_type", [
 
 export const composeType = pgEnum("compose_type", ["docker-compose", "stack"]);
 
+/**
+ * `queued` = accepted, waiting for a worker slot; `running` = the worker owns
+ * it. Only the deploy queue moves rows between the two (see
+ * `modules/deployment/index.ts`).
+ */
 export const deploymentStatus = pgEnum("deployment_status", [
+	"queued",
 	"running",
 	"done",
 	"error",

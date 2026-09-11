@@ -7,16 +7,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * - a cancelled preview must set it back to "idle";
  * - preview jobs must never touch the PARENT application's status;
  * - a failure BEFORE the log is opened (DB error, unwritable log dir) must
- *   still finalize the row and emit `finish`.
+ *   still finalize the row and emit `finish`;
+ * - a job stuck in a step that is not process-bound still finalizes when it
+ *   hits its deadline, is cancelled by the user, or interrupted by shutdown.
  */
 
-const { updates, deploymentRow } = vi.hoisted(() => ({
+const { updates, deploymentRow, applicationLookup } = vi.hoisted(() => ({
 	updates: [] as Array<{ table: string; values: Record<string, unknown> }>,
 	deploymentRow: {
 		value: null as null | { deploymentId: string; status: string; logPath: string },
 		/** Thrown once by the next deployments.findFirst call. */
 		error: null as null | Error,
 	},
+	/** When set, applications.findFirst never resolves (simulates a hung DB/SSH step). */
+	applicationLookup: { hang: false },
 }));
 
 vi.mock("../../db", () => ({
@@ -33,7 +37,10 @@ vi.mock("../../db", () => ({
 				},
 			},
 			// No application row → the job fails fast, exercising the catch path.
-			applications: { findFirst: async () => undefined },
+			applications: {
+				findFirst: () =>
+					applicationLookup.hang ? new Promise<never>(() => {}) : Promise.resolve(undefined),
+			},
 			previewDeployments: { findFirst: async () => null },
 			compose: { findFirst: async () => undefined },
 		},
@@ -72,28 +79,63 @@ import type { QueueJob } from "./queue";
 import type { ApplicationRow } from "./sources";
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const job = (deploymentId: string, previewDeploymentId: string): QueueJob => ({
 	deploymentId,
+	appName: "parent-app",
 	applicationId: "parent-app-1",
 	previewDeploymentId,
 	type: "deploy",
 	serverId: null,
 });
 
+const terminalUpdate = () => updates.find((u) => u.table === "deployment" && "status" in u.values);
+
 describe("worker preview status bookkeeping", () => {
 	beforeEach(async () => {
 		vi.resetModules();
+		delete (globalThis as { __nixployDeploymentQueue?: unknown }).__nixployDeploymentQueue;
 		updates.length = 0;
 		deploymentRow.error = null;
-		deploymentRow.value = { deploymentId: "d1", status: "running", logPath: "/tmp/test.log" };
+		applicationLookup.hang = false;
+		deploymentRow.value = { deploymentId: "d1", status: "queued", logPath: "/tmp/test.log" };
+	});
+
+	it("claims a queued row as running before the pipeline starts", async () => {
+		const queue = await import("./queue");
+		await import("./worker");
+
+		deploymentRow.value = { deploymentId: "d-claim", status: "queued", logPath: "/tmp/c.log" };
+		queue.enqueue(job("d-claim", "prev-0"));
+		await flush();
+		await flush();
+
+		const statusUpdates = updates
+			.filter((u) => u.table === "deployment" && "status" in u.values)
+			.map((u) => u.values.status);
+		expect(statusUpdates).toEqual(["running", "error"]);
+		expect(updates[0]?.values).toMatchObject({ status: "running" });
+		expect(updates[0]?.values.startedAt).toBeInstanceOf(Date);
+	});
+
+	it("skips a row that is no longer queued (cancelled or superseded while waiting)", async () => {
+		const queue = await import("./queue");
+		await import("./worker");
+
+		deploymentRow.value = { deploymentId: "d-gone", status: "cancelled", logPath: "/tmp/g.log" };
+		queue.enqueue(job("d-gone", "prev-0"));
+		await flush();
+		await flush();
+
+		expect(updates).toEqual([]);
 	});
 
 	it("marks a failed preview as error and leaves the parent app untouched", async () => {
 		const queue = await import("./queue");
 		await import("./worker");
 
-		deploymentRow.value = { deploymentId: "d-fail", status: "running", logPath: "/tmp/f.log" };
+		deploymentRow.value = { deploymentId: "d-fail", status: "queued", logPath: "/tmp/f.log" };
 		queue.enqueue(job("d-fail", "prev-1"));
 		await flush();
 		await flush();
@@ -107,7 +149,9 @@ describe("worker preview status bookkeeping", () => {
 		// The parent application row must never be updated for preview jobs.
 		expect(updates.filter((u) => u.table === "application")).toEqual([]);
 
-		const terminal = updates.find((u) => u.table === "deployment" && "status" in u.values);
+		const terminal = updates.find(
+			(u) => u.table === "deployment" && "status" in u.values && u.values.status !== "running",
+		);
 		expect(terminal?.values.status).toBe("error");
 	});
 
@@ -115,7 +159,7 @@ describe("worker preview status bookkeeping", () => {
 		const queue = await import("./queue");
 		await import("./worker");
 
-		deploymentRow.value = { deploymentId: "d-cancel", status: "running", logPath: "/tmp/c.log" };
+		deploymentRow.value = { deploymentId: "d-cancel", status: "queued", logPath: "/tmp/c.log" };
 		queue.enqueue(job("d-cancel", "prev-2"));
 		// The drain loop marks the job running synchronously, so this cancels it.
 		queue.requestCancellation("d-cancel");
@@ -129,7 +173,9 @@ describe("worker preview status bookkeeping", () => {
 		});
 		expect(updates.filter((u) => u.table === "application")).toEqual([]);
 
-		const terminal = updates.find((u) => u.table === "deployment" && "status" in u.values);
+		const terminal = updates.find(
+			(u) => u.table === "deployment" && "status" in u.values && u.values.status !== "running",
+		);
 		expect(terminal?.values.status).toBe("cancelled");
 	});
 
@@ -146,6 +192,7 @@ describe("worker preview status bookkeeping", () => {
 			deploymentRow.error = new Error("database unavailable");
 			queue.enqueue({
 				deploymentId: "d-early",
+				appName: "app-one",
 				applicationId: "app-1",
 				type: "deploy",
 				serverId: null,
@@ -153,12 +200,9 @@ describe("worker preview status bookkeeping", () => {
 			await flush();
 			await flush();
 
-			const terminal = updates.find((u) => u.table === "deployment" && "status" in u.values);
+			const terminal = terminalUpdate();
 			expect(terminal?.values.status).toBe("error");
-			expect(
-				updates.find((u) => u.table === "deployment" && "errorMessage" in u.values)?.values
-					.errorMessage,
-			).toBe("database unavailable");
+			expect(terminal?.values.errorMessage).toBe("database unavailable");
 			expect(finished).toContainEqual({ deploymentId: "d-early", status: "error" });
 			// A non-preview job failing marks the application as errored.
 			expect(updates.filter((u) => u.table === "application").at(-1)?.values).toEqual({
@@ -167,6 +211,96 @@ describe("worker preview status bookkeeping", () => {
 		} finally {
 			deploymentEvents.off("finish", onFinish);
 		}
+	});
+});
+
+describe("worker deadlines and interruption", () => {
+	const hungJob = (deploymentId: string): QueueJob => ({
+		deploymentId,
+		appName: "hung-app",
+		applicationId: "app-hung",
+		type: "deploy",
+		serverId: null,
+	});
+
+	beforeEach(async () => {
+		vi.resetModules();
+		delete (globalThis as { __nixployDeploymentQueue?: unknown }).__nixployDeploymentQueue;
+		updates.length = 0;
+		deploymentRow.error = null;
+		applicationLookup.hang = true;
+		delete process.env.NIXPLOY_DEPLOY_TIMEOUT_MS;
+	});
+
+	it("fails a job that exceeds NIXPLOY_DEPLOY_TIMEOUT_MS even while stuck in a non-process await", async () => {
+		process.env.NIXPLOY_DEPLOY_TIMEOUT_MS = "40";
+		const queue = await import("./queue");
+		await import("./worker");
+		const { deploymentEvents } = await import("./events");
+		const finished: Array<{ deploymentId: string; status: string }> = [];
+		const onFinish = (event: { deploymentId: string; status: string }) => {
+			finished.push(event);
+		};
+		deploymentEvents.on("finish", onFinish);
+		try {
+			deploymentRow.value = { deploymentId: "d-slow", status: "queued", logPath: "/tmp/s.log" };
+			queue.enqueue(hungJob("d-slow"));
+			await sleep(150);
+
+			const terminal = updates.find(
+				(u) => u.table === "deployment" && "status" in u.values && u.values.status !== "running",
+			);
+			expect(terminal?.values.status).toBe("error");
+			expect(terminal?.values.errorMessage).toMatch(/^Deployment exceeded /);
+			expect(finished).toContainEqual({ deploymentId: "d-slow", status: "error" });
+			// The slot is free again: the queue does not think the job is still running.
+			expect(queue.queueDepth(null)).toEqual({ pending: 0, running: 0 });
+		} finally {
+			deploymentEvents.off("finish", onFinish);
+			delete process.env.NIXPLOY_DEPLOY_TIMEOUT_MS;
+		}
+	});
+
+	it("finalizes a hung job as error 'Interrupted by panel shutdown' when drained", async () => {
+		const queue = await import("./queue");
+		await import("./worker");
+
+		deploymentRow.value = { deploymentId: "d-shut", status: "queued", logPath: "/tmp/sh.log" };
+		queue.enqueue(hungJob("d-shut"));
+		await flush();
+
+		const result = await queue.drainQueue({ graceMs: 20 });
+		expect(result).toEqual({ completed: 0, interrupted: 1 });
+		const terminal = updates.find(
+			(u) => u.table === "deployment" && "status" in u.values && u.values.status !== "running",
+		);
+		expect(terminal?.values).toMatchObject({
+			status: "error",
+			errorMessage: "Interrupted by panel shutdown",
+		});
+		expect(updates.filter((u) => u.table === "application").at(-1)?.values).toEqual({
+			status: "error",
+		});
+	});
+
+	it("finalizes a hung job as cancelled on a user cancel", async () => {
+		const queue = await import("./queue");
+		await import("./worker");
+
+		deploymentRow.value = { deploymentId: "d-user", status: "queued", logPath: "/tmp/u.log" };
+		queue.enqueue(hungJob("d-user"));
+		await flush();
+		expect(queue.requestCancellation("d-user")).toBe("running");
+		await flush();
+		await flush();
+
+		const terminal = updates.find(
+			(u) => u.table === "deployment" && "status" in u.values && u.values.status !== "running",
+		);
+		expect(terminal?.values).toMatchObject({ status: "cancelled", errorMessage: null });
+		expect(updates.filter((u) => u.table === "application").at(-1)?.values).toEqual({
+			status: "idle",
+		});
 	});
 });
 
@@ -203,5 +337,15 @@ describe("buildPreviewDeployTarget", () => {
 				branch: "fork:forker/app:fix",
 			}),
 		).toMatchObject({ owner: "forker", repository: "app", branch: "fix", gitBranch: "fix" });
+	});
+});
+
+describe("describeDeadline", () => {
+	it("prints minutes for minute-scale budgets and seconds otherwise", async () => {
+		const { describeDeadline } = await import("./worker");
+		expect(describeDeadline(60 * 60 * 1000)).toBe("60 minutes");
+		expect(describeDeadline(90 * 1000)).toBe("2 minutes");
+		expect(describeDeadline(30 * 1000)).toBe("30 seconds");
+		expect(describeDeadline(40)).toBe("1 seconds");
 	});
 });

@@ -29,7 +29,7 @@ export function ServiceStatusBadge({ status }: { status: ServiceStatus }) {
 	);
 }
 
-type DeploymentStatus = "running" | "done" | "error" | "cancelled" | null | undefined;
+type DeploymentStatus = "queued" | "running" | "done" | "error" | "cancelled" | null | undefined;
 
 const deploymentStatusConfig: Record<
 	string,
@@ -39,14 +39,24 @@ const deploymentStatusConfig: Record<
 		variant: "secondary" | "success" | "destructive" | "info";
 	}
 > = {
+	queued: { label: "Queued", status: "neutral", variant: "secondary" },
 	running: { label: "Running", status: "success", variant: "success" },
 	done: { label: "Done", status: "info", variant: "info" },
 	error: { label: "Error", status: "error", variant: "destructive" },
 	cancelled: { label: "Cancelled", status: "neutral", variant: "secondary" },
 };
 
-export function DeploymentStatusBadge({ status }: { status: DeploymentStatus }) {
+export function DeploymentStatusBadge({
+	status,
+	queuePosition,
+}: {
+	status: DeploymentStatus;
+	/** 1-based place in the server's deploy line; shown as "Queued (#n)". */
+	queuePosition?: number | null;
+}) {
 	const config = deploymentStatusConfig[status ?? "running"] ?? deploymentStatusConfig.running;
+	const label =
+		status === "queued" && queuePosition ? `${config.label} (#${queuePosition})` : config.label;
 
 	return (
 		<Badge variant={config.variant} className="gap-1.5 font-normal">
@@ -54,7 +64,7 @@ export function DeploymentStatusBadge({ status }: { status: DeploymentStatus }) 
 				status={config.status}
 				className={cn("ring-0", config.status === "success" && "animate-pulse")}
 			/>
-			{config.label}
+			{label}
 		</Badge>
 	);
 }

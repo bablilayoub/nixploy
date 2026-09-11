@@ -86,7 +86,7 @@ export async function explainDeploymentFailure(
 	if (deployment.status !== "error" && deployment.status !== "done") {
 		// Allow explain on error primarily; also allow done for post-mortems of flaky runs
 	}
-	if (deployment.status === "running") {
+	if (deployment.status === "running" || deployment.status === "queued") {
 		throw new Error("Deployment is still running");
 	}
 

@@ -232,6 +232,10 @@ export async function applyUpdate(options?: {
 						// Same monitor window as install.sh / update.sh (ROLL_ARGS): a
 						// task that passes HEALTHCHECK and dies within 60 s still rolls back.
 						"--update-monitor 60s",
+						// Panels installed before the graceful-shutdown work keep Swarm's
+						// 10 s default until update.sh runs; set it here too so an in-app
+						// update gives running deploys the same drain window.
+						"--stop-grace-period 90s",
 						"--rollback-order stop-first",
 						NIXPLOY_SERVICE_NAME,
 					].join(" "),

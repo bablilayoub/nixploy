@@ -6,8 +6,8 @@ import { useTRPC } from "@/lib/trpc";
 
 /**
  * 1px indeterminate progress hairline pinned directly under the TopNav
- * border while any deployment is running. Pure neutral CSS animation
- * (keyframes kept inline so no global stylesheet change is needed).
+ * border while any deployment is queued or running. Pure neutral CSS
+ * animation (keyframes kept inline so no global stylesheet change is needed).
  */
 export function DeployProgressBar() {
 	const trpc = useTRPC();
@@ -15,9 +15,11 @@ export function DeployProgressBar() {
 		...trpc.deployment.recent.queryOptions({ limit: 5 }),
 		refetchInterval: 5_000,
 	});
-	const running = (data?.deployments ?? []).some((deployment) => deployment.status === "running");
+	const active = (data?.deployments ?? []).some(
+		(deployment) => deployment.status === "running" || deployment.status === "queued",
+	);
 
-	if (!running) {
+	if (!active) {
 		return null;
 	}
 

@@ -24,46 +24,57 @@ const tsvector = customType<{ data: string }>({
 });
 
 /** Per-service alert rule (CPU / memory / restart count / deploy failure streak). */
-export const alertRules = pgTable("alert_rule", {
-	alertRuleId: idColumn("alert_rule_id"),
-	organizationId: text("organization_id")
-		.notNull()
-		.references(() => organizations.id, { onDelete: "cascade" }),
-	applicationId: text("application_id").references(() => applications.applicationId, {
-		onDelete: "cascade",
-	}),
-	composeId: text("compose_id").references(() => compose.composeId, {
-		onDelete: "cascade",
-	}),
-	/** cpu | memory | restarts | deploy_failure_streak */
-	metric: text("metric").notNull(),
-	threshold: doublePrecision("threshold").notNull(),
-	enabled: boolean("enabled").notNull().default(true),
-	cooldownMinutes: integer("cooldown_minutes").notNull().default(30),
-	lastTriggeredAt: timestamp("last_triggered_at", { withTimezone: true }),
-	createdAt: createdAt(),
-});
+export const alertRules = pgTable(
+	"alert_rule",
+	{
+		alertRuleId: idColumn("alert_rule_id"),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		applicationId: text("application_id").references(() => applications.applicationId, {
+			onDelete: "cascade",
+		}),
+		composeId: text("compose_id").references(() => compose.composeId, {
+			onDelete: "cascade",
+		}),
+		/** cpu | memory | restarts | deploy_failure_streak */
+		metric: text("metric").notNull(),
+		threshold: doublePrecision("threshold").notNull(),
+		enabled: boolean("enabled").notNull().default(true),
+		cooldownMinutes: integer("cooldown_minutes").notNull().default(30),
+		lastTriggeredAt: timestamp("last_triggered_at", { withTimezone: true }),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		index("alert_rule_application_id_idx").on(table.applicationId),
+		index("alert_rule_compose_id_idx").on(table.composeId),
+	],
+);
 
 /** Incident timeline entries (deploy failures, threshold trips, watchdog, uptime). */
-export const incidents = pgTable("incident", {
-	incidentId: idColumn("incident_id"),
-	organizationId: text("organization_id")
-		.notNull()
-		.references(() => organizations.id, { onDelete: "cascade" }),
-	projectId: text("project_id").references(() => projects.projectId, {
-		onDelete: "set null",
-	}),
-	/** deploy_failure | threshold | watchdog | uptime | alert_rule */
-	kind: text("kind").notNull(),
-	severity: text("severity").notNull().default("warning"),
-	title: text("title").notNull(),
-	message: text("message"),
-	serviceId: text("service_id"),
-	serviceName: text("service_name"),
-	metadata: jsonb("metadata").$type<Record<string, unknown>>(),
-	createdAt: createdAt(),
-	resolvedAt: timestamp("resolved_at", { withTimezone: true }),
-});
+export const incidents = pgTable(
+	"incident",
+	{
+		incidentId: idColumn("incident_id"),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		projectId: text("project_id").references(() => projects.projectId, {
+			onDelete: "set null",
+		}),
+		/** deploy_failure | threshold | watchdog | uptime | alert_rule */
+		kind: text("kind").notNull(),
+		severity: text("severity").notNull().default("warning"),
+		title: text("title").notNull(),
+		message: text("message"),
+		serviceId: text("service_id"),
+		serviceName: text("service_name"),
+		metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+		createdAt: createdAt(),
+		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+	},
+	(table) => [index("incident_org_created_idx").on(table.organizationId, table.createdAt.desc())],
+);
 
 /**
  * Indexed log chunks for lite search (Postgres tsvector).

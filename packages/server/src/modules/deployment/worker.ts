@@ -10,6 +10,7 @@ import {
 	redirects,
 	security,
 } from "../../db/schema";
+import { createLogger } from "../../lib/logger";
 import { redactSensitiveText } from "../../utils/public-url";
 import {
 	buildComposeDeployCommand,
@@ -28,9 +29,11 @@ import { type DeploymentStatus, deploymentEvents } from "./events";
 import { DeploymentLogger } from "./logger";
 import {
 	DeploymentCancelledError,
-	isDeploymentCancelled,
+	getCancellationReason,
+	onDeploymentCancelled,
 	type QueueJob,
 	registerDeploymentProcess,
+	requestCancellation,
 	setJobRunner,
 	throwIfCancelled,
 } from "./queue";
@@ -43,6 +46,27 @@ import {
 	resolveRegistryAuth,
 } from "./sources";
 import { upsertSwarmService } from "./swarm";
+
+const log = createLogger("deploy-worker");
+
+/** Per-job deadline default: `NIXPLOY_DEPLOY_TIMEOUT_MS` overrides it. */
+export const DEFAULT_DEPLOY_TIMEOUT_MS = 60 * 60 * 1000;
+
+/** Wall-clock budget of one deployment from the moment the worker picks it up. */
+export function deployTimeoutMs(): number {
+	const fromEnv = Number.parseInt(process.env.NIXPLOY_DEPLOY_TIMEOUT_MS ?? "", 10);
+	return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : DEFAULT_DEPLOY_TIMEOUT_MS;
+}
+
+/** "60 minutes" / "30 seconds" for the deadline error message. */
+export function describeDeadline(ms: number): string {
+	return ms >= 60_000
+		? `${Math.round(ms / 60_000)} minutes`
+		: `${Math.max(1, Math.round(ms / 1000))} seconds`;
+}
+
+/** Runs between pipeline steps; throws once the job was cancelled or abandoned. */
+type Checkpoint = () => void;
 
 /* -------------------------------------------------------------------------- */
 /*  Traefik                                                                   */
@@ -133,7 +157,11 @@ export function buildPreviewDeployTarget(
 	return { ...application, appName: preview.appName, branch: ref, gitBranch: ref };
 }
 
-async function runApplicationJob(ctx: DeploymentContext, job: QueueJob): Promise<void> {
+async function runApplicationJob(
+	ctx: DeploymentContext,
+	job: QueueJob,
+	checkpoint: Checkpoint,
+): Promise<void> {
 	const application = await db.query.applications.findFirst({
 		where: eq(applications.applicationId, job.applicationId ?? ""),
 		with: { environment: { with: { project: true } } },
@@ -182,7 +210,7 @@ async function runApplicationJob(ctx: DeploymentContext, job: QueueJob): Promise
 			application.sourceType === "drop"
 				? await extractDropSource(ctx, deployTarget)
 				: await cloneGitSource(ctx, deployTarget);
-		throwIfCancelled(job.deploymentId);
+		checkpoint();
 
 		const buildDir = resolveBuildDir(codeDir, application.buildPath || "/");
 		imageTag = await buildImage({
@@ -192,10 +220,10 @@ async function runApplicationJob(ctx: DeploymentContext, job: QueueJob): Promise
 			env: parseEnv(mergedEnv).map(([k, v]) => `${k}=${v}`),
 		});
 	}
-	throwIfCancelled(job.deploymentId);
+	checkpoint();
 
 	await upsertSwarmService(ctx, deployTarget, imageTag, { preview: Boolean(preview) });
-	throwIfCancelled(job.deploymentId);
+	checkpoint();
 
 	if (preview) {
 		// Route (parent's container port) + parent's basic-auth/redirects.
@@ -247,7 +275,11 @@ async function runApplicationJob(ctx: DeploymentContext, job: QueueJob): Promise
 /*  Compose pipeline                                                          */
 /* -------------------------------------------------------------------------- */
 
-async function runComposeJob(ctx: DeploymentContext, job: QueueJob): Promise<void> {
+async function runComposeJob(
+	ctx: DeploymentContext,
+	job: QueueJob,
+	checkpoint: Checkpoint,
+): Promise<void> {
 	const row = await db.query.compose.findFirst({
 		where: eq(compose.composeId, job.composeId ?? ""),
 	});
@@ -261,7 +293,7 @@ async function runComposeJob(ctx: DeploymentContext, job: QueueJob): Promise<voi
 	ctx.logger.line("Preparing compose files...");
 	const files = await prepareComposeFiles(row);
 	for (const secret of files.secrets) ctx.logger.addSecret(secret);
-	throwIfCancelled(job.deploymentId);
+	checkpoint();
 
 	// The compose module owns the command line (stack vs compose, env
 	// isolation, rendered file) — see modules/compose/commands.ts.
@@ -274,7 +306,7 @@ async function runComposeJob(ctx: DeploymentContext, job: QueueJob): Promise<voi
 	// manager with the file rendered there (tasks are pinned to the row's
 	// server by the injected node constraint). Plain compose runs on the server.
 	await ctx.run(command, { cwd: files.workDir, onPrimary: runsOnPrimary(row) });
-	throwIfCancelled(job.deploymentId);
+	checkpoint();
 
 	// Per-service Traefik configs for compose domains — best effort.
 	await resyncComposeDomains(row.composeId).catch((error) => {
@@ -290,7 +322,7 @@ async function runComposeJob(ctx: DeploymentContext, job: QueueJob): Promise<voi
 /*  Runner                                                                    */
 /* -------------------------------------------------------------------------- */
 
-type TerminalStatus = Exclude<DeploymentStatus, "running">;
+type TerminalStatus = Exclude<DeploymentStatus, "queued" | "running">;
 
 async function setServiceStatus(
 	job: QueueJob,
@@ -410,10 +442,13 @@ async function recordDeployFailure(job: QueueJob): Promise<void> {
 		}
 	}
 	const { maybeAutoExplainOnFailure } = await import("../ai");
-	void maybeAutoExplainOnFailure(job.deploymentId, orgId).catch((aiError) => {
-		console.error("Deploy Copilot auto-explain failed:", aiError);
+	void maybeAutoExplainOnFailure(job.deploymentId, orgId).catch((aiError: unknown) => {
+		log.error("Deploy Copilot auto-explain failed", { error: errorText(aiError) });
 	});
 }
+
+const errorText = (error: unknown): string =>
+	error instanceof Error ? error.message : String(error);
 
 /**
  * Execute one queued job end-to-end: source → build → swarm/compose →
@@ -424,29 +459,50 @@ async function recordDeployFailure(job: QueueJob): Promise<void> {
  * status, service status, `finish` event). Before, an unwritable log dir or
  * a transient DB error left the row `running` forever, which also froze the
  * status reconciler for that service.
+ *
+ * Lifecycle: the row is `queued` when the worker picks it up and flips to
+ * `running` here. The pipeline races a per-job deadline
+ * ({@link deployTimeoutMs}) and the queue's cancellation signal, so a job
+ * stuck in a step that is not process-bound (hung SSH handshake, Docker API
+ * call, DB query) still finalizes; an abandoned pipeline dies at its next
+ * `ctx.run` / checkpoint. Notifications and incident recording run detached
+ * after `finish` so the queue slot is released without waiting on them.
  */
 async function processJob(job: QueueJob): Promise<void> {
 	let logger: DeploymentLogger | null = null;
 	let terminalStatus: TerminalStatus = "done";
 	let errorMessage: string | null = null;
 	// Set once the job is confirmed live; an already-finalized row (cancelled
-	// while pending) must not be re-finalized by the `finally` block.
+	// or superseded while queued) must not be re-finalized by the `finally`.
 	let started = false;
+	let deadline: NodeJS.Timeout | null = null;
+	// Filled from inside the cancellation promise's executor (a closure, so a
+	// plain `let` would be narrowed to `null` by the time `finally` runs).
+	const teardown: Array<() => void> = [];
+	// True once the runner gave up on the pipeline (cancel / deadline). The
+	// queue clears its cancellation marker when this function returns, so the
+	// pipeline needs its own flag to refuse further work.
+	let abandoned = false;
+	const checkpoint: Checkpoint = () => {
+		if (abandoned) throw new DeploymentCancelledError(job.deploymentId);
+		throwIfCancelled(job.deploymentId);
+	};
 
 	try {
 		const deployment = await db.query.deployments.findFirst({
 			where: eq(deployments.deploymentId, job.deploymentId),
 		});
 		if (!deployment) return;
-		if (deployment.status !== "running") return;
+		if (deployment.status !== "queued") return;
 		started = true;
 
-		logger = new DeploymentLogger(deployment.logPath);
+		logger = new DeploymentLogger(deployment.logPath, job.deploymentId);
 		const log = logger;
 		const ctx: DeploymentContext = {
 			serverId: job.serverId,
 			logger: log,
 			run: async (command, opts) => {
+				checkpoint();
 				const proc = await spawnTargeted(opts?.onPrimary ? null : job.serverId, command, {
 					cwd: opts?.cwd,
 					onData: (chunk) => log.write(chunk),
@@ -458,51 +514,91 @@ async function processJob(job: QueueJob): Promise<void> {
 
 		await db
 			.update(deployments)
-			.set({ startedAt: new Date() })
+			.set({ status: "running", startedAt: new Date() })
 			.where(eq(deployments.deploymentId, job.deploymentId));
 		await setServiceStatus(job, "running");
 		log.line(
 			`Deployment ${job.deploymentId} started (${job.type}${job.serverId ? `, server ${job.serverId}` : ", local"})`,
 		);
 
-		if (job.applicationId) {
-			await runApplicationJob(ctx, job);
-		} else if (job.composeId) {
-			await runComposeJob(ctx, job);
-		} else {
-			throw new Error("Deployment job targets neither an application nor a compose service");
-		}
+		const timeoutMs = deployTimeoutMs();
+		deadline = setTimeout(() => {
+			requestCancellation(job.deploymentId, "timeout");
+		}, timeoutMs);
+		deadline.unref();
+
+		const cancellation = new Promise<never>((_, reject) => {
+			teardown.push(
+				onDeploymentCancelled(job.deploymentId, () => {
+					reject(new DeploymentCancelledError(job.deploymentId));
+				}),
+			);
+		});
+		const pipeline = job.applicationId
+			? runApplicationJob(ctx, job, checkpoint)
+			: job.composeId
+				? runComposeJob(ctx, job, checkpoint)
+				: Promise.reject(
+						new Error("Deployment job targets neither an application nor a compose service"),
+					);
+		// Whichever side loses the race must not surface as an unhandled rejection.
+		void pipeline.catch(() => {});
+		void cancellation.catch(() => {});
+		await Promise.race([pipeline, cancellation]);
 	} catch (error) {
 		started = true;
+		abandoned = true;
+		const reason = getCancellationReason(job.deploymentId);
 		const cancelled =
+			reason !== null ||
 			error instanceof DeploymentCancelledError ||
-			isDeploymentCancelled(job.deploymentId) ||
 			(error instanceof CommandError && error.killed);
-		terminalStatus = cancelled ? "cancelled" : "error";
 		const rawMessage = error instanceof Error ? error.message : String(error);
 		const message = redactSensitiveText(rawMessage, logger?.listSecrets() ?? []);
-		errorMessage = cancelled ? null : message;
-		if (logger) {
-			logger.line(cancelled ? "Deployment cancelled" : `Deployment failed: ${message}`);
+		if (cancelled && (reason === null || reason === "user")) {
+			terminalStatus = "cancelled";
+			errorMessage = null;
+		} else if (reason === "shutdown") {
+			terminalStatus = "error";
+			errorMessage = "Interrupted by panel shutdown";
+		} else if (reason === "timeout") {
+			terminalStatus = "error";
+			errorMessage = `Deployment exceeded ${describeDeadline(deployTimeoutMs())}`;
 		} else {
-			console.error(`Deployment ${job.deploymentId} failed before its log was opened:`, message);
+			terminalStatus = "error";
+			errorMessage = message;
 		}
-		await db
-			.update(deployments)
-			.set({ errorMessage })
-			.where(eq(deployments.deploymentId, job.deploymentId))
-			.catch(() => {});
+		if (logger) {
+			logger.line(
+				terminalStatus === "cancelled"
+					? "Deployment cancelled"
+					: `Deployment failed: ${errorMessage}`,
+			);
+		} else {
+			log.error(`Deployment ${job.deploymentId} failed before its log was opened`, {
+				error: errorMessage ?? message,
+			});
+		}
 	} finally {
+		if (deadline) clearTimeout(deadline);
+		for (const off of teardown) off();
 		if (started) {
-			if (terminalStatus === "done" && isDeploymentCancelled(job.deploymentId)) {
+			// A user cancel that landed after the pipeline already finished is
+			// still reported as cancelled (historic behaviour); deadline and
+			// shutdown cancels that lost the race to a successful pipeline keep
+			// the truthful "done".
+			if (terminalStatus === "done" && getCancellationReason(job.deploymentId) === "user") {
 				terminalStatus = "cancelled";
 			}
+			abandoned = true;
 			await db
 				.update(deployments)
-				.set({ status: terminalStatus, finishedAt: new Date() })
+				.set({ status: terminalStatus, errorMessage, finishedAt: new Date() })
 				.where(eq(deployments.deploymentId, job.deploymentId))
-				.catch((dbError) => {
-					console.error(`Failed to finalize deployment ${job.deploymentId}:`, dbError);
+				.catch((dbError: unknown) => {
+					log.error(`Failed to finalize deployment ${job.deploymentId}`, {
+						error: errorText(dbError),
+					});
 				});
 			// Without this, failed previews stayed "running" forever.
 			await setPreviewStatus(job, terminalStatus).catch(() => {});
@@ -513,14 +609,19 @@ async function processJob(job: QueueJob): Promise<void> {
 			logger?.close();
 			deploymentEvents.emit("finish", { deploymentId: job.deploymentId, status: terminalStatus });
 
+			// Detached on purpose: the queue slot frees as soon as this returns
+			// (architecture audit #16 — a slow notification channel used to add
+			// up to 10 s of dead time between deploys).
 			if (terminalStatus !== "cancelled") {
-				await notifyDeployOutcome(job, terminalStatus, errorMessage).catch((notifyError) => {
-					console.error("Failed to send deploy notification:", notifyError);
-				});
+				void notifyDeployOutcome(job, terminalStatus, errorMessage).catch(
+					(notifyError: unknown) => {
+						log.error("Failed to send deploy notification", { error: errorText(notifyError) });
+					},
+				);
 			}
 			if (terminalStatus === "error") {
-				await recordDeployFailure(job).catch((obsError) => {
-					console.error("Failed to record deploy observability:", obsError);
+				void recordDeployFailure(job).catch((obsError: unknown) => {
+					log.error("Failed to record deploy observability", { error: errorText(obsError) });
 				});
 			}
 		}

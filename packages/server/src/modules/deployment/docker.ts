@@ -5,9 +5,12 @@ import { Client as SshClient } from "ssh2";
 import { db } from "../../db";
 import { servers } from "../../db/schema";
 import {
+	describeTimeout,
 	execAsync,
 	execAsyncRemote,
 	execAsyncWithStdin,
+	killProcessTree,
+	localCommandTimeoutMs,
 	remoteCommandTimeoutMs,
 	verifyRemoteHostKey,
 } from "../../utils/exec";
@@ -73,8 +76,11 @@ export interface SpawnOptions {
 	cwd?: string;
 	onData?: (chunk: string) => void;
 	/**
-	 * Hard timeout for remote (SSH) commands. Defaults to
-	 * `NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS` or 30 minutes.
+	 * Hard timeout. Defaults to `NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS` (SSH) /
+	 * `NIXPLOY_COMMAND_TIMEOUT_MS` (local) or 30 minutes. On expiry the whole
+	 * process tree is killed and `done` rejects with a {@link CommandError}
+	 * whose message says so (`killed: false` — a timeout is a failure, not a
+	 * cancellation).
 	 */
 	timeoutMs?: number;
 }
@@ -132,31 +138,37 @@ function spawnLocal(command: string, options: SpawnOptions): TargetedProcess {
 	// the whole build tree, not just the `sh -c` wrapper.
 	const child: ChildProcess = spawn("sh", ["-c", command], { cwd: options.cwd, detached: true });
 	let killed = false;
+	let timedOut = false;
+	const timeoutMs = localCommandTimeoutMs(options.timeoutMs);
 
-	const signalTree = (signal: NodeJS.Signals) => {
-		try {
-			if (child.pid) {
-				process.kill(-child.pid, signal);
-			} else {
-				child.kill(signal);
-			}
-		} catch {
-			// Process-group signalling is unsupported (e.g. Windows) or the
-			// group already exited — fall back to signalling the shell itself.
-			try {
-				child.kill(signal);
-			} catch {
-				// already exited
-			}
-		}
+	// Process-group signalling is unsupported (e.g. Windows) or the group
+	// already exited → killProcessTree falls back to signalling the shell.
+	const signalTree = (signal: NodeJS.Signals) => killProcessTree(child, signal);
+	const terminate = () => {
+		signalTree("SIGTERM");
+		// Escalate if the process ignores SIGTERM.
+		setTimeout(() => signalTree("SIGKILL"), 5_000).unref();
 	};
 
 	const done = new Promise<void>((resolve, reject) => {
+		const timer = setTimeout(() => {
+			timedOut = true;
+			terminate();
+		}, timeoutMs);
+		timer.unref?.();
 		child.stdout?.on("data", (d: Buffer) => options.onData?.(d.toString()));
 		child.stderr?.on("data", (d: Buffer) => options.onData?.(d.toString()));
-		child.on("error", reject);
+		child.on("error", (error) => {
+			clearTimeout(timer);
+			reject(error);
+		});
 		child.on("close", (code) => {
-			if (code === 0) {
+			clearTimeout(timer);
+			if (timedOut) {
+				reject(
+					new CommandError(`Command timed out after ${describeTimeout(timeoutMs)}`, code, false),
+				);
+			} else if (code === 0) {
 				resolve();
 			} else {
 				reject(
@@ -174,9 +186,7 @@ function spawnLocal(command: string, options: SpawnOptions): TargetedProcess {
 		pid: child.pid,
 		kill: () => {
 			killed = true;
-			signalTree("SIGTERM");
-			// Escalate if the process ignores SIGTERM.
-			setTimeout(() => signalTree("SIGKILL"), 5_000).unref();
+			terminate();
 		},
 		done,
 	};

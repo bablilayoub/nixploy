@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { deploymentEvents } from "./events";
 import { ensureDir } from "./paths";
 
 /** Shortest value worth redacting; shorter strings shred the log instead. */
@@ -38,14 +39,19 @@ export function isRedactableSecret(value: string | null | undefined): value is s
 /**
  * Append-only deployment log. Every chunk is:
  * 1. redacted (registered secrets never hit disk or the wire),
- * 2. written synchronously to the deployment's log file (`deployments.logPath`)
- *    so the WS file-poll follower can read new bytes immediately.
+ * 2. written synchronously to the deployment's log file (`deployments.logPath`),
+ * 3. announced on `deploymentEvents` (`log`) when a `deploymentId` is known, so
+ *    `/ws/deployment` followers wake up and read the new bytes from disk
+ *    instead of polling the file.
  */
 export class DeploymentLogger {
 	private readonly secrets: string[] = [];
 	private closed = false;
 
-	constructor(readonly logPath: string) {
+	constructor(
+		readonly logPath: string,
+		readonly deploymentId: string | null = null,
+	) {
 		ensureDir(path.dirname(logPath));
 		// Ensure the file exists so early readers don't hit ENOENT forever.
 		if (!fs.existsSync(logPath)) {
@@ -85,6 +91,9 @@ export class DeploymentLogger {
 		if (this.closed) return;
 		const out = this.redact(chunk);
 		fs.appendFileSync(this.logPath, out);
+		if (this.deploymentId) {
+			deploymentEvents.emit("log", { deploymentId: this.deploymentId, chunk: out });
+		}
 	}
 
 	/** Convenience: write a line with trailing newline. */

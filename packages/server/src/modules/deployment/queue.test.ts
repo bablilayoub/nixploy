@@ -1,21 +1,29 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { QueueJob } from "./queue";
 
-// The queue keeps module-level state, so every test gets a fresh module.
+// The queue keeps its state on globalThis (shared with the Next bundle), so a
+// fresh module is not enough: drop the shared state before every test too.
 type QueueModule = typeof import("./queue");
 let queue: QueueModule;
 
+const resetQueueState = () => {
+	delete (globalThis as { __nixployDeploymentQueue?: unknown }).__nixployDeploymentQueue;
+};
+
 beforeEach(async () => {
 	vi.resetModules();
+	resetQueueState();
 	queue = await import("./queue");
 });
 
 /** Flush the microtask/promise chain the drain loop runs on. */
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-const job = (deploymentId: string, serverId: string | null = null): QueueJob => ({
+/** By default every job is its own app; pass `appName` to share one. */
+const job = (deploymentId: string, serverId: string | null = null, appName = deploymentId) => ({
 	deploymentId,
-	type: "deploy",
+	appName,
+	type: "deploy" as const,
 	serverId,
 });
 
@@ -164,10 +172,12 @@ describe("deployment queue", () => {
 		expect(queue.requestCancellation("j1")).toBe("running");
 		expect(proc.kill).toHaveBeenCalledTimes(1);
 		expect(queue.isDeploymentCancelled("j1")).toBe(true);
+		expect(queue.getCancellationReason("j1")).toBe("user");
 
 		// After the worker settles, the cancellation marker is cleaned up.
 		await finish("j1");
 		expect(queue.isDeploymentCancelled("j1")).toBe(false);
+		expect(queue.getCancellationReason("j1")).toBeNull();
 	});
 
 	it("returns null when cancelling an unknown deployment", async () => {
@@ -226,5 +236,164 @@ describe("deployment queue", () => {
 		} finally {
 			process.removeListener("unhandledRejection", onUnhandled);
 		}
+	});
+});
+
+describe("coalescing and per-app mutex", () => {
+	it("supersedes a pending job for the same app so a push burst queues one build", async () => {
+		const { runner, started, finish } = controlledRunner();
+		queue.setJobRunner(runner);
+
+		expect(queue.enqueue(job("d1", null, "shop")).superseded).toEqual([]);
+		await flush();
+		// d1 is running; d2 waits.
+		expect(queue.enqueue(job("d2", null, "shop")).superseded).toEqual([]);
+		// d3 replaces d2 (still pending); d1 keeps running.
+		const { superseded } = queue.enqueue(job("d3", null, "shop"));
+		expect(superseded.map((j) => j.deploymentId)).toEqual(["d2"]);
+		expect(queue.queueDepth(null)).toEqual({ pending: 1, running: 1 });
+		expect(queue.getQueuePosition("d3")).toBe(1);
+		expect(queue.getQueuePosition("d2")).toBeNull();
+
+		await finish("d1");
+		expect(started).toEqual(["d1", "d3"]);
+	});
+
+	it("never runs two jobs for one app concurrently, even with spare concurrency", async () => {
+		const { runner, started, finish } = controlledRunner();
+		queue.setJobRunner(runner);
+		queue.setServerConcurrency("server-a", 2);
+
+		queue.enqueue(job("x1", "server-a", "app-x"));
+		queue.enqueue(job("x2", "server-a", "app-x"));
+		queue.enqueue(job("y1", "server-a", "app-y"));
+		await flush();
+
+		// x2 is skipped (app-x busy); y1 takes the free slot instead.
+		expect(started.sort()).toEqual(["x1", "y1"]);
+		expect(queue.queueDepth("server-a")).toEqual({ pending: 1, running: 2 });
+
+		await finish("x1");
+		expect(started).toEqual(["x1", "y1", "x2"]);
+	});
+
+	it("reports 1-based queue positions per server line", async () => {
+		const { runner } = controlledRunner();
+		queue.setJobRunner(runner);
+
+		queue.enqueue(job("j1"));
+		queue.enqueue(job("j2"));
+		queue.enqueue(job("j3"));
+		queue.enqueue(job("b1", "server-b"));
+		await flush();
+
+		expect(queue.getQueuePosition("j1")).toBeNull(); // running
+		expect(queue.getQueuePosition("j2")).toBe(1);
+		expect(queue.getQueuePosition("j3")).toBe(2);
+		expect(queue.getQueuePosition("b1")).toBeNull(); // running on its own server
+	});
+});
+
+describe("shared state across module instances", () => {
+	it("lets a second instance (custom server vs Next bundle) see and drain the first one's jobs", async () => {
+		const { runner, started, finish } = controlledRunner();
+		queue.setJobRunner(runner);
+		queue.enqueue(job("a"));
+		queue.enqueue(job("b"));
+		await flush();
+		expect(started).toEqual(["a"]);
+
+		// Same file, second evaluation — what server.ts gets under tsx while
+		// the tRPC route bundle holds its own copy.
+		vi.resetModules();
+		const other = await import("./queue");
+		expect(other).not.toBe(queue);
+		expect(other.queueDepth(null)).toEqual({ pending: 1, running: 1 });
+		expect(other.getQueuePosition("b")).toBe(1);
+
+		const drained = other.drainQueue({ graceMs: 1_000 });
+		expect(queue.isQueueDraining()).toBe(true);
+		await finish("a");
+		await expect(drained).resolves.toEqual({ completed: 1, interrupted: 0 });
+		expect(queue.queueDepth(null)).toEqual({ pending: 0, running: 0 });
+	});
+});
+
+describe("cancellation reasons and hooks", () => {
+	it("keeps the first reason and fires cancellation hooks", async () => {
+		const { runner, finish } = controlledRunner();
+		queue.setJobRunner(runner);
+		queue.enqueue(job("j1"));
+		await flush();
+
+		const hook = vi.fn();
+		const unsubscribe = queue.onDeploymentCancelled("j1", hook);
+		expect(queue.requestCancellation("j1", "timeout")).toBe("running");
+		expect(hook).toHaveBeenCalledTimes(1);
+		expect(queue.getCancellationReason("j1")).toBe("timeout");
+
+		// A later user cancel does not rewrite the reason.
+		queue.requestCancellation("j1", "user");
+		expect(queue.getCancellationReason("j1")).toBe("timeout");
+		unsubscribe();
+
+		// A hook registered after the fact runs immediately.
+		const late = vi.fn();
+		queue.onDeploymentCancelled("j1", late);
+		expect(late).toHaveBeenCalledTimes(1);
+
+		await finish("j1");
+	});
+});
+
+describe("drainQueue", () => {
+	it("resolves at once when nothing is running and drops the pending backlog", async () => {
+		const { runner, started } = controlledRunner();
+		queue.setJobRunner(runner);
+		await expect(queue.drainQueue({ graceMs: 10 })).resolves.toEqual({
+			completed: 0,
+			interrupted: 0,
+		});
+		expect(queue.isQueueDraining()).toBe(true);
+
+		// Nothing starts once draining — the row stays queued for boot recovery.
+		queue.enqueue(job("late"));
+		await flush();
+		expect(started).toEqual([]);
+	});
+
+	it("waits for a job that finishes inside the grace", async () => {
+		const { runner, finish } = controlledRunner();
+		queue.setJobRunner(runner);
+		queue.enqueue(job("j1"));
+		queue.enqueue(job("j2"));
+		await flush();
+
+		const drained = queue.drainQueue({ graceMs: 1_000 });
+		expect(queue.queueDepth(null).pending).toBe(0);
+		await finish("j1");
+		await expect(drained).resolves.toEqual({ completed: 1, interrupted: 0 });
+	});
+
+	it("cancels stragglers with reason shutdown once the grace expires", async () => {
+		const { runner, finish } = controlledRunner();
+		queue.setJobRunner(runner);
+		queue.enqueue(job("j1"));
+		await flush();
+
+		const proc = { kill: vi.fn(), done: new Promise<void>(() => {}) };
+		queue.registerDeploymentProcess("j1", proc);
+		// The worker finalizes and returns once it observes the cancel.
+		let reason: string | null = null;
+		queue.onDeploymentCancelled("j1", () => {
+			reason = queue.getCancellationReason("j1");
+			void finish("j1");
+		});
+
+		const result = await queue.drainQueue({ graceMs: 20 });
+		expect(proc.kill).toHaveBeenCalledTimes(1);
+		expect(reason).toBe("shutdown");
+		expect(result).toEqual({ completed: 0, interrupted: 1 });
+		expect(queue.queueDepth(null)).toEqual({ pending: 0, running: 0 });
 	});
 });

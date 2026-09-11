@@ -1,10 +1,12 @@
-import { readFile } from "node:fs/promises";
+import { open, stat } from "node:fs/promises";
 import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import { deployments } from "../../db/schema";
+import { getQueuePosition } from "../../modules/deployment";
 import {
+	type DeploymentListResult,
 	getDeploymentDailyCounts,
 	getDeploymentStatsByProject,
 	listDeploymentsByApplication,
@@ -14,6 +16,51 @@ import {
 } from "../../modules/deployment/queries";
 import { resolveCallerOrganizationId } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
+
+const isActive = (status: string): boolean => status === "running" || status === "queued";
+
+/**
+ * Decorate a page with each queued row's 1-based place in its server's line
+ * (`null` for anything not waiting). Cheap: a Map lookup in the in-memory
+ * queue, no extra query.
+ */
+function withQueuePositions(page: DeploymentListResult) {
+	return {
+		...page,
+		deployments: page.deployments.map((deployment) => ({
+			...deployment,
+			queuePosition:
+				deployment.status === "queued" ? getQueuePosition(deployment.deploymentId) : null,
+		})),
+	};
+}
+
+/**
+ * Read a log file from a byte offset without loading what the caller already
+ * has. Returns the new text and the offset to resume from (the file size).
+ */
+async function readLogFrom(
+	logPath: string,
+	offset: number,
+): Promise<{ log: string; offset: number }> {
+	let size: number;
+	try {
+		size = (await stat(logPath)).size;
+	} catch {
+		return { log: "", offset: 0 };
+	}
+	// A rewritten (shorter) file: restart from the top rather than skip bytes.
+	const from = offset > size ? 0 : offset;
+	if (size <= from) return { log: "", offset: size };
+	const handle = await open(logPath, "r");
+	try {
+		const buffer = Buffer.allocUnsafe(size - from);
+		const { bytesRead } = await handle.read(buffer, 0, buffer.length, from);
+		return { log: buffer.subarray(0, bytesRead).toString("utf8"), offset: from + bytesRead };
+	} finally {
+		await handle.close();
+	}
+}
 
 const limitInput = z.number().int().min(1).max(100);
 
@@ -71,10 +118,12 @@ export const deploymentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			return listDeploymentsByProject(input.projectId, organizationId, {
-				limit: input.limit,
-				cursor: input.cursor,
-			});
+			return withQueuePositions(
+				await listDeploymentsByProject(input.projectId, organizationId, {
+					limit: input.limit,
+					cursor: input.cursor,
+				}),
+			);
 		}),
 
 	/** Deployments of one application, newest first. */
@@ -90,10 +139,12 @@ export const deploymentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			return listDeploymentsByApplication(input.applicationId, organizationId, {
-				limit: input.limit,
-				cursor: input.cursor,
-			});
+			return withQueuePositions(
+				await listDeploymentsByApplication(input.applicationId, organizationId, {
+					limit: input.limit,
+					cursor: input.cursor,
+				}),
+			);
 		}),
 
 	/** Deployments of one compose service, newest first. */
@@ -109,10 +160,12 @@ export const deploymentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			return listDeploymentsByCompose(input.composeId, organizationId, {
-				limit: input.limit,
-				cursor: input.cursor,
-			});
+			return withQueuePositions(
+				await listDeploymentsByCompose(input.composeId, organizationId, {
+					limit: input.limit,
+					cursor: input.cursor,
+				}),
+			);
 		}),
 
 	/** Most recent deployments across the caller's whole organization. */
@@ -127,10 +180,12 @@ export const deploymentRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
-			return listRecentDeployments(organizationId, {
-				limit: input.limit,
-				cursor: input.cursor,
-			});
+			return withQueuePositions(
+				await listRecentDeployments(organizationId, {
+					limit: input.limit,
+					cursor: input.cursor,
+				}),
+			);
 		}),
 
 	/** Deployment counts by status for a project (dashboard widget). */
@@ -144,7 +199,11 @@ export const deploymentRouter = router({
 			return getDeploymentStatsByProject(input.projectId, organizationId);
 		}),
 
-	/** Read a deployment's on-disk build log (CLI / tooling). */
+	/**
+	 * Read a deployment's on-disk build log (CLI / tooling). `offset` is the
+	 * byte offset returned by the previous call; only the bytes appended since
+	 * are read and returned.
+	 */
 	getLogs: protectedProcedure
 		.input(
 			z.object({
@@ -178,30 +237,27 @@ export const deploymentRouter = router({
 			}
 
 			const deployment = await assertDeploymentAccess(deploymentId, organizationId);
+			const queuePosition =
+				deployment.status === "queued" ? getQueuePosition(deployment.deploymentId) : null;
 			if (!deployment.logPath) {
 				return {
 					deploymentId,
 					status: deployment.status,
 					log: "",
 					offset: 0,
-					done: deployment.status !== "running",
+					done: !isActive(deployment.status),
+					queuePosition,
 				};
 			}
 
-			let content = "";
-			try {
-				content = await readFile(deployment.logPath, "utf8");
-			} catch {
-				content = "";
-			}
-			const offset = input.offset ?? 0;
-			const slice = content.slice(offset);
+			const { log, offset } = await readLogFrom(deployment.logPath, input.offset ?? 0);
 			return {
 				deploymentId,
 				status: deployment.status,
-				log: slice,
-				offset: content.length,
-				done: deployment.status !== "running",
+				log,
+				offset,
+				done: !isActive(deployment.status),
+				queuePosition,
 			};
 		}),
 });

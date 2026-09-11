@@ -1,26 +1,37 @@
-import { readFile } from "node:fs/promises";
+import { open, stat } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
+import { StringDecoder } from "node:string_decoder";
 import { eq } from "drizzle-orm";
 import type { WebSocket } from "ws";
 import { db } from "../db";
 import { deployments } from "../db/schema";
 // Shared contract with the deploy engine (modules/deployment).
-// `deploymentEvents` emits 'finish' { deploymentId, status } when a job ends.
+// `deploymentEvents` emits 'log' { deploymentId, chunk } per appended chunk
+// and 'finish' { deploymentId, status } when a job ends.
 import { deploymentEvents } from "../modules/deployment";
 import { assertWsDeploymentAccess, resolveWsOrganizationId } from "./access";
 import type { WsSession } from "./auth";
 import { closeWithError, sendJson, upgradeSearchParams } from "./utils";
 
-const FILE_POLL_MS = 500;
+/** Fallback status check, only for a `finish` event that never arrives. */
+const STATUS_POLL_MS = 5_000;
+/** Log events arrive per chunk; coalesce a burst into one read. */
+const FLUSH_DEBOUNCE_MS = 20;
+/** Bytes per frame while replaying/following. */
+const READ_CHUNK_BYTES = 256 * 1024;
+
+const isActive = (status: string): boolean => status === "running" || status === "queued";
 
 /**
  * /ws/deployment?deploymentId=<id>
  *
  * Streams the deploy log from disk (replay + follow) and closes when the
- * deployment leaves `running`. File polling is the source of truth for log
- * bytes so live updates work even when the custom server and Next request
- * graph do not share one EventEmitter instance. `finish` events still close
- * the socket promptly when the worker publishes them.
+ * deployment leaves `queued`/`running`. The file is the source of truth: the
+ * follower keeps a byte offset and reads only what was appended since
+ * (`fs.stat` size + positional `read`), woken by the in-process `log` event
+ * `DeploymentLogger.write` emits — no 500 ms re-read of the whole file and no
+ * per-client DB poll. A slow status poll remains as a safety net in case the
+ * `finish` event is missed.
  *
  * Frames: { type: "log", message } | { type: "finish", status }.
  */
@@ -36,17 +47,27 @@ export async function handleDeploymentLogs(
 	}
 
 	let logPath: string | null = null;
-	let sentLength = 0;
-	let pollTimer: ReturnType<typeof setInterval> | null = null;
+	let offset = 0;
 	let closed = false;
+	let statusTimer: ReturnType<typeof setInterval> | null = null;
+	let flushTimer: ReturnType<typeof setTimeout> | null = null;
+	let inflight: Promise<void> | null = null;
+	let again = false;
+	// Carries a multi-byte UTF-8 sequence split across two reads.
+	const decoder = new StringDecoder("utf8");
 
 	const cleanup = () => {
 		closed = true;
-		if (pollTimer) {
-			clearInterval(pollTimer);
-			pollTimer = null;
+		if (statusTimer) {
+			clearInterval(statusTimer);
+			statusTimer = null;
+		}
+		if (flushTimer) {
+			clearTimeout(flushTimer);
+			flushTimer = null;
 		}
 		deploymentEvents.off("finish", onFinish);
+		deploymentEvents.off("log", onLog);
 	};
 
 	const finishAndClose = (status: string) => {
@@ -57,26 +78,80 @@ export async function handleDeploymentLogs(
 		ws.close(1000);
 	};
 
-	const flushLog = async () => {
+	/** Send every byte appended since `offset`, in bounded frames. */
+	const readNewBytes = async () => {
 		if (closed || !logPath) return;
+		let size: number;
 		try {
-			const contents = await readFile(logPath, "utf8");
-			if (contents.length > sentLength) {
-				const next = contents.slice(sentLength);
-				sentLength = contents.length;
-				sendJson(ws, { type: "log", message: next });
-			}
+			size = (await stat(logPath)).size;
 		} catch {
-			// Log file may not exist yet while the job is still queued.
+			return; // Log file may not exist yet while the job is still queued.
 		}
+		if (size <= offset) return;
+		const handle = await open(logPath, "r");
+		try {
+			const buffer = Buffer.allocUnsafe(READ_CHUNK_BYTES);
+			while (offset < size && !closed) {
+				const { bytesRead } = await handle.read(
+					buffer,
+					0,
+					Math.min(buffer.length, size - offset),
+					offset,
+				);
+				if (bytesRead === 0) break;
+				offset += bytesRead;
+				const text = decoder.write(buffer.subarray(0, bytesRead));
+				if (text) sendJson(ws, { type: "log", message: text });
+			}
+		} finally {
+			await handle.close();
+		}
+	};
+
+	/**
+	 * Single-flight flush: concurrent wake-ups collapse into one extra pass,
+	 * and every caller gets a promise that resolves once the bytes it saw
+	 * appended have been sent.
+	 */
+	const flush = (): Promise<void> => {
+		if (inflight) {
+			again = true;
+			return inflight;
+		}
+		inflight = (async () => {
+			try {
+				do {
+					again = false;
+					await readNewBytes();
+				} while (again && !closed);
+			} catch {
+				// Transient read error — the next wake-up retries from `offset`.
+			} finally {
+				inflight = null;
+			}
+		})();
+		return inflight;
+	};
+
+	const scheduleFlush = () => {
+		if (closed || flushTimer) return;
+		flushTimer = setTimeout(() => {
+			flushTimer = null;
+			void flush();
+		}, FLUSH_DEBOUNCE_MS);
+	};
+
+	const onLog = (payload: { deploymentId: string }) => {
+		if (payload.deploymentId === deploymentId) scheduleFlush();
 	};
 
 	const onFinish = (payload: { deploymentId: string; status: string }) => {
 		if (payload.deploymentId !== deploymentId) return;
-		void flushLog().then(() => finishAndClose(payload.status));
+		void flush().then(() => finishAndClose(payload.status));
 	};
 
 	deploymentEvents.on("finish", onFinish);
+	deploymentEvents.on("log", onLog);
 	ws.on("close", cleanup);
 
 	try {
@@ -84,32 +159,31 @@ export async function handleDeploymentLogs(
 		const deployment = await assertWsDeploymentAccess(deploymentId, organizationId);
 		logPath = deployment.logPath;
 
-		await flushLog();
+		await flush();
 
-		if (deployment.status !== "running") {
+		if (!isActive(deployment.status)) {
 			finishAndClose(deployment.status);
 			return;
 		}
 
-		pollTimer = setInterval(() => {
+		statusTimer = setInterval(() => {
 			void (async () => {
 				if (closed) return;
-				await flushLog();
 				try {
 					const [row] = await db
 						.select({ status: deployments.status })
 						.from(deployments)
 						.where(eq(deployments.deploymentId, deploymentId))
 						.limit(1);
-					if (row && row.status !== "running") {
-						await flushLog();
+					if (row && !isActive(row.status)) {
+						await flush();
 						finishAndClose(row.status);
 					}
 				} catch {
 					// Ignore transient DB errors during follow.
 				}
 			})();
-		}, FILE_POLL_MS);
+		}, STATUS_POLL_MS);
 	} catch (error) {
 		cleanup();
 		closeWithError(ws, error instanceof Error ? error.message : "Failed to load deployment");

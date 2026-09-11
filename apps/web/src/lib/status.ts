@@ -2,6 +2,7 @@ import type { StatusDotStatus } from "@/components/shell";
 
 /** Deployment status ("running" | "done" | "error" | "cancelled") → StatusDot. */
 export const deploymentStatusDot: Record<string, StatusDotStatus> = {
+	queued: "neutral",
 	running: "info",
 	done: "success",
 	error: "error",

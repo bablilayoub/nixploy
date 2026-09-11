@@ -1,51 +1,200 @@
-import { exec, spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
 import { Client } from "ssh2";
 import { db } from "../db";
 import { servers } from "../db/schema";
 import { getSshKeysPath } from "../modules/deployment/paths";
 
-const execPromise = promisify(exec);
-
 /** 50 MB — build/deploy logs can be large. */
 const MAX_BUFFER = 1024 * 1024 * 50;
 const SSH_READY_TIMEOUT_MS = 30_000;
 
-/** Default hard timeout for long-running SSH commands (builds, pulls). */
-export const DEFAULT_REMOTE_TIMEOUT_MS = 30 * 60 * 1000;
+/** Default hard timeout for long-running commands (builds, pulls), local or SSH. */
+export const DEFAULT_COMMAND_TIMEOUT_MS = 30 * 60 * 1000;
+/** @deprecated alias kept for callers written before local timeouts existed. */
+export const DEFAULT_REMOTE_TIMEOUT_MS = DEFAULT_COMMAND_TIMEOUT_MS;
+
+function timeoutFromEnv(name: string): number | null {
+	const value = Number.parseInt(process.env[name] ?? "", 10);
+	return Number.isFinite(value) && value > 0 ? value : null;
+}
 
 /**
  * Resolve the remote command timeout: explicit override, then
- * `NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS`, then {@link DEFAULT_REMOTE_TIMEOUT_MS}.
+ * `NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS`, then `NIXPLOY_COMMAND_TIMEOUT_MS`,
+ * then {@link DEFAULT_COMMAND_TIMEOUT_MS}.
  */
 export function remoteCommandTimeoutMs(override?: number): number {
 	if (override && override > 0) return override;
-	const fromEnv = Number.parseInt(process.env.NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS ?? "", 10);
-	return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : DEFAULT_REMOTE_TIMEOUT_MS;
+	return (
+		timeoutFromEnv("NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS") ??
+		timeoutFromEnv("NIXPLOY_COMMAND_TIMEOUT_MS") ??
+		DEFAULT_COMMAND_TIMEOUT_MS
+	);
+}
+
+/**
+ * Resolve the timeout of a command spawned on the Nixploy host: explicit
+ * override, then `NIXPLOY_COMMAND_TIMEOUT_MS`, then
+ * {@link DEFAULT_COMMAND_TIMEOUT_MS}. No local spawn runs forever — a wedged
+ * `docker build` used to hold a deploy slot until the panel restarted.
+ */
+export function localCommandTimeoutMs(override?: number): number {
+	if (override && override > 0) return override;
+	return timeoutFromEnv("NIXPLOY_COMMAND_TIMEOUT_MS") ?? DEFAULT_COMMAND_TIMEOUT_MS;
+}
+
+/** Describe a timeout for error messages: "45s" / "30min". */
+export function describeTimeout(ms: number): string {
+	return ms >= 60_000 && ms % 60_000 === 0 ? `${ms / 60_000}min` : `${Math.round(ms / 1000)}s`;
+}
+
+/**
+ * Signal a detached child's whole process group (the `sh -c` wrapper AND
+ * everything it started), falling back to the child alone when process-group
+ * signalling is unsupported or the group already exited.
+ */
+export function killProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
+	try {
+		if (child.pid) {
+			process.kill(-child.pid, signal);
+		} else {
+			child.kill(signal);
+		}
+	} catch {
+		try {
+			child.kill(signal);
+		} catch {
+			// already exited
+		}
+	}
+}
+
+/** SIGTERM the tree now and SIGKILL whatever ignores it a few seconds later. */
+export function terminateProcessTree(child: ChildProcess, escalateAfterMs = 5_000): void {
+	killProcessTree(child, "SIGTERM");
+	setTimeout(() => killProcessTree(child, "SIGKILL"), escalateAfterMs).unref();
 }
 
 export interface ExecOptions {
 	cwd?: string;
 	env?: NodeJS.ProcessEnv;
+	/** Hard timeout in ms; defaults to {@link localCommandTimeoutMs} (30 min). */
 	timeout?: number;
+}
+
+/** Thrown by the local exec helpers when the command tree had to be killed on timeout. */
+export class CommandTimeoutError extends Error {
+	constructor(command: string, timeoutMs: number) {
+		super(`"${commandLabel(command)}" timed out after ${describeTimeout(timeoutMs)}`);
+		this.name = "CommandTimeoutError";
+	}
+}
+
+interface LocalRunResult {
+	code: number | null;
+	signal: NodeJS.Signals | null;
+	stdout: string;
+	stderr: string;
+	timedOut: boolean;
+}
+
+/**
+ * Spawn `sh -c command` on the Nixploy host, capture both streams and settle
+ * on exit. The child runs **detached** (its own process group) so the
+ * timeout can kill the whole tree: `child_process.exec` neither forwards
+ * `detached` nor signals grandchildren, and a surviving grandchild keeps the
+ * stdio pipes — and therefore the promise — open forever. Output beyond
+ * {@link MAX_BUFFER} kills the tree as well (same contract as `exec`).
+ */
+function runLocal(
+	command: string,
+	options: { cwd?: string; env?: NodeJS.ProcessEnv; stdin?: string | Buffer; timeoutMs: number },
+): Promise<LocalRunResult> {
+	return new Promise((resolve, reject) => {
+		const child = spawn("sh", ["-c", command], {
+			cwd: options.cwd,
+			env: options.env ? { ...process.env, ...options.env } : process.env,
+			stdio: ["pipe", "pipe", "pipe"],
+			detached: true,
+		});
+		let stdout = "";
+		let stderr = "";
+		let captured = 0;
+		let timedOut = false;
+		let overflow = false;
+		const timer = setTimeout(() => {
+			timedOut = true;
+			terminateProcessTree(child);
+		}, options.timeoutMs);
+		timer.unref?.();
+
+		const capture = (target: "stdout" | "stderr") => (data: Buffer) => {
+			captured += data.length;
+			if (captured > MAX_BUFFER) {
+				if (!overflow) {
+					overflow = true;
+					terminateProcessTree(child);
+				}
+				return;
+			}
+			if (target === "stdout") stdout += data.toString();
+			else stderr += data.toString();
+		};
+		child.stdout.on("data", capture("stdout"));
+		child.stderr.on("data", capture("stderr"));
+		child.on("error", (error) => {
+			clearTimeout(timer);
+			reject(error);
+		});
+		child.on("close", (code, signal) => {
+			clearTimeout(timer);
+			if (overflow) {
+				reject(
+					Object.assign(
+						new Error(
+							`"${commandLabel(command)}" produced more than ${MAX_BUFFER} bytes of output`,
+						),
+						{ code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" },
+					),
+				);
+				return;
+			}
+			resolve({ code, signal, stdout, stderr, timedOut });
+		});
+		// EPIPE when the command exits before reading stdin (e.g. `cat > f` on
+		// a read-only path): surface the exit error, not an uncaught stream error.
+		child.stdin.on("error", () => {});
+		if (options.stdin !== undefined) child.stdin.write(options.stdin);
+		child.stdin.end();
+	});
 }
 
 /**
  * Run a shell command on the Nixploy host. Resolves with stdout.
  * Every docker/shell operation in the platform goes through this or
  * {@link execAsyncRemote} so local and remote servers are interchangeable.
+ * Bounded by {@link localCommandTimeoutMs}; the rejection on a non-zero exit
+ * keeps `child_process.exec`'s shape (`code`, `signal`, `killed`, `stdout`,
+ * `stderr`, `cmd`) because callers inspect those fields.
  */
 export async function execAsync(command: string, options: ExecOptions = {}): Promise<string> {
-	const { stdout } = await execPromise(command, {
-		cwd: options.cwd,
-		env: options.env ? { ...process.env, ...options.env } : process.env,
-		timeout: options.timeout,
-		maxBuffer: MAX_BUFFER,
-	});
-	return stdout.toString();
+	const timeoutMs = localCommandTimeoutMs(options.timeout);
+	const result = await runLocal(command, { cwd: options.cwd, env: options.env, timeoutMs });
+	if (result.timedOut) throw new CommandTimeoutError(command, timeoutMs);
+	if (result.code !== 0) {
+		throw Object.assign(new Error(`Command failed: ${command}\n${result.stderr}`), {
+			cmd: command,
+			code: result.code,
+			signal: result.signal,
+			killed: result.signal !== null,
+			stdout: result.stdout,
+			stderr: result.stderr,
+		});
+	}
+	return result.stdout;
 }
 
 export class RemoteExecError extends Error {
@@ -178,7 +327,7 @@ export async function execAsyncRemote(
 		const timer = setTimeout(() => {
 			fail(
 				new RemoteExecError(
-					`Remote "${commandLabel(command)}" timed out after ${Math.round(timeoutMs / 1000)}s on server ${server.name}`,
+					`Remote "${commandLabel(command)}" timed out after ${describeTimeout(timeoutMs)} on server ${server.name}`,
 					stderr,
 					null,
 				),
@@ -248,42 +397,34 @@ export async function execAsyncWithStdin(
 ): Promise<string> {
 	const { serverId, ...localOptions } = options;
 	if (serverId) {
-		return await execAsyncRemoteWithStdin(serverId, command, stdin);
+		return await execAsyncRemoteWithStdin(serverId, command, stdin, {
+			timeoutMs: localOptions.timeout,
+		});
 	}
-	return await new Promise<string>((resolve, reject) => {
-		const child = spawn("sh", ["-c", command], {
-			cwd: localOptions.cwd,
-			env: localOptions.env ? { ...process.env, ...localOptions.env } : process.env,
-			stdio: ["pipe", "pipe", "pipe"],
-		});
-		let stdout = "";
-		let stderr = "";
-		child.stdout.on("data", (data: Buffer) => {
-			stdout += data.toString();
-		});
-		child.stderr.on("data", (data: Buffer) => {
-			stderr += data.toString();
-		});
-		child.on("error", reject);
-		child.on("close", (code) => {
-			if (code === 0 || code === null) resolve(stdout);
-			else
-				reject(
-					new Error(
-						`"${commandLabel(command)}" failed (exit ${code})${stderr ? `: ${stderr.slice(0, 200)}` : ""}`,
-					),
-				);
-		});
-		child.stdin.write(stdin);
-		child.stdin.end();
+	const timeoutMs = localCommandTimeoutMs(localOptions.timeout);
+	const result = await runLocal(command, {
+		cwd: localOptions.cwd,
+		env: localOptions.env,
+		stdin,
+		timeoutMs,
 	});
+	if (result.timedOut) throw new CommandTimeoutError(command, timeoutMs);
+	if (result.code === 0 || result.code === null) return result.stdout;
+	throw new Error(
+		`"${commandLabel(command)}" failed (exit ${result.code})${result.stderr ? `: ${result.stderr.slice(0, 200)}` : ""}`,
+	);
 }
 
-/** SSH variant of {@link execAsyncWithStdin}: `stdin` is streamed over the channel. */
+/**
+ * SSH variant of {@link execAsyncWithStdin}: `stdin` is streamed over the
+ * channel. Bounded by {@link remoteCommandTimeoutMs} like every other remote
+ * command — on timeout the connection is torn down and the call rejects.
+ */
 export async function execAsyncRemoteWithStdin(
 	serverId: string,
 	command: string,
 	stdin: string | Buffer,
+	options: { timeoutMs?: number } = {},
 ): Promise<string> {
 	const server = await db.query.servers.findFirst({
 		where: eq(servers.serverId, serverId),
@@ -295,30 +436,58 @@ export async function execAsyncRemoteWithStdin(
 		throw new Error(`Server ${server.name} (${serverId}) has no SSH key attached`);
 	}
 
+	const timeoutMs = remoteCommandTimeoutMs(options.timeoutMs);
+
 	return new Promise<string>((resolve, reject) => {
 		const conn = new Client();
 		let stdout = "";
 		let stderr = "";
+		let settled = false;
+
+		const finish = (fn: () => void) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			fn();
+		};
+		const fail = (error: Error) =>
+			finish(() => {
+				conn.end();
+				reject(error);
+			});
+
+		const timer = setTimeout(() => {
+			fail(
+				new RemoteExecError(
+					`Remote "${commandLabel(command)}" timed out after ${describeTimeout(timeoutMs)} on server ${server.name}`,
+					stderr,
+					null,
+				),
+			);
+		}, timeoutMs);
+		timer.unref?.();
+
 		conn
 			.on("ready", () => {
 				conn.exec(command, (err, stream) => {
 					if (err) {
-						conn.end();
-						reject(err);
+						fail(err);
 						return;
 					}
 					stream
 						.on("close", (code: number | null) => {
-							conn.end();
-							if (code === 0 || code === null) resolve(stdout);
-							else
-								reject(
-									new RemoteExecError(
-										`Remote "${commandLabel(command)}" failed (exit ${code}) on server ${server.name}`,
-										stderr,
-										code,
-									),
-								);
+							finish(() => {
+								conn.end();
+								if (code === 0 || code === null) resolve(stdout);
+								else
+									reject(
+										new RemoteExecError(
+											`Remote "${commandLabel(command)}" failed (exit ${code}) on server ${server.name}`,
+											stderr,
+											code,
+										),
+									);
+							});
 						})
 						.on("data", (data: Buffer) => {
 							stdout += data.toString();
@@ -326,14 +495,12 @@ export async function execAsyncRemoteWithStdin(
 					stream.stderr.on("data", (data: Buffer) => {
 						stderr += data.toString();
 					});
+					stream.on("error", fail);
 					stream.write(stdin);
 					stream.end();
 				});
 			})
-			.on("error", (err) => {
-				conn.end();
-				reject(err);
-			})
+			.on("error", fail)
 			.connect({
 				host: server.ipAddress,
 				port: server.port,

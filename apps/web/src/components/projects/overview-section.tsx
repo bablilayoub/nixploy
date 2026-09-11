@@ -30,15 +30,17 @@ function StatPanel({
 	className?: string;
 }) {
 	return (
-		<div className={cn("rounded-lg border border-border p-4", className)}>
+		<div className={cn("rounded-lg border border-border p-3 sm:p-4", className)}>
 			<div className="flex items-center justify-between gap-2">
-				<p className="text-sm font-medium text-foreground">{label}</p>
+				<p className="truncate text-xs font-medium text-foreground sm:text-sm">{label}</p>
 				{icon}
 			</div>
-			<div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
-				{isPending ? <Skeleton className="h-8 w-16" /> : (value ?? 0)}
+			<div className="mt-1 text-xl font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-2xl">
+				{isPending ? <Skeleton className="h-7 w-14 sm:h-8 sm:w-16" /> : (value ?? 0)}
 			</div>
-			{!isPending && detail ? <p className="mt-1 text-xs text-muted-foreground">{detail}</p> : null}
+			{!isPending && detail ? (
+				<p className="mt-1 hidden text-xs text-muted-foreground sm:block">{detail}</p>
+			) : null}
 		</div>
 	);
 }
@@ -69,7 +71,7 @@ export function OverviewCards() {
 	const deployments = data?.deploymentsLastDay;
 
 	return (
-		<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+		<div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
 			<StatPanel
 				label="Projects"
 				value={data?.projectCount}
@@ -122,15 +124,15 @@ function DockerStatPanel() {
 	return (
 		<Link
 			href="/dashboard/docker"
-			className="block rounded-lg border border-border p-4 transition-colors hover:border-foreground/20"
+			className="block rounded-lg border border-border p-3 transition-colors hover:border-foreground/20 sm:p-4"
 		>
 			<div className="flex items-center justify-between gap-2">
-				<p className="text-sm font-medium text-foreground">Docker</p>
+				<p className="truncate text-xs font-medium text-foreground sm:text-sm">Docker</p>
 				<Container className="size-4 text-muted-foreground" />
 			</div>
-			<div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
+			<div className="mt-1 text-xl font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-2xl">
 				{containersQuery.isPending ? (
-					<Skeleton className="h-8 w-16" />
+					<Skeleton className="h-7 w-14 sm:h-8 sm:w-16" />
 				) : containersQuery.isError ? (
 					<span className="text-sm font-normal text-muted-foreground">Offline</span>
 				) : (
@@ -247,8 +249,9 @@ export function RecentDeployments() {
 								</span>
 								<div className="min-w-0 flex-1 space-y-0.5">
 									<p className="truncate text-sm font-medium leading-none">{name}</p>
-									<p className="truncate text-xs text-muted-foreground capitalize">
-										{deployment.project.name} · {serviceType} · {deployment.status}
+									<p className="truncate text-xs text-muted-foreground">
+										{deployment.project.name} · <span className="capitalize">{serviceType}</span> ·{" "}
+										<span className="capitalize">{deployment.status}</span>
 									</p>
 								</div>
 								<div className="ms-auto text-xs whitespace-nowrap text-muted-foreground">

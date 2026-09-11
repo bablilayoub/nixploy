@@ -4,6 +4,7 @@ import { mergeDeploymentStatusRows } from "./queries";
 describe("mergeDeploymentStatusRows", () => {
 	it("returns zeros for no rows", () => {
 		expect(mergeDeploymentStatusRows([])).toEqual({
+			queued: 0,
 			running: 0,
 			done: 0,
 			error: 0,
@@ -18,7 +19,8 @@ describe("mergeDeploymentStatusRows", () => {
 				{ status: "done", value: 7 },
 				{ status: "error", value: 2 },
 				{ status: "running", value: 1 },
+				{ status: "queued", value: 3 },
 			]),
-		).toEqual({ running: 1, done: 7, error: 2, cancelled: 0, total: 10 });
+		).toEqual({ queued: 3, running: 1, done: 7, error: 2, cancelled: 0, total: 13 });
 	});
 });

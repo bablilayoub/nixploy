@@ -46,12 +46,17 @@ type ExplainResult = {
 type DeploymentRow = {
 	deploymentId: string;
 	title: string;
-	status: "running" | "done" | "error" | "cancelled";
+	status: "queued" | "running" | "done" | "error" | "cancelled";
+	/** Place in the server's deploy line while `queued`; null otherwise. */
+	queuePosition?: number | null;
 	errorMessage: string | null;
 	createdAt: Date | string;
 	startedAt: Date | string | null;
 	finishedAt: Date | string | null;
 };
+
+/** Queued and running deployments are both "in flight" for polling and cancel. */
+const isActive = (status: DeploymentRow["status"]) => status === "running" || status === "queued";
 
 export type DeploymentHistoryProps = {
 	kind: "application" | "compose";
@@ -113,10 +118,10 @@ export function DeploymentHistory({
 				getNextPageParam: (lastPage) => lastPage.nextCursor,
 				refetchInterval: (query) => {
 					const pages = query.state.data?.pages ?? [];
-					const hasRunning = pages.some((page) =>
-						page.deployments.some((deployment) => deployment.status === "running"),
+					const hasActive = pages.some((page) =>
+						page.deployments.some((deployment) => isActive(deployment.status)),
 					);
-					return hasRunning ? 2_000 : false;
+					return hasActive ? 2_000 : false;
 				},
 			},
 		),
@@ -130,10 +135,10 @@ export function DeploymentHistory({
 				getNextPageParam: (lastPage) => lastPage.nextCursor,
 				refetchInterval: (query) => {
 					const pages = query.state.data?.pages ?? [];
-					const hasRunning = pages.some((page) =>
-						page.deployments.some((deployment) => deployment.status === "running"),
+					const hasActive = pages.some((page) =>
+						page.deployments.some((deployment) => isActive(deployment.status)),
 					);
-					return hasRunning ? 2_000 : false;
+					return hasActive ? 2_000 : false;
 				},
 			},
 		),
@@ -196,18 +201,18 @@ export function DeploymentHistory({
 	const deployments =
 		(deploymentsQuery.data?.pages.flatMap((page) => page.deployments) as DeploymentRow[]) ?? [];
 	const latestError = deployments.find((deployment) => deployment.status === "error");
-	const hasRunning = deployments.some((deployment) => deployment.status === "running");
+	const hasActive = deployments.some((deployment) => isActive(deployment.status));
 
-	// Running → settled: the list polls every 2s while a deployment is in
-	// flight, so this edge fires within seconds of the worker finishing.
-	const hadRunningRef = useRef(false);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: only the running edge matters; the invalidation helper reads stable ids
+	// In flight → settled: the list polls every 2s while a deployment is
+	// queued or running, so this edge fires within seconds of the worker finishing.
+	const hadActiveRef = useRef(false);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: only the in-flight edge matters; the invalidation helper reads stable ids
 	useEffect(() => {
-		if (hadRunningRef.current && !hasRunning) {
+		if (hadActiveRef.current && !hasActive) {
 			invalidateServiceStatus();
 		}
-		hadRunningRef.current = hasRunning;
-	}, [hasRunning]);
+		hadActiveRef.current = hasActive;
+	}, [hasActive]);
 
 	const canDeploy = can("service.deploy");
 	const canExplain = can("ai.use");
@@ -292,7 +297,10 @@ export function DeploymentHistory({
 										)}
 									</TableCell>
 									<TableCell>
-										<DeploymentStatusBadge status={deployment.status} />
+										<DeploymentStatusBadge
+											status={deployment.status}
+											queuePosition={deployment.queuePosition}
+										/>
 									</TableCell>
 									<TableCell className="text-muted-foreground">
 										{format(new Date(deployment.createdAt), "MMM d, yyyy HH:mm")}
@@ -327,7 +335,7 @@ export function DeploymentHistory({
 													Explain
 												</Button>
 											)}
-											{canCancel && deployment.status === "running" && (
+											{canCancel && isActive(deployment.status) && (
 												<Button
 													variant="ghost"
 													size="sm"

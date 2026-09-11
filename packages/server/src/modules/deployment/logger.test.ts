@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { deploymentEvents } from "./events";
 import { DeploymentLogger, isRedactableSecret } from "./logger";
 
 describe("isRedactableSecret (redaction floor)", () => {
@@ -50,5 +51,33 @@ describe("DeploymentLogger", () => {
 		expect(content).not.toContain("sk-live-0123456789");
 		expect(content).toContain("**********");
 		expect(logger.listSecrets()).toEqual(["sk-live-0123456789"]);
+	});
+
+	it("announces every redacted chunk on deploymentEvents when it knows its deploymentId", async () => {
+		const events: Array<{ deploymentId: string; chunk: string }> = [];
+		const onLog = (event: { deploymentId: string; chunk: string }) => {
+			events.push(event);
+		};
+		deploymentEvents.on("log", onLog);
+		try {
+			const logger = new DeploymentLogger(join(dir, "live.log"), "dep-1");
+			logger.addSecret("sk-live-0123456789");
+			logger.write("token sk-live-0123456789\n");
+			logger.line("second");
+			logger.close();
+			logger.write("after close");
+
+			expect(events).toEqual([
+				{ deploymentId: "dep-1", chunk: "token **********\n" },
+				{ deploymentId: "dep-1", chunk: "second\n" },
+			]);
+
+			// Without an id (schedule/rollback logs) nothing is emitted.
+			const anonymous = new DeploymentLogger(join(dir, "anon.log"));
+			anonymous.line("quiet");
+			expect(events).toHaveLength(2);
+		} finally {
+			deploymentEvents.off("log", onLog);
+		}
 	});
 });
