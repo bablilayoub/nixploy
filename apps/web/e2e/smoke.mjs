@@ -2,6 +2,12 @@
  * Minimal Playwright smoke: setup (or login) → create project → create
  * docker-image application → open Domains tab.
  *
+ * NOTE: CI runs `tools/e2e-ui.mjs` instead — same flow, but with real
+ * assertions (deployment reaches "Succeeded", the domain dialog creates a row),
+ * a light/dark console check and teardown. This file stays as the tolerant
+ * "does the panel respond at all" probe; prefer the tools/ script for anything
+ * that has to fail when the product is broken.
+ *
  * Prerequisites:
  *   - Dev server running at BASE_URL (default http://localhost:3000)
  *   - `pnpm add -Dw playwright-core` once (not bundled — workspace deps are fixed)

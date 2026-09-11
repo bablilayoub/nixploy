@@ -6,11 +6,13 @@ name: Release
 # The `checks` gate (typecheck, Biome, vitest incl. tenancy on Postgres 17,
 # Traefik drift — .github/workflows/checks.yml, shared with CI) must pass on
 # the tagged ref before anything is built. CI then builds/pushes GHCR
-# (:vX.Y.Z, plus :latest for a final-version tag push) for linux/amd64 and
-# linux/arm64 with provenance + SBOM attestations, creates a GitHub Release
-# with auto-generated notes, and attaches version-pinned install.sh /
-# update.sh. workflow_dispatch re-runs rebuild an existing tag's image and
-# assets without moving :latest.
+# :vX.Y.Z for linux/amd64 and linux/arm64 with provenance + SBOM attestations,
+# scans it with Trivy (CRITICAL is fatal), signs the digest with cosign, and
+# only then moves :latest — so a critical CVE cannot reach the channel every
+# install auto-updates to. Finally it creates a GitHub Release with
+# auto-generated notes and attaches version-pinned install.sh / update.sh /
+# uninstall.sh plus SHA256SUMS. workflow_dispatch re-runs rebuild an existing
+# tag's image and assets without moving :latest.
 
 on:
   push:
@@ -28,6 +30,8 @@ on:
 permissions:
   contents: write
   packages: write
+  # Keyless cosign signing (Fulcio certificate + Rekor transparency log).
+  id-token: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -69,7 +73,7 @@ jobs:
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           ref: ${{ steps.tag.outputs.tag }}
@@ -88,15 +92,15 @@ jobs:
         # under QEMU and takes several times longer than the native build (expect
         # 20–40 min for a cold cache). Native `ubuntu-24.04-arm` runners plus a
         # manifest merge would be the fast path if this becomes a problem.
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
         with:
           platforms: arm64
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -121,19 +125,19 @@ jobs:
 
       - name: Image tags and labels
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # Tags are decided in the step above; metadata-action only renders
-          # them (ghcr.io/<repo>:vX.Y.Z [+ :latest], same as before) and adds
-          # the OCI labels (source, revision, version, created, licenses).
+          # Only the immutable version tag is built here. `:latest` is moved
+          # further down, after Trivy and cosign, with `imagetools create` —
+          # re-tagging an already-pushed manifest, not a second build.
           flavor: latest=false
           tags: |
             type=raw,value=${{ steps.tag.outputs.tag }}
-            type=raw,value=latest,enable=${{ steps.latest.outputs.move }}
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: docker/Dockerfile
@@ -149,6 +153,41 @@ jobs:
             NIXPLOY_APP_VERSION=${{ steps.tag.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Trivy scan (CRITICAL is fatal on a release)
+        # Stricter than the PR scan (advisory, CRITICAL+HIGH): a release is the
+        # artefact operators run as root with the Docker socket mounted, so a
+        # fixable CRITICAL must stop it. `ignore-unfixed` keeps Alpine base
+        # CVEs with no upstream patch from blocking a release nobody can fix.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          scan-type: image
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+
+      - name: Sign the image (keyless)
+        # One signature on the digest covers :vX.Y.Z and, once it is moved
+        # below, :latest. docs/releases.md carries the verify command.
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+
+      - name: Move :latest
+        if: steps.latest.outputs.move == 'true'
+        # Re-tags the manifest that just passed Trivy and was signed; no
+        # rebuild, so :latest and :vX.Y.Z are byte-identical by construction.
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker buildx imagetools create \
+            --tag "${REGISTRY}/${IMAGE_NAME}:latest" \
+            "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
 
       - name: Pin install.sh and update.sh
         run: |
@@ -175,8 +214,19 @@ jobs:
           mv install-release.sh install.sh
           mv update-release.sh update.sh
 
+      - name: Checksums for the shipped scripts
+        # `curl … | sudo bash` has no integrity check of its own
+        # (security.md §2.8). Publishing SHA256SUMS next to the release assets
+        # lets an operator verify before running as root; docs/install.md
+        # carries the two-line recipe. Checksums are taken AFTER pinning, so
+        # they match exactly what the release serves.
+        run: |
+          set -euo pipefail
+          sha256sum install.sh update.sh uninstall.sh > SHA256SUMS
+          cat SHA256SUMS
+
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.tag }}
@@ -186,5 +236,7 @@ jobs:
           files: |
             install.sh
             update.sh
+            uninstall.sh
+            SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

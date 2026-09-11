@@ -47,13 +47,13 @@ jobs:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -83,17 +83,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Read package version
         id: version
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Build image (no push)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: docker/Dockerfile
@@ -110,7 +110,7 @@ jobs:
         # exit-code 1 (and consider ignore-unfixed: true for Alpine base CVEs)
         # once the baseline is clean. No moving major tag exists for this
         # action, hence the exact version.
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: nixploy:ci
           scan-type: image
@@ -118,12 +118,176 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: "0"
 
+      - name: Export image for the e2e job
+        # Jobs do not share a Docker daemon, so the e2e job gets the *exact*
+        # image this job built rather than rebuilding from the layer cache (a
+        # cache miss there would blow the 25-minute budget). gzip -1 keeps the
+        # export under a minute; the artifact is deleted after a day.
+        run: |
+          set -euo pipefail
+          docker image save nixploy:ci | gzip -1 > /tmp/nixploy-ci-image.tar.gz
+          ls -lh /tmp/nixploy-ci-image.tar.gz
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nixploy-ci-image
+          path: /tmp/nixploy-ci-image.tar.gz
+          retention-days: 1
+          compression-level: 0
+
+  # The real product, end to end: the PR's own image + Postgres 17 on the
+  # runner's Swarm, first admin through /setup, then the REST golden path and
+  # the Playwright UI golden path. This is the only job that exercises the
+  # deploy engine, migrations-from-zero, Traefik routing and backups together
+  # (audit ops-dx #17).
+  e2e:
+    name: End-to-end (image on a real Swarm)
+    needs: image
+    if: >-
+      github.event_name != 'push' ||
+      (github.event.head_commit &&
+       !contains(github.event.head_commit.message, '[skip ci]') &&
+       !contains(github.event.head_commit.message, '[ci skip]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NIXPLOY_E2E_IMAGE: nixploy:ci
+      BASE_URL: http://localhost:3000
+      E2E_EMAIL: e2e@nixploy.test
+      E2E_PASSWORD: E2e-ci-password!1
+      # Pinned Playwright; kept in step with tools/e2e-ui.mjs and
+      # tools/screenshots/package.json.
+      PLAYWRIGHT_VERSION: 1.62.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Download the PR image
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: nixploy-ci-image
+          path: /tmp
+
+      - name: Load the image
+        run: |
+          set -euo pipefail
+          gunzip -c /tmp/nixploy-ci-image.tar.gz | docker image load
+          docker image ls nixploy:ci
+
+      - name: Init Swarm
+        # The panel drives the host daemon through the mounted socket; without
+        # a Swarm, `docker service create` fails and nothing deploys.
+        run: docker swarm init
+
+      - name: Host config root
+        # Bind-mounted into the panel at the same path (tools/ci/e2e-compose.yml
+        # explains why it cannot be a named volume).
+        run: sudo mkdir -p /etc/nixploy && sudo chmod 777 /etc/nixploy
+
+      - name: Ports 80/443 must be free
+        # Traefik publishes them in host mode (modules/traefik/setup.ts has no
+        # port knob). ubuntu-latest runners have nothing listening there; fail
+        # loudly with the culprit if that ever changes.
+        run: |
+          set -euo pipefail
+          if ss -ltnH '( sport = :80 or sport = :443 )' | grep -q .; then
+            echo "::error::Something already listens on :80/:443 on this runner"
+            ss -ltnp '( sport = :80 or sport = :443 )'
+            exit 1
+          fi
+          echo ":80 and :443 are free"
+
+      - name: Start the stack
+        run: docker compose -f tools/ci/e2e-compose.yml up -d
+
+      - name: Wait for /api/ready
+        # Migrations run from an empty database in the entrypoint, then the
+        # panel provisions Traefik; 180 s covers both on a cold runner.
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 90); do
+            body="$(curl -fsS http://localhost:3000/api/ready 2>/dev/null || true)"
+            if [ -n "$body" ]; then
+              echo "ready after ${i} attempt(s): $body"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::/api/ready never answered"
+          curl -sv http://localhost:3000/api/ready || true
+          exit 1
+
+      - name: Create the first admin and an API key
+        id: bootstrap
+        run: node tools/bootstrap-instance.mjs
+
+      - name: API golden path
+        env:
+          NIXPLOY_URL: http://localhost:3000
+          NIXPLOY_API_KEY: ${{ steps.bootstrap.outputs.api-key }}
+          # Runner DNS resolves *.traefik.me to 127.0.0.1, but probing the
+          # loopback with an explicit Host header removes the dependency.
+          SMOKE_TRAEFIK_ORIGIN: http://127.0.0.1
+        run: node tools/golden-path-api.mjs
+
+      - name: Install Playwright (pinned)
+        # Into a scratch prefix, not the workspace: the pnpm dependency set is
+        # deliberately fixed (CLAUDE.md). Equivalent one-liner for humans:
+        # `npx --yes playwright@1.62.1 install --with-deps chromium`.
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/pw" "playwright@${PLAYWRIGHT_VERSION}"
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+          echo "NODE_PATH=$RUNNER_TEMP/pw/node_modules" >> "$GITHUB_ENV"
+
+      - name: UI golden path
+        env:
+          E2E_SHOTS: ${{ runner.temp }}/ui-shots
+        run: node tools/e2e-ui.mjs
+
+      - name: Panel logs
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/e2e-logs"
+          docker compose -f tools/ci/e2e-compose.yml logs --no-color --timestamps \
+            > "$RUNNER_TEMP/e2e-logs/compose.log" 2>&1 || true
+          docker service ls > "$RUNNER_TEMP/e2e-logs/services.txt" 2>&1 || true
+          docker service ps --no-trunc $(docker service ls -q) \
+            > "$RUNNER_TEMP/e2e-logs/service-tasks.txt" 2>&1 || true
+          for svc in $(docker service ls --format '{{.Name}}'); do
+            docker service logs --no-color --timestamps "$svc" \
+              > "$RUNNER_TEMP/e2e-logs/service-$svc.log" 2>&1 || true
+          done
+          sudo cp -r /etc/nixploy "$RUNNER_TEMP/e2e-logs/config-root" 2>/dev/null || true
+          sudo chmod -R a+r "$RUNNER_TEMP/e2e-logs" || true
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: e2e-diagnostics
+          path: |
+            ${{ runner.temp }}/e2e-logs
+            ${{ runner.temp }}/ui-shots
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f tools/ci/e2e-compose.yml down -v || true
+
   shellcheck:
     name: ShellCheck
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: ShellCheck
         # ubuntu-latest ships shellcheck; the apt line only runs if that changes.
@@ -141,22 +305,28 @@ jobs:
           shellcheck --severity=warning "${files[@]}"
 
   audit:
-    name: pnpm audit (advisory)
+    name: pnpm audit
     runs-on: ubuntu-latest
-    # Advisory until the advisories listed in docs/audits/2026-09/security.md
-    # §2.8 (nodemailer, @modelcontextprotocol/sdk → fast-uri/hono/qs, sharp)
-    # are cleared. Remove continue-on-error once `pnpm audit --prod
-    # --audit-level high` is clean so new high advisories fail the PR.
-    continue-on-error: true
+    # Blocking since 2026-09-11: the advisories listed in
+    # docs/audits/2026-09/security.md §2.8 (nodemailer, fast-uri/hono/qs via
+    # @modelcontextprotocol/sdk, sharp) are fixed or overridden in the root
+    # package.json, and `pnpm audit --prod --audit-level high` exits 0 against
+    # this lockfile. Three *moderate* advisories remain and are deliberately
+    # below the gate: vitest / @vitest/mocker (dev-only, pulled in through
+    # better-auth and flagged by workspace hoisting) and adm-zip (not
+    # reachable — modules/deployment/sources.ts writes entries itself and never
+    # calls extractAllTo). Do not re-add continue-on-error to get a red run
+    # green; fix or override the advisory instead.
+    continue-on-error: false
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
@@ -169,13 +339,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -193,7 +363,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Init Swarm
         run: docker swarm init
@@ -312,17 +482,19 @@ jobs:
           docker service rm nixploy-smoke-whoami nixploy-smoke-traefik || true
           docker rm -f nixploy-smoke-static || true
 
-  # Optional full API golden path against a running Nixploy (secrets required).
+  # Optional full API golden path against an *external* running Nixploy
+  # (secrets required). The `e2e` job above runs the same script against the
+  # PR's own image on every PR; this one is for pointing it at staging.
   api-golden-path:
     name: API golden-path (manual)
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
@@ -330,6 +502,9 @@ jobs:
         env:
           NIXPLOY_URL: ${{ secrets.NIXPLOY_SMOKE_URL }}
           NIXPLOY_API_KEY: ${{ secrets.NIXPLOY_SMOKE_API_KEY }}
+          # The panel is somewhere else; this runner's Docker daemon knows
+          # nothing about its Swarm, so the leftover check would be meaningless.
+          SMOKE_SKIP_DOCKER_CHECK: "1"
         run: |
           if [ -z "$NIXPLOY_URL" ] || [ -z "$NIXPLOY_API_KEY" ]; then
             echo "Set NIXPLOY_SMOKE_URL and NIXPLOY_SMOKE_API_KEY secrets to enable this job"

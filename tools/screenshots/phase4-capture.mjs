@@ -72,7 +72,10 @@ for (const theme of ["dark", "light"]) {
 	});
 	// Generate with Copilot dialog
 	try {
-		await page.getByRole("button", { name: /generate with copilot/i }).first().click({ timeout: 4000 });
+		await page
+			.getByRole("button", { name: /generate with copilot/i })
+			.first()
+			.click({ timeout: 4000 });
 		await page.waitForTimeout(600);
 		await page.screenshot({ path: join(OUT, `compose-generate-dialog-${theme}.png`) });
 		console.log(`shot compose-generate-dialog-${theme}`);
@@ -80,7 +83,10 @@ for (const theme of ["dark", "light"]) {
 	} catch {
 		console.log(`generate dialog button not found (${theme})`);
 	}
-	await shot("settings-organization", "/dashboard/settings/organization", { theme, fullPage: true });
+	await shot("settings-organization", "/dashboard/settings/organization", {
+		theme,
+		fullPage: true,
+	});
 	await shot("monitoring", "/dashboard/monitoring", { theme });
 	await shot("settings-servers", "/dashboard/settings/servers", { theme });
 }

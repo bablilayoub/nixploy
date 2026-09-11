@@ -29,9 +29,12 @@ async function formLogin() {
 	await page.getByLabel(/email/i).fill(EMAIL);
 	await page.locator('input[type="password"]').first().fill(PASSWORD);
 	await Promise.all([
-		page.waitForURL((url) => url.pathname.includes("dashboard") || url.pathname.includes("two-factor"), {
-			timeout: 60_000,
-		}),
+		page.waitForURL(
+			(url) => url.pathname.includes("dashboard") || url.pathname.includes("two-factor"),
+			{
+				timeout: 60_000,
+			},
+		),
 		page.getByRole("button", { name: /sign in/i }).click(),
 	]);
 	if (page.url().includes("two-factor")) {
@@ -82,10 +85,13 @@ try {
 	if (!projectHref) throw new Error("no project");
 	await page.goto(`${BASE}${projectHref}`, { waitUntil: "networkidle" });
 
-	let appLink = page.locator('a[href*="/services/application/"]').first();
+	const appLink = page.locator('a[href*="/services/application/"]').first();
 	if ((await appLink.count()) === 0) {
 		console.log("creating application…");
-		await page.getByRole("button", { name: /add service/i }).first().click();
+		await page
+			.getByRole("button", { name: /add service/i })
+			.first()
+			.click();
 		await page.getByRole("menuitem", { name: /application/i }).click();
 		const dialog = page.locator('[role="dialog"]');
 		await dialog.getByLabel(/^name/i).fill("whoami");
@@ -109,7 +115,10 @@ try {
 				const img = page.locator("#docker-image").first();
 				if (await img.count()) {
 					await img.fill("traefik/whoami");
-					await page.getByRole("button", { name: /save source|save/i }).first().click();
+					await page
+						.getByRole("button", { name: /save source|save/i })
+						.first()
+						.click();
 					await page.waitForTimeout(1500);
 				}
 			}

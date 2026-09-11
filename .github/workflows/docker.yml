@@ -1,8 +1,9 @@
 name: Docker
 
 # Continuous images for every main push: ghcr.io/<repo>:main and :<sha>, both
-# linux/amd64 + linux/arm64 with provenance + SBOM. :latest and :vX.Y.Z are
-# owned by release.yml only (docs/releases.md).
+# linux/amd64 + linux/arm64 with provenance + SBOM, signed with cosign
+# (keyless). :latest and :vX.Y.Z are owned by release.yml only
+# (docs/releases.md).
 
 on:
   push:
@@ -12,6 +13,10 @@ on:
 permissions:
   contents: read
   packages: write
+  # Keyless cosign: the job exchanges this OIDC token for a short-lived
+  # Fulcio certificate and records the signature in Rekor. No private key,
+  # nothing to rotate — see docs/releases.md for the verify command.
+  id-token: write
 
 env:
   REGISTRY: ghcr.io
@@ -28,22 +33,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up QEMU
         # linux/arm64 is emulated on the amd64 runner: the Next.js build runs
         # under QEMU and takes several times longer than the native build.
         # Native `ubuntu-24.04-arm` runners plus a manifest merge would be the
         # fast path if main builds start to queue.
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
         with:
           platforms: arm64
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -51,7 +56,7 @@ jobs:
 
       - name: Extract tags
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           # Continuous builds: `main` + commit sha only. `latest` is the release
@@ -66,7 +71,8 @@ jobs:
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: docker/Dockerfile
@@ -82,3 +88,15 @@ jobs:
             NIXPLOY_APP_VERSION=${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+
+      - name: Sign the image (keyless)
+        # Signs the *digest*, so every tag that points at this manifest
+        # (`main`, `<sha>`) is covered by one signature. Keyless: the workflow's
+        # OIDC identity is bound into a short-lived Fulcio certificate and the
+        # signature is logged in Rekor — verification in docs/releases.md.
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"

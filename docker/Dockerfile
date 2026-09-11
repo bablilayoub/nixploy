@@ -62,13 +62,18 @@ ENV NIXPLOY_GIT_COMMIT=$NIXPLOY_GIT_COMMIT
 RUN apk add --no-cache docker-cli docker-cli-compose git openssh-client curl postgresql-client tzdata
 
 # Migration runner with its own small node_modules (does not share the app tree).
+# The manifest and lockfile are vendored in docker/migrate-deps/ so the whole
+# tree — not just the two top-level packages — is pinned and integrity-checked
+# on every build (security.md §2.8: `npm install pkg@version` left the
+# transitive set floating). Versions mirror what packages/server resolves in
+# pnpm-lock.yaml; regenerate with
+#   (cd docker/migrate-deps && npm install --package-lock-only --omit=dev --ignore-scripts)
 COPY docker/entrypoint.sh /app/entrypoint.sh
 COPY docker/migrate.mjs /app/migrate-deps/migrate.mjs
+COPY docker/migrate-deps/package.json docker/migrate-deps/package-lock.json /app/migrate-deps/
 RUN chmod +x /app/entrypoint.sh \
 	&& cd /app/migrate-deps \
-	&& npm init -y >/dev/null \
-	&& npm pkg set type=module \
-	&& npm install --omit=dev drizzle-orm@0.45.2 postgres@3.4.5 \
+	&& npm ci --omit=dev --ignore-scripts \
 	&& rm -rf /root/.npm /tmp/*
 
 # Root is required for the mounted docker.sock (same pattern as most PaaS images).

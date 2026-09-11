@@ -10,6 +10,8 @@ Nixploy is a free, self-hostable Platform as a Service. Deploy applications, dat
 
 **Website:** [nixploy.com](https://nixploy.com) · **GitHub:** [bablilayoub/nixploy](https://github.com/bablilayoub/nixploy)
 
+[![CI](https://github.com/bablilayoub/nixploy/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/bablilayoub/nixploy/actions/workflows/ci.yml)
+[![Release](https://github.com/bablilayoub/nixploy/actions/workflows/release.yml/badge.svg)](https://github.com/bablilayoub/nixploy/actions/workflows/release.yml)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D22-green)
 ![pnpm](https://img.shields.io/badge/pnpm-%3E%3D10-orange)

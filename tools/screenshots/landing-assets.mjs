@@ -43,7 +43,9 @@ await page.waitForURL(/dashboard/, { timeout: 20_000 });
 await page.waitForTimeout(1500);
 // Dismiss any toasts so they don't appear in shots.
 await page.evaluate(() => {
-	document.querySelectorAll("[data-sonner-toast], .sonner-toast, [data-sonner-toaster]").forEach((el) => el.remove());
+	document
+		.querySelectorAll("[data-sonner-toast], .sonner-toast, [data-sonner-toaster]")
+		.forEach((el) => el.remove());
 });
 console.log("logged in");
 
@@ -55,7 +57,9 @@ async function shot(file, path, { scroll = 0, tab } = {}) {
 		await page.waitForTimeout(1000);
 	}
 	await page.evaluate(() => {
-		document.querySelectorAll("[data-sonner-toast], .sonner-toast, [data-sonner-toaster]").forEach((el) => el.remove());
+		document
+			.querySelectorAll("[data-sonner-toast], .sonner-toast, [data-sonner-toaster]")
+			.forEach((el) => el.remove());
 	});
 	if (scroll) {
 		await page.evaluate((y) => window.scrollTo(0, y), scroll);

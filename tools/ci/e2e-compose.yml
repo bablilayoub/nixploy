@@ -1,0 +1,58 @@
+# End-to-end stack for the CI `e2e` job (.github/workflows/ci.yml): the exact
+# production image the `image` job built, plus the Postgres it ships against.
+#
+# Not docker/docker-compose.dev.yml, because that one *builds* from source and
+# owns its own named volumes. Here the image is an input (the PR artifact) and
+# the config root is a host bind mount at the production path — that is not a
+# detail: the panel creates the `nixploy-traefik` Swarm service through the
+# mounted docker socket, and the bind mounts in that `docker service create`
+# are resolved by the *host* daemon (modules/traefik/setup.ts). `/etc/nixploy`
+# inside the container must therefore be `/etc/nixploy` on the host, exactly
+# as install.sh arranges it.
+#
+#   NIXPLOY_E2E_IMAGE=nixploy:ci docker compose -f tools/ci/e2e-compose.yml up -d
+name: nixploy-e2e
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nixploy
+      POSTGRES_PASSWORD: nixploy
+      POSTGRES_DB: nixploy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nixploy -d nixploy"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    image: ${NIXPLOY_E2E_IMAGE:-nixploy:ci}
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://nixploy:nixploy@postgres:5432/nixploy
+      PORT: "3000"
+      BETTER_AUTH_URL: http://localhost:3000
+      # CI-only throwaway secrets. The image runs NODE_ENV=production and
+      # refuses to store env vars / registries / notifications without a
+      # 32-byte hex ENCRYPTION_KEY. Never reuse these anywhere real.
+      BETTER_AUTH_SECRET: ci-only-better-auth-secret-do-not-use-anywhere
+      ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      # The image ships NIXPLOY_DISABLE_TRAEFIK_BOOT=1 because install.sh owns
+      # the proxy in production. The e2e job wants the opposite: the panel
+      # provisions Traefik itself, so the golden path really goes
+      # app → Traefik → :80/:443 on the runner. An empty string is falsy for
+      # both readers (apps/web/server.ts and observability/health.ts).
+      NIXPLOY_DISABLE_TRAEFIK_BOOT: ""
+      LOG_LEVEL: ${NIXPLOY_E2E_LOG_LEVEL:-info}
+    ports:
+      - "3000:3000"
+    volumes:
+      # Swarm, image pulls, service logs — same socket install.sh mounts.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Must be the identical path on both sides; see the header note.
+      - /etc/nixploy:/etc/nixploy

@@ -2,8 +2,9 @@
 
 Nixploy PaaS ships via [GitHub Releases](https://github.com/bablilayoub/nixploy/releases)
 (Dokploy-style): each tag runs the quality gate, builds the multi-arch GHCR image
-(`linux/amd64` + `linux/arm64`, with provenance and SBOM attestations), publishes
-release notes from merged PRs, and attaches version-pinned `install.sh` / `update.sh`.
+(`linux/amd64` + `linux/arm64`, with provenance and SBOM attestations), scans it with
+Trivy, signs it with cosign, publishes release notes, and attaches version-pinned
+`install.sh` / `update.sh` / `uninstall.sh` plus a `SHA256SUMS` file.
 
 ## Version convention
 
@@ -66,32 +67,73 @@ Workflow: [`.github/workflows/release.yml`](../.github/workflows/release.yml)
 
 1. **Quality gate** — the `checks` job calls the reusable
    [`.github/workflows/checks.yml`](../.github/workflows/checks.yml) on the tagged ref:
-   `pnpm typecheck` (all workspaces), the Biome CI command, `pnpm test` with
+   `pnpm typecheck` (all workspaces), the Biome CI command, `pnpm test:db` with
    `DATABASE_URL_TEST` against a Postgres 17 service (so the tenancy-isolation suite
-   really runs), and the Traefik static-config drift check. The same workflow gates every
-   PR, so the release gate cannot drift from CI. The `release` job `needs:` it; a red tree
-   never reaches `:latest`.
+   really runs — `test:db` refuses to start without that variable), `pnpm -F @nixploy/cli
+   test`, the web tests when that package has a `test` script, and the Traefik
+   static-config drift check. The same workflow gates every PR, so the release gate cannot
+   drift from CI. The `release` job `needs:` it; a red tree never reaches `:latest`.
 2. Asserts tag ↔ `package.json`
-3. Builds and pushes `ghcr.io/<repo>:vX.Y.Z` — plus `:latest` when the event is a tag push
-   of a final version — for `linux/amd64` **and** `linux/arm64`. arm64 is emulated with
-   QEMU on the amd64 runner, so the release build is slow (expect 20–40 minutes cold; the
-   GHA layer cache helps on re-runs). Native `ubuntu-24.04-arm` runners + a manifest merge
-   are the upgrade path if that becomes painful.
+3. Builds and pushes `ghcr.io/<repo>:vX.Y.Z` for `linux/amd64` **and** `linux/arm64`.
+   arm64 is emulated with QEMU on the amd64 runner, so the release build is slow (expect
+   20–40 minutes cold; the GHA layer cache helps on re-runs). Native `ubuntu-24.04-arm`
+   runners + a manifest merge are the upgrade path if that becomes painful.
 4. Attaches a SLSA **provenance** attestation and an SPDX **SBOM** to the image
    (`provenance: true`, `sbom: true`) and stamps the OCI labels
    (`org.opencontainers.image.source|revision|version|created`) from
    `docker/metadata-action`. The attestations appear as extra `unknown/unknown` platform
    entries in the GHCR UI — that is expected. Inspect with
    `docker buildx imagetools inspect ghcr.io/bablilayoub/nixploy:vX.Y.Z`.
-5. Pins `install.sh` / `update.sh` defaults to that tag
-6. Creates the GitHub Release (`generate_release_notes`; marked prerelease when the tag
-   contains `-`) and uploads those scripts as assets
+5. **Trivy scan of the pushed digest**, `severity: CRITICAL`, `ignore-unfixed: true`,
+   `exit-code: 1`. A fixable critical CVE fails the release. (PRs run a wider but advisory
+   `CRITICAL,HIGH` scan — see [development.md](./development.md).)
+6. **cosign keyless signature** of the digest (`cosign sign --yes`). The workflow's OIDC
+   identity is bound into a short-lived Fulcio certificate and the signature is recorded in
+   the Rekor transparency log — no private key exists to leak or rotate. See *Verify what
+   you are running* below.
+7. **Moves `:latest`** — only for a tag push of a final `vX.Y.Z`, and only now, after the
+   scan and the signature. `docker buildx imagetools create` re-tags the manifest that was
+   just built, so `:latest` and `:vX.Y.Z` are the same bytes by construction and a failed
+   scan cannot advance the channel every install auto-updates to.
+8. Pins `install.sh` / `update.sh` defaults to that tag
+9. Writes `SHA256SUMS` over `install.sh`, `update.sh` and `uninstall.sh` **after** the
+   pinning step, so the checksums match the assets the release actually serves
+10. Creates the GitHub Release (`generate_release_notes`; marked prerelease when the tag
+    contains `-`) and uploads the three scripts plus `SHA256SUMS` as assets
+
+### Verify what you are running
+
+The image is signed keyless, so verification needs no key — only the identity that was
+allowed to sign:
+
+```bash
+cosign verify \
+  --certificate-identity-regexp '^https://github\.com/bablilayoub/nixploy/\.github/workflows/(release|docker)\.yml@refs/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/bablilayoub/nixploy:v0.1.0 | jq .
+```
+
+Both `release.yml` (tagged releases, `:vX.Y.Z` and `:latest`) and `docker.yml` (continuous
+`:main` / `:<sha>` builds) sign their digests. Tighten the regexp to `release.yml` alone if
+you only ever run releases.
+
+Installer scripts are verified against the release's `SHA256SUMS` before being run as root
+— the recipe lives in [install.md](./install.md).
+
+### Actions are SHA-pinned
+
+Every third-party action is referenced by commit SHA with the version in a trailing comment
+(`uses: owner/repo@<sha> # v1.2.3`). A moving tag is a supply-chain hole: whoever controls
+the action's repository can repoint `@v4` at new code that runs with this workflow's
+`packages: write` and `id-token: write` permissions. [Dependabot](../.github/dependabot.yml)
+opens a weekly PR that bumps the SHAs and the comments together, so pinning does not mean
+going stale.
 
 `main` pushes still build continuous images via
 [`.github/workflows/docker.yml`](../.github/workflows/docker.yml) (`main` + sha tags, never
-`latest`; also multi-arch with provenance + SBOM) — versioned tags and `latest` are owned by
-the Release workflow only. Continuous builds do **not** wait for the CI gate; they are
-throwaway images for testing.
+`latest`; also multi-arch with provenance + SBOM, and cosign-signed) — versioned tags and
+`latest` are owned by the Release workflow only. Continuous builds do **not** wait for the
+CI gate; they are throwaway images for testing.
 
 Supported image architectures: `linux/amd64`, `linux/arm64` (Raspberry Pi 4/5, Ampere,
 Graviton, Apple-silicon Docker). `install.sh` already accepts both; before this an arm64 host
@@ -121,6 +163,9 @@ Prefer the asset from the release you want (defaults already pin `NIXPLOY_VERSIO
 # Example: pin to v0.1.0 release assets
 curl -fsSL https://github.com/bablilayoub/nixploy/releases/download/v0.1.0/install.sh | sudo bash
 ```
+
+That pipes a script straight into root's shell. Every release also ships `SHA256SUMS`, so
+the safe form is download → verify → run; see the snippet in [install.md](./install.md).
 
 Raw `main` URLs still work and track the branch default:
 

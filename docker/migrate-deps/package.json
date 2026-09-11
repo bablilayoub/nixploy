@@ -1,0 +1,11 @@
+{
+	"name": "nixploy-migrate-deps",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Dependencies for docker/migrate.mjs — the migration runner the image entrypoint executes before the panel starts. Deliberately separate from the workspace node_modules so a migration can run on a half-built tree. Versions are pinned exactly to what packages/server resolves in pnpm-lock.yaml; package-lock.json pins the transitive tree too (security.md §2.8).",
+	"dependencies": {
+		"drizzle-orm": "0.45.2",
+		"postgres": "3.4.9"
+	}
+}
