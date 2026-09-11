@@ -4,7 +4,7 @@
 # custom server (WebSockets, deploy queue, crons). Traefik is expected as a
 # sibling Swarm service — set NIXPLOY_DISABLE_TRAEFIK_BOOT=1 in production.
 
-FROM node:22-alpine AS base
+FROM node:26-alpine AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && corepack prepare pnpm@10 --activate
@@ -39,7 +39,7 @@ RUN pnpm --filter @nixploy/web build \
 # Plain node image: nothing at runtime goes through pnpm/corepack, so the panel
 # boots without registry access (corepack would otherwise download the pinned
 # pnpm on every container start).
-FROM node:22-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
