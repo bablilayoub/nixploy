@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { DocsShell } from "@/components/docs/docs-shell";
 import { ProseLink } from "@/components/page-shell";
-import { apiCatalog } from "@/lib/docs/api-catalog";
+import { apiCatalog, apiEndpointCount } from "@/lib/docs/api-catalog";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -35,8 +35,15 @@ export default function ApiPage() {
 						panel. Send it on every request:
 					</p>
 					<pre className="overflow-x-auto rounded-lg border border-border bg-surface p-4 font-mono text-xs text-foreground/90">
-						{`x-api-key: nxlp_...`}
+						{`x-api-key: nxp_...`}
 					</pre>
+					<p className="text-[15px] leading-relaxed text-muted">
+						Keys are <strong className="font-medium text-foreground">scoped</strong> (read, deploy,
+						write or admin) and bound to one organization. The effective permission set is the scope
+						intersected with the key owner&apos;s own capabilities, so a{" "}
+						<code className="font-mono text-foreground/90">write</code> key held by a viewer still
+						cannot write. New keys expire after 90 days by default.
+					</p>
 				</section>
 
 				<section className="mt-12 space-y-4">
@@ -104,7 +111,7 @@ curl -sS -X POST \\
 					<h2 className="font-display text-xl font-semibold tracking-tight text-foreground">CLI</h2>
 					<pre className="overflow-x-auto rounded-lg border border-border bg-surface p-4 font-mono text-xs text-foreground/90">
 						{`npm i -g @nixploy/cli
-nixploy auth login --url https://panel.example.com --api-key nxlp_...
+echo "$NIXPLOY_API_KEY" | nixploy auth login --url https://panel.example.com
 nixploy doctor
 nixploy app list --project-id <id>`}
 					</pre>
@@ -120,7 +127,12 @@ nixploy app list --project-id <id>`}
 						Endpoint catalog
 					</h2>
 					<p className="mt-2 text-sm text-muted">
-						High-traffic procedures. Full schemas and every mutation are on panel Swagger.
+						All {apiEndpointCount} endpoints across {apiCatalog.length} routers, generated from the
+						router itself. The <strong className="font-medium text-foreground">Requires</strong>{" "}
+						column lists the organization capabilities the key&apos;s user must hold; “instance
+						admin” marks the operations that additionally need the platform owner. Full descriptions
+						and input/output schemas live on your own panel&apos;s Swagger, which always matches the
+						version you run.
 					</p>
 					<div className="mt-8 space-y-10">
 						{apiCatalog.map((group) => (
@@ -131,12 +143,13 @@ nixploy app list --project-id <id>`}
 								<p className="mt-1 text-sm text-muted">{group.description}</p>
 								<p className="mt-1 font-mono text-xs text-muted/80">router: {group.router}</p>
 								<div className="mt-4 overflow-x-auto rounded-lg border border-border">
-									<table className="w-full min-w-[28rem] text-left text-sm">
+									<table className="w-full min-w-[34rem] text-left text-sm">
 										<thead className="border-b border-border bg-surface/80 text-xs text-muted uppercase">
 											<tr>
 												<th className="px-3 py-2 font-medium">Method</th>
 												<th className="px-3 py-2 font-medium">Path</th>
 												<th className="px-3 py-2 font-medium">Summary</th>
+												<th className="px-3 py-2 font-medium">Requires</th>
 											</tr>
 										</thead>
 										<tbody>
@@ -149,6 +162,12 @@ nixploy app list --project-id <id>`}
 														/api/{ep.path}
 													</td>
 													<td className="px-3 py-2 text-muted">{ep.summary}</td>
+													<td className="px-3 py-2 font-mono text-xs text-muted/80">
+														{[
+															...(ep.capability ?? []),
+															...(ep.instanceAdmin ? ["instance admin"] : []),
+														].join(", ") || "—"}
+													</td>
 												</tr>
 											))}
 										</tbody>

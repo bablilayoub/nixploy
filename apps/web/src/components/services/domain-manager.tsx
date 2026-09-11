@@ -1163,7 +1163,7 @@ export function DomainManager({
 								{protocol === "http"
 									? "Layer 7: paths, middlewares and certificates apply."
 									: "Layer 4: Traefik forwards the raw stream on a dedicated entrypoint. No paths, redirects or middlewares."}{" "}
-								<HelpLink slug="domains" />
+								<HelpLink slug="tcp-udp-routing" />
 							</p>
 						</div>
 

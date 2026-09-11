@@ -607,7 +607,7 @@ export function ServerSettingsView() {
 							) : null}
 							<p className="text-sm text-muted-foreground">
 								Turn this on only for a self-hosted MinIO, Gotify, Gitea or SMTP server on a private
-								network. <HelpLink slug="security" />
+								network. <HelpLink slug="private-egress" />
 							</p>
 						</>
 					)}

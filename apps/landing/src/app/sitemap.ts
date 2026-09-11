@@ -1,32 +1,17 @@
 import type { MetadataRoute } from "next";
+import { docsSlugs } from "@/lib/docs/nav";
 import { site } from "@/lib/site";
 
-const docSlugs = [
-	"install",
-	"getting-started",
-	"migrate",
-	"deploy",
-	"domains",
-	"git",
-	"templates",
-	"databases",
-	"backups",
-	"observability",
-	"servers",
-	"security",
-	"schedules",
-	"cli",
-	"gitops",
-	"mcp",
-	"ai",
-] as const;
-
+/**
+ * Derived from `docsNav`, not from a second hand-written list — the previous
+ * copy silently dropped every page added after it was written.
+ */
 export default function sitemap(): MetadataRoute.Sitemap {
 	const paths = [
 		"",
 		"/features",
 		"/docs",
-		...docSlugs.map((s) => `/docs/${s}`),
+		...docsSlugs.map((slug) => `/docs/${slug}`),
 		"/api",
 		"/pricing",
 		"/about",

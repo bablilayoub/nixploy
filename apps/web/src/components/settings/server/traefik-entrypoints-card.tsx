@@ -123,7 +123,7 @@ export function TraefikEntrypointsCard() {
 				<p className="text-xs text-muted-foreground">
 					Adding or removing an entrypoint restarts Traefik: entrypoints live in its static
 					configuration, which is only read at start. Every route on this instance is unavailable
-					for a few seconds. <HelpLink slug="domains" />
+					for a few seconds. <HelpLink slug="tcp-udp-routing" />
 				</p>
 				<QueryState
 					isPending={entrypointsQuery.isLoading}

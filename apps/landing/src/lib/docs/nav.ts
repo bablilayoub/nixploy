@@ -25,6 +25,7 @@ export const docsNav: DocsNavGroup[] = [
 		items: [
 			{ href: "/docs/deploy", label: "Deploy & build" },
 			{ href: "/docs/domains", label: "Domains & TLS" },
+			{ href: "/docs/tcp-udp-routing", label: "TCP & UDP routing" },
 			{ href: "/docs/git", label: "Git & previews" },
 			{ href: "/docs/templates", label: "Templates" },
 			{ href: "/docs/databases", label: "Databases" },
@@ -37,6 +38,8 @@ export const docsNav: DocsNavGroup[] = [
 			{ href: "/docs/observability", label: "Observability" },
 			{ href: "/docs/servers", label: "Servers & Docker" },
 			{ href: "/docs/security", label: "Auth & security" },
+			{ href: "/docs/private-egress", label: "Outbound requests" },
+			{ href: "/docs/key-rotation", label: "Key rotation" },
 			{ href: "/docs/schedules", label: "Schedules & notify" },
 			{ href: "/docs/troubleshooting", label: "Troubleshooting" },
 		],
