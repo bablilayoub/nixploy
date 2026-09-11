@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { docker, ssh } = vi.hoisted(() => ({
 	docker: { logsCalls: 0, destroyed: 0, streams: [] as Array<{ push: (chunk: string) => void }> },
-	ssh: { connects: 0, execs: 0, ends: 0 },
+	ssh: { leases: 0, execs: 0, releases: 0 },
 }));
 
 vi.mock("./access", () => ({
@@ -24,6 +24,15 @@ vi.mock("../modules/compose/containers", () => ({
 }));
 
 vi.mock("./docker", () => {
+	const fakeClient = () => ({
+		exec: (_command: string, callback: (err: Error | null, stream: unknown) => void) => {
+			ssh.execs += 1;
+			const stream: EventEmitter & { close: () => void } = Object.assign(new EventEmitter(), {
+				close: () => stream.emit("close"),
+			});
+			callback(null, stream);
+		},
+	});
 	const makeContainer = (id: string) => ({
 		id,
 		inspect: async () => ({ Config: { Tty: true } }),
@@ -45,18 +54,29 @@ vi.mock("./docker", () => {
 		resolveRemoteContainerId: async () => "remote-container",
 		assertContainerNotProtected: async () => {},
 		getDocker: () => ({ modem: { demuxStream: () => {} } }),
-		connectToServer: async () => {
-			ssh.connects += 1;
+		// The pooled SSH transport: a lease is one channel on the shared
+		// connection, released when the follow ends (never `end()` on the client).
+		acquireServerSsh: async () => {
+			ssh.leases += 1;
 			return {
-				exec: (_command: string, callback: (err: Error | null, stream: unknown) => void) => {
-					ssh.execs += 1;
-					const stream = Object.assign(new EventEmitter(), { close: () => {} });
-					callback(null, stream);
+				client: fakeClient(),
+				server: { serverId: "srv-1", name: "prod-1", host: "10.0.0.9", port: 22, username: "root" },
+				release: () => {
+					ssh.releases += 1;
 				},
-				end: () => {
-					ssh.ends += 1;
+				discard: () => {
+					ssh.releases += 1;
 				},
+				onConnectionLost: () => {},
 			};
+		},
+		withServerSsh: async (_serverId: string, fn: (client: unknown) => Promise<unknown>) => {
+			ssh.leases += 1;
+			try {
+				return await fn(fakeClient());
+			} finally {
+				ssh.releases += 1;
+			}
 		},
 	};
 });
@@ -100,9 +120,9 @@ beforeEach(() => {
 	docker.logsCalls = 0;
 	docker.destroyed = 0;
 	docker.streams = [];
-	ssh.connects = 0;
+	ssh.leases = 0;
 	ssh.execs = 0;
-	ssh.ends = 0;
+	ssh.releases = 0;
 });
 
 describe("shared local log streams", () => {
@@ -171,7 +191,7 @@ describe("shared local log streams", () => {
 });
 
 describe("shared remote log streams", () => {
-	it("opens one SSH session per container, not per viewer", async () => {
+	it("opens one pooled SSH channel per container, not per viewer", async () => {
 		const a = new FakeSocket();
 		const b = new FakeSocket();
 		await connect(a, "containerId=abc123def456&serverId=srv-1");
@@ -183,7 +203,8 @@ describe("shared remote log streams", () => {
 		a.close();
 		b.close();
 		expect(sharedLogStreamCount()).toBe(0);
-		// The follow session is closed with the last viewer.
-		expect(ssh.ends).toBeGreaterThanOrEqual(1);
+		// The channel — and with it the pool slot — goes back with the last viewer.
+		expect(ssh.leases).toBe(1);
+		expect(ssh.releases).toBeGreaterThanOrEqual(1);
 	});
 });

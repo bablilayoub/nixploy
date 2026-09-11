@@ -5,6 +5,8 @@ import { db } from "../../db";
 import { servers } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
 import { execAsyncRemote } from "../../utils/exec";
+import { fanOutConcurrency, mapWithConcurrency } from "../../utils/fan-out";
+import { isServerUnreachable } from "../../utils/ssh-pool";
 import { getDocker } from "../deployment/docker";
 import { mapDockerStats } from "../docker/stats";
 import {
@@ -181,21 +183,6 @@ async function loadLocalContainerIndex(
 /** Max local `docker stats` calls in flight (each blocks ~1-2s). */
 const LOCAL_SAMPLE_CONCURRENCY = 4;
 
-async function mapWithConcurrency<T>(
-	items: T[],
-	limit: number,
-	fn: (item: T) => Promise<void>,
-): Promise<void> {
-	let index = 0;
-	const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-		while (index < items.length) {
-			const item = items[index++] as T;
-			await fn(item);
-		}
-	});
-	await Promise.all(workers);
-}
-
 /**
  * Restart signal for a local service: RestartCount of the running container
  * (in-place restarts, compose `restart:` policies) plus recently crashed task
@@ -307,10 +294,11 @@ async function sampleRemoteServers(
 	});
 	const configByServerId = new Map(serverRows.map((row) => [row.serverId, row]));
 
-	await Promise.all(
-		[...byServer].map(([serverId, targets]) =>
-			sampleOneRemoteServer(serverId, targets, configByServerId.get(serverId), context, now),
-		),
+	// Bounded: a metrics pass must not open one SSH batch per server at once,
+	// and a server whose SSH breaker is open is skipped outright.
+	const pending = [...byServer].filter(([serverId]) => !isServerUnreachable(serverId));
+	await mapWithConcurrency(pending, fanOutConcurrency(), ([serverId, targets]) =>
+		sampleOneRemoteServer(serverId, targets, configByServerId.get(serverId), context, now),
 	);
 }
 

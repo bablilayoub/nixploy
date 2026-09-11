@@ -4,10 +4,10 @@ import { type ContainerStatsFrame, mapDockerStats } from "../modules/docker/stat
 import { assertWsContainerAccess } from "./access";
 import type { WsSession } from "./auth";
 import {
-	connectToServer,
 	execOnConnection,
 	resolveLocalContainer,
 	resolveRemoteContainerId,
+	withServerSsh,
 } from "./docker";
 import { closeWithError, isValidAppName, sendJson, upgradeSearchParams } from "./utils";
 
@@ -46,7 +46,7 @@ export async function handleDockerStats(
 	try {
 		await assertWsContainerAccess(session, appName, serverId);
 		const sample = serverId
-			? await createRemoteSampler(ws, serverId, appName)
+			? await createRemoteSampler(serverId, appName)
 			: await createLocalSampler(appName);
 
 		interval = setInterval(() => {
@@ -86,26 +86,25 @@ async function createLocalSampler(appName: string): Promise<Sampler> {
 	};
 }
 
-async function createRemoteSampler(
-	ws: WebSocket,
-	serverId: string,
-	appName: string,
-): Promise<Sampler> {
-	const conn = await connectToServer(serverId);
-	ws.on("close", () => conn.end());
-
-	const containerId = await resolveRemoteContainerId(conn, appName);
+/**
+ * Each tick takes (and gives back) one channel on the server's pooled SSH
+ * connection rather than holding a whole connection for the socket's life:
+ * `docker stats --no-stream` is a one-shot command, and `tickInFlight` in the
+ * caller already keeps a viewer to one sample at a time.
+ */
+async function createRemoteSampler(serverId: string, appName: string): Promise<Sampler> {
+	const containerId = await withServerSsh(serverId, (client) =>
+		resolveRemoteContainerId(client, appName),
+	);
 	if (!containerId) {
-		conn.end();
 		throw new Error(`No running container found for app "${appName}" on the remote server`);
 	}
 
 	const format =
 		'{"cpu":{{json .CPUPerc}},"mem":{{json .MemUsage}},"net":{{json .NetIO}},"block":{{json .BlockIO}},"pids":{{json .PIDs}}}';
 	return async () => {
-		const out = await execOnConnection(
-			conn,
-			`docker stats --no-stream --format '${format}' ${containerId}`,
+		const out = await withServerSsh(serverId, (client) =>
+			execOnConnection(client, `docker stats --no-stream --format '${format}' ${containerId}`),
 		);
 		const parsed = JSON.parse(out) as {
 			cpu: string;

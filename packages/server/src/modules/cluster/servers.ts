@@ -2,8 +2,16 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { servers, webServerSettings } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { mapWithConcurrency } from "../../utils/fan-out";
+import {
+	getServerTransportState,
+	invalidateServerTransport,
+	resetServerTransport,
+	type ServerTransportState,
+} from "../../utils/ssh-pool";
 import { getSwarmNetwork } from "../application/paths";
 import { installRemoteBuilderCommand, REMOTE_BUILDER_TOOLS } from "../deployment/builders/tools";
+import { forgetRemoteDocker } from "../deployment/docker";
 import { shellQuote } from "../deployment/paths";
 import { forbidden, notFound, preconditionFailed } from "../errors";
 import { REMOTE_TRAEFIK_DIR } from "../traefik/paths";
@@ -66,7 +74,24 @@ export async function updateServerById(
 		.set(input)
 		.where(and(eq(servers.serverId, serverId), eq(servers.organizationId, organizationId)))
 		.returning();
+	// The pool caches the row's connection details: a swapped IP, port, user or
+	// SSH key must not keep talking to the old host over the old connection.
+	dropServerTransport(serverId);
 	return server;
+}
+
+/** Forget every cached transport for a server (pooled SSH + dockerode client). */
+function dropServerTransport(serverId: string): void {
+	invalidateServerTransport(serverId);
+	forgetRemoteDocker(serverId);
+}
+
+/**
+ * Live SSH transport state (pool + circuit breaker) for a server. Process-local
+ * by design — the pool is per panel process, like the deploy queue's slots.
+ */
+export function getServerTransport(serverId: string): ServerTransportState {
+	return getServerTransportState(serverId);
 }
 
 /** Best-effort remote command with a short timeout; never throws. */
@@ -109,14 +134,19 @@ export async function removeServer(serverId: string, organizationId: string) {
 		.delete(servers)
 		.where(and(eq(servers.serverId, serverId), eq(servers.organizationId, organizationId)))
 		.returning();
+	dropServerTransport(serverId);
 	return server;
 }
 
 /**
  * Verify SSH reachability and Docker availability on a managed server.
  * Returns the remote Docker server version on success, throws otherwise.
+ *
+ * Closes the SSH circuit breaker first: an operator asking "is it back?" must
+ * get a real answer, not the short-circuit left over from the outage.
  */
 export async function testConnection(serverId: string) {
+	resetServerTransport(serverId);
 	const pong = await execAsyncRemote(serverId, "echo ok");
 	if (!pong.includes("ok")) {
 		throw preconditionFailed("SSH connection failed: unexpected response to `echo ok`");
@@ -192,6 +222,8 @@ export async function setupServer(serverId: string, options: SetupServerOptions)
 	if (!options.instanceAdminVerified) {
 		throw forbidden("Joining a server to the primary Swarm requires the instance admin");
 	}
+	// Provisioning is an explicit retry: never answer it from an open breaker.
+	resetServerTransport(serverId);
 	const log: string[] = [];
 	const step = async (label: string, command: string) => {
 		log.push(`$ ${command}`);
@@ -440,26 +472,6 @@ export async function getServerStatsCached(serverId: string): Promise<ServerStat
 	});
 	serverStatsCache.set(serverId, { at: Date.now(), promise });
 	return promise;
-}
-
-async function mapWithConcurrency<T, R>(
-	items: T[],
-	concurrency: number,
-	fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-	if (items.length === 0) return [];
-	const results: R[] = new Array(items.length);
-	let nextIndex = 0;
-	const worker = async () => {
-		while (nextIndex < items.length) {
-			const index = nextIndex;
-			nextIndex += 1;
-			results[index] = await fn(items[index] as T);
-		}
-	};
-	const poolSize = Math.min(concurrency, items.length);
-	await Promise.all(Array.from({ length: poolSize }, () => worker()));
-	return results;
 }
 
 /**

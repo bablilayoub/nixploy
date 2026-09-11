@@ -1,9 +1,8 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import http from "node:http";
+import type { Socket } from "node:net";
 import Docker from "dockerode";
-import { eq } from "drizzle-orm";
-import { Client as SshClient } from "ssh2";
-import { db } from "../../db";
-import { servers } from "../../db/schema";
+import type { ClientChannel } from "ssh2";
 import {
 	describeTimeout,
 	execAsync,
@@ -12,14 +11,95 @@ import {
 	killProcessTree,
 	localCommandTimeoutMs,
 	remoteCommandTimeoutMs,
-	verifyRemoteHostKey,
 } from "../../utils/exec";
+import { acquireSsh, type SshLease, sshPoolLimits } from "../../utils/ssh-pool";
 import { shellQuote } from "./paths";
+
+/**
+ * The Docker engine API speaks HTTP over a channel opened with
+ * `docker system dial-stdio` — the same trick docker-modem's `ssh` protocol
+ * uses, except docker-modem builds a brand new ssh2 `Client` (TCP + key
+ * exchange + auth) for **every single API call**. Here the channel comes from
+ * the server's pooled connection instead (architecture audit #7).
+ */
+const DOCKER_DIAL_COMMAND = "docker system dial-stdio";
+
+/** Placeholder so docker-modem takes its socket path branch; our agent dials. */
+const POOLED_SOCKET_PATH = "/nixploy/ssh";
+
+/**
+ * ssh2 channels are Duplex streams, not `net.Socket`s. Node's HTTP agent only
+ * calls these when a timeout or keep-alive is configured (neither is, here),
+ * but a missing method would be a hard crash rather than a no-op — so stub
+ * them defensively before handing the channel to `http`.
+ */
+function asAgentSocket(stream: ClientChannel): Socket {
+	const candidate = stream as unknown as Record<string, unknown>;
+	for (const method of ["setNoDelay", "setKeepAlive", "setTimeout", "ref", "unref"]) {
+		if (typeof candidate[method] !== "function") {
+			candidate[method] = function noop(this: unknown) {
+				return this;
+			};
+		}
+	}
+	return stream as unknown as Socket;
+}
+
+/** An HTTP agent whose sockets are channels on the server's pooled SSH connection. */
+function createPooledSshAgent(serverId: string): http.Agent {
+	const agent = new http.Agent({
+		keepAlive: false,
+		// Queue inside the agent rather than inside the SSH pool, so a burst of
+		// Docker API calls never starves `execAsyncRemote` of channels.
+		maxSockets: Math.max(1, sshPoolLimits().maxChannels - 1),
+	});
+	agent.createConnection = ((
+		_options: unknown,
+		callback: (error: Error | null, socket?: Socket) => void,
+	) => {
+		void acquireSsh(serverId)
+			.then((lease) => {
+				lease.client.exec(DOCKER_DIAL_COMMAND, (error, stream) => {
+					if (error) {
+						lease.discard(error);
+						callback(error);
+						return;
+					}
+					stream.once("close", () => lease.release());
+					lease.onConnectionLost(() => {
+						try {
+							stream.destroy();
+						} catch {
+							// channel already gone
+						}
+					});
+					callback(null, asAgentSocket(stream));
+				});
+			})
+			.catch((error: unknown) => {
+				callback(error instanceof Error ? error : new Error(String(error)));
+			});
+		return undefined as unknown as Socket;
+	}) as typeof agent.createConnection;
+	return agent;
+}
+
+/**
+ * One dockerode client per managed server. The client itself is stateless —
+ * every request takes a fresh channel from the pool — so caching it just
+ * avoids rebuilding the agent on each call.
+ */
+const remoteDockerClients = new Map<string, Docker>();
 
 /**
  * Get a dockerode client for a managed server.
  * - `serverId` null/undefined → the Nixploy host's local docker socket.
- * - otherwise → docker engine API tunneled over SSH (docker-modem ssh protocol).
+ * - otherwise → docker engine API over a channel of the server's pooled SSH
+ *   connection (`utils/ssh-pool.ts`).
+ *
+ * An unknown server or a missing SSH key now surfaces as a `DomainError` from
+ * the first API call rather than from this constructor: there is no DB read
+ * here any more.
  */
 export async function getDocker(serverId?: string | null): Promise<Docker> {
 	if (!serverId) {
@@ -27,27 +107,24 @@ export async function getDocker(serverId?: string | null): Promise<Docker> {
 			socketPath: process.env.DOCKER_SOCKET ?? "/var/run/docker.sock",
 		});
 	}
-	const server = await db.query.servers.findFirst({
-		where: eq(servers.serverId, serverId),
-		with: { sshKey: true },
-	});
-	if (!server) {
-		throw new Error(`Server not found: ${serverId}`);
-	}
-	const sshKey = server.sshKey;
-	if (!sshKey) {
-		throw new Error(`Server ${server.name} (${serverId}) has no SSH key attached`);
-	}
-	return new Docker({
-		protocol: "ssh",
-		host: server.ipAddress,
-		port: server.port,
-		username: server.username,
-		sshOptions: {
-			privateKey: sshKey.privateKey,
-			hostVerifier: (key: Buffer) => verifyRemoteHostKey(serverId, key),
-		},
-	});
+	const cached = remoteDockerClients.get(serverId);
+	if (cached) return cached;
+	// `agent` is read by docker-modem (`Modem.agent` → per-request options) but
+	// is missing from @types/dockerode's `DockerOptions`.
+	const client = new Docker({
+		socketPath: POOLED_SOCKET_PATH,
+		agent: createPooledSshAgent(serverId),
+	} as Docker.DockerOptions & { agent: http.Agent });
+	remoteDockerClients.set(serverId, client);
+	return client;
+}
+
+/** Drop the cached dockerode client for a server (row changed / removed). */
+export function forgetRemoteDocker(serverId: string): void {
+	const client = remoteDockerClients.get(serverId);
+	remoteDockerClients.delete(serverId);
+	const agent = (client?.modem as { agent?: http.Agent } | undefined)?.agent;
+	agent?.destroy();
 }
 
 /** Error thrown when a spawned command exits non-zero (or is killed). */
@@ -197,49 +274,27 @@ async function spawnRemote(
 	command: string,
 	options: SpawnOptions,
 ): Promise<TargetedProcess> {
-	const server = await db.query.servers.findFirst({
-		where: eq(servers.serverId, serverId),
-		with: { sshKey: true },
-	});
-	if (!server) {
-		throw new Error(`Server not found: ${serverId}`);
-	}
-	const sshKey = server.sshKey;
-	if (!sshKey) {
-		throw new Error(`Server ${server.name} (${serverId}) has no SSH key attached`);
-	}
+	const lease: SshLease = await acquireSsh(serverId);
+	const serverName = lease.server.name;
 
-	const conn = new SshClient();
-	await new Promise<void>((resolve, reject) => {
-		conn
-			.on("ready", () => resolve())
-			.on("error", reject)
-			.connect({
-				host: server.ipAddress,
-				port: server.port,
-				username: server.username,
-				privateKey: sshKey.privateKey,
-				readyTimeout: 30_000,
-				hostVerifier: (key: Buffer) => verifyRemoteHostKey(serverId, key),
-			});
-	});
-
-	let stream: import("ssh2").ClientChannel;
+	let stream: ClientChannel;
 	try {
-		stream = await new Promise<import("ssh2").ClientChannel>((resolve, reject) => {
+		stream = await new Promise<ClientChannel>((resolve, reject) => {
 			// The first stderr line carries the remote shell's pid so kill() can
 			// terminate the actual command tree, not just the SSH channel.
 			const remoteCommand =
 				`printf '%s\\n' '${REMOTE_PID_MARKER}'"$$" >&2; ` +
 				(options.cwd ? `cd ${shellQuote(options.cwd)} && ${command}` : command);
-			conn.exec(remoteCommand, (err, s) => (err ? reject(err) : resolve(s)));
+			lease.client.exec(remoteCommand, (err, s) => (err ? reject(err) : resolve(s)));
 		});
 	} catch (error) {
-		// The handshake succeeded but the channel could not be opened: without
-		// this the authenticated socket leaks until the remote side times out.
-		conn.end();
+		// The connection is healthy but refused a session: drop it rather than
+		// hand the next caller a connection that cannot open channels.
+		lease.discard(error);
 		throw error;
 	}
+	// The pool slot follows the channel, whatever settles `done` first.
+	stream.once("close", () => lease.release());
 
 	let killed = false;
 	let remotePid: number | null = null;
@@ -249,20 +304,32 @@ async function spawnRemote(
 
 	/**
 	 * Terminate the remote command tree (the shell and every child) and then
-	 * tear the channel down. Closing the channel alone leaves builds/clones
+	 * close the channel. Closing the channel alone leaves builds/clones
 	 * running on the server; the `pkill` runs on a second exec channel over
-	 * the same connection.
+	 * the same pooled connection (it can briefly exceed the channel budget on
+	 * purpose — cancelling a build must not queue behind the build itself).
 	 */
 	const killRemoteTree = (pid: number) => {
 		let closed = false;
 		const closeChannel = () => {
 			if (closed) return;
 			closed = true;
-			stream.close();
-			conn.end();
+			try {
+				stream.close();
+			} catch {
+				// channel already gone
+			}
+			lease.release();
 		};
 		try {
-			conn.exec(`pkill -TERM -P ${pid} ; kill -TERM ${pid} ; true`, () => closeChannel());
+			lease.client.exec(`pkill -TERM -P ${pid} ; kill -TERM ${pid} ; true`, (err, killStream) => {
+				if (!err) {
+					// Drain it: an unread channel stalls the connection's window.
+					killStream.resume();
+					killStream.stderr.resume();
+				}
+				closeChannel();
+			});
 			// Fallback: never leave the channel open if the kill exec stalls.
 			setTimeout(closeChannel, 2_000).unref();
 		} catch {
@@ -280,15 +347,15 @@ async function spawnRemote(
 		let settled = false;
 		const timer = setTimeout(() => {
 			const error = new CommandError(
-				`Remote command timed out after ${Math.round(timeoutMs / 1000)}s on server ${server.name}`,
+				`Remote command timed out after ${Math.round(timeoutMs / 1000)}s on server ${serverName}`,
 				null,
 				false,
 			);
 			if (remotePid) {
 				// Stop the remote process too — a timed-out build must not keep
 				// consuming the server after we gave up on it. killRemoteTree
-				// owns the teardown (it closes the connection once pkill ran),
-				// so settle without destroying the socket underneath it.
+				// owns the teardown (it closes the channel once pkill ran), so
+				// settle without touching the shared connection underneath it.
 				killRemoteTree(remotePid);
 				finish(() => reject(error));
 				return;
@@ -305,7 +372,14 @@ async function spawnRemote(
 		};
 		const fail = (error: CommandError) =>
 			finish(() => {
-				conn.destroy();
+				// Only this command's channel goes away — the pooled connection
+				// is shared with every other command on the server.
+				try {
+					stream.close();
+				} catch {
+					// channel already gone
+				}
+				lease.release();
 				reject(error);
 			});
 
@@ -317,12 +391,11 @@ async function spawnRemote(
 		stream.on("error", (err: Error) =>
 			fail(new CommandError(`Remote command stream error: ${err.message}`, null, killed)),
 		);
-		conn.on("error", (err: Error) =>
+		lease.onConnectionLost((err: Error) =>
 			fail(new CommandError(`SSH connection error: ${err.message}`, null, killed)),
 		);
 		stream.on("close", (code: number | null) => {
 			finish(() => {
-				conn.end();
 				if (code === 0 || (code === null && killed)) {
 					if (code === null && killed) {
 						reject(new CommandError("Command was cancelled", code, true));
@@ -334,7 +407,7 @@ async function spawnRemote(
 						new CommandError(
 							killed
 								? "Command was cancelled"
-								: `Remote command failed (exit ${code}) on server ${server.name}`,
+								: `Remote command failed (exit ${code}) on server ${serverName}`,
 							code,
 							killed,
 						),
@@ -360,8 +433,12 @@ async function spawnRemote(
 				// Marker never showed up (shell noise, connection wedged): give
 				// up on a targeted kill and at least release the channel.
 				if (!remotePid) {
-					stream.close();
-					conn.end();
+					try {
+						stream.close();
+					} catch {
+						// channel already gone
+					}
+					lease.release();
 				}
 			}, 5_000).unref();
 		},

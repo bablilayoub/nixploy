@@ -5,12 +5,13 @@ import { assertComposeContainerOwnership } from "../modules/compose/containers";
 import { assertWsContainerAccess, assertWsDockerContainerAccess } from "./access";
 import type { WsSession } from "./auth";
 import {
+	acquireServerSsh,
 	assertContainerNotProtected,
-	connectToServer,
 	getDocker,
 	resolveLocalContainer,
 	resolveLocalContainerById,
 	resolveRemoteContainerId,
+	withServerSsh,
 } from "./docker";
 import {
 	closeWithError,
@@ -301,14 +302,10 @@ async function streamRemoteLogs(
 	appName: string,
 	tail: number,
 ): Promise<void> {
-	// One connection just to resolve the id; the follow gets its own (shared).
-	const conn = await connectToServer(serverId);
-	let containerId: string | null = null;
-	try {
-		containerId = await resolveRemoteContainerId(conn, appName);
-	} finally {
-		conn.end();
-	}
+	// One pooled channel just to resolve the id; the follow takes its own.
+	const containerId = await withServerSsh(serverId, (client) =>
+		resolveRemoteContainerId(client, appName),
+	);
 	if (!containerId) {
 		sendJson(ws, {
 			type: "empty",
@@ -337,33 +334,34 @@ async function pipeRemoteLogs(
 ): Promise<void> {
 	const id = `'${containerId.replace(/'/g, `'\\''`)}'`;
 	await subscribeShared(ws, `${serverId}:${containerId}:${tail}`, ({ emit, fail, end }) =>
-		// One SSH session per container, not per viewer (audit #20).
-		connectToServer(serverId).then(
-			(conn) =>
+		// One channel on the server's pooled connection per container, not per
+		// viewer (audit #20) and not a whole SSH connection per follow (#7).
+		acquireServerSsh(serverId).then(
+			(lease) =>
 				new Promise<() => void>((resolve, reject) => {
-					conn.exec(`docker logs --follow --tail ${tail} ${id} 2>&1`, (err, stream) => {
+					lease.onConnectionLost(() => fail());
+					lease.client.exec(`docker logs --follow --tail ${tail} ${id} 2>&1`, (err, stream) => {
 						if (err) {
-							conn.end();
+							lease.discard(err);
 							reject(err);
 							return;
 						}
+						// The channel holds the pool slot for as long as it follows.
+						stream.once("close", () => lease.release());
 						stream
 							.on("data", (data: Buffer) => emit(data.toString()))
 							.on("error", () => {
-								conn.end();
+								lease.release();
 								fail();
 							})
-							.on("close", () => {
-								conn.end();
-								end();
-							});
+							.on("close", () => end());
 						resolve(() => {
 							try {
 								stream.close();
 							} catch {
 								// channel already gone
 							}
-							conn.end();
+							lease.release();
 						});
 					});
 				}),

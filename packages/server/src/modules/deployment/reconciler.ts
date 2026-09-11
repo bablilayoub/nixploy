@@ -14,6 +14,8 @@ import {
 } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { forEachServerGroup } from "../../utils/fan-out";
+import { isServerUnreachable } from "../../utils/ssh-pool";
 import { shellQuote } from "../compose/paths";
 import {
 	type ServiceState,
@@ -66,8 +68,18 @@ export function reconcileStatus(current: StoredStatus, live: LiveStatus): Stored
 	return current === "running" || current === "done" ? "idle" : current;
 }
 
+/**
+ * A status probe is a `docker ps` — it either answers in a second or the host
+ * is not answering at all. Without this it inherited the 30 min remote command
+ * budget, so a single dead server wedged the every-minute pass indefinitely
+ * (`running` then swallowed every later tick).
+ */
+const PROBE_TIMEOUT_MS = 15_000;
+
 const runOn = (serverId: string | null, command: string): Promise<string> =>
-	serverId ? execAsyncRemote(serverId, command) : execAsync(command);
+	serverId
+		? execAsyncRemote(serverId, command, { timeoutMs: PROBE_TIMEOUT_MS })
+		: execAsync(command, { timeout: PROBE_TIMEOUT_MS });
 
 const NO_SERVICE: ServiceState = {
 	exists: false,
@@ -345,8 +357,8 @@ export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 		},
 	});
 
-	const applyCompose = async (row: (typeof composeRows)[number]): Promise<void> => {
-		if (busyCompose.has(row.composeId)) return;
+	const applyCompose = async (row: (typeof composeRows)[number]): Promise<boolean> => {
+		if (busyCompose.has(row.composeId)) return true;
 		try {
 			const live =
 				row.composeType === "stack"
@@ -354,7 +366,7 @@ export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 						? stackState(snapshot, row.appName)
 						: null
 					: await probePlainComposeState(row);
-			if (live === null) return; // swarm unreadable: leave stacks alone
+			if (live === null) return true; // swarm unreadable: leave stacks alone
 			let next = reconcileStatus(row.status, live);
 			if (
 				next === "idle" &&
@@ -374,24 +386,39 @@ export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 					environmentId: row.environmentId,
 				});
 			}
+			return true;
 		} catch {
 			// Probe failed — try again next pass.
+			return false;
 		}
 	};
 
 	// Plain-compose probes shell out per row, so group them by server and run
-	// the servers side by side: one unreachable host no longer stretches the
-	// whole pass by 30 s × its row count (audit #7).
-	const byServer = new Map<string, typeof composeRows>();
-	for (const row of composeRows) {
-		const key = row.serverId ?? "__local__";
-		byServer.set(key, [...(byServer.get(key) ?? []), row]);
-	}
-	await Promise.all(
-		[...byServer.values()].map(async (rows) => {
-			for (const row of rows) await applyCompose(row);
-		}),
+	// a bounded number of servers side by side (audit #7): one unreachable host
+	// no longer stretches the whole pass by its timeout × its row count, and a
+	// server whose SSH breaker is open is skipped outright instead of paying
+	// the connect timeout again for every row it owns.
+	const skipped = new Set<string>();
+	const fanOut = await forEachServerGroup(
+		composeRows,
+		(row) => row.serverId,
+		async ({ serverId, items }) => {
+			for (const row of items) {
+				const ok = await applyCompose(row);
+				// First failure on a managed server means the host, not the row:
+				// stop paying the probe timeout for its remaining rows this pass.
+				if (!ok && serverId) {
+					skipped.add(serverId);
+					break;
+				}
+			}
+		},
+		{ skipServer: isServerUnreachable },
 	);
+	const unreachable = [...new Set([...fanOut.skipped, ...skipped])];
+	if (unreachable.length > 0) {
+		log.warn("Skipped compose probes for unreachable servers", { servers: unreachable });
+	}
 
 	await notifyWatchdog(corrections);
 	return corrections;

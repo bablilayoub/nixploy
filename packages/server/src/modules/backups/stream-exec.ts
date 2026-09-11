@@ -1,11 +1,8 @@
 import { spawn } from "node:child_process";
 import type { Readable } from "node:stream";
-import { eq } from "drizzle-orm";
-import { Client } from "ssh2";
-import { db } from "../../db";
-import { servers } from "../../db/schema";
+import type { ClientChannel } from "ssh2";
 import { remoteCommandTimeoutMs, terminateProcessTree } from "../../utils/exec";
-import { notFound, preconditionFailed } from "../errors";
+import { acquireSsh } from "../../utils/ssh-pool";
 
 /**
  * Streaming exec for backups.
@@ -16,10 +13,11 @@ import { notFound, preconditionFailed } from "../errors";
  * multipart upload (or a file) on the other, with nothing but 8 MiB parts in
  * memory. Restores run the same shape in reverse.
  *
- * This is the only place in the module that touches `child_process` / `ssh2`
- * directly; it mirrors `utils/exec.ts`'s contract (detached process group,
- * hard timeout, host-key pinning over SSH) and should move there if a second
- * subsystem ever needs streaming.
+ * This is the only place in the module that touches `child_process` directly;
+ * it mirrors `utils/exec.ts`'s contract (detached process group, hard
+ * timeout, and — over SSH — a channel on the server's pooled connection from
+ * `utils/ssh-pool.ts`) and should move there if a second subsystem ever needs
+ * streaming.
  */
 
 export interface StreamingCommand {
@@ -108,96 +106,104 @@ async function runRemoteStreaming(
 	command: string,
 	options: StreamingOptions,
 ): Promise<StreamingCommand> {
-	const server = await db.query.servers.findFirst({
-		where: eq(servers.serverId, serverId),
-		with: { sshKey: true },
-	});
-	if (!server) throw notFound(`Server not found: ${serverId}`);
-	const sshKey = server.sshKey;
-	if (!sshKey) {
-		throw preconditionFailed(`Server ${server.name} (${serverId}) has no SSH key attached`);
-	}
-	// Imported lazily to keep the host-key pin logic in one place.
-	const { verifyRemoteHostKey } = await import("../../utils/exec");
+	const lease = await acquireSsh(serverId);
+	const serverName = lease.server.name;
 	const timeoutMs = remoteCommandTimeoutMs(options.timeoutMs);
 	const maxStderr = options.maxStderrBytes ?? DEFAULT_MAX_STDERR;
 
 	return await new Promise<StreamingCommand>((resolveCommand, rejectCommand) => {
-		const conn = new Client();
 		let stderr = "";
 		let settled = false;
+		let channel: ClientChannel | null = null;
 		let resolveDone: (value: string) => void = () => {};
 		let rejectDone: (reason: Error) => void = () => {};
 		const done = new Promise<string>((resolve, reject) => {
 			resolveDone = resolve;
 			rejectDone = reject;
 		});
-		const timer = setTimeout(() => {
+		// `done` is rejected by the transport even when the outer promise never
+		// resolved (connection lost before the channel opened), i.e. before any
+		// caller can await it. A no-op handler keeps that from crashing the
+		// process; the rejection still reaches whoever awaits `done` later.
+		void done.catch(() => {});
+
+		/**
+		 * Close this command's channel only — the connection is shared with every
+		 * other command on the server, so ending it would abort them too.
+		 */
+		const closeChannel = () => {
+			if (channel) {
+				try {
+					channel.close();
+				} catch {
+					// channel already gone
+				}
+			}
+			lease.release();
+		};
+		const settle = (fn: () => void) => {
 			if (settled) return;
 			settled = true;
-			conn.end();
-			rejectDone(new Error(`Backup command timed out after ${Math.round(timeoutMs / 1000)}s`));
+			clearTimeout(timer);
+			fn();
+		};
+
+		const timer = setTimeout(() => {
+			settle(() => {
+				closeChannel();
+				rejectDone(new Error(`Backup command timed out after ${Math.round(timeoutMs / 1000)}s`));
+			});
 		}, timeoutMs);
 		timer.unref?.();
 
-		conn
-			.on("ready", () => {
-				conn.exec(command, (err, stream) => {
-					if (err) {
-						clearTimeout(timer);
-						conn.end();
-						rejectCommand(err);
-						return;
-					}
-					stream.stderr.on("data", (chunk: Buffer) => {
-						if (stderr.length < maxStderr) stderr += chunk.toString();
-					});
-					stream.on("close", (code: number | null) => {
-						if (settled) return;
-						settled = true;
-						clearTimeout(timer);
-						conn.end();
-						if (code === 0 || code === null) resolveDone(stderr);
-						else
-							rejectDone(
-								new Error(
-									`Backup command failed (exit ${code}) on server ${server.name}${
-										stderr ? `: ${stderr.slice(0, 200)}` : ""
-									}`,
-								),
-							);
-					});
-					stream.on("error", (error: Error) => {
-						if (settled) return;
-						settled = true;
-						clearTimeout(timer);
-						conn.end();
-						rejectDone(error);
-					});
-					writeStdin(stream, options.stdin);
-					resolveCommand({
-						stdout: stream as unknown as Readable,
-						done,
-						abort: () => conn.end(),
-					});
-				});
-			})
-			.on("error", (error) => {
-				clearTimeout(timer);
-				if (!settled) {
-					settled = true;
-					rejectDone(error);
-				}
+		lease.onConnectionLost((error) => {
+			settle(() => {
+				rejectDone(error);
 				rejectCommand(error);
-			})
-			.connect({
-				host: server.ipAddress,
-				port: server.port,
-				username: server.username,
-				privateKey: sshKey.privateKey,
-				readyTimeout: 30_000,
-				hostVerifier: (key: Buffer) => verifyRemoteHostKey(serverId, key),
 			});
+		});
+
+		lease.client.exec(command, (err, stream) => {
+			if (err) {
+				clearTimeout(timer);
+				// The connection could not open a session: it is the transport that
+				// failed, so drop it instead of handing it to the next caller.
+				lease.discard(err);
+				rejectCommand(err);
+				return;
+			}
+			channel = stream;
+			// The pool slot follows the channel, whatever settles `done` first.
+			stream.once("close", () => lease.release());
+			stream.stderr.on("data", (chunk: Buffer) => {
+				if (stderr.length < maxStderr) stderr += chunk.toString();
+			});
+			stream.on("close", (code: number | null) => {
+				settle(() => {
+					if (code === 0 || code === null) resolveDone(stderr);
+					else
+						rejectDone(
+							new Error(
+								`Backup command failed (exit ${code}) on server ${serverName}${
+									stderr ? `: ${stderr.slice(0, 200)}` : ""
+								}`,
+							),
+						);
+				});
+			});
+			stream.on("error", (error: Error) => {
+				settle(() => {
+					closeChannel();
+					rejectDone(error);
+				});
+			});
+			writeStdin(stream, options.stdin);
+			resolveCommand({
+				stdout: stream as unknown as Readable,
+				done,
+				abort: closeChannel,
+			});
+		});
 	});
 }
 

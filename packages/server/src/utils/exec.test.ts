@@ -2,12 +2,90 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * The remote helpers now run on a channel of the server's pooled SSH
+ * connection (`utils/ssh-pool.ts`). A fake ssh2 client keeps their contract —
+ * `RemoteExecError` with stderr and the exit code, the hard timeout — under
+ * test without a managed server. The local-exec tests below are untouched by
+ * these mocks.
+ */
+const remote = vi.hoisted(() => ({
+	/** Every channel the fake client handed out this test. */
+	channels: [] as Array<{
+		command: string;
+		stdin: string[];
+		closed: boolean;
+		finish(code: number, stdout?: string, stderr?: string): void;
+	}>,
+}));
+
+vi.mock("ssh2", async () => {
+	const { EventEmitter } = await import("node:events");
+	class Client extends EventEmitter {
+		connect() {
+			queueMicrotask(() => this.emit("ready"));
+			return this;
+		}
+		exec(command: string, callback: (error: Error | null, channel?: unknown) => void) {
+			const stderr = new EventEmitter();
+			const channel = Object.assign(new EventEmitter(), {
+				stderr,
+				stdin: [] as string[],
+				closed: false,
+				command,
+				close: () => {
+					channel.closed = true;
+					channel.emit("close", null);
+				},
+				write: (chunk: string) => channel.stdin.push(String(chunk)),
+				end: () => {},
+				resume: () => {},
+				finish: (code: number, stdout = "", errText = "") => {
+					if (stdout) channel.emit("data", Buffer.from(stdout));
+					if (errText) stderr.emit("data", Buffer.from(errText));
+					channel.emit("close", code);
+				},
+			});
+			remote.channels.push(channel);
+			queueMicrotask(() => callback(null, channel));
+			return true;
+		}
+		end() {
+			this.emit("close");
+		}
+		destroy() {
+			this.emit("close");
+		}
+	}
+	return { Client };
+});
+
+vi.mock("../db", () => ({
+	db: {
+		query: {
+			servers: {
+				findFirst: async () => ({
+					serverId: "srv-1",
+					name: "prod-1",
+					ipAddress: "10.0.0.9",
+					port: 22,
+					username: "root",
+					sshKey: { privateKey: "KEY" },
+				}),
+			},
+		},
+	},
+}));
+
 import {
 	clearRemoteHostKey,
 	DEFAULT_COMMAND_TIMEOUT_MS,
 	describeTimeout,
 	execAsync,
+	execAsyncRemote,
+	execAsyncRemoteWithStdin,
 	execAsyncWithStdin,
 	getGitKnownHostsPath,
 	getPinnedHostsDir,
@@ -15,6 +93,7 @@ import {
 	remoteCommandTimeoutMs,
 	verifyRemoteHostKey,
 } from "./exec";
+import { closeAllSshConnections, getServerTransportState } from "./ssh-pool";
 
 describe("managed-server host key pinning", () => {
 	let configDir: string;
@@ -125,5 +204,88 @@ describe("command timeouts", () => {
 			execAsyncWithStdin("cat >/dev/null; sleep 60 & wait", "payload", { timeout: 100 }),
 		).rejects.toMatchObject({ name: "CommandTimeoutError" });
 		await expect(execAsyncWithStdin("cat", "payload", { timeout: 5_000 })).resolves.toBe("payload");
+	});
+});
+
+describe("remote commands over the pooled transport", () => {
+	let configDir: string;
+	let originalConfigDir: string | undefined;
+
+	const nextChannel = async () => {
+		for (let attempt = 0; attempt < 50 && remote.channels.length === 0; attempt += 1) {
+			await new Promise((resolve) => setTimeout(resolve, 1));
+		}
+		const channel = remote.channels[0];
+		if (!channel) throw new Error("no channel was opened");
+		return channel;
+	};
+
+	beforeEach(async () => {
+		remote.channels.length = 0;
+		configDir = await mkdtemp(join(tmpdir(), "nixploy-exec-remote-"));
+		originalConfigDir = process.env.NIXPLOY_CONFIG_DIR;
+		process.env.NIXPLOY_CONFIG_DIR = configDir;
+	});
+
+	afterEach(async () => {
+		closeAllSshConnections();
+		if (originalConfigDir === undefined) delete process.env.NIXPLOY_CONFIG_DIR;
+		else process.env.NIXPLOY_CONFIG_DIR = originalConfigDir;
+		await rm(configDir, { recursive: true, force: true });
+	});
+
+	it("resolves stdout on exit 0 and gives the channel slot back", async () => {
+		const pending = execAsyncRemote("srv-1", "docker ps -q");
+		(await nextChannel()).finish(0, "abc123\n");
+		await expect(pending).resolves.toBe("abc123\n");
+		expect(getServerTransportState("srv-1").openChannels).toBe(0);
+		// The connection itself stays up for the next command.
+		expect(getServerTransportState("srv-1").connected).toBe(true);
+	});
+
+	it("rejects with RemoteExecError naming the server, keeping stderr off the message", async () => {
+		const pending = execAsyncRemote("srv-1", "docker inspect nope");
+		(await nextChannel()).finish(1, "", "Error: no such object /var/lib/secret");
+		const error = await pending.catch((caught: Error) => caught);
+		expect(error).toMatchObject({
+			name: "RemoteExecError",
+			code: "INTERNAL_SERVER_ERROR",
+			exitCode: 1,
+			stderr: "Error: no such object /var/lib/secret",
+		});
+		expect((error as Error).message).toBe('Remote "docker" failed (exit 1) on server prod-1');
+		expect(getServerTransportState("srv-1").openChannels).toBe(0);
+	});
+
+	it("streams stdin over the channel", async () => {
+		const pending = execAsyncRemoteWithStdin("srv-1", "cat > /etc/thing", "payload");
+		const channel = await nextChannel();
+		channel.finish(0);
+		await expect(pending).resolves.toBe("");
+		expect(channel.stdin).toEqual(["payload"]);
+	});
+
+	it("closes only the channel on timeout, leaving the pooled connection up", async () => {
+		const pending = execAsyncRemote("srv-1", "sleep 600", { timeoutMs: 20 });
+		const channel = await nextChannel();
+		await expect(pending).rejects.toMatchObject({
+			name: "RemoteExecError",
+			message: 'Remote "sleep" timed out after 0s on server prod-1',
+			exitCode: null,
+		});
+		expect(channel.closed).toBe(true);
+		expect(getServerTransportState("srv-1").connected).toBe(true);
+		expect(getServerTransportState("srv-1").openChannels).toBe(0);
+	});
+
+	it("reuses one connection for several remote commands", async () => {
+		const first = execAsyncRemote("srv-1", "echo one");
+		(await nextChannel()).finish(0, "one");
+		await first;
+		remote.channels.length = 0;
+		const second = execAsyncRemote("srv-1", "echo two");
+		(await nextChannel()).finish(0, "two");
+		await expect(second).resolves.toBe("two");
+		expect(getServerTransportState("srv-1").connected).toBe(true);
 	});
 });

@@ -5,8 +5,8 @@ import { assertComposeContainerOwnership } from "../modules/compose/containers";
 import { assertWsDockerContainerAccess, assertWsTerminalAccess } from "./access";
 import type { WsSession } from "./auth";
 import {
+	acquireServerSsh,
 	assertContainerNotProtected,
-	connectToServer,
 	resolveLocalContainer,
 	resolveLocalContainerById,
 	resolveRemoteContainerId,
@@ -183,12 +183,12 @@ async function attachRemoteTerminal(
 	serverId: string,
 	appName: string,
 ): Promise<void> {
-	const conn = await connectToServer(serverId);
-	ws.on("close", () => conn.end());
+	const lease = await acquireServerSsh(serverId);
+	ws.on("close", () => lease.release());
 
-	const containerId = await resolveRemoteContainerId(conn, appName);
+	const containerId = await resolveRemoteContainerId(lease.client, appName);
 	if (!containerId) {
-		conn.end();
+		lease.release();
 		closeWithError(
 			ws,
 			`No running container found for "${appName}" on the remote server — deploy first`,
@@ -196,7 +196,7 @@ async function attachRemoteTerminal(
 		return;
 	}
 
-	pipeRemoteExec(ws, conn, containerId);
+	pipeRemoteExec(ws, lease, containerId);
 }
 
 async function attachRemoteTerminalById(
@@ -204,30 +204,32 @@ async function attachRemoteTerminalById(
 	serverId: string,
 	containerId: string,
 ): Promise<void> {
-	const conn = await connectToServer(serverId);
-	ws.on("close", () => conn.end());
-	pipeRemoteExec(ws, conn, containerId);
+	const lease = await acquireServerSsh(serverId);
+	ws.on("close", () => lease.release());
+	pipeRemoteExec(ws, lease, containerId);
 }
 
 function pipeRemoteExec(
 	ws: WebSocket,
-	conn: Awaited<ReturnType<typeof connectToServer>>,
+	lease: Awaited<ReturnType<typeof acquireServerSsh>>,
 	containerId: string,
 ): void {
 	const id = `'${containerId.replace(/'/g, `'\\''`)}'`;
-	conn.exec(
+	lease.client.exec(
 		`docker exec -it ${id} sh -c '${SHELL_FALLBACK_COMMAND}'`,
 		{ pty: { cols: DEFAULT_COLS, rows: DEFAULT_ROWS, term: "xterm-256color" } },
 		(err, stream) => {
 			if (err) {
-				conn.end();
+				lease.release();
 				closeWithError(ws, err.message);
 				return;
 			}
+			// Free the PTY channel (and the pool slot) when the browser goes away.
+			ws.on("close", () => stream.close());
 			stream
 				.on("data", (data: Buffer) => safeSend(ws, data))
 				.on("close", () => {
-					conn.end();
+					lease.release();
 					ws.close(1000);
 				});
 			stream.stderr.on("data", (data: Buffer) => safeSend(ws, data));

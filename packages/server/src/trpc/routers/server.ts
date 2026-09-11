@@ -7,6 +7,7 @@ import {
 	findServerById,
 	getServerStatsBatch,
 	getServerStatsCached,
+	getServerTransport,
 	listServersByOrganization,
 	redactServerCommandLog,
 	removeServer,
@@ -15,7 +16,11 @@ import {
 	type UpdateServerInput,
 	updateServerById,
 } from "../../modules/cluster";
-import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
+import {
+	assertCapability,
+	hasCapability,
+	resolveCallerOrganizationId,
+} from "../../modules/projects";
 import { clearRemoteHostKey } from "../../utils/exec";
 import { assertSshKeyInOrganization } from "../assert-org-refs";
 import type { TRPCContext } from "../init";
@@ -222,6 +227,29 @@ export const serverRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		await findServerOrThrow(input.serverId, organizationId);
 		return await getServerStatsCached(input.serverId);
+	}),
+
+	/**
+	 * SSH transport health of the organization's servers: whether the panel
+	 * holds a pooled connection, how many channels are open, and whether the
+	 * circuit breaker is short-circuiting commands (`status: "unreachable"`).
+	 *
+	 * Process-local, like the deploy queue's slots — it describes what *this*
+	 * panel process sees, not a stored column. `lastError` can name the host,
+	 * so it is only returned to callers with `servers.manage`.
+	 */
+	transportState: protectedProcedure.query(async ({ ctx }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		const owned = await listServersByOrganization(organizationId);
+		const canManage = await hasCapability(ctx.session.user.id, organizationId, "servers.manage");
+		return owned.map((server) => {
+			const state = getServerTransport(server.serverId);
+			return {
+				...state,
+				name: server.name,
+				lastError: canManage ? state.lastError : null,
+			};
+		});
 	}),
 
 	/**

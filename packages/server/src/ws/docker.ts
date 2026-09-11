@@ -6,6 +6,7 @@ import { servers } from "../db/schema";
 import { getLocalDocker, resolveLocalContainer } from "../modules/docker/containers";
 import { isProtectedPlatformName } from "../modules/docker/protected";
 import { execAsyncRemote, verifyRemoteHostKey } from "../utils/exec";
+import { acquireSsh } from "../utils/ssh-pool";
 
 const SSH_READY_TIMEOUT_MS = 30_000;
 const EXEC_TIMEOUT_MS = 15_000;
@@ -92,7 +93,40 @@ export async function assertContainerNotProtected(
 	}
 }
 
-/** Open an SSH connection to a managed remote server (same lookup as execAsyncRemote). */
+/**
+ * Reserve a channel on the server's pooled SSH connection and run `fn` with
+ * the shared client. Use this for short commands (`docker ps`, one-shot
+ * `docker stats`); long follows should hold their own {@link acquireSsh} lease
+ * for the life of the stream so the channel budget stays honest.
+ *
+ * Never call `end()`/`destroy()` on the client handed to `fn` — it is shared
+ * with every other command running against that server.
+ */
+export async function withServerSsh<T>(
+	serverId: string,
+	fn: (client: Client) => Promise<T>,
+): Promise<T> {
+	const lease = await acquireSsh(serverId);
+	try {
+		return await fn(lease.client);
+	} finally {
+		lease.release();
+	}
+}
+
+/** Reserve a channel for a long-lived stream; release the lease when it ends. */
+export { acquireSsh as acquireServerSsh } from "../utils/ssh-pool";
+
+/**
+ * Open a **dedicated** SSH connection to a managed remote server (same lookup
+ * as `execAsyncRemote` used to do).
+ *
+ * The only remaining caller is the interactive terminal (`ws/docker-terminal.ts`),
+ * which owns its connection for the session and ends it on close. Everything
+ * else goes through {@link withServerSsh} / {@link acquireServerSsh} so it
+ * shares the pooled connection; moving the terminal over needs the same lease
+ * treatment (see the handoff).
+ */
 export async function connectToServer(serverId: string): Promise<Client> {
 	const server = await db.query.servers.findFirst({
 		where: eq(servers.serverId, serverId),
@@ -127,15 +161,25 @@ export function execOnConnection(conn: Client, command: string): Promise<string>
 	return new Promise<string>((resolve, reject) => {
 		let stdout = "";
 		let stderr = "";
+		let channel: import("ssh2").ClientChannel | null = null;
 		const timer = setTimeout(() => {
+			// Close the wedged channel: the connection is pooled and shared, so
+			// leaving the session open would eat one of its channel slots.
+			try {
+				channel?.close();
+			} catch {
+				// channel already gone
+			}
 			reject(new Error(`Remote command timed out: ${command}`));
 		}, EXEC_TIMEOUT_MS);
+		timer.unref?.();
 		conn.exec(command, (err, stream) => {
 			if (err) {
 				clearTimeout(timer);
 				reject(err);
 				return;
 			}
+			channel = stream;
 			stream
 				.on("close", (code: number | null) => {
 					clearTimeout(timer);

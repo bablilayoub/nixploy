@@ -1,16 +1,23 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { eq } from "drizzle-orm";
-import { Client } from "ssh2";
-import { db } from "../db";
-import { servers } from "../db/schema";
+import type { ClientChannel } from "ssh2";
 import { getSshKeysPath } from "../modules/deployment/paths";
-import { DomainError, notFound, preconditionFailed } from "../modules/errors";
+import { DomainError } from "../modules/errors";
+import { acquireSsh } from "./ssh-pool";
+
+/**
+ * Host-key pinning lives in `ssh-pool.ts` (the pool needs it while dialling,
+ * and a two-way import would be a cycle). Re-exported here because every
+ * caller — and `exec.test.ts` — has always imported it from this module.
+ */
+export {
+	clearRemoteHostKey,
+	getPinnedHostsDir,
+	verifyRemoteHostKey,
+} from "./ssh-pool";
 
 /** 50 MB — build/deploy logs can be large. */
 const MAX_BUFFER = 1024 * 1024 * 50;
-const SSH_READY_TIMEOUT_MS = 30_000;
 
 /** Default hard timeout for long-running commands (builds, pulls), local or SSH. */
 export const DEFAULT_COMMAND_TIMEOUT_MS = 30 * 60 * 1000;
@@ -234,96 +241,41 @@ function commandLabel(command: string): string {
 }
 
 /**
- * Directory holding the TOFU host-key pins of managed servers:
- * `<configDir>/ssh/pinned-hosts/<serverId>.pub`.
- *
- * Earlier releases wrote them under `<configDir>/ssh/known_hosts/`, which
- * collided with the OpenSSH `UserKnownHostsFile` git clones need (that path
- * must be a file, not a directory). The old location is still read as a
- * fallback so existing pins keep working after an upgrade.
- */
-export const getPinnedHostsDir = (): string => path.join(getSshKeysPath(), "pinned-hosts");
-
-const legacyPinnedHostFile = (serverId: string): string =>
-	path.join(getSshKeysPath(), "known_hosts", `${serverId}.pub`);
-
-/**
  * OpenSSH known_hosts file used by git-over-ssh clones (custom SSH keys):
  * `<configDir>/ssh/git_known_hosts`. Populated by ssh itself through
  * `StrictHostKeyChecking=accept-new` (first contact pins, later mismatches fail).
  */
 export const getGitKnownHostsPath = (): string => path.join(getSshKeysPath(), "git_known_hosts");
 
-/**
- * Trust-on-first-use host key pinning for managed servers.
- * Keys live under `<configDir>/ssh/pinned-hosts/<serverId>.pub`.
- */
-export function verifyRemoteHostKey(serverId: string, key: Buffer): boolean {
-	const dir = getPinnedHostsDir();
-	mkdirSync(dir, { recursive: true });
-	const file = path.join(dir, `${serverId}.pub`);
-	const encoded = key.toString("base64");
-	if (existsSync(file)) {
-		return readFileSync(file, "utf8").trim() === encoded;
-	}
-	// Pre-rename installs: honor (and migrate) the legacy pin.
-	const legacy = legacyPinnedHostFile(serverId);
-	if (existsSync(legacy)) {
-		const pinned = readFileSync(legacy, "utf8").trim();
-		if (pinned !== encoded) return false;
-		writeFileSync(file, `${pinned}\n`, { mode: 0o600 });
-		return true;
-	}
-	writeFileSync(file, `${encoded}\n`, { mode: 0o600 });
-	return true;
-}
-
-/** Clear a pinned host key (e.g. after intentional server rebuild). */
-export function clearRemoteHostKey(serverId: string): void {
-	for (const file of [
-		path.join(getPinnedHostsDir(), `${serverId}.pub`),
-		legacyPinnedHostFile(serverId),
-	]) {
-		try {
-			unlinkSync(file);
-		} catch {
-			// missing is fine
-		}
-	}
+interface RemoteRunOptions {
+	timeoutMs?: number;
+	/** Written to the channel and closed; nothing is written when omitted. */
+	stdin?: string | Buffer;
 }
 
 /**
- * Run a shell command on a remote managed server over SSH (ssh2).
- * Looks up the server row (and its SSH key) by `serverId`, opens a
- * short-lived connection, streams the command, and resolves with stdout.
- * Rejects with {@link RemoteExecError} (carrying stderr + exit code) when
- * the command exits non-zero.
+ * Run one command on a channel of the server's pooled SSH connection
+ * ({@link acquireSsh}) and buffer its stdout. Shared by
+ * {@link execAsyncRemote} and {@link execAsyncRemoteWithStdin}, whose error
+ * classes and messages are unchanged — only the transport underneath is.
+ *
+ * The connection is never torn down here: on a command timeout only the
+ * channel is closed (which drops the remote command's stdio just as ending
+ * the connection used to), so other commands on the same server keep running.
  */
-export async function execAsyncRemote(
-	serverId: string,
+function runRemote(
+	lease: Awaited<ReturnType<typeof acquireSsh>>,
 	command: string,
-	options: { timeoutMs?: number } = {},
+	options: RemoteRunOptions,
 ): Promise<string> {
-	const server = await db.query.servers.findFirst({
-		where: eq(servers.serverId, serverId),
-		with: { sshKey: true },
-	});
-
-	if (!server) {
-		throw notFound(`Server not found: ${serverId}`);
-	}
-	const sshKey = server.sshKey;
-	if (!sshKey) {
-		throw preconditionFailed(`Server ${server.name} (${serverId}) has no SSH key attached`);
-	}
-
 	const timeoutMs = remoteCommandTimeoutMs(options.timeoutMs);
+	const serverName = lease.server.name;
 
 	return new Promise<string>((resolve, reject) => {
-		const conn = new Client();
 		let stdout = "";
 		let stderr = "";
 		let settled = false;
+		let channel: ClientChannel | null = null;
 
 		const finish = (fn: () => void) => {
 			if (settled) return;
@@ -331,18 +283,32 @@ export async function execAsyncRemote(
 			clearTimeout(timer);
 			fn();
 		};
+		/** Give the channel (and with it the pool slot) back after a failure. */
+		const abandonChannel = () => {
+			if (!channel) {
+				lease.release();
+				return;
+			}
+			try {
+				channel.close();
+			} catch {
+				// channel already gone
+			}
+			// `close` releases the slot; this only covers a wedged channel.
+			setTimeout(() => lease.release(), 5_000).unref?.();
+		};
 		const fail = (error: Error) =>
 			finish(() => {
-				conn.end();
+				abandonChannel();
 				reject(error);
 			});
 
 		// Hard command timeout — a wedged remote command must not pin the
-		// connection (and the caller) forever.
+		// channel (and the caller) forever.
 		const timer = setTimeout(() => {
 			fail(
 				new RemoteExecError(
-					`Remote "${commandLabel(command)}" timed out after ${describeTimeout(timeoutMs)} on server ${server.name}`,
+					`Remote "${commandLabel(command)}" timed out after ${describeTimeout(timeoutMs)} on server ${serverName}`,
 					stderr,
 					null,
 				),
@@ -350,53 +316,70 @@ export async function execAsyncRemote(
 		}, timeoutMs);
 		timer.unref?.();
 
-		conn
-			.on("ready", () => {
-				conn.exec(command, (err, stream) => {
-					if (err) {
-						fail(err);
-						return;
-					}
-					stream
-						.on("close", (code: number | null) => {
-							finish(() => {
-								conn.end();
-								if (code === 0 || code === null) {
-									resolve(stdout);
-								} else {
-									reject(
-										new RemoteExecError(
-											`Remote "${commandLabel(command)}" failed (exit ${code}) on server ${server.name}`,
-											stderr,
-											code,
-										),
-									);
-								}
-							});
-						})
-						.on("data", (data: Buffer) => {
-							stdout += data.toString();
-						});
-					stream.stderr.on("data", (data: Buffer) => {
-						stderr += data.toString();
-					});
-					stream.on("error", fail);
+		lease.onConnectionLost((error) => finish(() => reject(error)));
+
+		lease.client.exec(command, (err, stream) => {
+			if (err) {
+				// The handshake worked but the server refused a session: that is a
+				// transport fault, so drop the pooled connection rather than reuse it.
+				finish(() => {
+					lease.discard(err);
+					reject(err);
 				});
-			})
-			.on("error", (err) => {
-				// Always close the connection — an SSH error after `ready`
-				// otherwise leaks the socket.
-				fail(err);
-			})
-			.connect({
-				host: server.ipAddress,
-				port: server.port,
-				username: server.username,
-				privateKey: sshKey.privateKey,
-				readyTimeout: SSH_READY_TIMEOUT_MS,
-				hostVerifier: (key: Buffer) => verifyRemoteHostKey(serverId, key),
+				return;
+			}
+			channel = stream;
+			// The slot follows the channel, whatever settles the promise first.
+			stream.once("close", () => lease.release());
+			stream
+				.on("close", (code: number | null) => {
+					finish(() => {
+						if (code === 0 || code === null) {
+							resolve(stdout);
+						} else {
+							reject(
+								new RemoteExecError(
+									`Remote "${commandLabel(command)}" failed (exit ${code}) on server ${serverName}`,
+									stderr,
+									code,
+								),
+							);
+						}
+					});
+				})
+				.on("data", (data: Buffer) => {
+					stdout += data.toString();
+				});
+			stream.stderr.on("data", (data: Buffer) => {
+				stderr += data.toString();
 			});
+			stream.on("error", fail);
+			if (options.stdin !== undefined) {
+				stream.write(options.stdin);
+				stream.end();
+			}
+		});
 	});
+}
+
+/**
+ * Run a shell command on a remote managed server over SSH (ssh2).
+ * Takes a channel on the server's pooled connection (`utils/ssh-pool.ts`) —
+ * one connection per server, reused across commands, with keepalive and a
+ * circuit breaker — and resolves with stdout.
+ *
+ * Rejects with {@link RemoteExecError} (carrying stderr + exit code) when the
+ * command exits non-zero, `NOT_FOUND` when the server row is gone,
+ * `PRECONDITION_FAILED` when it has no SSH key or the server's breaker is
+ * open, and the raw ssh2 error when the handshake fails.
+ */
+export async function execAsyncRemote(
+	serverId: string,
+	command: string,
+	options: { timeoutMs?: number } = {},
+): Promise<string> {
+	const lease = await acquireSsh(serverId);
+	return await runRemote(lease, command, { timeoutMs: options.timeoutMs });
 }
 
 /**
@@ -433,7 +416,8 @@ export async function execAsyncWithStdin(
 /**
  * SSH variant of {@link execAsyncWithStdin}: `stdin` is streamed over the
  * channel. Bounded by {@link remoteCommandTimeoutMs} like every other remote
- * command — on timeout the connection is torn down and the call rejects.
+ * command — on timeout the channel is closed and the call rejects (the pooled
+ * connection stays up for the server's other commands).
  */
 export async function execAsyncRemoteWithStdin(
 	serverId: string,
@@ -441,88 +425,6 @@ export async function execAsyncRemoteWithStdin(
 	stdin: string | Buffer,
 	options: { timeoutMs?: number } = {},
 ): Promise<string> {
-	const server = await db.query.servers.findFirst({
-		where: eq(servers.serverId, serverId),
-		with: { sshKey: true },
-	});
-	if (!server) throw notFound(`Server not found: ${serverId}`);
-	const sshKey = server.sshKey;
-	if (!sshKey) {
-		throw preconditionFailed(`Server ${server.name} (${serverId}) has no SSH key attached`);
-	}
-
-	const timeoutMs = remoteCommandTimeoutMs(options.timeoutMs);
-
-	return new Promise<string>((resolve, reject) => {
-		const conn = new Client();
-		let stdout = "";
-		let stderr = "";
-		let settled = false;
-
-		const finish = (fn: () => void) => {
-			if (settled) return;
-			settled = true;
-			clearTimeout(timer);
-			fn();
-		};
-		const fail = (error: Error) =>
-			finish(() => {
-				conn.end();
-				reject(error);
-			});
-
-		const timer = setTimeout(() => {
-			fail(
-				new RemoteExecError(
-					`Remote "${commandLabel(command)}" timed out after ${describeTimeout(timeoutMs)} on server ${server.name}`,
-					stderr,
-					null,
-				),
-			);
-		}, timeoutMs);
-		timer.unref?.();
-
-		conn
-			.on("ready", () => {
-				conn.exec(command, (err, stream) => {
-					if (err) {
-						fail(err);
-						return;
-					}
-					stream
-						.on("close", (code: number | null) => {
-							finish(() => {
-								conn.end();
-								if (code === 0 || code === null) resolve(stdout);
-								else
-									reject(
-										new RemoteExecError(
-											`Remote "${commandLabel(command)}" failed (exit ${code}) on server ${server.name}`,
-											stderr,
-											code,
-										),
-									);
-							});
-						})
-						.on("data", (data: Buffer) => {
-							stdout += data.toString();
-						});
-					stream.stderr.on("data", (data: Buffer) => {
-						stderr += data.toString();
-					});
-					stream.on("error", fail);
-					stream.write(stdin);
-					stream.end();
-				});
-			})
-			.on("error", fail)
-			.connect({
-				host: server.ipAddress,
-				port: server.port,
-				username: server.username,
-				privateKey: sshKey.privateKey,
-				readyTimeout: SSH_READY_TIMEOUT_MS,
-				hostVerifier: (key: Buffer) => verifyRemoteHostKey(serverId, key),
-			});
-	});
+	const lease = await acquireSsh(serverId);
+	return await runRemote(lease, command, { timeoutMs: options.timeoutMs, stdin });
 }
