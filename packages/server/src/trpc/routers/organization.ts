@@ -10,6 +10,7 @@ import {
 	capabilitySchemaValues,
 	effectiveCapabilities,
 	getOrganizationServiceStatusCounts,
+	hasCapability,
 	ORG_ROLE_RANK,
 	type OrgCapability,
 	orgRoleRank,
@@ -20,6 +21,7 @@ import {
 	roleDefaultCapabilities,
 	serializeOrgMetadata,
 } from "../../modules/projects";
+import { textBlobSchema } from "../../utils/input-limits";
 import { protectedProcedure, router } from "../init";
 
 const invitableRoleSchema = z.enum(["viewer", "member", "deployer", "admin"]);
@@ -33,6 +35,14 @@ const quotaInputSchema = z.object({
 	maxCpuShares: z.number().int().min(0).nullable().optional(),
 	maxMemoryMb: z.number().int().min(0).nullable().optional(),
 });
+
+/**
+ * Organization-level env vars live in `organization.metadata.env` (dotenv
+ * string) — the slot `resolveEnvironmentVariables` reads as the lowest
+ * level of org → project → environment → service. `OrgMetadata` in
+ * `modules/projects/quotas.ts` does not declare it; the slot is typed here.
+ */
+type OrgMetadataWithEnv = ReturnType<typeof parseOrgMetadata> & { env?: string };
 
 const brandingInputSchema = z.object({
 	displayName: z.string().min(1).max(255).nullable().optional(),
@@ -143,6 +153,71 @@ export const organizationRouter = router({
 			});
 
 			return updated;
+		}),
+
+	/**
+	 * Shared (organization-level) environment variables. Inherited by every
+	 * project, environment and service; lower levels override on key
+	 * conflicts. `env` is null for members without `secrets.read` (same
+	 * redaction as project/environment env).
+	 */
+	environment: protectedProcedure.query(async ({ ctx }) => {
+		const organizationId = await resolveCallerOrganizationId(
+			ctx.session.user.id,
+			ctx.session.session.activeOrganizationId,
+		);
+		const org = await db.query.organizations.findFirst({
+			where: eq(organizations.id, organizationId),
+			columns: { metadata: true },
+		});
+		if (!org) {
+			throw new TRPCError({ code: "NOT_FOUND", message: "Organization not found" });
+		}
+		const canSeeSecrets = await hasCapability(ctx.session.user.id, organizationId, "secrets.read");
+		const metadata = parseOrgMetadata(org.metadata) as OrgMetadataWithEnv;
+		const env = typeof metadata.env === "string" ? metadata.env : "";
+		return {
+			organizationId,
+			env: canSeeSecrets ? env : null,
+			redacted: !canSeeSecrets,
+		};
+	}),
+
+	/**
+	 * Replace the shared environment variables. Requires the organization
+	 * settings capability plus `secrets.write` (values are secrets).
+	 */
+	saveEnvironment: protectedProcedure
+		.input(z.object({ env: textBlobSchema }))
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await resolveCallerOrganizationId(
+				ctx.session.user.id,
+				ctx.session.session.activeOrganizationId,
+			);
+			await assertCapability(ctx.session.user.id, organizationId, "settings.manage");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+
+			const org = await db.query.organizations.findFirst({
+				where: eq(organizations.id, organizationId),
+			});
+			if (!org) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Organization not found" });
+			}
+			const metadata = parseOrgMetadata(org.metadata) as OrgMetadataWithEnv;
+			metadata.env = input.env;
+			await db
+				.update(organizations)
+				.set({ metadata: serializeOrgMetadata(metadata) })
+				.where(eq(organizations.id, organizationId));
+
+			await auditFromSession(ctx, organizationId, {
+				action: "organization.environment",
+				targetType: "organization",
+				targetId: organizationId,
+				targetName: org.name,
+			});
+
+			return { organizationId, env: input.env };
 		}),
 
 	/**

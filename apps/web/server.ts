@@ -258,6 +258,10 @@ async function main() {
 
 	server.listen(port, listenHost, () => {
 		console.log(`▲ Nixploy ready on http://${listenHost}:${port}`);
+		// Fire-and-forget: tell channels subscribed to `nixployRestart` we are up.
+		void import("../../packages/server/src/modules/notifications/index").then((m) =>
+			m.emitInstanceRestartNotification(),
+		);
 	});
 }
 

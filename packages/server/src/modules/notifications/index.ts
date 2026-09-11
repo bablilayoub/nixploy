@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import type { notificationType } from "../../db/schema";
 import { environments, notifications, projects } from "../../db/schema";
+import { notFound } from "../errors";
 import {
 	customConfigSchema,
 	discordConfigSchema,
@@ -90,7 +91,7 @@ export async function notify(notificationId: string, payload: NotifyPayload): Pr
 		where: eq(notifications.notificationId, notificationId),
 	});
 	if (!row) {
-		throw new Error(`Notification not found: ${notificationId}`);
+		throw notFound(`Notification not found: ${notificationId}`);
 	}
 	await dispatchToRow(row, payload);
 }
@@ -110,7 +111,7 @@ export async function sendTestNotification(
 			where: eq(notifications.notificationId, input.notificationId),
 		});
 		if (!found) {
-			throw new Error(`Notification not found: ${input.notificationId}`);
+			throw notFound(`Notification not found: ${input.notificationId}`);
 		}
 		row = found;
 	}
@@ -199,6 +200,79 @@ export async function emitDeployNotification(
 			{ name: "Date", value: new Date().toISOString() },
 		],
 	});
+}
+
+/**
+ * Fan out a "Docker cleanup" event to the org's subscribed channels. Fired
+ * by the Docker control center prune procedures and the platform cleanup
+ * trigger (`webServer.dockerCleanupNow`). Best effort: never throws.
+ */
+export async function emitDockerCleanupNotification(
+	organizationId: string,
+	details: {
+		/** What was pruned. */
+		scope: "images" | "volumes" | "system" | "build-cache";
+		/** Managed server id, or null for the Nixploy host. */
+		serverId?: string | null;
+		/** Who triggered it (email or user id). */
+		actor?: string | null;
+		/** Raw docker output (truncated for the message). */
+		output?: string | null;
+	},
+): Promise<void> {
+	const reclaimed = details.output?.match(/Total reclaimed space:\s*(.+)/i)?.[1]?.trim();
+	try {
+		await notifyEvent(organizationId, "dockerCleanup", {
+			title: "🧹 Docker cleanup",
+			message: `Pruned ${details.scope} on ${details.serverId ? "a managed server" : "the Nixploy host"}.${reclaimed ? ` Reclaimed ${reclaimed}.` : ""}`,
+			fields: [
+				{ name: "Scope", value: details.scope },
+				{ name: "Target", value: details.serverId ?? "nixploy host" },
+				...(details.actor ? [{ name: "Triggered by", value: details.actor }] : []),
+				...(reclaimed ? [{ name: "Reclaimed", value: reclaimed }] : []),
+				{ name: "Date", value: new Date().toISOString() },
+			],
+		});
+	} catch (error) {
+		console.error("emitDockerCleanupNotification failed:", error);
+	}
+}
+
+/**
+ * Announce a panel (re)start to every channel of every organization that
+ * subscribed to `nixployRestart`. Called once from `apps/web/server.ts` after
+ * the HTTP server is listening; best effort, never throws.
+ */
+export async function emitInstanceRestartNotification(): Promise<void> {
+	try {
+		const [{ getAppVersion }, rows] = await Promise.all([
+			import("../updates/check"),
+			db.query.notifications.findMany({
+				where: eq(notifications.nixployRestart, true),
+			}),
+		]);
+		if (rows.length === 0) return;
+		const payload: NotifyPayload = {
+			title: "🔄 Nixploy started",
+			message: `The Nixploy panel started (version ${getAppVersion()}).`,
+			fields: [
+				{ name: "Version", value: getAppVersion() },
+				{ name: "Host", value: process.env.HOSTNAME ?? "unknown" },
+				{ name: "Date", value: new Date().toISOString() },
+			],
+		};
+		const results = await Promise.allSettled(rows.map((row) => dispatchToRow(row, payload)));
+		for (const [index, result] of results.entries()) {
+			if (result.status === "rejected") {
+				console.error(
+					`Failed to send nixployRestart notification via ${rows[index]?.name}:`,
+					result.reason,
+				);
+			}
+		}
+	} catch (error) {
+		console.error("emitInstanceRestartNotification failed:", error);
+	}
 }
 
 /** Direct project lookup kept for callers that already know the project. */

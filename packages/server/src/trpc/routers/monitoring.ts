@@ -25,10 +25,9 @@ import {
 	readServerMetricsHistory,
 } from "../../modules/monitoring/history";
 import { parseDockerStatsJsonLine } from "../../modules/monitoring/remote";
-import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
+import { resolveCallerOrganizationId } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { mapDockerStats } from "../../ws/docker-stats";
-import { isValidContainerId } from "../../ws/utils";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -36,7 +35,6 @@ import { protectedProcedure, router } from "../init";
  * Host/container metrics. Remote managed servers are queried over SSH (via
  * the cluster module); the Nixploy host itself is measured locally with
  * dockerode + /proc + `df` (node-os-utils breaks in Alpine containers).
- * `dockerCleanup` is a manual trigger for the deploy engine's cleanup routine.
  */
 
 type Session = NonNullable<TRPCContext["session"]>;
@@ -142,50 +140,6 @@ async function getLocalServerStats(): Promise<ServerStats> {
 	};
 }
 
-export interface ContainerStats {
-	cpuPercent: number;
-	memoryUsageBytes: number;
-	memoryLimitBytes: number;
-	memoryPercent: number;
-	networkRxBytes: number;
-	networkTxBytes: number;
-	blockReadBytes: number;
-	blockWriteBytes: number;
-	pids: number;
-}
-
-/** One-shot container stats on a remote server (`docker stats --no-stream`). */
-async function getRemoteContainerStats(
-	serverId: string,
-	containerId: string,
-): Promise<ContainerStats> {
-	if (!isValidContainerId(containerId)) {
-		throw new Error("Invalid container id");
-	}
-	const raw = await execAsyncRemote(
-		serverId,
-		`docker stats --no-stream --format '{{json .Stats}}' ${shellQuote(containerId)}`,
-	);
-	// The CLI's pre-computed format differs from the Engine API; parse what it
-	// exposes (CPUPerc/MemPerc are strings like "1.23%").
-	const line = raw.trim().split("\n")[0] ?? "";
-	if (!line) {
-		throw new Error(`No stats returned for container ${containerId}`);
-	}
-	const parsed = JSON.parse(line) as Record<string, string>;
-	return {
-		cpuPercent: Number.parseFloat(parsed.CPUPerc ?? "0") || 0,
-		memoryUsageBytes: 0,
-		memoryLimitBytes: 0,
-		memoryPercent: Number.parseFloat(parsed.MemPerc ?? "0") || 0,
-		networkRxBytes: 0,
-		networkTxBytes: 0,
-		blockReadBytes: 0,
-		blockWriteBytes: 0,
-		pids: Number.parseInt(parsed.PIDs ?? "0", 10) || 0,
-	};
-}
-
 /** Container labels a service's replicas carry, in resolution order (Swarm, compose, stack). */
 const REPLICA_LABEL_FILTERS = (appName: string) => [
 	`com.docker.swarm.service.name=${appName}`,
@@ -255,46 +209,6 @@ export const monitoringRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await findServerOrThrow(input.serverId, organizationId);
 			return await getServerStatsCached(input.serverId);
-		}),
-
-	/** One-shot container stats (locally via dockerode, remotely via SSH). */
-	containerStats: protectedProcedure
-		.input(
-			z.object({
-				containerId: z.string().min(1).refine(isValidContainerId, "Invalid container id"),
-				serverId: z.string().nullish(),
-			}),
-		)
-		.query(async ({ ctx, input }) => {
-			const organizationId = await getOrganizationId(ctx.session);
-			if (input.serverId) {
-				await findServerOrThrow(input.serverId, organizationId);
-				return await getRemoteContainerStats(input.serverId, input.containerId);
-			}
-			// Local-by-id without org mapping is an IDOR risk — require an owned serverId.
-			throw new TRPCError({
-				code: "BAD_REQUEST",
-				message: "serverId is required for container stats",
-			});
-		}),
-
-	/** Manually trigger the deploy engine's docker cleanup (prune) routine. */
-	dockerCleanup: protectedProcedure
-		.input(z.object({ serverId: z.string().nullish() }).optional())
-		.mutation(async ({ ctx, input }) => {
-			const serverId = input?.serverId ?? null;
-			// Prune is destructive and host-wide, like the Docker control center.
-			const organizationId = await getOrganizationId(ctx.session);
-			await assertCapability(ctx.session.user.id, organizationId, "settings.manage");
-			if (serverId) {
-				await findServerOrThrow(serverId, organizationId);
-			} else {
-				// Local docker.sock — instance admin only (parity with dockerRouter).
-				await assertInstanceAdmin(ctx.session);
-			}
-			const { dockerCleanup } = await import("../../modules/deployment/cleanup");
-			await dockerCleanup(serverId);
-			return { success: true };
 		}),
 
 	/**

@@ -1,12 +1,17 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Building2 } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { QueryState } from "@/components/query-state";
 import { EnvEditor } from "@/components/services/env-editor";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
+import { parseEnvFile } from "@/lib/env-file";
 import { useTRPC } from "@/lib/trpc";
 
 interface EnvironmentInfo {
@@ -44,6 +49,9 @@ export function EnvironmentVariablesTab({
 		}),
 		enabled: Boolean(environment),
 	});
+	// Lowest level of the chain, edited under Settings → Organization.
+	const orgEnvQuery = useQuery(trpc.organization.environment.queryOptions());
+	const orgKeys = orgEnvQuery.data?.env ? parseEnvFile(orgEnvQuery.data.env) : [];
 
 	const invalidateResolved = () =>
 		queryClient.invalidateQueries({
@@ -61,7 +69,7 @@ export function EnvironmentVariablesTab({
 					invalidateResolved(),
 				]);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -76,12 +84,52 @@ export function EnvironmentVariablesTab({
 					invalidateResolved(),
 				]);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
 	return (
 		<SettingsStack>
+			<SettingsSection
+				title={
+					<span className="flex items-center gap-2">
+						<Building2 className="size-4 text-muted-foreground" />
+						Organization shared variables
+					</span>
+				}
+				description="Inherited by every project, environment and service; lower levels override on key conflicts."
+				actions={
+					<Button asChild variant="outline" size="sm">
+						<Link href="/dashboard/settings/organization">Edit in organization settings</Link>
+					</Button>
+				}
+			>
+				{orgEnvQuery.isPending ? (
+					<Skeleton className="h-8 w-64" />
+				) : orgEnvQuery.isError ? (
+					<p className="text-sm text-muted-foreground">
+						Could not load shared variables: {orgEnvQuery.error.message}
+					</p>
+				) : orgEnvQuery.data.redacted ? (
+					<p className="text-sm text-muted-foreground">
+						Values are hidden — viewing them requires the "secrets.read" capability.
+					</p>
+				) : orgKeys.length === 0 ? (
+					<p className="text-sm text-muted-foreground">No shared variables defined.</p>
+				) : (
+					<div className="flex flex-wrap gap-1.5">
+						{orgKeys.map((entry) => (
+							<code
+								key={entry.key}
+								className="rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-xs"
+							>
+								{entry.key}
+							</code>
+						))}
+					</div>
+				)}
+			</SettingsSection>
+
 			<SettingsSection
 				title="Project variables"
 				description="Shared by every environment in this project. Deeper levels override these values."
@@ -91,6 +139,7 @@ export function EnvironmentVariablesTab({
 					loading={saveProjectEnv.isPending}
 					canRead={canRead}
 					canEdit={canEdit}
+					downloadName="project.env"
 					onSave={(env) => saveProjectEnv.mutateAsync({ projectId, env })}
 				/>
 			</SettingsSection>
@@ -106,6 +155,7 @@ export function EnvironmentVariablesTab({
 						loading={saveEnvironmentEnv.isPending}
 						canRead={canRead}
 						canEdit={canEdit}
+						downloadName={`${environment.name}.env`}
 						onSave={(env) =>
 							saveEnvironmentEnv.mutateAsync({
 								environmentId: environment.environmentId,

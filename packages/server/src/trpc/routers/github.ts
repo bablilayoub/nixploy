@@ -12,7 +12,6 @@ import {
 	getGithubRepositories,
 	listGithubByOrganization,
 	removeGithub,
-	setupGithubApp,
 	syncGithubInstallation,
 } from "../../modules/git";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
@@ -158,7 +157,7 @@ export const githubRouter = router({
 	/**
 	 * Build the GitHub App manifest flow payload. The UI auto-submits a hidden
 	 * POST form to the returned `url` with `manifest` + `state`; GitHub then
-	 * redirects back with a `code` for `handleCallback`.
+	 * redirects back with a `code` to `/api/github/callback` (route handler).
 	 */
 	createAppManifest: protectedProcedure
 		.input(
@@ -175,32 +174,6 @@ export const githubRouter = router({
 				baseUrl: getBaseUrl(),
 				appName: input.appName,
 			});
-		}),
-
-	/**
-	 * Exchange the manifest `code` for real App credentials and discover the
-	 * installation. Called by the `/api/github/callback` route handler.
-	 */
-	handleCallback: protectedProcedure
-		.input(
-			githubIdInput.extend({
-				code: z.string().min(1),
-				state: z.string().optional(),
-			}),
-		)
-		.mutation(async ({ ctx, input }) => {
-			const organizationId = await getOrganizationId(ctx.session);
-			await assertCapability(ctx.session.user.id, organizationId, "git_providers.manage");
-			const updated = await setupGithubApp({
-				githubId: input.githubId,
-				organizationId,
-				code: input.code,
-				state: input.state,
-			});
-			if (!updated) {
-				throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "GitHub App setup failed" });
-			}
-			return publicGithub(updated);
 		}),
 
 	/** Re-fetch the App installation id (after installing on a new account). */

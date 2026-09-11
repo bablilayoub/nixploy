@@ -6,7 +6,6 @@ import { domains } from "../../db/schema";
 import { assertApplicationAccess, getServiceContext } from "../../modules/application";
 import {
 	deleteAlertRule,
-	ingestServiceLog,
 	listAlertRules,
 	listIncidents,
 	listUptimeProbes,
@@ -141,29 +140,6 @@ export const observabilityRouter = router({
 				ctx.session.session.activeOrganizationId,
 			);
 			return searchServiceLogs(organizationId, input);
-		}),
-
-	ingestLog: protectedProcedure
-		.input(
-			z.object({
-				serviceId: z.string().min(1),
-				serviceType: z.enum(["application", "compose"]),
-				deploymentId: z.string().optional(),
-				body: z.string().min(1).max(200_000),
-			}),
-		)
-		.mutation(async ({ ctx, input }) => {
-			const organizationId = await resolveCallerOrganizationId(
-				ctx.session.user.id,
-				ctx.session.session.activeOrganizationId,
-			);
-			await assertCapability(ctx.session.user.id, organizationId, "settings.manage");
-			const service = await getServiceContext(input.serviceType, input.serviceId);
-			if (service.organizationId !== organizationId) {
-				throw new TRPCError({ code: "NOT_FOUND", message: "Service not found" });
-			}
-			await ingestServiceLog({ organizationId, ...input });
-			return { ok: true };
 		}),
 
 	uptimeProbes: protectedProcedure.query(async ({ ctx }) => {

@@ -33,6 +33,7 @@ import { DangerZone } from "@/components/services/danger-zone";
 import { EnvEditor } from "@/components/services/env-editor";
 import { LogViewer } from "@/components/services/log-viewer";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
+import { ServiceActionsCard } from "@/components/services/service-actions-card";
 import { ServiceTerminal } from "@/components/services/service-terminal";
 import { ServiceStatusBadge } from "@/components/services/status-badge";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
@@ -533,6 +534,8 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 						ns={ns}
 						idInput={idInput}
 						db={db}
+						type={type}
+						projectId={projectId}
 						label={cfg.label}
 						invalidate={invalidate}
 						onRemove={() => removeMutation.mutateAsync(idInput)}
@@ -819,15 +822,25 @@ function EnvironmentTab({ ns, idInput, env, invalidate }: TabProps & { env: stri
 	);
 }
 
+/** `duplicate` / `move` exist on every database router but not on the facade type. */
+interface DatabaseMoveDuplicateFacade {
+	duplicate: { mutationOptions: (opts?: DatabaseIdInput) => DatabaseIdInput };
+	move: { mutationOptions: (opts?: DatabaseIdInput) => DatabaseIdInput };
+}
+
 function SettingsTab({
 	ns,
 	idInput,
 	db,
+	type,
+	projectId,
 	label,
 	invalidate,
 	onRemove,
 }: TabProps & {
 	db: DatabaseRow;
+	type: DatabaseType;
+	projectId: string;
 	label: string;
 	/** Must return the delete promise (`mutateAsync`) so DangerZone can await it. */
 	onRemove: () => Promise<unknown>;
@@ -836,6 +849,18 @@ function SettingsTab({
 	const canWrite = can("service.write");
 	const canDelete = can("service.delete");
 	const [name, setName] = useState(db.name);
+	const cfg = DATABASE_TYPES[type];
+	const actions = ns as unknown as DatabaseMoveDuplicateFacade;
+	const duplicateMutation = useMutation(actions.duplicate.mutationOptions());
+	const moveMutation = useMutation(
+		actions.move.mutationOptions({
+			onSuccess: () => invalidate(),
+		}),
+	);
+	// Renaming the copy must not reuse `renameMutation` (its toast/invalidate).
+	const renameCopyMutation = useMutation(ns.update.mutationOptions());
+	// The normalized row type omits environmentId; every engine row carries it.
+	const environmentId = (db as { environmentId?: string }).environmentId ?? "";
 
 	const renameMutation = useMutation(
 		ns.update.mutationOptions({
@@ -874,6 +899,28 @@ function SettingsTab({
 					</div>
 				</div>
 			</SettingsSection>
+
+			<ServiceActionsCard
+				kind={type}
+				serviceName={db.name}
+				projectId={projectId}
+				environmentId={environmentId}
+				onDuplicate={async (targetEnvironmentId) => {
+					const created = (await duplicateMutation.mutateAsync({
+						...idInput,
+						environmentId: targetEnvironmentId,
+					})) as Record<string, unknown>;
+					return String(created[cfg.idField]);
+				}}
+				onRename={(id, nextName) => {
+					// Keyed id input ({ postgresId } / { mysqlId } / …) — untyped behind the facade.
+					const input: DatabaseIdInput = { [cfg.idField]: id, name: nextName };
+					return renameCopyMutation.mutateAsync(input);
+				}}
+				onMove={(targetEnvironmentId) =>
+					moveMutation.mutateAsync({ ...idInput, environmentId: targetEnvironmentId })
+				}
+			/>
 
 			<DangerZone
 				title="Delete database"

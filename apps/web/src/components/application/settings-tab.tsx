@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { DangerZone } from "@/components/services/danger-zone";
+import { ServiceActionsCard } from "@/components/services/service-actions-card";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -59,7 +61,7 @@ export function SettingsTab({
 				// Refetch is done: the server now holds what was typed.
 				setDirty(false);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -72,7 +74,19 @@ export function SettingsTab({
 				});
 				router.push(`/dashboard/projects/${projectId}`);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
+		}),
+	);
+
+	const duplicate = useMutation(trpc.application.duplicate.mutationOptions());
+	// Separate from `update`: renaming the copy must not toast "Application updated".
+	const rename = useMutation(trpc.application.update.mutationOptions());
+	const move = useMutation(
+		trpc.application.move.mutationOptions({
+			onSuccess: () =>
+				queryClient.invalidateQueries({
+					queryKey: trpc.application.one.queryKey({ applicationId }),
+				}),
 		}),
 	);
 
@@ -131,6 +145,22 @@ export function SettingsTab({
 					</div>
 				</div>
 			</SettingsSection>
+
+			<ServiceActionsCard
+				kind="application"
+				serviceName={application.name}
+				projectId={projectId}
+				environmentId={application.environmentId}
+				onDuplicate={async (environmentId) => {
+					const created = await duplicate.mutateAsync({
+						applicationId,
+						environmentId,
+					});
+					return created.applicationId;
+				}}
+				onRename={(id, name) => rename.mutateAsync({ applicationId: id, name })}
+				onMove={(environmentId) => move.mutateAsync({ applicationId, environmentId })}
+			/>
 
 			<DangerZone
 				title="Delete application"

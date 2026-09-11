@@ -174,7 +174,9 @@ export const docsPages: DocPage[] = [
 				items: [
 					"Mounts (volume / file content), published ports, redirects, basic-auth",
 					"Healthchecks, placement constraints, replicas & resources",
-					"Update / rollback Swarm configs",
+					"Swarm tuning: rolling update, rollback, restart policy, global mode, service labels, extra networks",
+					"Watch paths — only deploy a push when a matching file changed",
+					"Duplicate a service or move it to another environment",
 				],
 			},
 		],

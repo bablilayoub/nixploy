@@ -1,6 +1,7 @@
 "use client";
 
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useSyncedTab } from "@/hooks/use-synced-tab";
 
 import { HealthcheckManager } from "./healthcheck-manager";
 import { MountsManager } from "./mounts-manager";
@@ -9,14 +10,31 @@ import { PortsManager } from "./ports-manager";
 import { RedirectsManager } from "./redirects-manager";
 import { RollbacksManager } from "./rollbacks-manager";
 import { SecurityManager } from "./security-manager";
+import { SwarmConfig } from "./swarm-config";
 import type { Application } from "./types";
 import { UnderlineTabsList, UnderlineTabsTrigger } from "./underline-tabs";
 
+const ADVANCED_TABS = [
+	"mounts",
+	"ports",
+	"redirects",
+	"security",
+	"healthcheck",
+	"placement",
+	"swarm",
+	"rollbacks",
+];
+
 export function AdvancedTab({ application }: { application: Application }) {
 	const applicationId = application.applicationId;
+	// Third level of the page's tabs: kept in its own `?advanced=` param so
+	// `?tab=advanced&advanced=swarm` deep-links without touching `?tab=`.
+	const [tab, selectTab] = useSyncedTab("mounts", (value) => ADVANCED_TABS.includes(value), {
+		param: "advanced",
+	});
 
 	return (
-		<Tabs defaultValue="mounts" className="w-full">
+		<Tabs value={tab} onValueChange={selectTab} className="w-full">
 			<UnderlineTabsList>
 				<UnderlineTabsTrigger value="mounts">Mounts</UnderlineTabsTrigger>
 				<UnderlineTabsTrigger value="ports">Ports</UnderlineTabsTrigger>
@@ -24,6 +42,7 @@ export function AdvancedTab({ application }: { application: Application }) {
 				<UnderlineTabsTrigger value="security">Security</UnderlineTabsTrigger>
 				<UnderlineTabsTrigger value="healthcheck">Healthcheck</UnderlineTabsTrigger>
 				<UnderlineTabsTrigger value="placement">Placement</UnderlineTabsTrigger>
+				<UnderlineTabsTrigger value="swarm">Swarm</UnderlineTabsTrigger>
 				<UnderlineTabsTrigger value="rollbacks">Rollbacks</UnderlineTabsTrigger>
 			</UnderlineTabsList>
 			<TabsContent value="mounts" className="mt-6">
@@ -43,6 +62,9 @@ export function AdvancedTab({ application }: { application: Application }) {
 			</TabsContent>
 			<TabsContent value="placement" className="mt-6">
 				<PlacementManager application={application} />
+			</TabsContent>
+			<TabsContent value="swarm" className="mt-6">
+				<SwarmConfig application={application} />
 			</TabsContent>
 			<TabsContent value="rollbacks" className="mt-6">
 				<RollbacksManager applicationId={applicationId} />

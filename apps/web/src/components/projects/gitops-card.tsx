@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link2, Loader2 } from "lucide-react";
+import { Link2, Loader2, Zap } from "lucide-react";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -125,6 +125,8 @@ export const GitopsCard = forwardRef<
 	const planMutation = useMutation(trpc.gitops.plan.mutationOptions());
 	const applyMutation = useMutation(trpc.gitops.runApply.mutationOptions());
 	const syncUrlMutation = useMutation(trpc.gitops.syncFromUrl.mutationOptions());
+	// Same call a Git-driven pipeline makes: apply the YAML immediately, no plan.
+	const syncGitMutation = useMutation(trpc.gitops.syncFromGit.mutationOptions());
 
 	const handleExport = async () => {
 		try {
@@ -238,6 +240,31 @@ export const GitopsCard = forwardRef<
 		}
 	};
 
+	const handleSyncFromGit = async () => {
+		if (!yaml.trim()) {
+			toast.error("Paste or upload a stack file first");
+			return;
+		}
+		try {
+			const result = await syncGitMutation.mutateAsync({
+				yaml,
+				projectId,
+				redeploy: redeployAfter,
+			});
+			reportApply("Synced", result);
+			if (result.errors.length > 0) {
+				setSyncErrors(result.errors);
+			} else {
+				setSyncErrors([]);
+				onImportOpenChange(false);
+				setYaml("");
+			}
+			await invalidateAfterApply();
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "Sync failed");
+		}
+	};
+
 	const planItems = (planMutation.data?.items ?? []) as PlanItem[];
 
 	return (
@@ -324,7 +351,23 @@ export const GitopsCard = forwardRef<
 						<Button variant="outline" onClick={() => closeImport(false)}>
 							Cancel
 						</Button>
-						<Button onClick={() => void handlePreview()} disabled={planMutation.isPending}>
+						<Button
+							variant="secondary"
+							onClick={() => void handleSyncFromGit()}
+							disabled={syncGitMutation.isPending || planMutation.isPending}
+							title="Apply the pasted stack right away (gitops.syncFromGit), skipping the plan preview"
+						>
+							{syncGitMutation.isPending ? (
+								<Loader2 className="size-4 animate-spin" />
+							) : (
+								<Zap className="size-4" />
+							)}
+							Sync from Git
+						</Button>
+						<Button
+							onClick={() => void handlePreview()}
+							disabled={planMutation.isPending || syncGitMutation.isPending}
+						>
 							Preview plan
 						</Button>
 					</DialogFooter>

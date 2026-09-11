@@ -67,6 +67,21 @@ them.
   (`evaluateAlerts` in `modules/monitoring/history.ts`). Local and
   remote-hosted services alike (remote samples arrive over the SSH batch).
 
+## Notification events
+
+Settings → Notifications subscribes a channel to individual events. Every
+toggle is wired to a real emitter:
+
+| Event | Fired by |
+| --- | --- |
+| `appDeploy` / `appBuildError` | every terminal application and compose deploy (`emitDeployNotification`, cancellations stay silent); `appBuildError` also carries the failure watchdog's "service down" transition |
+| `databaseBackup` | database and named-volume backup runs, scheduled or manual (`emitBackupNotification`) |
+| `serverThreshold` | sustained CPU/memory above the host-health thresholds (see above) |
+| `serviceAlert` | an alert rule crossing its threshold |
+| `uptimeFlip` | an uptime probe changing state, plus the incident it opens |
+| `dockerCleanup` | the Docker control center prunes (images / volumes / system) and Settings → Platform → "Clean up now" (`emitDockerCleanupNotification`) |
+| `nixployRestart` | the panel process finishing boot, once per start (`emitInstanceRestartNotification`, called from `apps/web/server.ts`) |
+
 ## Status reconciler & watchdog
 
 - Cron `status-reconciler` (every 60s, `modules/deployment/reconciler.ts`)

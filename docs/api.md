@@ -99,7 +99,7 @@ High-level map of the OpenAPI surface (42 routers). Full input/output schemas li
 | `observability` | Incidents, alert rules, uptime, log search |
 | `schedule` | Cron jobs for apps/compose/servers |
 | `notification` | Multi-channel notification configs |
-| `organization` | Settings, invites, capabilities |
+| `organization` | Settings, invites, capabilities, shared (org-level) env vars |
 | `ai` | Deploy Copilot — explain, chat, generate compose |
 | `certificate` / `registry` / `sshKey` / `tag` | Certs, registries, SSH keys, tags |
 | `mount` / `port` / `redirect` / `security` | App advanced config |

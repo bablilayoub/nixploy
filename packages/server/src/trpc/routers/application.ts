@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import {
@@ -647,54 +647,6 @@ export const applicationRouter = router({
 			return canSeeSecrets ? application : redactApplicationSecrets(application);
 		}),
 
-	/** Docker-image source shorthand (Dokploy's saveDockerProvider). */
-	saveDockerProvider: protectedProcedure
-		.input(
-			applicationIdInput.extend({
-				dockerImage: z.string().min(1),
-				username: z.string().nullable().optional(),
-				password: z.string().nullable().optional(),
-				registryId: z.string().nullable().optional(),
-			}),
-		)
-		.mutation(async ({ ctx, input }) => {
-			const organizationId = await getOrganizationId(ctx.session);
-			await assertCapability(ctx.session.user.id, organizationId, "service.write");
-			if (input.password !== undefined) {
-				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
-			}
-			await assertApplicationAccess(input.applicationId, organizationId);
-			try {
-				assertSafeDockerImageRef(input.dockerImage);
-			} catch (error) {
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: error instanceof Error ? error.message : "Invalid docker image",
-				});
-			}
-			if (input.registryId) {
-				const reg = await db.query.registry.findFirst({
-					where: eq(registry.registryId, input.registryId),
-				});
-				if (!reg || reg.organizationId !== organizationId) {
-					throw new TRPCError({ code: "NOT_FOUND", message: "Registry not found" });
-				}
-			}
-			const application = await updateApplication(input.applicationId, {
-				sourceType: "docker",
-				dockerImage: input.dockerImage,
-				username: input.username ?? null,
-				password: input.password ?? null,
-				registryId: input.registryId ?? null,
-			});
-			const canSeeSecrets = await hasCapability(
-				ctx.session.user.id,
-				organizationId,
-				"secrets.read",
-			);
-			return canSeeSecrets ? application : redactApplicationSecrets(application);
-		}),
-
 	/** Force-restart every task of the swarm service (`docker service update --force`). */
 	reload: protectedProcedure.input(applicationIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
@@ -747,42 +699,6 @@ export const applicationRouter = router({
 		}
 		return { applicationId: application.applicationId, cancelled: running.length };
 	}),
-
-	/** Paginated deployment history (newest first), excluding previews. */
-	readDeployments: protectedProcedure
-		.input(
-			applicationIdInput.extend({
-				page: z
-					.object({
-						pageIndex: z.number().int().min(0),
-						pageSize: z.number().int().min(1).max(100),
-					})
-					.optional(),
-			}),
-		)
-		.query(async ({ ctx, input }) => {
-			const organizationId = await getOrganizationId(ctx.session);
-			await assertApplicationAccess(input.applicationId, organizationId);
-
-			const pageIndex = input.page?.pageIndex ?? 0;
-			const pageSize = input.page?.pageSize ?? 10;
-			const where = and(
-				eq(deployments.applicationId, input.applicationId),
-				eq(deployments.isPreview, false),
-			);
-
-			const [rows, countRows] = await Promise.all([
-				db.query.deployments.findMany({
-					where,
-					orderBy: desc(deployments.createdAt),
-					limit: pageSize,
-					offset: pageIndex * pageSize,
-				}),
-				db.select({ count: sql<number>`count(*)::int` }).from(deployments).where(where),
-			]);
-
-			return { deployments: rows, total: countRows[0]?.count ?? 0 };
-		}),
 
 	/**
 	 * Roll back to a pinned image (recorded by the deploy engine after every

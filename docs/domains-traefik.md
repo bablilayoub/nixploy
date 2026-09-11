@@ -59,7 +59,8 @@ internet ─► :80  ─► redirect → :443
 - `internalPath` rewrites the prefix: the public `path` is stripped
   (`stripPrefix`) and the internal one added (`addPrefix`), so public
   `/public/*` reaches the container as `/internal/*`; redirects and basic auth
-  become named middlewares shared by the app's routers.
+  become named middlewares shared by the app's routers. The domain form has an
+  **Internal path** field (empty or `/` forwards the path unchanged).
 - The YAML is always written on the Nixploy host, whatever server the app is
   pinned to: `nixploy-traefik` runs on the primary manager and only its file
   provider reads the dynamic directory, while `http://<appName>:<port>`

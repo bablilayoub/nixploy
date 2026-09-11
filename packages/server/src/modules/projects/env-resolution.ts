@@ -1,7 +1,7 @@
-import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { environments, organizations, projects } from "../../db/schema";
+import { notFound } from "../errors";
 
 /**
  * Environment-variable resolution.
@@ -145,7 +145,7 @@ function parseOrganizationEnv(metadata: string | null): Record<string, string> {
  * trusted server-side callers (deploy pipeline, compose runner). Routers must
  * authorize before calling it.
  *
- * @throws TRPCError NOT_FOUND when the environment does not exist.
+ * @throws DomainError NOT_FOUND when the environment does not exist.
  */
 export async function resolveEnvironmentVariables(
 	environmentId: string,
@@ -163,10 +163,7 @@ export async function resolveEnvironmentVariables(
 		.limit(1);
 
 	if (!row) {
-		throw new TRPCError({
-			code: "NOT_FOUND",
-			message: `Environment ${environmentId} not found`,
-		});
+		throw notFound(`Environment ${environmentId} not found`);
 	}
 
 	let merged = parseOrganizationEnv(row.organizationMetadata);

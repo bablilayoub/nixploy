@@ -8,6 +8,7 @@ import { db } from "../../db";
 import { webServerSettings } from "../../db/schema";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { dockerCleanup } from "../../modules/deployment";
+import { emitDockerCleanupNotification } from "../../modules/notifications";
 import { resolveCallerOrganizationId } from "../../modules/projects";
 import {
 	ensureTraefikSetup,
@@ -41,10 +42,10 @@ async function detectPublicIp(): Promise<string | null> {
 type Session = NonNullable<TRPCContext["session"]>;
 
 /** Platform-wide settings mutate shared infrastructure — instance admin only. */
-async function requireInstanceAdmin(session: Session): Promise<void> {
+async function requireInstanceAdmin(session: Session): Promise<string> {
 	await assertInstanceAdmin(session);
 	// Ensure the caller still has an org context (membership) for audit trails.
-	await resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
+	return await resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
 }
 
 /**
@@ -259,8 +260,13 @@ export const webServerRouter = router({
 
 	/** Prune unused images and build cache on the Nixploy host, on demand. */
 	dockerCleanupNow: protectedProcedure.mutation(async ({ ctx }) => {
-		await requireInstanceAdmin(ctx.session);
+		const organizationId = await requireInstanceAdmin(ctx.session);
 		await dockerCleanup();
+		void emitDockerCleanupNotification(organizationId, {
+			scope: "build-cache",
+			serverId: null,
+			actor: ctx.session.user.email,
+		});
 		return { success: true };
 	}),
 });

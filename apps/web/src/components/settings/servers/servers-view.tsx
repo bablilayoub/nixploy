@@ -11,6 +11,7 @@ import { QueryState } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { CreateServerDialog } from "@/components/settings/servers/create-server-dialog";
 import { ServerCapacityCell } from "@/components/settings/servers/server-capacity-cell";
+import { ServerHistoryDialog } from "@/components/settings/servers/server-history-dialog";
 import { ServerStatsPopover } from "@/components/settings/servers/server-stats-popover";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { PageHeader, StatusDot } from "@/components/shell";
@@ -49,6 +50,10 @@ import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
 type ServerRow = inferRouterOutputs<AppRouter>["server"]["all"][number];
+
+/** `metricsConfig.metrics.enabled` defaults to true (the sampler's own default). */
+const isMetricsEnabled = (server: ServerRow): boolean =>
+	(server.metricsConfig as { metrics?: { enabled?: boolean } } | null)?.metrics?.enabled !== false;
 
 export function ServersView() {
 	const trpc = useTRPC();
@@ -188,7 +193,7 @@ export function ServersView() {
 								<TableHead>Status</TableHead>
 								<TableHead className="hidden lg:table-cell">Capacity</TableHead>
 								<TableHead className="hidden md:table-cell">Added</TableHead>
-								<TableHead className="w-36 text-right">Actions</TableHead>
+								<TableHead className="w-44 text-right">Actions</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -230,6 +235,11 @@ export function ServersView() {
 									<TableCell>
 										<div className="flex items-center justify-end">
 											<ServerStatsPopover serverId={server.serverId} />
+											<ServerHistoryDialog
+												serverId={server.serverId}
+												serverName={server.name}
+												metricsEnabled={isMetricsEnabled(server)}
+											/>
 											<Tooltip>
 												<TooltipTrigger asChild>
 													<Button

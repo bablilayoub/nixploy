@@ -27,6 +27,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
@@ -45,6 +46,43 @@ const SOURCE_TYPES: { value: SourceType; label: string }[] = [
 ];
 
 const NONE = "__none__";
+
+// Server caps for watch paths (`packages/server/src/utils/input-limits.ts`).
+const MAX_WATCH_PATHS = 50;
+const MAX_WATCH_PATH_LENGTH = 256;
+const MAX_WATCH_PATH_GLOBSTARS = 3;
+const MAX_WATCH_PATH_STARS = 8;
+
+/** One glob per line → array; blank lines dropped; `null` when empty (matches every push). */
+function parseWatchPaths(text: string): string[] | null {
+	const patterns = text
+		.split("\n")
+		.map((line) => line.trim())
+		.filter(Boolean);
+	return patterns.length > 0 ? patterns : null;
+}
+
+/** Client-side mirror of the server validation so the error names the line. */
+function watchPathsError(patterns: string[] | null): string | null {
+	if (!patterns) return null;
+	if (patterns.length > MAX_WATCH_PATHS) return `At most ${MAX_WATCH_PATHS} watch paths`;
+	for (const pattern of patterns) {
+		if (pattern.length > MAX_WATCH_PATH_LENGTH) {
+			return `"${pattern.slice(0, 24)}…" is longer than ${MAX_WATCH_PATH_LENGTH} characters`;
+		}
+		if ((pattern.match(/\*\*/g)?.length ?? 0) > MAX_WATCH_PATH_GLOBSTARS) {
+			return `"${pattern}" has more than ${MAX_WATCH_PATH_GLOBSTARS} "**" wildcards`;
+		}
+		if ((pattern.match(/\*/g)?.length ?? 0) > MAX_WATCH_PATH_STARS) {
+			return `"${pattern}" has more than ${MAX_WATCH_PATH_STARS} "*" wildcards`;
+		}
+	}
+	return null;
+}
+
+function isGitLikeSource(sourceType: SourceType): boolean {
+	return sourceType === "git" || isGitProviderSource(sourceType);
+}
 
 function isGitProviderSource(sourceType: SourceType): sourceType is GitProviderSourceType {
 	return (
@@ -95,6 +133,7 @@ export function SourceConfig({ application }: { application: Application }) {
 	const [previewForksRequireApproval, setPreviewForksRequireApproval] = useState(
 		application.previewForksRequireApproval,
 	);
+	const [watchPathsText, setWatchPathsText] = useState((application.watchPaths ?? []).join("\n"));
 	// docker
 	const [dockerImage, setDockerImage] = useState(application.dockerImage ?? "");
 	const [dockerUsername, setDockerUsername] = useState(application.username ?? "");
@@ -114,6 +153,7 @@ export function SourceConfig({ application }: { application: Application }) {
 
 	const serverProviderId = storedProviderId(application);
 	const serverRepoSelection = storedRepoSelection(application);
+	const serverWatchPaths = (application.watchPaths ?? []).join("\n");
 
 	useEffect(() => {
 		if (dirty) return;
@@ -128,12 +168,14 @@ export function SourceConfig({ application }: { application: Application }) {
 		setAutoDeploy(application.autoDeploy);
 		setIsPreviewDeploymentsActive(application.isPreviewDeploymentsActive);
 		setPreviewForksRequireApproval(application.previewForksRequireApproval);
+		setWatchPathsText(serverWatchPaths);
 		setDockerImage(application.dockerImage ?? "");
 		setDockerUsername(application.username ?? "");
 		setDockerPassword("");
 		setRegistryId(application.registryId ?? NONE);
 	}, [
 		dirty,
+		serverWatchPaths,
 		application.sourceType,
 		application.gitUrl,
 		application.gitBranch,
@@ -232,13 +274,22 @@ export function SourceConfig({ application }: { application: Application }) {
 			? capabilityHint("secrets.write")
 			: undefined;
 
+	const watchPaths = parseWatchPaths(watchPathsText);
+	const watchPathsProblem = isGitLikeSource(sourceType) ? watchPathsError(watchPaths) : null;
+
 	const onSave = () => {
+		if (watchPathsProblem) {
+			toast.error(watchPathsProblem);
+			return;
+		}
 		const base = {
 			applicationId,
 			buildPath,
 			autoDeploy,
 			isPreviewDeploymentsActive,
 			previewForksRequireApproval,
+			// Docker/drop sources have no push webhook; clear stale patterns.
+			watchPaths: isGitLikeSource(sourceType) ? watchPaths : null,
 		};
 		switch (sourceType) {
 			case "git":
@@ -281,12 +332,7 @@ export function SourceConfig({ application }: { application: Application }) {
 		}
 	};
 
-	const isGitLike =
-		sourceType === "git" ||
-		sourceType === "github" ||
-		sourceType === "gitlab" ||
-		sourceType === "bitbucket" ||
-		sourceType === "gitea";
+	const isGitLike = isGitLikeSource(sourceType);
 
 	return (
 		<SettingsSection
@@ -469,6 +515,24 @@ export function SourceConfig({ application }: { application: Application }) {
 								</p>
 							</div>
 							<Switch id="auto-deploy" checked={autoDeploy} onCheckedChange={edit(setAutoDeploy)} />
+						</div>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="watch-paths">Watch paths (optional)</Label>
+							<Textarea
+								id="watch-paths"
+								className="min-h-24 font-mono text-xs sm:max-w-lg"
+								placeholder={"apps/web/**\npackages/shared/**\n!**/*.md"}
+								value={watchPathsText}
+								onChange={(e) => edit(setWatchPathsText)(e.target.value)}
+								aria-invalid={watchPathsProblem ? true : undefined}
+							/>
+							<p className="text-xs text-muted-foreground">
+								One glob per line. A push webhook only deploys when a changed file matches; empty
+								means every push. At most {MAX_WATCH_PATHS} patterns of {MAX_WATCH_PATH_LENGTH}{" "}
+								characters, {MAX_WATCH_PATH_GLOBSTARS} <code className="font-mono">**</code> and{" "}
+								{MAX_WATCH_PATH_STARS} <code className="font-mono">*</code> per pattern.
+							</p>
+							{watchPathsProblem && <p className="text-xs text-destructive">{watchPathsProblem}</p>}
 						</div>
 						{isGitProviderSource(sourceType) && (
 							<>

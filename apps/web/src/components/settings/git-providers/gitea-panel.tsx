@@ -3,9 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Loader2, Plug, Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
+import { EditProviderDialog } from "@/components/settings/git-providers/edit-provider-dialog";
+import { WebhookSecretDialog } from "@/components/settings/git-providers/webhook-secret-dialog";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,10 +32,22 @@ import {
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { missingCapabilityHint } from "@/lib/capabilities";
-import { useTRPC } from "@/lib/trpc";
+import { useTRPC, useTRPCClient } from "@/lib/trpc";
+
+const GITEA_EDIT_FIELDS = [
+	{ key: "name", label: "Name" },
+	{ key: "giteaUrl", label: "Gitea URL", placeholder: "https://gitea.com" },
+	{
+		key: "accessToken",
+		label: "Access token",
+		secret: true,
+		hint: "Rotate the personal access token; blank keeps the stored one.",
+	},
+];
 
 export function GiteaPanel() {
 	const trpc = useTRPC();
+	const trpcClient = useTRPCClient();
 	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
 	const { can } = useCapabilities();
@@ -41,6 +55,9 @@ export function GiteaPanel() {
 	const manageHint = canManage ? undefined : missingCapabilityHint("git_providers.manage");
 	const [name, setName] = useState("");
 	const [giteaUrl, setGiteaUrl] = useState("https://gitea.com");
+	// Webhook payload URLs need the browser origin; resolved after mount.
+	const [origin, setOrigin] = useState("");
+	useEffect(() => setOrigin(window.location.origin), []);
 	const [accessToken, setAccessToken] = useState("");
 
 	const {
@@ -70,6 +87,16 @@ export function GiteaPanel() {
 	const testMutation = useMutation(
 		trpc.gitea.testConnection.mutationOptions({
 			onSuccess: () => toast.success("Connection successful"),
+			onError: (error) => toast.error(error.message),
+		}),
+	);
+
+	const updateMutation = useMutation(
+		trpc.gitea.update.mutationOptions({
+			onSuccess: async () => {
+				toast.success("Gitea provider updated");
+				await invalidate();
+			},
 			onError: (error) => toast.error(error.message),
 		}),
 	);
@@ -206,6 +233,36 @@ export function GiteaPanel() {
 											)}
 											<span className="sr-only">Test connection</span>
 										</Button>
+										<WebhookSecretDialog
+											providerLabel="Gitea"
+											webhookUrl={`${origin}/api/webhooks/gitea/${gitea.giteaId}`}
+											instructions="In the repository settings add a webhook with this payload URL (JSON, push and pull request events) and paste the secret into the Gitea “Secret” field."
+											fetchSecret={async () =>
+												(
+													await trpcClient.gitea.revealWebhookSecret.query({
+														giteaId: gitea.giteaId,
+													})
+												).webhookSecret
+											}
+											disabled={!canManage}
+											disabledReason={manageHint}
+										/>
+										<EditProviderDialog
+											title="Edit Gitea provider"
+											description="Rename the provider, point it at another instance or rotate its token."
+											fields={GITEA_EDIT_FIELDS}
+											initialValues={{ name: gitProvider.name, giteaUrl: gitea.giteaUrl ?? "" }}
+											disabled={!canManage}
+											disabledReason={manageHint}
+											onSubmit={(values) =>
+												updateMutation.mutateAsync({
+													giteaId: gitea.giteaId,
+													name: values.name,
+													giteaUrl: values.giteaUrl || undefined,
+													...(values.accessToken ? { accessToken: values.accessToken } : {}),
+												})
+											}
+										/>
 										<ConfirmDeleteDialog
 											title="Remove Gitea provider"
 											description={`Remove "${gitProvider.name}"?`}

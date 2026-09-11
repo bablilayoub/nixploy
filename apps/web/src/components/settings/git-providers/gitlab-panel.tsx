@@ -6,6 +6,7 @@ import { GitMerge, Loader2, Plug, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
+import { EditProviderDialog } from "@/components/settings/git-providers/edit-provider-dialog";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,18 @@ import {
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
+
+const GITLAB_EDIT_FIELDS = [
+	{ key: "name", label: "Name" },
+	{ key: "gitlabUrl", label: "GitLab URL", placeholder: "https://gitlab.com" },
+	{ key: "groupName", label: "Group name (optional)" },
+	{
+		key: "accessToken",
+		label: "Access token",
+		secret: true,
+		hint: "Rotate the personal access token; blank keeps the stored one.",
+	},
+];
 
 export function GitlabPanel() {
 	const trpc = useTRPC();
@@ -72,6 +85,16 @@ export function GitlabPanel() {
 	const testMutation = useMutation(
 		trpc.gitlab.testConnection.mutationOptions({
 			onSuccess: () => toast.success("Connection successful"),
+			onError: (error) => toast.error(error.message),
+		}),
+	);
+
+	const updateMutation = useMutation(
+		trpc.gitlab.update.mutationOptions({
+			onSuccess: async () => {
+				toast.success("GitLab provider updated");
+				await invalidate();
+			},
 			onError: (error) => toast.error(error.message),
 		}),
 	);
@@ -225,6 +248,27 @@ export function GitlabPanel() {
 											)}
 											<span className="sr-only">Test connection</span>
 										</Button>
+										<EditProviderDialog
+											title="Edit GitLab provider"
+											description="Rename the provider, change its URL or group, or rotate its token."
+											fields={GITLAB_EDIT_FIELDS}
+											initialValues={{
+												name: gitProvider.name,
+												gitlabUrl: gitlab.gitlabUrl ?? "",
+												groupName: gitlab.groupName ?? "",
+											}}
+											disabled={!canManage}
+											disabledReason={manageHint}
+											onSubmit={(values) =>
+												updateMutation.mutateAsync({
+													gitlabId: gitlab.gitlabId,
+													name: values.name,
+													gitlabUrl: values.gitlabUrl || undefined,
+													groupName: values.groupName || null,
+													...(values.accessToken ? { accessToken: values.accessToken } : {}),
+												})
+											}
+										/>
 										<ConfirmDeleteDialog
 											title="Remove GitLab provider"
 											description={`Remove "${gitProvider.name}"?`}

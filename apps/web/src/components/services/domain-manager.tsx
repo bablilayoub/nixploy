@@ -105,6 +105,7 @@ export function DomainManager({
 
 	const [host, setHost] = useState("");
 	const [path, setPath] = useState("/");
+	const [internalPath, setInternalPath] = useState("");
 	const [port, setPort] = useState("");
 	const [https, setHttps] = useState(false);
 	const [certificateType, setCertificateType] = useState<CertificateType>("none");
@@ -118,6 +119,7 @@ export function DomainManager({
 			setEditing(null);
 			setHost("");
 			setPath("/");
+			setInternalPath("");
 			setPort("");
 			setHttps(false);
 			setCertificateType("none");
@@ -194,6 +196,7 @@ export function DomainManager({
 		setEditing(null);
 		setHost("");
 		setPath("/");
+		setInternalPath("");
 		setPort("");
 		setHttps(false);
 		setCertificateType("none");
@@ -206,6 +209,7 @@ export function DomainManager({
 		setEditing(domain);
 		setHost(domain.host);
 		setPath(domain.path ?? "/");
+		setInternalPath(domain.internalPath ?? "");
 		setPort(domain.port != null ? String(domain.port) : "");
 		setHttps(domain.https);
 		setCertificateType(domain.certificateType as CertificateType);
@@ -258,9 +262,16 @@ export function DomainManager({
 			return;
 		}
 
+		const trimmedInternalPath = internalPath.trim();
+		if (trimmedInternalPath && !trimmedInternalPath.startsWith("/")) {
+			toast.error("Internal path must start with /");
+			return;
+		}
 		const shared = {
 			host: trimmedHost,
 			path: path.trim() || "/",
+			// Empty or "/" means no rewrite: the request path is forwarded as-is.
+			internalPath: trimmedInternalPath && trimmedInternalPath !== "/" ? trimmedInternalPath : null,
 			port: parsedPort,
 			https,
 			certificateType,
@@ -349,7 +360,18 @@ export function DomainManager({
 												{domain.host}
 											</a>
 										</TableCell>
-										<TableCell className="font-mono text-xs">{domain.path ?? "/"}</TableCell>
+										<TableCell className="font-mono text-xs">
+											{domain.path ?? "/"}
+											{domain.internalPath && domain.internalPath !== "/" ? (
+												<span
+													className="text-muted-foreground"
+													title={`Rewritten to ${domain.internalPath} before reaching the container`}
+												>
+													{" "}
+													→ {domain.internalPath}
+												</span>
+											) : null}
+										</TableCell>
 										<TableCell className="font-mono text-xs">{domain.port ?? "—"}</TableCell>
 										{serviceType === "compose" && (
 											<TableCell className="font-mono text-xs">
@@ -494,6 +516,25 @@ export function DomainManager({
 							The port your app listens on inside the container. Traffic to the host is forwarded to
 							this port.
 						</p>
+
+						<div className="space-y-1.5">
+							<Label htmlFor="domain-internal-path">Internal path (optional)</Label>
+							<Input
+								id="domain-internal-path"
+								placeholder="/"
+								value={internalPath}
+								onChange={(event) => setInternalPath(event.target.value)}
+							/>
+							<p className="text-xs text-muted-foreground">
+								Rewrite the prefix before the request reaches the container: the public path above
+								is stripped and this one is added, so{" "}
+								<code className="font-mono">{path.trim() || "/"}api/x</code> arrives as{" "}
+								<code className="font-mono">
+									{(internalPath.trim() || "/").replace(/\/+$/, "")}/api/x
+								</code>
+								. Leave empty to forward the path unchanged.
+							</p>
+						</div>
 
 						{serviceType === "compose" && (
 							<div className="space-y-1.5">

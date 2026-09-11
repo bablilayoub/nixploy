@@ -52,7 +52,11 @@ Swagger lives at `/swagger` on your panel.
 | Placement | Application → Advanced → Placement |
 | GitOps | Project → GitOps (export / URL sync) |
 | Notifications | Settings → Notifications |
-| Remote servers | Settings → Servers |
+| Remote servers | Settings → Servers (metrics history per server behind the chart icon) |
+| Shared variables | Settings → Organization → Shared variables — org-level env inherited by every project, environment and service |
+| Swarm tuning | Application → Advanced → Swarm — rolling update, rollback, restart policy, global mode, service labels, extra networks |
+| Duplicate / move a service | any application, compose or database Settings tab |
+| Watch paths | Application → Source — only deploy a push when a changed file matches |
 
 ## Next reading
 

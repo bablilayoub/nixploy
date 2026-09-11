@@ -4,10 +4,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
 import type { ComposeService } from "@/components/compose/compose-detail";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { DangerZone } from "@/components/services/danger-zone";
+import { ServiceActionsCard } from "@/components/services/service-actions-card";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 export function SettingsTab({
@@ -48,13 +49,17 @@ export function SettingsTab({
 				toast.success("Compose service updated");
 				await Promise.all([
 					queryClient.invalidateQueries({
-						queryKey: trpc.compose.one.queryKey({ composeId: compose.composeId }),
+						queryKey: trpc.compose.one.queryKey({
+							composeId: compose.composeId,
+						}),
 					}),
-					queryClient.invalidateQueries({ queryKey: trpc.compose.all.pathKey() }),
+					queryClient.invalidateQueries({
+						queryKey: trpc.compose.all.pathKey(),
+					}),
 				]);
 				setDirty(false);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -67,7 +72,19 @@ export function SettingsTab({
 				});
 				router.push(`/dashboard/projects/${projectId}`);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
+		}),
+	);
+
+	const duplicateMutation = useMutation(trpc.compose.duplicate.mutationOptions());
+	// Separate from `updateMutation`: renaming the copy must not toast.
+	const renameMutation = useMutation(trpc.compose.update.mutationOptions());
+	const moveMutation = useMutation(
+		trpc.compose.move.mutationOptions({
+			onSuccess: () =>
+				queryClient.invalidateQueries({
+					queryKey: trpc.compose.one.queryKey({ composeId: compose.composeId }),
+				}),
 		}),
 	);
 
@@ -119,6 +136,27 @@ export function SettingsTab({
 					</div>
 				</div>
 			</SettingsSection>
+
+			<ServiceActionsCard
+				kind="compose"
+				serviceName={compose.name}
+				projectId={projectId}
+				environmentId={compose.environmentId}
+				onDuplicate={async (environmentId) => {
+					const created = await duplicateMutation.mutateAsync({
+						composeId: compose.composeId,
+						environmentId,
+					});
+					return created.composeId;
+				}}
+				onRename={(id, name) => renameMutation.mutateAsync({ composeId: id, name })}
+				onMove={(environmentId) =>
+					moveMutation.mutateAsync({
+						composeId: compose.composeId,
+						environmentId,
+					})
+				}
+			/>
 
 			<DangerZone
 				title="Delete compose service"

@@ -13,14 +13,23 @@ import { confirmDiscardUnsavedChanges } from "@/hooks/use-unsaved-changes";
  * the param. A `?tab=` change from outside (same-route navigation, browser
  * back/forward) re-syncs the selected value.
  *
+ * Nested tab sets that live under a `?tab=` group (e.g. Config → Advanced →
+ * Mounts/Ports/…) pass their own `param` so both levels stay in the URL
+ * (`?tab=advanced&advanced=swarm`).
+ *
  * Switching unmounts the previous `TabsContent`, so a dirty form there would
  * lose its edits: `select` first asks through the unsaved-changes guard.
  */
-export function useSyncedTab(defaultValue: string, isValid?: (value: string) => boolean) {
+export function useSyncedTab(
+	defaultValue: string,
+	isValid?: (value: string) => boolean,
+	options: { param?: string } = {},
+) {
+	const paramName = options.param ?? "tab";
 	const router = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
-	const param = searchParams.get("tab");
+	const param = searchParams.get(paramName);
 	const resolved = param && (!isValid || isValid(param)) ? param : defaultValue;
 	const [value, setValue] = useState(resolved);
 
@@ -34,14 +43,14 @@ export function useSyncedTab(defaultValue: string, isValid?: (value: string) => 
 			setValue(next);
 			const params = new URLSearchParams(searchParams.toString());
 			if (next === defaultValue) {
-				params.delete("tab");
+				params.delete(paramName);
 			} else {
-				params.set("tab", next);
+				params.set(paramName, next);
 			}
 			const query = params.toString();
 			router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
 		},
-		[defaultValue, pathname, router, searchParams, value],
+		[defaultValue, paramName, pathname, router, searchParams, value],
 	);
 
 	return [value, select] as const;

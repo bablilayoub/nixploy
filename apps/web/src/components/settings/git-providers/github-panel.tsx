@@ -6,6 +6,7 @@ import { GitBranch, Loader2, Plus, RefreshCw, Rocket } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
+import { EditProviderDialog } from "@/components/settings/git-providers/edit-provider-dialog";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,14 @@ import {
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
+
+const GITHUB_EDIT_FIELDS = [
+	{
+		key: "name",
+		label: "Name",
+		hint: "App credentials come from the GitHub App manifest flow — use “Recreate App” to rotate them.",
+	},
+];
 
 export function GithubPanel() {
 	const trpc = useTRPC();
@@ -97,6 +106,16 @@ export function GithubPanel() {
 		trpc.github.syncInstallation.mutationOptions({
 			onSuccess: async () => {
 				toast.success("Installation synced");
+				await invalidate();
+			},
+			onError: (error) => toast.error(error.message),
+		}),
+	);
+
+	const updateMutation = useMutation(
+		trpc.github.update.mutationOptions({
+			onSuccess: async () => {
+				toast.success("GitHub provider renamed");
 				await invalidate();
 			},
 			onError: (error) => toast.error(error.message),
@@ -252,6 +271,19 @@ export function GithubPanel() {
 													<span className="sr-only">Sync installation</span>
 												</Button>
 											)}
+											<EditProviderDialog
+												title="Edit GitHub provider"
+												fields={GITHUB_EDIT_FIELDS}
+												initialValues={{ name: gitProvider.name }}
+												disabled={!canManage}
+												disabledReason={manageHint}
+												onSubmit={(values) =>
+													updateMutation.mutateAsync({
+														githubId: github.githubId,
+														name: values.name,
+													})
+												}
+											/>
 											<ConfirmDeleteDialog
 												title="Remove GitHub provider"
 												description={`Remove "${gitProvider.name}"? Applications using it will lose their GitHub source.`}

@@ -5,6 +5,7 @@ import {
 	assertSafeOutboundUrl,
 	assertSafeSmtpHostname,
 } from "../../utils/public-url";
+import { badRequest } from "../errors";
 
 /**
  * Notification channel providers.
@@ -356,7 +357,7 @@ export async function sendEmailNotification(
 	}
 
 	if (!config.smtpServer || !config.smtpPort) {
-		throw new Error("Email notification requires either a Resend API key or SMTP server/port");
+		throw badRequest("Email notification requires either a Resend API key or SMTP server/port");
 	}
 	await assertSafeSmtpHostname(config.smtpServer);
 	const transporter = nodemailer.createTransport({

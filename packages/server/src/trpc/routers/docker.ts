@@ -14,6 +14,7 @@ import {
 	listServiceVolumeGuard,
 	pruneUnusedVolumes,
 } from "../../modules/docker/prune";
+import { emitDockerCleanupNotification } from "../../modules/notifications";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { assertSafeDockerImageRef } from "../../utils/validators";
@@ -234,12 +235,19 @@ export const dockerRouter = router({
 	imagesPrune: protectedProcedure
 		.input(serverInput.extend({ all: z.boolean().default(false) }))
 		.mutation(async ({ ctx, input }) => {
-			await assertAdmin(ctx, input?.serverId);
-			return await runOn(
+			const organizationId = await assertAdmin(ctx, input?.serverId);
+			const output = await runOn(
 				ctx,
 				input.serverId,
 				`docker image prune -f ${input.all ? "-a" : ""}`.trim(),
 			);
+			void emitDockerCleanupNotification(organizationId, {
+				scope: "images",
+				serverId: input.serverId ?? null,
+				actor: ctx.session.user.email,
+				output,
+			});
+			return output;
 		}),
 
 	// ── Swarm ─────────────────────────────────────────────────────────────────
@@ -395,6 +403,12 @@ export const dockerRouter = router({
 			execAsync,
 		);
 		void auditFromSession(ctx, organizationId, { action: "docker.volumes.prune" });
+		void emitDockerCleanupNotification(organizationId, {
+			scope: "volumes",
+			serverId: input.serverId ?? null,
+			actor: ctx.session.user.email,
+			output,
+		});
 		return output;
 	}),
 
@@ -436,6 +450,13 @@ export const dockerRouter = router({
 				action: "docker.system.prune",
 				metadata: { volumes: input.volumes },
 			});
-			return [systemOut, volumeOut].filter(Boolean).join("\n");
+			const output = [systemOut, volumeOut].filter(Boolean).join("\n");
+			void emitDockerCleanupNotification(organizationId, {
+				scope: "system",
+				serverId: input.serverId ?? null,
+				actor: ctx.session.user.email,
+				output,
+			});
+			return output;
 		}),
 });
