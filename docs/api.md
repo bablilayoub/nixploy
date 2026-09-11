@@ -212,7 +212,7 @@ See [mcp.md](./mcp.md).
 
 ## Router catalog
 
-High-level map of the OpenAPI surface (42 routers). Full input/output schemas live on panel Swagger.
+High-level map of the OpenAPI surface (44 routers). Full input/output schemas live on panel Swagger.
 
 | Router | Purpose |
 | --- | --- |

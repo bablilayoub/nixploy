@@ -21,7 +21,7 @@ file is for **state** and **tasks**.
 | UI verification | Both UI agents drove every touched page in light + dark (Playwright + in-app browser); 0 console / hydration errors after fixing three real hydration mismatches |
 | Dev DB | `nixploy-dev-pg` (127.0.0.1:54329): `nixploy` (dev), `nixploy_test` (tenancy suite), `nixploy_e2e` (e2e user e2e@example.test) — all migrated to `0025` |
 | Schema | 26 migrations (`0000`…`0025_overconfident_jimmy_woo` = audit ip/user-agent, nullable org, `allow_private_egress`); the final wave adds 0026–0028 |
-| Product | Phases 1–10 of `PLAN.md` shipped; 42 routers / ~300 procedures; 86 templates; 11 notification providers; MCP with 13 tools |
+| Product | Phases 1–10 of `PLAN.md` shipped; 42 routers / ~300 procedures; 86 templates; 11 notification providers; MCP with 32 tools |
 
 ## What the stability sweep did (2026-09-10/11)
 

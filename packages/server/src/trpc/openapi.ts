@@ -195,8 +195,12 @@ export interface OpenApiOptions {
 	serverUrl?: string;
 }
 
-/** One tag per router, so Swagger groups the 340+ endpoints usefully. */
+/** One tag per router, so Swagger groups the 390 endpoints usefully. */
 const TAG_DESCRIPTIONS: Record<string, string> = {
+	traefik:
+		"Instance-level Traefik entrypoints for TCP/UDP routing (instance admin; changing them restarts the proxy)",
+	volumeFiles:
+		"Browse, read, write and delete files inside a Docker volume (instance admin, docker.manage)",
 	ai: "Deploy Copilot: explain failures, chat, generate compose files",
 	application: "Applications: CRUD, source, build, deploy and Swarm runtime",
 	audit: "Organization audit trail",

@@ -290,7 +290,7 @@ Stored in `<config>/.env` (mode 600) and put on the service at create time.
 | `NIXPLOY_BASE_URL` | — | Public origin used for the GitHub App callback when `BETTER_AUTH_URL` is not the right one |
 | `NIXPLOY_NETWORK` | `nixploy-network` | Shared, Traefik-facing tenant overlay. The panel/Postgres overlay is always `nixploy-internal` |
 | `NIXPLOY_WILDCARD_DOMAIN` | `traefik.me` | Wildcard DNS zone used for preview deployments and quick smoke domains |
-| `NIXPLOY_DEPLOY_CONCURRENCY` | `2` | Deploy jobs built in parallel. The queue is **process-local** — multi-replica `nixploy` is unsupported by design |
+| `NIXPLOY_DEPLOY_CONCURRENCY` | `1` | Deploy jobs built in parallel. The queue is **process-local** — multi-replica `nixploy` is unsupported by design |
 | `NIXPLOY_DEPLOY_TIMEOUT_MS` | 60 min | Per-deployment deadline |
 | `NIXPLOY_COMMAND_TIMEOUT_MS` | 30 min | Default timeout for local shell/Docker commands |
 | `NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS` | falls back to the local timeout | Same, for commands run over SSH on a managed server |

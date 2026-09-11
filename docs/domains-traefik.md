@@ -7,7 +7,7 @@ localhost and on real internet domains, and how to debug routing problems.
 ## Architecture
 
 ```
-internet ─► :80  ─► redirect → :443
+internet ─► :80  ─► per-domain router (redirect to :443 only when HTTPS is on)
          ─► :443 ─► nixploy-traefik (global swarm service)
                             │  file provider, watches:
                             ▼
@@ -28,15 +28,13 @@ internet ─► :80  ─► redirect → :443
   delete, so the first domain attaches the network (one rolling update of that
   service) and the last one removed detaches it. Managed databases never join
   it. Full model: [`hardening.md`](./hardening.md).
-- **Port 80 always redirects to HTTPS**, at the *entrypoint* (static
-  `traefik.yml`). ACME HTTP-01 challenges are still served on `:80` before the
-  redirect. The writer also emits a per-router `redirectScheme` for every
-  `https: true` domain, so removing the entrypoint redirect is enough to make
-  the per-domain **HTTPS** toggle truthful — a domain with HTTPS off would then
-  be served plain on `:80`. Until that static-config change ships (it lives in
-  `install.sh`, `update.sh` and `docker/traefik/traefik.yml`, which CI diffs
-  against each other), HTTPS-off domains are still redirected to `:443`, where
-  they are served with the self-signed default certificate.
+- **The HTTPS redirect is per router.** Since v0.2.0 the static `traefik.yml`
+  carries no entrypoint-level redirection — it overrode every domain's own
+  `https` toggle. The writer emits a `redirectScheme` middleware for each
+  `https: true` domain instead, so a domain with HTTPS **off** is served plain
+  on `:80`. ACME HTTP-01 challenges are served on `:80` either way, and the
+  dashboard router is `websecure`-only. `update.sh` removes the old
+  `http.redirections` block from installs made before v0.2.0.
 - **Bare-IP / first boot:** a self-signed `defaultCertificate`
   (`dynamic/default.crt`) plus a low-priority catch-all router
   (`00-nixploy-dashboard.yml`) expose the dashboard at `https://<server-ip>`.
