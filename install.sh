@@ -37,6 +37,13 @@
 #   (NIXPLOY_DEPLOY_CONCURRENCY, NIXPLOY_WILDCARD_DOMAIN, DOCKER_SOCKET, …) is
 #   forwarded to the service when it is set in this script's environment.
 #   NIXPLOY_MEMORY_LIMIT         Memory limit of the nixploy service (default: 2g)
+#   NIXPLOY_SPLIT_WORKER         1 = also create a `nixploy-worker` service and run the
+#                                panel with NIXPLOY_ROLE=panel. Deploys, crons and the
+#                                status reconciler move out of the panel process, so a
+#                                panel restart (or an update) no longer kills in-flight
+#                                builds. Same as passing --split-worker. Default: 0
+#                                (single process). A re-run keeps an existing worker.
+#   NIXPLOY_WORKER_MEMORY        Memory limit of the nixploy-worker service (default: 2g)
 #   POSTGRES_VERSION             Postgres image tag             (default: 17-alpine)
 #   TRAEFIK_VERSION              Traefik image tag              (default: v3.5.0)
 #   NIXPLOY_SKIP_PORT_CHECK      1 = do not refuse to install when :80/:443 are taken
@@ -63,6 +70,12 @@ HOST_CONFIG_DIR="${NIXPLOY_CONFIG_DIR}"
 POSTGRES_VERSION="${POSTGRES_VERSION:-17-alpine}"
 TRAEFIK_VERSION="${TRAEFIK_VERSION:-v3.5.0}"
 NIXPLOY_MEMORY_LIMIT="${NIXPLOY_MEMORY_LIMIT:-2g}"
+NIXPLOY_WORKER_MEMORY="${NIXPLOY_WORKER_MEMORY:-2g}"
+# Opt-in two-process layout (see --split-worker). 0 = today's single process.
+SPLIT_WORKER="${NIXPLOY_SPLIT_WORKER:-0}"
+# Set by --no-split-worker: the only way to go back to one process.
+SPLIT_WORKER_EXPLICIT_OFF=0
+WORKER_SERVICE="nixploy-worker"
 NIXPLOY_REPO="${NIXPLOY_REPO:-bablilayoub/nixploy}"
 # Pin assets to the same release tag as the image unless overridden.
 NIXPLOY_BRANCH="${NIXPLOY_BRANCH:-$NIXPLOY_VERSION}"
@@ -617,6 +630,12 @@ BETTER_AUTH_URL=${public_url}
 NIXPLOY_SETUP_TOKEN=$(random_hex 16)
 ENCRYPTION_KEY=$(random_hex 32)
 PORT=3000
+# Two-process layout: set NIXPLOY_SPLIT_WORKER=1 in the *installer's*
+# environment (or pass --split-worker) and re-run install.sh to move deploys,
+# crons and the status reconciler into a separate \`nixploy-worker\` service.
+# This file is the shared env of both services; the role itself is set per
+# service (NIXPLOY_ROLE=panel / worker), never here.
+# NIXPLOY_SPLIT_WORKER=1
 EOF
 	set_env_var "DATABASE_URL" "postgres://nixploy:$(awk -F= '/^POSTGRES_PASSWORD=/{print $2}' "${ENV_FILE}")@nixploy-postgres:5432/nixploy"
 	ok "Generated secrets (${ENV_FILE})"
@@ -890,12 +909,37 @@ collect_app_env_args() {
 	APP_ENV_ARGS=(
 		"${flag}" "TRUSTED_PROXIES=${TRUSTED_PROXIES:-1}"
 		"${flag}" "NIXPLOY_IMAGE=${APP_IMAGE}"
+		"${flag}" "NIXPLOY_ROLE=$(app_role)"
 	)
 	for name in "${FORWARDED_APP_ENV[@]}"; do
 		if [ -n "${!name:-}" ]; then
 			APP_ENV_ARGS+=("${flag}" "${name}=${!name}")
 		fi
 	done
+}
+
+# Whether this install runs the two-process layout. An existing
+# `nixploy-worker` service keeps the split on across re-runs — an operator who
+# opted in once must not lose it by re-running the one-liner without the flag —
+# unless they explicitly ask for one process again with --no-split-worker.
+resolve_split_worker() {
+	if [ "${SPLIT_WORKER_EXPLICIT_OFF}" = "1" ]; then
+		SPLIT_WORKER=0
+		return
+	fi
+	# .env has been sourced by now, so NIXPLOY_SPLIT_WORKER=1 can also live there.
+	if [ "${NIXPLOY_SPLIT_WORKER:-0}" = "1" ]; then
+		SPLIT_WORKER=1
+	fi
+	if docker service inspect "${WORKER_SERVICE}" >/dev/null 2>&1; then
+		SPLIT_WORKER=1
+	fi
+}
+
+# Role of the `nixploy` service: `panel` when the worker owns the background
+# work, `all` (single process) otherwise.
+app_role() {
+	[ "${SPLIT_WORKER}" = "1" ] && printf 'panel' || printf 'all'
 }
 
 create_postgres() {
@@ -1036,6 +1080,85 @@ create_app() {
 	ok "Created nixploy"
 }
 
+# ── worker (opt-in second process) ───────────────────────────────────────────
+# Same image, same .env, same config volume and docker socket — only
+# NIXPLOY_ROLE differs. It joins `nixploy-internal` (Postgres + panel) and
+# NOTHING else: it never fronts traffic, so it is not on the tenant overlay and
+# publishes no host port. Its :3001 answers /api/health, /api/ready and
+# /api/version for the image HEALTHCHECK.
+#
+# What moves here: the deploy claim loop, boot recovery, every cron (backups,
+# schedules, metrics, uptime, reconciler, maintenance, update checker, image
+# auto-update, platform alerts) and the Traefik bootstrap. The panel keeps
+# enqueueing deploys and writing per-domain Traefik YAML, which is why both
+# services mount the config directory.
+WORKER_PORT=3001
+
+create_worker() {
+	if [ "${SPLIT_WORKER}" != "1" ]; then
+		remove_worker_if_present
+		return
+	fi
+
+	collect_app_env_args --env-add
+	if docker service inspect "${WORKER_SERVICE}" >/dev/null 2>&1; then
+		docker service update \
+			--detach --force --no-resolve-image \
+			--image "${APP_IMAGE}" \
+			"${ROLL_ARGS[@]}" \
+			--stop-grace-period 90s \
+			--limit-memory "${NIXPLOY_WORKER_MEMORY}" \
+			--reserve-memory 512m \
+			"${LOG_ARGS[@]}" \
+			--env-add "BETTER_AUTH_URL=${BETTER_AUTH_URL}" \
+			--env-add NIXPLOY_CONFIG_DIR=/etc/nixploy \
+			--env-add NIXPLOY_DISABLE_TRAEFIK_BOOT=1 \
+			--env-add "PORT=${WORKER_PORT}" \
+			"${APP_ENV_ARGS[@]}" \
+			--env-add NIXPLOY_ROLE=worker \
+			"${WORKER_SERVICE}" >/dev/null
+		ok "Updated ${WORKER_SERVICE} → ${APP_IMAGE}"
+		return
+	fi
+
+	collect_app_env_args --env
+	docker service create \
+		--name "${WORKER_SERVICE}" \
+		--network "${INTERNAL_NETWORK_NAME}" \
+		--constraint 'node.role == manager' \
+		--replicas 1 \
+		--detach \
+		--no-resolve-image \
+		--env-file "${ENV_FILE}" \
+		--env DATABASE_URL --env BETTER_AUTH_SECRET --env BETTER_AUTH_URL \
+		--env ENCRYPTION_KEY \
+		--env "PORT=${WORKER_PORT}" \
+		--env NIXPLOY_CONFIG_DIR=/etc/nixploy \
+		--env NIXPLOY_DISABLE_TRAEFIK_BOOT=1 \
+		"${APP_ENV_ARGS[@]}" \
+		--env NIXPLOY_ROLE=worker \
+		--mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
+		--mount type=bind,source="${NIXPLOY_CONFIG_DIR}",target=/etc/nixploy \
+		"${ROLL_ARGS[@]}" \
+		--stop-grace-period 90s \
+		--limit-memory "${NIXPLOY_WORKER_MEMORY}" \
+		--reserve-memory 512m \
+		"${LOG_ARGS[@]}" \
+		"${APP_IMAGE}" >/dev/null
+	ok "Created ${WORKER_SERVICE} (deploy queue + crons)"
+}
+
+# Going back to one process: the panel is already NIXPLOY_ROLE=all by the time
+# this runs, so removing the service is enough — nothing is left unowned.
+remove_worker_if_present() {
+	docker service inspect "${WORKER_SERVICE}" >/dev/null 2>&1 || return 0
+	if docker service rm "${WORKER_SERVICE}" >/dev/null 2>&1; then
+		ok "Removed ${WORKER_SERVICE} (single-process mode)"
+	else
+		warn "Could not remove ${WORKER_SERVICE} — run: docker service rm ${WORKER_SERVICE}"
+	fi
+}
+
 # ── readiness ────────────────────────────────────────────────────────────────
 # Through Traefik on loopback with the real host name: works before DNS has
 # propagated and does not need :3000 published. $1 = host, $2 = path. Prints
@@ -1165,7 +1288,14 @@ print_summary() {
 	printf '\n'
 	print_firewall_hint
 	printf '   %sConfig%s   %s\n' "${C_DIM}" "${C_RESET}" "${NIXPLOY_CONFIG_DIR}"
-	printf '   %sLogs%s     docker service logs -f nixploy\n' "${C_DIM}" "${C_RESET}"
+	if [ "${SPLIT_WORKER}" = "1" ]; then
+		printf '   %sRoles%s    nixploy (panel, %s) + %s (deploys & crons, %s)\n' \
+			"${C_DIM}" "${C_RESET}" "${NIXPLOY_MEMORY_LIMIT}" "${WORKER_SERVICE}" "${NIXPLOY_WORKER_MEMORY}"
+		printf '   %sLogs%s     docker service logs -f nixploy · docker service logs -f %s\n' \
+			"${C_DIM}" "${C_RESET}" "${WORKER_SERVICE}"
+	else
+		printf '   %sLogs%s     docker service logs -f nixploy\n' "${C_DIM}" "${C_RESET}"
+	fi
 	printf '   %sUpdate%s   curl -fsSL …/update.sh | sudo bash\n' "${C_DIM}" "${C_RESET}"
 	printf '   %sRemove%s   curl -fsSL …/uninstall.sh | sudo bash\n' "${C_DIM}" "${C_RESET}"
 	printf '\n'
@@ -1193,7 +1323,28 @@ print_firewall_hint() {
 	printf '\n'
 }
 
+# Flags. Everything else is an environment variable (the one-liner is piped
+# into bash, where flags need `bash -s -- --flag`), so this stays tiny.
+parse_args() {
+	while [ $# -gt 0 ]; do
+		case "$1" in
+			--split-worker) SPLIT_WORKER=1 ;;
+			--no-split-worker) SPLIT_WORKER=0; SPLIT_WORKER_EXPLICIT_OFF=1 ;;
+			-h|--help)
+				printf 'Usage: install.sh [--split-worker|--no-split-worker]\n'
+				printf '  --split-worker      run deploys and crons in a separate nixploy-worker service\n'
+				printf '  --no-split-worker   collapse an existing split install back to one process\n'
+				printf '  Every other knob is an environment variable — see the header of this file.\n'
+				exit 0
+				;;
+			*) die "Unknown argument: $1 (try --help)" ;;
+		esac
+		shift
+	done
+}
+
 main() {
+	parse_args "$@"
 	if [ "${NIXPLOY_RENDER_TRAEFIK_ONLY:-0}" = "1" ]; then
 		render_traefik_static "${ACME_EMAIL:-${ACME_EMAIL_UNSET}}"
 		exit 0
@@ -1235,8 +1386,10 @@ main() {
 	wait_for_postgres
 
 	step "Traefik & Nixploy"
+	resolve_split_worker
 	create_traefik
 	create_app
+	create_worker
 
 	step "Health check"
 	wait_for_app

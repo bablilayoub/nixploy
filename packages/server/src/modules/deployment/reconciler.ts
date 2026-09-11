@@ -24,6 +24,7 @@ import {
 } from "../databases/engine";
 import { notifyEvent } from "../notifications";
 import { getDocker } from "./docker";
+import { publishServiceStatusCorrections } from "./notify";
 
 const log = createLogger("status-reconciler");
 
@@ -465,6 +466,13 @@ export function initStatusReconciler(): void {
 		running = true;
 		try {
 			const corrections = await reconcileServiceStatuses();
+			// Push the corrections to every open dashboard (`/ws/events`); the
+			// panel turns them into query invalidations instead of polling.
+			void publishServiceStatusCorrections(
+				corrections.flatMap((fix) =>
+					fix.environmentId ? [{ ...fix, environmentId: fix.environmentId }] : [],
+				),
+			);
 			for (const fix of corrections) {
 				log.info(`Status reconciler: ${fix.kind} ${fix.appName} ${fix.from} → ${fix.to}`);
 			}

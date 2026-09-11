@@ -4,6 +4,11 @@ import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { findServerById } from "../../modules/cluster/servers";
 import {
+	dockerListingCache,
+	dockerListingKey,
+	invalidateDockerListings,
+} from "../../modules/docker/containers";
+import {
 	isProtectedContainerNames,
 	isProtectedPlatformName,
 	PROTECTED_NETWORKS,
@@ -17,7 +22,6 @@ import {
 import { emitDockerCleanupNotification } from "../../modules/notifications";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
-import { createTtlCache, DOCKER_LISTING_TTL_MS } from "../../utils/ttl-cache";
 import { assertSafeDockerImageRef } from "../../utils/validators";
 import { protectedProcedure, router } from "../init";
 
@@ -37,25 +41,17 @@ const serverInput = z.object({ serverId: z.string().nullish() });
  * which used to mean one `docker ps` / SSH round-trip each. Authorization
  * always runs BEFORE the lookup; the cached payload is server-scoped, never
  * caller-scoped.
+ *
+ * The cache itself lives in `modules/docker/containers.ts` so the deploy
+ * worker can invalidate a server's entries when it changes what runs there.
  */
-const listingCache = createTtlCache<string>({ ttlMs: DOCKER_LISTING_TTL_MS });
-
-const cacheKey = (view: string, serverId: string | null | undefined): string =>
-	`${view}:${serverId ?? "__local__"}`;
-
 const cachedListing = (
 	ctx: DockerContext,
 	view: string,
 	serverId: string | null | undefined,
 	command: string,
 ): Promise<string> =>
-	listingCache.get(cacheKey(view, serverId), () => runOn(ctx, serverId, command));
-
-/** Drop every cached listing for one server after a mutation touched it. */
-function invalidateDockerListings(serverId: string | null | undefined): void {
-	const suffix = `:${serverId ?? "__local__"}`;
-	listingCache.invalidateWhere((key) => key.endsWith(suffix));
-}
+	dockerListingCache.get(dockerListingKey(view, serverId), () => runOn(ctx, serverId, command));
 
 type DockerContext = {
 	session: { user: { id: string }; session: { activeOrganizationId?: string | null } };
@@ -299,7 +295,7 @@ export const dockerRouter = router({
 		await assertClusterAdmin(ctx, input?.serverId);
 		let out: string;
 		try {
-			out = await listingCache.get(cacheKey("swarmServices", input.serverId), () =>
+			out = await dockerListingCache.get(dockerListingKey("swarmServices", input.serverId), () =>
 				runSwarmOnPrimary(ctx, input.serverId, `docker service ls --format '{{json .}}'`),
 			);
 		} catch (error) {

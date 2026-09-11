@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
 import { db } from "../../db";
+import { isWorkerRole } from "../../lib/role";
 import type { TargetedProcess } from "./docker";
 import { deploymentEvents } from "./events";
+import { publishDeploymentStatusDetached } from "./notify";
 
 /**
  * Durable deployment queue.
@@ -317,6 +319,9 @@ async function runClaimPass(): Promise<void> {
 				const job = await claimNextDeployment(serverIdFromKey(key));
 				if (!job) break;
 				startJob(key, job);
+				// queued → running: the only place that transition is made, so
+				// the only place it has to be published (`/ws/events`).
+				publishDeploymentStatusDetached(job.deploymentId, "running");
 			}
 		}
 		if (waiting > 0) waiting = await refreshQueueSnapshot();
@@ -336,8 +341,13 @@ async function runClaimPass(): Promise<void> {
  * Start the claim loop (idempotent, once per process). Called from boot
  * recovery and lazily by `queueDeployment`, so neither `next build` nor the
  * offline unit tests ever open a database connection on import.
+ *
+ * Refused in role `panel` (`NIXPLOY_ROLE=panel`, `lib/role.ts`): that process
+ * enqueues rows and wakes the worker over `NOTIFY`, but must never claim one —
+ * it has no build tooling mounted and would race the worker for the slot.
  */
 export function startQueueLoop(): void {
+	if (!isWorkerRole()) return;
 	if (state.loopStarted || state.draining) return;
 	state.loopStarted = true;
 	deploymentEvents.on("enqueued", onEnqueued);

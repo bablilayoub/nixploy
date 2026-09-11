@@ -16,7 +16,7 @@ Supporting files: `docker/` (production Dockerfile, dev compose, Traefik
 static config), `install.sh` (production installer), `PLAN.md` (product
 blueprint), `docs/` (these guides).
 
-## Request surfaces (one process)
+## Request surfaces (one process by default)
 
 ```
 Browser ──► apps/web (Next.js App Router)              UI
@@ -25,8 +25,18 @@ Browser ──► apps/web (Next.js App Router)              UI
    ├────► /api/auth/*        better-auth handler
    ├────► /api/<router>.<proc>  REST/OpenAPI wrapper over the same root router (x-api-key)
    ├────► /swagger           generated OpenAPI docs
-   └────► /ws/{logs,deployment,stats,terminal}   WebSocket streams (server.ts)
+   └────► /ws/{logs,deployment,events,stats,terminal}   WebSocket streams (server.ts)
 ```
+
+One process is the default (`NIXPLOY_ROLE=all`). A split install
+(`install.sh --split-worker`) runs the same image twice: `nixploy`
+(`NIXPLOY_ROLE=panel`) serves everything above, and `nixploy-worker`
+(`NIXPLOY_ROLE=worker`, `apps/web/worker.ts`) owns the deploy claim loop, boot
+recovery, every cron and the Traefik bootstrap — no Next at all, just
+`/api/health`, `/api/ready` and `/api/version` for Swarm. The two halves talk
+over Postgres `LISTEN/NOTIFY`; roles, channels and cancellation semantics are
+in [`deployment-flow.md`](./deployment-flow.md) → "Process roles and the worker
+service".
 
 Every tRPC procedure is automatically also a REST endpoint and reachable from
 the CLI — they all hang off the same root router
@@ -95,15 +105,24 @@ stay outside the transaction, where they remain best-effort.
   - `/ws/logs` — `docker logs -f` for a service (raw text + JSON control
     frames `{type:"empty"}` / `{type:"error"}`).
   - `/ws/deployment` — live build log of one deployment
-    (`{type:"log"|"finish"|"error"}` frames).
+    (`{type:"log"|"finish"|"error"}` frames), followed by byte offset from the
+    log file on the config volume.
+  - `/ws/events` — one org-scoped push stream per tab: `deployment` status
+    transitions, `queue` depth and `service-status` corrections, plus a
+    heartbeat. The panel maps a frame onto TanStack Query invalidations
+    (`hooks/use-live-events.ts`), so dashboard screens carry no
+    `refetchInterval` of their own — only a fallback while the socket is down.
   - `/ws/stats` — per-second container stats frames
     (`{cpu, memory:{used,total,percent}, network:{rx,tx}}`).
   - `/ws/terminal` — interactive exec into a container.
-- Deployments run through an **in-process queue** (one at a time per service)
-  started by `queueDeployment`; statuses transition
-  `queued → running → done|error` and are streamed over `/ws/deployment`.
-- node-schedule crons (started in `server.ts`) drive scheduled backups,
-  scheduled deploys and Docker cleanup.
+- Deployments run through a **durable queue**: the `deployment` table is the
+  queue and the claim loop takes rows with `FOR UPDATE SKIP LOCKED`. Statuses
+  transition `queued → running → done|error|cancelled`, stream over
+  `/ws/deployment` and are published on `/ws/events`.
+- node-schedule crons drive scheduled backups, scheduled deploys, metrics,
+  uptime probes, the status reconciler and Docker cleanup. They are started by
+  whichever process holds the worker role — `server.ts` in a default install,
+  `worker.ts` in a split one.
 
 ## Infrastructure assumptions
 
@@ -113,7 +132,7 @@ stay outside the transaction, where they remain best-effort.
 
   | Overlay | Members |
   | --- | --- |
-  | `nixploy-internal` | `nixploy`, `nixploy-postgres`, `nixploy-traefik` — no tenant workload, ever |
+  | `nixploy-internal` | `nixploy`, `nixploy-worker` (split installs), `nixploy-postgres`, `nixploy-traefik` — no tenant workload, ever |
   | `nixploy-network` (`NIXPLOY_NETWORK`) | `nixploy-traefik` + tenant services **that have a domain** |
   | `<env-slug>-<env-id8>-net` | every application / database / compose service of one environment |
   | `<appName>-net` | the services of one compose stack |

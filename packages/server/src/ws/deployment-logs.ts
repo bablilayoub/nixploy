@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import type { WebSocket } from "ws";
 import { db } from "../db";
 import { deployments } from "../db/schema";
+import { isWorkerRole } from "../lib/role";
 // Shared contract with the deploy engine (modules/deployment).
 // `deploymentEvents` emits 'log' { deploymentId, chunk } per appended chunk
 // and 'finish' { deploymentId, status } when a job ends.
@@ -19,6 +20,16 @@ const STATUS_POLL_MS = 5_000;
 const FLUSH_DEBOUNCE_MS = 20;
 /** Bytes per frame while replaying/following. */
 const READ_CHUNK_BYTES = 256 * 1024;
+/**
+ * How often the panel re-stats the log file when the build runs in ANOTHER
+ * process (`NIXPLOY_ROLE=panel` — the worker owns `DeploymentLogger`, so the
+ * in-process `log` event never fires here). Log chunks deliberately do not
+ * travel over `LISTEN/NOTIFY`: a build log is megabytes and the payload cap is
+ * 8000 bytes, so the file on the shared config volume stays the source of
+ * truth and this is the wake-up signal instead. It is a `stat`, and the reader
+ * only sends the bytes appended since its offset.
+ */
+const FILE_POLL_MS = 500;
 
 const isActive = (status: string): boolean => status === "running" || status === "queued";
 
@@ -50,6 +61,7 @@ export async function handleDeploymentLogs(
 	let offset = 0;
 	let closed = false;
 	let statusTimer: ReturnType<typeof setInterval> | null = null;
+	let fileTimer: ReturnType<typeof setInterval> | null = null;
 	let flushTimer: ReturnType<typeof setTimeout> | null = null;
 	let inflight: Promise<void> | null = null;
 	let again = false;
@@ -61,6 +73,10 @@ export async function handleDeploymentLogs(
 		if (statusTimer) {
 			clearInterval(statusTimer);
 			statusTimer = null;
+		}
+		if (fileTimer) {
+			clearInterval(fileTimer);
+			fileTimer = null;
 		}
 		if (flushTimer) {
 			clearTimeout(flushTimer);
@@ -164,6 +180,16 @@ export async function handleDeploymentLogs(
 		if (!isActive(deployment.status)) {
 			finishAndClose(deployment.status);
 			return;
+		}
+
+		// Role `panel`: the writer is in nixploy-worker, so there is no local
+		// `log` event to wake this follower — poll the file instead. Role `all`
+		// (and the worker) keep the pure event-driven path.
+		if (!isWorkerRole()) {
+			fileTimer = setInterval(() => {
+				if (!closed) scheduleFlush();
+			}, FILE_POLL_MS);
+			fileTimer.unref?.();
 		}
 
 		statusTimer = setInterval(() => {

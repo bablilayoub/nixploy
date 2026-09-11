@@ -39,6 +39,10 @@
 #   NIXPLOY_ALLOW_DOWNGRADE      1 = allow rolling to a LOWER semver tag (default: refuse —
 #                                migrations are forward-only; restore a dump first)
 #   NIXPLOY_MEMORY_LIMIT         Memory limit of the nixploy service (default: 2g)
+#   NIXPLOY_WORKER_MEMORY        Memory limit of nixploy-worker, when that service exists
+#                                (default: 2g). The split itself is opt-in at install time
+#                                (install.sh --split-worker); this script only rolls
+#                                whichever services are already there.
 #   NIXPLOY_BUILD_FROM_SOURCE    1 = build locally instead of pull (opt-in only)
 #   NIXPLOY_REPO                 GitHub org/repo               (default: bablilayoub/nixploy)
 #   NIXPLOY_BRANCH               Branch for source builds      (default: the image tag)
@@ -63,6 +67,8 @@ NIXPLOY_REFRESH_TRAEFIK_YML="${NIXPLOY_REFRESH_TRAEFIK_YML:-1}"
 NIXPLOY_PRUNE="${NIXPLOY_PRUNE:-1}"
 NIXPLOY_PRE_UPDATE_BACKUP="${NIXPLOY_PRE_UPDATE_BACKUP:-1}"
 NIXPLOY_MEMORY_LIMIT="${NIXPLOY_MEMORY_LIMIT:-2g}"
+NIXPLOY_WORKER_MEMORY="${NIXPLOY_WORKER_MEMORY:-2g}"
+WORKER_SERVICE="nixploy-worker"
 
 APP_IMAGE="${NIXPLOY_IMAGE:-ghcr.io/bablilayoub/nixploy:${NIXPLOY_VERSION}}"
 TRAEFIK_IMAGE="traefik:${TRAEFIK_VERSION}"
@@ -545,14 +551,27 @@ FORWARDED_APP_ENV=(
 	TZ
 )
 
+# Role of the `nixploy` service: `panel` while a nixploy-worker exists (an
+# older spec would otherwise start a second claim loop against the same queue
+# after this update), `all` for a normal single-process install.
+app_role() {
+	if docker service inspect "${WORKER_SERVICE}" >/dev/null 2>&1; then
+		printf 'panel'
+	else
+		printf 'all'
+	fi
+}
+
 APP_ENV_ARGS=()
+# $1 = flag to emit (--env-add), $2 = NIXPLOY_ROLE for the target service.
 collect_app_env_args() {
-	local flag="$1" name
+	local flag="$1" role="${2:-$(app_role)}" name
 	APP_ENV_ARGS=(
 		"${flag}" "TRUSTED_PROXIES=${TRUSTED_PROXIES:-1}"
 		"${flag}" "NIXPLOY_IMAGE=${APP_IMAGE}"
 		"${flag}" "NIXPLOY_CONFIG_DIR=/etc/nixploy"
 		"${flag}" "NIXPLOY_DISABLE_TRAEFIK_BOOT=1"
+		"${flag}" "NIXPLOY_ROLE=${role}"
 	)
 	if [ -n "${BETTER_AUTH_URL:-}" ]; then
 		APP_ENV_ARGS+=("${flag}" "BETTER_AUTH_URL=${BETTER_AUTH_URL}")
@@ -584,6 +603,32 @@ update_app() {
 		"${APP_ENV_ARGS[@]}" \
 		nixploy >/dev/null
 	ok "Rolling nixploy → ${APP_IMAGE}"
+}
+
+# Split installs (install.sh --split-worker) run a second service with the same
+# image and env file; only NIXPLOY_ROLE differs. It has to be rolled to the new
+# image too, or the panel and the worker run different code against one schema.
+#
+# Order matters: the WORKER is rolled first, because it is the half that runs
+# the migrations (docker/entrypoint.sh skips them for role `panel`). The panel's
+# /api/ready reports 503 while its migration check says "behind", so Swarm keeps
+# a panel task out of the VIP until the worker's migrations have landed.
+update_worker() {
+	docker service inspect "${WORKER_SERVICE}" >/dev/null 2>&1 || return 0
+	collect_app_env_args --env-add worker
+	docker service update \
+		--detach \
+		--force \
+		--no-resolve-image \
+		--image "${APP_IMAGE}" \
+		"${ROLL_ARGS[@]}" \
+		--stop-grace-period 90s \
+		--limit-memory "${NIXPLOY_WORKER_MEMORY}" \
+		--reserve-memory 512m \
+		"${LOG_ARGS[@]}" \
+		"${APP_ENV_ARGS[@]}" \
+		"${WORKER_SERVICE}" >/dev/null
+	ok "Rolling ${WORKER_SERVICE} → ${APP_IMAGE}"
 }
 
 # Installs made before the Postgres hardening have no healthcheck, unbounded
@@ -792,6 +837,10 @@ print_summary() {
 	printf '   %sYour data, secrets and certificates were kept.%s\n' "${C_DIM}" "${C_RESET}"
 	printf '   %sDB migrations (if any) ran on container start.%s\n' "${C_DIM}" "${C_RESET}"
 	printf '   %sRoll back by hand: docker service rollback nixploy%s\n' "${C_DIM}" "${C_RESET}"
+	if docker service inspect "${WORKER_SERVICE}" >/dev/null 2>&1; then
+		printf '   %sSplit install: %s was rolled too (docker service rollback %s)%s\n' \
+			"${C_DIM}" "${WORKER_SERVICE}" "${WORKER_SERVICE}" "${C_RESET}"
+	fi
 	if [ -n "${BACKUP_FILE}" ]; then
 		printf '   %sPre-update DB dump: %s (restore + pin the old tag to downgrade)%s\n' "${C_DIM}" "${BACKUP_FILE}" "${C_RESET}"
 	fi
@@ -825,6 +874,9 @@ main() {
 
 	step "Roll services"
 	update_postgres_spec
+	# Worker first: it runs the migrations in a split install, and the panel's
+	# /api/ready keeps it out of the VIP until the schema matches.
+	update_worker
 	update_app
 	update_traefik
 

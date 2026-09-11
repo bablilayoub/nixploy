@@ -4,10 +4,11 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/uninstall.sh | sudo bash
 #
-# Default (safe): removes the three platform services (`nixploy`,
-# `nixploy-postgres`, `nixploy-traefik`) and the two platform overlays, and
-# KEEPS the Postgres volume and the config directory — so a later install.sh
-# on the same host brings everything back exactly as it was.
+# Default (safe): removes the platform services (`nixploy`, `nixploy-worker`
+# when a split install created it, `nixploy-postgres`, `nixploy-traefik`) and
+# the two platform overlays, and KEEPS the Postgres volume and the config
+# directory — so a later install.sh on the same host brings everything back
+# exactly as it was.
 #
 #   --purge   ALSO delete the `nixploy-postgres-data` volume and the config
 #             directory (secrets, Let's Encrypt certificates, SSH keys, app
@@ -30,7 +31,11 @@ NIXPLOY_CONFIG_DIR="${NIXPLOY_CONFIG_DIR:-/etc/nixploy}"
 NETWORK_NAME="${NIXPLOY_NETWORK:-nixploy-network}"
 INTERNAL_NETWORK_NAME="nixploy-internal"
 POSTGRES_VOLUME="nixploy-postgres-data"
-PLATFORM_SERVICES=(nixploy nixploy-traefik nixploy-postgres)
+# `nixploy-worker` only exists in a split install (install.sh --split-worker);
+# `docker service rm` on a missing service is handled by the caller's `|| true`.
+# It is listed FIRST so the deploy queue stops claiming before the panel and
+# the database go away.
+PLATFORM_SERVICES=(nixploy-worker nixploy nixploy-traefik nixploy-postgres)
 CONFIRM_PHRASE="delete nixploy data"
 
 PURGE=0
@@ -91,6 +96,8 @@ print_plan() {
 	for service in "${PLATFORM_SERVICES[@]}"; do
 		if docker service inspect "${service}" >/dev/null 2>&1; then
 			printf '   %s·%s remove Swarm service %s\n' "${C_RED}" "${C_RESET}" "${service}"
+		elif [ "${service}" = "nixploy-worker" ]; then
+			: # only exists in a split install — saying "not present" is noise
 		else
 			printf '   %s·%s (service %s is not present)\n' "${C_DIM}" "${C_RESET}" "${service}"
 		fi
@@ -158,7 +165,10 @@ remove_services() {
 	# removed while an endpoint still hangs off them.
 	local waited=0
 	while [ "${waited}" -lt 30 ]; do
-		docker ps --filter label=com.docker.swarm.service.name=nixploy --quiet 2>/dev/null | grep -q . || break
+		{
+			docker ps --filter label=com.docker.swarm.service.name=nixploy --quiet 2>/dev/null
+			docker ps --filter label=com.docker.swarm.service.name=nixploy-worker --quiet 2>/dev/null
+		} | grep -q . || break
 		sleep 1
 		waited=$((waited + 1))
 	done

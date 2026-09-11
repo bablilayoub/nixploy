@@ -13,8 +13,8 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { eq, inArray } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { eq, inArray, like, or } from "drizzle-orm";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { TenantFixture } from "../../trpc/tenancy.harness";
 
 const testUrl = process.env.DATABASE_URL_TEST;
@@ -96,6 +96,12 @@ describe.skipIf(!testUrl)("durable deploy queue (postgres)", () => {
 	}, 60_000);
 
 	afterAll(async () => {
+		// Delete this suite's rows BEFORE the tenant: a deployment row whose
+		// application is gone keeps a non-null `app_name` and a `queued`/
+		// `running` status, and the claim query and the per-app mutex are
+		// database-wide. One aborted run used to be enough to leave a row that
+		// no later run could ever claim past.
+		await wipeDeployments().catch(() => {});
 		if (tenant) await harness.wipeTenant(tenant);
 	});
 
@@ -138,10 +144,35 @@ describe.skipIf(!testUrl)("durable deploy queue (postgres)", () => {
 		return row;
 	};
 
+	/**
+	 * Remove everything this suite created, and nothing else.
+	 *
+	 * `nixploy_test` is shared and long-lived, so "the tests passed once" is not
+	 * enough — they have to pass against a database this file already ran
+	 * against. Two kinds of leftover used to break that:
+	 *
+	 * - a row still `running` (every claim test leaves one) holds the per-app
+	 *   mutex, which is a database-wide `NOT EXISTS` on `app_name`;
+	 * - a row whose `application_id` was nulled or whose fixture is gone is not
+	 *   matched by an `application_id` filter at all.
+	 *
+	 * Deleting by `app_name` as well as by application covers both: every name
+	 * this suite uses carries the run's random suffix (`appNameOne`,
+	 * `appNameTwo` and the `-pr-<n>` previews derived from them), so the LIKE
+	 * can never reach a concurrent run's rows.
+	 */
 	const wipeDeployments = async () => {
 		await dbModule.db
 			.delete(schema.deployments)
-			.where(inArray(schema.deployments.applicationId, [tenant.applicationId, otherApplicationId]));
+			.where(
+				or(
+					inArray(schema.deployments.applicationId, [tenant.applicationId, otherApplicationId]),
+					like(schema.deployments.appName, `%${suffix}%`),
+				),
+			);
+		await dbModule.db
+			.delete(schema.previewDeployments)
+			.where(like(schema.previewDeployments.appName, `%${suffix}%`));
 		// The test database is shared: another agent running the suite at the
 		// same time can wipe rows underneath us. Re-assert the fixture instead
 		// of failing with a confusing "row is not claimable".
@@ -160,7 +191,11 @@ describe.skipIf(!testUrl)("durable deploy queue (postgres)", () => {
 		}
 	};
 
+	// Both ends: `beforeEach` so a test starts from a known line, `afterEach` so
+	// the LAST test of the file does not leave a `running` row behind for the
+	// next run of this same file.
 	beforeEach(wipeDeployments);
+	afterEach(wipeDeployments);
 
 	it("claims the oldest queued row for a server and flips it to running", async () => {
 		const base = Date.now();

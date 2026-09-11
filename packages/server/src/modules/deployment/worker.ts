@@ -19,6 +19,7 @@ import {
 	resyncComposeDomains,
 	runsOnPrimary,
 } from "../compose/service";
+import { invalidateDockerListings } from "../docker/containers";
 import { parsePreviewSourceRef } from "../preview/source-ref";
 import { syncPreviewTraefik } from "../preview/traefik";
 import { DEFAULT_CONTAINER_PORT, writeAppTraefikConfig } from "../traefik/config-writer";
@@ -35,6 +36,7 @@ import {
 } from "./hooks";
 import { DeploymentLogger } from "./logger";
 import { ensureEnvironmentNetwork } from "./network";
+import { publishDeploymentStatusDetached } from "./notify";
 import type { CommitInfo } from "./provenance";
 import { pushBuiltImage, resolvePushRegistry } from "./push";
 import {
@@ -776,7 +778,14 @@ async function processJob(job: QueueJob): Promise<void> {
 				terminalStatus === "done" ? "running" : terminalStatus === "cancelled" ? "idle" : "error",
 			).catch(() => {});
 			logger?.close();
+			// What runs on that server just changed: drop its cached `docker ps`
+			// / `service ls` listings so the Docker tab's next read is truthful
+			// instead of up to 10 s stale (architecture audit #14).
+			invalidateDockerListings(job.serverId);
 			deploymentEvents.emit("finish", { deploymentId: job.deploymentId, status: terminalStatus });
+			// Cross-process: in the split this is what closes the panel's
+			// `/ws/deployment` stream and updates every open dashboard.
+			publishDeploymentStatusDetached(job.deploymentId, terminalStatus);
 
 			// Detached on purpose: the queue slot frees as soon as this returns
 			// (architecture audit #16 — a slow notification channel used to add

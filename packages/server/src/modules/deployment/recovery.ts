@@ -2,6 +2,7 @@ import { and, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, compose, deployments, previewDeployments } from "../../db/schema";
 import { deploymentEvents } from "./events";
+import { publishDeploymentStatusDetached } from "./notify";
 import { refreshQueueSnapshot, startQueueLoop } from "./queue";
 
 const INTERRUPTED_MESSAGE = "Interrupted: Nixploy restarted while this deployment was in flight";
@@ -106,6 +107,7 @@ export async function recoverInterruptedDeployments(): Promise<RecoveryResult> {
 
 	for (const { deploymentId } of interrupted) {
 		deploymentEvents.emit("finish", { deploymentId, status: "error" });
+		publishDeploymentStatusDetached(deploymentId, "error");
 	}
 
 	const requeued = await failUnplaceableQueuedRows();
@@ -133,6 +135,7 @@ async function failUnplaceableQueuedRows(): Promise<number> {
 
 	for (const row of orphans) {
 		deploymentEvents.emit("finish", { deploymentId: row.deploymentId, status: "error" });
+		publishDeploymentStatusDetached(row.deploymentId, "error");
 	}
 	return await refreshQueueSnapshot();
 }

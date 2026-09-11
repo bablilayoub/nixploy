@@ -2,16 +2,38 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, compose, deployments, previewDeployments } from "../../db/schema";
 import { generateId } from "../../db/schema/utils";
+import { isPanelRole, isSplitRole } from "../../lib/role";
+import { bestEffort } from "../../utils/best-effort";
 import { deploymentEvents } from "./events";
+import {
+	CANCEL_ACK_GRACE_MS,
+	finalizeUnacknowledgedCancel,
+	notifyDeployCancel,
+	notifyDeployQueued,
+	publishDeploymentStatusDetached,
+} from "./notify";
 import { getDeploymentLogPath } from "./paths";
 import type { DeploymentProvenance, DeploymentTrigger } from "./provenance";
-import { refreshQueueSnapshot, requestCancellation, startQueueLoop } from "./queue";
+import {
+	getQueuePosition,
+	refreshQueueSnapshot,
+	requestCancellation,
+	startQueueLoop,
+} from "./queue";
 // Importing the worker registers its job runner with the queue (side effect).
 import "./worker";
 
 export { dockerCleanup } from "./cleanup";
 export type { DeploymentFinishEvent, DeploymentLogEvent, DeploymentStatus } from "./events";
 export { deploymentEvents } from "./events";
+export type { ClientFrame, PlatformEvent } from "./notify";
+export {
+	onPlatformEvent,
+	publishServiceStatusCorrections,
+	startEventBridge,
+	stopEventBridge,
+	toClientFrame,
+} from "./notify";
 export {
 	applicationReadiness,
 	composeReadiness,
@@ -178,12 +200,20 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
 
 	for (const id of superseded) {
 		deploymentEvents.emit("finish", { deploymentId: id, status: "cancelled" });
+		publishDeploymentStatusDetached(id, "cancelled");
 	}
 	startQueueLoop();
 	deploymentEvents.emit("enqueued", { deploymentId, serverId });
+	// Cross-process wake-up: in role `panel` the claim loop lives in
+	// nixploy-worker, which the in-process `enqueued` event cannot reach. A lost
+	// NOTIFY only costs latency — the loop's slow poll is the fallback.
+	void notifyDeployQueued({ deploymentId, serverId });
 	// So the caller's very next `deployment.byApplication` already renders
 	// "Queued (#n)" instead of waiting for the loop's own refresh.
 	await refreshQueueSnapshot().catch(() => {});
+	publishDeploymentStatusDetached(deploymentId, "queued", {
+		queuePosition: getQueuePosition(deploymentId),
+	});
 	return deploymentId;
 }
 
@@ -193,6 +223,14 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
  * uses, so exactly one of "cancelled" and "claimed" can win. A row the worker
  * is already building has its child processes killed and is finalized by the
  * worker.
+ *
+ * Split-role semantics (`NIXPLOY_ROLE=panel`): the panel holds no child-process
+ * handles, so for a `running` row it publishes a cancel request on
+ * `nixploy_deploy_cancel` and returns. The WORKER kills the build and writes
+ * `cancelled` — one writer, no race. If the worker never acknowledges (it
+ * crashed, or the row is a zombie from an earlier crash) the panel finalizes
+ * the row itself after {@link CANCEL_ACK_GRACE_MS}; that UPDATE is guarded on
+ * `status = 'running'`, so a worker that finished in the meantime wins.
  */
 export async function cancelDeployment(deploymentId: string): Promise<void> {
 	const deployment = await db.query.deployments.findFirst({
@@ -212,12 +250,27 @@ export async function cancelDeployment(deploymentId: string): Promise<void> {
 		.returning({ deploymentId: deployments.deploymentId });
 	if (dequeued.length > 0) {
 		deploymentEvents.emit("finish", { deploymentId, status: "cancelled" });
+		publishDeploymentStatusDetached(deploymentId, "cancelled");
 		return;
 	}
 
 	// Running: the worker observes the cancellation, finalizes the row and
 	// emits "finish" itself.
 	if (requestCancellation(deploymentId) === "running") return;
+
+	// Running somewhere else. In the split that "somewhere else" is the worker
+	// process — ask it over NOTIFY and let it be the single writer, with a
+	// bounded fallback for the case where nobody is building this row.
+	if (isSplitRole() && isPanelRole()) {
+		await notifyDeployCancel(deploymentId);
+		const timer = setTimeout(() => {
+			void bestEffort("Unacknowledged cancel fallback", () =>
+				finalizeUnacknowledgedCancel(deploymentId),
+			);
+		}, CANCEL_ACK_GRACE_MS);
+		timer.unref?.();
+		return;
+	}
 
 	// `running` in the database but not in this process (a row left over by a
 	// crash the boot recovery has not reached yet): finalize directly so the
@@ -228,4 +281,5 @@ export async function cancelDeployment(deploymentId: string): Promise<void> {
 		.where(and(eq(deployments.deploymentId, deploymentId), eq(deployments.status, "running")))
 		.returning({ deploymentId: deployments.deploymentId });
 	deploymentEvents.emit("finish", { deploymentId, status: "cancelled" });
+	publishDeploymentStatusDetached(deploymentId, "cancelled");
 }

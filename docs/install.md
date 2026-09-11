@@ -124,6 +124,9 @@ installer cannot see that.
    rotation and a 60 s stop grace period so a checkpoint can finish.
    `nixploy` and `nixploy-postgres` are attached to `nixploy-internal` only;
    `nixploy-traefik` is on both overlays
+7. With `--split-worker`, also creates `nixploy-worker` (same image, same
+   `.env`, same config volume and docker socket, `nixploy-internal` only) and
+   sets `NIXPLOY_ROLE=panel` on `nixploy` — see [Split worker](#split-worker)
 
 The script is **idempotent** — safe to re-run. A re-run keeps the existing
 secrets, `BETTER_AUTH_URL`, the dashboard router (`00-nixploy-dashboard.yml`)
@@ -180,6 +183,8 @@ the panel's runtime environment (that is the next section).
 | `NIXPLOY_PORT` | unset | Additionally host-publish the panel on this port (plain HTTP, all interfaces — Swarm host-mode cannot bind loopback only) |
 | `NIXPLOY_CONFIG_DIR` | `/etc/nixploy` | Host data dir. Inside the container it is always `/etc/nixploy` |
 | `NIXPLOY_MEMORY_LIMIT` | `2g` | Memory limit of the `nixploy` service (`512m` reserved). Raise on hosts that build large images in the panel |
+| `NIXPLOY_SPLIT_WORKER` | `0` | `1` (or `--split-worker`) also creates `nixploy-worker` — see [Split worker](#split-worker) |
+| `NIXPLOY_WORKER_MEMORY` | `2g` | Memory limit of the `nixploy-worker` service (`512m` reserved), when it exists |
 | `POSTGRES_VERSION` | `17-alpine` | Postgres image tag |
 | `TRAEFIK_VERSION` | `v3.5.0` | Traefik image tag |
 | `NIXPLOY_SKIP_PORT_CHECK` | `0` | Do not refuse to install when :80/:443 are taken |
@@ -189,6 +194,56 @@ the panel's runtime environment (that is the next section).
 | `NIXPLOY_REPO` / `NIXPLOY_BRANCH` | `bablilayoub/nixploy` / the image tag | Source for local builds |
 | `NIXPLOY_GITHUB_TOKEN` | — | Fine-grained PAT (Contents: Read) for a private repo. `GITHUB_TOKEN` also works. Needed under `sudo`, which does not see your user gitconfig |
 | `NIXPLOY_RENDER_TRAEFIK_ONLY` | `0` | Print the static `traefik.yml` the script writes and exit (CI drift check — no root, no Docker) |
+
+## Split worker
+
+By default Nixploy is **one process**: the UI, the API, the websockets, the
+deploy queue and every cron share a single Node process and a single memory
+limit. That is the right shape for most installs, and it stays the default.
+
+`--split-worker` moves the background half into its own Swarm service:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh \
+  | sudo bash -s -- --split-worker
+
+# equivalently, for the piped one-liner:
+NIXPLOY_SPLIT_WORKER=1 curl -fsSL …/install.sh | sudo bash
+```
+
+| | `nixploy` (`NIXPLOY_ROLE=panel`) | `nixploy-worker` (`NIXPLOY_ROLE=worker`) |
+| --- | --- | --- |
+| Serves | UI, tRPC, REST, MCP, `/ws/*`, webhooks | `/api/health`, `/api/ready`, `/api/version` on `:3001` |
+| Runs | enqueues deploys, writes per-domain Traefik YAML | the deploy claim loop, boot recovery, every cron, the Traefik bootstrap |
+| Memory | `NIXPLOY_MEMORY_LIMIT` (default `2g`) | `NIXPLOY_WORKER_MEMORY` (default `2g`) |
+| Networks | `nixploy-internal` | `nixploy-internal` |
+| Mounts | `/var/run/docker.sock`, the config dir | `/var/run/docker.sock`, the config dir |
+| Migrations | skipped (503 on `/api/ready` until the schema matches) | runs them |
+
+Why you might want it:
+
+- **Updating the panel stops interrupting builds.** A `panel` restart closes
+  websockets and exits in milliseconds; the worker keeps building.
+- **Separate memory ceilings.** A build that eats 2 GB can no longer OOM the UI,
+  and you can give the worker more than the panel (or the reverse).
+- **Smaller blast radius.** A crash in a cron takes the worker, not the panel.
+
+What it costs: a second container, and `docker service logs -f nixploy-worker`
+is where deploy and cron output now lives. The two halves coordinate over
+Postgres `LISTEN/NOTIFY` — no broker, no extra port, no schema change (see
+[deployment-flow.md](./deployment-flow.md) → "Process roles and the worker
+service").
+
+`update.sh` rolls **both** services when the worker exists (worker first — it
+owns the migrations), `uninstall.sh` removes both, and re-running `install.sh`
+keeps the split without repeating the flag. To collapse back to one process:
+
+```bash
+sudo bash install.sh --no-split-worker
+```
+
+The panel is set back to `NIXPLOY_ROLE=all` before the worker service is
+removed, so nothing is ever unowned in between.
 
 ## Runtime environment
 
@@ -225,6 +280,7 @@ Stored in `<config>/.env` (mode 600) and put on the service at create time.
 
 | Variable | Default | What it does |
 | --- | --- | --- |
+| `NIXPLOY_ROLE` | `all` | `all` \| `panel` \| `worker` — what this process owns (see [Split worker](#split-worker)). Set by the installer; do not set it by hand on a single-process install |
 | `TRUSTED_PROXIES` | `1` (set by the installer) | Trust `X-Forwarded-For` for client IPs. Without it every client IP is "unknown" and IP-based rate limits degrade to one shared bucket |
 | `TZ` | UTC | Process timezone. **Every cron runs in it** — backups, schedules, update checks, platform alerts. The image ships `tzdata`, so real zone names work |
 | `LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error` |
@@ -312,10 +368,11 @@ curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/uninstall.
 
 It prints exactly what it will do and asks before touching anything.
 
-- **Default:** removes the three platform services and the two platform
-  overlays. The Postgres volume (`nixploy-postgres-data`) and the config
-  directory are **kept**, so re-running `install.sh` on the same host brings
-  the instance back as it was.
+- **Default:** removes the platform services (`nixploy`, `nixploy-worker` when
+  a split install created it, `nixploy-postgres`, `nixploy-traefik`) and the
+  two platform overlays. The Postgres volume (`nixploy-postgres-data`) and the
+  config directory are **kept**, so re-running `install.sh` on the same host
+  brings the instance back as it was.
 - `--purge`: also deletes the volume and the config directory (secrets,
   Let's Encrypt certificates, SSH keys). Irreversible, needs an interactive
   terminal and the typed phrase `delete nixploy data`.
@@ -342,6 +399,10 @@ curl -fsSL https://github.com/bablilayoub/nixploy/releases/latest/download/updat
 
 Keeps secrets, Postgres data, ACME certs, and Traefik routes. Migrations run on
 boot. Or use **Settings → Platform → Updates** in the UI.
+
+On a [split install](#split-worker) both services are rolled: `nixploy-worker`
+first, because it is the half that runs the migrations, then `nixploy` — whose
+`/api/ready` keeps it out of the service VIP until the schema matches.
 
 The roll is `stop-first` with `--update-failure-action rollback`: the image's
 `HEALTHCHECK` (`GET /api/ready`, see [observability.md](./observability.md#platform-health-endpoints))

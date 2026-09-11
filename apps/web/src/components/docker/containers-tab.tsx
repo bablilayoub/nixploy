@@ -44,6 +44,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { useLiveEventsConnected } from "@/hooks/use-live-events";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
@@ -84,9 +85,15 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 	const [terminalOf, setTerminalOf] = useState<ContainerRow | null>(null);
 	const [removing, setRemoving] = useState<ContainerRow | null>(null);
 
+	// `docker.containers` shells out to `docker ps` (or an SSH round-trip for a
+	// managed server), so the old unconditional 30 s poll cost one shell-out per
+	// open tab forever. `/ws/events` invalidates this query whenever a
+	// deployment settles or the reconciler corrects a status; the timer is now
+	// only a fallback for a disconnected socket.
+	const live = useLiveEventsConnected();
 	const containersQuery = useQuery({
 		...trpc.docker.containers.queryOptions({ serverId }),
-		refetchInterval: 30_000,
+		refetchInterval: live ? false : 30_000,
 	});
 
 	const invalidate = () =>

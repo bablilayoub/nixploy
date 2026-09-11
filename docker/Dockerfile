@@ -95,9 +95,13 @@ EXPOSE 3000
 # migration state is broken (see packages/server/src/modules/observability/health.ts);
 # the generous start period covers a cold host where migrations wait for
 # Postgres to come up.
+# $PORT, not a literal: `nixploy-worker` (NIXPLOY_ROLE=worker) serves the same
+# /api/health, /api/ready and /api/version on its own port instead of 3000.
 HEALTHCHECK --interval=15s --timeout=10s --start-period=180s --retries=3 \
-	CMD curl -fsS -o /dev/null http://127.0.0.1:3000/api/ready || exit 1
+	CMD curl -fsS -o /dev/null "http://127.0.0.1:${PORT}/api/ready" || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 # tsx straight from the workspace install (pnpm shim with absolute NODE_PATH).
+# One command for every role: `server.ts` hands over to the worker entry point
+# when NIXPLOY_ROLE=worker, so a split install only sets an env var.
 CMD ["/app/apps/web/node_modules/.bin/tsx", "server.ts"]

@@ -7,6 +7,7 @@ import { handleDeploymentLogs } from "./deployment-logs";
 import { handleDockerLogs } from "./docker-logs";
 import { handleDockerStats } from "./docker-stats";
 import { handleDockerTerminal } from "./docker-terminal";
+import { handlePlatformEvents } from "./events";
 
 export type WsConnectionHandler = (
 	ws: WebSocket,
@@ -30,6 +31,7 @@ interface TrackedSocket extends WebSocket {
 
 const routes: Record<string, WsConnectionHandler> = {
 	"/ws/deployment": handleDeploymentLogs,
+	"/ws/events": handlePlatformEvents,
 	"/ws/logs": handleDockerLogs,
 	"/ws/stats": handleDockerStats,
 	"/ws/terminal": handleDockerTerminal,
@@ -41,6 +43,7 @@ const servers = new Set<WebSocketServer>();
 /**
  * Attach all Nixploy websocket endpoints to the shared HTTP server:
  *   /ws/deployment?deploymentId=  — replay + live-follow of deploy logs
+ *   /ws/events                    — org-scoped deployment/queue/status pushes
  *   /ws/logs?appName=&serverId=   — `docker logs -f` of the app's container
  *   /ws/stats?appName=&serverId=  — 1s cpu/memory/network frames
  *   /ws/terminal?appName=&serverId= — interactive shell in the container

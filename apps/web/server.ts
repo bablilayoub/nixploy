@@ -3,176 +3,25 @@ import { createLogger } from "@nixploy/server/lib/logger";
 import { closeWebSocketServer, setupWebSocketServer } from "@nixploy/server/ws";
 import next from "next";
 // Stateful server modules are imported by relative path on purpose (same
-// module instance as the tRPC/cron graph under tsx) — see initBackgroundSchedules.
-import { shutdownGraceMs, stopScheduledJobs } from "../../packages/server/src/lib/shutdown";
-import { drainQueue } from "../../packages/server/src/modules/deployment/queue";
+// module instance as the tRPC/cron graph under tsx) — see startBackgroundWork.
+import {
+	describeProcessRole,
+	isUnknownProcessRole,
+	isWorkerRole,
+	processRole,
+} from "../../packages/server/src/lib/role";
+import { shutdownGraceMs } from "../../packages/server/src/lib/shutdown";
+import { startEventBridge } from "../../packages/server/src/modules/deployment/notify";
 import { PEER_IP_HEADER } from "../../packages/server/src/utils/rate-limit";
+// Importing worker.ts starts nothing — it only exports the background half
+// (claim loop, crons, boot recovery, Traefik) that role `all` runs in-process
+// and role `worker` runs on its own.
+import { runWorkerProcess, startBackgroundWork, stopBackgroundWork } from "./worker";
 
 const log = createLogger("server");
 
 const describeError = (error: unknown): Record<string, unknown> =>
 	error instanceof Error ? { error: error.message, stack: error.stack } : { error: String(error) };
-
-/**
- * Boot the cron registries (database/volume backups + container schedules).
- * The @nixploy/server package does not export a `./modules/*` subpath, so we
- * import the source files directly — tsx resolves them to the same realpath
- * as the package specifiers used by the tRPC routers, keeping a single module
- * instance. Failures are logged but must not prevent the web server from
- * starting.
- */
-async function initBackgroundSchedules() {
-	const jobs: Array<[string, () => Promise<unknown>]> = [
-		[
-			"backup schedules",
-			async () => {
-				const { initBackupSchedules } = await import(
-					"../../packages/server/src/modules/backups/scheduler"
-				);
-				await initBackupSchedules();
-			},
-		],
-		[
-			"service schedules",
-			async () => {
-				const { initSchedules } = await import("../../packages/server/src/modules/schedules/index");
-				await initSchedules();
-			},
-		],
-		[
-			"metrics history",
-			async () => {
-				const { initMetricsHistory } = await import(
-					"../../packages/server/src/modules/monitoring/history"
-				);
-				initMetricsHistory();
-			},
-		],
-		[
-			"status reconciler",
-			async () => {
-				const { initStatusReconciler } = await import(
-					"../../packages/server/src/modules/deployment/reconciler"
-				);
-				initStatusReconciler();
-			},
-		],
-		[
-			"deployment maintenance",
-			async () => {
-				const { initDeploymentMaintenance } = await import(
-					"../../packages/server/src/modules/deployment/maintenance"
-				);
-				initDeploymentMaintenance();
-			},
-		],
-		[
-			"update checker",
-			async () => {
-				const { initUpdateChecker } = await import(
-					"../../packages/server/src/modules/updates/scheduler"
-				);
-				await initUpdateChecker();
-			},
-		],
-		[
-			"docker image auto-update",
-			async () => {
-				const { initImageAutoUpdate } = await import(
-					"../../packages/server/src/modules/deployment/auto-update"
-				);
-				await initImageAutoUpdate();
-			},
-		],
-		[
-			"platform alerts",
-			async () => {
-				const { startPlatformAlerts } = await import(
-					"../../packages/server/src/modules/monitoring/platform-alerts"
-				);
-				startPlatformAlerts();
-			},
-		],
-		[
-			"uptime probes",
-			async () => {
-				const { initUptimeProbes } = await import(
-					"../../packages/server/src/modules/observability/index"
-				);
-				await initUptimeProbes();
-			},
-		],
-	];
-	for (const [label, start] of jobs) {
-		try {
-			await start();
-			console.log(`▲ Initialized ${label}`);
-		} catch (error) {
-			console.error(`Failed to initialize ${label}:`, error);
-		}
-	}
-}
-
-/**
- * The queue itself lives in Postgres, but the BUILDS do not: anything that was
- * running when this process last stopped died with it. Fail those rows before
- * serving traffic (they would otherwise show as "running" forever, block the
- * status reconciler and hold the queue's per-app mutex). Rows still `queued`
- * are left exactly as they are — the claim loop picks them up in order, which
- * is what makes the backlog survive a restart.
- */
-async function recoverDeployments() {
-	try {
-		const { recoverInterruptedDeployments } = await import(
-			"../../packages/server/src/modules/deployment/recovery"
-		);
-		const { interrupted, requeued } = await recoverInterruptedDeployments();
-		if (interrupted > 0) {
-			console.log(`▲ Marked ${interrupted} interrupted deployment(s) as failed`);
-		}
-		if (requeued > 0) {
-			console.log(`▲ ${requeued} queued deployment(s) waiting — the worker will claim them`);
-		}
-	} catch (error) {
-		console.error("Failed to recover interrupted deployments:", error);
-	}
-}
-
-/**
- * Bring up the Traefik reverse proxy on boot so local dev gets a working
- * proxy without manual setup. Skipped when NIXPLOY_DISABLE_TRAEFIK_BOOT is
- * set or the docker socket is unreachable (e.g. UI-only dev); failures are
- * logged but never prevent the web server from starting.
- */
-async function initTraefik() {
-	if (process.env.NIXPLOY_DISABLE_TRAEFIK_BOOT) {
-		console.log("▲ Traefik boot skipped (NIXPLOY_DISABLE_TRAEFIK_BOOT is set)");
-		return;
-	}
-	try {
-		const { execAsync } = await import("../../packages/server/src/utils/exec");
-		await execAsync("docker info", { timeout: 10_000 });
-	} catch {
-		console.log("▲ Traefik boot skipped (docker socket unreachable)");
-		return;
-	}
-	const TRAEFIK_BOOT_TIMEOUT_MS = 45_000;
-	try {
-		const { ensureTraefikSetup } = await import("../../packages/server/src/modules/traefik/setup");
-		await Promise.race([
-			ensureTraefikSetup(),
-			new Promise<never>((_, reject) => {
-				setTimeout(
-					() => reject(new Error(`Traefik boot timed out after ${TRAEFIK_BOOT_TIMEOUT_MS}ms`)),
-					TRAEFIK_BOOT_TIMEOUT_MS,
-				);
-			}),
-		]);
-		console.log("▲ Traefik reverse proxy ready");
-	} catch (error) {
-		console.error("Failed to initialize Traefik:", error);
-	}
-}
 
 /**
  * Crash guard. One stray rejection in a cron or WS handler used to take the
@@ -203,6 +52,11 @@ const SHUTDOWN_BACKSTOP_EXTRA_MS = 30_000;
  *      ("Interrupted by panel shutdown"),
  *   5. exit 0. Queued rows stay `queued` and are re-enqueued at next boot.
  * A second signal forces an immediate exit.
+ *
+ * In role `panel` steps 1, 2 and 4 belong to `nixploy-worker` instead
+ * (`stopBackgroundWork` is a no-op there — this process owns no queue and no
+ * cron), so a panel restart closes sockets and exits in milliseconds while
+ * builds keep running. That is the whole point of the split.
  */
 function registerShutdownHandlers(server: Server) {
 	let shuttingDown = false;
@@ -214,7 +68,7 @@ function registerShutdownHandlers(server: Server) {
 		}
 		shuttingDown = true;
 		const graceMs = shutdownGraceMs();
-		log.info(`Received ${signal}: shutting down gracefully`, { graceMs });
+		log.info(`Received ${signal}: shutting down gracefully`, { graceMs, role: processRole() });
 		const backstop = setTimeout(() => {
 			log.error("Shutdown backstop reached — exiting");
 			process.exit(1);
@@ -223,20 +77,29 @@ function registerShutdownHandlers(server: Server) {
 
 		try {
 			// Flip the queue to draining first (synchronous) so nothing new
-			// starts while the rest winds down; the wait happens in step 4.
-			const drained = drainQueue({ graceMs });
+			// starts while the rest winds down; the wait happens below.
+			const background = isWorkerRole() ? stopBackgroundWork(graceMs) : null;
 			server.close();
 			server.closeIdleConnections();
 			log.info("HTTP server stopped accepting connections");
 
-			const crons = await stopScheduledJobs();
-			log.info("Scheduled jobs stopped", { jobs: crons.jobs, timedOut: crons.timedOut });
-
 			const sockets = await closeWebSocketServer();
 			log.info("WebSocket server closed", { connections: sockets });
 
-			const result = await drained;
-			log.info("Deploy queue drained", { ...result });
+			if (background) {
+				const result = await background;
+				log.info("Scheduled jobs stopped", { ...result.crons });
+				log.info("Deploy queue drained", { ...result.queue });
+			} else {
+				const { stopEventBridge } = await import(
+					"../../packages/server/src/modules/deployment/notify"
+				);
+				await stopEventBridge();
+				// Role `panel` still talks to managed servers (log/stats/terminal
+				// streams) over the pooled SSH connections; close them too.
+				const { closeAllSshConnections } = await import("../../packages/server/src/utils/ssh-pool");
+				closeAllSshConnections();
+			}
 
 			log.info("Shutdown complete");
 			process.exit(0);
@@ -261,6 +124,19 @@ const app = next({ dev, hostname: listenHost, port });
 const handle = app.getRequestHandler();
 
 async function main() {
+	if (isUnknownProcessRole(process.env.NIXPLOY_ROLE)) {
+		console.warn(
+			`▲ Unknown NIXPLOY_ROLE "${process.env.NIXPLOY_ROLE}" — falling back to "all" (valid: all, panel, worker)`,
+		);
+	}
+	// The production image has one CMD. `NIXPLOY_ROLE=worker` is all it takes
+	// to turn the same container into nixploy-worker: no Next, no HTTP surface
+	// beyond the health endpoints.
+	if (processRole() === "worker") {
+		await runWorkerProcess();
+		return;
+	}
+
 	registerProcessGuards();
 	await app.prepare();
 
@@ -277,15 +153,22 @@ async function main() {
 	});
 	registerShutdownHandlers(server);
 
-	// WebSocket endpoints: /ws/deployment, /ws/logs, /ws/stats, /ws/terminal.
+	// WebSocket endpoints: /ws/deployment, /ws/events, /ws/logs, /ws/stats, /ws/terminal.
 	setupWebSocketServer(server);
 
-	await recoverDeployments();
-	await initBackgroundSchedules();
-	await initTraefik();
+	if (isWorkerRole()) {
+		// Role `all`: the deploy queue, the crons, boot recovery and the Traefik
+		// bootstrap run right here, exactly as they always have.
+		await startBackgroundWork();
+	} else {
+		// Role `panel`: nixploy-worker owns all of that. This process still has
+		// to LISTEN so deployment transitions published there reach `/ws/events`
+		// and close `/ws/deployment` log streams.
+		await startEventBridge();
+	}
 
 	server.listen(port, listenHost, () => {
-		console.log(`▲ Nixploy ready on http://${listenHost}:${port}`);
+		console.log(`▲ Nixploy ready on http://${listenHost}:${port} — ${describeProcessRole()}`);
 		// Fire-and-forget: tell channels subscribed to `nixployRestart` we are up.
 		void import("../../packages/server/src/modules/notifications/index").then((m) =>
 			m.emitInstanceRestartNotification(),

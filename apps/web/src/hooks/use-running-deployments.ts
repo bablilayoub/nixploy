@@ -5,6 +5,7 @@ import type { inferRouterOutputs } from "@trpc/server";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo } from "react";
 
+import { useLiveEventsConnected } from "@/hooks/use-live-events";
 import { confirmDiscardUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -20,7 +21,12 @@ export type RunningDeploymentScope = {
 
 /** Newest org-wide rows the shared query watches; in-flight jobs are always at the top. */
 const RECENT_LIMIT = 25;
-/** Poll cadence while at least one deployment is queued or running. */
+/**
+ * Fallback poll cadence: used ONLY while the `/ws/events` socket is down and
+ * something is in flight. With the socket up, every transition arrives as a
+ * push and `use-live-events.ts` invalidates this query — no timer at all
+ * (architecture audit #14: the 3 s poll used to run on every tab forever).
+ */
 const POLL_MS = 3_000;
 
 export const isActiveDeployment = (status: string): boolean =>
@@ -92,9 +98,11 @@ const inFlight = new Map<string, RecentDeployment>();
 export function useRunningDeployments(scope: RunningDeploymentScope = {}) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const live = useLiveEventsConnected();
 	const query = useQuery({
 		...trpc.deployment.recent.queryOptions({ limit: RECENT_LIMIT }),
 		refetchInterval: (state) =>
+			!live &&
 			(state.state.data?.deployments ?? []).some((deployment) =>
 				isActiveDeployment(deployment.status),
 			)

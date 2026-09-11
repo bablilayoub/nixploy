@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useLiveEventsConnected } from "@/hooks/use-live-events";
 import { describeTriggeredBy, firstLine, TRIGGER_LABELS } from "@/hooks/use-running-deployments";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { toastError } from "@/lib/describe-error";
@@ -167,6 +168,7 @@ export function DeploymentHistory({
 }: DeploymentHistoryProps) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const live = useLiveEventsConnected();
 	const router = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
@@ -221,7 +223,10 @@ export function DeploymentHistory({
 			{ applicationId: serviceId, limit: PAGE_SIZE },
 			{
 				getNextPageParam: (lastPage) => lastPage.nextCursor,
+				// Fallback only: with `/ws/events` up, every transition of these
+				// rows arrives as a push and invalidates the list.
 				refetchInterval: (query) => {
+					if (live) return false;
 					const pages = query.state.data?.pages ?? [];
 					const hasActive = pages.some((page) =>
 						page.deployments.some((deployment) => isActive(deployment.status)),
@@ -238,7 +243,10 @@ export function DeploymentHistory({
 			{ composeId: serviceId, limit: PAGE_SIZE },
 			{
 				getNextPageParam: (lastPage) => lastPage.nextCursor,
+				// Fallback only: with `/ws/events` up, every transition of these
+				// rows arrives as a push and invalidates the list.
 				refetchInterval: (query) => {
+					if (live) return false;
 					const pages = query.state.data?.pages ?? [];
 					const hasActive = pages.some((page) =>
 						page.deployments.some((deployment) => isActive(deployment.status)),

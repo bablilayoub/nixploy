@@ -141,6 +141,148 @@ service above the grace (the installer sets 90 s) or Docker kills the process
 mid-finalization. `unhandledRejection` is logged and survived;
 `uncaughtException` is logged and exits `1`.
 
+Each role drains what it owns. In role `panel` there is no queue and no cron to
+stop, so a restart closes sockets and exits in milliseconds while builds keep
+running in `nixploy-worker`; in role `worker` (`apps/web/worker.ts`) the same
+sequence runs without the websocket step. That is the practical payoff of the
+split: updating the UI no longer interrupts a build.
+
+## Process roles and the worker service
+
+`NIXPLOY_ROLE` (`packages/server/src/lib/role.ts`) decides what a Nixploy
+process owns. One image, three shapes:
+
+| Role | Runs | Does not run |
+| --- | --- | --- |
+| `all` (default) | Next + tRPC + REST + MCP + WebSockets, boot recovery, the claim loop, every cron, the Traefik bootstrap | — |
+| `panel` | Next + tRPC + REST + MCP + WebSockets. Still *enqueues* deploys and still writes per-domain Traefik YAML on domain mutations | no claim loop, no crons, no boot recovery |
+| `worker` | boot recovery, the claim loop, every cron (backups, service schedules, metrics, uptime, reconciler, maintenance, update checker, image auto-update, platform alerts), the Traefik bootstrap, and a tiny HTTP listener on `PORT` (default 3001) serving `/api/health`, `/api/ready`, `/api/version` | no Next, no tRPC, no REST, no WebSockets |
+
+The default install is unchanged: with no `NIXPLOY_ROLE` set, `all` behaves
+exactly as the single process always did. An unknown value falls back to `all`
+and logs a warning once — a typo in a Swarm env var must not take the panel
+down.
+
+Entry points: `apps/web/server.ts` for `all`/`panel`, `apps/web/worker.ts` for
+`worker`. The production image has ONE command (`tsx server.ts`) and
+`server.ts` hands over to `worker.ts` when the role says so, so a split install
+only sets an environment variable.
+
+**Traefik provisioning belongs to the worker.** It already writes dynamic YAML
+on every deploy and needs the docker socket to `docker service create` the
+proxy. The panel also mounts the config directory — it writes domain YAML on
+domain mutations — but it never provisions. In production both are moot:
+`install.sh` owns the proxy and sets `NIXPLOY_DISABLE_TRAEFIK_BOOT=1` on both
+services.
+
+### Channels
+
+The split needs a bus, and Postgres already holds the queue, so it is the bus:
+`LISTEN/NOTIFY`, no schema change, no migration, no broker. Notifications are
+sent from application code **after** the transaction that made the fact true —
+never from a trigger. The listener owns a dedicated `max: 1` connection
+(`packages/server/src/db/listen.ts`); a session that has issued `LISTEN` can
+never go back to the pool.
+
+| Channel | Sent by | Received by | Payload |
+| --- | --- | --- | --- |
+| `nixploy_deploy_queued` | the panel, after `queueDeployment` commits | the worker's claim loop (→ `pokeQueue()`) | `{ deploymentId, serverId }` |
+| `nixploy_deploy_cancel` | the panel, in `cancelDeployment` for a `running` row | the worker (→ `requestCancellation`) | `{ deploymentId }` |
+| `nixploy_events` | whichever half made the transition | both halves | `{ o: <origin>, e: <frame> }` |
+
+`nixploy_events` carries the frames `/ws/events` serves: `deployment` (every
+`queued → running → done|error|cancelled` transition), `queue` (an
+organization's queued depth) and `service-status` (a reconciler correction).
+Every frame carries `organizationId` server-side and it is stripped before the
+frame reaches a socket. `o` is a per-process id: both halves listen on the
+channel, so a publisher gets its own notification back — it already emitted the
+event locally, and without the origin check the panel invalidated every query
+twice per transition.
+
+A lost notification only costs latency, never correctness: the claim loop keeps
+its slow poll (2 s while rows wait, 15 s when the line is empty) as the
+fallback, and `subscribe()` re-pokes the loop after a reconnect.
+
+In role `all` none of this runs. The in-process `deploymentEvents` emitter is
+the bus and `publishPlatformEvent` only emits locally.
+
+### Cancellation across the split
+
+`cancelDeployment` (`modules/deployment/index.ts`) has one writer per case:
+
+1. **Row still `queued`** — the panel finalizes it itself with a conditional
+   `UPDATE … WHERE status = 'queued'`, the same guard the claim query uses, so
+   exactly one of "cancelled" and "claimed" can win. No NOTIFY needed.
+2. **Row `running`, built in this process** (role `all`) — unchanged:
+   `requestCancellation` kills the child processes and the worker finalizes.
+3. **Row `running`, built in the worker** (role `panel`) — the panel publishes
+   on `nixploy_deploy_cancel` and returns. The **worker** kills the build and
+   writes `cancelled`; it is the only writer, so there is no race with a
+   pipeline that finishes in the same instant (a `done` that lands first simply
+   wins, exactly as it does in role `all`).
+4. **Row `running` but nobody is building it** (a zombie left by a crash) — the
+   panel's NOTIFY reaches no one, so after `CANCEL_ACK_GRACE_MS` (8 s) it
+   finalizes the row itself. That UPDATE is guarded on `status = 'running'`, so
+   a worker that finished meanwhile still wins. This is the repair boot
+   recovery would do, just sooner.
+
+### Log streaming across the split
+
+Deployment **log chunks never travel over NOTIFY**: the payload cap is 8000
+bytes and a build log is megabytes. The log file on the shared config volume
+stays the source of truth. `/ws/deployment` keeps a byte offset and sends only
+what was appended since; what wakes it depends on the role:
+
+- role `all` / `worker` — the in-process `log` event `DeploymentLogger.write`
+  emits (unchanged, no polling);
+- role `panel` — a 500 ms `fs.stat` of the log file, because the writer is in
+  another process. It is a stat, and the reader still only ships the delta.
+
+The `finish` frame that closes the stream arrives over `nixploy_events` and is
+re-emitted on the panel's local `deploymentEvents`, so `/ws/deployment` itself
+needed no change.
+
+### Health endpoints
+
+Both halves answer `/api/health` (liveness, no dependencies) and `/api/ready`
+(Postgres, docker socket, migration state, queue, Traefik, platform alerts →
+503 with the failing checks). The worker serves them from a plain
+`node:http` server on `PORT`; the panel serves them from its Next route
+handlers. The image `HEALTHCHECK` probes `http://127.0.0.1:$PORT/api/ready`,
+so one healthcheck definition covers both services.
+
+**Migrations** run in the role that owns the background work — `all` and
+`worker` — and are skipped for `panel` (`docker/entrypoint.sh`). Two
+containers racing the same per-file transaction on every update is the failure
+this avoids, and it needs no coordination beyond the healthcheck that already
+exists: the panel's `/api/ready` reports `migrations: behind` → 503 until the
+worker has migrated, and Swarm keeps a panel task out of the service VIP until
+it passes. `update.sh` rolls the worker first for the same reason.
+
+### Running a split install
+
+```bash
+# opt in (or NIXPLOY_SPLIT_WORKER=1 in the installer's environment)
+curl -fsSL …/install.sh | sudo bash -s -- --split-worker
+```
+
+That creates `nixploy-worker` (same image, same `.env`, same config volume and
+docker socket, `nixploy-internal` only, its own `NIXPLOY_WORKER_MEMORY` limit)
+and sets `NIXPLOY_ROLE=panel` on `nixploy`. `update.sh` rolls both when the
+worker exists, and `uninstall.sh` removes it. `--no-split-worker` collapses
+back to one process. Locally:
+
+```bash
+cd apps/web
+NIXPLOY_ROLE=worker PORT=3001 pnpm exec tsx worker.ts   # or: pnpm worker
+NIXPLOY_ROLE=panel  PORT=3000 pnpm exec tsx server.ts
+```
+
+The in-memory pieces that remain process-local — slot accounting, rate
+limiters, the reconciler's overlap flag — all live in the worker now, which is
+why multi-replica `nixploy-worker` is still unsupported by design. The panel,
+by contrast, no longer owns anything stateful beyond its websockets.
+
 ## Application deploy pipeline (`worker.ts`)
 
 1. **Context** (`context.ts`): load the application + tenancy, resolve env
