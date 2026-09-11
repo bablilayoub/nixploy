@@ -26,6 +26,12 @@
 #   NIXPLOY_LETSENCRYPT_EMAIL    Replace the ACME email in traefik.yml (default: keep)
 #   TRAEFIK_VERSION              Traefik image tag             (default: v3.5.0)
 #   NIXPLOY_UPDATE_TRAEFIK       1 = also pull & force Traefik  (default: 1)
+#   NIXPLOY_UPDATE_POSTGRES_SPEC 1 = apply the pg_isready healthcheck, rotated json-file
+#                                logs and the 60 s stop grace to an older nixploy-postgres
+#                                service (default: 0 — it restarts Postgres once)
+#   TZ                           Process timezone of the panel; every cron runs in it
+#                                (default: UTC). Forwarded when set, like every other
+#                                runtime knob in docs/install.md → "Runtime environment"
 #   NIXPLOY_REFRESH_TRAEFIK_YML  1 = re-render static traefik.yml, keeping the ACME email (default: 1)
 #   NIXPLOY_PRUNE                1 = prune dangling images     (default: 1)
 #   NIXPLOY_PRE_UPDATE_BACKUP    1 = pg_dump the platform DB to <config>/backups before
@@ -292,6 +298,12 @@ pull_app_image() {
 # Static Traefik config. Keep byte-identical to install.sh,
 # packages/server/src/modules/traefik/setup.ts#buildTraefikStaticConfig and
 # docker/traefik/traefik.yml — CI renders all of them and diffs.
+#
+# No entrypoint-level HTTP → HTTPS redirect: it would override every domain's
+# `https` toggle. The panel emits a per-router `redirectScheme` middleware for
+# each `https: true` domain, so `https: false` domains stay plain on :80.
+# Installs made before that change carry the old redirect block in their
+# traefik.yml; re-rendering here removes it (see refresh_traefik_yml).
 render_traefik_static() {
 	local email="${1:-${ACME_EMAIL_UNSET}}"
 	cat <<EOF
@@ -303,12 +315,6 @@ log:
 entryPoints:
   web:
     address: ":80"
-    http:
-      redirections:
-        entryPoint:
-          to: websecure
-          scheme: https
-          permanent: true
   websecure:
     address: ":443"
 providers:
@@ -327,6 +333,10 @@ api:
 EOF
 }
 
+# Set when the rendered static config differs from what is on disk — Traefik
+# reads traefik.yml once at start, so the proxy has to be restarted for it.
+TRAEFIK_YML_CHANGED=0
+
 refresh_traefik_yml() {
 	[ "${NIXPLOY_REFRESH_TRAEFIK_YML}" = "1" ] || {
 		ok "Keeping existing traefik.yml"
@@ -342,9 +352,26 @@ refresh_traefik_yml() {
 		[ "${email}" != "admin@example.com" ] || email=""
 		email="${email:-${ACME_EMAIL_UNSET}}"
 	fi
+	# Marker of the pre-v0.2.0 template: an entrypoint-level redirection block
+	# under entryPoints.web. Nothing else in the file uses `redirections`.
+	local had_redirect=0
+	if [ -f "${file}" ] && grep -q 'redirections:' "${file}" 2>/dev/null; then
+		had_redirect=1
+	fi
 	# Rendered locally (no network): fixes drift from older templates that
-	# enabled INFO logging + accessLog on the unrotated json-file driver.
-	render_traefik_static "${email}" > "${file}"
+	# enabled INFO logging + accessLog on the unrotated json-file driver, and
+	# removes the entrypoint-level HTTP → HTTPS redirect that pre-empted the
+	# per-domain `https` toggle.
+	local rendered
+	rendered="$(render_traefik_static "${email}")"
+	if [ ! -f "${file}" ] || [ "${rendered}" != "$(cat "${file}")" ]; then
+		TRAEFIK_YML_CHANGED=1
+	fi
+	printf '%s\n' "${rendered}" > "${file}"
+	if [ "${had_redirect}" = "1" ]; then
+		ok "Removed the global HTTP → HTTPS redirect from traefik.yml"
+		info "Domains with HTTPS enabled keep redirecting (per-router middleware); domains with HTTPS off are now served plain on :80."
+	fi
 	if [ "${email}" = "${ACME_EMAIL_UNSET}" ]; then
 		ok "Refreshed traefik.yml (no ACME email)"
 		warn "Let's Encrypt is unavailable until an email is set: NIXPLOY_LETSENCRYPT_EMAIL=… update.sh, or Settings → Platform → Let's Encrypt email."
@@ -491,8 +518,33 @@ SERVICE_ARGS=(
 	--reserve-memory 512m
 )
 
-# Env forwarded to the app: documented knobs, only when set (values already on
-# the service are kept — `--env-add` never removes anything).
+# Runtime knobs forwarded to the `nixploy` service, only when set (values
+# already on the service are kept — `--env-add` never removes anything).
+# Documented in docs/install.md → "Runtime environment"; keep in sync with
+# install.sh's copy.
+FORWARDED_APP_ENV=(
+	LOG_LEVEL
+	LOG_FORMAT
+	DATABASE_POOL_MAX
+	NIXPLOY_NETWORK
+	NIXPLOY_WILDCARD_DOMAIN
+	NIXPLOY_DEPLOY_CONCURRENCY
+	NIXPLOY_DEPLOY_TIMEOUT_MS
+	NIXPLOY_COMMAND_TIMEOUT_MS
+	NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS
+	NIXPLOY_SHUTDOWN_GRACE_MS
+	NIXPLOY_DB_WAIT_SECONDS
+	NIXPLOY_AUDIT_RETENTION_DAYS
+	NIXPLOY_CRON_CATCH_UP
+	NIXPLOY_SCHEDULES_LOG_PATH
+	NIXPLOY_INSTANCE_BACKUP_ALERT_DAYS
+	NIXPLOY_DOCKER_CLEANUP_CRON
+	NIXPLOY_BASE_URL
+	DOCKER_SOCKET
+	LISTEN_HOST
+	TZ
+)
+
 APP_ENV_ARGS=()
 collect_app_env_args() {
 	local flag="$1" name
@@ -505,7 +557,7 @@ collect_app_env_args() {
 	if [ -n "${BETTER_AUTH_URL:-}" ]; then
 		APP_ENV_ARGS+=("${flag}" "BETTER_AUTH_URL=${BETTER_AUTH_URL}")
 	fi
-	for name in LOG_LEVEL LOG_FORMAT DATABASE_POOL_MAX NIXPLOY_NETWORK; do
+	for name in "${FORWARDED_APP_ENV[@]}"; do
 		if [ -n "${!name:-}" ]; then
 			APP_ENV_ARGS+=("${flag}" "${name}=${!name}")
 		fi
@@ -534,13 +586,53 @@ update_app() {
 	ok "Rolling nixploy → ${APP_IMAGE}"
 }
 
+# Installs made before the Postgres hardening have no healthcheck, unbounded
+# json-file logs and the default 10 s stop grace (a checkpoint can outlive it,
+# which is how a database gets a dirty shutdown on every update).
+#
+# Applying it recreates the Postgres task — one short outage of the panel's
+# database — so it is opt-in behind NIXPLOY_UPDATE_POSTGRES_SPEC=1 rather than
+# silently part of an update. It is idempotent: re-running changes nothing.
+update_postgres_spec() {
+	[ "${NIXPLOY_UPDATE_POSTGRES_SPEC:-0}" = "1" ] || return 0
+	docker service inspect nixploy-postgres >/dev/null 2>&1 || {
+		warn "Service nixploy-postgres not found — skipping the spec update"
+		return 0
+	}
+	info "Applying the healthcheck, log rotation and 60 s stop grace to nixploy-postgres (one restart)"
+	if docker service update \
+		--detach=false \
+		--health-cmd 'pg_isready -q -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+		--health-interval 10s --health-timeout 5s --health-retries 5 --health-start-period 30s \
+		--stop-grace-period 60s \
+		"${LOG_ARGS[@]}" \
+		nixploy-postgres >/dev/null 2>&1; then
+		ok "Updated the nixploy-postgres service spec"
+	else
+		warn "Could not update the nixploy-postgres spec — check: docker service ps nixploy-postgres"
+	fi
+}
+
+# Traefik loads traefik.yml once at start; a rewritten static config only takes
+# effect when the task is recreated.
+restart_traefik_for_static_config() {
+	[ "${TRAEFIK_YML_CHANGED}" = "1" ] || return 0
+	if docker service update --detach --force nixploy-traefik >/dev/null 2>&1; then
+		ok "Restarted nixploy-traefik to pick up the new static config"
+	else
+		warn "Could not restart nixploy-traefik — run: docker service update --force nixploy-traefik"
+	fi
+}
+
 update_traefik() {
 	[ "${NIXPLOY_UPDATE_TRAEFIK}" = "1" ] || {
 		ok "Skipping Traefik update"
+		restart_traefik_for_static_config
 		return
 	}
 	run_quiet "Pulling ${TRAEFIK_IMAGE}" docker pull "${TRAEFIK_IMAGE}" || {
 		warn "Traefik pull failed — leaving current Traefik running"
+		restart_traefik_for_static_config
 		return
 	}
 	docker service update \
@@ -732,6 +824,7 @@ main() {
 	migrate_internal_network
 
 	step "Roll services"
+	update_postgres_spec
 	update_app
 	update_traefik
 

@@ -66,13 +66,24 @@ export function parseInstanceDatabaseUrl(raw: string | undefined): InstanceDatab
 }
 
 /**
+ * `--clean --if-exists` makes the dump restorable over a **non-empty**
+ * database: every object is dropped before it is recreated, and `IF EXISTS`
+ * keeps the drops quiet on a fresh one. Without it the documented restore
+ * (`psql -v ON_ERROR_STOP=1`) fails at the first `CREATE TABLE` because the
+ * panel's own migrations already created it on first boot — the exact
+ * failure the ops audit found (#12). Kept in one constant so the two dump
+ * paths (host pg_dump and in-container pg_dump) cannot drift.
+ */
+export const PG_DUMP_FLAGS = "--clean --if-exists --no-owner --no-privileges";
+
+/**
  * pg_dump against the DATABASE_URL target, run from the Nixploy process.
  * The caller sets PGPASSWORD in the exec environment.
  */
 export function buildInstancePgDumpCommand(target: InstanceDatabaseTarget): string {
 	return (
 		`pg_dump -h ${sq(target.host)} -p ${sq(target.port)} -U ${sq(target.user)} ` +
-		`-d ${sq(target.database)} --no-owner --no-privileges`
+		`-d ${sq(target.database)} ${PG_DUMP_FLAGS}`
 	);
 }
 
@@ -92,7 +103,7 @@ export function buildInstanceContainerFilters(host: string): string[] {
 
 /** In-container pg_dump (trust-authenticated local socket, like the postgres engine). */
 export function buildInstanceContainerDumpCommand(target: InstanceDatabaseTarget): string {
-	return `pg_dump -U ${sq(target.user)} -d ${sq(target.database)} --no-owner --no-privileges`;
+	return `pg_dump -U ${sq(target.user)} -d ${sq(target.database)} ${PG_DUMP_FLAGS}`;
 }
 
 // ── web-server: config directory archive ────────────────────────────────────

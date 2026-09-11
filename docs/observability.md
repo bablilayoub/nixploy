@@ -99,6 +99,57 @@ them.
   (`evaluateAlerts` in `modules/monitoring/history.ts`). Local and
   remote-hosted services alike (remote samples arrive over the SSH batch).
 
+## Incidents
+
+Incidents are the timeline under **Monitoring → Incidents**: failed deploys,
+alert-rule trips, the failure watchdog and uptime flips all write one
+(`recordIncident`, `modules/observability/index.ts`).
+
+Two actions close the loop (`observability.acknowledgeIncident` /
+`resolveIncident`, both gated on `project.write` and audited):
+
+- **Acknowledge** records who is looking at it (`acknowledged_at` /
+  `acknowledged_by`) and leaves the incident **open** — "seen it" is not
+  "fixed it", and collapsing the two would lose the distinction the timeline
+  exists for. Acknowledging twice keeps the first acknowledger.
+- **Resolve** sets `resolved_at` (and back-fills the acknowledgement when it
+  was skipped). An optional note is stored in `metadata.resolutionNote`,
+  never in `title` — the title is what the public status page renders.
+
+Resolved incidents are dropped by the retention pass 90 days later.
+
+## Public status page
+
+`observability.enableStatusPage({ probeIds, title })` publishes selected
+uptime probes at **`/status/<token>`**, an unauthenticated page
+(`apps/web/src/app/status/[token]/page.tsx`). One `status_page` row per
+organization holds the token, the title and the published probe ids; the
+token is a 32-character url-safe secret and `rotateStatusPageToken` mints a
+new one, invalidating every link shared so far. `disableStatusPage` takes the
+page offline while keeping the token, so re-publishing restores the same URL.
+The card lives under Monitoring → Incidents ("Status page"); publishing needs
+`settings.manage`, because making organization data readable without a
+session is an organization-level decision, not a per-project one.
+
+What crosses the boundary is deliberately small: the probe's **host**, its
+current state, a 90-day uptime percentage and the **titles** of recent uptime
+incidents. No service ids, project names, probe paths, error strings, or
+acknowledger identities. `loadPublicStatus` (`modules/observability/status-page.ts`)
+is the only function that turns a public token into data.
+
+The uptime percentage is derived from the probe's flip incidents, because
+that is the only history Nixploy keeps — `uptime_probe` stores the *current*
+state, there is no per-check sample table. `uptimePercentFromEvents` walks the
+flips inside the window, infers the state before the first one by inversion
+(a window whose first flip is a recovery opened in an outage), and counts an
+unrecovered outage up to now. A probe younger than the window is measured
+from its creation instead.
+
+The route is `force-dynamic` (it needs the client IP) with a 30 s in-process
+memo per token and a per-IP limit of 60 requests/minute, so a hammered link
+costs one pair of queries per window and token enumeration is throttled.
+It is also `robots: noindex` — an indexed status page defeats the token.
+
 ## Notification events
 
 Settings → Notifications subscribes a channel to individual events. Every
@@ -112,7 +163,51 @@ toggle is wired to a real emitter:
 | `serviceAlert` | an alert rule crossing its threshold |
 | `uptimeFlip` | an uptime probe changing state, plus the incident it opens |
 | `dockerCleanup` | the Docker control center prunes (images / volumes / system) and Settings → Platform → "Clean up now" (`emitDockerCleanupNotification`) |
-| `nixployRestart` | the panel process finishing boot, once per start (`emitInstanceRestartNotification`, called from `apps/web/server.ts`) |
+| `nixployRestart` | the panel process finishing boot, once per start (`emitInstanceRestartNotification`, called from `apps/web/server.ts`) — **and the platform self-alerts below** |
+
+## Platform self-alerts
+
+Org thresholds watch tenant services. Platform self-alerts watch the box the
+panel runs on, so an operator learns about a full disk from Slack instead of
+from a failed deploy. A cron every **5 minutes**
+(`modules/monitoring/platform-alerts.ts`, registered by `startPlatformAlerts()`)
+evaluates five checks:
+
+| Alert | Warning | Critical | Source |
+| --- | --- | --- | --- |
+| `hostDisk` | filesystem holding the config dir > **85 %** | > **95 %** | `df -Pk <config dir>` |
+| `queueStalled` | oldest deployment still `queued` for > **30 min** | — | `min(created_at)` over `deployment` rows in `queued` |
+| `certExpiry` | an ACME certificate expires in < **14 days** | it already expired | `<config>/traefik/acme.json`, parsed with `node:crypto`'s `X509Certificate` — skipped when the file is absent or empty |
+| `platformService` | — | `nixploy-traefik` / `nixploy-postgres` below their desired replicas | dockerode `listServices` + `listTasks`; skipped entirely when `NIXPLOY_DISABLE_TRAEFIK_BOOT` is unset only for the panel-managed case — a service that does not exist on this host is never an alert |
+| `instanceBackup` | no successful instance backup in `NIXPLOY_INSTANCE_BACKUP_ALERT_DAYS` days (default **8**, `0` disables), or never | — | newest `backup_run` with `kind = 'instance'`, `status = 'success'` |
+
+Where they go:
+
+- **Channels.** Platform alerts are instance-level, so they are *not* fanned
+  out per organization. They go to every notification channel that has the
+  `nixployRestart` ("Nixploy restarted") toggle on **and** belongs to an
+  organization with at least one instance-admin member. A tenant org that
+  turns the toggle on still never sees platform internals.
+- **Cooldown.** One notification per `kind:severity` per **24 h**, persisted
+  in `<config>/platform-alerts.json` (mode 600) so a panel restart does not
+  re-fire everything. An escalation from `warning` to `critical` notifies
+  immediately; an alert that resolves forgets its cooldown, so it can fire
+  again as soon as it returns.
+- **`GET /api/ready`.** The same file is reported as the `platform` check —
+  `{ evaluatedAt, alerts: [{ kind, severity, summary }] }` plus a `warning`
+  line. It is **advisory only**: a full disk must never make Swarm restart a
+  panel that still serves, so the check is always `ok`.
+- **Monitoring → Fleet** shows a "Platform alerts" card (instance admins
+  only) fed by the same endpoint.
+
+### Weekly Docker cleanup (opt-in)
+
+`NIXPLOY_DOCKER_CLEANUP_CRON` is **unset by default**. Set it to a cron
+expression (e.g. `0 4 * * 0` — Sunday 04:00 in the process timezone, UTC in
+the shipped image) and the panel prunes dangling images plus the BuildKit
+cache on the Nixploy host once a week and emits the existing `dockerCleanup`
+notification. Tagged images are never touched (a stopped application's
+`appName:latest` must survive — see `modules/deployment/cleanup.ts`).
 
 ## Status reconciler & watchdog
 
@@ -161,11 +256,72 @@ one pass; every probe is bounded to 4 s):
 | `migrations` | journal shipped with the build vs `drizzle.__drizzle_migrations` (`state`: `current` / `behind` / `ahead` / `unknown`, plus `applied` / `expected` counts) | `behind` only — `ahead` (old code on a newer schema, i.e. a downgrade) and `unknown` are warnings |
 | `queue` | the deploy queue: `pending` (rows still `queued` in Postgres, from the snapshot each claim pass refreshes), `running` (jobs this process is building) and rows still `running` after 90 min (`stuck`) | never — warning only |
 | `traefik` | `nixploy-traefik` Swarm service present (`docker service ls`, cached 10 s) | only when the panel bootstraps Traefik itself (`NIXPLOY_DISABLE_TRAEFIK_BOOT` unset); the production image sets it, so there a missing proxy is a warning |
+| `platform` | the last platform self-alert pass (see above), read from `<config>/platform-alerts.json` — never re-evaluated here | never — warning only |
 
 Consumers: the image `HEALTHCHECK` (Swarm restarts a task that stays 503 and
 `--update-failure-action rollback` reverts a bad update), the post-roll
 probes in `install.sh` / `update.sh`, and `nixploy doctor`, which prints the
 report next to the server/CLI versions and warns on a major-version mismatch.
+
+## Platform logs
+
+Everything above is about *tenant* services. This section is about the panel
+itself — where its own output goes and how to read it.
+
+```bash
+docker service logs -f nixploy               # the panel process
+docker service logs -f nixploy-postgres      # the platform database
+docker service logs -f nixploy-traefik       # the proxy (level ERROR, no access log)
+docker service ps nixploy --no-trunc         # why a task was replaced
+```
+
+All three services run on the `json-file` driver with rotation
+(`max-size=10m`, `max-file=3`, set by `install.sh` / `update.sh`), so an
+unbounded log cannot fill a small host. `docker service logs` needs
+`json-file` or `journald` — do not switch the driver.
+
+**Subsystem prefixes.** The panel logs through `lib/logger.ts`: one line per
+event, prefixed with the subsystem in brackets. The ones you will actually
+look for:
+
+| Prefix | Subsystem |
+| --- | --- |
+| `[server]` | boot, listen, SIGTERM drain |
+| `[deploy]` / `[deploy-queue]` | the deploy worker and its queue |
+| `[status-reconciler]` | the 60 s drift pass |
+| `[metrics-history]` | the 30 s sampler |
+| `[platform-alerts]` | the 5 min self-alert pass |
+| `[backups]` / `[schedules]` / `[updates]` | the other crons |
+
+**Levels and format.** `LOG_LEVEL` is `debug` | `info` | `warn` | `error`
+(default `info`). `LOG_FORMAT=json` switches to one JSON object per line —
+`{ts, level, subsystem, message, ...meta}` — which is what you want when
+shipping to Loki/Elastic/Datadog. Both are forwarded by `install.sh` /
+`update.sh` when set. Reading JSON logs by hand:
+
+```bash
+# only errors, newest last
+docker service logs nixploy 2>&1 | grep '"level":"error"' | tail -20
+
+# one subsystem, pretty-printed (jq optional but much nicer)
+docker service logs nixploy 2>&1 | jq -c 'select(.subsystem=="deploy")'
+
+# without jq
+docker service logs nixploy 2>&1 | python3 -c 'import json,sys
+for line in sys.stdin:
+    try: e = json.loads(line)
+    except ValueError: continue
+    print(e["ts"], e["level"], e["subsystem"], e["message"])'
+```
+
+**Build logs** are not process logs: every deployment writes
+`<config>/logs/<appName>/<deploymentId>.log` (streamed live to the UI,
+pruned by the retention cron below). Schedule output lands under
+`<config>/schedules`. Neither is in `docker service logs`.
+
+**Secrets never reach the log.** Tokens, passwords and env values are
+redacted or passed over stdin (`execAsyncWithStdin`); a log line that
+contains a credential is a bug worth reporting.
 
 ## Missed cron ticks (opt-in catch-up)
 
@@ -195,10 +351,23 @@ audit #17). Boot always **says so**, and can replay it on request:
 
 ## Cron schedules run in UTC
 
-Every cron expression in the panel — database and volume backups,
-schedules, the update checker — runs in the process time zone, which is UTC
-in the production image (Alpine, no `TZ`). `0 3 * * *` is 03:00 UTC, not
-local time; the inputs are labelled accordingly.
+Every cron expression in the panel — database and volume backups, schedules,
+the update checker, the platform self-alerts — runs in the **process time
+zone**, which is UTC in the production image unless you set one. `0 3 * * *`
+is 03:00 UTC, not local time; the inputs are labelled accordingly.
+
+To run them in your own zone, set `TZ` (the image ships `tzdata`, so the
+zone actually resolves) and let the installer forward it:
+
+```bash
+TZ=Europe/Paris curl -fsSL …/update.sh | sudo bash
+# or once, by hand:
+docker service update --env-add TZ=Europe/Paris nixploy
+```
+
+Changing `TZ` restarts the panel and **shifts every existing cron** — a
+`0 3 * * *` backup that ran at 03:00 UTC now runs at 03:00 local. Decide
+once, at install time, rather than after schedules exist.
 
 ## Retention
 

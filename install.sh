@@ -31,9 +31,17 @@
 #   TRUSTED_PROXIES              Forwarded to the app            (default: 1 — Traefik fronts it)
 #   LOG_LEVEL / LOG_FORMAT       Forwarded to the app when set (debug|info|warn|error / json)
 #   DATABASE_POOL_MAX            Forwarded to the app when set
+#   TZ                           Process timezone of the panel — every cron (backups,
+#                                schedules, platform alerts) runs in it. Default: UTC.
+#   Every other runtime knob listed in docs/install.md → "Runtime environment"
+#   (NIXPLOY_DEPLOY_CONCURRENCY, NIXPLOY_WILDCARD_DOMAIN, DOCKER_SOCKET, …) is
+#   forwarded to the service when it is set in this script's environment.
 #   NIXPLOY_MEMORY_LIMIT         Memory limit of the nixploy service (default: 2g)
 #   POSTGRES_VERSION             Postgres image tag             (default: 17-alpine)
 #   TRAEFIK_VERSION              Traefik image tag              (default: v3.5.0)
+#   NIXPLOY_SKIP_PORT_CHECK      1 = do not refuse to install when :80/:443 are taken
+#   NIXPLOY_SKIP_DNS_CHECK       1 = do not compare NIXPLOY_DOMAIN's A record with the
+#                                public IP (behind a proxy/CDN this mismatch is expected)
 #   NIXPLOY_SKIP_DOCKER_INSTALL  1 = require pre-installed Docker (skip get.docker.com)
 #   NIXPLOY_BUILD_FROM_SOURCE    1 = always build the image locally
 #   NIXPLOY_REPO                 GitHub org/repo                (default: bablilayoub/nixploy)
@@ -112,7 +120,7 @@ else
 fi
 
 STEP=0
-TOTAL_STEPS=9
+TOTAL_STEPS=10
 
 banner() {
 	printf '\n%s' "${C_CYAN}${C_BOLD}"
@@ -258,6 +266,133 @@ install_docker() {
 	done
 	docker info >/dev/null 2>&1 || die "Docker daemon did not start"
 	ok "Docker $(docker --version | awk '{print $3}' | tr -d ',')"
+}
+
+# ── host preflight ───────────────────────────────────────────────────────────
+# Cheap checks that turn a confusing failure five minutes into the install
+# (a raw `docker service create` error after the images are pulled) into one
+# actionable line before anything is downloaded. Every check is skippable or
+# a warning except rootless Docker, which cannot work at all.
+
+# Listening TCP ports, one per line. ss (iproute2) first, then lsof, then
+# netstat; prints nothing when none of them exist (the check then self-skips).
+listening_ports() {
+	if need_cmd ss; then
+		ss -ltnH 2>/dev/null | awk '{print $4}' | sed 's/.*://'
+	elif need_cmd lsof; then
+		lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $9}' | sed 's/.*://'
+	elif need_cmd netstat; then
+		netstat -ltn 2>/dev/null | awk '/^tcp/ {print $4}' | sed 's/.*://'
+	fi
+}
+
+# :80/:443 must be free for Traefik — unless nixploy-traefik already holds
+# them (every re-run) or the operator terminates TLS elsewhere.
+check_ports() {
+	[ "${NIXPLOY_SKIP_PORT_CHECK:-0}" = "1" ] && { info "Port check skipped (NIXPLOY_SKIP_PORT_CHECK=1)"; return 0; }
+	if docker service inspect nixploy-traefik >/dev/null 2>&1; then
+		ok "Ports 80/443 held by the existing nixploy-traefik service"
+		return 0
+	fi
+	local ports busy=""
+	ports="$(listening_ports)"
+	[ -n "${ports}" ] || { info "Port check skipped (no ss/lsof/netstat)"; return 0; }
+	local port
+	for port in 80 443; do
+		printf '%s\n' "${ports}" | grep -qx "${port}" && busy="${busy} ${port}"
+	done
+	[ -n "${busy}" ] || { ok "Ports 80 and 443 are free"; return 0; }
+	warn "Port(s)${busy} are already in use — Traefik cannot bind them."
+	warn "Stop the other server (nginx/apache/caddy: systemctl stop nginx) or set NIXPLOY_SKIP_PORT_CHECK=1 to continue anyway."
+	die "Ports${busy} in use"
+}
+
+# Free space in GiB on the filesystem holding $1 ("" when df cannot answer).
+free_gib() {
+	local blocks
+	blocks="$(df -Pk "$1" 2>/dev/null | awk 'NR==2 {print $4}')" || return 0
+	[ -n "${blocks}" ] || return 0
+	printf '%s' "$((blocks / 1024 / 1024))"
+}
+
+# Images, build caches, Postgres data and app checkouts all land on disk.
+# 5 GiB is the floor for one small app; the panel image alone is ~1 GiB.
+check_disk() {
+	local docker_root free_config free_docker
+	mkdir -p "${NIXPLOY_CONFIG_DIR}" 2>/dev/null || true
+	free_config="$(free_gib "${NIXPLOY_CONFIG_DIR}")"
+	if [ -n "${free_config}" ] && [ "${free_config}" -lt 5 ]; then
+		warn "Only ${free_config} GiB free on ${NIXPLOY_CONFIG_DIR} — builds, backups and image pulls need at least 5 GiB."
+	elif [ -n "${free_config}" ]; then
+		ok "Disk: ${free_config} GiB free on ${NIXPLOY_CONFIG_DIR}"
+	fi
+	docker_root="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || true)"
+	[ -n "${docker_root}" ] || return 0
+	[ "${docker_root}" = "${NIXPLOY_CONFIG_DIR}" ] && return 0
+	free_docker="$(free_gib "${docker_root}")"
+	if [ -n "${free_docker}" ] && [ "${free_docker}" -lt 5 ]; then
+		warn "Only ${free_docker} GiB free on the Docker root (${docker_root}) — image pulls will fail."
+	elif [ -n "${free_docker}" ]; then
+		ok "Disk: ${free_docker} GiB free on ${docker_root}"
+	fi
+}
+
+# 2 GB is the documented minimum; a source build wants ~4 GB.
+check_memory() {
+	local kb gb
+	kb="$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo 2>/dev/null || true)"
+	[ -n "${kb}" ] || return 0
+	gb=$((kb / 1024 / 1024))
+	if [ "${kb}" -lt 1900000 ]; then
+		warn "This host has ~${gb} GB RAM. Nixploy needs 2 GB minimum (4 GB+ to build images locally); add swap or resize."
+	else
+		ok "Memory: ~${gb} GB"
+	fi
+}
+
+# Rootless Docker has no Swarm, cannot bind :80/:443 and cannot share the
+# socket the panel needs. There is no workaround — fail loudly and early.
+check_rootless_docker() {
+	local security
+	security="$(docker info --format '{{range .SecurityOptions}}{{println .}}{{end}}' 2>/dev/null || true)"
+	case "${security}" in
+		*rootless*)
+			die "Rootless Docker detected. Nixploy needs the root daemon (Swarm, host ports 80/443, /var/run/docker.sock). Install Docker Engine as root and re-run."
+			;;
+	esac
+	ok "Docker daemon runs as root"
+}
+
+# An A record that does not point here burns Let's Encrypt failures (5 per
+# account per hostname per hour) and leaves the panel on the self-signed cert.
+check_domain_dns() {
+	[ -n "${DASHBOARD_DOMAIN}" ] || return 0
+	[ "${NIXPLOY_SKIP_DNS_CHECK:-0}" = "1" ] && { info "DNS check skipped (NIXPLOY_SKIP_DNS_CHECK=1)"; return 0; }
+	local resolved="" expected
+	expected="$(detect_public_ip)"
+	if need_cmd getent; then
+		resolved="$(getent ahostsv4 "${DASHBOARD_DOMAIN}" 2>/dev/null | awk '{print $1; exit}' || true)"
+	elif need_cmd dig; then
+		resolved="$(dig +short A "${DASHBOARD_DOMAIN}" 2>/dev/null | head -n 1 || true)"
+	elif need_cmd host; then
+		resolved="$(host -t A "${DASHBOARD_DOMAIN}" 2>/dev/null | awk '/has address/ {print $4; exit}' || true)"
+	fi
+	if [ -z "${resolved}" ]; then
+		warn "${DASHBOARD_DOMAIN} does not resolve yet. Let's Encrypt will fail until the A record exists and has propagated."
+	elif [ "${resolved}" = "${expected}" ]; then
+		ok "DNS: ${DASHBOARD_DOMAIN} → ${resolved}"
+	else
+		warn "${DASHBOARD_DOMAIN} resolves to ${resolved}, but this host's public IP is ${expected}."
+		warn "Behind a proxy/CDN this is expected; otherwise fix the A record first — Let's Encrypt rate-limits failed validations. Set NIXPLOY_SKIP_DNS_CHECK=1 to silence this."
+	fi
+}
+
+host_preflight() {
+	check_rootless_docker
+	check_ports
+	check_disk
+	check_memory
+	check_domain_dns
 }
 
 # Address of the primary interface (private on NAT'd clouds) — right for the
@@ -491,6 +626,10 @@ EOF
 # packages/server/src/modules/traefik/setup.ts#buildTraefikStaticConfig and
 # docker/traefik/traefik.yml — CI renders all of them and diffs
 # (NIXPLOY_RENDER_TRAEFIK_ONLY=1 bash install.sh).
+#
+# No entrypoint-level HTTP → HTTPS redirect: it would override every domain's
+# `https` toggle. The panel emits a per-router `redirectScheme` middleware for
+# each `https: true` domain, so `https: false` domains stay plain on :80.
 render_traefik_static() {
 	local email="${1:-${ACME_EMAIL_UNSET}}"
 	cat <<EOF
@@ -502,12 +641,6 @@ log:
 entryPoints:
   web:
     address: ":80"
-    http:
-      redirections:
-        entryPoint:
-          to: websecure
-          scheme: https
-          permanent: true
   websecure:
     address: ":443"
 providers:
@@ -551,14 +684,14 @@ write_traefik_static() {
 	ACME_EMAIL="${email}"
 	render_traefik_static "${email}" > "${file}"
 	if [ "${email}" = "${ACME_EMAIL_UNSET}" ]; then
-		ok "Traefik static config (HTTPS redirect on, self-signed certificate)"
+		ok "Traefik static config (self-signed certificate)"
 		warn "No ACME email: Let's Encrypt rejects '${ACME_EMAIL_UNSET}', so app domains cannot get real certificates yet."
 		warn "Set NIXPLOY_LETSENCRYPT_EMAIL=you@example.com (re-run) or Settings → Platform → Let's Encrypt email."
 	elif [ "${guessed}" = "1" ]; then
-		ok "Traefik static config (HTTPS redirect on, ACME email ${email})"
+		ok "Traefik static config (ACME email ${email})"
 		warn "ACME email defaulted to ${email} — set NIXPLOY_LETSENCRYPT_EMAIL to receive certificate notices."
 	else
-		ok "Traefik static config (HTTPS redirect on, ACME email ${email})"
+		ok "Traefik static config (ACME email ${email})"
 	fi
 }
 
@@ -722,7 +855,33 @@ SERVICE_ARGS=(
 	--reserve-memory 512m
 )
 
-# Env forwarded to the app: documented knobs, only when the operator set them.
+# Runtime knobs forwarded to the `nixploy` service, only when the operator set
+# them. Everything here is documented in docs/install.md → "Runtime
+# environment"; keep the two lists (and update.sh's copy) in sync — a knob that
+# is not forwarded has to be re-applied by hand after every update.
+FORWARDED_APP_ENV=(
+	LOG_LEVEL
+	LOG_FORMAT
+	DATABASE_POOL_MAX
+	NIXPLOY_NETWORK
+	NIXPLOY_WILDCARD_DOMAIN
+	NIXPLOY_DEPLOY_CONCURRENCY
+	NIXPLOY_DEPLOY_TIMEOUT_MS
+	NIXPLOY_COMMAND_TIMEOUT_MS
+	NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS
+	NIXPLOY_SHUTDOWN_GRACE_MS
+	NIXPLOY_DB_WAIT_SECONDS
+	NIXPLOY_AUDIT_RETENTION_DAYS
+	NIXPLOY_CRON_CATCH_UP
+	NIXPLOY_SCHEDULES_LOG_PATH
+	NIXPLOY_INSTANCE_BACKUP_ALERT_DAYS
+	NIXPLOY_DOCKER_CLEANUP_CRON
+	NIXPLOY_BASE_URL
+	DOCKER_SOCKET
+	LISTEN_HOST
+	TZ
+)
+
 # $1 is the flag to emit (--env for create, --env-add for update).
 APP_ENV_ARGS=()
 collect_app_env_args() {
@@ -731,7 +890,7 @@ collect_app_env_args() {
 		"${flag}" "TRUSTED_PROXIES=${TRUSTED_PROXIES:-1}"
 		"${flag}" "NIXPLOY_IMAGE=${APP_IMAGE}"
 	)
-	for name in LOG_LEVEL LOG_FORMAT DATABASE_POOL_MAX NIXPLOY_NETWORK; do
+	for name in "${FORWARDED_APP_ENV[@]}"; do
 		if [ -n "${!name:-}" ]; then
 			APP_ENV_ARGS+=("${flag}" "${name}=${!name}")
 		fi
@@ -997,9 +1156,33 @@ print_summary() {
 		printf '   %sLet'"'"'s Encrypt needs a contact email: Settings → Platform → Let'"'"'s Encrypt email.%s\n' "${C_DIM}" "${C_RESET}"
 	fi
 	printf '\n'
+	print_firewall_hint
 	printf '   %sConfig%s   %s\n' "${C_DIM}" "${C_RESET}" "${NIXPLOY_CONFIG_DIR}"
 	printf '   %sLogs%s     docker service logs -f nixploy\n' "${C_DIM}" "${C_RESET}"
 	printf '   %sUpdate%s   curl -fsSL …/update.sh | sudo bash\n' "${C_DIM}" "${C_RESET}"
+	printf '   %sRemove%s   curl -fsSL …/uninstall.sh | sudo bash\n' "${C_DIM}" "${C_RESET}"
+	printf '\n'
+}
+
+# Ports 80/443 must be reachable from the internet or Let's Encrypt's HTTP-01
+# challenge (and the panel) never answer. Print the one-liner for whichever
+# firewall this host actually runs.
+print_firewall_hint() {
+	local shown=0
+	printf '   %sOpen the firewall for HTTP/HTTPS:%s\n' "${C_BOLD}" "${C_RESET}"
+	if need_cmd ufw && ufw status 2>/dev/null | grep -qi '^Status: active'; then
+		printf '   %s→%s  ufw allow 80,443/tcp\n' "${C_GREEN}" "${C_RESET}"
+		shown=1
+	fi
+	if need_cmd firewall-cmd && firewall-cmd --state >/dev/null 2>&1; then
+		printf '   %s→%s  firewall-cmd --permanent --add-service=http --add-service=https && firewall-cmd --reload\n' "${C_GREEN}" "${C_RESET}"
+		shown=1
+	fi
+	if [ "${shown}" = "0" ]; then
+		printf '   %sufw:%s         ufw allow 80,443/tcp\n' "${C_DIM}" "${C_RESET}"
+		printf '   %sfirewalld:%s   firewall-cmd --permanent --add-service=http --add-service=https && firewall-cmd --reload\n' "${C_DIM}" "${C_RESET}"
+		printf '   %sCloud:%s       also open 80/443 in the provider'"'"'s security group.\n' "${C_DIM}" "${C_RESET}"
+	fi
 	printf '\n'
 }
 
@@ -1021,6 +1204,9 @@ main() {
 
 	step "Docker Engine"
 	install_docker
+
+	step "Host preflight"
+	host_preflight
 
 	step "Docker Swarm"
 	init_swarm

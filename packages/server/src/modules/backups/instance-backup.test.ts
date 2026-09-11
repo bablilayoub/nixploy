@@ -7,6 +7,7 @@ import {
 	buildRedisSnapshotScript,
 	CONFIG_ARCHIVE_EXCLUDES,
 	isSafeRedisDataDir,
+	PG_DUMP_FLAGS,
 	parseInstanceDatabaseUrl,
 } from "./instance-backup";
 
@@ -58,10 +59,18 @@ describe("buildInstancePgDumpCommand", () => {
 	it("targets host, port, user and database without the password on argv", () => {
 		const command = buildInstancePgDumpCommand(target);
 		expect(command).toBe(
-			"pg_dump -h 'nixploy-postgres' -p '5432' -U 'nixploy' -d 'nixploy' --no-owner --no-privileges",
+			"pg_dump -h 'nixploy-postgres' -p '5432' -U 'nixploy' -d 'nixploy' --clean --if-exists --no-owner --no-privileges",
 		);
 		expect(command).not.toContain("s3cret");
 		expect(command).not.toContain("PGPASSWORD");
+	});
+
+	it("dumps with --clean --if-exists so a restore works over a migrated database", () => {
+		// The documented restore runs `psql -v ON_ERROR_STOP=1` against an
+		// instance whose first boot already ran the migrations (ops audit #12).
+		expect(buildInstancePgDumpCommand(target)).toContain(PG_DUMP_FLAGS);
+		expect(PG_DUMP_FLAGS).toContain("--clean");
+		expect(PG_DUMP_FLAGS).toContain("--if-exists");
 	});
 
 	it("shell-quotes hostile values", () => {
@@ -86,7 +95,9 @@ describe("instance container fallback", () => {
 	it("runs pg_dump inside the container without a password (trust auth)", () => {
 		const target = parseInstanceDatabaseUrl("postgres://nixploy:s3cret@postgres:5432/nixploy");
 		const command = buildInstanceContainerDumpCommand(target);
-		expect(command).toBe("pg_dump -U 'nixploy' -d 'nixploy' --no-owner --no-privileges");
+		expect(command).toBe(
+			"pg_dump -U 'nixploy' -d 'nixploy' --clean --if-exists --no-owner --no-privileges",
+		);
 		expect(command).not.toContain("s3cret");
 	});
 });

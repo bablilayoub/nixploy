@@ -71,8 +71,11 @@ const normalizeDnsProvider = (provider: string | null | undefined): string | nul
 
 /**
  * Traefik v3 static configuration. The file provider watches the dynamic
- * directory (hot-reload). HTTP is redirected to HTTPS globally; ACME uses
- * the HTTP challenge on `web` (Traefik serves challenges before redirect).
+ * directory (hot-reload). There is **no entrypoint-level HTTP → HTTPS
+ * redirect**: it would override every domain's `https` toggle. The config
+ * writer emits a per-router `redirectScheme` middleware for each `https: true`
+ * domain instead, so a domain with `https: false` is served plain on `:80`.
+ * ACME uses the HTTP challenge on `web`.
  * TLS for bare IPs uses the self-signed defaultCertificate; app domains
  * attach `certResolver: letsencrypt` per-router in dynamic YAML.
  *
@@ -106,12 +109,6 @@ log:
 entryPoints:
   web:
     address: ":80"
-    http:
-      redirections:
-        entryPoint:
-          to: websecure
-          scheme: https
-          permanent: true
   websecure:
     address: ":443"
 providers:

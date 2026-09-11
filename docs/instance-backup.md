@@ -86,7 +86,7 @@ Every instance run produces **two artifacts** in the destination:
 
 | Artifact | Key layout | Contents |
 | --- | --- | --- |
-| Database dump | `<prefix>/web-server/<timestamp>.gz` | `pg_dump --no-owner --no-privileges` of the `DATABASE_URL` database (gzipped SQL) |
+| Database dump | `<prefix>/web-server/<timestamp>.gz` | `pg_dump --clean --if-exists --no-owner --no-privileges` of the `DATABASE_URL` database (gzipped SQL) |
 | Config archive | `<prefix>/web-server-config/<timestamp>.gz` | tar.gz of the config directory (`NIXPLOY_CONFIG_DIR`, default `/etc/nixploy`) |
 
 The config archive includes everything under the config dir **except**
@@ -165,17 +165,17 @@ Run-now, enable/disable, run history and verify work like any other backup row.
 There is no one-click restore on purpose: you are typically restoring onto a
 **fresh** host where the panel does not run yet.
 
-1. **Provision the new host.** Install Docker, then install Nixploy per
-   [install.md](./install.md), but stop before logging in. Then put your
-   **own** copy of the old `.env` in place (`/etc/nixploy/.env`, mode 600)
-   — it is not in the backup. The instance must run with the **same**
-   `ENCRYPTION_KEY` (and ideally `BETTER_AUTH_SECRET`) as the old one;
-   otherwise every encrypted column (env vars, credentials, S3/notification
-   configs) is unreadable after the restore and has to be re-entered.
-   `DATABASE_URL`/`POSTGRES_PASSWORD` must match the Postgres you restore
-   into; keep the installer's fresh values if you let it create Postgres.
+The order matters. `install.sh` boots the panel, and the panel runs its
+migrations on first start — so by the time you get a login screen the database
+already has every table. Dumps are taken with `--clean --if-exists`, which
+drops each object before recreating it, so restoring **over** that migrated
+database is fine. Restoring a dump taken before v0.2.0 (without those flags)
+onto a migrated database fails at the first `CREATE TABLE`; drop and recreate
+the database first in that case.
 
-2. **Fetch the artifacts** from your destination (replace prefix/timestamps):
+1. **Fetch the artifacts** from your destination (replace prefix/timestamps),
+   and make sure you also have your own copy of the old `.env` — it is
+   deliberately **not** in the backup.
 
    ```bash
    # S3 destination:
@@ -187,38 +187,150 @@ There is no one-click restore on purpose: you are typically restoring onto a
    # <config dir>/backups/<organizationId>/backup/web-server-config/<ts>.gz
    ```
 
-3. **Restore the database.** The dump is plain SQL:
+2. **Rehearse the restore before you touch the new host.** Ten minutes now,
+   on any machine with Docker, beats finding out mid-incident:
 
    ```bash
-   # against the instance Postgres (service name from install.sh):
-   gunzip -c dump.sql.gz | docker exec -i $(docker ps -qf name=nixploy-postgres) \
+   ./tools/dr-restore-test.sh --dump dump.sql.gz
+   ```
+
+   It restores into a throwaway Postgres container, restores a **second**
+   time to prove `--clean --if-exists` works over a populated database,
+   asserts the core tables and prints their row counts, then removes the
+   container. `--boot` additionally starts the panel image against the
+   restored database and waits for `GET /api/ready`.
+
+3. **Provision the new host.** Install Docker, then install Nixploy per
+   [install.md](./install.md) and **stop before logging in**.
+
+4. **Put the old `.env` back** at `/etc/nixploy/.env`, mode 600. The instance
+   must run with the **same** `ENCRYPTION_KEY` (and ideally
+   `BETTER_AUTH_SECRET`) as the old one; otherwise every encrypted column
+   (env vars, credentials, S3/notification configs) is unreadable after the
+   restore and has to be re-entered. `DATABASE_URL` / `POSTGRES_PASSWORD`
+   must match the Postgres you restore into — keep the installer's fresh
+   values if you let it create Postgres, and change only the auth secrets.
+
+   **Restoring to a new IP or domain?** Set `BETTER_AUTH_URL` in the restored
+   `.env` to the address you will actually browse to, or every sign-in fails
+   with "Invalid origin". Then either re-run
+   `NIXPLOY_DOMAIN=panel.new.example sudo -E bash install.sh`, or edit the
+   file and `docker service update --env-add BETTER_AUTH_URL=… nixploy`.
+   Also update the dashboard domain under Settings → Platform once you are
+   in, and point the DNS A record at the new host **before** Let's Encrypt
+   is asked for a certificate.
+
+5. **Restore the database.** The dump is plain SQL:
+
+   ```bash
+   gunzip -c dump.sql.gz | docker exec -i "$(docker ps -qf name=nixploy-postgres)" \
      psql -U nixploy -d nixploy -v ON_ERROR_STOP=1
    ```
 
-   If you are restoring into a Postgres that already has data, drop and
-   recreate the `nixploy` database first (the dump was taken with
-   `--no-owner --no-privileges`, so no role fixups are needed).
+   `ON_ERROR_STOP=1` is deliberate: a restore that logs errors and continues
+   leaves a half-populated database that looks like it worked.
 
-4. **Restore the config directory** (default `/etc/nixploy`, or whatever
-   `NIXPLOY_CONFIG_DIR` points at):
+6. **Restore the config directory** (default `/etc/nixploy`, or wherever
+   `NIXPLOY_CONFIG_DIR` points). Keep the `.env` you placed in step 4 — the
+   archive does not contain one, so nothing overwrites it:
 
    ```bash
    mkdir -p /etc/nixploy
    tar xzf config.tar.gz -C /etc/nixploy
+   chmod 600 /etc/nixploy/traefik/acme.json    # tar can widen the mode
    ```
 
-5. **Recreate the platform services** — rerun `install.sh` (or
-   `docker service update --force nixploy` + `nixploy-traefik`) so the
-   `nixploy` service picks up the restored `.env`. Traefik picks up the
-   restored dynamic configs and certificates; the app runs migrations on
-   boot (`pnpm db:migrate` semantics) and your orgs, projects and
-   deployments are back. Open a service's environment tab: if values show
-   as garbage or decryption errors appear in the logs, the `ENCRYPTION_KEY`
-   in `.env` is not the original one.
+7. **Recreate the platform services** — re-run `install.sh` (or
+   `docker service update --force nixploy` + `nixploy-traefik`) so the panel
+   picks up the restored `.env` and Traefik reloads the restored dynamic
+   configs and certificates.
 
-6. **Redeploy affected services** as needed — the database knows about them,
+8. **Verify** before declaring the restore done:
+
+   ```bash
+   curl -sk https://<new-host>/api/ready | jq        # every check ok
+   ```
+
+   - Sign in. If the login page rejects the origin, `BETTER_AUTH_URL` is
+     wrong (step 4).
+   - Open a service's **Environment** tab. Values showing as garbage, or
+     decryption errors in `docker service logs nixploy`, mean the
+     `ENCRYPTION_KEY` in `.env` is not the original one — stop and find the
+     right key rather than re-entering secrets.
+   - Check projects, domains and backup destinations are all present.
+
+9. **Redeploy affected services** as needed — the database knows about them,
    and container state is reconciled automatically for services whose images
    still exist in the registry.
+
+## Disaster-recovery checklist
+
+Fill this in for your install and keep it **outside** the machine it
+describes.
+
+### Objectives
+
+| | Value | Determined by |
+| --- | --- | --- |
+| **RPO** (data you can afford to lose) | = your instance-backup interval | the cron on the instance backup row. Nightly ⇒ up to 24 h of projects, domains, env changes and deploy history |
+| **RTO** (time to be serving again) | ≈ 20–40 min on a prepared host | provision + install (10–15 min) + restore (minutes for a typical dump) + redeploy the services you need |
+
+Deployed **workloads** are not in the dump. They are rebuilt or re-pulled
+after the restore, so a large fleet's real RTO is dominated by redeploys, not
+by the database.
+
+### What must exist off-box
+
+| Item | Where it lives | Notes |
+| --- | --- | --- |
+| Database dump | destination bucket, `<prefix>/web-server/` | the panel's whole state |
+| Config archive | destination bucket, `<prefix>/web-server-config/` | Traefik config + `acme.json` + SSH keys |
+| **`/etc/nixploy/.env`** | **somewhere else entirely** | password manager / KMS / offline vault. **Never the same bucket as the dump** — it holds the key that decrypts it |
+| Application source | your Git host | Nixploy stores references, not code |
+| Images built in-panel | a registry, if you cannot rebuild | locally built images live only on the host |
+| Named volumes | separate volume backups | not part of the instance backup |
+| DNS control | your registrar | to repoint records at the new host |
+
+A "local" destination is on the panel host's own disk: **a lost host takes
+those backups with it.** Use S3 (or copy them off with `rsync`/snapshots) for
+anything you actually rely on.
+
+### Key custody
+
+`ENCRYPTION_KEY` is the single point of failure. Without it the dump is
+useless for every stored credential.
+
+- Store it separately from the backups, with at least two people or two
+  locations able to reach it.
+- Treat a rotation as a migration, not a config change — everything encrypted
+  with the old key has to be re-encrypted first.
+- `BETTER_AUTH_SECRET` is less critical (losing it only invalidates existing
+  sessions); `POSTGRES_PASSWORD` / `DATABASE_URL` only need to match the
+  Postgres you restore into.
+
+### Rehearse
+
+The first real restore should not be the first restore.
+
+```bash
+sudo ./tools/dr-restore-test.sh                        # newest local dump
+./tools/dr-restore-test.sh --dump dump.sql.gz --boot   # a fetched artifact + panel boot
+```
+
+Run it on a schedule (monthly is a reasonable floor), after any Postgres major
+upgrade, and after changing the backup destination. Also use the in-app
+**Verify** button (see above) on individual runs — it proves a stored dump
+restores into a throwaway container, from the UI, with no shell access.
+
+### Drill checklist
+
+- [ ] Both artifacts downloadable from the destination, by someone who is not
+      the person who set it up
+- [ ] `.env` retrievable from its separate location
+- [ ] `tools/dr-restore-test.sh` passes on the newest dump
+- [ ] A scratch host restored end to end at least once, with a real sign-in
+- [ ] DNS TTLs low enough to repoint quickly (≤ 300 s before a planned move)
+- [ ] The checklist itself stored off-box
 
 ## Redis backups
 

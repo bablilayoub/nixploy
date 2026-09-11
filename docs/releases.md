@@ -32,6 +32,13 @@ ref to the panel as `NIXPLOY_IMAGE`.
 
 ## Cut a release
 
+0. Write the release down **before** tagging: move the `[Unreleased]` section
+   of [`CHANGELOG.md`](../CHANGELOG.md) under the new version, and give any
+   change that alters a default, removes a procedure or needs an operator
+   action its own entry in [`upgrade-notes.md`](./upgrade-notes.md). The
+   auto-generated GitHub notes are built from merged PRs and this repository
+   takes direct commits, so they come out empty — these two files *are* the
+   release notes.
 1. Bump `"version"` in the root [`package.json`](../package.json) (and keep `apps/web` / other workspace versions in sync if you treat them as the product version).
 2. Commit on `main` with `[skip ci]` in the message so **CI** and **Docker** do not run on that push. Only the tag triggers packaging.
 3. Tag and push:

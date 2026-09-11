@@ -62,6 +62,19 @@ describe("buildTraefikStaticConfig", () => {
 		expect(buildTraefikStaticConfig(" ops@example.com ")).toContain("email: ops@example.com");
 	});
 
+	it("renders no entrypoint-level HTTP → HTTPS redirect", () => {
+		// The per-domain `https` toggle is implemented by a per-router
+		// `redirectScheme` middleware (config-writer.ts). An entrypoint
+		// redirection here would pre-empt it and make `https: false`
+		// impossible to honour.
+		const rendered = buildTraefikStaticConfig("ops@example.com");
+		expect(rendered).not.toContain("redirections");
+		expect(rendered).not.toContain("permanent: true");
+		expect(rendered).toContain('  web:\n    address: ":80"\n  websecure:\n    address: ":443"');
+		// ACME HTTP-01 still answers on the plain entrypoint.
+		expect(rendered).toContain("httpChallenge:\n        entryPoint: web");
+	});
+
 	it("renders no DNS-01 resolver by default", () => {
 		// CI diffs this exact output against docker/traefik/traefik.yml,
 		// install.sh and update.sh — the default render must not move.

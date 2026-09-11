@@ -21,6 +21,10 @@ import { getAppVersion } from "../updates/check";
  * - `queue`      in-memory deploy queue + rows stuck in `running`   → warning only
  * - `traefik`    `nixploy-traefik` Swarm service present            → fails only when
  *                the panel bootstraps Traefik itself (see {@link traefikRequired})
+ * - `platform`   platform self-alerts from the 5-minute cron        → warning only
+ *                (disk, queue age, certificate expiry, platform services, backups —
+ *                `modules/monitoring/platform-alerts.ts` persists the state, this
+ *                only reports it, so readiness never runs `df` or `docker service ls`)
  *
  * The aggregate is cached for {@link READINESS_CACHE_MS} so Swarm health
  * probes, `update.sh`, the CLI and dashboards polling at once cost one pass.
@@ -65,6 +69,13 @@ export interface TraefikInfo {
 	present: boolean | null;
 }
 
+/** Alert summaries from the platform-alert cron; no paths, no configuration. */
+export interface PlatformAlertsInfo {
+	/** ISO timestamp of the last evaluation pass, null when it never ran. */
+	evaluatedAt: string | null;
+	alerts: Array<{ kind: string; severity: string; summary: string }>;
+}
+
 export interface ReadinessReport {
 	ok: boolean;
 	checkedAt: string;
@@ -76,6 +87,7 @@ export interface ReadinessReport {
 		migrations: CheckResult & MigrationInfo;
 		queue: CheckResult & QueueInfo;
 		traefik: CheckResult & TraefikInfo;
+		platform: CheckResult & PlatformAlertsInfo;
 	};
 }
 
@@ -88,6 +100,8 @@ export interface ReadinessProbes {
 	/** `null` when Traefik is not probed (not required and docker unreachable). */
 	traefikPresent: () => Promise<boolean | null>;
 	traefikRequired: () => boolean;
+	/** Last persisted platform-alert pass (file read only — never re-evaluates). */
+	readPlatformAlerts: () => Promise<PlatformAlertsInfo>;
 	now?: () => number;
 }
 
@@ -156,12 +170,13 @@ export async function runReadinessChecks(probes: ReadinessProbes): Promise<Readi
 	const now = probes.now ?? Date.now;
 	const required = probes.traefikRequired();
 
-	const [database, docker, migrations, queue, traefik] = await Promise.all([
+	const [database, docker, migrations, queue, traefik, platform] = await Promise.all([
 		timed("database", probes.pingDatabase, now),
 		timed("docker", probes.pingDocker, now),
 		timed("migrations", probes.readMigrations, now),
 		timed("queue", probes.readQueue, now),
 		timed("traefik", probes.traefikPresent, now),
+		timed("platform", probes.readPlatformAlerts, now),
 	]);
 
 	const migrationInfo: MigrationInfo = migrations.value ?? {
@@ -213,12 +228,30 @@ export async function runReadinessChecks(probes: ReadinessProbes): Promise<Readi
 		delete traefikCheck.error;
 	}
 
+	// Platform self-alerts are advisory: a full disk or an expiring certificate
+	// must not make Swarm restart an otherwise healthy panel, so this check is
+	// always `ok` and speaks through `warning`.
+	const platformInfo: PlatformAlertsInfo = platform.value ?? { evaluatedAt: null, alerts: [] };
+	const platformCheck: CheckResult & PlatformAlertsInfo = {
+		...platform.result,
+		...platformInfo,
+		ok: true,
+	};
+	delete platformCheck.error;
+	if (!platform.result.ok) {
+		platformCheck.warning = `Platform alert state could not be read: ${platform.result.error ?? "unknown error"}`;
+	} else if (platformInfo.alerts.length > 0) {
+		const critical = platformInfo.alerts.filter((alert) => alert.severity === "critical").length;
+		platformCheck.warning = `${platformInfo.alerts.length} platform alert(s) active${critical > 0 ? ` (${critical} critical)` : ""}: ${platformInfo.alerts.map((alert) => alert.kind).join(", ")}`;
+	}
+
 	const checks: ReadinessReport["checks"] = {
 		database: database.result,
 		docker: docker.result,
 		migrations: migrationsCheck,
 		queue: queueCheck,
 		traefik: traefikCheck,
+		platform: platformCheck,
 	};
 	const failing = (Object.keys(checks) as Array<keyof typeof checks>).filter(
 		(name) => !checks[name].ok,
@@ -364,6 +397,20 @@ async function traefikPresent(): Promise<boolean | null> {
 	return present;
 }
 
+/**
+ * Read-only view of the file the platform-alert cron writes. Readiness never
+ * re-evaluates the alerts itself: `df`, `docker service ls` and the ACME parse
+ * belong to the 5-minute cron, not to a probe Swarm hits every 15 s.
+ */
+async function readPlatformAlerts(): Promise<PlatformAlertsInfo> {
+	const { readPlatformAlertState } = await import("../monitoring/platform-alerts");
+	const state = await readPlatformAlertState();
+	return {
+		evaluatedAt: state.checkedAt > 0 ? new Date(state.checkedAt).toISOString() : null,
+		alerts: state.active.map(({ kind, severity, summary }) => ({ kind, severity, summary })),
+	};
+}
+
 export const realReadinessProbes: ReadinessProbes = {
 	pingDatabase,
 	pingDocker,
@@ -371,6 +418,7 @@ export const realReadinessProbes: ReadinessProbes = {
 	readQueue,
 	traefikPresent,
 	traefikRequired: () => traefikRequired(),
+	readPlatformAlerts,
 };
 
 // ─── Cached entry point ──────────────────────────────────────────────────────

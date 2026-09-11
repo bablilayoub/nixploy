@@ -22,7 +22,9 @@ test-results/
 
 # local Nixploy runtime (Traefik YAML, compose files, logs, metrics, ACME)
 .nixploy-data/
-dev.sh
+# The maintainer's personal helper at the repo root only — anchored so it does
+# not also swallow the committed tools/dev.sh.
+/dev.sh
 
 # logs
 *.log

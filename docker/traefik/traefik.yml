@@ -14,8 +14,10 @@
 # hot-reloads. A self-signed default certificate (00-default-tls.yml) covers
 # bare-IP / first-boot HTTPS; app domains opt into `certResolver: letsencrypt`
 # per router (no entrypoint-level resolver: bare IPs cannot use ACME).
-# HTTP → HTTPS is redirected globally; ACME HTTP-01 still works because
-# Traefik serves the challenge before applying the redirect.
+# There is deliberately NO entrypoint-level HTTP → HTTPS redirect: it would
+# override the per-domain `https` toggle. Nixploy emits a per-router
+# `redirectScheme` middleware for every domain with `https: true` instead, so a
+# domain with `https: false` stays plain on :80. ACME HTTP-01 is unaffected.
 # Logging stays at ERROR with no access log: the services run on the
 # json-file driver with rotation, and an access log fills small hosts.
 global:
@@ -26,12 +28,6 @@ log:
 entryPoints:
   web:
     address: ":80"
-    http:
-      redirections:
-        entryPoint:
-          to: websecure
-          scheme: https
-          permanent: true
   websecure:
     address: ":443"
 providers:

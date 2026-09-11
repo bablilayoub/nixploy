@@ -27,6 +27,7 @@ const healthyProbes = (): ReadinessProbes => ({
 	readQueue: vi.fn(async () => ({ pending: 0, running: 0, stuck: 0 })),
 	traefikPresent: vi.fn(async () => true),
 	traefikRequired: () => true,
+	readPlatformAlerts: vi.fn(async () => ({ evaluatedAt: null, alerts: [] })),
 });
 
 describe("runReadinessChecks", () => {
@@ -131,6 +132,44 @@ describe("runReadinessChecks", () => {
 		probes.traefikRequired = () => true;
 		report = await runReadinessChecks(probes);
 		expect(report.failing).toEqual(["traefik"]);
+	});
+
+	it("platform: self-alerts are reported as a warning, never a failure", async () => {
+		const probes = healthyProbes();
+		probes.readPlatformAlerts = async () => ({
+			evaluatedAt: "2026-09-11T12:00:00.000Z",
+			alerts: [
+				{ kind: "hostDisk", severity: "critical", summary: "Disk usage is 97.0%." },
+				{ kind: "certExpiry", severity: "warning", summary: "app.test expires in 3 days." },
+			],
+		});
+		const report = await runReadinessChecks(probes);
+		// A full disk must not make Swarm restart a panel that still serves.
+		expect(report.ok).toBe(true);
+		expect(report.failing).toEqual([]);
+		expect(report.checks.platform.ok).toBe(true);
+		expect(report.checks.platform.warning).toBe(
+			"2 platform alert(s) active (1 critical): hostDisk, certExpiry",
+		);
+		expect(report.checks.platform.alerts).toHaveLength(2);
+		expect(report.checks.platform.evaluatedAt).toBe("2026-09-11T12:00:00.000Z");
+	});
+
+	it("platform: a quiet or never-run cron produces no warning", async () => {
+		const report = await runReadinessChecks(healthyProbes());
+		expect(report.checks.platform).toMatchObject({ ok: true, evaluatedAt: null, alerts: [] });
+		expect(report.checks.platform.warning).toBeUndefined();
+	});
+
+	it("platform: an unreadable state file degrades to a warning", async () => {
+		const probes = healthyProbes();
+		probes.readPlatformAlerts = async () => {
+			throw new Error("EACCES: permission denied");
+		};
+		const report = await runReadinessChecks(probes);
+		expect(report.ok).toBe(true);
+		expect(report.checks.platform.warning).toContain("permission denied");
+		expect(report.checks.platform.error).toBeUndefined();
 	});
 
 	it("lists every failing check", async () => {

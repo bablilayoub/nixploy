@@ -2,9 +2,27 @@
 
 Contributor overview (clone → PR): [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
 
+## Quick start
+
+```bash
+git clone https://github.com/bablilayoub/nixploy && cd nixploy
+./tools/dev.sh
+```
+
+`tools/dev.sh` checks the toolchain, starts (or creates) the `nixploy-dev-pg`
+container on `127.0.0.1:54329`, writes `apps/web/.env` from
+`.env.example` with real random secrets on first run, applies the migrations
+and runs the panel on **:3000** and the landing site on **:3001** until
+Ctrl+C. `--no-landing`, `--skip-migrate`, `--skip-install` and
+`--no-postgres` do what they say.
+
+Everything below is the same thing done by hand, plus the details the script
+cannot decide for you.
+
 ## Prerequisites
 
-- Node ≥ 22, pnpm ≥ 10 (`corepack enable` gives you the pinned pnpm).
+- Node ≥ 22 (`.nvmrc` pins the major — `nvm use` picks it up), pnpm ≥ 10
+  (`corepack enable` gives you the pinned pnpm).
 - Docker Desktop (or any Docker daemon) with **Swarm active**:
   `docker swarm init` once if `docker info | grep Swarm` says `inactive`.
 - A local PostgreSQL 17 for the app database. Quickest throwaway instance:
@@ -52,6 +70,40 @@ First run: open `/setup` on a fresh database to create the owner account
 during setup and becomes your active org. The dev server boots
 Traefik (`nixploy-traefik` swarm service) and the overlay network
 automatically on start.
+
+## macOS / laptop notes
+
+The panel is written for a Linux host with a root Docker daemon. On a laptop
+four things bite, in this order:
+
+- **UI-only mode: `NIXPLOY_DISABLE_TRAEFIK_BOOT=1`.** By default the panel
+  bootstraps Traefik on boot: it renders `traefik.yml`, generates a
+  self-signed certificate and creates the `nixploy-traefik` global service,
+  which host-publishes **:80 and :443**. On a machine that already runs a
+  local web server (or where you simply do not want a proxy grabbing
+  privileged ports) that is the wrong default. Set the variable in
+  `apps/web/.env` and the boot step is skipped entirely — everything except
+  real domain routing still works, and `/api/ready` reports Traefik as a
+  warning rather than a failure. Unset it when you actually want to test
+  domains and TLS end to end.
+- **:80 / :443 collisions.** Swarm host-mode publishing cannot bind to
+  loopback only, so `nixploy-traefik` takes those ports on every interface.
+  Nothing else can hold them at the same time — stop the other server, or use
+  the UI-only mode above. `docker service rm nixploy-traefik` frees them; the
+  next panel boot recreates the service unless the variable is set.
+- **One dev server at a time.** Next 16 takes an exclusive
+  `apps/web/.next/dev/lock`. A second `pnpm dev` (or a `pnpm build` racing a
+  running dev server) fails or hangs on it. Stop the first one; if a process
+  was killed hard, delete the stale lock before starting again.
+- **`BETTER_AUTH_URL` must match the port you browse to.** It is the trusted
+  origin, not a display string: running on `PORT=3136` while
+  `BETTER_AUTH_URL=http://localhost:3000` makes every sign-in fail with
+  "Invalid origin". Change both together.
+
+Two more things that are Linux-only and silently degrade here: the config dir
+falls back to `./.nixploy-data` when `NIXPLOY_CONFIG_DIR` is unset (writing to
+`/etc` needs sudo on macOS), and host metrics read `/proc`, which does not
+exist — the Host card shows what Docker Desktop's VM reports, not your Mac.
 
 ## Verify changes (the loop)
 
@@ -115,3 +167,7 @@ without running it. Do not run the Docker/Postgres jobs under `act`.
 `docs/architecture.md` · `docs/development.md` · `docs/deployment-flow.md` ·
 `docs/domains-traefik.md` · `docs/auth.md` · `docs/audit.md` · `docs/docker.md` ·
 `docs/observability.md` · `docs/templates.md`
+
+Operator-facing: `docs/install.md` (including the runtime-environment
+reference) · `docs/troubleshooting.md` · `docs/upgrade-notes.md` ·
+`docs/instance-backup.md` · `docs/releases.md` · [`CHANGELOG.md`](../CHANGELOG.md)
