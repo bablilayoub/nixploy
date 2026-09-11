@@ -13,8 +13,9 @@ import {
 } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { isSafeWatchPathPattern } from "../../utils/input-limits";
-import { queueDeployment } from "../deployment";
+import { type DeploymentProvenance, queueDeployment } from "../deployment";
 import { getAppCodePath, shellQuote } from "../deployment/paths";
+import { DomainError } from "../errors";
 import {
 	classifyPullRequestAction,
 	createOrRedeployPreview,
@@ -40,6 +41,13 @@ import { derivedWebhookSecret } from "./webhook-secret";
 
 export type GitWebhookProvider = "github" | "gitlab" | "bitbucket" | "gitea";
 
+/** Head commit of a push (or a PR head), as far as the provider payload says. */
+export type WebhookCommit = {
+	sha: string;
+	message: string | null;
+	author: string | null;
+};
+
 export type PullRequestWebhookInfo = {
 	action: string;
 	number: string;
@@ -63,6 +71,7 @@ export type PullRequestWebhookInfo = {
 };
 
 export type GitWebhookResult = {
+	provider: GitWebhookProvider;
 	/** Ids of applications that should react to this delivery. */
 	applicationIds: string[];
 	branch: string;
@@ -70,6 +79,8 @@ export type GitWebhookResult = {
 	type: "push" | "pull_request" | "tag";
 	/** Present when type is pull_request. */
 	pullRequest?: PullRequestWebhookInfo;
+	/** Head commit (push/tag: from the payload; pull_request: sha only). */
+	commit?: WebhookCommit;
 };
 
 type WebhookHeaders = Record<string, string | string[] | undefined>;
@@ -85,7 +96,10 @@ function safeEqual(a: string, b: string): boolean {
 	return ba.length === bb.length && timingSafeEqual(ba, bb);
 }
 
-function normalizeRef(ref: string | undefined): { branch: string; isTag: boolean } {
+function normalizeRef(ref: string | undefined): {
+	branch: string;
+	isTag: boolean;
+} {
 	if (!ref) return { branch: "", isTag: false };
 	if (ref.startsWith("refs/tags/")) return { branch: ref.slice("refs/tags/".length), isTag: true };
 	if (ref.startsWith("refs/heads/"))
@@ -110,7 +124,44 @@ type ExtractedWebhook = {
 	/** Files touched by a push (added/modified/removed across commits). */
 	changedPaths?: string[];
 	pullRequest?: PullRequestWebhookInfo;
+	commit?: WebhookCommit;
 };
+
+const COMMIT_SHA = /^[0-9a-f]{7,64}$/i;
+
+/**
+ * Head commit of a push payload. `sha` is the provider's `after`/`checkout_sha`
+ * (falls back to the commit object's id/hash); the message and author come
+ * from the head commit object (GitHub/Gitea `head_commit`, GitLab last
+ * `commits[]` entry, Bitbucket `changes[].new.target`). Author fields differ
+ * per provider (`author.name`, `author.user.display_name`, Bitbucket's raw
+ * `"Name <email>"`), so every shape is tried before the pusher fallback.
+ * Branch deletions carry an all-zero sha and yield nothing.
+ */
+export function extractPushCommit(
+	sha: unknown,
+	head: unknown,
+	fallbackAuthor?: unknown,
+): WebhookCommit | undefined {
+	const headObj = (head && typeof head === "object" ? head : {}) as Record<string, unknown>;
+	const id = asString(sha) || asString(headObj.id) || asString(headObj.hash);
+	if (!COMMIT_SHA.test(id) || /^0+$/.test(id)) return undefined;
+	const authorObj = (
+		headObj.author && typeof headObj.author === "object" ? headObj.author : {}
+	) as Record<string, unknown>;
+	const authorUser = (
+		authorObj.user && typeof authorObj.user === "object" ? authorObj.user : {}
+	) as Record<string, unknown>;
+	const author =
+		asString(authorObj.name) ||
+		asString(authorUser.display_name) ||
+		asString(authorObj.raw).replace(/\s*<[^>]*>\s*$/, "") ||
+		asString(authorObj.username) ||
+		asString(fallbackAuthor) ||
+		null;
+	const message = asString(headObj.message).trim() || null;
+	return { sha: id, message, author };
+}
 
 /** Collect added/modified/removed paths from a push event's commit list. */
 function collectCommitPaths(commits: unknown): string[] | undefined {
@@ -175,6 +226,7 @@ async function verifyAndExtractGithub(
 			owner,
 			cloneUrl: payload.repository?.clone_url,
 			changedPaths: collectCommitPaths(payload.commits),
+			commit: extractPushCommit(payload.after, payload.head_commit, payload.pusher?.name),
 		};
 	}
 	if (event === "pull_request") {
@@ -247,6 +299,7 @@ async function verifyAndExtractGitlab(
 		const { branch } = normalizeRef(payload.ref);
 		const pathWithNamespace: string = payload.project?.path_with_namespace ?? "";
 		const parts = pathWithNamespace.split("/");
+		const commits = Array.isArray(payload.commits) ? payload.commits : [];
 		return {
 			branch,
 			type: event === "tag_push" ? "tag" : "push",
@@ -254,6 +307,12 @@ async function verifyAndExtractGitlab(
 			owner: parts.slice(0, -1).join("/"),
 			cloneUrl: payload.project?.git_http_url,
 			changedPaths: collectCommitPaths(payload.commits),
+			// GitLab lists commits oldest-first; `checkout_sha` is the head.
+			commit: extractPushCommit(
+				payload.checkout_sha ?? payload.after,
+				commits[commits.length - 1],
+				payload.user_name ?? payload.user_username,
+			),
 		};
 	}
 	if (event === "merge_request") {
@@ -326,12 +385,18 @@ async function verifyAndExtractBitbucket(
 	if (event === "repo:push") {
 		const change = payload.push?.changes?.[0];
 		const newRef = change?.new;
+		const commit = extractPushCommit(
+			newRef?.target?.hash,
+			newRef?.target,
+			payload.actor?.display_name ?? payload.actor?.nickname,
+		);
 		if (newRef?.type === "tag") {
 			return {
 				branch: newRef.name ?? "",
 				type: "tag",
 				repository: payload.repository?.name ?? "",
 				owner: payload.repository?.workspace?.slug ?? "",
+				commit,
 			};
 		}
 		return {
@@ -340,6 +405,7 @@ async function verifyAndExtractBitbucket(
 			repository: payload.repository?.name ?? "",
 			owner: payload.repository?.workspace?.slug ?? "",
 			cloneUrl: payload.repository?.links?.html?.href,
+			commit,
 		};
 	}
 	const prEvents: Record<string, string> = {
@@ -425,6 +491,11 @@ async function verifyAndExtractGitea(
 			owner,
 			cloneUrl: payload.repository?.clone_url,
 			changedPaths: collectCommitPaths(payload.commits),
+			commit: extractPushCommit(
+				payload.after,
+				payload.head_commit,
+				payload.pusher?.full_name ?? payload.pusher?.login ?? payload.pusher?.username,
+			),
 		};
 	}
 	if (event === "pull_request") {
@@ -458,14 +529,17 @@ async function verifyAndExtractGitea(
 	throw new WebhookIgnored(`unsupported gitea event: ${event}`);
 }
 
-export class WebhookUnauthorized extends Error {
+export class WebhookUnauthorized extends DomainError {
 	constructor(message: string) {
-		super(message);
+		super("UNAUTHORIZED", message);
 		this.name = "WebhookUnauthorized";
 	}
 }
 
-/** Non-error signal for deliveries that are valid but carry no work. */
+/**
+ * Non-error signal for deliveries that are valid but carry no work. Deliberately
+ * a plain Error, not a DomainError: the webhook route answers it with 202.
+ */
 export class WebhookIgnored extends Error {
 	constructor(message: string) {
 		super(message);
@@ -697,10 +771,14 @@ export async function handleGitWebhook(
 		);
 
 		return {
+			provider,
 			applicationIds: matches.map((match) => match.applicationId),
 			branch: extracted.branch,
 			type: "pull_request",
 			pullRequest: extracted.pullRequest,
+			commit: extracted.pullRequest.headCommit
+				? { sha: extracted.pullRequest.headCommit, message: null, author: null }
+				: undefined,
 		};
 	}
 
@@ -733,24 +811,44 @@ export async function handleGitWebhook(
 	const matches = candidates.filter((candidate) => applicationMatchesWebhook(candidate, context));
 
 	return {
+		provider,
 		applicationIds: matches.map((match) => match.applicationId),
 		branch: extracted.branch,
 		type: extracted.type,
+		commit: extracted.commit,
+	};
+}
+
+/** Deployment provenance of a verified provider delivery: `webhook:<provider>` + head commit. */
+export function webhookProvenance(
+	result: Pick<GitWebhookResult, "provider" | "commit">,
+): DeploymentProvenance {
+	return {
+		trigger: "webhook",
+		triggeredBy: `webhook:${result.provider}`,
+		commitSha: result.commit?.sha ?? null,
+		commitMessage: result.commit?.message ?? null,
+		commitAuthor: result.commit?.author ?? null,
 	};
 }
 
 /**
- * Enqueue a redeploy triggered by a webhook and retitle the deployment row
- * (queueDeployment only writes "Deployment"/"Redeploy") so the trigger shows
- * up in the deployment history, e.g. "Webhook: push to main".
+ * Enqueue a redeploy triggered by a webhook with a descriptive title
+ * ("Webhook: push to main") and its provenance. Defaults to a provider
+ * `webhook` trigger; the generic API-key deploy hook passes `api` + user.
  */
 export async function queueWebhookDeployment(
 	applicationId: string,
 	title: string,
+	provenance: Partial<DeploymentProvenance> = {},
 ): Promise<string> {
-	const deploymentId = await queueDeployment({ applicationId, type: "redeploy" });
-	await db.update(deployments).set({ title }).where(eq(deployments.deploymentId, deploymentId));
-	return deploymentId;
+	return await queueDeployment({
+		applicationId,
+		type: "redeploy",
+		title,
+		trigger: "webhook",
+		...provenance,
+	});
 }
 
 /**
@@ -848,7 +946,11 @@ async function readCheckoutCommit(preview: {
 export async function handlePreviewWebhookForApplication(
 	applicationId: string,
 	webhook: GitWebhookResult,
-): Promise<{ action: string; previewDeploymentId?: string; deploymentId?: string }> {
+): Promise<{
+	action: string;
+	previewDeploymentId?: string;
+	deploymentId?: string;
+}> {
 	const pr = webhook.pullRequest;
 	if (!pr?.number) {
 		throw new WebhookIgnored("pull_request webhook carried no PR number");
@@ -887,11 +989,18 @@ export async function handlePreviewWebhookForApplication(
 				deployedCommit,
 			})
 		) {
-			return { action: "ignored", previewDeploymentId: existingPreview.previewDeploymentId };
+			return {
+				action: "ignored",
+				previewDeploymentId: existingPreview.previewDeploymentId,
+			};
 		}
 	}
 
 	const sourceRef = pr.sourceRef ?? webhook.branch ?? null;
+	const provenance = {
+		triggeredBy: `webhook:${webhook.provider}`,
+		commitSha: pr.headCommit ?? null,
+	};
 	const result = await (async () => {
 		const gate = await evaluateForkGate(applicationId, pr);
 		if (gate === "allow") {
@@ -903,6 +1012,7 @@ export async function handlePreviewWebhookForApplication(
 				pullRequestTitle: pr.title ?? null,
 				pullRequestURL: pr.url ?? null,
 				pullRequestAuthor: pr.authorLogin ?? null,
+				...provenance,
 			});
 		}
 
@@ -916,6 +1026,7 @@ export async function handlePreviewWebhookForApplication(
 			pullRequestTitle: pr.title ?? null,
 			pullRequestURL: pr.url ?? null,
 			pullRequestAuthor: pr.authorLogin ?? null,
+			...provenance,
 		};
 		const existing = existingPreview;
 		if (existing && existing.previewStatus !== "awaiting_approval") {
@@ -945,7 +1056,10 @@ export async function handlePreviewWebhookForApplication(
 				deploymentId: "",
 			};
 		}
-		const created = await createPreviewDeployment({ ...gatedInput, deferDeploy: true });
+		const created = await createPreviewDeployment({
+			...gatedInput,
+			deferDeploy: true,
+		});
 		await upsertPreviewComment({
 			applicationId,
 			pullRequestNumber: pr.number,

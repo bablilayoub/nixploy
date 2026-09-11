@@ -1,25 +1,18 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-
-import { useTRPC } from "@/lib/trpc";
+import { useRunningDeployments } from "@/hooks/use-running-deployments";
 
 /**
  * 1px indeterminate progress hairline pinned directly under the TopNav
- * border while any deployment is queued or running. Pure neutral CSS
- * animation (keyframes kept inline so no global stylesheet change is needed).
+ * border while any deployment is queued or running. Reads the shared
+ * running-deployments query (polls only while something is in flight —
+ * no more 5 s forever polling on every page). Pure neutral CSS animation
+ * (keyframes kept inline so no global stylesheet change is needed).
  */
 export function DeployProgressBar() {
-	const trpc = useTRPC();
-	const { data } = useQuery({
-		...trpc.deployment.recent.queryOptions({ limit: 5 }),
-		refetchInterval: 5_000,
-	});
-	const active = (data?.deployments ?? []).some(
-		(deployment) => deployment.status === "running" || deployment.status === "queued",
-	);
+	const { anyActive } = useRunningDeployments();
 
-	if (!active) {
+	if (!anyActive) {
 		return null;
 	}
 

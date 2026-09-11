@@ -147,7 +147,10 @@ export const gitopsRouter = router({
 				input.redeploy !== false,
 			);
 			const result = await applyStack(stack, organizationId, input.projectId);
-			const redeploy = input.redeploy === false ? null : await redeployChangedFromApply(result);
+			const redeploy =
+				input.redeploy === false
+					? null
+					: await redeployChangedFromApply(result, { triggeredBy: ctx.session.user.id });
 			await auditFromSession(ctx, organizationId, {
 				action: "gitops.runApply",
 				targetType: "project",
@@ -192,7 +195,10 @@ export const gitopsRouter = router({
 				input.redeploy !== false,
 			);
 			const result = await applyStack(stack, organizationId, input.projectId);
-			const redeploy = input.redeploy === false ? null : await redeployChangedFromApply(result);
+			const redeploy =
+				input.redeploy === false
+					? null
+					: await redeployChangedFromApply(result, { triggeredBy: ctx.session.user.id });
 			await auditFromSession(ctx, organizationId, {
 				action: "gitops.syncFromGit",
 				targetType: "project",
@@ -239,7 +245,10 @@ export const gitopsRouter = router({
 				input.redeploy !== false,
 			);
 			const result = await applyStack(stack, organizationId, input.projectId);
-			const redeploy = input.redeploy === false ? null : await redeployChangedFromApply(result);
+			const redeploy =
+				input.redeploy === false
+					? null
+					: await redeployChangedFromApply(result, { triggeredBy: ctx.session.user.id });
 			await auditFromSession(ctx, organizationId, {
 				action: "gitops.syncFromUrl",
 				targetType: "project",

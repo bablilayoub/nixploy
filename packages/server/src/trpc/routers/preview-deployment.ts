@@ -75,7 +75,9 @@ export const previewDeploymentRouter = router({
 			await assertApplicationAccess(input.applicationId, organizationId);
 
 			try {
-				return await createPreviewDeployment(input);
+				// Manual preview: the deployment row is attributed to this user
+				// (webhook-driven previews pass `webhook:<provider>` instead).
+				return await createPreviewDeployment({ ...input, triggeredBy: ctx.session.user.id });
 			} catch (error) {
 				if (error instanceof PreviewConflictError) {
 					throw new TRPCError({ code: "CONFLICT", message: error.message });
@@ -121,7 +123,9 @@ export const previewDeploymentRouter = router({
 					message: "Preview is not awaiting approval",
 				});
 			}
-			const result = await redeployPreviewDeployment(preview.previewDeploymentId);
+			const result = await redeployPreviewDeployment(preview.previewDeploymentId, {
+				triggeredBy: ctx.session.user.id,
+			});
 			if (preview.pullRequestNumber) {
 				await upsertPreviewComment({
 					applicationId: preview.applicationId,

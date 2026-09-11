@@ -4,6 +4,7 @@ import { applications, compose, deployments, previewDeployments } from "../../db
 import { generateId } from "../../db/schema/utils";
 import { deploymentEvents } from "./events";
 import { getDeploymentLogPath } from "./paths";
+import type { DeploymentProvenance, DeploymentTrigger } from "./provenance";
 import { enqueue, type QueueJob, requestCancellation } from "./queue";
 // Importing the worker registers its job runner with the queue (side effect).
 import "./worker";
@@ -12,6 +13,17 @@ export { dockerCleanup } from "./cleanup";
 export type { DeploymentFinishEvent, DeploymentLogEvent, DeploymentStatus } from "./events";
 export { deploymentEvents } from "./events";
 export {
+	applicationReadiness,
+	composeReadiness,
+	type DeploymentProvenance,
+	type DeploymentTrigger,
+	type DeployReadiness,
+	firstLine,
+	isApiKeySession,
+	provenanceForSession,
+	SOURCE_NOT_CONFIGURED,
+} from "./provenance";
+export {
 	drainQueue,
 	getQueuePosition,
 	isQueueDraining,
@@ -19,11 +31,22 @@ export {
 	setServerConcurrency,
 } from "./queue";
 
-export interface DeploymentJobInput {
+export interface DeploymentJobInput extends Partial<DeploymentProvenance> {
 	applicationId?: string;
 	composeId?: string;
 	previewDeploymentId?: string;
 	type: "deploy" | "redeploy";
+	/** Row title; defaults to "Deployment" / "Redeploy" (previews prefixed). */
+	title?: string;
+}
+
+/**
+ * Trigger recorded when a caller does not say: a plain redeploy (Deploy
+ * Copilot "apply & redeploy", template re-runs) is `redeploy`, a first
+ * deploy is `manual`. Every router/webhook/cron caller passes its own.
+ */
+export function defaultTrigger(type: DeploymentJobInput["type"]): DeploymentTrigger {
+	return type === "redeploy" ? "redeploy" : "manual";
 }
 
 /** Error message stored on a queued row replaced by a newer job for the same app. */
@@ -93,13 +116,15 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
 	const deploymentId = generateId();
 	await db.insert(deployments).values({
 		deploymentId,
-		title: job.previewDeploymentId
-			? job.type === "redeploy"
-				? "Preview redeploy"
-				: "Preview deployment"
-			: job.type === "redeploy"
-				? "Redeploy"
-				: "Deployment",
+		title:
+			job.title ??
+			(job.previewDeploymentId
+				? job.type === "redeploy"
+					? "Preview redeploy"
+					: "Preview deployment"
+				: job.type === "redeploy"
+					? "Redeploy"
+					: "Deployment"),
 		// The worker flips this to "running" when it picks the job up; rows
 		// still "queued" at boot are re-enqueued by recovery.ts.
 		status: "queued",
@@ -108,6 +133,14 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
 		composeId: job.composeId ?? null,
 		isPreview: Boolean(job.previewDeploymentId),
 		serverId,
+		// Provenance: who started it and, when the caller already knows (webhook
+		// payloads), which commit. Git clones fill the commit fields later
+		// (worker → readCheckoutCommit) when they are still null.
+		trigger: job.trigger ?? defaultTrigger(job.type),
+		triggeredBy: job.triggeredBy ?? null,
+		commitSha: job.commitSha ?? null,
+		commitMessage: job.commitMessage ?? null,
+		commitAuthor: job.commitAuthor ?? null,
 	});
 
 	// enqueue() coalesces synchronously, so two concurrent calls for one app

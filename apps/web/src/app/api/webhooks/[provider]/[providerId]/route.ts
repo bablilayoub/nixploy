@@ -6,6 +6,7 @@ import {
 	queueWebhookDeployment,
 	WebhookIgnored,
 	WebhookUnauthorized,
+	webhookProvenance,
 } from "@nixploy/server/modules/git/webhook-handler";
 import {
 	clientIpFromRequest,
@@ -126,9 +127,10 @@ export async function POST(req: Request, { params }: RouteParams) {
 	}
 
 	const title = `Webhook: ${result.type} to ${result.branch}`;
+	const provenance = webhookProvenance(result);
 	const deploymentIds: string[] = [];
 	for (const applicationId of result.applicationIds) {
-		deploymentIds.push(await queueWebhookDeployment(applicationId, title));
+		deploymentIds.push(await queueWebhookDeployment(applicationId, title, provenance));
 	}
 
 	return Response.json({

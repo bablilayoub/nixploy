@@ -10,10 +10,11 @@ import {
 	registry,
 	sshKeys,
 } from "../../db/schema";
-import { getGitKnownHostsPath } from "../../utils/exec";
+import { execAsync, execAsyncRemote, getGitKnownHostsPath } from "../../utils/exec";
 import type { DeploymentContext } from "./context";
 import { getDocker, writeFileTargeted } from "./docker";
 import { getAppCodePath, getDropZipPath, getSshKeysPath, shellQuote } from "./paths";
+import { CHECKOUT_COMMIT_FORMAT, type CommitInfo, parseCheckoutCommit } from "./provenance";
 
 export type ApplicationRow = typeof applications.$inferSelect;
 
@@ -256,6 +257,49 @@ export async function cloneGitSource(
 	await git.fetch(["--depth", "1", "origin", source.branch]);
 	await git.reset(["--hard", "FETCH_HEAD"]);
 	return codeDir;
+}
+
+/**
+ * Read the commit a fresh checkout landed on (sha, author, subject) so the
+ * deployment row can show provenance. Best effort: a missing git binary,
+ * an SSH hiccup or an unexpected output shape yields `null`, never a failed
+ * deploy. Runs where the clone ran (local or the pinned server) and stays
+ * out of the deployment log — the log already says what was checked out.
+ */
+export async function readCheckoutCommit(
+	ctx: DeploymentContext,
+	codeDir: string,
+): Promise<CommitInfo | null> {
+	const command = `git -C ${shellQuote(codeDir)} log -1 --format=${shellQuote(CHECKOUT_COMMIT_FORMAT)}`;
+	try {
+		const output = ctx.serverId
+			? await execAsyncRemote(ctx.serverId, command, { timeoutMs: 15_000 })
+			: await execAsync(command, { timeout: 15_000 });
+		return parseCheckoutCommit(output);
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Repository digest (`sha256:…`) of a pulled image, when the registry sent
+ * one. Docker-source deployments have no commit, so the digest is what pins
+ * "which nginx:latest did this run" in the history. One image inspect,
+ * `null` for local-only images.
+ */
+export async function resolveImageDigest(
+	ctx: DeploymentContext,
+	image: string,
+): Promise<string | null> {
+	try {
+		const docker = await getDocker(ctx.serverId);
+		const info = await docker.getImage(image).inspect();
+		const repoDigest = info.RepoDigests?.[0];
+		const at = repoDigest?.indexOf("@") ?? -1;
+		return repoDigest && at !== -1 ? repoDigest.slice(at + 1) : null;
+	} catch {
+		return null;
+	}
 }
 
 /**

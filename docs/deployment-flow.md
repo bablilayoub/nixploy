@@ -94,6 +94,17 @@ mid-finalization. `unhandledRejection` is logged and survived;
      (see `docs/observability.md`).
    - `dockerfile-builder.ts` — build the repo's Dockerfile (path/context/stage,
      `--build-arg` from build args).
+   - **Build env vs runtime env.** Builders receive only the application's
+     *build args* (`resolveBuildEnv`, `modules/deployment/env.ts`): nixpacks,
+     railpack and pack get them as `--env`, the Dockerfile builder as
+     `--build-arg`. The merged runtime env (org → project → environment →
+     service) goes to the Swarm service only — it used to be handed to the
+     builders too, which baked runtime secrets into image layers and the
+     BuildKit cache. **Migration note:** an app whose build read a runtime
+     variable (a `NEXT_PUBLIC_*` value, a private registry token) must move
+     that key into Build args; until then set
+     `NIXPLOY_BUILD_WITH_RUNTIME_ENV=1` on the `nixploy` service to restore
+     the old merge (build args still override runtime values by key).
    - `buildpacks.ts` — Heroku or Paketo buildpacks via `pack` (local binary
      or the `buildpacksio/pack` image). **Platform caveat**: both builders
      ship amd64-only images — on arm64 hosts the build succeeds but the
@@ -122,6 +133,54 @@ which also emits a `log` event on `deploymentEvents` per chunk. `/ws/deployment`
 (`stat` size + positional read) woken by those events — no per-client file
 re-read or DB poll; a 5 s status check remains as a safety net. `deployment.getLogs`
 reads from the byte `offset` it returned last time for the same reason.
+
+### Pre-flight
+
+`application.deploy` / `redeploy` and `compose.deploy` / `redeploy` refuse
+with `PRECONDITION_FAILED` before a row is queued when there is nothing to
+fetch (`applicationReadiness` / `composeReadiness`,
+`modules/deployment/provenance.ts`): a docker source without an image, a
+generic git source without a URL, a provider source without owner +
+repository, a drop source without an uploaded archive, a raw compose without
+a file. `application.one` and `compose.one` return the same predicate as
+`readiness: { canDeploy, reason? }`, which the headers use to disable Deploy
+with the reason as the tooltip instead of toasting a false "queued".
+
+### Provenance
+
+Every `deployment` row records what started it (`trigger`, migration 0020)
+and who (`triggeredBy`): `manual` (browser session, user id), `api` (API
+key — REST, CLI, MCP, the generic deploy hook — user id of the key owner),
+`webhook` (`webhook:<provider>`), `schedule` (`schedule:<id>`), `preview`,
+`rollback`, `redeploy` (Copilot apply & redeploy, template re-run), `gitops`,
+`system`. Provider push webhooks also fill `commitSha` / `commitMessage` /
+`commitAuthor` from the payload (`extractPushCommit`); pull-request
+deliveries carry the head sha. After a git checkout the worker runs
+`git log -1 --format=%H%n%an%n%s` in the code dir and fills whichever of the
+three fields is still null (`readCheckoutCommit`); docker-image sources store
+the registry digest in `commitSha` and the image reference in
+`commitMessage`. `deployment.byApplication` / `byCompose` / `byProject` /
+`recent` join the actor's display name as `triggeredByName`. The history
+table renders a trigger chip, the short sha (linked to the provider's commit
+page when the source is a repository — `buildCommitUrl`), the first line of
+the message and the author. GitLab and Gitea links need the integration's
+base URL because both are commonly self-hosted: applications carry it through
+the `gitlab`/`gitea` relation on `application.one`, while `compose.one` does
+not load those relations, so a compose service's sha stays plain text rather
+than guessing gitlab.com.
+
+### Deploy feedback loop (UI)
+
+One hook, `apps/web/src/hooks/use-running-deployments.ts`, watches
+`deployment.recent` and polls only while something is queued or running.
+The top-nav hairline, the application/compose headers ("Queued (#n)" /
+"Deploying" in place of the stale service status, last failure line + "View
+logs") and the project services table read it; when a deployment settles the
+hook invalidates `application.one` / `compose.one`, the `all` lists,
+`environment.byProject` and the deployment lists once, so badges catch up
+without per-page timers. Queuing a deploy switches to
+`?tab=deployments&deployment=<id>`; `DeploymentHistory` opens that row's log
+drawer as soon as it is listed.
 
 ## Compose deploy pipeline
 

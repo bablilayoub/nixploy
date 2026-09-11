@@ -1,6 +1,7 @@
 "use client";
 
-import { Loader2, MoreVertical, Play, RefreshCw, Rocket, Square } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Loader2, MoreVertical, Play, RefreshCw, Rocket, ScrollText, Square } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -26,6 +27,12 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import {
+	firstLine,
+	useFollowDeployment,
+	useRunningDeployments,
+} from "@/hooks/use-running-deployments";
+import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
 import type { ApplicationActions } from "./use-application-actions";
@@ -53,17 +60,48 @@ export function ApplicationHeader({
 	 */
 	hasDeployed: boolean;
 }) {
+	const trpc = useTRPC();
 	const { can } = useCapabilities();
 	const applicationId = application.applicationId;
 	const [confirmStop, setConfirmStop] = useState(false);
 	const { deploy, redeploy, start, stop, isBusy } = actions;
+	const followDeployment = useFollowDeployment();
+
+	// Live deploy state (UX audit F13): the shared running-deployments query
+	// tells us a build is queued/running before `application.status` moves.
+	const { active } = useRunningDeployments({ applicationId });
+	const inFlight = active[0] ?? null;
+	// Last outcome, for the error line under the status (UX audit F2).
+	const lastDeploymentQuery = useQuery(
+		trpc.deployment.byApplication.queryOptions({ applicationId, limit: 1 }),
+	);
+	const lastDeployment = lastDeploymentQuery.data?.deployments[0] ?? null;
+	const lastError =
+		!inFlight && lastDeployment?.status === "error" ? firstLine(lastDeployment.errorMessage) : null;
 
 	const isRunning = application.status === "running" || application.status === "done";
-	const statusConfig = STATUS_CONFIG[application.status ?? "idle"] ?? STATUS_CONFIG.idle;
+	const baseStatus = STATUS_CONFIG[application.status ?? "idle"] ?? STATUS_CONFIG.idle;
+	const statusConfig = inFlight
+		? {
+				label:
+					inFlight.status === "queued"
+						? `Queued${inFlight.queuePosition ? ` (#${inFlight.queuePosition})` : ""}`
+						: "Deploying",
+				status: "info" as StatusDotStatus,
+			}
+		: baseStatus;
 
 	const canDeploy = can("service.deploy");
 	const canRuntime = can("service.runtime");
-	const deployHint = canDeploy ? undefined : capabilityHint("service.deploy");
+	const readiness = application.readiness;
+	// Pre-flight (UX audit F2): the server refuses unconfigured sources with
+	// the same message, so the button explains instead of toasting a failure.
+	const deployHint = !canDeploy
+		? capabilityHint("service.deploy")
+		: readiness.canDeploy
+			? undefined
+			: readiness.reason;
+	const deployDisabled = isBusy || !canDeploy || !readiness.canDeploy;
 	const runtimeHint = canRuntime ? undefined : capabilityHint("service.runtime");
 
 	return (
@@ -83,14 +121,31 @@ export function ApplicationHeader({
 				}
 				title={application.name}
 				description={
-					<span className="flex items-center gap-1.5">
-						<StatusDot
-							status={statusConfig.status}
-							className={statusConfig.status === "success" ? "animate-pulse" : undefined}
-						/>
-						<span>{statusConfig.label}</span>
-						<span aria-hidden>·</span>
-						<span>{application.description || application.appName}</span>
+					<span className="flex flex-col gap-1">
+						<span className="flex items-center gap-1.5">
+							<StatusDot
+								status={statusConfig.status}
+								className={
+									statusConfig.status === "success" || inFlight ? "animate-pulse" : undefined
+								}
+							/>
+							<span>{statusConfig.label}</span>
+							<span aria-hidden>·</span>
+							<span>{application.description || application.appName}</span>
+						</span>
+						{lastError && lastDeployment && (
+							<span className="flex items-center gap-1.5 text-destructive">
+								<span className="truncate">Last deployment failed: {lastError}</span>
+								<button
+									type="button"
+									className="inline-flex shrink-0 items-center gap-1 underline-offset-2 hover:underline"
+									onClick={() => followDeployment(lastDeployment.deploymentId)}
+								>
+									<ScrollText className="size-3.5" />
+									View logs
+								</button>
+							</span>
+						)}
 					</span>
 				}
 				actions={
@@ -103,10 +158,7 @@ export function ApplicationHeader({
 							}}
 						/>
 						<DisabledHint hint={deployHint}>
-							<Button
-								onClick={() => deploy.mutate({ applicationId })}
-								disabled={isBusy || !canDeploy}
-							>
+							<Button onClick={() => deploy.mutate({ applicationId })} disabled={deployDisabled}>
 								{deploy.isPending ? (
 									<Loader2 className="size-4 animate-spin" />
 								) : (
@@ -120,7 +172,7 @@ export function ApplicationHeader({
 								<Button
 									variant="outline"
 									onClick={() => redeploy.mutate({ applicationId })}
-									disabled={isBusy || !canDeploy}
+									disabled={deployDisabled}
 								>
 									{redeploy.isPending ? (
 										<Loader2 className="size-4 animate-spin" />
@@ -178,7 +230,7 @@ export function ApplicationHeader({
 								<DropdownMenuContent align="end">
 									{hasDeployed && (
 										<DropdownMenuItem
-											disabled={isBusy || !canDeploy}
+											disabled={deployDisabled}
 											title={deployHint}
 											onClick={() => redeploy.mutate({ applicationId })}
 										>

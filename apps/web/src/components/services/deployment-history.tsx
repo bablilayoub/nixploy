@@ -3,12 +3,14 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Ban, Bot, ChevronDown, Loader2, RefreshCw, ScrollText } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { capabilityHint } from "@/components/services/capability-hint";
 import { LogViewer } from "@/components/services/log-viewer";
 import { DeploymentStatusBadge } from "@/components/services/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -29,10 +31,77 @@ import {
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { describeTriggeredBy, firstLine, TRIGGER_LABELS } from "@/hooks/use-running-deployments";
 import { formatDuration } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
 
 const PAGE_SIZE = 10;
+
+/** Enough of a service row to point a commit sha at the provider's commit page. */
+export type CommitLinkSource = {
+	sourceType: string;
+	owner?: string | null;
+	repository?: string | null;
+	gitUrl?: string | null;
+	/** Self-hosted GitLab/Gitea base URL when the service is linked to one. */
+	providerUrl?: string | null;
+};
+
+const withProtocol = (url: string): string => (/^[a-z]+:\/\//i.test(url) ? url : `https://${url}`);
+
+/** `https://host/owner/repo` from an https, ssh:// or scp-style git URL; null otherwise. */
+function webRepoFromGitUrl(gitUrl: string): string | null {
+	const scp = gitUrl.match(/^(?:[\w.-]+@)?([\w.-]+):([\w./-]+?)(?:\.git)?\/?$/);
+	if (scp && !gitUrl.includes("://")) {
+		return `https://${scp[1]}/${scp[2]}`;
+	}
+	try {
+		const url = new URL(gitUrl);
+		if (!/^(https?|ssh|git)(\+ssh)?:$/.test(url.protocol)) return null;
+		const path = url.pathname.replace(/\.git$/, "").replace(/\/$/, "");
+		if (path.split("/").filter(Boolean).length < 2) return null;
+		return `https://${url.hostname}${path}`;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Provider commit URL for a deployment's sha. Docker/drop/raw sources have
+ * no repository (the "sha" of a docker deployment is the image digest) and
+ * return null, so the sha renders as plain text. GitLab and Gitea are often
+ * self-hosted, so they need the integration's base URL: without it the sha
+ * stays plain text rather than pointing at gitlab.com/gitea.com by guess.
+ */
+export function buildCommitUrl(source: CommitLinkSource, sha: string): string | null {
+	const repo =
+		source.owner && source.repository
+			? `${source.owner.replace(/^\/+|\/+$/g, "")}/${source.repository.replace(/^\/+|\/+$/g, "")}`
+			: null;
+	const providerBase = source.providerUrl
+		? withProtocol(source.providerUrl).replace(/\/$/, "")
+		: null;
+	switch (source.sourceType) {
+		case "github":
+			return repo ? `https://github.com/${repo}/commit/${sha}` : null;
+		case "gitlab":
+			return repo && providerBase ? `${providerBase}/${repo}/-/commit/${sha}` : null;
+		case "bitbucket":
+			return repo ? `https://bitbucket.org/${repo}/commits/${sha}` : null;
+		case "gitea":
+			return repo && providerBase ? `${providerBase}/${repo}/commit/${sha}` : null;
+		case "git": {
+			const base = source.gitUrl ? webRepoFromGitUrl(source.gitUrl) : null;
+			return base ? `${base}/commit/${sha}` : null;
+		}
+		default:
+			return null;
+	}
+}
+
+/** Short display form: 7 chars for a git sha, `sha256:abcdef1` for an image digest. */
+const shortSha = (sha: string): string =>
+	sha.startsWith("sha256:") ? `sha256:${sha.slice(7, 14)}` : sha.slice(0, 7);
 
 type ExplainResult = {
 	summary: string;
@@ -53,6 +122,13 @@ type DeploymentRow = {
 	createdAt: Date | string;
 	startedAt: Date | string | null;
 	finishedAt: Date | string | null;
+	/** Provenance (migration 0020); older rows carry nulls. */
+	trigger?: string | null;
+	triggeredBy?: string | null;
+	triggeredByName?: string | null;
+	commitSha?: string | null;
+	commitMessage?: string | null;
+	commitAuthor?: string | null;
 };
 
 /** Queued and running deployments are both "in flight" for polling and cancel. */
@@ -64,6 +140,14 @@ export type DeploymentHistoryProps = {
 	description: string;
 	/** Application deployments can be cancelled while running. */
 	canCancel?: boolean;
+	/** Provider commit page for a sha; omit (or return null) to render the sha as text. */
+	commitUrl?: (sha: string) => string | null;
+	/**
+	 * Open this deployment's log drawer as soon as its row is listed. The
+	 * `?deployment=<id>` query param (set by "follow the deploy") does the
+	 * same without a prop.
+	 */
+	initialOpenDeploymentId?: string | null;
 };
 
 /**
@@ -75,12 +159,30 @@ export function DeploymentHistory({
 	serviceId,
 	description,
 	canCancel = false,
+	commitUrl,
+	initialOpenDeploymentId,
 }: DeploymentHistoryProps) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const router = useRouter();
+	const pathname = usePathname();
+	const searchParams = useSearchParams();
 	const { can } = useCapabilities();
 	const [logDeployment, setLogDeployment] = useState<DeploymentRow | null>(null);
 	const [explainResult, setExplainResult] = useState<ExplainResult | null>(null);
+	const requestedDeploymentId = initialOpenDeploymentId ?? searchParams.get("deployment");
+	// Opened once per requested id; a closed drawer must not pop back open on refetch.
+	const openedRef = useRef<string | null>(null);
+
+	const closeLogs = () => {
+		setLogDeployment(null);
+		if (searchParams.get("deployment")) {
+			const params = new URLSearchParams(searchParams.toString());
+			params.delete("deployment");
+			const query = params.toString();
+			router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+		}
+	};
 
 	const listPathKey =
 		kind === "application"
@@ -214,6 +316,17 @@ export function DeploymentHistory({
 		hadActiveRef.current = hasActive;
 	}, [hasActive]);
 
+	// "Follow the deploy": open the requested row's logs as soon as it shows
+	// up in the list (the row is inserted a moment before the mutation
+	// returns, so the first refetch usually carries it).
+	useEffect(() => {
+		if (!requestedDeploymentId || openedRef.current === requestedDeploymentId) return;
+		const row = deployments.find((deployment) => deployment.deploymentId === requestedDeploymentId);
+		if (!row) return;
+		openedRef.current = requestedDeploymentId;
+		setLogDeployment(row);
+	}, [requestedDeploymentId, deployments]);
+
 	const canDeploy = can("service.deploy");
 	const canExplain = can("ai.use");
 	const canApplyPatch = can("ai.use") && can("secrets.write") && can("service.deploy");
@@ -289,9 +402,56 @@ export function DeploymentHistory({
 							{deployments.map((deployment) => (
 								<TableRow key={deployment.deploymentId}>
 									<TableCell className="font-medium">
-										{deployment.title}
+										<span className="flex flex-wrap items-center gap-1.5">
+											{deployment.title}
+											{deployment.trigger && (
+												<Badge
+													variant="outline"
+													className="font-normal text-muted-foreground"
+													title={describeTriggeredBy(deployment) ?? undefined}
+												>
+													{TRIGGER_LABELS[deployment.trigger] ?? deployment.trigger}
+												</Badge>
+											)}
+										</span>
+										{deployment.commitSha && (
+											<span className="mt-0.5 flex max-w-md items-center gap-1.5 text-xs font-normal text-muted-foreground">
+												{(() => {
+													const sha = deployment.commitSha;
+													const href = commitUrl?.(sha) ?? null;
+													return href ? (
+														<a
+															href={href}
+															target="_blank"
+															rel="noreferrer"
+															className="shrink-0 font-mono text-foreground underline-offset-2 hover:underline"
+															title={sha}
+														>
+															{shortSha(sha)}
+														</a>
+													) : (
+														<span className="shrink-0 font-mono text-foreground" title={sha}>
+															{shortSha(sha)}
+														</span>
+													);
+												})()}
+												{firstLine(deployment.commitMessage) && (
+													<span className="truncate" title={deployment.commitMessage ?? undefined}>
+														{firstLine(deployment.commitMessage)}
+													</span>
+												)}
+												{deployment.commitAuthor && (
+													<span className="shrink-0">· {deployment.commitAuthor}</span>
+												)}
+											</span>
+										)}
+										{!deployment.commitSha && describeTriggeredBy(deployment) && (
+											<span className="block text-xs font-normal text-muted-foreground">
+												{describeTriggeredBy(deployment)}
+											</span>
+										)}
 										{deployment.errorMessage && (
-											<span className="block max-w-md truncate text-xs text-destructive">
+											<span className="block max-w-md truncate text-xs font-normal text-destructive">
 												{deployment.errorMessage}
 											</span>
 										)}
@@ -374,10 +534,7 @@ export function DeploymentHistory({
 				</div>
 			)}
 
-			<Dialog
-				open={logDeployment !== null}
-				onOpenChange={(open) => !open && setLogDeployment(null)}
-			>
+			<Dialog open={logDeployment !== null} onOpenChange={(open) => !open && closeLogs()}>
 				<DialogContent className="flex max-h-[85vh] w-[calc(100%-2rem)] flex-col sm:max-w-5xl">
 					<DialogHeader>
 						<DialogTitle>{logDeployment?.title ?? "Deployment logs"}</DialogTitle>

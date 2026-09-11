@@ -1,5 +1,5 @@
 import { normalize } from "node:path";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../../db";
 import {
 	applications,
@@ -24,9 +24,10 @@ import { DEFAULT_CONTAINER_PORT, writeAppTraefikConfig } from "../traefik/config
 import { buildImage } from "./builders";
 import type { DeploymentContext } from "./context";
 import { CommandError, spawnTargeted } from "./docker";
-import { mergeEnv, parseEnv } from "./env";
+import { mergeEnv, parseEnv, resolveBuildEnv } from "./env";
 import { type DeploymentStatus, deploymentEvents } from "./events";
 import { DeploymentLogger } from "./logger";
+import type { CommitInfo } from "./provenance";
 import {
 	DeploymentCancelledError,
 	getCancellationReason,
@@ -43,6 +44,8 @@ import {
 	cloneGitSource,
 	extractDropSource,
 	pullDockerImage,
+	readCheckoutCommit,
+	resolveImageDigest,
 	resolveRegistryAuth,
 } from "./sources";
 import { upsertSwarmService } from "./swarm";
@@ -127,6 +130,28 @@ const resolveBuildDir = (codeDir: string, buildPath: string): string => {
 	return resolved;
 };
 
+/**
+ * Fill the row's commit fields from the checkout (or image digest) unless
+ * the caller already knew them (webhook payloads carry sha/message/author).
+ * `coalesce` keeps the richer webhook data; a failed write never fails the
+ * deploy.
+ */
+async function recordProvenance(deploymentId: string, commit: CommitInfo): Promise<void> {
+	await db
+		.update(deployments)
+		.set({
+			commitSha: sql`coalesce(${deployments.commitSha}, ${commit.sha})`,
+			commitMessage: sql`coalesce(${deployments.commitMessage}, ${commit.message})`,
+			commitAuthor: sql`coalesce(${deployments.commitAuthor}, ${commit.author})`,
+		})
+		.where(eq(deployments.deploymentId, deploymentId))
+		.catch((error: unknown) => {
+			log.error(`Failed to record provenance for deployment ${deploymentId}`, {
+				error: errorText(error),
+			});
+		});
+}
+
 type PreviewRow = typeof previewDeployments.$inferSelect;
 
 /**
@@ -197,6 +222,7 @@ async function runApplicationJob(
 		application.env,
 	);
 	for (const [, value] of parseEnv(mergedEnv)) ctx.logger.addSecret(value);
+	for (const [, value] of parseEnv(application.buildArgs)) ctx.logger.addSecret(value);
 	const registryAuth =
 		application.sourceType === "docker" ? await resolveRegistryAuth(application) : null;
 	if (registryAuth) ctx.logger.addSecret(registryAuth.password);
@@ -205,19 +231,41 @@ async function runApplicationJob(
 	if (application.sourceType === "docker") {
 		ctx.logger.line("Using docker image source");
 		imageTag = await pullDockerImage(ctx, application);
+		// No commit to record: pin the registry digest so the history says
+		// which `nginx:latest` this deployment actually ran.
+		const digest = await resolveImageDigest(ctx, imageTag);
+		if (digest) {
+			await recordProvenance(job.deploymentId, {
+				sha: digest,
+				message: imageTag,
+				author: null,
+			});
+		}
 	} else {
 		const codeDir =
 			application.sourceType === "drop"
 				? await extractDropSource(ctx, deployTarget)
 				: await cloneGitSource(ctx, deployTarget);
 		checkpoint();
+		if (application.sourceType !== "drop") {
+			const commit = await readCheckoutCommit(ctx, codeDir);
+			if (commit) {
+				ctx.logger.line(
+					`Commit ${commit.sha.slice(0, 12)}${commit.author ? ` by ${commit.author}` : ""}${commit.message ? `: ${commit.message}` : ""}`,
+				);
+				await recordProvenance(job.deploymentId, commit);
+			}
+		}
 
 		const buildDir = resolveBuildDir(codeDir, application.buildPath || "/");
 		imageTag = await buildImage({
 			ctx,
 			application: deployTarget,
 			buildDir,
-			env: parseEnv(mergedEnv).map(([k, v]) => `${k}=${v}`),
+			// Build args only (product audit, Env #2): the merged runtime env
+			// used to be baked into nixpacks/railpack/pack images and their
+			// cache. `NIXPLOY_BUILD_WITH_RUNTIME_ENV=1` restores that.
+			env: resolveBuildEnv(application.buildArgs, mergedEnv),
 		});
 	}
 	checkpoint();

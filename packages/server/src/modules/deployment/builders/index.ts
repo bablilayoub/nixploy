@@ -11,7 +11,12 @@ export interface BuildInput {
 	application: ApplicationRow;
 	/** Absolute path of the build context on the target server. */
 	buildDir: string;
-	/** Merged project → environment → service env (`KEY=VALUE` entries). */
+	/**
+	 * Build-time variables (`KEY=VALUE` entries) — the application's build
+	 * args, not the merged runtime env (see `resolveBuildEnv` in `../env.ts`).
+	 * Passed as `--env` to nixpacks/railpack/pack; the Dockerfile builder
+	 * reads `application.buildArgs` directly as `--build-arg`.
+	 */
 	env: string[];
 }
 

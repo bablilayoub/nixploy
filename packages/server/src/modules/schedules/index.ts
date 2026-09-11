@@ -6,6 +6,7 @@ import { db } from "../../db";
 import { applications, compose, deployments, schedules } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
 import { getConfigDir } from "../application/paths";
+import { badRequest, conflict } from "../errors";
 import { isValidCronExpression } from "./cron";
 import { runScheduleCommand } from "./runner";
 
@@ -98,6 +99,8 @@ async function recordRun(
 			composeId: row.composeId,
 			serverId: row.serverId,
 			scheduleId: row.scheduleId,
+			trigger: "schedule",
+			triggeredBy: `schedule:${row.scheduleId}`,
 		});
 	} catch (error) {
 		log.error(`Failed to record schedule run ${row.scheduleId}`, {
@@ -123,7 +126,7 @@ export async function runSchedule(
 	trigger: "cron" | "manual" = "cron",
 ): Promise<ScheduleRunResult> {
 	if (inFlight.has(row.scheduleId)) {
-		throw new Error(`Schedule "${row.name}" is already running — wait for it to finish`);
+		throw conflict(`Schedule "${row.name}" is already running — wait for it to finish`);
 	}
 	inFlight.add(row.scheduleId);
 	const state = getState(row.scheduleId);
@@ -226,7 +229,7 @@ export function registerSchedule(row: ScheduleRow): void {
 	unregisterSchedule(row.scheduleId);
 	if (!row.enabled) return;
 	if (!isValidCron(row.cronExpression)) {
-		throw new Error(`Invalid cron expression: ${row.cronExpression}`);
+		throw badRequest(`Invalid cron expression: ${row.cronExpression}`);
 	}
 	const job = schedule.scheduleJob(row.scheduleId, row.cronExpression, () => {
 		void tickSchedule(row.scheduleId).catch((error) => {
@@ -236,7 +239,7 @@ export function registerSchedule(row: ScheduleRow): void {
 		});
 	});
 	if (!job) {
-		throw new Error(`Invalid cron expression: ${row.cronExpression}`);
+		throw badRequest(`Invalid cron expression: ${row.cronExpression}`);
 	}
 	jobs.set(row.scheduleId, { job, row });
 }

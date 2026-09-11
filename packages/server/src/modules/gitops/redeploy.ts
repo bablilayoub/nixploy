@@ -30,7 +30,12 @@ export function itemsToRedeploy(result: ApplyStackResult): ApplyStackResult["ite
  */
 export async function redeployChangedFromApply(
 	result: ApplyStackResult,
+	options: {
+		/** User id of whoever ran the apply (recorded as the deployment's `triggeredBy`). */
+		triggeredBy?: string | null;
+	} = {},
 ): Promise<RedeployFromApplyResult> {
+	const provenance = { trigger: "gitops" as const, triggeredBy: options.triggeredBy ?? null };
 	const environment = await db.query.environments.findFirst({
 		where: and(
 			eq(environments.projectId, result.projectId),
@@ -78,7 +83,11 @@ export async function redeployChangedFromApply(
 				continue;
 			}
 			deploymentIds.push(
-				await queueDeployment({ applicationId: app.applicationId, type: "redeploy" }),
+				await queueDeployment({
+					applicationId: app.applicationId,
+					type: "redeploy",
+					...provenance,
+				}),
 			);
 			continue;
 		}
@@ -88,7 +97,9 @@ export async function redeployChangedFromApply(
 				skipped.push(`compose:${item.name}`);
 				continue;
 			}
-			deploymentIds.push(await queueDeployment({ composeId: row.composeId, type: "redeploy" }));
+			deploymentIds.push(
+				await queueDeployment({ composeId: row.composeId, type: "redeploy", ...provenance }),
+			);
 			continue;
 		}
 		skipped.push(`${item.kind}:${item.name}`);

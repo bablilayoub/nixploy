@@ -21,6 +21,7 @@ import { classifyPullRequestAction, previewAppName, previewHost } from "../previ
 import {
 	applicationMatchesPreviewWebhook,
 	applicationMatchesWebhook,
+	extractPushCommit,
 	globCacheSize,
 	handleGitWebhook,
 	isGitlabMetadataOnlyUpdate,
@@ -30,7 +31,72 @@ import {
 	type WebhookRepoContext,
 	WebhookUnauthorized,
 	watchPathsMatch,
+	webhookProvenance,
 } from "./webhook-handler";
+
+describe("extractPushCommit", () => {
+	it("reads GitHub/Gitea head_commit shapes", () => {
+		expect(
+			extractPushCommit(
+				"0123456789abcdef0123456789abcdef01234567",
+				{ id: "ignored", message: "feat: x\n\nbody", author: { name: "Jane", email: "j@x" } },
+				"pusher",
+			),
+		).toEqual({
+			sha: "0123456789abcdef0123456789abcdef01234567",
+			message: "feat: x\n\nbody",
+			author: "Jane",
+		});
+	});
+
+	it("reads Bitbucket raw authors and falls back to the actor", () => {
+		expect(
+			extractPushCommit(undefined, {
+				hash: "abcdef1234",
+				message: "m",
+				author: { raw: "Jo <j@x>" },
+			}),
+		).toEqual({ sha: "abcdef1234", message: "m", author: "Jo" });
+		expect(extractPushCommit("abcdef1234", { author: { user: { display_name: "Disp" } } })).toEqual(
+			{ sha: "abcdef1234", message: null, author: "Disp" },
+		);
+		expect(extractPushCommit("abcdef1234", {}, "Actor")).toEqual({
+			sha: "abcdef1234",
+			message: null,
+			author: "Actor",
+		});
+	});
+
+	it("yields nothing for branch deletions and garbage", () => {
+		expect(extractPushCommit("0000000000000000000000000000000000000000", {})).toBeUndefined();
+		expect(extractPushCommit("not-a-sha", { id: "also not" })).toBeUndefined();
+		expect(extractPushCommit(undefined, undefined)).toBeUndefined();
+	});
+});
+
+describe("webhookProvenance", () => {
+	it("attributes the deployment to the provider webhook with the head commit", () => {
+		expect(
+			webhookProvenance({
+				provider: "gitlab",
+				commit: { sha: "abcdef1", message: "m", author: "a" },
+			}),
+		).toEqual({
+			trigger: "webhook",
+			triggeredBy: "webhook:gitlab",
+			commitSha: "abcdef1",
+			commitMessage: "m",
+			commitAuthor: "a",
+		});
+		expect(webhookProvenance({ provider: "github" })).toEqual({
+			trigger: "webhook",
+			triggeredBy: "webhook:github",
+			commitSha: null,
+			commitMessage: null,
+			commitAuthor: null,
+		});
+	});
+});
 
 describe("watchPathsMatch", () => {
 	it("deploys everything when no watch paths are configured", () => {
@@ -274,6 +340,46 @@ describe("provider webhook verification", () => {
 		await expect(handleGitWebhook("gitlab", {}, pushBody)).rejects.toBeInstanceOf(
 			WebhookUnauthorized,
 		);
+	});
+
+	it("carries the provider and head commit of a verified push delivery", async () => {
+		// Provider row, then the (empty) application candidate list.
+		mockSelects([{ gitlabId: "gl1", secret: "s3cret" }], []);
+		const result = await handleGitWebhook(
+			"gitlab",
+			{ "x-gitlab-token": "s3cret" },
+			JSON.stringify({
+				object_kind: "push",
+				ref: "refs/heads/main",
+				checkout_sha: "0123456789abcdef0123456789abcdef01234567",
+				user_name: "Pusher",
+				project: { path_with_namespace: "acme/api" },
+				// GitLab lists commits oldest-first, so the head is the last entry.
+				commits: [
+					{ id: "1111111", message: "older", author: { name: "Old" } },
+					{
+						id: "0123456789abcdef0123456789abcdef01234567",
+						message: "feat: head\n\nbody",
+						author: { name: "Jane" },
+					},
+				],
+			}),
+			"gl1",
+		);
+		expect(result.provider).toBe("gitlab");
+		expect(result.type).toBe("push");
+		expect(result.commit).toEqual({
+			sha: "0123456789abcdef0123456789abcdef01234567",
+			message: "feat: head\n\nbody",
+			author: "Jane",
+		});
+		expect(webhookProvenance(result)).toEqual({
+			trigger: "webhook",
+			triggeredBy: "webhook:gitlab",
+			commitSha: "0123456789abcdef0123456789abcdef01234567",
+			commitMessage: "feat: head\n\nbody",
+			commitAuthor: "Jane",
+		});
 	});
 
 	it("rejects a gitea delivery with no signature header", async () => {

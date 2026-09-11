@@ -29,16 +29,28 @@ import {
 	updateSwarmServiceImage,
 	upsertApplicationSwarmService,
 } from "../../modules/application";
+import type { ApplicationWithTenancy } from "../../modules/application/org";
 import { auditFromSession } from "../../modules/audit";
 import { redactServerCommandLog } from "../../modules/cluster";
 import {
+	applicationReadiness,
 	cancelDeployment as cancelQueuedDeployment,
+	provenanceForSession,
 	queueDeployment,
+	SOURCE_NOT_CONFIGURED,
 } from "../../modules/deployment";
 import { getDeploymentLogPath } from "../../modules/deployment/paths";
 import { assertCapability, assertWithinQuota, hasCapability } from "../../modules/projects";
 import { textBlobSchema, watchPathsSchema } from "../../utils/input-limits";
 import { assertSafeGitCloneUrl } from "../../utils/public-url";
+import {
+	labelsSwarmSchema,
+	modeSwarmSchema,
+	networkSwarmSchema,
+	restartPolicySwarmSchema,
+	rollbackConfigSwarmSchema,
+	updateConfigSwarmSchema,
+} from "../../utils/swarm-overrides";
 import { appNameSchema, assertSafeDockerImageRef } from "../../utils/validators";
 import {
 	assertGitProviderInOrganization,
@@ -75,17 +87,33 @@ const swarmSpecFields = {
 	cpuLimit: z.string().nullable().optional(),
 	command: z.string().nullable().optional(),
 	healthCheckSwarm: z.unknown().nullable().optional(),
-	restartPolicySwarm: z.unknown().nullable().optional(),
+	restartPolicySwarm: restartPolicySwarmSchema.nullable().optional(),
 	placementSwarm: z.unknown().nullable().optional(),
-	updateConfigSwarm: z.unknown().nullable().optional(),
-	rollbackConfigSwarm: z.unknown().nullable().optional(),
-	modeSwarm: z.unknown().nullable().optional(),
-	labelsSwarm: z.unknown().nullable().optional(),
-	networkSwarm: z.unknown().nullable().optional(),
+	updateConfigSwarm: updateConfigSwarmSchema.nullable().optional(),
+	rollbackConfigSwarm: rollbackConfigSwarmSchema.nullable().optional(),
+	modeSwarm: modeSwarmSchema.nullable().optional(),
+	labelsSwarm: labelsSwarmSchema.nullable().optional(),
+	networkSwarm: networkSwarmSchema.nullable().optional(),
 } as const;
 
 /** Verify a git provider connection (github/gitlab/bitbucket/gitea row) belongs to the org. */
 const assertGitProviderAccess = assertGitProviderInOrganization;
+
+/**
+ * Pre-flight (UX audit F2): a brand-new app with no repository or image used
+ * to queue fine, fail 15 ms later in the worker and leave a red "Error" with
+ * no reason. Refuse before a row exists, with the message the UI also shows
+ * on the disabled Deploy button (`application.one.readiness`).
+ */
+const assertDeployable = async (application: ApplicationWithTenancy): Promise<void> => {
+	const readiness = await applicationReadiness(application);
+	if (!readiness.canDeploy) {
+		throw new TRPCError({
+			code: "PRECONDITION_FAILED",
+			message: readiness.reason ?? SOURCE_NOT_CONFIGURED,
+		});
+	}
+};
 
 /** Rollbacks skip the deploy worker, so their (short) log is written here. */
 const writeRollbackLog = async (logPath: string, lines: string[]): Promise<void> => {
@@ -170,8 +198,13 @@ export const applicationRouter = router({
 		if (!application || application.environment.project.organizationId !== organizationId) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
 		}
-		const canSeeSecrets = await hasCapability(ctx.session.user.id, organizationId, "secrets.read");
-		const safe = publicApplicationServer(application);
+		const [canSeeSecrets, readiness] = await Promise.all([
+			hasCapability(ctx.session.user.id, organizationId, "secrets.read"),
+			applicationReadiness(application),
+		]);
+		// `readiness` is the same predicate `deploy` enforces, so the UI can
+		// disable Deploy with the reason instead of learning it from a toast.
+		const safe = { ...publicApplicationServer(application), readiness };
 		if (canSeeSecrets) return safe;
 		return redactApplicationSecrets(safe);
 	}),
@@ -361,10 +394,13 @@ export const applicationRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
-			await assertApplicationAccess(input.applicationId, organizationId);
+			const application = await assertApplicationAccess(input.applicationId, organizationId);
+			await assertDeployable(application);
 			const deploymentId = await queueDeployment({
 				applicationId: input.applicationId,
 				type: "deploy",
+				title: input.title?.trim() || undefined,
+				...provenanceForSession(ctx.session),
 			});
 			await auditFromSession(ctx, organizationId, {
 				action: "application.deploy",
@@ -378,10 +414,12 @@ export const applicationRouter = router({
 	redeploy: protectedProcedure.input(applicationIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
-		await assertApplicationAccess(input.applicationId, organizationId);
+		const application = await assertApplicationAccess(input.applicationId, organizationId);
+		await assertDeployable(application);
 		const deploymentId = await queueDeployment({
 			applicationId: input.applicationId,
 			type: "redeploy",
+			...provenanceForSession(ctx.session),
 		});
 		return { applicationId: input.applicationId, deploymentId };
 	}),
@@ -797,6 +835,10 @@ export const applicationRouter = router({
 					serverId: application.serverId,
 					startedAt,
 					finishedAt: new Date(),
+					trigger: "rollback",
+					triggeredBy: ctx.session.user.id,
+					commitSha: null,
+					commitMessage: rollback.image,
 				});
 				throw new TRPCError({
 					code: "INTERNAL_SERVER_ERROR",
@@ -817,6 +859,10 @@ export const applicationRouter = router({
 					serverId: application.serverId,
 					startedAt,
 					finishedAt: new Date(),
+					trigger: "rollback",
+					triggeredBy: ctx.session.user.id,
+					// No commit: the pinned image reference stands in for it.
+					commitMessage: rollback.image,
 				})
 				.returning();
 			await updateApplication(application.applicationId, { status: "running" });

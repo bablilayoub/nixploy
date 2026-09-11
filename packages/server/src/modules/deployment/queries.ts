@@ -1,6 +1,6 @@
 import { and, count, desc, eq, gte, type SQL, sql } from "drizzle-orm";
 import { db } from "../../db";
-import { applications, compose, deployments, environments, projects } from "../../db/schema";
+import { applications, compose, deployments, environments, projects, users } from "../../db/schema";
 import { assertApplicationAccess } from "../application";
 import { findComposeForOrg } from "../compose/service";
 import { findProjectById } from "../projects";
@@ -16,6 +16,8 @@ import { findProjectById } from "../projects";
 export type DeploymentRow = typeof deployments.$inferSelect;
 
 export interface DeploymentListItem extends DeploymentRow {
+	/** Display name of the user in `triggeredBy`; null for webhook/schedule/system rows. */
+	triggeredByName: string | null;
 	service: {
 		type: "application" | "compose";
 		name: string | null;
@@ -66,10 +68,15 @@ function baseDeploymentQuery() {
 			environmentName: environments.name,
 			projectId: projects.projectId,
 			projectName: projects.name,
+			// `triggeredBy` is a user id for manual/api/rollback rows and an
+			// opaque `webhook:<provider>` / `schedule:<id>` otherwise — the join
+			// simply misses for the latter.
+			triggeredByName: users.name,
 		})
 		.from(deployments)
 		.leftJoin(applications, eq(deployments.applicationId, applications.applicationId))
 		.leftJoin(compose, eq(deployments.composeId, compose.composeId))
+		.leftJoin(users, eq(deployments.triggeredBy, users.id))
 		.innerJoin(
 			environments,
 			sql`${environments.environmentId} = coalesce(${applications.environmentId}, ${compose.environmentId})`,
@@ -82,6 +89,7 @@ type DeploymentQueryRow = Awaited<ReturnType<typeof baseDeploymentQuery>>[number
 function toDeploymentListItem(row: DeploymentQueryRow): DeploymentListItem {
 	return {
 		...row.deployment,
+		triggeredByName: row.triggeredByName ?? null,
 		service: {
 			type: row.serviceType,
 			name: row.serviceName,

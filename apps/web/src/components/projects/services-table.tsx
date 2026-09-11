@@ -18,12 +18,14 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useRunningDeployments } from "@/hooks/use-running-deployments";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 
 import { ServiceRowActions } from "./service-row-actions";
@@ -76,6 +78,28 @@ export function ServicesTable({
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [bulkPending, setBulkPending] = useState(false);
 	const [confirmStop, setConfirmStop] = useState(false);
+
+	// Live deploy state per row (UX audit F13). The shared query also refreshes
+	// `<type>.all` / environment counts when a deployment settles, so the
+	// status badges here stop going stale after a deploy.
+	const { active: activeDeployments } = useRunningDeployments({ projectId });
+	const deployingBadge = (service: ServiceEntry) => {
+		if (service.type !== "application" && service.type !== "compose") return null;
+		const deployment = activeDeployments.find((row) =>
+			service.type === "application"
+				? row.applicationId === service.id
+				: row.composeId === service.id,
+		);
+		if (!deployment) return null;
+		return (
+			<Badge variant="info" className="gap-1.5 font-normal">
+				<Loader2 className="size-3 animate-spin" />
+				{deployment.status === "queued"
+					? `Queued${deployment.queuePosition ? ` (#${deployment.queuePosition})` : ""}`
+					: "Deploying"}
+			</Badge>
+		);
+	};
 
 	// Bulk start/stop hit the runtime procedures (database `start` additionally
 	// requires service.deploy; the server still reports those per row).
@@ -241,7 +265,9 @@ export function ServicesTable({
 											<TableCell className="w-36">
 												{/* Same vocabulary as the service headers; only the header dot pulses, not every row. */}
 												<span className="[&_.animate-pulse]:animate-none">
-													<ServiceStatusBadge status={service.status as BadgeStatus} />
+													{deployingBadge(service) ?? (
+														<ServiceStatusBadge status={service.status as BadgeStatus} />
+													)}
 												</span>
 											</TableCell>
 											<TableCell>

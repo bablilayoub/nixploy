@@ -54,9 +54,11 @@ export async function POST(req: Request, { params }: RouteParams) {
 		return Response.json({ message: `Application not found: ${appName}` }, { status: 404 });
 	}
 
+	// An API-key caller, not a provider push: recorded as `api` by the key owner.
 	const deploymentId = await queueWebhookDeployment(
 		application.applicationId,
 		"Webhook: manual deploy trigger",
+		{ trigger: "api", triggeredBy: authenticated.userId },
 	);
 	return Response.json({
 		applicationId: application.applicationId,

@@ -4,6 +4,7 @@ import { applications, domains, previewDeployments } from "../../db/schema";
 import { removeApplicationImages, removeSwarmService } from "../application/docker";
 import { getWildcardDomain } from "../application/paths";
 import { queueDeployment } from "../deployment";
+import { DomainError } from "../errors";
 import { removeTraefikConfig } from "../traefik";
 import { syncPreviewTraefik } from "./traefik";
 
@@ -35,23 +36,30 @@ export type CreatePreviewInput = {
 	 * The row lands in `awaiting_approval` until previewDeployment.approve.
 	 */
 	deferDeploy?: boolean;
+	/** Provenance of the queued deployment: `webhook:<provider>` or a user id. */
+	triggeredBy?: string | null;
+	/** PR head sha when the provider sent it (the clone fills the rest). */
+	commitSha?: string | null;
 };
+
+/** Provenance a preview job carries (webhook delivery or approve/redeploy click). */
+export type PreviewProvenance = Pick<CreatePreviewInput, "triggeredBy" | "commitSha">;
 
 export type PreviewWithDomain = typeof previewDeployments.$inferSelect & {
 	domain: typeof domains.$inferSelect | null;
 	deploymentId?: string;
 };
 
-export class PreviewConflictError extends Error {
+export class PreviewConflictError extends DomainError {
 	constructor(message: string) {
-		super(message);
+		super("CONFLICT", message);
 		this.name = "PreviewConflictError";
 	}
 }
 
-export class PreviewNotFoundError extends Error {
+export class PreviewNotFoundError extends DomainError {
 	constructor(message: string) {
-		super(message);
+		super("NOT_FOUND", message);
 		this.name = "PreviewNotFoundError";
 	}
 }
@@ -176,13 +184,20 @@ export async function createPreviewDeployment(
 		if (input.deferDeploy) {
 			// Awaiting approval: route exists but nothing was built. Approving
 			// redeploys via redeployPreviewDeployment.
-			return { ...preview, domainId: domain?.domainId ?? null, domain: domain ?? null };
+			return {
+				...preview,
+				domainId: domain?.domainId ?? null,
+				domain: domain ?? null,
+			};
 		}
 
 		const deploymentId = await queueDeployment({
 			applicationId: application.applicationId,
 			previewDeploymentId: preview.previewDeploymentId,
 			type: "deploy",
+			trigger: "preview",
+			triggeredBy: input.triggeredBy ?? null,
+			commitSha: input.commitSha ?? null,
 		});
 
 		return {
@@ -208,6 +223,7 @@ export async function createPreviewDeployment(
 /** Redeploy an existing preview by enqueueing an isolated preview deploy. */
 export async function redeployPreviewDeployment(
 	previewDeploymentId: string,
+	provenance: PreviewProvenance = {},
 ): Promise<{ previewDeploymentId: string; deploymentId: string }> {
 	const preview = await db.query.previewDeployments.findFirst({
 		where: eq(previewDeployments.previewDeploymentId, previewDeploymentId),
@@ -225,6 +241,9 @@ export async function redeployPreviewDeployment(
 		applicationId: preview.applicationId,
 		previewDeploymentId: preview.previewDeploymentId,
 		type: "redeploy",
+		trigger: "preview",
+		triggeredBy: provenance.triggeredBy ?? null,
+		commitSha: provenance.commitSha ?? null,
 	});
 
 	return { previewDeploymentId: preview.previewDeploymentId, deploymentId };
@@ -277,7 +296,10 @@ export async function createOrRedeployPreview(input: CreatePreviewInput): Promis
 				})
 				.where(eq(previewDeployments.previewDeploymentId, existing.previewDeploymentId));
 		}
-		const result = await redeployPreviewDeployment(existing.previewDeploymentId);
+		const result = await redeployPreviewDeployment(existing.previewDeploymentId, {
+			triggeredBy: input.triggeredBy,
+			commitSha: input.commitSha,
+		});
 		return {
 			action: "redeployed",
 			previewDeploymentId: result.previewDeploymentId,

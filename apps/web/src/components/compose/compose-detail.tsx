@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { Layers, Loader2, Play, RefreshCw, Rocket, Square } from "lucide-react";
+import { Layers, Loader2, Play, RefreshCw, Rocket, ScrollText, Square } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -33,10 +33,17 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import {
+	firstLine,
+	useFollowDeployment,
+	useRunningDeployments,
+} from "@/hooks/use-running-deployments";
 import { useSyncedTab } from "@/hooks/use-synced-tab";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -80,17 +87,22 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 		SUB_TAB_PARENT[tab] === parent ? tab : SUB_TAB_DEFAULT[parent];
 	const [confirmStop, setConfirmStop] = useState(false);
 	const { can } = useCapabilities();
+	const followDeployment = useFollowDeployment();
 
-	// The worker flips `status` to "running" only when it picks the job up, a
-	// moment after the deploy mutation returns; poll for a bounded window after
-	// queuing so that edge is not missed when the queue is busy.
-	const [pollUntil, setPollUntil] = useState(0);
-	const { data, isLoading, isError, error, refetch } = useQuery({
-		...trpc.compose.one.queryOptions({ composeId }),
-		// Poll while a deployment is in flight so the header settles on its own.
-		refetchInterval: (query) =>
-			query.state.data?.status === "running" || Date.now() < pollUntil ? 5_000 : false,
+	const { data, isLoading, isError, error, refetch } = useQuery(
+		trpc.compose.one.queryOptions({ composeId }),
+	);
+	// Live deploy state + status refresh on finish come from the shared
+	// running-deployments query (UX audit F13) — no per-page timer.
+	const { active } = useRunningDeployments({ composeId });
+	const inFlight = active[0] ?? null;
+	// Start / Redeploy only make sense once a deployment succeeded; the last
+	// outcome also feeds the error line under the header (UX audit F2/F22).
+	const recentDeployments = useQuery({
+		...trpc.deployment.byCompose.queryOptions({ composeId, limit: 20 }),
+		enabled: Boolean(data),
 	});
+	const lastDeployment = recentDeployments.data?.deployments[0] ?? null;
 
 	const invalidate = () => {
 		queryClient.invalidateQueries({
@@ -98,28 +110,28 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 		});
 		queryClient.invalidateQueries({ queryKey: trpc.compose.all.pathKey() });
 		queryClient.invalidateQueries({ queryKey: trpc.deployment.byCompose.pathKey() });
+		// Wakes the shared running-deployments query (hairline, header, services table).
+		queryClient.invalidateQueries({ queryKey: trpc.deployment.recent.pathKey() });
 	};
 
 	const onActionError = (error: unknown) =>
 		toast.error(error instanceof Error ? error.message : "Action failed");
 
+	const queued = (message: string) => (result: { deploymentId: string }) => {
+		toast.success(message);
+		invalidate();
+		followDeployment(result.deploymentId);
+	};
+
 	const deployMutation = useMutation(
 		trpc.compose.deploy.mutationOptions({
-			onSuccess: () => {
-				toast.success("Deployment queued");
-				setPollUntil(Date.now() + 30_000);
-				invalidate();
-			},
+			onSuccess: queued("Deployment queued"),
 			onError: onActionError,
 		}),
 	);
 	const redeployMutation = useMutation(
 		trpc.compose.redeploy.mutationOptions({
-			onSuccess: () => {
-				toast.success("Redeployment queued");
-				setPollUntil(Date.now() + 30_000);
-				invalidate();
-			},
+			onSuccess: queued("Redeployment queued"),
 			onError: onActionError,
 		}),
 	);
@@ -183,9 +195,21 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 		stopMutation.isPending ||
 		startMutation.isPending;
 	const isRunning = compose.status === "running" || compose.status === "done";
+	const hasDeployed =
+		isRunning ||
+		(recentDeployments.data?.deployments ?? []).some((deployment) => deployment.status === "done");
+	const lastError =
+		!inFlight && lastDeployment?.status === "error" ? firstLine(lastDeployment.errorMessage) : null;
 	const canDeploy = can("service.deploy");
 	const canRuntime = can("service.runtime");
-	const deployHint = canDeploy ? undefined : capabilityHint("service.deploy");
+	const readiness = compose.readiness;
+	// Pre-flight (UX audit F2): same predicate the server enforces, shown as the hint.
+	const deployHint = !canDeploy
+		? capabilityHint("service.deploy")
+		: readiness.canDeploy
+			? undefined
+			: readiness.reason;
+	const deployDisabled = anyActionPending || !canDeploy || !readiness.canDeploy;
 	const runtimeHint = canRuntime ? undefined : capabilityHint("service.runtime");
 
 	return (
@@ -206,70 +230,99 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 				title={
 					<span className="flex items-center gap-2.5">
 						{compose.name}
-						<ServiceStatusBadge status={compose.status} />
+						{inFlight ? (
+							<Badge variant="info" className="gap-1.5 font-normal">
+								<Loader2 className="size-3 animate-spin" />
+								{inFlight.status === "queued"
+									? `Queued${inFlight.queuePosition ? ` (#${inFlight.queuePosition})` : ""}`
+									: "Deploying"}
+							</Badge>
+						) : (
+							<ServiceStatusBadge status={compose.status} />
+						)}
 					</span>
 				}
-				description={compose.description ?? compose.appName}
+				description={
+					<span className="flex flex-col gap-1">
+						<span>{compose.description ?? compose.appName}</span>
+						{lastError && lastDeployment && (
+							<span className="flex items-center gap-1.5 text-destructive">
+								<span className="truncate">Last deployment failed: {lastError}</span>
+								<button
+									type="button"
+									className="inline-flex shrink-0 items-center gap-1 underline-offset-2 hover:underline"
+									onClick={() => followDeployment(lastDeployment.deploymentId)}
+								>
+									<ScrollText className="size-3.5" />
+									View logs
+								</button>
+							</span>
+						)}
+					</span>
+				}
 				actions={
 					<>
 						<CopilotChatDrawer target={{ type: "compose", id: composeId, name: compose.name }} />
-						<Button
-							disabled={anyActionPending || !canDeploy}
-							title={deployHint}
-							onClick={() => deployMutation.mutate({ composeId })}
-						>
-							{deployMutation.isPending ? (
-								<Loader2 className="size-4 animate-spin" />
-							) : (
-								<Rocket className="size-4" />
-							)}
-							Deploy
-						</Button>
-						<Button
-							variant="outline"
-							className="hidden sm:inline-flex"
-							disabled={anyActionPending || !canDeploy}
-							title={deployHint}
-							onClick={() => redeployMutation.mutate({ composeId })}
-						>
-							{redeployMutation.isPending ? (
-								<Loader2 className="size-4 animate-spin" />
-							) : (
-								<RefreshCw className="size-4" />
-							)}
-							Redeploy
-						</Button>
-						{isRunning ? (
+						<DisabledHint hint={deployHint}>
 							<Button
-								variant="outline"
-								className="hidden sm:inline-flex"
-								disabled={anyActionPending || !canRuntime}
-								title={runtimeHint}
-								onClick={() => setConfirmStop(true)}
+								disabled={deployDisabled}
+								onClick={() => deployMutation.mutate({ composeId })}
 							>
-								{stopMutation.isPending ? (
+								{deployMutation.isPending ? (
 									<Loader2 className="size-4 animate-spin" />
 								) : (
-									<Square className="size-4" />
+									<Rocket className="size-4" />
 								)}
-								Stop
+								Deploy
 							</Button>
-						) : (
-							<Button
-								variant="outline"
-								className="hidden sm:inline-flex"
-								disabled={anyActionPending || !canRuntime}
-								title={runtimeHint}
-								onClick={() => startMutation.mutate({ composeId })}
-							>
-								{startMutation.isPending ? (
-									<Loader2 className="size-4 animate-spin" />
-								) : (
-									<Play className="size-4" />
-								)}
-								Start
-							</Button>
+						</DisabledHint>
+						{hasDeployed && (
+							<DisabledHint hint={deployHint} className="hidden sm:inline-flex">
+								<Button
+									variant="outline"
+									disabled={deployDisabled}
+									onClick={() => redeployMutation.mutate({ composeId })}
+								>
+									{redeployMutation.isPending ? (
+										<Loader2 className="size-4 animate-spin" />
+									) : (
+										<RefreshCw className="size-4" />
+									)}
+									Redeploy
+								</Button>
+							</DisabledHint>
 						)}
+						{isRunning ? (
+							<DisabledHint hint={runtimeHint} className="hidden sm:inline-flex">
+								<Button
+									variant="outline"
+									disabled={anyActionPending || !canRuntime}
+									onClick={() => setConfirmStop(true)}
+								>
+									{stopMutation.isPending ? (
+										<Loader2 className="size-4 animate-spin" />
+									) : (
+										<Square className="size-4" />
+									)}
+									Stop
+								</Button>
+							</DisabledHint>
+						) : hasDeployed ? (
+							<DisabledHint hint={runtimeHint} className="hidden sm:inline-flex">
+								<Button
+									variant="outline"
+									disabled={anyActionPending || !canRuntime}
+									onClick={() => startMutation.mutate({ composeId })}
+								>
+									{startMutation.isPending ? (
+										<Loader2 className="size-4 animate-spin" />
+									) : (
+										<Play className="size-4" />
+									)}
+									Start
+								</Button>
+							</DisabledHint>
+						) : null}
 					</>
 				}
 			/>

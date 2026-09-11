@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, Play, Rocket } from "lucide-react";
-import { Suspense, use, useState } from "react";
+import { Suspense, use } from "react";
 
 import { AdvancedTab } from "@/components/application/advanced-tab";
 import { ApplicationHeader } from "@/components/application/application-header";
@@ -91,28 +91,18 @@ function ApplicationDetail({ projectId, id }: { projectId: string; id: string })
 	const topTab = TOP_TABS.includes(tab) ? tab : (SUB_TAB_PARENT[tab] ?? "general");
 	const subTab = (parent: string) =>
 		SUB_TAB_PARENT[tab] === parent ? tab : SUB_TAB_DEFAULT[parent];
-	// The worker flips `status` to "running" only when it picks the job up, a
-	// moment after the deploy mutation returns; poll for a bounded window after
-	// queuing so that edge is not missed when the queue is busy.
-	const [pollUntil, setPollUntil] = useState(0);
+	// No timer here: `useRunningDeployments` (mounted by ApplicationHeader)
+	// polls only while something is queued/running and invalidates
+	// `application.one` when a deployment settles, so the header and tabs
+	// refresh on the edge instead of every 5 s forever (UX audit F13).
 	const {
 		data: application,
 		isLoading,
 		isError,
 		error,
 		refetch,
-	} = useQuery({
-		...trpc.application.one.queryOptions({ applicationId: id }),
-		// `status` stays "running" while a deployment builds and settles to
-		// done/error when the worker finishes — poll until it does so the header
-		// and tabs do not show a stale state.
-		refetchInterval: (query) =>
-			query.state.data?.status === "running" || Date.now() < pollUntil ? 5_000 : false,
-	});
-	const actions = useApplicationActions({
-		applicationId: id,
-		onDeployQueued: () => setPollUntil(Date.now() + 30_000),
-	});
+	} = useQuery(trpc.application.one.queryOptions({ applicationId: id }));
+	const actions = useApplicationActions({ applicationId: id });
 	const { can } = useCapabilities();
 	// Start / Redeploy only make sense once a deployment succeeded (the swarm
 	// service exists). `application.one` carries no such flag, so read the

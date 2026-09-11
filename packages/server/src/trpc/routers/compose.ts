@@ -20,7 +20,7 @@ import {
 	stopCompose,
 	updateComposeById,
 } from "../../modules/compose/service";
-import { queueDeployment } from "../../modules/deployment";
+import { composeReadiness, provenanceForSession, queueDeployment } from "../../modules/deployment";
 import {
 	assertCapability,
 	assertWithinQuota,
@@ -38,6 +38,17 @@ import {
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 import { redactComposeSecrets } from "../redact-secrets";
+
+/** Pre-flight (UX audit F2): refuse before a row is queued when there is nothing to deploy. */
+function assertComposeDeployable(row: Parameters<typeof composeReadiness>[0]): void {
+	const readiness = composeReadiness(row);
+	if (!readiness.canDeploy) {
+		throw new TRPCError({
+			code: "PRECONDITION_FAILED",
+			message: readiness.reason ?? "Compose source is not configured",
+		});
+	}
+}
 
 type Session = NonNullable<TRPCContext["session"]>;
 
@@ -93,8 +104,10 @@ export const composeRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		const row = await findComposeForOrg(input.composeId, organizationId);
 		const canSeeSecrets = await hasCapability(ctx.session.user.id, organizationId, "secrets.read");
-		if (canSeeSecrets) return row;
-		return redactComposeSecrets(row);
+		// Same predicate `deploy` enforces — lets the UI disable Deploy with the reason.
+		const safe = { ...row, readiness: composeReadiness(row) };
+		if (canSeeSecrets) return safe;
+		return redactComposeSecrets(safe);
 	}),
 
 	/** Create a compose service (raw paste or git-backed source). */
@@ -200,6 +213,12 @@ export const composeRouter = router({
 			}
 
 			const { composeId, ...values } = input;
+			if (Object.values(values).every((value) => value === undefined)) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Nothing to update — pass at least one field",
+				});
+			}
 			const updated = await updateComposeById(composeId, values, { callerIsInstanceAdmin });
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
@@ -293,8 +312,13 @@ export const composeRouter = router({
 	deploy: protectedProcedure.input(composeIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
-		await findComposeForOrg(input.composeId, organizationId);
-		const deploymentId = await queueDeployment({ composeId: input.composeId, type: "deploy" });
+		const row = await findComposeForOrg(input.composeId, organizationId);
+		assertComposeDeployable(row);
+		const deploymentId = await queueDeployment({
+			composeId: input.composeId,
+			type: "deploy",
+			...provenanceForSession(ctx.session),
+		});
 		await auditFromSession(ctx, organizationId, {
 			action: "compose.deploy",
 			targetType: "compose",
@@ -308,10 +332,12 @@ export const composeRouter = router({
 	redeploy: protectedProcedure.input(composeIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
-		await findComposeForOrg(input.composeId, organizationId);
+		const row = await findComposeForOrg(input.composeId, organizationId);
+		assertComposeDeployable(row);
 		const deploymentId = await queueDeployment({
 			composeId: input.composeId,
 			type: "redeploy",
+			...provenanceForSession(ctx.session),
 		});
 		return { deploymentId };
 	}),
