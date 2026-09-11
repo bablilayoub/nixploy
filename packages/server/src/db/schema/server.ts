@@ -1,7 +1,7 @@
 import { relations } from "drizzle-orm";
 import { boolean, index, integer, jsonb, pgTable, text } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
-import { encryptedText } from "../custom-columns";
+import { encryptedJson, encryptedText } from "../custom-columns";
 import { organizations } from "./auth";
 import { certificateType, serverStatus, swarmRole } from "./enums";
 import { createdAt, idColumn } from "./utils";
@@ -59,6 +59,15 @@ export const webServerSettings = pgTable("web_server_settings", {
 	host: text("host"),
 	letsEncryptEmail: text("lets_encrypt_email"),
 	certificateType: certificateType("certificate_type").notNull().default("none"),
+	/**
+	 * Traefik ACME DNS-01 provider code (`cloudflare`, `route53`, …). When set,
+	 * `ensureTraefikSetup` renders a second resolver `letsencrypt-dns` that
+	 * wildcard domains use; the provider credentials are passed to the Traefik
+	 * container as environment variables by the operator (see docs).
+	 */
+	acmeDnsProvider: text("acme_dns_provider"),
+	/** Provider credentials (`{ CF_DNS_API_TOKEN: "…" }`), encrypted at rest. */
+	acmeDnsCredentials: encryptedJson("acme_dns_credentials"),
 	metricsConfig: jsonb("metrics_config"),
 	createdAt: createdAt(),
 });

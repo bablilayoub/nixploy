@@ -54,11 +54,21 @@ describe("buildDashboardRouterYaml", () => {
 		});
 	});
 
+	it("drops the catch-all once a dashboard domain is configured", () => {
+		const { http } = load("panel.example.com");
+		// The panel must not answer on every hostname pointed at the box once
+		// its own host is known (security.md §2.10).
+		expect(Object.keys(http.routers)).not.toContain("nixploy-dashboard");
+		expect(Object.values(http.routers).map((router) => router.rule)).not.toContain(
+			"PathPrefix(`/`)",
+		);
+		// The service stays — tenant `maintenance` middlewares point at it.
+		expect(http.services["nixploy-dashboard"]).toBeDefined();
+	});
+
 	it("puts HSTS on every dashboard router and the body cap on the API routers only", () => {
 		const { http } = load("panel.example.com");
 		expect(Object.keys(http.routers).sort()).toEqual([
-			"nixploy-dashboard",
-			"nixploy-dashboard-api",
 			"nixploy-dashboard-domain",
 			"nixploy-dashboard-domain-api",
 		]);

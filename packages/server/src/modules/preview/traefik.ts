@@ -24,6 +24,7 @@ export async function syncPreviewTraefik(previewDeploymentId: string): Promise<v
 	const [domain, parentRedirects, parentSecurity] = await Promise.all([
 		db.query.domains.findFirst({
 			where: eq(domains.previewDeploymentId, previewDeploymentId),
+			with: { middlewares: true },
 		}),
 		db.query.redirects.findMany({
 			where: eq(redirects.applicationId, preview.applicationId),
@@ -49,6 +50,7 @@ export async function syncPreviewTraefik(previewDeploymentId: string): Promise<v
 				https: domain.https,
 				certificateType: domain.certificateType,
 				certificateId: domain.certificateId,
+				middlewares: domain.middlewares,
 			},
 		],
 		redirects: parentRedirects.map((redirect) => ({

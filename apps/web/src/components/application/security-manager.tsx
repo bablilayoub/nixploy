@@ -41,11 +41,17 @@ import { useCapabilities } from "@/hooks/use-capabilities";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
+import type { TraefikParent } from "./traefik-parent";
 import type { SecurityEntry } from "./types";
 
 const EMPTY_FORM = { username: "", password: "" };
 
-export function SecurityManager({ applicationId }: { applicationId: string }) {
+/**
+ * HTTP basic auth for an application or for one service of a compose stack —
+ * the same rows behind the same Traefik `basicAuth` middleware.
+ */
+export function SecurityManager(parent: TraefikParent) {
+	const { applicationId, composeId, serviceName } = parent;
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
@@ -73,11 +79,23 @@ export function SecurityManager({ applicationId }: { applicationId: string }) {
 		isError,
 		error,
 		refetch,
-	} = useQuery(trpc.security.byApplication.queryOptions({ applicationId }));
+	} = useQuery(
+		applicationId
+			? trpc.security.byApplication.queryOptions({ applicationId })
+			: trpc.security.byCompose.queryOptions({
+					composeId: composeId as string,
+					serviceName: serviceName as string,
+				}),
+	);
 
 	const invalidate = () =>
 		queryClient.invalidateQueries({
-			queryKey: trpc.security.byApplication.queryKey({ applicationId }),
+			queryKey: applicationId
+				? trpc.security.byApplication.queryKey({ applicationId })
+				: trpc.security.byCompose.queryKey({
+						composeId: composeId as string,
+						serviceName: serviceName as string,
+					}),
 		});
 
 	const create = useMutation(
@@ -127,9 +145,16 @@ export function SecurityManager({ applicationId }: { applicationId: string }) {
 				username: form.username,
 				...(form.password ? { password: form.password } : {}),
 			});
-		} else {
+		} else if (applicationId) {
 			create.mutate({
 				applicationId,
+				username: form.username,
+				password: form.password,
+			});
+		} else {
+			create.mutate({
+				composeId: composeId as string,
+				serviceName,
 				username: form.username,
 				password: form.password,
 			});
@@ -140,7 +165,11 @@ export function SecurityManager({ applicationId }: { applicationId: string }) {
 		<>
 			<SettingsSection
 				title="Security"
-				description="Protect the application with HTTP basic auth at the reverse proxy."
+				description={
+					serviceName
+						? `Protect ${serviceName} with HTTP basic auth at the reverse proxy.`
+						: "Protect the application with HTTP basic auth at the reverse proxy."
+				}
 				actions={
 					<Button
 						size="sm"
@@ -171,7 +200,7 @@ export function SecurityManager({ applicationId }: { applicationId: string }) {
 						<div className="flex flex-col items-center gap-2 py-10 text-center">
 							<ShieldCheck className="size-8 text-muted-foreground" />
 							<p className="text-sm text-muted-foreground">
-								No basic-auth credentials. The application is publicly reachable.
+								No basic-auth credentials. This service is publicly reachable.
 							</p>
 						</div>
 					}

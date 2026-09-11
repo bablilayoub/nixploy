@@ -231,6 +231,102 @@ describe("buildTraefikFileConfig", () => {
 		expect(config.http.routers["myapp-router-0"]?.middlewares).toEqual(["addprefix-myapp-0"]);
 	});
 
+	it("chains per-domain middlewares after the shared ones, in order", async () => {
+		const config = await buildTraefikFileConfig({
+			appName: "myapp",
+			domains: [
+				{
+					...baseDomain,
+					middlewares: [
+						{ kind: "compress", config: {}, order: 2 },
+						{ kind: "rateLimit", config: { average: 2, burst: 2 }, order: 0 },
+						{ kind: "ipAllowList", config: { sourceRange: ["127.0.0.1/32"] }, order: 1 },
+						{ kind: "headers", config: { stsSeconds: 60 }, order: 3, enabled: false },
+					],
+				},
+			],
+			basicAuth: [{ username: "admin", password: "$2y$05$hash" }],
+		});
+
+		// Shared basic-auth first, then the enabled rows by `order`; the
+		// disabled one is not rendered at all.
+		expect(config.http.routers["myapp-router-0"]?.middlewares).toEqual([
+			"auth-myapp",
+			"mw-myapp-0-0-rateLimit",
+			"mw-myapp-0-1-ipAllowList",
+			"mw-myapp-0-2-compress",
+		]);
+		expect(config.http.middlewares?.["mw-myapp-0-0-rateLimit"]).toEqual({
+			rateLimit: { average: 2, burst: 2 },
+		});
+		expect(config.http.middlewares?.["mw-myapp-0-3-headers"]).toBeUndefined();
+	});
+
+	it("stickyCookie configures the load balancer, not a middleware", async () => {
+		const config = await buildTraefikFileConfig({
+			appName: "myapp",
+			domains: [
+				{
+					...baseDomain,
+					middlewares: [{ kind: "stickyCookie", config: { name: "sess", secure: true } }],
+				},
+			],
+		});
+		expect(config.http.services["myapp-service-0"]?.loadBalancer.sticky).toEqual({
+			cookie: { name: "sess", secure: true, httpOnly: true },
+		});
+		expect(config.http.routers["myapp-router-0"]?.middlewares).toEqual([]);
+	});
+
+	it("maintenance serves the panel's page for every backend response", async () => {
+		const config = await buildTraefikFileConfig({
+			appName: "myapp",
+			domains: [{ ...baseDomain, middlewares: [{ kind: "maintenance", config: {} }] }],
+		});
+		expect(config.http.middlewares?.["mw-myapp-0-0-maintenance"]).toEqual({
+			errors: { status: ["100-599"], service: "nixploy-dashboard", query: "/__maintenance" },
+		});
+	});
+
+	it("rejects a middleware config that no longer validates", async () => {
+		await expect(
+			buildTraefikFileConfig({
+				appName: "myapp",
+				domains: [
+					{ ...baseDomain, middlewares: [{ kind: "ipAllowList", config: { sourceRange: ["x"] } }] },
+				],
+			}),
+		).rejects.toThrow(/CIDR/);
+	});
+
+	it("wildcard hosts become a single-label HostRegexp with a DNS-01 resolver", async () => {
+		const config = await buildTraefikFileConfig({
+			appName: "myapp",
+			domains: [
+				{ ...baseDomain, host: "*.apps.example.com", https: true, certificateType: "letsencrypt" },
+			],
+		});
+		expect(config.http.routers["myapp-router-websecure-0"]?.rule).toBe(
+			"HostRegexp(`^[a-zA-Z0-9_-]+\\.apps\\.example\\.com$`)",
+		);
+		expect(config.http.routers["myapp-router-websecure-0"]?.tls).toEqual({
+			certResolver: "letsencrypt-dns",
+			domains: [{ main: "*.apps.example.com" }],
+		});
+	});
+
+	it("still rejects inner wildcards and bare-TLD wildcards", async () => {
+		await expect(
+			buildTraefikFileConfig({ appName: "myapp", domains: [{ ...baseDomain, host: "*.com" }] }),
+		).rejects.toThrow(/parent domain/);
+		await expect(
+			buildTraefikFileConfig({
+				appName: "myapp",
+				domains: [{ ...baseDomain, host: "ap*p.example.com" }],
+			}),
+		).rejects.toThrow(/Invalid Traefik host/);
+	});
+
 	it("produces YAML Traefik's file provider can parse", async () => {
 		const { stringify } = await import("yaml");
 		const config = await buildTraefikFileConfig({

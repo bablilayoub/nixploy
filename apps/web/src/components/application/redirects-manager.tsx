@@ -42,11 +42,18 @@ import { useCapabilities } from "@/hooks/use-capabilities";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
+import type { TraefikParent } from "./traefik-parent";
 import type { RedirectEntry } from "./types";
 
 const EMPTY_FORM = { regex: "", replacement: "", permanent: false };
 
-export function RedirectsManager({ applicationId }: { applicationId: string }) {
+/**
+ * Regex redirects for an application or for one service of a compose stack —
+ * the same rows, the same Traefik `redirectRegex` middleware, only the parent
+ * differs (see `TraefikParent`).
+ */
+export function RedirectsManager(parent: TraefikParent) {
+	const { applicationId, composeId, serviceName } = parent;
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const { can } = useCapabilities();
@@ -65,17 +72,22 @@ export function RedirectsManager({ applicationId }: { applicationId: string }) {
 		}
 	}, [dialogOpen]);
 
-	const {
-		data: redirects,
-		isLoading,
-		isError,
-		error,
-		refetch,
-	} = useQuery(trpc.redirect.byApplication.queryOptions({ applicationId }));
+	const queryOptions = applicationId
+		? trpc.redirect.byApplication.queryOptions({ applicationId })
+		: trpc.redirect.byCompose.queryOptions({
+				composeId: composeId as string,
+				serviceName: serviceName as string,
+			});
+	const { data: redirects, isLoading, isError, error, refetch } = useQuery(queryOptions);
 
 	const invalidate = () =>
 		queryClient.invalidateQueries({
-			queryKey: trpc.redirect.byApplication.queryKey({ applicationId }),
+			queryKey: applicationId
+				? trpc.redirect.byApplication.queryKey({ applicationId })
+				: trpc.redirect.byCompose.queryKey({
+						composeId: composeId as string,
+						serviceName: serviceName as string,
+					}),
 		});
 
 	const create = useMutation(
@@ -125,8 +137,10 @@ export function RedirectsManager({ applicationId }: { applicationId: string }) {
 	const onSubmit = () => {
 		if (editing) {
 			update.mutate({ redirectId: editing.redirectId, ...form });
-		} else {
+		} else if (applicationId) {
 			create.mutate({ applicationId, ...form });
+		} else {
+			create.mutate({ composeId: composeId as string, serviceName, ...form });
 		}
 	};
 
@@ -134,7 +148,11 @@ export function RedirectsManager({ applicationId }: { applicationId: string }) {
 		<>
 			<SettingsSection
 				title="Redirects"
-				description="Regex-based URL redirects applied at the reverse proxy."
+				description={
+					serviceName
+						? `Regex-based URL redirects applied at the reverse proxy for ${serviceName}.`
+						: "Regex-based URL redirects applied at the reverse proxy."
+				}
 				actions={
 					<Button
 						size="sm"

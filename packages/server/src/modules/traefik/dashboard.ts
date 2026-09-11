@@ -45,12 +45,17 @@ export const normalizeDashboardDomain = (raw: string | null | undefined): string
 
 /**
  * YAML for the dashboard routing file:
- * - a priority-1 catch-all on `websecure` so `https://<server-ip>` reaches
- *   the dashboard with the self-signed default certificate, plus a
- *   priority-2 sibling for `/api/` that adds the request-body buffer;
- * - when a domain is configured, the same pair as `Host()` routers with the
- *   Let's Encrypt resolver — the certificate is issued on the first request
- *   (the longer `&&` rule wins for `/api/` by Traefik's default priority).
+ * - when **no** domain is configured, a priority-1 catch-all on `websecure` so
+ *   `https://<server-ip>` reaches the dashboard with the self-signed default
+ *   certificate, plus a priority-2 sibling for `/api/` that adds the
+ *   request-body buffer;
+ * - when a domain **is** configured, the same pair scoped to `Host(<domain>)`
+ *   with the Let's Encrypt resolver — the certificate is issued on the first
+ *   request (the longer `&&` rule wins for `/api/` by Traefik's default
+ *   priority) — and the catch-all is dropped: it answered on every hostname
+ *   pointed at the box (bare IP, stray DNS), which fingerprinted the panel on
+ *   vhosts nobody configured (audit security.md §2.10). Tenant domains are
+ *   unaffected either way; they always carry their own `Host()` routers.
  *
  * Every dashboard router carries the HSTS middleware; tenant routers
  * (`config-writer.ts`) never reference these middlewares.
@@ -59,6 +64,28 @@ export const normalizeDashboardDomain = (raw: string | null | undefined): string
  * local dev (host networking); callers pass the right one.
  */
 export const buildDashboardRouterYaml = (domain: string | null, target: string): string => {
+	const catchAllRouters = domain
+		? ""
+		: `    nixploy-dashboard:
+      rule: PathPrefix(\`/\`)
+      entryPoints:
+        - websecure
+      service: nixploy-dashboard
+      middlewares:
+        - ${DASHBOARD_HEADERS_MIDDLEWARE}
+      tls: {}
+      priority: 1
+    nixploy-dashboard-api:
+      rule: ${DASHBOARD_API_RULE}
+      entryPoints:
+        - websecure
+      service: nixploy-dashboard
+      middlewares:
+        - ${DASHBOARD_HEADERS_MIDDLEWARE}
+        - ${DASHBOARD_BUFFERING_MIDDLEWARE}
+      tls: {}
+      priority: 2
+`;
 	const domainRouters = domain
 		? `    nixploy-dashboard-domain:
       rule: Host(\`${domain}\`)
@@ -83,26 +110,7 @@ export const buildDashboardRouterYaml = (domain: string | null, target: string):
 		: "";
 	return `http:
   routers:
-    nixploy-dashboard:
-      rule: PathPrefix(\`/\`)
-      entryPoints:
-        - websecure
-      service: nixploy-dashboard
-      middlewares:
-        - ${DASHBOARD_HEADERS_MIDDLEWARE}
-      tls: {}
-      priority: 1
-    nixploy-dashboard-api:
-      rule: ${DASHBOARD_API_RULE}
-      entryPoints:
-        - websecure
-      service: nixploy-dashboard
-      middlewares:
-        - ${DASHBOARD_HEADERS_MIDDLEWARE}
-        - ${DASHBOARD_BUFFERING_MIDDLEWARE}
-      tls: {}
-      priority: 2
-${domainRouters}  middlewares:
+${catchAllRouters}${domainRouters}  middlewares:
     ${DASHBOARD_HEADERS_MIDDLEWARE}:
       headers:
         stsSeconds: ${DASHBOARD_HSTS_SECONDS}

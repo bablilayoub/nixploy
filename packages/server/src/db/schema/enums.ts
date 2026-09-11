@@ -79,6 +79,22 @@ export const certificateType = pgEnum("certificate_type", ["letsencrypt", "custo
 
 export const domainType = pgEnum("domain_type", ["application", "compose", "preview"]);
 
+/**
+ * Traefik middleware kinds a domain can opt into. The set is closed on
+ * purpose: every kind maps to one hand-written renderer + zod schema in
+ * `modules/traefik/middlewares.ts`, so no tenant string ever reaches the
+ * dynamic YAML unvalidated (there is no raw-YAML escape hatch).
+ */
+export const domainMiddlewareKind = pgEnum("domain_middleware_kind", [
+	"rateLimit",
+	"ipAllowList",
+	"headers",
+	"compress",
+	"forwardAuth",
+	"stickyCookie",
+	"maintenance",
+]);
+
 export const mountType = pgEnum("mount_type", ["bind", "volume", "file"]);
 
 /** Every kind of service a mount/port/domain can attach to. */

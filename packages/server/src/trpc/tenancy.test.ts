@@ -184,6 +184,69 @@ describe.skipIf(!testUrl)("tenant isolation", () => {
 		});
 		await expectConflict(callerB.domain.update({ domainId: own.domainId, host }));
 	});
+
+	it("domain middlewares are org-scoped and validated per kind", async () => {
+		const domain = await callerA.domain.create({
+			host: `mw-${Date.now()}.example.test`,
+			applicationId: a.applicationId,
+			port: 3000,
+		});
+
+		const saved = await callerA.domain.saveMiddlewares({
+			domainId: domain.domainId,
+			middlewares: [
+				{ kind: "rateLimit", config: { average: 2, burst: 2 }, enabled: true },
+				{ kind: "ipAllowList", config: { sourceRange: ["127.0.0.1/32"] }, enabled: true },
+			],
+		});
+		expect(saved.map((row) => row.kind)).toEqual(["rateLimit", "ipAllowList"]);
+		expect(saved.map((row) => row.order)).toEqual([0, 1]);
+
+		// Another org can neither read nor rewrite the chain.
+		await expectDenied(callerB.domain.middlewares({ domainId: domain.domainId }));
+		await expectDenied(
+			callerB.domain.saveMiddlewares({ domainId: domain.domainId, middlewares: [] }),
+		);
+
+		// Bad config is rejected before anything is written.
+		await expect(
+			callerA.domain.saveMiddlewares({
+				domainId: domain.domainId,
+				middlewares: [{ kind: "ipAllowList", config: { sourceRange: ["nope"] }, enabled: true }],
+			}),
+		).rejects.toMatchObject({ code: "BAD_REQUEST" });
+		expect(await callerA.domain.middlewares({ domainId: domain.domainId })).toHaveLength(2);
+
+		// forwardAuth may not point at a private host outside the org.
+		await expect(
+			callerA.domain.saveMiddlewares({
+				domainId: domain.domainId,
+				middlewares: [
+					{ kind: "forwardAuth", config: { address: "http://10.0.0.5:9091/x" }, enabled: true },
+				],
+			}),
+		).rejects.toMatchObject({ code: "BAD_REQUEST" });
+
+		// Replace-all semantics: an empty list clears the chain.
+		expect(
+			await callerA.domain.saveMiddlewares({ domainId: domain.domainId, middlewares: [] }),
+		).toEqual([]);
+	});
+
+	it("compose redirects and basic auth are org-scoped", async () => {
+		await expectDenied(callerB.redirect.byCompose({ composeId: a.composeId, serviceName: "web" }));
+		await expectDenied(callerB.security.byCompose({ composeId: a.composeId, serviceName: "web" }));
+		const redirect = await callerA.redirect.create({
+			composeId: a.composeId,
+			serviceName: "web",
+			regex: "^/old/.*$",
+			replacement: "/new/",
+		});
+		expect(redirect.composeId).toBe(a.composeId);
+		expect(redirect.applicationId).toBeNull();
+		await expectDenied(callerB.redirect.one({ redirectId: redirect.redirectId }));
+		await callerA.redirect.delete({ redirectId: redirect.redirectId });
+	});
 });
 
 describe("tenancy coverage registry", () => {

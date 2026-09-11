@@ -148,6 +148,13 @@
       "when": 1789087751971,
       "tag": "0020_plain_james_howlett",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1789129952216,
+      "tag": "0021_familiar_blue_shield",
+      "breakpoints": true
     }
   ]
 }

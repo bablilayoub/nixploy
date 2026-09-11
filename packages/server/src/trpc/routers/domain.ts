@@ -7,9 +7,11 @@ import {
 	applications,
 	certificates,
 	compose,
+	domainMiddlewares,
 	domains,
 	environments,
 	projects,
+	webServerSettings,
 } from "../../db/schema";
 import {
 	assertApplicationAccess,
@@ -18,9 +20,19 @@ import {
 	syncApplicationTraefik,
 } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
+import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { resyncComposeDomains } from "../../modules/compose/service";
+import { isDomainError } from "../../modules/errors";
 import { syncPreviewTraefik } from "../../modules/preview/traefik";
 import { assertCapability } from "../../modules/projects";
+import {
+	domainMiddlewareKindSchema,
+	isWildcardHost,
+	parseForwardAuthAddress,
+	parseMiddlewareConfig,
+} from "../../modules/traefik";
+import { assertSafeOutboundUrl } from "../../utils/public-url";
+import { takeRateLimitToken } from "../../utils/rate-limit";
 import {
 	assertComposeServiceName,
 	assertTraefikHost,
@@ -31,6 +43,82 @@ import { protectedProcedure, router } from "../init";
 const domainIdInput = z.object({ domainId: z.string().min(1) });
 
 const certificateTypeSchema = z.enum(["letsencrypt", "none", "custom"]);
+
+/**
+ * Let's Encrypt issuance budget per organization. The instance shares one ACME
+ * account, so a tenant attaching hosts that do not resolve burns the whole
+ * box's rate limit (50 certs/week, 5 failures/hour — security.md §2.10).
+ */
+const LETSENCRYPT_DOMAINS_PER_HOUR = 20;
+
+const assertLetsEncryptBudget = (organizationId: string): void => {
+	if (
+		!takeRateLimitToken(`letsencrypt-domain:${organizationId}`, {
+			windowMs: 3_600_000,
+			max: LETSENCRYPT_DOMAINS_PER_HOUR,
+		})
+	) {
+		throw new TRPCError({
+			code: "TOO_MANY_REQUESTS",
+			message: `At most ${LETSENCRYPT_DOMAINS_PER_HOUR} Let's Encrypt domains can be added per hour. Try again later or use certificate type “None”.`,
+		});
+	}
+};
+
+/**
+ * Validate a host that may carry exactly one leading `*.` label. Wildcards go
+ * through the same checks as a normal host on the part after `*.`.
+ */
+const assertHostAllowingWildcard = (host: string): string => {
+	const trimmed = host.trim().toLowerCase();
+	if (!isWildcardHost(trimmed)) return assertTraefikHost(trimmed);
+	const base = trimmed.slice(2);
+	if (base.includes("*")) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "A wildcard host has exactly one leading “*.” label",
+		});
+	}
+	const normalized = assertTraefikHost(base);
+	if (normalized.split(".").filter(Boolean).length < 2) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "A wildcard host needs a parent domain, e.g. *.apps.example.com",
+		});
+	}
+	return `*.${normalized}`;
+};
+
+/**
+ * Nixploy has no proof that an organization owns the parent zone of a
+ * wildcard, and `*.example.com` swallows every unclaimed subdomain of it on
+ * this instance. Until zone ownership is verifiable, wildcard rows are
+ * instance-admin only (documented in docs/domains-traefik.md).
+ */
+const assertWildcardAllowed = async (
+	session: Parameters<typeof assertInstanceAdmin>[0],
+	host: string,
+	certificateType: z.infer<typeof certificateTypeSchema>,
+): Promise<void> => {
+	if (!isWildcardHost(host)) return;
+	try {
+		await assertInstanceAdmin(session);
+	} catch {
+		throw new TRPCError({
+			code: "FORBIDDEN",
+			message: "Wildcard domains can only be added by the instance administrator",
+		});
+	}
+	if (certificateType !== "letsencrypt") return;
+	const [settings] = await db.select().from(webServerSettings).limit(1);
+	if (!settings?.acmeDnsProvider) {
+		throw new TRPCError({
+			code: "PRECONDITION_FAILED",
+			message:
+				"A wildcard certificate needs the DNS-01 challenge. Configure a DNS provider in Settings → Platform first.",
+		});
+	}
+};
 
 /** `*.traefik.me` resolves to 127.0.0.1 — Let's Encrypt HTTP-01 can never succeed. */
 const isLocalWildcardHost = (host: string): boolean =>
@@ -169,6 +257,67 @@ const assertHostPathAvailable = async (
 				message: "This host (or host + path) is already routed on this instance",
 			});
 		}
+	}
+};
+
+/**
+ * SSRF gate for `forwardAuth.address`. Two shapes are allowed:
+ * - a bare container/service name (`http://authelia:9091/api/verify`) that
+ *   belongs to an application or compose stack of the **same organization** —
+ *   it never resolves in the panel's DNS, so the generic guard cannot see it;
+ * - any other URL, which goes through `assertSafeOutboundUrl` with private
+ *   ranges denied (no loopback, no RFC1918, no metadata).
+ */
+const assertForwardAuthAllowed = async (address: string, organizationId: string): Promise<void> => {
+	let target: ReturnType<typeof parseForwardAuthAddress>;
+	try {
+		target = parseForwardAuthAddress(address);
+	} catch (error) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: error instanceof Error ? error.message : "Invalid forwardAuth address",
+		});
+	}
+	if (target.scope === "external") {
+		try {
+			await assertSafeOutboundUrl(target.url.toString(), { allowPrivate: false });
+		} catch (error) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message:
+					"forwardAuth must point at a public HTTPS endpoint or another service of this organization",
+				cause: error,
+			});
+		}
+		return;
+	}
+	const [applicationRows, composeRows] = await Promise.all([
+		db
+			.select({ appName: applications.appName })
+			.from(applications)
+			.innerJoin(environments, eq(applications.environmentId, environments.environmentId))
+			.innerJoin(projects, eq(environments.projectId, projects.projectId))
+			.where(eq(projects.organizationId, organizationId)),
+		db
+			.select({ appName: compose.appName })
+			.from(compose)
+			.innerJoin(environments, eq(compose.environmentId, environments.environmentId))
+			.innerJoin(projects, eq(environments.projectId, projects.projectId))
+			.where(eq(projects.organizationId, organizationId)),
+	]);
+	const host = target.host;
+	const owned =
+		applicationRows.some((row) => row.appName.toLowerCase() === host) ||
+		// Compose containers are `<appName>-<service>-1`.
+		composeRows.some((row) => {
+			const appName = row.appName.toLowerCase();
+			return host === appName || host.startsWith(`${appName}-`);
+		});
+	if (!owned) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: `No service named “${host}” in this organization. Use the app name of a service you own, or a public HTTPS URL.`,
+		});
 	}
 };
 
@@ -327,10 +476,11 @@ export const domainRouter = router({
 			let path: string;
 			let internalPath: string | null;
 			try {
-				host = assertTraefikHost(input.host);
+				host = assertHostAllowingWildcard(input.host);
 				path = assertTraefikPath(input.path ?? "/") ?? "/";
 				internalPath = assertTraefikPath(input.internalPath);
 			} catch (error) {
+				if (error instanceof TRPCError) throw error;
 				throw new TRPCError({
 					code: "BAD_REQUEST",
 					message: error instanceof Error ? error.message : "Invalid domain host/path",
@@ -347,6 +497,7 @@ export const domainRouter = router({
 				}
 			}
 			assertCertificateAllowedForHost(host, certificateType);
+			await assertWildcardAllowed(ctx.session, host, certificateType);
 			if (certificateType === "custom") {
 				if (!input.certificateId) {
 					throw new TRPCError({
@@ -357,6 +508,9 @@ export const domainRouter = router({
 				await assertCertificateExists(input.certificateId, organizationId);
 			}
 			await assertHostPathAvailable(host, path, organizationId);
+			if (certificateType === "letsencrypt") {
+				assertLetsEncryptBudget(organizationId);
+			}
 
 			const values = {
 				host,
@@ -428,7 +582,8 @@ export const domainRouter = router({
 			let nextHost: string;
 			let nextPath: string;
 			try {
-				nextHost = input.host !== undefined ? assertTraefikHost(input.host) : existing.host;
+				nextHost =
+					input.host !== undefined ? assertHostAllowingWildcard(input.host) : existing.host;
 				nextPath =
 					input.path !== undefined
 						? (assertTraefikPath(input.path) ?? "/")
@@ -440,12 +595,19 @@ export const domainRouter = router({
 					assertComposeServiceName(input.serviceName);
 				}
 			} catch (error) {
+				if (error instanceof TRPCError) throw error;
 				throw new TRPCError({
 					code: "BAD_REQUEST",
 					message: error instanceof Error ? error.message : "Invalid domain host/path",
 				});
 			}
 			assertCertificateAllowedForHost(nextHost, certificateType);
+			if (nextHost !== existing.host || certificateType !== existing.certificateType) {
+				await assertWildcardAllowed(ctx.session, nextHost, certificateType);
+			}
+			if (certificateType === "letsencrypt" && existing.certificateType !== "letsencrypt") {
+				assertLetsEncryptBudget(organizationId);
+			}
 			const certificateId =
 				certificateType === "custom" ? (input.certificateId ?? existing.certificateId) : null;
 			if (certificateType === "custom") {
@@ -533,6 +695,123 @@ export const domainRouter = router({
 		});
 		return { domainId: input.domainId };
 	}),
+
+	/** Middleware rows attached to one domain, in chain order. */
+	middlewares: protectedProcedure.input(domainIdInput).query(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		await assertDomainAccess(input.domainId, organizationId);
+		return db.query.domainMiddlewares.findMany({
+			where: eq(domainMiddlewares.domainId, input.domainId),
+			orderBy: [domainMiddlewares.order, domainMiddlewares.createdAt],
+		});
+	}),
+
+	/**
+	 * Replace the middleware chain of one domain. Replace-all (not per-row
+	 * CRUD) so reordering, adding and removing are one atomic write and the
+	 * Traefik file is rewritten exactly once.
+	 */
+	saveMiddlewares: protectedProcedure
+		.input(
+			domainIdInput.extend({
+				middlewares: z
+					.array(
+						z.object({
+							kind: domainMiddlewareKindSchema,
+							config: z.unknown().optional(),
+							enabled: z.boolean().default(true),
+						}),
+					)
+					.max(20),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertCapability(ctx.session.user.id, organizationId, "domains.manage");
+			const domain = await assertDomainAccess(input.domainId, organizationId);
+
+			// Validate every config BEFORE touching the table, so a bad row never
+			// leaves the chain half-written (Traefik would then drop the route).
+			const validated: Array<{
+				kind: (typeof input.middlewares)[number]["kind"];
+				config: unknown;
+				enabled: boolean;
+			}> = [];
+			for (const row of input.middlewares) {
+				let config: unknown;
+				try {
+					config = parseMiddlewareConfig(row.kind, row.config ?? {});
+				} catch (error) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message:
+							isDomainError(error) || error instanceof Error
+								? error.message
+								: `Invalid ${row.kind} middleware`,
+					});
+				}
+				if (row.kind === "forwardAuth") {
+					await assertForwardAuthAllowed((config as { address: string }).address, organizationId);
+				}
+				validated.push({ kind: row.kind, config, enabled: row.enabled });
+			}
+
+			const previous = await db.query.domainMiddlewares.findMany({
+				where: eq(domainMiddlewares.domainId, input.domainId),
+			});
+			await db.transaction(async (tx) => {
+				await tx.delete(domainMiddlewares).where(eq(domainMiddlewares.domainId, input.domainId));
+				if (validated.length > 0) {
+					await tx.insert(domainMiddlewares).values(
+						validated.map((row, index) => ({
+							domainId: input.domainId,
+							kind: row.kind,
+							config: row.config,
+							order: index,
+							enabled: row.enabled,
+						})),
+					);
+				}
+			});
+
+			try {
+				await resyncServiceTraefik(domain);
+			} catch (error) {
+				// Compensation: put the old chain back so the live config and the
+				// rows agree even when the rewrite failed.
+				await db
+					.transaction(async (tx) => {
+						await tx
+							.delete(domainMiddlewares)
+							.where(eq(domainMiddlewares.domainId, input.domainId));
+						if (previous.length > 0) {
+							await tx.insert(domainMiddlewares).values(
+								previous.map((row) => ({
+									domainId: row.domainId,
+									kind: row.kind,
+									config: row.config,
+									order: row.order,
+									enabled: row.enabled,
+								})),
+							);
+						}
+					})
+					.catch(() => {});
+				throw error;
+			}
+
+			await auditFromSession(ctx, organizationId, {
+				action: "domain.saveMiddlewares",
+				targetType: "domain",
+				targetId: domain.domainId,
+				targetName: domain.host,
+				metadata: { kinds: validated.map((row) => row.kind) },
+			});
+			return db.query.domainMiddlewares.findMany({
+				where: eq(domainMiddlewares.domainId, input.domainId),
+				orderBy: [domainMiddlewares.order, domainMiddlewares.createdAt],
+			});
+		}),
 
 	/**
 	 * Free wildcard domain (`traefik.me` resolves any *.traefik.me to

@@ -7,6 +7,8 @@ import { db } from "../../db";
 import { certificates } from "../../db/schema";
 import { execAsyncRemote, execAsyncWithStdin } from "../../utils/exec";
 import { badRequest } from "../errors";
+import type { DomainMiddlewareKind, RenderedMiddleware, StickyCookie } from "./middlewares";
+import { renderMiddleware, renderStickyCookie } from "./middlewares";
 import { getDynamicDir } from "./paths";
 
 /**
@@ -18,6 +20,15 @@ import { getDynamicDir } from "./paths";
 export const DEFAULT_CONTAINER_PORT = 80;
 
 // ─── Public contract types ───────────────────────────────────────────────────
+
+/** One `domain_middleware` row, as handed to the writer. */
+export interface TraefikMiddlewareEntry {
+	kind: DomainMiddlewareKind;
+	config: unknown;
+	/** Position in the chain (ascending); ties keep input order. */
+	order?: number;
+	enabled?: boolean;
+}
 
 export interface TraefikDomainEntry {
 	host: string;
@@ -37,6 +48,8 @@ export interface TraefikDomainEntry {
 	serviceName?: string | null;
 	/** Stable suffix for router/service names (defaults to the array index). */
 	uniqueConfigKey?: string | null;
+	/** Per-domain middleware rows, chained after the app-wide ones. */
+	middlewares?: TraefikMiddlewareEntry[];
 }
 
 export interface TraefikRedirectEntry {
@@ -66,18 +79,24 @@ export interface WriteAppTraefikConfigInput {
 
 // ─── Traefik file-provider config shape ─────────────────────────────────────
 
+interface TlsDomain {
+	main: string;
+	sans?: string[];
+}
+
 interface HttpRouter {
 	rule: string;
 	service: string;
 	entryPoints: string[];
 	middlewares?: string[];
-	tls?: { certResolver?: string };
+	tls?: { certResolver?: string; domains?: TlsDomain[] };
 }
 
 interface HttpService {
 	loadBalancer: {
 		servers: Array<{ url: string }>;
 		passHostHeader: boolean;
+		sticky?: { cookie: StickyCookie };
 	};
 }
 
@@ -88,7 +107,8 @@ type HttpMiddleware =
 	  }
 	| { basicAuth: { removeHeader: boolean; users: string[] } }
 	| { stripPrefix: { prefixes: string[] } }
-	| { addPrefix: { prefix: string } };
+	| { addPrefix: { prefix: string } }
+	| RenderedMiddleware;
 
 interface FileConfig {
 	http: {
@@ -108,6 +128,25 @@ const shq = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
 /** Traefik object names must be alphanumeric + dashes. */
 const sanitizeName = (value: string): string => value.replace(/[^a-zA-Z0-9-]/g, "-");
+
+/**
+ * ACME resolver used for wildcard hosts. Only rendered into the static config
+ * when a DNS provider is configured (`web_server_settings.acmeDnsProvider`);
+ * `domain.create` refuses a Let's Encrypt wildcard without one, because
+ * HTTP-01 can never validate `*.example.com`.
+ */
+export const DNS_CERT_RESOLVER = "letsencrypt-dns";
+
+/** `*.example.com` — exactly one leading wildcard label. */
+export const isWildcardHost = (host: string): boolean => host.trim().startsWith("*.");
+
+/**
+ * Traefik v3 dropped the named-group HostRegexp syntax, so a wildcard host
+ * becomes a plain Go regexp matching exactly one label — the same span a
+ * wildcard certificate covers (`a.example.com` yes, `a.b.example.com` no).
+ */
+const wildcardHostRule = (baseHost: string): string =>
+	`HostRegexp(\`^[a-zA-Z0-9_-]+\\.${baseHost.replace(/[.]/g, "\\.")}$\`)`;
 
 /** Strip backticks and reject Traefik rule metacharacters in Host/Path values. */
 const sanitizeRuleValue = (value: string): string => {
@@ -261,27 +300,38 @@ export const buildTraefikFileConfig = async (
 		const routerNameSecure = `${sanitizeName(appName)}-router-websecure-${key}`;
 		const serviceName = `${sanitizeName(appName)}-service-${key}`;
 
-		const host = sanitizeRuleValue(toPunycode(domain.host));
-		// No wildcards — a Host(`*`) / Host(`*.evil`) rule would catch unrelated traffic.
+		const rawHost = sanitizeRuleValue(domain.host);
+		// A wildcard is only ever the leading label: `Host(`*`)` or an inner `*`
+		// would catch unrelated traffic. Everything after `*.` is validated as a
+		// normal host, so `*.*.evil` and `*evil.com` are still rejected.
+		const wildcard = isWildcardHost(rawHost);
+		const host = sanitizeRuleValue(toPunycode(wildcard ? rawHost.slice(2) : rawHost));
 		if (host.includes("*") || !/^[a-zA-Z0-9.-]+(\.[a-zA-Z0-9.-]+)*\.?$/.test(host)) {
 			throw badRequest(`Invalid Traefik host after punycode: ${domain.host}`);
 		}
+		// `*.com` would ask a public-suffix-wide certificate; require a zone.
+		if (wildcard && host.split(".").filter(Boolean).length < 2) {
+			throw badRequest(`Wildcard host needs a parent domain: ${domain.host}`);
+		}
+		const matchHost = wildcard ? `*.${host}` : host;
 		const path = domain.path && domain.path !== "/" ? sanitizeRuleValue(domain.path) : null;
 		if (path && (!path.startsWith("/") || /[()|`]/.test(path) || path.includes(".."))) {
 			throw badRequest(`Invalid Traefik path: ${domain.path}`);
 		}
-		const rule = `Host(\`${host}\`)${path ? ` && PathPrefix(\`${path}\`)` : ""}`;
+		const hostRule = wildcard ? wildcardHostRule(host) : `Host(\`${host}\`)`;
+		const rule = `${hostRule}${path ? ` && PathPrefix(\`${path}\`)` : ""}`;
 
 		if (domain.serviceName && !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(domain.serviceName)) {
 			throw badRequest(`Invalid compose service name: ${domain.serviceName}`);
 		}
 		const target = domain.serviceName ? `${appName}-${domain.serviceName}-1` : appName;
-		config.http.services[serviceName] = {
+		const service: HttpService = {
 			loadBalancer: {
 				servers: [{ url: `http://${target}:${domain.port ?? DEFAULT_CONTAINER_PORT}` }],
 				passHostHeader: true,
 			},
 		};
+		config.http.services[serviceName] = service;
 
 		// Per-domain internal-path rewrite: public `<path>/*` → upstream
 		// `<internalPath>/*`. addPrefix alone would yield `/internal/public/*`,
@@ -305,6 +355,25 @@ export const buildTraefikFileConfig = async (
 			domainMiddlewares.unshift(...rewrite);
 		}
 
+		// Per-domain middleware rows, chained after the app-wide redirect /
+		// basic-auth ones and in `order`. Every config is re-validated here, so
+		// a row written under looser rules can never reach the YAML.
+		const rows = (domain.middlewares ?? [])
+			.map((row, position) => ({ row, position }))
+			.filter(({ row }) => row.enabled !== false)
+			.sort((a, b) => (a.row.order ?? 0) - (b.row.order ?? 0) || a.position - b.position);
+		for (const [index, { row }] of rows.entries()) {
+			const rendered = renderMiddleware(row.kind, row.config);
+			if (!rendered) {
+				// stickyCookie is a load-balancer option, not a middleware.
+				service.loadBalancer.sticky = { cookie: renderStickyCookie(row.config) };
+				continue;
+			}
+			const name = `mw-${sanitizeName(appName)}-${key}-${index}-${sanitizeName(row.kind)}`;
+			middlewares[name] = rendered;
+			domainMiddlewares.push(name);
+		}
+
 		if (domain.https) {
 			// Plain-HTTP router only bounces to https; everything else happens
 			// on the websecure router where the request actually lands.
@@ -322,7 +391,12 @@ export const buildTraefikFileConfig = async (
 				middlewares: domainMiddlewares,
 			};
 			if (domain.certificateType === "letsencrypt") {
-				secureRouter.tls = { certResolver: "letsencrypt" };
+				// A wildcard can only be validated by DNS-01, and Traefik needs
+				// `tls.domains` to know which SAN to ask for (the router rule is a
+				// regexp, so it cannot derive the name from the request).
+				secureRouter.tls = wildcard
+					? { certResolver: DNS_CERT_RESOLVER, domains: [{ main: matchHost }] }
+					: { certResolver: "letsencrypt" };
 			} else {
 				// "custom": the cert comes from tls.certificates below.
 				// "none": Traefik serves the default (self-signed) certificate.

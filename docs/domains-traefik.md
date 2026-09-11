@@ -20,12 +20,22 @@ internet ─► :80  ─► redirect → :443
 - Traefik runs as the global swarm service `nixploy-traefik` (image
   `traefik:v3.5.0`), publishing host ports 80 and 443, attached to the shared
   overlay network (`NIXPLOY_NETWORK`, default `nixploy-network`).
-- **Port 80 always redirects to HTTPS.** ACME HTTP-01 challenges are still
-  served on `:80` before the redirect.
+- **Port 80 always redirects to HTTPS**, at the *entrypoint* (static
+  `traefik.yml`). ACME HTTP-01 challenges are still served on `:80` before the
+  redirect. The writer also emits a per-router `redirectScheme` for every
+  `https: true` domain, so removing the entrypoint redirect is enough to make
+  the per-domain **HTTPS** toggle truthful — a domain with HTTPS off would then
+  be served plain on `:80`. Until that static-config change ships (it lives in
+  `install.sh`, `update.sh` and `docker/traefik/traefik.yml`, which CI diffs
+  against each other), HTTPS-off domains are still redirected to `:443`, where
+  they are served with the self-signed default certificate.
 - **Bare-IP / first boot:** a self-signed `defaultCertificate`
   (`dynamic/default.crt`) plus a low-priority catch-all router
   (`00-nixploy-dashboard.yml`) expose the dashboard at `https://<server-ip>`.
   Browsers show a one-time warning — accept it, or link a real domain.
+  **Once a dashboard domain is configured the catch-all is dropped**: the
+  panel then answers on its own host only, instead of on every hostname
+  pointed at the box. Clearing the domain brings the catch-all back.
 - **Dashboard domain:** Settings → Platform → Access (or
   `NIXPLOY_DOMAIN` at install time) adds a `Host()` router with
   `certResolver: letsencrypt` to `00-nixploy-dashboard.yml`
@@ -61,6 +71,8 @@ internet ─► :80  ─► redirect → :443
   `/public/*` reaches the container as `/internal/*`; redirects and basic auth
   become named middlewares shared by the app's routers. The domain form has an
   **Internal path** field (empty or `/` forwards the path unchanged).
+- Per-domain **middlewares** (see below) are chained after the shared
+  redirect / basic-auth ones, in their `order`.
 - The YAML is always written on the Nixploy host, whatever server the app is
   pinned to: `nixploy-traefik` runs on the primary manager and only its file
   provider reads the dynamic directory, while `http://<appName>:<port>`
@@ -68,6 +80,105 @@ internet ─► :80  ─► redirect → :443
 - A host is one shared namespace for the whole instance: `domain.create` /
   `domain.update` reject (CONFLICT) a host already routed by another
   organization on any path, and the same host + path on any other service.
+- `domain.create` with **Let's Encrypt** is rate-limited to 20 domains per
+  organization per hour. The instance shares one ACME account, so hosts that
+  do not resolve burn the whole box's Let's Encrypt budget.
+
+## Middlewares
+
+Every domain — application **and** compose — can carry an ordered list of
+Traefik middlewares (Domains tab → the **Middlewares** column). There is no
+raw-YAML escape hatch: the kinds below are a closed set, each with its own zod
+schema and renderer in `modules/traefik/middlewares.ts`, validated both when
+saved (`domain.saveMiddlewares`) and again when the YAML is rendered.
+
+| Kind | Traefik object | Semantics |
+| --- | --- | --- |
+| `rateLimit` | `rateLimit{average,burst,period}` | Requests per source IP per period (default `1s`). Over the burst → **429**. |
+| `ipAllowList` | `ipAllowList{sourceRange}` | Only these IPs/CIDRs may reach the service; everything else gets **403**. IPv4 and IPv6, validated on save. |
+| `headers` | `headers{…}` | Custom request/response headers, HSTS (`stsSeconds`), CORS origins, `frameDeny`, `contentTypeNosniff`. `Host` and `X-Forwarded-*` are set by the proxy and are rejected — they decide routing and client-IP rate limiting. |
+| `compress` | `compress{}` | gzip / brotli responses, optional `minResponseBodyBytes`. |
+| `forwardAuth` | `forwardAuth{address,trustForwardHeader,authResponseHeaders}` | Delegate auth to an SSO proxy. |
+| `stickyCookie` | `loadBalancer.sticky.cookie{…}` | Not a middleware: pins a client to one replica with a cookie. |
+| `maintenance` | `errors{status,service,query}` | Replaces **every** response with the panel's `/__maintenance` page. |
+
+Chain order: internal-path rewrite → app-wide redirects → basic auth → the
+domain's middlewares in `order`. Disabling a row (the switch) keeps it stored
+but leaves it out of the rendered YAML.
+
+### forwardAuth with Authentik / Authelia
+
+Deploy the SSO proxy as a normal Nixploy service and point `address` at its
+**app name** — Traefik and the service share the `nixploy-network` overlay, so
+the container name resolves. A private target is only accepted when it is a
+service of the same organization; anything else must be a public HTTPS URL
+(the same SSRF guard the notification providers use).
+
+Authelia:
+
+```
+address:              http://authelia:9091/api/verify?rd=https://auth.example.com
+trustForwardHeader:   on
+authResponseHeaders:  Remote-User, Remote-Groups, Remote-Name, Remote-Email
+```
+
+Authentik (outpost):
+
+```
+address:              http://authentik-outpost:9000/outpost.goauthentik.io/auth/traefik
+trustForwardHeader:   on
+authResponseHeaders:  X-authentik-username, X-authentik-groups, X-authentik-email, X-authentik-uid
+```
+
+Give the SSO host its own domain row (no forwardAuth on it, or the login page
+would need to authenticate itself) and add the `forwardAuth` middleware to
+every protected domain.
+
+### Maintenance mode
+
+The `maintenance` middleware renders as Traefik's `errors` middleware with
+`status: ["100-599"]`, `service: nixploy-dashboard` and
+`query: /__maintenance`: **every** response the backend produces — including
+the 502 Traefik synthesises when the service is stopped — is replaced by the
+panel's static, unauthenticated `/__maintenance` page. The tenant's host and
+certificate are unchanged, so no visitor is redirected anywhere. Disable the
+row to let traffic through again. (Traefik cannot serve static HTML itself,
+and a redirect to another host would break the tenant's URLs, so the panel
+serves the page.)
+
+The substitution **fails open**: if the panel is unreachable when Traefik
+fetches `/__maintenance`, the original response is served instead of an error.
+Verified against the real proxy — with a reachable error-page service the
+backend's response is replaced (`GET /__maintenance` reaches the error
+service), with an unreachable one the request falls through.
+
+## Wildcard domains and DNS-01
+
+`*.apps.example.com` is accepted as a host. It renders as a
+``HostRegexp(`^[a-zA-Z0-9_-]+\.apps\.example\.com$`)`` router — exactly one
+label, the same span a wildcard certificate covers — with
+`tls.domains[].main` set to the wildcard.
+
+- HTTP-01 cannot validate a wildcard, so a **Let's Encrypt** wildcard needs a
+  DNS-01 provider: Settings → Platform → **Wildcard certificates**. Saving a
+  provider appends a second resolver `letsencrypt-dns` to the static
+  `traefik.yml` and restarts the proxy (both resolvers share `acme.json`,
+  which Traefik keys by resolver name, so no new bind mount is needed).
+- The provider **credentials** are stored encrypted in the panel, but Traefik
+  reads them from its own process environment. Apply them once on the host:
+
+  ```bash
+  docker service update --env-add CF_DNS_API_TOKEN=<token> nixploy-traefik
+  ```
+
+  (One `--env-add` per variable; the settings card prints the exact list for
+  the selected provider.)
+- Certificate type **None** or **Custom** works for wildcards without any DNS
+  provider.
+- Nixploy cannot prove that an organization owns the parent zone, and
+  `*.example.com` swallows every unclaimed subdomain of it on this instance —
+  so **wildcard rows are instance-admin only**. Ordinary members keep adding
+  concrete hosts.
 
 ## Localhost / development domains
 
@@ -103,6 +214,17 @@ host:port in `servers[].url` → container running and listening on that port
 Custom certificates: upload cert/key in Settings → Certificates, then choose
 **Custom** in the domain dialog; the pair is inlined into the app's dynamic
 YAML as `tls.certificates`.
+
+## Compose domains
+
+Compose domains route to one service of the stack
+(`<appName>-<serviceName>-1`) and each routed service gets its own dynamic
+YAML file. **Redirects and basic auth work the same as for applications**: the
+`redirect` / `security` rows take either an `applicationId` or a
+`composeId` + `serviceName` (a CHECK constraint enforces exactly one parent),
+and the Domains tab renders a Redirects and a Security section per routed
+service. Middlewares hang off the domain row, so they are identical for both
+service types.
 
 ## Preview deployments
 

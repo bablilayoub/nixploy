@@ -1,21 +1,32 @@
 import { TRPCError } from "@trpc/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { redirects } from "../../db/schema";
+import { applications, domains, redirects } from "../../db/schema";
 import {
 	assertApplicationAccess,
 	getOrganizationId,
+	getServiceContext,
 	syncApplicationTraefik,
 } from "../../modules/application";
+import { auditFromSession } from "../../modules/audit";
+import { resyncComposeDomains } from "../../modules/compose/service";
 import { assertCapability } from "../../modules/projects";
 import { bestEffort } from "../../utils/best-effort";
+import { assertComposeServiceName } from "../../utils/validators";
 import { protectedProcedure, router } from "../init";
 
 const REDIRECT_REGEX_MAX = 256;
 const REDIRECT_REPLACEMENT_MAX = 512;
 
-function assertSafeRedirectRule(regex: string, replacement: string): void {
+/**
+ * `replacement` is written verbatim into a Traefik `redirectRegex`, so an
+ * absolute URL there is an open redirect on the tenant's own domain
+ * (security.md §2.6). Absolute replacements must therefore be `https://`, or
+ * point at one of the service's own hosts; relative ones stay same-host by
+ * construction.
+ */
+function assertSafeRedirectRule(regex: string, replacement: string, ownHosts: string[]): void {
 	if (regex.length > REDIRECT_REGEX_MAX || replacement.length > REDIRECT_REPLACEMENT_MAX) {
 		throw new TRPCError({
 			code: "BAD_REQUEST",
@@ -46,13 +57,34 @@ function assertSafeRedirectRule(regex: string, replacement: string): void {
 			message: "Redirect regex is not a valid regular expression",
 		});
 	}
-	if (replacement.includes("://") && !/^https?:\/\/[^\s]+$/i.test(replacement)) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: "Invalid redirect replacement URL",
-		});
+	if (replacement.includes("://")) {
+		if (!/^https?:\/\/[^\s]+$/i.test(replacement)) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: "Invalid redirect replacement URL",
+			});
+		}
+		let host: string;
+		try {
+			// Traefik capture placeholders (`${1}`) are legal URL characters.
+			host = new URL(replacement).hostname.toLowerCase();
+		} catch {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: "Invalid redirect replacement URL",
+			});
+		}
+		const sameHost = ownHosts.includes(host);
+		if (!replacement.toLowerCase().startsWith("https://") && !sameHost) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message:
+					"An absolute redirect must use https:// (or point at one of this service's own domains)",
+			});
+		}
+		return;
 	}
-	if (!replacement.includes("://") && !replacement.startsWith("/")) {
+	if (!replacement.startsWith("/")) {
 		throw new TRPCError({
 			code: "BAD_REQUEST",
 			message: "Redirect replacement must be a path or http(s) URL",
@@ -60,16 +92,62 @@ function assertSafeRedirectRule(regex: string, replacement: string): void {
 	}
 }
 
-/** Load an application-owned redirect row and verify org ownership. */
-const findApplicationRedirect = async (redirectId: string, organizationId: string) => {
+/** Hosts routed to a service — the "same host" set for the check above. */
+const loadOwnHosts = async (parent: {
+	applicationId?: string | null;
+	composeId?: string | null;
+}): Promise<string[]> => {
+	const where = parent.applicationId
+		? eq(domains.applicationId, parent.applicationId)
+		: parent.composeId
+			? eq(domains.composeId, parent.composeId)
+			: null;
+	if (!where) return [];
+	const rows = await db.query.domains.findMany({ where, columns: { host: true } });
+	return rows.map((row) => row.host.toLowerCase());
+};
+
+/** Verify a compose service belongs to the org (returns its context). */
+const assertComposeAccess = async (composeId: string, organizationId: string) => {
+	const context = await getServiceContext("compose", composeId);
+	if (context.organizationId !== organizationId) {
+		throw new TRPCError({ code: "NOT_FOUND", message: "Compose service not found" });
+	}
+	return context;
+};
+
+type RedirectRow = typeof redirects.$inferSelect;
+
+/** Rewrite the Traefik config of whichever service owns the row. */
+const resyncParent = async (redirect: RedirectRow): Promise<void> => {
+	if (redirect.applicationId) {
+		const application = await db.query.applications.findFirst({
+			where: eq(applications.applicationId, redirect.applicationId),
+		});
+		if (application) await syncApplicationTraefik(application);
+		return;
+	}
+	if (redirect.composeId) {
+		await resyncComposeDomains(redirect.composeId);
+	}
+};
+
+/** Load a redirect row and verify org ownership through its parent service. */
+const findRedirect = async (redirectId: string, organizationId: string) => {
 	const redirect = await db.query.redirects.findFirst({
 		where: eq(redirects.redirectId, redirectId),
 	});
 	if (!redirect) {
 		throw new TRPCError({ code: "NOT_FOUND", message: "Redirect not found" });
 	}
-	const application = await assertApplicationAccess(redirect.applicationId, organizationId);
-	return { redirect, application };
+	if (redirect.applicationId) {
+		await assertApplicationAccess(redirect.applicationId, organizationId);
+	} else if (redirect.composeId) {
+		await assertComposeAccess(redirect.composeId, organizationId);
+	} else {
+		throw new TRPCError({ code: "NOT_FOUND", message: "Redirect not found" });
+	}
+	return redirect;
 };
 
 export const redirectRouter = router({
@@ -84,28 +162,78 @@ export const redirectRouter = router({
 			});
 		}),
 
+	/** Redirects of a compose stack, optionally narrowed to one of its services. */
+	byCompose: protectedProcedure
+		.input(
+			z.object({
+				composeId: z.string().min(1),
+				serviceName: z.string().min(1).optional(),
+			}),
+		)
+		.query(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertComposeAccess(input.composeId, organizationId);
+			return db.query.redirects.findMany({
+				where: input.serviceName
+					? and(
+							eq(redirects.composeId, input.composeId),
+							eq(redirects.serviceName, input.serviceName),
+						)
+					: eq(redirects.composeId, input.composeId),
+				orderBy: redirects.createdAt,
+			});
+		}),
+
 	one: protectedProcedure
 		.input(z.object({ redirectId: z.string().min(1) }))
 		.query(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			const { redirect } = await findApplicationRedirect(input.redirectId, organizationId);
-			return redirect;
+			return findRedirect(input.redirectId, organizationId);
 		}),
 
 	create: protectedProcedure
 		.input(
-			z.object({
-				applicationId: z.string().min(1),
-				regex: z.string().min(1),
-				replacement: z.string().min(1),
-				permanent: z.boolean().default(false),
-			}),
+			z
+				.object({
+					applicationId: z.string().min(1).optional(),
+					composeId: z.string().min(1).optional(),
+					/** Required with composeId: which compose service to protect. */
+					serviceName: z.string().min(1).optional(),
+					regex: z.string().min(1),
+					replacement: z.string().min(1),
+					permanent: z.boolean().default(false),
+				})
+				.refine((value) => Boolean(value.applicationId) !== Boolean(value.composeId), {
+					message: "Exactly one of applicationId or composeId is required",
+				}),
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
-			const application = await assertApplicationAccess(input.applicationId, organizationId);
-			assertSafeRedirectRule(input.regex, input.replacement);
+			if (input.applicationId) {
+				await assertApplicationAccess(input.applicationId, organizationId);
+			} else if (input.composeId) {
+				await assertComposeAccess(input.composeId, organizationId);
+				if (!input.serviceName) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "serviceName is required for compose redirects",
+					});
+				}
+				try {
+					assertComposeServiceName(input.serviceName);
+				} catch (error) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: error instanceof Error ? error.message : "Invalid serviceName",
+					});
+				}
+			}
+			assertSafeRedirectRule(
+				input.regex,
+				input.replacement,
+				await loadOwnHosts({ applicationId: input.applicationId, composeId: input.composeId }),
+			);
 
 			const [redirect] = await db
 				.insert(redirects)
@@ -113,7 +241,9 @@ export const redirectRouter = router({
 					regex: input.regex,
 					replacement: input.replacement,
 					permanent: input.permanent,
-					applicationId: input.applicationId,
+					applicationId: input.applicationId ?? null,
+					composeId: input.composeId ?? null,
+					serviceName: input.composeId ? (input.serviceName ?? null) : null,
 				})
 				.returning();
 			if (!redirect) {
@@ -124,7 +254,7 @@ export const redirectRouter = router({
 			}
 
 			try {
-				await syncApplicationTraefik(application);
+				await resyncParent(redirect);
 			} catch (error) {
 				// Compensation: without it the client sees a 500 but the row exists,
 				// and a retry can stack duplicate redirects behind the failure.
@@ -133,6 +263,12 @@ export const redirectRouter = router({
 				);
 				throw error;
 			}
+			await auditFromSession(ctx, organizationId, {
+				action: "redirect.create",
+				targetType: "redirect",
+				targetId: redirect.redirectId,
+				targetName: redirect.regex,
+			});
 			return redirect;
 		}),
 
@@ -148,13 +284,10 @@ export const redirectRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
-			const { redirect, application } = await findApplicationRedirect(
-				input.redirectId,
-				organizationId,
-			);
+			const redirect = await findRedirect(input.redirectId, organizationId);
 			const regex = input.regex ?? redirect.regex;
 			const replacement = input.replacement ?? redirect.replacement;
-			assertSafeRedirectRule(regex, replacement);
+			assertSafeRedirectRule(regex, replacement, await loadOwnHosts(redirect));
 
 			const next = {
 				regex,
@@ -168,7 +301,7 @@ export const redirectRouter = router({
 				.returning();
 
 			try {
-				await syncApplicationTraefik(application);
+				await resyncParent(updated ?? redirect);
 			} catch (error) {
 				// Compensation: restore the previous row so the client can retry
 				// instead of finding a half-applied update behind the 500.
@@ -184,6 +317,12 @@ export const redirectRouter = router({
 				);
 				throw error;
 			}
+			await auditFromSession(ctx, organizationId, {
+				action: "redirect.update",
+				targetType: "redirect",
+				targetId: redirect.redirectId,
+				targetName: regex,
+			});
 			return updated;
 		}),
 
@@ -192,13 +331,16 @@ export const redirectRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
-			const { redirect, application } = await findApplicationRedirect(
-				input.redirectId,
-				organizationId,
-			);
+			const redirect = await findRedirect(input.redirectId, organizationId);
 
 			await db.delete(redirects).where(eq(redirects.redirectId, redirect.redirectId));
-			await syncApplicationTraefik(application);
+			await resyncParent(redirect);
+			await auditFromSession(ctx, organizationId, {
+				action: "redirect.delete",
+				targetType: "redirect",
+				targetId: redirect.redirectId,
+				targetName: redirect.regex,
+			});
 			return { redirectId: redirect.redirectId };
 		}),
 });

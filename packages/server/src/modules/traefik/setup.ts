@@ -31,14 +31,73 @@ const runOn = (serverId: string | null | undefined, command: string): Promise<st
 	serverId ? execAsyncRemote(serverId, command) : execAsync(command);
 
 /**
+ * Traefik DNS-01 providers Nixploy offers in the UI. The code is passed
+ * straight to Traefik's `dnsChallenge.provider`; the provider's credentials
+ * reach the proxy as environment variables (see docs/domains-traefik.md).
+ */
+export const ACME_DNS_PROVIDERS = [
+	{ code: "cloudflare", label: "Cloudflare", envKeys: ["CF_DNS_API_TOKEN"] },
+	{
+		code: "route53",
+		label: "AWS Route 53",
+		envKeys: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"],
+	},
+	{ code: "digitalocean", label: "DigitalOcean", envKeys: ["DO_AUTH_TOKEN"] },
+	{ code: "gandiv5", label: "Gandi LiveDNS", envKeys: ["GANDIV5_PERSONAL_ACCESS_TOKEN"] },
+	{ code: "hetzner", label: "Hetzner DNS", envKeys: ["HETZNER_API_KEY"] },
+	{ code: "namecheap", label: "Namecheap", envKeys: ["NAMECHEAP_API_USER", "NAMECHEAP_API_KEY"] },
+	{
+		code: "ovh",
+		label: "OVH",
+		envKeys: ["OVH_ENDPOINT", "OVH_APPLICATION_KEY", "OVH_APPLICATION_SECRET", "OVH_CONSUMER_KEY"],
+	},
+	{ code: "vultr", label: "Vultr", envKeys: ["VULTR_API_KEY"] },
+] as const;
+
+export type AcmeDnsProviderCode = (typeof ACME_DNS_PROVIDERS)[number]["code"];
+
+export interface AcmeDnsSettings {
+	provider: string;
+	/** Resolvers Traefik asks before considering the TXT record propagated. */
+	resolvers?: string[];
+}
+
+/** Only the codes above may be rendered — the value lands in the static YAML. */
+const normalizeDnsProvider = (provider: string | null | undefined): string | null => {
+	const code = provider?.trim().toLowerCase();
+	if (!code) return null;
+	return ACME_DNS_PROVIDERS.some((entry) => entry.code === code) ? code : null;
+};
+
+/**
  * Traefik v3 static configuration. The file provider watches the dynamic
  * directory (hot-reload). HTTP is redirected to HTTPS globally; ACME uses
  * the HTTP challenge on `web` (Traefik serves challenges before redirect).
  * TLS for bare IPs uses the self-signed defaultCertificate; app domains
  * attach `certResolver: letsencrypt` per-router in dynamic YAML.
+ *
+ * With a DNS provider configured a **second** resolver `letsencrypt-dns` is
+ * appended for wildcard hosts (HTTP-01 cannot validate `*.example.com`). With
+ * none — the default, and what CI diffs against `docker/traefik/traefik.yml`,
+ * `install.sh` and `update.sh` — the rendered file is unchanged.
  */
-export const buildTraefikStaticConfig = (letsEncryptEmail?: string | null): string => {
+export const buildTraefikStaticConfig = (
+	letsEncryptEmail?: string | null,
+	acmeDns?: AcmeDnsSettings | null,
+): string => {
 	const email = letsEncryptEmail?.trim() || "nixploy@localhost";
+	const dnsProvider = normalizeDnsProvider(acmeDns?.provider);
+	const dnsResolver = dnsProvider
+		? // Same acme.json as the HTTP-01 resolver: Traefik keys its storage by
+			// resolver name, so no extra bind mount is needed on upgrade.
+			`  letsencrypt-dns:
+    acme:
+      email: ${email}
+      storage: ${TRAEFIK_ACME_CONTAINER_PATH}
+      dnsChallenge:
+        provider: ${dnsProvider}
+`
+		: "";
 	return `global:
   checkNewVersion: false
   sendAnonymousUsage: false
@@ -66,14 +125,21 @@ certificatesResolvers:
       storage: ${TRAEFIK_ACME_CONTAINER_PATH}
       httpChallenge:
         entryPoint: web
-api:
+${dnsResolver}api:
   dashboard: false
 `;
 };
 
-const getLetsEncryptEmail = async (): Promise<string | null> => {
+/** ACME email + DNS-01 provider from the singleton settings row. */
+const getAcmeSettings = async (): Promise<{
+	email: string | null;
+	dns: AcmeDnsSettings | null;
+}> => {
 	const [settings] = await db.select().from(webServerSettings).limit(1);
-	return settings?.letsEncryptEmail ?? null;
+	return {
+		email: settings?.letsEncryptEmail ?? null,
+		dns: settings?.acmeDnsProvider ? { provider: settings.acmeDnsProvider } : null,
+	};
 };
 
 /** Current `traefik.yml` on the target host; `null` when missing or empty. */
@@ -186,7 +252,8 @@ export const ensureTraefikSetup = async (serverId?: string | null): Promise<void
 	// 1. Static config (rewritten every call so settings changes take effect).
 	// An unset email keeps the `nixploy@localhost` sentinel, so the content —
 	// and therefore the restart decision below — only moves when it changes.
-	const staticConfig = buildTraefikStaticConfig(await getLetsEncryptEmail());
+	const acme = await getAcmeSettings();
+	const staticConfig = buildTraefikStaticConfig(acme.email, acme.dns);
 	const staticChanged = (await readStaticConfig(serverId, staticPath)) !== staticConfig;
 	await writeFileOnServer(staticPath, staticConfig, serverId);
 

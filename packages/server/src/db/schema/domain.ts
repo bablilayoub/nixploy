@@ -1,12 +1,12 @@
 import { relations } from "drizzle-orm";
-import { boolean, index, integer, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { encryptedText } from "../custom-columns";
 import { applications } from "./application";
 import { organizations } from "./auth";
 import { compose } from "./compose";
 import { previewDeployments } from "./deployment";
-import { certificateType, domainType } from "./enums";
+import { certificateType, domainMiddlewareKind, domainType } from "./enums";
 import { servers } from "./server";
 import { createdAt, idColumn } from "./utils";
 
@@ -48,6 +48,28 @@ export const domains = pgTable(
 	],
 );
 
+/**
+ * A Traefik middleware attached to one domain (rate limiting, IP allow-list,
+ * headers, …). `config` is jsonb validated per kind by
+ * `modules/traefik/middlewares.ts` on write AND on render; `order` decides the
+ * position in the router's middleware chain (after redirects/basic-auth).
+ */
+export const domainMiddlewares = pgTable(
+	"domain_middleware",
+	{
+		domainMiddlewareId: idColumn("domain_middleware_id"),
+		domainId: text("domain_id")
+			.notNull()
+			.references(() => domains.domainId, { onDelete: "cascade" }),
+		kind: domainMiddlewareKind("kind").notNull(),
+		config: jsonb("config").notNull().default({}),
+		order: integer("order").notNull().default(0),
+		enabled: boolean("enabled").notNull().default(true),
+		createdAt: createdAt(),
+	},
+	(table) => [index("domain_middleware_domain_id_idx").on(table.domainId)],
+);
+
 /** Manually uploaded TLS certificates. */
 export const certificates = pgTable("certificate", {
 	certificateId: idColumn("certificate_id"),
@@ -71,7 +93,8 @@ export const certificates = pgTable("certificate", {
 	createdAt: createdAt(),
 });
 
-export const domainsRelations = relations(domains, ({ one }) => ({
+export const domainsRelations = relations(domains, ({ one, many }) => ({
+	middlewares: many(domainMiddlewares),
 	application: one(applications, {
 		fields: [domains.applicationId],
 		references: [applications.applicationId],
@@ -90,6 +113,13 @@ export const domainsRelations = relations(domains, ({ one }) => ({
 	}),
 }));
 
+export const domainMiddlewaresRelations = relations(domainMiddlewares, ({ one }) => ({
+	domain: one(domains, {
+		fields: [domainMiddlewares.domainId],
+		references: [domains.domainId],
+	}),
+}));
+
 export const certificatesRelations = relations(certificates, ({ one }) => ({
 	server: one(servers, {
 		fields: [certificates.serverId],
@@ -101,3 +131,5 @@ export const insertDomainSchema = createInsertSchema(domains);
 export const selectDomainSchema = createSelectSchema(domains);
 export const insertCertificateSchema = createInsertSchema(certificates);
 export const selectCertificateSchema = createSelectSchema(certificates);
+export const insertDomainMiddlewareSchema = createInsertSchema(domainMiddlewares);
+export const selectDomainMiddlewareSchema = createSelectSchema(domainMiddlewares);

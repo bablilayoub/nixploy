@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { state, execAsync, writeFileOnServer, readFile } = vi.hoisted(() => ({
 	state: {
 		email: null as string | null,
+		acmeDnsProvider: null as string | null,
 		/** Current traefik.yml on disk; null = missing. */
 		existingStatic: null as string | null,
 		serviceExists: true,
@@ -24,7 +25,11 @@ vi.mock("node:fs/promises", () => ({ readFile }));
 vi.mock("../../db", () => ({
 	db: {
 		select: () => ({
-			from: () => ({ limit: async () => [{ letsEncryptEmail: state.email }] }),
+			from: () => ({
+				limit: async () => [
+					{ letsEncryptEmail: state.email, acmeDnsProvider: state.acmeDnsProvider },
+				],
+			}),
 		}),
 	},
 }));
@@ -56,12 +61,35 @@ describe("buildTraefikStaticConfig", () => {
 		expect(buildTraefikStaticConfig("   ")).toContain("email: nixploy@localhost");
 		expect(buildTraefikStaticConfig(" ops@example.com ")).toContain("email: ops@example.com");
 	});
+
+	it("renders no DNS-01 resolver by default", () => {
+		// CI diffs this exact output against docker/traefik/traefik.yml,
+		// install.sh and update.sh — the default render must not move.
+		const rendered = buildTraefikStaticConfig(null);
+		expect(rendered).not.toContain("letsencrypt-dns");
+		expect(rendered).not.toContain("dnsChallenge");
+		expect(buildTraefikStaticConfig(null, null)).toBe(rendered);
+		// An unknown provider code is ignored rather than written into the YAML.
+		expect(buildTraefikStaticConfig(null, { provider: "; rm -rf /" })).toBe(rendered);
+	});
+
+	it("adds a letsencrypt-dns resolver when a DNS provider is configured", () => {
+		const rendered = buildTraefikStaticConfig("ops@example.com", { provider: "cloudflare" });
+		expect(rendered).toContain("letsencrypt-dns:");
+		expect(rendered).toContain("dnsChallenge:");
+		expect(rendered).toContain("provider: cloudflare");
+		// Both resolvers share acme.json (keyed by resolver name) — no new mount.
+		expect(rendered.match(/storage: /g)).toHaveLength(2);
+		// The HTTP-01 resolver is untouched.
+		expect(rendered).toContain("httpChallenge:");
+	});
 });
 
 describe("ensureTraefikSetup", () => {
 	beforeEach(() => {
 		state.commands.length = 0;
 		state.email = null;
+		state.acmeDnsProvider = null;
 		state.existingStatic = null;
 		state.serviceExists = true;
 		writeFileOnServer.mockClear();
@@ -93,6 +121,14 @@ describe("ensureTraefikSetup", () => {
 		expect(writtenStatic()).toEqual([buildTraefikStaticConfig("ops@example.com")]);
 		expect(restarts()).toHaveLength(1);
 		expect(creates()).toEqual([]);
+	});
+
+	it("restarts the proxy when a DNS-01 provider is configured", async () => {
+		state.existingStatic = buildTraefikStaticConfig(null);
+		state.acmeDnsProvider = "cloudflare";
+		await ensureTraefikSetup();
+		expect(writtenStatic()).toEqual([buildTraefikStaticConfig(null, { provider: "cloudflare" })]);
+		expect(restarts()).toHaveLength(1);
 	});
 
 	it("creates the service on a fresh host without restarting anything", async () => {

@@ -11,6 +11,7 @@ import { dockerCleanup } from "../../modules/deployment";
 import { emitDockerCleanupNotification } from "../../modules/notifications";
 import { resolveCallerOrganizationId } from "../../modules/projects";
 import {
+	ACME_DNS_PROVIDERS,
 	ensureTraefikSetup,
 	getDynamicDir,
 	getTraefikDir,
@@ -80,10 +81,18 @@ function baseMetricsConfig(metricsConfig: unknown): Record<string, unknown> {
 		: {};
 }
 
+const acmeDnsProviderSchema = z.enum(
+	ACME_DNS_PROVIDERS.map((provider) => provider.code) as [string, ...string[]],
+);
+
 const updateSettingsInput = z.object({
 	host: z.string().nullish(),
 	letsEncryptEmail: z.email().nullish(),
 	certificateType: z.enum(["letsencrypt", "custom", "none"]).optional(),
+	/** `null` disables DNS-01 (wildcard certificates stop being issuable). */
+	acmeDnsProvider: acmeDnsProviderSchema.nullish(),
+	/** `{ CF_DNS_API_TOKEN: "…" }` — stored encrypted, never returned. */
+	acmeDnsCredentials: z.record(z.string().min(1).max(64), z.string().max(4096)).nullish(),
 	traefikDashboardEnabled: z.boolean().optional(),
 	cleanupCronEnabled: z.boolean().optional(),
 	cleanupCronExpression: z.string().nullish(),
@@ -98,15 +107,37 @@ export const webServerRouter = router({
 		const [row] = await db.select().from(webServerSettings).limit(1);
 		if (!row) return null;
 		const extras = readExtras(row.metricsConfig);
-		const { metricsConfig: _metricsConfig, ...publicRow } = row;
+		const { metricsConfig: _metricsConfig, acmeDnsCredentials, ...publicRow } = row;
 		return {
 			...publicRow,
+			// Credentials are write-only: report which env keys are set, never
+			// their values.
+			acmeDnsCredentialKeys:
+				acmeDnsCredentials && typeof acmeDnsCredentials === "object"
+					? Object.keys(acmeDnsCredentials as Record<string, unknown>).sort()
+					: [],
 			traefikDashboardEnabled: extras.traefikDashboardEnabled ?? false,
 			cleanupCronEnabled: extras.cleanupCronEnabled ?? false,
 			cleanupCronExpression: extras.cleanupCronExpression ?? null,
 			cpuAlertPercent: extras.cpuAlertPercent ?? null,
 			memoryAlertPercent: extras.memoryAlertPercent ?? null,
 		};
+	}),
+
+	/**
+	 * DNS-01 providers offered for wildcard certificates, with the environment
+	 * variables Traefik needs for each. Nixploy stores the values (encrypted)
+	 * but cannot inject them into the proxy container by itself — the operator
+	 * runs the `docker service update --env-add` step from
+	 * docs/domains-traefik.md.
+	 */
+	acmeDnsProviders: protectedProcedure.query(async ({ ctx }) => {
+		await requireInstanceAdmin(ctx.session);
+		return ACME_DNS_PROVIDERS.map((provider) => ({
+			code: provider.code as string,
+			label: provider.label as string,
+			envKeys: [...provider.envKeys] as string[],
+		}));
 	}),
 
 	/**
@@ -163,6 +194,12 @@ export const webServerRouter = router({
 			...(input.certificateType !== undefined && {
 				certificateType: input.certificateType,
 			}),
+			...(input.acmeDnsProvider !== undefined && {
+				acmeDnsProvider: input.acmeDnsProvider ?? null,
+			}),
+			...(input.acmeDnsCredentials !== undefined && {
+				acmeDnsCredentials: input.acmeDnsCredentials ?? null,
+			}),
 			metricsConfig,
 		};
 
@@ -183,7 +220,13 @@ export const webServerRouter = router({
 			input.letsEncryptEmail !== undefined &&
 			input.letsEncryptEmail !== (existing?.letsEncryptEmail ?? null);
 		const hostChanged = host !== undefined && host !== (existing?.host ?? null);
-		if (emailChanged || hostChanged) {
+		// A new DNS-01 provider adds the `letsencrypt-dns` resolver to the
+		// STATIC config, which Traefik only reads at start — `ensureTraefikSetup`
+		// notices the changed file and restarts the proxy.
+		const dnsProviderChanged =
+			input.acmeDnsProvider !== undefined &&
+			(input.acmeDnsProvider ?? null) !== (existing?.acmeDnsProvider ?? null);
+		if (emailChanged || hostChanged || dnsProviderChanged) {
 			try {
 				await ensureTraefikSetup();
 				traefikConfigRewritten = true;

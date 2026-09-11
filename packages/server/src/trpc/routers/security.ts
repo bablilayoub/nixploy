@@ -1,18 +1,20 @@
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { security } from "../../db/schema";
+import { applications, security } from "../../db/schema";
 import {
 	assertApplicationAccess,
 	getOrganizationId,
+	getServiceContext,
 	syncApplicationTraefik,
 } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
+import { resyncComposeDomains } from "../../modules/compose/service";
 import { assertCapability } from "../../modules/projects";
 import { bestEffort } from "../../utils/best-effort";
-import { assertBasicAuthUsername } from "../../utils/validators";
+import { assertBasicAuthUsername, assertComposeServiceName } from "../../utils/validators";
 import { protectedProcedure, router } from "../init";
 
 const BCRYPT_ROUNDS = 10;
@@ -23,8 +25,33 @@ const redact = <T extends { password: string }>(row: T): Omit<T, "password"> => 
 	return rest;
 };
 
-/** Load an application-owned security row and verify org ownership. */
-const findApplicationSecurity = async (securityId: string, organizationId: string) => {
+/** Verify a compose service belongs to the org (returns its context). */
+const assertComposeAccess = async (composeId: string, organizationId: string) => {
+	const context = await getServiceContext("compose", composeId);
+	if (context.organizationId !== organizationId) {
+		throw new TRPCError({ code: "NOT_FOUND", message: "Compose service not found" });
+	}
+	return context;
+};
+
+type SecurityRow = typeof security.$inferSelect;
+
+/** Rewrite the Traefik config of whichever service owns the row. */
+const resyncParent = async (entry: SecurityRow): Promise<void> => {
+	if (entry.applicationId) {
+		const application = await db.query.applications.findFirst({
+			where: eq(applications.applicationId, entry.applicationId),
+		});
+		if (application) await syncApplicationTraefik(application);
+		return;
+	}
+	if (entry.composeId) {
+		await resyncComposeDomains(entry.composeId);
+	}
+};
+
+/** Load a security row and verify org ownership through its parent service. */
+const findSecurity = async (securityId: string, organizationId: string) => {
 	const entry = await db.query.security.findFirst({
 		where: eq(security.securityId, securityId),
 	});
@@ -34,8 +61,25 @@ const findApplicationSecurity = async (securityId: string, organizationId: strin
 			message: "Security entry not found",
 		});
 	}
-	const application = await assertApplicationAccess(entry.applicationId, organizationId);
-	return { entry, application };
+	if (entry.applicationId) {
+		await assertApplicationAccess(entry.applicationId, organizationId);
+	} else if (entry.composeId) {
+		await assertComposeAccess(entry.composeId, organizationId);
+	} else {
+		throw new TRPCError({ code: "NOT_FOUND", message: "Security entry not found" });
+	}
+	return entry;
+};
+
+const assertUsername = (username: string): void => {
+	try {
+		assertBasicAuthUsername(username);
+	} catch (error) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: error instanceof Error ? error.message : "Invalid username",
+		});
+	}
 };
 
 export const securityRouter = router({
@@ -51,35 +95,75 @@ export const securityRouter = router({
 			return entries.map(redact);
 		}),
 
+	/** Basic-auth entries of a compose stack, optionally narrowed to a service. */
+	byCompose: protectedProcedure
+		.input(
+			z.object({
+				composeId: z.string().min(1),
+				serviceName: z.string().min(1).optional(),
+			}),
+		)
+		.query(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertComposeAccess(input.composeId, organizationId);
+			const entries = await db.query.security.findMany({
+				where: input.serviceName
+					? and(
+							eq(security.composeId, input.composeId),
+							eq(security.serviceName, input.serviceName),
+						)
+					: eq(security.composeId, input.composeId),
+				orderBy: security.createdAt,
+			});
+			return entries.map(redact);
+		}),
+
 	one: protectedProcedure
 		.input(z.object({ securityId: z.string().min(1) }))
 		.query(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			const { entry } = await findApplicationSecurity(input.securityId, organizationId);
-			return redact(entry);
+			return redact(await findSecurity(input.securityId, organizationId));
 		}),
 
 	create: protectedProcedure
 		.input(
-			z.object({
-				applicationId: z.string().min(1),
-				username: z.string().min(1),
-				password: z.string().min(1),
-			}),
+			z
+				.object({
+					applicationId: z.string().min(1).optional(),
+					composeId: z.string().min(1).optional(),
+					/** Required with composeId: which compose service to protect. */
+					serviceName: z.string().min(1).optional(),
+					username: z.string().min(1),
+					password: z.string().min(1),
+				})
+				.refine((value) => Boolean(value.applicationId) !== Boolean(value.composeId), {
+					message: "Exactly one of applicationId or composeId is required",
+				}),
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
 			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
-			const application = await assertApplicationAccess(input.applicationId, organizationId);
-			try {
-				assertBasicAuthUsername(input.username);
-			} catch (error) {
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: error instanceof Error ? error.message : "Invalid username",
-				});
+			if (input.applicationId) {
+				await assertApplicationAccess(input.applicationId, organizationId);
+			} else if (input.composeId) {
+				await assertComposeAccess(input.composeId, organizationId);
+				if (!input.serviceName) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "serviceName is required for compose basic auth",
+					});
+				}
+				try {
+					assertComposeServiceName(input.serviceName);
+				} catch (error) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: error instanceof Error ? error.message : "Invalid serviceName",
+					});
+				}
 			}
+			assertUsername(input.username);
 
 			// Traefik's basicAuth middleware expects bcrypt-hashed passwords.
 			const hashed = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
@@ -88,7 +172,9 @@ export const securityRouter = router({
 				.values({
 					username: input.username,
 					password: hashed,
-					applicationId: input.applicationId,
+					applicationId: input.applicationId ?? null,
+					composeId: input.composeId ?? null,
+					serviceName: input.composeId ? (input.serviceName ?? null) : null,
 				})
 				.returning();
 			if (!entry) {
@@ -99,7 +185,7 @@ export const securityRouter = router({
 			}
 
 			try {
-				await syncApplicationTraefik(application);
+				await resyncParent(entry);
 			} catch (error) {
 				// Compensation: without it the client sees a 500 but the row exists,
 				// and a retry can stack duplicate basic-auth entries behind the failure.
@@ -129,22 +215,12 @@ export const securityRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
-			const { entry, application } = await findApplicationSecurity(
-				input.securityId,
-				organizationId,
-			);
+			const entry = await findSecurity(input.securityId, organizationId);
 			if (input.password) {
 				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			}
 			if (input.username) {
-				try {
-					assertBasicAuthUsername(input.username);
-				} catch (error) {
-					throw new TRPCError({
-						code: "BAD_REQUEST",
-						message: error instanceof Error ? error.message : "Invalid username",
-					});
-				}
+				assertUsername(input.username);
 			}
 
 			const [updated] = await db
@@ -157,7 +233,7 @@ export const securityRouter = router({
 				.returning();
 
 			try {
-				await syncApplicationTraefik(application);
+				await resyncParent(updated ?? entry);
 			} catch (error) {
 				// Compensation: restore the previous row so the client can retry
 				// instead of finding a half-applied update behind the 500.
@@ -186,13 +262,10 @@ export const securityRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
-			const { entry, application } = await findApplicationSecurity(
-				input.securityId,
-				organizationId,
-			);
+			const entry = await findSecurity(input.securityId, organizationId);
 
 			await db.delete(security).where(eq(security.securityId, entry.securityId));
-			await syncApplicationTraefik(application);
+			await resyncParent(entry);
 			await auditFromSession(ctx, organizationId, {
 				action: "security.delete",
 				targetType: "security",

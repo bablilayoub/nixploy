@@ -10,12 +10,15 @@
 export type {
 	TraefikBasicAuthEntry,
 	TraefikDomainEntry,
+	TraefikMiddlewareEntry,
 	TraefikRedirectEntry,
 	WriteAppTraefikConfigInput,
 } from "./config-writer";
 export {
 	buildTraefikFileConfig,
 	DEFAULT_CONTAINER_PORT,
+	DNS_CERT_RESOLVER,
+	isWildcardHost,
 	removeFileOnServer,
 	removeTraefikConfig,
 	writeAppTraefikConfig,
@@ -27,6 +30,14 @@ export {
 	normalizeDashboardDomain,
 	writeDashboardRouterConfig,
 } from "./dashboard";
+export type { DomainMiddlewareKind } from "./middlewares";
+export {
+	DOMAIN_MIDDLEWARE_KINDS,
+	describeMiddleware,
+	domainMiddlewareKindSchema,
+	parseForwardAuthAddress,
+	parseMiddlewareConfig,
+} from "./middlewares";
 export {
 	getCertificatesDir,
 	getConfigDir,
@@ -37,7 +48,9 @@ export {
 	TRAEFIK_CERTIFICATES_CONTAINER_DIR,
 	TRAEFIK_DYNAMIC_CONTAINER_DIR,
 } from "./paths";
+export type { AcmeDnsSettings } from "./setup";
 export {
+	ACME_DNS_PROVIDERS,
 	buildTraefikStaticConfig,
 	ensureTraefikSetup,
 	restartTraefik,

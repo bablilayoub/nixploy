@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AcmeDnsCard } from "@/components/settings/server/acme-dns-card";
 import { AiSettingsCard } from "@/components/settings/server/ai-settings-card";
 import { HostMonitoringBody } from "@/components/settings/server/host-monitoring-card";
 import { UpdatesCard } from "@/components/settings/server/updates-card";
@@ -34,10 +35,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/code-editor";
+import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 function isForbidden(error: unknown): boolean {
@@ -140,7 +143,7 @@ function DashboardDomainFields({
 			);
 			setDnsResult(result);
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "DNS check failed");
+			toastError(error, "DNS check failed");
 		} finally {
 			setChecking(false);
 		}
@@ -296,21 +299,21 @@ export function ServerSettingsView() {
 				);
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
 	const restartMutation = useMutation(
 		trpc.webServer.restartTraefik.mutationOptions({
 			onSuccess: () => toast.success("Traefik restart triggered"),
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
 	const cleanupMutation = useMutation(
 		trpc.webServer.dockerCleanupNow.mutationOptions({
 			onSuccess: () => toast.success("Docker cleanup complete"),
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -436,6 +439,9 @@ export function ServerSettingsView() {
 					)}
 				</SettingsSection>
 
+				{/* Wildcard certificates: DNS-01 provider + credentials */}
+				<AcmeDnsCard />
+
 				{/* Proxy: Traefik dashboard + collapsed config + restart */}
 				<SettingsSection
 					id="proxy"
@@ -494,6 +500,10 @@ export function ServerSettingsView() {
 							Advanced: Traefik config
 						</summary>
 						<div className="mt-3 space-y-4">
+							<p className="text-sm text-muted-foreground">
+								Nixploy owns these files — edits are overwritten on the next deploy.{" "}
+								<HelpLink slug="domains" />
+							</p>
 							{traefikQuery.isPending ? (
 								<Skeleton className="h-64 w-full" />
 							) : (
