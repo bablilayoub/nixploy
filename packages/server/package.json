@@ -53,6 +53,7 @@
 		"zod": "^4.6.1"
 	},
 	"devDependencies": {
+		"tsx": "^4.23.13",
 		"@types/adm-zip": "^0.5.8",
 		"@types/dockerode": "^4.0.1",
 		"@types/node": "^22.20.2",

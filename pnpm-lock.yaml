@@ -324,6 +324,9 @@ importers:
       drizzle-kit:
         specifier: ^0.31.1
         version: 0.31.10(drizzle-orm@0.45.2(kysely@0.29.4)(postgres@3.4.9))
+      tsx:
+        specifier: ^4.23.13
+        version: 4.23.13
       typescript:
         specifier: ^5.9.2
         version: 5.9.3
