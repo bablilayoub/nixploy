@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { eq } from "drizzle-orm";
+import { eq, inArray, max } from "drizzle-orm";
 import schedule from "node-schedule";
 import { db } from "../../db";
 import { applications, compose, deployments, schedules } from "../../db/schema";
@@ -280,6 +280,92 @@ export function isScheduleRegistered(scheduleId: string): boolean {
 	return jobs.has(scheduleId);
 }
 
+/**
+ * Next fire time of a cron expression at or after `start`, or null when the
+ * expression does not recur. The probe job is cancelled immediately and is
+ * unnamed, so it never lands in `schedule.scheduledJobs`.
+ */
+function nextFireAt(expression: string, start: Date): Date | null {
+	const probe = schedule.scheduleJob({ rule: expression.trim(), start }, () => {});
+	if (!probe) return null;
+	const next = probe.nextInvocation();
+	probe.cancel();
+	return next ? new Date(next.getTime()) : null;
+}
+
+/**
+ * Distance between two consecutive fires of a cron expression — node-schedule
+ * only exposes the *next* invocation, so the second one is read from a probe
+ * job that starts just after the first. Returns null for expressions that
+ * fire at most once.
+ */
+export function cronIntervalMs(expression: string, from: Date = new Date()): number | null {
+	const first = nextFireAt(expression, from);
+	if (!first) return null;
+	const second = nextFireAt(expression, new Date(first.getTime() + 1_000));
+	if (!second) return null;
+	const interval = second.getTime() - first.getTime();
+	return interval > 0 ? interval : null;
+}
+
+/**
+ * Last recorded run per schedule: every run writes a `deployment` row
+ * (`recordRun`), which is the only durable trace we have — the `schedule`
+ * table has no `last_run_at` column yet (audit #17; see the handoff note in
+ * `docs/observability.md`).
+ */
+async function lastRunByScheduleId(scheduleIds: string[]): Promise<Map<string, Date>> {
+	if (scheduleIds.length === 0) return new Map();
+	const rows = await db
+		.select({ scheduleId: deployments.scheduleId, lastRunAt: max(deployments.createdAt) })
+		.from(deployments)
+		.where(inArray(deployments.scheduleId, scheduleIds))
+		.groupBy(deployments.scheduleId);
+	const byId = new Map<string, Date>();
+	for (const row of rows) {
+		if (row.scheduleId && row.lastRunAt) byId.set(row.scheduleId, new Date(row.lastRunAt));
+	}
+	return byId;
+}
+
+export interface OverdueSchedule {
+	scheduleId: string;
+	name: string;
+	cronExpression: string;
+	lastRunAt: Date | null;
+	missedIntervals: number;
+}
+
+/**
+ * Schedules whose last run is older than one full interval — i.e. ticks the
+ * panel missed while it was down. node-schedule has no catch-up, so these
+ * simply never ran (audit #17). Reported, not replayed: re-running an
+ * arbitrary shell command hours late is rarely what the operator wants, and
+ * the decision needs a `last_run_at` column to be safe against double runs.
+ */
+export async function findOverdueSchedules(now: Date = new Date()): Promise<OverdueSchedule[]> {
+	const rows = await db.query.schedules.findMany({ where: eq(schedules.enabled, true) });
+	const lastRuns = await lastRunByScheduleId(rows.map((row) => row.scheduleId));
+	const overdue: OverdueSchedule[] = [];
+	for (const row of rows) {
+		const interval = cronIntervalMs(row.cronExpression, now);
+		if (!interval) continue;
+		// Never ran at all: use the row's creation time as the reference.
+		const reference = lastRuns.get(row.scheduleId) ?? row.createdAt;
+		if (!reference) continue;
+		const elapsed = now.getTime() - reference.getTime();
+		if (elapsed <= interval * 2) continue;
+		overdue.push({
+			scheduleId: row.scheduleId,
+			name: row.name,
+			cronExpression: row.cronExpression,
+			lastRunAt: lastRuns.get(row.scheduleId) ?? null,
+			missedIntervals: Math.floor(elapsed / interval),
+		});
+	}
+	return overdue;
+}
+
 /** Register every enabled schedule at process boot. */
 export async function initSchedules(): Promise<void> {
 	const rows = await db.query.schedules.findMany({
@@ -295,4 +381,22 @@ export async function initSchedules(): Promise<void> {
 		}
 	}
 	log.info(`Initialized ${jobs.size} schedules`);
+
+	// node-schedule has no catch-up: ticks missed while the panel was down are
+	// gone. Say so instead of leaving the operator to notice a silent gap.
+	try {
+		for (const entry of await findOverdueSchedules()) {
+			log.warn(
+				`Schedule "${entry.name}" (${entry.cronExpression}) has not run for ~${entry.missedIntervals} intervals`,
+				{
+					scheduleId: entry.scheduleId,
+					lastRunAt: entry.lastRunAt?.toISOString() ?? "never",
+				},
+			);
+		}
+	} catch (error) {
+		log.error("Could not check for overdue schedules", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+	}
 }

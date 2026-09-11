@@ -1,11 +1,17 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, compose, deployments, previewDeployments } from "../../db/schema";
 import { generateId } from "../../db/schema/utils";
 import { deploymentEvents } from "./events";
 import { getDeploymentLogPath } from "./paths";
 import type { DeploymentProvenance, DeploymentTrigger } from "./provenance";
-import { enqueue, type QueueJob, requestCancellation } from "./queue";
+import {
+	queuedSiblingsForApp,
+	refreshQueueSnapshot,
+	rememberJobDetails,
+	requestCancellation,
+	startQueueLoop,
+} from "./queue";
 // Importing the worker registers its job runner with the queue (side effect).
 import "./worker";
 
@@ -28,7 +34,9 @@ export {
 	getQueuePosition,
 	isQueueDraining,
 	queueDepth,
+	refreshQueueSnapshot,
 	setServerConcurrency,
+	startQueueLoop,
 } from "./queue";
 
 export interface DeploymentJobInput extends Partial<DeploymentProvenance> {
@@ -53,29 +61,62 @@ export function defaultTrigger(type: DeploymentJobInput["type"]): DeploymentTrig
 export const SUPERSEDED_MESSAGE = "Superseded by a newer deployment";
 
 /**
- * Finalize rows whose in-memory job was dropped by queue coalescing: they
- * never ran, so they end as `cancelled` (not `error` — a push burst must not
- * count as failures in stats, streak alerts or Deploy Copilot). Guarded on
- * `status = queued` so a row the user cancelled meanwhile is left alone.
+ * Finalize the rows a newer job for the same app just replaced: they never
+ * ran, so they end as `cancelled` (not `error` — a push burst must not count
+ * as failures in stats, streak alerts or Deploy Copilot).
+ *
+ * Both statements are guarded on `status = 'queued'`, so a row the worker
+ * already claimed (it is `running`) or the user cancelled meanwhile is left
+ * alone — that guard is what makes coalescing safe against a concurrent
+ * claim. Runs inside `queueDeployment`'s transaction, under an advisory lock
+ * on the app name, so two simultaneous pushes cannot supersede each other.
  */
-export async function markSuperseded(jobs: QueueJob[]): Promise<void> {
-	if (jobs.length === 0) return;
-	const ids = jobs.map((job) => job.deploymentId);
-	const rows = await db
-		.update(deployments)
-		.set({ status: "cancelled", errorMessage: SUPERSEDED_MESSAGE, finishedAt: new Date() })
-		.where(and(inArray(deployments.deploymentId, ids), eq(deployments.status, "queued")))
-		.returning({ deploymentId: deployments.deploymentId });
-	for (const row of rows) {
-		deploymentEvents.emit("finish", { deploymentId: row.deploymentId, status: "cancelled" });
-	}
+async function supersedeQueuedJobs(
+	tx: Pick<typeof db, "execute">,
+	target: { appName: string; deploymentId: string; isPreview: boolean },
+): Promise<string[]> {
+	// Previews build under their own appName but their row names the PARENT
+	// application, so SQL cannot derive their coalescing key — the queue's
+	// in-process registry supplies the sibling ids instead. (Queued previews
+	// never survive a restart, so the registry is always authoritative here.)
+	const rows = target.isPreview
+		? await (async () => {
+				const ids = queuedSiblingsForApp(target.appName, target.deploymentId);
+				if (ids.length === 0) return [];
+				return (await tx.execute(sql`
+					update "deployment"
+					set "status" = 'cancelled', "error_message" = ${SUPERSEDED_MESSAGE}, "finished_at" = now()
+					where "status" = 'queued' and "deployment_id" = any(${sql.param(ids)}::text[])
+					returning "deployment_id"
+				`)) as unknown as { deployment_id: string }[];
+			})()
+		: ((await tx.execute(sql`
+				update "deployment" d
+				set "status" = 'cancelled', "error_message" = ${SUPERSEDED_MESSAGE}, "finished_at" = now()
+				from (
+					select q."deployment_id"
+					from "deployment" q
+					left join "application" a on a."application_id" = q."application_id"
+					left join "compose" c on c."compose_id" = q."compose_id"
+					where q."status" = 'queued'
+						and q."is_preview" = false
+						and q."deployment_id" <> ${target.deploymentId}
+						and coalesce(a."app_name", c."app_name") = ${target.appName}
+				) s
+				where d."deployment_id" = s."deployment_id"
+				returning d."deployment_id"
+			`)) as unknown as { deployment_id: string }[]);
+
+	return rows.map((row) => row.deployment_id);
 }
 
 /**
- * Create a deployment row (`queued`) and enqueue the job (FIFO per target
- * server, one job per app at a time). A job still waiting for the same app
- * is superseded: the burst of pushes that used to queue N full builds now
- * leaves at most one queued + one running job per app.
+ * Create a deployment row (`queued`). The worker loop claims it straight from
+ * Postgres (FIFO per target server, one job per app at a time) — nothing is
+ * handed over in memory, so a restart between this insert and the build keeps
+ * the job. A row still waiting for the same app is superseded in the same
+ * transaction: the burst of pushes that used to queue N full builds leaves at
+ * most one queued + one running job per app.
  * Returns the deploymentId — the WS layer streams the log from disk and
  * closes on the matching {@link deploymentEvents} `finish` (or DB status).
  */
@@ -114,54 +155,71 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
 	}
 
 	const deploymentId = generateId();
-	await db.insert(deployments).values({
-		deploymentId,
-		title:
-			job.title ??
-			(job.previewDeploymentId
-				? job.type === "redeploy"
-					? "Preview redeploy"
-					: "Preview deployment"
-				: job.type === "redeploy"
-					? "Redeploy"
-					: "Deployment"),
-		// The worker flips this to "running" when it picks the job up; rows
-		// still "queued" at boot are re-enqueued by recovery.ts.
-		status: "queued",
-		logPath: getDeploymentLogPath(appName, deploymentId),
-		applicationId: job.applicationId ?? null,
-		composeId: job.composeId ?? null,
-		isPreview: Boolean(job.previewDeploymentId),
-		serverId,
-		// Provenance: who started it and, when the caller already knows (webhook
-		// payloads), which commit. Git clones fill the commit fields later
-		// (worker → readCheckoutCommit) when they are still null.
-		trigger: job.trigger ?? defaultTrigger(job.type),
-		triggeredBy: job.triggeredBy ?? null,
-		commitSha: job.commitSha ?? null,
-		commitMessage: job.commitMessage ?? null,
-		commitAuthor: job.commitAuthor ?? null,
+	const isPreview = Boolean(job.previewDeploymentId);
+
+	const superseded = await db.transaction(async (tx) => {
+		// Serialize concurrent enqueues for ONE app so two pushes landing in
+		// the same millisecond cannot each insert a queued row and then find
+		// nothing to supersede. Different apps never contend.
+		await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${appName}))`);
+		await tx.insert(deployments).values({
+			deploymentId,
+			title:
+				job.title ??
+				(job.previewDeploymentId
+					? job.type === "redeploy"
+						? "Preview redeploy"
+						: "Preview deployment"
+					: job.type === "redeploy"
+						? "Redeploy"
+						: "Deployment"),
+			// The worker's claim query flips this to "running"; rows still
+			// "queued" after a restart are claimed by the next boot's loop.
+			status: "queued",
+			logPath: getDeploymentLogPath(appName, deploymentId),
+			applicationId: job.applicationId ?? null,
+			composeId: job.composeId ?? null,
+			isPreview,
+			serverId,
+			// Provenance: who started it and, when the caller already knows (webhook
+			// payloads), which commit. Git clones fill the commit fields later
+			// (worker → readCheckoutCommit) when they are still null.
+			trigger: job.trigger ?? defaultTrigger(job.type),
+			triggeredBy: job.triggeredBy ?? null,
+			commitSha: job.commitSha ?? null,
+			commitMessage: job.commitMessage ?? null,
+			commitAuthor: job.commitAuthor ?? null,
+		});
+		return await supersedeQueuedJobs(tx, { appName, deploymentId, isPreview });
 	});
 
-	// enqueue() coalesces synchronously, so two concurrent calls for one app
-	// cannot both slip a pending job past each other.
-	const { superseded } = enqueue({
-		deploymentId,
+	// Registered only once the row is committed: the claim loop's snapshot GC
+	// drops registry entries for deployments it cannot see as queued/running.
+	// The row does not carry the preview id or the preview's own appName —
+	// this is where the claim loop finds them (see queue.ts).
+	rememberJobDetails(deploymentId, {
 		appName,
-		applicationId: job.applicationId,
-		composeId: job.composeId,
 		previewDeploymentId: job.previewDeploymentId,
 		type: job.type,
-		serverId,
 	});
-	await markSuperseded(superseded);
+
+	for (const id of superseded) {
+		deploymentEvents.emit("finish", { deploymentId: id, status: "cancelled" });
+	}
+	startQueueLoop();
+	deploymentEvents.emit("enqueued", { deploymentId, serverId });
+	// So the caller's very next `deployment.byApplication` already renders
+	// "Queued (#n)" instead of waiting for the loop's own refresh.
+	await refreshQueueSnapshot().catch(() => {});
 	return deploymentId;
 }
 
 /**
- * Cancel a deployment. Queued jobs are dequeued and finalized immediately;
- * running jobs have their child processes killed and the worker finalizes
- * the row as "cancelled".
+ * Cancel a deployment. A row that is still `queued` is finalized with a
+ * conditional UPDATE — the same `status = 'queued'` guard the claim query
+ * uses, so exactly one of "cancelled" and "claimed" can win. A row the worker
+ * is already building has its child processes killed and is finalized by the
+ * worker.
  */
 export async function cancelDeployment(deploymentId: string): Promise<void> {
 	const deployment = await db.query.deployments.findFirst({
@@ -174,24 +232,27 @@ export async function cancelDeployment(deploymentId: string): Promise<void> {
 		return; // already in a terminal state
 	}
 
-	const found = requestCancellation(deploymentId);
-	if (found === "pending") {
-		await db
-			.update(deployments)
-			.set({ status: "cancelled", finishedAt: new Date() })
-			.where(eq(deployments.deploymentId, deploymentId));
+	const dequeued = await db
+		.update(deployments)
+		.set({ status: "cancelled", finishedAt: new Date() })
+		.where(and(eq(deployments.deploymentId, deploymentId), eq(deployments.status, "queued")))
+		.returning({ deploymentId: deployments.deploymentId });
+	if (dequeued.length > 0) {
 		deploymentEvents.emit("finish", { deploymentId, status: "cancelled" });
 		return;
 	}
-	if (found === null) {
-		// Not in this process's queue (restarted server, stale row): finalize
-		// directly so the UI does not show a zombie "running" deployment.
-		await db
-			.update(deployments)
-			.set({ status: "cancelled", finishedAt: new Date() })
-			.where(eq(deployments.deploymentId, deploymentId));
-		deploymentEvents.emit("finish", { deploymentId, status: "cancelled" });
-	}
-	// found === "running": the worker observes the cancellation, finalizes
-	// the row and emits "finish" itself.
+
+	// Running: the worker observes the cancellation, finalizes the row and
+	// emits "finish" itself.
+	if (requestCancellation(deploymentId) === "running") return;
+
+	// `running` in the database but not in this process (a row left over by a
+	// crash the boot recovery has not reached yet): finalize directly so the
+	// UI does not show a zombie deployment.
+	await db
+		.update(deployments)
+		.set({ status: "cancelled", finishedAt: new Date() })
+		.where(and(eq(deployments.deploymentId, deploymentId), eq(deployments.status, "running")))
+		.returning({ deploymentId: deployments.deploymentId });
+	deploymentEvents.emit("finish", { deploymentId, status: "cancelled" });
 }

@@ -1,33 +1,50 @@
+import { sql } from "drizzle-orm";
+import { db } from "../../db";
 import type { TargetedProcess } from "./docker";
+import { deploymentEvents } from "./events";
 
 /**
- * In-memory FIFO deployment queue.
+ * Durable deployment queue.
  *
- * - Jobs are grouped by target server (`serverId`, `null` = the Nixploy
- *   host) and each server runs up to `concurrency` deployments at once
- *   (default 1 — Docker builds are heavy, Dokploy serializes them too).
- * - **Per-app mutex**: two jobs for the same `appName` never run at the same
- *   time, whatever the concurrency — they would race on the code checkout and
- *   the `<appName>:latest` tag. A busy app's pending job is skipped in favour
- *   of the next app in line.
- * - **Coalescing**: enqueueing a job for an app that already has a *pending*
- *   job replaces the old one (returned as `superseded` so the caller can
- *   finalize its row). A push burst therefore yields at most one queued plus
- *   one running job per app.
- * - A job can be cancelled while pending (it is simply dequeued; the caller
- *   finalizes the deployment row) or while running (every child process the
- *   worker registered via {@link registerDeploymentProcess} is killed and
- *   the worker observes {@link isDeploymentCancelled}). Cancellations carry a
- *   {@link CancelReason} so the worker can tell a user cancel from a deadline
- *   or a panel shutdown.
- * - {@link drainQueue} stops dequeuing and waits (bounded) for running jobs —
- *   the graceful-shutdown hook. Queued rows are left `queued` in the database
- *   and re-enqueued by boot recovery (`recovery.ts`), so a restart no longer
- *   loses the backlog.
- * - The state itself lives on `globalThis` (see {@link QueueState}): this
- *   module is instantiated twice at runtime — once inside the Next route
- *   bundle (tRPC/REST/webhooks enqueue there) and once in the custom server
- *   (`server.ts` recovers and drains there) — and both must see one queue.
+ * The `deployment` table is the source of truth: `queueDeployment`
+ * (`./index.ts`) inserts a row with `status = 'queued'` and this module's
+ * worker loop claims it with a single atomic statement
+ * (`UPDATE … WHERE deployment_id = (SELECT … FOR UPDATE SKIP LOCKED LIMIT 1)`,
+ * see {@link claimNextDeployment}). Nothing about *which* job runs next lives
+ * in process memory any more, so a restart, a crash or a SIGKILL mid-build
+ * never loses the backlog — the rows are still `queued` and the next boot
+ * picks them up.
+ *
+ * What the claim query enforces, in SQL:
+ * - **FIFO per target server** (`server_id IS NOT DISTINCT FROM $1`,
+ *   `ORDER BY created_at, deployment_id`).
+ * - **Per-app mutex** — `NOT EXISTS (… status = 'running' … same app_name)`:
+ *   two jobs for one service never build at the same time whatever
+ *   `NIXPLOY_DEPLOY_CONCURRENCY` says (they would race on the code checkout
+ *   and the `<appName>:latest` tag). A busy app's row stays in line and the
+ *   next app's row takes the free slot.
+ * - **SKIP LOCKED** — two claimers can never be handed the same row.
+ *
+ * What is still process-local, and why:
+ * - the slot accounting per server (`NIXPLOY_DEPLOY_CONCURRENCY`), the set of
+ *   running jobs, their child processes and their cancellation state — all of
+ *   it only has meaning inside the process that is actually building;
+ * - `details`, a small registry of `deploymentId → { appName,
+ *   previewDeploymentId }` filled at enqueue time. The `deployment` row does
+ *   not carry either column yet (see the handoff note in
+ *   `docs/deployment-flow.md`), so the *preview* appName and the preview id
+ *   are recovered from here. Queued previews never survive a restart (boot
+ *   recovery fails them, exactly as before), so a queued preview row always
+ *   has its registry entry;
+ * - the queue-position / depth snapshot, which is *computed in SQL* on every
+ *   pass and cached so `getQueuePosition` / `queueDepth` can stay synchronous
+ *   for their tRPC and `/api/ready` callers.
+ *
+ * The state lives on `globalThis` (see {@link QueueState}): this module is
+ * instantiated twice at runtime — once inside the Next route bundle
+ * (tRPC/REST/webhooks enqueue there) and once in the custom server
+ * (`server.ts`, loaded through tsx, recovers and drains there). Both must see
+ * one set of running jobs, and only one of them may run the claim loop.
  */
 
 export interface QueueJob {
@@ -46,10 +63,19 @@ export type CancelLookup = "pending" | "running" | null;
 /** Why a running job was told to stop. `user` is the default (cancel button / API). */
 export type CancelReason = "user" | "shutdown" | "timeout";
 
-/** Runs a dequeued job to completion. Registered by worker.ts at import time. */
+/** Runs a claimed job to completion. Registered by worker.ts at import time. */
 type JobRunner = (job: QueueJob) => Promise<void>;
 
+/** What the `deployment` row cannot tell us yet — filled at enqueue time. */
+export interface JobDetails {
+	/** Real service name: the PREVIEW appName for preview jobs. */
+	appName: string;
+	previewDeploymentId?: string;
+	type: "deploy" | "redeploy";
+}
+
 const serverKey = (serverId: string | null): string => serverId ?? "__local__";
+const serverIdFromKey = (key: string): string | null => (key === "__local__" ? null : key);
 
 interface RunningJob {
 	key: string;
@@ -59,28 +85,37 @@ interface RunningJob {
 }
 
 interface QueueState {
-	/** Runs a dequeued job to completion; registered by worker.ts at import time. */
+	/** Runs a claimed job to completion; registered by worker.ts at import time. */
 	runner: JobRunner | null;
-	pendingByServer: Map<string, QueueJob[]>;
 	runningCountByServer: Map<string, number>;
 	runningJobs: Map<string, RunningJob>;
-	/** appNames with a job in flight (per-app mutex). */
+	/** appNames with a job in flight (per-app mutex, process side). */
 	runningApps: Set<string>;
 	concurrencyByServer: Map<string, number>;
+	/** deploymentId → what the row does not store (preview id, preview appName). */
+	details: Map<string, JobDetails>;
 	processesByDeployment: Map<string, Set<TargetedProcess>>;
 	cancelledDeployments: Map<string, CancelReason>;
 	cancelHooks: Map<string, Set<() => void>>;
-	/** True once {@link drainQueue} was called: nothing new gets started. */
+	/** True once {@link drainQueue} was called: nothing new gets claimed. */
 	draining: boolean;
+	/** SQL snapshot: 1-based position of every queued row in its server's line. */
+	positions: Map<string, number>;
+	/** SQL snapshot: queued row count per server key. */
+	pendingByServer: Map<string, number>;
+	/** Claim-loop bookkeeping — only one loop may run per process. */
+	loopStarted: boolean;
+	loopBusy: boolean;
+	timer: NodeJS.Timeout | null;
 }
 
 /**
  * Queue state is shared through `globalThis`, like `deploymentEvents`. Next
  * transpiles `@nixploy/server` into its route bundles, so the request graph
- * that enqueues jobs and the custom server (loaded through tsx) that
- * recovers and drains them are two instances of this module. Module-level
- * Maps gave each its own invisible queue: a SIGTERM drain reported nothing
- * running while a build was mid-flight and the row was abandoned `running`.
+ * that enqueues jobs and the custom server (loaded through tsx) that recovers
+ * and drains them are two instances of this module. Module-level Maps gave
+ * each its own invisible queue: a SIGTERM drain reported nothing running
+ * while a build was mid-flight and the row was abandoned `running`.
  */
 const globalForQueue = globalThis as typeof globalThis & {
 	__nixployDeploymentQueue?: QueueState;
@@ -88,15 +123,20 @@ const globalForQueue = globalThis as typeof globalThis & {
 
 const state: QueueState = globalForQueue.__nixployDeploymentQueue ?? {
 	runner: null,
-	pendingByServer: new Map(),
 	runningCountByServer: new Map(),
 	runningJobs: new Map(),
 	runningApps: new Set(),
 	concurrencyByServer: new Map(),
+	details: new Map(),
 	processesByDeployment: new Map(),
 	cancelledDeployments: new Map(),
 	cancelHooks: new Map(),
 	draining: false,
+	positions: new Map(),
+	pendingByServer: new Map(),
+	loopStarted: false,
+	loopBusy: false,
+	timer: null,
 };
 
 if (!globalForQueue.__nixployDeploymentQueue) {
@@ -104,7 +144,6 @@ if (!globalForQueue.__nixployDeploymentQueue) {
 }
 
 const {
-	pendingByServer,
 	runningCountByServer,
 	runningJobs,
 	runningApps,
@@ -130,95 +169,296 @@ const getConcurrency = (key: string): number =>
 /** Override the concurrency of one server (defaults to 1 / env var). */
 export function setServerConcurrency(serverId: string | null, concurrency: number): void {
 	concurrencyByServer.set(serverKey(serverId), Math.max(1, concurrency));
-	void drain(serverKey(serverId));
+	pokeQueue();
 }
 
-/** Number of jobs waiting or running, per server — used by tests and monitoring. */
+/**
+ * Jobs waiting or running, per server. `pending` comes from the SQL snapshot
+ * refreshed by every claim pass (and synchronously after an enqueue), so it
+ * counts rows this process has not claimed yet — including a backlog left by
+ * a previous run.
+ */
 export function queueDepth(serverId: string | null): { pending: number; running: number } {
 	const key = serverKey(serverId);
 	return {
-		pending: pendingByServer.get(key)?.length ?? 0,
+		pending: state.pendingByServer.get(key) ?? 0,
 		running: runningCountByServer.get(key) ?? 0,
 	};
 }
 
 /**
- * 1-based position of a pending job in its server's line (1 = next to
- * start), or `null` when the deployment is not waiting in this process.
+ * 1-based position of a queued row in its server's line (1 = next to start),
+ * or `null` when the deployment is not waiting. Read from the SQL snapshot —
+ * `deployment.byApplication` / `byProject` / … render it as "Queued (#n)".
  */
 export function getQueuePosition(deploymentId: string): number | null {
-	for (const queue of pendingByServer.values()) {
-		const index = queue.findIndex((job) => job.deploymentId === deploymentId);
-		if (index !== -1) return index + 1;
-	}
-	return null;
+	return state.positions.get(deploymentId) ?? null;
 }
 
-/** True once {@link drainQueue} was called: nothing new gets started. */
+/** True once {@link drainQueue} was called: nothing new gets claimed. */
 export function isQueueDraining(): boolean {
 	return state.draining;
 }
 
-/** Remove and return every pending job for an app (coalescing). */
-function takePendingForApp(appName: string): QueueJob[] {
-	const removed: QueueJob[] = [];
-	for (const [key, queue] of pendingByServer) {
-		for (let index = queue.length - 1; index >= 0; index--) {
-			const job = queue[index];
-			if (job?.appName === appName) {
-				queue.splice(index, 1);
-				removed.unshift(job);
+/**
+ * Remember what the `deployment` row cannot store (the preview id and, for a
+ * preview, its own appName). Called by `queueDeployment` right after the
+ * insert; dropped when the job settles.
+ */
+export function rememberJobDetails(deploymentId: string, details: JobDetails): void {
+	state.details.set(deploymentId, details);
+}
+
+/**
+ * deploymentIds of queued rows whose real (registry) appName matches — the
+ * coalescing key for preview jobs, which SQL cannot derive from the row.
+ */
+export function queuedSiblingsForApp(appName: string, exceptDeploymentId: string): string[] {
+	const ids: string[] = [];
+	for (const [deploymentId, details] of state.details) {
+		if (deploymentId === exceptDeploymentId) continue;
+		if (details.appName !== appName) continue;
+		if (runningJobs.has(deploymentId)) continue;
+		ids.push(deploymentId);
+	}
+	return ids;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  SQL: claim, snapshot                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The app a deployment row belongs to, as SQL can see it: applications and
+ * compose services carry a unique `app_name`. Preview rows point at the
+ * PARENT application, so their derived name is the parent's — which is why
+ * previews are excluded from the SQL coalescing and carry their real name in
+ * the in-process registry instead.
+ */
+const APP_NAME_JOIN = sql`
+	left join "application" a on a."application_id" = q."application_id"
+	left join "compose" c on c."compose_id" = q."compose_id"
+`;
+
+interface ClaimedRow {
+	deployment_id: string;
+	application_id: string | null;
+	compose_id: string | null;
+	is_preview: boolean;
+	title: string | null;
+	server_id: string | null;
+	app_name: string | null;
+}
+
+/**
+ * Claim the oldest runnable `queued` row for one server and flip it to
+ * `running` in the same statement. Returns `null` when nothing is runnable
+ * (empty line, every candidate's app already building, every row locked by
+ * another claimer).
+ *
+ * `blocked` carries deploymentIds the caller knows must wait even though SQL
+ * cannot tell: queued previews whose real appName is already building.
+ */
+export async function claimNextDeployment(
+	serverId: string | null,
+	blocked: string[] = [],
+): Promise<QueueJob | null> {
+	const rows = (await db.execute(sql`
+		update "deployment" d
+		set "status" = 'running', "started_at" = now()
+		from (
+			select q."deployment_id", coalesce(a."app_name", c."app_name") as app_name
+			from "deployment" q
+			${APP_NAME_JOIN}
+			where q."status" = 'queued'
+				and q."server_id" is not distinct from ${serverId}::text
+				and coalesce(a."app_name", c."app_name") is not null
+				and not (q."deployment_id" = any(${sql.param(blocked)}::text[]))
+				and not exists (
+					select 1
+					from "deployment" r
+					left join "application" ra on ra."application_id" = r."application_id"
+					left join "compose" rc on rc."compose_id" = r."compose_id"
+					where r."status" = 'running'
+						and coalesce(ra."app_name", rc."app_name") = coalesce(a."app_name", c."app_name")
+				)
+			order by q."created_at", q."deployment_id"
+			for update of q skip locked
+			limit 1
+		) s
+		where d."deployment_id" = s."deployment_id"
+		returning d."deployment_id", d."application_id", d."compose_id", d."is_preview",
+			d."title", d."server_id", s."app_name"
+	`)) as unknown as ClaimedRow[];
+
+	const row = rows[0];
+	if (!row?.app_name) return null;
+
+	const details = state.details.get(row.deployment_id);
+	return {
+		deploymentId: row.deployment_id,
+		// Previews build under their own service name, which only the registry
+		// knows (the row carries the parent's application id).
+		appName: details?.appName ?? row.app_name,
+		applicationId: row.application_id ?? undefined,
+		composeId: row.compose_id ?? undefined,
+		previewDeploymentId: details?.previewDeploymentId,
+		type: details?.type ?? (row.title === "Redeploy" ? "redeploy" : "deploy"),
+		serverId: row.server_id,
+	};
+}
+
+interface QueuedRow {
+	deployment_id: string;
+	server_id: string | null;
+	pos: string | number;
+}
+
+/**
+ * Recompute the queue-position / depth snapshot from SQL. One window query
+ * over the (indexed) in-flight rows; callers read it synchronously afterwards.
+ */
+export async function refreshQueueSnapshot(): Promise<number> {
+	const rows = (await db.execute(sql`
+		select "deployment_id", "server_id",
+			row_number() over (
+				partition by "server_id" order by "created_at", "deployment_id"
+			) as pos
+		from "deployment"
+		where "status" = 'queued'
+	`)) as unknown as QueuedRow[];
+
+	const positions = new Map<string, number>();
+	const pending = new Map<string, number>();
+	for (const row of rows) {
+		positions.set(row.deployment_id, Number(row.pos));
+		const key = serverKey(row.server_id);
+		pending.set(key, (pending.get(key) ?? 0) + 1);
+	}
+	state.positions = positions;
+	state.pendingByServer = pending;
+
+	// GC the detail registry: a row that is neither waiting nor running was
+	// cancelled, superseded or finished elsewhere, and would otherwise leak
+	// (and skew the preview coalescing) for the life of the process.
+	for (const deploymentId of state.details.keys()) {
+		if (positions.has(deploymentId) || runningJobs.has(deploymentId)) continue;
+		state.details.delete(deploymentId);
+	}
+	return rows.length;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Claim loop                                                                */
+/* -------------------------------------------------------------------------- */
+
+/** Poll cadence while rows are waiting (the `enqueued` event wakes it sooner). */
+const BUSY_POLL_MS = 2_000;
+/** Poll cadence while the line is empty — a pure safety net. */
+const IDLE_POLL_MS = 15_000;
+
+function scheduleNextPass(delayMs: number): void {
+	if (state.draining || !state.loopStarted) return;
+	if (state.timer) clearTimeout(state.timer);
+	state.timer = setTimeout(() => {
+		state.timer = null;
+		void runClaimPass();
+	}, delayMs);
+	// Never hold the event loop open on the queue's account.
+	state.timer.unref?.();
+}
+
+/**
+ * One claim pass: refresh the snapshot, then fill every server's free slots
+ * from the database, oldest row first.
+ */
+async function runClaimPass(): Promise<void> {
+	if (state.loopBusy || state.draining || !state.runner) return;
+	state.loopBusy = true;
+	let waiting = 0;
+	try {
+		waiting = await refreshQueueSnapshot();
+		for (const key of [...state.pendingByServer.keys()]) {
+			while (!state.draining) {
+				const running = runningCountByServer.get(key) ?? 0;
+				if (running >= getConcurrency(key)) break;
+				const job = await claimNextDeployment(serverIdFromKey(key), blockedDeploymentIds());
+				if (!job) break;
+				startJob(key, job);
 			}
 		}
-		if (queue.length === 0) pendingByServer.delete(key);
+		if (waiting > 0) waiting = await refreshQueueSnapshot();
+	} catch (error) {
+		// A DB hiccup must not kill the loop — try again on the next tick.
+		console.error(
+			"Deploy queue claim pass failed:",
+			error instanceof Error ? error.message : error,
+		);
+	} finally {
+		state.loopBusy = false;
+		scheduleNextPass(waiting > 0 ? BUSY_POLL_MS : IDLE_POLL_MS);
 	}
-	return removed;
 }
 
 /**
- * Enqueue a job and kick the drain loop for its server. Any job for the same
- * app that was still waiting is dropped and returned as `superseded` — the
- * caller owns finalizing those deployment rows (see `queueDeployment`).
+ * Queued rows SQL must skip: previews whose real service name is already
+ * building (their row names the parent application, so the `NOT EXISTS`
+ * mutex in the claim query cannot see the collision).
  */
-export function enqueue(job: QueueJob): { superseded: QueueJob[] } {
-	if (!state.runner) {
-		throw new Error("Deployment worker is not registered (import modules/deployment first)");
+function blockedDeploymentIds(): string[] {
+	const blocked: string[] = [];
+	for (const [deploymentId, details] of state.details) {
+		if (runningJobs.has(deploymentId)) continue;
+		if (runningApps.has(details.appName)) blocked.push(deploymentId);
 	}
-	const superseded = takePendingForApp(job.appName);
-	const key = serverKey(job.serverId);
-	const queue = pendingByServer.get(key) ?? [];
-	queue.push(job);
-	pendingByServer.set(key, queue);
-	void drain(key);
-	return { superseded };
+	return blocked;
 }
 
 /**
- * Start as many pending jobs as the server's concurrency allows, skipping
- * jobs whose app is already running (they stay in line, in order).
+ * Start the claim loop (idempotent, once per process). Called from boot
+ * recovery and lazily by `queueDeployment`, so neither `next build` nor the
+ * offline unit tests ever open a database connection on import.
  */
-function drain(key: string): void {
-	if (!state.runner || state.draining) return;
-	const queue = pendingByServer.get(key);
-	if (!queue || queue.length === 0) return;
-
-	let index = 0;
-	while (index < queue.length) {
-		const running = runningCountByServer.get(key) ?? 0;
-		if (running >= getConcurrency(key)) break;
-		const job = queue[index];
-		if (!job) break;
-		if (runningApps.has(job.appName)) {
-			index += 1;
-			continue;
-		}
-		queue.splice(index, 1);
-		startJob(key, job);
-	}
-	if (queue.length === 0) pendingByServer.delete(key);
+export function startQueueLoop(): void {
+	if (state.loopStarted || state.draining) return;
+	state.loopStarted = true;
+	deploymentEvents.on("enqueued", onEnqueued);
+	void runClaimPass();
 }
 
-function startJob(key: string, job: QueueJob): void {
+const onEnqueued = (): void => {
+	pokeQueue();
+};
+
+/** Wake the loop now instead of waiting for the next tick. */
+export function pokeQueue(): void {
+	if (!state.loopStarted || state.draining) return;
+	if (state.loopBusy) return;
+	scheduleNextPass(0);
+}
+
+/** Stop the loop and detach its listener (tests, shutdown). */
+export function stopQueueLoop(): void {
+	if (state.timer) clearTimeout(state.timer);
+	state.timer = null;
+	if (state.loopStarted) deploymentEvents.off("enqueued", onEnqueued);
+	state.loopStarted = false;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Running jobs                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Hand a claimed job to the worker and hold its slot until it settles. The
+ * row is already `running` in the database (the claim did that atomically);
+ * this only tracks the process-side state — slot accounting, per-app mutex,
+ * child processes and cancellation.
+ *
+ * Exported because the worker's unit tests drive it directly (they mock the
+ * database away and never reach the claim query).
+ */
+export function startJob(key: string, job: QueueJob): void {
 	runningCountByServer.set(key, (runningCountByServer.get(key) ?? 0) + 1);
 	runningApps.add(job.appName);
 	// Mark as running immediately so cancellation works even before the
@@ -231,7 +471,7 @@ function startJob(key: string, job: QueueJob): void {
 	});
 	runningJobs.set(job.deploymentId, { key, job, settled });
 
-	// Never let a rejected job take down the drain loop. The worker finalizes
+	// Never let a rejected job take down the claim loop. The worker finalizes
 	// its own deployment row; a rejection here means it failed before it
 	// could (DB down, unwritable log dir) — say so instead of hiding it.
 	Promise.resolve()
@@ -249,28 +489,24 @@ function startJob(key: string, job: QueueJob): void {
 			processesByDeployment.delete(job.deploymentId);
 			cancelledDeployments.delete(job.deploymentId);
 			cancelHooks.delete(job.deploymentId);
+			state.details.delete(job.deploymentId);
 			release();
-			void drain(key);
+			// A freed slot may unblock the next row (and the per-app mutex).
+			pokeQueue();
 		});
 }
 
 /**
- * Remove a pending job or kill a running one.
- * Returns where the job was found (`null` = unknown deploymentId).
+ * Kill a running job. A row that is still `queued` is NOT touched here — the
+ * caller (`cancelDeployment`) finalizes it in SQL, which is what makes the
+ * cancellation atomic against a concurrent claim.
+ * Returns where the job was found (`null` = not running in this process).
  * The first reason recorded for a running job wins.
  */
 export function requestCancellation(
 	deploymentId: string,
 	reason: CancelReason = "user",
 ): CancelLookup {
-	for (const [key, queue] of pendingByServer) {
-		const index = queue.findIndex((job) => job.deploymentId === deploymentId);
-		if (index !== -1) {
-			queue.splice(index, 1);
-			if (queue.length === 0) pendingByServer.delete(key);
-			return "pending";
-		}
-	}
 	if (processesByDeployment.has(deploymentId)) {
 		if (!cancelledDeployments.has(deploymentId)) {
 			cancelledDeployments.set(deploymentId, reason);
@@ -382,16 +618,17 @@ const sleep = (ms: number): Promise<void> =>
 	});
 
 /**
- * Graceful shutdown: stop starting jobs, drop the in-memory backlog (its rows
- * stay `queued` and are re-enqueued at next boot) and wait up to `graceMs`
- * for running jobs. Jobs still running afterwards are cancelled with reason
+ * Graceful shutdown: stop claiming rows and wait up to `graceMs` for the jobs
+ * already running. Jobs still running afterwards are cancelled with reason
  * `shutdown` — the worker kills their processes and finalizes the rows as
- * `error` ("Interrupted by panel shutdown") — and get a short, bounded
- * window to do so. Idempotent: a second call just waits again.
+ * `error` ("Interrupted by panel shutdown") — and get a short, bounded window
+ * to do so. The backlog needs no handling at all any more: those rows are
+ * still `queued` in Postgres and the next boot claims them. Idempotent: a
+ * second call just waits again.
  */
 export async function drainQueue(options: { graceMs: number }): Promise<DrainResult> {
 	state.draining = true;
-	pendingByServer.clear();
+	stopQueueLoop();
 
 	const running = [...runningJobs.values()];
 	if (running.length === 0) return { completed: 0, interrupted: 0 };

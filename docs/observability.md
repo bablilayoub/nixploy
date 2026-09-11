@@ -8,6 +8,14 @@ All rendered by `apps/web/src/components/services/log-viewer.tsx` (shared by
 apps, databases, compose, deployment dialogs and the Docker tab) and
 `monitoring-charts.tsx`.
 
+`/ws/logs` follows a container **once per (container, tail)** and fans the
+bytes out to every viewer, ref-counted (`ws/docker-logs.ts`, architecture
+audit #20): three people watching one container is one `docker logs
+--follow` — and, on a managed server, one SSH session — not three. A viewer
+joining an existing stream replays what it captured so far (the `--tail N`
+backfill plus everything since, capped at 2 MiB); the follow stops as soon
+as its last viewer disconnects.
+
 The LogViewer classifies every line into a level shown as a gutter badge:
 `ERR` / `WRN` / `OK` / `INF` / `DBG` (see `classifyLine` — explicit `[tag]`
 prefixes first, then common Docker/Postgres/buildkit tokens). Timestamps are
@@ -19,7 +27,20 @@ download-as-`.txt`.
 - Cron `metrics-history` (every 30s, `modules/monitoring/history.ts`)
   snapshots cpu/memory/network/block-io/pids for every **local**
   application, compose (first container) and database into
-  `$NIXPLOY_CONFIG_DIR/metrics/<appName>.jsonl`, pruned to 48h.
+  `$NIXPLOY_CONFIG_DIR/metrics/<appName>.jsonl`, kept to a 48h window.
+- **Writes are appends** (`modules/monitoring/store.ts`). Each sample is one
+  `appendFile` line; the file is rewritten — without the points that fell
+  out of the window, through a temp file + `rename` so no reader sees a
+  half-written file — at most **once an hour per file**. Before, every
+  sample read, parsed, filtered and rewrote the whole file (~0.5 MB per
+  service per 30 s at 48h retention; architecture audit #2).
+- **Reads seek from the tail**: `monitoring.history` / `serverHistory` read
+  a 64 KiB chunk from the end of the file and grow it (x4) only while the
+  oldest line read is still inside the requested window; `latest` (one call
+  per service in `fleetOverview`) is answered from an in-memory ring of the
+  newest ~240 points per file. The ring is a pure cache — every point is on
+  disk before it lands there, so nothing needs persisting at shutdown and a
+  cold process refills it from the file tail on first read.
 - Services hosted on **managed servers** are sampled in the same pass: one
   SSH batch per active server collects host cpu (`/proc/stat` delta), memory
   (`/proc/meminfo`) and disk (`df`) plus a one-shot `docker stats` per
@@ -44,6 +65,17 @@ download-as-`.txt`.
   with a sparkline or meter. Charts share a synced cursor (`syncId`) and
   draw dashed peak markers; services with multiple replicas get a
   per-replica breakdown (`monitoring.replicaStats`).
+
+One pass costs a **fixed** number of Docker calls and DB queries, not a
+multiple of the service count (architecture audit #3):
+
+| Per pass | What |
+| --- | --- |
+| 1 `listContainers({ all: false })` | resolves every local service's container, indexed by `com.docker.swarm.service.name` / `com.docker.compose.project` / `com.docker.stack.namespace` |
+| 1 `listContainers({ all: true, status: exited })` | crash-looped task containers for every service — only when an enabled rule watches `restarts` |
+| 1 `environments.findMany(inArray(...))` | environment → organization/project for every target (was one `findFirst` per target) |
+| 1 `loadEnabledAlertRules()` | every enabled alert rule, keyed by service (was one `alertRules.findMany` per target); services with no rule never reach the evaluator |
+| 1 `stats({ stream: false })` per running container | the only per-service call left. Docker's `one-shot` is deliberately **not** used: it zeroes `precpu_stats`, so every service would report 0% CPU |
 
 Sampling runs four services at a time locally and every managed server in
 parallel; the remote timeout scales with the number of services (15 s + 3 s
@@ -89,6 +121,17 @@ toggle is wired to a real emitter:
   corrects drift (`error → running` when tasks are healthy, `running/done →
   idle` when scaled to zero, anything → `error` on crash loops). Services
   with an in-flight deployment are skipped.
+- One pass makes **two Docker API calls total** — `listServices()` +
+  `listTasks()`, grouped by `ServiceID` in memory (`loadSwarmSnapshot`) —
+  instead of two per service (architecture audit #8). Compose **stacks** are
+  answered from the same snapshot via the `com.docker.stack.namespace`
+  label, so the old `docker service ls` shell-out plus a per-service inspect
+  for each stack is gone. When the daemon cannot be read at all the pass
+  skips every swarm-backed row rather than mistaking "cannot see docker" for
+  "nothing is deployed".
+- Plain (non-stack) compose rows still shell out to `docker ps`; those are
+  grouped **by server** and the servers run side by side, so one unreachable
+  host no longer stretches the pass by its row count × the SSH timeout.
 - Transitions INTO `error` fire the **failure watchdog**: an `appBuildError`
   fan-out to the org's notification channels (Slack/Discord/Telegram/email/
   Gotify/Ntfy/Pushover/Mattermost/Lark/Teams/custom — enable the event toggle
@@ -116,13 +159,31 @@ one pass; every probe is bounded to 4 s):
 | `database` | `SELECT 1` through the pool | yes |
 | `docker` | `docker.ping()` on the host socket | yes |
 | `migrations` | journal shipped with the build vs `drizzle.__drizzle_migrations` (`state`: `current` / `behind` / `ahead` / `unknown`, plus `applied` / `expected` counts) | `behind` only — `ahead` (old code on a newer schema, i.e. a downgrade) and `unknown` are warnings |
-| `queue` | in-memory deploy queue (`pending` / `running`) and rows still `running` after 90 min (`stuck`) | never — warning only |
+| `queue` | the deploy queue: `pending` (rows still `queued` in Postgres, from the snapshot each claim pass refreshes), `running` (jobs this process is building) and rows still `running` after 90 min (`stuck`) | never — warning only |
 | `traefik` | `nixploy-traefik` Swarm service present (`docker service ls`, cached 10 s) | only when the panel bootstraps Traefik itself (`NIXPLOY_DISABLE_TRAEFIK_BOOT` unset); the production image sets it, so there a missing proxy is a warning |
 
 Consumers: the image `HEALTHCHECK` (Swarm restarts a task that stays 503 and
 `--update-failure-action rollback` reverts a bad update), the post-roll
 probes in `install.sh` / `update.sh`, and `nixploy doctor`, which prints the
 report next to the server/CLI versions and warns on a major-version mismatch.
+
+## Missed cron ticks (no catch-up)
+
+node-schedule fires nothing for the time the process was down: a nightly
+backup that coincided with an `update.sh` simply never runs (architecture
+audit #17). Nothing is replayed — re-running an arbitrary shell command or a
+dump hours late is rarely what an operator wants — but boot now **says so**:
+
+- `modules/schedules/index.ts#findOverdueSchedules` and
+  `modules/backups/scheduler.ts#findOverdueBackups` compare each enabled
+  row's last recorded run with its cron interval (`cronIntervalMs`, which
+  reads two consecutive fire times out of node-schedule) and log a warning
+  per row overdue by more than one interval, with the number of missed ones.
+- "Last run" is derived, not stored: schedules use the `deployment` row every
+  run writes, backups use `backup_run`. **Open schema item**: adding
+  `last_run_at timestamptz` to `schedule`, `backup` and `volume_backup`
+  would make this exact (and is the prerequisite for actually replaying a
+  missed tick without risking a double run).
 
 ## Cron schedules run in UTC
 

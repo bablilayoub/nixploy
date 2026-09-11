@@ -12,6 +12,7 @@ import {
 } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
 import { redactSensitiveText } from "../../utils/public-url";
+import { invalidateComposeContainers } from "../compose/containers";
 import {
 	buildComposeDeployCommand,
 	prepareComposeFiles,
@@ -82,7 +83,10 @@ type Checkpoint = () => void;
  */
 async function syncApplicationTraefik(application: ApplicationRow): Promise<void> {
 	const [appDomains, appRedirects, appSecurity] = await Promise.all([
-		db.query.domains.findMany({ where: eq(domains.applicationId, application.applicationId) }),
+		db.query.domains.findMany({
+			where: eq(domains.applicationId, application.applicationId),
+			with: { middlewares: true },
+		}),
 		db.query.redirects.findMany({
 			where: eq(redirects.applicationId, application.applicationId),
 		}),
@@ -101,6 +105,9 @@ async function syncApplicationTraefik(application: ApplicationRow): Promise<void
 				https: domain.https,
 				certificateType: domain.certificateType,
 				certificateId: domain.certificateId,
+				// Without this a deploy would drop the domain's middleware chain
+				// from the YAML until the next domain/redirect edit re-synced it.
+				middlewares: domain.middlewares,
 			})),
 		redirects: appRedirects.map((redirect) => ({
 			regex: redirect.regex,
@@ -356,6 +363,10 @@ async function runComposeJob(
 	await ctx.run(command, { cwd: files.workDir, onPrimary: runsOnPrimary(row) });
 	checkpoint();
 
+	// The runtime tab's container list is cached for 10 s — a deploy replaces
+	// every container, so drop it now instead of showing the old ids.
+	invalidateComposeContainers(row.appName, row.serverId);
+
 	// Per-service Traefik configs for compose domains — best effort.
 	await resyncComposeDomains(row.composeId).catch((error) => {
 		ctx.logger.line(
@@ -508,8 +519,10 @@ const errorText = (error: unknown): string =>
  * a transient DB error left the row `running` forever, which also froze the
  * status reconciler for that service.
  *
- * Lifecycle: the row is `queued` when the worker picks it up and flips to
- * `running` here. The pipeline races a per-job deadline
+ * Lifecycle: the queue's claim query already flipped the row from `queued` to
+ * `running` (with `startedAt`) in one atomic statement, which is what makes
+ * "claimed exactly once" true across restarts and concurrent claimers — the
+ * worker only mirrors that onto the service row. The pipeline races a per-job deadline
  * ({@link deployTimeoutMs}) and the queue's cancellation signal, so a job
  * stuck in a step that is not process-bound (hung SSH handshake, Docker API
  * call, DB query) still finalizes; an abandoned pipeline dies at its next
@@ -541,7 +554,9 @@ async function processJob(job: QueueJob): Promise<void> {
 			where: eq(deployments.deploymentId, job.deploymentId),
 		});
 		if (!deployment) return;
-		if (deployment.status !== "queued") return;
+		// The claim query set this; anything else means the row was finalized
+		// underneath us (a stale in-process start) — do not re-finalize it.
+		if (deployment.status !== "running") return;
 		started = true;
 
 		logger = new DeploymentLogger(deployment.logPath, job.deploymentId);
@@ -560,10 +575,8 @@ async function processJob(job: QueueJob): Promise<void> {
 			},
 		};
 
-		await db
-			.update(deployments)
-			.set({ status: "running", startedAt: new Date() })
-			.where(eq(deployments.deploymentId, job.deploymentId));
+		// The row is already `running` (claim query) — only the service row and
+		// the log still need the transition.
 		await setServiceStatus(job, "running");
 		log.line(
 			`Deployment ${job.deploymentId} started (${job.type}${job.serverId ? `, server ${job.serverId}` : ", local"})`,

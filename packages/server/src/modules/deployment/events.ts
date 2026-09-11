@@ -20,13 +20,28 @@ export interface DeploymentLogEvent {
 	chunk: string;
 }
 
+/**
+ * Emitted after a `queued` row was inserted (or a queued backlog was found at
+ * boot). The durable queue's worker loop polls Postgres on a slow timer and
+ * uses this as its wake-up signal, so a deploy starts immediately instead of
+ * waiting for the next tick. Carries no payload the worker trusts — it
+ * re-reads (and claims) the row from the database.
+ */
+export interface DeploymentEnqueuedEvent {
+	deploymentId: string;
+	serverId: string | null;
+}
+
 export interface DeploymentEvents {
 	on(event: "finish", listener: (e: DeploymentFinishEvent) => void): this;
 	on(event: "log", listener: (e: DeploymentLogEvent) => void): this;
+	on(event: "enqueued", listener: (e: DeploymentEnqueuedEvent) => void): this;
 	off(event: "finish", listener: (e: DeploymentFinishEvent) => void): this;
 	off(event: "log", listener: (e: DeploymentLogEvent) => void): this;
+	off(event: "enqueued", listener: (e: DeploymentEnqueuedEvent) => void): this;
 	emit(event: "finish", e: DeploymentFinishEvent): boolean;
 	emit(event: "log", e: DeploymentLogEvent): boolean;
+	emit(event: "enqueued", e: DeploymentEnqueuedEvent): boolean;
 }
 
 /**

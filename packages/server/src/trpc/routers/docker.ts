@@ -17,6 +17,7 @@ import {
 import { emitDockerCleanupNotification } from "../../modules/notifications";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { createTtlCache, DOCKER_LISTING_TTL_MS } from "../../utils/ttl-cache";
 import { assertSafeDockerImageRef } from "../../utils/validators";
 import { protectedProcedure, router } from "../init";
 
@@ -28,6 +29,33 @@ import { protectedProcedure, router } from "../init";
  */
 
 const serverInput = z.object({ serverId: z.string().nullish() });
+
+/**
+ * Read-only docker listings, cached for 10 s per (view, server) and shared by
+ * concurrent callers (audit #14). The Docker tab polls `containers` every
+ * 30 s, the compose runtime view every 15 s and so on — *per open tab* —
+ * which used to mean one `docker ps` / SSH round-trip each. Authorization
+ * always runs BEFORE the lookup; the cached payload is server-scoped, never
+ * caller-scoped.
+ */
+const listingCache = createTtlCache<string>({ ttlMs: DOCKER_LISTING_TTL_MS });
+
+const cacheKey = (view: string, serverId: string | null | undefined): string =>
+	`${view}:${serverId ?? "__local__"}`;
+
+const cachedListing = (
+	ctx: DockerContext,
+	view: string,
+	serverId: string | null | undefined,
+	command: string,
+): Promise<string> =>
+	listingCache.get(cacheKey(view, serverId), () => runOn(ctx, serverId, command));
+
+/** Drop every cached listing for one server after a mutation touched it. */
+function invalidateDockerListings(serverId: string | null | undefined): void {
+	const suffix = `:${serverId ?? "__local__"}`;
+	listingCache.invalidateWhere((key) => key.endsWith(suffix));
+}
 
 type DockerContext = {
 	session: { user: { id: string }; session: { activeOrganizationId?: string | null } };
@@ -139,7 +167,12 @@ export const dockerRouter = router({
 
 	containers: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
 		await assertAdmin(ctx, input?.serverId);
-		const out = await runOn(ctx, input.serverId, `docker ps -a --format '{{json .}}'`);
+		const out = await cachedListing(
+			ctx,
+			"containers",
+			input.serverId,
+			`docker ps -a --format '{{json .}}'`,
+		);
 		return parseJsonLines<{
 			ID: string;
 			Image: string;
@@ -184,6 +217,7 @@ export const dockerRouter = router({
 					? `docker rm -f ${shq(input.containerId)}`
 					: `docker ${input.action} ${shq(input.containerId)}`;
 			await runOn(ctx, input.serverId, command);
+			invalidateDockerListings(input.serverId);
 			if (input.action === "remove") {
 				await auditFromSession(ctx, organizationId, {
 					action: "docker.container.remove",
@@ -198,7 +232,12 @@ export const dockerRouter = router({
 
 	images: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
 		await assertAdmin(ctx, input?.serverId);
-		const out = await runOn(ctx, input.serverId, `docker images --format '{{json .}}'`);
+		const out = await cachedListing(
+			ctx,
+			"images",
+			input.serverId,
+			`docker images --format '{{json .}}'`,
+		);
 		return parseJsonLines<{
 			Repository: string;
 			Tag: string;
@@ -221,7 +260,9 @@ export const dockerRouter = router({
 					message: error instanceof Error ? error.message : "Invalid image reference",
 				});
 			}
-			return await runOn(ctx, input.serverId, `docker pull ${shq(reference)}`);
+			const output = await runOn(ctx, input.serverId, `docker pull ${shq(reference)}`);
+			invalidateDockerListings(input.serverId);
+			return output;
 		}),
 
 	imageRemove: protectedProcedure
@@ -229,6 +270,7 @@ export const dockerRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			await assertAdmin(ctx, input?.serverId);
 			await runOn(ctx, input.serverId, `docker rmi ${shq(input.imageId)}`);
+			invalidateDockerListings(input.serverId);
 			return true;
 		}),
 
@@ -241,6 +283,7 @@ export const dockerRouter = router({
 				input.serverId,
 				`docker image prune -f ${input.all ? "-a" : ""}`.trim(),
 			);
+			invalidateDockerListings(input.serverId);
 			void emitDockerCleanupNotification(organizationId, {
 				scope: "images",
 				serverId: input.serverId ?? null,
@@ -256,7 +299,9 @@ export const dockerRouter = router({
 		await assertClusterAdmin(ctx, input?.serverId);
 		let out: string;
 		try {
-			out = await runSwarmOnPrimary(ctx, input.serverId, `docker service ls --format '{{json .}}'`);
+			out = await listingCache.get(cacheKey("swarmServices", input.serverId), () =>
+				runSwarmOnPrimary(ctx, input.serverId, `docker service ls --format '{{json .}}'`),
+			);
 		} catch (error) {
 			if (isNotSwarmManagerError(error)) return [];
 			throw error;
@@ -307,6 +352,7 @@ export const dockerRouter = router({
 				input.serverId,
 				`docker node update --availability ${input.availability} ${shq(input.nodeId)}`,
 			);
+			invalidateDockerListings(input.serverId);
 			void auditFromSession(ctx, organizationId, {
 				action: "docker.node.update",
 				targetType: "node",
@@ -443,6 +489,7 @@ export const dockerRouter = router({
 			// Volumes go through the guarded pass below instead of `--volumes`,
 			// so data volumes of stopped (scaled-to-zero) services survive.
 			const systemOut = await run("docker system prune -f");
+			invalidateDockerListings(input.serverId);
 			const volumeOut = input.volumes
 				? await pruneUnusedVolumes(run, await listServiceVolumeGuard(), execAsync)
 				: "";

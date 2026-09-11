@@ -155,6 +155,26 @@ export const deployStreakKey = (service: {
 			? `compose:${service.composeId}`
 			: null;
 
+export type AlertRuleRow = typeof alertRules.$inferSelect;
+
+/**
+ * Every enabled alert rule, indexed by {@link deployStreakKey}. The metrics
+ * cron used to run one `alertRules.findMany` **per sampled service, per
+ * pass** (audit #3): 100 services meant 100 queries every 30 s for a table
+ * that usually holds a handful of rows. Loaded once per pass instead and
+ * handed to {@link evaluateServiceAlertRules} as `rules`.
+ */
+export async function loadEnabledAlertRules(): Promise<Map<string, AlertRuleRow[]>> {
+	const rows = await db.query.alertRules.findMany({ where: eq(alertRules.enabled, true) });
+	const byService = new Map<string, AlertRuleRow[]>();
+	for (const rule of rows) {
+		const key = deployStreakKey(rule);
+		if (!key) continue;
+		byService.set(key, [...(byService.get(key) ?? []), rule]);
+	}
+	return byService;
+}
+
 const DEPLOY_STREAK_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
 const DEPLOY_STREAK_MAX_ROWS = 5000;
 
@@ -213,25 +233,35 @@ export async function evaluateServiceAlertRules(input: {
 	memoryPercent?: number | null;
 	restarts?: number | null;
 	deployFailureStreak?: number | null;
+	/**
+	 * Pre-loaded rules for THIS service ({@link loadEnabledAlertRules}). Pass
+	 * it from a batch caller (the metrics cron) to skip the per-service query;
+	 * omit it for one-off callers.
+	 */
+	rules?: AlertRuleRow[];
 }): Promise<void> {
-	const conditions = [
-		eq(alertRules.organizationId, input.organizationId),
-		eq(alertRules.enabled, true),
-	];
-	if (input.applicationId) {
-		conditions.push(eq(alertRules.applicationId, input.applicationId));
-	} else if (input.composeId) {
-		conditions.push(eq(alertRules.composeId, input.composeId));
-	} else {
-		return;
-	}
+	if (!input.applicationId && !input.composeId) return;
 
-	const rules = await db.query.alertRules.findMany({
-		where: and(...conditions),
-	});
+	const rules =
+		input.rules ??
+		(await (async () => {
+			const conditions = [
+				eq(alertRules.organizationId, input.organizationId),
+				eq(alertRules.enabled, true),
+				input.applicationId
+					? eq(alertRules.applicationId, input.applicationId)
+					: eq(alertRules.composeId, input.composeId as string),
+			];
+			return await db.query.alertRules.findMany({ where: and(...conditions) });
+		})());
+	if (rules.length === 0) return;
 	const now = Date.now();
 
 	for (const rule of rules) {
+		// A pre-loaded batch is not org-filtered by the query: keep the tenant
+		// check here so a caller can never evaluate another org's rule.
+		if (rule.organizationId !== input.organizationId) continue;
+		if (rule.enabled !== true) continue;
 		let value: number | null = null;
 		if (rule.metric === "cpu") value = input.cpu ?? null;
 		else if (rule.metric === "memory") value = input.memoryPercent ?? null;

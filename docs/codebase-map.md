@@ -45,15 +45,15 @@ The request proxy `apps/web/src/proxy.ts` (Next 16 `proxy` convention, Node runt
 ### Pages (App Router)
 
 - `(auth)/`: `login`, `setup` (first owner + org; public register removed), `two-factor`, `accept-invitation/[invitationId]`, legacy `register` (redirects).
-- `(dashboard)/dashboard/`: `page.tsx` (projects overview), `projects/[projectId]` (project detail, environments, services table, GitOps card, tags), `projects/[projectId]/services/<type>/[id]` for `application | compose | postgres | mysql | mariadb | mongo | redis`, `templates`, `docker`, `monitoring`, `schedules`, `settings/{profile,organization,activity,incidents,notifications,servers,ssh-keys,server(platform),certificates,git-providers,registries,destinations}`.
+- `(dashboard)/dashboard/`: `page.tsx` (projects overview), `projects/[projectId]` (project detail, environments, services table, GitOps card, tags), `projects/[projectId]/services/<type>/[id]` for `application | compose | postgres | mysql | mariadb | mongo | redis`, `templates`, `docker`, `monitoring` (tabs `?tab=fleet|incidents|audit` — Incidents and the audit log live here now), `schedules`, `settings/{profile,organization,notifications,servers,ssh-keys,server(platform),certificates,git-providers,registries,destinations}` (`settings/activity` and `settings/incidents` are `redirect()` stubs into Monitoring).
 - Error boundaries: `app/error.tsx`, `global-error.tsx`, `not-found.tsx`, `(dashboard)/error.tsx`, `(dashboard)/loading.tsx`.
 - Providers: `app/providers.tsx` (TanStack Query with 4xx no-retry, tRPC `httpBatchLink` + superjson, next-themes, sonner, tooltip). Browser tRPC URL is always relative `/api/trpc`.
 
 ### Web component layout (`apps/web/src/components`)
 
-`application/*` (tabs: general, source, build, environment, domains via `services/domain-manager`, deployments via `services/deployment-history`, previews, logs, monitoring, advanced managers: ports/mounts/redirects/security/healthcheck/placement/resources/rollbacks, settings), `compose/*`, `databases/*` (`database-detail.tsx` drives all five engines), `projects/*`, `services/*` (shared log viewer, terminal, monitoring charts, env editor, status badge, copilot drawer, danger zone), `docker/*` (control center tabs), `settings/*`, `templates/*`, `schedules/*`, `backups/*`, `command-palette/*` (⌘K, register new pages here), `layout/*` (sidebar shell, top nav, deploy progress bar, keyboard shortcuts), `shell/*` (page header, sub-nav, empty/error states), `ui/*` (vendored shadcn, do not restyle wholesale), `data-table/*`.
+`application/*`, `compose/*`, `databases/*` (`database-detail.tsx` drives all five engines) — all three render the shared `services/service-page-header.tsx` (breadcrumb `Projects / project / environment / service`, one status badge, a `ServiceActions` cluster) and the same top-level tab order: **General · [Compose file | Connection] · Deploy · Runtime · Domains · Environment · Backups · Advanced · Settings** (a kind only renders the tabs it has). Advanced sub-tabs (mounts/ports/redirects/security/healthcheck/placement/swarm/rollbacks) are URL-synced under `?tab=advanced&advanced=<name>`. Then `projects/*`, `services/*` (shared log viewer, terminal, monitoring charts, env editor, status badge, copilot drawer, danger zone), `docker/*` (control center tabs), `settings/*`, `templates/*`, `schedules/*`, `backups/*`, `command-palette/*` (⌘K, register new pages here), `layout/*` (sidebar shell, top nav, deploy progress bar, keyboard shortcuts, `activity-tray.tsx` — bottom-right list of running deployments/backups/restores), `shell/*` (page header, sub-nav, empty/error states), `ui/*` (vendored shadcn, do not restyle wholesale), `data-table/*`.
 
-Hooks: `hooks/use-synced-tab.ts` (tab ↔ URL), `hooks/use-mobile.ts`. Lib: `lib/trpc.ts`, `lib/trpc-types.ts` (re-exports `AppRouter`), `lib/auth-client.ts` (better-auth client with org/admin/2FA/api-key plugins — must mirror server plugins), `lib/format.ts`, `lib/status.ts`, `lib/codemirror-theme.ts`.
+Hooks: `hooks/use-synced-tab.ts` (tab ↔ URL, plus `SERVICE_TAB_ALIASES` mapping retired tab ids), `hooks/use-running-deployments.ts` (the one `deployment.recent` query — header status, deploy hairline, services table, dashboard list and the activity tray all read it; it polls only while something is queued/running), `hooks/use-mobile.ts`. Lib: `lib/trpc.ts`, `lib/trpc-types.ts` (re-exports `AppRouter`), `lib/auth-client.ts` (better-auth client with org/admin/2FA/api-key plugins — must mirror server plugins), `lib/format.ts`, `lib/status.ts`, `lib/codemirror-theme.ts`.
 
 ## 3. Server package (`packages/server/src`)
 
@@ -109,8 +109,14 @@ Router → module map:
 
 ```
 router → queueDeployment()  modules/deployment/index.ts
-        ├─ insert deployment row (status "queued"; boot recovery re-enqueues leftovers, "running" leftovers are failed)
-        └─ enqueue() per-server FIFO  queue.ts  (row status queued→running; coalesces pending jobs per app, per-app mutex, concurrency NIXPLOY_DEPLOY_CONCURRENCY default 1)
+        └─ ONE tx: advisory lock on appName → insert row (status "queued") → supersede the app's older queued rows
+queue.ts claim loop (woken by deploymentEvents "enqueued", polls 2 s busy / 15 s idle)
+        └─ UPDATE deployment SET status='running', started_at=now()
+             WHERE deployment_id = (SELECT … status='queued' AND server matches
+                                    AND NOT EXISTS (same app_name already running)
+                                    ORDER BY created_at FOR UPDATE OF q SKIP LOCKED LIMIT 1)
+           → per-server FIFO + per-app mutex + exactly-once, all in SQL
+             (slots per server: NIXPLOY_DEPLOY_CONCURRENCY, default 1)
 worker.ts processJob()
   application: context → sources.ts (git clone / docker pull / drop zip)
              → builders/{nixpacks,railpack,dockerfile-builder,buildpacks,static}.ts  (image `<appName>:latest`)
@@ -122,7 +128,7 @@ worker.ts processJob()
                on error: incident + service_log ingest + Copilot auto-explain
 ```
 
-Cancellation: `requestCancellation(id, reason)` dequeues pending jobs or kills registered child processes (`registerDeploymentProcess`) and fires `onDeploymentCancelled` hooks; the worker races the pipeline against that signal and its `NIXPLOY_DEPLOY_TIMEOUT_MS` deadline, and checks a checkpoint between steps. Shutdown: `drainQueue({ graceMs })` (called from `server.ts` on SIGTERM) stops dequeuing, waits, then cancels stragglers with reason `shutdown`. The queue's state (and `deploymentEvents`) lives on `globalThis` (`__nixployDeploymentQueue`): `transpilePackages` bundles `@nixploy/server` into the Next route chunks, so the tRPC/REST/webhook graph and the tsx-loaded `server.ts` are two module instances that must share one queue. Logs: `<config>/logs/<appName>/<deploymentId>.log` (+ `.explain.json` sidecar), streamed via `/ws/deployment`.
+Cancellation: a `queued` row is finalized by a conditional `UPDATE … WHERE status = 'queued'` (atomic against a concurrent claim); `requestCancellation(id, reason)` kills the registered child processes (`registerDeploymentProcess`) and fires `onDeploymentCancelled` hooks; the worker races the pipeline against that signal and its `NIXPLOY_DEPLOY_TIMEOUT_MS` deadline, and checks a checkpoint between steps. Shutdown: `drainQueue({ graceMs })` (called from `server.ts` on SIGTERM) stops claiming, waits, then cancels stragglers with reason `shutdown`; the backlog is left `queued` in Postgres for the next boot. The queue's process-local state (running jobs, slots, cancellation, the preview-detail registry, the SQL position snapshot — and `deploymentEvents`) lives on `globalThis` (`__nixployDeploymentQueue`): `transpilePackages` bundles `@nixploy/server` into the Next route chunks, so the tRPC/REST/webhook graph and the tsx-loaded `server.ts` are two module instances that must share one set of running jobs and run exactly one claim loop. Logs: `<config>/logs/<appName>/<deploymentId>.log` (+ `.explain.json` sidecar), streamed via `/ws/deployment`.
 
 ## 5. On-disk layout (`NIXPLOY_CONFIG_DIR`, default `/etc/nixploy`, dev `.nixploy-data/`)
 
@@ -168,11 +174,11 @@ Helpers: `modules/deployment/paths.ts` (canonical `getConfigDir`, apps, logs, ss
 | `NIXPLOY_NETWORK` | swarm, compose, traefik | overlay network (default `nixploy-network`) |
 | `NIXPLOY_WILDCARD_DOMAIN` | previews | default `traefik.me` |
 | `NIXPLOY_DISABLE_TRAEFIK_BOOT` | server.ts | skip Traefik bootstrap (set in the image) |
-| `NIXPLOY_DEPLOY_CONCURRENCY` | queue | per-server parallel deploys (default 1; same app never runs twice at once) |
+| `NIXPLOY_DEPLOY_CONCURRENCY` | queue | per-server parallel deploys (default 1; the SQL claim's `NOT EXISTS` mutex keeps one app from building twice at once whatever the value) |
 | `NIXPLOY_COMMAND_TIMEOUT_MS` | exec, docker | local spawn hard timeout, process tree killed on expiry (default 30 min; fallback for SSH too) |
 | `NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS` | exec | SSH command hard timeout (default 30 min) |
 | `NIXPLOY_DEPLOY_TIMEOUT_MS` | worker | per-deployment deadline, job cancelled + row `error` on expiry (default 60 min) |
-| `NIXPLOY_SHUTDOWN_GRACE_MS` | server.ts, queue | SIGTERM wait for running deploys before they are cancelled (default 60 s; keep below Swarm `--stop-grace-period`) |
+| `NIXPLOY_SHUTDOWN_GRACE_MS` | server.ts, queue | SIGTERM wait for running deploys before they are cancelled (default 60 s; keep below Swarm `--stop-grace-period`). Rows still `queued` are never touched — the next boot claims them |
 | `NIXPLOY_MIGRATIONS_DIR`, `NIXPLOY_APP_VERSION`, `NIXPLOY_IMAGE` | image, updates | set by Dockerfile / install |
 | `NIXPLOY_GIT_COMMIT` | `/api/version` | optional git SHA baked in with `--build-arg` |
 | `NIXPLOY_DB_WAIT_SECONDS` | entrypoint, migrate.mjs | how long to wait for Postgres before migrating (default 60) |

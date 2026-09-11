@@ -1,4 +1,5 @@
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { createTtlCache, DOCKER_LISTING_TTL_MS } from "../../utils/ttl-cache";
 import { notFound } from "../errors";
 
 export type ComposeContainerRow = {
@@ -73,10 +74,42 @@ async function run(serverId: string | null | undefined, command: string): Promis
 }
 
 /**
+ * Container listings are three `docker ps` calls (one per label filter) and
+ * the runtime tab polls them every 15 s per open tab, so they are cached for
+ * 10 s per (app, server) and shared by concurrent callers (audit #14).
+ * Mutations call {@link invalidateComposeContainers}.
+ */
+const containerCache = createTtlCache<ComposeContainerRow[]>({ ttlMs: DOCKER_LISTING_TTL_MS });
+
+const cacheKey = (appName: string, serverId: string | null | undefined): string =>
+	`${serverId ?? "__local__"}:${appName}`;
+
+/** Forget a compose project's cached container list (deploy, start/stop, delete). */
+export function invalidateComposeContainers(
+	appName: string,
+	serverId?: string | null | undefined,
+): void {
+	if (serverId === undefined) {
+		containerCache.invalidateWhere((key) => key.endsWith(`:${appName}`));
+		return;
+	}
+	containerCache.invalidate(cacheKey(appName, serverId));
+}
+
+/**
  * Running (+ recently created) containers belonging to a compose project /
  * swarm stack named `appName`.
  */
-export async function listComposeContainers(
+export function listComposeContainers(
+	appName: string,
+	serverId: string | null | undefined,
+): Promise<ComposeContainerRow[]> {
+	return containerCache.get(cacheKey(appName, serverId), () =>
+		probeComposeContainers(appName, serverId),
+	);
+}
+
+async function probeComposeContainers(
 	appName: string,
 	serverId: string | null | undefined,
 ): Promise<ComposeContainerRow[]> {

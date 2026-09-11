@@ -100,6 +100,132 @@ export async function handleDockerLogs(
 	}
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Shared follow streams                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One `docker logs --follow` per (container, tail), fanned out to every
+ * viewer (audit #20). Each client used to open its own follower — and, for a
+ * managed server, its own SSH session — so three people watching one
+ * container meant three SSH channels and three copies of the same bytes over
+ * the wire from the host.
+ *
+ * A late joiner replays what the shared stream has captured so far (the
+ * initial `--tail N` backfill plus everything since), capped at
+ * {@link MAX_REPLAY_BYTES}; the stream stops as soon as its last viewer
+ * disconnects. The registry is keyed by tail size too, so a client asking for
+ * a different backfill still gets an exact answer instead of someone else's
+ * window.
+ */
+const MAX_REPLAY_BYTES = 2 * 1024 * 1024;
+
+/** Starts the underlying follow; returns the function that stops it. */
+type StreamStarter = (handlers: {
+	emit: (chunk: string) => void;
+	fail: () => void;
+	end: () => void;
+}) => Promise<() => void>;
+
+interface SharedStream {
+	subscribers: Set<WebSocket>;
+	/** Everything seen so far, oldest first, bounded by MAX_REPLAY_BYTES. */
+	replay: string[];
+	replayBytes: number;
+	starting: Promise<void>;
+	stop: (() => void) | null;
+	ended: boolean;
+}
+
+const sharedStreams = new Map<string, SharedStream>();
+
+/** Number of live shared streams — exported for tests. */
+export function sharedLogStreamCount(): number {
+	return sharedStreams.size;
+}
+
+function remember(entry: SharedStream, chunk: string): void {
+	entry.replay.push(chunk);
+	entry.replayBytes += chunk.length;
+	while (entry.replayBytes > MAX_REPLAY_BYTES && entry.replay.length > 1) {
+		const dropped = entry.replay.shift();
+		entry.replayBytes -= dropped?.length ?? 0;
+	}
+}
+
+function teardown(key: string): void {
+	const entry = sharedStreams.get(key);
+	if (!entry) return;
+	sharedStreams.delete(key);
+	try {
+		entry.stop?.();
+	} catch {
+		// stream already gone
+	}
+}
+
+function release(key: string, ws: WebSocket): void {
+	const entry = sharedStreams.get(key);
+	if (!entry) return;
+	entry.subscribers.delete(ws);
+	// Last viewer left: stop following (and drop the SSH session with it).
+	if (entry.subscribers.size === 0) teardown(key);
+}
+
+async function subscribeShared(ws: WebSocket, key: string, start: StreamStarter): Promise<void> {
+	let entry = sharedStreams.get(key);
+	if (!entry) {
+		const created: SharedStream = {
+			subscribers: new Set(),
+			replay: [],
+			replayBytes: 0,
+			starting: Promise.resolve(),
+			stop: null,
+			ended: false,
+		};
+		sharedStreams.set(key, created);
+		created.starting = start({
+			emit: (chunk) => {
+				remember(created, chunk);
+				for (const client of created.subscribers) safeSend(client, chunk);
+			},
+			fail: () => {
+				for (const client of created.subscribers) client.close(1011);
+				teardown(key);
+			},
+			end: () => {
+				created.ended = true;
+				for (const client of created.subscribers) client.close(1000);
+				teardown(key);
+			},
+		}).then((stop) => {
+			// The last viewer may have left while the stream was still opening.
+			if (sharedStreams.get(key) === created) created.stop = stop;
+			else stop();
+		});
+		entry = created;
+	}
+
+	ws.on("close", () => release(key, ws));
+
+	try {
+		await entry.starting;
+	} catch (error) {
+		teardown(key);
+		throw error;
+	}
+
+	// Replay, then subscribe — in one synchronous step, so a chunk arriving
+	// right now is either in the replay or in the live fan-out, never both.
+	for (const chunk of entry.replay) safeSend(ws, chunk);
+	entry.subscribers.add(ws);
+	if (entry.ended) ws.close(1000);
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Local (dockerode)                                                         */
+/* -------------------------------------------------------------------------- */
+
 async function streamLocalLogs(ws: WebSocket, appName: string, tail: number): Promise<void> {
 	const container = await resolveLocalContainer(appName);
 	if (!container) {
@@ -135,38 +261,39 @@ async function pipeLocalLogs(
 	container: NonNullable<Awaited<ReturnType<typeof resolveLocalContainer>>>,
 	tail: number,
 ): Promise<void> {
-	// TTY containers emit a raw stream; others are multiplexed and must be demuxed.
-	const info = await container.inspect();
-	const isTty = info.Config?.Tty === true;
+	await subscribeShared(ws, `local:${container.id}:${tail}`, async ({ emit, fail, end }) => {
+		// TTY containers emit a raw stream; others are multiplexed and must be demuxed.
+		const info = await container.inspect();
+		const isTty = info.Config?.Tty === true;
 
-	const stream = (await container.logs({
-		follow: true,
-		stdout: true,
-		stderr: true,
-		tail,
-		timestamps: false,
-	})) as unknown as Readable;
+		const stream = (await container.logs({
+			follow: true,
+			stdout: true,
+			stderr: true,
+			tail,
+			timestamps: false,
+		})) as unknown as Readable;
 
-	ws.on("close", () => {
-		stream.destroy();
+		if (isTty) {
+			stream.on("data", (chunk: Buffer) => emit(chunk.toString()));
+		} else {
+			const out = new Writable({
+				write(chunk, _encoding, callback) {
+					emit(chunk.toString());
+					callback();
+				},
+			});
+			getDocker().modem.demuxStream(stream, out, out);
+		}
+		stream.on("error", () => fail());
+		stream.on("end", () => end());
+		return () => stream.destroy();
 	});
-
-	if (isTty) {
-		stream.on("data", (chunk: Buffer) => safeSend(ws, chunk.toString()));
-		stream.on("error", () => ws.close(1011));
-		stream.on("end", () => ws.close(1000));
-	} else {
-		const out = new Writable({
-			write(chunk, _encoding, callback) {
-				safeSend(ws, chunk.toString());
-				callback();
-			},
-		});
-		getDocker().modem.demuxStream(stream, out, out);
-		stream.on("error", () => ws.close(1011));
-		stream.on("end", () => ws.close(1000));
-	}
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Remote (SSH)                                                              */
+/* -------------------------------------------------------------------------- */
 
 async function streamRemoteLogs(
 	ws: WebSocket,
@@ -174,12 +301,15 @@ async function streamRemoteLogs(
 	appName: string,
 	tail: number,
 ): Promise<void> {
+	// One connection just to resolve the id; the follow gets its own (shared).
 	const conn = await connectToServer(serverId);
-	ws.on("close", () => conn.end());
-
-	const containerId = await resolveRemoteContainerId(conn, appName);
-	if (!containerId) {
+	let containerId: string | null = null;
+	try {
+		containerId = await resolveRemoteContainerId(conn, appName);
+	} finally {
 		conn.end();
+	}
+	if (!containerId) {
 		sendJson(ws, {
 			type: "empty",
 			message: `No running container found for app "${appName}" on the remote server`,
@@ -187,8 +317,7 @@ async function streamRemoteLogs(
 		ws.close(1000);
 		return;
 	}
-
-	pipeRemoteLogs(ws, conn, containerId, tail);
+	await pipeRemoteLogs(ws, serverId, containerId, tail);
 }
 
 async function streamRemoteLogsById(
@@ -197,29 +326,47 @@ async function streamRemoteLogsById(
 	containerId: string,
 	tail: number,
 ): Promise<void> {
-	const conn = await connectToServer(serverId);
-	ws.on("close", () => conn.end());
-	pipeRemoteLogs(ws, conn, containerId, tail);
+	await pipeRemoteLogs(ws, serverId, containerId, tail);
 }
 
-function pipeRemoteLogs(
+async function pipeRemoteLogs(
 	ws: WebSocket,
-	conn: Awaited<ReturnType<typeof connectToServer>>,
+	serverId: string,
 	containerId: string,
 	tail: number,
-): void {
+): Promise<void> {
 	const id = `'${containerId.replace(/'/g, `'\\''`)}'`;
-	conn.exec(`docker logs --follow --tail ${tail} ${id} 2>&1`, (err, stream) => {
-		if (err) {
-			conn.end();
-			closeWithError(ws, err.message);
-			return;
-		}
-		stream
-			.on("data", (data: Buffer) => safeSend(ws, data.toString()))
-			.on("close", () => {
-				conn.end();
-				ws.close(1000);
-			});
-	});
+	await subscribeShared(ws, `${serverId}:${containerId}:${tail}`, ({ emit, fail, end }) =>
+		// One SSH session per container, not per viewer (audit #20).
+		connectToServer(serverId).then(
+			(conn) =>
+				new Promise<() => void>((resolve, reject) => {
+					conn.exec(`docker logs --follow --tail ${tail} ${id} 2>&1`, (err, stream) => {
+						if (err) {
+							conn.end();
+							reject(err);
+							return;
+						}
+						stream
+							.on("data", (data: Buffer) => emit(data.toString()))
+							.on("error", () => {
+								conn.end();
+								fail();
+							})
+							.on("close", () => {
+								conn.end();
+								end();
+							});
+						resolve(() => {
+							try {
+								stream.close();
+							} catch {
+								// channel already gone
+							}
+							conn.end();
+						});
+					});
+				}),
+		),
+	);
 }

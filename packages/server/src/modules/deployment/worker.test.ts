@@ -99,32 +99,32 @@ describe("worker preview status bookkeeping", () => {
 		updates.length = 0;
 		deploymentRow.error = null;
 		applicationLookup.hang = false;
-		deploymentRow.value = { deploymentId: "d1", status: "queued", logPath: "/tmp/test.log" };
+		deploymentRow.value = { deploymentId: "d1", status: "running", logPath: "/tmp/test.log" };
 	});
 
-	it("claims a queued row as running before the pipeline starts", async () => {
+	it("does not re-write the status the claim query already set", async () => {
 		const queue = await import("./queue");
 		await import("./worker");
 
-		deploymentRow.value = { deploymentId: "d-claim", status: "queued", logPath: "/tmp/c.log" };
-		queue.enqueue(job("d-claim", "prev-0"));
+		deploymentRow.value = { deploymentId: "d-claim", status: "running", logPath: "/tmp/c.log" };
+		queue.startJob("__local__", job("d-claim", "prev-0"));
 		await flush();
 		await flush();
 
+		// The row arrives already `running` (claimed atomically in SQL); the
+		// worker only writes the TERMINAL status.
 		const statusUpdates = updates
 			.filter((u) => u.table === "deployment" && "status" in u.values)
 			.map((u) => u.values.status);
-		expect(statusUpdates).toEqual(["running", "error"]);
-		expect(updates[0]?.values).toMatchObject({ status: "running" });
-		expect(updates[0]?.values.startedAt).toBeInstanceOf(Date);
+		expect(statusUpdates).toEqual(["error"]);
 	});
 
-	it("skips a row that is no longer queued (cancelled or superseded while waiting)", async () => {
+	it("skips a row that is no longer running (cancelled or superseded while waiting)", async () => {
 		const queue = await import("./queue");
 		await import("./worker");
 
 		deploymentRow.value = { deploymentId: "d-gone", status: "cancelled", logPath: "/tmp/g.log" };
-		queue.enqueue(job("d-gone", "prev-0"));
+		queue.startJob("__local__", job("d-gone", "prev-0"));
 		await flush();
 		await flush();
 
@@ -135,8 +135,8 @@ describe("worker preview status bookkeeping", () => {
 		const queue = await import("./queue");
 		await import("./worker");
 
-		deploymentRow.value = { deploymentId: "d-fail", status: "queued", logPath: "/tmp/f.log" };
-		queue.enqueue(job("d-fail", "prev-1"));
+		deploymentRow.value = { deploymentId: "d-fail", status: "running", logPath: "/tmp/f.log" };
+		queue.startJob("__local__", job("d-fail", "prev-1"));
 		await flush();
 		await flush();
 
@@ -149,9 +149,7 @@ describe("worker preview status bookkeeping", () => {
 		// The parent application row must never be updated for preview jobs.
 		expect(updates.filter((u) => u.table === "application")).toEqual([]);
 
-		const terminal = updates.find(
-			(u) => u.table === "deployment" && "status" in u.values && u.values.status !== "running",
-		);
+		const terminal = terminalUpdate();
 		expect(terminal?.values.status).toBe("error");
 	});
 
@@ -159,8 +157,8 @@ describe("worker preview status bookkeeping", () => {
 		const queue = await import("./queue");
 		await import("./worker");
 
-		deploymentRow.value = { deploymentId: "d-cancel", status: "queued", logPath: "/tmp/c.log" };
-		queue.enqueue(job("d-cancel", "prev-2"));
+		deploymentRow.value = { deploymentId: "d-cancel", status: "running", logPath: "/tmp/c.log" };
+		queue.startJob("__local__", job("d-cancel", "prev-2"));
 		// The drain loop marks the job running synchronously, so this cancels it.
 		queue.requestCancellation("d-cancel");
 		await flush();
@@ -173,9 +171,7 @@ describe("worker preview status bookkeeping", () => {
 		});
 		expect(updates.filter((u) => u.table === "application")).toEqual([]);
 
-		const terminal = updates.find(
-			(u) => u.table === "deployment" && "status" in u.values && u.values.status !== "running",
-		);
+		const terminal = terminalUpdate();
 		expect(terminal?.values.status).toBe("cancelled");
 	});
 
@@ -190,7 +186,7 @@ describe("worker preview status bookkeeping", () => {
 		deploymentEvents.on("finish", onFinish);
 		try {
 			deploymentRow.error = new Error("database unavailable");
-			queue.enqueue({
+			queue.startJob("__local__", {
 				deploymentId: "d-early",
 				appName: "app-one",
 				applicationId: "app-1",
@@ -243,13 +239,11 @@ describe("worker deadlines and interruption", () => {
 		};
 		deploymentEvents.on("finish", onFinish);
 		try {
-			deploymentRow.value = { deploymentId: "d-slow", status: "queued", logPath: "/tmp/s.log" };
-			queue.enqueue(hungJob("d-slow"));
+			deploymentRow.value = { deploymentId: "d-slow", status: "running", logPath: "/tmp/s.log" };
+			queue.startJob("__local__", hungJob("d-slow"));
 			await sleep(150);
 
-			const terminal = updates.find(
-				(u) => u.table === "deployment" && "status" in u.values && u.values.status !== "running",
-			);
+			const terminal = terminalUpdate();
 			expect(terminal?.values.status).toBe("error");
 			expect(terminal?.values.errorMessage).toMatch(/^Deployment exceeded /);
 			expect(finished).toContainEqual({ deploymentId: "d-slow", status: "error" });
@@ -265,15 +259,13 @@ describe("worker deadlines and interruption", () => {
 		const queue = await import("./queue");
 		await import("./worker");
 
-		deploymentRow.value = { deploymentId: "d-shut", status: "queued", logPath: "/tmp/sh.log" };
-		queue.enqueue(hungJob("d-shut"));
+		deploymentRow.value = { deploymentId: "d-shut", status: "running", logPath: "/tmp/sh.log" };
+		queue.startJob("__local__", hungJob("d-shut"));
 		await flush();
 
 		const result = await queue.drainQueue({ graceMs: 20 });
 		expect(result).toEqual({ completed: 0, interrupted: 1 });
-		const terminal = updates.find(
-			(u) => u.table === "deployment" && "status" in u.values && u.values.status !== "running",
-		);
+		const terminal = terminalUpdate();
 		expect(terminal?.values).toMatchObject({
 			status: "error",
 			errorMessage: "Interrupted by panel shutdown",
@@ -287,16 +279,14 @@ describe("worker deadlines and interruption", () => {
 		const queue = await import("./queue");
 		await import("./worker");
 
-		deploymentRow.value = { deploymentId: "d-user", status: "queued", logPath: "/tmp/u.log" };
-		queue.enqueue(hungJob("d-user"));
+		deploymentRow.value = { deploymentId: "d-user", status: "running", logPath: "/tmp/u.log" };
+		queue.startJob("__local__", hungJob("d-user"));
 		await flush();
 		expect(queue.requestCancellation("d-user")).toBe("running");
 		await flush();
 		await flush();
 
-		const terminal = updates.find(
-			(u) => u.table === "deployment" && "status" in u.values && u.values.status !== "running",
-		);
+		const terminal = terminalUpdate();
 		expect(terminal?.values).toMatchObject({ status: "cancelled", errorMessage: null });
 		expect(updates.filter((u) => u.table === "application").at(-1)?.values).toEqual({
 			status: "idle",

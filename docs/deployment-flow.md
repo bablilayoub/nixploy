@@ -4,43 +4,116 @@ How a service goes from "click Deploy" to a running container behind Traefik.
 
 ## The queue
 
-`packages/server/src/modules/deployment/queue.ts` is an in-process FIFO queue
-(one per server: local host is the `null` key, managed servers are keyed by
-`serverId`; `NIXPLOY_DEPLOY_CONCURRENCY` slots per server, default 1).
-Routers call `queueDeployment(...)`, which inserts a `deployment` row with
-`status: queued` and enqueues a job. `worker.ts` dequeues, flips the row to
-`running` (`startedAt`), runs the pipeline and finalizes it as `done` /
-`error` / `cancelled`. Queue depth per server is exposed for monitoring
-(`queueDepth`); each queued row's place in its server's line is returned as
-`queuePosition` by `deployment.byApplication` / `byCompose` / `byProject` /
-`recent` / `getLogs` and rendered as "Queued (#n)" in the history table.
+The `deployment` **table is the queue**. `queueDeployment(...)`
+(`modules/deployment/index.ts`) inserts a row with `status: queued`; the
+worker loop in `modules/deployment/queue.ts` claims it straight from Postgres
+with one atomic statement and hands it to `worker.ts`, which runs the
+pipeline and finalizes the row as `done` / `error` / `cancelled`. Nothing
+about *which* job runs next lives in process memory, so a restart, a crash or
+a `SIGKILL` mid-build never loses the backlog — the rows are still `queued`
+and the next boot picks them up.
 
-Rules the queue enforces:
+### The claim
 
-- **Coalescing** — enqueueing a job for an app that already has a *queued*
-  (not running) job replaces it: the old row ends as `cancelled` with
-  `errorMessage = "Superseded by a newer deployment"` (not `error`, so a push
-  burst never counts as failures in stats, streak alerts or Deploy Copilot).
-  A burst of N pushes therefore yields at most one running + one queued job
-  per app.
-- **Per-app mutex** — two jobs for the same `appName` never run at once, even
-  with `NIXPLOY_DEPLOY_CONCURRENCY > 1`; a busy app's job stays in line and the
-  next app's job takes the free slot.
-- **Cancellation** — a queued job is dequeued and its row finalized by the
-  caller; a running job has every registered child process killed and the
-  worker finalizes it. Cancellations carry a reason (`user`, `timeout`,
-  `shutdown`) so the worker records the right outcome.
-- **Restart safety** — queued rows stay `queued` across a restart and boot
-  recovery (`recovery.ts`) re-enqueues them oldest-first (previews excepted:
-  the row does not carry the previewDeploymentId, so they are failed). Rows
-  that were `running` are failed ("Interrupted: Nixploy restarted…").
-- **One queue per process** — the state lives on `globalThis`
+```sql
+update "deployment" d
+set "status" = 'running', "started_at" = now()
+from (
+  select q."deployment_id", coalesce(a."app_name", c."app_name") as app_name
+  from "deployment" q
+  left join "application" a on a."application_id" = q."application_id"
+  left join "compose" c on c."compose_id" = q."compose_id"
+  where q."status" = 'queued'
+    and q."server_id" is not distinct from $1::text
+    and coalesce(a."app_name", c."app_name") is not null
+    and not (q."deployment_id" = any($2::text[]))
+    and not exists (
+      select 1
+      from "deployment" r
+      left join "application" ra on ra."application_id" = r."application_id"
+      left join "compose" rc on rc."compose_id" = r."compose_id"
+      where r."status" = 'running'
+        and coalesce(ra."app_name", rc."app_name") = coalesce(a."app_name", c."app_name")
+    )
+  order by q."created_at", q."deployment_id"
+  for update of q skip locked
+  limit 1
+) s
+where d."deployment_id" = s."deployment_id"
+returning d."deployment_id", d."application_id", d."compose_id", d."is_preview",
+  d."title", d."server_id", s."app_name"
+```
+
+What each clause buys:
+
+- `server_id is not distinct from $1` + `order by created_at` — **FIFO per
+  target server** (the Nixploy host is the `null` key).
+- `not exists (… status = 'running' … same app_name)` — the **per-app
+  mutex**: two jobs for one service never build at once whatever
+  `NIXPLOY_DEPLOY_CONCURRENCY` says (they would race on the code checkout and
+  the `<appName>:latest` tag). A busy app's row stays in line and the next
+  app's row takes the free slot.
+- `for update of q skip locked` — two claimers can never be handed the same
+  row. (`of q`: Postgres refuses `FOR UPDATE` on the nullable side of an
+  outer join.)
+- `$2::text[]` — ids the caller knows must wait even though SQL cannot tell;
+  see "previews" below.
+
+### What is still in process memory, and why
+
+- **Slot accounting** per server (`NIXPLOY_DEPLOY_CONCURRENCY`, default 1),
+  the set of running jobs, their child processes and their cancellation
+  state. All of it only means anything inside the process that is building.
+- **Job details the row does not carry**: `previewDeploymentId` and, for a
+  preview, its own `appName`. The `deployment` table has neither column, so
+  `queueDeployment` records them in a small `globalThis` registry and the
+  claim reads them back. Queued previews never survive a restart (boot
+  recovery fails them, as before), so a queued preview row always has its
+  entry. **Open schema item**: adding `app_name text` and
+  `preview_deployment_id text` to `deployment` would delete the registry,
+  make preview coalescing pure SQL, and let queued previews survive a
+  restart like everything else.
+- **The queue-position / depth snapshot**, which *is* computed in SQL
+  (`row_number() over (partition by server_id order by created_at,
+  deployment_id)`) on every claim pass and after every enqueue, then cached
+  so `getQueuePosition` / `queueDepth` stay synchronous for their tRPC and
+  `/api/ready` callers.
+
+### Rules the queue enforces
+
+- **Coalescing** — `queueDeployment` inserts and supersedes in ONE
+  transaction, under `pg_advisory_xact_lock(hashtext(appName))` so two
+  pushes landing in the same millisecond cannot each insert a row and find
+  nothing to supersede. The older `queued` row(s) for the app end as
+  `cancelled` with `errorMessage = "Superseded by a newer deployment"` (not
+  `error`, so a push burst never counts as failures in stats, streak alerts
+  or Deploy Copilot). The `where status = 'queued'` guard is what makes this
+  safe against a concurrent claim: exactly one of "cancelled" and "claimed"
+  can win. A burst of N pushes therefore yields at most one running + one
+  queued job per app.
+- **Previews** coalesce and mutex on the *preview* appName, which SQL cannot
+  derive (their row names the parent application): the sibling ids come from
+  the in-process registry, and the claim's `$2` blocked-id list keeps a
+  queued preview waiting while its own service is building.
+- **Cancellation** — a `queued` row is finalized by a conditional
+  `UPDATE … WHERE status = 'queued'` (atomic against a concurrent claim); a
+  running job has every registered child process killed and the worker
+  finalizes it. Cancellations carry a reason (`user`, `timeout`, `shutdown`)
+  so the worker records the right outcome.
+- **Wake-up** — the loop is woken by the `enqueued` event on
+  `deploymentEvents` and by a freed slot; a fallback poll runs every 2 s
+  while rows are waiting and every 15 s when the line is empty.
+- **One loop per process** — the state lives on `globalThis`
   (`__nixployDeploymentQueue`), like `deploymentEvents`. Next transpiles
   `@nixploy/server` into its route bundles, so the request graph that
   enqueues jobs and the custom server (`server.ts`, loaded through tsx) that
   recovers and drains them are two instances of `queue.ts`; module-level
-  state would give each its own invisible queue and a SIGTERM drain would
-  miss every real build.
+  state would give each its own invisible queue, two claim loops, and a
+  SIGTERM drain that misses every real build.
+- The in-memory parts are process-local by design: a multi-replica `nixploy`
+  is still unsupported. The claim query itself is already multi-worker safe
+  (`SKIP LOCKED`), which is what makes a separate `nixploy-worker` service
+  possible later.
 
 ### Timeouts
 
@@ -60,12 +133,14 @@ without waiting on a slow notification channel.
 ### Graceful shutdown
 
 `apps/web/server.ts` handles `SIGTERM`/`SIGINT` (Swarm updates, `update.sh`,
-Ctrl-C): stop dequeuing and stop accepting HTTP connections → cancel the
+Ctrl-C): stop claiming rows and stop accepting HTTP connections → cancel the
 node-schedule crons (`lib/shutdown.ts`, bounded wait for a running tick) →
 close websocket clients with `1001` (the log viewer reconnects after the
 restart) → wait up to `NIXPLOY_SHUTDOWN_GRACE_MS` (default 60 s) for running
 deployments; whatever is still building is cancelled with reason `shutdown`
-and finalized as `error` ("Interrupted by panel shutdown") → `exit 0`. A
+and finalized as `error` ("Interrupted by panel shutdown") → `exit 0`. The
+backlog needs no handling at all: those rows are still `queued` in Postgres
+and the next boot claims them. A
 second signal forces an immediate exit; a backstop timer (grace + 30 s) exits
 `1` if anything hangs. Keep the Swarm `--stop-grace-period` of the `nixploy`
 service above the grace (the installer sets 90 s) or Docker kills the process
@@ -123,7 +198,9 @@ mid-finalization. `unhandledRejection` is logged and survived;
 5. **Traefik sync** (`modules/application/service.ts#syncApplicationTraefik`):
    rewrite `<appName>.yml` from the service's domain rows (see
    `docs/domains-traefik.md`).
-6. **Finalize**: deployment row → `done` (with `logPath`), service status →
+6. **Finalize**: the row arrives already `running` (the claim set that and
+   `startedAt` atomically — the worker only mirrors it onto the service row);
+   on success it becomes `done` (with `logPath`), service status →
    `done`; on failure → `error`, with the error message on the deployment row.
    `events.ts` fans out to notification channels (deploy success/failure).
 
@@ -265,9 +342,14 @@ through `modules/backups` to S3 destinations on schedules.
 ## Boot & maintenance
 
 - **Boot recovery** (`modules/deployment/recovery.ts`): deployments left
-  `running` by a restart are marked `error` ("Interrupted…") so the status
-  reconciler is not blocked by a deployment that can never finish; rows left
-  `queued` are re-enqueued oldest-first (see "The queue"). Interrupted
+  `running` by a restart are marked `error` ("Interrupted…") — not just
+  cosmetic: the status reconciler skips a service with a running deployment,
+  and the queue's per-app mutex would refuse to ever build that app again.
+  Rows left `queued` need nothing; the claim loop picks them up in creation
+  order, which is what makes the backlog survive a restart. Two exceptions
+  are failed instead: queued **previews** (the row carries neither the
+  preview id nor the preview appName) and queued rows whose service no
+  longer exists (invisible to the claim query otherwise). Interrupted
   previews land on `previewDeployments.previewStatus = error`; the parent
   application's status is left alone.
 - **Docker cleanup** (`modules/deployment/cleanup.ts`, cron + manual trigger)

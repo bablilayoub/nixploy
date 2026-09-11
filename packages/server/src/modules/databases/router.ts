@@ -7,11 +7,8 @@ import type { TRPCContext } from "../../trpc/init";
 import { protectedProcedure, router } from "../../trpc/init";
 import { redactDatabaseSecrets } from "../../trpc/redact-secrets";
 import { textBlobSchema } from "../../utils/input-limits";
-import {
-	appNameSchema,
-	assertSafeDockerImageRef,
-	assertSafePublishedPort,
-} from "../../utils/validators";
+import { createTtlCache, DOCKER_LISTING_TTL_MS } from "../../utils/ttl-cache";
+import { appNameSchema, assertSafeDockerImageRef } from "../../utils/validators";
 import { isAppNameTaken } from "../application/app-name";
 import { auditFromSession } from "../audit";
 import { unregisterBackupsForService } from "../backups/scheduler";
@@ -23,6 +20,7 @@ import {
 	resolveCallerOrganizationId,
 } from "../projects";
 import {
+	assertSafeDatabaseExternalPort,
 	buildConnectionUrl,
 	DATABASE_CONFIGS,
 	type DatabaseKind,
@@ -37,6 +35,21 @@ import {
 	startDatabase,
 	stopDatabase,
 } from "./engine";
+
+/**
+ * `getStatus` inspects the swarm service (one dockerode listServices +
+ * listTasks) and the database detail page polls it every 30 s per open tab —
+ * cache it for 10 s per appName (audit #14). Every lifecycle mutation in this
+ * router drops the entry, so a start/stop/deploy still reads through.
+ */
+const statusCache = createTtlCache<Awaited<ReturnType<typeof getDatabaseStatus>>>({
+	ttlMs: DOCKER_LISTING_TTL_MS,
+});
+
+/** Forget a database's cached swarm status (lifecycle mutations). */
+function invalidateDatabaseStatus(appName: string): void {
+	statusCache.invalidate(appName);
+}
 
 /**
  * Factory producing the tRPC router for one database type. All five database
@@ -215,7 +228,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			await assertEnvironmentAccess(input.environmentId, organizationId);
 			await assertServerInOrganization(input.serverId, organizationId);
 			if (input.externalPort != null) {
-				assertSafePublishedPort(input.externalPort, "externalPort");
+				assertSafeDatabaseExternalPort(input.externalPort);
 			}
 			let dockerImage: string;
 			try {
@@ -281,7 +294,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 				delete values.appName;
 			}
 			if (typeof values.externalPort === "number") {
-				assertSafePublishedPort(values.externalPort, "externalPort");
+				assertSafeDatabaseExternalPort(values.externalPort);
 			}
 			if (typeof values.dockerImage === "string") {
 				try {
@@ -389,7 +402,8 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			const row = await findRowOrThrow(id, organizationId);
 			// Cancel the row's backup crons first so they cannot fire mid-teardown.
 			unregisterBackupsForService({ appName: row.appName });
-			await removeDatabase(row.appName, row.serverId, kind);
+			await removeDatabase(row.appName, row.serverId, kind, row.environmentId);
+			invalidateDatabaseStatus(row.appName);
 			await db.delete(table).where(eq(idColumn, id));
 			await auditFromSession(ctx, organizationId, {
 				action: `${kind}.delete`,
@@ -407,6 +421,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
 			await startDatabase(kind, row);
+			invalidateDatabaseStatus(row.appName);
 			const updated = await updateRow(id, { status: "running" });
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
@@ -425,6 +440,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
 			await stopDatabase(row.appName);
+			invalidateDatabaseStatus(row.appName);
 			const updated = await updateRow(id, { status: "idle" });
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
@@ -473,11 +489,12 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 				await findRowOrThrow(id, organizationId);
 				const externalPort = input.externalPort;
 				if (typeof externalPort === "number") {
-					assertSafePublishedPort(externalPort, "externalPort");
+					assertSafeDatabaseExternalPort(externalPort);
 				}
 				const row = await updateRow(id, { externalPort });
 				if (await databaseServiceExists(row.appName)) {
 					await deployDatabase(kind, row);
+					invalidateDatabaseStatus(row.appName);
 				}
 				const canSeeSecrets = await hasCapability(
 					ctx.session.user.id,
@@ -497,6 +514,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 				throw badRequest("Database is not deployed; use start instead");
 			}
 			await reloadDatabase(row.appName);
+			invalidateDatabaseStatus(row.appName);
 			const updated = await updateRow(id, { status: "running" });
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
@@ -510,7 +528,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 
 		/**
 		 * Connection URLs: `internal` uses the swarm service name + native port
-		 * (for services on `nixploy-network`); `external` uses the server IP +
+		 * (for services in the same environment); `external` uses the server IP +
 		 * published port (null when no external port is configured).
 		 */
 		getConnectionUrl: protectedProcedure.input(idSchema).query(async ({ ctx, input }) => {
@@ -529,7 +547,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			const organizationId = await getOrganizationId(ctx);
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
-			const status = await getDatabaseStatus(row.appName);
+			const status = await statusCache.get(row.appName, () => getDatabaseStatus(row.appName));
 			if (status !== row.status) {
 				await updateRow(id, { status });
 			}

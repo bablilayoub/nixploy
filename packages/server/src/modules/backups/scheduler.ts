@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray, max } from "drizzle-orm";
 import schedule from "node-schedule";
 import { db } from "../../db";
-import { backups, destinations, volumeBackups } from "../../db/schema";
+import { backupRuns, backups, destinations, volumeBackups } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { cronIntervalMs } from "../schedules";
 import { isValidCronExpression } from "../schedules/cron";
 import {
 	type BackupRow,
@@ -256,6 +257,85 @@ export function unregisterBackupsForService(service: {
 	return cancelled;
 }
 
+/**
+ * Last recorded run per backup / volume backup. `backup_run` is the durable
+ * trace — neither `backup` nor `volume_backup` carries a `last_run_at` column
+ * yet (audit #17; see the handoff note in `docs/observability.md`).
+ */
+async function lastRunAt(
+	column: typeof backupRuns.backupId | typeof backupRuns.volumeBackupId,
+	ids: string[],
+): Promise<Map<string, Date>> {
+	if (ids.length === 0) return new Map();
+	const rows = await db
+		.select({ id: column, lastRunAt: max(backupRuns.startedAt) })
+		.from(backupRuns)
+		.where(inArray(column, ids))
+		.groupBy(column);
+	const byId = new Map<string, Date>();
+	for (const row of rows) {
+		if (row.id && row.lastRunAt) byId.set(row.id, new Date(row.lastRunAt));
+	}
+	return byId;
+}
+
+export interface OverdueBackup {
+	id: string;
+	label: string;
+	cronExpression: string;
+	lastRunAt: Date | null;
+	missedIntervals: number;
+}
+
+/** Backups whose last run is more than one interval old (missed ticks). */
+export async function findOverdueBackups(now: Date = new Date()): Promise<OverdueBackup[]> {
+	const [backupRows, volumeRows] = await Promise.all([
+		db.query.backups.findMany({ where: eq(backups.enabled, true) }),
+		db.query.volumeBackups.findMany({ where: eq(volumeBackups.enabled, true) }),
+	]);
+	const [backupRunsById, volumeRunsById] = await Promise.all([
+		lastRunAt(
+			backupRuns.backupId,
+			backupRows.map((row) => row.backupId),
+		),
+		lastRunAt(
+			backupRuns.volumeBackupId,
+			volumeRows.map((row) => row.volumeBackupId),
+		),
+	]);
+
+	const overdue: OverdueBackup[] = [];
+	const check = (
+		id: string,
+		label: string,
+		cronExpression: string,
+		createdAt: Date | null,
+		runs: Map<string, Date>,
+	) => {
+		const interval = cronIntervalMs(cronExpression, now);
+		if (!interval) return;
+		const reference = runs.get(id) ?? createdAt;
+		if (!reference) return;
+		const elapsed = now.getTime() - reference.getTime();
+		if (elapsed <= interval * 2) return;
+		overdue.push({
+			id,
+			label,
+			cronExpression,
+			lastRunAt: runs.get(id) ?? null,
+			missedIntervals: Math.floor(elapsed / interval),
+		});
+	};
+
+	for (const row of backupRows) {
+		check(row.backupId, row.appName, row.schedule, row.createdAt, backupRunsById);
+	}
+	for (const row of volumeRows) {
+		check(row.volumeBackupId, row.volumeName, row.cronExpression, row.createdAt, volumeRunsById);
+	}
+	return overdue;
+}
+
 /** Register every enabled backup + volume backup at process boot. */
 export async function initBackupSchedules(): Promise<void> {
 	const [backupRows, volumeBackupRows] = await Promise.all([
@@ -283,4 +363,19 @@ export async function initBackupSchedules(): Promise<void> {
 	log.info(
 		`Initialized ${backupJobs.size} backup schedules, ${volumeBackupJobs.size} volume backup schedules`,
 	);
+
+	// node-schedule has no catch-up: a nightly dump that coincided with an
+	// update never ran and never will (audit #17). Surface it at boot.
+	try {
+		for (const entry of await findOverdueBackups()) {
+			log.warn(
+				`Backup "${entry.label}" (${entry.cronExpression}) has not run for ~${entry.missedIntervals} intervals`,
+				{ id: entry.id, lastRunAt: entry.lastRunAt?.toISOString() ?? "never" },
+			);
+		}
+	} catch (error) {
+		log.error("Could not check for overdue backups", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+	}
 }

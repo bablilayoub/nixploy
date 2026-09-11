@@ -15,8 +15,13 @@ import {
 import { createLogger } from "../../lib/logger";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { shellQuote } from "../compose/paths";
-import { inspectServiceState, statusFromServiceState } from "../databases/engine";
+import {
+	type ServiceState,
+	statusFromServiceState,
+	summarizeTaskStates,
+} from "../databases/engine";
 import { notifyEvent } from "../notifications";
+import { getDocker } from "./docker";
 
 const log = createLogger("status-reconciler");
 
@@ -64,37 +69,90 @@ export function reconcileStatus(current: StoredStatus, live: LiveStatus): Stored
 const runOn = (serverId: string | null, command: string): Promise<string> =>
 	serverId ? execAsyncRemote(serverId, command) : execAsync(command);
 
+const NO_SERVICE: ServiceState = {
+	exists: false,
+	desired: 0,
+	running: 0,
+	pending: 0,
+	failed: 0,
+};
+
 /**
- * Probe a compose deployment. Stack services are Swarm objects and are read
- * from the primary manager whatever server the row is pinned to; plain
- * compose containers live on the row's server and are probed there.
+ * Every swarm service's state in TWO Docker API calls — `listServices()` plus
+ * `listTasks()`, grouped by `ServiceID` in memory — instead of the two calls
+ * *per service* the pass used to make (audit #8: 100 services meant 200+
+ * serialized round-trips a minute). Returns `null` when the daemon could not
+ * be read at all: the caller then skips the swarm-backed rows rather than
+ * mistaking "cannot see docker" for "nothing is deployed".
  */
-async function probeComposeState(row: {
+interface SwarmSnapshot {
+	/** Service name → live task summary. */
+	byName: Map<string, ServiceState>;
+	/** `com.docker.stack.namespace` label → the stack's service names. */
+	byStack: Map<string, string[]>;
+}
+
+export async function loadSwarmSnapshot(): Promise<SwarmSnapshot | null> {
+	try {
+		const docker = await getDocker();
+		const [services, tasks] = await Promise.all([docker.listServices(), docker.listTasks()]);
+		const statesByServiceId = new Map<string, string[]>();
+		for (const task of tasks) {
+			const serviceId = task.ServiceID;
+			if (!serviceId) continue;
+			const states = statesByServiceId.get(serviceId) ?? [];
+			states.push(task.Status?.State?.toLowerCase() ?? "");
+			statesByServiceId.set(serviceId, states);
+		}
+		const byName = new Map<string, ServiceState>();
+		const byStack = new Map<string, string[]>();
+		for (const service of services) {
+			const name = service.Spec?.Name;
+			if (!name) continue;
+			byName.set(name, {
+				exists: true,
+				desired: service.Spec?.Mode?.Replicated?.Replicas ?? 0,
+				...summarizeTaskStates(statesByServiceId.get(service.ID ?? "") ?? []),
+			});
+			const stack = (service.Spec?.Labels as Record<string, string> | undefined)?.[
+				"com.docker.stack.namespace"
+			];
+			if (stack) byStack.set(stack, [...(byStack.get(stack) ?? []), name]);
+		}
+		return { byName, byStack };
+	} catch (error) {
+		log.warn("Could not read swarm state — skipping swarm-backed reconciliation this pass", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+		return null;
+	}
+}
+
+/** A stack's live status, summed over the services carrying its namespace label. */
+function stackState(snapshot: SwarmSnapshot, appName: string): LiveStatus {
+	const names = snapshot.byStack.get(appName) ?? [];
+	if (names.length === 0) return "idle";
+	let running = 0;
+	let failed = 0;
+	for (const name of names) {
+		const state = snapshot.byName.get(name);
+		if (!state) continue;
+		running += state.running;
+		failed += state.failed;
+	}
+	if (running > 0) return "running";
+	return failed > 0 ? "error" : "idle";
+}
+
+/**
+ * Probe a plain (non-stack) compose deployment: its containers live on the
+ * row's server and are probed there.
+ */
+async function probePlainComposeState(row: {
 	appName: string;
-	composeType: string;
 	serverId: string | null;
 }): Promise<LiveStatus> {
-	if (row.composeType === "stack") {
-		const out = await execAsync(
-			`docker service ls --filter ${shellQuote(`label=com.docker.stack.namespace=${row.appName}`)} --format '{{.Name}}'`,
-		);
-		const names = out
-			.split("\n")
-			.map((line) => line.trim())
-			.filter(Boolean);
-		if (names.length === 0) return "idle";
-		let running = 0;
-		let failed = 0;
-		for (const name of names) {
-			const state = await inspectServiceState(name);
-			running += state.running;
-			failed += state.failed;
-		}
-		if (running > 0) return "running";
-		return failed > 0 ? "error" : "idle";
-	}
-
-	// Plain docker compose: prefer project/stack labels (never name= prefix).
+	// Prefer project/stack labels (never name= prefix).
 	const out = await runOn(
 		row.serverId,
 		[
@@ -234,38 +292,44 @@ export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 	const graceApplications = new Set(recentDone.map((row) => row.applicationId).filter(Boolean));
 	const graceCompose = new Set(recentDone.map((row) => row.composeId).filter(Boolean));
 
-	for (const descriptor of SWARM_BACKED) {
-		const rows = await descriptor.load();
-		for (const row of rows) {
-			if (descriptor.kind === "application" && busyApplications.has(row.id)) continue;
-			try {
-				// Service state comes from the primary manager for every row,
-				// pinned or not (see databases/engine.ts).
-				const liveState = statusFromServiceState(await inspectServiceState(row.appName));
-				// statusFromServiceState never yields "done" today; keep the cast honest.
-				const live: LiveStatus = liveState === "done" ? "running" : liveState;
-				let next = reconcileStatus(row.status, live);
-				if (
-					next === "idle" &&
-					(row.status === "running" || row.status === "done") &&
-					descriptor.kind === "application" &&
-					graceApplications.has(row.id)
-				) {
-					next = "running";
+	// Two Docker API calls for the whole pass; every swarm-backed row (apps,
+	// databases, compose stacks) is answered from this snapshot.
+	const snapshot = await loadSwarmSnapshot();
+
+	if (snapshot) {
+		for (const descriptor of SWARM_BACKED) {
+			const rows = await descriptor.load();
+			for (const row of rows) {
+				if (descriptor.kind === "application" && busyApplications.has(row.id)) continue;
+				try {
+					// Service state comes from the primary manager for every row,
+					// pinned or not (see databases/engine.ts).
+					const liveState = statusFromServiceState(snapshot.byName.get(row.appName) ?? NO_SERVICE);
+					// statusFromServiceState never yields "done" today; keep the cast honest.
+					const live: LiveStatus = liveState === "done" ? "running" : liveState;
+					let next = reconcileStatus(row.status, live);
+					if (
+						next === "idle" &&
+						(row.status === "running" || row.status === "done") &&
+						descriptor.kind === "application" &&
+						graceApplications.has(row.id)
+					) {
+						next = "running";
+					}
+					if (next !== row.status) {
+						await descriptor.update(row.id, next);
+						corrections.push({
+							kind: descriptor.kind,
+							id: row.id,
+							appName: row.appName,
+							from: row.status,
+							to: next,
+							environmentId: row.environmentId,
+						});
+					}
+				} catch {
+					// Row update failed (DB hiccup) — try again next pass.
 				}
-				if (next !== row.status) {
-					await descriptor.update(row.id, next);
-					corrections.push({
-						kind: descriptor.kind,
-						id: row.id,
-						appName: row.appName,
-						from: row.status,
-						to: next,
-						environmentId: row.environmentId,
-					});
-				}
-			} catch {
-				// Probe failed (remote daemon down, docker hiccup) — try again next pass.
 			}
 		}
 	}
@@ -280,10 +344,17 @@ export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 			environmentId: true,
 		},
 	});
-	for (const row of composeRows) {
-		if (busyCompose.has(row.composeId)) continue;
+
+	const applyCompose = async (row: (typeof composeRows)[number]): Promise<void> => {
+		if (busyCompose.has(row.composeId)) return;
 		try {
-			const live = await probeComposeState(row);
+			const live =
+				row.composeType === "stack"
+					? snapshot
+						? stackState(snapshot, row.appName)
+						: null
+					: await probePlainComposeState(row);
+			if (live === null) return; // swarm unreadable: leave stacks alone
 			let next = reconcileStatus(row.status, live);
 			if (
 				next === "idle" &&
@@ -306,7 +377,21 @@ export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 		} catch {
 			// Probe failed — try again next pass.
 		}
+	};
+
+	// Plain-compose probes shell out per row, so group them by server and run
+	// the servers side by side: one unreachable host no longer stretches the
+	// whole pass by 30 s × its row count (audit #7).
+	const byServer = new Map<string, typeof composeRows>();
+	for (const row of composeRows) {
+		const key = row.serverId ?? "__local__";
+		byServer.set(key, [...(byServer.get(key) ?? []), row]);
 	}
+	await Promise.all(
+		[...byServer.values()].map(async (rows) => {
+			for (const row of rows) await applyCompose(row);
+		}),
+	);
 
 	await notifyWatchdog(corrections);
 	return corrections;
