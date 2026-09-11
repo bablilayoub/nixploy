@@ -47,3 +47,6 @@ drizzle/meta/_journal.json.bak
 # Next.js 16 dev server writes these agent guides next to each app
 apps/*/AGENTS.md
 apps/*/CLAUDE.md
+
+# Local dev-server launch config for the desktop app (per machine).
+.claude/launch.json

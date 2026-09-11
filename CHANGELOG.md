@@ -13,7 +13,7 @@ this file is the summary.
 
 Nothing yet.
 
-## [0.2.0] — unreleased
+## [0.2.0] — 2026-09-12
 
 First release after the stability sweep and the September improvement audit.
 **It changes defaults.** Read
@@ -53,6 +53,48 @@ away, and `ping` no longer working inside tenant containers.
   `pg_dump`, a downgrade guard, and a real `queued` deployment status.
 - `tzdata` in the image, so `TZ` actually changes the timezone every cron runs
   in.
+- Scoped, organization-bound API keys (`nxp_` prefix, 90-day default expiry),
+  a first-admin setup token printed by the installer, and SSO through OpenID
+  Connect (`NIXPLOY_OIDC_*`).
+- Deploy provenance (commit, author, trigger) with pre-flight checks and
+  queue supersede; pre/post-deploy hooks; preview knobs (env, cap, TTL, fork
+  approval) with commit metadata; pull-request previews for compose services;
+  remote-server builders and optional registry push; incident ack/resolve; a
+  public status page; docker-image auto-update.
+- Process roles: `NIXPLOY_ROLE=panel|worker` with `install.sh --split-worker`
+  (a `nixploy-worker` service takes the deploy queue, crons and Traefik
+  provisioning, coordinated over Postgres LISTEN/NOTIFY) and a `/ws/events`
+  push stream that replaces dashboard polling.
+- Pooled SSH transport to managed servers (keepalive, bounded channels, a
+  per-server circuit breaker exposed as `server.transportState`) and bounded
+  fan-out in the crons.
+- TCP/UDP routing through Traefik: instance-level entrypoints (Settings →
+  Server) and `protocol` / `tlsMode` on domains (HostSNI, terminate or
+  passthrough).
+- Databases: a curated engine version picker (downgrades blocked, major
+  upgrades confirmed) and additional logical databases/users per instance.
+- Compose rollbacks from per-deploy snapshots, `compose.createFromUrl`, and
+  organization template sources (`http-json` / `git`) merged into the catalog.
+- Updater release notes and a version pin (`pinnedVersion`,
+  `runUpdate({ version, allowDowngrade })`).
+- Image schedules (`runMode: image`) and "Run once" jobs under the container
+  hardening baseline.
+- Prometheus exposition at `GET /api/metrics` (API key) and
+  `NIXPLOY_METRICS_RETENTION_HOURS`.
+- Server SSH web terminal and a volume file browser (instance admin, audited,
+  path-confined).
+- Security: address-pinned egress with an instance `allowPrivateEgress`
+  toggle, `ENCRYPTION_KEYS` rotation with `nixploy:rotate-key`, build secrets
+  off argv (env files, BuildKit secrets), streaming database dumps to S3, audit
+  rows with IP / user agent, CSV export and optional forwarding, and rate
+  limits that trust forwarded headers only from a trusted socket peer.
+- CLI: registry-driven commands, `org list/use`, `audit list --since`,
+  `audit export`, 429 handling; MCP with 32 tools; every procedure documented
+  in OpenAPI (390 across 44 routers) and the landing API catalog generated
+  from it.
+- CI: a real end-to-end job on a Swarm, a UI golden path, cosign-signed
+  images, SHA-pinned actions, installer checksums (`SHA256SUMS`), knip and
+  Biome warnings as errors.
 
 ### Changed
 
@@ -86,6 +128,15 @@ away, and `ping` no longer working inside tenant containers.
   instance-admin only.
 - Unified service pages: one header, one tab order and one status badge across
   applications, compose and the five database kinds.
+- API keys are minted with the `nxp_` prefix and expire after 90 days by
+  default; existing keys keep working.
+- Audit log: `organization_id` is nullable (history survives an
+  organization's deletion) and rows carry `ip`, `user_agent` and
+  `organization_name`; auth events write those as columns, not `metadata`.
+- LAN targets for notifications, SMTP, registries and S3 need the instance
+  toggle Settings → Server → "Outbound requests" (default off).
+- Changing Traefik entrypoints restarts the proxy (about nine seconds of no
+  routing); the static config is regenerated from the entrypoint table.
 
 ### Removed
 
@@ -105,6 +156,18 @@ away, and `ping` no longer working inside tenant containers.
 - A deploy no longer wipes a domain's Traefik middleware chain.
 - Boot recovery re-enqueues `queued` deployments and fails leftover `running`
   ones instead of leaving them hanging.
+- Every compose domain routed to a nonexistent upstream name
+  (`<app>-<svc>-<svc>-1`) and answered 502.
+- A deployment was marked done before any task ran; it now waits for a
+  running task and fails with the engine's reason when tasks keep failing.
+- A queued backlog found at boot sat until the first request touched the
+  deploy engine.
+- Duplicate host or app names leaked the raw SQL statement to the client.
+- Throttled API keys answered 401 instead of 429 with `Retry-After`.
+- A stale session cookie looped between `/login` and `/dashboard`.
+- The projects dashboard stayed on its empty state after the first project
+  until a reload.
+- Multi-arch images were listed once per platform under Docker → Images.
 
 ## [0.1.0]
 

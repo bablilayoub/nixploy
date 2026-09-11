@@ -206,6 +206,32 @@ json-file logs (10 MB × 3).
 - Secrets are redacted for viewers; redacted `env` / `composeFile` come back
   as `null`.
 
+### Keys, egress, worker and layer-4 routing
+
+- **API keys** are minted with the `nxp_` prefix and expire after 90 days by
+  default. Keys created before v0.2.0 keep working; plan a rotation for
+  automation that must not stop.
+- **Outbound requests to private addresses** (notification webhooks, SMTP,
+  registries, S3 on the LAN) are refused until the instance admin enables
+  Settings → Server → "Outbound requests" (`NIXPLOY_ALLOW_PRIVATE_EGRESS=1`
+  forces it). The Swarm overlay and cloud metadata stay blocked either way.
+- **`ENCRYPTION_KEYS`** (optional) replaces the single `ENCRYPTION_KEY` for
+  rotation: `"new,old"`, then `pnpm -F @nixploy/server nixploy:rotate-key`
+  — see `docs/auth.md`.
+- **Split worker** is opt-in: `NIXPLOY_SPLIT_WORKER=1 … update.sh` (or
+  `install.sh --split-worker`) adds the `nixploy-worker` service and runs the
+  panel as `NIXPLOY_ROLE=panel`. Single-process installs change nothing.
+- **TCP/UDP entrypoints** publish extra host ports on `nixploy-traefik` and
+  restart it (about nine seconds). Open the port in the host firewall as well.
+- **Audit log**: `organization_id` is nullable and `ip` / `user_agent` are
+  columns; anything reading `metadata->>'ip'` must switch. `audit.export`
+  returns CSV; `NIXPLOY_AUDIT_FORWARD=1` mirrors rows to platform alerts.
+- **`/api/metrics`** needs an API key; `NIXPLOY_METRICS_RETENTION_HOURS`
+  (default 48) bounds the metrics store.
+- **Rate limits** now trust forwarded headers only from a trusted socket peer;
+  behind the installer's Traefik nothing changes.
+- Migrations 0019–0028 run on update; the pre-update dump is the rollback.
+
 ### After upgrading
 
 ```bash
