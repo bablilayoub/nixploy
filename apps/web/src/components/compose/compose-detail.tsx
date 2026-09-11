@@ -258,7 +258,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 				}
 			/>
 
-			<Tabs value={topTab} onValueChange={selectTab}>
+			<Tabs value={topTab} onValueChange={selectTab} activationMode="manual">
 				<UnderlineTabsList>
 					<UnderlineTabsTrigger value="general">General</UnderlineTabsTrigger>
 					<UnderlineTabsTrigger value="compose-file">Compose file</UnderlineTabsTrigger>
@@ -276,7 +276,12 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 					<ComposeFileTab compose={compose} />
 				</SaveBarTabsContent>
 				<SaveBarTabsContent value="deploy" className="mt-6">
-					<Tabs value={subTab("deploy")} onValueChange={selectTab} className="w-full gap-4">
+					<Tabs
+						value={subTab("deploy")}
+						onValueChange={selectTab}
+						activationMode="manual"
+						className="w-full gap-4"
+					>
 						<SubTabsList>
 							<SubTabsTrigger value="deployments">Deployments</SubTabsTrigger>
 							<SubTabsTrigger value="schedules">Schedules</SubTabsTrigger>
@@ -292,7 +297,12 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 					</Tabs>
 				</SaveBarTabsContent>
 				<SaveBarTabsContent value="runtime" className="mt-6">
-					<Tabs value={subTab("runtime")} onValueChange={selectTab} className="w-full gap-4">
+					<Tabs
+						value={subTab("runtime")}
+						onValueChange={selectTab}
+						activationMode="manual"
+						className="w-full gap-4"
+					>
 						<SubTabsList>
 							<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
 							<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>

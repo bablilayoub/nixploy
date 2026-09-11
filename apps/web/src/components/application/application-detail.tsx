@@ -175,7 +175,7 @@ export function ApplicationDetail({ projectId, id }: { projectId: string; id: st
 					hasDeployed={hasDeployed}
 				/>
 
-				<Tabs value={topTab} onValueChange={selectTab} className="w-full">
+				<Tabs value={topTab} onValueChange={selectTab} activationMode="manual" className="w-full">
 					<UnderlineTabsList>
 						<UnderlineTabsTrigger value="general">General</UnderlineTabsTrigger>
 						<UnderlineTabsTrigger value="deploy">Deploy</UnderlineTabsTrigger>
@@ -192,7 +192,12 @@ export function ApplicationDetail({ projectId, id }: { projectId: string; id: st
 					</SaveBarTabsContent>
 
 					<SaveBarTabsContent value="deploy" className="mt-6">
-						<Tabs value={subTab("deploy")} onValueChange={selectTab} className="w-full gap-4">
+						<Tabs
+							value={subTab("deploy")}
+							onValueChange={selectTab}
+							activationMode="manual"
+							className="w-full gap-4"
+						>
 							<SubTabsList>
 								<SubTabsTrigger value="deployments">Deployments</SubTabsTrigger>
 								<SubTabsTrigger value="preview">Preview</SubTabsTrigger>
@@ -217,7 +222,12 @@ export function ApplicationDetail({ projectId, id }: { projectId: string; id: st
 					</SaveBarTabsContent>
 
 					<SaveBarTabsContent value="runtime" className="mt-6">
-						<Tabs value={subTab("runtime")} onValueChange={selectTab} className="w-full gap-4">
+						<Tabs
+							value={subTab("runtime")}
+							onValueChange={selectTab}
+							activationMode="manual"
+							className="w-full gap-4"
+						>
 							<SubTabsList>
 								<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
 								<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>

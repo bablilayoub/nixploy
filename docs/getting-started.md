@@ -35,7 +35,7 @@ Settings → Profile → API key:
 
 ```bash
 npm i -g @nixploy/cli   # published as @nixploy/cli (see apps/cli/README.md)
-nixploy auth login --url https://panel.yourdomain.com --api-key nxlp_...
+nixploy auth login --url https://panel.yourdomain.com --api-key nxp_...
 nixploy doctor
 nixploy app list --project-id <id>
 nixploy compose list --project-id <id>

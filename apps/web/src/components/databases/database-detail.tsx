@@ -373,7 +373,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 				</AlertDialogContent>
 			</AlertDialog>
 
-			<Tabs value={topTab} onValueChange={selectTab}>
+			<Tabs value={topTab} onValueChange={selectTab} activationMode="manual">
 				<UnderlineTabsList>
 					<UnderlineTabsTrigger value="general">General</UnderlineTabsTrigger>
 					<UnderlineTabsTrigger value="connection">Connection</UnderlineTabsTrigger>
@@ -425,7 +425,12 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 				)}
 
 				<SaveBarTabsContent value="runtime" className="mt-6">
-					<Tabs value={runtimeTab} onValueChange={selectTab} className="w-full gap-4">
+					<Tabs
+						value={runtimeTab}
+						onValueChange={selectTab}
+						activationMode="manual"
+						className="w-full gap-4"
+					>
 						<SubTabsList>
 							<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
 							<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>

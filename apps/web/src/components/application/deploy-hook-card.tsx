@@ -71,8 +71,8 @@ export function DeployHookCard({ appName }: { appName: string }) {
 						</div>
 						<p className="text-xs text-muted-foreground">
 							Method <code className="font-mono">POST</code>, header{" "}
-							<code className="font-mono">x-api-key: nxlp_…</code> (or{" "}
-							<code className="font-mono">Authorization: Bearer nxlp_…</code>), no body. Responds
+							<code className="font-mono">x-api-key: nxp_…</code> (or{" "}
+							<code className="font-mono">Authorization: Bearer nxp_…</code>), no body. Responds
 							with the queued <code className="font-mono">deploymentId</code>; limited to 30
 							requests per minute per key.
 						</p>

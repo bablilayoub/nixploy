@@ -161,7 +161,7 @@ removes the old redirect block from existing installs and restarts the proxy.
 
 ```bash
 npm i -g @nixploy/cli
-nixploy auth login --url https://panel.yourdomain.com --api-key nxlp_...
+nixploy auth login --url https://panel.yourdomain.com --api-key nxp_...
 nixploy doctor
 ```
 
