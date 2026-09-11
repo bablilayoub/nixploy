@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { docsSlugs } from "../../../../landing/src/lib/docs/nav";
-import { docsPages } from "../../../../landing/src/lib/docs/pages";
 import { DOC_SLUGS, docsUrl } from "./help-link";
+
+// The landing registry is a sibling workspace that the production image does
+// not contain (`docker/Dockerfile` copies apps/web, apps/cli, packages/server
+// only), and `next build` type-checks test files too. A computed specifier
+// keeps TypeScript out of the resolution; vitest resolves it at run time.
+const landingDocs = "../../../../landing/src/lib/docs";
+const { docsSlugs } = (await import(`${landingDocs}/nav`)) as { docsSlugs: string[] };
+const { docsPages } = (await import(`${landingDocs}/pages`)) as {
+	docsPages: Array<{ slug: string; title: string }>;
+};
 
 /**
  * `<HelpLink slug="…">` links the panel's risky options to nixploy.com/docs,
