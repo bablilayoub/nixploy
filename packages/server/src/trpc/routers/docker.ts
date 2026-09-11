@@ -8,6 +8,7 @@ import {
 	dockerListingKey,
 	invalidateDockerListings,
 } from "../../modules/docker/containers";
+import { type DockerImageRow, dedupeImageRows } from "../../modules/docker/images";
 import {
 	isProtectedContainerNames,
 	isProtectedPlatformName,
@@ -234,13 +235,7 @@ export const dockerRouter = router({
 			input.serverId,
 			`docker images --format '{{json .}}'`,
 		);
-		return parseJsonLines<{
-			Repository: string;
-			Tag: string;
-			ID: string;
-			Size: string;
-			CreatedSince: string;
-		}>(out);
+		return dedupeImageRows(parseJsonLines<DockerImageRow>(out));
 	}),
 
 	imagePull: protectedProcedure
