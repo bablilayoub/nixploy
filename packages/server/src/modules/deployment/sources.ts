@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { simpleGit } from "simple-git";
+import { type SimpleGit, simpleGit } from "simple-git";
 import { db } from "../../db";
 import {
 	type applications,
@@ -74,6 +74,38 @@ export function gitProtocolEnv(): Record<string, string> {
 		env[`GIT_CONFIG_VALUE_${index}`] = value;
 	});
 	return env;
+}
+
+/**
+ * simple-git refuses any task whose environment carries `GIT_CONFIG_COUNT`
+ * (its guard against config smuggled in by the caller's environment). Here
+ * the config IS ours — `gitProtocolEnv()` is the hardening — so the opt-in is
+ * explicit and lives in one place. Without it every LOCAL clone failed with
+ * `Use of "GIT_CONFIG_COUNT" is not permitted` while remote clones (a shell
+ * command with an env prefix) kept working.
+ */
+export function hardenedSimpleGit(baseDir: string): SimpleGit {
+	return simpleGit({
+		baseDir,
+		// `allowUnsafeProtocolOverride` guards against a caller ENABLING
+		// `ext::`-style protocols; our override only ever disables them.
+		unsafe: { allowUnsafeConfigEnvCount: true, allowUnsafeProtocolOverride: true },
+	});
+}
+
+/**
+ * Environment handed to simple-git: the hardened git config plus the few
+ * process variables git needs to run at all. Forwarding the whole panel
+ * environment tripped simple-git's other guard (`GIT_EDITOR`) and leaked
+ * unrelated secrets into every git child process.
+ */
+export function gitProcessEnv(gitEnv: Record<string, string>): Record<string, string> {
+	const passthrough: Record<string, string> = {};
+	for (const key of ["PATH", "HOME", "USER", "LANG", "LC_ALL", "TMPDIR", "SSH_AUTH_SOCK"]) {
+		const value = process.env[key];
+		if (value !== undefined) passthrough[key] = value;
+	}
+	return { ...passthrough, ...gitEnv };
 }
 
 /** `KEY=value ` prefix for a remote shell command. */
@@ -294,9 +326,9 @@ export async function cloneGitSource(
 		await fs.rm(codeDir, { recursive: true, force: true });
 		await fs.mkdir(codeDir, { recursive: true });
 	}
-	const git = simpleGit({ baseDir: codeDir });
+	const git = hardenedSimpleGit(codeDir);
 	// simple-git's env() replaces the child environment wholesale — keep PATH.
-	git.env({ ...process.env, ...gitEnv });
+	git.env(gitProcessEnv(gitEnv));
 	if (hasRepo) {
 		await git.remote(["set-url", "origin", source.cloneUrl]);
 	} else {

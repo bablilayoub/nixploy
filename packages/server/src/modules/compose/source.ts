@@ -1,7 +1,6 @@
 import { chmod, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { eq } from "drizzle-orm";
-import { simpleGit } from "simple-git";
 import { db } from "../../db";
 import type { compose } from "../../db/schema";
 import { bitbucket, gitea, github, gitlab, sshKeys } from "../../db/schema";
@@ -9,7 +8,12 @@ import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { assertSafeGitRef } from "../../utils/public-url";
 import { writeFileTargeted } from "../deployment/docker";
 import { getSshKeysPath } from "../deployment/paths";
-import { buildGitSshCommand, gitProtocolEnv } from "../deployment/sources";
+import {
+	buildGitSshCommand,
+	gitProcessEnv,
+	gitProtocolEnv,
+	hardenedSimpleGit,
+} from "../deployment/sources";
 import { badRequest, notFound } from "../errors";
 import { getComposeCodeDir, shellQuote } from "./paths";
 
@@ -219,9 +223,9 @@ export async function cloneComposeSource(composeRow: ComposeRow): Promise<{
 		await rm(codeDir, { recursive: true, force: true });
 	}
 	await mkdir(codeDir, { recursive: true });
-	const git = simpleGit({ baseDir: codeDir });
+	const git = hardenedSimpleGit(codeDir);
 	// simple-git's env() replaces the child environment wholesale — keep PATH.
-	git.env({ ...process.env, ...gitEnv });
+	git.env(gitProcessEnv(gitEnv));
 	if (isRepo) {
 		// Refresh the remote first (see the remote branch above).
 		await git.remote(["set-url", "origin", source.cloneUrl]);

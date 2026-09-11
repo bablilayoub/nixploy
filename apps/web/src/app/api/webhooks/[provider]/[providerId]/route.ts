@@ -1,8 +1,9 @@
 import {
+	type GitWebhookDispatch,
 	type GitWebhookProvider,
-	type GitWebhookResult,
 	handleGitWebhook,
 	handlePreviewWebhookForApplication,
+	handlePreviewWebhookForCompose,
 	queueWebhookDeployment,
 	WebhookIgnored,
 	WebhookUnauthorized,
@@ -93,7 +94,7 @@ export async function POST(req: Request, { params }: RouteParams) {
 		headers[key] = value;
 	});
 
-	let result: GitWebhookResult;
+	let result: GitWebhookDispatch;
 	try {
 		result = await handleGitWebhook(provider as GitWebhookProvider, headers, rawBody, providerId);
 	} catch (error) {
@@ -108,7 +109,8 @@ export async function POST(req: Request, { params }: RouteParams) {
 
 	if (result.type === "pull_request") {
 		const previews: Array<{
-			applicationId: string;
+			applicationId?: string;
+			composeId?: string;
 			action: string;
 			previewDeploymentId?: string;
 			deploymentId?: string;
@@ -117,11 +119,19 @@ export async function POST(req: Request, { params }: RouteParams) {
 			const outcome = await handlePreviewWebhookForApplication(applicationId, result);
 			previews.push({ applicationId, ...outcome });
 		}
+		// Compose services react to pull requests exactly like applications do
+		// (same fork gate, same limit/TTL, same PR comment) — see
+		// modules/git/preview-flow.ts.
+		for (const composeId of result.composeIds) {
+			const outcome = await handlePreviewWebhookForCompose(composeId, result);
+			previews.push({ composeId, ...outcome });
+		}
 		return Response.json({
 			branch: result.branch,
 			type: result.type,
 			pullRequest: result.pullRequest,
 			applicationIds: result.applicationIds,
+			composeIds: result.composeIds,
 			previews,
 		});
 	}
