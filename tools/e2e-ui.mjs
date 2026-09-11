@@ -36,9 +36,10 @@
  */
 
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { delimiter, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
@@ -88,10 +89,26 @@ async function loadChromium() {
 		// `chromium` as a named ESM binding.
 		join(repoRoot, "tools/screenshots/node_modules/playwright-core/index.mjs"),
 	];
+	// ESM `import()` ignores NODE_PATH, so bare specifiers are resolved the
+	// CommonJS way first (NODE_PATH entries, then the repo) and imported by
+	// file URL — that is how the CI scratch install becomes visible.
+	const require = createRequire(import.meta.url);
+	const searchPaths = [
+		...(process.env.NODE_PATH ?? "").split(delimiter).filter(Boolean),
+		repoRoot,
+	];
 	for (const candidate of candidates) {
 		if (candidate.startsWith("/") && !existsSync(candidate)) continue;
 		try {
-			const mod = await import(candidate);
+			let specifier = candidate;
+			if (!candidate.startsWith("/")) {
+				try {
+					specifier = pathToFileURL(require.resolve(candidate, { paths: searchPaths })).href;
+				} catch {
+					// not installed anywhere we look — plain import() below decides
+				}
+			}
+			const mod = await import(specifier);
 			const chromium = mod.chromium ?? mod.default?.chromium;
 			if (chromium) return { chromium, from: candidate };
 		} catch {

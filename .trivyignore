@@ -1,0 +1,8 @@
+# Trivy ignore list for the production image scan (release.yml, CRITICAL is fatal).
+# Every entry needs a reason and a way out; review on each release.
+
+# Go crypto/tls certificate validation in the esbuild binary that tsx uses to
+# transform TypeScript at start-up. The binary never opens a TLS connection
+# (no network code path), so the flaw is unreachable. Goes away when tsx moves
+# to an esbuild built with Go >= 1.24.13 (esbuild >= 0.28 at the time of writing).
+CVE-2025-68121

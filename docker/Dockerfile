@@ -74,7 +74,10 @@ COPY docker/migrate-deps/package.json docker/migrate-deps/package-lock.json /app
 RUN chmod +x /app/entrypoint.sh \
 	&& cd /app/migrate-deps \
 	&& npm ci --omit=dev --ignore-scripts \
-	&& rm -rf /root/.npm /tmp/*
+	&& rm -rf /root/.npm /tmp/* \
+	# npm itself is build-time only here (pnpm comes from corepack, migrations run
+	# with node); its bundled node-tar carried a CRITICAL in the image scan.
+	&& rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # Root is required for the mounted docker.sock (same pattern as most PaaS images).
 # Only what the custom server needs: the workspace symlinks in

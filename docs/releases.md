@@ -120,6 +120,15 @@ you only ever run releases.
 Installer scripts are verified against the release's `SHA256SUMS` before being run as root
 — the recipe lives in [install.md](./install.md).
 
+### Image scan (`.trivyignore`)
+
+The release job fails on any CRITICAL finding in the image. Findings that are
+unreachable in Nixploy's use of the affected binary are listed in
+[`.trivyignore`](../.trivyignore) with the reason and the condition under which
+the entry can go; review that file on every release. Do not ignore anything in
+a dependency the panel actually exercises — fix or pin it instead
+(`pnpm.overrides` in the root `package.json`).
+
 ### Actions are SHA-pinned
 
 Every third-party action is referenced by commit SHA with the version in a trailing comment
