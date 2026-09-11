@@ -2,6 +2,7 @@ import type Docker from "dockerode";
 import { and, count, eq, isNull } from "drizzle-orm";
 import { db } from "../../db";
 import { domains, environments, mounts, ports } from "../../db/schema";
+import type { PrivilegesSwarm } from "../../utils/swarm-overrides";
 import { getSwarmNetwork, resolveFileMountPath } from "../application/paths";
 import { mergeNodeConstraint } from "../cluster/placement";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
@@ -195,6 +196,31 @@ export interface ContainerSpecInput {
 	mounts: Docker.MountSettings[];
 	command: string | null;
 	healthCheck: Docker.HealthConfig | null;
+	/** Validated `application.privilegesSwarm` — merged over the hardening baseline. */
+	privileges?: PrivilegesSwarm | null;
+}
+
+/**
+ * Merge the instance-admin override over the baseline. The engine expects
+ * bare capability names; the override schema already refuses `CAP_`.
+ */
+export function resolveContainerPrivileges(override: PrivilegesSwarm | null | undefined): {
+	CapabilityAdd: string[];
+	CapabilityDrop: string[];
+	Privileges: Record<string, unknown>;
+} {
+	const add = new Set<string>(DEFAULT_CAPABILITY_ADD);
+	for (const cap of override?.capabilityAdd ?? []) add.add(cap);
+	const drop = override?.capabilityDrop?.length
+		? [...override.capabilityDrop]
+		: [...DEFAULT_CAPABILITY_DROP];
+	const securityOpt = override?.securityOpt ?? [];
+	const privileges: Record<string, unknown> = {
+		NoNewPrivileges: !securityOpt.includes("no-new-privileges:false"),
+	};
+	if (securityOpt.includes("seccomp=unconfined")) privileges.Seccomp = { Mode: "unconfined" };
+	if (securityOpt.includes("apparmor=unconfined")) privileges.AppArmor = { Mode: "disabled" };
+	return { CapabilityAdd: [...add], CapabilityDrop: drop, Privileges: privileges };
 }
 
 /**
@@ -209,15 +235,16 @@ export interface ContainerSpecInput {
  * the merge in {@link upsertSwarmService}.
  */
 export function buildContainerSpec(input: ContainerSpecInput): Docker.ContainerSpec {
+	const hardening = resolveContainerPrivileges(input.privileges);
 	return {
 		Image: input.imageTag,
 		Env: input.env,
 		Mounts: input.mounts,
 		Command: input.command ? ["/bin/sh", "-c", input.command] : null,
 		HealthCheck: input.healthCheck,
-		CapabilityAdd: [...DEFAULT_CAPABILITY_ADD],
-		CapabilityDrop: [...DEFAULT_CAPABILITY_DROP],
-		Privileges: { ...DEFAULT_PRIVILEGES },
+		CapabilityAdd: hardening.CapabilityAdd,
+		CapabilityDrop: hardening.CapabilityDrop,
+		Privileges: hardening.Privileges,
 		Ulimits: defaultUlimits(),
 	} as unknown as Docker.ContainerSpec;
 }
@@ -230,6 +257,7 @@ export function buildTaskResources(
 	limits: Docker.ResourceLimits,
 	reservations: Docker.ResourceRequirements["Reservations"],
 	defaults: QuotaResourceDefaults = {},
+	pidsLimit: number | null | undefined = undefined,
 ): Docker.ResourceRequirements {
 	const merged: Docker.ResourceLimits & { Pids?: number } = { ...limits };
 	if (merged.MemoryBytes === undefined && defaults.memoryBytes !== undefined) {
@@ -238,7 +266,7 @@ export function buildTaskResources(
 	if (merged.NanoCPUs === undefined && defaults.nanoCpus !== undefined) {
 		merged.NanoCPUs = defaults.nanoCpus;
 	}
-	merged.Pids = DEFAULT_PIDS_LIMIT;
+	merged.Pids = pidsLimit ?? DEFAULT_PIDS_LIMIT;
 	return {
 		Limits: merged,
 		Reservations: reservations && Object.keys(reservations).length > 0 ? reservations : undefined,
@@ -388,8 +416,14 @@ export async function upsertSwarmService(
 				mounts: mountSpecs,
 				command: application.command,
 				healthCheck: (application.healthCheckSwarm as Docker.HealthConfig | null) ?? null,
+				privileges: application.privilegesSwarm as PrivilegesSwarm | null,
 			}),
-			Resources: buildTaskResources(limits, reservations, quotaDefaults),
+			Resources: buildTaskResources(
+				limits,
+				reservations,
+				quotaDefaults,
+				(application.privilegesSwarm as PrivilegesSwarm | null)?.pidsLimit,
+			),
 			RestartPolicy:
 				(application.restartPolicySwarm as Docker.TaskRestartPolicy | null) ?? undefined,
 			Placement: withNodeConstraint(

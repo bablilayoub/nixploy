@@ -91,6 +91,8 @@ export const applications = pgTable(
 		modeSwarm: jsonb("mode_swarm"),
 		labelsSwarm: jsonb("labels_swarm"),
 		networkSwarm: jsonb("network_swarm"),
+		/** Instance-admin-only relaxation of the container hardening (utils/swarm-overrides). */
+		privilegesSwarm: jsonb("privileges_swarm"),
 
 		// ── tenancy / placement ─────────────────────────────────────────────────
 		environmentId: text("environment_id")

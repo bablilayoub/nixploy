@@ -1,0 +1,1 @@
+ALTER TABLE "application" ADD COLUMN "privileges_swarm" jsonb;

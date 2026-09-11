@@ -48,6 +48,7 @@ const application = {
 	modeSwarm: null,
 	labelsSwarm: null,
 	networkSwarm: null,
+	privilegesSwarm: null,
 	serverId: null,
 };
 

@@ -18,6 +18,7 @@ import { deleteApplication } from "../application/service";
 import { unregisterBackupsForService } from "../backups/scheduler";
 import { deleteCompose } from "../compose/service";
 import { type DatabaseKind, removeDatabase } from "../databases/engine";
+import { pruneEnvironmentNetwork } from "../deployment/network";
 import { forbidden, notFound } from "../errors";
 import { unregisterSchedulesForService } from "../schedules";
 import { getCertificatesDir, REMOTE_TRAEFIK_DIR, removeFileOnServer } from "../traefik";
@@ -423,7 +424,7 @@ export async function deleteEnvironmentCascade(environmentId: string): Promise<v
 			rows.map((row) => {
 				unregisterBackupsForService({ appName: row.appName });
 				return tearDown(`database ${row.appName}`, () =>
-					removeDatabase(row.appName, row.serverId, kind),
+					removeDatabase(row.appName, row.serverId, kind, environmentId),
 				);
 			}),
 		);
@@ -473,6 +474,9 @@ export async function deleteEnvironmentCascade(environmentId: string): Promise<v
 			),
 		);
 	}
+
+	// Every service left the environment overlay; drop it before the row goes.
+	await pruneEnvironmentNetwork(environmentId);
 
 	// The environment itself (remaining FK children — domains, mounts... — cascade in the DB).
 	await db.delete(environments).where(eq(environments.environmentId, environmentId));

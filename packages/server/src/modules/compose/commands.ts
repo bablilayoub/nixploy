@@ -27,7 +27,8 @@ export function deployedServiceName(row: ComposeCommandRow, serviceName: string)
 
 /**
  * Traefik config key for one compose service — this is also the hostname the
- * service is reachable at on `nixploy-network`:
+ * service is reachable at on `nixploy-network` (exposed services) and on the
+ * environment overlay (every service):
  * - docker-compose: `<appName>-<serviceName>` (network alias injected at deploy)
  * - stack: `<appName>_<serviceName>` (native swarm DNS)
  * The isolation suffix is part of the service name in both cases.

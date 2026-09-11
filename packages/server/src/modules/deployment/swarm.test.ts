@@ -267,3 +267,28 @@ describe("environmentNetworkName", () => {
 		).toBe(false);
 	});
 });
+
+describe("resolveContainerPrivileges", () => {
+	it("keeps the baseline when no override is set", async () => {
+		const { resolveContainerPrivileges, DEFAULT_CAPABILITY_ADD } = await import("./swarm");
+		const result = resolveContainerPrivileges(null);
+		expect(result.CapabilityAdd).toEqual([...DEFAULT_CAPABILITY_ADD]);
+		expect(result.CapabilityDrop).toEqual(["ALL"]);
+		expect(result.Privileges).toEqual({ NoNewPrivileges: true });
+	});
+
+	it("merges an instance-admin override over the baseline", async () => {
+		const { resolveContainerPrivileges } = await import("./swarm");
+		const result = resolveContainerPrivileges({
+			capabilityAdd: ["NET_RAW", "CHOWN"],
+			securityOpt: ["no-new-privileges:false", "seccomp=unconfined"],
+		});
+		expect(result.CapabilityAdd).toContain("NET_RAW");
+		expect(result.CapabilityAdd.filter((cap) => cap === "CHOWN")).toHaveLength(1);
+		expect(result.CapabilityDrop).toEqual(["ALL"]);
+		expect(result.Privileges).toEqual({
+			NoNewPrivileges: false,
+			Seccomp: { Mode: "unconfined" },
+		});
+	});
+});

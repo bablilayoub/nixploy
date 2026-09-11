@@ -48,6 +48,8 @@ import {
 	labelsSwarmSchema,
 	modeSwarmSchema,
 	networkSwarmSchema,
+	privilegesSwarmSchema,
+	relaxesContainerHardening,
 	restartPolicySwarmSchema,
 	rollbackConfigSwarmSchema,
 	updateConfigSwarmSchema,
@@ -90,10 +92,15 @@ function publicApplicationServer<T>(application: T): T {
  */
 const assertHardeningOverrideAllowed = async (
 	session: { user: { id: string; role?: string | null } },
-	input: { networkSwarm?: unknown },
+	input: { networkSwarm?: unknown; privilegesSwarm?: unknown },
 ): Promise<void> => {
 	const networks = input.networkSwarm;
 	if (Array.isArray(networks) && networks.length > 0) {
+		await assertInstanceAdmin(session);
+		return;
+	}
+	const privileges = privilegesSwarmSchema.nullable().optional().safeParse(input.privilegesSwarm);
+	if (privileges.success && relaxesContainerHardening(privileges.data)) {
 		await assertInstanceAdmin(session);
 	}
 };
@@ -114,6 +121,7 @@ const swarmSpecFields = {
 	modeSwarm: modeSwarmSchema.nullable().optional(),
 	labelsSwarm: labelsSwarmSchema.nullable().optional(),
 	networkSwarm: networkSwarmSchema.nullable().optional(),
+	privilegesSwarm: privilegesSwarmSchema.nullable().optional(),
 } as const;
 
 /** Verify a git provider connection (github/gitlab/bitbucket/gitea row) belongs to the org. */

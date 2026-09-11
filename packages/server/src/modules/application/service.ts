@@ -13,7 +13,9 @@ import {
 	redirects,
 	security,
 } from "../../db/schema";
+
 import { bestEffort } from "../../utils/best-effort";
+import type { PrivilegesSwarm } from "../../utils/swarm-overrides";
 import { assertSafeAppName, assertSafePublishedPort } from "../../utils/validators";
 import { unregisterBackupsForService } from "../backups/scheduler";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
@@ -180,6 +182,7 @@ type ApplicationRow = Pick<
 	| "modeSwarm"
 	| "labelsSwarm"
 	| "networkSwarm"
+	| "privilegesSwarm"
 	| "serverId"
 >;
 
@@ -290,8 +293,14 @@ export const buildApplicationSwarmSpec = (
 				mounts: mountSpecs,
 				command: application.command,
 				healthCheck: (application.healthCheckSwarm as Docker.HealthConfig | null) ?? null,
+				privileges: application.privilegesSwarm as PrivilegesSwarm | null,
 			}),
-			Resources: buildTaskResources(limits, reservations, options.quotaDefaults),
+			Resources: buildTaskResources(
+				limits,
+				reservations,
+				options.quotaDefaults,
+				(application.privilegesSwarm as PrivilegesSwarm | null)?.pidsLimit,
+			),
 			RestartPolicy:
 				(application.restartPolicySwarm as Docker.TaskRestartPolicy | null) ?? undefined,
 			Placement: withNodeConstraint(
