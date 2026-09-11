@@ -190,7 +190,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 						title={writeHint}
 					>
 						<Plus className="size-4" />
-						Add Mount
+						Add mount
 					</Button>
 				}
 			>
@@ -220,7 +220,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 							<TableRow>
 								<TableHead>Type</TableHead>
 								<TableHead>Source</TableHead>
-								<TableHead>Mount Path</TableHead>
+								<TableHead>Mount path</TableHead>
 								<TableHead className="text-right">Actions</TableHead>
 							</TableRow>
 						</TableHeader>
@@ -266,7 +266,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>{editing ? "Edit Mount" : "Add Mount"}</DialogTitle>
+						<DialogTitle>{editing ? "Edit mount" : "Add mount"}</DialogTitle>
 						<DialogDescription>
 							Mounts are applied to the service on the next update.
 						</DialogDescription>
@@ -297,7 +297,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 
 						{form.type === "volume" && (
 							<div className="flex flex-col gap-2">
-								<Label htmlFor="volume-name">Volume Name</Label>
+								<Label htmlFor="volume-name">Volume name</Label>
 								<Input
 									id="volume-name"
 									placeholder="{appName}-data"
@@ -308,7 +308,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 						)}
 						{form.type === "bind" && (
 							<div className="flex flex-col gap-2">
-								<Label htmlFor="host-path">Host Path</Label>
+								<Label htmlFor="host-path">Host path</Label>
 								<Input
 									id="host-path"
 									placeholder="/srv/data"
@@ -320,7 +320,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 						{form.type === "file" && (
 							<>
 								<div className="flex flex-col gap-2">
-									<Label htmlFor="file-path">File Path</Label>
+									<Label htmlFor="file-path">File path</Label>
 									<Input
 										id="file-path"
 										placeholder="nginx.conf"

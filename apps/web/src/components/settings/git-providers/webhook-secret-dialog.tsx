@@ -2,7 +2,6 @@
 
 import { KeyRound, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 
 import { CopyButton } from "@/components/services/copy-button";
 import { Button } from "@/components/ui/button";
@@ -16,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toastError } from "@/lib/describe-error";
 
 /**
  * "Reveal webhook secret" for providers whose secret is derived server-side
@@ -56,7 +56,7 @@ export function WebhookSecretDialog({
 				if (!cancelled) setSecret(value);
 			})
 			.catch((error: unknown) => {
-				toast.error(error instanceof Error ? error.message : "Could not reveal the secret");
+				toastError(error, "Could not reveal the secret");
 				if (!cancelled) setOpen(false);
 			})
 			.finally(() => {

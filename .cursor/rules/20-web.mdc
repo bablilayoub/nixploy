@@ -12,7 +12,15 @@ alwaysApply: false
 - Client components use `useTRPC()` from `@/lib/trpc` with
   `trpc.<router>.<proc>.queryOptions` / `mutationOptions` (TanStack Query).
   After mutations, invalidate via `queryKey`.
-- Toasts via `sonner`; sentence-case messages ("Domain created").
+- Toasts via `sonner`; sentence case everywhere — messages, buttons, labels
+  and dialog titles ("Domain created", "Add domain"). Only proper nouns keep
+  capitals (Docker, Swarm, Traefik, GitHub, Deploy Copilot).
+- Errors go through `toastError` / `describeError` (`@/lib/describe-error`),
+  never `toast.error(error.message)`.
+- "What is deploying" comes from one shared query,
+  `hooks/use-running-deployments.ts` — do not add another `refetchInterval`
+  on deployments. Other long operations register with the activity tray
+  (`components/layout/activity-tray.tsx`) via `useTrackedActivity`.
 - Better-auth client from `@/lib/auth-client`; POSTs to `/api/auth/*` from
   non-browser contexts must include an `Origin` header (CSRF).
 
@@ -29,10 +37,19 @@ alwaysApply: false
 - Log rendering goes through `components/services/log-viewer.tsx` (level
   badges + colors); monitoring through `monitoring-charts.tsx` — extend them
   instead of forking viewers.
+- Risky options carry a `<HelpLink slug="…">` (`components/ui/help-link.tsx`)
+  to `nixploy.com/docs/<slug>`; the slug must exist in
+  `apps/landing/src/lib/docs/pages.ts`.
 
 ## Routing
 
 - Dashboard routes live in `src/app/(dashboard)/dashboard/…`; services are
   `projects/[projectId]/services/<type>/<id>` with `<type>` in
   application | compose | postgres | mysql | mariadb | mongo | redis.
+- Every service page renders `components/services/service-page-header.tsx`
+  and one tab order: General · [Compose file | Connection] · Deploy ·
+  Runtime · Domains · Environment · Backups · Advanced · Settings (a kind
+  renders only the tabs it has). Tabs sync to `?tab=`; Advanced sub-tabs use
+  their own `?advanced=`. Retiring a tab id means adding it to
+  `SERVICE_TAB_ALIASES` in `hooks/use-synced-tab.ts` so old links still land.
 - `useSearchParams` requires a `<Suspense>` boundary in the page.

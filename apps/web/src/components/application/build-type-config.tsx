@@ -205,7 +205,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 				{buildType === "dockerfile" && (
 					<div className="grid gap-4 sm:grid-cols-3">
 						<div className="flex flex-col gap-2">
-							<Label htmlFor="dockerfile">Dockerfile Path</Label>
+							<Label htmlFor="dockerfile">Dockerfile path</Label>
 							<Input
 								id="dockerfile"
 								placeholder="Dockerfile"
@@ -214,7 +214,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 							/>
 						</div>
 						<div className="flex flex-col gap-2">
-							<Label htmlFor="docker-context">Build Context</Label>
+							<Label htmlFor="docker-context">Build context</Label>
 							<Input
 								id="docker-context"
 								placeholder="."
@@ -237,7 +237,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 				{buildType === "static" && (
 					<>
 						<div className="flex flex-col gap-2">
-							<Label htmlFor="publish-dir">Publish Directory</Label>
+							<Label htmlFor="publish-dir">Publish directory</Label>
 							<Input
 								id="publish-dir"
 								placeholder="dist"
@@ -251,7 +251,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 						</div>
 						<div className="flex items-center justify-between rounded-md border p-3">
 							<div className="flex flex-col gap-1">
-								<Label htmlFor="is-spa">Single Page Application</Label>
+								<Label htmlFor="is-spa">Single-page application</Label>
 								<p className="text-xs text-muted-foreground">
 									Rewrite all paths to index.html (React, Vue, etc.).
 								</p>
@@ -278,7 +278,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 							/>
 						</div>
 						<div className="flex flex-col gap-2">
-							<Label htmlFor="build-args">Build Args</Label>
+							<Label htmlFor="build-args">Build args</Label>
 							<Textarea
 								id="build-args"
 								placeholder={"NODE_ENV=production\nSOME_FLAG=1"}
@@ -298,7 +298,7 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 					<DisabledHint hint={saveHint}>
 						<Button onClick={onSave} disabled={isPending || saveBlocked}>
 							{isPending && <Loader2 className="size-4 animate-spin" />}
-							Save Build
+							Save build
 						</Button>
 					</DisabledHint>
 				</div>

@@ -259,7 +259,7 @@ export function SchedulesTab({
 						onClick={() => setDialogOpen(true)}
 					>
 						<Plus className="size-4" />
-						Add Schedule
+						Add schedule
 					</Button>
 				}
 			>
@@ -290,7 +290,7 @@ export function SchedulesTab({
 									<TableHead>Name</TableHead>
 									<TableHead>Schedule</TableHead>
 									<TableHead>Command</TableHead>
-									<TableHead>Last Run</TableHead>
+									<TableHead>Last run</TableHead>
 									<TableHead>Enabled</TableHead>
 									<TableHead className="text-right">Actions</TableHead>
 								</TableRow>
@@ -386,7 +386,7 @@ export function SchedulesTab({
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>{editing ? "Edit Schedule" : "Add Schedule"}</DialogTitle>
+						<DialogTitle>{editing ? "Edit schedule" : "Add schedule"}</DialogTitle>
 						<DialogDescription>
 							The command runs inside the service container on the given cron schedule.
 						</DialogDescription>

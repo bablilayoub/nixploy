@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -216,7 +217,12 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 	const deploy = useMutation(
 		trpc.template.deploy.mutationOptions({
 			onSuccess: async (result, variables) => {
-				toast.success(`Deploying ${template.name} — watch the deployment logs`);
+				const href = `/dashboard/projects/${variables.projectId}/services/compose/${result.composeId}?tab=deployments`;
+				// "View" survives the navigation below and re-opens the log tab
+				// if the operator wandered off (UX audit F14).
+				toast.success(`Deploying ${template.name} — watch the deployment logs`, {
+					action: { label: "View", onClick: () => router.push(href) },
+				});
 				// A new compose service now exists in the target project — refresh
 				// the project list, the project page and its compose service list.
 				await Promise.all([
@@ -234,9 +240,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 						}),
 					}),
 				]);
-				router.push(
-					`/dashboard/projects/${variables.projectId}/services/compose/${result.composeId}`,
-				);
+				router.push(href);
 			},
 			onError: (error) => toastError(error),
 		}),
@@ -309,7 +313,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 						<ShieldAlert className="mt-0.5 size-4 shrink-0 text-warning" />
 						<p className="text-sm text-muted-foreground">
 							This template needs elevated host access (Docker socket and/or Linux capabilities).
-							Only the instance admin can deploy it.
+							Only the instance admin can deploy it. <HelpLink slug="templates" />
 						</p>
 					</div>
 				)}

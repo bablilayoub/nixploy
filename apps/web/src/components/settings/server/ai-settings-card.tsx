@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 type Provider = "openai" | "anthropic" | "openai-compatible" | "ollama";
@@ -50,7 +51,7 @@ export function AiSettingsCard() {
 			setApiKey("");
 			await queryClient.invalidateQueries({ queryKey: trpc.ai.getSettings.queryKey() });
 		},
-		onError: (error) => toast.error(error.message),
+		onError: (error) => toastError(error),
 	});
 
 	const persist = (next?: { enabled?: boolean }) => {

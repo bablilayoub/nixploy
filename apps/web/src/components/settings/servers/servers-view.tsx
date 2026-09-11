@@ -24,6 +24,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -46,6 +47,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { missingCapabilityHint } from "@/lib/capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -83,7 +85,7 @@ export function ServersView() {
 	const testMutation = useMutation(
 		trpc.server.testConnection.mutationOptions({
 			onSuccess: () => toast.success("Connection successful"),
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -93,7 +95,7 @@ export function ServersView() {
 				toast.success("Server setup complete");
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -103,7 +105,7 @@ export function ServersView() {
 				toast.success("Server removed");
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -140,7 +142,7 @@ export function ServersView() {
 				await invalidate();
 				setEditing(null);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -439,7 +441,8 @@ export function ServersView() {
 								</SelectContent>
 							</Select>
 							<p className="text-xs text-muted-foreground">
-								Applied on the next setup run if the node is not yet in the swarm.
+								Applied on the next setup run if the node is not yet in the swarm.{" "}
+								<HelpLink slug="servers" />
 							</p>
 						</div>
 						<div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">

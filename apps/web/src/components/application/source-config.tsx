@@ -17,6 +17,7 @@ import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
+import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -29,6 +30,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -259,7 +261,7 @@ export function SourceConfig({ application }: { application: Application }) {
 				// Refetch is done: the server now holds what was typed.
 				setDirty(false);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -341,7 +343,7 @@ export function SourceConfig({ application }: { application: Application }) {
 		>
 			<div className="flex flex-col gap-4">
 				<div className="flex flex-col gap-2">
-					<Label>Source Type</Label>
+					<Label>Source type</Label>
 					<Select value={sourceType} onValueChange={(v) => changeSourceType(v as SourceType)}>
 						<SelectTrigger className="w-full sm:max-w-xs">
 							<SelectValue />
@@ -378,7 +380,7 @@ export function SourceConfig({ application }: { application: Application }) {
 								/>
 							</div>
 							<div className="flex flex-col gap-2">
-								<Label>SSH Key (optional)</Label>
+								<Label>SSH key (optional)</Label>
 								<Select value={sshKeyId} onValueChange={edit(setSshKeyId)}>
 									<SelectTrigger className="w-full">
 										<SelectValue placeholder="None" />
@@ -434,7 +436,7 @@ export function SourceConfig({ application }: { application: Application }) {
 				{sourceType === "docker" && (
 					<>
 						<div className="flex flex-col gap-2">
-							<Label htmlFor="docker-image">Docker Image</Label>
+							<Label htmlFor="docker-image">Docker image</Label>
 							<Input
 								id="docker-image"
 								placeholder="nginx:latest"
@@ -498,7 +500,7 @@ export function SourceConfig({ application }: { application: Application }) {
 				{isGitLike && (
 					<>
 						<div className="flex flex-col gap-2">
-							<Label htmlFor="build-path">Build Path</Label>
+							<Label htmlFor="build-path">Build path</Label>
 							<Input
 								id="build-path"
 								placeholder="/"
@@ -509,7 +511,7 @@ export function SourceConfig({ application }: { application: Application }) {
 						</div>
 						<div className="flex items-center justify-between rounded-md border p-3">
 							<div className="flex flex-col gap-1">
-								<Label htmlFor="auto-deploy">Auto Deploy</Label>
+								<Label htmlFor="auto-deploy">Auto deploy</Label>
 								<p className="text-xs text-muted-foreground">
 									Deploy automatically when new commits are pushed.
 								</p>
@@ -530,7 +532,8 @@ export function SourceConfig({ application }: { application: Application }) {
 								One glob per line. A push webhook only deploys when a changed file matches; empty
 								means every push. At most {MAX_WATCH_PATHS} patterns of {MAX_WATCH_PATH_LENGTH}{" "}
 								characters, {MAX_WATCH_PATH_GLOBSTARS} <code className="font-mono">**</code> and{" "}
-								{MAX_WATCH_PATH_STARS} <code className="font-mono">*</code> per pattern.
+								{MAX_WATCH_PATH_STARS} <code className="font-mono">*</code> per pattern.{" "}
+								<HelpLink slug="git" />
 							</p>
 							{watchPathsProblem && <p className="text-xs text-destructive">{watchPathsProblem}</p>}
 						</div>
@@ -538,7 +541,7 @@ export function SourceConfig({ application }: { application: Application }) {
 							<>
 								<div className="flex items-center justify-between rounded-md border p-3">
 									<div className="flex flex-col gap-1">
-										<Label htmlFor="preview-deploys">Preview Deployments</Label>
+										<Label htmlFor="preview-deploys">Preview deployments</Label>
 										<p className="text-xs text-muted-foreground">
 											Create and tear down preview environments from pull request webhooks.
 										</p>
@@ -573,7 +576,7 @@ export function SourceConfig({ application }: { application: Application }) {
 					<DisabledHint hint={saveHint}>
 						<Button onClick={onSave} disabled={saveSource.isPending || saveBlocked}>
 							{saveSource.isPending && <Loader2 className="size-4 animate-spin" />}
-							Save Source
+							Save source
 						</Button>
 					</DisabledHint>
 				</div>

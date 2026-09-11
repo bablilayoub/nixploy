@@ -1,7 +1,6 @@
 "use client";
 
 import {
-	Activity,
 	Archive,
 	Bell,
 	Building2,
@@ -11,7 +10,6 @@ import {
 	Server,
 	ServerCog,
 	ShieldCheck,
-	TriangleAlert,
 	User,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -52,29 +50,11 @@ export const settingsNavGroups: SettingsNavGroup[] = [
 		],
 	},
 	{
-		label: "Observability",
-		items: [
-			{ label: "Incidents", href: "/dashboard/settings/incidents", icon: TriangleAlert },
-			{
-				label: "Audit log",
-				href: "/dashboard/settings/activity",
-				icon: Activity,
-				gate: { capability: "audit.read" },
-			},
-		],
-	},
-	{
 		label: "Infrastructure",
 		items: [
 			{ label: "Servers", href: "/dashboard/settings/servers", icon: Server },
 			{ label: "SSH keys", href: "/dashboard/settings/ssh-keys", icon: KeyRound },
 			{ label: "Certificates", href: "/dashboard/settings/certificates", icon: ShieldCheck },
-			{
-				label: "Platform",
-				href: "/dashboard/settings/server",
-				icon: ServerCog,
-				gate: { instanceAdmin: true },
-			},
 		],
 	},
 	{
@@ -83,6 +63,19 @@ export const settingsNavGroups: SettingsNavGroup[] = [
 			{ label: "Git providers", href: "/dashboard/settings/git-providers", icon: GitBranch },
 			{ label: "Registries", href: "/dashboard/settings/registries", icon: Package },
 			{ label: "Backup storage", href: "/dashboard/settings/destinations", icon: Archive },
+		],
+	},
+	// Instance-wide settings (this Nixploy install, not one organization).
+	// Only the better-auth instance admin can open them (UX audit F11).
+	{
+		label: "Instance",
+		items: [
+			{
+				label: "Platform",
+				href: "/dashboard/settings/server",
+				icon: ServerCog,
+				gate: { instanceAdmin: true },
+			},
 		],
 	},
 ];

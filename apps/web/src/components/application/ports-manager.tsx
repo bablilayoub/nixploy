@@ -26,6 +26,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -169,7 +170,7 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 						title={writeHint}
 					>
 						<Plus className="size-4" />
-						Add Port
+						Add port
 					</Button>
 				}
 			>
@@ -249,7 +250,7 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>{editing ? "Edit Port" : "Add Port"}</DialogTitle>
+						<DialogTitle>{editing ? "Edit port" : "Add port"}</DialogTitle>
 						<DialogDescription>
 							Ports are applied to the service on the next update.
 						</DialogDescription>
@@ -262,7 +263,7 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 						className="grid gap-4 sm:grid-cols-2"
 					>
 						<div className="flex flex-col gap-2">
-							<Label htmlFor="published-port">Published Port</Label>
+							<Label htmlFor="published-port">Published port</Label>
 							<Input
 								id="published-port"
 								type="number"
@@ -274,7 +275,7 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 							/>
 						</div>
 						<div className="flex flex-col gap-2">
-							<Label htmlFor="target-port">Target Port</Label>
+							<Label htmlFor="target-port">Target port</Label>
 							<Input
 								id="target-port"
 								type="number"
@@ -306,7 +307,7 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 							</Select>
 						</div>
 						<div className="flex flex-col gap-2">
-							<Label>Publish Mode</Label>
+							<Label>Publish mode</Label>
 							<Select
 								value={form.publishMode}
 								onValueChange={(v) =>
@@ -324,6 +325,10 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 									<SelectItem value="host">Host</SelectItem>
 								</SelectContent>
 							</Select>
+							<p className="text-sm text-muted-foreground">
+								Ingress load-balances across the swarm; host binds the port on the node that runs
+								the task. <HelpLink slug="deploy" />
+							</p>
 						</div>
 						<DialogFooter className="sm:col-span-2">
 							<Button type="submit" disabled={!isValid || isPending}>

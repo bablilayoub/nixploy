@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 const DEFAULT_COLOR = "#6366f1";
@@ -72,7 +73,7 @@ export function ManageTagsDialog() {
 				setColor(DEFAULT_COLOR);
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -83,7 +84,7 @@ export function ManageTagsDialog() {
 				setEditingId(null);
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -99,7 +100,7 @@ export function ManageTagsDialog() {
 				toast.success("Tag deleted");
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

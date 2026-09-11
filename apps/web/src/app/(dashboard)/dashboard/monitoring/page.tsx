@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
-import { MonitoringView } from "@/components/monitoring/monitoring-view";
+import { MonitoringPage } from "@/components/monitoring/monitoring-page";
 
 export const metadata: Metadata = {
 	title: "Monitoring",
 };
 
-export default function MonitoringPage() {
-	return <MonitoringView />;
+export default function Page() {
+	return <MonitoringPage />;
 }

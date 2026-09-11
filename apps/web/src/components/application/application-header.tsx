@@ -1,13 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, MoreVertical, Play, RefreshCw, Rocket, ScrollText, Square } from "lucide-react";
-import Link from "next/link";
+import { Loader2, Play, RefreshCw, Rocket, Square } from "lucide-react";
 import { useState } from "react";
 
 import { capabilityHint } from "@/components/services/capability-hint";
 import { CopilotChatDrawer } from "@/components/services/copilot-chat-drawer";
-import { PageHeader, StatusDot, type StatusDotStatus } from "@/components/shell";
+import { type ServiceActions, ServicePageHeader } from "@/components/services/service-page-header";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -18,14 +17,6 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { DisabledHint } from "@/components/ui/disabled-hint";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import {
 	firstLine,
@@ -36,13 +27,6 @@ import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
 import type { ApplicationActions } from "./use-application-actions";
-
-const STATUS_CONFIG: Record<string, { label: string; status: StatusDotStatus }> = {
-	idle: { label: "Idle", status: "neutral" },
-	running: { label: "Running", status: "success" },
-	done: { label: "Done", status: "info" },
-	error: { label: "Error", status: "error" },
-};
 
 export function ApplicationHeader({
 	application,
@@ -80,17 +64,6 @@ export function ApplicationHeader({
 		!inFlight && lastDeployment?.status === "error" ? firstLine(lastDeployment.errorMessage) : null;
 
 	const isRunning = application.status === "running" || application.status === "done";
-	const baseStatus = STATUS_CONFIG[application.status ?? "idle"] ?? STATUS_CONFIG.idle;
-	const statusConfig = inFlight
-		? {
-				label:
-					inFlight.status === "queued"
-						? `Queued${inFlight.queuePosition ? ` (#${inFlight.queuePosition})` : ""}`
-						: "Deploying",
-				status: "info" as StatusDotStatus,
-			}
-		: baseStatus;
-
 	const canDeploy = can("service.deploy");
 	const canRuntime = can("service.runtime");
 	const readiness = application.readiness;
@@ -104,163 +77,74 @@ export function ApplicationHeader({
 	const deployDisabled = isBusy || !canDeploy || !readiness.canDeploy;
 	const runtimeHint = canRuntime ? undefined : capabilityHint("service.runtime");
 
+	const serviceActions: ServiceActions = [
+		{
+			key: "deploy",
+			label: "Deploy",
+			icon: Rocket,
+			primary: true,
+			onClick: () => deploy.mutate({ applicationId }),
+			pending: deploy.isPending,
+			disabled: deployDisabled,
+			hint: deployHint,
+		},
+	];
+	if (hasDeployed) {
+		serviceActions.push({
+			key: "redeploy",
+			label: "Redeploy",
+			icon: RefreshCw,
+			onClick: () => redeploy.mutate({ applicationId }),
+			pending: redeploy.isPending,
+			disabled: deployDisabled,
+			hint: deployHint,
+		});
+	}
+	if (isRunning) {
+		serviceActions.push({
+			key: "stop",
+			label: "Stop",
+			icon: Square,
+			onClick: () => setConfirmStop(true),
+			pending: stop.isPending,
+			disabled: isBusy || !canRuntime,
+			hint: runtimeHint,
+		});
+	} else if (hasDeployed) {
+		serviceActions.push({
+			key: "start",
+			label: "Start",
+			icon: Play,
+			onClick: () => start.mutate({ applicationId }),
+			pending: start.isPending,
+			disabled: isBusy || !canRuntime,
+			hint: runtimeHint,
+		});
+	}
+
 	return (
 		<>
-			<PageHeader
-				breadcrumb={
-					<nav className="flex items-center gap-1.5">
-						<Link
-							href={`/dashboard/projects/${projectId}`}
-							className="transition-colors hover:text-foreground"
-						>
-							{application.environment.project.name}
-						</Link>
-						<span aria-hidden>/</span>
-						<span className="text-foreground">{application.name}</span>
-					</nav>
+			<ServicePageHeader
+				projectId={projectId}
+				projectName={application.environment.project.name}
+				environmentName={application.environment.name}
+				name={application.name}
+				subtitle={application.description || application.appName}
+				status={application.status}
+				inFlight={inFlight}
+				actions={serviceActions}
+				lastError={lastError}
+				onViewLogs={
+					lastDeployment ? () => followDeployment(lastDeployment.deploymentId) : undefined
 				}
-				title={application.name}
-				description={
-					<span className="flex flex-col gap-1">
-						<span className="flex items-center gap-1.5">
-							<StatusDot
-								status={statusConfig.status}
-								className={
-									statusConfig.status === "success" || inFlight ? "animate-pulse" : undefined
-								}
-							/>
-							<span>{statusConfig.label}</span>
-							<span aria-hidden>·</span>
-							<span>{application.description || application.appName}</span>
-						</span>
-						{lastError && lastDeployment && (
-							<span className="flex items-center gap-1.5 text-destructive">
-								<span className="truncate">Last deployment failed: {lastError}</span>
-								<button
-									type="button"
-									className="inline-flex shrink-0 items-center gap-1 underline-offset-2 hover:underline"
-									onClick={() => followDeployment(lastDeployment.deploymentId)}
-								>
-									<ScrollText className="size-3.5" />
-									View logs
-								</button>
-							</span>
-						)}
-					</span>
-				}
-				actions={
-					<>
-						<CopilotChatDrawer
-							target={{
-								type: "application",
-								id: applicationId,
-								name: application.name,
-							}}
-						/>
-						<DisabledHint hint={deployHint}>
-							<Button onClick={() => deploy.mutate({ applicationId })} disabled={deployDisabled}>
-								{deploy.isPending ? (
-									<Loader2 className="size-4 animate-spin" />
-								) : (
-									<Rocket className="size-4" />
-								)}
-								Deploy
-							</Button>
-						</DisabledHint>
-						{hasDeployed && (
-							<DisabledHint hint={deployHint} className="hidden sm:inline-flex">
-								<Button
-									variant="outline"
-									onClick={() => redeploy.mutate({ applicationId })}
-									disabled={deployDisabled}
-								>
-									{redeploy.isPending ? (
-										<Loader2 className="size-4 animate-spin" />
-									) : (
-										<RefreshCw className="size-4" />
-									)}
-									Redeploy
-								</Button>
-							</DisabledHint>
-						)}
-						{isRunning ? (
-							<DisabledHint hint={runtimeHint} className="hidden sm:inline-flex">
-								<Button
-									variant="outline"
-									onClick={() => setConfirmStop(true)}
-									disabled={isBusy || !canRuntime}
-								>
-									{stop.isPending ? (
-										<Loader2 className="size-4 animate-spin" />
-									) : (
-										<Square className="size-4" />
-									)}
-									Stop
-								</Button>
-							</DisabledHint>
-						) : hasDeployed ? (
-							<DisabledHint hint={runtimeHint} className="hidden sm:inline-flex">
-								<Button
-									variant="outline"
-									onClick={() => start.mutate({ applicationId })}
-									disabled={isBusy || !canRuntime}
-								>
-									{start.isPending ? (
-										<Loader2 className="size-4 animate-spin" />
-									) : (
-										<Play className="size-4" />
-									)}
-									Start
-								</Button>
-							</DisabledHint>
-						) : null}
-						{(hasDeployed || isRunning) && (
-							<DropdownMenu>
-								<DropdownMenuTrigger asChild>
-									<Button
-										variant="outline"
-										size="icon"
-										className="sm:hidden"
-										aria-label="More actions"
-										disabled={isBusy}
-									>
-										<MoreVertical className="size-4" />
-									</Button>
-								</DropdownMenuTrigger>
-								<DropdownMenuContent align="end">
-									{hasDeployed && (
-										<DropdownMenuItem
-											disabled={deployDisabled}
-											title={deployHint}
-											onClick={() => redeploy.mutate({ applicationId })}
-										>
-											<RefreshCw className="size-4" />
-											Redeploy
-										</DropdownMenuItem>
-									)}
-									{isRunning ? (
-										<DropdownMenuItem
-											disabled={isBusy || !canRuntime}
-											title={runtimeHint}
-											onClick={() => setConfirmStop(true)}
-										>
-											<Square className="size-4" />
-											Stop
-										</DropdownMenuItem>
-									) : (
-										<DropdownMenuItem
-											disabled={isBusy || !canRuntime}
-											title={runtimeHint}
-											onClick={() => start.mutate({ applicationId })}
-										>
-											<Play className="size-4" />
-											Start
-										</DropdownMenuItem>
-									)}
-								</DropdownMenuContent>
-							</DropdownMenu>
-						)}
-					</>
+				before={
+					<CopilotChatDrawer
+						target={{
+							type: "application",
+							id: applicationId,
+							name: application.name,
+						}}
+					/>
 				}
 			/>
 			<AlertDialog open={confirmStop} onOpenChange={setConfirmStop}>

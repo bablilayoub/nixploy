@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { INSTANCE_ADMIN_HINT, missingCapabilityHint } from "@/lib/capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -94,14 +95,14 @@ export function DestinationsView() {
 				setAccessKey("");
 				setSecretAccessKey("");
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
 	const testMutation = useMutation(
 		trpc.destination.testConnection.mutationOptions({
 			onSuccess: () => toast.success("Connection successful"),
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -111,7 +112,7 @@ export function DestinationsView() {
 				toast.success("Backup destination removed");
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -141,7 +142,7 @@ export function DestinationsView() {
 				await invalidate();
 				setEditing(null);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

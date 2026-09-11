@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
 import { DatabaseBackup, Loader2, Pencil, Play, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -11,6 +10,7 @@ import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DateTime } from "@/components/ui/date-time";
 import {
 	Dialog,
 	DialogContent,
@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { INSTANCE_ADMIN_HINT, missingCapabilityHint } from "@/lib/capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 /** The `database` column is informational for instance backups (DATABASE_URL is authoritative). */
@@ -92,8 +93,7 @@ export function InstanceBackups() {
 	const invalidate = () =>
 		queryClient.invalidateQueries({ queryKey: trpc.backup.all.queryKey(listInput) });
 
-	const onError = (error: { message?: string }) =>
-		toast.error(error.message ?? "Something went wrong");
+	const onError = (error: { message?: string }) => toastError(error, "Something went wrong");
 
 	const updateMutation = useMutation(
 		trpc.backup.update.mutationOptions({
@@ -234,7 +234,7 @@ export function InstanceBackups() {
 										<LastRunBadge run={backup.lastRun} />
 									</TableCell>
 									<TableCell className="text-sm text-muted-foreground">
-										{format(new Date(backup.createdAt), "PP")}
+										<DateTime value={backup.createdAt} mode="absolute" />
 									</TableCell>
 									<TableCell>
 										<div className="flex items-center justify-end gap-1">
@@ -317,8 +317,7 @@ function InstanceBackupFormDialog({
 }) {
 	const trpc = useTRPC();
 
-	const onError = (error: { message?: string }) =>
-		toast.error(error.message ?? "Something went wrong");
+	const onError = (error: { message?: string }) => toastError(error, "Something went wrong");
 
 	const createMutation = useMutation(
 		trpc.backup.create.mutationOptions({

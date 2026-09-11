@@ -137,7 +137,7 @@ export function CertificatesView() {
 						<DialogTrigger asChild>
 							<Button size="sm" disabled={!canManage} title={manageHint}>
 								<Plus className="size-4" />
-								Add Certificate
+								Add certificate
 							</Button>
 						</DialogTrigger>
 					}

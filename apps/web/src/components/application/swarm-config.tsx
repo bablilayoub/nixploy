@@ -9,6 +9,7 @@ import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
+import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -830,6 +831,10 @@ function NetworksForm({ application }: { application: Application }) {
 export function SwarmConfig({ application }: { application: Application }) {
 	return (
 		<SettingsStack>
+			<p className="text-sm text-muted-foreground">
+				Raw Docker Swarm service settings — a wrong value can make a deploy hang or roll back.{" "}
+				<HelpLink slug="deploy" />
+			</p>
 			<RolloutForm
 				application={application}
 				field="updateConfigSwarm"

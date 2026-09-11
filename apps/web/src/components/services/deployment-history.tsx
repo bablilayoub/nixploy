@@ -1,7 +1,6 @@
 "use client";
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
 import { Ban, Bot, ChevronDown, Loader2, RefreshCw, ScrollText } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -12,6 +11,7 @@ import { LogViewer } from "@/components/services/log-viewer";
 import { DeploymentStatusBadge } from "@/components/services/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DateTime } from "@/components/ui/date-time";
 import {
 	Dialog,
 	DialogContent,
@@ -32,7 +32,9 @@ import {
 import { TableCard } from "@/components/ui/table-card";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { describeTriggeredBy, firstLine, TRIGGER_LABELS } from "@/hooks/use-running-deployments";
+import { toastError } from "@/lib/describe-error";
 import { formatDuration } from "@/lib/format";
+import { deploymentStatusLabel } from "@/lib/status";
 import { useTRPC } from "@/lib/trpc";
 
 const PAGE_SIZE = 10;
@@ -255,14 +257,14 @@ export function DeploymentHistory({
 				toast.success("Deployment cancelled");
 				invalidateList();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
 	const explain = useMutation(
 		trpc.ai.explainDeployment.mutationOptions({
 			onSuccess: (result) => setExplainResult(result),
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -272,7 +274,7 @@ export function DeploymentHistory({
 			setExplainResult(null);
 			invalidateList();
 		},
-		onError: (error: { message: string }) => toast.error(error.message),
+		onError: (error: { message: string }) => toastError(error),
 	};
 
 	const redeployApplication = useMutation(
@@ -296,7 +298,7 @@ export function DeploymentHistory({
 					queryClient.invalidateQueries({ queryKey: trpc.application.one.queryKey() });
 				}
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -463,7 +465,7 @@ export function DeploymentHistory({
 										/>
 									</TableCell>
 									<TableCell className="text-muted-foreground">
-										{format(new Date(deployment.createdAt), "MMM d, yyyy HH:mm")}
+										<DateTime value={deployment.createdAt} />
 									</TableCell>
 									<TableCell className="text-muted-foreground">
 										{formatDuration(deployment.startedAt, deployment.finishedAt)}
@@ -539,8 +541,12 @@ export function DeploymentHistory({
 					<DialogHeader>
 						<DialogTitle>{logDeployment?.title ?? "Deployment logs"}</DialogTitle>
 						<DialogDescription>
-							{logDeployment &&
-								`${format(new Date(logDeployment.createdAt), "MMM d, yyyy HH:mm")} · ${logDeployment.status}`}
+							{logDeployment && (
+								<>
+									<DateTime value={logDeployment.createdAt} mode="absolute" /> ·{" "}
+									{deploymentStatusLabel[logDeployment.status] ?? logDeployment.status}
+								</>
+							)}
 						</DialogDescription>
 					</DialogHeader>
 					<div className="min-h-0 flex-1">

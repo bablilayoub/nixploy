@@ -28,28 +28,37 @@ import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { useSyncedTab } from "@/hooks/use-synced-tab";
+import { SERVICE_TAB_ALIASES, useSyncedTab } from "@/hooks/use-synced-tab";
 import { useTRPC } from "@/lib/trpc";
 
-const TOP_TABS = ["general", "deploy", "runtime", "domains", "config", "settings"];
+/**
+ * One tab order for every service kind (UX audit F8):
+ * General · Deploy · Runtime · Domains · Environment · Backups · Advanced · Settings.
+ */
+const TOP_TABS = [
+	"general",
+	"deploy",
+	"runtime",
+	"domains",
+	"environment",
+	"backups",
+	"advanced",
+	"settings",
+];
 
 /** Sub-tab → its top-level tab, so ?tab=logs / ?tab=deployments deep-link. */
 const SUB_TAB_PARENT: Record<string, string> = {
 	deployments: "deploy",
 	preview: "deploy",
 	schedules: "deploy",
-	backups: "deploy",
 	logs: "runtime",
 	monitoring: "runtime",
 	terminal: "runtime",
-	environment: "config",
-	advanced: "config",
 };
 
 const SUB_TAB_DEFAULT: Record<string, string> = {
 	deploy: "deployments",
 	runtime: "logs",
-	config: "environment",
 };
 
 function PageSkeleton() {
@@ -87,6 +96,7 @@ function ApplicationDetail({ projectId, id }: { projectId: string; id: string })
 	const [tab, selectTab] = useSyncedTab(
 		"general",
 		(value) => TOP_TABS.includes(value) || value in SUB_TAB_PARENT,
+		{ aliases: SERVICE_TAB_ALIASES },
 	);
 	const topTab = TOP_TABS.includes(tab) ? tab : (SUB_TAB_PARENT[tab] ?? "general");
 	const subTab = (parent: string) =>
@@ -183,7 +193,9 @@ function ApplicationDetail({ projectId, id }: { projectId: string; id: string })
 					<UnderlineTabsTrigger value="deploy">Deploy</UnderlineTabsTrigger>
 					<UnderlineTabsTrigger value="runtime">Runtime</UnderlineTabsTrigger>
 					<UnderlineTabsTrigger value="domains">Domains</UnderlineTabsTrigger>
-					<UnderlineTabsTrigger value="config">Config</UnderlineTabsTrigger>
+					<UnderlineTabsTrigger value="environment">Environment</UnderlineTabsTrigger>
+					<UnderlineTabsTrigger value="backups">Backups</UnderlineTabsTrigger>
+					<UnderlineTabsTrigger value="advanced">Advanced</UnderlineTabsTrigger>
 					<UnderlineTabsTrigger value="settings">Settings</UnderlineTabsTrigger>
 				</UnderlineTabsList>
 
@@ -197,7 +209,6 @@ function ApplicationDetail({ projectId, id }: { projectId: string; id: string })
 							<SubTabsTrigger value="deployments">Deployments</SubTabsTrigger>
 							<SubTabsTrigger value="preview">Preview</SubTabsTrigger>
 							<SubTabsTrigger value="schedules">Schedules</SubTabsTrigger>
-							<SubTabsTrigger value="backups">Backups</SubTabsTrigger>
 						</SubTabsList>
 						<TabsContent value="deployments" className="mt-0">
 							<DeploymentsTab application={application} />
@@ -207,9 +218,6 @@ function ApplicationDetail({ projectId, id }: { projectId: string; id: string })
 						</TabsContent>
 						<TabsContent value="schedules" className="mt-0">
 							<SchedulesTab serviceType="application" serviceId={application.applicationId} />
-						</TabsContent>
-						<TabsContent value="backups" className="mt-0">
-							<VolumeBackupsTab serviceType="application" serviceId={application.applicationId} />
 						</TabsContent>
 					</Tabs>
 				</TabsContent>
@@ -261,19 +269,16 @@ function ApplicationDetail({ projectId, id }: { projectId: string; id: string })
 					<DomainManager serviceType="application" serviceId={application.applicationId} />
 				</TabsContent>
 
-				<TabsContent value="config" className="mt-6">
-					<Tabs value={subTab("config")} onValueChange={selectTab} className="w-full gap-4">
-						<SubTabsList>
-							<SubTabsTrigger value="environment">Environment</SubTabsTrigger>
-							<SubTabsTrigger value="advanced">Advanced</SubTabsTrigger>
-						</SubTabsList>
-						<TabsContent value="environment" className="mt-0">
-							<EnvironmentTab application={application} />
-						</TabsContent>
-						<TabsContent value="advanced" className="mt-0">
-							<AdvancedTab application={application} />
-						</TabsContent>
-					</Tabs>
+				<TabsContent value="environment" className="mt-6">
+					<EnvironmentTab application={application} />
+				</TabsContent>
+
+				<TabsContent value="backups" className="mt-6">
+					<VolumeBackupsTab serviceType="application" serviceId={application.applicationId} />
+				</TabsContent>
+
+				<TabsContent value="advanced" className="mt-6">
+					<AdvancedTab application={application} />
 				</TabsContent>
 
 				<TabsContent value="settings" className="mt-6">

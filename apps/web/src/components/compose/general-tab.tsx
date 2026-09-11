@@ -15,6 +15,7 @@ import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
+import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -51,7 +52,7 @@ export function GeneralTab({
 	onOpenComposeFile,
 }: {
 	compose: ComposeService;
-	/** Switch to the Compose File tab (raw sources are edited there). */
+	/** Switch to the Compose file tab (raw sources are edited there). */
 	onOpenComposeFile?: () => void;
 }) {
 	const trpc = useTRPC();
@@ -225,7 +226,7 @@ export function GeneralTab({
 			<SettingsSection title="General" description="How this compose file is deployed.">
 				<div className="flex flex-col gap-6">
 					<div className="flex flex-col gap-2">
-						<Label htmlFor="compose-type">Compose Type</Label>
+						<Label htmlFor="compose-type">Compose type</Label>
 						<Select
 							value={composeType}
 							onValueChange={(value) =>
@@ -242,15 +243,15 @@ export function GeneralTab({
 						</Select>
 						<p className="text-sm text-muted-foreground">
 							Stack mode deploys with <code>docker stack deploy</code> instead of{" "}
-							<code>docker compose up</code>.
+							<code>docker compose up</code>. <HelpLink slug="deploy" />
 						</p>
 					</div>
 					<div className="flex items-center justify-between gap-4 rounded-lg border p-4">
 						<div>
-							<Label htmlFor="isolated-deployment">Isolated Deployment</Label>
+							<Label htmlFor="isolated-deployment">Isolated deployment</Label>
 							<p className="text-sm text-muted-foreground">
 								Randomize service and container names to avoid collisions between copies of this
-								compose file.
+								compose file. <HelpLink slug="deploy" />
 							</p>
 						</div>
 						<Switch
@@ -261,7 +262,7 @@ export function GeneralTab({
 					</div>
 					<div className="flex items-center justify-between gap-4 rounded-lg border p-4">
 						<div>
-							<Label htmlFor="auto-deploy">Auto Deploy</Label>
+							<Label htmlFor="auto-deploy">Auto deploy</Label>
 							<p className="text-sm text-muted-foreground">
 								Deploy automatically when the source repository changes.
 							</p>
@@ -274,7 +275,7 @@ export function GeneralTab({
 			<SettingsSection title="Source" description="Where the compose file comes from.">
 				<div className="flex flex-col gap-4">
 					<div className="flex flex-col gap-2">
-						<Label htmlFor="source-type">Source Type</Label>
+						<Label htmlFor="source-type">Source type</Label>
 						<Select
 							value={sourceType}
 							onValueChange={(value) => changeSourceType(value as SourceType)}
@@ -302,11 +303,11 @@ export function GeneralTab({
 									onClick={onOpenComposeFile}
 									className="font-medium text-foreground underline-offset-4 hover:underline"
 								>
-									Edit it in the Compose File tab →
+									Edit it in the Compose file tab →
 								</button>
 							) : (
 								<>
-									Edit it in the <span className="font-medium">Compose File</span> tab.
+									Edit it in the <span className="font-medium">Compose file</span> tab.
 								</>
 							)}
 						</p>
@@ -373,7 +374,7 @@ export function GeneralTab({
 
 					{sourceType !== "raw" && (
 						<div className="flex flex-col gap-2">
-							<Label htmlFor="compose-path">Compose Path</Label>
+							<Label htmlFor="compose-path">Compose path</Label>
 							<Input
 								id="compose-path"
 								placeholder="./docker-compose.yml"

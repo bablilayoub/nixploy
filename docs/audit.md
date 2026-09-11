@@ -3,7 +3,7 @@
 ## Audit log
 
 Every meaningful mutation appends to the org-scoped `audit_log` table and is
-visible in **Settings → Audit log** (filter by action, target type, text
+visible in **Monitoring → Audit log** (filter by action, target type, text
 search, paginated).
 
 - Table: `packages/server/src/db/schema/audit.ts` — actor (user + email),

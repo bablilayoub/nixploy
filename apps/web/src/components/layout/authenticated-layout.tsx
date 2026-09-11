@@ -1,5 +1,6 @@
 "use client";
 
+import { ActivityTray } from "@/components/layout/activity-tray";
 import { DeployProgressBar } from "@/components/layout/deploy-progress-bar";
 import { KeyboardShortcuts } from "@/components/layout/keyboard-shortcuts";
 import { Main } from "@/components/layout/main";
@@ -20,6 +21,7 @@ export function AuthenticatedLayout({ children }: { children: React.ReactNode })
 			<Main id="main-content" tabIndex={-1} className="flex-1 outline-none">
 				{children}
 			</Main>
+			<ActivityTray />
 		</div>
 	);
 }

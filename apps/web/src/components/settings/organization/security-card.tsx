@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { missingCapabilityHint } from "@/lib/capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 const DESCRIPTION =
@@ -43,7 +44,7 @@ export function SecurityCard() {
 			toast.success("Security settings updated");
 			await queryClient.invalidateQueries({ queryKey: trpc.organization.settings.queryKey() });
 		},
-		onError: (error) => toast.error(error.message),
+		onError: (error) => toastError(error),
 	});
 
 	if (!mounted || settingsQuery.isPending) {

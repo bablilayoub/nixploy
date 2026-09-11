@@ -24,6 +24,7 @@
 	--color-popover-foreground: var(--popover-foreground);
 	--color-primary: var(--primary);
 	--color-primary-foreground: var(--primary-foreground);
+	--color-brand: var(--brand);
 	--color-secondary: var(--secondary);
 	--color-secondary-foreground: var(--secondary-foreground);
 	--color-muted: var(--muted);
@@ -62,6 +63,10 @@
 	--popover-foreground: #1c1917;
 	--primary: #1c1917;
 	--primary-foreground: #fafaf9;
+	/* Organization accent (UX audit F34). Defaults to --primary, so the panel
+	   stays monochrome until a white-label accent is saved; OrgBrandingProvider
+	   overrides it on the root element. */
+	--brand: var(--primary);
 	--secondary: #f5f5f4;
 	--secondary-foreground: #1c1917;
 	--muted: #f5f5f4;
@@ -102,6 +107,7 @@
 	--popover-foreground: #fafafa;
 	--primary: #fafafa;
 	--primary-foreground: #09090b;
+	--brand: var(--primary);
 	--secondary: #1c1c1f;
 	--secondary-foreground: #fafafa;
 	--muted: #1c1c1f;
@@ -154,6 +160,13 @@
  * Spinners stay: they signal pending work. Unlayered so it wins over the
  * utility layer.
  */
+/* The activity tray (UX audit F14) sits bottom-right; while it has items the
+   sonner toast stack lifts above it so a toast never hides the pill. */
+body[data-activity-tray="1"] [data-sonner-toaster][data-y-position="bottom"] {
+	--offset-bottom: 4.25rem;
+	--mobile-offset-bottom: 4.25rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.animate-pulse,
 	.animate-ping {

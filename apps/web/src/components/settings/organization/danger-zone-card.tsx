@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient, useSession } from "@/lib/auth-client";
+import { toastError } from "@/lib/describe-error";
 
 /** Only the organization's owner may permanently delete it. */
 export function DangerZoneCard() {
@@ -47,7 +48,7 @@ export function DangerZoneCard() {
 					// The card is owner-only; without a member list we cannot prove
 					// ownership, so stay hidden but say why.
 					setIsOwner(false);
-					toast.error(error.message ?? "Failed to load organization members");
+					toastError(error, "Failed to load organization members");
 					return;
 				}
 				const self = data?.members?.find((member) => member.userId === userId);
@@ -56,7 +57,7 @@ export function DangerZoneCard() {
 			.catch((error: unknown) => {
 				if (cancelled) return;
 				setIsOwner(false);
-				toast.error(error instanceof Error ? error.message : "Failed to load organization members");
+				toastError(error, "Failed to load organization members");
 			});
 		return () => {
 			cancelled = true;
@@ -75,7 +76,7 @@ export function DangerZoneCard() {
 		});
 		setIsDeleting(false);
 		if (error) {
-			toast.error(error.message ?? "Failed to delete organization");
+			toastError(error, "Failed to delete organization");
 			return;
 		}
 		toast.success(`Organization "${activeOrganization.name}" deleted`);

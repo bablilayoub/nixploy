@@ -1,17 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-	AlertTriangle,
-	Eye,
-	EyeOff,
-	Loader2,
-	MoreVertical,
-	Play,
-	RefreshCw,
-	Square,
-} from "lucide-react";
-import Link from "next/link";
+import { AlertTriangle, Eye, EyeOff, Loader2, Play, RefreshCw, Square } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -34,12 +24,11 @@ import { EnvEditor } from "@/components/services/env-editor";
 import { LogViewer } from "@/components/services/log-viewer";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
 import { ServiceActionsCard } from "@/components/services/service-actions-card";
+import { type ServiceActions, ServicePageHeader } from "@/components/services/service-page-header";
 import { ServiceTerminal } from "@/components/services/service-terminal";
-import { ServiceStatusBadge } from "@/components/services/status-badge";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
-import { PageHeader } from "@/components/shell";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -52,19 +41,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { useSyncedTab } from "@/hooks/use-synced-tab";
+import { SERVICE_TAB_ALIASES, useSyncedTab } from "@/hooks/use-synced-tab";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 interface DatabaseDetailProps {
@@ -189,8 +173,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 		queryClient.invalidateQueries({ queryKey: ns.all.pathKey() });
 	};
 
-	const onError = (error: { message?: string }) =>
-		toast.error(error.message ?? "Something went wrong");
+	const onError = (error: { message?: string }) => toastError(error, "Something went wrong");
 
 	const startMutation = useMutation(
 		ns.start.mutationOptions({
@@ -259,17 +242,20 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 		</DisabledHint>
 	);
 
+	// Unified service tab order (UX audit F8), with the database-only
+	// "Connection" tab right after General.
 	const topTabs = [
 		"general",
 		"connection",
+		"runtime",
 		"environment",
 		...(cfg.supportsBackups ? ["backups"] : []),
-		"runtime",
 		"settings",
 	];
 	const [tab, selectTab] = useSyncedTab(
 		"general",
 		(value) => topTabs.includes(value) || value in SUB_TAB_PARENT,
+		{ aliases: SERVICE_TAB_ALIASES },
 	);
 	const topTab = topTabs.includes(tab) ? tab : (SUB_TAB_PARENT[tab] ?? "general");
 	const runtimeTab = SUB_TAB_PARENT[tab] === "runtime" ? tab : "logs";
@@ -312,108 +298,50 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 		);
 	}
 
+	const serviceActions: ServiceActions = [
+		isRunning
+			? {
+					key: "stop",
+					label: "Stop",
+					icon: Square,
+					primary: true,
+					variant: "outline" as const,
+					onClick: () => setConfirmStop(true),
+					pending: stopMutation.isPending,
+					disabled: actionPending || !canRuntime,
+					hint: runtimeHint,
+				}
+			: {
+					key: "start",
+					label: "Start",
+					icon: Play,
+					primary: true,
+					variant: "outline" as const,
+					onClick: () => startMutation.mutate(idInput),
+					pending: startMutation.isPending,
+					disabled: actionPending || !canDeploy,
+					hint: deployHint,
+				},
+		{
+			key: "reload",
+			label: "Reload",
+			icon: RefreshCw,
+			onClick: () => reloadMutation.mutate(idInput),
+			pending: reloadMutation.isPending,
+			disabled: actionPending || !isRunning || !canRuntime,
+			hint: !canRuntime ? runtimeHint : isRunning ? undefined : "Start the database first",
+		},
+	];
+
 	return (
 		<div className="flex flex-col gap-6">
-			<PageHeader
-				breadcrumb={
-					<>
-						<Link
-							href={`/dashboard/projects/${projectId}`}
-							className="transition-colors hover:text-foreground"
-						>
-							Project
-						</Link>
-						<span className="mx-1.5">/</span>
-						{cfg.label}
-					</>
-				}
-				title={
-					<span className="flex items-center gap-2.5">
-						{db.name}
-						<ServiceStatusBadge status={status} />
-					</span>
-				}
-				description={`${cfg.label} · ${db.appName}`}
-				actions={
-					<>
-						{isRunning ? (
-							<DisabledHint hint={runtimeHint}>
-								<Button
-									variant="outline"
-									size="sm"
-									disabled={actionPending || !canRuntime}
-									onClick={() => setConfirmStop(true)}
-								>
-									{stopMutation.isPending ? (
-										<Loader2 className="size-4 animate-spin" />
-									) : (
-										<Square className="size-4" />
-									)}
-									Stop
-								</Button>
-							</DisabledHint>
-						) : (
-							<DisabledHint hint={deployHint}>
-								<Button
-									variant="outline"
-									size="sm"
-									disabled={actionPending || !canDeploy}
-									onClick={() => startMutation.mutate(idInput)}
-								>
-									{startMutation.isPending ? (
-										<Loader2 className="size-4 animate-spin" />
-									) : (
-										<Play className="size-4" />
-									)}
-									Start
-								</Button>
-							</DisabledHint>
-						)}
-						<DisabledHint
-							hint={!canRuntime ? runtimeHint : isRunning ? undefined : "Start the database first"}
-							className="hidden sm:inline-flex"
-						>
-							<Button
-								variant="outline"
-								size="sm"
-								disabled={actionPending || !isRunning || !canRuntime}
-								onClick={() => reloadMutation.mutate(idInput)}
-							>
-								{reloadMutation.isPending ? (
-									<Loader2 className="size-4 animate-spin" />
-								) : (
-									<RefreshCw className="size-4" />
-								)}
-								Reload
-							</Button>
-						</DisabledHint>
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button
-									variant="outline"
-									size="icon"
-									className="sm:hidden"
-									aria-label="More actions"
-									disabled={actionPending}
-								>
-									<MoreVertical className="size-4" />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end">
-								<DropdownMenuItem
-									disabled={
-										actionPending || (status !== "running" && status !== "done") || !canRuntime
-									}
-									title={runtimeHint}
-									onClick={() => reloadMutation.mutate(idInput)}
-								>
-									<RefreshCw className="size-4" />
-									Reload
-								</DropdownMenuItem>
-							</DropdownMenuContent>
-						</DropdownMenu>
-					</>
-				}
+			<ServicePageHeader
+				projectId={projectId}
+				environmentId={(db as { environmentId?: string }).environmentId}
+				name={db.name}
+				subtitle={`${cfg.label} · ${db.appName}`}
+				status={status}
+				actions={serviceActions}
 			/>
 
 			<AlertDialog open={confirmStop} onOpenChange={setConfirmStop}>
@@ -445,11 +373,11 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 				<UnderlineTabsList>
 					<UnderlineTabsTrigger value="general">General</UnderlineTabsTrigger>
 					<UnderlineTabsTrigger value="connection">Connection</UnderlineTabsTrigger>
+					<UnderlineTabsTrigger value="runtime">Runtime</UnderlineTabsTrigger>
 					<UnderlineTabsTrigger value="environment">Environment</UnderlineTabsTrigger>
 					{cfg.supportsBackups ? (
 						<UnderlineTabsTrigger value="backups">Backups</UnderlineTabsTrigger>
 					) : null}
-					<UnderlineTabsTrigger value="runtime">Runtime</UnderlineTabsTrigger>
 					<UnderlineTabsTrigger value="settings">Settings</UnderlineTabsTrigger>
 				</UnderlineTabsList>
 
@@ -582,7 +510,7 @@ function GeneralTab({
 				toast.success("Settings saved");
 				invalidate();
 			},
-			onError: (error: { message?: string }) => toast.error(error.message ?? "Failed to save"),
+			onError: (error: { message?: string }) => toastError(error, "Failed to save"),
 		}),
 	);
 	const portMutation = useMutation(
@@ -591,8 +519,7 @@ function GeneralTab({
 				toast.success("External port saved");
 				invalidate();
 			},
-			onError: (error: { message?: string }) =>
-				toast.error(error.message ?? "Failed to save external port"),
+			onError: (error: { message?: string }) => toastError(error, "Failed to save external port"),
 		}),
 	);
 
@@ -679,7 +606,7 @@ function GeneralTab({
 
 			<SettingsSection
 				title="External port"
-				description="Host port for external access. Leave empty for internal-only."
+				description="Off by default. Your own services in this environment already reach the database by name — a port is only needed for tools outside the platform."
 			>
 				<div className="space-y-4">
 					<div className="space-y-1.5">
@@ -689,10 +616,17 @@ function GeneralTab({
 							type="number"
 							min={1}
 							max={65535}
-							placeholder="e.g. 5432"
+							placeholder="e.g. 35432"
 							value={externalPort}
 							onChange={(e) => setExternalPort(e.target.value)}
 						/>
+						<p className="text-sm text-muted-foreground">
+							Swarm publishes host ports on <strong>every</strong> network interface — there is no
+							localhost-only option — so the database becomes reachable from anywhere that can route
+							to this server. Firewall the port, keep the password strong, and leave this empty
+							unless you need it. Privileged ports, the default database ports and the platform's
+							own ports are rejected.
+						</p>
 						{!portValid && (
 							<p className="text-sm text-destructive">Enter a port between 1 and 65535.</p>
 						)}
@@ -800,7 +734,7 @@ function EnvironmentTab({ ns, idInput, env, invalidate }: TabProps & { env: stri
 				toast.success("Environment variables saved");
 				invalidate();
 			},
-			onError: (error: { message?: string }) => toast.error(error.message ?? "Failed to save"),
+			onError: (error: { message?: string }) => toastError(error, "Failed to save"),
 		}),
 	);
 
@@ -868,7 +802,7 @@ function SettingsTab({
 				toast.success("Database renamed");
 				invalidate();
 			},
-			onError: (error: { message?: string }) => toast.error(error.message ?? "Failed to rename"),
+			onError: (error: { message?: string }) => toastError(error, "Failed to rename"),
 		}),
 	);
 

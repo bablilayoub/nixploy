@@ -168,6 +168,10 @@ export function useRunningDeployments(scope: RunningDeploymentScope = {}) {
 		/** Anything in flight anywhere in the organization. */
 		anyActive: (data?.deployments ?? []).some((row) => isActiveDeployment(row.status)),
 		isLoading: query.isLoading,
+		isPending: query.isPending,
+		isError: query.isError,
+		error: query.error,
+		refetch: query.refetch,
 	};
 }
 

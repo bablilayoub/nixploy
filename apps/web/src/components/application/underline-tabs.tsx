@@ -27,7 +27,7 @@ export function UnderlineTabsTrigger({ className, ...props }: ComponentProps<typ
 	return (
 		<TabsTrigger
 			className={cn(
-				"-mb-px h-auto flex-none rounded-none border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-sm font-normal text-muted-foreground shadow-none transition-colors after:hidden hover:text-foreground data-[state=active]:border-b-foreground data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-foreground data-[state=active]:shadow-none",
+				"-mb-px h-auto flex-none rounded-none border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-sm font-normal text-muted-foreground shadow-none transition-colors after:hidden hover:text-foreground data-[state=active]:border-b-brand data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-foreground data-[state=active]:shadow-none",
 				className,
 			)}
 			{...props}

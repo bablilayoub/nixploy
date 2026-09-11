@@ -1,11 +1,6 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { ActivityView } from "@/components/settings/activity/activity-view";
-
-export const metadata: Metadata = {
-	title: "Audit log",
-};
-
+/** The audit log moved under Monitoring (UX audit F11); old links keep working. */
 export default function ActivityPage() {
-	return <ActivityView />;
+	redirect("/dashboard/monitoring?tab=audit");
 }

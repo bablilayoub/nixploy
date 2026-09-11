@@ -94,7 +94,7 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 	return (
 		<SettingsStack>
 			<SettingsSection
-				title="Compose File"
+				title="Compose file"
 				description={
 					isGitSource ? (
 						<>

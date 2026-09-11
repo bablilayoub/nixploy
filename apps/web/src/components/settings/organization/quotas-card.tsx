@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { missingCapabilityHint } from "@/lib/capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 export function QuotasCard() {
@@ -47,7 +48,7 @@ export function QuotasCard() {
 			toast.success("Quotas updated");
 			await queryClient.invalidateQueries({ queryKey: trpc.organization.settings.queryKey() });
 		},
-		onError: (error) => toast.error(error.message),
+		onError: (error) => toastError(error),
 	});
 
 	function parseLimit(value: string): number | null {

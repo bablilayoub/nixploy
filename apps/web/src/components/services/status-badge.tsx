@@ -41,7 +41,8 @@ const deploymentStatusConfig: Record<
 > = {
 	queued: { label: "Queued", status: "neutral", variant: "secondary" },
 	running: { label: "Running", status: "success", variant: "success" },
-	done: { label: "Done", status: "info", variant: "info" },
+	// "Succeeded", not "Done" — it reads as an outcome next to Error/Cancelled (UX audit F26).
+	done: { label: "Succeeded", status: "info", variant: "info" },
 	error: { label: "Error", status: "error", variant: "destructive" },
 	cancelled: { label: "Cancelled", status: "neutral", variant: "secondary" },
 };

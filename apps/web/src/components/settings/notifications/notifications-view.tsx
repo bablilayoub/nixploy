@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { missingCapabilityHint } from "@/lib/capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 export function NotificationsView() {
@@ -54,7 +55,7 @@ export function NotificationsView() {
 	const testMutation = useMutation(
 		trpc.notification.test.mutationOptions({
 			onSuccess: () => toast.success("Test notification sent"),
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -64,7 +65,7 @@ export function NotificationsView() {
 				toast.success("Notification channel removed");
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -100,7 +101,7 @@ export function NotificationsView() {
 						onClick={() => setCreateOpen(true)}
 					>
 						<Plus className="size-4" />
-						Add Notification
+						Add notification
 					</Button>
 				}
 			>

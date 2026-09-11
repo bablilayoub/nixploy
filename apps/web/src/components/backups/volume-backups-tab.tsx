@@ -3,10 +3,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { ArchiveRestore, DatabaseBackup, Loader2, Pencil, Play, Plus, Trash2 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { BackupRunsSheet, LastRunBadge } from "@/components/backups/backup-runs";
+import { useTrackedActivity } from "@/components/layout/activity-tray";
 import { QueryState } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { EmptyState } from "@/components/services/empty-state";
@@ -50,6 +52,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -87,6 +90,9 @@ export function VolumeBackupsTab({
 }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const router = useRouter();
+	const pathname = usePathname();
+	const backupsHref = `${pathname}?tab=backups`;
 	const { can } = useCapabilities();
 	const canManage = can("backups.manage");
 	const manageHint = canManage ? undefined : capabilityHint("backups.manage");
@@ -140,7 +146,7 @@ export function VolumeBackupsTab({
 				setDialogOpen(false);
 				invalidate();
 			},
-			onError: (mutationError) => toast.error(mutationError.message),
+			onError: (mutationError) => toastError(mutationError),
 		}),
 	);
 	const update = useMutation(
@@ -150,7 +156,7 @@ export function VolumeBackupsTab({
 				setDialogOpen(false);
 				invalidate();
 			},
-			onError: (mutationError) => toast.error(mutationError.message),
+			onError: (mutationError) => toastError(mutationError),
 		}),
 	);
 	const remove = useMutation(
@@ -160,36 +166,57 @@ export function VolumeBackupsTab({
 				setDeleteTarget(null);
 				invalidate();
 			},
-			onError: (mutationError) => toast.error(mutationError.message),
+			onError: (mutationError) => toastError(mutationError),
 		}),
 	);
 	const runNow = useMutation(
 		trpc.volumeBackup.runManually.mutationOptions({
 			onSuccess: () => {
-				toast.success("Backup uploaded");
+				toast.success("Backup uploaded", {
+					action: { label: "View", onClick: () => router.push(backupsHref) },
+				});
 				invalidate();
 			},
 			// The server answers BAD_REQUEST "already running" while a run is in
 			// flight — its message is already user-facing, so show it verbatim.
 			onError: (mutationError) => {
-				toast.error(mutationError.message);
+				toastError(mutationError);
 				invalidate();
 			},
 		}),
 	);
+	// Archiving a volume can take minutes — keep it visible in the tray (F14).
+	useTrackedActivity({
+		active: runNow.isPending,
+		id: `volume-backup:${runNow.variables?.volumeBackupId ?? "run"}`,
+		kind: "backup",
+		label: "Volume backup running",
+		detail: "Archiving to S3",
+		href: backupsHref,
+	});
 	const restore = useMutation(
 		trpc.volumeBackup.restore.mutationOptions({
 			onSuccess: () => {
-				toast.success("Volume restored");
+				toast.success("Volume restored", {
+					action: { label: "View", onClick: () => router.push(backupsHref) },
+				});
 				setRestoreTarget(null);
 			},
-			onError: (mutationError) => toast.error(`Restore failed: ${mutationError.message}`),
+			onError: (mutationError) => toastError(mutationError, "Restore failed"),
 		}),
 	);
+	useTrackedActivity({
+		active: restore.isPending,
+		id: `volume-restore:${restore.variables?.volumeBackupId ?? "restore"}`,
+		kind: "restore",
+		label: "Volume restore running",
+		detail: restoreTarget?.volumeName,
+		href: backupsHref,
+	});
 	const toggleEnabled = useMutation(
 		trpc.volumeBackup.update.mutationOptions({
 			onSuccess: invalidate,
-			onError: (mutationError) => toast.error(mutationError.message),
+			onError: (mutationError) => toastError(mutationError),
 		}),
 	);
 
@@ -252,7 +279,7 @@ export function VolumeBackupsTab({
 	return (
 		<>
 			<SettingsSection
-				title="Volume Backups"
+				title="Volume backups"
 				description="Volume archives to a backup destination on a cron."
 				actions={
 					<Button
@@ -262,7 +289,7 @@ export function VolumeBackupsTab({
 						onClick={() => setDialogOpen(true)}
 					>
 						<Plus className="size-4" />
-						Add Backup
+						Add backup
 					</Button>
 				}
 			>
@@ -406,7 +433,7 @@ export function VolumeBackupsTab({
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>{editing ? "Edit Volume Backup" : "Add Volume Backup"}</DialogTitle>
+						<DialogTitle>{editing ? "Edit volume Backup" : "Add volume Backup"}</DialogTitle>
 						<DialogDescription>
 							The volume is archived as a tarball and uploaded to the destination.
 						</DialogDescription>

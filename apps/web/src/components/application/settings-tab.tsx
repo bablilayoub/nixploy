@@ -165,7 +165,7 @@ export function SettingsTab({
 			<DangerZone
 				title="Delete application"
 				description="Deleting an application removes its swarm service, routes, domains, mounts and deployment history. This action is irreversible."
-				actionLabel="Delete Application"
+				actionLabel="Delete application"
 				requireText={application.name}
 				disabled={!canDelete}
 				disabledReason={capabilityHint("service.delete")}

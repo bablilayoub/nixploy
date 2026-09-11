@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { missingCapabilityHint } from "@/lib/capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 const GITLAB_EDIT_FIELDS = [
@@ -78,14 +79,14 @@ export function GitlabPanel() {
 				setAccessToken("");
 				setGroupName("");
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
 	const testMutation = useMutation(
 		trpc.gitlab.testConnection.mutationOptions({
 			onSuccess: () => toast.success("Connection successful"),
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -95,7 +96,7 @@ export function GitlabPanel() {
 				toast.success("GitLab provider updated");
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -105,7 +106,7 @@ export function GitlabPanel() {
 				toast.success("GitLab provider removed");
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

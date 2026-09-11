@@ -4,21 +4,29 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 	Activity,
 	AppWindow,
+	BookOpen,
 	Bot,
 	Boxes,
 	CalendarClock,
 	Container,
+	FileCog,
 	FolderGit2,
+	Globe,
+	History,
 	LayoutTemplate,
 	LogOut,
 	type LucideIcon,
 	Moon,
 	Plus,
+	Rocket,
+	ScrollText,
 	Search,
 	Settings,
 	Shield,
 	Sun,
 	Tags,
+	TerminalSquare,
+	TriangleAlert,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -35,6 +43,7 @@ import {
 	CommandSeparator,
 	CommandShortcut,
 } from "@/components/ui/command";
+import { docsUrl } from "@/components/ui/help-link";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { signOut } from "@/lib/auth-client";
 import { toastError } from "@/lib/describe-error";
@@ -44,7 +53,13 @@ import { cn } from "@/lib/utils";
 const RECENTS_KEY = "nixploy:command-palette:recents";
 const MAX_RECENTS = 5;
 
-type PaletteGroup = "This Project" | "Projects" | "Pages" | "Templates" | "Actions";
+type PaletteGroup =
+	| "This Service"
+	| "This Project"
+	| "Projects"
+	| "Pages"
+	| "Templates"
+	| "Actions";
 
 interface PaletteItem {
 	id: string;
@@ -55,6 +70,30 @@ interface PaletteItem {
 	keywords: string[];
 	run: () => void;
 }
+
+/**
+ * Match score in [0, 1]. Used twice per item — once on the label, once on the
+ * keywords at a third of the weight — so "dom" ranks "Domains" above an item
+ * that merely lists "domain" as a keyword (UX audit F15).
+ */
+function matchScore(text: string, search: string): number {
+	const haystack = text.toLowerCase();
+	const needle = search.toLowerCase();
+	if (!needle) return 1;
+	if (haystack === needle) return 1;
+	const index = haystack.indexOf(needle);
+	if (index === 0) return 0.9;
+	if (index > 0) return /[\s\-/·(]/.test(haystack[index - 1] ?? "") ? 0.8 : 0.6;
+	// Subsequence fallback ("ndb" → "New database"), ranked below any substring.
+	let cursor = 0;
+	for (const char of haystack) {
+		if (char === needle[cursor]) cursor += 1;
+		if (cursor === needle.length) return 0.25;
+	}
+	return 0;
+}
+
+const KEYWORD_WEIGHT = 0.35;
 
 function readRecentIds(): string[] {
 	if (typeof window === "undefined") {
@@ -130,6 +169,13 @@ export function CommandPalette({ className }: { className?: string }) {
 	const applicationId = applicationMatch?.[1];
 	const composeMatch = pathname.match(/\/services\/compose\/([^/]+)/);
 	const composeId = composeMatch?.[1];
+	// Any service route — the per-service destinations below (UX audit F15).
+	const serviceMatch = pathname.match(
+		/\/services\/(application|compose|postgres|mysql|mariadb|mongo|redis)\/([^/?]+)/,
+	);
+	const serviceKind = serviceMatch?.[1] as ServiceType | undefined;
+	const serviceId = serviceMatch?.[2];
+	const servicePath = serviceMatch ? pathname : undefined;
 	// No environmentName scope: search services across all environments.
 	const serviceInput = useMemo(() => ({ projectId: projectId ?? "" }), [projectId]);
 	const inProject = Boolean(open && projectId);
@@ -196,6 +242,70 @@ export function CommandPalette({ className }: { className?: string }) {
 	const items = useMemo<PaletteItem[]>(() => {
 		const list: PaletteItem[] = [];
 		const go = (href: string) => () => router.push(href);
+
+		// Tabs of the service the user is looking at right now — the audit's
+		// "3 clicks for logs/domains" (F15). Tab ids are the unified ones (F8).
+		if (servicePath && serviceKind) {
+			const isDatabase = serviceKind !== "application" && serviceKind !== "compose";
+			const tab = (value: string) => go(`${servicePath}?tab=${value}`);
+			const kindLabel = SERVICE_TYPE_META[serviceKind].label;
+			const destinations: {
+				id: string;
+				label: string;
+				icon: LucideIcon;
+				tab: string;
+				keywords: string[];
+			}[] = [
+				{ id: "logs", label: "Logs", icon: ScrollText, tab: "logs", keywords: ["output", "tail"] },
+				...(isDatabase
+					? []
+					: [
+							{
+								id: "domains",
+								label: "Domains",
+								icon: Globe,
+								tab: "domains",
+								keywords: ["dns", "https", "tls", "url", "route"],
+							},
+						]),
+				{
+					id: "environment",
+					label: "Environment",
+					icon: FileCog,
+					tab: "environment",
+					keywords: ["env", "variables", "secrets"],
+				},
+				{
+					id: "terminal",
+					label: "Terminal",
+					icon: TerminalSquare,
+					tab: "terminal",
+					keywords: ["shell", "exec", "console"],
+				},
+				...(isDatabase
+					? []
+					: [
+							{
+								id: "deploy",
+								label: "Deploy this service",
+								icon: Rocket,
+								tab: "deployments",
+								keywords: ["build", "redeploy", "release", "history"],
+							},
+						]),
+			];
+			for (const destination of destinations) {
+				list.push({
+					id: `service-tab:${serviceId}:${destination.id}`,
+					label: destination.label,
+					hint: kindLabel,
+					group: "This Service",
+					icon: destination.icon,
+					keywords: destination.keywords,
+					run: tab(destination.tab),
+				});
+			}
+		}
 
 		for (const project of projectsQuery.data ?? []) {
 			list.push({
@@ -264,7 +374,7 @@ export function CommandPalette({ className }: { className?: string }) {
 			list.push(
 				{
 					id: "new:application",
-					label: "New Application",
+					label: "New application",
 					hint: currentProjectQuery.data?.name,
 					group: "This Project",
 					icon: AppWindow,
@@ -273,7 +383,7 @@ export function CommandPalette({ className }: { className?: string }) {
 				},
 				{
 					id: "new:database",
-					label: "New Database",
+					label: "New database",
 					hint: currentProjectQuery.data?.name,
 					group: "This Project",
 					icon: Plus,
@@ -282,7 +392,7 @@ export function CommandPalette({ className }: { className?: string }) {
 				},
 				{
 					id: "new:compose",
-					label: "New Compose Service",
+					label: "New compose service",
 					hint: currentProjectQuery.data?.name,
 					group: "This Project",
 					icon: Boxes,
@@ -291,7 +401,7 @@ export function CommandPalette({ className }: { className?: string }) {
 				},
 				{
 					id: "project:manage-tags",
-					label: "Manage Tags",
+					label: "Manage tags",
 					hint: currentProjectQuery.data?.name,
 					group: "This Project",
 					icon: Tags,
@@ -361,12 +471,30 @@ export function CommandPalette({ className }: { className?: string }) {
 				run: go("/dashboard/monitoring"),
 			},
 			{
+				id: "page:incidents",
+				label: "Incidents",
+				hint: "Monitoring",
+				group: "Pages",
+				icon: TriangleAlert,
+				keywords: ["alerts", "failures", "uptime", "watchdog", "observability"],
+				run: go("/dashboard/monitoring?tab=incidents"),
+			},
+			{
 				id: "page:schedules",
 				label: "Schedules",
 				group: "Pages",
 				icon: CalendarClock,
 				keywords: ["cron", "jobs", "scheduled", "tasks"],
 				run: go("/dashboard/schedules"),
+			},
+			{
+				id: "page:audit-log",
+				label: "Audit log",
+				hint: "Monitoring",
+				group: "Pages",
+				icon: History,
+				keywords: ["activity", "audit", "history", "who", "changes"],
+				run: go("/dashboard/monitoring?tab=audit"),
 			},
 			{
 				id: "page:member-capabilities",
@@ -408,7 +536,6 @@ export function CommandPalette({ className }: { className?: string }) {
 					"settings",
 					item.label,
 					// Legacy names users still search for
-					...(item.href.endsWith("/activity") ? ["activity", "audit"] : []),
 					...(item.href.endsWith("/server") ? ["web server", "host", "traefik", "ai"] : []),
 					...(item.href.endsWith("/destinations") ? ["destinations", "s3", "backups"] : []),
 					...(item.href.endsWith("/organization") ? ["organization", "members", "roles"] : []),
@@ -432,15 +559,24 @@ export function CommandPalette({ className }: { className?: string }) {
 		list.push(
 			{
 				id: "action:new-project",
-				label: "New Project",
+				label: "New project",
 				group: "Actions",
 				icon: Plus,
 				keywords: ["create"],
 				run: go("/dashboard?new=project"),
 			},
 			{
+				id: "action:docs",
+				label: "Documentation",
+				hint: "nixploy.com",
+				group: "Actions",
+				icon: BookOpen,
+				keywords: ["docs", "help", "guide", "manual", "learn"],
+				run: () => window.open(docsUrl(), "_blank", "noopener,noreferrer"),
+			},
+			{
 				id: "action:toggle-theme",
-				label: resolvedTheme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode",
+				label: resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode",
 				group: "Actions",
 				icon: resolvedTheme === "dark" ? Sun : Moon,
 				keywords: ["theme", "appearance", "dark", "light"],
@@ -448,7 +584,7 @@ export function CommandPalette({ className }: { className?: string }) {
 			},
 			{
 				id: "action:sign-out",
-				label: "Sign Out",
+				label: "Sign out",
 				group: "Actions",
 				icon: LogOut,
 				keywords: ["logout", "session"],
@@ -475,6 +611,9 @@ export function CommandPalette({ className }: { className?: string }) {
 		templatesQuery.data,
 		applicationId,
 		composeId,
+		serviceKind,
+		serviceId,
+		servicePath,
 		can,
 		isInstanceAdmin,
 	]);
@@ -502,6 +641,10 @@ export function CommandPalette({ className }: { className?: string }) {
 	const recentSet = new Set(recentItems.map((item) => item.id));
 
 	const groups: { heading: PaletteGroup; items: PaletteItem[] }[] = [
+		{
+			heading: "This Service",
+			items: items.filter((item) => item.group === "This Service" && !recentSet.has(item.id)),
+		},
 		{
 			heading: "This Project",
 			items: items.filter((item) => item.group === "This Project" && !recentSet.has(item.id)),
@@ -532,13 +675,32 @@ export function CommandPalette({ className }: { className?: string }) {
 		item.run();
 	};
 
+	// cmdk scores by `value` + `keywords`; both carry the id/label/keywords so
+	// the custom filter below can weight the label over the keywords (F15).
+	const labelById = useMemo(() => {
+		const map = new Map<string, { label: string; keywords: string[] }>();
+		for (const item of [...items, ...searchItems]) {
+			map.set(item.id, { label: item.label, keywords: item.keywords });
+		}
+		return map;
+	}, [items, searchItems]);
+
+	const filter = useCallback(
+		(value: string, search: string) => {
+			const entry = labelById.get(value);
+			if (!entry) return 0;
+			const labelScore = matchScore(entry.label, search);
+			const keywordScore = entry.keywords.reduce(
+				(best, keyword) => Math.max(best, matchScore(keyword, search)),
+				0,
+			);
+			return Math.max(labelScore, keywordScore * KEYWORD_WEIGHT);
+		},
+		[labelById],
+	);
+
 	const renderItem = (item: PaletteItem) => (
-		<CommandItem
-			key={item.id}
-			value={item.id}
-			keywords={[item.label, ...item.keywords]}
-			onSelect={() => runItem(item)}
-		>
+		<CommandItem key={item.id} value={item.id} onSelect={() => runItem(item)}>
 			<item.icon className="size-4" />
 			<span className="truncate">{item.label}</span>
 			{item.hint ? (
@@ -581,8 +743,9 @@ export function CommandPalette({ className }: { className?: string }) {
 			<CommandDialog
 				open={open}
 				onOpenChange={setOpen}
-				title="Command Palette"
+				title="Command palette"
 				description="Search projects, services, pages, and actions"
+				filter={filter}
 				className="sm:max-w-lg"
 				showCloseButton={false}
 			>

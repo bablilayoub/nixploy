@@ -167,7 +167,7 @@ export function ResourcesForm({ application }: { application: Application }) {
 				<div className="grid gap-6 sm:grid-cols-2">
 					<div className="flex flex-col gap-3">
 						<div className="flex items-center justify-between">
-							<Label>Memory Reservation</Label>
+							<Label>Memory reservation</Label>
 							<span className="text-sm text-muted-foreground">
 								{memoryReservation === 0 ? "None" : formatMemory(memoryReservation)}
 							</span>
@@ -185,7 +185,7 @@ export function ResourcesForm({ application }: { application: Application }) {
 					</div>
 					<div className="flex flex-col gap-3">
 						<div className="flex items-center justify-between">
-							<Label>Memory Limit</Label>
+							<Label>Memory limit</Label>
 							<span className="text-sm text-muted-foreground">{formatMemory(memoryLimit)}</span>
 						</div>
 						<Slider
@@ -201,7 +201,7 @@ export function ResourcesForm({ application }: { application: Application }) {
 					</div>
 					<div className="flex flex-col gap-3">
 						<div className="flex items-center justify-between">
-							<Label>CPU Reservation</Label>
+							<Label>CPU reservation</Label>
 							<span className="text-sm text-muted-foreground">
 								{cpuReservation === 0 ? "None" : formatCpu(cpuReservation)}
 							</span>
@@ -219,7 +219,7 @@ export function ResourcesForm({ application }: { application: Application }) {
 					</div>
 					<div className="flex flex-col gap-3">
 						<div className="flex items-center justify-between">
-							<Label>CPU Limit</Label>
+							<Label>CPU limit</Label>
 							<span className="text-sm text-muted-foreground">{formatCpu(cpuLimit)}</span>
 						</div>
 						<Slider
@@ -240,7 +240,7 @@ export function ResourcesForm({ application }: { application: Application }) {
 					<DisabledHint hint={canWrite ? undefined : capabilityHint("service.write")}>
 						<Button onClick={onSave} disabled={update.isPending || !canWrite}>
 							{update.isPending && <Loader2 className="size-4 animate-spin" />}
-							Save Resources
+							Save resources
 						</Button>
 					</DisabledHint>
 				</div>

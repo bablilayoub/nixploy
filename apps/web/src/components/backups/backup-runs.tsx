@@ -27,6 +27,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { describeError } from "@/lib/describe-error";
 import { formatBytes, formatDuration } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -144,7 +145,7 @@ export function BackupRunsSheet({
 				invalidate();
 			},
 			onError: (error) => {
-				toast.error(`Restore verification failed: ${error.message}`);
+				toast.error(`Restore verification failed: ${describeError(error)}`);
 				invalidate();
 			},
 		}),

@@ -40,7 +40,7 @@ export function GitProvidersView() {
 	return (
 		<div className="flex flex-col gap-4">
 			<PageHeader
-				title="Git Providers"
+				title="Git providers"
 				description="Connect GitHub, GitLab, Bitbucket, or Gitea for repository deploys."
 			/>
 			<Tabs defaultValue="github">

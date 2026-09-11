@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { formatDistanceToNow } from "date-fns";
 import { ChevronRight, Container, FolderGit2, Rocket, Server } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -9,8 +8,10 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { StatusDot } from "@/components/shell";
+import { DateTime } from "@/components/ui/date-time";
 import { Skeleton } from "@/components/ui/skeleton";
-import { deploymentStatusDot } from "@/lib/status";
+import { useRunningDeployments } from "@/hooks/use-running-deployments";
+import { deploymentStatusDot, deploymentStatusLabel } from "@/lib/status";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
@@ -150,12 +151,11 @@ function DockerStatPanel() {
 
 /** Latest deployments across every project of the organization. */
 export function RecentDeployments() {
-	const trpc = useTRPC();
-	const { data, isPending, isError, error, refetch } = useQuery({
-		...trpc.deployment.recent.queryOptions({ limit: 8 }),
-		refetchInterval: 10_000,
-	});
-	const deployments = data?.deployments ?? [];
+	// Shares the one running-deployments query (UX audit F31): it polls only
+	// while something is queued or running instead of every 10 s forever, and
+	// every deploy mutation invalidates it, so the list still updates live.
+	const { deployments: all, isPending, isError, error, refetch } = useRunningDeployments();
+	const deployments = all.slice(0, 8);
 
 	// Flash a row once when its status flips between polls (running → done/error).
 	const previousStatuses = useRef(new Map<string, string>());
@@ -251,12 +251,13 @@ export function RecentDeployments() {
 									<p className="truncate text-sm font-medium leading-none">{name}</p>
 									<p className="truncate text-xs text-muted-foreground">
 										{deployment.project.name} · <span className="capitalize">{serviceType}</span> ·{" "}
-										<span className="capitalize">{deployment.status}</span>
+										{deploymentStatusLabel[deployment.status] ?? deployment.status}
 									</p>
 								</div>
-								<div className="ms-auto text-xs whitespace-nowrap text-muted-foreground">
-									{formatDistanceToNow(new Date(deployment.createdAt), { addSuffix: true })}
-								</div>
+								<DateTime
+									value={deployment.createdAt}
+									className="ms-auto text-xs whitespace-nowrap text-muted-foreground"
+								/>
 							</>
 						);
 						return href ? (

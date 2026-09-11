@@ -45,7 +45,20 @@ Production build before shipping big UI changes:
   raw). Logic lives in `modules/<domain>/`, routers stay thin.
 - **New page**: under `apps/web/src/app/(dashboard)/dashboard/…`, with
   skeleton + error-with-retry + empty states; add it to the command palette
-  (`components/command-palette/command-palette.tsx`) if navigable.
+  (`components/command-palette/command-palette.tsx`) if navigable. Sentence
+  case for labels, buttons and dialog titles; errors via `toastError` /
+  `describeError`, never `toast.error(error.message)`.
+- **New service tab**: service pages share
+  `components/services/service-page-header.tsx` and one tab order (General ·
+  [Compose file | Connection] · Deploy · Runtime · Domains · Environment ·
+  Backups · Advanced · Settings). Tabs sync to `?tab=` via `useSyncedTab`;
+  retiring an id means adding it to `SERVICE_TAB_ALIASES` so old deep links
+  still land. Register the new tab in the palette's "This Service" group.
+- **New long operation**: deployment state comes from the one
+  `hooks/use-running-deployments.ts` query — never add another
+  `refetchInterval` on deployments. Anything else that runs for minutes
+  registers with `components/layout/activity-tray.tsx` via
+  `useTrackedActivity` (pending mutation) or `trackActivity` (fire-and-forget).
 - **New schema field**: edit `packages/server/src/db/schema/*` →
   `pnpm db:generate` → migration is committed; secrets use `encryptedText`
   (or `encryptedJson` for config blobs). Hand-edit the generated SQL when

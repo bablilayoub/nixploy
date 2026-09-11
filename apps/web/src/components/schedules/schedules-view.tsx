@@ -279,7 +279,7 @@ export function SchedulesView() {
 						onClick={() => setDialogOpen(true)}
 					>
 						<Plus className="size-4" />
-						Add Schedule
+						Add schedule
 					</Button>
 				}
 			/>
@@ -309,7 +309,7 @@ export function SchedulesView() {
 							onClick={() => setDialogOpen(true)}
 						>
 							<Plus className="size-4" />
-							Add Schedule
+							Add schedule
 						</Button>
 					</div>
 				}

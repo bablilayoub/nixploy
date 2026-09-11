@@ -18,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 type PlanItem = {
@@ -148,7 +149,7 @@ export const GitopsCard = forwardRef<
 			setTimeout(() => URL.revokeObjectURL(url), 1000);
 			toast.success("Stack exported");
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "Export failed");
+			toastError(error, "Export failed");
 		}
 	};
 
@@ -188,7 +189,7 @@ export const GitopsCard = forwardRef<
 			await planMutation.mutateAsync({ yaml, projectId });
 			setConfirmOpen(true);
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "Plan failed");
+			toastError(error, "Plan failed");
 		}
 	};
 
@@ -212,7 +213,7 @@ export const GitopsCard = forwardRef<
 			}
 			await invalidateAfterApply();
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "Apply failed");
+			toastError(error, "Apply failed");
 		}
 	};
 
@@ -236,7 +237,7 @@ export const GitopsCard = forwardRef<
 			}
 			await invalidateAfterApply();
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "Sync failed");
+			toastError(error, "Sync failed");
 		}
 	};
 
@@ -261,7 +262,7 @@ export const GitopsCard = forwardRef<
 			}
 			await invalidateAfterApply();
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "Sync failed");
+			toastError(error, "Sync failed");
 		}
 	};
 

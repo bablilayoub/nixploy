@@ -18,7 +18,11 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTRPC } from "@/lib/trpc";
 
-export function IncidentsView() {
+/**
+ * Incident timeline. Rendered as the Monitoring page's "Incidents" tab (UX
+ * audit F11); `embedded` drops the page title that tab already carries.
+ */
+export function IncidentsView({ embedded = false }: { embedded?: boolean } = {}) {
 	const trpc = useTRPC();
 	const [projectId, setProjectId] = useState<string>("all");
 	const projects = useQuery(trpc.project.all.queryOptions());
@@ -31,10 +35,12 @@ export function IncidentsView() {
 
 	return (
 		<div className="flex flex-col gap-8">
-			<PageHeader
-				title="Incidents"
-				description="Failed deploys, alert-rule trips, watchdog events and uptime flips across your projects."
-			/>
+			{embedded ? null : (
+				<PageHeader
+					title="Incidents"
+					description="Failed deploys, alert-rule trips, watchdog events and uptime flips across your projects."
+				/>
+			)}
 			<SettingsStack>
 				<SettingsSection
 					title="Incident timeline"

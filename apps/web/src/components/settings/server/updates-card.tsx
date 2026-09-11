@@ -19,18 +19,19 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { HelpLink } from "@/components/ui/help-link";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { toastError } from "@/lib/describe-error";
+import { formatRelative } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
 
+/** "Checked 3 hours ago" — one shared formatter, not `toLocaleString` (UX audit F27). */
 function formatWhen(iso: string | null | undefined): string {
 	if (!iso) return "Never checked";
-	try {
-		return `Checked ${new Date(iso).toLocaleString()}`;
-	} catch {
-		return iso;
-	}
+	const when = formatRelative(iso);
+	return when === "—" ? iso : `Checked ${when}`;
 }
 
 /** Platform self-update: check GHCR digests, toggle auto-update, roll the service. */
@@ -58,7 +59,7 @@ export function UpdatesCard() {
 				toast.success("Update settings saved");
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -85,7 +86,7 @@ export function UpdatesCard() {
 				}
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -101,7 +102,7 @@ export function UpdatesCard() {
 				}
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -165,7 +166,7 @@ export function UpdatesCard() {
 										<AlertDialogDescription>
 											This pulls {data.image} and rolls the Swarm service. The dashboard will
 											briefly disconnect while the new container starts. Your data, secrets and
-											certificates are kept.
+											certificates are kept. <HelpLink slug="install" />
 										</AlertDialogDescription>
 									</AlertDialogHeader>
 									<AlertDialogFooter>
@@ -275,7 +276,7 @@ export function UpdatesCard() {
 						<div className="grid gap-0.5">
 							<Label htmlFor="auto-update">Automatic updates</Label>
 							<p className="text-xs text-muted-foreground">
-								Pull and restart when a newer image is found.
+								Pull and restart when a newer image is found. <HelpLink slug="install" />
 							</p>
 						</div>
 						<Switch

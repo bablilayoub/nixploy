@@ -26,6 +26,7 @@ import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useRunningDeployments } from "@/hooks/use-running-deployments";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 
 import { ServiceRowActions } from "./service-row-actions";
@@ -159,7 +160,7 @@ export function ServicesTable({
 			}
 			await invalidateAffected(targets.map((service) => service.type));
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "Failed to refresh services");
+			toastError(error, "Failed to refresh services");
 		} finally {
 			setBulkPending(false);
 			setSelected(new Set());

@@ -167,23 +167,31 @@ Consumers: the image `HEALTHCHECK` (Swarm restarts a task that stays 503 and
 probes in `install.sh` / `update.sh`, and `nixploy doctor`, which prints the
 report next to the server/CLI versions and warns on a major-version mismatch.
 
-## Missed cron ticks (no catch-up)
+## Missed cron ticks (opt-in catch-up)
 
 node-schedule fires nothing for the time the process was down: a nightly
 backup that coincided with an `update.sh` simply never runs (architecture
-audit #17). Nothing is replayed — re-running an arbitrary shell command or a
-dump hours late is rarely what an operator wants — but boot now **says so**:
+audit #17). Boot always **says so**, and can replay it on request:
 
 - `modules/schedules/index.ts#findOverdueSchedules` and
   `modules/backups/scheduler.ts#findOverdueBackups` compare each enabled
-  row's last recorded run with its cron interval (`cronIntervalMs`, which
-  reads two consecutive fire times out of node-schedule) and log a warning
-  per row overdue by more than one interval, with the number of missed ones.
-- "Last run" is derived, not stored: schedules use the `deployment` row every
-  run writes, backups use `backup_run`. **Open schema item**: adding
-  `last_run_at timestamptz` to `schedule`, `backup` and `volume_backup`
-  would make this exact (and is the prerequisite for actually replaying a
-  missed tick without risking a double run).
+  row's last run with its cron interval (`cronIntervalMs`, which reads two
+  consecutive fire times out of node-schedule) and log a warning per row
+  overdue by more than one interval, with the number of missed ones.
+- "Last run" is `schedule.last_run_at` / `backup.last_run_at` /
+  `volume_backup.last_run_at` (migration 0023). It is stamped **before** the
+  command or dump starts, never after: a process killed mid-run has still
+  moved the marker, so a crash loop cannot replay the same window forever.
+  Rows written before 0023 carry no marker and fall back to the derived
+  trace (the `deployment` row a schedule run writes, `backup_run` for a
+  backup), then to the row's own creation time.
+- `NIXPLOY_CRON_CATCH_UP=1` replays every overdue job **once** at boot —
+  once per row, never once per missed interval — sequentially and detached,
+  so a backlog cannot saturate the host or hold up the panel. Default off:
+  a nightly dump that missed its window is often better skipped than run at
+  11:00, and an arbitrary shell command replayed hours late can be worse
+  than not running it. The warnings carry `catchUp: true|false` so the log
+  says which mode produced them.
 
 ## Cron schedules run in UTC
 

@@ -22,6 +22,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -291,7 +292,7 @@ export function AddServiceMenu({
 				<DropdownMenuTrigger asChild>
 					<Button disabled={disabled} title={disabled ? disabledReason : undefined}>
 						<Plus className="size-4" />
-						Add Service
+						Add service
 						<ChevronDown className="size-4" />
 					</Button>
 				</DropdownMenuTrigger>
@@ -358,6 +359,10 @@ export function AddServiceMenu({
 										<SelectItem value="stack">Docker Stack (Swarm)</SelectItem>
 									</SelectContent>
 								</Select>
+								<p className="text-sm text-muted-foreground">
+									Compose runs <code>docker compose up</code>; Stack deploys through Swarm.{" "}
+									<HelpLink slug="deploy" />
+								</p>
 							</div>
 						)}
 						{(dialog === "application" || dialog === "compose") && (

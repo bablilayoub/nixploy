@@ -61,7 +61,12 @@ function serviceHref(row: { kind: string; serviceId: string; projectId: string }
 	return `${base}/${row.kind}/${row.serviceId}`;
 }
 
-export function MonitoringView() {
+/**
+ * Fleet overview — host health plus live per-service charts. Rendered as the
+ * Monitoring page's "Fleet" tab (UX audit F11); `embedded` drops the page
+ * title that tab already carries.
+ */
+export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}) {
 	const trpc = useTRPC();
 	const [selectedKey, setSelectedKey] = useState<string | null>(null);
 	const { isInstanceAdmin } = useCapabilities();
@@ -109,14 +114,16 @@ export function MonitoringView() {
 
 	return (
 		<div className="flex flex-col gap-5">
-			<PageHeader
-				title="Monitoring"
-				description={
-					showHost
-						? "Host health and live metrics across every service in this organization."
-						: "Live metrics across every service in this organization."
-				}
-			/>
+			{embedded ? null : (
+				<PageHeader
+					title="Monitoring"
+					description={
+						showHost
+							? "Host health and live metrics across every service in this organization."
+							: "Live metrics across every service in this organization."
+					}
+				/>
+			)}
 
 			{!mounted ? (
 				<Skeleton className="h-[4.5rem] w-full rounded-lg" />

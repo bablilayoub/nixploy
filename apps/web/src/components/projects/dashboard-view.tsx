@@ -59,7 +59,7 @@ export function DashboardView() {
 							<CreateProjectDialog>
 								<Button size="sm" disabled={!canCreate}>
 									<Plus className="size-4" />
-									New Project
+									New project
 								</Button>
 							</CreateProjectDialog>
 						</DisabledHint>
@@ -117,7 +117,7 @@ export function DashboardView() {
 											<CreateProjectDialog>
 												<Button size="sm" disabled={!canCreate}>
 													<Plus className="size-4" />
-													New Project
+													New project
 												</Button>
 											</CreateProjectDialog>
 										</DisabledHint>

@@ -7,14 +7,20 @@ import { toast } from "sonner";
 import { EnvEditor } from "@/components/services/env-editor";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
+import { HelpLink } from "@/components/ui/help-link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { missingCapabilityHint } from "@/lib/capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 const TITLE = "Shared variables";
-const DESCRIPTION =
-	"Inherited by every project, environment and service; lower levels override on key conflicts.";
+const DESCRIPTION = (
+	<>
+		Inherited by every project, environment and service; lower levels override on key conflicts.{" "}
+		<HelpLink slug="deploy" />
+	</>
+);
 
 /** Organization-level env vars (the lowest level of the env inheritance chain). */
 export function SharedVariablesCard() {
@@ -43,7 +49,7 @@ export function SharedVariablesCard() {
 					}),
 				]);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

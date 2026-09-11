@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { authClient } from "@/lib/auth-client";
 import { isOrgAdminRole, missingCapabilityHint } from "@/lib/capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 export function OrganizationCard() {
@@ -68,7 +69,7 @@ export function OrganizationCard() {
 			toast.success("Branding updated");
 			await queryClient.invalidateQueries({ queryKey: trpc.organization.settings.queryKey() });
 		},
-		onError: (error) => toast.error(error.message),
+		onError: (error) => toastError(error),
 	});
 
 	async function onNameSubmit(event: React.FormEvent) {
@@ -81,7 +82,7 @@ export function OrganizationCard() {
 		});
 		setIsNamePending(false);
 		if (error) {
-			toast.error(error.message ?? "Failed to update organization");
+			toastError(error, "Failed to update organization");
 			return;
 		}
 		toast.success("Organization updated");
@@ -193,6 +194,10 @@ export function OrganizationCard() {
 					</div>
 					<div className="grid gap-2">
 						<Label htmlFor="org-accent">Accent color</Label>
+						<p className="text-sm text-muted-foreground">
+							Used for primary buttons and the active tab underline. The rest of the panel stays
+							monochrome on purpose; text colour on the accent is picked automatically for contrast.
+						</p>
 						<div className="flex items-center gap-2">
 							<Input
 								id="org-accent"

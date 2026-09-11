@@ -161,7 +161,7 @@ export function SettingsTab({
 			<DangerZone
 				title="Delete compose service"
 				description="Deleting a compose service tears down its deployment and removes its domains. This cannot be undone."
-				actionLabel="Delete Compose Service"
+				actionLabel="Delete compose service"
 				requireText={compose.name}
 				disabled={!canDelete}
 				disabledReason={capabilityHint("service.delete")}

@@ -9,6 +9,18 @@ export const deploymentStatusDot: Record<string, StatusDotStatus> = {
 	cancelled: "neutral",
 };
 
+/**
+ * Deployment status → the label the panel shows everywhere (UX audit F26).
+ * `done` reads as "Succeeded" next to Failed / Cancelled, never as "Done".
+ */
+export const deploymentStatusLabel: Record<string, string> = {
+	queued: "Queued",
+	running: "Running",
+	done: "Succeeded",
+	error: "Failed",
+	cancelled: "Cancelled",
+};
+
 /** Service status ("idle" | "running" | "done" | "error") → StatusDot. */
 export const serviceStatusDot: Record<string, StatusDotStatus> = {
 	idle: "neutral",

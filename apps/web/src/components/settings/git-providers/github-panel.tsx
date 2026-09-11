@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { missingCapabilityHint } from "@/lib/capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 const GITHUB_EDIT_FIELDS = [
@@ -69,7 +70,7 @@ export function GithubPanel() {
 				setOpen(false);
 				setName("");
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -98,7 +99,7 @@ export function GithubPanel() {
 				document.body.appendChild(form);
 				form.submit();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -108,7 +109,7 @@ export function GithubPanel() {
 				toast.success("Installation synced");
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -118,7 +119,7 @@ export function GithubPanel() {
 				toast.success("GitHub provider renamed");
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -128,7 +129,7 @@ export function GithubPanel() {
 				toast.success("GitHub provider removed");
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { missingCapabilityHint } from "@/lib/capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 
 const BITBUCKET_EDIT_FIELDS = [
@@ -89,14 +90,14 @@ export function BitbucketPanel() {
 				setAppPassword("");
 				setApiToken("");
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
 	const testMutation = useMutation(
 		trpc.bitbucket.testConnection.mutationOptions({
 			onSuccess: () => toast.success("Connection successful"),
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -106,7 +107,7 @@ export function BitbucketPanel() {
 				toast.success("Bitbucket provider updated");
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -116,7 +117,7 @@ export function BitbucketPanel() {
 				toast.success("Bitbucket provider removed");
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

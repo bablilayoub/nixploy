@@ -1,12 +1,18 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
 import { DatabaseBackup, Loader2, Pencil, Play, Plus, RotateCcw, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { BackupRunsSheet, LastRunBadge } from "@/components/backups/backup-runs";
 import type { BackupDatabaseType } from "@/components/databases/database-types";
+import {
+	settleActivity,
+	trackActivity,
+	useTrackedActivity,
+} from "@/components/layout/activity-tray";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { SettingsSection } from "@/components/settings/settings-section";
 import {
@@ -21,6 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DateTime } from "@/components/ui/date-time";
 import {
 	Dialog,
 	DialogContent,
@@ -49,6 +56,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 interface DatabaseBackupsProps {
@@ -83,6 +91,9 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 	const canManage = can("backups.manage");
 	const manageHint = canManage ? undefined : capabilityHint("backups.manage");
 
+	const router = useRouter();
+	const pathname = usePathname();
+	const backupsHref = `${pathname}?tab=backups`;
 	const listInput = { serviceId, databaseType };
 	const backupsQuery = useQuery(trpc.backup.all.queryOptions(listInput));
 	const destinationsQuery = useQuery(trpc.destination.all.queryOptions());
@@ -95,8 +106,7 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 	const invalidate = () =>
 		queryClient.invalidateQueries({ queryKey: trpc.backup.all.queryKey(listInput) });
 
-	const onError = (error: { message?: string }) =>
-		toast.error(error.message ?? "Something went wrong");
+	const onError = (error: unknown) => toastError(error);
 
 	const updateMutation = useMutation(
 		trpc.backup.update.mutationOptions({
@@ -121,7 +131,9 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 		trpc.backup.runManually.mutationOptions({
 			// The server answers once the dump is stored — the run row is final.
 			onSuccess: () => {
-				toast.success("Backup finished");
+				toast.success("Backup finished", {
+					action: { label: "View", onClick: () => router.push(backupsHref) },
+				});
 				invalidate();
 			},
 			onError: (error) => {
@@ -130,6 +142,15 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 			},
 		}),
 	);
+	// The dump can take minutes; the tray keeps it visible off this page (UX audit F14).
+	useTrackedActivity({
+		active: runMutation.isPending,
+		id: `backup:${runMutation.variables?.backupId ?? "run"}`,
+		kind: "backup",
+		label: "Backup running",
+		detail: "Dumping to S3",
+		href: backupsHref,
+	});
 
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editingId, setEditingId] = useState<string | null>(null);
@@ -201,7 +222,14 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 						<DatabaseBackup className="size-8 text-muted-foreground" />
 						<p className="text-sm font-medium">No S3 destinations configured</p>
 						<p className="text-sm text-muted-foreground">
-							Add a destination under Settings → Backup storage before creating backups.
+							Add a destination under{" "}
+							<Link
+								href="/dashboard/settings/destinations"
+								className="font-medium text-foreground underline-offset-4 hover:underline"
+							>
+								Settings → Backup storage
+							</Link>{" "}
+							before creating backups.
 						</p>
 					</div>
 				) : backups.length === 0 ? (
@@ -251,7 +279,7 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 										<LastRunBadge run={backup.lastRun} />
 									</TableCell>
 									<TableCell className="text-sm text-muted-foreground">
-										{format(new Date(backup.createdAt), "PP")}
+										<DateTime value={backup.createdAt} mode="absolute" />
 									</TableCell>
 									<TableCell>
 										<div className="flex items-center justify-end gap-1">
@@ -375,8 +403,7 @@ function BackupFormDialog({
 }) {
 	const trpc = useTRPC();
 
-	const onError = (error: { message?: string }) =>
-		toast.error(error.message ?? "Something went wrong");
+	const onError = (error: { message?: string }) => toastError(error, "Something went wrong");
 
 	const createMutation = useMutation(
 		trpc.backup.create.mutationOptions({
@@ -526,6 +553,9 @@ function BackupFormDialog({
 }
 
 function RestoreDialog({ backupId, canManage }: { backupId: string; canManage: boolean }) {
+	const router = useRouter();
+	const pathname = usePathname();
+	const backupsHref = `${pathname}?tab=backups`;
 	const trpc = useTRPC();
 	const [open, setOpen] = useState(false);
 	const [key, setKey] = useState<string>("");
@@ -539,10 +569,22 @@ function RestoreDialog({ backupId, canManage }: { backupId: string; canManage: b
 	const restoreMutation = useMutation(
 		trpc.backup.restore.mutationOptions({
 			onSuccess: () => {
-				toast.success("Restore started");
+				// The server only acknowledges the start, so the tray row is
+				// cleared on a timer rather than by a completion signal.
+				const activityId = trackActivity({
+					id: `restore:${backupId}`,
+					kind: "restore",
+					label: "Restore started",
+					detail: key || undefined,
+					href: backupsHref,
+				});
+				window.setTimeout(() => settleActivity(activityId, "done", "Check the run history"), 2_000);
+				toast.success("Restore started", {
+					action: { label: "View", onClick: () => router.push(backupsHref) },
+				});
 				setOpen(false);
 			},
-			onError: (error: { message?: string }) => toast.error(error.message ?? "Restore failed"),
+			onError: (error) => toastError(error, "Restore failed"),
 		}),
 	);
 

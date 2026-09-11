@@ -52,7 +52,7 @@ const STATUS_CONFIG: Record<
 > = {
 	idle: { label: "Idle", status: "neutral" },
 	running: { label: "Running", status: "success" },
-	done: { label: "Done", status: "info" },
+	done: { label: "Succeeded", status: "info" },
 	error: { label: "Error", status: "error" },
 	awaiting_approval: { label: "Awaiting approval", status: "warning" },
 };
@@ -144,26 +144,26 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 
 	return (
 		<SettingsSection
-			title="Preview Deployments"
+			title="Preview deployments"
 			description="Per-PR preview instances. Enable under Source for git webhooks."
 			actions={
 				<Dialog open={createOpen} onOpenChange={setCreateOpen}>
 					<DialogTrigger asChild>
 						<Button size="sm" disabled={!canDeploy} title={deployHint}>
 							<Plus className="size-4" />
-							Create Preview
+							Create preview
 						</Button>
 					</DialogTrigger>
 					<DialogContent>
 						<DialogHeader>
-							<DialogTitle>Create Preview Deployment</DialogTitle>
+							<DialogTitle>Create preview deployment</DialogTitle>
 							<DialogDescription>
 								Spins up a variant of this application routed at a wildcard preview domain.
 							</DialogDescription>
 						</DialogHeader>
 						<div className="flex flex-col gap-4">
 							<div className="flex flex-col gap-2">
-								<Label htmlFor="pr-number">Pull Request Number</Label>
+								<Label htmlFor="pr-number">Pull request number</Label>
 								<Input
 									id="pr-number"
 									placeholder="123"

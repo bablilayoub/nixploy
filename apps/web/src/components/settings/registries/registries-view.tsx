@@ -155,7 +155,7 @@ export function RegistriesView() {
 						<DialogTrigger asChild>
 							<Button size="sm" disabled={!canManage} title={manageHint}>
 								<Plus className="size-4" />
-								Add Registry
+								Add registry
 							</Button>
 						</DialogTrigger>
 						<DialogContent>

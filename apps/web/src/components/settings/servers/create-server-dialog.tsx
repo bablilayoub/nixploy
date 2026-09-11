@@ -15,6 +15,7 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
+import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -24,6 +25,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 export function CreateServerDialog({
@@ -63,7 +65,7 @@ export function CreateServerDialog({
 				setSshKeyId(null);
 				setSwarmRole("worker");
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -72,7 +74,7 @@ export function CreateServerDialog({
 			<DialogTrigger asChild>
 				<Button size="sm" disabled={disabled} title={disabled ? disabledReason : undefined}>
 					<Plus className="size-4" />
-					Add Server
+					Add server
 				</Button>
 			</DialogTrigger>
 			<DialogContent>
@@ -163,7 +165,7 @@ export function CreateServerDialog({
 						</Select>
 						<p className="text-xs text-muted-foreground">
 							Setup joins this host to the primary Swarm. Workers run workloads; managers can also
-							schedule Traefik.
+							schedule Traefik. <HelpLink slug="servers" />
 						</p>
 					</div>
 				</div>

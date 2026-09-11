@@ -149,7 +149,7 @@ export function SshKeysView() {
 
 	return (
 		<div className="flex flex-col gap-8">
-			<PageHeader title="SSH Keys" description="Keypairs used to connect to remote servers." />
+			<PageHeader title="SSH keys" description="Keypairs used to connect to remote servers." />
 			<SettingsSection
 				title="SSH keys"
 				description="Keypairs used to connect to remote servers."
@@ -158,7 +158,7 @@ export function SshKeysView() {
 						<DialogTrigger asChild>
 							<Button size="sm" disabled={!canManage} title={manageHint}>
 								<Plus className="size-4" />
-								Create SSH Key
+								Create SSH key
 							</Button>
 						</DialogTrigger>
 						<DialogContent className="max-w-2xl">

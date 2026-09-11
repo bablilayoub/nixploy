@@ -43,6 +43,7 @@ import { UserAvatar } from "@/components/user-avatar";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { authClient, useSession } from "@/lib/auth-client";
 import { missingCapabilityHint } from "@/lib/capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 type InvitableRole = "viewer" | "member" | "deployer" | "admin";
@@ -111,7 +112,7 @@ export function MembersCard() {
 			setExpiryDays("7");
 			await loadMembers();
 		},
-		onError: (error) => toast.error(error.message),
+		onError: (error) => toastError(error),
 	});
 
 	const loadMembers = useCallback(async () => {
@@ -136,7 +137,7 @@ export function MembersCard() {
 			setMembers((membersResult.data?.members ?? []) as unknown as MemberRow[]);
 		}
 		if (invitationsResult.error) {
-			toast.error(invitationsResult.error.message ?? "Failed to load pending invitations");
+			toastError(invitationsResult.error, "Failed to load pending invitations");
 		} else {
 			const all = (invitationsResult.data ?? []) as unknown as InvitationRow[];
 			setInvitations(all.filter((invitation) => invitation.status === "pending"));
@@ -155,7 +156,7 @@ export function MembersCard() {
 			organizationId,
 		});
 		if (error) {
-			toast.error(error.message ?? "Failed to remove member");
+			toastError(error, "Failed to remove member");
 			throw new Error(error.message ?? "Failed to remove member");
 		}
 		toast.success("Member removed");
@@ -170,7 +171,7 @@ export function MembersCard() {
 			organizationId,
 		});
 		if (error) {
-			toast.error(error.message ?? "Failed to change role");
+			toastError(error, "Failed to change role");
 			return;
 		}
 		toast.success("Role updated");
@@ -189,7 +190,7 @@ export function MembersCard() {
 			invitationId: invitation.id,
 		});
 		if (error) {
-			toast.error(error.message ?? "Failed to cancel invitation");
+			toastError(error, "Failed to cancel invitation");
 			return;
 		}
 		toast.success(`Invitation to ${invitation.email} cancelled`);
@@ -207,7 +208,7 @@ export function MembersCard() {
 			<DialogTrigger asChild>
 				<Button size="sm" disabled={!canManage} title={manageHint}>
 					<Plus className="size-4" />
-					Invite Member
+					Invite member
 				</Button>
 			</DialogTrigger>
 			<DialogContent>

@@ -165,7 +165,7 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 					composeId: target.id,
 					composeFile: action.composeFile,
 				});
-				await onActionDone("Compose draft saved — review the Compose File tab");
+				await onActionDone("Compose draft saved — review the Compose file tab");
 				return;
 			}
 

@@ -62,7 +62,11 @@ function formatTime(value: Date | string): string {
 	});
 }
 
-export function ActivityView() {
+/**
+ * Audit log. Rendered as the Monitoring page's "Audit log" tab (UX audit
+ * F11); `embedded` drops the page title that tab already carries.
+ */
+export function ActivityView({ embedded = false }: { embedded?: boolean } = {}) {
 	const trpc = useTRPC();
 	const [action, setAction] = useState(ALL);
 	const [targetType, setTargetType] = useState(ALL);
@@ -103,10 +107,12 @@ export function ActivityView() {
 
 	return (
 		<div className="flex flex-col gap-6">
-			<PageHeader
-				title="Audit log"
-				description="Audit trail of everything that happens in this organization."
-			/>
+			{embedded ? null : (
+				<PageHeader
+					title="Audit log"
+					description="Audit trail of everything that happens in this organization."
+				/>
+			)}
 
 			<div className="flex flex-wrap items-center gap-2">
 				<div className="relative">

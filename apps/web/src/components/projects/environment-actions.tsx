@@ -11,6 +11,7 @@ import {
 	Trash2,
 	Upload,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { capabilityHint } from "@/components/services/capability-hint";
@@ -78,6 +79,7 @@ export function EnvironmentActions({
 }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const router = useRouter();
 	const { can } = useCapabilities();
 	const canWrite = can("project.write");
 	// Duplicate/clone copy env vars → the server also requires secrets.write.
@@ -173,8 +175,16 @@ export function EnvironmentActions({
 	const clone = useMutation(
 		trpc.environment.clone.mutationOptions({
 			onSuccess: async (created) => {
+				const name = created?.name ?? cloneName.trim();
 				toast.success(
-					`Environment "${created?.name ?? cloneName.trim()}" cloned with ${created?.servicesCloned ?? 0} services`,
+					`Environment "${name}" cloned with ${created?.servicesCloned ?? 0} services`,
+					{
+						action: {
+							label: "View",
+							onClick: () =>
+								router.push(`/dashboard/projects/${projectId}?env=${encodeURIComponent(name)}`),
+						},
+					},
 				);
 				await invalidate();
 				setCloneOpen(false);
