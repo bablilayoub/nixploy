@@ -47,6 +47,37 @@ NIXPLOY_LETSENCRYPT_EMAIL=you@yourdomain.com \
 When it finishes, open the printed **Setup** URL and create the owner account.
 Public `/register` is disabled after that.
 
+### Verify the installer before running it
+
+The one-liner pipes a script straight into root's shell. Every release ships a
+`SHA256SUMS` file, so the safer form is download → verify → run:
+
+```bash
+VERSION=v0.2.0   # the release you want
+BASE="https://github.com/bablilayoub/nixploy/releases/download/$VERSION"
+curl -fsSLO "$BASE/install.sh"
+curl -fsSLO "$BASE/SHA256SUMS"
+sha256sum --ignore-missing -c SHA256SUMS    # → install.sh: OK
+sudo bash install.sh
+```
+
+On macOS use `shasum -a 256 --ignore-missing -c SHA256SUMS`. The same file covers
+`update.sh` and `uninstall.sh`.
+
+The checksums only match the **release assets**, not the `raw.githubusercontent.com/.../main/`
+copies — release assets carry a `NIXPLOY_VERSION` line pinned to that tag, which the branch
+copies do not. If you install from `main`, there is nothing to verify against; prefer a
+tagged release.
+
+The panel image is signed with cosign (keyless, GitHub OIDC). To verify a tag:
+
+```bash
+cosign verify \
+  --certificate-identity-regexp '^https://github\.com/bablilayoub/nixploy/\.github/workflows/(release|docker)\.yml@refs/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/bablilayoub/nixploy:v0.2.0
+```
+
 ## Preflight
 
 Right after Docker is available and **before** any image is pulled, the
