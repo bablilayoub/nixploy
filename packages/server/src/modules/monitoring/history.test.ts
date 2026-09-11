@@ -1,49 +1,53 @@
-import { mkdtemp, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { FakeDocker } from "../../test-utils/fake-docker";
+import { useTempDir } from "../../test-utils/tmpdir";
 
 /**
  * The metrics pass must cost a FIXED number of Docker calls and DB queries,
  * not a multiple of the service count (audit #3): one `listContainers` for
  * every service's container, one more for crash-looped ones, one `inArray`
  * environment→org query and one alert-rule load per pass.
+ *
+ * Imported through `./history` on purpose: that barrel is what the router and
+ * `apps/web/server.ts` import, so it also guards the sampler/alerts/store
+ * split behind it (audit F5).
  */
 
-const { calls, rows, dockerState } = vi.hoisted(() => ({
+const state = vi.hoisted(() => ({
+	/** Set by the `../deployment/docker` mock factory below. */
+	docker: null as FakeDocker | null,
 	calls: {
-		listContainers: [] as Array<Record<string, unknown>>,
-		stats: [] as string[],
 		environmentsFindMany: 0,
 		environmentsFindFirst: 0,
 		alertRuleLoads: 0,
 		evaluated: [] as Array<{ appName: string; rules: number }>,
 	},
-	rows: { applications: [] as Array<Record<string, unknown>> },
-	dockerState: { running: [] as Array<Record<string, unknown>> },
+	applications: [] as Array<Record<string, unknown>>,
+	running: [] as Array<Record<string, unknown>>,
 }));
 
-let configDir = "";
+const docker = (): FakeDocker => {
+	if (!state.docker) throw new Error("docker mock was never initialised");
+	return state.docker;
+};
 
-vi.mock("../application/paths", () => ({ getConfigDir: () => configDir }));
+const configDir = useTempDir("nixploy-history-");
 
-vi.mock("../deployment/docker", () => ({
-	getDocker: async () => ({
-		listContainers: async (options: Record<string, unknown>) => {
-			calls.listContainers.push(options);
-			return options.all ? [] : dockerState.running;
-		},
-		getContainer: (id: string) => ({
-			inspect: async () => ({ RestartCount: 0 }),
-			stats: async () => {
-				calls.stats.push(id);
-				return {};
-			},
-		}),
-	}),
-}));
+vi.mock("../application/paths", () => ({ getConfigDir: () => configDir.path }));
 
-vi.mock("../../ws/docker-stats", () => ({
+vi.mock("../deployment/docker", async () => {
+	const { createFakeDocker } = await import("../../test-utils/fake-docker");
+	state.docker = createFakeDocker({
+		containers: (options) => (options.all ? [] : (state.running as never[])),
+		inspect: () => ({ RestartCount: 0 }),
+		stats: () => ({}),
+	});
+	return { getDocker: async () => state.docker?.docker };
+});
+
+vi.mock("../docker/stats", () => ({
 	mapDockerStats: () => ({
 		cpu: 10,
 		memory: { used: 100, total: 1000, percent: 10 },
@@ -59,7 +63,7 @@ vi.mock("../observability", () => ({
 	requiredAlertMetrics: async () => new Set(["cpu"]),
 	computeDeployFailureStreaks: async () => new Map(),
 	loadEnabledAlertRules: async () => {
-		calls.alertRuleLoads += 1;
+		state.calls.alertRuleLoads += 1;
 		return new Map([
 			[
 				"application:a1",
@@ -74,7 +78,7 @@ vi.mock("../observability", () => ({
 				? `compose:${service.composeId}`
 				: null,
 	evaluateServiceAlertRules: async (input: { appName: string; rules?: unknown[] }) => {
-		calls.evaluated.push({ appName: input.appName, rules: input.rules?.length ?? -1 });
+		state.calls.evaluated.push({ appName: input.appName, rules: input.rules?.length ?? -1 });
 	},
 }));
 
@@ -84,7 +88,7 @@ vi.mock("../../db", () => {
 		db: {
 			select: () => ({ from: () => ({ limit: async () => [] }) }),
 			query: {
-				applications: { findMany: async () => rows.applications },
+				applications: { findMany: async () => state.applications },
 				compose: empty,
 				postgres: empty,
 				mysql: empty,
@@ -94,7 +98,7 @@ vi.mock("../../db", () => {
 				servers: empty,
 				environments: {
 					findMany: async () => {
-						calls.environmentsFindMany += 1;
+						state.calls.environmentsFindMany += 1;
 						return [
 							{
 								environmentId: "env-1",
@@ -103,7 +107,7 @@ vi.mock("../../db", () => {
 						];
 					},
 					findFirst: async () => {
-						calls.environmentsFindFirst += 1;
+						state.calls.environmentsFindFirst += 1;
 						return null;
 					},
 				},
@@ -126,61 +130,61 @@ const container = (appName: string) => ({
 	Labels: { "com.docker.swarm.service.name": appName },
 });
 
-beforeEach(async () => {
-	configDir = await mkdtemp(join(tmpdir(), "nixploy-history-"));
-	calls.listContainers = [];
-	calls.stats = [];
-	calls.environmentsFindMany = 0;
-	calls.environmentsFindFirst = 0;
-	calls.alertRuleLoads = 0;
-	calls.evaluated = [];
-	rows.applications = [];
-	dockerState.running = [];
+/** Register `count` local applications, all of them with a running container. */
+function seedRunningApplications(count: number): void {
+	state.applications = Array.from({ length: count }, (_, index) => application(index + 1));
+	state.running.push(...state.applications.map((row) => container(row.appName as string)));
+}
+
+beforeEach(() => {
+	state.calls.environmentsFindMany = 0;
+	state.calls.environmentsFindFirst = 0;
+	state.calls.alertRuleLoads = 0;
+	state.calls.evaluated = [];
+	state.applications = [];
+	state.running.length = 0;
+	state.docker?.reset();
 });
 
 describe("sampleAllServices batching", () => {
 	it("resolves 10 services with a single listContainers call", async () => {
-		rows.applications = Array.from({ length: 10 }, (_, index) => application(index + 1));
-		dockerState.running = rows.applications.map((row) => container(row.appName as string));
+		seedRunningApplications(10);
 
 		await sampleAllServices();
 
 		// One `{ all: false }` listing for the pass. `restarts` is not a
 		// watched metric here, so the exited listing is not made at all.
-		expect(calls.listContainers).toEqual([{ all: false }]);
-		expect(calls.stats).toHaveLength(10);
+		expect(docker().calls.listContainers).toEqual([{ all: false }]);
+		expect(docker().calls.stats).toHaveLength(10);
 	});
 
 	it("looks the organization up once per pass, not once per service", async () => {
-		rows.applications = Array.from({ length: 10 }, (_, index) => application(index + 1));
-		dockerState.running = rows.applications.map((row) => container(row.appName as string));
+		seedRunningApplications(10);
 
 		await sampleAllServices();
 
-		expect(calls.environmentsFindMany).toBe(1);
-		expect(calls.environmentsFindFirst).toBe(0);
-		expect(calls.alertRuleLoads).toBe(1);
+		expect(state.calls.environmentsFindMany).toBe(1);
+		expect(state.calls.environmentsFindFirst).toBe(0);
+		expect(state.calls.alertRuleLoads).toBe(1);
 	});
 
 	it("hands pre-loaded rules to the evaluator and skips services with none", async () => {
-		rows.applications = [application(1), application(2)];
-		dockerState.running = rows.applications.map((row) => container(row.appName as string));
+		seedRunningApplications(2);
 
 		await sampleAllServices();
 
 		// Only svc-1 (applicationId a1) has a rule; svc-2 never reaches the
 		// evaluator, so it costs no query at all.
-		expect(calls.evaluated).toEqual([{ appName: "svc-1", rules: 1 }]);
+		expect(state.calls.evaluated).toEqual([{ appName: "svc-1", rules: 1 }]);
 	});
 
 	it("appends one JSONL line per sampled service", async () => {
-		rows.applications = [application(1)];
-		dockerState.running = [container("svc-1")];
+		seedRunningApplications(1);
 
 		await sampleAllServices();
 		await sampleAllServices();
 
-		const file = join(configDir, "metrics", "svc-1.jsonl");
+		const file = join(configDir.path, "metrics", "svc-1.jsonl");
 		const points = (await readFile(file, "utf8")).split("\n").filter(Boolean);
 		expect(points).toHaveLength(2);
 		expect(JSON.parse(points[0] as string)).toMatchObject({ cpu: 10, mu: 100, mt: 1000 });
@@ -188,6 +192,6 @@ describe("sampleAllServices batching", () => {
 
 	it("makes no Docker call at all when there is nothing local to sample", async () => {
 		await sampleAllServices();
-		expect(calls.listContainers).toEqual([]);
+		expect(docker().calls.listContainers).toEqual([]);
 	});
 });

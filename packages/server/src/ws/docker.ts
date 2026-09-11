@@ -1,50 +1,29 @@
-import Docker from "dockerode";
+import type Docker from "dockerode";
 import { eq } from "drizzle-orm";
 import { Client } from "ssh2";
 import { db } from "../db";
 import { servers } from "../db/schema";
+import { getLocalDocker, resolveLocalContainer } from "../modules/docker/containers";
 import { isProtectedPlatformName } from "../modules/docker/protected";
 import { execAsyncRemote, verifyRemoteHostKey } from "../utils/exec";
 
 const SSH_READY_TIMEOUT_MS = 30_000;
 const EXEC_TIMEOUT_MS = 15_000;
 
-let dockerInstance: Docker | null = null;
-
 const shq = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
-/** Local dockerode client (daemon socket on the Nixploy host). */
-export function getDocker(): Docker {
-	if (!dockerInstance) {
-		dockerInstance = new Docker();
-	}
-	return dockerInstance;
-}
-
 /**
- * Resolve a running container for an app on the local daemon.
- * Prefer exact Swarm / compose labels — never substring `name=` matching.
+ * The local dockerode client and the label-based container lookup live in
+ * `modules/docker/containers.ts` (the metrics pass and the monitoring router
+ * need them too); re-exported here under their original names.
  */
-export async function resolveLocalContainer(appName: string): Promise<Docker.Container | null> {
-	const docker = getDocker();
-	const labelFilters = [
-		[`com.docker.swarm.service.name=${appName}`],
-		[`com.docker.compose.project=${appName}`],
-		[`com.docker.stack.namespace=${appName}`],
-	];
-	for (const label of labelFilters) {
-		const matches = await docker.listContainers({ filters: { label } });
-		const first = matches[0];
-		if (first) return docker.getContainer(first.Id);
-	}
-	return null;
-}
+export { getLocalDocker as getDocker, resolveLocalContainer };
 
 /** Resolve a local container by exact Docker ID (short or full). */
 export async function resolveLocalContainerById(
 	containerId: string,
 ): Promise<Docker.Container | null> {
-	const docker = getDocker();
+	const docker = getLocalDocker();
 	try {
 		const container = docker.getContainer(containerId);
 		const info = await container.inspect();
@@ -79,7 +58,7 @@ export async function resolveContainerAppName(
 		const parts = out.split("|");
 		labels = Object.fromEntries(APP_NAME_LABELS.map((label, i) => [label, parts[i] ?? ""]));
 	} else {
-		const info = await getDocker().getContainer(containerId).inspect();
+		const info = await getLocalDocker().getContainer(containerId).inspect();
 		labels = info.Config?.Labels ?? {};
 	}
 	for (const label of APP_NAME_LABELS) {
@@ -103,7 +82,7 @@ export async function assertContainerNotProtected(
 			await execAsyncRemote(serverId, `docker inspect --format '{{.Name}}' ${shq(containerId)}`)
 		).trim();
 	} else {
-		const info = await getDocker().getContainer(containerId).inspect();
+		const info = await getLocalDocker().getContainer(containerId).inspect();
 		name = info.Name ?? "";
 	}
 	if (isProtectedPlatformName(name)) {
