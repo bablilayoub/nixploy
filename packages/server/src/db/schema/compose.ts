@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { boolean, index, pgTable, text } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, text } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { encryptedText } from "../custom-columns";
 import { composeSourceType, composeType, serviceStatus } from "./enums";
@@ -30,6 +30,22 @@ export const compose = pgTable(
 		composePath: text("compose_path").notNull().default("./docker-compose.yml"),
 		autoDeploy: boolean("auto_deploy").notNull().default(true),
 		watchPaths: text("watch_paths").array(),
+
+		// ── previews ────────────────────────────────────────────────────────────
+		// Same names and semantics as the application columns (see
+		// `schema/application.ts`); `modules/preview` reads both through one
+		// `PreviewParent` shape, so the two sets must not drift.
+		/** When true, pull_request webhooks create/redeploy/delete preview stacks. */
+		isPreviewDeploymentsActive: boolean("is_preview_deployments_active").notNull().default(false),
+		/** Safe default: fork PRs wait for an org member's approval before deploying. */
+		previewForksRequireApproval: boolean("preview_forks_require_approval").notNull().default(true),
+		/** Preview-only env, merged OVER the service env layer for PR renders. */
+		previewEnv: encryptedText("preview_env"),
+		/** Max simultaneous previews for this stack; a webhook over the cap is refused. */
+		previewLimit: integer("preview_limit").notNull().default(3),
+		/** Default expiry handed to webhook-created previews (null = never expire). */
+		previewTtlHours: integer("preview_ttl_hours"),
+
 		gitUrl: text("git_url"),
 		gitBranch: text("git_branch"),
 		customGitSSHKeyId: text("custom_git_ssh_key_id").references(() => sshKeys.sshKeyId, {

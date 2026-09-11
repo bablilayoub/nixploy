@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
-import { applications, deployments, previewDeployments } from "../../db/schema";
+import { deployments, previewDeployments } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { getComposeCodeDir } from "../compose/paths";
 import { getAppCodePath, shellQuote } from "../deployment/paths";
 import {
 	classifyPullRequestAction,
@@ -9,12 +10,15 @@ import {
 	createPreviewDeployment,
 	deletePreviewByPullRequest,
 	findPreviewByPullRequest,
+	loadPreviewParent,
+	type PreviewParent,
+	type PreviewParentRef,
 } from "../preview";
 import { upsertPreviewComment } from "../preview/comment";
 import { decideForkPreviewGate, type ForkGateDecision } from "../preview/fork-gate";
 import { isMetadataOnlyPullRequestUpdate } from "../preview/source-ref";
 import { isBitbucketCollaborator } from "./bitbucket";
-import { commitUrlForApplication } from "./commit-link";
+import { commitUrlForApplication, commitUrlForCompose } from "./commit-link";
 import { isGiteaCollaborator } from "./gitea";
 import { isGithubCollaborator } from "./github";
 import { isGitlabCollaborator } from "./gitlab";
@@ -24,61 +28,52 @@ import { WebhookIgnored } from "./providers/shared";
 /**
  * Preview lifecycle of a verified pull_request delivery: the fork approval
  * gate (provider collaborator lookup) and create / redeploy / delete.
+ *
+ * Applications and compose services share every step — they expose the same
+ * provider columns and the same preview knobs through `PreviewParent`
+ * (`modules/preview/parent.ts`) — so the flow is written once and entered
+ * through the two thin wrappers at the bottom.
  */
 
 /**
- * Fork gate for one PR delivery: consult the app's
+ * Fork gate for one PR delivery: consult the parent's
  * `previewForksRequireApproval` setting and the provider collaborator /
  * membership API (fail-safe: unknown collaborator status ⇒ gated).
  */
 async function evaluateForkGate(
-	applicationId: string,
+	parent: PreviewParent,
 	pr: PullRequestWebhookInfo,
 ): Promise<ForkGateDecision> {
 	if (!pr.isFork) return "allow";
-	const application = await db.query.applications.findFirst({
-		where: eq(applications.applicationId, applicationId),
-		columns: {
-			sourceType: true,
-			owner: true,
-			repository: true,
-			githubId: true,
-			gitlabId: true,
-			giteaId: true,
-			bitbucketId: true,
-			previewForksRequireApproval: true,
-		},
-	});
-	if (!application) return "allow"; // deleted between match and apply
 	let isCollaborator: boolean | null = null;
-	const owner = application.owner;
-	const repo = application.repository;
+	const owner = parent.owner;
+	const repo = parent.repository;
 	const username = pr.authorLogin;
 	if (owner && repo && username) {
-		if (application.sourceType === "github" && application.githubId) {
+		if (parent.sourceType === "github" && parent.githubId) {
 			isCollaborator = await isGithubCollaborator({
-				githubId: application.githubId,
+				githubId: parent.githubId,
 				owner,
 				repo,
 				username,
 			});
-		} else if (application.sourceType === "gitlab" && application.gitlabId) {
+		} else if (parent.sourceType === "gitlab" && parent.gitlabId) {
 			isCollaborator = await isGitlabCollaborator({
-				gitlabId: application.gitlabId,
+				gitlabId: parent.gitlabId,
 				owner,
 				repo,
 				username,
 			});
-		} else if (application.sourceType === "gitea" && application.giteaId) {
+		} else if (parent.sourceType === "gitea" && parent.giteaId) {
 			isCollaborator = await isGiteaCollaborator({
-				giteaId: application.giteaId,
+				giteaId: parent.giteaId,
 				owner,
 				repo,
 				username,
 			});
-		} else if (application.sourceType === "bitbucket" && application.bitbucketId) {
+		} else if (parent.sourceType === "bitbucket" && parent.bitbucketId) {
 			isCollaborator = await isBitbucketCollaborator({
-				bitbucketId: application.bitbucketId,
+				bitbucketId: parent.bitbucketId,
 				owner,
 				repo,
 				username,
@@ -87,7 +82,7 @@ async function evaluateForkGate(
 	}
 	return decideForkPreviewGate({
 		isFork: true,
-		requireApproval: application.previewForksRequireApproval,
+		requireApproval: parent.previewForksRequireApproval,
 		isCollaborator,
 	});
 }
@@ -97,11 +92,15 @@ async function evaluateForkGate(
  * `<code dir>` reset to the last fetched head). Null when unknown — never
  * deployed, checkout wiped, server unreachable — which always rebuilds.
  */
-async function readCheckoutCommit(preview: {
-	appName: string;
-	serverId: string | null;
-}): Promise<string | null> {
-	const command = `git -C ${shellQuote(getAppCodePath(preview.appName))} rev-parse HEAD`;
+async function readCheckoutCommit(
+	parent: PreviewParent,
+	preview: { appName: string; serverId: string | null },
+): Promise<string | null> {
+	const codeDir =
+		parent.kind === "compose"
+			? getComposeCodeDir(preview.appName)
+			: getAppCodePath(preview.appName);
+	const command = `git -C ${shellQuote(codeDir)} rev-parse HEAD`;
 	try {
 		const out = preview.serverId
 			? await execAsyncRemote(preview.serverId, command, { timeoutMs: 15_000 })
@@ -115,32 +114,41 @@ async function readCheckoutCommit(preview: {
 
 /**
  * Commit page for a PR's head commit: the payload's own link when the
- * provider sent one, otherwise built from the application's source row and
+ * provider sent one, otherwise built from the parent's source row and
  * the base URL of the git-provider it is linked to (so self-hosted GitLab /
  * Gitea land on their own host rather than the vendor cloud).
  */
 async function resolvePreviewCommitUrl(
-	applicationId: string,
+	parent: PreviewParent,
 	pr: PullRequestWebhookInfo,
 ): Promise<string | null> {
 	if (pr.headCommitUrl) return pr.headCommitUrl;
 	if (!pr.headCommit) return null;
-	return await commitUrlForApplication(applicationId, pr.headCommit).catch(() => null);
+	const resolve =
+		parent.kind === "compose"
+			? commitUrlForCompose(parent.id, pr.headCommit)
+			: commitUrlForApplication(parent.id, pr.headCommit);
+	return await resolve.catch(() => null);
 }
 
+/** `{ applicationId }` or `{ composeId }` for the preview lifecycle calls. */
+const refFor = (parent: PreviewParent): PreviewParentRef =>
+	parent.kind === "application" ? { applicationId: parent.id } : { composeId: parent.id };
+
 /**
- * Apply a verified pull_request webhook to one application: create/redeploy
- * on open/sync, delete on close. Returns a short status string for the HTTP
- * response.
+ * Apply a verified pull_request webhook to one preview parent: create /
+ * redeploy on open/sync, delete on close. Returns a short status string for
+ * the HTTP response.
  */
-export async function handlePreviewWebhookForApplication(
-	applicationId: string,
+async function handlePreviewWebhookForParent(
+	parent: PreviewParent,
 	webhook: GitWebhookResult,
 ): Promise<{
 	action: string;
 	previewDeploymentId?: string;
 	deploymentId?: string;
 }> {
+	const ref = refFor(parent);
 	const pr = webhook.pullRequest;
 	if (!pr?.number) {
 		throw new WebhookIgnored("pull_request webhook carried no PR number");
@@ -152,10 +160,10 @@ export async function handlePreviewWebhookForApplication(
 	}
 
 	if (kind === "delete") {
-		const deleted = await deletePreviewByPullRequest(applicationId, pr.number);
+		const deleted = await deletePreviewByPullRequest(ref, pr.number);
 		if (deleted) {
 			await upsertPreviewComment({
-				applicationId,
+				...ref,
 				pullRequestNumber: pr.number,
 				status: "removed",
 			});
@@ -169,9 +177,9 @@ export async function handlePreviewWebhookForApplication(
 	// Bitbucket's `pullrequest:updated` also fires for title/description/
 	// reviewer edits; skip the rebuild when the head commit is what the
 	// preview already checked out.
-	const existingPreview = await findPreviewByPullRequest(applicationId, pr.number);
+	const existingPreview = await findPreviewByPullRequest(ref, pr.number);
 	if (existingPreview && pr.headCommit) {
-		const deployedCommit = await readCheckoutCommit(existingPreview);
+		const deployedCommit = await readCheckoutCommit(parent, existingPreview);
 		if (
 			isMetadataOnlyPullRequestUpdate({
 				action: pr.action,
@@ -193,29 +201,14 @@ export async function handlePreviewWebhookForApplication(
 		commitMessage: pr.headCommitMessage ?? null,
 		commitAuthor: pr.headCommitAuthor ?? null,
 		// Prefer the URL the payload carried (it names the real host, fork
-		// repositories included); derive one from the application's provider
+		// repositories included); derive one from the parent's provider
 		// row only when the provider sent none.
-		commitUrl: await resolvePreviewCommitUrl(applicationId, pr),
+		commitUrl: await resolvePreviewCommitUrl(parent, pr),
 	};
 	const result = await (async () => {
-		const gate = await evaluateForkGate(applicationId, pr);
-		if (gate === "allow") {
-			return await createOrRedeployPreview({
-				applicationId,
-				pullRequestNumber: pr.number,
-				branch: sourceRef || null,
-				pullRequestId: pr.id ?? null,
-				pullRequestTitle: pr.title ?? null,
-				pullRequestURL: pr.url ?? null,
-				pullRequestAuthor: pr.authorLogin ?? null,
-				...provenance,
-			});
-		}
-
-		// Fork PR + approval required + author not a known collaborator: never
-		// auto-build arbitrary code. Park the preview as awaiting_approval.
-		const gatedInput = {
-			applicationId,
+		const gate = await evaluateForkGate(parent, pr);
+		const input = {
+			...ref,
 			pullRequestNumber: pr.number,
 			branch: sourceRef || null,
 			pullRequestId: pr.id ?? null,
@@ -224,31 +217,37 @@ export async function handlePreviewWebhookForApplication(
 			pullRequestAuthor: pr.authorLogin ?? null,
 			...provenance,
 		};
+		if (gate === "allow") {
+			return await createOrRedeployPreview(input);
+		}
+
+		// Fork PR + approval required + author not a known collaborator: never
+		// auto-build arbitrary code. Park the preview as awaiting_approval.
 		const existing = existingPreview;
 		if (existing && existing.previewStatus !== "awaiting_approval") {
 			// Approved earlier (or predates the gate) — keep it redeploying.
-			return await createOrRedeployPreview(gatedInput);
+			return await createOrRedeployPreview(input);
 		}
 		if (existing) {
 			// Still gated: refresh PR metadata only, no build.
 			await db
 				.update(previewDeployments)
 				.set({
-					branch: gatedInput.branch,
-					pullRequestId: gatedInput.pullRequestId,
-					pullRequestTitle: gatedInput.pullRequestTitle,
-					pullRequestURL: gatedInput.pullRequestURL,
-					pullRequestAuthor: gatedInput.pullRequestAuthor,
+					branch: input.branch,
+					pullRequestId: input.pullRequestId,
+					pullRequestTitle: input.pullRequestTitle,
+					pullRequestURL: input.pullRequestURL,
+					pullRequestAuthor: input.pullRequestAuthor,
 					// A gated fork PR never builds, so the preview row is the
 					// only place its head commit is ever recorded.
-					...(gatedInput.commitSha ? { commitSha: gatedInput.commitSha } : {}),
-					...(gatedInput.commitMessage ? { commitMessage: gatedInput.commitMessage } : {}),
-					...(gatedInput.commitAuthor ? { commitAuthor: gatedInput.commitAuthor } : {}),
-					...(gatedInput.commitUrl ? { commitUrl: gatedInput.commitUrl } : {}),
+					...(input.commitSha ? { commitSha: input.commitSha } : {}),
+					...(input.commitMessage ? { commitMessage: input.commitMessage } : {}),
+					...(input.commitAuthor ? { commitAuthor: input.commitAuthor } : {}),
+					...(input.commitUrl ? { commitUrl: input.commitUrl } : {}),
 				})
 				.where(eq(previewDeployments.previewDeploymentId, existing.previewDeploymentId));
 			await upsertPreviewComment({
-				applicationId,
+				...ref,
 				pullRequestNumber: pr.number,
 				status: "awaiting_approval",
 			});
@@ -258,12 +257,9 @@ export async function handlePreviewWebhookForApplication(
 				deploymentId: "",
 			};
 		}
-		const created = await createPreviewDeployment({
-			...gatedInput,
-			deferDeploy: true,
-		});
+		const created = await createPreviewDeployment({ ...input, deferDeploy: true });
 		await upsertPreviewComment({
-			applicationId,
+			...ref,
 			pullRequestNumber: pr.number,
 			status: "awaiting_approval",
 		});
@@ -284,7 +280,7 @@ export async function handlePreviewWebhookForApplication(
 
 	if (result.action !== "awaiting_approval") {
 		await upsertPreviewComment({
-			applicationId,
+			...ref,
 			pullRequestNumber: pr.number,
 			status: "deploying",
 		});
@@ -295,4 +291,25 @@ export async function handlePreviewWebhookForApplication(
 		previewDeploymentId: result.previewDeploymentId,
 		deploymentId: result.deploymentId,
 	};
+}
+
+/** Apply a verified pull_request webhook to one application. */
+export async function handlePreviewWebhookForApplication(
+	applicationId: string,
+	webhook: GitWebhookResult,
+): Promise<{ action: string; previewDeploymentId?: string; deploymentId?: string }> {
+	const parent = await loadPreviewParent({ applicationId });
+	// Deleted between match and apply.
+	if (!parent) return { action: "noop" };
+	return await handlePreviewWebhookForParent(parent, webhook);
+}
+
+/** Apply a verified pull_request webhook to one compose service. */
+export async function handlePreviewWebhookForCompose(
+	composeId: string,
+	webhook: GitWebhookResult,
+): Promise<{ action: string; previewDeploymentId?: string; deploymentId?: string }> {
+	const parent = await loadPreviewParent({ composeId });
+	if (!parent) return { action: "noop" };
+	return await handlePreviewWebhookForParent(parent, webhook);
 }

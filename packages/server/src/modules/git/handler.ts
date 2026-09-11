@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
-import { applications } from "../../db/schema";
+import { applications, compose } from "../../db/schema";
 import { type DeploymentProvenance, queueDeployment } from "../deployment";
 import { classifyPullRequestAction } from "../preview";
 import { previewSourceRefForPullRequest } from "../preview/source-ref";
@@ -33,6 +33,23 @@ const PROVIDER_COLUMN = {
 	gitea: applications.giteaId,
 } as const;
 
+const COMPOSE_PROVIDER_COLUMN = {
+	github: compose.githubId,
+	gitlab: compose.gitlabId,
+	bitbucket: compose.bitbucketId,
+	gitea: compose.giteaId,
+} as const;
+
+/**
+ * A verified delivery plus the compose services that should react to it.
+ * `GitWebhookResult` predates compose previews and only carries
+ * `applicationIds`; widening it here keeps the provider modules untouched.
+ */
+export type GitWebhookDispatch = GitWebhookResult & {
+	/** Ids of compose services that should react to this delivery (pull requests only). */
+	composeIds: string[];
+};
+
 /**
  * Verify an incoming git webhook, extract repo/branch, and return the
  * applications that should react. `body` must be the *raw* request body
@@ -43,14 +60,15 @@ const PROVIDER_COLUMN = {
  * provider row only and only applications linked to it can match.
  *
  * Push/tag → apps with autoDeploy matching repo+branch.
- * Pull request → apps with isPreviewDeploymentsActive matching repo only.
+ * Pull request → applications AND compose services with
+ * isPreviewDeploymentsActive matching repo only.
  */
 export async function handleGitWebhook(
 	provider: GitWebhookProvider,
 	headers: WebhookHeaders,
 	body: string | object,
 	providerId?: string,
-): Promise<GitWebhookResult> {
+): Promise<GitWebhookDispatch> {
 	const rawBody = typeof body === "string" ? body : JSON.stringify(body);
 
 	const extracted = await (async () => {
@@ -98,16 +116,35 @@ export async function handleGitWebhook(
 		if (providerId) {
 			conditions.push(eq(PROVIDER_COLUMN[provider], providerId));
 		}
-		const candidates = await db
-			.select({
-				applicationId: applications.applicationId,
-				sourceType: applications.sourceType,
-				repository: applications.repository,
-				owner: applications.owner,
-				isPreviewDeploymentsActive: applications.isPreviewDeploymentsActive,
-			})
-			.from(applications)
-			.where(and(...conditions));
+		const composeConditions = [
+			eq(compose.sourceType, provider),
+			eq(compose.isPreviewDeploymentsActive, true),
+		];
+		if (providerId) {
+			composeConditions.push(eq(COMPOSE_PROVIDER_COLUMN[provider], providerId));
+		}
+		const [candidates, composeCandidates] = await Promise.all([
+			db
+				.select({
+					applicationId: applications.applicationId,
+					sourceType: applications.sourceType,
+					repository: applications.repository,
+					owner: applications.owner,
+					isPreviewDeploymentsActive: applications.isPreviewDeploymentsActive,
+				})
+				.from(applications)
+				.where(and(...conditions)),
+			db
+				.select({
+					composeId: compose.composeId,
+					sourceType: compose.sourceType,
+					repository: compose.repository,
+					owner: compose.owner,
+					isPreviewDeploymentsActive: compose.isPreviewDeploymentsActive,
+				})
+				.from(compose)
+				.where(and(...composeConditions)),
+		]);
 
 		const context = {
 			provider,
@@ -117,10 +154,16 @@ export async function handleGitWebhook(
 		const matches = candidates.filter((candidate) =>
 			applicationMatchesPreviewWebhook(candidate, context),
 		);
+		// Same pure predicate: a compose row carries the identical provider,
+		// repository, owner and previews-enabled columns.
+		const composeMatches = composeCandidates.filter((candidate) =>
+			applicationMatchesPreviewWebhook(candidate, context),
+		);
 
 		return {
 			provider,
 			applicationIds: matches.map((match) => match.applicationId),
+			composeIds: composeMatches.map((match) => match.composeId),
 			branch: extracted.branch,
 			type: "pull_request",
 			pullRequest: extracted.pullRequest,
@@ -165,6 +208,9 @@ export async function handleGitWebhook(
 	return {
 		provider,
 		applicationIds: matches.map((match) => match.applicationId),
+		// Compose services do not auto-deploy from pushes (only previews react
+		// to pull requests), so a push delivery never names one.
+		composeIds: [],
 		branch: extracted.branch,
 		type: extracted.type,
 		commit: extracted.commit,

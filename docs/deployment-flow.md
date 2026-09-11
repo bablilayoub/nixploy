@@ -455,6 +455,36 @@ therefore runs against the project that is **currently** running — it is
 skipped with a log line on the first deploy — and aborting there leaves that
 project untouched; the post hook runs against the project just brought up.
 
+Git-backed compose sources are checked out with `init` + `fetch <ref>` +
+`reset --hard FETCH_HEAD` (the sequence application deploys use), not
+`git clone --branch`: clone only accepts branch and tag names, while a fork
+pull-request preview fetches `refs/pull/<n>/head`.
+
+### Compose previews
+
+A compose preview is a whole second **project**, not one service:
+`buildPreviewComposeTarget` (`modules/preview/compose.ts`) hands the compose
+pipeline the parent row with `appName` replaced by `<appName>-pr-<n>` and
+`previewEnv` merged over the service env layer, pointed at the pull request's
+source ref. Because every downstream step is keyed on `appName`, the preview
+gets its own working directory, checkout, rendered file, compose project /
+stack name, private `<appName>-pr-<n>-net` and per-service network aliases
+for free, and can never collide with production. The isolation suffix is
+dropped (the project name is already unique). Differences from a normal
+compose job, all in `runComposeJob`:
+
+- no rollback snapshot (`prepareComposeFiles` is called with
+  `deploymentId: null`) — a PR's file must never become a production rollback
+  target, and both rows share one `composeId`;
+- neither deploy hook runs, exactly like application previews;
+- Traefik files are written by `syncPreviewTraefik`, one per compose service
+  that has a production HTTP domain, under the preview project's own key
+  (`<app>-pr-<n>-<service>` / `<app>-pr-<n>_<service>`);
+  `resyncComposeDomains` is not called, and it filters preview domains out of
+  production's files in return;
+- the compose row's `status` is never written (the shared preview guard in
+  `setServiceStatus`); the preview row's `previewStatus` is.
+
 ## Database lifecycle
 
 `modules/databases/engine.ts`: create inserts the row with generated
@@ -485,8 +515,20 @@ through `modules/backups` to S3 destinations on schedules.
 - Git push webhooks (`/api/webhooks/<provider>/...`, signature-verified,
   watch-path filtered) and the generic API-key deploy hook all end at the
   same `queueDeployment`.
-- `pull_request` deliveries go to `handlePreviewWebhookForApplication`, which
-  creates/redeploys/tears down the PR's preview and then posts the preview URL
+- `pull_request` deliveries fan out to every **application** and every
+  **compose service** with `isPreviewDeploymentsActive` whose provider, owner
+  and repository match (`handleGitWebhook` returns `applicationIds` and
+  `composeIds`; branch is deliberately not compared). Each one goes to
+  `handlePreviewWebhookForApplication` / `handlePreviewWebhookForCompose`,
+  two thin wrappers over one flow: both parent tables carry the same provider
+  columns and the same five preview knobs, reduced to a `PreviewParent`
+  (`modules/preview/parent.ts`), so the fork gate, the limit, the TTL, the PR
+  comment, cancel/supersede and teardown are written once. A preview row names
+  exactly one parent (`application_id` / `compose_id`, CHECK constraint
+  `preview_deployment_one_parent`). Push deliveries never name a compose
+  service — compose auto-deploy from pushes does not exist.
+  The flow creates/redeploys/tears down the PR's preview and then posts the
+  preview URL(s)
   back on the pull request (`modules/preview/comment.ts`, GitHub/GitLab/Gitea).
   The comment carries a hidden marker so later pushes edit it in place instead
   of stacking new comments; a torn-down preview edits it to say so. Commenting
@@ -506,17 +548,29 @@ through `modules/backups` to S3 destinations on schedules.
   none of its published ports, volumes or file/bind mounts, as a single
   replica; their Traefik file forwards to the parent domain's container port
   and carries the parent's basic-auth and redirects.
-- Three knobs shape them (application columns, Previews tab):
+- A compose preview is the whole project under `<app>-pr-<n>` (see
+  [Compose previews](#compose-previews) above). Its hosts are
+  `pr-<n>-<app>-<service>.<wildcard>`, one per compose service that has a
+  production HTTP domain, each mirroring that service's port and TLS settings
+  and carrying that service's redirects and basic-auth; `tcp`/`udp` domains
+  are skipped (a wildcard host cannot name an entrypoint). A stack whose
+  services have no domain still deploys — it simply has no public URL, and the
+  PR comment says so.
+- Three knobs shape them (application **and compose** columns, Previews tab):
   `previewEnv` is merged **over** the service env layer for preview jobs only
-  (`buildPreviewDeployTarget`), so a PR can point at a scratch database while
-  still inheriting the project/environment values; `previewLimit` (default 3,
-  `0` = unlimited) caps how many previews one application may have at once —
+  (`buildPreviewDeployTarget` / `buildPreviewComposeTarget`), so a PR can point
+  at a scratch database while still inheriting the project/environment values;
+  `previewLimit` (default 3,
+  `0` = unlimited) caps how many previews one service may have at once —
   a webhook over the cap is **refused**, never silently evicting a preview
   somebody is still reviewing, and the pull request gets a comment saying so;
   `previewTtlHours` stamps `expiresAt` on previews the webhook creates, which
-  the hourly maintenance cron then tears down. An explicit `expiresAt` (manual
-  create) wins over the default. Deploy hooks do not run for previews. Compose
-  services have no previews at all.
+  the hourly maintenance cron then tears down (the expiry query filters on
+  `expires_at` alone, so both kinds are swept). An explicit `expiresAt`
+  (manual create) wins over the default. Deploy hooks do not run for previews.
+  `previewDeployment.list` / `.create` take exactly one of `applicationId` /
+  `composeId`; `previewDeployment.byApplication` is kept for existing REST and
+  CLI callers.
 - Every terminal deploy status fans out to the organization's notification
   channels (`emitDeployNotification`: `appDeploy` on success, `appBuildError`
   on failure; cancellations stay silent). Compose deploys notify too.
@@ -572,7 +626,11 @@ through `modules/backups` to S3 destinations on schedules.
   compose stacks — are never pruned: they are the only local copy of built
   images, and an `image prune -a` broke Start until a full rebuild.
 - **Hourly maintenance cron** (`modules/deployment/maintenance.ts`): tears
-  down previews past their `expiresAt`, and prunes deployment log files older
+  down previews past their `expiresAt` (application and compose alike — the
+  teardown branches inside `deletePreviewDeployment`: `docker service rm` +
+  image cleanup for an application, `docker compose down` / `docker stack rm`
+  plus the preview's working directory for a compose project), and prunes
+  deployment log files older
   than 30 days. Deleting an application or compose service also removes its
   log files, which live outside the app dir and have no FK to cascade through.
 

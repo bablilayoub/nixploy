@@ -1,13 +1,47 @@
 import { and, count, eq } from "drizzle-orm";
 import { db } from "../../db";
-import { applications, domains, previewDeployments } from "../../db/schema";
+import { compose, domains, previewDeployments } from "../../db/schema";
 import { removeApplicationImages, removeSwarmService } from "../application/docker";
-import { getWildcardDomain } from "../application/paths";
 import { queueDeployment } from "../deployment";
 import { DomainError } from "../errors";
-import { removeTraefikConfig } from "../traefik";
-import { syncPreviewTraefik } from "./traefik";
+import {
+	listComposeExposedServices,
+	removePreviewComposeFiles,
+	teardownPreviewComposeProject,
+} from "./compose";
+import {
+	previewAppName,
+	previewComposeHost,
+	previewExpiryFromTtl,
+	previewHost,
+	previewLimitReached,
+} from "./naming";
+import {
+	loadPreviewParent,
+	type PreviewParent,
+	type PreviewParentRef,
+	previewParentRef,
+} from "./parent";
+import { removePreviewTraefik, syncPreviewTraefik } from "./traefik";
 
+export { buildPreviewComposeTarget, listComposeExposedServices } from "./compose";
+export {
+	previewAppName,
+	previewComposeHost,
+	previewExpiryFromTtl,
+	previewHost,
+	previewLimitReached,
+} from "./naming";
+export {
+	applicationPreviewParent,
+	composePreviewParent,
+	loadPreviewParent,
+	loadPreviewParentForPreview,
+	type PreviewParent,
+	type PreviewParentKind,
+	type PreviewParentRef,
+	previewParentRef,
+} from "./parent";
 export {
 	encodePreviewSourceRef,
 	isMetadataOnlyPullRequestUpdate,
@@ -16,10 +50,9 @@ export {
 	previewSourceRefForPullRequest,
 	pullRequestHeadRef,
 } from "./source-ref";
-export { syncPreviewTraefik } from "./traefik";
+export { composePreviewTraefikKey, removePreviewTraefik, syncPreviewTraefik } from "./traefik";
 
-export type CreatePreviewInput = {
-	applicationId: string;
+export type CreatePreviewInput = PreviewParentRef & {
 	pullRequestNumber: string;
 	/**
 	 * Source to build: a branch name, a provider PR ref (`refs/pull/<n>/head`)
@@ -71,7 +104,10 @@ function commitColumns(input: PreviewCommit): Partial<PreviewCommit> {
 }
 
 export type PreviewWithDomain = typeof previewDeployments.$inferSelect & {
+	/** First route (an application preview has exactly one); null when unrouted. */
 	domain: typeof domains.$inferSelect | null;
+	/** Every route: one per exposed compose service, one (or none) for an application. */
+	domains: (typeof domains.$inferSelect)[];
 	deploymentId?: string;
 };
 
@@ -90,7 +126,7 @@ export class PreviewNotFoundError extends DomainError {
 }
 
 /**
- * The application already runs `previewLimit` previews. Refusing (rather than
+ * The parent already runs `previewLimit` previews. Refusing (rather than
  * silently evicting the oldest) is the safe default: a PR whose preview is
  * still under review must not be torn down because a newer PR opened.
  */
@@ -101,64 +137,106 @@ export class PreviewLimitError extends DomainError {
 	}
 }
 
-/** `previewLimit <= 0` means "no cap". */
-export function previewLimitReached(current: number, limit: number | null | undefined): boolean {
-	if (!limit || limit <= 0) return false;
-	return current >= limit;
-}
-
-/** Expiry a webhook-created preview inherits from `previewTtlHours`. */
-export function previewExpiryFromTtl(
-	ttlHours: number | null | undefined,
-	now: Date = new Date(),
-): Date | null {
-	if (!ttlHours || ttlHours <= 0) return null;
-	return new Date(now.getTime() + ttlHours * 60 * 60 * 1000);
-}
-
-/** Variant swarm/traefik name for a PR preview: `<appName>-pr-<n>`. */
-export function previewAppName(appName: string, pullRequestNumber: string): string {
-	assertNumericPullRequest(pullRequestNumber);
-	return `${appName}-pr-${pullRequestNumber}`;
-}
-
-/** Wildcard host for a PR preview: `pr-<n>-<appName>.<wildcardDomain>`. */
-export function previewHost(appName: string, pullRequestNumber: string): string {
-	assertNumericPullRequest(pullRequestNumber);
-	return `pr-${pullRequestNumber}-${appName}.${getWildcardDomain()}`;
-}
-
-function assertNumericPullRequest(pullRequestNumber: string): void {
-	if (!/^\d{1,10}$/.test(pullRequestNumber)) {
-		throw new Error(`Invalid pull request number: ${pullRequestNumber}`);
-	}
-}
-
-/** Attach the preview's domain row (1:1) if present. */
+/** Attach the preview's domain rows (1 for an application, 1..n for compose). */
 export async function withPreviewDomain<T extends { previewDeploymentId: string }>(
 	preview: T,
-): Promise<T & { domain: typeof domains.$inferSelect | null }> {
-	const domain = await db.query.domains.findFirst({
+): Promise<
+	T & { domain: typeof domains.$inferSelect | null; domains: (typeof domains.$inferSelect)[] }
+> {
+	const rows = await db.query.domains.findMany({
 		where: eq(domains.previewDeploymentId, preview.previewDeploymentId),
 	});
-	return { ...preview, domain: domain ?? null };
+	return { ...preview, domain: rows[0] ?? null, domains: rows };
+}
+
+/** Live previews of one parent (the `previewLimit` cap). */
+async function countPreviews(parent: PreviewParent): Promise<number> {
+	const [live] = await db
+		.select({ value: count() })
+		.from(previewDeployments)
+		.where(
+			parent.kind === "application"
+				? eq(previewDeployments.applicationId, parent.id)
+				: eq(previewDeployments.composeId, parent.id),
+		);
+	return live?.value ?? 0;
+}
+
+/** The ref form a parent takes in inputs and audit metadata. */
+const refFor = (parent: PreviewParent): PreviewParentRef =>
+	parent.kind === "application" ? { applicationId: parent.id } : { composeId: parent.id };
+
+/**
+ * Domain rows a new preview needs. An application preview gets one route,
+ * mirroring the parent's first production domain (container port and TLS);
+ * a compose preview gets one per compose service that has a production HTTP
+ * domain, each mirroring that service's own settings.
+ */
+async function previewDomainValues(
+	parent: PreviewParent,
+	pullRequestNumber: string,
+	previewDeploymentId: string,
+): Promise<(typeof domains.$inferInsert)[]> {
+	if (parent.kind === "application") {
+		// The parent's first production domain tells us the container port the
+		// app listens on and which TLS settings to mirror.
+		const parentDomain = await db.query.domains.findFirst({
+			where: and(eq(domains.applicationId, parent.id), eq(domains.domainType, "application")),
+		});
+		const https = Boolean(parentDomain?.https);
+		return [
+			{
+				host: previewHost(parent.appName, pullRequestNumber),
+				path: "/",
+				// Same container port as production: a static build serves on
+				// nginx:80, a Go app on 8080 — hardcoding 3000 502'd all of them.
+				port: parentDomain?.port ?? null,
+				https,
+				certificateType: https ? (parentDomain?.certificateType ?? "letsencrypt") : "none",
+				certificateId: https ? (parentDomain?.certificateId ?? null) : null,
+				domainType: "preview" as const,
+				applicationId: parent.id,
+				previewDeploymentId,
+			},
+		];
+	}
+
+	const exposed = await listComposeExposedServices(parent.id);
+	return exposed.map((service) => ({
+		host: previewComposeHost(parent.appName, pullRequestNumber, service.serviceName),
+		path: "/",
+		port: service.port,
+		https: service.https,
+		certificateType: service.certificateType as "none" | "letsencrypt" | "custom",
+		certificateId: service.certificateId,
+		domainType: "preview" as const,
+		composeId: parent.id,
+		// Routing targets the SOURCE service name; the deploy renders the
+		// preview project's alias for it.
+		serviceName: service.serviceName,
+		previewDeploymentId,
+	}));
 }
 
 /**
  * Spin up a per-PR variant: insert preview + domain rows, write Traefik
- * config, and enqueue a deploy of the isolated preview service (not production).
+ * config, and enqueue a deploy of the isolated preview service / project
+ * (never production).
  */
 export async function createPreviewDeployment(
 	input: CreatePreviewInput,
 ): Promise<PreviewWithDomain> {
-	const application = await db.query.applications.findFirst({
-		where: eq(applications.applicationId, input.applicationId),
-	});
-	if (!application) {
-		throw new PreviewNotFoundError(`Application not found: ${input.applicationId}`);
+	const parent = await loadPreviewParent(input);
+	if (!parent) {
+		const target = previewParentRef(input);
+		throw new PreviewNotFoundError(
+			target
+				? `${target.kind === "application" ? "Application" : "Compose service"} not found: ${target.id}`
+				: "A preview needs exactly one of applicationId or composeId",
+		);
 	}
 
-	const variantAppName = previewAppName(application.appName, input.pullRequestNumber);
+	const variantAppName = previewAppName(parent.appName, input.pullRequestNumber);
 	const existing = await db.query.previewDeployments.findFirst({
 		where: eq(previewDeployments.appName, variantAppName),
 	});
@@ -168,47 +246,29 @@ export async function createPreviewDeployment(
 		);
 	}
 
-	// Per-application cap (product audit, Previews row): previews inherit the
+	// Per-parent cap (product audit, Previews row): previews inherit the
 	// parent's resources, so an active repo could otherwise fill the node with
-	// one swarm service per open PR.
-	const [live] = await db
-		.select({ value: count() })
-		.from(previewDeployments)
-		.where(eq(previewDeployments.applicationId, application.applicationId));
-	const current = live?.value ?? 0;
-	if (previewLimitReached(current, application.previewLimit)) {
+	// one service / stack per open PR.
+	const current = await countPreviews(parent);
+	if (previewLimitReached(current, parent.previewLimit)) {
 		// Tell the PR author why nothing was deployed — the webhook itself is
 		// answered with a 200 and nobody reads the panel's logs.
 		const { upsertPreviewComment } = await import("./comment");
 		await upsertPreviewComment({
-			applicationId: application.applicationId,
+			...refFor(parent),
 			pullRequestNumber: input.pullRequestNumber,
 			status: "limit_reached",
 		}).catch(() => {});
 		throw new PreviewLimitError(
-			`Preview limit reached for "${application.name}": ${current} of ${application.previewLimit} previews already exist. Delete one, or raise the limit on the Previews tab.`,
+			`Preview limit reached for "${parent.name}": ${current} of ${parent.previewLimit} previews already exist. Delete one, or raise the limit on the Previews tab.`,
 		);
 	}
-
-	const host = previewHost(application.appName, input.pullRequestNumber);
-	// The parent's first production domain tells us the container port the
-	// app listens on and which TLS settings to mirror.
-	const parentDomain = await db.query.domains.findFirst({
-		where: and(
-			eq(domains.applicationId, application.applicationId),
-			eq(domains.domainType, "application"),
-		),
-	});
-	const https = Boolean(parentDomain?.https);
-	const certificateType = https
-		? (parentDomain?.certificateType ?? "letsencrypt")
-		: ("none" as const);
 
 	const [preview] = await db
 		.insert(previewDeployments)
 		.values({
 			appName: variantAppName,
-			branch: input.branch ?? application.branch ?? application.gitBranch,
+			branch: input.branch ?? parent.defaultBranch,
 			pullRequestId: input.pullRequestId ?? null,
 			pullRequestNumber: input.pullRequestNumber,
 			pullRequestTitle: input.pullRequestTitle ?? null,
@@ -219,11 +279,12 @@ export async function createPreviewDeployment(
 			commitAuthor: input.commitAuthor ?? null,
 			commitUrl: input.commitUrl ?? null,
 			previewStatus: input.deferDeploy ? "awaiting_approval" : "running",
-			// An explicit expiry (manual create) wins; otherwise the app's
+			// An explicit expiry (manual create) wins; otherwise the parent's
 			// default TTL applies, which is what makes webhook previews expire.
-			expiresAt: input.expiresAt ?? previewExpiryFromTtl(application.previewTtlHours),
-			applicationId: application.applicationId,
-			serverId: application.serverId,
+			expiresAt: input.expiresAt ?? previewExpiryFromTtl(parent.previewTtlHours),
+			applicationId: parent.kind === "application" ? parent.id : null,
+			composeId: parent.kind === "compose" ? parent.id : null,
+			serverId: parent.serverId,
 		})
 		.returning();
 	if (!preview) {
@@ -233,27 +294,18 @@ export async function createPreviewDeployment(
 	// Compensation on any failure below: without it the preview row survives
 	// and every subsequent webhook for this PR hits PreviewConflictError.
 	try {
-		const [domain] = await db
-			.insert(domains)
-			.values({
-				host,
-				path: "/",
-				// Same container port as production: a static build serves on
-				// nginx:80, a Go app on 8080 — hardcoding 3000 502'd all of them.
-				port: parentDomain?.port ?? null,
-				https,
-				certificateType,
-				certificateId: https ? (parentDomain?.certificateId ?? null) : null,
-				domainType: "preview",
-				applicationId: application.applicationId,
-				previewDeploymentId: preview.previewDeploymentId,
-			})
-			.returning();
+		const values = await previewDomainValues(
+			parent,
+			input.pullRequestNumber,
+			preview.previewDeploymentId,
+		);
+		const created = values.length > 0 ? await db.insert(domains).values(values).returning() : [];
 
-		if (domain) {
+		const first = created[0];
+		if (first) {
 			await db
 				.update(previewDeployments)
-				.set({ domainId: domain.domainId })
+				.set({ domainId: first.domainId })
 				.where(eq(previewDeployments.previewDeploymentId, preview.previewDeploymentId));
 		}
 
@@ -266,13 +318,15 @@ export async function createPreviewDeployment(
 			// redeploys via redeployPreviewDeployment.
 			return {
 				...preview,
-				domainId: domain?.domainId ?? null,
-				domain: domain ?? null,
+				domainId: first?.domainId ?? null,
+				domain: first ?? null,
+				domains: created,
 			};
 		}
 
 		const deploymentId = await queueDeployment({
-			applicationId: application.applicationId,
+			applicationId: parent.kind === "application" ? parent.id : undefined,
+			composeId: parent.kind === "compose" ? parent.id : undefined,
 			previewDeploymentId: preview.previewDeploymentId,
 			type: "deploy",
 			trigger: "preview",
@@ -284,12 +338,13 @@ export async function createPreviewDeployment(
 
 		return {
 			...preview,
-			domainId: domain?.domainId ?? null,
-			domain: domain ?? null,
+			domainId: first?.domainId ?? null,
+			domain: first ?? null,
+			domains: created,
 			deploymentId,
 		};
 	} catch (error) {
-		await removeTraefikConfig(variantAppName).catch(() => {});
+		await removePreviewTraefik(preview).catch(() => {});
 		await db
 			.delete(domains)
 			.where(eq(domains.previewDeploymentId, preview.previewDeploymentId))
@@ -320,7 +375,8 @@ export async function redeployPreviewDeployment(
 		.where(eq(previewDeployments.previewDeploymentId, previewDeploymentId));
 
 	const deploymentId = await queueDeployment({
-		applicationId: preview.applicationId,
+		applicationId: preview.applicationId ?? undefined,
+		composeId: preview.composeId ?? undefined,
 		previewDeploymentId: preview.previewDeploymentId,
 		type: "redeploy",
 		trigger: "preview",
@@ -336,14 +392,12 @@ export async function redeployPreviewDeployment(
 }
 
 /**
- * Find a preview by application + PR number, or null if none exists.
+ * Find a preview by parent + PR number, or null if none exists.
  */
-export async function findPreviewByPullRequest(applicationId: string, pullRequestNumber: string) {
-	const application = await db.query.applications.findFirst({
-		where: eq(applications.applicationId, applicationId),
-	});
-	if (!application) return null;
-	const variantAppName = previewAppName(application.appName, pullRequestNumber);
+export async function findPreviewByPullRequest(ref: PreviewParentRef, pullRequestNumber: string) {
+	const parent = await loadPreviewParent(ref);
+	if (!parent) return null;
+	const variantAppName = previewAppName(parent.appName, pullRequestNumber);
 	return await db.query.previewDeployments.findFirst({
 		where: eq(previewDeployments.appName, variantAppName),
 	});
@@ -358,7 +412,7 @@ export async function createOrRedeployPreview(input: CreatePreviewInput): Promis
 	previewDeploymentId: string;
 	deploymentId: string;
 }> {
-	const existing = await findPreviewByPullRequest(input.applicationId, input.pullRequestNumber);
+	const existing = await findPreviewByPullRequest(input, input.pullRequestNumber);
 	if (existing) {
 		const commitPatch = commitColumns(input);
 		if (
@@ -406,7 +460,10 @@ export async function createOrRedeployPreview(input: CreatePreviewInput): Promis
 	};
 }
 
-/** Tear down a preview: swarm service, Traefik YAML, domain + preview rows. */
+/**
+ * Tear down a preview: the running service / compose project, its Traefik
+ * YAML, on-disk state and the domain + preview rows.
+ */
 export async function deletePreviewDeployment(
 	previewDeploymentId: string,
 ): Promise<{ previewDeploymentId: string }> {
@@ -417,21 +474,30 @@ export async function deletePreviewDeployment(
 		throw new PreviewNotFoundError(`Preview deployment not found: ${previewDeploymentId}`);
 	}
 
-	const application = await db.query.applications.findFirst({
-		where: eq(applications.applicationId, preview.applicationId),
-	});
-	const serverId = application?.serverId ?? preview.serverId;
+	if (preview.composeId) {
+		const parent = await db.query.compose.findFirst({
+			where: eq(compose.composeId, preview.composeId),
+		});
+		if (parent) {
+			// A preview that never deployed has no project — tolerate the failure.
+			await teardownPreviewComposeProject(parent, preview.appName).catch(() => {});
+			await removePreviewComposeFiles(parent, preview.appName).catch(() => {});
+		}
+	} else {
+		const parent = await loadPreviewParent({ applicationId: preview.applicationId });
+		const serverId = parent?.serverId ?? preview.serverId;
+		// Service objects live on the primary manager whatever server the
+		// preview inherited from its parent.
+		await removeSwarmService(preview.appName).catch(() => {
+			// variant may never have been deployed
+		});
+		// The PR build is tagged `<app>-pr-<n>:latest` on the server that built
+		// it; nothing else references it.
+		await removeApplicationImages(preview.appName, serverId).catch(() => {});
+	}
 
-	// Service objects live on the primary manager whatever server the
-	// preview inherited from its parent.
-	await removeSwarmService(preview.appName).catch(() => {
-		// variant may never have been deployed
-	});
-	// The PR build is tagged `<app>-pr-<n>:latest` on the server that built
-	// it; nothing else references it.
-	await removeApplicationImages(preview.appName, serverId).catch(() => {});
 	// Routing YAML always lives on the Nixploy host (where Traefik runs).
-	await removeTraefikConfig(preview.appName);
+	await removePreviewTraefik(preview);
 	await db.delete(domains).where(eq(domains.previewDeploymentId, preview.previewDeploymentId));
 	await db
 		.delete(previewDeployments)
@@ -441,14 +507,14 @@ export async function deletePreviewDeployment(
 }
 
 /**
- * Delete the preview for an application + PR number if it exists.
+ * Delete the preview for a parent + PR number if it exists.
  * No-op when missing (idempotent webhook close).
  */
 export async function deletePreviewByPullRequest(
-	applicationId: string,
+	ref: PreviewParentRef,
 	pullRequestNumber: string,
 ): Promise<{ previewDeploymentId: string } | null> {
-	const existing = await findPreviewByPullRequest(applicationId, pullRequestNumber);
+	const existing = await findPreviewByPullRequest(ref, pullRequestNumber);
 	if (!existing) return null;
 	return await deletePreviewDeployment(existing.previewDeploymentId);
 }

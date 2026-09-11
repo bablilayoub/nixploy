@@ -13,6 +13,7 @@ import { EnvironmentTab } from "@/components/compose/environment-tab";
 import { GeneralTab } from "@/components/compose/general-tab";
 import { LogsTab } from "@/components/compose/logs-tab";
 import { MonitoringTab } from "@/components/compose/monitoring-tab";
+import { PreviewDeploymentsTab } from "@/components/compose/preview-deployments-tab";
 import { RollbacksTab } from "@/components/compose/rollbacks-tab";
 import { SettingsTab } from "@/components/compose/settings-tab";
 import { TerminalTab } from "@/components/compose/terminal-tab";
@@ -67,6 +68,7 @@ const TOP_TABS = [
 const SUB_TAB_PARENT: Record<string, string> = {
 	deployments: "deploy",
 	rollbacks: "deploy",
+	preview: "deploy",
 	schedules: "deploy",
 	logs: "runtime",
 	monitoring: "runtime",
@@ -287,6 +289,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 						<SubTabsList>
 							<SubTabsTrigger value="deployments">Deployments</SubTabsTrigger>
 							<SubTabsTrigger value="rollbacks">Rollbacks</SubTabsTrigger>
+							<SubTabsTrigger value="preview">Preview</SubTabsTrigger>
 							<SubTabsTrigger value="schedules">Schedules</SubTabsTrigger>
 						</SubTabsList>
 						<TabsContent value="deployments" className="mt-0">
@@ -294,6 +297,9 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 						</TabsContent>
 						<TabsContent value="rollbacks" className="mt-0">
 							<RollbacksTab compose={compose} />
+						</TabsContent>
+						<TabsContent value="preview" className="mt-0">
+							<PreviewDeploymentsTab compose={compose} />
 						</TabsContent>
 						<TabsContent value="schedules" className="mt-0">
 							<SchedulesPanel

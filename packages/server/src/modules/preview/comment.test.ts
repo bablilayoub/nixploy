@@ -5,7 +5,7 @@ describe("renderPreviewComment", () => {
 	it("carries the marker so repeat pushes edit one comment", () => {
 		const body = renderPreviewComment({
 			pullRequestNumber: "42",
-			host: "pr-42-my-app.traefik.me",
+			hosts: ["pr-42-my-app.traefik.me"],
 			status: "deploying",
 		});
 		expect(body.startsWith(PREVIEW_COMMENT_MARKER)).toBe(true);
@@ -14,7 +14,7 @@ describe("renderPreviewComment", () => {
 	it("links the preview host and the pull request", () => {
 		const body = renderPreviewComment({
 			pullRequestNumber: "42",
-			host: "pr-42-my-app.traefik.me",
+			hosts: ["pr-42-my-app.traefik.me"],
 			status: "deploying",
 		});
 		expect(body).toContain("https://pr-42-my-app.traefik.me");
@@ -24,7 +24,7 @@ describe("renderPreviewComment", () => {
 	it("states the preview is gone once it is torn down", () => {
 		const body = renderPreviewComment({
 			pullRequestNumber: "7",
-			host: "pr-7-my-app.traefik.me",
+			hosts: ["pr-7-my-app.traefik.me"],
 			status: "removed",
 		});
 		expect(body).toContain(PREVIEW_COMMENT_MARKER);

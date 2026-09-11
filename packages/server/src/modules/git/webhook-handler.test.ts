@@ -453,6 +453,52 @@ describe("provider webhook verification", () => {
 		expect(result.pullRequest?.sourceRef).toBe("refs/merge-requests/7/head");
 	});
 
+	it("matches compose services with previews enabled, not only applications", async () => {
+		mockSelects(
+			[{ gitlabId: "gl1", secret: "s3cret" }],
+			// applications: none
+			[],
+			// compose: one repo match, one for a different repository
+			[
+				{
+					composeId: "cmp-1",
+					sourceType: "gitlab",
+					repository: "api",
+					owner: "ACME",
+					isPreviewDeploymentsActive: true,
+				},
+				{
+					composeId: "cmp-2",
+					sourceType: "gitlab",
+					repository: "other",
+					owner: "acme",
+					isPreviewDeploymentsActive: true,
+				},
+			],
+		);
+		const result = await handleGitWebhook(
+			"gitlab",
+			{ "x-gitlab-token": "s3cret" },
+			mergeRequestBody({ action: "open" }),
+			"gl1",
+		);
+		expect(result.applicationIds).toEqual([]);
+		// Owner comparison is case-insensitive, repository is exact.
+		expect(result.composeIds).toEqual(["cmp-1"]);
+	});
+
+	it("never names a compose service on a push delivery (previews only)", async () => {
+		mockSelects([{ gitlabId: "gl1", secret: "s3cret" }], []);
+		const result = await handleGitWebhook(
+			"gitlab",
+			{ "x-gitlab-token": "s3cret" },
+			pushBody,
+			"gl1",
+		);
+		expect(result.type).toBe("push");
+		expect(result.composeIds).toEqual([]);
+	});
+
 	it("accepts a gitea delivery signed with the dedicated webhook secret", async () => {
 		mockSelects([{ giteaId: "gt1", accessToken: "tok" }]);
 		const body = JSON.stringify({ some: "payload" });

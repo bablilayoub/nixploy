@@ -12,7 +12,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  *   hits its deadline, is cancelled by the user, or interrupted by shutdown.
  */
 
-const { updates, deploymentRow, applicationLookup, hooks, pipeline } = vi.hoisted(() => ({
+const {
+	updates,
+	deploymentRow,
+	applicationLookup,
+	composeLookup,
+	composePipeline,
+	hooks,
+	pipeline,
+} = vi.hoisted(() => ({
 	updates: [] as Array<{ table: string; values: Record<string, unknown> }>,
 	deploymentRow: {
 		value: null as null | { deploymentId: string; status: string; logPath: string },
@@ -24,6 +32,27 @@ const { updates, deploymentRow, applicationLookup, hooks, pipeline } = vi.hoiste
 	 * `row`: the application the pipeline should see; null → the job fails fast.
 	 */
 	applicationLookup: { hang: false, row: null as null | Record<string, unknown> },
+	/**
+	 * The compose pipeline's two rows: the compose service and, for a preview
+	 * job, the `preview_deployment` row the worker must fork the project from.
+	 */
+	composeLookup: {
+		row: null as null | Record<string, unknown>,
+		preview: null as null | Record<string, unknown>,
+	},
+	/** Compose-side doubles: what the worker hands the compose module. */
+	composePipeline: {
+		prepareComposeFiles: vi.fn(async () => ({
+			workDir: "/tmp/work",
+			composeFilePath: "/tmp/work/docker-compose.nixploy.yml",
+			envFilePath: "/tmp/work/.env",
+			secrets: [] as string[],
+		})),
+		buildComposeDeployCommand: vi.fn(() => "true"),
+		resyncComposeDomains: vi.fn(async () => {}),
+		syncPreviewTraefik: vi.fn(async () => {}),
+		spawnTargeted: vi.fn(async () => ({ done: Promise.resolve(), kill: () => {} })),
+	},
 	/** Deploy-hook doubles, so a hook can be made to fail on demand. */
 	hooks: {
 		runPreDeployHook: vi.fn(async () => {}),
@@ -58,8 +87,8 @@ vi.mock("../../db", () => ({
 						? new Promise<never>(() => {})
 						: Promise.resolve(applicationLookup.row ?? undefined),
 			},
-			previewDeployments: { findFirst: async () => null },
-			compose: { findFirst: async () => undefined },
+			previewDeployments: { findFirst: async () => composeLookup.preview },
+			compose: { findFirst: async () => composeLookup.row ?? undefined },
 		},
 		update: (table: unknown) => ({
 			set: (values: Record<string, unknown>) => {
@@ -87,9 +116,16 @@ vi.mock("./logger", () => ({
 
 // Owned by another module — stub so the test does not depend on it.
 vi.mock("../compose/service", () => ({
-	prepareComposeFiles: vi.fn(),
-	buildComposeDeployCommand: vi.fn(() => "true"),
-	resyncComposeDomains: vi.fn(async () => {}),
+	prepareComposeFiles: composePipeline.prepareComposeFiles,
+	buildComposeDeployCommand: composePipeline.buildComposeDeployCommand,
+	resyncComposeDomains: composePipeline.resyncComposeDomains,
+	runsOnPrimary: (row: { composeType: string }) => row.composeType === "stack",
+}));
+vi.mock("../preview/traefik", () => ({ syncPreviewTraefik: composePipeline.syncPreviewTraefik }));
+// `ctx.run` would otherwise spawn a real child process for the compose job.
+vi.mock("./docker", async (importOriginal) => ({
+	...(await importOriginal<typeof import("./docker")>()),
+	spawnTargeted: composePipeline.spawnTargeted,
 }));
 
 // Pipeline doubles: the hook tests below care about ORDER (hook before
@@ -131,6 +167,10 @@ import type { QueueJob } from "./queue";
 import type { ApplicationRow } from "./sources";
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+/** Let a whole pipeline (several awaits deep) run to its terminal update. */
+const settle = async () => {
+	for (let i = 0; i < 12; i++) await flush();
+};
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const job = (deploymentId: string, previewDeploymentId: string): QueueJob => ({
@@ -380,6 +420,158 @@ describe("buildPreviewDeployTarget", () => {
 				branch: "fork:forker/app:fix",
 			}),
 		).toMatchObject({ owner: "forker", repository: "app", branch: "fix", gitBranch: "fix" });
+	});
+});
+
+/**
+ * A compose preview job must render and deploy the PREVIEW project
+ * (`<app>-pr-<n>`), never production: no rollback snapshot against the parent,
+ * no deploy hooks, no production Traefik resync, and no write to the compose
+ * row's status.
+ */
+describe("compose preview jobs", () => {
+	const composeRow = (overrides: Record<string, unknown> = {}) => ({
+		composeId: "cmp-1",
+		name: "shop",
+		appName: "shop-9f00aa",
+		env: "LOG_LEVEL=info",
+		composeType: "docker-compose",
+		sourceType: "github",
+		repository: "shop",
+		owner: "acme",
+		branch: "main",
+		gitBranch: null,
+		composePath: "./compose.yaml",
+		previewEnv: null,
+		isolatedDeployment: false,
+		suffix: "",
+		preDeployCommand: "echo pre",
+		postDeployCommand: "echo post",
+		serverId: null,
+		environmentId: "env-1",
+		...overrides,
+	});
+
+	const composeJob = (deploymentId: string, previewDeploymentId?: string) => ({
+		deploymentId,
+		appName: previewDeploymentId ? "shop-9f00aa-pr-7" : "shop-9f00aa",
+		composeId: "cmp-1",
+		previewDeploymentId,
+		type: "deploy" as const,
+		serverId: null,
+	});
+
+	beforeEach(async () => {
+		vi.resetModules();
+		delete (globalThis as { __nixployDeploymentQueue?: unknown }).__nixployDeploymentQueue;
+		updates.length = 0;
+		deploymentRow.error = null;
+		applicationLookup.hang = false;
+		applicationLookup.row = null;
+		composeLookup.row = composeRow();
+		composeLookup.preview = null;
+		composePipeline.prepareComposeFiles.mockClear();
+		composePipeline.buildComposeDeployCommand.mockClear();
+		composePipeline.resyncComposeDomains.mockClear();
+		composePipeline.syncPreviewTraefik.mockClear();
+		hooks.runComposeExecHook.mockClear();
+	});
+
+	it("renders the preview project from the PR ref with previewEnv merged in", async () => {
+		composeLookup.row = composeRow({ previewEnv: "LOG_LEVEL=debug\nPREVIEW=1" });
+		composeLookup.preview = {
+			previewDeploymentId: "prev-7",
+			appName: "shop-9f00aa-pr-7",
+			branch: "refs/pull/7/head",
+			composeId: "cmp-1",
+			applicationId: null,
+		};
+		deploymentRow.value = { deploymentId: "d-cp", status: "running", logPath: "/tmp/cp.log" };
+
+		const queue = await import("./queue");
+		await import("./worker");
+		queue.startJob("__local__", composeJob("d-cp", "prev-7"));
+		await settle();
+
+		const [target, options] = (composePipeline.prepareComposeFiles.mock.calls[0] ??
+			[]) as unknown as [
+			{ appName: string; env: string; branch: string },
+			{ deploymentId: string | null },
+		];
+		expect(target.appName).toBe("shop-9f00aa-pr-7");
+		expect(target.branch).toBe("refs/pull/7/head");
+		expect(target.env.split("\n").sort()).toEqual(["LOG_LEVEL=debug", "PREVIEW=1"]);
+		// Never snapshot a preview render against the parent's rollback history.
+		expect(options.deploymentId).toBeNull();
+		// The deploy command runs for the preview project, not production.
+		const [deployTarget] = (composePipeline.buildComposeDeployCommand.mock.calls[0] ??
+			[]) as unknown as [{ appName: string }];
+		expect(deployTarget.appName).toBe("shop-9f00aa-pr-7");
+	});
+
+	it("skips both deploy hooks and writes only the preview's Traefik files", async () => {
+		composeLookup.preview = {
+			previewDeploymentId: "prev-7",
+			appName: "shop-9f00aa-pr-7",
+			branch: "feature/x",
+			composeId: "cmp-1",
+			applicationId: null,
+		};
+		deploymentRow.value = { deploymentId: "d-cp2", status: "running", logPath: "/tmp/cp2.log" };
+
+		const queue = await import("./queue");
+		await import("./worker");
+		queue.startJob("__local__", composeJob("d-cp2", "prev-7"));
+		await settle();
+
+		expect(hooks.runComposeExecHook).not.toHaveBeenCalled();
+		expect(composePipeline.resyncComposeDomains).not.toHaveBeenCalled();
+		expect(composePipeline.syncPreviewTraefik).toHaveBeenCalledWith("prev-7");
+		// The preview row is marked done; the compose row's status is untouched.
+		expect(updates).toContainEqual({
+			table: "preview_deployment",
+			values: { previewStatus: "done" },
+		});
+		expect(updates.filter((u) => u.table === "compose")).toEqual([]);
+	});
+
+	it("refuses a preview row that belongs to another compose service", async () => {
+		composeLookup.preview = {
+			previewDeploymentId: "prev-x",
+			appName: "other-pr-7",
+			branch: "feature/x",
+			composeId: "cmp-other",
+			applicationId: null,
+		};
+		deploymentRow.value = { deploymentId: "d-cp3", status: "running", logPath: "/tmp/cp3.log" };
+
+		const queue = await import("./queue");
+		await import("./worker");
+		queue.startJob("__local__", composeJob("d-cp3", "prev-x"));
+		await settle();
+
+		const terminal = terminalUpdate();
+		expect(terminal?.values.status).toBe("error");
+		expect(String(terminal?.values.errorMessage)).toContain("does not belong");
+		expect(composePipeline.prepareComposeFiles).not.toHaveBeenCalled();
+	});
+
+	it("still snapshots, hooks and resyncs production for a non-preview compose job", async () => {
+		deploymentRow.value = { deploymentId: "d-cp4", status: "running", logPath: "/tmp/cp4.log" };
+
+		const queue = await import("./queue");
+		await import("./worker");
+		queue.startJob("__local__", composeJob("d-cp4"));
+		await settle();
+
+		const [, options] = (composePipeline.prepareComposeFiles.mock.calls[0] ?? []) as unknown as [
+			unknown,
+			{ deploymentId: string | null },
+		];
+		expect(options.deploymentId).toBe("d-cp4");
+		expect(hooks.runComposeExecHook).toHaveBeenCalledTimes(2);
+		expect(composePipeline.resyncComposeDomains).toHaveBeenCalledWith("cmp-1");
+		expect(composePipeline.syncPreviewTraefik).not.toHaveBeenCalled();
 	});
 });
 

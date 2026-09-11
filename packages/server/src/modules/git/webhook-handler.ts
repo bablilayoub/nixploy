@@ -18,7 +18,12 @@ export {
 	commitUrlForCompose,
 } from "./commit-link";
 export { buildCommitUrl, type CommitLinkSource, webRepoFromGitUrl } from "./commit-url";
-export { handleGitWebhook, queueWebhookDeployment, webhookProvenance } from "./handler";
+export {
+	type GitWebhookDispatch,
+	handleGitWebhook,
+	queueWebhookDeployment,
+	webhookProvenance,
+} from "./handler";
 export {
 	applicationMatchesPreviewWebhook,
 	applicationMatchesWebhook,
@@ -28,7 +33,10 @@ export {
 	type WebhookRepoContext,
 	watchPathsMatch,
 } from "./match";
-export { handlePreviewWebhookForApplication } from "./preview-flow";
+export {
+	handlePreviewWebhookForApplication,
+	handlePreviewWebhookForCompose,
+} from "./preview-flow";
 export { isGitlabMetadataOnlyUpdate } from "./providers/gitlab";
 export {
 	commitSubject,

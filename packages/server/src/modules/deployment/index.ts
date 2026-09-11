@@ -131,10 +131,20 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
 		if (!preview) throw new Error(`Preview deployment not found: ${job.previewDeploymentId}`);
 		appName = preview.appName;
 		serverId = preview.serverId;
-		if (job.applicationId && job.applicationId !== preview.applicationId) {
-			throw new Error("previewDeploymentId does not match applicationId");
+		// A preview row names exactly one parent (schema CHECK). The job always
+		// carries the PARENT's id — the preview name is what `appName` holds.
+		if (preview.composeId) {
+			if (job.composeId && job.composeId !== preview.composeId) {
+				throw new Error("previewDeploymentId does not match composeId");
+			}
+			job.composeId = preview.composeId;
+			job.applicationId = undefined;
+		} else {
+			if (job.applicationId && job.applicationId !== preview.applicationId) {
+				throw new Error("previewDeploymentId does not match applicationId");
+			}
+			job.applicationId = preview.applicationId ?? undefined;
 		}
-		job.applicationId = preview.applicationId;
 	} else if (job.applicationId) {
 		const application = await db.query.applications.findFirst({
 			where: eq(applications.applicationId, job.applicationId),

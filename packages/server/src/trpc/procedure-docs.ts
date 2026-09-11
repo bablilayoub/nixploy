@@ -506,18 +506,24 @@ const docs: Record<string, ProcedureDoc> = {
 	},
 
 	// ───────────────────────────────────────────────── preview deployments
-	"previewDeployment.byApplication": {
+	"previewDeployment.list": {
 		summary: "List pull-request previews",
-		description: "Previews of one application with PR metadata, status and expiry.",
+		description:
+			"Previews of one application or one compose service (exactly one id) with PR metadata, commit, status and expiry.",
+	},
+	"previewDeployment.byApplication": {
+		summary: "List an application's pull-request previews",
+		description:
+			"Previews of one application with PR metadata, status and expiry. `previewDeployment.list` covers compose services too.",
 	},
 	"previewDeployment.one": {
 		summary: "Get one preview deployment",
-		description: "Full preview row including its generated domain and expiry.",
+		description: "Full preview row including its generated domain(s) and expiry.",
 	},
 	"previewDeployment.create": {
 		summary: "Create a preview deployment",
 		description:
-			"Creates (or redeploys) a preview for a pull request. Fork PRs land in `awaiting-approval` when the fork gate is on.",
+			"Creates (or redeploys) a preview for a pull request on an application or a compose service (exactly one id). Fork PRs land in `awaiting-approval` when the fork gate is on.",
 		capability: ["service.deploy"],
 	},
 	"previewDeployment.approve": {
@@ -533,7 +539,8 @@ const docs: Record<string, ProcedureDoc> = {
 	},
 	"previewDeployment.delete": {
 		summary: "Delete a preview deployment",
-		description: "Removes the preview's Swarm service, domain and row.",
+		description:
+			"Removes the preview's Swarm service (or compose project), its domains and its row.",
 		capability: ["service.deploy"],
 	},
 

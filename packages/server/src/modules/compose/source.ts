@@ -1,4 +1,4 @@
-import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { eq } from "drizzle-orm";
 import { simpleGit } from "simple-git";
@@ -6,6 +6,7 @@ import { db } from "../../db";
 import type { compose } from "../../db/schema";
 import { bitbucket, gitea, github, gitlab, sshKeys } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { assertSafeGitRef } from "../../utils/public-url";
 import { writeFileTargeted } from "../deployment/docker";
 import { getSshKeysPath } from "../deployment/paths";
 import { buildGitSshCommand, gitProtocolEnv } from "../deployment/sources";
@@ -161,12 +162,20 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
  * Clone (or fast-forward) the compose row's git source into
  * `<configDir>/compose/<appName>/code`. Local rows use simple-git; rows
  * pinned to a remote server are cloned over SSH with the system git client.
+ *
+ * Always `init` + `fetch <ref>` + `reset --hard FETCH_HEAD` (the sequence
+ * `modules/deployment/sources.ts#cloneGitSource` uses): `git clone --branch`
+ * only accepts branch and tag names, while a compose preview of a fork pull
+ * request fetches `refs/pull/<n>/head` / `refs/merge-requests/<n>/head`,
+ * which only `fetch` understands.
  */
 export async function cloneComposeSource(composeRow: ComposeRow): Promise<{
 	codeDir: string;
 	secrets: string[];
 }> {
 	const source = await resolveGitSource(composeRow);
+	// Re-check the ref at USE time: it may come from a webhook payload.
+	source.branch = assertSafeGitRef(source.branch);
 	const codeDir = getComposeCodeDir(composeRow.appName);
 	const secrets = [...(source.secrets ?? [])];
 	try {
@@ -193,39 +202,35 @@ export async function cloneComposeSource(composeRow: ComposeRow): Promise<{
 			.join("");
 		await execAsyncRemote(
 			composeRow.serverId,
-			`mkdir -p ${dir} && ` +
-				`(if [ -d ${dir}/.git ]; then ` +
-				// Refresh the remote first: the URL baked in at clone time carries a
-				// short-lived installation token / a rotatable PAT, and the
-				// repository or provider may have changed since.
-				`${prefix}git -C ${dir} remote set-url origin ${url} && ` +
-				`${prefix}git -C ${dir} fetch --depth 1 origin ${branch} && git -C ${dir} reset --hard FETCH_HEAD; ` +
-				`else ${prefix}git clone --branch ${branch} --depth 1 --single-branch ${url} ${dir}; fi)`,
+			// Refresh the remote first: the URL baked in at clone time carries a
+			// short-lived installation token / a rotatable PAT, and the
+			// repository or provider may have changed since.
+			`(if [ -d ${dir}/.git ]; then ${prefix}git -C ${dir} remote set-url origin ${url}; ` +
+				`else rm -rf ${dir} && mkdir -p ${dir} && ${prefix}git init -q ${dir} && ${prefix}git -C ${dir} remote add origin ${url}; fi) && ` +
+				`${prefix}git -C ${dir} fetch --depth 1 origin ${branch} && ${prefix}git -C ${dir} reset --hard FETCH_HEAD`,
 		);
 		return { codeDir, secrets };
 	}
 
+	const isRepo = await stat(join(codeDir, ".git"))
+		.then((entry) => entry.isDirectory())
+		.catch(() => false);
+	if (!isRepo) {
+		await rm(codeDir, { recursive: true, force: true });
+	}
 	await mkdir(codeDir, { recursive: true });
 	const git = simpleGit({ baseDir: codeDir });
 	// simple-git's env() replaces the child environment wholesale — keep PATH.
 	git.env({ ...process.env, ...gitEnv });
-	const isRepo = await git.checkIsRepo().catch(() => false);
 	if (isRepo) {
 		// Refresh the remote first (see the remote branch above).
 		await git.remote(["set-url", "origin", source.cloneUrl]);
-		await git.fetch(["origin", source.branch, "--depth", "1"]);
-		await git.reset(["--hard", "FETCH_HEAD"]);
 	} else {
-		await rm(codeDir, { recursive: true, force: true });
-		await mkdir(codeDir, { recursive: true });
-		await git.clone(source.cloneUrl, codeDir, [
-			"--branch",
-			source.branch,
-			"--depth",
-			"1",
-			"--single-branch",
-		]);
+		await git.init();
+		await git.addRemote("origin", source.cloneUrl);
 	}
+	await git.fetch(["--depth", "1", "origin", source.branch]);
+	await git.reset(["--hard", "FETCH_HEAD"]);
 	return { codeDir, secrets };
 }
 

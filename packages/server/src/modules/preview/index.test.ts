@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { state, syncPreviewTraefik, queueDeployment, upsertPreviewComment } = vi.hoisted(() => ({
 	state: {
 		parentDomain: null as null | { port: number | null; https: boolean; certificateType: string },
+		/** Rows `domains.findMany` returns (the compose exposed-service lookup). */
+		composeDomains: [] as Array<Record<string, unknown>>,
 		inserted: [] as Array<{ table: string; values: Record<string, unknown> }>,
 		/** Application row the module loads (preview knobs live on it). */
 		application: {
@@ -12,8 +14,37 @@ const { state, syncPreviewTraefik, queueDeployment, upsertPreviewComment } = vi.
 			serverId: null as string | null,
 			branch: "main" as string | null,
 			gitBranch: null as string | null,
+			isPreviewDeploymentsActive: true,
+			previewForksRequireApproval: true,
 			previewLimit: 3,
 			previewTtlHours: null as number | null,
+			sourceType: "github",
+			owner: "acme",
+			repository: "echo",
+			githubId: "gh-1" as string | null,
+			gitlabId: null as string | null,
+			bitbucketId: null as string | null,
+			giteaId: null as string | null,
+		},
+		/** Compose row the module loads for compose previews. */
+		compose: {
+			composeId: "cmp-1",
+			name: "shop",
+			appName: "shop-9f00aa",
+			serverId: null as string | null,
+			branch: "main" as string | null,
+			gitBranch: null as string | null,
+			isPreviewDeploymentsActive: true,
+			previewForksRequireApproval: true,
+			previewLimit: 3,
+			previewTtlHours: null as number | null,
+			sourceType: "github",
+			owner: "acme",
+			repository: "shop",
+			githubId: "gh-1" as string | null,
+			gitlabId: null as string | null,
+			bitbucketId: null as string | null,
+			giteaId: null as string | null,
 		},
 		/** Rows `select(count())` reports for the preview cap. */
 		livePreviews: 0,
@@ -29,11 +60,13 @@ const tableName = (table: unknown): string =>
 vi.mock("../../db", () => ({
 	db: {
 		query: {
-			applications: {
-				findFirst: async () => state.application,
-			},
+			applications: { findFirst: async () => state.application },
+			compose: { findFirst: async () => state.compose },
 			previewDeployments: { findFirst: async () => undefined },
-			domains: { findFirst: async () => state.parentDomain },
+			domains: {
+				findFirst: async () => state.parentDomain,
+				findMany: async () => state.composeDomains,
+			},
 		},
 		select: () => ({
 			from: () => ({
@@ -41,10 +74,15 @@ vi.mock("../../db", () => ({
 			}),
 		}),
 		insert: (table: unknown) => ({
-			values: (values: Record<string, unknown>) => ({
+			values: (values: Record<string, unknown> | Record<string, unknown>[]) => ({
 				returning: async () => {
-					state.inserted.push({ table: tableName(table), values });
-					return [{ previewDeploymentId: "prev-1", domainId: "dom-1", ...values }];
+					const rows = Array.isArray(values) ? values : [values];
+					for (const row of rows) state.inserted.push({ table: tableName(table), values: row });
+					return rows.map((row, index) => ({
+						previewDeploymentId: "prev-1",
+						domainId: `dom-${index + 1}`,
+						...row,
+					}));
 				},
 			}),
 		}),
@@ -64,23 +102,55 @@ vi.mock("../traefik", () => ({
 	removeTraefikConfig: vi.fn(),
 	DEFAULT_CONTAINER_PORT: 80,
 }));
-vi.mock("./traefik", () => ({ syncPreviewTraefik }));
+vi.mock("./traefik", () => ({ syncPreviewTraefik, removePreviewTraefik: vi.fn(async () => {}) }));
 vi.mock("./comment", () => ({ upsertPreviewComment }));
 
 import {
 	classifyPullRequestAction,
 	createPreviewDeployment,
 	PreviewLimitError,
+	PreviewNotFoundError,
 	previewAppName,
+	previewComposeHost,
 	previewExpiryFromTtl,
 	previewHost,
 	previewLimitReached,
+	previewParentRef,
 } from "./index";
 
 describe("previewAppName / previewHost", () => {
 	it("uses the Dokploy-style variant naming", () => {
 		expect(previewAppName("echo-4a4487", "12")).toBe("echo-4a4487-pr-12");
 		expect(previewHost("echo-4a4487", "12")).toBe("pr-12-echo-4a4487.example.test");
+	});
+
+	it("gives a compose preview its own project name and a host per service", () => {
+		// The project name is what keeps the preview's containers, volumes,
+		// `<appName>-net` and Traefik keys off production's.
+		expect(previewAppName("shop-9f00aa", "7")).toBe("shop-9f00aa-pr-7");
+		expect(previewComposeHost("shop-9f00aa", "7", "web")).toBe("pr-7-shop-9f00aa-web.example.test");
+		expect(previewComposeHost("shop-9f00aa", "7", "api")).toBe("pr-7-shop-9f00aa-api.example.test");
+		// Two services of one PR, and the same service across two PRs, never collide.
+		expect(previewComposeHost("shop-9f00aa", "7", "web")).not.toBe(
+			previewComposeHost("shop-9f00aa", "8", "web"),
+		);
+	});
+
+	it("refuses a non-numeric pull request number", () => {
+		expect(() => previewAppName("shop", "7; rm -rf /")).toThrow(/Invalid pull request number/);
+		expect(() => previewComposeHost("shop", "../..", "web")).toThrow(/Invalid pull request number/);
+	});
+});
+
+describe("previewParentRef", () => {
+	it("accepts exactly one parent id and rejects zero or two", () => {
+		expect(previewParentRef({ applicationId: "app-1" })).toEqual({
+			kind: "application",
+			id: "app-1",
+		});
+		expect(previewParentRef({ composeId: "cmp-1" })).toEqual({ kind: "compose", id: "cmp-1" });
+		expect(previewParentRef({})).toBeNull();
+		expect(previewParentRef({ applicationId: "app-1", composeId: "cmp-1" })).toBeNull();
 	});
 });
 
@@ -116,16 +186,21 @@ describe("previewExpiryFromTtl", () => {
 	});
 });
 
-describe("createPreviewDeployment", () => {
-	beforeEach(() => {
-		state.inserted.length = 0;
-		state.livePreviews = 0;
-		state.application.previewLimit = 3;
-		state.application.previewTtlHours = null;
-		syncPreviewTraefik.mockClear();
-		queueDeployment.mockClear();
-		upsertPreviewComment.mockClear();
-	});
+const reset = () => {
+	state.inserted.length = 0;
+	state.livePreviews = 0;
+	state.composeDomains = [];
+	state.application.previewLimit = 3;
+	state.application.previewTtlHours = null;
+	state.compose.previewLimit = 3;
+	state.compose.previewTtlHours = null;
+	syncPreviewTraefik.mockClear();
+	queueDeployment.mockClear();
+	upsertPreviewComment.mockClear();
+};
+
+describe("createPreviewDeployment (application)", () => {
+	beforeEach(reset);
 
 	it("copies the parent domain's container port onto the preview domain row", async () => {
 		state.parentDomain = { port: 8080, https: false, certificateType: "none" };
@@ -144,7 +219,12 @@ describe("createPreviewDeployment", () => {
 		// Route + parent's basic-auth/redirects come from the preview's own sync.
 		expect(syncPreviewTraefik).toHaveBeenCalledWith("prev-1");
 		expect(queueDeployment).toHaveBeenCalledWith(
-			expect.objectContaining({ previewDeploymentId: "prev-1", type: "deploy" }),
+			expect.objectContaining({
+				previewDeploymentId: "prev-1",
+				type: "deploy",
+				applicationId: "app-1",
+				composeId: undefined,
+			}),
 		);
 		expect(result.deploymentId).toBe("dep-1");
 	});
@@ -166,7 +246,11 @@ describe("createPreviewDeployment", () => {
 		expect(state.inserted).toHaveLength(0);
 		expect(queueDeployment).not.toHaveBeenCalled();
 		expect(upsertPreviewComment).toHaveBeenCalledWith(
-			expect.objectContaining({ pullRequestNumber: "14", status: "limit_reached" }),
+			expect.objectContaining({
+				applicationId: "app-1",
+				pullRequestNumber: "14",
+				status: "limit_reached",
+			}),
 		);
 	});
 
@@ -191,5 +275,131 @@ describe("createPreviewDeployment", () => {
 		});
 		const previewInsert = state.inserted.find((row) => row.table === "preview_deployment");
 		expect(previewInsert?.values.expiresAt).toBe(explicit);
+	});
+});
+
+const composeDomain = (
+	serviceName: string,
+	overrides: Record<string, unknown> = {},
+): Record<string, unknown> => ({
+	serviceName,
+	protocol: "http",
+	port: 80,
+	https: false,
+	certificateType: "none",
+	certificateId: null,
+	previewDeploymentId: null,
+	...overrides,
+});
+
+describe("createPreviewDeployment (compose)", () => {
+	beforeEach(reset);
+
+	it("creates one preview domain per compose service exposed in production", async () => {
+		state.composeDomains = [
+			composeDomain("web", { port: 8080 }),
+			composeDomain("api", { port: 3000, https: true, certificateType: "letsencrypt" }),
+			// A second host for the same service must not create a second preview.
+			composeDomain("web", { port: 8080 }),
+		];
+		const result = await createPreviewDeployment({
+			composeId: "cmp-1",
+			pullRequestNumber: "7",
+		});
+
+		const previewInsert = state.inserted.find((row) => row.table === "preview_deployment");
+		expect(previewInsert?.values).toMatchObject({
+			appName: "shop-9f00aa-pr-7",
+			composeId: "cmp-1",
+			applicationId: null,
+		});
+
+		const domainInserts = state.inserted.filter((row) => row.table === "domain");
+		expect(domainInserts).toHaveLength(2);
+		expect(domainInserts.map((row) => row.values.host)).toEqual([
+			"pr-7-shop-9f00aa-web.example.test",
+			"pr-7-shop-9f00aa-api.example.test",
+		]);
+		// Each preview route mirrors ITS service's production settings.
+		expect(domainInserts[0]?.values).toMatchObject({
+			serviceName: "web",
+			port: 8080,
+			https: false,
+			composeId: "cmp-1",
+			domainType: "preview",
+			previewDeploymentId: "prev-1",
+		});
+		expect(domainInserts[1]?.values).toMatchObject({
+			serviceName: "api",
+			port: 3000,
+			https: true,
+			certificateType: "letsencrypt",
+		});
+
+		expect(syncPreviewTraefik).toHaveBeenCalledWith("prev-1");
+		expect(queueDeployment).toHaveBeenCalledWith(
+			expect.objectContaining({
+				previewDeploymentId: "prev-1",
+				composeId: "cmp-1",
+				applicationId: undefined,
+				type: "deploy",
+			}),
+		);
+		expect(result.domains).toHaveLength(2);
+	});
+
+	it("skips tcp/udp domains — a wildcard host cannot express an entrypoint", async () => {
+		state.composeDomains = [
+			composeDomain("db", { protocol: "tcp", port: 5432 }),
+			composeDomain("web"),
+		];
+		await createPreviewDeployment({ composeId: "cmp-1", pullRequestNumber: "8" });
+		const domainInserts = state.inserted.filter((row) => row.table === "domain");
+		expect(domainInserts.map((row) => row.values.serviceName)).toEqual(["web"]);
+	});
+
+	it("still deploys a stack whose services have no production domain", async () => {
+		state.composeDomains = [];
+		await createPreviewDeployment({ composeId: "cmp-1", pullRequestNumber: "9" });
+		expect(state.inserted.filter((row) => row.table === "domain")).toHaveLength(0);
+		expect(queueDeployment).toHaveBeenCalledWith(
+			expect.objectContaining({ composeId: "cmp-1", previewDeploymentId: "prev-1" }),
+		);
+	});
+
+	it("enforces the compose row's own preview cap", async () => {
+		state.livePreviews = 3;
+		state.compose.previewLimit = 3;
+		await expect(
+			createPreviewDeployment({ composeId: "cmp-1", pullRequestNumber: "10" }),
+		).rejects.toBeInstanceOf(PreviewLimitError);
+		expect(state.inserted).toHaveLength(0);
+		expect(queueDeployment).not.toHaveBeenCalled();
+		expect(upsertPreviewComment).toHaveBeenCalledWith(
+			expect.objectContaining({ composeId: "cmp-1", status: "limit_reached" }),
+		);
+	});
+
+	it("stamps the compose row's default TTL", async () => {
+		state.compose.previewTtlHours = 12;
+		await createPreviewDeployment({ composeId: "cmp-1", pullRequestNumber: "11" });
+		const previewInsert = state.inserted.find((row) => row.table === "preview_deployment");
+		const expiresAt = previewInsert?.values.expiresAt as Date;
+		expect(expiresAt).toBeInstanceOf(Date);
+		expect(expiresAt.getTime()).toBeGreaterThan(Date.now() + 11 * 60 * 60 * 1000);
+	});
+
+	it("refuses an input that names zero or two parents", async () => {
+		await expect(createPreviewDeployment({ pullRequestNumber: "12" })).rejects.toBeInstanceOf(
+			PreviewNotFoundError,
+		);
+		await expect(
+			createPreviewDeployment({
+				applicationId: "app-1",
+				composeId: "cmp-1",
+				pullRequestNumber: "12",
+			}),
+		).rejects.toBeInstanceOf(PreviewNotFoundError);
+		expect(state.inserted).toHaveLength(0);
 	});
 });

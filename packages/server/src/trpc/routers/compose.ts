@@ -170,6 +170,13 @@ export const composeRouter = router({
 				composePath: z.string().min(1).optional(),
 				autoDeploy: z.boolean().optional(),
 				watchPaths: watchPathsSchema.nullish(),
+				// Preview knobs — identical names, bounds and semantics to the
+				// application router's (see `routers/application.ts`).
+				isPreviewDeploymentsActive: z.boolean().optional(),
+				previewForksRequireApproval: z.boolean().optional(),
+				previewEnv: textBlobSchema.nullish(),
+				previewLimit: z.number().int().min(0).max(100).optional(),
+				previewTtlHours: z.number().int().min(1).max(8760).nullish(),
 				gitUrl: z.string().nullish(),
 				gitBranch: z.string().nullish(),
 				customGitSSHKeyId: z.string().nullish(),
@@ -215,8 +222,13 @@ export const composeRouter = router({
 				}
 			}
 
-			if (input.preDeployCommand !== undefined || input.postDeployCommand !== undefined) {
-				// Hook commands are shell and are redacted like other secrets.
+			if (
+				input.preDeployCommand !== undefined ||
+				input.postDeployCommand !== undefined ||
+				input.previewEnv !== undefined
+			) {
+				// Hook commands are shell and `previewEnv` holds credentials —
+				// both are redacted like other secrets.
 				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			}
 

@@ -53,6 +53,8 @@ export const EXEMPT = [
 	"rollback.all",
 	"rollback.one",
 	"previewDeployment.one",
+	// Org-checked on the parent it names (application.one / compose.one are covered).
+	"previewDeployment.list",
 	"schedule.one",
 	"schedule.all",
 	"security.one",

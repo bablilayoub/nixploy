@@ -1,8 +1,10 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
-import { applications, gitea, github, gitlab } from "../../db/schema";
+import { gitea, github, gitlab } from "../../db/schema";
 import { getGithubOctokit } from "../git/github";
-import { previewHost } from "./index";
+import { listComposeExposedServices } from "./compose";
+import { previewComposeHost, previewHost } from "./naming";
+import { loadPreviewParent, type PreviewParentRef } from "./parent";
 
 /**
  * Hidden marker kept in the comment body so repeated pushes to the same pull
@@ -14,14 +16,19 @@ export type PreviewCommentStatus = "deploying" | "removed" | "awaiting_approval"
 
 export type RenderPreviewCommentInput = {
 	pullRequestNumber: string;
-	host: string;
+	/**
+	 * Every host the preview answers on: one for an application, one per
+	 * exposed compose service for a compose stack (possibly none, when no
+	 * compose service has a production domain to mirror).
+	 */
+	hosts: string[];
 	status: PreviewCommentStatus;
 };
 
 /** Markdown body posted back to the pull request. */
 export function renderPreviewComment({
 	pullRequestNumber,
-	host,
+	hosts,
 	status,
 }: RenderPreviewCommentInput): string {
 	if (status === "removed") {
@@ -52,15 +59,25 @@ export function renderPreviewComment({
 			"A maintainer can approve the preview from the Nixploy dashboard.",
 		].join("\n");
 	}
+	if (hosts.length === 0) {
+		return [
+			PREVIEW_COMMENT_MARKER,
+			"### Nixploy preview",
+			"",
+			`The preview environment for PR #${pullRequestNumber} is deploying. It has no public URL — no service in this stack has a domain yet.`,
+		].join("\n");
+	}
 	return [
 		PREVIEW_COMMENT_MARKER,
 		"### Nixploy preview",
 		"",
 		`| Preview | Pull request |`,
 		`| --- | --- |`,
-		`| https://${host} | #${pullRequestNumber} |`,
+		...hosts.map((host) => `| https://${host} | #${pullRequestNumber} |`),
 		"",
-		"The preview is deploying — the URL responds once the deployment finishes.",
+		hosts.length > 1
+			? "The preview is deploying — the URLs respond once the deployment finishes."
+			: "The preview is deploying — the URL responds once the deployment finishes.",
 	].join("\n");
 }
 
@@ -204,56 +221,53 @@ async function commentOnGitea(input: {
  * Bitbucket is intentionally unsupported — its comment API needs a workspace
  * level token Nixploy does not request.
  */
-export async function upsertPreviewComment(input: {
-	applicationId: string;
-	pullRequestNumber: string;
-	status: PreviewCommentStatus;
-	/** Preview host; looked up from the preview's domain row when omitted. */
-	host?: string;
-}): Promise<boolean> {
+export async function upsertPreviewComment(
+	input: PreviewParentRef & {
+		pullRequestNumber: string;
+		status: PreviewCommentStatus;
+		/** Preview hosts; derived from the parent row when omitted. */
+		hosts?: string[];
+	},
+): Promise<boolean> {
 	try {
-		const application = await db.query.applications.findFirst({
-			where: eq(applications.applicationId, input.applicationId),
-			columns: {
-				appName: true,
-				sourceType: true,
-				owner: true,
-				repository: true,
-				githubId: true,
-				gitlabId: true,
-				giteaId: true,
-			},
-		});
-		if (!application?.owner || !application.repository) return false;
+		const parent = await loadPreviewParent(input);
+		if (!parent?.owner || !parent.repository) return false;
 
-		// Deterministic from appName + PR number, so it also resolves after the
-		// preview row is gone (the "removed" comment).
-		const host = input.host ?? previewHost(application.appName, input.pullRequestNumber);
+		// Deterministic from appName + PR number (+ the parent's exposed compose
+		// services), so it also resolves after the preview row is gone — which
+		// is exactly when the "removed" comment is rendered.
+		const hosts =
+			input.hosts ??
+			(parent.kind === "application"
+				? [previewHost(parent.appName, input.pullRequestNumber)]
+				: (await listComposeExposedServices(parent.id)).map((service) =>
+						previewComposeHost(parent.appName, input.pullRequestNumber, service.serviceName),
+					));
 
 		const body = renderPreviewComment({
 			pullRequestNumber: input.pullRequestNumber,
-			host,
+			hosts,
 			status: input.status,
 		});
 		const shared = {
-			owner: application.owner,
-			repo: application.repository,
+			owner: parent.owner,
+			repo: parent.repository,
 			pullRequestNumber: input.pullRequestNumber,
 			body,
 		};
 
-		switch (application.sourceType) {
+		switch (parent.sourceType) {
 			case "github":
-				if (!application.githubId) return false;
-				await commentOnGithub({ ...shared, githubId: application.githubId });
+				if (!parent.githubId) return false;
+				await commentOnGithub({ ...shared, githubId: parent.githubId });
 				return true;
 			case "gitlab":
-				if (!application.gitlabId) return false;
-				await commentOnGitlab({ ...shared, gitlabId: application.gitlabId });
+				if (!parent.gitlabId) return false;
+				await commentOnGitlab({ ...shared, gitlabId: parent.gitlabId });
 				return true;
 			case "gitea":
-				if (!application.giteaId) return false;
-				await commentOnGitea({ ...shared, giteaId: application.giteaId });
+				if (!parent.giteaId) return false;
+				await commentOnGitea({ ...shared, giteaId: parent.giteaId });
 				return true;
 			default:
 				return false;

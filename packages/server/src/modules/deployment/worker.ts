@@ -20,6 +20,7 @@ import {
 	runsOnPrimary,
 } from "../compose/service";
 import { invalidateDockerListings } from "../docker/containers";
+import { buildPreviewComposeTarget } from "../preview/compose";
 import { parsePreviewSourceRef } from "../preview/source-ref";
 import { syncPreviewTraefik } from "../preview/traefik";
 import { toTraefikDomainEntry, writeAppTraefikConfig } from "../traefik/config-writer";
@@ -418,19 +419,42 @@ async function runComposeJob(
 		throw new Error(`Compose service not found: ${job.composeId}`);
 	}
 
-	for (const [, value] of parseEnv(row.env)) ctx.logger.addSecret(value);
+	const preview = job.previewDeploymentId
+		? await db.query.previewDeployments.findFirst({
+				where: eq(previewDeployments.previewDeploymentId, job.previewDeploymentId),
+			})
+		: null;
+	if (job.previewDeploymentId && !preview) {
+		throw new Error(`Preview deployment not found: ${job.previewDeploymentId}`);
+	}
+	if (preview && preview.composeId !== row.composeId) {
+		throw new Error("Preview deployment does not belong to this compose service");
+	}
+
+	// A preview renders and deploys an isolated project under
+	// `<appName>-pr-<n>` (its own private network, volumes and Traefik keys)
+	// from the pull request's source — never the production project.
+	const target: typeof row = preview ? buildPreviewComposeTarget(row, preview) : row;
+
+	for (const [, value] of parseEnv(target.env)) ctx.logger.addSecret(value);
 
 	// Materialize compose file + merged env file (clones git sources too).
 	ctx.logger.line("Preparing compose files...");
 	// Snapshot the rendered file + env against THIS job (compose rollbacks).
-	const files = await prepareComposeFiles(row, { deploymentId: job.deploymentId });
+	// Previews are throwaway and share the parent's composeId — snapshotting
+	// one would offer a PR's file as a production rollback target.
+	const files = await prepareComposeFiles(target, {
+		deploymentId: preview ? null : job.deploymentId,
+	});
 	for (const secret of files.secrets) ctx.logger.addSecret(secret);
 	checkpoint();
 
 	// Pre-deploy hook. Compose has no image Nixploy built, so the command runs
 	// inside a container of the project that is CURRENTLY running (skipped on
 	// the first deploy). Aborting here leaves that project untouched.
-	const preDeployCommand = row.preDeployCommand?.trim();
+	// Previews skip both hooks, like application previews do: a PR's migration
+	// must never run against the environment production shares.
+	const preDeployCommand = preview ? null : row.preDeployCommand?.trim();
 	if (preDeployCommand) {
 		await runComposeExecHook(ctx, {
 			appName: row.appName,
@@ -442,23 +466,23 @@ async function runComposeJob(
 
 	// The compose module owns the command line (stack vs compose, env
 	// isolation, rendered file) — see modules/compose/commands.ts.
-	const command = buildComposeDeployCommand(row, files);
+	const command = buildComposeDeployCommand(target, files);
 
 	ctx.logger.line(
-		row.composeType === "stack" ? "Deploying stack..." : "Starting compose project...",
+		target.composeType === "stack" ? "Deploying stack..." : "Starting compose project...",
 	);
 	// Stacks are Swarm services: `docker stack deploy` runs on the primary
 	// manager with the file rendered there (tasks are pinned to the row's
 	// server by the injected node constraint). Plain compose runs on the server.
-	await ctx.run(command, { cwd: files.workDir, onPrimary: runsOnPrimary(row) });
+	await ctx.run(command, { cwd: files.workDir, onPrimary: runsOnPrimary(target) });
 	checkpoint();
 
 	// The runtime tab's container list is cached for 10 s — a deploy replaces
 	// every container, so drop it now instead of showing the old ids.
-	invalidateComposeContainers(row.appName, row.serverId);
+	invalidateComposeContainers(target.appName, target.serverId);
 
 	// Post-deploy hook: the project is up, wait for a container and exec.
-	const postDeployCommand = row.postDeployCommand?.trim();
+	const postDeployCommand = preview ? null : row.postDeployCommand?.trim();
 	if (postDeployCommand) {
 		await runComposeExecHook(ctx, {
 			appName: row.appName,
@@ -469,12 +493,26 @@ async function runComposeJob(
 		checkpoint();
 	}
 
-	// Per-service Traefik configs for compose domains — best effort.
-	await resyncComposeDomains(row.composeId).catch((error) => {
-		ctx.logger.line(
-			`Warning: failed to sync Traefik configs: ${error instanceof Error ? error.message : String(error)}`,
-		);
-	});
+	// Per-service Traefik configs — best effort. A preview writes its own
+	// files (one per exposed service, under the preview project's key) and
+	// must never rewrite production's.
+	if (preview) {
+		await syncPreviewTraefik(preview.previewDeploymentId).catch((error) => {
+			ctx.logger.line(
+				`Warning: failed to sync preview Traefik config: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		});
+		await db
+			.update(previewDeployments)
+			.set({ previewStatus: "done" })
+			.where(eq(previewDeployments.previewDeploymentId, preview.previewDeploymentId));
+	} else {
+		await resyncComposeDomains(row.composeId).catch((error) => {
+			ctx.logger.line(
+				`Warning: failed to sync Traefik configs: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		});
+	}
 
 	ctx.logger.line("Deployment successful");
 }
@@ -555,7 +593,23 @@ async function notifyDeployOutcome(
 			columns: { name: true, appName: true, environmentId: true },
 		});
 		if (!row) return;
-		await emitDeployNotification(row, status, { errorMessage, type: "compose" });
+		const preview = job.previewDeploymentId
+			? await db.query.previewDeployments.findFirst({
+					where: eq(previewDeployments.previewDeploymentId, job.previewDeploymentId),
+					columns: { appName: true, pullRequestNumber: true },
+				})
+			: null;
+		await emitDeployNotification(
+			preview
+				? {
+						name: `${row.name} (PR #${preview.pullRequestNumber ?? "?"} preview)`,
+						appName: preview.appName,
+						environmentId: row.environmentId,
+					}
+				: row,
+			status,
+			{ errorMessage, type: "compose" },
+		);
 	}
 }
 

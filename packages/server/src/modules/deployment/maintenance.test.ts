@@ -4,13 +4,16 @@ import { join } from "node:path";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { state } = vi.hoisted(() => ({
+const { state, deletePreviewDeployment } = vi.hoisted(() => ({
+	deletePreviewDeployment: vi.fn(async (previewDeploymentId: string) => ({ previewDeploymentId })),
 	state: {
 		/** Results handed back by successive `db.execute` calls. */
 		executeResults: [] as unknown[][],
 		executed: [] as unknown[],
 		deleted: [] as Array<{ table: unknown; where: unknown }>,
 		deleteResult: [] as unknown[],
+		selected: [] as Array<{ table: unknown; where: unknown }>,
+		selectResult: [] as unknown[],
 	},
 }));
 
@@ -28,14 +31,23 @@ vi.mock("../../db", () => ({
 				},
 			}),
 		}),
+		select: () => ({
+			from: (table: unknown) => ({
+				where: async (where: unknown) => {
+					state.selected.push({ table, where });
+					return state.selectResult;
+				},
+			}),
+		}),
 	},
 }));
-vi.mock("../preview", () => ({ deletePreviewDeployment: vi.fn() }));
+vi.mock("../preview", () => ({ deletePreviewDeployment }));
 vi.mock("node-schedule", () => ({ default: { scheduleJob: vi.fn() } }));
 
 import {
 	DEFAULT_AUDIT_RETENTION_DAYS,
 	DEPLOYMENTS_KEPT_PER_TARGET,
+	expirePreviewDeployments,
 	findOrphanDeploymentIds,
 	pruneAuditLogs,
 	pruneDeploymentLogs,
@@ -73,6 +85,9 @@ beforeEach(async () => {
 	state.executed = [];
 	state.deleted = [];
 	state.deleteResult = [];
+	state.selected = [];
+	state.selectResult = [];
+	deletePreviewDeployment.mockClear();
 });
 
 afterEach(async () => {
@@ -81,6 +96,34 @@ afterEach(async () => {
 		else process.env[key] = value;
 	}
 	await rm(configDir, { recursive: true, force: true });
+});
+
+describe("expirePreviewDeployments", () => {
+	it("tears down expired previews of both kinds through one lifecycle call", async () => {
+		// The expiry query filters on `expires_at` alone, so a compose preview
+		// is picked up by construction — there is no per-kind branch to forget.
+		state.selectResult = [
+			{ previewDeploymentId: "prev-app", appName: "echo-pr-3" },
+			{ previewDeploymentId: "prev-cmp", appName: "shop-pr-7" },
+		];
+		const removed = await expirePreviewDeployments(new Date("2026-02-01T00:00:00Z"));
+		expect(removed).toBe(2);
+		expect(tableName(state.selected[0]?.table)).toBe("preview_deployment");
+		expect(deletePreviewDeployment.mock.calls.map((call) => call[0])).toEqual([
+			"prev-app",
+			"prev-cmp",
+		]);
+	});
+
+	it("keeps going when one teardown fails", async () => {
+		state.selectResult = [
+			{ previewDeploymentId: "prev-bad", appName: "shop-pr-7" },
+			{ previewDeploymentId: "prev-ok", appName: "shop-pr-8" },
+		];
+		deletePreviewDeployment.mockRejectedValueOnce(new Error("docker unreachable"));
+		expect(await expirePreviewDeployments()).toBe(1);
+		expect(deletePreviewDeployment).toHaveBeenCalledTimes(2);
+	});
 });
 
 describe("resolveAuditRetentionDays", () => {

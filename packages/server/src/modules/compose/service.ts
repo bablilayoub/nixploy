@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "../../db";
 import {
 	compose,
@@ -8,6 +8,7 @@ import {
 	domains,
 	environments,
 	mounts,
+	previewDeployments,
 	redirects,
 	security,
 } from "../../db/schema";
@@ -347,10 +348,15 @@ export interface PreparedComposeFiles {
 	secrets: string[];
 }
 
-/** Source service names that have a Nixploy domain (the Traefik targets). */
+/**
+ * Source service names that have a Nixploy domain (the Traefik targets).
+ * Preview domains are excluded: they carry the same `composeId` (so the
+ * Domains tab and the org check keep working) but belong to a `<app>-pr-<n>`
+ * project, and their hosts must never end up in production's routing.
+ */
 async function exposedServiceNames(composeId: string): Promise<Set<string>> {
 	const rows = await db.query.domains.findMany({
-		where: eq(domains.composeId, composeId),
+		where: and(eq(domains.composeId, composeId), isNull(domains.previewDeploymentId)),
 		columns: { serviceName: true },
 	});
 	const names = new Set<string>();
@@ -549,6 +555,25 @@ export async function deleteCompose(composeRow: ComposeRow): Promise<void> {
 		appName: composeRow.appName,
 		composeId: composeRow.composeId,
 	});
+
+	// PR previews are separate projects with their own Traefik files: the rows
+	// cascade with this one, the running stacks and the YAML do not. Imported
+	// lazily — `modules/preview` reaches the deploy engine, which reaches back
+	// here through the worker.
+	const previews = await db.query.previewDeployments.findMany({
+		where: eq(previewDeployments.composeId, composeRow.composeId),
+	});
+	if (previews.length > 0) {
+		const { deletePreviewDeployment } = await import("../preview");
+		await Promise.all(
+			previews.map((preview) =>
+				bestEffort(`remove preview deployment ${preview.appName}`, () =>
+					deletePreviewDeployment(preview.previewDeploymentId),
+				),
+			),
+		);
+	}
+
 	const composeDomains = await db.query.domains.findMany({
 		where: eq(domains.composeId, composeRow.composeId),
 	});
@@ -703,7 +728,9 @@ export async function resyncComposeDomains(composeId: string): Promise<void> {
 	// both are loaded once and filtered per group below.
 	const [composeDomains, composeRedirects, composeSecurity] = await Promise.all([
 		db.query.domains.findMany({
-			where: eq(domains.composeId, composeId),
+			// Preview domains belong to the `<app>-pr-<n>` project and are written
+			// by `modules/preview/traefik.ts` under their own keys.
+			where: and(eq(domains.composeId, composeId), isNull(domains.previewDeploymentId)),
 			with: { middlewares: true },
 		}),
 		db.query.redirects.findMany({ where: eq(redirects.composeId, composeId) }),
@@ -722,7 +749,17 @@ export async function resyncComposeDomains(composeId: string): Promise<void> {
 		await traefik.writeAppTraefikConfig({
 			appName: traefikAppName(row, serviceName),
 			serverId: row.serverId,
-			domains: serviceDomains.map(toTraefikDomainEntry),
+			// `serviceName` is cleared on purpose: the writer's compose form
+			// appends `-<serviceName>-1` to the config key, and the key already
+			// IS `<appName>-<service>` / `<appName>_<service>` — which is exactly
+			// the network alias `injectNetwork` gives the container (and the swarm
+			// DNS name in stack mode). Leaving it set produced
+			// `http://<app>-<svc>-<svc>-1`, which resolves nowhere (verified:
+			// NXDOMAIN from the Traefik container), so every compose domain 502'd.
+			domains: serviceDomains.map((domain) => ({
+				...toTraefikDomainEntry(domain),
+				serviceName: null,
+			})),
 			redirects: composeRedirects
 				.filter((redirect) => redirect.serviceName === serviceName)
 				.map((redirect) => ({

@@ -1,5 +1,13 @@
 import { relations, sql } from "drizzle-orm";
-import { type AnyPgColumn, boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+	type AnyPgColumn,
+	boolean,
+	check,
+	index,
+	pgTable,
+	text,
+	timestamp,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { applications } from "./application";
 import { compose } from "./compose";
@@ -81,11 +89,23 @@ export const deployments = pgTable(
 	],
 );
 
-/** A preview (per-PR) instance of an application. */
+/**
+ * A preview (per-PR) instance of an application **or** of a compose service.
+ * Exactly one of `applicationId` / `composeId` is set (CHECK constraint):
+ * every other column — the `<parent>-pr-<n>` `appName`, the PR metadata, the
+ * status, the expiry — means the same thing for both kinds, which is what
+ * lets `modules/preview` run one lifecycle over a `PreviewParent` shape.
+ */
 export const previewDeployments = pgTable(
 	"preview_deployment",
 	{
 		previewDeploymentId: idColumn("preview_deployment_id"),
+		/**
+		 * Service name of the preview instance: `<parent appName>-pr-<n>`. For a
+		 * compose preview this is also the compose project / stack name and the
+		 * prefix of its private `<appName>-net`, so a preview can never collide
+		 * with the production stack it was forked from.
+		 */
 		appName: text("app_name").notNull(),
 		branch: text("branch"),
 		pullRequestId: text("pull_request_id"),
@@ -111,15 +131,30 @@ export const previewDeployments = pgTable(
 		previewStatus: previewStatus("preview_status").notNull().default("idle"),
 		domainId: text("domain_id"),
 		expiresAt: timestamp("expires_at", { withTimezone: true }),
-		applicationId: text("application_id")
-			.notNull()
-			.references(() => applications.applicationId, { onDelete: "cascade" }),
+		/** Parent application, or null when this preview belongs to a compose service. */
+		applicationId: text("application_id").references(() => applications.applicationId, {
+			onDelete: "cascade",
+		}),
+		/** Parent compose service, or null when this preview belongs to an application. */
+		composeId: text("compose_id").references(() => compose.composeId, {
+			onDelete: "cascade",
+		}),
 		serverId: text("server_id").references(() => servers.serverId, {
 			onDelete: "set null",
 		}),
 		createdAt: createdAt(),
 	},
-	(table) => [index("preview_deployment_application_id_idx").on(table.applicationId)],
+	(table) => [
+		index("preview_deployment_application_id_idx").on(table.applicationId),
+		index("preview_deployment_compose_id_idx").on(table.composeId),
+		// A preview has exactly one parent. Without this, a row with both ids
+		// (or neither) would be deployed by whichever branch the worker checked
+		// first, and the org resolution would have two answers.
+		check(
+			"preview_deployment_one_parent",
+			sql`("application_id" IS NOT NULL) <> ("compose_id" IS NOT NULL)`,
+		),
+	],
 );
 
 /** A pinned image a service can be rolled back to. */
@@ -161,6 +196,10 @@ export const previewDeploymentsRelations = relations(previewDeployments, ({ one 
 	application: one(applications, {
 		fields: [previewDeployments.applicationId],
 		references: [applications.applicationId],
+	}),
+	compose: one(compose, {
+		fields: [previewDeployments.composeId],
+		references: [compose.composeId],
 	}),
 	server: one(servers, {
 		fields: [previewDeployments.serverId],

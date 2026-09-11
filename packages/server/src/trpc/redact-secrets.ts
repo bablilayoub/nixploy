@@ -40,6 +40,7 @@ export function redactComposeSecrets<T>(row: T): T {
 		composeFile: null,
 		preDeployCommand: null,
 		postDeployCommand: null,
+		previewEnv: null,
 	};
 	const environment = source.environment as
 		| ({ env?: string | null; project?: Record<string, unknown> } & Record<string, unknown>)
