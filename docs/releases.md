@@ -41,7 +41,7 @@ ref to the panel as `NIXPLOY_IMAGE`.
    takes direct commits, so they come out empty — these two files *are* the
    release notes.
 1. Bump `"version"` in the root [`package.json`](../package.json) (and keep `apps/web` / other workspace versions in sync if you treat them as the product version).
-2. Commit on `main` with `[release]` in the message so **CI** and **Docker** skip that push (their `if:` guards look for it). Do **not** use `[release]`: GitHub applies it to the tag push as well, so the Release workflow is silently skipped — that is what happened to the first v0.2.0 tag.
+2. Commit on `main` with `[release]` in the message so **CI** and **Docker** skip that push (their `if:` guards look for it). Do **not** use `[release]`: GitHub applies it to the tag push as well, so the Release workflow is silently skipped — that is what happened to the first v0.2.0 tag. The match is a plain substring, so a commit message that merely *mentions* the marker (a changelog line, a commit explaining the rule) is skipped too — spell it out as skip-ci in prose.
 3. Tag and push:
 
 ```bash
