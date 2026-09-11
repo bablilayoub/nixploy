@@ -41,67 +41,10 @@ import { useTRPC } from "@/lib/trpc";
 
 const PAGE_SIZE = 10;
 
-/** Enough of a service row to point a commit sha at the provider's commit page. */
-export type CommitLinkSource = {
-	sourceType: string;
-	owner?: string | null;
-	repository?: string | null;
-	gitUrl?: string | null;
-	/** Self-hosted GitLab/Gitea base URL when the service is linked to one. */
-	providerUrl?: string | null;
-};
-
-const withProtocol = (url: string): string => (/^[a-z]+:\/\//i.test(url) ? url : `https://${url}`);
-
-/** `https://host/owner/repo` from an https, ssh:// or scp-style git URL; null otherwise. */
-function webRepoFromGitUrl(gitUrl: string): string | null {
-	const scp = gitUrl.match(/^(?:[\w.-]+@)?([\w.-]+):([\w./-]+?)(?:\.git)?\/?$/);
-	if (scp && !gitUrl.includes("://")) {
-		return `https://${scp[1]}/${scp[2]}`;
-	}
-	try {
-		const url = new URL(gitUrl);
-		if (!/^(https?|ssh|git)(\+ssh)?:$/.test(url.protocol)) return null;
-		const path = url.pathname.replace(/\.git$/, "").replace(/\/$/, "");
-		if (path.split("/").filter(Boolean).length < 2) return null;
-		return `https://${url.hostname}${path}`;
-	} catch {
-		return null;
-	}
-}
-
-/**
- * Provider commit URL for a deployment's sha. Docker/drop/raw sources have
- * no repository (the "sha" of a docker deployment is the image digest) and
- * return null, so the sha renders as plain text. GitLab and Gitea are often
- * self-hosted, so they need the integration's base URL: without it the sha
- * stays plain text rather than pointing at gitlab.com/gitea.com by guess.
- */
-export function buildCommitUrl(source: CommitLinkSource, sha: string): string | null {
-	const repo =
-		source.owner && source.repository
-			? `${source.owner.replace(/^\/+|\/+$/g, "")}/${source.repository.replace(/^\/+|\/+$/g, "")}`
-			: null;
-	const providerBase = source.providerUrl
-		? withProtocol(source.providerUrl).replace(/\/$/, "")
-		: null;
-	switch (source.sourceType) {
-		case "github":
-			return repo ? `https://github.com/${repo}/commit/${sha}` : null;
-		case "gitlab":
-			return repo && providerBase ? `${providerBase}/${repo}/-/commit/${sha}` : null;
-		case "bitbucket":
-			return repo ? `https://bitbucket.org/${repo}/commits/${sha}` : null;
-		case "gitea":
-			return repo && providerBase ? `${providerBase}/${repo}/commit/${sha}` : null;
-		case "git": {
-			const base = source.gitUrl ? webRepoFromGitUrl(source.gitUrl) : null;
-			return base ? `${base}/commit/${sha}` : null;
-		}
-		default:
-			return null;
-	}
-}
+// Provider commit URLs are derived from the service row + sha at render
+// time (no `commit_url` column), by the import-free server helper shared
+// with the preview flow; re-exported so existing callers keep their import.
+export { buildCommitUrl, type CommitLinkSource } from "@nixploy/server/modules/git/commit-url";
 
 /** Short display form: 7 chars for a git sha, `sha256:abcdef1` for an image digest. */
 const shortSha = (sha: string): string =>

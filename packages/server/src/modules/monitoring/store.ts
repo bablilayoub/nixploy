@@ -187,7 +187,46 @@ export function ringPoints<P extends TimePoint>(file: string): P[] {
 // server's samples live on disk, the stored point shapes and the read API the
 // monitoring router serves. Written by `./sampler.ts`.
 
-export const METRICS_RETENTION_MS = 48 * 60 * 60 * 1000;
+/** Default history window when `NIXPLOY_METRICS_RETENTION_HOURS` is unset. */
+export const DEFAULT_METRICS_RETENTION_HOURS = 48;
+/** Below this the Monitoring tab's own 1 h range would out-run the store. */
+export const MIN_METRICS_RETENTION_HOURS = 1;
+/** 30 days. Higher belongs in Prometheus (`/api/metrics`), not in JSONL files. */
+export const MAX_METRICS_RETENTION_HOURS = 720;
+
+/**
+ * Retention window of the JSONL metrics store, in hours.
+ *
+ * The single place `NIXPLOY_METRICS_RETENTION_HOURS` is read: the compaction
+ * pass (`appendPoint`) trims to it, the range picker offers at most this
+ * much, and the docs quote it. Garbage, zero and negative values fall back
+ * to the default rather than disabling retention — a typo must not grow the
+ * files forever — and the value is clamped to
+ * [{@link MIN_METRICS_RETENTION_HOURS}, {@link MAX_METRICS_RETENTION_HOURS}].
+ *
+ * Read on every call (not cached) so a restart is not needed in dev and so
+ * tests can flip the env var; the parse is a few microseconds next to the
+ * file I/O it guards.
+ */
+export function metricsRetentionHours(): number {
+	const raw = process.env.NIXPLOY_METRICS_RETENTION_HOURS?.trim();
+	if (!raw) return DEFAULT_METRICS_RETENTION_HOURS;
+	const parsed = Number.parseInt(raw, 10);
+	if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_METRICS_RETENTION_HOURS;
+	return Math.min(Math.max(parsed, MIN_METRICS_RETENTION_HOURS), MAX_METRICS_RETENTION_HOURS);
+}
+
+/** {@link metricsRetentionHours} in milliseconds. */
+export function metricsRetentionMs(): number {
+	return metricsRetentionHours() * 60 * 60 * 1000;
+}
+
+/**
+ * @deprecated Reads the env var once at import time; call
+ * {@link metricsRetentionMs} instead. Kept because it is re-exported from
+ * `./history.ts` and imported by the panel.
+ */
+export const METRICS_RETENTION_MS = metricsRetentionMs();
 
 /** Most points one read returns; longer windows are downsampled to it. */
 const MAX_POINTS_PER_READ = 240;
@@ -241,10 +280,10 @@ export const serverMetricsFile = (serverId: string) =>
 	path.join(metricsDir(), `server-${serverId}.jsonl`);
 
 export const appendServicePoint = (appName: string, point: HistoryPoint): Promise<void> =>
-	appendPoint(metricsFile(appName), point, { retentionMs: METRICS_RETENTION_MS });
+	appendPoint(metricsFile(appName), point, { retentionMs: metricsRetentionMs() });
 
 export const appendServerPoint = (serverId: string, point: ServerHistoryPoint): Promise<void> =>
-	appendPoint(serverMetricsFile(serverId), point, { retentionMs: METRICS_RETENTION_MS });
+	appendPoint(serverMetricsFile(serverId), point, { retentionMs: metricsRetentionMs() });
 
 /** Uniform-stride downsample to at most {@link MAX_POINTS_PER_READ} points. */
 function downsample<P>(points: P[]): P[] {

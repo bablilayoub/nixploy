@@ -94,6 +94,20 @@ export const previewDeployments = pgTable(
 		pullRequestURL: text("pull_request_url"),
 		/** Provider login of the PR author (shown on the approval gate). */
 		pullRequestAuthor: text("pull_request_author"),
+		/**
+		 * Head commit of the pull request, refreshed on every `synchronize`
+		 * delivery. Stored on the preview row (not only on the deployment rows
+		 * it spawns) because the Previews tab lists previews, a gated fork PR
+		 * never produces a deployment at all, and some providers hand us a
+		 * commit URL — GitLab's `last_commit.url`, Bitbucket's
+		 * `links.html.href` — that no derivation from the repo URL reproduces.
+		 */
+		commitSha: text("commit_sha"),
+		/** First line of the head commit message, capped by the webhook parser. */
+		commitMessage: text("commit_message"),
+		commitAuthor: text("commit_author"),
+		/** Provider commit page; null when the provider sent none and none could be built. */
+		commitUrl: text("commit_url"),
 		previewStatus: previewStatus("preview_status").notNull().default("idle"),
 		domainId: text("domain_id"),
 		expiresAt: timestamp("expires_at", { withTimezone: true }),

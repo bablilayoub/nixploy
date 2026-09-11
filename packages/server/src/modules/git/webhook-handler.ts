@@ -8,8 +8,16 @@
  * - `match.ts` — watch-path globs and the pure repo→application predicates
  * - `handler.ts` — the dispatcher, provenance and the deploy enqueue
  * - `preview-flow.ts` — fork gate and the preview create/redeploy/delete flow
+ * - `commit-url.ts` / `commit-link.ts` — provider commit links for a sha
  */
 
+export {
+	commitLinkSourceForApplication,
+	commitLinkSourceForCompose,
+	commitUrlForApplication,
+	commitUrlForCompose,
+} from "./commit-link";
+export { buildCommitUrl, type CommitLinkSource, webRepoFromGitUrl } from "./commit-url";
 export { handleGitWebhook, queueWebhookDeployment, webhookProvenance } from "./handler";
 export {
 	applicationMatchesPreviewWebhook,
@@ -23,6 +31,8 @@ export {
 export { handlePreviewWebhookForApplication } from "./preview-flow";
 export { isGitlabMetadataOnlyUpdate } from "./providers/gitlab";
 export {
+	commitSubject,
+	commitUrlFromRepoHtml,
 	extractPushCommit,
 	type GitWebhookProvider,
 	type GitWebhookResult,

@@ -1,14 +1,10 @@
 import type Docker from "dockerode";
-import { eq } from "drizzle-orm";
-import { Client } from "ssh2";
-import { db } from "../db";
-import { servers } from "../db/schema";
+import type { Client } from "ssh2";
 import { getLocalDocker, resolveLocalContainer } from "../modules/docker/containers";
 import { isProtectedPlatformName } from "../modules/docker/protected";
-import { execAsyncRemote, verifyRemoteHostKey } from "../utils/exec";
+import { execAsyncRemote } from "../utils/exec";
 import { acquireSsh } from "../utils/ssh-pool";
 
-const SSH_READY_TIMEOUT_MS = 30_000;
 const EXEC_TIMEOUT_MS = 15_000;
 
 const shq = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
@@ -116,45 +112,6 @@ export async function withServerSsh<T>(
 
 /** Reserve a channel for a long-lived stream; release the lease when it ends. */
 export { acquireSsh as acquireServerSsh } from "../utils/ssh-pool";
-
-/**
- * Open a **dedicated** SSH connection to a managed remote server (same lookup
- * as `execAsyncRemote` used to do).
- *
- * The only remaining caller is the interactive terminal (`ws/docker-terminal.ts`),
- * which owns its connection for the session and ends it on close. Everything
- * else goes through {@link withServerSsh} / {@link acquireServerSsh} so it
- * shares the pooled connection; moving the terminal over needs the same lease
- * treatment (see the handoff).
- */
-export async function connectToServer(serverId: string): Promise<Client> {
-	const server = await db.query.servers.findFirst({
-		where: eq(servers.serverId, serverId),
-		with: { sshKey: true },
-	});
-	if (!server) {
-		throw new Error(`Server not found: ${serverId}`);
-	}
-	const sshKey = server.sshKey;
-	if (!sshKey) {
-		throw new Error(`Server ${server.name} (${serverId}) has no SSH key attached`);
-	}
-
-	return new Promise<Client>((resolve, reject) => {
-		const conn = new Client();
-		conn
-			.on("ready", () => resolve(conn))
-			.on("error", (err) => reject(err))
-			.connect({
-				host: server.ipAddress,
-				port: server.port,
-				username: server.username,
-				privateKey: sshKey.privateKey,
-				readyTimeout: SSH_READY_TIMEOUT_MS,
-				hostVerifier: (key: Buffer) => verifyRemoteHostKey(serverId, key),
-			});
-	});
-}
 
 /** Run a short command over an open SSH connection and resolve with trimmed stdout. */
 export function execOnConnection(conn: Client, command: string): Promise<string> {

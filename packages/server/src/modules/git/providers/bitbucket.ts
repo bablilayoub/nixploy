@@ -5,9 +5,11 @@ import { isForkPullRequest } from "../../preview/fork-gate";
 import { derivedWebhookSecret } from "../webhook-secret";
 import {
 	asString,
+	commitUrlFromRepoHtml,
 	type ExtractedWebhook,
 	extractPushCommit,
 	header,
+	optionalString,
 	safeEqual,
 	type WebhookHeaders,
 	WebhookIgnored,
@@ -92,6 +94,19 @@ export async function verifyAndExtractBitbucket(
 				}),
 				headRepoFullName: headFullName || null,
 				headCommit: typeof pr.source?.commit?.hash === "string" ? pr.source.commit.hash : null,
+				// Bitbucket sends the source commit's hash and, on most plans,
+				// an `html` link for it; `message`/`author` are only on the
+				// `repo:push` payload, never on a pullrequest one. The fallback
+				// builds `<repo html>/commits/<hash>` — Bitbucket's plural path.
+				headCommitMessage: null,
+				headCommitAuthor: null,
+				headCommitUrl:
+					optionalString(pr.source?.commit?.links?.html?.href) ??
+					commitUrlFromRepoHtml(
+						pr.source?.repository?.links?.html?.href,
+						pr.source?.commit?.hash,
+						"commits",
+					),
 				authorLogin: typeof pr.author?.nickname === "string" ? pr.author.nickname : null,
 			},
 		};

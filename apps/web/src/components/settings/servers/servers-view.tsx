@@ -13,6 +13,7 @@ import { CreateServerDialog } from "@/components/settings/servers/create-server-
 import { ServerCapacityCell } from "@/components/settings/servers/server-capacity-cell";
 import { ServerHistoryDialog } from "@/components/settings/servers/server-history-dialog";
 import { ServerStatsPopover } from "@/components/settings/servers/server-stats-popover";
+import { ServerTerminalDialog } from "@/components/settings/servers/server-terminal-dialog";
 import { PageHeader, StatusDot } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,9 +59,18 @@ const isMetricsEnabled = (server: ServerRow): boolean =>
 
 export function ServersView() {
 	const trpc = useTRPC();
-	const { can } = useCapabilities();
+	const { can, isInstanceAdmin } = useCapabilities();
 	const canManage = can("servers.manage");
 	const manageHint = canManage ? undefined : missingCapabilityHint("servers.manage");
+	// A host shell on a Swarm member is platform-wide power (it runs every
+	// tenant's unpinned tasks), so the server gate is capability + instance
+	// admin; mirror both here so the button is not offered to be refused.
+	const canOpenTerminal = canManage && isInstanceAdmin;
+	const terminalHint = !canManage
+		? manageHint
+		: isInstanceAdmin
+			? undefined
+			: "Server terminals are limited to instance admins";
 
 	const {
 		data: servers,
@@ -217,6 +227,12 @@ export function ServersView() {
 									<TableCell>
 										<div className="flex items-center justify-end">
 											<ServerStatsPopover serverId={server.serverId} />
+											<ServerTerminalDialog
+												serverId={server.serverId}
+												serverName={server.name}
+												disabled={!canOpenTerminal}
+												disabledReason={terminalHint}
+											/>
 											<ServerHistoryDialog
 												serverId={server.serverId}
 												serverName={server.name}

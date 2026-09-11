@@ -6,6 +6,7 @@ import { isForkPullRequest } from "../../preview/fork-gate";
 import {
 	asString,
 	collectCommitPaths,
+	commitUrlFromRepoHtml,
 	type ExtractedWebhook,
 	extractPushCommit,
 	header,
@@ -89,6 +90,13 @@ export async function verifyAndExtractGithub(
 				headRepoFullName:
 					typeof pr.head?.repo?.full_name === "string" ? pr.head.repo.full_name : null,
 				headCommit: typeof pr.head?.sha === "string" ? pr.head.sha : null,
+				// GitHub's pull_request payload carries the head sha but never
+				// the head commit's message or author, so only the URL can be
+				// built here (from the head repository, which is the fork for
+				// fork PRs — that is where the commit actually lives).
+				headCommitMessage: null,
+				headCommitAuthor: null,
+				headCommitUrl: commitUrlFromRepoHtml(pr.head?.repo?.html_url, pr.head?.sha),
 				authorLogin: typeof pr.user?.login === "string" ? pr.user.login : null,
 			},
 		};

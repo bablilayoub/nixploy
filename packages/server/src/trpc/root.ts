@@ -38,8 +38,10 @@ import { setupRouter } from "./routers/setup";
 import { sshKeyRouter } from "./routers/ssh-key";
 import { tagRouter } from "./routers/tag";
 import { templateRouter } from "./routers/template";
+import { traefikRouter } from "./routers/traefik";
 import { updatesRouter } from "./routers/updates";
 import { volumeBackupRouter } from "./routers/volume-backup";
+import { volumeFilesRouter } from "./routers/volume-files";
 import { webServerRouter } from "./routers/web-server";
 
 export const appRouter = router({
@@ -82,8 +84,10 @@ export const appRouter = router({
 	sshKey: sshKeyRouter,
 	tag: tagRouter,
 	template: templateRouter,
+	traefik: traefikRouter,
 	updates: updatesRouter,
 	volumeBackup: volumeBackupRouter,
+	volumeFiles: volumeFilesRouter,
 	webServer: webServerRouter,
 });
 

@@ -7,6 +7,7 @@ import { derivedWebhookSecret } from "../webhook-secret";
 import {
 	asString,
 	collectCommitPaths,
+	commitUrlFromRepoHtml,
 	type ExtractedWebhook,
 	extractPushCommit,
 	header,
@@ -98,6 +99,12 @@ export async function verifyAndExtractGitea(
 				headRepoFullName:
 					typeof pr.head?.repo?.full_name === "string" ? pr.head.repo.full_name : null,
 				headCommit: typeof pr.head?.sha === "string" ? pr.head.sha : null,
+				// Like GitHub, Gitea's pull_request payload has no head commit
+				// message/author — but `head.repo.html_url` names the (possibly
+				// self-hosted) instance, which beats guessing gitea.com.
+				headCommitMessage: null,
+				headCommitAuthor: null,
+				headCommitUrl: commitUrlFromRepoHtml(pr.head?.repo?.html_url, pr.head?.sha),
 				authorLogin: typeof pr.user?.login === "string" ? pr.user.login : null,
 			},
 		};

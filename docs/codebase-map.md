@@ -193,6 +193,7 @@ Helpers: `modules/deployment/paths.ts` (canonical `getConfigDir`, apps, logs, ss
 | `NIXPLOY_SSH_BREAKER_FAILURES` | ssh-pool | consecutive connect failures before a server is short-circuited as unreachable (default 3) |
 | `NIXPLOY_SSH_BREAKER_MS` | ssh-pool | how long commands fail fast while the breaker is open (default 5 min). A success, `server.testConnection` or `server.setup` closes it |
 | `NIXPLOY_FANOUT_CONCURRENCY` | fan-out | servers a cron pass talks to at once (default 4) |
+| `NIXPLOY_METRICS_RETENTION_HOURS` | monitoring/store.ts | how long the JSONL metrics store keeps samples (default 48, min 1, max 720); read only through `metricsRetentionHours()` |
 | `NIXPLOY_ROLE` | lib/role.ts | `all` (default) / `panel` / `worker` — see §1 |
 | `NIXPLOY_SPLIT_WORKER` | install.sh | `1` creates the `nixploy-worker` Swarm service and runs the panel as `panel` |
 | `NIXPLOY_WORKER_MEMORY` | install.sh | memory limit of the worker service |

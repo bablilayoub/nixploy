@@ -7,6 +7,7 @@ import { handleDeploymentLogs } from "./deployment-logs";
 import { handleDockerLogs } from "./docker-logs";
 import { handleDockerStats } from "./docker-stats";
 import { handleDockerTerminal } from "./docker-terminal";
+import { handleServerTerminal } from "./server-terminal";
 import { handlePlatformEvents } from "./events";
 
 export type WsConnectionHandler = (
@@ -35,6 +36,7 @@ const routes: Record<string, WsConnectionHandler> = {
 	"/ws/logs": handleDockerLogs,
 	"/ws/stats": handleDockerStats,
 	"/ws/terminal": handleDockerTerminal,
+	"/ws/server-terminal": handleServerTerminal,
 };
 
 let heartbeat: NodeJS.Timeout | null = null;
@@ -47,6 +49,7 @@ const servers = new Set<WebSocketServer>();
  *   /ws/logs?appName=&serverId=   — `docker logs -f` of the app's container
  *   /ws/stats?appName=&serverId=  — 1s cpu/memory/network frames
  *   /ws/terminal?appName=&serverId= — interactive shell in the container
+ *   /ws/server-terminal?serverId=  — SSH host shell on a managed server
  *
  * Every upgrade is authenticated against the better-auth session cookie;
  * unauthenticated upgrades get a 401 and a destroyed socket. Browser

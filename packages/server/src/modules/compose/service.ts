@@ -77,7 +77,13 @@ export const runsOnPrimary = (row: Pick<ComposeRow, "composeType">): boolean =>
 export async function findComposeById(composeId: string) {
 	return db.query.compose.findFirst({
 		where: eq(compose.composeId, composeId),
-		with: { environment: { with: { project: true } } },
+		with: {
+			environment: { with: { project: true } },
+			// Only the base URLs: the provider rows also carry access tokens and
+			// this row is what `compose.one` returns to the browser.
+			gitlab: { columns: { gitlabUrl: true } },
+			gitea: { columns: { giteaUrl: true } },
+		},
 	});
 }
 

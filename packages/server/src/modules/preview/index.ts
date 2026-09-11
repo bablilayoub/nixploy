@@ -40,10 +40,35 @@ export type CreatePreviewInput = {
 	triggeredBy?: string | null;
 	/** PR head sha when the provider sent it (the clone fills the rest). */
 	commitSha?: string | null;
+	/** First line of the head commit message; only GitLab payloads carry one. */
+	commitMessage?: string | null;
+	commitAuthor?: string | null;
+	/** Provider commit page for `commitSha`. */
+	commitUrl?: string | null;
 };
 
+/** Head-commit metadata stored on the preview row and refreshed on every push. */
+export type PreviewCommit = Pick<
+	CreatePreviewInput,
+	"commitSha" | "commitMessage" | "commitAuthor" | "commitUrl"
+>;
+
 /** Provenance a preview job carries (webhook delivery or approve/redeploy click). */
-export type PreviewProvenance = Pick<CreatePreviewInput, "triggeredBy" | "commitSha">;
+export type PreviewProvenance = Pick<CreatePreviewInput, "triggeredBy"> & PreviewCommit;
+
+/**
+ * Only overwrite a stored commit field when the new delivery actually has
+ * one: a Bitbucket `pullrequest:updated` for a title edit must not blank the
+ * message a previous delivery recorded.
+ */
+function commitColumns(input: PreviewCommit): Partial<PreviewCommit> {
+	const patch: Partial<PreviewCommit> = {};
+	if (input.commitSha) patch.commitSha = input.commitSha;
+	if (input.commitMessage) patch.commitMessage = input.commitMessage;
+	if (input.commitAuthor) patch.commitAuthor = input.commitAuthor;
+	if (input.commitUrl) patch.commitUrl = input.commitUrl;
+	return patch;
+}
 
 export type PreviewWithDomain = typeof previewDeployments.$inferSelect & {
 	domain: typeof domains.$inferSelect | null;
@@ -189,6 +214,10 @@ export async function createPreviewDeployment(
 			pullRequestTitle: input.pullRequestTitle ?? null,
 			pullRequestURL: input.pullRequestURL ?? null,
 			pullRequestAuthor: input.pullRequestAuthor ?? null,
+			commitSha: input.commitSha ?? null,
+			commitMessage: input.commitMessage ?? null,
+			commitAuthor: input.commitAuthor ?? null,
+			commitUrl: input.commitUrl ?? null,
 			previewStatus: input.deferDeploy ? "awaiting_approval" : "running",
 			// An explicit expiry (manual create) wins; otherwise the app's
 			// default TTL applies, which is what makes webhook previews expire.
@@ -249,6 +278,8 @@ export async function createPreviewDeployment(
 			trigger: "preview",
 			triggeredBy: input.triggeredBy ?? null,
 			commitSha: input.commitSha ?? null,
+			commitMessage: input.commitMessage ?? null,
+			commitAuthor: input.commitAuthor ?? null,
 		});
 
 		return {
@@ -294,7 +325,11 @@ export async function redeployPreviewDeployment(
 		type: "redeploy",
 		trigger: "preview",
 		triggeredBy: provenance.triggeredBy ?? null,
-		commitSha: provenance.commitSha ?? null,
+		// Fall back to what the preview row already knows: an "approve" click
+		// carries no payload, but the PR it approves does have a head commit.
+		commitSha: provenance.commitSha ?? preview.commitSha ?? null,
+		commitMessage: provenance.commitMessage ?? preview.commitMessage ?? null,
+		commitAuthor: provenance.commitAuthor ?? preview.commitAuthor ?? null,
 	});
 
 	return { previewDeploymentId: preview.previewDeploymentId, deploymentId };
@@ -325,12 +360,14 @@ export async function createOrRedeployPreview(input: CreatePreviewInput): Promis
 }> {
 	const existing = await findPreviewByPullRequest(input.applicationId, input.pullRequestNumber);
 	if (existing) {
+		const commitPatch = commitColumns(input);
 		if (
 			input.branch ||
 			input.pullRequestTitle ||
 			input.pullRequestURL ||
 			input.pullRequestId ||
-			input.pullRequestAuthor
+			input.pullRequestAuthor ||
+			Object.keys(commitPatch).length > 0
 		) {
 			await db
 				.update(previewDeployments)
@@ -344,12 +381,15 @@ export async function createOrRedeployPreview(input: CreatePreviewInput): Promis
 					...(input.pullRequestAuthor !== undefined
 						? { pullRequestAuthor: input.pullRequestAuthor }
 						: {}),
+					...commitPatch,
 				})
 				.where(eq(previewDeployments.previewDeploymentId, existing.previewDeploymentId));
 		}
 		const result = await redeployPreviewDeployment(existing.previewDeploymentId, {
 			triggeredBy: input.triggeredBy,
 			commitSha: input.commitSha,
+			commitMessage: input.commitMessage,
+			commitAuthor: input.commitAuthor,
 		});
 		return {
 			action: "redeployed",

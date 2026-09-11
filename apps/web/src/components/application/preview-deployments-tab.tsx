@@ -61,6 +61,41 @@ const STATUS_CONFIG: Record<
 	awaiting_approval: { label: "Awaiting approval", status: "warning" },
 };
 
+/** Short display form of a commit sha. */
+const shortSha = (sha: string): string => sha.slice(0, 7);
+
+/**
+ * Attribution line under a preview: who opened the pull request and which
+ * commit is deployed. The sha links to the provider's commit page when the
+ * webhook could resolve one (self-hosted GitLab/Gitea included — the URL is
+ * stored on the row, not guessed in the browser).
+ */
+function CommitLine({ preview }: { preview: PreviewDeployment }) {
+	const author = preview.commitAuthor ?? preview.pullRequestAuthor;
+	if (!author && !preview.commitSha) return null;
+	return (
+		<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+			{author && <span className="truncate">{author}</span>}
+			{preview.commitSha &&
+				(preview.commitUrl ? (
+					<a
+						href={preview.commitUrl}
+						target="_blank"
+						rel="noreferrer"
+						className="font-mono hover:underline"
+						title={preview.commitSha}
+					>
+						{shortSha(preview.commitSha)}
+					</a>
+				) : (
+					<span className="font-mono" title={preview.commitSha}>
+						{shortSha(preview.commitSha)}
+					</span>
+				))}
+		</span>
+	);
+}
+
 /** Turn a "expires in N days" input into an absolute date for the API. */
 function parseExpiry(days: string): Date | null {
 	const parsed = Number.parseInt(days.trim(), 10);
@@ -256,17 +291,31 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 							{(previews ?? []).map((preview) => (
 								<TableRow key={preview.previewDeploymentId}>
 									<TableCell className="font-medium">
-										#{preview.pullRequestNumber}
-										{preview.pullRequestTitle && (
-											<span className="block max-w-48 truncate text-xs text-muted-foreground">
-												{preview.pullRequestTitle}
+										{preview.pullRequestURL ? (
+											<a
+												href={preview.pullRequestURL}
+												target="_blank"
+												rel="noreferrer"
+												className="hover:underline"
+											>
+												#{preview.pullRequestNumber}
+											</a>
+										) : (
+											<>#{preview.pullRequestNumber}</>
+										)}
+										{/* The head commit's subject is the most useful line here —
+										    it says what the preview actually runs. GitHub, Gitea and
+										    Bitbucket do not send it on pull-request events, so the PR
+										    title stands in for them. */}
+										{(preview.commitMessage || preview.pullRequestTitle) && (
+											<span
+												className="block max-w-64 truncate text-xs text-muted-foreground"
+												title={preview.commitMessage ?? preview.pullRequestTitle ?? undefined}
+											>
+												{preview.commitMessage ?? preview.pullRequestTitle}
 											</span>
 										)}
-										{preview.pullRequestAuthor && (
-											<span className="block text-xs text-muted-foreground">
-												by @{preview.pullRequestAuthor}
-											</span>
-										)}
+										<CommitLine preview={preview} />
 									</TableCell>
 									<TableCell className="text-muted-foreground">{preview.branch ?? "—"}</TableCell>
 									<TableCell>

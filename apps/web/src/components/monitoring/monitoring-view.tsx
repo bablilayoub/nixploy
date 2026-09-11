@@ -5,6 +5,7 @@ import { AlertTriangle, Cpu, HardDrive, MemoryStick, ShieldCheck } from "lucide-
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { PrometheusCard } from "@/components/monitoring/prometheus-card";
 import { QueryState } from "@/components/query-state";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
 import { ServiceStatusBadge } from "@/components/services/status-badge";
@@ -264,6 +265,8 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 			) : null}
 
 			{showHost ? <PlatformAlertsCard /> : null}
+
+			<PrometheusCard />
 
 			<div className="grid items-start gap-5 lg:grid-cols-[minmax(16rem,18rem)_minmax(0,1fr)]">
 				<aside className="rounded-lg border">

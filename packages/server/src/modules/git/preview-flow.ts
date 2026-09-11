@@ -14,6 +14,7 @@ import { upsertPreviewComment } from "../preview/comment";
 import { decideForkPreviewGate, type ForkGateDecision } from "../preview/fork-gate";
 import { isMetadataOnlyPullRequestUpdate } from "../preview/source-ref";
 import { isBitbucketCollaborator } from "./bitbucket";
+import { commitUrlForApplication } from "./commit-link";
 import { isGiteaCollaborator } from "./gitea";
 import { isGithubCollaborator } from "./github";
 import { isGitlabCollaborator } from "./gitlab";
@@ -113,6 +114,21 @@ async function readCheckoutCommit(preview: {
 }
 
 /**
+ * Commit page for a PR's head commit: the payload's own link when the
+ * provider sent one, otherwise built from the application's source row and
+ * the base URL of the git-provider it is linked to (so self-hosted GitLab /
+ * Gitea land on their own host rather than the vendor cloud).
+ */
+async function resolvePreviewCommitUrl(
+	applicationId: string,
+	pr: PullRequestWebhookInfo,
+): Promise<string | null> {
+	if (pr.headCommitUrl) return pr.headCommitUrl;
+	if (!pr.headCommit) return null;
+	return await commitUrlForApplication(applicationId, pr.headCommit).catch(() => null);
+}
+
+/**
  * Apply a verified pull_request webhook to one application: create/redeploy
  * on open/sync, delete on close. Returns a short status string for the HTTP
  * response.
@@ -174,6 +190,12 @@ export async function handlePreviewWebhookForApplication(
 	const provenance = {
 		triggeredBy: `webhook:${webhook.provider}`,
 		commitSha: pr.headCommit ?? null,
+		commitMessage: pr.headCommitMessage ?? null,
+		commitAuthor: pr.headCommitAuthor ?? null,
+		// Prefer the URL the payload carried (it names the real host, fork
+		// repositories included); derive one from the application's provider
+		// row only when the provider sent none.
+		commitUrl: await resolvePreviewCommitUrl(applicationId, pr),
 	};
 	const result = await (async () => {
 		const gate = await evaluateForkGate(applicationId, pr);
@@ -217,6 +239,12 @@ export async function handlePreviewWebhookForApplication(
 					pullRequestTitle: gatedInput.pullRequestTitle,
 					pullRequestURL: gatedInput.pullRequestURL,
 					pullRequestAuthor: gatedInput.pullRequestAuthor,
+					// A gated fork PR never builds, so the preview row is the
+					// only place its head commit is ever recorded.
+					...(gatedInput.commitSha ? { commitSha: gatedInput.commitSha } : {}),
+					...(gatedInput.commitMessage ? { commitMessage: gatedInput.commitMessage } : {}),
+					...(gatedInput.commitAuthor ? { commitAuthor: gatedInput.commitAuthor } : {}),
+					...(gatedInput.commitUrl ? { commitUrl: gatedInput.commitUrl } : {}),
 				})
 				.where(eq(previewDeployments.previewDeploymentId, existing.previewDeploymentId));
 			await upsertPreviewComment({

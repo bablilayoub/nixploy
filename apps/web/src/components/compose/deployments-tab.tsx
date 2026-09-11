@@ -9,8 +9,6 @@ export function DeploymentsTab({ compose }: { compose: ComposeService }) {
 			kind="compose"
 			serviceId={compose.composeId}
 			description="Build and deployment history for this compose service."
-			// `compose.one` carries no gitlab/gitea relation, so self-hosted
-			// providers have no base URL here and their shas stay plain text.
 			commitUrl={(sha) =>
 				buildCommitUrl(
 					{
@@ -18,6 +16,7 @@ export function DeploymentsTab({ compose }: { compose: ComposeService }) {
 						owner: compose.owner,
 						repository: compose.repository,
 						gitUrl: compose.gitUrl,
+						providerUrl: compose.gitlab?.gitlabUrl ?? compose.gitea?.giteaUrl ?? null,
 					},
 					sha,
 				)

@@ -29,6 +29,17 @@ export type PullRequestWebhookInfo = {
 	/** Head commit sha, when the provider sends it (metadata-only update detection). */
 	headCommit?: string | null;
 	/**
+	 * First line of the head commit message, when the payload carries one.
+	 * Only GitLab ships it on merge-request events (`object_attributes
+	 * .last_commit`); GitHub, Gitea and Bitbucket send the head sha alone, so
+	 * this stays null for them and the preview row falls back to the PR title.
+	 */
+	headCommitMessage?: string | null;
+	/** Head commit author name, same availability caveat as the message. */
+	headCommitAuthor?: string | null;
+	/** Provider commit page as sent in the payload (preferred over deriving one). */
+	headCommitUrl?: string | null;
+	/**
 	 * Encoded source the preview must build (`preview/source-ref.ts`): the
 	 * branch for same-repo PRs, the provider PR head ref or the fork repo for
 	 * fork PRs. Set by `handleGitWebhook`.
@@ -146,6 +157,55 @@ export function extractPushCommit(
 		null;
 	const message = asString(headObj.message).trim() || null;
 	return { sha: id, message, author };
+}
+
+/** Longest commit subject stored on a preview row — one table cell, not a body. */
+export const MAX_COMMIT_SUBJECT_LENGTH = 200;
+
+/**
+ * First non-empty line of a commit message, capped at
+ * {@link MAX_COMMIT_SUBJECT_LENGTH} characters (an ellipsis marks the cut).
+ * Webhook payloads carry the full message; the UI only ever shows a subject.
+ */
+export function commitSubject(message: unknown): string | null {
+	if (typeof message !== "string") return null;
+	const line = message
+		.split("\n")
+		.map((entry) => entry.trim())
+		.find((entry) => entry.length > 0);
+	if (!line) return null;
+	return line.length > MAX_COMMIT_SUBJECT_LENGTH
+		? `${line.slice(0, MAX_COMMIT_SUBJECT_LENGTH - 1)}…`
+		: line;
+}
+
+/** Non-empty trimmed string, or null — payload fields are whatever the provider felt like sending. */
+export function optionalString(value: unknown): string | null {
+	return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+/**
+ * `<repo html url>/commit/<sha>` from the repository object a PR payload
+ * carries. This is how a self-hosted Gitea/GitLab commit link is obtained
+ * without a database lookup: the payload already names the host. Anything
+ * that is not an http(s) URL, or a sha that is not hex, yields null — the
+ * caller then derives a link from the service's provider row instead.
+ */
+export function commitUrlFromRepoHtml(
+	repoHtmlUrl: unknown,
+	sha: unknown,
+	segment: "commit" | "commits" = "commit",
+): string | null {
+	const base = optionalString(repoHtmlUrl);
+	const id = optionalString(sha);
+	if (!base || !id || !COMMIT_SHA.test(id)) return null;
+	try {
+		const url = new URL(base);
+		if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+	} catch {
+		return null;
+	}
+	return `${base.replace(/\/+$/, "")}/${segment}/${id}`;
 }
 
 /** Collect added/modified/removed paths from a push event's commit list. */

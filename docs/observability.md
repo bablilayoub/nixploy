@@ -27,7 +27,8 @@ download-as-`.txt`.
 - Cron `metrics-history` (every 30s, `modules/monitoring/history.ts`)
   snapshots cpu/memory/network/block-io/pids for every **local**
   application, compose (first container) and database into
-  `$NIXPLOY_CONFIG_DIR/metrics/<appName>.jsonl`, kept to a 48h window.
+  `$NIXPLOY_CONFIG_DIR/metrics/<appName>.jsonl`, kept to the retention
+  window below (48h by default).
 - **Writes are appends** (`modules/monitoring/store.ts`). Each sample is one
   `appendFile` line; the file is rewritten — without the points that fell
   out of the window, through a temp file + `rename` so no reader sees a
@@ -87,6 +88,72 @@ Swarm tasks that exited non-zero in the last hour (Swarm replaces tasks
 rather than restarting in place); `deploy_failure_streak` counts consecutive
 failed deployments. Both are only computed while an enabled rule references
 them.
+
+### Metrics retention
+
+`NIXPLOY_METRICS_RETENTION_HOURS` sets how much history the JSONL store
+keeps. Default **48**, minimum 1, maximum 720 (30 days); anything
+unparseable, zero or negative falls back to the default rather than
+disabling retention, and a larger value is clamped rather than honoured.
+Read in exactly one place — `metricsRetentionHours()` in
+`modules/monitoring/store.ts` — which the hourly compaction pass uses as its
+cutoff.
+
+Size it with the sample rate in mind: one service writes ~120 lines/hour
+(~10 KB), so 48h is ~0.5 MB per service and 30 days is ~7 MB per service.
+The files live under `$NIXPLOY_CONFIG_DIR/metrics/`, and a shorter window
+trims existing files on the next compaction (at most hourly per file).
+Longer-term storage belongs in Prometheus, below — the JSONL store is there
+so the Monitoring tab has something to draw without any external system.
+
+## Prometheus / OpenMetrics export
+
+`GET /api/metrics` serves the calling API key's organization as Prometheus
+text exposition (version 0.0.4, which OpenMetrics scrapers also accept):
+
+```
+curl -H "x-api-key: $NIXPLOY_API_KEY" https://panel.example.com/api/metrics
+```
+
+Authentication is the same path REST and MCP use (`buildApiKeyContext`), so
+`x-api-key` **or** `Authorization: Bearer` works and the per-IP/per-key rate
+limits, key scopes, organization binding and the org 2FA gate all apply. A
+scrape is a read, so a **read-only** key is enough; no extra capability is
+required beyond membership.
+
+| Metric | Type | Labels | Meaning |
+| --- | --- | --- | --- |
+| `nixploy_service_cpu_percent` | gauge | `service`, `kind`, `project`, `environment` | Latest sampled CPU, percent of one core |
+| `nixploy_service_memory_bytes` | gauge | same | Latest sampled resident memory |
+| `nixploy_service_memory_limit_bytes` | gauge | same | Memory limit the sample saw (0 = unlimited) |
+| `nixploy_service_status` | gauge | same | 1 when Nixploy considers the service running |
+| `nixploy_deployments_total` | counter | `status` | Deployment rows by status (`queued`/`running`/`done`/`error`/`cancelled`) |
+| `nixploy_uptime_probe_up` | gauge | `probe` (host+path) | 1 when the last probe check succeeded |
+| `nixploy_queue_depth` | gauge | `state` (`pending`/`running`) | This panel process's deploy queue |
+
+Notes worth knowing before you alert on these:
+
+- **The numbers come from the existing metrics store**, not from a fresh
+  Docker call — a scrape costs two aggregate SQL queries and an in-memory
+  ring read. The sampler writes every 30 s, so scraping faster than that
+  simply sees the same point twice.
+- **Services with no sample yet emit no cpu/memory series** (they would
+  otherwise report a fake 0%); `nixploy_service_status` is always emitted, so
+  `nixploy_service_status == 0` is the honest "it is down" signal.
+- **Probes that have never been checked are omitted** rather than reported as
+  down.
+- **`nixploy_queue_depth` is process-local**, like the queue itself —
+  multi-replica `nixploy` is unsupported by design.
+- **One organization per key.** A Prometheus watching several organizations
+  configures one job per key; there is deliberately no instance-wide dump,
+  because it would put every tenant's project and service names into a file
+  anyone with the scrape config can read.
+- Empty families still print their `# HELP`/`# TYPE` headers, so an
+  `absent()` alert does not fire the moment an organization has no services.
+
+The renderer is a pure function (`modules/monitoring/prometheus.ts`,
+`renderPrometheus`) over a snapshot, with the collection in the same module;
+label values are escaped for backslash, quote and newline.
 
 ## Threshold alerts
 
@@ -322,6 +389,54 @@ pruned by the retention cron below). Schedule output lands under
 **Secrets never reach the log.** Tokens, passwords and env values are
 redacted or passed over stdin (`execAsyncWithStdin`); a log line that
 contains a credential is a bug worth reporting.
+
+## Jobs: schedules that run their own container
+
+A schedule has two axes. `scheduleType` says **which service** it belongs to
+(`application`, `compose`, `server`, `nixploy-server`) and drives every
+access check; `runMode` says **how the command runs**:
+
+| `runMode` | What happens |
+| --- | --- |
+| `exec` (default) | `docker exec` into a container that is already running — the historical behaviour. The service has to be up. |
+| `image` | `docker run --rm` a throwaway container from the schedule's `image`. The service can be stopped. |
+
+An image job is the standalone job/cron service (product audit, Platform row
+"No standalone job/cron service"): a nightly report, a migration, a cleanup
+that has no business keeping a container alive all day.
+
+What an image job gets (`modules/schedules/image-job.ts`):
+
+- the application's / stack's **environment overlay**, so it reaches that
+  environment's database by name;
+- the **merged env** — organization → project → environment → service, the
+  same inheritance a deployment resolves — handed over an `--env-file`
+  written `0600` on the target host. Secrets never reach argv, where `ps`
+  shows them;
+- the container hardening baseline from `deployment/swarm.ts`
+  (`--cap-drop ALL` plus the seven standard adds, `no-new-privileges`, a pids
+  ceiling);
+- `--entrypoint sh`. This is load-bearing: without it the image's own
+  ENTRYPOINT receives `sh -c '<command>'` as *arguments* and ignores them, so
+  the job silently never runs. **Exit 127 means the image has no `/bin/sh`** —
+  scratch and distroless images cannot host a job.
+- a deadline: `NIXPLOY_SCHEDULE_TIMEOUT_MS`, falling back to
+  `NIXPLOY_HOOK_TIMEOUT_MS` (default 10 minutes). The env file and a container
+  that outlived the deadline are always cleaned up.
+
+`bash` schedules re-enter bash from `sh` when the image has one and fall back
+to `sh` when it does not, so a job does not fail with "bash: not found" just
+because the row's default shell is bash.
+
+**Run once** (`schedule.runOnce`) runs the same container with no schedule row
+behind it — a one-off migration or smoke command. It writes the same run log
+and `deployment` row a scheduled run writes, so the output shows up in the
+service's history. Image jobs are only available on `application` and
+`compose` targets, which is where the env and the network come from.
+
+Run output is written to `<config>/schedules/<scheduleId>-<timestamp>.log`
+with mode `0600`: it is whatever the command printed, which regularly includes
+connection strings and dump paths.
 
 ## Missed cron ticks (opt-in catch-up)
 

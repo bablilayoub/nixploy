@@ -4,10 +4,12 @@ import { gitlab } from "../../../db/schema";
 import {
 	asString,
 	collectCommitPaths,
+	commitSubject,
 	type ExtractedWebhook,
 	extractPushCommit,
 	header,
 	normalizeRef,
+	optionalString,
 	safeEqual,
 	type WebhookHeaders,
 	WebhookIgnored,
@@ -106,6 +108,13 @@ export async function verifyAndExtractGitlab(
 						? attrs.source.path_with_namespace
 						: null,
 				headCommit: typeof attrs.last_commit?.id === "string" ? attrs.last_commit.id : null,
+				// GitLab is the only provider that ships the head commit in a
+				// merge-request payload: `last_commit` carries message, author
+				// and — best of all — the exact URL on the (often self-hosted)
+				// instance, so nothing has to be derived.
+				headCommitMessage: commitSubject(attrs.last_commit?.message),
+				headCommitAuthor: optionalString(attrs.last_commit?.author?.name),
+				headCommitUrl: optionalString(attrs.last_commit?.url),
 				authorLogin: typeof payload.user?.username === "string" ? payload.user.username : null,
 			},
 		};

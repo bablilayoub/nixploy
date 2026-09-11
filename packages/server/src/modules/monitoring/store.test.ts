@@ -1,11 +1,15 @@
 import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	appendPoint,
 	COMPACTION_INTERVAL_MS,
 	compactFile,
+	DEFAULT_METRICS_RETENTION_HOURS,
+	MAX_METRICS_RETENTION_HOURS,
+	metricsRetentionHours,
+	metricsRetentionMs,
 	RING_LIMIT,
 	readLatestPoint,
 	readPointsSince,
@@ -183,5 +187,47 @@ describe("readLatestPoint", () => {
 
 	it("returns null when there is no history", async () => {
 		expect(await readLatestPoint<Point>(join(dir, "nope.jsonl"))).toBeNull();
+	});
+});
+
+describe("metricsRetentionHours", () => {
+	const original = process.env.NIXPLOY_METRICS_RETENTION_HOURS;
+
+	afterEach(() => {
+		if (original === undefined) delete process.env.NIXPLOY_METRICS_RETENTION_HOURS;
+		else process.env.NIXPLOY_METRICS_RETENTION_HOURS = original;
+	});
+
+	const withEnv = (value: string | undefined): number => {
+		if (value === undefined) delete process.env.NIXPLOY_METRICS_RETENTION_HOURS;
+		else process.env.NIXPLOY_METRICS_RETENTION_HOURS = value;
+		return metricsRetentionHours();
+	};
+
+	it("defaults to 48 hours when unset or blank", () => {
+		expect(withEnv(undefined)).toBe(DEFAULT_METRICS_RETENTION_HOURS);
+		expect(withEnv("   ")).toBe(DEFAULT_METRICS_RETENTION_HOURS);
+	});
+
+	it("accepts a plain number of hours", () => {
+		expect(withEnv("168")).toBe(168);
+		expect(withEnv(" 6 ")).toBe(6);
+	});
+
+	it("clamps to the supported window instead of trusting the operator", () => {
+		expect(withEnv("0")).toBe(DEFAULT_METRICS_RETENTION_HOURS);
+		expect(withEnv("-5")).toBe(DEFAULT_METRICS_RETENTION_HOURS);
+		expect(withEnv("100000")).toBe(MAX_METRICS_RETENTION_HOURS);
+	});
+
+	it("falls back to the default for values that are not numbers", () => {
+		expect(withEnv("forever")).toBe(DEFAULT_METRICS_RETENTION_HOURS);
+		expect(withEnv("48h")).toBe(48); // parseInt stops at the unit
+		expect(withEnv("h48")).toBe(DEFAULT_METRICS_RETENTION_HOURS);
+	});
+
+	it("reports the window in milliseconds", () => {
+		withEnv("2");
+		expect(metricsRetentionMs()).toBe(2 * HOUR);
 	});
 });

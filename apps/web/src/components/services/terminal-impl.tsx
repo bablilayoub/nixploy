@@ -11,31 +11,45 @@ import { Button } from "@/components/ui/button";
 import { nixployTerminalTheme } from "@/lib/codemirror-theme";
 import { cn } from "@/lib/utils";
 
-function wsUrl(params: Record<string, string | null | undefined>) {
+/** Websocket endpoints this component can drive; both speak the same frames. */
+export type TerminalEndpoint = "terminal" | "server-terminal";
+
+function wsUrl(endpoint: TerminalEndpoint, params: Record<string, string | null | undefined>) {
 	const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 	const search = new URLSearchParams();
 	for (const [key, value] of Object.entries(params)) {
 		if (value) search.set(key, value);
 	}
-	return `${protocol}//${window.location.host}/ws/terminal?${search.toString()}`;
+	return `${protocol}//${window.location.host}/ws/${endpoint}?${search.toString()}`;
 }
 
 type TerminalStatus = "connecting" | "connected" | "disconnected";
 
 /**
- * Interactive shell into a Nixploy service (`appName`) or a raw Docker
- * container (`containerId`, Docker control center).
+ * Interactive shell into a Nixploy service (`appName`), a raw Docker
+ * container (`containerId`, Docker control center) or — with
+ * `endpoint="server-terminal"` — the SSH host shell of a managed server
+ * (`serverId` alone).
+ *
+ * All three endpoints exchange the same frames (`{type:"stdin"|"resize"}` out,
+ * raw bytes in), so the xterm plumbing below is shared; only the URL and the
+ * "what do we need to connect" check differ.
  */
 export function ServiceTerminal({
 	appName,
 	containerId,
 	serverId,
+	endpoint = "terminal",
+	connectingLabel = "Connecting to container…",
 	serviceStatus,
 	notRunningAction,
 }: {
 	appName?: string;
 	containerId?: string;
 	serverId?: string | null;
+	endpoint?: TerminalEndpoint;
+	/** Overlay text while the socket opens. */
+	connectingLabel?: string;
 } & RuntimeEmptyProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const terminalRef = useRef<Terminal | null>(null);
@@ -57,9 +71,13 @@ export function ServiceTerminal({
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container) return;
-		if (!appName && !containerId) {
+		if (endpoint === "server-terminal" ? !serverId : !appName && !containerId) {
 			setStatus("disconnected");
-			setLastError("No service or container specified");
+			setLastError(
+				endpoint === "server-terminal"
+					? "No server specified"
+					: "No service or container specified",
+			);
 			return;
 		}
 
@@ -120,7 +138,7 @@ export function ServiceTerminal({
 
 			setLastError(null);
 			ws = new WebSocket(
-				wsUrl({
+				wsUrl(endpoint, {
 					appName,
 					containerId,
 					serverId,
@@ -174,7 +192,7 @@ export function ServiceTerminal({
 			terminal?.dispose();
 			if (terminalRef.current === terminal) terminalRef.current = null;
 		};
-	}, [appName, containerId, serverId, session]);
+	}, [appName, containerId, serverId, endpoint, session]);
 
 	const startNewSession = () => {
 		setStatus("connecting");
@@ -208,7 +226,7 @@ export function ServiceTerminal({
 				>
 					{status === "connecting" ? (
 						<span className="flex items-center gap-2">
-							<Loader2 className="size-4 animate-spin" /> Connecting to container…
+							<Loader2 className="size-4 animate-spin" /> {connectingLabel}
 						</span>
 					) : (
 						<>

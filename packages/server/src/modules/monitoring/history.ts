@@ -11,8 +11,13 @@
 export { loadPassContext, type PassContext, type SampleTarget } from "./alerts";
 export { initMetricsHistory, sampleAllServices } from "./sampler";
 export {
+	DEFAULT_METRICS_RETENTION_HOURS,
 	type HistorySample,
+	MAX_METRICS_RETENTION_HOURS,
 	METRICS_RETENTION_MS,
+	MIN_METRICS_RETENTION_HOURS,
+	metricsRetentionHours,
+	metricsRetentionMs,
 	readLatestMetricsSample,
 	readMetricsHistory,
 	readServerMetricsHistory,

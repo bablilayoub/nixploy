@@ -125,7 +125,11 @@ export async function handleGitWebhook(
 			type: "pull_request",
 			pullRequest: extracted.pullRequest,
 			commit: extracted.pullRequest.headCommit
-				? { sha: extracted.pullRequest.headCommit, message: null, author: null }
+				? {
+						sha: extracted.pullRequest.headCommit,
+						message: extracted.pullRequest.headCommitMessage ?? null,
+						author: extracted.pullRequest.headCommitAuthor ?? null,
+					}
 				: undefined,
 		};
 	}
