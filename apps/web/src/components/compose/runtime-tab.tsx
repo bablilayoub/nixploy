@@ -18,6 +18,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useLiveEventsConnected } from "@/hooks/use-live-events";
 import { useTRPC } from "@/lib/trpc";
 
 type Mode = "terminal" | "logs";
@@ -33,9 +34,11 @@ function containerLabel(row: { name: string; service: string | null; state: stri
  */
 export function ComposeRuntimeTab({ compose, mode }: { compose: ComposeService; mode: Mode }) {
 	const trpc = useTRPC();
+	const live = useLiveEventsConnected();
 	const containersQuery = useQuery({
 		...trpc.compose.containers.queryOptions({ composeId: compose.composeId }),
-		refetchInterval: 15_000,
+		// Pushed on `service-status` / deployment frames; poll only while the socket is down.
+		refetchInterval: live ? false : 15_000,
 	});
 
 	const containers = containersQuery.data ?? [];

@@ -73,6 +73,7 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useDraft } from "@/hooks/use-draft";
+import { useLiveEventsConnected } from "@/hooks/use-live-events";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { SERVICE_TAB_ALIASES, useSyncedTab } from "@/hooks/use-synced-tab";
 import { toastError } from "@/lib/describe-error";
@@ -186,8 +187,10 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 	const rowQuery = useQuery(ns.one.queryOptions(idInput));
 	const db = rowQuery.data as DatabaseRow | undefined;
 
+	// Pushed on `service-status` frames; poll only while the socket is down.
+	const live = useLiveEventsConnected();
 	const statusQuery = useQuery(
-		ns.getStatus.queryOptions(idInput, { refetchInterval: 30_000, retry: false }),
+		ns.getStatus.queryOptions(idInput, { refetchInterval: live ? false : 30_000, retry: false }),
 	);
 	const status = ((statusQuery.data as ServiceStatus | undefined) ??
 		db?.status ??

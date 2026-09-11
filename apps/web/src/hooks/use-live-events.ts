@@ -42,9 +42,11 @@ export type InvalidationTarget =
 	| { path: "application.all" }
 	| { path: "compose.one"; composeId: string }
 	| { path: "compose.all" }
+	| { path: "compose.containers"; composeId: string }
 	| { path: "docker.containers" }
 	| { path: "service.one"; serviceKind: string; id: string }
-	| { path: "service.all"; serviceKind: string };
+	| { path: "service.all"; serviceKind: string }
+	| { path: "service.getStatus"; serviceKind: string; id: string };
 
 const TERMINAL_STATUSES = new Set(["done", "error", "cancelled"]);
 
@@ -71,11 +73,16 @@ export function frameInvalidations(event: LiveEvent): InvalidationTarget[] {
 					{ path: "application.all" },
 				);
 			} else if (event.serviceKind === "compose") {
-				targets.push({ path: "compose.one", composeId: event.id }, { path: "compose.all" });
+				targets.push(
+					{ path: "compose.one", composeId: event.id },
+					{ path: "compose.all" },
+					{ path: "compose.containers", composeId: event.id },
+				);
 			} else if (DATABASE_KINDS.has(event.serviceKind)) {
 				targets.push(
 					{ path: "service.one", serviceKind: event.serviceKind, id: event.id },
 					{ path: "service.all", serviceKind: event.serviceKind },
+					{ path: "service.getStatus", serviceKind: event.serviceKind, id: event.id },
 				);
 			}
 			targets.push({ path: "environment.byProject" });
@@ -99,7 +106,11 @@ export function frameInvalidations(event: LiveEvent): InvalidationTarget[] {
 				);
 			}
 			if (event.composeId) {
-				targets.push({ path: "compose.one", composeId: event.composeId }, { path: "compose.all" });
+				targets.push(
+					{ path: "compose.one", composeId: event.composeId },
+					{ path: "compose.all" },
+					{ path: "compose.containers", composeId: event.composeId },
+				);
 			}
 			targets.push({ path: "docker.containers" });
 			return targets;
@@ -159,6 +170,8 @@ export function useLiveEvents(): void {
 					return trpc.compose.one.queryKey({ composeId: target.composeId });
 				case "compose.all":
 					return trpc.compose.all.pathKey();
+				case "compose.containers":
+					return trpc.compose.containers.queryKey({ composeId: target.composeId });
 				case "docker.containers":
 					return trpc.docker.containers.pathKey();
 				case "service.one": {
@@ -169,6 +182,10 @@ export function useLiveEvents(): void {
 				case "service.all": {
 					const namespace = namespaceOf(target.serviceKind);
 					return namespace?.all?.pathKey() ?? null;
+				}
+				case "service.getStatus": {
+					const namespace = namespaceOf(target.serviceKind);
+					return namespace?.getStatus?.queryKey({ [`${target.serviceKind}Id`]: target.id }) ?? null;
 				}
 				default:
 					return null;
