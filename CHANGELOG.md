@@ -13,6 +13,28 @@ this file is the summary.
 
 Nothing yet.
 
+## [0.2.1] — 2026-09-12
+
+Follow-up to 0.2.0 after its release pipeline was exercised end to end.
+
+### Fixed
+
+- The runtime image ships `openssl`: when the panel provisions Traefik itself
+  (compose stacks, dev in a container) it could not create the default TLS
+  certificate and `/api/ready` stayed 503.
+- MinIO template image moved to `quay.io/minio/minio` (Docker Hub no longer
+  serves the tags).
+- `tsx` is a dependency of `@nixploy/server` (key rotation script and the CI
+  drift check ran `pnpm exec tsx` there).
+- Image scan: the base image's bundled npm (with a vulnerable node-tar) is
+  removed from the runtime image; the esbuild Go TLS finding is documented in
+  `.trivyignore`.
+- Release commits use a `[release]` marker; `[skip ci]` also skipped the tag
+  push that was supposed to publish. The UI golden path resolves Playwright
+  through `NODE_PATH`.
+- Dependabot resolves pnpm 10 (`packageManager`) and ignores Node major image
+  bumps.
+
 ## [0.2.0] — 2026-09-12
 
 First release after the stability sweep and the September improvement audit.
