@@ -2,6 +2,7 @@ import { buildApiKeyContext } from "@nixploy/server/lib/api-key-context";
 import { appRouter } from "@nixploy/server/trpc";
 import type { TRPCContext } from "@nixploy/server/trpc/init";
 import { coerceQueryInput } from "@nixploy/server/trpc/query-input";
+import { walkProcedurePath } from "@nixploy/server/trpc/rest-path";
 import { retryAfterSecondsFromError } from "@nixploy/server/utils/rate-limit";
 import { getTRPCErrorFromUnknown } from "@trpc/server";
 import superjson, { type SuperJSONResult } from "superjson";
@@ -98,11 +99,8 @@ function resolveProcedure(path: string): ResolvedProcedure | null {
 	const dotIndex = path.indexOf(".");
 	if (dotIndex <= 0 || dotIndex === path.length - 1) return null;
 
-	let node: unknown = appRouter;
-	for (const segment of path.split(".")) {
-		node = (node as Record<string, unknown>)?.[segment];
-		if (node === undefined || node === null) return null;
-	}
+	const node = walkProcedurePath(appRouter, path);
+	if (node === undefined || node === null) return null;
 	const def = (node as { _def?: { type?: string; inputs?: unknown[] } })._def;
 	if (def?.type !== "query" && def?.type !== "mutation") return null;
 
@@ -110,13 +108,12 @@ function resolveProcedure(path: string): ResolvedProcedure | null {
 		type: def.type,
 		inputSchema: def.inputs?.[0],
 		call: async (ctx, input) => {
-			const caller = appRouter.createCaller(ctx) as unknown as Record<
-				string,
-				Record<string, (input: unknown) => Promise<unknown>>
-			>;
-			const routerName = path.slice(0, dotIndex);
-			const procedureName = path.slice(dotIndex + 1);
-			return caller[routerName]?.[procedureName]?.(input);
+			// Walk every segment: nested routers are `a.b.c`, not `a["b.c"]`.
+			const procedure = walkProcedurePath<(input: unknown) => Promise<unknown>>(
+				appRouter.createCaller(ctx),
+				path,
+			);
+			return procedure?.(input);
 		},
 	};
 }

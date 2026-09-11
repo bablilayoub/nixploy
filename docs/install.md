@@ -455,6 +455,10 @@ semver tag (`NIXPLOY_VERSION=v0.1.0` while `v0.2.0` runs). To go back:
 while old code runs on a newer schema. Non-semver tags (`latest`, digests)
 skip the guard.
 
+The in-app updater (Settings → Server → Updates) has the same guard:
+`updates.runUpdate({ version, allowDowngrade })` and the `pinnedVersion`
+ceiling are documented in [`upgrade-notes.md`](./upgrade-notes.md).
+
 ### Update overrides
 
 | Variable | Default | Purpose |

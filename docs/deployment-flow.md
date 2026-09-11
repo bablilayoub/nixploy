@@ -533,6 +533,16 @@ through `modules/backups` to S3 destinations on schedules.
   implementations, so retention there is the operator's job. Rolling back
   repoints the swarm service at the pinned image — no source fetch, no build —
   and records a `Rollback` deployment with a short log.
+- Compose rollback (`modules/compose/snapshot.ts`, `compose.rollbackTargets`
+  / `compose.rollback`): every render in `prepareComposeFiles` stores a
+  `compose_deployment_snapshot` row (source file, rendered file, service env
+  and the merged env, encrypted at rest) keyed by the deployment that produced
+  it. Rolling back restores the compose row's file and **service-level** env
+  from the snapshot — not the merged env, or every inherited project/
+  environment variable would be absorbed into the service row — and enqueues
+  a normal `rollback`-triggered deployment through `queueDeployment`.
+  Git-backed compose rows restore env only (the repository stays the authority
+  for the file); the procedure reports `restoredComposeFile: false`.
 - **Docker-image auto-update** (`modules/deployment/auto-update.ts`, hourly
   cron at :07, registered in `apps/web/server.ts`): every docker-source
   application with `autoUpdateImage` gets its tag's remote digest resolved

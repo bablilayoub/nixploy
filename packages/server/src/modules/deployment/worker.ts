@@ -430,7 +430,8 @@ async function runComposeJob(
 
 	// Materialize compose file + merged env file (clones git sources too).
 	ctx.logger.line("Preparing compose files...");
-	const files = await prepareComposeFiles(row);
+	// Snapshot the rendered file + env against THIS job (compose rollbacks).
+	const files = await prepareComposeFiles(row, { deploymentId: job.deploymentId });
 	for (const secret of files.secrets) ctx.logger.addSecret(secret);
 	checkpoint();
 
