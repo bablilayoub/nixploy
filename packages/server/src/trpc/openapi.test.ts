@@ -1,13 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { generateOpenApiDocument } from "./openapi";
+import { ORG_CAPABILITIES } from "../modules/projects/capabilities";
+import { describeProcedure, generateOpenApiDocument } from "./openapi";
+import { MAX_UNDOCUMENTED_PROCEDURES, procedureDocs } from "./procedure-docs";
 import { appRouter } from "./root";
 
 interface Operation {
 	tags: string[];
+	summary: string;
+	description?: string;
 	operationId: string;
 	security: Array<Record<string, string[]>>;
 	parameters?: unknown[];
 	requestBody?: unknown;
+	"x-nixploy-capability"?: string[];
+}
+
+/** Every `<router>.<procedure>` path the appRouter exposes. */
+function procedurePaths(procedures: Record<string, unknown>, prefix = ""): string[] {
+	const paths: string[] = [];
+	for (const [key, value] of Object.entries(procedures)) {
+		const def = (value as { _def?: Record<string, unknown> })._def;
+		if (!def) continue;
+		if (def.procedures) {
+			paths.push(
+				...procedurePaths(
+					def.procedures as Record<string, unknown>,
+					prefix ? `${prefix}.${key}` : key,
+				),
+			);
+			continue;
+		}
+		if (def.type !== "query" && def.type !== "mutation") continue;
+		paths.push(prefix ? `${prefix}.${key}` : key);
+	}
+	return paths;
 }
 
 /** Count every query/mutation procedure in the (possibly nested) router. */
@@ -103,6 +129,63 @@ describe("generateOpenApiDocument", () => {
 		expect(paramNames).toContain("projectId");
 	});
 
+	it("gives every operation a summary that is not just the path", () => {
+		const undocumented: string[] = [];
+		for (const [path, methods] of Object.entries(doc.paths)) {
+			for (const operation of Object.values(methods) as Operation[]) {
+				expect(operation.summary.length).toBeGreaterThan(0);
+				if (operation.summary === operation.operationId) {
+					undocumented.push(path);
+				}
+			}
+		}
+		// Documented coverage may only grow: lower MAX_UNDOCUMENTED_PROCEDURES
+		// in procedure-docs.ts when you document more.
+		expect(
+			undocumented.length,
+			`Undocumented procedures (add them to procedure-docs.ts): ${undocumented.join(", ")}`,
+		).toBeLessThanOrEqual(MAX_UNDOCUMENTED_PROCEDURES);
+	});
+
+	it("tags every operation with its router and describes the tags", () => {
+		const tagNames = new Set(doc.tags.map((tag) => tag.name));
+		for (const [path, methods] of Object.entries(doc.paths)) {
+			for (const operation of Object.values(methods) as Operation[]) {
+				expect(operation.tags).toHaveLength(1);
+				expect(operation.tags[0]).toBe(path.replace("/api/", "").split(".")[0]);
+				expect(tagNames.has(operation.tags[0] as string)).toBe(true);
+			}
+		}
+		// Most routers carry a human description; the list must not be empty.
+		expect(doc.tags.filter((tag) => "description" in tag).length).toBeGreaterThan(20);
+	});
+
+	it("emits x-nixploy-capability for gated mutations", () => {
+		const deploy = doc.paths["/api/application.deploy"]?.post as Operation | undefined;
+		expect(deploy?.["x-nixploy-capability"]).toEqual(["service.deploy"]);
+		const createDomain = doc.paths["/api/domain.create"]?.post as Operation | undefined;
+		expect(createDomain?.["x-nixploy-capability"]).toEqual(["domains.manage"]);
+		// Read-only procedures that need nothing beyond a session stay unannotated.
+		expect(
+			(doc.paths["/api/project.all"]?.get as Operation | undefined)?.["x-nixploy-capability"],
+		).toBeUndefined();
+	});
+
+	it("types the 200 envelope and the error bodies", () => {
+		const op = doc.paths["/api/project.all"]?.get as unknown as {
+			responses: Record<string, { content?: Record<string, { schema: unknown }> }>;
+		};
+		expect(op.responses["200"]?.content?.["application/json"]?.schema).toMatchObject({
+			type: "object",
+			properties: { result: { type: "object" } },
+		});
+		for (const status of ["400", "401", "403", "404", "429", "500"]) {
+			expect(op.responses[status]?.content?.["application/json"]?.schema).toMatchObject({
+				type: "object",
+			});
+		}
+	});
+
 	it("honors title/version/serverUrl options", () => {
 		const custom = generateOpenApiDocument({
 			title: "Custom",
@@ -112,5 +195,56 @@ describe("generateOpenApiDocument", () => {
 		expect(custom.info.title).toBe("Custom");
 		expect(custom.info.version).toBe("9.9.9");
 		expect(custom.servers).toEqual([{ url: "https://nixploy.example.com" }]);
+	});
+});
+
+describe("procedure-docs", () => {
+	const registered = new Set(procedurePaths(appRouter._def.procedures as Record<string, unknown>));
+
+	it("documents only procedures that exist (no stale entries)", () => {
+		const stale = Object.keys(procedureDocs).filter((path) => !registered.has(path));
+		expect(stale, `Stale procedure-docs entries: ${stale.join(", ")}`).toEqual([]);
+	});
+
+	it("lists only real capability ids", () => {
+		const known = new Set<string>(ORG_CAPABILITIES);
+		for (const [path, doc] of Object.entries(procedureDocs)) {
+			for (const capability of doc.capability ?? []) {
+				expect(known.has(capability), `${path} references unknown capability ${capability}`).toBe(
+					true,
+				);
+			}
+		}
+	});
+
+	it("gives every entry a distinct summary and a real description", () => {
+		for (const [path, doc] of Object.entries(procedureDocs)) {
+			expect(doc.summary, path).not.toBe(path);
+			expect(doc.summary.length, path).toBeGreaterThan(4);
+			expect(doc.description.length, path).toBeGreaterThan(20);
+		}
+	});
+
+	it("covers the whole router surface within the undocumented allowance", () => {
+		const missing = [...registered].filter((path) => !(path in procedureDocs)).sort();
+		expect(
+			missing.length,
+			`Undocumented: ${missing.join(", ")} — document them in procedure-docs.ts or raise MAX_UNDOCUMENTED_PROCEDURES deliberately.`,
+		).toBeLessThanOrEqual(MAX_UNDOCUMENTED_PROCEDURES);
+	});
+
+	it("prefers a procedure's own meta over the side-table", () => {
+		const fromMeta = describeProcedure("project.all", {
+			summary: "From meta",
+			description: "Meta wins",
+			capability: "project.write",
+		});
+		expect(fromMeta).toEqual({
+			summary: "From meta",
+			description: "Meta wins",
+			capability: ["project.write"],
+			instanceAdmin: undefined,
+		});
+		expect(describeProcedure("project.all", undefined).summary).toBe("List projects");
 	});
 });

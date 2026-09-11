@@ -1,95 +1,113 @@
 # @nixploy/cli
 
-Command-line interface for [Nixploy](https://nixploy.com) — a self-hosted PaaS. Manage projects, applications, databases and environment variables against any Nixploy server over its REST API.
+Command-line interface for [Nixploy](https://nixploy.com), the self-hosted PaaS.
+Drives the same REST API as the dashboard: projects, applications, compose
+stacks, databases, domains, environment variables, deployments, backups,
+schedules, servers and previews.
+
+Full reference — every command group with examples, exit codes and scripting
+recipes: **[docs/cli.md](https://github.com/bablilayoub/nixploy/blob/main/docs/cli.md)**.
 
 ## Install
 
 ```bash
-npm install -g @nixploy/cli
-# or run from the monorepo
-pnpm --filter @nixploy/cli build && pnpm --filter @nixploy/cli exec nixploy --help
+npm i -g @nixploy/cli
 ```
 
-Requires Node.js >= 22.
+Node 22+. One runtime dependency (commander).
 
-## Authentication
+## Authenticate
 
-Generate an API key in the Nixploy dashboard (**Settings → Profile → API Keys**), then:
+Create an API key in the panel under **Settings → Profile → API keys**, then:
 
 ```bash
-nixploy auth login --url https://panel.nixploy.com --api-key nxlp_...
-nixploy auth status
+# prompts for the key with echo off
+nixploy auth login --url https://panel.example.com
+
+# CI: pipe it in — never pass a key as an argument, `ps` shows it
+echo "$NIXPLOY_API_KEY" | nixploy auth login --url https://panel.example.com
 ```
 
-Credentials are stored in `~/.nixploy/config.json` (mode `0600`). Precedence for every request:
-
-1. Global flags `--url` / `--api-key`
-2. Environment variables `NIXPLOY_API_URL` / `NIXPLOY_API_KEY`
-3. `~/.nixploy/config.json`
-
-All requests send the key as the `x-api-key` header.
-
-## Commands
+Credentials live in `~/.nixploy/config.json` (mode `0600`). Override per
+invocation with `--url` / `--api-key`, or with `NIXPLOY_API_URL` /
+`NIXPLOY_API_KEY`. Several panels or organizations at once:
 
 ```bash
-# Projects
-nixploy project list [--json]
-nixploy project create --name my-project [--description "..."] [--json]
-
-# Applications
-nixploy app list --project-id <id> [--env <name>] [--json]
-nixploy app create --project-id <id> --name my-app [--env <name>] [--json]
-nixploy app deploy <applicationId>
-nixploy app redeploy <applicationId>
-nixploy app logs <applicationId>
-
-# Compose stacks
-nixploy compose list --project-id <id> [--env <name>] [--json]
-nixploy compose create --project-id <id> --name my-stack [--env <name>] [--type docker-compose|stack]
-nixploy compose one <composeId>
-nixploy compose deploy <composeId>
-nixploy compose redeploy <composeId>
-nixploy compose logs <composeId> [-f]
-nixploy compose env <composeId> [--set "..."]
-nixploy compose pull <composeId>
-nixploy compose save <composeId> --file ./docker-compose.yml
-
-# Templates
-nixploy template list [--json]
-nixploy template one <templateId>
-nixploy template deploy <templateId> --project-id <id> --env <name> \
-  [--var KEY=VALUE ...] [--domain host:service:port ...]
-
-# Tags
-nixploy tag list [--json]
-nixploy tag create --name production [--color "#22c55e"] [--json]
-nixploy tag set --service-type application --service-id <id> --tag-id <id> [<id>...]
-
-# Databases (postgres, mysql, mariadb, mongo, redis)
-nixploy db list --project-id <id> [--env <name>] [--json]
-
-# Environment variables (KEY=VALUE, dotenv format)
-nixploy env list <serviceId> [--type app|compose|postgres|mysql|mariadb|mongo|redis]
-nixploy env set <serviceId> KEY=VALUE [KEY2=VALUE2 ...] [--replace] [--type ...]
+echo "$KEY" | nixploy auth login --url https://staging.example.com --profile staging
+nixploy --profile staging app list --project-id proj_123
 ```
 
-`env set` merges with existing variables by default; pass `--replace` to overwrite the whole set. Values are transmitted to the server, which stores them encrypted at rest.
-
-## REST API convention
-
-The CLI targets the REST/OpenAPI surface generated from the tRPC routers:
-
-- Queries: `GET /api/<router>.<procedure>?<input as search params>`
-- Mutations: `POST /api/<router>.<procedure>` with a JSON body
-- Auth: `x-api-key: <key>` header
-- tRPC-style envelopes (`{ "result": { "data": ... } }`) are unwrapped automatically.
-
-Endpoints used: `project.all`, `project.create`, `application.all`, `application.create`, `application.deploy`, `application.redeploy`, `application.logs`, `<type>.all` / `<type>.one` / `<type>.saveEnvironment` for each service type.
-
-## Development
+## Quick tour
 
 ```bash
-pnpm install
-pnpm --filter @nixploy/cli typecheck
-pnpm --filter @nixploy/cli build
+nixploy doctor                                   # panel readiness, versions, Swarm, disk
+nixploy org current                              # which organization this key acts in
+nixploy project list
+nixploy project create --name shop
+
+nixploy app create --project-id proj_123 --name api
+nixploy app update-source app_abc --docker-image traefik/whoami:v1.10.1
+nixploy app deploy app_abc
+nixploy app logs app_abc -f
+nixploy domain add api.example.com --application-id app_abc --port 80 --https
+nixploy app stop app_abc
+
+nixploy db create postgres --project-id proj_123 --name main \
+  --database app --user app --password "$PG_PASSWORD"
+nixploy db connection-url postgres pg_abc
+
+nixploy env set LOG_LEVEL=debug --scope project --project-id proj_123
+nixploy env resolved --project-id proj_123 --env production
+
+nixploy backup run bkp_abc
+nixploy backup verify bkp_abc
+nixploy deployment rollback app_abc --rollback-id rb_abc
 ```
+
+Command groups: `app`, `audit`, `auth`, `backup`, `compose`, `db`,
+`deployment`, `doctor`, `domain`, `env`, `environment`, `gitops`, `incident`,
+`monitoring`, `notification`, `org`, `preview`, `project`, `registry`,
+`schedule`, `server`, `ssh-key`, `tag`, `template`, `updates`, plus the
+top-level `plan` / `apply` / `sync` GitOps verbs. `nixploy <group> --help`
+lists the verbs of any group.
+
+## Scripting
+
+Every command accepts `--json` (raw API payload) and `--quiet` (identifiers
+only, one per line):
+
+```bash
+nixploy app list --project-id proj_123 --json | jq -r '.[].appName'
+nixploy app list --project-id proj_123 --quiet | xargs -n1 nixploy app redeploy
+```
+
+Exit codes:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Success |
+| `1` | Runtime error (API rejected the call, network failure) |
+| `2` | Usage error (unknown flag, missing option, bad value) |
+| `3` | Not found or forbidden (HTTP 401 / 403 / 404) |
+
+Destructive verbs (`delete`, `remove`, `backup restore`, `updates apply`)
+require `--yes`.
+
+## GitOps
+
+```bash
+nixploy gitops export --project-id proj_123 --env production -o nixploy.yaml
+nixploy plan  -f nixploy.yaml
+nixploy apply -f nixploy.yaml
+```
+
+## Links
+
+- CLI reference: [docs/cli.md](https://github.com/bablilayoub/nixploy/blob/main/docs/cli.md)
+- REST API: [docs/api.md](https://github.com/bablilayoub/nixploy/blob/main/docs/api.md)
+- MCP (AI agents): [docs/mcp.md](https://github.com/bablilayoub/nixploy/blob/main/docs/mcp.md)
+- Project: [nixploy.com](https://nixploy.com) · [GitHub](https://github.com/bablilayoub/nixploy)
+
+## License
+
+Apache-2.0

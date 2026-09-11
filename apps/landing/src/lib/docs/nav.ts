@@ -38,6 +38,7 @@ export const docsNav: DocsNavGroup[] = [
 			{ href: "/docs/servers", label: "Servers & Docker" },
 			{ href: "/docs/security", label: "Auth & security" },
 			{ href: "/docs/schedules", label: "Schedules & notify" },
+			{ href: "/docs/troubleshooting", label: "Troubleshooting" },
 		],
 	},
 	{

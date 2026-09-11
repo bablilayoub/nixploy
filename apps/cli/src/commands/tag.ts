@@ -1,8 +1,9 @@
-import { Command } from "commander";
-import { apiGet, apiPost } from "../client.js";
-import { printJson, printList } from "../utils/output.js";
+import type { Command } from "commander";
+import { api, apiPost } from "../client.js";
+import { usageError } from "../errors.js";
+import { addOutputOptions, printList, printResult } from "../utils/output.js";
 
-const SERVICE_TYPES = [
+export const TAGGABLE_SERVICE_TYPES = [
 	"application",
 	"compose",
 	"postgres",
@@ -12,65 +13,62 @@ const SERVICE_TYPES = [
 	"redis",
 ] as const;
 
-export function tagCommand(): Command {
-	const tag = new Command("tag").description("Manage organization tags and service assignments");
-
-	tag
-		.command("list")
-		.description("List tags in the active organization")
-		.option("--json", "Print raw JSON")
-		.action(async (options: { json?: boolean }) => {
-			const rows = await apiGet("tag.all");
-			printList(rows, ["tagId", "name", "color"], options);
+export function augmentTagCommand(tag: Command): Command {
+	addOutputOptions(
+		tag
+			.command("set")
+			.description("Replace every tag on a service")
+			.requiredOption("--service-type <type>", `One of: ${TAGGABLE_SERVICE_TYPES.join(", ")}`)
+			.requiredOption("--service-id <id>", "Service ID")
+			.option("--tag-id <id...>", "Tag IDs to assign (omit to clear)"),
+	).action(async (options: { serviceType: string; serviceId: string; tagId?: string[] }) => {
+		if (!(TAGGABLE_SERVICE_TYPES as readonly string[]).includes(options.serviceType)) {
+			throw usageError(
+				`Invalid --service-type. Expected one of: ${TAGGABLE_SERVICE_TYPES.join(", ")}`,
+			);
+		}
+		const result = await apiPost("tag.setServiceTags", {
+			type: options.serviceType,
+			serviceId: options.serviceId,
+			tagIds: options.tagId ?? [],
 		});
+		printResult(result, `Assigned ${options.tagId?.length ?? 0} tag(s).`);
+	});
 
-	tag
-		.command("create")
-		.description("Create a tag")
-		.requiredOption("--name <name>", "Tag name")
-		.option("--color <hex>", "Hex color (#RRGGBB)")
-		.option("--json", "Print raw JSON")
-		.action(async (options: { name: string; color?: string; json?: boolean }) => {
-			const created = await apiPost("tag.create", {
-				name: options.name,
-				color: options.color,
-			});
-			if (options.json) {
-				printJson(created);
-			} else {
-				printJson({ ok: true, tag: created });
-			}
+	addOutputOptions(
+		tag
+			.command("rename")
+			.description("Rename or recolour a tag")
+			.argument("<tagId>", "Tag ID")
+			.option("--name <name>", "New name")
+			.option("--color <hex>", "New hex color (#RRGGBB)"),
+	).action(async (tagId: string, options: { name?: string; color?: string }) => {
+		if (!options.name && !options.color) {
+			throw usageError("Provide --name and/or --color");
+		}
+		const updated = await apiPost("tag.update", {
+			tagId,
+			...(options.name ? { name: options.name } : {}),
+			...(options.color ? { color: options.color } : {}),
 		});
+		printResult(updated, "Tag updated.");
+	});
 
-	tag
-		.command("set")
-		.description("Replace all tags on a service")
-		.requiredOption("--service-type <type>", `One of: ${SERVICE_TYPES.join(", ")}`)
-		.requiredOption("--service-id <id>", "Service ID")
-		.option("--tag-id <id...>", "Tag IDs to assign (omit to clear)")
-		.option("--json", "Print raw JSON")
-		.action(
-			async (options: {
-				serviceType: string;
-				serviceId: string;
-				tagId?: string[];
-				json?: boolean;
-			}) => {
-				if (!(SERVICE_TYPES as readonly string[]).includes(options.serviceType)) {
-					throw new Error(`Invalid --service-type. Expected one of: ${SERVICE_TYPES.join(", ")}`);
-				}
-				const result = await apiPost("tag.setServiceTags", {
-					type: options.serviceType,
-					serviceId: options.serviceId,
-					tagIds: options.tagId ?? [],
-				});
-				if (options.json) {
-					printJson(result);
-				} else {
-					printJson({ ok: true, assigned: options.tagId?.length ?? 0 });
-				}
+	addOutputOptions(
+		tag
+			.command("services")
+			.description("List the tags assigned to one or more services")
+			.requiredOption("--service-type <type>", `One of: ${TAGGABLE_SERVICE_TYPES.join(", ")}`)
+			.requiredOption("--service-id <id...>", "Service IDs"),
+	).action(async (options: { serviceType: string; serviceId: string[] }) => {
+		const rows = await api("tag.forServices", {
+			method: "GET",
+			query: {
+				input: JSON.stringify({ type: options.serviceType, serviceIds: options.serviceId }),
 			},
-		);
+		});
+		printList(rows, ["serviceId", "tagId", "name", "color"]);
+	});
 
 	return tag;
 }

@@ -44,6 +44,7 @@
 		"build": "tsup",
 		"dev": "tsup --watch",
 		"typecheck": "tsc --noEmit",
+		"test": "../../packages/server/node_modules/.bin/vitest run --config vitest.config.ts",
 		"prepublishOnly": "pnpm run typecheck && pnpm run build"
 	},
 	"dependencies": {

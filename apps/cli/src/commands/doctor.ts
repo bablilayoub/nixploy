@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { apiGet, apiPublic, CLI_VERSION } from "../client.js";
-import { printJson } from "../utils/output.js";
+import { addOutputOptions, outputMode, printJson } from "../utils/output.js";
 
 type ServerStats = {
 	dockerVersion?: string;
@@ -96,91 +96,94 @@ export function readinessChecks(status: number, report: ReadinessReport | null):
 }
 
 export function doctorCommand(): Command {
-	return new Command("doctor")
+	const doctor = new Command("doctor")
 		.description("Quick health check: panel readiness, versions, Swarm, Docker, disk, host metrics")
-		.option("--json", "Print raw JSON")
-		.option("--server-id <id>", "Check a managed remote server instead of the host")
-		.action(async (options: { json?: boolean; serverId?: string }) => {
-			const checks: Check[] = [];
+		.option("--server-id <id>", "Check a managed remote server instead of the host");
+	return addOutputOptions(doctor).action(async (options: { serverId?: string }) => {
+		const checks: Check[] = [];
 
-			// Unauthenticated platform endpoints first: they work even when the
-			// API key is wrong and tell us whether the rest is worth trying.
-			let serverVersion: VersionInfo | null = null;
-			try {
-				const [version, ready] = await Promise.all([
-					apiPublic<VersionInfo>("version"),
-					apiPublic<ReadinessReport>("ready"),
-				]);
-				serverVersion = version.status === 200 ? version.data : null;
-				checks.push(versionCheck(serverVersion?.version, CLI_VERSION));
-				checks.push(...readinessChecks(ready.status, ready.data));
-			} catch (error) {
-				checks.push(check("panel", false, error instanceof Error ? error.message : String(error)));
+		// Unauthenticated platform endpoints first: they work even when the
+		// API key is wrong and tell us whether the rest is worth trying.
+		let serverVersion: VersionInfo | null = null;
+		try {
+			const [version, ready] = await Promise.all([
+				apiPublic<VersionInfo>("version"),
+				apiPublic<ReadinessReport>("ready"),
+			]);
+			serverVersion = version.status === 200 ? version.data : null;
+			checks.push(versionCheck(serverVersion?.version, CLI_VERSION));
+			checks.push(...readinessChecks(ready.status, ready.data));
+		} catch (error) {
+			checks.push(check("panel", false, error instanceof Error ? error.message : String(error)));
+		}
+
+		// `monitoring.serverStats` declares an optional input; the docker
+		// listings declare `{ serverId: string | null }`, which rejects
+		// `undefined` — the host case has to send an explicit null.
+		const query = options.serverId ? { serverId: options.serverId } : undefined;
+		const dockerQuery = { serverId: options.serverId ?? null };
+		let stats: ServerStats | null = null;
+		try {
+			const [serverStats, systemInfo, nodes] = await Promise.all([
+				apiGet<ServerStats>("monitoring.serverStats", query),
+				apiGet<{ version?: { Server?: { Version?: string } } }>("docker.systemInfo", dockerQuery),
+				apiGet<unknown[]>("docker.nodes", dockerQuery).catch(() => []),
+			]);
+			stats = serverStats;
+
+			const swarmState = stats.swarmNodeState ?? "";
+			const diskPct = parsePercent(stats.disk?.usedPercent);
+			const memUsed = stats.memory?.usedBytes ?? 0;
+			const memTotal = stats.memory?.totalBytes ?? 0;
+			const memPct = memTotal > 0 ? (memUsed / memTotal) * 100 : 0;
+			checks.push(
+				check(
+					"docker",
+					Boolean(stats.dockerVersion || systemInfo.version?.Server?.Version),
+					stats.dockerVersion || systemInfo.version?.Server?.Version || "unreachable",
+				),
+				check(
+					"swarm",
+					/active|ready/i.test(swarmState) || (Array.isArray(nodes) && nodes.length > 0),
+					swarmState || (Array.isArray(nodes) ? `${nodes.length} node(s)` : "unknown"),
+				),
+				check("disk", diskPct < 90, stats.disk ? `${Math.round(diskPct)}% used` : "n/a"),
+				check("memory", memPct < 95, memTotal ? `${Math.round(memPct)}% used` : "n/a"),
+				check(
+					"containers",
+					true,
+					`${stats.containersRunning ?? 0}/${stats.containers ?? 0} running`,
+				),
+			);
+		} catch (error) {
+			checks.push(check("api", false, error instanceof Error ? error.message : String(error)));
+		}
+
+		const healthy = checks.every((c) => c.ok);
+		const payload = {
+			ok: healthy,
+			cliVersion: CLI_VERSION,
+			serverVersion: serverVersion?.version ?? null,
+			serverCommit: serverVersion?.commit ?? null,
+			os: stats?.operatingSystem,
+			loadAverage: stats?.loadAverage,
+			checks,
+		};
+
+		if (outputMode().json) {
+			printJson(payload);
+			return;
+		}
+
+		process.stdout.write(`Nixploy doctor — ${healthy ? "OK" : "ISSUES"}\n`);
+		for (const c of checks) {
+			process.stdout.write(`  ${c.ok ? "✓" : "✗"} ${c.name}: ${c.detail}\n`);
+			if (c.warning) {
+				process.stdout.write(`    ! ${c.warning}\n`);
 			}
-
-			const query = options.serverId ? { serverId: options.serverId } : undefined;
-			let stats: ServerStats | null = null;
-			try {
-				const [serverStats, systemInfo, nodes] = await Promise.all([
-					apiGet<ServerStats>("monitoring.serverStats", query),
-					apiGet<{ version?: { Server?: { Version?: string } } }>("docker.systemInfo", query ?? {}),
-					apiGet<unknown[]>("docker.nodes", query ?? {}).catch(() => []),
-				]);
-				stats = serverStats;
-
-				const swarmState = stats.swarmNodeState ?? "";
-				const diskPct = parsePercent(stats.disk?.usedPercent);
-				const memUsed = stats.memory?.usedBytes ?? 0;
-				const memTotal = stats.memory?.totalBytes ?? 0;
-				const memPct = memTotal > 0 ? (memUsed / memTotal) * 100 : 0;
-				checks.push(
-					check(
-						"docker",
-						Boolean(stats.dockerVersion || systemInfo.version?.Server?.Version),
-						stats.dockerVersion || systemInfo.version?.Server?.Version || "unreachable",
-					),
-					check(
-						"swarm",
-						/active|ready/i.test(swarmState) || (Array.isArray(nodes) && nodes.length > 0),
-						swarmState || (Array.isArray(nodes) ? `${nodes.length} node(s)` : "unknown"),
-					),
-					check("disk", diskPct < 90, stats.disk ? `${Math.round(diskPct)}% used` : "n/a"),
-					check("memory", memPct < 95, memTotal ? `${Math.round(memPct)}% used` : "n/a"),
-					check(
-						"containers",
-						true,
-						`${stats.containersRunning ?? 0}/${stats.containers ?? 0} running`,
-					),
-				);
-			} catch (error) {
-				checks.push(check("api", false, error instanceof Error ? error.message : String(error)));
-			}
-
-			const healthy = checks.every((c) => c.ok);
-			const payload = {
-				ok: healthy,
-				cliVersion: CLI_VERSION,
-				serverVersion: serverVersion?.version ?? null,
-				serverCommit: serverVersion?.commit ?? null,
-				os: stats?.operatingSystem,
-				loadAverage: stats?.loadAverage,
-				checks,
-			};
-
-			if (options.json) {
-				printJson(payload);
-				return;
-			}
-
-			process.stdout.write(`Nixploy doctor — ${healthy ? "OK" : "ISSUES"}\n`);
-			for (const c of checks) {
-				process.stdout.write(`  ${c.ok ? "✓" : "✗"} ${c.name}: ${c.detail}\n`);
-				if (c.warning) {
-					process.stdout.write(`    ! ${c.warning}\n`);
-				}
-			}
-			if (!healthy) {
-				process.exitCode = 1;
-			}
-		});
+		}
+		if (!healthy) {
+			process.exitCode = 1;
+		}
+	});
 }

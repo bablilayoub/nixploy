@@ -10,7 +10,14 @@
 		"esModuleInterop": true,
 		"skipLibCheck": true,
 		"forceConsistentCasingInFileNames": true,
-		"noEmit": true
+		"noEmit": true,
+		// The CLI ships with one runtime dependency (commander) and no test
+		// runner of its own: `pnpm -F @nixploy/cli test` borrows the vitest
+		// binary from @nixploy/server. Point the type resolver at the same
+		// copy so `*.test.ts` typechecks without adding a dev dependency.
+		"paths": {
+			"vitest": ["../../packages/server/node_modules/vitest/dist/index.d.ts"]
+		}
 	},
-	"include": ["src"]
+	"include": ["src", "vitest.config.ts"]
 }

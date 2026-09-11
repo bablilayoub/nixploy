@@ -1,63 +1,51 @@
 import { Command } from "commander";
-import { ApiError } from "./client.js";
-import { appCommand } from "./commands/app.js";
-import { authCommand } from "./commands/auth.js";
-import { composeCommand } from "./commands/compose.js";
-import { dbCommand } from "./commands/db.js";
-import { deployCommand } from "./commands/deploy.js";
-import { doctorCommand } from "./commands/doctor.js";
-import { domainCommand } from "./commands/domain.js";
-import { envCommand } from "./commands/env.js";
-import { gitopsCommand, registerGitopsTopLevelCommands } from "./commands/gitops.js";
-import { projectCommand } from "./commands/project.js";
-import { serverCommand } from "./commands/server.js";
-import { tagCommand } from "./commands/tag.js";
-import { templateCommand } from "./commands/template.js";
-
-const program = new Command();
+import { applyExitOverride, resolveExitCode } from "./cli-runtime.js";
+import { registerCommands } from "./commands/index.js";
+import { EXIT_OK } from "./errors.js";
+import { setOutputMode } from "./utils/output.js";
 
 declare const __CLI_VERSION__: string;
 
+const program = new Command();
+
 program
 	.name("nixploy")
-	.description("Nixploy CLI — manage projects, apps, databases and env vars")
+	.description("Nixploy CLI — projects, apps, databases, domains and env vars from your terminal")
 	.version(__CLI_VERSION__)
-	.option("--url <url>", "Nixploy server base URL (overrides config and NIXPLOY_API_URL)")
-	.option("--api-key <key>", "API key (overrides config and NIXPLOY_API_KEY)")
-	.hook("preAction", (thisCommand) => {
-		const options = thisCommand.opts<{ url?: string; apiKey?: string }>();
-		if (options.url) {
-			process.env.NIXPLOY_API_URL = options.url;
-		}
-		if (options.apiKey) {
-			process.env.NIXPLOY_API_KEY = options.apiKey;
-		}
+	.option("--url <url>", "Nixploy panel base URL (overrides the profile and NIXPLOY_API_URL)")
+	.option("--api-key <key>", "API key (visible in `ps`; prefer a profile or NIXPLOY_API_KEY)")
+	.option("--profile <name>", "Credential profile from ~/.nixploy/config.json")
+	.option("--organization-id <id>", "Organization to act in (sent as x-organization-id)")
+	.option("--json", "Print the raw API payload as JSON")
+	.option("--quiet", "Print only identifiers; suppress confirmations")
+	// Global flags are read from the *leaf* command so `nixploy app list --json`
+	// and `nixploy --json app list` behave the same.
+	.hook("preAction", (_thisCommand, actionCommand) => {
+		const options = actionCommand.optsWithGlobals<{
+			url?: string;
+			apiKey?: string;
+			profile?: string;
+			organizationId?: string;
+			json?: boolean;
+			quiet?: boolean;
+		}>();
+		if (options.url) process.env.NIXPLOY_API_URL = options.url;
+		if (options.apiKey) process.env.NIXPLOY_API_KEY = options.apiKey;
+		if (options.profile) process.env.NIXPLOY_PROFILE = options.profile;
+		if (options.organizationId) process.env.NIXPLOY_ORG_ID = options.organizationId;
+		setOutputMode({ json: options.json, quiet: options.quiet });
 	});
 
-program.addCommand(authCommand());
-program.addCommand(projectCommand());
-program.addCommand(appCommand());
-program.addCommand(composeCommand());
-program.addCommand(templateCommand());
-program.addCommand(tagCommand());
-program.addCommand(domainCommand());
-program.addCommand(serverCommand());
-program.addCommand(deployCommand());
-program.addCommand(doctorCommand());
-program.addCommand(dbCommand());
-program.addCommand(envCommand());
-program.addCommand(gitopsCommand());
-registerGitopsTopLevelCommands(program);
+registerCommands(program);
+applyExitOverride(program);
 
 try {
 	await program.parseAsync(process.argv);
+	process.exitCode = process.exitCode ?? EXIT_OK;
 } catch (error) {
-	if (error instanceof ApiError) {
-		process.stderr.write(`Error (HTTP ${error.status}): ${error.message}\n`);
-	} else if (error instanceof Error) {
-		process.stderr.write(`Error: ${error.message}\n`);
-	} else {
-		process.stderr.write(`Error: ${String(error)}\n`);
+	const { code, message } = resolveExitCode(error);
+	if (message) {
+		process.stderr.write(`${message}\n`);
 	}
-	process.exitCode = 1;
+	process.exitCode = code;
 }

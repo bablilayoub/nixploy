@@ -1,4 +1,5 @@
-import { resolveApiKey, resolveApiUrl } from "./config.js";
+import { resolveApiKey, resolveApiUrl, resolveOrganizationId } from "./config.js";
+import { exitCodeForStatus } from "./errors.js";
 
 declare const __CLI_VERSION__: string;
 
@@ -20,6 +21,11 @@ export class ApiError extends Error {
 		super(message);
 		this.name = "ApiError";
 	}
+
+	/** 401/403/404 → 3 ("not found or forbidden"), everything else → 1. */
+	get exitCode(): number {
+		return exitCodeForStatus(this.status);
+	}
 }
 
 interface RequestOptions {
@@ -28,16 +34,21 @@ interface RequestOptions {
 	query?: Record<string, string | undefined>;
 	apiUrl?: string;
 	apiKey?: string;
+	organizationId?: string;
+	/** Per-call override; log following uses a shorter budget per poll. */
+	timeoutMs?: number;
 }
 
 /**
  * Calls the Nixploy REST API (generated from the tRPC routers by
- * @nixploy/trpc-openapi). Convention: `/api/<router>.<procedure>`,
- * queries via GET + search params, mutations via POST + JSON body.
+ * `packages/server/src/trpc/openapi.ts`). Convention:
+ * `/api/<router>.<procedure>`, queries via GET + search params, mutations via
+ * POST + JSON body. A pinned organization travels as `x-organization-id`.
  */
 export async function api<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
 	const baseUrl = resolveApiUrl(options.apiUrl);
 	const apiKey = resolveApiKey(options.apiKey);
+	const organizationId = resolveOrganizationId(options.organizationId);
 
 	const url = new URL(`${baseUrl}/api/${path}`);
 	for (const [key, value] of Object.entries(options.query ?? {})) {
@@ -46,16 +57,25 @@ export async function api<T = unknown>(path: string, options: RequestOptions = {
 		}
 	}
 
-	const response = await fetch(url, {
-		method: options.method ?? (options.body !== undefined ? "POST" : "GET"),
-		headers: {
-			"x-api-key": apiKey,
-			"user-agent": USER_AGENT,
-			...(options.body !== undefined ? { "content-type": "application/json" } : {}),
-		},
-		body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-	});
+	let response: Response;
+	try {
+		response = await fetch(url, {
+			method: options.method ?? (options.body !== undefined ? "POST" : "GET"),
+			headers: {
+				"x-api-key": apiKey,
+				"user-agent": USER_AGENT,
+				...(organizationId ? { "x-organization-id": organizationId } : {}),
+				...(options.body !== undefined ? { "content-type": "application/json" } : {}),
+			},
+			body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+			signal: AbortSignal.timeout(options.timeoutMs ?? REQUEST_TIMEOUT_MS),
+		});
+	} catch (error) {
+		if (error instanceof Error && error.name === "TimeoutError") {
+			throw new Error(`Request to ${url.pathname} timed out after ${REQUEST_TIMEOUT_MS} ms`);
+		}
+		throw error;
+	}
 
 	const text = await response.text();
 	let data: unknown;
@@ -90,6 +110,8 @@ export async function api<T = unknown>(path: string, options: RequestOptions = {
 	return data as T;
 }
 
+export type QueryInput = Record<string, string | number | boolean | undefined | null>;
+
 /**
  * GET with query input. Non-string values (booleans, numbers) are sent as a
  * single JSON `input` blob so Zod schemas receive the correct types. Pure
@@ -97,13 +119,26 @@ export async function api<T = unknown>(path: string, options: RequestOptions = {
  */
 export const apiGet = <T>(
 	path: string,
-	query?: Record<string, string | number | boolean | undefined>,
-	options?: Pick<RequestOptions, "apiUrl" | "apiKey">,
+	query?: QueryInput,
+	options?: Pick<RequestOptions, "apiUrl" | "apiKey" | "organizationId" | "timeoutMs">,
 ): Promise<T> => {
-	if (!query || Object.keys(query).length === 0) {
+	if (!query) {
+		// No input at all — only valid for procedures with an optional (or no)
+		// input schema.
 		return api<T>(path, { ...options, method: "GET" });
 	}
-	const needsJson = Object.values(query).some((v) => v !== undefined && typeof v !== "string");
+	if (Object.keys(query).length === 0) {
+		// An *explicitly empty* object is not the same as no input: plenty of
+		// procedures declare `z.object({ serverId: z.string().nullish() })`,
+		// which rejects `undefined` with "expected object, received undefined".
+		return api<T>(path, { ...options, method: "GET", query: { input: "{}" } });
+	}
+	// Anything that is not a plain string has to travel as JSON: flattened query
+	// params are strings, and an explicit `null` (which several schemas accept
+	// as "the panel host, not a managed server") would otherwise be dropped.
+	const needsJson = Object.values(query).some(
+		(value) => value !== undefined && typeof value !== "string",
+	);
 	if (needsJson) {
 		const cleaned: Record<string, unknown> = {};
 		for (const [key, value] of Object.entries(query)) {
@@ -117,7 +152,7 @@ export const apiGet = <T>(
 	}
 	const stringQuery: Record<string, string | undefined> = {};
 	for (const [key, value] of Object.entries(query)) {
-		stringQuery[key] = value === undefined ? undefined : String(value);
+		stringQuery[key] = value === undefined || value === null ? undefined : String(value);
 	}
 	return api<T>(path, { ...options, method: "GET", query: stringQuery });
 };
@@ -125,7 +160,7 @@ export const apiGet = <T>(
 export const apiPost = <T>(
 	path: string,
 	body?: unknown,
-	options?: Pick<RequestOptions, "apiUrl" | "apiKey">,
+	options?: Pick<RequestOptions, "apiUrl" | "apiKey" | "organizationId" | "timeoutMs">,
 ): Promise<T> => api<T>(path, { ...options, method: "POST", body });
 
 /**

@@ -11,8 +11,9 @@ Guides for running and developing Nixploy.
 | [install.md](./install.md) | Operators | Production one-liner, env overrides, update, troubleshooting |
 | [releases.md](./releases.md) | Maintainers | Cut PaaS GitHub Releases (`v*`), GHCR tags, pinned install assets |
 | [getting-started.md](./getting-started.md) | Operators | First deploy (whoami / template), Git, CLI |
-| [api.md](./api.md) | Operators / CI | REST conventions, router catalog, CLI, Swagger, MCP pointer |
-| [mcp.md](./mcp.md) | Operators / AI | MCP server tools, auth, client config |
+| [api.md](./api.md) | Operators / CI | REST conventions, responses, capabilities per endpoint, typed client, Swagger |
+| [cli.md](./cli.md) | Operators / CI | `@nixploy/cli`: auth & profiles, every command group, exit codes, scripting |
+| [mcp.md](./mcp.md) | Operators / AI | MCP server tools (32), auth, client config |
 | [migrate-from-coolify.md](./migrate-from-coolify.md) | Operators | Concept map + cutover from Coolify |
 | [migrate-from-dokploy.md](./migrate-from-dokploy.md) | Operators | Concept map + cutover from Dokploy |
 
