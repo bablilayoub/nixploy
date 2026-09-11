@@ -61,6 +61,7 @@ import {
 import { TableCard } from "@/components/ui/table-card";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 
 type CertificateType = "letsencrypt" | "none" | "custom";
@@ -528,7 +529,7 @@ function DomainMiddlewaresCell({
 				});
 				setOpen(false);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -700,7 +701,7 @@ export function DomainManager({
 				queryClient.invalidateQueries({ queryKey: trpc.observability.uptimeProbes.pathKey() });
 				toast.success("Uptime probe updated");
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -765,7 +766,7 @@ export function DomainManager({
 	};
 
 	const onMutationError = (error: { message?: string }) => {
-		toast.error(error.message ?? "Something went wrong");
+		toastError(error, "Something went wrong");
 	};
 
 	const createMutation = useMutation(
@@ -833,7 +834,7 @@ export function DomainManager({
 			setCertificateType("none");
 			setCertificateId(null);
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "Failed to generate domain");
+			toastError(error, "Failed to generate domain");
 		}
 	};
 
