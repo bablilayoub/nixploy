@@ -26,10 +26,15 @@ import { authClient, useSession } from "@/lib/auth-client";
 import { describeError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
+import { MIN_PASSWORD_LENGTH, PasswordStrengthHint } from "../../password-strength";
+
 const acceptSchema = z
 	.object({
 		name: z.string().min(1, "Name is required").max(64),
-		password: z.string().min(8, "Password must be at least 8 characters"),
+		email: z.email("Enter the email address this invitation was sent to"),
+		password: z
+			.string()
+			.min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`),
 		confirmPassword: z.string(),
 	})
 	.refine((data) => data.password === data.confirmPassword, {
@@ -38,6 +43,21 @@ const acceptSchema = z
 	});
 
 type AcceptInput = z.infer<typeof acceptSchema>;
+
+/**
+ * Mirror of `maskEmail` in packages/server/src/modules/auth/setup.ts. The
+ * preview deliberately never returns the invitee's full address (a leaked
+ * invite link must not disclose it), so the signed-in check compares masks.
+ */
+function maskEmail(email: string): string {
+	const trimmed = email.trim();
+	const at = trimmed.lastIndexOf("@");
+	if (at <= 0) return "\u2022\u2022\u2022";
+	const local = trimmed.slice(0, at);
+	const domain = trimmed.slice(at);
+	const visible = local.slice(0, Math.min(2, local.length));
+	return `${visible}${"\u2022".repeat(Math.max(3, local.length - visible.length))}${domain}`;
+}
 
 async function acceptAndActivate(invitationId: string) {
 	const { error: acceptError } = await authClient.organization.acceptInvitation({
@@ -59,8 +79,9 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 
 	const form = useForm<AcceptInput>({
 		resolver: zodResolver(acceptSchema),
-		defaultValues: { name: "", password: "", confirmPassword: "" },
+		defaultValues: { name: "", email: "", password: "", confirmPassword: "" },
 	});
+	const password = form.watch("password");
 
 	const invitation = preview.data?.ok ? preview.data.invitation : null;
 
@@ -69,9 +90,9 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 		setFormError(null);
 		setAccepting(true);
 		try {
-			if (session.user.email.toLowerCase() !== invitation.email.toLowerCase()) {
+			if (maskEmail(session.user.email.toLowerCase()) !== invitation.emailMasked.toLowerCase()) {
 				throw new Error(
-					`This invitation is for ${invitation.email}. Sign out and open the link again, or sign in as that user.`,
+					`This invitation is for ${invitation.emailMasked}. Sign out and open the link again, or sign in as that user.`,
 				);
 			}
 			await acceptAndActivate(invitation.invitationId);
@@ -102,7 +123,7 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 				},
 				body: JSON.stringify({
 					name: values.name.trim(),
-					email: invitation.email,
+					email: values.email.trim(),
 					password: values.password,
 				}),
 			});
@@ -159,7 +180,8 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 	}
 
 	if (session?.user) {
-		const emailMatches = session.user.email.toLowerCase() === invitation.email.toLowerCase();
+		const emailMatches =
+			maskEmail(session.user.email.toLowerCase()) === invitation.emailMasked.toLowerCase();
 		return (
 			<Card>
 				<CardHeader className="text-center">
@@ -184,8 +206,8 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 					) : (
 						<>
 							<p className="text-sm text-muted-foreground">
-								This invitation is for <strong>{invitation.email}</strong>. Sign out and open the
-								link again, or sign in with that account.
+								This invitation is for <strong>{invitation.emailMasked}</strong>. Sign out and open
+								the link again, or sign in with that account.
 							</p>
 							<Button asChild variant="outline" className="w-full">
 								<Link href="/login">Go to sign in</Link>
@@ -215,18 +237,27 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 								{formError}
 							</div>
 						)}
-						<div className="grid gap-2">
-							<label htmlFor="invite-accept-email" className="text-sm font-medium leading-none">
-								Email
-							</label>
-							<Input
-								id="invite-accept-email"
-								type="email"
-								value={invitation.email}
-								disabled
-								readOnly
-							/>
-						</div>
+						<FormField
+							control={form.control}
+							name="email"
+							render={({ field }) => (
+								<FormItem>
+									<FormLabel>Email</FormLabel>
+									<FormControl>
+										<Input
+											type="email"
+											placeholder={invitation.emailMasked}
+											autoComplete="email"
+											{...field}
+										/>
+									</FormControl>
+									<p className="text-xs text-muted-foreground">
+										Type the address this invitation was sent to ({invitation.emailMasked}).
+									</p>
+									<FormMessage />
+								</FormItem>
+							)}
+						/>
 						<FormField
 							control={form.control}
 							name="name"
@@ -253,6 +284,7 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 								</FormItem>
 							)}
 						/>
+						<PasswordStrengthHint value={password} />
 						<FormField
 							control={form.control}
 							name="confirmPassword"

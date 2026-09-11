@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { and, count, eq, gt, sql } from "drizzle-orm";
 import { db } from "../../db";
 import { invitations, organizations, users } from "../../db/schema";
@@ -15,6 +16,54 @@ export async function needsSetup(): Promise<boolean> {
 
 /** Header the accept-invitation page sends with the sign-up request. */
 export const INVITATION_ID_HEADER = "x-nixploy-invitation-id";
+
+// ── first-admin setup token ─────────────────────────────────────────────────
+
+/** Header the setup wizard sends with the first-admin sign-up request. */
+export const SETUP_TOKEN_HEADER = "x-nixploy-setup-token";
+
+/**
+ * When `NIXPLOY_SETUP_TOKEN` is set the first-admin claim at `/setup` is no
+ * longer "first visitor wins": the installer prints a random token, writes it
+ * to `/etc/nixploy/.env`, and the operator opens `/setup?token=<token>` (or
+ * pastes it into the form). Unset (upgrades, dev) keeps the old behaviour.
+ */
+export function setupToken(): string | null {
+	const value = process.env.NIXPLOY_SETUP_TOKEN?.trim();
+	return value && value.length > 0 ? value : null;
+}
+
+/** True when this instance requires a setup token for the first admin. */
+export function requiresSetupToken(): boolean {
+	return setupToken() !== null;
+}
+
+/** Constant-time comparison of a caller-supplied token against the configured one. */
+export function setupTokenMatches(candidate: string | null | undefined): boolean {
+	const expected = setupToken();
+	if (!expected) return true;
+	const provided = candidate?.trim() ?? "";
+	if (provided.length === 0) return false;
+	const expectedBuffer = Buffer.from(expected, "utf8");
+	const providedBuffer = Buffer.from(provided, "utf8");
+	if (expectedBuffer.length !== providedBuffer.length) return false;
+	return timingSafeEqual(expectedBuffer, providedBuffer);
+}
+
+/**
+ * Mask an email for unauthenticated display: enough for the invitee to
+ * recognise their own address, not enough to harvest it from a leaked link.
+ * `ada.lovelace@example.com` → `ad•••••••••@example.com`.
+ */
+export function maskEmail(email: string): string {
+	const trimmed = email.trim();
+	const at = trimmed.lastIndexOf("@");
+	if (at <= 0) return "•••";
+	const local = trimmed.slice(0, at);
+	const domain = trimmed.slice(at);
+	const visible = local.slice(0, Math.min(2, local.length));
+	return `${visible}${"•".repeat(Math.max(3, local.length - visible.length))}${domain}`;
+}
 
 /**
  * Whether `email` may sign up through invitation `invitationId`: the
@@ -49,10 +98,15 @@ export async function canSignUpWithInvitation(
  * Public, unauthenticated preview of a pending invitation for the accept page.
  * Returns null when missing, expired, or already used — callers should not
  * distinguish those cases to the invitee beyond "invalid or expired".
+ *
+ * The invitee's address is returned **masked**: anyone who finds or receives a
+ * leaked invite link must not learn the full email (security audit 2.2). The
+ * accept page asks the invitee to type their address instead; sign-up verifies
+ * it against the invitation (`canSignUpWithInvitation`).
  */
 export async function getInvitationPreview(invitationId: string): Promise<{
 	invitationId: string;
-	email: string;
+	emailMasked: string;
 	role: string | null;
 	expiresAt: Date;
 	organizationName: string;
@@ -73,7 +127,7 @@ export async function getInvitationPreview(invitationId: string): Promise<{
 
 	return {
 		invitationId: invitation.id,
-		email: invitation.email,
+		emailMasked: maskEmail(invitation.email),
 		role: invitation.role,
 		expiresAt: invitation.expiresAt,
 		organizationName: organization.name,

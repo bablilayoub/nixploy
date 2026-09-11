@@ -20,6 +20,7 @@ import { AcmeDnsCard } from "@/components/settings/server/acme-dns-card";
 import { AiSettingsCard } from "@/components/settings/server/ai-settings-card";
 import { HostMonitoringBody } from "@/components/settings/server/host-monitoring-card";
 import { UpdatesCard } from "@/components/settings/server/updates-card";
+import { UsersCard } from "@/components/settings/server/users-card";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { PageHeader } from "@/components/shell";
 import {
@@ -670,6 +671,7 @@ export function ServerSettingsView() {
 
 				<UpdatesCard />
 				<AiSettingsCard />
+				<UsersCard />
 			</SettingsStack>
 		</div>
 	);

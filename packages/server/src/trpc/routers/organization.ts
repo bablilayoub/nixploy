@@ -7,6 +7,7 @@ import { invitations, members, organizations, projects, users } from "../../db/s
 import { auditFromSession } from "../../modules/audit";
 import {
 	assertCapability,
+	capabilityMinRole,
 	capabilitySchemaValues,
 	effectiveCapabilities,
 	getOrganizationServiceStatusCounts,
@@ -454,11 +455,32 @@ export const organizationRouter = router({
 
 			const callerOverrides = parseCapabilityOverrides(callerMembership.capabilityOverrides);
 			const callerCaps = effectiveCapabilities(callerMembership.role, callerOverrides);
+			const targetRank = orgRoleRank(membership.role);
 			for (const cap of input.grant) {
 				if (!callerCaps.has(cap as OrgCapability)) {
 					throw new TRPCError({
 						code: "FORBIDDEN",
 						message: `Cannot grant capability you do not have: ${cap}`,
+					});
+				}
+				// Infrastructure and organization capabilities reach the shared
+				// host (Swarm joins, the docker socket) or the org itself: an
+				// overlay must not hand them to a viewer/member (security 2.3).
+				const minRole = capabilityMinRole(cap as OrgCapability);
+				if (minRole && targetRank < ORG_ROLE_RANK[minRole]) {
+					throw new TRPCError({
+						code: "FORBIDDEN",
+						message: `"${cap}" requires the ${minRole} role or higher — change the member's role instead`,
+					});
+				}
+			}
+			// `revoke` was unvalidated: an unknown or self-referential entry is
+			// harmless, but a caller must still only touch capabilities it holds.
+			for (const cap of input.revoke) {
+				if (!callerCaps.has(cap as OrgCapability)) {
+					throw new TRPCError({
+						code: "FORBIDDEN",
+						message: `Cannot revoke capability you do not have: ${cap}`,
 					});
 				}
 			}

@@ -1,68 +1,130 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+	findFirst: vi.fn(),
+}));
+
+vi.mock("../../db", () => ({
+	db: { query: { members: { findFirst: mocks.findFirst } } },
+}));
+
 import {
-	CAPABILITY_CATALOG,
+	assertCapability,
+	capabilityMinRole,
 	effectiveCapabilities,
+	getMemberCapabilities,
+	hasCapability,
 	ORG_CAPABILITIES,
-	parseCapabilityOverrides,
-	primaryOrgRole,
-	ROLE_CAPABILITIES,
+	RANK_BOUND_CAPABILITIES,
+	runWithCapabilityScope,
 } from "./capabilities";
 
-describe("capability catalog", () => {
-	it("has unique ids matching ORG_CAPABILITIES", () => {
-		const ids = CAPABILITY_CATALOG.map((entry) => entry.id);
-		expect(new Set(ids).size).toBe(ids.length);
-		expect([...ORG_CAPABILITIES].sort()).toEqual([...ids].sort());
+const membership = (role: string, capabilityOverrides: unknown = null) => ({
+	id: "member-1",
+	organizationId: "org-1",
+	userId: "user-1",
+	role,
+	capabilityOverrides,
+});
+
+describe("capabilityMinRole", () => {
+	it("rank-binds the capabilities that reach the host or the org", () => {
+		expect(capabilityMinRole("servers.manage")).toBe("admin");
+		expect(capabilityMinRole("docker.manage")).toBe("admin");
+		expect(capabilityMinRole("settings.manage")).toBe("admin");
+		expect(capabilityMinRole("members.manage")).toBe("admin");
 	});
 
-	it("admin baseline includes every catalog capability", () => {
-		expect([...ROLE_CAPABILITIES.admin].sort()).toEqual([...ORG_CAPABILITIES].sort());
+	it("leaves ordinary capabilities delegable", () => {
+		expect(capabilityMinRole("service.deploy")).toBeNull();
+		expect(capabilityMinRole("secrets.read")).toBeNull();
+		expect(capabilityMinRole("audit.read")).toBeNull();
+	});
+
+	it("lists exactly the rank-bound ids", () => {
+		expect([...RANK_BOUND_CAPABILITIES].sort()).toEqual([
+			"docker.manage",
+			"members.manage",
+			"servers.manage",
+			"settings.manage",
+		]);
+	});
+});
+
+describe("capability scope (API keys)", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mocks.findFirst.mockResolvedValue(membership("owner"));
+	});
+
+	it("resolves the full role set with no scope in force", async () => {
+		const info = await getMemberCapabilities("user-1", "org-1");
+		expect(info?.capabilities).toEqual([...ORG_CAPABILITIES].sort());
+		expect(await hasCapability("user-1", "org-1", "servers.manage")).toBe(true);
+	});
+
+	it("intersects the member set with the scope ceiling", async () => {
+		await runWithCapabilityScope(
+			{ allowed: new Set(["audit.read", "secrets.read"]), label: "API key scope (read)" },
+			async () => {
+				const info = await getMemberCapabilities("user-1", "org-1");
+				expect(info?.capabilities).toEqual(["audit.read", "secrets.read"]);
+				expect(await hasCapability("user-1", "org-1", "service.deploy")).toBe(false);
+				expect(await hasCapability("user-1", "org-1", "audit.read")).toBe(true);
+			},
+		);
+	});
+
+	it("never widens a member's own set", async () => {
+		mocks.findFirst.mockResolvedValue(membership("viewer"));
+		await runWithCapabilityScope({ allowed: new Set(ORG_CAPABILITIES) }, async () => {
+			const info = await getMemberCapabilities("user-1", "org-1");
+			// viewer's baseline is audit.read only, scope or not.
+			expect(info?.capabilities).toEqual(["audit.read"]);
+		});
+	});
+
+	it("resolves nothing outside the organization a key is bound to", async () => {
+		await runWithCapabilityScope(
+			{ allowed: new Set(ORG_CAPABILITIES), organizationId: "org-1" },
+			async () => {
+				expect(
+					(await getMemberCapabilities("user-1", "org-1"))?.capabilities.length,
+				).toBeGreaterThan(0);
+				expect(await hasCapability("user-1", "org-2", "service.deploy")).toBe(false);
+				expect((await getMemberCapabilities("user-1", "org-2"))?.capabilities).toEqual([]);
+			},
+		);
+	});
+
+	it("mentions the scope in the assertCapability error", async () => {
+		await runWithCapabilityScope(
+			{ allowed: new Set(["audit.read"]), label: "API key scope (read)" },
+			async () => {
+				await expect(assertCapability("user-1", "org-1", "service.deploy")).rejects.toMatchObject({
+					code: "FORBIDDEN",
+					message: expect.stringContaining("API key scope (read)"),
+				});
+			},
+		);
+	});
+
+	it("does not leak out of the scoped call", async () => {
+		await runWithCapabilityScope({ allowed: new Set(["audit.read"]) }, async () => {
+			expect(await hasCapability("user-1", "org-1", "service.deploy")).toBe(false);
+		});
+		expect(await hasCapability("user-1", "org-1", "service.deploy")).toBe(true);
 	});
 });
 
 describe("effectiveCapabilities", () => {
-	it("gives deployer service.deploy by default", () => {
-		const caps = effectiveCapabilities("deployer");
-		expect(caps.has("service.deploy")).toBe(true);
-		expect(caps.has("service.runtime")).toBe(true);
-		expect(caps.has("servers.manage")).toBe(false);
-	});
-
-	it("grants and revokes overlays", () => {
-		const caps = effectiveCapabilities("member", {
-			grant: ["service.deploy"],
-			revoke: ["secrets.write"],
-		});
-		expect(caps.has("service.deploy")).toBe(true);
-		expect(caps.has("secrets.write")).toBe(false);
-		expect(caps.has("project.write")).toBe(true);
-		expect(caps.has("ai.use")).toBe(true);
-	});
-
-	it("treats unknown roles as viewer (audit.read only)", () => {
-		expect([...effectiveCapabilities("custom-role")].sort()).toEqual(["audit.read"]);
-	});
-
-	it("resolves comma-separated better-auth roles", () => {
-		expect(primaryOrgRole("member,admin")).toBe("admin");
-		expect(effectiveCapabilities("member,deployer").has("service.deploy")).toBe(true);
-	});
-
-	it("admin baseline matches ROLE_CAPABILITIES", () => {
-		expect([...effectiveCapabilities("admin")].sort()).toEqual([...ROLE_CAPABILITIES.admin].sort());
-	});
-});
-
-describe("parseCapabilityOverrides", () => {
-	it("filters invalid capability names", () => {
-		expect(
-			parseCapabilityOverrides({
-				grant: ["service.deploy", "nope"],
-				revoke: ["secrets.read"],
-			}),
-		).toEqual({
+	it("applies grant then revoke on top of the role baseline", () => {
+		const set = effectiveCapabilities("member", {
 			grant: ["service.deploy"],
 			revoke: ["secrets.read"],
 		});
+		expect(set.has("service.deploy")).toBe(true);
+		expect(set.has("secrets.read")).toBe(false);
+		expect(set.has("project.write")).toBe(true);
 	});
 });

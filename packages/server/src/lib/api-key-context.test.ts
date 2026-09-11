@@ -13,6 +13,7 @@ vi.mock("../db", () => ({
 	client: mocks.sqlClient,
 }));
 
+import { buildApiKeyPermissions } from "../modules/auth/api-key-scopes";
 import { buildApiKeyContext } from "./api-key-context";
 
 const req = (headers: Record<string, string>) =>
@@ -208,5 +209,124 @@ describe("buildApiKeyContext", () => {
 			bucket: "test-org-ok",
 		});
 		expect(ctx.session?.session.activeOrganizationId).toBe("org-2");
+	});
+});
+
+describe("buildApiKeyContext scopes and organization binding", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	const verified = (key: Record<string, unknown>) => ({
+		valid: true,
+		key: { id: "key-1", referenceId: "user-1", ...key },
+	});
+
+	it("leaves legacy keys unscoped (no permissions, no metadata)", async () => {
+		mocks.verifyApiKey.mockResolvedValue(verified({}));
+		mocks.sqlClient
+			.mockResolvedValueOnce([userRow])
+			.mockResolvedValueOnce([{ organizationId: "org-1" }]);
+		const ctx = await buildApiKeyContext(req({ "x-api-key": "legacy" }), {
+			bucket: "test-legacy",
+		});
+		expect(ctx.apiKey).toEqual({
+			id: "key-1",
+			scope: null,
+			organizationId: null,
+			legacy: true,
+		});
+		// No ceiling: the owner's full capability set applies, as before scopes.
+		expect(ctx.capabilityScope).toBeUndefined();
+	});
+
+	it("carries the scope's capability ceiling on the context", async () => {
+		mocks.verifyApiKey.mockResolvedValue(verified({ permissions: buildApiKeyPermissions("read") }));
+		mocks.sqlClient
+			.mockResolvedValueOnce([userRow])
+			.mockResolvedValueOnce([{ organizationId: "org-1" }]);
+		const ctx = await buildApiKeyContext(req({ "x-api-key": "scoped" }), {
+			bucket: "test-scope-read",
+		});
+		expect(ctx.apiKey.scope).toBe("read");
+		expect(ctx.capabilityScope?.label).toBe("API key scope (read)");
+		expect([...(ctx.capabilityScope?.allowed ?? [])].sort()).toEqual([
+			"audit.read",
+			"secrets.read",
+		]);
+		expect(ctx.capabilityScope?.organizationId).toBeNull();
+	});
+
+	it("gives a deploy key exactly the deploy capabilities", async () => {
+		mocks.verifyApiKey.mockResolvedValue(
+			verified({ permissions: buildApiKeyPermissions("deploy") }),
+		);
+		mocks.sqlClient
+			.mockResolvedValueOnce([userRow])
+			.mockResolvedValueOnce([{ organizationId: "org-1" }]);
+		const ctx = await buildApiKeyContext(req({ "x-api-key": "deployer" }), {
+			bucket: "test-scope-deploy",
+		});
+		const allowed = ctx.capabilityScope?.allowed ?? new Set();
+		expect(allowed.has("service.deploy")).toBe(true);
+		expect(allowed.has("service.write")).toBe(false);
+		expect(allowed.has("servers.manage")).toBe(false);
+	});
+
+	it("binds a key to the organization in its metadata", async () => {
+		mocks.verifyApiKey.mockResolvedValue(
+			verified({
+				permissions: buildApiKeyPermissions("deploy"),
+				metadata: { organizationId: "org-bound" },
+			}),
+		);
+		mocks.sqlClient
+			.mockResolvedValueOnce([userRow])
+			.mockResolvedValueOnce([{ organizationId: "org-bound" }]);
+		const ctx = await buildApiKeyContext(req({ "x-api-key": "bound" }), {
+			bucket: "test-bound",
+		});
+		expect(ctx.session?.session.activeOrganizationId).toBe("org-bound");
+		expect(ctx.apiKey.organizationId).toBe("org-bound");
+		expect(ctx.capabilityScope?.organizationId).toBe("org-bound");
+		// Membership in the bound org is verified, not assumed.
+		const membershipQuery = String(mocks.sqlClient.mock.calls[1]?.[0]);
+		expect(membershipQuery).toContain("FROM member");
+	});
+
+	it("rejects a bound key whose owner left the organization", async () => {
+		mocks.verifyApiKey.mockResolvedValue(verified({ metadata: { organizationId: "org-bound" } }));
+		mocks.sqlClient.mockResolvedValueOnce([userRow]).mockResolvedValueOnce([]);
+		await expect(
+			buildApiKeyContext(req({ "x-api-key": "orphan" }), { bucket: "test-bound-orphan" }),
+		).rejects.toMatchObject({
+			code: "FORBIDDEN",
+			message: "Not a member of the organization this API key is bound to",
+		});
+	});
+
+	it("refuses x-organization-id that contradicts the binding", async () => {
+		mocks.verifyApiKey.mockResolvedValue(verified({ metadata: { organizationId: "org-bound" } }));
+		mocks.sqlClient.mockResolvedValueOnce([userRow]);
+		await expect(
+			buildApiKeyContext(req({ "x-api-key": "bound", "x-organization-id": "org-other" }), {
+				bucket: "test-bound-cross",
+			}),
+		).rejects.toMatchObject({
+			code: "FORBIDDEN",
+			message: "This API key is bound to a different organization",
+		});
+	});
+
+	it("accepts x-organization-id that matches the binding", async () => {
+		mocks.verifyApiKey.mockResolvedValue(verified({ metadata: { organizationId: "org-bound" } }));
+		mocks.sqlClient
+			.mockResolvedValueOnce([userRow])
+			.mockResolvedValueOnce([{ organizationId: "org-bound" }]);
+		const ctx = await buildApiKeyContext(
+			req({ "x-api-key": "bound", "x-organization-id": "org-bound" }),
+			{ bucket: "test-bound-same" },
+		);
+		expect(ctx.session?.session.activeOrganizationId).toBe("org-bound");
 	});
 });

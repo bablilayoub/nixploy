@@ -2,18 +2,37 @@ import { apiKey } from "@better-auth/api-key";
 import bcrypt from "bcryptjs";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { APIError } from "better-auth/api";
-import { admin, organization, twoFactor } from "better-auth/plugins";
+import { APIError, createAuthMiddleware } from "better-auth/api";
+import { admin, genericOAuth, organization, twoFactor } from "better-auth/plugins";
 import { client, db, schema } from "../db";
 import type { invitations, members } from "../db/schema";
 import { recordAudit } from "../modules/audit";
+import {
+	type AuthHookContext,
+	handleAuthEventAfter,
+	loginLockoutFor,
+	loginLockoutMessage,
+} from "../modules/auth/auth-events";
 import { isInstanceAdminRole } from "../modules/auth/instance-admin";
 import {
 	assertInviteRoleBelowCaller,
 	assertMemberActionRank,
 	loadCallerMembership,
 } from "../modules/auth/org-rank";
-import { canSignUpWithInvitation, hasAnyUsers, INVITATION_ID_HEADER } from "../modules/auth/setup";
+import {
+	EMAIL_NOT_CONFIGURED_MESSAGE,
+	hasInstanceEmailProvider,
+	sendPasswordResetEmail,
+} from "../modules/auth/password-reset";
+import {
+	canSignUpWithInvitation,
+	hasAnyUsers,
+	INVITATION_ID_HEADER,
+	requiresSetupToken,
+	SETUP_TOKEN_HEADER,
+	setupTokenMatches,
+} from "../modules/auth/setup";
+import { isSsoRequestPath, joinDefaultOrganizationForSso, ssoConfig } from "../modules/auth/sso";
 import { deleteOrganizationCascade, hasCapability } from "../modules/projects";
 import { trustedProxyCidrsForAuth } from "../utils/rate-limit";
 import { orgAc, orgPluginRoles } from "./org-roles";
@@ -25,6 +44,22 @@ type InvitationRow = typeof invitations.$inferSelect;
 const FIRST_USER_LOCK_KEY = 872_314_01;
 
 const BCRYPT_ROUNDS = 10;
+
+const DAY_SECONDS = 24 * 60 * 60;
+
+/**
+ * Default API-key lifetime when the caller does not pick one (90 days), and the
+ * ceiling for a custom value (1 year). "Never" is reserved for instance admins
+ * and requested with `metadata.neverExpires` — see the `/api-key/create`
+ * pre-hook below.
+ */
+const API_KEY_DEFAULT_EXPIRY_SECONDS = 90 * DAY_SECONDS;
+const API_KEY_MAX_EXPIRY_DAYS = 365;
+
+/** Impersonated sessions are a break-glass tool, not a login (audit 2.2). */
+const IMPERSONATION_SESSION_SECONDS = 60 * 60;
+
+const sso = ssoConfig();
 
 /**
  * Trusted origins must include the dashboard domain configured at runtime in
@@ -86,13 +121,28 @@ export const auth = betterAuth({
 	emailAndPassword: {
 		enabled: true,
 		autoSignIn: true,
-		minPasswordLength: 8,
+		// Applies to **new** passwords only (sign-up, reset, change): sign-in
+		// verification never checks length, so accounts created under the old
+		// 8-character floor keep working.
+		minPasswordLength: 12,
 		// Public self-serve registration is gated in user.create.before:
 		// first admin only, or the holder of a pending organization invitation
 		// (the accept page sends its id in INVITATION_ID_HEADER).
 		password: {
 			hash: (password) => bcrypt.hash(password, BCRYPT_ROUNDS),
 			verify: ({ password, hash }) => bcrypt.compare(password, hash),
+		},
+		resetPasswordTokenExpiresIn: 60 * 60,
+		// Delivered through the instance's email notification channel; with no
+		// channel configured this throws and the form shows a clear message
+		// instead of pretending the mail was sent.
+		sendResetPassword: async ({ user, token }, request) => {
+			await sendPasswordResetEmail({
+				email: user.email,
+				name: user.name,
+				token,
+				request,
+			});
 		},
 	},
 	// A self-hosted panel is usually reachable from the internet, so throttle
@@ -107,6 +157,7 @@ export const auth = betterAuth({
 			"/two-factor/verify-totp": { window: 60, max: 10 },
 			"/two-factor/verify-backup-code": { window: 60, max: 10 },
 			"/forget-password": { window: 300, max: 5 },
+			"/request-password-reset": { window: 300, max: 5 },
 			"/reset-password": { window: 300, max: 5 },
 			// Read-only routes the dashboard calls on every navigation. better-auth
 			// keys its limiter by client IP + path (or one shared bucket when no
@@ -173,16 +224,41 @@ export const auth = betterAuth({
 				},
 			},
 		}),
-		admin(),
+		admin({ impersonationSessionDuration: IMPERSONATION_SESSION_SECONDS }),
 		twoFactor(),
 		apiKey({
 			enableMetadata: true,
+			// A recognisable prefix so secret scanners (GitHub, gitleaks) catch a
+			// key pasted into a repository or a build log.
+			defaultPrefix: "nxp_",
+			keyExpiration: {
+				minExpiresIn: 1,
+				maxExpiresIn: API_KEY_MAX_EXPIRY_DAYS,
+			},
 			rateLimit: {
 				enabled: true,
 				timeWindow: 60_000,
 				maxRequests: 120,
 			},
 		}),
+		// Optional OIDC SSO. genericOAuth registers the provider as a social
+		// provider, so the client uses /sign-in/social with this providerId.
+		...(sso
+			? [
+					genericOAuth({
+						config: [
+							{
+								providerId: sso.providerId,
+								name: sso.name,
+								discoveryUrl: sso.discoveryUrl,
+								clientId: sso.clientId,
+								clientSecret: sso.clientSecret,
+								scopes: ["openid", "profile", "email"],
+							},
+						],
+					}),
+				]
+			: []),
 	],
 	trustedOrigins: () => trustedOriginsWithDashboardDomain(),
 	advanced: {
@@ -192,11 +268,75 @@ export const auth = betterAuth({
 			trustedProxies: trustedProxyCidrsForAuth(),
 		},
 	},
+	hooks: {
+		before: createAuthMiddleware(async (ctx) => {
+			// Per-account sign-in lockout. better-auth's own limiter is per IP, so
+			// a distributed run still gets 10 guesses/min/IP against one account;
+			// this bucket is keyed by email (modules/auth/auth-events.ts).
+			if (ctx.path === "/sign-in/email") {
+				const email = typeof ctx.body?.email === "string" ? ctx.body.email : null;
+				if (email) {
+					const state = loginLockoutFor(email);
+					if (state.locked) {
+						throw new APIError("TOO_MANY_REQUESTS", { message: loginLockoutMessage(state) });
+					}
+				}
+				return;
+			}
+
+			// better-auth answers `/request-password-reset` with a deliberately
+			// vague "check your email" and runs the sender in the background, so
+			// a failing send is invisible. Instance-level configuration is not
+			// account information, so refuse up front when no email channel
+			// exists instead of promising a mail that cannot be sent.
+			if (ctx.path === "/request-password-reset" || ctx.path === "/forget-password") {
+				if (!(await hasInstanceEmailProvider())) {
+					throw new APIError("SERVICE_UNAVAILABLE", {
+						message: EMAIL_NOT_CONFIGURED_MESSAGE,
+					});
+				}
+				return;
+			}
+
+			// API keys expire by default. Omitting `expiresIn` means 90 days for
+			// everyone; a never-expiring key must be asked for explicitly
+			// (`metadata.neverExpires`) and is reserved for instance admins.
+			if (ctx.path === "/api-key/create") {
+				const body = (ctx.body ?? {}) as Record<string, unknown>;
+				const metadata = (body.metadata ?? null) as Record<string, unknown> | null;
+				const wantsNever = metadata?.neverExpires === true;
+				if (wantsNever) {
+					const session = await auth.api.getSession({ headers: ctx.headers ?? new Headers() });
+					if (!isInstanceAdminRole(session?.user?.role)) {
+						throw new APIError("FORBIDDEN", {
+							message: "Only the instance admin can create API keys that never expire",
+						});
+					}
+					return { context: { body: { ...body, expiresIn: null } } };
+				}
+				if (body.expiresIn === undefined || body.expiresIn === null) {
+					return {
+						context: { body: { ...body, expiresIn: API_KEY_DEFAULT_EXPIRY_SECONDS } },
+					};
+				}
+			}
+		}),
+		// Runs for failed requests too (the endpoint's APIError lands in
+		// ctx.context.returned), which is what makes auth.login.failed visible.
+		after: createAuthMiddleware(async (ctx) => {
+			await handleAuthEventAfter(ctx as unknown as AuthHookContext);
+		}),
+	},
 	databaseHooks: {
 		user: {
 			create: {
 				before: async (user, ctx) => {
 					const email = typeof user.email === "string" ? user.email : "";
+					const header = (name: string) =>
+						ctx?.headers?.get(name) ?? ctx?.request?.headers?.get(name) ?? null;
+					// Users provisioned by the IdP are not "public registration":
+					// the OIDC callback already authenticated them.
+					const viaSso = Boolean(sso) && isSsoRequestPath(ctx?.path);
 					// Session-level advisory locks are per connection, so lock and
 					// unlock must run on the same one: reserve it from the pool
 					// instead of issuing both through the pooled `db`.
@@ -205,14 +345,23 @@ export const auth = betterAuth({
 						await reserved`SELECT pg_advisory_lock(${FIRST_USER_LOCK_KEY})`;
 						try {
 							const isFirst = !(await hasAnyUsers());
-							if (!isFirst) {
-								const invitationId =
-									ctx?.headers?.get(INVITATION_ID_HEADER) ??
-									ctx?.request?.headers?.get(INVITATION_ID_HEADER) ??
-									null;
+							if (isFirst) {
+								// "First visitor wins" is a race a scanner can win on a
+								// fresh host; when the installer wrote a setup token the
+								// first admin must present it.
+								if (requiresSetupToken() && !setupTokenMatches(header(SETUP_TOKEN_HEADER))) {
+									throw new APIError("FORBIDDEN", {
+										message:
+											"A setup token is required to create the first admin. It is printed by the installer and stored in /etc/nixploy/.env as NIXPLOY_SETUP_TOKEN.",
+									});
+								}
+							} else if (!viaSso) {
+								const invitationId = header(INVITATION_ID_HEADER);
 								if (!(await canSignUpWithInvitation(email, invitationId))) {
 									throw new APIError("FORBIDDEN", {
-										message: "Registration is disabled. Ask an admin to invite you, or sign in.",
+										message: invitationId
+											? "This invitation is for a different email address."
+											: "Registration is disabled. Ask an admin to invite you, or sign in.",
 									});
 								}
 							}
@@ -236,9 +385,15 @@ export const auth = betterAuth({
 				// New sign-in sessions get no activeOrganizationId from the
 				// organization plugin — default it to the user's first
 				// membership so org-scoped routers work immediately.
-				before: async (session) => {
+				before: async (session, ctx) => {
 					if (session.activeOrganizationId) {
 						return { data: session };
+					}
+					// JIT membership for SSO: a user the IdP just provisioned (or an
+					// existing one who never joined an org) lands in the org named by
+					// NIXPLOY_OIDC_DEFAULT_ORG as `member`.
+					if (sso && isSsoRequestPath(ctx?.path)) {
+						await joinDefaultOrganizationForSso(session.userId);
 					}
 					const membership = await db.query.members.findFirst({
 						where: (m, { eq }) => eq(m.userId, session.userId),

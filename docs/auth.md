@@ -22,8 +22,28 @@ Dokploy:
    their account (name/password; email locked to the invite) and joins.
 5. Legacy `/register` permanently redirects to `/setup`.
 
-Probe: `setup.needsSetup` and `setup.invitationPreview` (public tRPC). Helpers
-live in `packages/server/src/modules/auth/setup.ts`.
+Probe: `setup.needsSetup`, `setup.authConfig` and `setup.invitationPreview`
+(public tRPC). Helpers live in `packages/server/src/modules/auth/setup.ts`.
+
+The invitation preview returns the org name, the role and a **masked** email
+(`ad••••••••••@example.com`): a leaked invite link must not disclose the
+invitee's address. The accept page asks the invitee to type it, and the sign-up
+is refused unless it matches the invitation.
+
+### Setup token (installer)
+
+"First visitor wins" is a race a scanner can win on a freshly installed host.
+When `NIXPLOY_SETUP_TOKEN` is set, creating the first admin additionally
+requires that token:
+
+- the installer generates it, writes it to `/etc/nixploy/.env` and prints it
+  with the panel URL (`https://panel.example.com/setup?token=<token>`);
+- `/setup` prefills the field from `?token=` and shows it otherwise;
+- the wizard sends it as `x-nixploy-setup-token`, and
+  `databaseHooks.user.create.before` compares it in constant time.
+
+Unset (upgrades, local development) keeps the old behaviour. The token only
+guards the *first* admin — it is ignored once the instance has users.
 
 ## Sessions & the active organization
 
@@ -79,6 +99,13 @@ Labels and descriptions live in `CAPABILITY_CATALOG`
 (shield) edits overlays; `organization.capabilityCatalog` /
 `organization.myCapabilities` power the UI.
 
+**Rank-bound capabilities.** `servers.manage`, `docker.manage`,
+`settings.manage` and `members.manage` carry `minRole: "admin"` in the catalog:
+they reach the shared host or the organization itself, so an overlay can never
+hand them to a `viewer`/`member`/`deployer` — change the member's role instead.
+`organization.setMemberCapabilities` enforces the floor on `grant`, and
+validates `revoke` against the caller's own set too.
+
 ### Role defaults
 
 | Role | Baseline |
@@ -112,8 +139,9 @@ shared host or cluster additionally requires `assertInstanceAdmin(session)`
 - Host bind mounts, host TLS store, `nixploy-server` schedules, instance
   backups, self-update, the AI singleton and the Traefik host settings.
 
-Keep the instance-admin account on 2FA and do not hand its API keys to CI:
-a key carries the owner's full capability set, including these gates.
+Keep the instance-admin account on 2FA, and give CI a **scoped** key rather
+than an `admin` one: an `admin`-scoped key created by an instance admin carries
+that account's full capability set, including the gates above.
 
 ## Two-factor authentication (TOTP)
 
@@ -140,7 +168,154 @@ a key carries the owner's full capability set, including these gates.
   member can always enable it and continue; users with no organization
   (first-run setup) are exempt.
 
+## Passwords
+
+- **New** passwords (sign-up, invitation, reset, change) must be at least 12
+  characters (`emailAndPassword.minPasswordLength`). Sign-in never checks
+  length, so accounts created under the old 8-character floor keep working
+  until they change their password.
+- The setup, invitation and reset forms show a dependency-free strength hint
+  (length + character classes) — advisory on top of the hard minimum.
+- Sign-in is limited **per IP** by better-auth (10/min) **and per account**:
+  10 failures inside 15 minutes lock that email for 15 minutes with a readable
+  message. The per-account bucket is what a distributed credential-stuffing run
+  hits. Failures are audited as `auth.login.failed`, the lock as
+  `auth.login.locked`. Buckets are in-process, so a panel restart clears them.
+
+### Password reset
+
+`/forgot-password` → emailed link → `/reset-password/<token>` (one hour, single
+use). Delivery uses the **instance's email notification channel**: the oldest
+channel of type `email` in Settings → Notifications, with the recipient replaced
+by the account asking for the reset. With no email channel configured the
+endpoint answers 503 with "Email delivery is not configured on this instance —
+ask your instance admin…" instead of silently promising a mail.
+
+### Locked out with no email (break glass)
+
+```bash
+docker exec nixploy node scripts/reset-admin.mjs admin@example.com
+```
+
+Sets a random one-time password, removes the account's TOTP enrolment, revokes
+every session and prints the password. Run it on the host; it reads
+`DATABASE_URL` from the container environment. Sign in with the printed
+password and change it immediately. (The better-auth admin plugin cannot clear
+an enrolled TOTP secret, which is why this is a script and not a button.)
+
+## Single sign-on (OIDC)
+
+Optional, configured entirely from the environment — no migration, no
+`NEXT_PUBLIC_*` in the client bundle (the login page resolves it server-side
+and passes it as a prop):
+
+```bash
+NIXPLOY_OIDC_ISSUER=https://auth.example.com/application/o/nixploy/
+NIXPLOY_OIDC_CLIENT_ID=...
+NIXPLOY_OIDC_CLIENT_SECRET=...
+NIXPLOY_OIDC_PROVIDER_NAME=Authentik   # button label, optional
+NIXPLOY_OIDC_DEFAULT_ORG=acme-ops      # org *slug* new users JIT-join
+```
+
+With all three required variables set, `/login` grows a
+**Continue with `<provider>`** button. Nixploy uses better-auth's
+`genericOAuth` plugin, which in 1.7 registers the provider as a first-class
+social provider: sign-in goes through `/api/auth/sign-in/social` with
+`provider: "oidc"` and the callback is
+`/api/auth/callback/oidc`. Endpoints are read from OIDC discovery
+(`<issuer>/.well-known/openid-configuration`); scopes are `openid profile
+email`.
+
+**Redirect URI to register with the IdP:**
+`https://panel.example.com/api/auth/callback/oidc`
+
+**JIT provisioning.** A user the IdP authenticates is created even though public
+registration is closed (the OIDC callback already authenticated them), and
+joins the organization whose **slug** is `NIXPLOY_OIDC_DEFAULT_ORG` as
+`member`. Users who already belong to an organization keep it. With no default
+org configured (or a slug that does not exist) the user lands with no
+organization and sees the create-organization screen; instance admins can then
+invite them properly.
+
+### Authentik
+
+1. Applications → Providers → Create → **OAuth2/OpenID Provider**.
+2. Client type `Confidential`, redirect URI
+   `https://panel.example.com/api/auth/callback/oidc`.
+3. Signing key: any; scopes `openid`, `profile`, `email`.
+4. Issuer is the provider's *OpenID Configuration Issuer*, e.g.
+   `https://auth.example.com/application/o/nixploy/`.
+
+### Keycloak
+
+1. Clients → Create client → `OpenID Connect`, client authentication **On**.
+2. Valid redirect URIs: `https://panel.example.com/api/auth/callback/oidc`.
+3. Credentials tab → client secret.
+4. Issuer: `https://keycloak.example.com/realms/<realm>`.
+
+Restart the panel after changing any `NIXPLOY_OIDC_*` value — the plugin list is
+built at boot.
+
+## Instance user management
+
+Settings → Platform → **Users** (instance admin only) lists every account over
+the better-auth `admin()` plugin: instance role (`user` / `admin`), 2FA state,
+ban state, ban/unban, and impersonation. Impersonated sessions last **one
+hour** (`impersonationSessionDuration`) and every action is audited
+(`admin.user.banned`, `admin.user.role.set`, `auth.impersonation.started`, …).
+Clearing someone's TOTP is not a plugin capability — use
+`scripts/reset-admin.mjs` above.
+
+## Auth events in the audit log
+
+better-auth `hooks.after` writes these into the organization audit trail, with
+the client IP and user agent in `metadata` (the audit table has no columns for
+them — see [status.md](./status.md)):
+
+`auth.login` (with `method: password | sso`), `auth.login.failed`,
+`auth.login.locked`, `auth.logout`, `auth.password.changed`,
+`auth.2fa.enabled` / `auth.2fa.disabled`, `auth.apikey.created` /
+`auth.apikey.deleted`, `auth.impersonation.started` /
+`auth.impersonation.stopped`, `admin.user.banned` / `admin.user.unbanned` /
+`admin.user.role.set` / `admin.user.removed` / `admin.user.password.set`.
+
+Rows are attributed to the actor's oldest organization membership; events by a
+user who belongs to no organization (the moment between first sign-up and org
+creation) are dropped, because `audit_log.organization_id` is `NOT NULL`.
+
 ## API keys (REST & CLI)
+
+Keys are **scoped** and **organization-bound** — a key is no longer the owner's
+whole identity:
+
+| Scope | Capability ceiling |
+| --- | --- |
+| `read` | `audit.read`, `secrets.read` + every list/read procedure |
+| `deploy` | read + `service.deploy`, `service.runtime` |
+| `write` | deploy + `service.write`, `domains.manage`, `secrets.write` |
+| `admin` | the owner's full set |
+
+The effective set is **scope ∩ the owner's own capabilities**, applied as a
+per-request ceiling in `lib/api-key-context.ts` and entered by
+`protectedProcedure` (`trpc/init.ts`), so `assertCapability` in every router
+sees the reduced set without any router change. The deploy webhook
+(`/api/webhooks/deploy/<appName>`) goes through the same path, which also gives
+it the org 2FA gate.
+
+Vocabulary and helpers: `modules/auth/api-key-scopes.ts`. The canonical column
+is `apikey.permissions`; because the api-key plugin treats it as a server-only
+property, the panel records the scope in `apikey.metadata` and `lib/auth.ts`
+mirrors it into `permissions` right after creation. Both are read back.
+
+Organization binding lives in `apikey.metadata.organizationId`. A bound key
+refuses any other organization, including a contradicting `x-organization-id`.
+
+Defaults on creation: **90-day expiry** (7/30/90 days and 1 year in the picker,
+1 year maximum; "Never" for instance admins only) and the **`nxp_`** prefix so
+secret scanners catch a leaked key. The panel shows **Last used**.
+
+Keys created before scopes existed have neither column; they keep the old
+behaviour and are labelled **Legacy — full access** in the panel. Rotate them.
 
 Rate limits: every API-key request is limited **per key** (120/min) plus a
 per-IP bucket that is only consumed by failed verifications; webhook and

@@ -1,7 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, KeyRound } from "lucide-react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -22,15 +23,58 @@ import { safeNextPath } from "@/lib/safe-next-path";
 
 import { type LoginInput, loginSchema } from "@/server/actions/auth.schema";
 
-export function LoginForm() {
+export interface SsoInfo {
+	enabled: boolean;
+	providerId: string;
+	name: string;
+}
+
+export function LoginForm({ sso }: { sso?: SsoInfo }) {
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const nextPath = safeNextPath(searchParams.get("next"));
 	const [formError, setFormError] = useState<string | null>(null);
+	const [ssoPending, setSsoPending] = useState(false);
 	const form = useForm<LoginInput>({
 		resolver: zodResolver(loginSchema),
 		defaultValues: { email: "", password: "" },
 	});
+
+	/**
+	 * OIDC sign-in. `genericOAuth` registers the provider as a social provider,
+	 * so this is the standard /sign-in/social route; the response carries the
+	 * authorization URL to send the browser to.
+	 */
+	async function signInWithSso() {
+		if (!sso?.enabled) return;
+		setFormError(null);
+		setSsoPending(true);
+		try {
+			const res = await fetch("/api/auth/sign-in/social", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Origin: window.location.origin },
+				body: JSON.stringify({
+					provider: sso.providerId,
+					callbackURL: nextPath,
+					errorCallbackURL: "/login",
+				}),
+			});
+			const data = (await res.json().catch(() => ({}))) as { url?: string; message?: string };
+			if (!res.ok || !data.url) {
+				const msg = data.message ?? `Could not start ${sso.name} sign-in (${res.status})`;
+				toast.error(msg);
+				setFormError(msg);
+				return;
+			}
+			window.location.href = data.url;
+		} catch (err) {
+			const msg = describeError(err, "Network error");
+			toast.error(msg);
+			setFormError(msg);
+		} finally {
+			setSsoPending(false);
+		}
+	}
 
 	async function onSubmit(values: LoginInput) {
 		setFormError(null);
@@ -123,8 +167,34 @@ export function LoginForm() {
 						<Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
 							{form.formState.isSubmitting ? "Signing in…" : "Sign in"}
 						</Button>
+						<Link
+							href="/forgot-password"
+							className="text-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+						>
+							Forgot your password?
+						</Link>
 					</form>
 				</Form>
+
+				{sso?.enabled && (
+					<div className="mt-4 grid gap-4">
+						<div className="flex items-center gap-3">
+							<span className="h-px flex-1 bg-border" />
+							<span className="text-xs text-muted-foreground">or</span>
+							<span className="h-px flex-1 bg-border" />
+						</div>
+						<Button
+							type="button"
+							variant="outline"
+							className="w-full"
+							disabled={ssoPending}
+							onClick={() => void signInWithSso()}
+						>
+							<KeyRound className="size-4" />
+							{ssoPending ? "Redirecting…" : `Continue with ${sso.name}`}
+						</Button>
+					</div>
+				)}
 			</CardContent>
 		</Card>
 	);

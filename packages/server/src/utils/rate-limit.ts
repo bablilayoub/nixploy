@@ -64,6 +64,83 @@ export function ipRateLimitMax(ip: string, max: number, unknownIpMax?: number): 
 	return ip === UNKNOWN_IP ? (unknownIpMax ?? max * UNKNOWN_IP_LIMIT_MULTIPLIER) : max;
 }
 
+// ── sliding failure lockout ─────────────────────────────────────────────────
+//
+// Per-IP limits do not stop a distributed credential-stuffing run against one
+// account, so password sign-in additionally counts failures per **email**: N
+// failures inside `windowMs` lock that address for `lockMs`. Process-local like
+// every other bucket here (single-replica by design); a restart clears locks.
+
+type FailureRecord = { failures: number[]; lockedUntil: number };
+
+const failureRecords = new Map<string, FailureRecord>();
+
+export interface SlidingLockoutOptions {
+	/** Failures older than this stop counting. */
+	windowMs: number;
+	/** Failures inside the window that trigger a lock. */
+	max: number;
+	/** How long the lock lasts once triggered. */
+	lockMs: number;
+}
+
+export interface LockoutState {
+	locked: boolean;
+	/** Milliseconds until the lock lifts (0 when not locked). */
+	retryAfterMs: number;
+}
+
+const lockoutState = (record: FailureRecord | undefined, now: number): LockoutState =>
+	record && record.lockedUntil > now
+		? { locked: true, retryAfterMs: record.lockedUntil - now }
+		: { locked: false, retryAfterMs: 0 };
+
+/** Current lock state for `key` without recording anything. */
+export function lockoutStatus(key: string): LockoutState {
+	return lockoutState(failureRecords.get(key), Date.now());
+}
+
+/**
+ * Record one failed attempt for `key` and report the resulting lock state.
+ * Returns `locked: true` on the attempt that trips the threshold as well as
+ * for every attempt while the lock holds.
+ */
+export function recordFailure(key: string, options: SlidingLockoutOptions): LockoutState {
+	const now = Date.now();
+	const record = failureRecords.get(key) ?? { failures: [], lockedUntil: 0 };
+	if (record.lockedUntil > now) {
+		failureRecords.set(key, record);
+		return lockoutState(record, now);
+	}
+	record.failures = record.failures.filter((at) => at > now - options.windowMs);
+	record.failures.push(now);
+	if (record.failures.length >= options.max) {
+		record.lockedUntil = now + options.lockMs;
+		record.failures = [];
+	}
+	failureRecords.set(key, record);
+	// Keep the map from growing without bound on a scanned instance: drop
+	// records that carry neither a live lock nor recent failures.
+	if (failureRecords.size > 5_000) {
+		for (const [existingKey, existing] of failureRecords) {
+			if (existing.lockedUntil <= now && existing.failures.length === 0) {
+				failureRecords.delete(existingKey);
+			}
+		}
+	}
+	return lockoutState(record, now);
+}
+
+/** Forget the failure history for `key` (successful sign-in). */
+export function clearFailures(key: string): void {
+	failureRecords.delete(key);
+}
+
+/** Test helper — drops every recorded failure and lock. */
+export function resetFailureRecords(): void {
+	failureRecords.clear();
+}
+
 /**
  * RFC 1918 + loopback + ULA ranges: what `TRUSTED_PROXIES=1` means in the
  * reference install (Traefik reaches the panel over the Swarm overlay /

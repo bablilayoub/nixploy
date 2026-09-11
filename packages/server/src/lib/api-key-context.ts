@@ -1,5 +1,12 @@
 import { TRPCError } from "@trpc/server";
 import { client } from "../db";
+import {
+	type ApiKeyScope,
+	apiKeyScopeCapabilities,
+	describeApiKey,
+} from "../modules/auth/api-key-scopes";
+import type { CapabilityScope, OrgCapability } from "../modules/projects/capabilities";
+import { ORG_CAPABILITIES } from "../modules/projects/capabilities";
 import type { TRPCContext } from "../trpc/init";
 import {
 	clientIpFromRequest,
@@ -24,22 +31,55 @@ export interface ApiKeyContextOptions {
 	allowBearer?: boolean;
 }
 
+/** Expand a scope into concrete capabilities; no scope (bound legacy key) = all. */
+function scopeCeiling(scope: ApiKeyScope | null): readonly OrgCapability[] {
+	if (!scope) return ORG_CAPABILITIES as OrgCapability[];
+	const ceiling = apiKeyScopeCapabilities(scope);
+	return ceiling === "all" ? (ORG_CAPABILITIES as OrgCapability[]) : ceiling;
+}
+
 const REQUESTS_PER_IP_MINUTE = 120;
 const REQUESTS_PER_KEY_MINUTE = 120;
 const AUTH_FAILURES_PER_MINUTE = 30;
 
+/** What the verified key turned out to be, for callers that need to branch. */
+export interface ApiKeyCallerInfo {
+	id: string;
+	scope: ApiKeyScope | null;
+	/** Organization the key is bound to (`metadata.organizationId`). */
+	organizationId: string | null;
+	/** Pre-scopes key: full owner capabilities, org from header/oldest membership. */
+	legacy: boolean;
+}
+
+export interface ApiKeyContext extends TRPCContext {
+	apiKey: ApiKeyCallerInfo;
+	/**
+	 * Capability ceiling for this request. `protectedProcedure` enters it
+	 * around every procedure (`trpc/init.ts`); non-tRPC callers must wrap
+	 * their own work with `runWithCapabilityScope`.
+	 */
+	capabilityScope?: CapabilityScope;
+}
+
 /**
- * Authenticate an API-key request (REST adapter, MCP endpoint) and build the
- * same tRPC context shape better-auth's getSession produces — the routers
- * only read `user.id` and `session.activeOrganizationId`.
+ * Authenticate an API-key request (REST adapter, MCP endpoint, deploy webhook)
+ * and build the same tRPC context shape better-auth's getSession produces —
+ * the routers only read `user.id` and `session.activeOrganizationId`.
  *
- * Org resolution: an explicit `x-organization-id` header wins (membership is
- * verified); otherwise the caller's oldest membership is used.
+ * Org resolution: a key bound to an organization (`metadata.organizationId`)
+ * always acts for that org; otherwise an explicit `x-organization-id` header
+ * wins (membership is verified) and finally the caller's oldest membership.
+ *
+ * Scopes: `permissions.nixploy = ["read" | "deploy" | "write" | "admin"]` is
+ * installed as a per-request capability ceiling (see
+ * `modules/projects/capabilities.ts`), so `assertCapability` in every router
+ * sees the reduced set without any router change.
  */
 export async function buildApiKeyContext(
 	req: Request,
 	options: ApiKeyContextOptions,
-): Promise<TRPCContext> {
+): Promise<ApiKeyContext> {
 	const ip = clientIpFromRequest(req);
 	const authFailureKey = `${options.bucket}-auth:${ip}`;
 	const authFailureMax = ipRateLimitMax(ip, AUTH_FAILURES_PER_MINUTE);
@@ -70,7 +110,13 @@ export async function buildApiKeyContext(
 		body: { key: apiKeyHeader },
 	})) as {
 		valid: boolean;
-		key: { referenceId?: string; userId?: string; id: string } | null;
+		key: {
+			referenceId?: string;
+			userId?: string;
+			id: string;
+			permissions?: unknown;
+			metadata?: unknown;
+		} | null;
 	};
 	if (!result.valid || !result.key) {
 		// Only failed verifications count against the per-IP auth bucket, so
@@ -114,11 +160,38 @@ export async function buildApiKeyContext(
 		throw new TRPCError({ code: "FORBIDDEN", message: "User is banned" });
 	}
 
+	// Scope + org binding (modules/auth/api-key-scopes.ts). Keys created before
+	// scopes existed carry neither column and keep the old behaviour.
+	const { scope, organizationId: boundOrganizationId } = describeApiKey(result.key);
+
 	// Prefer explicit org from the client (multi-org API keys); otherwise the
-	// oldest membership — the same default sessions get (lib/auth.ts).
+	// oldest membership — the same default sessions get (lib/auth.ts). A key
+	// bound to one organization ignores neither: it refuses any other org.
 	const requestedOrgId = req.headers.get("x-organization-id")?.trim() || null;
+	if (boundOrganizationId && requestedOrgId && requestedOrgId !== boundOrganizationId) {
+		throw new TRPCError({
+			code: "FORBIDDEN",
+			message: "This API key is bound to a different organization",
+		});
+	}
 	let activeOrganizationId: string | null = null;
-	if (requestedOrgId) {
+	if (boundOrganizationId) {
+		// The binding is only as good as the owner's membership: a key stays
+		// valid exactly as long as its owner belongs to the bound org.
+		const membership = await client`
+			SELECT organization_id AS "organizationId"
+			FROM member
+			WHERE user_id = ${userId} AND organization_id = ${boundOrganizationId}
+			LIMIT 1
+		`;
+		if (!membership[0]) {
+			throw new TRPCError({
+				code: "FORBIDDEN",
+				message: "Not a member of the organization this API key is bound to",
+			});
+		}
+		activeOrganizationId = boundOrganizationId;
+	} else if (requestedOrgId) {
 		const membership = await client`
 			SELECT organization_id AS "organizationId"
 			FROM member
@@ -142,6 +215,19 @@ export async function buildApiKeyContext(
 			(memberships[0] as { organizationId?: string } | undefined)?.organizationId ?? null;
 	}
 
+	// What this caller may do for the rest of the request: the scope's
+	// capability ceiling (intersected with the owner's own set downstream) plus
+	// the org binding. Legacy keys (no scope, no binding) carry no scope and
+	// keep the owner's full set, as before.
+	const capabilityScope: CapabilityScope | undefined =
+		scope || boundOrganizationId
+			? {
+					allowed: new Set<OrgCapability>(scopeCeiling(scope)),
+					organizationId: boundOrganizationId,
+					label: scope ? `API key scope (${scope})` : "API key organization binding",
+				}
+			: undefined;
+
 	// Synthesize the same { user, session } shape better-auth's getSession
 	// returns — the routers only read user.id and session.activeOrganizationId.
 	const now = new Date();
@@ -161,5 +247,15 @@ export async function buildApiKeyContext(
 		},
 	} as unknown as NonNullable<TRPCContext["session"]>;
 
-	return { headers: req.headers, session };
+	return {
+		headers: req.headers,
+		session,
+		capabilityScope,
+		apiKey: {
+			id: result.key.id,
+			scope,
+			organizationId: boundOrganizationId,
+			legacy: scope === null && boundOrganizationId === null,
+		},
+	};
 }

@@ -12,6 +12,7 @@ import {
 	TWO_FACTOR_REQUIRED_MESSAGE,
 } from "../modules/auth/two-factor-gate";
 import { type DomainErrorCode, isDomainError } from "../modules/errors";
+import { type CapabilityScope, runWithCapabilityScope } from "../modules/projects/capabilities";
 
 const log = createLogger("trpc");
 
@@ -222,11 +223,19 @@ export const protectedProcedure = t.procedure.use(errorBoundary).use(async ({ ct
 		});
 	}
 
-	return next({
-		ctx: {
-			...ctx,
-			session,
-			organizationId,
-		},
-	});
+	const run = () =>
+		next({
+			ctx: {
+				...ctx,
+				session,
+				organizationId,
+			},
+		});
+
+	// API-key callers arrive with a capability ceiling on the context
+	// (`lib/api-key-context.ts`: key scope + organization binding). Entering it
+	// here is what makes `assertCapability` inside every router see the reduced
+	// set; cookie sessions carry no scope and are unaffected.
+	const capabilityScope = (ctx as { capabilityScope?: CapabilityScope }).capabilityScope;
+	return capabilityScope ? runWithCapabilityScope(capabilityScope, run) : run();
 });

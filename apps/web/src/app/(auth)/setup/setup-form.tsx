@@ -11,10 +11,11 @@ import {
 	LayoutTemplate,
 	Users,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,13 +32,34 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { describeError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
-import {
-	buildOrgSlug,
-	type RegisterInput,
-	type SetupOrgInput,
-	setupOrgSchema,
-	setupSchema,
-} from "@/server/actions/auth.schema";
+import { buildOrgSlug, type SetupOrgInput, setupOrgSchema } from "@/server/actions/auth.schema";
+
+import { MIN_PASSWORD_LENGTH, PasswordStrengthHint } from "../password-strength";
+
+/**
+ * Owner step. Local (not `setupSchema`) because the first admin now also
+ * carries the optional installer setup token and the 12-character floor
+ * better-auth enforces for new passwords.
+ */
+const ownerSchema = z
+	.object({
+		name: z.string().min(1, "Name is required").max(64),
+		email: z.email("Enter a valid email address"),
+		password: z
+			.string()
+			.min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`),
+		confirmPassword: z.string(),
+		setupToken: z.string(),
+	})
+	.refine((data) => data.password === data.confirmPassword, {
+		message: "Passwords do not match",
+		path: ["confirmPassword"],
+	});
+
+type OwnerInput = z.infer<typeof ownerSchema>;
+
+/** Header `user.create.before` reads the first-admin setup token from. */
+const SETUP_TOKEN_HEADER = "x-nixploy-setup-token";
 
 type WizardStep = "welcome" | "owner" | "org" | "ready";
 
@@ -56,6 +78,7 @@ const STEP_LABELS: Record<WizardStep, string> = {
  */
 export function SetupForm() {
 	const router = useRouter();
+	const searchParams = useSearchParams();
 	const trpc = useTRPC();
 	const [step, setStep] = useState<WizardStep>("welcome");
 	const [formError, setFormError] = useState<string | null>(null);
@@ -74,11 +97,21 @@ export function SetupForm() {
 		}
 	}, [status.data, router]);
 
-	const ownerForm = useForm<RegisterInput>({
-		resolver: zodResolver(setupSchema),
-		defaultValues: { name: "", email: "", password: "", confirmPassword: "" },
+	const ownerForm = useForm<OwnerInput>({
+		resolver: zodResolver(ownerSchema),
+		defaultValues: { name: "", email: "", password: "", confirmPassword: "", setupToken: "" },
 		mode: "onSubmit",
 	});
+	const password = ownerForm.watch("password");
+	const requiresSetupToken = status.data?.requiresSetupToken ?? false;
+
+	// `/setup?token=…` — the installer prints the URL with the token appended.
+	useEffect(() => {
+		const fromQuery = searchParams.get("token");
+		if (fromQuery && !ownerForm.getValues("setupToken")) {
+			ownerForm.setValue("setupToken", fromQuery);
+		}
+	}, [searchParams, ownerForm]);
 
 	const orgForm = useForm<SetupOrgInput>({
 		resolver: zodResolver(setupOrgSchema),
@@ -125,7 +158,11 @@ export function SetupForm() {
 		const owner = ownerForm.getValues();
 		const { orgName } = orgForm.getValues();
 		setSubmitting(true);
-		const headers = { "Content-Type": "application/json", Origin: window.location.origin };
+		const headers: Record<string, string> = {
+			"Content-Type": "application/json",
+			Origin: window.location.origin,
+			...(owner.setupToken?.trim() ? { [SETUP_TOKEN_HEADER]: owner.setupToken.trim() } : {}),
+		};
 		const readJson = async <T,>(res: Response): Promise<T | null> => {
 			try {
 				return (await res.json()) as T;
@@ -338,6 +375,7 @@ export function SetupForm() {
 											</FormItem>
 										)}
 									/>
+									<PasswordStrengthHint value={password} />
 									<FormField
 										control={ownerForm.control}
 										name="confirmPassword"
@@ -356,6 +394,34 @@ export function SetupForm() {
 											</FormItem>
 										)}
 									/>
+									{requiresSetupToken && (
+										<FormField
+											control={ownerForm.control}
+											name="setupToken"
+											render={({ field }) => (
+												<FormItem>
+													<FormLabel>Setup token</FormLabel>
+													<FormControl>
+														<Input
+															placeholder="Printed by the installer"
+															autoComplete="off"
+															spellCheck={false}
+															className="font-mono"
+															disabled={ownerCreated}
+															{...field}
+														/>
+													</FormControl>
+													<p className="text-xs text-muted-foreground">
+														This instance requires the token from{" "}
+														<code className="font-mono">NIXPLOY_SETUP_TOKEN</code> (
+														<code className="font-mono">/etc/nixploy/.env</code>) to claim the first
+														admin account.
+													</p>
+													<FormMessage />
+												</FormItem>
+											)}
+										/>
+									)}
 									<div className="flex gap-2">
 										<Button
 											type="button"

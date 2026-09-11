@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { members } from "../../db/schema";
@@ -7,6 +8,12 @@ import { ORG_ROLE_RANK, type OrgRole } from "./roles";
 /**
  * Capability catalog — fixed vocabulary for org-scoped authorization.
  * Groups drive the Members UI; ids are stable (stored in capability_overrides).
+ *
+ * `minRole` marks capabilities that reach the shared host or the organization
+ * itself: they can never be handed to a lower-ranked member through a
+ * capability overlay (`organization.setMemberCapabilities`), only earned by
+ * the role. Capabilities without `minRole` are freely delegable within the
+ * granter's own set.
  */
 export const CAPABILITY_CATALOG = [
 	// Projects & services
@@ -114,6 +121,7 @@ export const CAPABILITY_CATALOG = [
 		group: "Infrastructure",
 		label: "Manage servers",
 		description: "Add, test, and remove remote Docker Swarm nodes.",
+		minRole: "admin",
 	},
 	{
 		id: "registries.manage",
@@ -150,6 +158,7 @@ export const CAPABILITY_CATALOG = [
 		group: "Infrastructure",
 		label: "Docker control center",
 		description: "Inspect and mutate host containers, images, volumes, and Swarm.",
+		minRole: "admin",
 	},
 	{
 		id: "notifications.manage",
@@ -163,12 +172,14 @@ export const CAPABILITY_CATALOG = [
 		group: "Organization",
 		label: "Manage members",
 		description: "Invite members and edit per-member capability overlays.",
+		minRole: "admin",
 	},
 	{
 		id: "settings.manage",
 		group: "Organization",
 		label: "Organization settings",
 		description: "Change org name, quotas, branding, and server AI settings.",
+		minRole: "admin",
 	},
 	{
 		id: "audit.read",
@@ -202,6 +213,24 @@ export function capabilityMeta(id: OrgCapability) {
 	}
 	return entry;
 }
+
+/**
+ * Minimum org role a capability may be delegated to, or `null` when the
+ * capability carries no rank floor. Enforced by
+ * `organization.setMemberCapabilities` for both `grant` and `revoke`.
+ */
+export function capabilityMinRole(id: OrgCapability): OrgRole | null {
+	const entry = CAPABILITY_CATALOG.find((item) => item.id === id) as
+		| { minRole?: OrgRole }
+		| undefined;
+	return entry?.minRole ?? null;
+}
+
+/** Capabilities that may not be granted below their `minRole`. */
+export const RANK_BOUND_CAPABILITIES = CAPABILITY_CATALOG.filter(
+	(entry): entry is (typeof CAPABILITY_CATALOG)[number] & { minRole: OrgRole } =>
+		"minRole" in entry,
+).map((entry) => entry.id) as OrgCapability[];
 
 /** Baseline capabilities implied by each org role (before member overrides). */
 export const ROLE_CAPABILITIES: Record<OrgRole, readonly OrgCapability[]> = {
@@ -288,6 +317,55 @@ export function effectiveCapabilities(
 	return base;
 }
 
+// ── per-request capability scope (API keys) ─────────────────────────────────
+//
+// An API-key caller is not the owner: the key's scope (and the org it is bound
+// to) reduce what `assertCapability` / `hasCapability` may see for the duration
+// of one request. `assertCapability(userId, orgId, cap)` is called from ~100
+// places with no request handle, so the overlay travels in an
+// AsyncLocalStorage store that `buildApiKeyContext` enters once per request.
+// Cookie sessions never enter it and behave exactly as before.
+
+export interface CapabilityScope {
+	/** Capability ceiling — the member's own set is intersected with this. */
+	allowed: ReadonlySet<OrgCapability>;
+	/** When set, no capability resolves outside this organization. */
+	organizationId?: string | null;
+	/** Human-readable source, for error messages ("API key scope: read"). */
+	label?: string;
+}
+
+const capabilityScopeStorage = new AsyncLocalStorage<CapabilityScope>();
+
+/** The scope in force for the current request, if any. */
+export function currentCapabilityScope(): CapabilityScope | undefined {
+	return capabilityScopeStorage.getStore();
+}
+
+/**
+ * Run `fn` with a capability ceiling in force.
+ *
+ * `buildApiKeyContext` cannot install the scope itself (`enterWith` from an
+ * async callee does not reach the awaiting caller once Node switches to the
+ * async-context-frame implementation), so it *carries* the scope on the tRPC
+ * context and `protectedProcedure` enters it around the procedure. Non-tRPC
+ * key callers (the deploy webhook) wrap their own work with this directly.
+ */
+export function runWithCapabilityScope<T>(scope: CapabilityScope, fn: () => T): T {
+	return capabilityScopeStorage.run(scope, fn);
+}
+
+/** Intersect a resolved capability set with the request scope, if any. */
+function applyCapabilityScope(
+	capabilities: OrgCapability[],
+	organizationId: string,
+): OrgCapability[] {
+	const scope = capabilityScopeStorage.getStore();
+	if (!scope) return capabilities;
+	if (scope.organizationId && scope.organizationId !== organizationId) return [];
+	return capabilities.filter((capability) => scope.allowed.has(capability));
+}
+
 export async function getMemberCapabilities(
 	userId: string,
 	organizationId: string,
@@ -301,9 +379,10 @@ export async function getMemberCapabilities(
 	});
 	if (!membership) return null;
 	const overrides = parseCapabilityOverrides(membership.capabilityOverrides);
-	const capabilities = [
-		...effectiveCapabilities(membership.role, overrides),
-	].sort() as OrgCapability[];
+	const capabilities = applyCapabilityScope(
+		[...effectiveCapabilities(membership.role, overrides)].sort() as OrgCapability[],
+		organizationId,
+	);
 	return { role: membership.role, capabilities, overrides };
 }
 
@@ -327,6 +406,12 @@ export async function assertCapability(
 ): Promise<void> {
 	const ok = await hasCapability(userId, organizationId, capability);
 	if (!ok) {
+		const scope = currentCapabilityScope();
+		if (scope?.label) {
+			throw forbidden(
+				`This action requires the "${capability}" capability, outside this ${scope.label}`,
+			);
+		}
 		throw forbidden(`This action requires the "${capability}" capability`);
 	}
 }
