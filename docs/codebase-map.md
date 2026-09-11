@@ -11,13 +11,20 @@ Snapshot: 2026-09-10, branch `chore/sprint-1-hygiene` (on top of `main` @ `07ab3
 ## 1. Process topology
 
 ```
-apps/web/server.ts  (tsx, custom Node http server)
+apps/web/server.ts  (tsx, custom Node http server)            role `all` | `panel`
 ├─ next()                      UI + route handlers under apps/web/src/app
-├─ setupWebSocketServer()      packages/server/src/ws/index.ts  (/ws/*)
+├─ setupWebSocketServer()      packages/server/src/ws/index.ts  (/ws/*, incl. /ws/events push)
+├─ startEventBridge()          modules/deployment/notify.ts (LISTEN nixploy_events → local emitter)
+└─ startBackgroundWork()       only for role `all` — everything below
+apps/web/worker.ts  (tsx)                                        role `worker` | (inlined for `all`)
 ├─ recoverInterruptedDeployments()   modules/deployment/recovery.ts
-├─ initBackgroundSchedules()   7 cron registries (see §6)
-└─ initTraefik()               modules/traefik/setup.ts (skipped when NIXPLOY_DISABLE_TRAEFIK_BOOT=1 or no docker socket)
+├─ startQueueLoop()            modules/deployment/queue.ts (woken by NOTIFY nixploy_deploy_queued)
+├─ initBackgroundSchedules()   9 cron registries (see §6)
+├─ initTraefik()               modules/traefik/setup.ts (skipped when NIXPLOY_DISABLE_TRAEFIK_BOOT=1 or no docker socket)
+└─ node:http on PORT (3001)    /api/health, /api/ready, /api/version
 ```
+
+**Process roles.** `NIXPLOY_ROLE` = `all` (default, one process) | `panel` | `worker`, parsed only in `lib/role.ts` (`isPanelRole` / `isWorkerRole` / `isSplitRole`; unknown → `all`). The split is opt-in (`install.sh --split-worker`, `NIXPLOY_SPLIT_WORKER=1`) and coordinated over Postgres `LISTEN/NOTIFY` (`db/listen.ts`: `nixploy_deploy_queued`, `nixploy_deploy_cancel`, `nixploy_events`; wire envelope `{o: origin, e: frame}` so a publisher drops its own echo). The entrypoint migrates for `all`/`worker` and skips for `panel` (whose `/api/ready` answers 503 while the schema is behind). Detail: `docs/deployment-flow.md` → "Process roles and the worker service".
 
 Boot order: `app.prepare()` → WS attach → deployment recovery → crons → Traefik → `listen(0.0.0.0:3000)`. `HOSTNAME` is deliberately ignored (Swarm sets it to the container id). Production image entrypoint (`docker/entrypoint.sh`) runs `docker/migrate.mjs` (Drizzle migrator with its own `node_modules` in `/app/migrate-deps`) before `pnpm --filter @nixploy/web exec tsx server.ts`.
 
@@ -69,7 +76,7 @@ Exports (`package.json#exports`): `.` (db, auth, encryption, exec), `./db`, `./s
 
 ### `lib/`
 
-`auth.ts` (better-auth config: drizzle adapter, bcrypt, rate limits, org plugin with capability-gated hooks, admin, twoFactor, apiKey; `databaseHooks` for first-admin gate with advisory lock, session org backfill, audit of member/invite events; dynamic `trustedOrigins` from web-server settings), `org-roles.ts` (better-auth AC roles), `api-key-context.ts` (shared REST/MCP auth → synthetic session), `encryption.ts`, `logger.ts` (`createLogger(subsystem)`, `LOG_LEVEL`, `LOG_FORMAT=json`).
+`role.ts` (`NIXPLOY_ROLE` parsing — the only place that reads it), `auth.ts` (better-auth config: drizzle adapter, bcrypt, rate limits, org plugin with capability-gated hooks, admin, twoFactor, apiKey; `databaseHooks` for first-admin gate with advisory lock, session org backfill, audit of member/invite events; dynamic `trustedOrigins` from web-server settings), `org-roles.ts` (better-auth AC roles), `api-key-context.ts` (shared REST/MCP auth → synthetic session), `encryption.ts`, `logger.ts` (`createLogger(subsystem)`, `LOG_LEVEL`, `LOG_FORMAT=json`).
 
 ### `trpc/`
 
@@ -99,11 +106,11 @@ Router → module map:
 
 ### `utils/`
 
-`exec.ts` (`execAsync`, `execAsyncRemote`, `execAsyncWithStdin` — string or Buffer stdin, TOFU host-key pinning under `<config>/ssh/pinned-hosts/<serverId>.pub` with the legacy `known_hosts/` dir read as fallback; git clones with custom keys use the `<config>/ssh/git_known_hosts` file via `StrictHostKeyChecking=accept-new`), `rate-limit.ts` (in-memory sliding window; trusts `X-Forwarded-For` only with `TRUSTED_PROXIES`), `public-url.ts` (the single outbound/SSRF guard: IP classification, the instance `allowPrivateEgress` toggle, address-pinned `pinnedFetch`/`safeFetch`, `assertSafeGitRef`, `redactSensitiveText`), `validators.ts` (docker image refs incl. private-registry hosts, hostnames, ports, …).
+`exec.ts` (`execAsync`, `execAsyncRemote`, `execAsyncWithStdin` — string or Buffer stdin, TOFU host-key pinning under `<config>/ssh/pinned-hosts/<serverId>.pub` with the legacy `known_hosts/` dir read as fallback; git clones with custom keys use the `<config>/ssh/git_known_hosts` file via `StrictHostKeyChecking=accept-new`), `ssh-pool.ts` (one ssh2 `Client` per managed server on `globalThis`, bounded channels + FIFO queue, keepalive, idle close, per-server circuit breaker, TOFU host-key pinning — `exec.ts` re-exports the pin helpers; nothing else may construct an ssh2 client except `ws/server-terminal.ts`), `fan-out.ts` (`groupByServer` / `mapWithConcurrency` / `forEachServerGroup` for the crons), `ttl-cache.ts` (TTL + single-flight cache; the docker-listing instance lives in `modules/docker/containers.ts` as `dockerListingCache` / `invalidateDockerListings`), `rate-limit.ts` (in-memory sliding window; trusts `X-Forwarded-For` only with `TRUSTED_PROXIES` and a trusted socket peer via `x-nixploy-peer-ip`), `public-url.ts` (the single outbound/SSRF guard: IP classification, the instance `allowPrivateEgress` toggle, address-pinned `pinnedFetch`/`safeFetch`, `assertSafeGitRef`, `redactSensitiveText`), `validators.ts` (docker image refs incl. private-registry hosts, hostnames, ports, …).
 
 ### `ws/`
 
-`index.ts` (routes, heartbeat 30 s, Origin check against the trusted origins, leaves non-Nixploy upgrades to Next HMR), `auth.ts`, `access.ts` (org resolution incl. the 2FA gate, capability checks, container-label ownership for control-center streams), `deployment-logs.ts` (replay file + follow `deploymentEvents`), `docker-logs.ts`, `docker-stats.ts`, `docker-terminal.ts` (exec into container), `docker.ts`, `utils.ts`.
+`index.ts` (routes, heartbeat 30 s, Origin check against the trusted origins, leaves non-Nixploy upgrades to Next HMR), `auth.ts`, `access.ts` (org resolution incl. the 2FA gate, capability checks, container-label ownership for control-center streams), `events.ts` (`/ws/events` — one org-scoped push stream per tab: deployment, queue and service-status frames), `deployment-logs.ts` (replay file + follow `deploymentEvents`; in role `panel` woken by a 500 ms `fs.stat` of the log file instead), `docker-logs.ts`, `docker-stats.ts`, `docker-terminal.ts` (exec into container), `docker.ts`, `utils.ts`.
 
 ## 4. Deploy pipeline in one screen
 
@@ -152,7 +159,7 @@ ssh/                      git-over-ssh keys (<sshKeyId>.pem), pinned-hosts/<serv
 
 Helpers: `modules/deployment/paths.ts` (canonical `getConfigDir`, apps, logs, ssh, cache), `modules/compose/paths.ts`, `modules/traefik/paths.ts` (both re-export `getConfigDir`), `modules/application/paths.ts` (files dir, canonical `getSwarmNetwork`, wildcard domain).
 
-## 6. Background jobs (registered in `apps/web/server.ts`)
+## 6. Background jobs (registered in `apps/web/worker.ts#startBackgroundWork`, inlined by `server.ts` for role `all`)
 
 | Job | Where | Cadence |
 | --- | --- | --- |
@@ -180,6 +187,15 @@ Helpers: `modules/deployment/paths.ts` (canonical `getConfigDir`, apps, logs, ss
 | `NIXPLOY_DEPLOY_CONCURRENCY` | queue | per-server parallel deploys (default 1; the SQL claim's `NOT EXISTS` mutex keeps one app from building twice at once whatever the value) |
 | `NIXPLOY_COMMAND_TIMEOUT_MS` | exec, docker | local spawn hard timeout, process tree killed on expiry (default 30 min; fallback for SSH too) |
 | `NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS` | exec | SSH command hard timeout (default 30 min) |
+| `NIXPLOY_SSH_MAX_CHANNELS` | ssh-pool | concurrent channels on a server's pooled SSH connection (default 8; OpenSSH `MaxSessions` is 10). Extra callers queue FIFO instead of opening a second connection |
+| `NIXPLOY_SSH_IDLE_MS` | ssh-pool | close a pooled connection with no channels after this (default 5 min); re-dialled on demand |
+| `NIXPLOY_SSH_CONNECT_TIMEOUT_MS` | ssh-pool | handshake budget, was the per-command ssh2 `readyTimeout` (default 30 s) |
+| `NIXPLOY_SSH_BREAKER_FAILURES` | ssh-pool | consecutive connect failures before a server is short-circuited as unreachable (default 3) |
+| `NIXPLOY_SSH_BREAKER_MS` | ssh-pool | how long commands fail fast while the breaker is open (default 5 min). A success, `server.testConnection` or `server.setup` closes it |
+| `NIXPLOY_FANOUT_CONCURRENCY` | fan-out | servers a cron pass talks to at once (default 4) |
+| `NIXPLOY_ROLE` | lib/role.ts | `all` (default) / `panel` / `worker` — see §1 |
+| `NIXPLOY_SPLIT_WORKER` | install.sh | `1` creates the `nixploy-worker` Swarm service and runs the panel as `panel` |
+| `NIXPLOY_WORKER_MEMORY` | install.sh | memory limit of the worker service |
 | `NIXPLOY_DEPLOY_TIMEOUT_MS` | worker | per-deployment deadline, job cancelled + row `error` on expiry (default 60 min) |
 | `NIXPLOY_CONVERGENCE_TIMEOUT_MS` | 180000 | Budget for a rollout to produce one running task before the deployment is marked `done`; tasks that keep failing fail the deployment with the engine's reason (`deployment/swarm.ts` `waitForServiceConvergence`). |
 | `NIXPLOY_SHUTDOWN_GRACE_MS` | server.ts, queue | SIGTERM wait for running deploys before they are cancelled (default 60 s; keep below Swarm `--stop-grace-period`). Rows still `queued` are never touched — the next boot claims them |
