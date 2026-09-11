@@ -12,15 +12,29 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  *   hits its deadline, is cancelled by the user, or interrupted by shutdown.
  */
 
-const { updates, deploymentRow, applicationLookup } = vi.hoisted(() => ({
+const { updates, deploymentRow, applicationLookup, hooks, pipeline } = vi.hoisted(() => ({
 	updates: [] as Array<{ table: string; values: Record<string, unknown> }>,
 	deploymentRow: {
 		value: null as null | { deploymentId: string; status: string; logPath: string },
 		/** Thrown once by the next deployments.findFirst call. */
 		error: null as null | Error,
 	},
-	/** When set, applications.findFirst never resolves (simulates a hung DB/SSH step). */
-	applicationLookup: { hang: false },
+	/**
+	 * `hang`: applications.findFirst never resolves (a hung DB/SSH step).
+	 * `row`: the application the pipeline should see; null → the job fails fast.
+	 */
+	applicationLookup: { hang: false, row: null as null | Record<string, unknown> },
+	/** Deploy-hook doubles, so a hook can be made to fail on demand. */
+	hooks: {
+		runPreDeployHook: vi.fn(async () => {}),
+		runPostDeployHook: vi.fn(async () => {}),
+		runComposeExecHook: vi.fn(async () => {}),
+	},
+	/** Everything the application pipeline touches between source and rollout. */
+	pipeline: {
+		buildImage: vi.fn(async () => "app:latest"),
+		upsertSwarmService: vi.fn(async () => {}),
+	},
 }));
 
 vi.mock("../../db", () => ({
@@ -39,7 +53,9 @@ vi.mock("../../db", () => ({
 			// No application row → the job fails fast, exercising the catch path.
 			applications: {
 				findFirst: () =>
-					applicationLookup.hang ? new Promise<never>(() => {}) : Promise.resolve(undefined),
+					applicationLookup.hang
+						? new Promise<never>(() => {})
+						: Promise.resolve(applicationLookup.row ?? undefined),
 			},
 			previewDeployments: { findFirst: async () => null },
 			compose: { findFirst: async () => undefined },
@@ -75,6 +91,38 @@ vi.mock("../compose/service", () => ({
 	resyncComposeDomains: vi.fn(async () => {}),
 }));
 
+// Pipeline doubles: the hook tests below care about ORDER (hook before
+// rollout), not about docker actually running anything.
+vi.mock("./hooks", async (importOriginal) => ({
+	...(await importOriginal<typeof import("./hooks")>()),
+	runPreDeployHook: hooks.runPreDeployHook,
+	runPostDeployHook: hooks.runPostDeployHook,
+	runComposeExecHook: hooks.runComposeExecHook,
+}));
+vi.mock("./builders", () => ({ buildImage: pipeline.buildImage }));
+vi.mock("./swarm", () => ({ upsertSwarmService: pipeline.upsertSwarmService }));
+vi.mock("./network", () => ({ ensureEnvironmentNetwork: vi.fn(async () => "env-net") }));
+vi.mock("./sources", () => ({
+	cloneGitSource: vi.fn(async () => "/tmp/code"),
+	extractDropSource: vi.fn(async () => "/tmp/code"),
+	pullDockerImage: vi.fn(async () => "nginx:latest"),
+	readCheckoutCommit: vi.fn(async () => null),
+	resolveImageDigest: vi.fn(async () => null),
+	resolveRegistryAuth: vi.fn(async () => null),
+}));
+vi.mock("./push", () => ({
+	pushBuiltImage: vi.fn(async () => "ghcr.io/acme/app:dep"),
+	resolvePushRegistry: vi.fn(async () => null),
+}));
+vi.mock("./rollback", () => ({
+	pinRollbackImage: vi.fn(async () => "app:dep"),
+	recordRollback: vi.fn(async () => {}),
+}));
+vi.mock("../traefik/config-writer", () => ({
+	writeAppTraefikConfig: vi.fn(async () => {}),
+	DEFAULT_CONTAINER_PORT: 80,
+}));
+
 import type { QueueJob } from "./queue";
 import type { ApplicationRow } from "./sources";
 
@@ -99,6 +147,7 @@ describe("worker preview status bookkeeping", () => {
 		updates.length = 0;
 		deploymentRow.error = null;
 		applicationLookup.hang = false;
+		applicationLookup.row = null;
 		deploymentRow.value = { deploymentId: "d1", status: "running", logPath: "/tmp/test.log" };
 	});
 
@@ -327,6 +376,110 @@ describe("buildPreviewDeployTarget", () => {
 				branch: "fork:forker/app:fix",
 			}),
 		).toMatchObject({ owner: "forker", repository: "app", branch: "fix", gitBranch: "fix" });
+	});
+});
+
+describe("deploy hooks", () => {
+	const applicationRow = (overrides: Record<string, unknown> = {}) => ({
+		applicationId: "app-hooks",
+		appName: "hooked-app",
+		name: "Hooked",
+		sourceType: "docker",
+		dockerImage: "traefik/whoami:v1.10.1",
+		env: null,
+		buildArgs: null,
+		buildPath: "/",
+		buildType: "nixpacks",
+		previewEnv: null,
+		preDeployCommand: null,
+		postDeployCommand: null,
+		pushRegistryId: null,
+		registryId: null,
+		environmentId: "env-1",
+		serverId: null,
+		environment: {
+			environmentId: "env-1",
+			name: "production",
+			env: null,
+			project: { projectId: "proj-1", env: null, organizationId: "org-1" },
+		},
+		...overrides,
+	});
+
+	const hookJob = (deploymentId: string): QueueJob => ({
+		deploymentId,
+		appName: "hooked-app",
+		applicationId: "app-hooks",
+		type: "deploy",
+		serverId: null,
+	});
+
+	beforeEach(async () => {
+		vi.resetModules();
+		delete (globalThis as { __nixployDeploymentQueue?: unknown }).__nixployDeploymentQueue;
+		updates.length = 0;
+		deploymentRow.error = null;
+		applicationLookup.hang = false;
+		applicationLookup.row = null;
+		hooks.runPreDeployHook.mockReset().mockResolvedValue(undefined);
+		hooks.runPostDeployHook.mockReset().mockResolvedValue(undefined);
+		pipeline.upsertSwarmService.mockReset().mockResolvedValue(undefined);
+		delete process.env.NIXPLOY_DEPLOY_TIMEOUT_MS;
+	});
+
+	it("runs the pre-deploy hook before the rollout and the post-deploy hook after it", async () => {
+		applicationLookup.row = applicationRow({
+			preDeployCommand: "npm run migrate",
+			postDeployCommand: "npm run warm",
+		});
+		deploymentRow.value = { deploymentId: "d-hook", status: "running", logPath: "/tmp/h.log" };
+		const queue = await import("./queue");
+		await import("./worker");
+		queue.startJob("__local__", hookJob("d-hook"));
+		for (let i = 0; i < 8; i += 1) await flush();
+
+		expect(hooks.runPreDeployHook).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({ appName: "hooked-app", command: "npm run migrate" }),
+		);
+		expect(pipeline.upsertSwarmService).toHaveBeenCalled();
+		expect(hooks.runPostDeployHook).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({ appName: "hooked-app", command: "npm run warm" }),
+		);
+		expect(terminalUpdate()?.values.status).toBe("done");
+	});
+
+	it("aborts the deployment when the pre-deploy hook exits non-zero, leaving the rollout untouched", async () => {
+		applicationLookup.row = applicationRow({ preDeployCommand: "exit 3" });
+		hooks.runPreDeployHook.mockRejectedValue(
+			new Error("Pre-deploy command failed: Command failed (exit 3)"),
+		);
+		deploymentRow.value = { deploymentId: "d-fail", status: "running", logPath: "/tmp/f.log" };
+		const queue = await import("./queue");
+		await import("./worker");
+		queue.startJob("__local__", hookJob("d-fail"));
+		for (let i = 0; i < 8; i += 1) await flush();
+
+		// The previous version keeps serving: the swarm service was never touched.
+		expect(pipeline.upsertSwarmService).not.toHaveBeenCalled();
+		expect(hooks.runPostDeployHook).not.toHaveBeenCalled();
+		const terminal = terminalUpdate();
+		expect(terminal?.values.status).toBe("error");
+		expect(terminal?.values.errorMessage).toContain("Pre-deploy command failed");
+	});
+
+	it("skips both hooks when the application has none configured", async () => {
+		applicationLookup.row = applicationRow();
+		deploymentRow.value = { deploymentId: "d-none", status: "running", logPath: "/tmp/n.log" };
+		const queue = await import("./queue");
+		await import("./worker");
+		queue.startJob("__local__", hookJob("d-none"));
+		for (let i = 0; i < 8; i += 1) await flush();
+
+		expect(hooks.runPreDeployHook).not.toHaveBeenCalled();
+		expect(hooks.runPostDeployHook).not.toHaveBeenCalled();
+		expect(pipeline.upsertSwarmService).toHaveBeenCalled();
 	});
 });
 

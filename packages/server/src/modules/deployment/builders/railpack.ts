@@ -2,28 +2,17 @@ import { commandExists } from "../docker";
 import { shellQuote } from "../paths";
 import { prepareBuildCache } from "./cache";
 import type { BuildInput } from "./index";
-import { ensureToolBinary, type PinnedTool } from "./tools";
+import { ensureToolBinary, RAILPACK_TOOL } from "./tools";
 
 /**
  * Railpack builder (Railway's nixpacks successor). No public railpack
  * docker image exists, so the CLI runs on the host: an installed
  * `railpack` binary wins, otherwise a pinned release is downloaded into
- * the tools dir. Managed servers must have railpack installed themselves.
+ * the tools dir. On managed servers the binary is installed by
+ * `cluster/servers.ts#setupServer` (the version lives in `./tools.ts`).
  */
 
 const BUILDKIT_CONTAINER = "nixploy-buildkit";
-
-const RAILPACK: PinnedTool = {
-	name: "railpack",
-	version: "v0.35.0",
-	repo: "railwayapp/railpack",
-	targets: {
-		"darwin-arm64": "arm64-apple-darwin",
-		"darwin-x64": "x86_64-apple-darwin",
-		"linux-arm64": "arm64-unknown-linux-musl",
-		"linux-x64": "x86_64-unknown-linux-musl",
-	},
-};
 
 export async function buildWithRailpack(input: BuildInput, imageTag: string): Promise<void> {
 	const { ctx, buildDir, env } = input;
@@ -33,10 +22,10 @@ export async function buildWithRailpack(input: BuildInput, imageTag: string): Pr
 	if (await commandExists(ctx.serverId, "railpack")) {
 		binary = "railpack";
 	} else if (!ctx.serverId) {
-		binary = await ensureToolBinary(ctx, RAILPACK);
+		binary = await ensureToolBinary(ctx, RAILPACK_TOOL);
 	} else {
 		throw new Error(
-			"railpack is not installed on this server — install it (https://railpack.com) or choose another builder",
+			"railpack is not installed on this server — run Server → Setup again to install the pinned builders, install it manually (https://railpack.com), or choose another builder",
 		);
 	}
 

@@ -72,6 +72,10 @@ export const incidents = pgTable(
 		metadata: jsonb("metadata").$type<Record<string, unknown>>(),
 		createdAt: createdAt(),
 		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+		/** Someone is on it: acknowledged incidents stay open but stop nagging. */
+		acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+		/** User id of the acknowledger (never shown on the public status page). */
+		acknowledgedBy: text("acknowledged_by"),
 	},
 	(table) => [index("incident_org_created_idx").on(table.organizationId, table.createdAt.desc())],
 );
@@ -124,6 +128,33 @@ export const uptimeProbes = pgTable("uptime_probe", {
 	lastError: text("last_error"),
 	createdAt: createdAt(),
 });
+
+/**
+ * Public status page for an organization: one row per org, addressed by an
+ * unguessable `token` at `/status/<token>`. `probeIds` selects which uptime
+ * probes are published — nothing else of the org is ever exposed.
+ */
+export const statusPages = pgTable("status_page", {
+	statusPageId: idColumn("status_page_id"),
+	organizationId: text("organization_id")
+		.notNull()
+		.references(() => organizations.id, { onDelete: "cascade" })
+		.unique(),
+	/** Rotatable secret in the URL; the page has no other authentication. */
+	token: text("token").notNull().unique(),
+	title: text("title").notNull().default("Status"),
+	/** `uptime_probe` ids published on the page (order preserved). */
+	probeIds: jsonb("probe_ids").$type<string[]>().notNull().default([]),
+	enabled: boolean("enabled").notNull().default(true),
+	createdAt: createdAt(),
+});
+
+export const statusPagesRelations = relations(statusPages, ({ one }) => ({
+	organization: one(organizations, {
+		fields: [statusPages.organizationId],
+		references: [organizations.id],
+	}),
+}));
 
 export const alertRulesRelations = relations(alertRules, ({ one }) => ({
 	organization: one(organizations, {

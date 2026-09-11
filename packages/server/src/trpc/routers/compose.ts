@@ -170,6 +170,10 @@ export const composeRouter = router({
 				bitbucketId: z.string().nullish(),
 				giteaId: z.string().nullish(),
 				isolatedDeployment: z.boolean().optional(),
+				// Shell commands run in a container of the project around the
+				// rollout; capped like every other tenant text blob.
+				preDeployCommand: textBlobSchema.nullish(),
+				postDeployCommand: textBlobSchema.nullish(),
 				/** Generated server-side when isolation is enabled without one. */
 				suffix: z
 					.string()
@@ -201,6 +205,11 @@ export const composeRouter = router({
 						message: error instanceof Error ? error.message : "Invalid git URL",
 					});
 				}
+			}
+
+			if (input.preDeployCommand !== undefined || input.postDeployCommand !== undefined) {
+				// Hook commands are shell and are redacted like other secrets.
+				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			}
 
 			await assertServerInOrganization(input.serverId, organizationId);

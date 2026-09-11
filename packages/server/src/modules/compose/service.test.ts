@@ -68,6 +68,8 @@ const privilegedRow = {
 	gitlabId: null,
 	bitbucketId: null,
 	giteaId: null,
+	preDeployCommand: null,
+	postDeployCommand: null,
 	isolatedDeployment: false,
 	suffix: "",
 	hostPrivileged: true,

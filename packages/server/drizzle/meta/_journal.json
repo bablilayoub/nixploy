@@ -169,6 +169,13 @@
       "when": 1789132613831,
       "tag": "0023_clear_joseph",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789134330762,
+      "tag": "0024_condemned_tarot",
+      "breakpoints": true
     }
   ]
 }

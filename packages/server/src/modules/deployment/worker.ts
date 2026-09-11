@@ -27,8 +27,16 @@ import type { DeploymentContext } from "./context";
 import { CommandError, spawnTargeted } from "./docker";
 import { mergeEnv, parseEnv, resolveBuildEnv } from "./env";
 import { type DeploymentStatus, deploymentEvents } from "./events";
+import {
+	DEFAULT_HOOK_CONVERGENCE_MS,
+	runComposeExecHook,
+	runPostDeployHook,
+	runPreDeployHook,
+} from "./hooks";
 import { DeploymentLogger } from "./logger";
+import { ensureEnvironmentNetwork } from "./network";
 import type { CommitInfo } from "./provenance";
+import { pushBuiltImage, resolvePushRegistry } from "./push";
 import {
 	DeploymentCancelledError,
 	getCancellationReason,
@@ -166,19 +174,29 @@ type PreviewRow = typeof previewDeployments.$inferSelect;
  * under the preview's appName, pointed at the PR's source. Fork PRs fetch
  * the provider's PR head ref from the base repo, or (Bitbucket) clone the
  * head repository itself — see `preview/source-ref.ts`.
+ *
+ * `previewEnv` is folded into the service-level `env` layer, so the inherited
+ * project → environment values still apply and the preview-only keys win
+ * (product audit, Previews row). Everything downstream — the swarm spec's
+ * `mergeEnv`, the deploy hooks — reads the target row, so nothing else has to
+ * know previews exist.
  */
 export function buildPreviewDeployTarget(
 	application: ApplicationRow,
 	preview: Pick<PreviewRow, "appName" | "branch">,
 ): ApplicationRow {
+	const env = application.previewEnv
+		? mergeEnv(application.env, application.previewEnv)
+		: application.env;
 	const source = parsePreviewSourceRef(preview.branch);
 	if (!source) {
-		return { ...application, appName: preview.appName };
+		return { ...application, appName: preview.appName, env };
 	}
 	if (source.kind === "fork") {
 		return {
 			...application,
 			appName: preview.appName,
+			env,
 			owner: source.owner,
 			repository: source.repository,
 			branch: source.branch,
@@ -186,7 +204,7 @@ export function buildPreviewDeployTarget(
 		};
 	}
 	const ref = source.kind === "ref" ? source.ref : source.branch;
-	return { ...application, appName: preview.appName, branch: ref, gitBranch: ref };
+	return { ...application, appName: preview.appName, env, branch: ref, gitBranch: ref };
 }
 
 async function runApplicationJob(
@@ -223,10 +241,11 @@ async function runApplicationJob(
 	// Register every secret that could leak into command output: the fully
 	// merged env (project → environment → application), not just the app's own.
 	// The logger applies a redaction floor (short/numeric values are skipped).
+	// `deployTarget.env` already carries `previewEnv` for preview jobs.
 	const mergedEnv = mergeEnv(
 		application.environment.project.env,
 		application.environment.env,
-		application.env,
+		deployTarget.env,
 	);
 	for (const [, value] of parseEnv(mergedEnv)) ctx.logger.addSecret(value);
 	for (const [, value] of parseEnv(application.buildArgs)) ctx.logger.addSecret(value);
@@ -277,7 +296,45 @@ async function runApplicationJob(
 	}
 	checkpoint();
 
-	await upsertSwarmService(ctx, deployTarget, imageTag, { preview: Boolean(preview) });
+	// Pre-deploy hook (migrations): a throwaway container from the image this
+	// job produced, on the service's own overlay, BEFORE the rollout — so a
+	// non-zero exit aborts here and the previous version keeps serving.
+	// Previews are excluded on purpose: a PR's migration must never run
+	// against the environment the production service shares.
+	const preDeployCommand = application.preDeployCommand?.trim();
+	if (!preview && preDeployCommand) {
+		const network = await ensureEnvironmentNetwork(application.environment);
+		await runPreDeployHook(ctx, {
+			appName: application.appName,
+			deploymentId: job.deploymentId,
+			image: imageTag,
+			network,
+			env: mergedEnv,
+			command: preDeployCommand,
+		});
+		checkpoint();
+	}
+
+	// Registry push: the built tag only exists on the node that built it, so
+	// a replica scheduled anywhere else cannot pull it. Docker-source apps
+	// already run a registry reference and previews are throwaway.
+	let pushedRef: string | null = null;
+	if (!preview && application.sourceType !== "docker" && application.pushRegistryId) {
+		const pushRegistry = await resolvePushRegistry(application.pushRegistryId);
+		if (pushRegistry) {
+			pushedRef = await pushBuiltImage(ctx, {
+				appName: application.appName,
+				deploymentId: job.deploymentId,
+				localTag: imageTag,
+				registryRow: pushRegistry,
+			});
+		}
+		checkpoint();
+	}
+
+	await upsertSwarmService(ctx, deployTarget, pushedRef ?? imageTag, {
+		preview: Boolean(preview),
+	});
 	checkpoint();
 
 	if (preview) {
@@ -292,6 +349,18 @@ async function runApplicationJob(
 			.set({ previewStatus: "done" })
 			.where(eq(previewDeployments.previewDeploymentId, preview.previewDeploymentId));
 	} else {
+		// Post-deploy hook: exec into one task of the rollout we just made,
+		// waiting out the swarm's convergence first. A failure here IS a
+		// deploy failure — the new version is serving, but broken.
+		const postDeployCommand = application.postDeployCommand?.trim();
+		if (postDeployCommand) {
+			await runPostDeployHook(ctx, {
+				appName: application.appName,
+				command: postDeployCommand,
+			});
+			checkpoint();
+		}
+
 		// Traefik routing — best effort, the domain router re-syncs anyway.
 		await syncApplicationTraefik(application).catch((error) => {
 			ctx.logger.line(
@@ -302,7 +371,9 @@ async function runApplicationJob(
 		// Pin the running image as a rollback target (best effort: a failed
 		// pin must not fail a deployment that is already serving traffic).
 		try {
-			const pinned = await pinRollbackImage(ctx, application, job.deploymentId, imageTag);
+			const pinned = await pinRollbackImage(ctx, application, job.deploymentId, imageTag, {
+				pushedRef,
+			});
 			await recordRollback({
 				applicationId: application.applicationId,
 				appName: application.appName,
@@ -350,6 +421,19 @@ async function runComposeJob(
 	for (const secret of files.secrets) ctx.logger.addSecret(secret);
 	checkpoint();
 
+	// Pre-deploy hook. Compose has no image Nixploy built, so the command runs
+	// inside a container of the project that is CURRENTLY running (skipped on
+	// the first deploy). Aborting here leaves that project untouched.
+	const preDeployCommand = row.preDeployCommand?.trim();
+	if (preDeployCommand) {
+		await runComposeExecHook(ctx, {
+			appName: row.appName,
+			command: preDeployCommand,
+			label: "Pre-deploy command",
+		});
+		checkpoint();
+	}
+
 	// The compose module owns the command line (stack vs compose, env
 	// isolation, rendered file) — see modules/compose/commands.ts.
 	const command = buildComposeDeployCommand(row, files);
@@ -366,6 +450,18 @@ async function runComposeJob(
 	// The runtime tab's container list is cached for 10 s — a deploy replaces
 	// every container, so drop it now instead of showing the old ids.
 	invalidateComposeContainers(row.appName, row.serverId);
+
+	// Post-deploy hook: the project is up, wait for a container and exec.
+	const postDeployCommand = row.postDeployCommand?.trim();
+	if (postDeployCommand) {
+		await runComposeExecHook(ctx, {
+			appName: row.appName,
+			command: postDeployCommand,
+			label: "Post-deploy command",
+			waitMs: DEFAULT_HOOK_CONVERGENCE_MS,
+		});
+		checkpoint();
+	}
 
 	// Per-service Traefik configs for compose domains — best effort.
 	await resyncComposeDomains(row.composeId).catch((error) => {
@@ -568,6 +664,7 @@ async function processJob(job: QueueJob): Promise<void> {
 				checkpoint();
 				const proc = await spawnTargeted(opts?.onPrimary ? null : job.serverId, command, {
 					cwd: opts?.cwd,
+					timeoutMs: opts?.timeoutMs,
 					onData: (chunk) => log.write(chunk),
 				});
 				registerDeploymentProcess(job.deploymentId, proc);

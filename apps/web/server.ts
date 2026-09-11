@@ -75,6 +75,24 @@ async function initBackgroundSchedules() {
 			},
 		],
 		[
+			"docker image auto-update",
+			async () => {
+				const { initImageAutoUpdate } = await import(
+					"../../packages/server/src/modules/deployment/auto-update"
+				);
+				await initImageAutoUpdate();
+			},
+		],
+		[
+			"platform alerts",
+			async () => {
+				const { startPlatformAlerts } = await import(
+					"../../packages/server/src/modules/monitoring/platform-alerts"
+				);
+				startPlatformAlerts();
+			},
+		],
+		[
 			"uptime probes",
 			async () => {
 				const { initUptimeProbes } = await import(

@@ -157,8 +157,15 @@ mid-finalization. `unhandledRejection` is logged and survived;
      `ghcr.io/railwayapp/nixpacks` image is only a Nix base, and railpack
      ships no public image). Railpack additionally needs a BuildKit daemon —
      a shared `nixploy-buildkit` container is auto-provisioned and passed as
-     `BUILDKIT_HOST`.      Managed servers must have the CLIs installed
-     themselves (clear error otherwise). **Metrics history** only samples
+     `BUILDKIT_HOST`. On managed servers the pinned binaries are installed by
+     **Server → Setup** (`modules/cluster/servers.ts`, same versions as the
+     local tools dir, into `/usr/local/bin`); the builders still refuse with
+     a clear error — "run Server → Setup again" — if the binary is missing,
+     which is what a server added before this existed looks like. The install
+     is skipped entirely with `NIXPLOY_SKIP_REMOTE_BUILDERS=1` (air-gapped
+     hosts), and a failed install never fails the setup: Docker and the Swarm
+     join are what matter, the outcome is recorded in the setup log.
+     **Metrics history** only samples
      local services; managed-server services are live-WS only
      (see `docs/observability.md`).
    - `dockerfile-builder.ts` — build the repo's Dockerfile (path/context/stage,
@@ -182,17 +189,46 @@ mid-finalization. `unhandledRejection` is logged and survived;
    - `static.ts` — publish dir served by an nginx image (SPA rewrite
      optional).
    - docker-image source skips the build entirely.
-4. **Swarm upsert** (`swarm.ts`): create or update the swarm service
+4. **Pre-deploy hook** (`hooks.ts`), when `preDeployCommand` is set: the
+   command runs in a throwaway container from the image this job just
+   produced — `docker run --rm --network <environment overlay> --env-file
+   <0600 temp file> <hardening flags> <image> sh -c '<command>'` — with the
+   merged runtime env in the file (never on argv, where `ps` would show it)
+   and the same capability drop / `no-new-privileges` / pids ceiling the
+   Swarm spec applies. A non-zero exit **aborts the deployment before the
+   rollout**, so the previous version keeps serving. Time-boxed by
+   `NIXPLOY_HOOK_TIMEOUT_MS` (default 10 minutes); the container is force
+   removed and the env file deleted whatever happens. Previews never run it:
+   a pull request's migration must not touch the environment production
+   shares. **The image must contain a shell**: the hook overrides the image's
+   ENTRYPOINT with `sh` (otherwise an image like `traefik/whoami` would take
+   `sh -c '<command>'` as flags to its own binary, ignore them and serve until
+   the deadline). A scratch or distroless image therefore exits 127, and the
+   deployment says exactly that.
+5. **Registry push** (`push.ts`), when `pushRegistryId` is set and the image
+   was built here: `docker login` (password over stdin) → `docker tag
+   <local> <imagePrefix>/<appName>:<short deployment id>` → `docker push`.
+   The pushed reference is what the Swarm spec runs and what the rollback pin
+   records, so a replica scheduled on another node — or a rollback after a
+   node swap — can actually pull it. Without it a built image only exists on
+   the node that built it.
+6. **Swarm upsert** (`swarm.ts`): create or update the swarm service
    `<appName>` — always through the primary manager — with the image, env,
    mounts, ports, resources, on the shared overlay network; services pinned
    to a managed server get a `node.id==<swarmNodeId>` placement constraint
    (merged with the user's own constraints). Same-tag redeploys bump `TaskTemplate.ForceUpdate` —
    otherwise the spec is identical, the swarm no-ops, and tasks keep
    running the OLD image.
-5. **Traefik sync** (`modules/application/service.ts#syncApplicationTraefik`):
+7. **Post-deploy hook** (`hooks.ts`), when `postDeployCommand` is set: wait
+   for the rollout to converge (a running task container carrying
+   `com.docker.swarm.service.name=<appName>`, polled for up to two minutes),
+   then `docker exec <container> sh -c '<command>'`. A non-zero exit fails
+   the deployment — the new version is serving, but the job says it is
+   broken. No running container after the wait is a warning, not a failure.
+8. **Traefik sync** (`modules/application/service.ts#syncApplicationTraefik`):
    rewrite `<appName>.yml` from the service's domain rows (see
    `docs/domains-traefik.md`).
-6. **Finalize**: the row arrives already `running` (the claim set that and
+9. **Finalize**: the row arrives already `running` (the claim set that and
    `startedAt` atomically — the worker only mirrors it onto the service row);
    on success it becomes `done` (with `logPath`), service status →
    `done`; on failure → `error`, with the error message on the deployment row.
@@ -269,6 +305,14 @@ services that have a domain also join `nixploy-network` with the alias
 domains uses `<appName>-<service>-1` container names. `resyncComposeDomains`
 writes Traefik config per exposed service.
 
+Compose services carry the same `preDeployCommand` / `postDeployCommand`
+columns, but with different semantics: there is no image Nixploy built, so
+both hooks `docker exec` into a container of the project (matched on
+`com.docker.compose.project` or `com.docker.stack.namespace`). The pre hook
+therefore runs against the project that is **currently** running — it is
+skipped with a log line on the first deploy — and aborting there leaves that
+project untouched; the post hook runs against the project just brought up.
+
 ## Database lifecycle
 
 `modules/databases/engine.ts`: create inserts the row with generated
@@ -320,6 +364,17 @@ through `modules/backups` to S3 destinations on schedules.
   none of its published ports, volumes or file/bind mounts, as a single
   replica; their Traefik file forwards to the parent domain's container port
   and carries the parent's basic-auth and redirects.
+- Three knobs shape them (application columns, Previews tab):
+  `previewEnv` is merged **over** the service env layer for preview jobs only
+  (`buildPreviewDeployTarget`), so a PR can point at a scratch database while
+  still inheriting the project/environment values; `previewLimit` (default 3,
+  `0` = unlimited) caps how many previews one application may have at once —
+  a webhook over the cap is **refused**, never silently evicting a preview
+  somebody is still reviewing, and the pull request gets a comment saying so;
+  `previewTtlHours` stamps `expiresAt` on previews the webhook creates, which
+  the hourly maintenance cron then tears down. An explicit `expiresAt` (manual
+  create) wins over the default. Deploy hooks do not run for previews. Compose
+  services have no previews at all.
 - Every terminal deploy status fans out to the organization's notification
   channels (`emitDeployNotification`: `appDeploy` on success, `appBuildError`
   on failure; cancellations stay silent). Compose deploys notify too.
@@ -328,10 +383,22 @@ through `modules/backups` to S3 destinations on schedules.
   it runs as a `rollback` row. Built images are retagged
   `appName:<version>` (`version` = first 12 chars of the deployment id;
   `appName:latest` is overwritten by the next build), docker sources record
-  the registry digest. The newest 5 pins per app are kept; older rows and
-  their local tags are pruned. Rolling back repoints the swarm service at the
-  pinned image — no source fetch, no build — and records a `Rollback`
-  deployment with a short log.
+  the registry digest. When the build was pushed (`pushRegistryId`), the
+  pushed reference is pinned instead — it is immutable *and* reachable from
+  every node, unlike a local tag. The newest 5 pins per app are kept; older
+  rows and their local tags are pruned. Pushed tags are **not** pruned from
+  the remote registry: deleting a manifest is not portable across registry
+  implementations, so retention there is the operator's job. Rolling back
+  repoints the swarm service at the pinned image — no source fetch, no build —
+  and records a `Rollback` deployment with a short log.
+- **Docker-image auto-update** (`modules/deployment/auto-update.ts`, hourly
+  cron at :07, registered in `apps/web/server.ts`): every docker-source
+  application with `autoUpdateImage` gets its tag's remote digest resolved
+  (`modules/updates/registry.ts#fetchRemoteDigest`, anonymous OCI token
+  client) and a `system`-triggered redeploy queued when that digest differs
+  from the one the last successful deployment recorded in `commit_sha`. An
+  application that never deployed successfully is skipped, and a private image
+  the anonymous client cannot read is quietly left alone.
 
 ## Boot & maintenance
 

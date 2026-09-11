@@ -10,7 +10,7 @@ import { previewHost } from "./index";
  */
 export const PREVIEW_COMMENT_MARKER = "<!-- nixploy-preview -->";
 
-export type PreviewCommentStatus = "deploying" | "removed" | "awaiting_approval";
+export type PreviewCommentStatus = "deploying" | "removed" | "awaiting_approval" | "limit_reached";
 
 export type RenderPreviewCommentInput = {
 	pullRequestNumber: string;
@@ -30,6 +30,16 @@ export function renderPreviewComment({
 			"### Nixploy preview removed",
 			"",
 			`The preview environment for PR #${pullRequestNumber} has been torn down.`,
+		].join("\n");
+	}
+	if (status === "limit_reached") {
+		return [
+			PREVIEW_COMMENT_MARKER,
+			"### Nixploy preview not created",
+			"",
+			`This application has reached its preview limit, so no preview was built for PR #${pullRequestNumber}.`,
+			"",
+			"Close or delete another preview, or raise the limit on the application's Previews tab.",
 		].join("\n");
 	}
 	if (status === "awaiting_approval") {

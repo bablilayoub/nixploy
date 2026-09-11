@@ -141,6 +141,7 @@ export function SourceConfig({ application }: { application: Application }) {
 	const [dockerUsername, setDockerUsername] = useState(application.username ?? "");
 	const [dockerPassword, setDockerPassword] = useState("");
 	const [registryId, setRegistryId] = useState(application.registryId ?? NONE);
+	const [autoUpdateImage, setAutoUpdateImage] = useState(application.autoUpdateImage);
 	// Only mirror server values while the user is not editing — background
 	// refetches (deploy status flips, window focus) must not wipe typed text.
 	const [dirty, setDirty] = useState(false);
@@ -175,6 +176,7 @@ export function SourceConfig({ application }: { application: Application }) {
 		setDockerUsername(application.username ?? "");
 		setDockerPassword("");
 		setRegistryId(application.registryId ?? NONE);
+		setAutoUpdateImage(application.autoUpdateImage);
 	}, [
 		dirty,
 		serverWatchPaths,
@@ -192,6 +194,7 @@ export function SourceConfig({ application }: { application: Application }) {
 		application.dockerImage,
 		application.username,
 		application.registryId,
+		application.autoUpdateImage,
 	]);
 
 	/**
@@ -326,6 +329,7 @@ export function SourceConfig({ application }: { application: Application }) {
 					username: dockerUsername || null,
 					password: dockerPassword || null,
 					registryId: registryId === NONE ? null : registryId,
+					autoUpdateImage,
 				});
 				break;
 			case "drop":
@@ -459,6 +463,20 @@ export function SourceConfig({ application }: { application: Application }) {
 									))}
 								</SelectContent>
 							</Select>
+						</div>
+						<div className="flex items-center justify-between rounded-md border p-3">
+							<div className="flex flex-col gap-1">
+								<Label htmlFor="auto-update-image">Auto-update image</Label>
+								<p className="text-xs text-muted-foreground">
+									Check this tag&apos;s digest hourly and redeploy when it moves. Public registries
+									only — a private image needs credentials the check cannot use.
+								</p>
+							</div>
+							<Switch
+								id="auto-update-image"
+								checked={autoUpdateImage}
+								onCheckedChange={edit(setAutoUpdateImage)}
+							/>
 						</div>
 						{registryId === NONE && (
 							<div className="grid gap-4 sm:grid-cols-2">

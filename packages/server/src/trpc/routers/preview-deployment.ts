@@ -8,6 +8,7 @@ import {
 	createPreviewDeployment,
 	deletePreviewDeployment,
 	PreviewConflictError,
+	PreviewLimitError,
 	PreviewNotFoundError,
 	redeployPreviewDeployment,
 	withPreviewDomain,
@@ -81,6 +82,9 @@ export const previewDeploymentRouter = router({
 			} catch (error) {
 				if (error instanceof PreviewConflictError) {
 					throw new TRPCError({ code: "CONFLICT", message: error.message });
+				}
+				if (error instanceof PreviewLimitError) {
+					throw new TRPCError({ code: "PRECONDITION_FAILED", message: error.message });
 				}
 				if (error instanceof PreviewNotFoundError) {
 					throw new TRPCError({ code: "NOT_FOUND", message: error.message });

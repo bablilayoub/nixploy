@@ -3,6 +3,7 @@ import { db } from "../../db";
 import { servers, webServerSettings } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { getSwarmNetwork } from "../application/paths";
+import { installRemoteBuilderCommand, REMOTE_BUILDER_TOOLS } from "../deployment/builders/tools";
 import { shellQuote } from "../deployment/paths";
 import { forbidden, notFound, preconditionFailed } from "../errors";
 import { REMOTE_TRAEFIK_DIR } from "../traefik/paths";
@@ -163,6 +164,12 @@ export async function getPrimarySwarmJoinCommand(role: SwarmRole): Promise<strin
 	return `docker swarm join --token ${token} ${addr}${port}`;
 }
 
+/** Image `buildWithPack` runs on a managed server (no `pack` binary there). */
+const PACK_IMAGE = "buildpacksio/pack:latest";
+
+/** Escape hatch for air-gapped hosts: skip the GitHub release downloads. */
+export const SKIP_REMOTE_BUILDERS_ENV = "NIXPLOY_SKIP_REMOTE_BUILDERS";
+
 export interface SetupServerOptions {
 	/**
 	 * The caller ran `assertInstanceAdmin` for this request. Joining the
@@ -198,6 +205,21 @@ export async function setupServer(serverId: string, options: SetupServerOptions)
 		}
 	};
 
+	/**
+	 * Same as `step` but a failure only lands in the log. Used for the builder
+	 * installs: a GitHub outage or an unsupported architecture must not undo a
+	 * successful Docker install and Swarm join — the operator sees the error in
+	 * the setup log and the builder itself says "run Server → Setup again".
+	 */
+	const optionalStep = async (label: string, command: string): Promise<boolean> => {
+		try {
+			await step(label, command);
+			return true;
+		} catch {
+			return false;
+		}
+	};
+
 	try {
 		const server = await db.query.servers.findFirst({
 			where: eq(servers.serverId, serverId),
@@ -221,6 +243,30 @@ else
   echo "docker already installed: $(docker version --format '{{.Server.Version}}' 2>/dev/null)"
 fi`,
 		);
+
+		// Builders (product audit, Deploy #3). Nixpacks is the DEFAULT build
+		// type, and `buildWithNixpacks` refuses to run on a server that does
+		// not have it — a fresh remote could not build anything before this.
+		// The `pack` image covers both buildpack builders (they always run
+		// through the container on a remote), railpack pulls buildkit itself.
+		if (process.env[SKIP_REMOTE_BUILDERS_ENV] === "1") {
+			log.push(`# builder install skipped (${SKIP_REMOTE_BUILDERS_ENV}=1)`);
+		} else {
+			for (const tool of REMOTE_BUILDER_TOOLS) {
+				const ok = await optionalStep(`install ${tool.name}`, installRemoteBuilderCommand(tool));
+				log.push(
+					ok
+						? `# ${tool.name} ${tool.version} ready`
+						: `# warning: ${tool.name} ${tool.version} was not installed — builds using it will fail on this server`,
+				);
+			}
+			const packOk = await optionalStep("pull pack image", `docker pull ${shellQuote(PACK_IMAGE)}`);
+			log.push(
+				packOk
+					? `# ${PACK_IMAGE} pulled`
+					: `# warning: could not pull ${PACK_IMAGE} — the buildpack builders will pull it on first use`,
+			);
+		}
 
 		const swarmState = (
 			await execAsyncRemote(

@@ -1,12 +1,17 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { StatusPageCard } from "@/components/monitoring/status-page-card";
 import { QueryState } from "@/components/query-state";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { SettingsSection, SettingsStack } from "@/components/settings/settings-section";
 import { PageHeader } from "@/components/shell";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DateTime } from "@/components/ui/date-time";
+import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -16,6 +21,8 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 /**
@@ -24,6 +31,8 @@ import { useTRPC } from "@/lib/trpc";
  */
 export function IncidentsView({ embedded = false }: { embedded?: boolean } = {}) {
 	const trpc = useTRPC();
+	const queryClient = useQueryClient();
+	const { can } = useCapabilities();
 	const [projectId, setProjectId] = useState<string>("all");
 	const projects = useQuery(trpc.project.all.queryOptions());
 	const incidents = useQuery(
@@ -32,6 +41,28 @@ export function IncidentsView({ embedded = false }: { embedded?: boolean } = {})
 			limit: 100,
 		}),
 	);
+
+	const refresh = () =>
+		queryClient.invalidateQueries({ queryKey: trpc.observability.incidents.queryKey() });
+
+	const acknowledge = useMutation(
+		trpc.observability.acknowledgeIncident.mutationOptions({
+			onSuccess: () => refresh(),
+			onError: (error) => toastError(error),
+		}),
+	);
+	const resolve = useMutation(
+		trpc.observability.resolveIncident.mutationOptions({
+			onSuccess: () => refresh(),
+			onError: (error) => toastError(error),
+		}),
+	);
+
+	const canManage = can("project.write");
+	const manageHint = canManage ? undefined : capabilityHint("project.write");
+	/** Which incident id each mutation is currently working on. */
+	const busyAck = acknowledge.isPending ? acknowledge.variables?.incidentId : null;
+	const busyResolve = resolve.isPending ? resolve.variables?.incidentId : null;
 
 	return (
 		<div className="flex flex-col gap-8">
@@ -84,7 +115,14 @@ export function IncidentsView({ embedded = false }: { embedded?: boolean } = {})
 							{(incidents.data ?? []).map((incident) => (
 								<div key={incident.incidentId} className="rounded-lg border px-4 py-3 text-sm">
 									<div className="flex flex-wrap items-center justify-between gap-2">
-										<p className="font-medium">{incident.title}</p>
+										<div className="flex min-w-0 flex-wrap items-center gap-2">
+											<p className="font-medium">{incident.title}</p>
+											{incident.resolvedAt ? (
+												<Badge variant="secondary">Resolved</Badge>
+											) : incident.acknowledgedAt ? (
+												<Badge variant="outline">Acknowledged</Badge>
+											) : null}
+										</div>
 										<DateTime
 											value={incident.createdAt}
 											className="text-xs text-muted-foreground"
@@ -100,11 +138,49 @@ export function IncidentsView({ embedded = false }: { embedded?: boolean } = {})
 											{incident.message}
 										</p>
 									)}
+									{incident.resolvedAt ? (
+										<p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+											<Check className="size-3.5" />
+											Resolved <DateTime value={incident.resolvedAt} />
+										</p>
+									) : (
+										<div className="mt-3 flex flex-wrap gap-2">
+											{incident.acknowledgedAt ? null : (
+												<DisabledHint hint={manageHint}>
+													<Button
+														size="sm"
+														variant="outline"
+														disabled={!canManage || busyAck === incident.incidentId}
+														onClick={() => acknowledge.mutate({ incidentId: incident.incidentId })}
+													>
+														{busyAck === incident.incidentId && (
+															<Loader2 className="size-3.5 animate-spin" />
+														)}
+														Acknowledge
+													</Button>
+												</DisabledHint>
+											)}
+											<DisabledHint hint={manageHint}>
+												<Button
+													size="sm"
+													disabled={!canManage || busyResolve === incident.incidentId}
+													onClick={() => resolve.mutate({ incidentId: incident.incidentId })}
+												>
+													{busyResolve === incident.incidentId && (
+														<Loader2 className="size-3.5 animate-spin" />
+													)}
+													Resolve
+												</Button>
+											</DisabledHint>
+										</div>
+									)}
 								</div>
 							))}
 						</div>
 					</QueryState>
 				</SettingsSection>
+
+				<StatusPageCard />
 
 				<LogSearchSection />
 			</SettingsStack>

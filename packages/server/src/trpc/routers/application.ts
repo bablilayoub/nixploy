@@ -314,8 +314,17 @@ export const applicationRouter = router({
 				autoDeploy: z.boolean().optional(),
 				isPreviewDeploymentsActive: z.boolean().optional(),
 				previewForksRequireApproval: z.boolean().optional(),
+				previewEnv: textBlobSchema.nullable().optional(),
+				previewLimit: z.number().int().min(0).max(100).optional(),
+				previewTtlHours: z.number().int().min(1).max(8760).nullable().optional(),
 				watchPaths: watchPathsSchema.nullable().optional(),
 				buildArgs: textBlobSchema.nullable().optional(),
+				// Hooks are shell commands; the blob cap keeps a 200 MB paste out
+				// of the column and off every deploy's command line.
+				preDeployCommand: textBlobSchema.nullable().optional(),
+				postDeployCommand: textBlobSchema.nullable().optional(),
+				pushRegistryId: z.string().nullable().optional(),
+				autoUpdateImage: z.boolean().optional(),
 				serverId: z.string().nullable().optional(),
 				...swarmSpecFields,
 			}),
@@ -323,12 +332,31 @@ export const applicationRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.write");
-			if (input.buildArgs !== undefined) {
+			if (
+				input.buildArgs !== undefined ||
+				input.previewEnv !== undefined ||
+				input.preDeployCommand !== undefined ||
+				input.postDeployCommand !== undefined
+			) {
 				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			}
 			await assertApplicationAccess(input.applicationId, organizationId);
 			await assertServerInOrganization(input.serverId, organizationId);
 			await assertHardeningOverrideAllowed(ctx.session, input);
+			if (input.pushRegistryId) {
+				const reg = await db.query.registry.findFirst({
+					where: eq(registry.registryId, input.pushRegistryId),
+				});
+				if (!reg || reg.organizationId !== organizationId) {
+					throw new TRPCError({ code: "NOT_FOUND", message: "Registry not found" });
+				}
+				if (!reg.imagePrefix?.trim()) {
+					throw new TRPCError({
+						code: "PRECONDITION_FAILED",
+						message: `Registry "${reg.registryName}" has no image prefix — set one before using it as a push target`,
+					});
+				}
+			}
 
 			const { applicationId, ...data } = input;
 			const application = await updateApplication(applicationId, data);
@@ -556,6 +584,7 @@ export const applicationRouter = router({
 				username: z.string().nullable().optional(),
 				password: z.string().nullable().optional(),
 				registryId: z.string().nullable().optional(),
+				autoUpdateImage: z.boolean().optional(),
 				autoDeploy: z.boolean().optional(),
 				isPreviewDeploymentsActive: z.boolean().optional(),
 				previewForksRequireApproval: z.boolean().optional(),
@@ -606,6 +635,7 @@ export const applicationRouter = router({
 				username: null,
 				password: null,
 				registryId: null,
+				autoUpdateImage: false,
 			};
 
 			const data: Partial<typeof applications.$inferInsert> = {
@@ -620,6 +650,9 @@ export const applicationRouter = router({
 					? { previewForksRequireApproval: input.previewForksRequireApproval }
 					: {}),
 				...(input.watchPaths !== undefined ? { watchPaths: input.watchPaths } : {}),
+				// Only meaningful for the docker source; the switch below clears
+				// it when another source type is selected.
+				...(input.autoUpdateImage !== undefined ? { autoUpdateImage: input.autoUpdateImage } : {}),
 			};
 
 			switch (input.sourceType) {

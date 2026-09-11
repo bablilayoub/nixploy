@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Cpu, HardDrive, MemoryStick } from "lucide-react";
+import { AlertTriangle, Cpu, HardDrive, MemoryStick, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -50,6 +50,92 @@ function HostStat({
 				<div className="h-1" />
 			)}
 			{hint ? <p className="truncate text-[11px] text-muted-foreground">{hint}</p> : null}
+		</div>
+	);
+}
+
+interface PlatformAlertRow {
+	kind: string;
+	severity: string;
+	summary: string;
+}
+
+/** Mirrors `platformAlertLabel` in `modules/notifications/platform.ts`. */
+const PLATFORM_ALERT_LABELS: Record<string, string> = {
+	hostDisk: "Disk usage",
+	queueStalled: "Deploy queue stalled",
+	certExpiry: "Certificate expiring",
+	platformService: "Platform service degraded",
+	instanceBackup: "Instance backup missing",
+};
+
+/**
+ * Platform self-alerts (disk, deploy queue age, certificate expiry, platform
+ * services, instance backups). The 5-minute cron
+ * (`modules/monitoring/platform-alerts.ts`) persists the state and
+ * `GET /api/ready` reports it, so this card reads the readiness endpoint
+ * directly instead of adding a router procedure that would run the probes a
+ * second time. Instance admins only — it is about the host, not the org.
+ */
+function PlatformAlertsCard() {
+	const query = useQuery({
+		queryKey: ["platform-alerts"],
+		refetchInterval: 60_000,
+		queryFn: async (): Promise<{ evaluatedAt: string | null; alerts: PlatformAlertRow[] }> => {
+			// /api/ready answers 503 while a check fails; the body is still the report.
+			const response = await fetch("/api/ready", { cache: "no-store" });
+			const report = (await response.json()) as {
+				checks?: { platform?: { evaluatedAt?: string | null; alerts?: PlatformAlertRow[] } };
+			};
+			return {
+				evaluatedAt: report.checks?.platform?.evaluatedAt ?? null,
+				alerts: report.checks?.platform?.alerts ?? [],
+			};
+		},
+	});
+
+	// Nothing to say while it loads, when the cron has not run yet, or when the
+	// platform is healthy — this card exists to be empty.
+	if (query.isPending || query.isError) return null;
+	const alerts = query.data?.alerts ?? [];
+	if (alerts.length === 0) {
+		if (!query.data?.evaluatedAt) return null;
+		return (
+			<div className="flex items-center gap-2 rounded-xl border bg-card px-4 py-3">
+				<ShieldCheck className="size-4 shrink-0 text-muted-foreground" />
+				<p className="text-sm text-muted-foreground">
+					No platform alerts — disk, deploy queue, certificates, platform services and instance
+					backups are healthy.
+				</p>
+			</div>
+		);
+	}
+
+	return (
+		<div className="overflow-hidden rounded-xl border bg-card">
+			<div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+				<AlertTriangle className="size-4 shrink-0 text-destructive" />
+				<p className="text-sm font-medium">Platform alerts</p>
+				<span className="text-xs text-muted-foreground">{alerts.length} active</span>
+			</div>
+			<ul className="divide-y">
+				{alerts.map((alert) => (
+					<li key={`${alert.kind}:${alert.severity}`} className="flex gap-3 px-4 py-2.5">
+						<span
+							className={cn(
+								"mt-1 size-2 shrink-0 rounded-full",
+								alert.severity === "critical" ? "bg-destructive" : "bg-amber-500",
+							)}
+						/>
+						<div className="min-w-0">
+							<p className="text-sm font-medium">
+								{PLATFORM_ALERT_LABELS[alert.kind] ?? alert.kind}
+							</p>
+							<p className="text-xs text-muted-foreground">{alert.summary}</p>
+						</div>
+					</li>
+				))}
+			</ul>
 		</div>
 	);
 }
@@ -176,6 +262,8 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 					) : null}
 				</QueryState>
 			) : null}
+
+			{showHost ? <PlatformAlertsCard /> : null}
 
 			<div className="grid items-start gap-5 lg:grid-cols-[minmax(16rem,18rem)_minmax(0,1fr)]">
 				<aside className="rounded-lg border">

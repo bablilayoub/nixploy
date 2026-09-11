@@ -5,6 +5,21 @@ import { assertSafeOutboundUrl } from "../../utils/public-url";
 import { notFound } from "../errors";
 import { notifyEvent } from "../notifications";
 
+export {
+	disableStatusPage,
+	enableStatusPage,
+	generateStatusPageToken,
+	getStatusPage,
+	loadPublicStatus,
+	type PublicStatus,
+	type PublicStatusIncident,
+	type PublicStatusProbe,
+	rotateStatusPageToken,
+	STATUS_PAGE_UPTIME_DAYS,
+	type StatusPageRow,
+	uptimePercentFromEvents,
+} from "./status-page";
+
 export async function recordIncident(input: {
 	organizationId: string;
 	projectId?: string | null;
@@ -50,6 +65,69 @@ export async function listIncidents(
 		orderBy: [desc(incidents.createdAt)],
 		limit,
 	});
+}
+
+/** Load one incident, scoped to the caller's organization. */
+async function findIncident(incidentId: string, organizationId: string) {
+	const row = await db.query.incidents.findFirst({
+		where: and(eq(incidents.incidentId, incidentId), eq(incidents.organizationId, organizationId)),
+	});
+	if (!row) throw notFound("Incident not found");
+	return row;
+}
+
+/**
+ * Acknowledge an incident: someone is looking at it. The row stays OPEN
+ * (`resolvedAt` untouched) — acknowledging is the "seen it" signal, resolving
+ * is the "fixed it" one, and conflating them loses the distinction the
+ * timeline is for.
+ */
+export async function acknowledgeIncident(input: {
+	incidentId: string;
+	organizationId: string;
+	userId: string;
+}) {
+	const existing = await findIncident(input.incidentId, input.organizationId);
+	// Idempotent: re-acknowledging keeps the first acknowledger and time.
+	if (existing.acknowledgedAt) return existing;
+	const [row] = await db
+		.update(incidents)
+		.set({ acknowledgedAt: new Date(), acknowledgedBy: input.userId })
+		.where(eq(incidents.incidentId, existing.incidentId))
+		.returning();
+	return row ?? existing;
+}
+
+/**
+ * Resolve an incident. An optional note is kept in `metadata.resolutionNote`
+ * — never in `title`, which the public status page renders.
+ */
+export async function resolveIncident(input: {
+	incidentId: string;
+	organizationId: string;
+	userId: string;
+	note?: string | null;
+}) {
+	const existing = await findIncident(input.incidentId, input.organizationId);
+	if (existing.resolvedAt) return existing;
+	const metadata = {
+		...(existing.metadata ?? {}),
+		...(input.note?.trim()
+			? { resolutionNote: input.note.trim(), resolvedBy: input.userId }
+			: { resolvedBy: input.userId }),
+	};
+	const [row] = await db
+		.update(incidents)
+		.set({
+			resolvedAt: new Date(),
+			// Resolving without acknowledging first still records who saw it.
+			acknowledgedAt: existing.acknowledgedAt ?? new Date(),
+			acknowledgedBy: existing.acknowledgedBy ?? input.userId,
+			metadata,
+		})
+		.where(eq(incidents.incidentId, existing.incidentId))
+		.returning();
+	return row ?? existing;
 }
 
 export async function listAlertRules(

@@ -2,6 +2,7 @@
 
 import { buildCommitUrl, DeploymentHistory } from "@/components/services/deployment-history";
 
+import { DeployCommandsCard } from "./deploy-commands-card";
 import { DeployHookCard } from "./deploy-hook-card";
 
 import type { Application } from "./types";
@@ -27,6 +28,7 @@ export function DeploymentsTab({ application }: { application: Application }) {
 					)
 				}
 			/>
+			<DeployCommandsCard application={application} />
 			<DeployHookCard appName={application.appName} />
 		</div>
 	);

@@ -4,11 +4,18 @@ import { z } from "zod";
 import { db } from "../../db";
 import { domains } from "../../db/schema";
 import { assertApplicationAccess, getServiceContext } from "../../modules/application";
+import { auditFromSession } from "../../modules/audit";
 import {
+	acknowledgeIncident,
 	deleteAlertRule,
+	disableStatusPage,
+	enableStatusPage,
+	getStatusPage,
 	listAlertRules,
 	listIncidents,
 	listUptimeProbes,
+	resolveIncident,
+	rotateStatusPageToken,
 	searchServiceLogs,
 	setUptimeProbe,
 	upsertAlertRule,
@@ -63,6 +70,134 @@ export const observabilityRouter = router({
 				limit: input?.limit,
 			});
 		}),
+
+	/**
+	 * Mark an incident as seen. Gated by `project.write` like every other
+	 * observability mutation (there is no separate observability capability);
+	 * audited so the timeline can say who picked it up.
+	 */
+	acknowledgeIncident: protectedProcedure
+		.input(z.object({ incidentId: z.string().min(1) }))
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await resolveCallerOrganizationId(
+				ctx.session.user.id,
+				ctx.session.session.activeOrganizationId,
+			);
+			await assertCapability(ctx.session.user.id, organizationId, "project.write");
+			const incident = await acknowledgeIncident({
+				incidentId: input.incidentId,
+				organizationId,
+				userId: ctx.session.user.id,
+			});
+			await auditFromSession(ctx, organizationId, {
+				action: "incident.acknowledge",
+				targetType: "incident",
+				targetId: incident.incidentId,
+				targetName: incident.title,
+			});
+			return incident;
+		}),
+
+	/** Close an incident, optionally recording what was done about it. */
+	resolveIncident: protectedProcedure
+		.input(
+			z.object({
+				incidentId: z.string().min(1),
+				note: z.string().max(1000).nullish(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await resolveCallerOrganizationId(
+				ctx.session.user.id,
+				ctx.session.session.activeOrganizationId,
+			);
+			await assertCapability(ctx.session.user.id, organizationId, "project.write");
+			const incident = await resolveIncident({
+				incidentId: input.incidentId,
+				organizationId,
+				userId: ctx.session.user.id,
+				note: input.note ?? null,
+			});
+			await auditFromSession(ctx, organizationId, {
+				action: "incident.resolve",
+				targetType: "incident",
+				targetId: incident.incidentId,
+				targetName: incident.title,
+			});
+			return incident;
+		}),
+
+	/** Current status-page configuration for this organization (or null). */
+	statusPage: protectedProcedure.query(async ({ ctx }) => {
+		const organizationId = await resolveCallerOrganizationId(
+			ctx.session.user.id,
+			ctx.session.session.activeOrganizationId,
+		);
+		return getStatusPage(organizationId);
+	}),
+
+	/**
+	 * Publish (or re-publish) probes at `/status/<token>`. Making org data
+	 * readable without authentication is an organization-level decision, so
+	 * this needs `settings.manage` rather than the softer `project.write`.
+	 */
+	enableStatusPage: protectedProcedure
+		.input(
+			z.object({
+				probeIds: z.array(z.string().min(1)).max(100),
+				title: z.string().min(1).max(120).optional(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await resolveCallerOrganizationId(
+				ctx.session.user.id,
+				ctx.session.session.activeOrganizationId,
+			);
+			await assertCapability(ctx.session.user.id, organizationId, "settings.manage");
+			const page = await enableStatusPage({ organizationId, ...input });
+			await auditFromSession(ctx, organizationId, {
+				action: "statusPage.enable",
+				targetType: "statusPage",
+				targetId: page.statusPageId,
+				targetName: page.title,
+				metadata: { probes: page.probeIds.length },
+			});
+			return page;
+		}),
+
+	/** Take the public page offline; the token is kept so the URL can return. */
+	disableStatusPage: protectedProcedure.mutation(async ({ ctx }) => {
+		const organizationId = await resolveCallerOrganizationId(
+			ctx.session.user.id,
+			ctx.session.session.activeOrganizationId,
+		);
+		await assertCapability(ctx.session.user.id, organizationId, "settings.manage");
+		const page = await disableStatusPage(organizationId);
+		await auditFromSession(ctx, organizationId, {
+			action: "statusPage.disable",
+			targetType: "statusPage",
+			targetId: page.statusPageId,
+			targetName: page.title,
+		});
+		return page;
+	}),
+
+	/** Mint a new token, invalidating every URL shared so far. */
+	rotateStatusPageToken: protectedProcedure.mutation(async ({ ctx }) => {
+		const organizationId = await resolveCallerOrganizationId(
+			ctx.session.user.id,
+			ctx.session.session.activeOrganizationId,
+		);
+		await assertCapability(ctx.session.user.id, organizationId, "settings.manage");
+		const page = await rotateStatusPageToken(organizationId);
+		await auditFromSession(ctx, organizationId, {
+			action: "statusPage.rotateToken",
+			targetType: "statusPage",
+			targetId: page.statusPageId,
+			targetName: page.title,
+		});
+		return page;
+	}),
 
 	alertRules: protectedProcedure
 		.input(

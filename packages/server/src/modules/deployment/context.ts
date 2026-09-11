@@ -8,6 +8,12 @@ export interface DeploymentRunOptions {
 	 * manager; builds and clones stay on `serverId`.
 	 */
 	onPrimary?: boolean;
+	/**
+	 * Per-command deadline. Defaults to the spawn helper's own timeout; the
+	 * deploy hooks pass `NIXPLOY_HOOK_TIMEOUT_MS` so a wedged migration cannot
+	 * sit on the queue slot for the whole deployment budget.
+	 */
+	timeoutMs?: number;
 }
 
 /**

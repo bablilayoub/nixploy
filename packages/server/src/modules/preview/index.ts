@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, domains, previewDeployments } from "../../db/schema";
 import { removeApplicationImages, removeSwarmService } from "../application/docker";
@@ -64,6 +64,33 @@ export class PreviewNotFoundError extends DomainError {
 	}
 }
 
+/**
+ * The application already runs `previewLimit` previews. Refusing (rather than
+ * silently evicting the oldest) is the safe default: a PR whose preview is
+ * still under review must not be torn down because a newer PR opened.
+ */
+export class PreviewLimitError extends DomainError {
+	constructor(message: string) {
+		super("PRECONDITION_FAILED", message);
+		this.name = "PreviewLimitError";
+	}
+}
+
+/** `previewLimit <= 0` means "no cap". */
+export function previewLimitReached(current: number, limit: number | null | undefined): boolean {
+	if (!limit || limit <= 0) return false;
+	return current >= limit;
+}
+
+/** Expiry a webhook-created preview inherits from `previewTtlHours`. */
+export function previewExpiryFromTtl(
+	ttlHours: number | null | undefined,
+	now: Date = new Date(),
+): Date | null {
+	if (!ttlHours || ttlHours <= 0) return null;
+	return new Date(now.getTime() + ttlHours * 60 * 60 * 1000);
+}
+
 /** Variant swarm/traefik name for a PR preview: `<appName>-pr-<n>`. */
 export function previewAppName(appName: string, pullRequestNumber: string): string {
 	assertNumericPullRequest(pullRequestNumber);
@@ -116,6 +143,28 @@ export async function createPreviewDeployment(
 		);
 	}
 
+	// Per-application cap (product audit, Previews row): previews inherit the
+	// parent's resources, so an active repo could otherwise fill the node with
+	// one swarm service per open PR.
+	const [live] = await db
+		.select({ value: count() })
+		.from(previewDeployments)
+		.where(eq(previewDeployments.applicationId, application.applicationId));
+	const current = live?.value ?? 0;
+	if (previewLimitReached(current, application.previewLimit)) {
+		// Tell the PR author why nothing was deployed — the webhook itself is
+		// answered with a 200 and nobody reads the panel's logs.
+		const { upsertPreviewComment } = await import("./comment");
+		await upsertPreviewComment({
+			applicationId: application.applicationId,
+			pullRequestNumber: input.pullRequestNumber,
+			status: "limit_reached",
+		}).catch(() => {});
+		throw new PreviewLimitError(
+			`Preview limit reached for "${application.name}": ${current} of ${application.previewLimit} previews already exist. Delete one, or raise the limit on the Previews tab.`,
+		);
+	}
+
 	const host = previewHost(application.appName, input.pullRequestNumber);
 	// The parent's first production domain tells us the container port the
 	// app listens on and which TLS settings to mirror.
@@ -141,7 +190,9 @@ export async function createPreviewDeployment(
 			pullRequestURL: input.pullRequestURL ?? null,
 			pullRequestAuthor: input.pullRequestAuthor ?? null,
 			previewStatus: input.deferDeploy ? "awaiting_approval" : "running",
-			expiresAt: input.expiresAt ?? null,
+			// An explicit expiry (manual create) wins; otherwise the app's
+			// default TTL applies, which is what makes webhook previews expire.
+			expiresAt: input.expiresAt ?? previewExpiryFromTtl(application.previewTtlHours),
 			applicationId: application.applicationId,
 			serverId: application.serverId,
 		})

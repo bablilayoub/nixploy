@@ -37,7 +37,16 @@ export async function pinRollbackImage(
 	application: { appName: string; sourceType: string },
 	deploymentId: string,
 	imageTag: string,
+	options: {
+		/**
+		 * Reference the build was pushed to (`modules/deployment/push.ts`).
+		 * It is already immutable AND reachable from every node, so it beats a
+		 * local `appName:<version>` tag that only exists on the build host.
+		 */
+		pushedRef?: string | null;
+	} = {},
 ): Promise<string> {
+	if (options.pushedRef) return options.pushedRef;
 	if (application.sourceType === "docker") {
 		try {
 			const docker = await getDocker(ctx.serverId);

@@ -26,6 +26,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
@@ -70,6 +71,8 @@ export function GeneralTab({
 	const [branch, setBranch] = useState(compose.branch ?? "");
 	const [composePath, setComposePath] = useState(compose.composePath);
 	const [providerId, setProviderId] = useState(storedProviderId(compose));
+	const [preDeployCommand, setPreDeployCommand] = useState(compose.preDeployCommand ?? "");
+	const [postDeployCommand, setPostDeployCommand] = useState(compose.postDeployCommand ?? "");
 	// Only mirror server values while the user is not editing — the header's
 	// Deploy/Stop invalidate compose.one and a status flip must not wipe the
 	// form (the whole `compose` object changes identity on every refetch).
@@ -98,6 +101,8 @@ export function GeneralTab({
 		setBranch(compose.branch ?? "");
 		setComposePath(compose.composePath);
 		setProviderId(serverProviderId);
+		setPreDeployCommand(compose.preDeployCommand ?? "");
+		setPostDeployCommand(compose.postDeployCommand ?? "");
 	}, [
 		dirty,
 		compose.composeType,
@@ -110,6 +115,8 @@ export function GeneralTab({
 		compose.branch,
 		compose.composePath,
 		serverProviderId,
+		compose.preDeployCommand,
+		compose.postDeployCommand,
 	]);
 
 	/**
@@ -218,6 +225,8 @@ export function GeneralTab({
 			gitlabId: providerIds.gitlab,
 			bitbucketId: providerIds.bitbucket,
 			giteaId: providerIds.gitea,
+			preDeployCommand: preDeployCommand.trim() || null,
+			postDeployCommand: postDeployCommand.trim() || null,
 		});
 	};
 
@@ -268,6 +277,37 @@ export function GeneralTab({
 							</p>
 						</div>
 						<Switch id="auto-deploy" checked={autoDeploy} onCheckedChange={edit(setAutoDeploy)} />
+					</div>
+					<div className="flex flex-col gap-2">
+						<Label htmlFor="compose-pre-deploy">Pre-deploy command</Label>
+						<Textarea
+							id="compose-pre-deploy"
+							className="min-h-16 font-mono text-xs sm:max-w-lg"
+							placeholder="php artisan down"
+							value={preDeployCommand}
+							disabled={!canWrite}
+							onChange={(event) => edit(setPreDeployCommand)(event.target.value)}
+						/>
+						<p className="text-sm text-muted-foreground">
+							Runs in a container of the project that is currently running, before it is replaced
+							(skipped on the first deploy). A non-zero exit aborts the deployment and leaves the
+							running project untouched.
+						</p>
+					</div>
+					<div className="flex flex-col gap-2">
+						<Label htmlFor="compose-post-deploy">Post-deploy command</Label>
+						<Textarea
+							id="compose-post-deploy"
+							className="min-h-16 font-mono text-xs sm:max-w-lg"
+							placeholder="php artisan migrate --force"
+							value={postDeployCommand}
+							disabled={!canWrite}
+							onChange={(event) => edit(setPostDeployCommand)(event.target.value)}
+						/>
+						<p className="text-sm text-muted-foreground">
+							Runs in a container of the project that was just brought up. A non-zero exit marks the
+							deployment failed. Save from the button at the bottom of this page.
+						</p>
 					</div>
 				</div>
 			</SettingsSection>

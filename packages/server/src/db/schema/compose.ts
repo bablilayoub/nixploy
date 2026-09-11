@@ -48,6 +48,16 @@ export const compose = pgTable(
 			onDelete: "set null",
 		}),
 
+		// ── deploy hooks ────────────────────────────────────────────────────────
+		/**
+		 * Shell command run in a throwaway container BEFORE `docker compose up` /
+		 * `stack deploy`. A non-zero exit aborts the deployment and the running
+		 * project is left untouched.
+		 */
+		preDeployCommand: text("pre_deploy_command"),
+		/** Shell command run inside one running project container afterwards. */
+		postDeployCommand: text("post_deploy_command"),
+
 		/** Randomize service/container names to avoid collisions between copies. */
 		isolatedDeployment: boolean("isolated_deployment").notNull().default(false),
 		suffix: text("suffix").notNull().default(""),

@@ -10,9 +10,14 @@ export function redactApplicationSecrets<T>(row: T): T {
 		...source,
 		env: null,
 		buildArgs: null,
+		previewEnv: null,
 		password: null,
 		dockerfile: null,
 		command: null,
+		// Hook commands are shell, and shell carries credentials just as often
+		// as `command` does.
+		preDeployCommand: null,
+		postDeployCommand: null,
 	};
 	const environment = source.environment as
 		| ({ env?: string | null; project?: Record<string, unknown> } & Record<string, unknown>)
@@ -33,6 +38,8 @@ export function redactComposeSecrets<T>(row: T): T {
 		...source,
 		env: null,
 		composeFile: null,
+		preDeployCommand: null,
+		postDeployCommand: null,
 	};
 	const environment = source.environment as
 		| ({ env?: string | null; project?: Record<string, unknown> } & Record<string, unknown>)

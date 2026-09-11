@@ -43,12 +43,29 @@ export const applications = pgTable(
 		isPreviewDeploymentsActive: boolean("is_preview_deployments_active").notNull().default(false),
 		/** Safe default: fork PRs wait for an org member's approval before building. */
 		previewForksRequireApproval: boolean("preview_forks_require_approval").notNull().default(true),
+		/** Preview-only env, merged OVER the inherited runtime env for PR builds. */
+		previewEnv: encryptedText("preview_env"),
+		/** Max simultaneous previews for this app; a webhook over the cap is refused. */
+		previewLimit: integer("preview_limit").notNull().default(3),
+		/** Default expiry handed to webhook-created previews (null = never expire). */
+		previewTtlHours: integer("preview_ttl_hours"),
 		watchPaths: text("watch_paths").array(),
 		// docker source
 		dockerImage: text("docker_image"),
+		/** Poll the registry hourly and redeploy when the tag's digest moved. */
+		autoUpdateImage: boolean("auto_update_image").notNull().default(false),
 		username: text("username"),
 		password: encryptedText("password"),
 		registryId: text("registry_id").references(() => registry.registryId, {
+			onDelete: "set null",
+		}),
+		/**
+		 * Optional push target for BUILT images (`registryId` is the pull side).
+		 * When set the deploy tags the build `<imagePrefix>/<appName>:<version>`,
+		 * pushes it and runs the swarm service from that reference, so a task
+		 * scheduled on another node can pull it.
+		 */
+		pushRegistryId: text("push_registry_id").references(() => registry.registryId, {
 			onDelete: "set null",
 		}),
 		// generic git source
@@ -81,6 +98,16 @@ export const applications = pgTable(
 		/** static build type: directory served by nginx. */
 		publishDirectory: text("publish_directory"),
 		isStaticSpa: boolean("is_static_spa"),
+
+		// ── deploy hooks ────────────────────────────────────────────────────────
+		/**
+		 * Shell command run in a throwaway container from the freshly built
+		 * image BEFORE the rollout (migrations). A non-zero exit aborts the
+		 * deployment and the previous version keeps serving.
+		 */
+		preDeployCommand: text("pre_deploy_command"),
+		/** Shell command run inside one running task AFTER the rollout converged. */
+		postDeployCommand: text("post_deploy_command"),
 
 		// ── swarm tuning (raw dockerode ServiceSpec fragments) ──────────────────
 		healthCheckSwarm: jsonb("health_check_swarm"),
