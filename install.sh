@@ -614,6 +614,7 @@ POSTGRES_PASSWORD=$(random_hex 24)
 POSTGRES_DB=nixploy
 BETTER_AUTH_SECRET=$(random_hex 32)
 BETTER_AUTH_URL=${public_url}
+NIXPLOY_SETUP_TOKEN=$(random_hex 16)
 ENCRYPTION_KEY=$(random_hex 32)
 PORT=3000
 EOF
@@ -1143,7 +1144,13 @@ print_summary() {
 	printf '  %s╰──────────────────────────────────────────────╯%s\n' "${C_GREEN}" "${C_RESET}"
 	printf '\n'
 	printf '   %sCreate your admin account:%s\n' "${C_BOLD}" "${C_RESET}"
-	printf '   %s→%s  %s%s/setup%s\n' "${C_GREEN}" "${C_RESET}" "${C_BOLD}${C_CYAN}" "${url}" "${C_RESET}"
+	if [ -n "${NIXPLOY_SETUP_TOKEN:-}" ]; then
+		printf '   %s→%s  %s%s/setup?token=%s%s\n' "${C_GREEN}" "${C_RESET}" "${C_BOLD}${C_CYAN}" "${url}" "${NIXPLOY_SETUP_TOKEN}" "${C_RESET}"
+		printf '   %sSetup token: %s — stored in %s as NIXPLOY_SETUP_TOKEN; it is needed once,%s\n' "${C_DIM}" "${NIXPLOY_SETUP_TOKEN}" "${ENV_FILE}" "${C_RESET}"
+		printf '   %sto create the first admin. Remove the line afterwards if you like.%s\n' "${C_DIM}" "${C_RESET}"
+	else
+		printf '   %s→%s  %s%s/setup%s\n' "${C_GREEN}" "${C_RESET}" "${C_BOLD}${C_CYAN}" "${url}" "${C_RESET}"
+	fi
 	printf '\n'
 	if [ -n "${DASHBOARD_DOMAIN}" ]; then
 		printf '   %sThe Let'"'"'s Encrypt certificate is issued on first visit.%s\n' "${C_DIM}" "${C_RESET}"
