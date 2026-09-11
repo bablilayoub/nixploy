@@ -3,10 +3,11 @@ import { db } from "../../db";
 import { apikeys, members, users } from "../../db/schema";
 import {
 	clearFailures,
-	clientIpFromRequest,
+	clientIpFromHeaders,
 	type LockoutState,
 	lockoutStatus,
 	recordFailure,
+	userAgentFromHeaders,
 } from "../../utils/rate-limit";
 import { recordAudit } from "../audit";
 import { apiKeyMetadataScope, buildApiKeyPermissions } from "./api-key-scopes";
@@ -19,10 +20,12 @@ import { apiKeyMetadataScope, buildApiKeyPermissions } from "./api-key-scopes";
  * in `ctx.context.returned`), which is what makes `auth.login.failed`
  * observable at all.
  *
- * The audit table requires an `organization_id`, so each row is attributed to
- * the actor's oldest membership; events by users who belong to no organization
- * (the moment between first sign-up and org creation) are dropped. Client IP
- * and user agent go into `metadata` — the table has no columns for them.
+ * Each row is attributed to the actor's oldest membership. `organization_id`
+ * is nullable since the audit-completeness work, so an event by a user who
+ * belongs to no organization — the window between the first sign-up and org
+ * creation, an SSO user with no default org, a failed login for an org-less
+ * account — is recorded as an instance-level row instead of being dropped.
+ * Client IP and user agent are columns now, not `metadata` keys.
  */
 
 // ── per-account sign-in lockout ─────────────────────────────────────────────
@@ -85,18 +88,20 @@ export function hookFailed(ctx: AuthHookContext): boolean {
 	return isApiErrorLike(ctx.context?.returned);
 }
 
-function requestFor(ctx: AuthHookContext): Request {
-	return new Request("http://local", { headers: ctx.headers ?? new Headers() });
-}
-
-/** IP + user agent for the metadata blob (the audit table has no columns). */
-export function requestMetadata(ctx: AuthHookContext): Record<string, unknown> {
+/** Client IP + user agent of the hooked request, as audit columns. */
+export function requestContext(ctx: AuthHookContext): { ip: string; userAgent: string | null } {
 	const headers = ctx.headers ?? new Headers();
 	return {
-		ip: clientIpFromRequest(requestFor(ctx)),
-		userAgent: headers.get("user-agent") ?? null,
+		// Honours TRUSTED_PROXIES and the socket-peer check, so it is never a
+		// forged X-Forwarded-For.
+		ip: clientIpFromHeaders(headers),
+		userAgent: userAgentFromHeaders(headers),
 	};
 }
+
+/** `undefined` for an empty metadata object, so the column stays null. */
+const metadataOrNull = (metadata: Record<string, unknown>): Record<string, unknown> | undefined =>
+	Object.keys(metadata).length > 0 ? metadata : undefined;
 
 /** Oldest membership of a user — the org an auth event is attributed to. */
 async function auditOrganizationFor(userId: string): Promise<string | null> {
@@ -116,7 +121,14 @@ async function actorEmail(userId: string, known?: string | null): Promise<string
 	return row?.email ?? null;
 }
 
-/** Write one auth audit row; silently skipped when the actor has no org. */
+/**
+ * Write one auth audit row.
+ *
+ * A user with no membership gets `organizationId: null` (an instance-level
+ * row) rather than no row at all: impersonation of an org-less account and a
+ * failed sign-in before the first organization exists both used to leave no
+ * trail (security audit 2.9, auth handoff §3b).
+ */
 export async function recordAuthEvent(input: {
 	userId: string;
 	email?: string | null;
@@ -124,18 +136,20 @@ export async function recordAuthEvent(input: {
 	targetType?: string;
 	targetId?: string | null;
 	targetName?: string | null;
+	ip?: string | null;
+	userAgent?: string | null;
 	metadata?: Record<string, unknown>;
 }): Promise<void> {
-	const organizationId = await auditOrganizationFor(input.userId);
-	if (!organizationId) return;
 	await recordAudit({
-		organizationId,
+		organizationId: await auditOrganizationFor(input.userId),
 		actorId: input.userId,
 		actorEmail: await actorEmail(input.userId, input.email),
 		action: input.action,
 		targetType: input.targetType ?? "user",
 		targetId: input.targetId ?? input.userId,
 		targetName: input.targetName ?? null,
+		ip: input.ip ?? null,
+		userAgent: input.userAgent ?? null,
 		metadata: input.metadata ?? null,
 	});
 }
@@ -214,7 +228,7 @@ export async function handleAuthEventAfter(ctx: AuthHookContext): Promise<void> 
 	try {
 		const path = ctx.path ?? "";
 		const failed = hookFailed(ctx);
-		const metadata = requestMetadata(ctx);
+		const request = requestContext(ctx);
 
 		if (path === "/sign-in/email") {
 			const email = bodyString(ctx, "email");
@@ -230,7 +244,8 @@ export async function handleAuthEventAfter(ctx: AuthHookContext): Promise<void> 
 					userId: user.id,
 					email: user.email,
 					action: state.locked ? "auth.login.locked" : "auth.login.failed",
-					metadata: { ...metadata, method: "password" },
+					...request,
+					metadata: { method: "password" },
 				});
 				return;
 			}
@@ -241,7 +256,8 @@ export async function handleAuthEventAfter(ctx: AuthHookContext): Promise<void> 
 					userId: actor.id,
 					email: actor.email,
 					action: "auth.login",
-					metadata: { ...metadata, method: "password" },
+					...request,
+					metadata: { method: "password" },
 				});
 			}
 			return;
@@ -260,7 +276,8 @@ export async function handleAuthEventAfter(ctx: AuthHookContext): Promise<void> 
 					userId: actor.id,
 					email: actor.email,
 					action: "auth.login",
-					metadata: { ...metadata, method: "sso" },
+					...request,
+					metadata: { method: "sso" },
 				});
 			}
 			return;
@@ -277,11 +294,11 @@ export async function handleAuthEventAfter(ctx: AuthHookContext): Promise<void> 
 				action: adminAction,
 				targetType: "user",
 				targetId: targetUserId ?? actor.id,
-				metadata: {
-					...metadata,
+				...request,
+				metadata: metadataOrNull({
 					...(bodyString(ctx, "role") ? { role: bodyString(ctx, "role") } : {}),
 					...(bodyString(ctx, "banReason") ? { banReason: bodyString(ctx, "banReason") } : {}),
-				},
+				}),
 			});
 			return;
 		}
@@ -297,7 +314,7 @@ export async function handleAuthEventAfter(ctx: AuthHookContext): Promise<void> 
 			targetType: path.startsWith("/api-key/") ? "apikey" : "user",
 			targetId: path.startsWith("/api-key/") ? (bodyString(ctx, "keyId") ?? actor.id) : actor.id,
 			targetName: path === "/api-key/create" ? bodyString(ctx, "name") : null,
-			metadata,
+			...request,
 		});
 	} catch (error) {
 		console.error("Auth audit hook failed:", error);

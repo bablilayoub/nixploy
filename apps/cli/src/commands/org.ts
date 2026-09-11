@@ -1,7 +1,8 @@
 import type { Command } from "commander";
 import { apiGet } from "../client.js";
-import { activeProfileName, listProfiles, updateActiveProfile } from "../config.js";
-import { addOutputOptions, printList, printRecord, printResult } from "../utils/output.js";
+import { activeProfileName, updateActiveProfile } from "../config.js";
+import { notFoundError } from "../errors.js";
+import { addOutputOptions, printRecord, printResult } from "../utils/output.js";
 
 /** `organization.myCapabilities` — effective role plus the capability ids. */
 export interface MyCapabilities {
@@ -10,16 +11,25 @@ export interface MyCapabilities {
 	capabilities: string[];
 }
 
+/** One row of `organization.list` — a membership of the API key's user. */
+export interface OrganizationMembership {
+	organizationId: string;
+	name: string;
+	slug: string;
+	role: string;
+	active: boolean;
+}
+
 /**
  * Organization selection for multi-org API keys.
  *
  * An API key resolves to exactly one organization per request: the one stored
  * in the key's metadata when it is bound, otherwise the `x-organization-id`
  * header, otherwise the user's first membership
- * (`packages/server/src/lib/api-key-context.ts`). `org use` writes that header
- * value into the active profile; there is no tRPC procedure that enumerates a
- * user's memberships yet, so `org list` reports what the profiles know plus the
- * organization the key currently resolves to.
+ * (`packages/server/src/lib/api-key-context.ts`). `org use` (alias `switch`)
+ * writes that header value into the active profile, and `organization.list`
+ * enumerates the memberships it may legally point at — before that procedure
+ * existed this command could only guess from the stored profiles.
  */
 export function augmentOrgCommand(org: Command): Command {
 	addOutputOptions(
@@ -40,26 +50,9 @@ export function augmentOrgCommand(org: Command): Command {
 	});
 
 	addOutputOptions(
-		org.command("list").description("Organizations reachable from the stored profiles"),
-	).action(async () => {
-		const current = await apiGet<{ id: string; name: string }>("organization.settings").catch(
-			() => null,
-		);
-		const active = activeProfileName();
-		const rows = Object.entries(listProfiles()).map(([name, profile]) => ({
-			organizationId:
-				profile.organizationId ?? (name === active ? (current?.id ?? "") : "(key default)"),
-			name: name === active ? (current?.name ?? "") : "",
-			profile: name,
-			active: name === active,
-			apiUrl: profile.apiUrl,
-		}));
-		printList(rows, ["organizationId", "name", "profile", "active", "apiUrl"]);
-	});
-
-	addOutputOptions(
 		org
 			.command("use")
+			.alias("switch")
 			.description("Pin the active profile to an organization (sent as x-organization-id)")
 			.argument("[organizationId]", "Organization ID; omit with --clear"),
 	)
@@ -73,20 +66,31 @@ export function augmentOrgCommand(org: Command): Command {
 				);
 				return;
 			}
+			const memberships = await apiGet<OrganizationMembership[]>("organization.list");
 			if (!organizationId) {
-				const current = await apiGet<{ id: string; name: string }>("organization.settings");
+				const current = memberships.find((row) => row.active);
 				printResult(
-					{ organizationId: current.id, name: current.name },
-					`Currently using ${current.name} (${current.id}). Pass an organization ID to pin another.`,
+					current ?? { organizationId: null },
+					current
+						? `Currently using ${current.name} (${current.organizationId}). Pass an organization ID to pin another — \`nixploy org list\` shows them all.`
+						: "This key resolves to no organization. `nixploy org list` shows the memberships.",
 				);
 				return;
 			}
+			// Fail before writing the profile: a pin the key cannot use would
+			// otherwise break every later command with a FORBIDDEN.
+			const target = memberships.find((row) => row.organizationId === organizationId);
+			if (!target) {
+				throw notFoundError(
+					`Not a member of "${organizationId}". Available: ${
+						memberships.map((row) => `${row.name} (${row.organizationId})`).join(", ") || "none"
+					}`,
+				);
+			}
 			updateActiveProfile({ organizationId });
-			// Confirm the pin actually resolves before declaring success.
-			const settings = await apiGet<{ id: string; name: string }>("organization.settings");
 			printResult(
-				{ ok: true, organizationId: settings.id, name: settings.name },
-				`Profile "${activeProfileName()}" now uses ${settings.name} (${settings.id}).`,
+				{ ok: true, organizationId: target.organizationId, name: target.name, role: target.role },
+				`Profile "${activeProfileName()}" now uses ${target.name} (${target.organizationId}).`,
 			);
 		});
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { History, Search } from "lucide-react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Download, History, Loader2, Search } from "lucide-react";
 import { useState } from "react";
 
 import { QueryState } from "@/components/query-state";
@@ -26,7 +26,9 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 const PAGE_SIZE = 50;
@@ -69,10 +71,12 @@ function formatTime(value: Date | string): string {
  */
 export function ActivityView({ embedded = false }: { embedded?: boolean } = {}) {
 	const trpc = useTRPC();
+	const queryClient = useQueryClient();
 	const [action, setAction] = useState(ALL);
 	const [targetType, setTargetType] = useState(ALL);
 	const [search, setSearch] = useState("");
 	const [page, setPage] = useState(0);
+	const [exporting, setExporting] = useState(false);
 
 	// Query on pauses in typing, not on every keystroke.
 	const debouncedSearch = useDebouncedValue(search.trim(), 300);
@@ -100,6 +104,38 @@ export function ActivityView({ embedded = false }: { embedded?: boolean } = {}) 
 		setTargetType(ALL);
 		setSearch("");
 		setPage(0);
+	};
+
+	/**
+	 * `audit.export` renders the whole filtered trail (every column, including
+	 * ip/user agent/metadata) as CSV server-side; the browser only has to turn
+	 * the string into a file. Not a `useQuery`: an export is an action, and its
+	 * result must never be cached or refetched in the background.
+	 */
+	const exportCsv = async () => {
+		setExporting(true);
+		try {
+			const result = await queryClient.fetchQuery(
+				trpc.audit.export.queryOptions({
+					action: action === ALL ? undefined : action,
+					targetType: targetType === ALL ? undefined : targetType,
+					search: debouncedSearch || undefined,
+				}),
+			);
+			const url = URL.createObjectURL(new Blob([result.csv], { type: "text/csv;charset=utf-8" }));
+			const link = document.createElement("a");
+			link.href = url;
+			link.download = result.filename;
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			// Revoking immediately can race the download in Safari; a tick is enough.
+			setTimeout(() => URL.revokeObjectURL(url), 1_000);
+		} catch (error) {
+			toastError(error, "Export failed");
+		} finally {
+			setExporting(false);
+		}
 	};
 
 	return (
@@ -162,6 +198,20 @@ export function ActivityView({ embedded = false }: { embedded?: boolean } = {}) 
 						))}
 					</SelectContent>
 				</Select>
+				<Button
+					variant="outline"
+					size="sm"
+					className="ml-auto"
+					disabled={exporting || rows.length === 0}
+					onClick={exportCsv}
+				>
+					{exporting ? (
+						<Loader2 className="size-3.5 animate-spin" />
+					) : (
+						<Download className="size-3.5" />
+					)}
+					Export CSV
+				</Button>
 			</div>
 
 			<QueryState
@@ -198,6 +248,7 @@ export function ActivityView({ embedded = false }: { embedded?: boolean } = {}) 
 								<TableHead>Actor</TableHead>
 								<TableHead>Action</TableHead>
 								<TableHead>Target</TableHead>
+								<TableHead className="w-32">IP</TableHead>
 								<TableHead>Details</TableHead>
 							</TableRow>
 						</TableHeader>
@@ -217,6 +268,24 @@ export function ActivityView({ embedded = false }: { embedded?: boolean } = {}) 
 										{row.targetName ?? row.targetId ?? "—"}
 										{row.targetType && (
 											<span className="ml-1.5 text-muted-foreground">({row.targetType})</span>
+										)}
+									</TableCell>
+									<TableCell className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+										{row.ip ? (
+											row.userAgent ? (
+												<Tooltip>
+													<TooltipTrigger asChild>
+														<span className="cursor-help underline decoration-dotted underline-offset-4">
+															{row.ip}
+														</span>
+													</TooltipTrigger>
+													<TooltipContent className="font-mono">{row.userAgent}</TooltipContent>
+												</Tooltip>
+											) : (
+												row.ip
+											)
+										) : (
+											"—"
 										)}
 									</TableCell>
 									<TableCell className="max-w-64 truncate font-mono text-[11px] text-muted-foreground">

@@ -87,6 +87,18 @@ describe("resolveExitCode", () => {
 		});
 	});
 
+	it("reports a throttled request as a rate limit, not as an auth failure", () => {
+		expect(resolveExitCode(new ApiError("API key rate limit exceeded", 429, 13))).toEqual({
+			code: EXIT_ERROR,
+			message: "Error (HTTP 429): Rate limited — retry in 13s",
+		});
+		// No Retry-After header: keep the panel's own wording.
+		expect(resolveExitCode(new ApiError("Too many requests from this address", 429))).toEqual({
+			code: EXIT_ERROR,
+			message: "Error (HTTP 429): Rate limited — Too many requests from this address",
+		});
+	});
+
 	it("falls back to a plain runtime error for anything else", () => {
 		expect(resolveExitCode(new Error("socket hang up"))).toEqual({
 			code: EXIT_ERROR,

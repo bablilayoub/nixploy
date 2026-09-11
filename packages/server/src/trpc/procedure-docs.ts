@@ -108,6 +108,25 @@ function databaseDocs(router: string, label: string): Record<string, ProcedureDo
 			summary: `Get ${label} container status`,
 			description: "Live container state for the service (running, exited, missing).",
 		},
+		[`${router}.engineVersions`]: {
+			summary: `List curated ${label} versions`,
+			description: `The engine versions the picker offers, newest first, with an end-of-life note where one applies. Setting engineVersion on create/update derives the image; a custom dockerImage still overrides it.`,
+		},
+		[`${router}.listLogicalDatabases`]: {
+			summary: `List additional ${label} databases`,
+			description: `Extra logical databases created inside this instance, with their owning user. Passwords and connection URLs are nulled for callers without secrets.read. Redis returns an empty list.`,
+		},
+		[`${router}.createLogicalDatabase`]: {
+			summary: `Create an additional ${label} database`,
+			description: `Creates a database and an owning user inside the running container (docker exec, SQL over stdin). The password is generated server-side and stored encrypted. The service must be running. Not available for Redis.`,
+			capability: ["service.write", "secrets.write"],
+		},
+		[`${router}.deleteLogicalDatabase`]: {
+			summary: `Delete an additional ${label} database`,
+			description:
+				"Drops the database and its owning user inside the container, then removes the row. Irreversible.",
+			capability: ["service.delete"],
+		},
 	};
 }
 
@@ -424,6 +443,23 @@ const docs: Record<string, ProcedureDoc> = {
 		summary: "List running containers of a stack",
 		description: "Live container list for terminal and log targeting, local host or remote server.",
 	},
+	"compose.rollbackTargets": {
+		summary: "List compose rollback points",
+		description:
+			"Snapshots of the compose file and env each successful deployment rendered, newest first (10 kept). A stack has no single image, so this — not `rollback.all` — is the compose rollback list.",
+	},
+	"compose.rollback": {
+		summary: "Roll a compose stack back to a snapshot",
+		description:
+			"Restores the compose body and the service-level env of the chosen deployment, then enqueues a normal deployment for them. Git-backed rows keep reading the file from their repository, so only the env is restored — `restoredComposeFile` says which happened.",
+		capability: ["service.deploy", "secrets.write"],
+	},
+	"compose.createFromUrl": {
+		summary: "Create a compose service from a URL",
+		description:
+			"Fetches a compose file over http(s) through the egress guard (no redirects followed, body capped) and stores it after the usual safety checks. Nothing is deployed until `compose.deploy`.",
+		capability: ["service.create"],
+	},
 
 	// ────────────────────────────────────────────────────────── deployments
 	"deployment.byApplication": {
@@ -719,6 +755,12 @@ const docs: Record<string, ProcedureDoc> = {
 		description: "Unregisters the cron job and removes the row and its run history.",
 		capability: ["schedules.manage"],
 	},
+	"schedule.runOnce": {
+		summary: "Run a command once from an image",
+		description:
+			"One-off job in a throwaway `docker run --rm` container on the service's environment overlay, with the merged env handed over a 0600 env file. No schedule row is created; the output lands in the service's run history.",
+		capability: ["schedules.manage", "secrets.read"],
+	},
 	"schedule.runManually": {
 		summary: "Run a schedule now",
 		description: "Executes the command once, recording the output as a deployment-style log row.",
@@ -772,8 +814,14 @@ const docs: Record<string, ProcedureDoc> = {
 	},
 	"server.testConnection": {
 		summary: "Test SSH reachability",
-		description: "Opens an SSH session with the stored credentials and reports the result.",
+		description:
+			"Opens an SSH session with the stored credentials and reports the result. Closes the server's SSH circuit breaker first, so it doubles as the manual retry after an outage.",
 		capability: ["servers.manage"],
+	},
+	"server.transportState": {
+		summary: "Get SSH transport health",
+		description:
+			'Per-server view of the panel\'s SSH connection pool: whether a pooled connection is live, how many channels it holds, the consecutive connection failures and — while the circuit breaker is open — `status: "unreachable"` plus the time Nixploy will retry. Process-local state, not a stored column; `lastError` is only returned to callers with servers.manage.',
 	},
 	"server.getStats": {
 		summary: "Get server stats",
@@ -999,6 +1047,11 @@ const docs: Record<string, ProcedureDoc> = {
 	},
 
 	// ──────────────────────────────────────────────────────── organization
+	"organization.list": {
+		summary: "List the caller's organizations",
+		description:
+			"Organizations the API key's user belongs to, oldest membership first, each with the caller's role and an `active` flag for the one this request resolves to.",
+	},
 	"organization.settings": {
 		summary: "Get organization settings",
 		description: "Name, quotas, branding, 2FA enforcement and service counts.",
@@ -1048,7 +1101,7 @@ const docs: Record<string, ProcedureDoc> = {
 	"audit.all": {
 		summary: "List audit events",
 		description:
-			"Organization audit trail, newest first, filterable by action, target type and target name. Returns `{ rows, total }`.",
+			"Organization audit trail, newest first, filterable by action, target type, target name and a `since`/`until` window (ISO, or `30m`/`24h`/`7d`). Returns `{ rows, total }`.",
 		capability: ["audit.read"],
 	},
 	"audit.facets": {
@@ -1059,7 +1112,7 @@ const docs: Record<string, ProcedureDoc> = {
 	"audit.export": {
 		summary: "Export the audit trail as CSV",
 		description:
-			"The organization's audit rows rendered as CSV (header + one line per event), newest first, capped by `limit`. Returns `{ filename, rows, csv }`.",
+			"The organization's audit rows rendered as CSV (header + one line per event), newest first, capped by `limit` and narrowed by the same filters as `audit.all`. Returns `{ filename, rows, csv }`.",
 		capability: ["audit.read"],
 	},
 	"updates.banner": {
@@ -1095,11 +1148,53 @@ const docs: Record<string, ProcedureDoc> = {
 		summary: "Get one template",
 		description: "Compose body, env schema, default domains and documentation of a template.",
 	},
+	"template.sourcesList": {
+		summary: "List template sources",
+		description:
+			"Remote template catalogs of the organization, with the diagnostics of their last sync (rejected entries, unreachable images).",
+	},
+	"template.sourcesCreate": {
+		summary: "Add a template source",
+		description:
+			"A JSON index URL (`http-json`) or a git repository carrying `templates/index.json`. The URL is checked against the egress policy here and again on every sync. Nothing is fetched until `template.sourcesSync`.",
+	},
+	"template.sourcesUpdate": {
+		summary: "Update a template source",
+		description:
+			"Rename, re-point, change branch, or enable/disable it. A disabled source contributes no templates.",
+	},
+	"template.sourcesDelete": {
+		summary: "Delete a template source",
+		description:
+			"Removes the row and its cached catalog. Services already deployed from it are untouched.",
+	},
+	"template.sourcesSync": {
+		summary: "Sync a template source",
+		description:
+			"Fetches the index now, validates every entry, probes the images it references and rewrites the cache. Invalid entries and unreachable images are reported, not fatal.",
+	},
 	"template.deploy": {
 		summary: "Deploy a template",
 		description:
 			"Creates a compose service from the template, fills its env schema (generating secrets where the template asks for them), attaches the requested domains and deploys.",
 		capability: ["templates.deploy", "secrets.write", "domains.manage"],
+		instanceAdmin: true,
+	},
+	"traefik.listEntrypoints": {
+		summary: "List Traefik TCP/UDP entrypoints",
+		description:
+			"Extra layer-4 entrypoints a tcp/udp domain can bind to. Readable by any member so the domain form can offer them.",
+	},
+	"traefik.createEntrypoint": {
+		summary: "Add a Traefik TCP/UDP entrypoint",
+		description:
+			"Declares the entrypoint in Traefik's static config and publishes the host port on the nixploy-traefik service. The static config is only read at start, so this recreates the proxy task — every route on the instance is briefly unavailable (~9 s). Host ports are instance-wide, hence instance-admin only.",
+		instanceAdmin: true,
+	},
+	"traefik.deleteEntrypoint": {
+		summary: "Remove a Traefik TCP/UDP entrypoint",
+		description:
+			"Unpublishes the port and drops the entrypoint from the static config, restarting the proxy. Refused while a domain still routes through it.",
 		instanceAdmin: true,
 	},
 	"tag.all": {
@@ -1283,6 +1378,41 @@ const docs: Record<string, ProcedureDoc> = {
 		summary: "Prune unused volumes",
 		description: "Destructive: removes every volume no container references.",
 		capability: ["docker.manage"],
+	},
+	"volumeFiles.list": {
+		summary: "List files in a Docker volume",
+		description:
+			"Directory listing inside a volume, produced by a throwaway `alpine` container with the volume mounted read-only and no network. Paths are confined to the mount: `..` is rejected before the command is built and the container's resolved `realpath` is verified again, so a symlink cannot read outside the volume. At most 1000 entries per call. Volumes are instance-level Docker resources, so this needs the instance admin on top of docker.manage.",
+		capability: ["docker.manage"],
+		instanceAdmin: true,
+	},
+	"volumeFiles.read": {
+		summary: "Read a text file from a Docker volume",
+		description:
+			"Contents of one file, capped at 512 KiB (the check runs in the container, so a huge file is never streamed out). Binary files are refused — use a volume backup to get those.",
+		capability: ["docker.manage"],
+		instanceAdmin: true,
+	},
+	"volumeFiles.write": {
+		summary: "Write a text file into a Docker volume",
+		description:
+			"Creates or overwrites one file. The payload travels over stdin (never argv, where `ps` would show it) and the parent directory must already exist. Audited as `docker.volume.file.write`.",
+		capability: ["docker.manage"],
+		instanceAdmin: true,
+	},
+	"volumeFiles.delete": {
+		summary: "Delete a path in a Docker volume",
+		description:
+			"Removes a file, or a directory and everything under it. Refuses the volume root. Audited as `docker.volume.file.delete`. There is no undo — take a volume backup first.",
+		capability: ["docker.manage"],
+		instanceAdmin: true,
+	},
+	"volumeFiles.mkdir": {
+		summary: "Create a directory in a Docker volume",
+		description:
+			"Creates one directory whose parent already exists. Audited as `docker.volume.file.mkdir`.",
+		capability: ["docker.manage"],
+		instanceAdmin: true,
 	},
 	"docker.systemInfo": {
 		summary: "Get Docker system info",

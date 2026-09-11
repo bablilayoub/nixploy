@@ -1,6 +1,13 @@
 import { type Command, CommanderError } from "commander";
 import { ApiError } from "./client.js";
-import { CliError, EXIT_ERROR, EXIT_OK, EXIT_USAGE } from "./errors.js";
+import {
+	CliError,
+	EXIT_ERROR,
+	EXIT_OK,
+	EXIT_USAGE,
+	HTTP_TOO_MANY_REQUESTS,
+	rateLimitMessage,
+} from "./errors.js";
 
 /**
  * Commander exits the process itself on `--help`, an unknown option or a
@@ -42,7 +49,11 @@ export function resolveExitCode(error: unknown): { code: number; message: string
 		return { code: error.exitCode, message: `Error: ${error.message}` };
 	}
 	if (error instanceof ApiError) {
-		return { code: error.exitCode, message: `Error (HTTP ${error.status}): ${error.message}` };
+		const message =
+			error.status === HTTP_TOO_MANY_REQUESTS
+				? rateLimitMessage(error.retryAfterSeconds, error.message)
+				: error.message;
+		return { code: error.exitCode, message: `Error (HTTP ${error.status}): ${message}` };
 	}
 	if (error instanceof Error) {
 		return { code: EXIT_ERROR, message: `Error: ${error.message}` };

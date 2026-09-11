@@ -17,6 +17,8 @@ export class ApiError extends Error {
 	constructor(
 		message: string,
 		public readonly status: number,
+		/** Seconds from the response's `Retry-After` header (429 only). */
+		public readonly retryAfterSeconds: number | null = null,
 	) {
 		super(message);
 		this.name = "ApiError";
@@ -26,6 +28,24 @@ export class ApiError extends Error {
 	get exitCode(): number {
 		return exitCodeForStatus(this.status);
 	}
+}
+
+/**
+ * `Retry-After` in seconds. The panel always sends the delta-seconds form;
+ * an HTTP-date (RFC 9110 §10.2.3 allows it) is converted, and anything else
+ * is ignored rather than shown as a bogus countdown.
+ */
+export function parseRetryAfter(value: string | null, now = Date.now()): number | null {
+	const raw = value?.trim();
+	if (!raw) return null;
+	if (/^\d+$/.test(raw)) {
+		const seconds = Number.parseInt(raw, 10);
+		return seconds > 0 ? seconds : null;
+	}
+	const at = Date.parse(raw);
+	if (Number.isNaN(at)) return null;
+	const seconds = Math.ceil((at - now) / 1000);
+	return seconds > 0 ? seconds : null;
 }
 
 interface RequestOptions {
@@ -92,7 +112,11 @@ export async function api<T = unknown>(path: string, options: RequestOptions = {
 			typeof data === "object" && data !== null && "message" in data
 				? String((data as { message: unknown }).message)
 				: `Request failed with status ${response.status}`;
-		throw new ApiError(message, response.status);
+		throw new ApiError(
+			message,
+			response.status,
+			parseRetryAfter(response.headers.get("retry-after")),
+		);
 	}
 
 	// tRPC HTTP responses wrap payloads in { result: { data } }.

@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -45,9 +46,11 @@ function NewProjectDeepLink({ onOpen }: { onOpen: () => void }) {
 
 export function CreateProjectDialog({ children }: { children: React.ReactNode }) {
 	const trpc = useTRPC();
+	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
+	const projectsKey = trpc.project.all.queryKey();
 
 	const createProject = useSaveMutation(
 		trpc.project.create.mutationOptions({
@@ -58,11 +61,32 @@ export function CreateProjectDialog({ children }: { children: React.ReactNode })
 			},
 		}),
 		{
-			// Success text names the project, so it is toasted here rather than
-			// through `successMessage`.
-			invalidate: [trpc.project.all.queryKey()],
-			onSuccess: (project) => {
+			// `invalidate` is deliberately NOT used here: the list has to be
+			// refreshed by hand, see below.
+			onSuccess: async (project) => {
+				// Success text names the project, so it is toasted here rather than
+				// through `successMessage`.
 				toast.success(`Project "${project.name}" created`);
+
+				// Whether the dashboard's `project.all` had ever resolved *before*
+				// this write. It has not on the very first load of an empty
+				// organization — the request that renders "Create your first
+				// project" is still in flight while the user creates a project from
+				// that same screen.
+				const hadData = queryClient.getQueryData(projectsKey) !== undefined;
+				await queryClient.invalidateQueries({ queryKey: projectsKey });
+				// query-core only honours `cancelRefetch` once a query holds data
+				// (`Query#fetch`: `state.data !== undefined && cancelRefetch`).
+				// Without data it returns the promise of the request already in
+				// flight instead, so the invalidation above resolves with the
+				// PRE-CREATE list and the dashboard keeps rendering its empty state
+				// until the next page load (2026-09 audit, ci2 §4.1 — reproduced by
+				// holding the first `project.all` response until after the write).
+				// One extra refetch, only in that case, guarantees a request that
+				// started after the row existed.
+				if (!hadData) {
+					await queryClient.refetchQueries({ queryKey: projectsKey });
+				}
 			},
 		},
 	);

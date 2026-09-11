@@ -14,6 +14,7 @@ vi.mock("../db", () => ({
 }));
 
 import { buildApiKeyPermissions } from "../modules/auth/api-key-scopes";
+import { retryAfterSecondsFromError } from "../utils/rate-limit";
 import { buildApiKeyContext } from "./api-key-context";
 
 const req = (headers: Record<string, string>) =>
@@ -155,6 +156,49 @@ describe("buildApiKeyContext", () => {
 		await expect(
 			buildApiKeyContext(req({ "x-api-key": "key-b" }), { bucket }),
 		).resolves.toBeTruthy();
+	});
+
+	it("answers the api-key plugin's own rate limit with TOO_MANY_REQUESTS, not UNAUTHORIZED", async () => {
+		// better-auth returns the same `{ valid: false }` envelope for a revoked
+		// key and for a throttled one; only `error.code` tells them apart. Read
+		// as UNAUTHORIZED it said "your key is invalid" to a caller whose key was
+		// fine (CLI/MCP audit §12).
+		mocks.verifyApiKey.mockResolvedValue({
+			valid: false,
+			key: null,
+			error: {
+				code: "RATE_LIMITED",
+				message: "Rate limit exceeded.",
+				details: { tryAgainIn: 12_400 },
+			},
+		});
+		const error = await buildApiKeyContext(req({ "x-api-key": "throttled" }), {
+			bucket: "test-plugin-throttle",
+		}).catch((thrown: unknown) => thrown);
+		expect(error).toMatchObject({ code: "TOO_MANY_REQUESTS" });
+		expect((error as Error).message).toMatch(/rate limit exceeded/i);
+		expect(retryAfterSecondsFromError(error)).toBe(13);
+	});
+
+	it("carries a Retry-After hint on the per-key bucket rejection", async () => {
+		const bucket = "test-per-key-retry";
+		mocks.verifyApiKey.mockImplementation(async ({ body }: { body: { key: string } }) => ({
+			valid: true,
+			key: { id: body.key, referenceId: "user-1" },
+		}));
+		mocks.sqlClient.mockImplementation(async (strings: TemplateStringsArray) =>
+			String(strings.join("")).includes('FROM "user"') ? [userRow] : [{ organizationId: "org-1" }],
+		);
+		for (let i = 0; i < 120; i += 1) {
+			await buildApiKeyContext(req({ "x-api-key": "key-retry" }), { bucket });
+		}
+		const error = await buildApiKeyContext(req({ "x-api-key": "key-retry" }), { bucket }).catch(
+			(thrown: unknown) => thrown,
+		);
+		expect(error).toMatchObject({ code: "TOO_MANY_REQUESTS" });
+		const retryAfter = retryAfterSecondsFromError(error);
+		expect(retryAfter).toBeGreaterThan(0);
+		expect(retryAfter).toBeLessThanOrEqual(60);
 	});
 
 	it("only counts failed verifications against the per-IP auth bucket", async () => {

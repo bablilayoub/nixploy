@@ -67,6 +67,43 @@ export function hasRateLimitCapacity(key: string, max: number): boolean {
 	return existing.count < max;
 }
 
+/** Milliseconds until `key`'s window resets (0 when it has no live bucket). */
+export function rateLimitResetInMs(key: string): number {
+	const existing = buckets.get(key);
+	if (!existing) return 0;
+	return Math.max(0, existing.resetAt - Date.now());
+}
+
+/**
+ * Attached as the `cause` of a `TOO_MANY_REQUESTS` error so a transport can
+ * answer with a `Retry-After` header instead of a bare status.
+ *
+ * tRPC keeps `cause` intact through `getTRPCErrorFromUnknown`, which is how the
+ * REST adapter (`apps/web/src/app/api/[...rest]/route.ts`) reads it back with
+ * {@link retryAfterSecondsFromError}.
+ */
+export class RateLimitedCause extends Error {
+	readonly retryAfterSeconds: number;
+
+	constructor(retryAfterMs: number) {
+		const seconds = Math.max(1, Math.ceil(retryAfterMs / 1000));
+		super(`Retry after ${seconds}s`);
+		this.name = "RateLimitedCause";
+		this.retryAfterSeconds = seconds;
+	}
+}
+
+/** Seconds to wait before retrying, when `error` carries a {@link RateLimitedCause}. */
+export function retryAfterSecondsFromError(error: unknown): number | null {
+	let current: unknown = error;
+	// Walk a short cause chain: tRPC wraps a thrown cause once, no deeper.
+	for (let depth = 0; current !== null && current !== undefined && depth < 5; depth += 1) {
+		if (current instanceof RateLimitedCause) return current.retryAfterSeconds;
+		current = (current as { cause?: unknown }).cause;
+	}
+	return null;
+}
+
 /**
  * Per-IP bucket that degrades gracefully when the IP is unknown (no trusted
  * proxy configured): the shared "unknown" bucket gets a much larger limit so a

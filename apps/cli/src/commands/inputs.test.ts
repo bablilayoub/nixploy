@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { describeDiff, deserializeEnv, diffEnv, parsePairs, serializeEnv } from "../utils/env.js";
 import { buildSourceInput } from "./app.js";
-import { filterSince, parseSince } from "./audit.js";
+import { parseSince } from "./audit.js";
 import { assertEngine, createInputFor } from "./db.js";
 import { assertMiddlewareKind, parseConfig, toSaveShape } from "./domain.js";
 import { parseDomains } from "./template.js";
@@ -200,12 +200,13 @@ describe("audit --since", () => {
 		expect(() => parseSince("last tuesday", now)).toThrow(/--since expects/);
 	});
 
-	it("filters rows older than the window", () => {
-		const rows = [
-			{ action: "a", targetType: null, targetName: null, createdAt: "2026-09-11T11:59:00Z" },
-			{ action: "b", targetType: null, targetName: null, createdAt: "2026-09-01T00:00:00Z" },
-		];
-		expect(filterSince(rows, parseSince("30m", now)).map((row) => row.action)).toEqual(["a"]);
-		expect(filterSince(rows, null)).toHaveLength(2);
+	it("names the flag it was called for", () => {
+		expect(() => parseSince("nope", now, "--until")).toThrow(/--until expects/);
+	});
+
+	it("produces the ISO instant sent to audit.all", () => {
+		// The window travels as an absolute timestamp so the panel never has to
+		// resolve "24h" against its own clock.
+		expect(parseSince("24h", now).toISOString()).toBe("2026-09-10T12:00:00.000Z");
 	});
 });

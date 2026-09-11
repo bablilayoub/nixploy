@@ -8,7 +8,7 @@ import { bitbucket, gitea, github, gitlab, sshKeys } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { writeFileTargeted } from "../deployment/docker";
 import { getSshKeysPath } from "../deployment/paths";
-import { buildGitSshCommand } from "../deployment/sources";
+import { buildGitSshCommand, gitProtocolEnv } from "../deployment/sources";
 import { badRequest, notFound } from "../errors";
 import { getComposeCodeDir, shellQuote } from "./paths";
 
@@ -177,13 +177,20 @@ export async function cloneComposeSource(composeRow: ComposeRow): Promise<{
 		// SSH URLs are not WHATWG URLs — fine.
 	}
 
+	// Same hardened git environment application deploys use (`gitProtocolEnv`
+	// in `modules/deployment/sources.ts`): only https and ssh are accepted as
+	// transports and the URL is never "from the user", so `ext::`, `file://`
+	// and the helper-executing schemes are refused by git itself and not only
+	// by our URL checks (security audit 2.6).
+	const gitEnv = { ...gitProtocolEnv(), ...(source.env ?? {}) };
+
 	if (composeRow.serverId) {
 		const dir = shellQuote(codeDir);
 		const url = shellQuote(source.cloneUrl);
 		const branch = shellQuote(source.branch);
-		const sshEnv = source.env?.GIT_SSH_COMMAND
-			? `GIT_SSH_COMMAND=${shellQuote(source.env.GIT_SSH_COMMAND)} `
-			: "";
+		const prefix = Object.entries(gitEnv)
+			.map(([key, value]) => `${key}=${shellQuote(value)} `)
+			.join("");
 		await execAsyncRemote(
 			composeRow.serverId,
 			`mkdir -p ${dir} && ` +
@@ -191,16 +198,17 @@ export async function cloneComposeSource(composeRow: ComposeRow): Promise<{
 				// Refresh the remote first: the URL baked in at clone time carries a
 				// short-lived installation token / a rotatable PAT, and the
 				// repository or provider may have changed since.
-				`${sshEnv}git -C ${dir} remote set-url origin ${url} && ` +
-				`${sshEnv}git -C ${dir} fetch --depth 1 origin ${branch} && git -C ${dir} reset --hard FETCH_HEAD; ` +
-				`else ${sshEnv}git clone --branch ${branch} --depth 1 --single-branch ${url} ${dir}; fi)`,
+				`${prefix}git -C ${dir} remote set-url origin ${url} && ` +
+				`${prefix}git -C ${dir} fetch --depth 1 origin ${branch} && git -C ${dir} reset --hard FETCH_HEAD; ` +
+				`else ${prefix}git clone --branch ${branch} --depth 1 --single-branch ${url} ${dir}; fi)`,
 		);
 		return { codeDir, secrets };
 	}
 
 	await mkdir(codeDir, { recursive: true });
 	const git = simpleGit({ baseDir: codeDir });
-	if (source.env) git.env(source.env);
+	// simple-git's env() replaces the child environment wholesale — keep PATH.
+	git.env({ ...process.env, ...gitEnv });
 	const isRepo = await git.checkIsRepo().catch(() => false);
 	if (isRepo) {
 		// Refresh the remote first (see the remote branch above).

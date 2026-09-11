@@ -70,10 +70,18 @@ the key's metadata when the key is bound to an org, otherwise the
 `x-organization-id` header, otherwise the user's first membership.
 
 ```bash
+nixploy org list               # every organization this key's user belongs to
 nixploy org current            # which org am I acting in?
 nixploy org use org_abc123     # pin the active profile to another org
+nixploy org switch org_abc123  # alias of `org use`
 nixploy org use --clear        # back to the key's default
 ```
+
+`org list` reads `organization.list`, so it shows real memberships — id, name,
+slug, the caller's role and which one this key currently resolves to — not a
+guess from the stored profiles. `org use` checks the target against that list
+before writing the profile, so a typo fails immediately (exit `3`) instead of
+turning every later command into a permission error.
 
 ## Output and exit codes
 
@@ -100,6 +108,10 @@ Exit codes (stable; scripts may branch on them):
 | `1` | Runtime error — the API rejected the call, or the network failed |
 | `2` | Usage error — unknown command or flag, missing required option, bad value |
 | `3` | Not found or forbidden — HTTP 401, 403 or 404 |
+
+A throttled request is exit `1`, not `3`: the panel answers `429` with a
+`Retry-After` header and the CLI prints `Rate limited — retry in Ns`. The
+per-key limit is 120 requests/minute.
 
 Destructive verbs (`delete`, `remove`, `backup restore`, `updates apply`)
 require `-y, --yes`; without it they exit `2` and change nothing.
@@ -348,12 +360,22 @@ nixploy updates check
 nixploy updates apply --yes                     # the panel restarts itself
 
 nixploy audit list --since 24h
+nixploy audit list --since 7d --until 2026-09-10 --action application.deploy
 nixploy audit list --action application.deploy --limit 100
 nixploy audit facets
+
+nixploy audit export --since 30d -o audit.csv   # every column, as CSV
+nixploy audit export --since 24h | column -t -s,
 ```
 
-`--since` accepts an ISO timestamp or a relative window (`30m`, `24h`, `7d`)
-and filters the fetched page client-side — raise `--limit` when widening it.
+`--since` and `--until` accept an ISO timestamp or a relative window (`30m`,
+`24h`, `7d`). They are resolved to an absolute instant by the CLI and pushed
+down to the panel as a SQL predicate, so a window wider than `--limit` rows no
+longer silently loses its older half.
+
+`audit export` returns the whole filtered trail as CSV — the same columns the
+table shows plus `organizationId`, `actorId`, `ip`, `userAgent` and the raw
+`metadata` blob. Without `--output` it writes to stdout, so it pipes.
 
 ### `gitops` — desired state
 
@@ -436,6 +458,7 @@ and [api.md](./api.md); each REST operation also advertises its requirement as
 | --- | --- |
 | `No API key configured` (exit 2) | No profile and no `NIXPLOY_API_KEY`. Run `nixploy auth login`. |
 | `Request failed with status 404` on a command that used to work | Panel/CLI major mismatch. `nixploy doctor` compares the versions. |
-| Exit 3 on everything | Key revoked or expired, or it belongs to another organization — check `nixploy org current`. |
+| Exit 3 on everything | Key revoked or expired, or it belongs to another organization — check `nixploy org list`. |
+| `Rate limited — retry in Ns` (exit 1) | 120 requests/minute per key. Space the loop out, or mint a second key. Before 2026-09 this was reported as `401 Invalid or expired API key`. |
 | `Environment variables are redacted` | The key's user lacks `secrets.read`; values are hidden, key names are not. |
 | A destructive command exits 2 without doing anything | It needs `--yes`. |

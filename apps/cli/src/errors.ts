@@ -35,3 +35,21 @@ export function exitCodeForStatus(status: number): number {
 	}
 	return EXIT_ERROR;
 }
+
+/** The panel's per-key throttle (120 requests/minute), answered with `Retry-After`. */
+export const HTTP_TOO_MANY_REQUESTS = 429;
+
+/**
+ * Line shown for a throttled request.
+ *
+ * Until the 2026-09 audit a key that blew its per-minute limit came back as
+ * `401 "Invalid or expired API key"`, which reads as a revoked key and sent
+ * people rotating perfectly good credentials. The panel now answers 429 with a
+ * `Retry-After` header; this turns it into an instruction.
+ */
+export function rateLimitMessage(retryAfterSeconds?: number | null, fallback?: string): string {
+	if (retryAfterSeconds && retryAfterSeconds > 0) {
+		return `Rate limited — retry in ${retryAfterSeconds}s`;
+	}
+	return fallback ? `Rate limited — ${fallback}` : "Rate limited — retry in a minute";
+}

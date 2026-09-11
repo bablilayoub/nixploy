@@ -1,10 +1,51 @@
-import { and, desc, eq, ilike, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import { auditLogs } from "../../db/schema";
 import { auditRowsToCsv } from "../../modules/audit";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import { protectedProcedure, router } from "../init";
+
+/**
+ * Time window bound. An ISO timestamp, or a relative `30m` / `24h` / `7d`
+ * offset from now — the CLI (`nixploy audit list --since 24h`) and the REST
+ * adapter both send plain strings, so the coercion lives here rather than in
+ * every caller. `z.coerce.date()` alone would accept `"7d"` as an invalid date.
+ */
+const RELATIVE_WINDOW = /^(\d{1,6})([mhd])$/;
+const RELATIVE_MS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000 };
+
+export function parseAuditWindow(value: string, now = new Date()): Date | null {
+	const trimmed = value.trim();
+	const relative = RELATIVE_WINDOW.exec(trimmed);
+	if (relative?.[1] && relative[2]) {
+		const ms = RELATIVE_MS[relative[2]];
+		if (!ms) return null;
+		return new Date(now.getTime() - Number(relative[1]) * ms);
+	}
+	const parsed = new Date(trimmed);
+	return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+// A string, not `z.date()`: the REST adapter introspects this schema to decide
+// which flattened query params to coerce, and a date is not representable in
+// JSON Schema — one here would disable coercion for `limit`/`offset` too.
+const windowSchema = z
+	.string()
+	.min(1)
+	.max(64)
+	.transform((value, ctx) => {
+		const parsed = parseAuditWindow(value);
+		if (!parsed) {
+			ctx.addIssue({
+				code: "custom",
+				message: `Expected an ISO date or a window like 30m, 24h, 7d (got "${value}")`,
+			});
+			return z.NEVER;
+		}
+		return parsed;
+	})
+	.optional();
 
 /** Org audit trail, newest first, with optional filters. */
 export const auditRouter = router({
@@ -14,6 +55,10 @@ export const auditRouter = router({
 				action: z.string().optional(),
 				targetType: z.string().optional(),
 				search: z.string().max(100).optional(),
+				/** Only events at or after this instant (ISO, or `30m`/`24h`/`7d`). */
+				since: windowSchema,
+				/** Only events strictly before this instant (same formats). */
+				until: windowSchema,
 				limit: z.number().int().min(1).max(200).default(50),
 				offset: z.number().int().min(0).default(0),
 			}),
@@ -30,6 +75,8 @@ export const auditRouter = router({
 			if (input.search) {
 				conditions.push(ilike(auditLogs.targetName, `%${input.search}%`));
 			}
+			if (input.since) conditions.push(gte(auditLogs.createdAt, input.since));
+			if (input.until) conditions.push(lt(auditLogs.createdAt, input.until));
 			const [rows, total] = await Promise.all([
 				db.query.auditLogs.findMany({
 					where: and(...conditions),
@@ -55,6 +102,11 @@ export const auditRouter = router({
 			z.object({
 				action: z.string().optional(),
 				targetType: z.string().optional(),
+				// Same filters as `all`, so the CSV matches what the operator is
+				// looking at when they press Export.
+				search: z.string().max(100).optional(),
+				since: windowSchema,
+				until: windowSchema,
 				limit: z.number().int().min(1).max(10_000).default(5_000),
 			}),
 		)
@@ -67,6 +119,9 @@ export const auditRouter = router({
 			const conditions = [eq(auditLogs.organizationId, organizationId)];
 			if (input.action) conditions.push(eq(auditLogs.action, input.action));
 			if (input.targetType) conditions.push(eq(auditLogs.targetType, input.targetType));
+			if (input.search) conditions.push(ilike(auditLogs.targetName, `%${input.search}%`));
+			if (input.since) conditions.push(gte(auditLogs.createdAt, input.since));
+			if (input.until) conditions.push(lt(auditLogs.createdAt, input.until));
 			const rows = await db.query.auditLogs.findMany({
 				where: and(...conditions),
 				orderBy: desc(auditLogs.createdAt),

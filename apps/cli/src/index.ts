@@ -6,6 +6,14 @@ import { setOutputMode } from "./utils/output.js";
 
 declare const __CLI_VERSION__: string;
 
+// `nixploy audit export | head` (or any piped command) closes stdout early and
+// Node turns the next write into an unhandled EPIPE with a stack trace. The
+// reader got what it asked for — exit quietly.
+process.stdout.on("error", (error: NodeJS.ErrnoException) => {
+	if (error.code === "EPIPE") process.exit(EXIT_OK);
+	throw error;
+});
+
 const program = new Command();
 
 program

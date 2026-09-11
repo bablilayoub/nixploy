@@ -1122,6 +1122,15 @@ export const commandRegistry: RegistryEntry[] = [
 	// ------------------------------------------------------------------- org
 	{
 		group: "org",
+		verb: "list",
+		aliases: ["ls"],
+		procedure: "organization.list",
+		kind: "query",
+		summary: "Organizations this API key's user belongs to (role + active flag)",
+		columns: ["organizationId", "name", "slug", "role", "active"],
+	},
+	{
+		group: "org",
 		verb: "settings",
 		procedure: "organization.settings",
 		kind: "query",

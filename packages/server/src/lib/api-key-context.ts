@@ -12,6 +12,8 @@ import {
 	clientIpFromRequest,
 	hasRateLimitCapacity,
 	ipRateLimitMax,
+	RateLimitedCause,
+	rateLimitResetInMs,
 	takeIpRateLimitToken,
 	takeRateLimitToken,
 } from "../utils/rate-limit";
@@ -41,6 +43,25 @@ function scopeCeiling(scope: ApiKeyScope | null): readonly OrgCapability[] {
 const REQUESTS_PER_IP_MINUTE = 120;
 const REQUESTS_PER_KEY_MINUTE = 120;
 const AUTH_FAILURES_PER_MINUTE = 30;
+
+/**
+ * Verification failures that are a throttle, not a bad credential.
+ *
+ * The api-key plugin answers its own per-key rate limit (`rateLimit` in
+ * `lib/auth.ts`) with `{ valid: false, error: { code: "RATE_LIMITED" } }` —
+ * the same envelope a revoked key produces. Reported as `UNAUTHORIZED` it read
+ * as "your key was deleted", which sent operators hunting for a key that was
+ * fine (CLI/MCP audit §12). These codes become `TOO_MANY_REQUESTS` instead,
+ * and never count against the per-IP auth-failure bucket.
+ */
+const THROTTLE_ERROR_CODES = new Set(["RATE_LIMITED", "USAGE_EXCEEDED"]);
+
+/** Milliseconds the api-key plugin says to wait (`details.tryAgainIn`). */
+function tryAgainInMs(error: { details?: unknown } | null | undefined): number {
+	const details = error?.details;
+	const value = (details as { tryAgainIn?: unknown } | undefined)?.tryAgainIn;
+	return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 60_000;
+}
 
 /** What the verified key turned out to be, for callers that need to branch. */
 export interface ApiKeyCallerInfo {
@@ -81,13 +102,20 @@ export async function buildApiKeyContext(
 	options: ApiKeyContextOptions,
 ): Promise<ApiKeyContext> {
 	const ip = clientIpFromRequest(req);
+	const ipBucketKey = `${options.bucket}:${ip}`;
 	const authFailureKey = `${options.bucket}-auth:${ip}`;
 	const authFailureMax = ipRateLimitMax(ip, AUTH_FAILURES_PER_MINUTE);
 	if (
 		!takeIpRateLimitToken(options.bucket, ip, { windowMs: 60_000, max: REQUESTS_PER_IP_MINUTE }) ||
 		!hasRateLimitCapacity(authFailureKey, authFailureMax)
 	) {
-		throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many requests" });
+		throw new TRPCError({
+			code: "TOO_MANY_REQUESTS",
+			message: "Too many requests from this address",
+			cause: new RateLimitedCause(
+				Math.max(rateLimitResetInMs(ipBucketKey), rateLimitResetInMs(authFailureKey)),
+			),
+		});
 	}
 
 	const bearer = options.allowBearer
@@ -110,6 +138,7 @@ export async function buildApiKeyContext(
 		body: { key: apiKeyHeader },
 	})) as {
 		valid: boolean;
+		error?: { code?: string; message?: string; details?: unknown } | null;
 		key: {
 			referenceId?: string;
 			userId?: string;
@@ -119,6 +148,18 @@ export async function buildApiKeyContext(
 		} | null;
 	};
 	if (!result.valid || !result.key) {
+		const errorCode = result.error?.code;
+		if (errorCode && THROTTLE_ERROR_CODES.has(errorCode)) {
+			const retryAfterMs = tryAgainInMs(result.error);
+			throw new TRPCError({
+				code: "TOO_MANY_REQUESTS",
+				message: `API key rate limit exceeded (${REQUESTS_PER_KEY_MINUTE} requests/minute). Retry in ${Math.max(
+					1,
+					Math.ceil(retryAfterMs / 1000),
+				)}s.`,
+				cause: new RateLimitedCause(retryAfterMs),
+			});
+		}
 		// Only failed verifications count against the per-IP auth bucket, so
 		// legitimate keys behind a shared/unknown IP are never starved by it.
 		takeRateLimitToken(authFailureKey, { windowMs: 60_000, max: authFailureMax });
@@ -127,13 +168,22 @@ export async function buildApiKeyContext(
 			message: "Invalid or expired API key",
 		});
 	}
+	const keyBucketKey = `${options.bucket}:key:${result.key.id}`;
 	if (
-		!takeRateLimitToken(`${options.bucket}:key:${result.key.id}`, {
+		!takeRateLimitToken(keyBucketKey, {
 			windowMs: 60_000,
 			max: REQUESTS_PER_KEY_MINUTE,
 		})
 	) {
-		throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many requests" });
+		const retryAfterMs = rateLimitResetInMs(keyBucketKey) || 60_000;
+		throw new TRPCError({
+			code: "TOO_MANY_REQUESTS",
+			message: `API key rate limit exceeded (${REQUESTS_PER_KEY_MINUTE} requests/minute). Retry in ${Math.max(
+				1,
+				Math.ceil(retryAfterMs / 1000),
+			)}s.`,
+			cause: new RateLimitedCause(retryAfterMs),
+		});
 	}
 
 	// @better-auth/api-key >= 1.6 exposes the owner as referenceId.

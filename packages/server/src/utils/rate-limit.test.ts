@@ -11,8 +11,11 @@ import {
 	PEER_IP_HEADER,
 	PRIVATE_PROXY_RANGES,
 	parseTrustedProxies,
+	RateLimitedCause,
+	rateLimitResetInMs,
 	recordFailure,
 	resetFailureRecords,
+	retryAfterSecondsFromError,
 	takeIpRateLimitToken,
 	takeRateLimitToken,
 	trustedProxyCidrsForAuth,
@@ -31,6 +34,32 @@ describe("takeRateLimitToken / hasRateLimitCapacity", () => {
 		expect(takeRateLimitToken(key, { windowMs: 60_000, max: 2 })).toBe(true);
 		expect(hasRateLimitCapacity(key, 2)).toBe(false);
 		expect(takeRateLimitToken(key, { windowMs: 60_000, max: 2 })).toBe(false);
+	});
+});
+
+describe("rateLimitResetInMs / RateLimitedCause", () => {
+	it("reports the time left in a live window and nothing for an unknown key", () => {
+		const key = uniqueBucket("reset");
+		expect(rateLimitResetInMs(key)).toBe(0);
+		takeRateLimitToken(key, { windowMs: 60_000, max: 1 });
+		const remaining = rateLimitResetInMs(key);
+		expect(remaining).toBeGreaterThan(55_000);
+		expect(remaining).toBeLessThanOrEqual(60_000);
+	});
+
+	it("rounds a retry-after up to whole seconds, never below one", () => {
+		expect(new RateLimitedCause(1).retryAfterSeconds).toBe(1);
+		expect(new RateLimitedCause(0).retryAfterSeconds).toBe(1);
+		expect(new RateLimitedCause(1_400).retryAfterSeconds).toBe(2);
+		expect(new RateLimitedCause(60_000).retryAfterSeconds).toBe(60);
+	});
+
+	it("is readable back off an error that wraps it as `cause`", () => {
+		const wrapped = new Error("Too many requests", { cause: new RateLimitedCause(2_500) });
+		expect(retryAfterSecondsFromError(wrapped)).toBe(3);
+		expect(retryAfterSecondsFromError(new RateLimitedCause(1_000))).toBe(1);
+		expect(retryAfterSecondsFromError(new Error("nope"))).toBeNull();
+		expect(retryAfterSecondsFromError(null)).toBeNull();
 	});
 });
 

@@ -290,6 +290,8 @@ export function ServerSettingsView() {
 		cleanupCronExpression: settings?.cleanupCronExpression ?? "",
 	});
 	const { cleanupCronEnabled, cleanupCronExpression } = maintenanceDraft.value;
+	const egressDraft = useDraft(settings?.allowPrivateEgress ?? false);
+	const allowPrivateEgress = egressDraft.value;
 
 	const updateMutation = useSaveMutation(
 		trpc.webServer.updateSettings.mutationOptions({
@@ -361,8 +363,13 @@ export function ServerSettingsView() {
 		);
 	};
 
+	const saveEgress = () => {
+		updateMutation.mutate({ allowPrivateEgress }, { onSuccess: () => egressDraft.markSaved() });
+	};
+
 	const savePending = updateMutation.isPending;
 	const saveDisabled = settingsQuery.isPending;
+	useSaveBar(egressDraft, { onSave: saveEgress, pending: savePending, disabled: saveDisabled });
 	useSaveBar(accessDraft, { onSave: saveAccess, pending: savePending, disabled: saveDisabled });
 	useSaveBar(proxyDraft, { onSave: saveProxy, pending: savePending, disabled: saveDisabled });
 	useSaveBar(healthDraft, { onSave: saveHealth, pending: savePending, disabled: saveDisabled });
@@ -550,6 +557,58 @@ export function ServerSettingsView() {
 							)}
 						</div>
 					</details>
+				</SettingsSection>
+
+				{/* Outbound requests: the private-egress escape hatch */}
+				<SettingsSection
+					id="egress"
+					title="Outbound requests"
+					description="Where notifications, SMTP, registries, S3 and webhooks are allowed to connect."
+					actions={
+						<Button
+							type="button"
+							size="sm"
+							disabled={updateMutation.isPending || settingsQuery.isPending}
+							onClick={saveEgress}
+						>
+							{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+							Save
+						</Button>
+					}
+				>
+					{settingsQuery.isPending ? (
+						<Skeleton className="h-9 w-full" />
+					) : (
+						<>
+							<div className="flex items-center justify-between gap-4">
+								<div className="grid gap-0.5">
+									<Label htmlFor="allow-private-egress">Allow private network targets</Label>
+									<p className="text-xs text-muted-foreground">
+										Off by default: outbound targets must resolve to a public address.
+									</p>
+								</div>
+								<Switch
+									id="allow-private-egress"
+									checked={allowPrivateEgress}
+									onCheckedChange={egressDraft.set}
+								/>
+							</div>
+							{allowPrivateEgress ? (
+								<div className="flex items-start gap-2 rounded-md border border-warning/50 bg-warning/10 p-3 text-sm text-warning">
+									<ShieldAlert className="mt-0.5 size-4 shrink-0" />
+									<p>
+										Organization admins can now point notification, SMTP, registry and S3 targets at
+										hosts on this machine&apos;s LAN. The Swarm overlay and the cloud metadata
+										endpoints stay blocked either way.
+									</p>
+								</div>
+							) : null}
+							<p className="text-sm text-muted-foreground">
+								Turn this on only for a self-hosted MinIO, Gotify, Gitea or SMTP server on a private
+								network. <HelpLink slug="security" />
+							</p>
+						</>
+					)}
 				</SettingsSection>
 
 				{/* Host health: meters + alert thresholds */}

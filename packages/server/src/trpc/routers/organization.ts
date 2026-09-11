@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
-import { and, count, eq, gt, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import { invitations, members, organizations, projects, users } from "../../db/schema";
@@ -55,6 +55,45 @@ const brandingInputSchema = z.object({
 });
 
 export const organizationRouter = router({
+	/**
+	 * Organizations the caller belongs to, oldest membership first, with the
+	 * one this request resolves to flagged `active` — what `nixploy org list`
+	 * and `org use` need to stop guessing from stored profiles.
+	 *
+	 * Strictly the caller's own memberships: it joins through `member`, so an
+	 * organization the caller does not belong to can never appear. `active`
+	 * mirrors `resolveCallerOrganizationId` (the session/header organization
+	 * when the caller is a member of it, otherwise the oldest membership)
+	 * without throwing for a user who belongs to none — this procedure answers
+	 * `[]` for them instead, which is what the CLI wants to print.
+	 */
+	list: protectedProcedure.query(async ({ ctx }) => {
+		const rows = await db
+			.select({
+				organizationId: organizations.id,
+				name: organizations.name,
+				slug: organizations.slug,
+				logo: organizations.logo,
+				role: members.role,
+				joinedAt: members.createdAt,
+			})
+			.from(members)
+			.innerJoin(organizations, eq(organizations.id, members.organizationId))
+			.where(eq(members.userId, ctx.session.user.id))
+			.orderBy(asc(members.createdAt));
+
+		const requested = ctx.session.session.activeOrganizationId ?? null;
+		const activeOrganizationId =
+			requested && rows.some((row) => row.organizationId === requested)
+				? requested
+				: (rows[0]?.organizationId ?? null);
+
+		return rows.map((row) => ({
+			...row,
+			active: row.organizationId === activeOrganizationId,
+		}));
+	}),
+
 	/** Quotas, branding and usage for the active organization. */
 	settings: protectedProcedure.query(async ({ ctx }) => {
 		const organizationId = await resolveCallerOrganizationId(

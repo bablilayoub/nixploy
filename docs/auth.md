@@ -361,10 +361,18 @@ go through `utils/public-url.ts`:
 - `nixploy`, `nixploy-postgres`, `nixploy-traefik`, `traefik` and `postgres` are
   never reachable by name;
 - other private/LAN addresses (127/8, 192.168/16, 172.16/12, CGNAT, IPv6 ULA)
-  need the instance-admin toggle **Settings → Web server → Allow private
-  egress** (`web_server_settings.allow_private_egress`, default **off**;
-  `NIXPLOY_ALLOW_PRIVATE_EGRESS=1` forces it on for installs without UI
-  access).
+  need the instance-admin toggle **Settings → Platform → Outbound requests →
+  Allow private network targets** (`web_server_settings.allow_private_egress`,
+  default **off**; `NIXPLOY_ALLOW_PRIVATE_EGRESS=1` forces it on for installs
+  without UI access).
+
+Turning the toggle on lets organization **admins** — not just the instance
+admin — point notification, SMTP, registry and S3 targets at hosts on the
+panel machine's LAN, so it is worth the extra click only for a self-hosted
+MinIO, Gotify, Gitea or SMTP server. The ranges in the first three bullets stay
+blocked either way. The guard caches the flag for 30 s; saving the toggle
+invalidates that cache, so the next outbound check sees the new value
+immediately.
 
 Once a target passes, the connection is **pinned to the address that was
 vetted** (`pinnedFetch` — a `node:http`/`node:https` request with a custom

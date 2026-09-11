@@ -76,6 +76,16 @@ export const EXEMPT = [
 	"bitbucket.one",
 	// Audit is org-filtered; covered indirectly via project seed volume of work.
 	"audit.all",
+	// The caller's OWN memberships, not org rows: `organization.list` joins
+	// through `member.user_id = ctx.session.user.id`, so an organization the
+	// caller does not belong to cannot appear in the result at all. There is no
+	// second tenant's row for an isolation assertion to catch.
+	"organization.list",
+	// Docker volumes are instance-level resources, not org rows: `volumeFiles.*`
+	// is gated on `docker.manage` + the instance-admin role, and a `serverId`
+	// is verified against the caller's org before any SSH command
+	// (`trpc/routers/volume-files.ts`). There is no tenant row to isolate.
+	"volumeFiles.list",
 ] as const;
 
 export const LIST_GET_SUFFIXES = [".all", ".one", ".list"] as const;

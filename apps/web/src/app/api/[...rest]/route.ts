@@ -2,6 +2,7 @@ import { buildApiKeyContext } from "@nixploy/server/lib/api-key-context";
 import { appRouter } from "@nixploy/server/trpc";
 import type { TRPCContext } from "@nixploy/server/trpc/init";
 import { coerceQueryInput } from "@nixploy/server/trpc/query-input";
+import { retryAfterSecondsFromError } from "@nixploy/server/utils/rate-limit";
 import { getTRPCErrorFromUnknown } from "@trpc/server";
 import superjson, { type SuperJSONResult } from "superjson";
 
@@ -55,7 +56,7 @@ const NUMERIC_CODE: Record<string, number> = {
 	TOO_MANY_REQUESTS: -32029,
 };
 
-function errorResponse(code: string, message: string) {
+function errorResponse(code: string, message: string, retryAfterSeconds?: number | null) {
 	const httpStatus = HTTP_STATUS_BY_CODE[code] ?? 500;
 	return Response.json(
 		{
@@ -63,11 +64,27 @@ function errorResponse(code: string, message: string) {
 			error: {
 				message,
 				code: NUMERIC_CODE[code] ?? -32603,
-				data: { code, httpStatus },
+				data: {
+					code,
+					httpStatus,
+					...(retryAfterSeconds ? { retryAfterSeconds } : {}),
+				},
 			},
 		},
-		{ status: httpStatus },
+		{
+			status: httpStatus,
+			// RFC 9110 §10.2.3 — a throttled client is told how long to wait
+			// instead of hammering the panel (or, worse, rotating its API key
+			// because a 401 said the key was invalid).
+			headers: retryAfterSeconds ? { "retry-after": String(retryAfterSeconds) } : undefined,
+		},
 	);
+}
+
+/** `errorResponse` for a thrown error, carrying its `Retry-After` when it has one. */
+function errorResponseFor(error: unknown) {
+	const trpcError = getTRPCErrorFromUnknown(error);
+	return errorResponse(trpcError.code, trpcError.message, retryAfterSecondsFromError(trpcError));
 }
 
 interface ResolvedProcedure {
@@ -140,8 +157,7 @@ async function handle(req: Request, path: string): Promise<Response> {
 	try {
 		ctx = await buildContext(req);
 	} catch (error) {
-		const trpcError = getTRPCErrorFromUnknown(error);
-		return errorResponse(trpcError.code, trpcError.message);
+		return errorResponseFor(error);
 	}
 
 	let input: unknown;
@@ -179,8 +195,7 @@ async function handle(req: Request, path: string): Promise<Response> {
 		const data = await procedure.call(ctx, input);
 		return Response.json({ result: { data } });
 	} catch (error) {
-		const trpcError = getTRPCErrorFromUnknown(error);
-		return errorResponse(trpcError.code, trpcError.message);
+		return errorResponseFor(error);
 	}
 }
 
