@@ -1,4 +1,3 @@
-import { TRPCError } from "@trpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
@@ -16,6 +15,7 @@ import {
 import { isAppNameTaken } from "../application/app-name";
 import { auditFromSession } from "../audit";
 import { unregisterBackupsForService } from "../backups/scheduler";
+import { badRequest, conflict, notFound, unauthorized } from "../errors";
 import {
 	assertCapability,
 	assertWithinQuota,
@@ -62,7 +62,7 @@ interface DatabaseRouterOptions<K extends DatabaseKind> {
 function getOrganizationId(ctx: TRPCContext): Promise<string> {
 	const session = ctx.session;
 	if (!session) {
-		throw new TRPCError({ code: "UNAUTHORIZED" });
+		throw unauthorized("Sign in to continue");
 	}
 	return resolveCallerOrganizationId(session.user.id, session.session.activeOrganizationId);
 }
@@ -74,7 +74,7 @@ async function assertEnvironmentAccess(environmentId: string, organizationId: st
 		with: { project: true },
 	});
 	if (!environment || environment.project.organizationId !== organizationId) {
-		throw new TRPCError({ code: "NOT_FOUND", message: "Environment not found" });
+		throw notFound("Environment not found");
 	}
 	return environment;
 }
@@ -89,10 +89,7 @@ async function assertEnvironmentAccess(environmentId: string, organizationId: st
 async function resolveNewAppName(requested: string | undefined, name: string): Promise<string> {
 	if (requested) {
 		if (await isAppNameTaken(requested)) {
-			throw new TRPCError({
-				code: "CONFLICT",
-				message: `appName "${requested}" is already in use`,
-			});
+			throw conflict(`appName "${requested}" is already in use`);
 		}
 		return requested;
 	}
@@ -100,10 +97,7 @@ async function resolveNewAppName(requested: string | undefined, name: string): P
 		const candidate = generateDatabaseAppName(name);
 		if (!(await isAppNameTaken(candidate))) return candidate;
 	}
-	throw new TRPCError({
-		code: "INTERNAL_SERVER_ERROR",
-		message: `Could not generate a unique appName for "${name}"`,
-	});
+	throw new Error(`Could not generate a unique appName for "${name}"`);
 }
 
 export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRouterOptions<K>) {
@@ -136,7 +130,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 		const rows = (await db.select().from(table).where(eq(idColumn, id)).limit(1)) as Row[];
 		const row = rows[0];
 		if (!row) {
-			throw new TRPCError({ code: "NOT_FOUND", message: "Database not found" });
+			throw notFound("Database not found");
 		}
 		await assertEnvironmentAccess(row.environmentId, organizationId);
 		return row;
@@ -150,7 +144,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			.returning()) as Row[];
 		const row = updated[0];
 		if (!row) {
-			throw new TRPCError({ code: "NOT_FOUND", message: "Database not found" });
+			throw notFound("Database not found");
 		}
 		return row;
 	}
@@ -170,7 +164,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 					where: eq(projects.projectId, input.projectId),
 				});
 				if (!project || project.organizationId !== organizationId) {
-					throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
+					throw notFound("Project not found");
 				}
 				const envs = await db.query.environments.findMany({
 					where: input.environmentName
@@ -227,10 +221,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			try {
 				dockerImage = assertSafeDockerImageRef(input.dockerImage);
 			} catch (error) {
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: error instanceof Error ? error.message : "Invalid docker image",
-				});
+				throw badRequest(error instanceof Error ? error.message : "Invalid docker image");
 			}
 			const appName = await resolveNewAppName(input.appName, input.name);
 			try {
@@ -259,10 +250,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 					error !== null &&
 					(error as { code?: string }).code === "23505"
 				) {
-					throw new TRPCError({
-						code: "CONFLICT",
-						message: `appName "${appName}" is already in use`,
-					});
+					throw conflict(`appName "${appName}" is already in use`);
 				}
 				throw error;
 			}
@@ -284,16 +272,10 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 				// row are keyed by appName: renaming a deployed database would
 				// orphan all of them. Renames are only allowed before the first start.
 				if (await databaseServiceExists(existing.appName)) {
-					throw new TRPCError({
-						code: "BAD_REQUEST",
-						message: "appName cannot be changed once the database has been deployed",
-					});
+					throw badRequest("appName cannot be changed once the database has been deployed");
 				}
 				if (await isAppNameTaken(values.appName)) {
-					throw new TRPCError({
-						code: "CONFLICT",
-						message: `appName "${values.appName}" is already in use`,
-					});
+					throw conflict(`appName "${values.appName}" is already in use`);
 				}
 			} else if (values.appName === existing.appName) {
 				delete values.appName;
@@ -305,10 +287,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 				try {
 					values.dockerImage = assertSafeDockerImageRef(values.dockerImage);
 				} catch (error) {
-					throw new TRPCError({
-						code: "BAD_REQUEST",
-						message: error instanceof Error ? error.message : "Invalid docker image",
-					});
+					throw badRequest(error instanceof Error ? error.message : "Invalid docker image");
 				}
 			}
 			const touchesSecrets =
@@ -334,7 +313,12 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 		 * different environment; the data volume is not copied.
 		 */
 		duplicate: protectedProcedure
-			.input(z.object({ [idField]: z.string().min(1), environmentId: z.string().optional() }))
+			.input(
+				z.object({
+					[idField]: z.string().min(1),
+					environmentId: z.string().optional(),
+				}),
+			)
 			.mutation(async ({ ctx, input }) => {
 				const organizationId = await getOrganizationId(ctx);
 				await assertCapability(ctx.session.user.id, organizationId, "service.write");
@@ -365,14 +349,21 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 
 		/** Move this database to another environment (any project in the org). */
 		move: protectedProcedure
-			.input(z.object({ [idField]: z.string().min(1), environmentId: z.string().min(1) }))
+			.input(
+				z.object({
+					[idField]: z.string().min(1),
+					environmentId: z.string().min(1),
+				}),
+			)
 			.mutation(async ({ ctx, input }) => {
 				const organizationId = await getOrganizationId(ctx);
 				await assertCapability(ctx.session.user.id, organizationId, "service.write");
 				const id = input[idField] as string;
 				const row = await findRowOrThrow(id, organizationId);
 				await assertEnvironmentAccess(input.environmentId as string, organizationId);
-				const updated = await updateRow(id, { environmentId: input.environmentId });
+				const updated = await updateRow(id, {
+					environmentId: input.environmentId,
+				});
 				await auditFromSession(ctx, organizationId, {
 					action: `${kind}.move`,
 					targetType: kind,
@@ -503,10 +494,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
 			if (!(await databaseServiceExists(row.appName))) {
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: "Database is not deployed; use start instead",
-				});
+				throw badRequest("Database is not deployed; use start instead");
 			}
 			await reloadDatabase(row.appName);
 			const updated = await updateRow(id, { status: "running" });

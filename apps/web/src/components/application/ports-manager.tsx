@@ -45,6 +45,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import type { ServicePort } from "./types";
@@ -95,7 +96,7 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 				setDialogOpen(false);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 	const update = useMutation(
@@ -105,7 +106,7 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 				setDialogOpen(false);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 	const remove = useMutation(
@@ -115,7 +116,7 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 				setDeleteTarget(null);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -289,7 +290,10 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 							<Select
 								value={form.protocol}
 								onValueChange={(v) =>
-									setForm((f) => ({ ...f, protocol: v as ServicePort["protocol"] }))
+									setForm((f) => ({
+										...f,
+										protocol: v as ServicePort["protocol"],
+									}))
 								}
 							>
 								<SelectTrigger className="w-full">
@@ -306,7 +310,10 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 							<Select
 								value={form.publishMode}
 								onValueChange={(v) =>
-									setForm((f) => ({ ...f, publishMode: v as ServicePort["publishMode"] }))
+									setForm((f) => ({
+										...f,
+										publishMode: v as ServicePort["publishMode"],
+									}))
 								}
 							>
 								<SelectTrigger className="w-full">

@@ -2,6 +2,7 @@ import { and, desc, eq, gt, ilike, isNull, or, sql } from "drizzle-orm";
 import { db } from "../../db";
 import { alertRules, deployments, incidents, serviceLogs, uptimeProbes } from "../../db/schema";
 import { assertSafeOutboundUrl } from "../../utils/public-url";
+import { notFound } from "../errors";
 import { notifyEvent } from "../notifications";
 
 export async function recordIncident(input: {
@@ -91,7 +92,7 @@ export async function upsertAlertRule(input: {
 			)
 			.returning();
 		if (!row) {
-			throw new Error("Alert rule not found");
+			throw notFound("Alert rule not found");
 		}
 		return row;
 	}
@@ -225,7 +226,9 @@ export async function evaluateServiceAlertRules(input: {
 		return;
 	}
 
-	const rules = await db.query.alertRules.findMany({ where: and(...conditions) });
+	const rules = await db.query.alertRules.findMany({
+		where: and(...conditions),
+	});
 	const now = Date.now();
 
 	for (const rule of rules) {
@@ -295,7 +298,9 @@ export async function ingestServiceLog(input: {
 
 	// Soft prune: drop oldest when over size budget (approx by row count * avg).
 	const sizeRows = await db
-		.select({ total: sql<number>`coalesce(sum(length(${serviceLogs.body})), 0)` })
+		.select({
+			total: sql<number>`coalesce(sum(length(${serviceLogs.body})), 0)`,
+		})
 		.from(serviceLogs)
 		.where(eq(serviceLogs.organizationId, input.organizationId));
 	const total = Number(sizeRows[0]?.total ?? 0);

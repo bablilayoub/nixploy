@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { missingCapabilityHint } from "@/lib/capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -84,14 +85,14 @@ export function RegistriesView() {
 				setRegistryType("cloud");
 				setImagePrefix("");
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
 	const testMutation = useMutation(
 		trpc.registry.test.mutationOptions({
 			onSuccess: () => toast.success("Registry login successful"),
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -101,7 +102,7 @@ export function RegistriesView() {
 				toast.success("Registry removed");
 				await invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -131,7 +132,7 @@ export function RegistriesView() {
 				await invalidate();
 				setEditing(null);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

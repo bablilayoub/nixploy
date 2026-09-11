@@ -36,6 +36,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import { describeServiceCounts, type ServiceCounts, sumServiceCounts } from "./service-summary";
@@ -93,7 +94,7 @@ export function ProjectActions({
 				await invalidateProjects();
 				setRenameOpen(false);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -106,7 +107,7 @@ export function ProjectActions({
 				});
 				router.push("/dashboard");
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

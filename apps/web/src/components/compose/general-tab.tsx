@@ -3,7 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
 import type { ComposeService } from "@/components/compose/compose-detail";
 import {
 	GIT_PROVIDER_LABELS,
@@ -27,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 type SourceType = ComposeService["sourceType"];
@@ -184,7 +184,7 @@ export function GeneralTab({
 				// Refetch is done: the server now holds what was typed.
 				setDirty(false);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

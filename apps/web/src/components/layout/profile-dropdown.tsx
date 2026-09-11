@@ -5,7 +5,6 @@ import { Bell, KeyRound, LogOut, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -19,11 +18,16 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/user-avatar";
 import { signOut, useSession } from "@/lib/auth-client";
+import { toastError } from "@/lib/describe-error";
 
 const settingsItems = [
 	{ label: "Profile", icon: User, href: "/dashboard/settings/profile" },
 	{ label: "SSH keys", icon: KeyRound, href: "/dashboard/settings/ssh-keys" },
-	{ label: "Notifications", icon: Bell, href: "/dashboard/settings/notifications" },
+	{
+		label: "Notifications",
+		icon: Bell,
+		href: "/dashboard/settings/notifications",
+	},
 ];
 
 /** Compact avatar menu for the top header — shadcn-admin ProfileDropdown pattern. */
@@ -41,14 +45,14 @@ export function ProfileDropdown() {
 			// better-auth resolves with `{ error }` instead of throwing.
 			const { error } = await signOut();
 			if (error) {
-				toast.error(error.message ?? "Failed to sign out");
+				toastError(error, "Failed to sign out");
 				return;
 			}
 			queryClient.clear();
 			router.push("/login");
 			router.refresh();
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "Failed to sign out");
+			toastError(error, "Failed to sign out");
 		}
 	};
 

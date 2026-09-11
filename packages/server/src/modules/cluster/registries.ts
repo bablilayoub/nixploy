@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { registry } from "../../db/schema";
 import { execAsyncWithStdin } from "../../utils/exec";
+import { notFound } from "../errors";
 
 export type CreateRegistryInput = {
 	registryName: string;
@@ -71,7 +72,7 @@ export async function testRegistry(input: {
 }): Promise<{ success: boolean }> {
 	const row = await findRegistryById(input.registryId, input.organizationId);
 	if (!row) {
-		throw new Error(`Registry not found: ${input.registryId}`);
+		throw notFound(`Registry not found: ${input.registryId}`);
 	}
 
 	if (input.serverId) {

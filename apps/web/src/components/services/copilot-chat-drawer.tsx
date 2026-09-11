@@ -6,7 +6,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,6 +18,7 @@ import {
 } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import { capabilityHint } from "./capability-hint";
@@ -76,7 +76,9 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 		const params = new URLSearchParams(searchParams.toString());
 		params.delete("copilot");
 		const query = params.toString();
-		router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+		router.replace(query ? `${pathname}?${query}` : pathname, {
+			scroll: false,
+		});
 	}, [searchParams, router, pathname]);
 
 	const aiSettings = useQuery({
@@ -99,7 +101,7 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 				]);
 				setPendingActions((result.proposedActions ?? []) as ProposedAction[]);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -210,7 +212,7 @@ export function CopilotChatDrawer({ target }: { target: CopilotTarget }) {
 					break;
 			}
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "Action failed");
+			toastError(error, "Action failed");
 		}
 	};
 

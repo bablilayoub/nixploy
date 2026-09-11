@@ -7,6 +7,7 @@ import {
 	assertTraefikHost,
 	assertTraefikPath,
 } from "../../utils/validators";
+import { badRequest } from "../errors";
 
 export const NIXPLOY_STACK_VERSION = 1;
 
@@ -270,7 +271,7 @@ export const parseStackYaml = (yaml: string): NixployStack => {
 		try {
 			parsed = JSON.parse(yaml);
 		} catch {
-			throw new Error("Invalid stack file: expected YAML or JSON");
+			throw badRequest("Invalid stack file: expected YAML or JSON");
 		}
 	}
 	return nixployStackSchema.parse(parsed);
@@ -286,5 +287,5 @@ export const parseStackInput = (input: { stack?: NixployStack; yaml?: string }):
 	if (input.yaml) {
 		return parseStackYaml(input.yaml);
 	}
-	throw new Error("Provide stack or yaml");
+	throw badRequest("Provide stack or yaml");
 };

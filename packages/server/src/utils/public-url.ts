@@ -1,5 +1,6 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { badRequest } from "../modules/errors";
 
 /** Block obvious SSRF targets (loopback / link-local / private / metadata). */
 export function assertPublicHostname(hostname: string): void {
@@ -11,7 +12,7 @@ export function assertPublicHostname(hostname: string): void {
 		host.endsWith(".local") ||
 		host.endsWith(".internal")
 	) {
-		throw new Error("URL host is not allowed");
+		throw badRequest("URL host is not allowed");
 	}
 	if (isIP(host)) {
 		assertPublicIp(host);
@@ -32,7 +33,7 @@ export function assertPublicIp(ip: string): void {
 		) {
 			const mapped = normalized.startsWith("::ffff:") ? normalized.slice("::ffff:".length) : null;
 			if (!mapped || mapped.includes(":")) {
-				throw new Error("URL host is not allowed");
+				throw badRequest("URL host is not allowed");
 			}
 			assertPublicIp(mapped);
 			return;
@@ -49,7 +50,7 @@ export function assertPublicIp(ip: string): void {
 		(a === 192 && b === 168) ||
 		(a === 100 && b >= 64 && b <= 127)
 	) {
-		throw new Error("URL host is not allowed");
+		throw badRequest("URL host is not allowed");
 	}
 }
 
@@ -80,16 +81,19 @@ export async function assertPublicHttpsUrl(url: string): Promise<URL> {
 	try {
 		parsed = new URL(url);
 	} catch {
-		throw new Error("Invalid URL");
+		throw badRequest("Invalid URL");
 	}
 	if (parsed.protocol !== "https:") {
-		throw new Error("URL must be https");
+		throw badRequest("URL must be https");
 	}
 	assertPublicHostname(parsed.hostname);
 	if (!isIP(parsed.hostname)) {
-		const records = await lookup(parsed.hostname, { all: true, verbatim: true });
+		const records = await lookup(parsed.hostname, {
+			all: true,
+			verbatim: true,
+		});
 		if (records.length === 0) {
-			throw new Error("URL host could not be resolved");
+			throw badRequest("URL host could not be resolved");
 		}
 		for (const record of records) {
 			assertPublicIp(record.address);
@@ -113,7 +117,7 @@ export async function assertSafeOutboundUrl(
 	try {
 		parsed = new URL(url);
 	} catch {
-		throw new Error("Invalid URL");
+		throw badRequest("Invalid URL");
 	}
 	const allowHttp = options?.allowHttp ?? options?.allowPrivate ?? false;
 	if (parsed.protocol === "https:") {
@@ -121,10 +125,10 @@ export async function assertSafeOutboundUrl(
 	} else if (parsed.protocol === "http:" && allowHttp) {
 		// ok for self-hosted LAN endpoints
 	} else {
-		throw new Error(allowHttp ? "URL must be http(s)" : "URL must be https");
+		throw badRequest(allowHttp ? "URL must be http(s)" : "URL must be https");
 	}
 	if (isCloudMetadataHostname(parsed.hostname)) {
-		throw new Error("URL must not target cloud metadata");
+		throw badRequest("URL must not target cloud metadata");
 	}
 
 	const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
@@ -137,7 +141,7 @@ export async function assertSafeOutboundUrl(
 
 	if (hostIsPrivate) {
 		if (!options?.allowPrivate) {
-			throw new Error("URL host is not allowed");
+			throw badRequest("URL host is not allowed");
 		}
 		return parsed;
 	}
@@ -145,7 +149,7 @@ export async function assertSafeOutboundUrl(
 	if (!isIP(host)) {
 		const records = await lookup(host, { all: true, verbatim: true });
 		if (records.length === 0) {
-			throw new Error("URL host could not be resolved");
+			throw badRequest("URL host could not be resolved");
 		}
 		for (const record of records) {
 			assertPublicIp(record.address);
@@ -160,10 +164,10 @@ export async function assertSafeOutboundUrl(
 export async function assertSafeSmtpHostname(hostname: string, allowPrivate = true): Promise<void> {
 	const host = hostname.trim().toLowerCase();
 	if (!host || host.includes("/") || host.includes(" ")) {
-		throw new Error("Invalid SMTP server hostname");
+		throw badRequest("Invalid SMTP server hostname");
 	}
 	if (isCloudMetadataHostname(host)) {
-		throw new Error("SMTP server must not target cloud metadata");
+		throw badRequest("SMTP server must not target cloud metadata");
 	}
 	let hostIsPrivate = false;
 	try {
@@ -173,14 +177,14 @@ export async function assertSafeSmtpHostname(hostname: string, allowPrivate = tr
 	}
 	if (hostIsPrivate) {
 		if (!allowPrivate) {
-			throw new Error("SMTP server host is not allowed");
+			throw badRequest("SMTP server host is not allowed");
 		}
 		return;
 	}
 	if (!isIP(host)) {
 		const records = await lookup(host, { all: true, verbatim: true });
 		if (records.length === 0) {
-			throw new Error("SMTP server host could not be resolved");
+			throw badRequest("SMTP server host could not be resolved");
 		}
 		for (const record of records) {
 			assertPublicIp(record.address);
@@ -197,13 +201,13 @@ export async function assertSafeSmtpHostname(hostname: string, allowPrivate = tr
 export async function assertSafeGitCloneUrl(url: string): Promise<void> {
 	const trimmed = url.trim();
 	if (!trimmed || trimmed.startsWith("-")) {
-		throw new Error("Invalid git URL");
+		throw badRequest("Invalid git URL");
 	}
 	const sshMatch = /^git@([^:]+):/.exec(trimmed) ?? /^ssh:\/\/(?:[^@]+@)?([^/]+)/i.exec(trimmed);
 	if (sshMatch?.[1]) {
 		const host = sshMatch[1].replace(/^\[|\]$/g, "").toLowerCase();
 		if (isCloudMetadataHostname(host)) {
-			throw new Error("git URL must not target cloud metadata");
+			throw badRequest("git URL must not target cloud metadata");
 		}
 		assertPublicHostname(host);
 		if (!isIP(host)) {
@@ -218,17 +222,20 @@ export async function assertSafeGitCloneUrl(url: string): Promise<void> {
 	try {
 		parsed = new URL(trimmed);
 	} catch {
-		throw new Error("Invalid git URL");
+		throw badRequest("Invalid git URL");
 	}
 	if (parsed.protocol === "file:" || parsed.protocol === "git:") {
-		throw new Error("git URL scheme is not allowed");
+		throw badRequest("git URL scheme is not allowed");
 	}
 	if (parsed.protocol !== "https:") {
-		throw new Error("git URL must be https or ssh");
+		throw badRequest("git URL must be https or ssh");
 	}
 	assertPublicHostname(parsed.hostname);
 	if (!isIP(parsed.hostname)) {
-		const records = await lookup(parsed.hostname, { all: true, verbatim: true });
+		const records = await lookup(parsed.hostname, {
+			all: true,
+			verbatim: true,
+		});
 		for (const record of records) {
 			assertPublicIp(record.address);
 		}

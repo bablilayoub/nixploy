@@ -4,7 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
 import { SESSIONS_QUERY_KEY } from "@/components/settings/profile/sessions-card";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
@@ -12,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { UserAvatar } from "@/components/user-avatar";
 import { authClient, useSession } from "@/lib/auth-client";
+import { toastError } from "@/lib/describe-error";
 import {
 	GRAVATAR_IMAGE_MARKER,
 	isGravatarImage,
@@ -41,7 +41,7 @@ export function ProfileCard() {
 		const { error } = await authClient.updateUser({ image });
 		setPending(false);
 		if (error) {
-			toast.error(error.message ?? "Failed to update avatar");
+			toastError(error, "Failed to update avatar");
 			return;
 		}
 		await refetch?.();
@@ -59,7 +59,7 @@ export function ProfileCard() {
 		const { error } = await authClient.updateUser({ name: trimmed });
 		setPending(false);
 		if (error) {
-			toast.error(error.message ?? "Failed to update name");
+			toastError(error, "Failed to update name");
 			return;
 		}
 		await refetch?.();
@@ -183,7 +183,7 @@ export function ChangePasswordCard() {
 		});
 		setIsPending(false);
 		if (error) {
-			toast.error(error.message ?? "Failed to change password");
+			toastError(error, "Failed to change password");
 			return;
 		}
 		toast.success("Password updated");

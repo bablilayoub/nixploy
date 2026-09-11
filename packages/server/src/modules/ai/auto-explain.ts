@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { deployments } from "../../db/schema";
+import { bestEffort } from "../../utils/best-effort";
 import { explainDeploymentFailure } from "./explain";
 import {
 	appendExplanationToLog,
@@ -31,5 +32,7 @@ export async function maybeAutoExplainOnFailure(
 
 	const result = await explainDeploymentFailure(deploymentId, organizationId);
 	await writeCachedExplanation(deployment.logPath, result);
-	await appendExplanationToLog(deployment.logPath, result).catch(() => {});
+	await bestEffort("append AI explanation to the deployment log", () =>
+		appendExplanationToLog(deployment.logPath, result),
+	);
 }

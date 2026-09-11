@@ -39,6 +39,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import type { RedirectEntry } from "./types";
@@ -84,7 +85,7 @@ export function RedirectsManager({ applicationId }: { applicationId: string }) {
 				setDialogOpen(false);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 	const update = useMutation(
@@ -94,7 +95,7 @@ export function RedirectsManager({ applicationId }: { applicationId: string }) {
 				setDialogOpen(false);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 	const remove = useMutation(
@@ -104,7 +105,7 @@ export function RedirectsManager({ applicationId }: { applicationId: string }) {
 				setDeleteTarget(null);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

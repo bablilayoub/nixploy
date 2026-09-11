@@ -15,7 +15,6 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +37,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { INSTANCE_ADMIN_HINT, missingCapabilityHint } from "@/lib/capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { TemplateLogo } from "./template-logo";
@@ -200,7 +200,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 			});
 			setDomainHost(generated);
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "Failed to generate domain");
+			toastError(error, "Failed to generate domain");
 		} finally {
 			setGeneratingHost(false);
 		}
@@ -220,19 +220,25 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 				// A new compose service now exists in the target project — refresh
 				// the project list, the project page and its compose service list.
 				await Promise.all([
-					queryClient.invalidateQueries({ queryKey: trpc.project.all.queryKey() }),
 					queryClient.invalidateQueries({
-						queryKey: trpc.project.one.queryKey({ projectId: variables.projectId }),
+						queryKey: trpc.project.all.queryKey(),
 					}),
 					queryClient.invalidateQueries({
-						queryKey: trpc.compose.all.queryKey({ projectId: variables.projectId }),
+						queryKey: trpc.project.one.queryKey({
+							projectId: variables.projectId,
+						}),
+					}),
+					queryClient.invalidateQueries({
+						queryKey: trpc.compose.all.queryKey({
+							projectId: variables.projectId,
+						}),
 					}),
 				]);
 				router.push(
 					`/dashboard/projects/${variables.projectId}/services/compose/${result.composeId}`,
 				);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

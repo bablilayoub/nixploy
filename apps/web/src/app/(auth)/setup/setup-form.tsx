@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { describeError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import {
@@ -192,7 +193,7 @@ export function SetupForm() {
 			toast.success("Instance ready");
 			setComplete(true);
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : "Network error";
+			const msg = describeError(err, "Network error");
 			toast.error(msg);
 			setFormError(msg);
 		} finally {

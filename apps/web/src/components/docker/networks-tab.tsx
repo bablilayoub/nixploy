@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Lock, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -27,6 +26,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps } from "./docker-view";
@@ -47,7 +47,9 @@ export function NetworksTab({ serverId }: DockerTabProps) {
 	const networksQuery = useQuery(trpc.docker.networks.queryOptions({ serverId }));
 
 	const invalidate = () =>
-		queryClient.invalidateQueries({ queryKey: trpc.docker.networks.queryKey({ serverId }) });
+		queryClient.invalidateQueries({
+			queryKey: trpc.docker.networks.queryKey({ serverId }),
+		});
 
 	const removeMutation = useMutation(
 		trpc.docker.networkRemove.mutationOptions({
@@ -56,7 +58,7 @@ export function NetworksTab({ serverId }: DockerTabProps) {
 				setRemoving(null);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

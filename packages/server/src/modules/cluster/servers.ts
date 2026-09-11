@@ -4,6 +4,7 @@ import { servers, webServerSettings } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { getSwarmNetwork } from "../application/paths";
 import { shellQuote } from "../deployment/paths";
+import { forbidden, notFound, preconditionFailed } from "../errors";
 import { REMOTE_TRAEFIK_DIR } from "../traefik/paths";
 import { buildTraefikStaticConfig } from "../traefik/setup";
 import { inspectPrimaryNode } from "./swarm-node";
@@ -95,7 +96,9 @@ export async function removeServer(serverId: string, organizationId: string) {
 		await tryRemote(serverId, "docker swarm leave --force");
 		try {
 			// `node rm` only succeeds once the node reports Down (or with --force).
-			await execAsync(`docker node rm --force ${shellQuote(nodeId)}`, { timeout: 30_000 });
+			await execAsync(`docker node rm --force ${shellQuote(nodeId)}`, {
+				timeout: 30_000,
+			});
 		} catch {
 			// Not a manager here, node already gone, or a different swarm — ignore.
 		}
@@ -115,7 +118,7 @@ export async function removeServer(serverId: string, organizationId: string) {
 export async function testConnection(serverId: string) {
 	const pong = await execAsyncRemote(serverId, "echo ok");
 	if (!pong.includes("ok")) {
-		throw new Error("SSH connection failed: unexpected response to `echo ok`");
+		throw preconditionFailed("SSH connection failed: unexpected response to `echo ok`");
 	}
 	const version = await execAsyncRemote(serverId, "docker version --format '{{.Server.Version}}'");
 	return { dockerVersion: version.trim() };
@@ -133,7 +136,7 @@ async function getLetsEncryptEmail(): Promise<string | null> {
 export async function getPrimarySwarmJoinCommand(role: SwarmRole): Promise<string> {
 	const token = (await execAsync(`docker swarm join-token ${role} -q`)).trim();
 	if (!token) {
-		throw new Error(`Failed to read swarm ${role} join token from the primary host`);
+		throw preconditionFailed(`Failed to read swarm ${role} join token from the primary host`);
 	}
 
 	// Prefer the manager's advertised address from swarm info; fall back to
@@ -153,7 +156,7 @@ export async function getPrimarySwarmJoinCommand(role: SwarmRole): Promise<strin
 		if (match?.[1]) {
 			return `docker swarm join --token ${token} ${match[1]}`;
 		}
-		throw new Error("Could not determine primary swarm advertise address");
+		throw preconditionFailed("Could not determine primary swarm advertise address");
 	}
 
 	const port = addr.includes(":") ? "" : ":2377";
@@ -180,7 +183,7 @@ export interface SetupServerOptions {
  */
 export async function setupServer(serverId: string, options: SetupServerOptions): Promise<string> {
 	if (!options.instanceAdminVerified) {
-		throw new Error("Joining a server to the primary Swarm requires the instance admin");
+		throw forbidden("Joining a server to the primary Swarm requires the instance admin");
 	}
 	const log: string[] = [];
 	const step = async (label: string, command: string) => {
@@ -200,7 +203,7 @@ export async function setupServer(serverId: string, options: SetupServerOptions)
 			where: eq(servers.serverId, serverId),
 		});
 		if (!server) {
-			throw new Error(`Server not found: ${serverId}`);
+			throw notFound(`Server not found: ${serverId}`);
 		}
 		const role: SwarmRole = server.swarmRole === "manager" ? "manager" : "worker";
 
@@ -308,7 +311,12 @@ export type ServerStats = {
 	images: number;
 	swarmNodeState: string;
 	memory: { totalBytes: number; usedBytes: number; availableBytes: number };
-	disk: { totalBytes: number; usedBytes: number; availableBytes: number; usedPercent: string };
+	disk: {
+		totalBytes: number;
+		usedBytes: number;
+		availableBytes: number;
+		usedPercent: string;
+	};
 	loadAverage: [number, number, number];
 };
 

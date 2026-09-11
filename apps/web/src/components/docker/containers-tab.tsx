@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { LogViewer } from "@/components/services/log-viewer";
 import { ServiceTerminal } from "@/components/services/terminal";
 import {
@@ -45,6 +44,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps, invalidateDockerQueries } from "./docker-view";
@@ -106,7 +106,7 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 					invalidate();
 				}
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

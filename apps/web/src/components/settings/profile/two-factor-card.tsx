@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
 import { authClient, useSession } from "@/lib/auth-client";
+import { toastError } from "@/lib/describe-error";
 
 export function TwoFactorCard() {
 	const { data: session, refetch } = useSession();
@@ -60,7 +61,7 @@ export function TwoFactorCard() {
 		const { data, error } = await authClient.twoFactor.enable({ password });
 		setIsPending(false);
 		if (error) {
-			toast.error(error.message ?? "Failed to enable 2FA");
+			toastError(error, "Failed to enable 2FA");
 			return;
 		}
 		// better-auth ≥ 1.7 discriminates the response on `method`; Nixploy only
@@ -78,7 +79,7 @@ export function TwoFactorCard() {
 		const { error } = await authClient.twoFactor.verifyTotp({ code });
 		setIsPending(false);
 		if (error) {
-			toast.error(error.message ?? "Invalid code");
+			toastError(error, "Invalid code");
 			return;
 		}
 		toast.success("Two-factor authentication enabled");
@@ -92,7 +93,7 @@ export function TwoFactorCard() {
 		const { error } = await authClient.twoFactor.disable({ password });
 		setIsPending(false);
 		if (error) {
-			toast.error(error.message ?? "Failed to disable 2FA");
+			toastError(error, "Failed to disable 2FA");
 			return;
 		}
 		toast.success("Two-factor authentication disabled");

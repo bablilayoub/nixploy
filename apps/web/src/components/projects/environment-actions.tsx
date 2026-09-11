@@ -44,6 +44,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import { GitopsCard, type GitopsCardHandle } from "./gitops-card";
 import { describeServiceCounts, type ServiceCounts } from "./service-summary";
@@ -142,7 +143,7 @@ export function EnvironmentActions({
 				setRenameOpen(false);
 				onRenamed(updated?.name ?? name.trim());
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 	const duplicate = useMutation(
@@ -155,7 +156,7 @@ export function EnvironmentActions({
 					onDuplicated(created.name);
 				}
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 	const remove = useMutation(
@@ -166,7 +167,7 @@ export function EnvironmentActions({
 				setDeleteOpen(false);
 				onDeleted();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 	const clone = useMutation(
@@ -181,7 +182,7 @@ export function EnvironmentActions({
 					onDuplicated(created.name);
 				}
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

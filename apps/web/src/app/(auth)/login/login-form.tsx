@@ -17,6 +17,7 @@ import {
 	FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { describeError } from "@/lib/describe-error";
 import { safeNextPath } from "@/lib/safe-next-path";
 
 import { type LoginInput, loginSchema } from "@/server/actions/auth.schema";
@@ -67,7 +68,7 @@ export function LoginForm() {
 			router.push(nextPath);
 			router.refresh();
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : "Network error";
+			const msg = describeError(err, "Network error");
 			toast.error(msg);
 			setFormError(msg);
 		}

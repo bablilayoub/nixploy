@@ -26,6 +26,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps, invalidateDockerQueries } from "./docker-view";
@@ -51,7 +52,7 @@ export function SystemTab({ serverId }: DockerTabProps) {
 				// volumes — every cached list for this daemon is stale now.
 				void invalidateDockerQueries(queryClient, trpc, serverId);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -144,7 +145,12 @@ export function SystemTab({ serverId }: DockerTabProps) {
 						<AlertDialogAction
 							variant="destructive"
 							disabled={pruneMutation.isPending}
-							onClick={() => pruneMutation.mutate({ serverId, volumes: pruneOpen === "volumes" })}
+							onClick={() =>
+								pruneMutation.mutate({
+									serverId,
+									volumes: pruneOpen === "volumes",
+								})
+							}
 						>
 							{pruneMutation.isPending && <Loader2 className="size-4 animate-spin" />}
 							Prune

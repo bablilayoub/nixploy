@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { badRequest } from "../modules/errors";
 
 /** Docker named volume / compose service name character set. */
 export const DOCKER_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
@@ -58,7 +59,7 @@ export function assertSafeAppName(appName: string): string {
 	const trimmed = appName.trim();
 	const parsed = appNameSchema.safeParse(trimmed);
 	if (!parsed.success) {
-		throw new Error(parsed.error.issues[0]?.message ?? `Invalid appName: ${appName}`);
+		throw badRequest(parsed.error.issues[0]?.message ?? `Invalid appName: ${appName}`);
 	}
 	return parsed.data;
 }
@@ -72,7 +73,7 @@ export const TRAEFIK_PATH_RE = /^\/[A-Za-z0-9._~/-]*$/;
 
 export function assertDockerVolumeName(volumeName: string): void {
 	if (!DOCKER_NAME_RE.test(volumeName) || volumeName.includes("..")) {
-		throw new Error(
+		throw badRequest(
 			`Invalid Docker volume name "${volumeName}" (must match ${DOCKER_NAME_RE.source})`,
 		);
 	}
@@ -81,7 +82,7 @@ export function assertDockerVolumeName(volumeName: string): void {
 export function assertTraefikHost(host: string): string {
 	const trimmed = host.trim().toLowerCase();
 	if (!TRAEFIK_HOST_RE.test(trimmed) || /[`()|]/.test(trimmed)) {
-		throw new Error(`Invalid domain host: ${host}`);
+		throw badRequest(`Invalid domain host: ${host}`);
 	}
 	return trimmed;
 }
@@ -89,20 +90,20 @@ export function assertTraefikHost(host: string): string {
 export function assertTraefikPath(path: string | null | undefined): string | null {
 	if (!path || path === "/") return path === "/" ? "/" : null;
 	if (!TRAEFIK_PATH_RE.test(path) || path.includes("..") || /[`()|]/.test(path)) {
-		throw new Error(`Invalid domain path: ${path}`);
+		throw badRequest(`Invalid domain path: ${path}`);
 	}
 	return path;
 }
 
 export function assertComposeServiceName(serviceName: string): void {
 	if (!DOCKER_NAME_RE.test(serviceName)) {
-		throw new Error(`Invalid compose service name: ${serviceName}`);
+		throw badRequest(`Invalid compose service name: ${serviceName}`);
 	}
 }
 
 export function assertBasicAuthUsername(username: string): void {
 	if (!/^[A-Za-z0-9._@+-]+$/.test(username) || username.includes(":")) {
-		throw new Error("Invalid basic-auth username");
+		throw badRequest("Invalid basic-auth username");
 	}
 }
 
@@ -118,10 +119,10 @@ export const BLOCKED_HOST_PORTS = new Set([
 
 export function assertSafePublishedPort(port: number, label = "publishedPort"): void {
 	if (!Number.isInteger(port) || port < 1 || port > 65535) {
-		throw new Error(`Invalid ${label}`);
+		throw badRequest(`Invalid ${label}`);
 	}
 	if (BLOCKED_HOST_PORTS.has(port) || port < 1024) {
-		throw new Error(
+		throw badRequest(
 			`${label} ${port} is not allowed (privileged or sensitive host ports are blocked)`,
 		);
 	}
@@ -142,7 +143,7 @@ export function assertSafeDockerImageRef(reference: string): string {
 		trimmed.includes("..") ||
 		!DOCKER_IMAGE_REF_RE.test(trimmed)
 	) {
-		throw new Error(`Invalid Docker image reference: ${reference}`);
+		throw badRequest(`Invalid Docker image reference: ${reference}`);
 	}
 	return trimmed;
 }

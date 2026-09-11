@@ -9,6 +9,7 @@ import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { writeFileTargeted } from "../deployment/docker";
 import { getSshKeysPath } from "../deployment/paths";
 import { buildGitSshCommand } from "../deployment/sources";
+import { badRequest, notFound } from "../errors";
 import { getComposeCodeDir, shellQuote } from "./paths";
 
 export type ComposeRow = typeof compose.$inferSelect;
@@ -32,7 +33,7 @@ const stripProtocol = (url: string) => url.replace(/^https?:\/\//, "").replace(/
 async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 	switch (composeRow.sourceType) {
 		case "git": {
-			if (!composeRow.gitUrl) throw new Error("Git source requires gitUrl");
+			if (!composeRow.gitUrl) throw badRequest("Git source requires gitUrl");
 			const source: GitSource = {
 				cloneUrl: composeRow.gitUrl,
 				branch: composeRow.gitBranch ?? "main",
@@ -41,7 +42,7 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 				const key = await db.query.sshKeys.findFirst({
 					where: eq(sshKeys.sshKeyId, composeRow.customGitSSHKeyId),
 				});
-				if (!key) throw new Error("Custom git SSH key not found");
+				if (!key) throw notFound("Custom git SSH key not found");
 				const keyPath = join(getSshKeysPath(), `${key.sshKeyId}.pem`);
 				// The key must exist where git runs: on the managed server for
 				// remote rows, on the Nixploy host otherwise.
@@ -52,7 +53,7 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 		}
 		case "github": {
 			if (!composeRow.owner || !composeRow.repository) {
-				throw new Error("GitHub source requires owner and repository");
+				throw badRequest("GitHub source requires owner and repository");
 			}
 			let cloneUrl = `https://github.com/${composeRow.owner}/${composeRow.repository}.git`;
 			if (composeRow.githubId) {
@@ -67,9 +68,15 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 							privateKey: gh.githubPrivateKey,
 							installationId: gh.githubInstallationId,
 						});
-						const { token } = (await appAuth({ type: "installation" })) as { token: string };
+						const { token } = (await appAuth({ type: "installation" })) as {
+							token: string;
+						};
 						cloneUrl = `https://x-access-token:${token}@github.com/${composeRow.owner}/${composeRow.repository}.git`;
-						return { cloneUrl, branch: composeRow.branch ?? "main", secrets: [token] };
+						return {
+							cloneUrl,
+							branch: composeRow.branch ?? "main",
+							secrets: [token],
+						};
 					} catch {
 						// fall through to the unauthenticated URL (public repos)
 					}
@@ -79,7 +86,7 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 		}
 		case "gitlab": {
 			if (!composeRow.owner || !composeRow.repository) {
-				throw new Error("GitLab source requires owner and repository");
+				throw badRequest("GitLab source requires owner and repository");
 			}
 			let host = "gitlab.com";
 			let token: string | null = null;
@@ -101,7 +108,7 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 		}
 		case "bitbucket": {
 			if (!composeRow.owner || !composeRow.repository) {
-				throw new Error("Bitbucket source requires owner and repository");
+				throw badRequest("Bitbucket source requires owner and repository");
 			}
 			let auth = "";
 			const secrets: string[] = [];
@@ -125,7 +132,7 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 		}
 		case "gitea": {
 			if (!composeRow.owner || !composeRow.repository) {
-				throw new Error("Gitea source requires owner and repository");
+				throw badRequest("Gitea source requires owner and repository");
 			}
 			let host = "gitea.com";
 			let token: string | null = null;
@@ -146,7 +153,7 @@ async function resolveGitSource(composeRow: ComposeRow): Promise<GitSource> {
 			};
 		}
 		default:
-			throw new Error(`Source type ${composeRow.sourceType} has no git repository to clone`);
+			throw badRequest(`Source type ${composeRow.sourceType} has no git repository to clone`);
 	}
 }
 

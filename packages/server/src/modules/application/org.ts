@@ -1,4 +1,3 @@
-import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import {
@@ -13,6 +12,7 @@ import {
 	redis,
 } from "../../db/schema";
 import type { TRPCContext } from "../../trpc/init";
+import { notFound } from "../errors";
 import { resolveCallerOrganizationId } from "../projects";
 
 type Session = NonNullable<TRPCContext["session"]>;
@@ -59,7 +59,7 @@ export const assertApplicationAccess = async (
 ): Promise<ApplicationWithTenancy> => {
 	const application = await findApplication(applicationId);
 	if (!application || application.environment.project.organizationId !== organizationId) {
-		throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
+		throw notFound("Application not found");
 	}
 	return application;
 };
@@ -96,7 +96,7 @@ export const assertEnvironmentAccess = async (environmentId: string, organizatio
 		with: { project: true },
 	});
 	if (!environment || environment.project.organizationId !== organizationId) {
-		throw new TRPCError({ code: "NOT_FOUND", message: "Environment not found" });
+		throw notFound("Environment not found");
 	}
 	return environment;
 };
@@ -112,7 +112,7 @@ export const findEnvironmentByName = async (
 		with: { project: true },
 	});
 	if (!environment || environment.project.organizationId !== organizationId) {
-		throw new TRPCError({ code: "NOT_FOUND", message: "Environment not found" });
+		throw notFound("Environment not found");
 	}
 	return environment;
 };
@@ -199,7 +199,7 @@ export const getServiceContext = async (
 	}
 
 	if (!row) {
-		throw new TRPCError({ code: "NOT_FOUND", message: `${serviceType} service not found` });
+		throw notFound(`${serviceType} service not found`);
 	}
 	return {
 		serviceId,

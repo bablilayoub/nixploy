@@ -5,11 +5,11 @@ import { Building2, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { toastError } from "@/lib/describe-error";
 
 const slugify = (value: string): string =>
 	value
@@ -42,7 +42,9 @@ export function NoOrganization({ userName }: { userName?: string | null }) {
 			if (error) throw new Error(error.message);
 			if (data?.id) {
 				// better-auth resolves with `{ error }` instead of throwing.
-				const activated = await authClient.organization.setActive({ organizationId: data.id });
+				const activated = await authClient.organization.setActive({
+					organizationId: data.id,
+				});
 				if (activated.error) {
 					throw new Error(activated.error.message ?? "Failed to switch to the new organization");
 				}
@@ -51,7 +53,7 @@ export function NoOrganization({ userName }: { userName?: string | null }) {
 			toast.success(`Organization "${trimmed}" created`);
 			router.refresh();
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "Failed to create organization");
+			toastError(error, "Failed to create organization");
 		} finally {
 			setIsCreating(false);
 		}

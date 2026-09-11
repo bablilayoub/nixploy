@@ -3,6 +3,7 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, compose, deployments, domains } from "../../db/schema";
 import { redactSensitiveText } from "../../utils/public-url";
+import { notFound, preconditionFailed } from "../errors";
 import { completeChat } from "./client";
 import { writeCachedExplanation } from "./explanation-cache";
 import { validateComposeYaml } from "./generate-compose";
@@ -81,13 +82,13 @@ export async function explainDeploymentFailure(
 	const settings = await getAiSettings();
 	const deployment = await loadDeploymentForOrg(deploymentId, organizationId);
 	if (!deployment) {
-		throw new Error("Deployment not found");
+		throw notFound("Deployment not found");
 	}
 	if (deployment.status !== "error" && deployment.status !== "done") {
 		// Allow explain on error primarily; also allow done for post-mortems of flaky runs
 	}
 	if (deployment.status === "running" || deployment.status === "queued") {
-		throw new Error("Deployment is still running");
+		throw preconditionFailed("Deployment is still running");
 	}
 
 	let logTail = "";
@@ -242,7 +243,11 @@ export async function chatAboutService(
 	target: CopilotTarget,
 	organizationId: string,
 	messages: Array<{ role: "user" | "assistant"; content: string }>,
-): Promise<{ reply: string; model: string; proposedActions: ProposedAction[] }> {
+): Promise<{
+	reply: string;
+	model: string;
+	proposedActions: ProposedAction[];
+}> {
 	const settings = await getAiSettings();
 
 	let system: string;
@@ -254,7 +259,7 @@ export async function chatAboutService(
 			},
 		});
 		if (!app || app.environment.project.organizationId !== organizationId) {
-			throw new Error("Application not found");
+			throw notFound("Application not found");
 		}
 
 		const appDomains = await db
@@ -291,7 +296,7 @@ ${context}`;
 			},
 		});
 		if (!row || row.environment.project.organizationId !== organizationId) {
-			throw new Error("Compose service not found");
+			throw notFound("Compose service not found");
 		}
 
 		const composeDomains = await db

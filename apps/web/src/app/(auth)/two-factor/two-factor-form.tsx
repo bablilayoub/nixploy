@@ -4,7 +4,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -17,6 +16,7 @@ import {
 } from "@/components/ui/form";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { authClient } from "@/lib/auth-client";
+import { toastError } from "@/lib/describe-error";
 import { safeNextPath } from "@/lib/safe-next-path";
 import { type TwoFactorInput, twoFactorSchema } from "@/server/actions/auth.schema";
 
@@ -35,7 +35,7 @@ export function TwoFactorForm() {
 			code: values.code,
 		});
 		if (error) {
-			toast.error(error.message ?? "Verification failed");
+			toastError(error, "Verification failed");
 			return;
 		}
 		toast.success("Verified");

@@ -4,7 +4,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -18,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 export function CreateProjectDialog({ children }: { children: React.ReactNode }) {
@@ -40,7 +40,9 @@ export function CreateProjectDialog({ children }: { children: React.ReactNode })
 		const params = new URLSearchParams(searchParams.toString());
 		params.delete("new");
 		const query = params.toString();
-		router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+		router.replace(query ? `${pathname}?${query}` : pathname, {
+			scroll: false,
+		});
 	}, [searchParams, router, pathname]);
 
 	const createProject = useMutation(
@@ -54,7 +56,7 @@ export function CreateProjectDialog({ children }: { children: React.ReactNode })
 				setName("");
 				setDescription("");
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

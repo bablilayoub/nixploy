@@ -4,6 +4,7 @@ import { deployments } from "../../db/schema";
 import { saveEnvironment as saveApplicationEnvironment } from "../application/service";
 import { saveEnvironment as saveComposeEnvironment } from "../compose/service";
 import { queueDeployment } from "../deployment";
+import { badRequest, notFound, preconditionFailed } from "../errors";
 import { extractEnvEntries, mergeDotenv } from "./apply-patch";
 import { readCachedExplanation } from "./explanation-cache";
 
@@ -33,7 +34,7 @@ export async function applySuggestedEnvPatch(options: {
 		deployment?.application?.environment.project.organizationId ??
 		deployment?.compose?.environment.project.organizationId;
 	if (!deployment || orgId !== options.organizationId) {
-		throw new Error("Deployment not found");
+		throw notFound("Deployment not found");
 	}
 
 	let patch = options.patch?.trim() || null;
@@ -42,12 +43,12 @@ export async function applySuggestedEnvPatch(options: {
 		patch = cached?.suggestedPatch ?? null;
 	}
 	if (!patch) {
-		throw new Error("No suggested patch available to apply");
+		throw preconditionFailed("No suggested patch available to apply");
 	}
 
 	const keys = extractEnvEntries(patch).map((entry) => entry.key);
 	if (keys.length === 0) {
-		throw new Error("Suggested patch has no KEY=VALUE environment lines to apply");
+		throw badRequest("Suggested patch has no KEY=VALUE environment lines to apply");
 	}
 
 	if (deployment.application) {
@@ -76,5 +77,5 @@ export async function applySuggestedEnvPatch(options: {
 		return { appliedKeys: keys, deploymentId };
 	}
 
-	throw new Error("Deployment is not linked to an application or compose service");
+	throw preconditionFailed("Deployment is not linked to an application or compose service");
 }

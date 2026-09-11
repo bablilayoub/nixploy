@@ -31,6 +31,7 @@ import {
 	updateComposeById,
 } from "../compose/service";
 import { DATABASE_CONFIGS, generateDatabaseAppName } from "../databases/engine";
+import { notFound, preconditionFailed } from "../errors";
 import { getEnvironmentServices } from "../projects";
 import { randomPassword, resolveEnvironmentId, resolveProjectForStack } from "./export";
 import { buildPlan, type GitopsPlanItem, type GitopsPlanResult, type LiveStackState } from "./plan";
@@ -91,7 +92,7 @@ export const loadLiveStackState = async (
 		where: and(eq(environments.projectId, projectId), eq(environments.name, environmentName)),
 	});
 	if (!environment) {
-		throw new Error(`Environment "${environmentName}" not found`);
+		throw notFound(`Environment "${environmentName}" not found`);
 	}
 
 	const services = await getEnvironmentServices(environment.environmentId);
@@ -250,7 +251,12 @@ export const domainUpdatePatch = (
 
 const syncDomains = async (
 	desired: GitopsDomain[] | undefined,
-	liveDomains: Array<{ domainId: string; host: string; path: string | null; port: number | null }>,
+	liveDomains: Array<{
+		domainId: string;
+		host: string;
+		path: string | null;
+		port: number | null;
+	}>,
 	parent: { applicationId?: string; composeId?: string },
 ): Promise<void> => {
 	const liveByKey = new Map(
@@ -310,7 +316,7 @@ const applyApplication = async (
 			),
 		});
 		if (!existing) {
-			throw new Error(`Application "${desired.name}" not found`);
+			throw notFound(`Application "${desired.name}" not found`);
 		}
 		applicationId = existing.applicationId;
 	}
@@ -358,7 +364,7 @@ const applyCompose = async (
 			where: and(eq(compose.environmentId, environmentId), eq(compose.name, desired.name)),
 		});
 		if (!existing) {
-			throw new Error(`Compose service "${desired.name}" not found`);
+			throw notFound(`Compose service "${desired.name}" not found`);
 		}
 		composeRow = existing;
 		composeId = composeRow.composeId;
@@ -377,7 +383,7 @@ const applyCompose = async (
 
 	if (desired.composeFile !== undefined && composeRow.sourceType === "raw") {
 		if (composeRow.hostPrivileged) {
-			throw new Error(
+			throw preconditionFailed(
 				`Compose "${desired.name}" is host-privileged; update its compose file as instance admin in the UI (GitOps cannot rewrite docker.sock stacks)`,
 			);
 		}
@@ -514,7 +520,11 @@ export const planStack = async (
 export interface ApplyStackResult extends GitopsPlanResult {
 	applied: number;
 	/** Services that could not be applied — the rest of the stack was still written. */
-	errors: Array<{ kind: GitopsPlanItem["kind"]; name: string; message: string }>;
+	errors: Array<{
+		kind: GitopsPlanItem["kind"];
+		name: string;
+		message: string;
+	}>;
 }
 
 const planAction = (
@@ -582,7 +592,9 @@ export const applyStack = async (
 				const liveDomains = await db.query.domains.findMany({
 					where: eq(domains.applicationId, application.applicationId),
 				});
-				await syncDomains(app.domains, liveDomains, { applicationId: application.applicationId });
+				await syncDomains(app.domains, liveDomains, {
+					applicationId: application.applicationId,
+				});
 			}
 		});
 	}
@@ -603,7 +615,9 @@ export const applyStack = async (
 				const liveDomains = await db.query.domains.findMany({
 					where: eq(domains.composeId, composeRow.composeId),
 				});
-				await syncDomains(row.domains, liveDomains, { composeId: composeRow.composeId });
+				await syncDomains(row.domains, liveDomains, {
+					composeId: composeRow.composeId,
+				});
 			}
 		});
 	}

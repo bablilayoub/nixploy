@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
 import type { ComposeService } from "@/components/compose/compose-detail";
 import { GenerateComposeDialog } from "@/components/compose/generate-compose-dialog";
 import { capabilityHint } from "@/components/services/capability-hint";
@@ -17,6 +16,7 @@ import { CodeEditor } from "@/components/ui/code-editor";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 export function ComposeFileTab({ compose }: { compose: ComposeService }) {
@@ -61,7 +61,9 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 				// the refetch lands.
 				await Promise.all([
 					queryClient.invalidateQueries({
-						queryKey: trpc.compose.one.queryKey({ composeId: compose.composeId }),
+						queryKey: trpc.compose.one.queryKey({
+							composeId: compose.composeId,
+						}),
 					}),
 					queryClient.invalidateQueries({
 						queryKey: trpc.compose.loadServices.queryKey({
@@ -71,7 +73,7 @@ export function ComposeFileTab({ compose }: { compose: ComposeService }) {
 				]);
 				setLocked(true);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient, useSession } from "@/lib/auth-client";
+import { describeError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 const acceptSchema = z
@@ -78,7 +79,7 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 			router.push("/dashboard");
 			router.refresh();
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : "Failed to join";
+			const msg = describeError(err, "Failed to join");
 			toast.error(msg);
 			setFormError(msg);
 		} finally {
@@ -118,7 +119,7 @@ export function AcceptInvitationForm({ invitationId }: { invitationId: string })
 			router.push("/dashboard");
 			router.refresh();
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : "Network error";
+			const msg = describeError(err, "Network error");
 			toast.error(msg);
 			setFormError(msg);
 		}

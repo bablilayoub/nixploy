@@ -1,6 +1,7 @@
 import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { createLogger } from "../../lib/logger";
+import { bestEffort } from "../../utils/best-effort";
 import { execAsync } from "../../utils/exec";
 import { getConfigDir, shellQuote } from "../deployment/paths";
 import { countActiveDeployments } from "../observability/health";
@@ -244,10 +245,12 @@ export async function applyUpdate(options?: {
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				console.error("Self-update roll failed:", message);
-				await patchUpdateSettings({
-					updateInProgress: false,
-					lastError: `Service update failed: ${message}`,
-				}).catch(() => {});
+				await bestEffort("record service update failure", () =>
+					patchUpdateSettings({
+						updateInProgress: false,
+						lastError: `Service update failed: ${message}`,
+					}),
+				);
 			} finally {
 				applyInFlight = false;
 			}

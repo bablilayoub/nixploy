@@ -3,6 +3,7 @@ import { db } from "../../db";
 import { servers } from "../../db/schema";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { shellQuote } from "../deployment/paths";
+import { DomainError, notFound } from "../errors";
 import { matchSwarmNode, type SwarmNodeSummary } from "./placement";
 
 /**
@@ -19,12 +20,12 @@ const PRIMARY_TIMEOUT_MS = 15_000;
 const REMOTE_TIMEOUT_MS = 30_000;
 
 /** The server is not (or no longer) a usable node of the primary swarm. */
-export class ServerNotInSwarmError extends Error {
+export class ServerNotInSwarmError extends DomainError {
 	constructor(
 		readonly serverId: string,
 		message: string,
 	) {
-		super(message);
+		super("PRECONDITION_FAILED", message);
 		this.name = "ServerNotInSwarmError";
 	}
 }
@@ -112,7 +113,7 @@ export async function getServerSwarmNodeId(serverId: string): Promise<string> {
 		columns: { serverId: true, name: true, ipAddress: true, swarmNodeId: true },
 	});
 	if (!server) {
-		throw new Error(`Server not found: ${serverId}`);
+		throw notFound(`Server not found: ${serverId}`);
 	}
 
 	if (server.swarmNodeId) {

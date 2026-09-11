@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 type Metric = "cpu" | "memory" | "restarts" | "deploy_failure_streak";
@@ -37,7 +37,9 @@ export function ServiceAlertRulesCard({
 	const rules = useQuery(trpc.observability.alertRules.queryOptions({ applicationId, composeId }));
 
 	const invalidate = () =>
-		queryClient.invalidateQueries({ queryKey: trpc.observability.alertRules.pathKey() });
+		queryClient.invalidateQueries({
+			queryKey: trpc.observability.alertRules.pathKey(),
+		});
 
 	const upsert = useMutation(
 		trpc.observability.upsertAlertRule.mutationOptions({
@@ -45,7 +47,7 @@ export function ServiceAlertRulesCard({
 				toast.success("Alert rule saved");
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 	const remove = useMutation(
@@ -54,7 +56,7 @@ export function ServiceAlertRulesCard({
 				toast.success("Alert rule removed");
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

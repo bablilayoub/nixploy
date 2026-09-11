@@ -9,6 +9,7 @@ import {
 	syncApplicationTraefik,
 } from "../../modules/application";
 import { assertCapability } from "../../modules/projects";
+import { bestEffort } from "../../utils/best-effort";
 import { protectedProcedure, router } from "../init";
 
 const REDIRECT_REGEX_MAX = 256;
@@ -16,7 +17,10 @@ const REDIRECT_REPLACEMENT_MAX = 512;
 
 function assertSafeRedirectRule(regex: string, replacement: string): void {
 	if (regex.length > REDIRECT_REGEX_MAX || replacement.length > REDIRECT_REPLACEMENT_MAX) {
-		throw new TRPCError({ code: "BAD_REQUEST", message: "Redirect pattern is too long" });
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Redirect pattern is too long",
+		});
 	}
 	if (/[()]/.test(regex) || /\\[0-9]/.test(regex)) {
 		throw new TRPCError({
@@ -43,7 +47,10 @@ function assertSafeRedirectRule(regex: string, replacement: string): void {
 		});
 	}
 	if (replacement.includes("://") && !/^https?:\/\/[^\s]+$/i.test(replacement)) {
-		throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid redirect replacement URL" });
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Invalid redirect replacement URL",
+		});
 	}
 	if (!replacement.includes("://") && !replacement.startsWith("/")) {
 		throw new TRPCError({
@@ -121,10 +128,9 @@ export const redirectRouter = router({
 			} catch (error) {
 				// Compensation: without it the client sees a 500 but the row exists,
 				// and a retry can stack duplicate redirects behind the failure.
-				await db
-					.delete(redirects)
-					.where(eq(redirects.redirectId, redirect.redirectId))
-					.catch(() => {});
+				await bestEffort("roll back redirect row", () =>
+					db.delete(redirects).where(eq(redirects.redirectId, redirect.redirectId)),
+				);
 				throw error;
 			}
 			return redirect;
@@ -166,15 +172,16 @@ export const redirectRouter = router({
 			} catch (error) {
 				// Compensation: restore the previous row so the client can retry
 				// instead of finding a half-applied update behind the 500.
-				await db
-					.update(redirects)
-					.set({
-						regex: redirect.regex,
-						replacement: redirect.replacement,
-						permanent: redirect.permanent,
-					})
-					.where(eq(redirects.redirectId, redirect.redirectId))
-					.catch(() => {});
+				await bestEffort("restore redirect row", () =>
+					db
+						.update(redirects)
+						.set({
+							regex: redirect.regex,
+							replacement: redirect.replacement,
+							permanent: redirect.permanent,
+						})
+						.where(eq(redirects.redirectId, redirect.redirectId)),
+				);
 				throw error;
 			}
 			return updated;

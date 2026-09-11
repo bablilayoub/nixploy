@@ -4,7 +4,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { HeartPulse, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { capabilityHint } from "@/components/services/capability-hint";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
@@ -12,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -85,13 +85,16 @@ export function HealthcheckManager({ application }: { application: Application }
 					}),
 				});
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
 	const handleSave = () => {
 		if (!enabled) {
-			save.mutate({ applicationId: application.applicationId, healthCheckSwarm: null });
+			save.mutate({
+				applicationId: application.applicationId,
+				healthCheckSwarm: null,
+			});
 			return;
 		}
 		const parsedPort = Number.parseInt(port, 10);

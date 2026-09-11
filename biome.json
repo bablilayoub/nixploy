@@ -50,6 +50,23 @@
 	},
 	"overrides": [
 		{
+			"includes": ["packages/server/src/modules/**", "!packages/server/src/modules/mcp/server.ts"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": {
+							"level": "error",
+							"options": {
+								"paths": {
+									"@trpc/server": "Modules must not import @trpc/server: throw a DomainError from modules/errors.ts (badRequest, notFound, conflict, …) and trpc/init.ts maps it to the right code for tRPC, REST and MCP."
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		{
 			"includes": ["apps/web/src/app/swagger/swagger-theme.css"],
 			"linter": {
 				"rules": {

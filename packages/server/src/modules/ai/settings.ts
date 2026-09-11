@@ -8,6 +8,7 @@ import {
 	isLoopbackHostname,
 } from "../../utils/public-url";
 import { BLOCKED_HOST_PORTS } from "../../utils/validators";
+import { badRequest } from "../errors";
 
 const EXTRAS_KEY = "webServer";
 
@@ -48,13 +49,13 @@ export async function assertSafeAiBaseUrl(
 	try {
 		parsed = new URL(baseUrl);
 	} catch {
-		throw new Error("Invalid AI base URL");
+		throw badRequest("Invalid AI base URL");
 	}
 	if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-		throw new Error("AI base URL must be http(s)");
+		throw badRequest("AI base URL must be http(s)");
 	}
 	if (isCloudMetadataHostname(parsed.hostname)) {
-		throw new Error("AI base URL must not target cloud metadata");
+		throw badRequest("AI base URL must not target cloud metadata");
 	}
 	if (isLoopbackHostname(parsed.hostname)) {
 		if (provider === "ollama" || provider === "openai-compatible") {
@@ -64,14 +65,14 @@ export async function assertSafeAiBaseUrl(
 				BLOCKED_HOST_PORTS.has(port) ||
 				(port < 1024 && port !== 80 && port !== 443)
 			) {
-				throw new Error("AI base URL port is not allowed on loopback");
+				throw badRequest("AI base URL port is not allowed on loopback");
 			}
 			return;
 		}
-		throw new Error("AI base URL must not target loopback for cloud providers");
+		throw badRequest("AI base URL must not target loopback for cloud providers");
 	}
 	if (provider === "ollama") {
-		throw new Error("Ollama base URL must be loopback (127.0.0.1 / localhost)");
+		throw badRequest("Ollama base URL must be loopback (127.0.0.1 / localhost)");
 	}
 	await assertPublicHttpsUrl(baseUrl);
 }
@@ -85,7 +86,7 @@ export async function assertAiFetchBaseUrl(settings: AiSettings): Promise<string
 	}
 	if (settings.provider === "openai-compatible") {
 		if (!settings.baseUrl?.trim()) {
-			throw new Error("Base URL is required for OpenAI-compatible providers");
+			throw badRequest("Base URL is required for OpenAI-compatible providers");
 		}
 		const base = settings.baseUrl.replace(/\/$/, "");
 		await assertSafeAiBaseUrl(base, "openai-compatible");

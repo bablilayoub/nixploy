@@ -1,4 +1,3 @@
-import { TRPCError } from "@trpc/server";
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
 import {
@@ -14,10 +13,12 @@ import {
 	projects,
 	redis,
 } from "../../db/schema";
+import { bestEffort } from "../../utils/best-effort";
 import { deleteApplication } from "../application/service";
 import { unregisterBackupsForService } from "../backups/scheduler";
 import { deleteCompose } from "../compose/service";
 import { type DatabaseKind, removeDatabase } from "../databases/engine";
+import { forbidden, notFound } from "../errors";
 import { unregisterSchedulesForService } from "../schedules";
 import { getCertificatesDir, REMOTE_TRAEFIK_DIR, removeFileOnServer } from "../traefik";
 import type { OrgRole } from "./roles";
@@ -35,7 +36,7 @@ export { ORG_ROLE_RANK, orgRoleRank } from "./roles";
  * organization when set (membership verified), otherwise the first
  * organization the user is a member of.
  *
- * @throws TRPCError FORBIDDEN when the user has no (valid) organization.
+ * @throws DomainError FORBIDDEN when the user has no (valid) organization.
  */
 export async function resolveCallerOrganizationId(
 	userId: string,
@@ -46,10 +47,7 @@ export async function resolveCallerOrganizationId(
 			where: and(eq(members.userId, userId), eq(members.organizationId, activeOrganizationId)),
 		});
 		if (!membership) {
-			throw new TRPCError({
-				code: "FORBIDDEN",
-				message: "You are not a member of the active organization",
-			});
+			throw forbidden("You are not a member of the active organization");
 		}
 		return activeOrganizationId;
 	}
@@ -58,10 +56,7 @@ export async function resolveCallerOrganizationId(
 		orderBy: asc(members.createdAt),
 	});
 	if (!firstMembership) {
-		throw new TRPCError({
-			code: "FORBIDDEN",
-			message: "You are not a member of any organization",
-		});
+		throw forbidden("You are not a member of any organization");
 	}
 	return firstMembership.organizationId;
 }
@@ -84,7 +79,7 @@ export async function userHasOrganization(userId: string): Promise<boolean> {
  * Require the caller's role in `organizationId` to be at least `minRole`
  * (viewer < member < deployer < admin < owner). Used by write/destructive
  * mutations across tRPC routers.
- * @throws TRPCError FORBIDDEN.
+ * @throws DomainError FORBIDDEN.
  */
 export async function assertOrgRole(
 	userId: string,
@@ -95,10 +90,7 @@ export async function assertOrgRole(
 		where: and(eq(members.userId, userId), eq(members.organizationId, organizationId)),
 	});
 	if (!membership || orgRoleRank(membership.role) < ORG_ROLE_RANK[minRole]) {
-		throw new TRPCError({
-			code: "FORBIDDEN",
-			message: `This action requires the ${minRole} role or higher`,
-		});
+		throw forbidden(`This action requires the ${minRole} role or higher`);
 	}
 }
 
@@ -118,20 +110,17 @@ export async function hasOrgRole(
 
 /**
  * Fetch a project and verify it belongs to `organizationId`.
- * @throws TRPCError NOT_FOUND / FORBIDDEN.
+ * @throws DomainError NOT_FOUND / FORBIDDEN.
  */
 export async function findProjectById(projectId: string, organizationId: string) {
 	const project = await db.query.projects.findFirst({
 		where: eq(projects.projectId, projectId),
 	});
 	if (!project) {
-		throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
+		throw notFound("Project not found");
 	}
 	if (project.organizationId !== organizationId) {
-		throw new TRPCError({
-			code: "FORBIDDEN",
-			message: "You do not have access to this project",
-		});
+		throw forbidden("You do not have access to this project");
 	}
 	return project;
 }
@@ -139,7 +128,7 @@ export async function findProjectById(projectId: string, organizationId: string)
 /**
  * Fetch an environment (with its project) and verify the parent project
  * belongs to `organizationId`.
- * @throws TRPCError NOT_FOUND / FORBIDDEN.
+ * @throws DomainError NOT_FOUND / FORBIDDEN.
  */
 export async function findEnvironmentById(environmentId: string, organizationId: string) {
 	const environment = await db.query.environments.findFirst({
@@ -147,13 +136,10 @@ export async function findEnvironmentById(environmentId: string, organizationId:
 		with: { project: true },
 	});
 	if (!environment) {
-		throw new TRPCError({ code: "NOT_FOUND", message: "Environment not found" });
+		throw notFound("Environment not found");
 	}
 	if (environment.project.organizationId !== organizationId) {
-		throw new TRPCError({
-			code: "FORBIDDEN",
-			message: "You do not have access to this environment",
-		});
+		throw forbidden("You do not have access to this environment");
 	}
 	return environment;
 }
@@ -388,13 +374,8 @@ export async function getOrganizationServiceStatusCounts(
 // ── cascade deletion ────────────────────────────────────────────────────────
 
 /** Run a teardown step without letting one failed service block the rest. */
-async function bestEffort(label: string, task: () => Promise<unknown>): Promise<void> {
-	try {
-		await task();
-	} catch (error) {
-		console.error(`Failed to tear down ${label}:`, error instanceof Error ? error.message : error);
-	}
-}
+const tearDown = (label: string, task: () => Promise<unknown>) =>
+	bestEffort(`tear down ${label}`, task, "error");
 
 /**
  * Delete an environment and everything inside it. Every service is torn
@@ -415,17 +396,20 @@ export async function deleteEnvironmentCascade(environmentId: string): Promise<v
 			composeId: composeRow.composeId,
 			appName: composeRow.appName,
 		});
-		unregisterBackupsForService({ appName: composeRow.appName, composeId: composeRow.composeId });
+		unregisterBackupsForService({
+			appName: composeRow.appName,
+			composeId: composeRow.composeId,
+		});
 	}
 
 	await Promise.all(
 		services.applications.map((application) =>
-			bestEffort(`application ${application.appName}`, () => deleteApplication(application)),
+			tearDown(`application ${application.appName}`, () => deleteApplication(application)),
 		),
 	);
 	await Promise.all(
 		services.compose.map((composeRow) =>
-			bestEffort(`compose stack ${composeRow.appName}`, () => deleteCompose(composeRow)),
+			tearDown(`compose stack ${composeRow.appName}`, () => deleteCompose(composeRow)),
 		),
 	);
 
@@ -438,7 +422,7 @@ export async function deleteEnvironmentCascade(environmentId: string): Promise<v
 		Promise.all(
 			rows.map((row) => {
 				unregisterBackupsForService({ appName: row.appName });
-				return bestEffort(`database ${row.appName}`, () =>
+				return tearDown(`database ${row.appName}`, () =>
 					removeDatabase(row.appName, row.serverId, kind),
 				);
 			}),
@@ -521,8 +505,12 @@ export async function deleteOrganizationCascade(organizationId: string): Promise
 	});
 	for (const cert of certRows) {
 		const dir = cert.serverId ? `${REMOTE_TRAEFIK_DIR}/dynamic/certificates` : getCertificatesDir();
-		await removeFileOnServer(`${dir}/${cert.certificateId}.crt`, cert.serverId).catch(() => {});
-		await removeFileOnServer(`${dir}/${cert.certificateId}.key`, cert.serverId).catch(() => {});
+		await bestEffort(`remove certificate ${cert.certificateId}.crt`, () =>
+			removeFileOnServer(`${dir}/${cert.certificateId}.crt`, cert.serverId),
+		);
+		await bestEffort(`remove certificate ${cert.certificateId}.key`, () =>
+			removeFileOnServer(`${dir}/${cert.certificateId}.key`, cert.serverId),
+		);
 	}
 
 	const projectList = await db.query.projects.findMany({

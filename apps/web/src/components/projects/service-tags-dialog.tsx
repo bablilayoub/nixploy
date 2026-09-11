@@ -16,6 +16,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import type { ServiceEntry } from "./services-table";
 
@@ -49,10 +50,12 @@ export function ServiceTagsDialog({
 		trpc.tag.setServiceTags.mutationOptions({
 			onSuccess: async () => {
 				toast.success("Tags updated");
-				await queryClient.invalidateQueries({ queryKey: trpc.tag.forServices.queryKey() });
+				await queryClient.invalidateQueries({
+					queryKey: trpc.tag.forServices.queryKey(),
+				});
 				onOpenChange(false);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

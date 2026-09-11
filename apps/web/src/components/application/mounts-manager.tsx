@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Mount } from "./types";
@@ -100,7 +101,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 				setDialogOpen(false);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 	const update = useMutation(
@@ -110,7 +111,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 				setDialogOpen(false);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 	const remove = useMutation(
@@ -120,7 +121,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 				setDeleteTarget(null);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

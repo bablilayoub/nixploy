@@ -1,3 +1,4 @@
+import { preconditionFailed } from "../errors";
 import { type AiProvider, type AiSettings, assertAiFetchBaseUrl } from "./settings";
 
 export interface ChatMessage {
@@ -49,7 +50,7 @@ async function completeAnthropic(
 	settings: AiSettings,
 	messages: ChatMessage[],
 ): Promise<LlmCompletion> {
-	if (!settings.apiKey) throw new Error("Anthropic API key is required");
+	if (!settings.apiKey) throw preconditionFailed("Anthropic API key is required");
 	const base = await assertAiFetchBaseUrl(settings);
 	const system = messages.find((m) => m.role === "system")?.content;
 	const rest = messages.filter((m) => m.role !== "system");
@@ -87,12 +88,12 @@ export async function completeChat(
 	messages: ChatMessage[],
 ): Promise<LlmCompletion> {
 	if (!settings.enabled) {
-		throw new Error("AI Copilot is disabled — enable it in Settings → Platform");
+		throw preconditionFailed("AI Copilot is disabled — enable it in Settings → Platform");
 	}
 	const needsKey: AiProvider[] = ["openai", "anthropic", "openai-compatible"];
 	if (needsKey.includes(settings.provider) && !settings.apiKey && settings.provider !== "ollama") {
 		if (settings.provider !== "openai-compatible") {
-			throw new Error("API key is required for this provider");
+			throw preconditionFailed("API key is required for this provider");
 		}
 	}
 

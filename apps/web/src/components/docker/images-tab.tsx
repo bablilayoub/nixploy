@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -27,6 +26,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps, invalidateDockerQueries } from "./docker-view";
@@ -48,7 +48,9 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 	const imagesQuery = useQuery(trpc.docker.images.queryOptions({ serverId }));
 
 	const invalidate = () =>
-		queryClient.invalidateQueries({ queryKey: trpc.docker.images.queryKey({ serverId }) });
+		queryClient.invalidateQueries({
+			queryKey: trpc.docker.images.queryKey({ serverId }),
+		});
 
 	const pullMutation = useMutation(
 		trpc.docker.imagePull.mutationOptions({
@@ -57,7 +59,7 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 				setReference("");
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 	const removeMutation = useMutation(
@@ -67,7 +69,7 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 				// Disk usage on the System tab changes too.
 				void invalidateDockerQueries(queryClient, trpc, serverId);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 	const pruneMutation = useMutation(
@@ -79,7 +81,7 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 				setPruneOpen(false);
 				void invalidateDockerQueries(queryClient, trpc, serverId);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

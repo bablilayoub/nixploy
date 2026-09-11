@@ -1,7 +1,7 @@
-import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { members } from "../../db/schema";
+import { forbidden } from "../errors";
 import { ORG_ROLE_RANK, type OrgRole } from "./roles";
 
 /**
@@ -291,7 +291,11 @@ export function effectiveCapabilities(
 export async function getMemberCapabilities(
 	userId: string,
 	organizationId: string,
-): Promise<{ role: string; capabilities: OrgCapability[]; overrides: CapabilityOverrides } | null> {
+): Promise<{
+	role: string;
+	capabilities: OrgCapability[];
+	overrides: CapabilityOverrides;
+} | null> {
 	const membership = await db.query.members.findFirst({
 		where: and(eq(members.userId, userId), eq(members.organizationId, organizationId)),
 	});
@@ -314,7 +318,7 @@ export async function hasCapability(
 
 /**
  * Require an effective capability for the caller in `organizationId`.
- * @throws TRPCError FORBIDDEN
+ * @throws DomainError FORBIDDEN
  */
 export async function assertCapability(
 	userId: string,
@@ -323,10 +327,7 @@ export async function assertCapability(
 ): Promise<void> {
 	const ok = await hasCapability(userId, organizationId, capability);
 	if (!ok) {
-		throw new TRPCError({
-			code: "FORBIDDEN",
-			message: `This action requires the "${capability}" capability`,
-		});
+		throw forbidden(`This action requires the "${capability}" capability`);
 	}
 }
 

@@ -6,6 +6,7 @@ import { Client } from "ssh2";
 import { db } from "../db";
 import { servers } from "../db/schema";
 import { getSshKeysPath } from "../modules/deployment/paths";
+import { DomainError, notFound, preconditionFailed } from "../modules/errors";
 
 /** 50 MB — build/deploy logs can be large. */
 const MAX_BUFFER = 1024 * 1024 * 50;
@@ -86,9 +87,9 @@ export interface ExecOptions {
 }
 
 /** Thrown by the local exec helpers when the command tree had to be killed on timeout. */
-export class CommandTimeoutError extends Error {
+export class CommandTimeoutError extends DomainError {
 	constructor(command: string, timeoutMs: number) {
-		super(`"${commandLabel(command)}" timed out after ${describeTimeout(timeoutMs)}`);
+		super("TIMEOUT", `"${commandLabel(command)}" timed out after ${describeTimeout(timeoutMs)}`);
 		this.name = "CommandTimeoutError";
 	}
 }
@@ -111,7 +112,12 @@ interface LocalRunResult {
  */
 function runLocal(
 	command: string,
-	options: { cwd?: string; env?: NodeJS.ProcessEnv; stdin?: string | Buffer; timeoutMs: number },
+	options: {
+		cwd?: string;
+		env?: NodeJS.ProcessEnv;
+		stdin?: string | Buffer;
+		timeoutMs: number;
+	},
 ): Promise<LocalRunResult> {
 	return new Promise((resolve, reject) => {
 		const child = spawn("sh", ["-c", command], {
@@ -182,7 +188,11 @@ function runLocal(
  */
 export async function execAsync(command: string, options: ExecOptions = {}): Promise<string> {
 	const timeoutMs = localCommandTimeoutMs(options.timeout);
-	const result = await runLocal(command, { cwd: options.cwd, env: options.env, timeoutMs });
+	const result = await runLocal(command, {
+		cwd: options.cwd,
+		env: options.env,
+		timeoutMs,
+	});
 	if (result.timedOut) throw new CommandTimeoutError(command, timeoutMs);
 	if (result.code !== 0) {
 		throw Object.assign(new Error(`Command failed: ${command}\n${result.stderr}`), {
@@ -197,13 +207,18 @@ export async function execAsync(command: string, options: ExecOptions = {}): Pro
 	return result.stdout;
 }
 
-export class RemoteExecError extends Error {
+/**
+ * A remote command failed. `message` names only the program (see
+ * `commandLabel`) and is safe to show; stderr stays in its own field because
+ * it can carry paths, hostnames and credentials.
+ */
+export class RemoteExecError extends DomainError {
 	constructor(
 		message: string,
 		public readonly stderr: string,
-		public readonly code: number | null,
+		public readonly exitCode: number | null,
 	) {
-		super(message);
+		super("INTERNAL_SERVER_ERROR", message);
 		this.name = "RemoteExecError";
 	}
 }
@@ -295,11 +310,11 @@ export async function execAsyncRemote(
 	});
 
 	if (!server) {
-		throw new Error(`Server not found: ${serverId}`);
+		throw notFound(`Server not found: ${serverId}`);
 	}
 	const sshKey = server.sshKey;
 	if (!sshKey) {
-		throw new Error(`Server ${server.name} (${serverId}) has no SSH key attached`);
+		throw preconditionFailed(`Server ${server.name} (${serverId}) has no SSH key attached`);
 	}
 
 	const timeoutMs = remoteCommandTimeoutMs(options.timeoutMs);
@@ -430,10 +445,10 @@ export async function execAsyncRemoteWithStdin(
 		where: eq(servers.serverId, serverId),
 		with: { sshKey: true },
 	});
-	if (!server) throw new Error(`Server not found: ${serverId}`);
+	if (!server) throw notFound(`Server not found: ${serverId}`);
 	const sshKey = server.sshKey;
 	if (!sshKey) {
-		throw new Error(`Server ${server.name} (${serverId}) has no SSH key attached`);
+		throw preconditionFailed(`Server ${server.name} (${serverId}) has no SSH key attached`);
 	}
 
 	const timeoutMs = remoteCommandTimeoutMs(options.timeoutMs);

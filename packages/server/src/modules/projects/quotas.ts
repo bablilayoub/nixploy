@@ -1,7 +1,7 @@
-import { TRPCError } from "@trpc/server";
 import { count, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { organizations, projects } from "../../db/schema";
+import { badRequest } from "../errors";
 import { getOrganizationServiceStatusCounts } from "./index";
 
 export interface OrgQuotas {
@@ -79,10 +79,7 @@ export async function assertWithinQuota(
 			.from(projects)
 			.where(eq(projects.organizationId, organizationId));
 		if ((row?.value ?? 0) >= quotas.maxProjects) {
-			throw new TRPCError({
-				code: "BAD_REQUEST",
-				message: `Project limit reached (${quotas.maxProjects} max)`,
-			});
+			throw badRequest(`Project limit reached (${quotas.maxProjects} max)`);
 		}
 	}
 
@@ -90,10 +87,7 @@ export async function assertWithinQuota(
 	if (adding > 0 && quotas.maxServices != null) {
 		const serviceCounts = await getOrganizationServiceStatusCounts(organizationId);
 		if (serviceCounts.total + adding > quotas.maxServices) {
-			throw new TRPCError({
-				code: "BAD_REQUEST",
-				message: `Service limit reached (${quotas.maxServices} max)`,
-			});
+			throw badRequest(`Service limit reached (${quotas.maxServices} max)`);
 		}
 	}
 }

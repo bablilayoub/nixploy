@@ -1,5 +1,6 @@
 import schedule from "node-schedule";
 import { createLogger } from "../../lib/logger";
+import { bestEffort } from "../../utils/best-effort";
 import { applyUpdate, clearStaleUpdateFlag } from "./apply";
 import { checkForUpdates } from "./check";
 import { DEFAULT_CHECK_CRON, getUpdateSettings, patchUpdateSettings } from "./settings";
@@ -76,7 +77,9 @@ export async function rescheduleUpdateChecker(): Promise<void> {
 	if (!job) {
 		const message = `Invalid update check cron "${cron}" — automatic checks are paused until it is fixed`;
 		log.error(message);
-		await patchUpdateSettings({ lastError: message }).catch(() => {});
+		await bestEffort("record invalid update cron", () =>
+			patchUpdateSettings({ lastError: message }),
+		);
 		return;
 	}
 	log.info(`Update checker scheduled (${cron})`);

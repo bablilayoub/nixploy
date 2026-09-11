@@ -3,11 +3,13 @@ import Docker from "dockerode";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { mariadb, mongo, mysql, postgres, redis, servers } from "../../db/schema";
+import { bestEffort } from "../../utils/best-effort";
 import { execAsyncRemote } from "../../utils/exec";
 import { assertSafePublishedPort } from "../../utils/validators";
 import { getSwarmNetwork } from "../application/paths";
 import { mergeNodeConstraint } from "../cluster/placement";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
+import { conflict, notFound, preconditionFailed } from "../errors";
 
 /**
  * Shared engine for the five one-click database services (postgres, mysql,
@@ -175,7 +177,9 @@ const POSTGRES_DEFAULT_IMAGE = "postgres:17";
  * `K extends DatabaseKind` yields `DatabaseTypeConfig<DatabaseRowMap[K]>`
  * (an explicit per-key annotation would widen lookups to a union of configs).
  */
-export const DATABASE_CONFIGS: { [K in DatabaseKind]: DatabaseTypeConfig<DatabaseRowMap[K]> } = {
+export const DATABASE_CONFIGS: {
+	[K in DatabaseKind]: DatabaseTypeConfig<DatabaseRowMap[K]>;
+} = {
 	postgres: {
 		defaultImage: POSTGRES_DEFAULT_IMAGE,
 		internalPort: 5432,
@@ -483,7 +487,9 @@ export function buildDatabaseSwarmSpec(
 
 /** The shared overlay is cluster-scoped: create it on the primary manager when missing. */
 async function ensureNetwork(): Promise<void> {
-	const networks = await docker.listNetworks({ filters: { name: [getSwarmNetwork()] } });
+	const networks = await docker.listNetworks({
+		filters: { name: [getSwarmNetwork()] },
+	});
 	const exists = networks.some((n) => n.Name === getSwarmNetwork());
 	if (!exists) {
 		await docker.createNetwork({
@@ -506,7 +512,13 @@ export interface ServiceState {
 	failed: number;
 }
 
-const NO_SERVICE: ServiceState = { exists: false, desired: 0, running: 0, pending: 0, failed: 0 };
+const NO_SERVICE: ServiceState = {
+	exists: false,
+	desired: 0,
+	running: 0,
+	pending: 0,
+	failed: 0,
+};
 
 /** Swarm task states on their way to running (engine task lifecycle). */
 const PENDING_TASK_STATES = new Set([
@@ -596,7 +608,7 @@ async function assertManagedDatabaseService(
 	if (!existing) return; // no such service — nothing to protect
 	const labels = existing.Spec?.Labels as Record<string, string> | undefined;
 	if (!isManagedDatabaseLabels(labels, kind)) {
-		throw new Error(
+		throw preconditionFailed(
 			`Refusing to ${action} swarm service "${appName}": it is not a Nixploy-managed ${kind ?? "database"} service`,
 		);
 	}
@@ -701,7 +713,7 @@ async function scaleDatabase(appName: string, replicas: number): Promise<void> {
 	});
 	if (!existing) {
 		if (replicas === 0) return;
-		throw new Error(`Service "${appName}" does not exist; deploy it first`);
+		throw preconditionFailed(`Service "${appName}" does not exist; deploy it first`);
 	}
 	await updateServiceWithRetry(appName, (spec) => ({
 		...spec,
@@ -735,10 +747,7 @@ export async function removeDatabase(
 ): Promise<void> {
 	const volumeName = `${appName}-data`;
 	await assertManagedDatabaseService(appName, kind, "remove");
-	await docker
-		.getService(appName)
-		.remove()
-		.catch(() => undefined);
+	await bestEffort(`remove swarm service ${appName}`, () => docker.getService(appName).remove());
 
 	if (isRemote(serverId)) {
 		const label = shellQuote(`label=com.docker.swarm.service.name=${appName}`);
@@ -779,7 +788,7 @@ export async function removeDatabase(
 			const status = (error as { statusCode?: number }).statusCode;
 			if (status === 404) return;
 			if (attempt === REMOVE_VOLUME_ATTEMPTS) {
-				throw new Error(
+				throw conflict(
 					`Removed service "${appName}" but its data volume "${volumeName}" is still in use — remove it manually`,
 				);
 			}
@@ -794,7 +803,10 @@ export async function reloadDatabase(appName: string): Promise<void> {
 		const template = (spec.TaskTemplate ?? {}) as { ForceUpdate?: number };
 		return {
 			...spec,
-			TaskTemplate: { ...template, ForceUpdate: (template.ForceUpdate ?? 0) + 1 },
+			TaskTemplate: {
+				...template,
+				ForceUpdate: (template.ForceUpdate ?? 0) + 1,
+			},
 		};
 	});
 }
@@ -839,13 +851,13 @@ export async function buildConnectionUrl<K extends DatabaseKind>(
 		return config.connectionUrl(row, row.appName, config.internalPort);
 	}
 	if (!row.externalPort) {
-		throw new Error(`Database ${row.appName} has no external port configured`);
+		throw preconditionFailed(`Database ${row.appName} has no external port configured`);
 	}
 	let host = "localhost";
 	if (isRemote(row.serverId)) {
 		const [server] = await db.select().from(servers).where(eq(servers.serverId, row.serverId));
 		if (!server) {
-			throw new Error(`Server not found: ${row.serverId}`);
+			throw notFound(`Server not found: ${row.serverId}`);
 		}
 		host = server.ipAddress;
 	}

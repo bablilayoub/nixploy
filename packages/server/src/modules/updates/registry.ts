@@ -4,6 +4,7 @@
  */
 
 import { assertPublicHostname } from "../../utils/public-url";
+import { badRequest } from "../errors";
 
 export interface ParsedImageRef {
 	registry: string;
@@ -71,7 +72,7 @@ const DIGEST_RE = /^sha256:[a-f0-9]{64}$/i;
 export function assertValidImageRef(raw: string): ParsedImageRef {
 	const trimmed = raw.trim();
 	if (!trimmed || trimmed.length > 512 || /\s/.test(trimmed)) {
-		throw new Error(`Invalid image reference: ${raw}`);
+		throw badRequest(`Invalid image reference: ${raw}`);
 	}
 	const ref = parseImageRef(trimmed);
 	const valid =
@@ -79,7 +80,7 @@ export function assertValidImageRef(raw: string): ParsedImageRef {
 		REPOSITORY_RE.test(ref.repository) &&
 		(ref.digest ? DIGEST_RE.test(ref.digest) : ref.tag !== null && TAG_RE.test(ref.tag));
 	if (!valid) {
-		throw new Error(`Invalid image reference: ${raw}`);
+		throw badRequest(`Invalid image reference: ${raw}`);
 	}
 	return ref;
 }
@@ -91,7 +92,10 @@ export function normalizeDigest(value: string | null | undefined): string | null
 	return match ? match[0].toLowerCase() : null;
 }
 
-function registryEndpoints(ref: ParsedImageRef): { tokenUrl: string; manifestHost: string } {
+function registryEndpoints(ref: ParsedImageRef): {
+	tokenUrl: string;
+	manifestHost: string;
+} {
 	const scope = `repository:${ref.repository}:pull`;
 	if (ref.registry === "docker.io") {
 		return {
@@ -141,9 +145,15 @@ export async function fetchRemoteDigest(image: string): Promise<string | null> {
 	try {
 		let authHeader: string | undefined;
 		try {
-			const tokenRes = await fetch(tokenUrl, { signal: controller.signal, redirect: "error" });
+			const tokenRes = await fetch(tokenUrl, {
+				signal: controller.signal,
+				redirect: "error",
+			});
 			if (tokenRes.ok) {
-				const body = (await tokenRes.json()) as { token?: string; access_token?: string };
+				const body = (await tokenRes.json()) as {
+					token?: string;
+					access_token?: string;
+				};
 				const token = body.token ?? body.access_token;
 				if (token) authHeader = `Bearer ${token}`;
 			}
@@ -195,7 +205,10 @@ export async function fetchRemoteDigest(image: string): Promise<string | null> {
 						redirect: "error",
 					});
 					if (tokenRes.ok) {
-						const body = (await tokenRes.json()) as { token?: string; access_token?: string };
+						const body = (await tokenRes.json()) as {
+							token?: string;
+							access_token?: string;
+						};
 						const token = body.token ?? body.access_token;
 						if (token) {
 							res = await fetch(manifestUrl, {

@@ -4,7 +4,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
 import { capabilityHint } from "@/components/services/capability-hint";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection } from "@/components/settings/settings-section";
@@ -13,6 +12,7 @@ import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -119,7 +119,7 @@ export function ResourcesForm({ application }: { application: Application }) {
 				});
 				setDirty(false);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

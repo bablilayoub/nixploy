@@ -211,3 +211,7 @@ Next 16 App Router, Tailwind v4, Motion, magicui components. Pages: `/`, `/featu
 ## 11. Tests
 
 44 vitest files in `packages/server/src` (714 passing, 13 skipped offline). Coverage areas: builders, swarm spec, Traefik YAML, compose file rewriting, database engine commands, backups/dump commands, webhook handling, preview fork gate/comments, gitops plan/redeploy, MCP tools/server, AI patch/compose/settings, capabilities, env resolution, encryption, api-key context, openapi generation, queue/worker/reconciler, template catalog + image health, tenancy isolation (DB-backed). Playwright smoke: `apps/web/e2e/smoke.mjs` (needs `playwright-core`, which lives only in `tools/screenshots`).
+
+## Error boundary (2026-09-11)
+
+`modules/errors.ts` defines `DomainError` (tRPC code + cause) and helpers; the existing `ComposeValidationError`, `Preview*Error`, `RemoteExecError`, `ServerNotInSwarmError`, `WebhookUnauthorized` extend it. `trpc/init.ts` normalises everything once (`normalizeTRPCError` middleware + `errorFormatter`): `DomainError` → its code, `ZodError` → `"path: message"` lines with `data.zodIssues`, anything else → INTERNAL_SERVER_ERROR (generic message in production, logged with the procedure path). REST (`apps/web/src/app/api/[...rest]/route.ts`) and MCP (`modules/mcp/server.ts`) call the same router, so they inherit the mapping; `trpc/error-boundary.test.ts` proves all three transports. `utils/best-effort.ts` wraps teardown side effects; `apps/web/src/lib/describe-error.ts` turns client errors into readable toasts.

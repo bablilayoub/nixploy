@@ -11,6 +11,7 @@ import {
 } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
 import { assertCapability } from "../../modules/projects";
+import { bestEffort } from "../../utils/best-effort";
 import { assertBasicAuthUsername } from "../../utils/validators";
 import { protectedProcedure, router } from "../init";
 
@@ -28,7 +29,10 @@ const findApplicationSecurity = async (securityId: string, organizationId: strin
 		where: eq(security.securityId, securityId),
 	});
 	if (!entry) {
-		throw new TRPCError({ code: "NOT_FOUND", message: "Security entry not found" });
+		throw new TRPCError({
+			code: "NOT_FOUND",
+			message: "Security entry not found",
+		});
 	}
 	const application = await assertApplicationAccess(entry.applicationId, organizationId);
 	return { entry, application };
@@ -99,10 +103,9 @@ export const securityRouter = router({
 			} catch (error) {
 				// Compensation: without it the client sees a 500 but the row exists,
 				// and a retry can stack duplicate basic-auth entries behind the failure.
-				await db
-					.delete(security)
-					.where(eq(security.securityId, entry.securityId))
-					.catch(() => {});
+				await bestEffort("roll back basic-auth entry", () =>
+					db.delete(security).where(eq(security.securityId, entry.securityId)),
+				);
 				throw error;
 			}
 			await auditFromSession(ctx, organizationId, {
@@ -158,14 +161,15 @@ export const securityRouter = router({
 			} catch (error) {
 				// Compensation: restore the previous row so the client can retry
 				// instead of finding a half-applied update behind the 500.
-				await db
-					.update(security)
-					.set({
-						username: entry.username,
-						password: entry.password,
-					})
-					.where(eq(security.securityId, entry.securityId))
-					.catch(() => {});
+				await bestEffort("restore basic-auth entry", () =>
+					db
+						.update(security)
+						.set({
+							username: entry.username,
+							password: entry.password,
+						})
+						.where(eq(security.securityId, entry.securityId)),
+				);
 				throw error;
 			}
 			await auditFromSession(ctx, organizationId, {

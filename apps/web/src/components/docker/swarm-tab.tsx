@@ -3,7 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Boxes, Lock, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-
 import { EmptyState } from "@/components/services/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +23,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps } from "./docker-view";
@@ -68,7 +68,9 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 		queryClient.invalidateQueries({
 			queryKey: trpc.docker.swarmServices.queryKey({ serverId }),
 		});
-		queryClient.invalidateQueries({ queryKey: trpc.docker.nodes.queryKey({ serverId }) });
+		queryClient.invalidateQueries({
+			queryKey: trpc.docker.nodes.queryKey({ serverId }),
+		});
 	};
 
 	const nodeMutation = useMutation(
@@ -77,7 +79,7 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 				toast.success(`Node set to ${variables.availability}`);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

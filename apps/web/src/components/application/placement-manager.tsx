@@ -4,12 +4,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Server } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { capabilityHint } from "@/components/services/capability-hint";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -44,9 +44,11 @@ export function PlacementManager({ application }: { application: Application }) 
 		trpc.application.update.mutationOptions({
 			onSuccess: async () => {
 				toast.success("Placement constraints saved");
-				await queryClient.invalidateQueries({ queryKey: trpc.application.one.queryKey() });
+				await queryClient.invalidateQueries({
+					queryKey: trpc.application.one.queryKey(),
+				});
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

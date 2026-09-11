@@ -35,6 +35,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { missingCapabilityHint } from "@/lib/capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -76,7 +77,7 @@ export function CertificatesView() {
 				});
 				setOpen(false);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -88,7 +89,7 @@ export function CertificatesView() {
 					queryKey: trpc.certificate.all.queryKey(),
 				});
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -116,7 +117,7 @@ export function CertificatesView() {
 				});
 				setEditing(null);
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

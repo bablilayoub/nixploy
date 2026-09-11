@@ -4,7 +4,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
 import { CopyButton } from "@/components/services/copy-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +32,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import { DATABASE_TYPES, type DatabaseType, SERVICE_TYPE_META } from "./service-types";
@@ -159,7 +159,7 @@ export function AddServiceMenu({
 		]);
 	};
 
-	const onMutationError = (error: { message: string }) => toast.error(error.message);
+	const onMutationError = (error: { message: string }) => toastError(error);
 
 	const createApplication = useMutation(
 		trpc.application.create.mutationOptions({

@@ -5,7 +5,6 @@ import { Loader2, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -18,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 /**
@@ -28,7 +28,10 @@ export function GenerateComposeDialog({ onAccept }: { onAccept: (composeFile: st
 	const trpc = useTRPC();
 	const [open, setOpen] = useState(false);
 	const [prompt, setPrompt] = useState("");
-	const [draft, setDraft] = useState<{ composeFile: string; model: string } | null>(null);
+	const [draft, setDraft] = useState<{
+		composeFile: string;
+		model: string;
+	} | null>(null);
 
 	const aiSettings = useQuery({
 		...trpc.ai.getSettings.queryOptions(),
@@ -39,7 +42,7 @@ export function GenerateComposeDialog({ onAccept }: { onAccept: (composeFile: st
 	const generate = useMutation(
 		trpc.ai.generateCompose.mutationOptions({
 			onSuccess: (result) => setDraft(result),
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

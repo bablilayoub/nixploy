@@ -1,4 +1,5 @@
 import { execAsync, execAsyncRemote } from "../../utils/exec";
+import { notFound } from "../errors";
 
 export type ComposeContainerRow = {
 	id: string;
@@ -149,7 +150,7 @@ export async function assertComposeContainerOwnership(
 		'{{.Name}}|{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.stack.namespace"}}|{{index .Config.Labels "com.docker.swarm.service.name"}}';
 	const out = (await run(serverId, `docker inspect --format ${shq(format)} ${id}`)).trim();
 	if (!out) {
-		throw new Error(`Container not found: ${containerId}`);
+		throw notFound(`Container not found: ${containerId}`);
 	}
 	const [name, composeProject, stackNs, swarmService] = out.split("|");
 	const ok = containerBelongsToApp({
@@ -162,6 +163,6 @@ export async function assertComposeContainerOwnership(
 		},
 	});
 	if (!ok) {
-		throw new Error(`Container ${containerId} does not belong to "${appName}"`);
+		throw notFound(`Container ${containerId} does not belong to "${appName}"`);
 	}
 }

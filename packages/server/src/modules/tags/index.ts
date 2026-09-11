@@ -1,4 +1,3 @@
-import { TRPCError } from "@trpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
 import {
@@ -18,6 +17,7 @@ import {
 } from "../../db/schema";
 import { assertApplicationAccess } from "../application";
 import { findComposeForOrg } from "../compose/service";
+import { badRequest, notFound } from "../errors";
 
 export type TaggableServiceType =
 	| "application"
@@ -31,7 +31,7 @@ export type TaggableServiceType =
 async function assertTagInOrg(tagId: string, organizationId: string) {
 	const tag = await db.query.tags.findFirst({ where: eq(tags.tagId, tagId) });
 	if (!tag || tag.organizationId !== organizationId) {
-		throw new TRPCError({ code: "NOT_FOUND", message: "Tag not found" });
+		throw notFound("Tag not found");
 	}
 	return tag;
 }
@@ -46,7 +46,7 @@ export async function listTags(organizationId: string) {
 export async function createTag(organizationId: string, input: { name: string; color?: string }) {
 	const name = input.name.trim();
 	if (!name) {
-		throw new TRPCError({ code: "BAD_REQUEST", message: "Name is required" });
+		throw badRequest("Name is required");
 	}
 	const [row] = await db
 		.insert(tags)
@@ -124,7 +124,7 @@ async function assertServiceInOrg(
 							});
 
 	if (!row || row.environment.project.organizationId !== organizationId) {
-		throw new TRPCError({ code: "NOT_FOUND", message: "Service not found" });
+		throw notFound("Service not found");
 	}
 }
 
@@ -140,7 +140,7 @@ export async function setServiceTags(
 			where: and(eq(tags.organizationId, organizationId), inArray(tags.tagId, tagIds)),
 		});
 		if (owned.length !== tagIds.length) {
-			throw new TRPCError({ code: "BAD_REQUEST", message: "One or more tags are invalid" });
+			throw badRequest("One or more tags are invalid");
 		}
 	}
 

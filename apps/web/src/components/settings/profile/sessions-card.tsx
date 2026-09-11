@@ -5,12 +5,12 @@ import { format } from "date-fns";
 import { Loader2, Monitor, Smartphone } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { SettingsSection } from "@/components/settings/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient, useSession } from "@/lib/auth-client";
+import { toastError } from "@/lib/describe-error";
 
 interface SessionRow {
 	id: string;
@@ -80,7 +80,7 @@ export function SessionsCard() {
 		const { error } = await authClient.revokeSession({ token: session.token });
 		setRevoking(null);
 		if (error) {
-			toast.error(error.message ?? "Failed to revoke session");
+			toastError(error, "Failed to revoke session");
 			return;
 		}
 		toast.success("Session revoked");

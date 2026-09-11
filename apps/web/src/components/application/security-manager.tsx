@@ -38,6 +38,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import type { SecurityEntry } from "./types";
@@ -86,7 +87,7 @@ export function SecurityManager({ applicationId }: { applicationId: string }) {
 				setDialogOpen(false);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 	const update = useMutation(
@@ -96,7 +97,7 @@ export function SecurityManager({ applicationId }: { applicationId: string }) {
 				setDialogOpen(false);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 	const remove = useMutation(
@@ -106,7 +107,7 @@ export function SecurityManager({ applicationId }: { applicationId: string }) {
 				setDeleteTarget(null);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

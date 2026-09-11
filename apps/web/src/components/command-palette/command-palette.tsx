@@ -23,8 +23,6 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
-
 import { isSettingsNavItemAllowed, settingsNavItems } from "@/components/nav-settings";
 import { SERVICE_TYPE_META, type ServiceType } from "@/components/projects/service-types";
 import {
@@ -39,6 +37,7 @@ import {
 } from "@/components/ui/command";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { signOut } from "@/lib/auth-client";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
@@ -183,14 +182,14 @@ export function CommandPalette({ className }: { className?: string }) {
 			// better-auth resolves with `{ error }` instead of throwing.
 			const { error } = await signOut();
 			if (error) {
-				toast.error(error.message ?? "Failed to sign out");
+				toastError(error, "Failed to sign out");
 				return;
 			}
 			queryClient.clear();
 			router.push("/login");
 			router.refresh();
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "Failed to sign out");
+			toastError(error, "Failed to sign out");
 		}
 	}, [queryClient, router]);
 

@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -26,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth-client";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
@@ -58,14 +58,16 @@ export function OrgSwitcher({ className }: { className?: string }) {
 		try {
 			// better-auth resolves with `{ error }` instead of throwing — only
 			// refetch the cache once the server actually switched the org.
-			const { error } = await authClient.organization.setActive({ organizationId });
+			const { error } = await authClient.organization.setActive({
+				organizationId,
+			});
 			if (error) {
-				toast.error(error.message ?? "Failed to switch organization");
+				toastError(error, "Failed to switch organization");
 				return;
 			}
 			await queryClient.invalidateQueries();
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "Failed to switch organization");
+			toastError(error, "Failed to switch organization");
 		}
 	};
 
@@ -80,7 +82,9 @@ export function OrgSwitcher({ className }: { className?: string }) {
 			});
 			if (error) throw new Error(error.message);
 			if (data?.id) {
-				const activated = await authClient.organization.setActive({ organizationId: data.id });
+				const activated = await authClient.organization.setActive({
+					organizationId: data.id,
+				});
 				if (activated.error) {
 					throw new Error(activated.error.message ?? "Failed to switch to the new organization");
 				}
@@ -90,7 +94,7 @@ export function OrgSwitcher({ className }: { className?: string }) {
 			setCreateOpen(false);
 			setName("");
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "Failed to create organization");
+			toastError(error, "Failed to create organization");
 		} finally {
 			setIsCreating(false);
 		}

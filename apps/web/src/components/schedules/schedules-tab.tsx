@@ -52,6 +52,7 @@ import {
 import { TableCard } from "@/components/ui/table-card";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { describeError, toastError } from "@/lib/describe-error";
 import { scheduleRunStatusDot } from "@/lib/status";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -148,7 +149,7 @@ export function SchedulesTab({
 				setDialogOpen(false);
 				invalidate();
 			},
-			onError: (mutationError) => toast.error(mutationError.message),
+			onError: (mutationError) => toastError(mutationError),
 		}),
 	);
 	const update = useMutation(
@@ -158,7 +159,7 @@ export function SchedulesTab({
 				setDialogOpen(false);
 				invalidate();
 			},
-			onError: (mutationError) => toast.error(mutationError.message),
+			onError: (mutationError) => toastError(mutationError),
 		}),
 	);
 	const remove = useMutation(
@@ -168,7 +169,7 @@ export function SchedulesTab({
 				setDeleteTarget(null);
 				invalidate();
 			},
-			onError: (mutationError) => toast.error(mutationError.message),
+			onError: (mutationError) => toastError(mutationError),
 		}),
 	);
 	const runNow = useMutation(
@@ -178,7 +179,7 @@ export function SchedulesTab({
 				invalidate();
 			},
 			onError: (mutationError) => {
-				toast.error(`Run failed: ${mutationError.message}`);
+				toast.error(`Run failed: ${describeError(mutationError)}`);
 				invalidate();
 			},
 		}),
@@ -186,13 +187,13 @@ export function SchedulesTab({
 	const setEnabled = useMutation(
 		trpc.schedule.enable.mutationOptions({
 			onSuccess: invalidate,
-			onError: (mutationError) => toast.error(mutationError.message),
+			onError: (mutationError) => toastError(mutationError),
 		}),
 	);
 	const setDisabled = useMutation(
 		trpc.schedule.disable.mutationOptions({
 			onSuccess: invalidate,
-			onError: (mutationError) => toast.error(mutationError.message),
+			onError: (mutationError) => toastError(mutationError),
 		}),
 	);
 
@@ -326,8 +327,12 @@ export function SchedulesTab({
 												title={manageHint}
 												onCheckedChange={(checked) =>
 													checked
-														? setEnabled.mutate({ scheduleId: schedule.scheduleId })
-														: setDisabled.mutate({ scheduleId: schedule.scheduleId })
+														? setEnabled.mutate({
+																scheduleId: schedule.scheduleId,
+															})
+														: setDisabled.mutate({
+																scheduleId: schedule.scheduleId,
+															})
 												}
 											/>
 										</TableCell>

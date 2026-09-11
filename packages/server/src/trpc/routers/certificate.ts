@@ -13,6 +13,7 @@ import {
 	TRAEFIK_CERTIFICATES_CONTAINER_DIR,
 	writeFileOnServer,
 } from "../../modules/traefik";
+import { bestEffort } from "../../utils/best-effort";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { protectedProcedure, router } from "../init";
 
@@ -35,7 +36,10 @@ const findCertificate = (certificateId: string) =>
 const assertCertificateAccess = async (certificateId: string, organizationId: string) => {
 	const certificate = await findCertificate(certificateId);
 	if (!certificate || certificate.organizationId !== organizationId) {
-		throw new TRPCError({ code: "NOT_FOUND", message: "Certificate not found" });
+		throw new TRPCError({
+			code: "NOT_FOUND",
+			message: "Certificate not found",
+		});
 	}
 	return certificate;
 };
@@ -80,8 +84,12 @@ const removeCertificateFiles = async (
 	serverId: string | null,
 ): Promise<void> => {
 	const dir = hostCertificatesDir(serverId);
-	await removeFileOnServer(`${dir}/${certificateId}.crt`, serverId).catch(() => {});
-	await removeFileOnServer(`${dir}/${certificateId}.key`, serverId).catch(() => {});
+	await bestEffort(`remove certificate ${certificateId}.crt`, () =>
+		removeFileOnServer(`${dir}/${certificateId}.crt`, serverId),
+	);
+	await bestEffort(`remove certificate ${certificateId}.key`, () =>
+		removeFileOnServer(`${dir}/${certificateId}.key`, serverId),
+	);
 };
 
 /** Response shape: never ship the private key back to the client. */

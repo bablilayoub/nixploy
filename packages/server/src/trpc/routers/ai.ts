@@ -16,6 +16,7 @@ import {
 } from "../../modules/ai";
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
+import { isDomainError } from "../../modules/errors";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
@@ -103,6 +104,9 @@ export const aiRouter = router({
 				}
 				return await explainAndCacheDeploymentFailure(input.deploymentId, organizationId);
 			} catch (error) {
+				// A DomainError already carries the right code (the boundary in
+				// init.ts maps it); only legacy plain Errors need this guesswork.
+				if (isDomainError(error)) throw error;
 				const message = error instanceof Error ? error.message : String(error);
 				if (message.includes("not found")) {
 					throw new TRPCError({ code: "NOT_FOUND", message });
@@ -177,6 +181,9 @@ export const aiRouter = router({
 				});
 				return result;
 			} catch (error) {
+				// A DomainError already carries the right code (the boundary in
+				// init.ts maps it); only legacy plain Errors need this guesswork.
+				if (isDomainError(error)) throw error;
 				const message = error instanceof Error ? error.message : String(error);
 				if (message.includes("not found")) {
 					throw new TRPCError({ code: "NOT_FOUND", message });
@@ -213,6 +220,9 @@ export const aiRouter = router({
 					: { type: "compose" as const, composeId: input.composeId as string };
 				return await chatAboutService(target, organizationId, input.messages);
 			} catch (error) {
+				// A DomainError already carries the right code (the boundary in
+				// init.ts maps it); only legacy plain Errors need this guesswork.
+				if (isDomainError(error)) throw error;
 				const message = error instanceof Error ? error.message : String(error);
 				if (message.includes("not found")) {
 					throw new TRPCError({ code: "NOT_FOUND", message });
@@ -236,6 +246,7 @@ export const aiRouter = router({
 				});
 				return result;
 			} catch (error) {
+				if (isDomainError(error)) throw error;
 				const message = error instanceof Error ? error.message : String(error);
 				throw new TRPCError({ code: "BAD_REQUEST", message });
 			}

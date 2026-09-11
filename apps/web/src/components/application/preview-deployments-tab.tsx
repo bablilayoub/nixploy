@@ -41,6 +41,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application, PreviewDeployment } from "./types";
@@ -89,7 +90,9 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 
 	const invalidate = () =>
 		queryClient.invalidateQueries({
-			queryKey: trpc.previewDeployment.byApplication.queryKey({ applicationId }),
+			queryKey: trpc.previewDeployment.byApplication.queryKey({
+				applicationId,
+			}),
 		});
 
 	const create = useMutation(
@@ -104,7 +107,7 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 				setExpiresInDays("");
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -115,7 +118,7 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 				setDeleteTarget(null);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -125,7 +128,7 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 				toast.success("Preview approved — deployment queued");
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -135,7 +138,7 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 				toast.success("Preview denied and removed");
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -322,7 +325,9 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 												disabled={approve.isPending || deny.isPending || !canDeploy}
 												title={deployHint}
 												onClick={() =>
-													approve.mutate({ previewDeploymentId: preview.previewDeploymentId })
+													approve.mutate({
+														previewDeploymentId: preview.previewDeploymentId,
+													})
 												}
 											>
 												{approve.isPending ? (
@@ -338,7 +343,9 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 												disabled={approve.isPending || deny.isPending || !canDeploy}
 												title={deployHint}
 												onClick={() =>
-													deny.mutate({ previewDeploymentId: preview.previewDeploymentId })
+													deny.mutate({
+														previewDeploymentId: preview.previewDeploymentId,
+													})
 												}
 											>
 												<X className="size-4 text-destructive" />
@@ -384,7 +391,9 @@ export function PreviewDeploymentsTab({ application }: { application: Applicatio
 								// Keep the dialog open (with its spinner) until the mutation settles.
 								event.preventDefault();
 								if (deleteTarget) {
-									remove.mutate({ previewDeploymentId: deleteTarget.previewDeploymentId });
+									remove.mutate({
+										previewDeploymentId: deleteTarget.previewDeploymentId,
+									});
 								}
 							}}
 							disabled={remove.isPending}

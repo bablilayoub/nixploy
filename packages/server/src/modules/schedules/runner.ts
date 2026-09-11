@@ -7,6 +7,7 @@ import {
 	execAsyncWithStdin,
 	remoteCommandTimeoutMs,
 } from "../../utils/exec";
+import { badRequest, preconditionFailed } from "../errors";
 
 /**
  * Executes a schedule's command/script against its target:
@@ -56,7 +57,7 @@ async function resolveAppName(target: ScheduleTarget): Promise<string> {
 		if (stack) return stack.appName;
 	}
 	if (target.appName) return target.appName;
-	throw new Error("Schedule has no appName and its target service could not be resolved");
+	throw preconditionFailed("Schedule has no appName and its target service could not be resolved");
 }
 
 async function resolveServiceServerId(target: ScheduleTarget): Promise<string | null> {
@@ -96,7 +97,7 @@ async function findContainerId(
 		const containerId = output.trim().split("\n")[0]?.trim();
 		if (containerId) return containerId;
 	}
-	throw new Error(`No running container found for ${appName}`);
+	throw preconditionFailed(`No running container found for ${appName}`);
 }
 
 /**
@@ -129,10 +130,12 @@ export async function runScheduleCommand(target: ScheduleTarget): Promise<string
 		}
 		case "server": {
 			if (!target.serverId) {
-				throw new Error("Server schedule is missing serverId");
+				throw badRequest("Server schedule is missing serverId");
 			}
 			if (target.script) {
-				return execAsyncWithStdin(inner, target.script, { serverId: target.serverId });
+				return execAsyncWithStdin(inner, target.script, {
+					serverId: target.serverId,
+				});
 			}
 			return execAsyncRemote(target.serverId, inner);
 		}
@@ -140,7 +143,9 @@ export async function runScheduleCommand(target: ScheduleTarget): Promise<string
 			// Same hard timeout as remote commands: a hung command must not pin
 			// the schedule's in-flight guard forever.
 			if (target.script) {
-				return execAsyncWithStdin(inner, target.script, { timeout: remoteCommandTimeoutMs() });
+				return execAsyncWithStdin(inner, target.script, {
+					timeout: remoteCommandTimeoutMs(),
+				});
 			}
 			return execAsync(inner, { timeout: remoteCommandTimeoutMs() });
 		}

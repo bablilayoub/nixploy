@@ -1,5 +1,6 @@
 import path from "node:path";
 import { getConfigDir } from "../deployment/paths";
+import { badRequest } from "../errors";
 
 /** Root directory where Nixploy keeps all on-disk state — see `deployment/paths.ts`. */
 export { getConfigDir };
@@ -30,7 +31,7 @@ export const resolveFileMountPath = (appName: string, filePath: string): string 
 	const base = getApplicationFilesDir(appName);
 	const resolved = path.resolve(base, filePath);
 	if (resolved !== base && !resolved.startsWith(base + path.sep)) {
-		throw new Error(`Invalid file mount path (escapes files dir): ${filePath}`);
+		throw badRequest(`Invalid file mount path (escapes files dir): ${filePath}`);
 	}
 	return resolved;
 };

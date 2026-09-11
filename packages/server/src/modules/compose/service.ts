@@ -1,15 +1,16 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
-import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { compose, deployments, domains, environments, mounts } from "../../db/schema";
+import { bestEffort } from "../../utils/best-effort";
 import { assertSafeAppName } from "../../utils/validators";
 import { isAppNameTaken as isAnyAppNameTaken } from "../application/app-name";
 import { getSwarmNetwork } from "../application/paths";
 import { unregisterBackupsForService } from "../backups/scheduler";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
 import { removeServiceLogs } from "../deployment/maintenance";
+import { badRequest, conflict, notFound, preconditionFailed } from "../errors";
 import { unregisterSchedulesForService } from "../schedules";
 import { DEFAULT_CONTAINER_PORT } from "../traefik/config-writer";
 import { getTraefik } from "./adapters";
@@ -77,7 +78,7 @@ export async function findComposeForOrg(
 ) {
 	const row = await findComposeById(composeId);
 	if (!row || row.environment.project.organizationId !== organizationId) {
-		throw new TRPCError({ code: "NOT_FOUND", message: "Compose service not found" });
+		throw notFound("Compose service not found");
 	}
 	return row;
 }
@@ -105,7 +106,7 @@ export async function generateUniqueAppName(name: string): Promise<string> {
 		const candidate = `${slugify(name)}-${randomSuffix()}`;
 		if (!(await isAppNameTaken(candidate))) return candidate;
 	}
-	throw new TRPCError({ code: "CONFLICT", message: "Could not allocate a unique appName" });
+	throw conflict("Could not allocate a unique appName");
 }
 
 export interface CreateComposeInput {
@@ -126,22 +127,19 @@ export async function createCompose(input: CreateComposeInput): Promise<ComposeR
 		with: { project: true },
 	});
 	if (!environment) {
-		throw new TRPCError({ code: "NOT_FOUND", message: "Environment not found" });
+		throw notFound("Environment not found");
 	}
 	const appName = input.appName
 		? (() => {
 				try {
 					return assertSafeAppName(input.appName);
 				} catch (error) {
-					throw new TRPCError({
-						code: "BAD_REQUEST",
-						message: error instanceof Error ? error.message : "Invalid appName",
-					});
+					throw badRequest(error instanceof Error ? error.message : "Invalid appName");
 				}
 			})()
 		: await generateUniqueAppName(input.name);
 	if (await isAppNameTaken(appName)) {
-		throw new TRPCError({ code: "CONFLICT", message: `appName "${appName}" is already in use` });
+		throw conflict(`appName "${appName}" is already in use`);
 	}
 	const [created] = await db
 		.insert(compose)
@@ -156,7 +154,7 @@ export async function createCompose(input: CreateComposeInput): Promise<ComposeR
 			hostPrivileged: input.hostPrivileged ?? false,
 		})
 		.returning();
-	if (!created) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+	if (!created) throw new Error("Failed to create compose service");
 	return created;
 }
 
@@ -179,9 +177,15 @@ export async function duplicateCompose(
 	} = source;
 	const [created] = await db
 		.insert(compose)
-		.values({ ...rest, appName, environmentId, status: "idle", hostPrivileged: false })
+		.values({
+			...rest,
+			appName,
+			environmentId,
+			status: "idle",
+			hostPrivileged: false,
+		})
 		.returning();
-	if (!created) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+	if (!created) throw new Error("Failed to duplicate compose service");
 
 	const sourceMounts = await db.query.mounts.findMany({
 		where: eq(mounts.composeId, sourceId),
@@ -272,24 +276,19 @@ export async function updateComposeById(
 	const existing = await db.query.compose.findFirst({
 		where: eq(compose.composeId, composeId),
 	});
-	if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Compose service not found" });
+	if (!existing) throw notFound("Compose service not found");
 
 	const values: Partial<typeof compose.$inferInsert> = { ...input };
 	if (values.appName && values.appName !== existing.appName) {
 		if (await isAppNameTaken(values.appName)) {
-			throw new TRPCError({
-				code: "CONFLICT",
-				message: `appName "${values.appName}" is already in use`,
-			});
+			throw conflict(`appName "${values.appName}" is already in use`);
 		}
 		// The appName names the running project/stack, its volumes and the
 		// Traefik configs — renaming would orphan all of them.
 		if (await hasBeenDeployed(existing)) {
-			throw new TRPCError({
-				code: "PRECONDITION_FAILED",
-				message:
-					"appName cannot be changed after the first deployment (it names the running stack, its volumes and routing). Create a new service instead.",
-			});
+			throw preconditionFailed(
+				"appName cannot be changed after the first deployment (it names the running stack, its volumes and routing). Create a new service instead.",
+			);
 		}
 	}
 	// Isolated deployments need a suffix; the UI only sends the toggle.
@@ -312,7 +311,7 @@ export async function updateComposeById(
 		.set(values)
 		.where(eq(compose.composeId, composeId))
 		.returning();
-	if (!updated) throw new TRPCError({ code: "NOT_FOUND", message: "Compose service not found" });
+	if (!updated) throw notFound("Compose service not found");
 	return updated;
 }
 
@@ -357,7 +356,7 @@ export async function prepareComposeFiles(composeRow: ComposeRow): Promise<Prepa
 	if (composeRow.sourceType === "raw") {
 		rawContent = composeRow.composeFile;
 		if (!rawContent.trim()) {
-			throw new Error("Compose file is empty — save a compose file before deploying");
+			throw preconditionFailed("Compose file is empty — save a compose file before deploying");
 		}
 		// Keep the untouched source next to the rendered file for operators.
 		await writeComposeFile(
@@ -404,8 +403,13 @@ export async function prepareComposeFiles(composeRow: ComposeRow): Promise<Prepa
 		composeRow.hostPrivileged ? hostPrivilegedComposeSafety() : undefined,
 	);
 	// Both carry resolved secrets — owner-only.
-	await writeComposeFile(composeRow, composeFilePath, transformed, { mode: 0o600, onPrimary });
-	await writeComposeFile(composeRow, envFilePath, `${mergedEnv}\n`, { mode: 0o600 });
+	await writeComposeFile(composeRow, composeFilePath, transformed, {
+		mode: 0o600,
+		onPrimary,
+	});
+	await writeComposeFile(composeRow, envFilePath, `${mergedEnv}\n`, {
+		mode: 0o600,
+	});
 
 	// Scrub the merged env from logs — values land in the rendered file and
 	// Docker echoes parts of it on errors. Short tokens would redact too much.
@@ -413,14 +417,21 @@ export async function prepareComposeFiles(composeRow: ComposeRow): Promise<Prepa
 		if (shouldRedactEnvValue(value)) secrets.push(value);
 	}
 
-	return { workDir: getComposeBaseDir(appName), composeFilePath, envFilePath, secrets };
+	return {
+		workDir: getComposeBaseDir(appName),
+		composeFilePath,
+		envFilePath,
+		secrets,
+	};
 }
 
 // ── lifecycle commands ──────────────────────────────────────────────────────
 
 /** The deploy command shown in the UI ("getDefaultCommand"). */
 export function getDefaultCommand(row: ComposeRow): string {
-	return buildComposeDeployCommand(row, { composeFilePath: getComposeDeployFilePath(row.appName) });
+	return buildComposeDeployCommand(row, {
+		composeFilePath: getComposeDeployFilePath(row.appName),
+	});
 }
 
 async function updateStatus(composeId: string, status: "idle" | "running" | "done" | "error") {
@@ -464,8 +475,14 @@ export async function stopCompose(composeRow: ComposeRow): Promise<void> {
 export async function deleteCompose(composeRow: ComposeRow): Promise<void> {
 	// Stop cron work that targets this stack before its containers go away;
 	// the rows cascade with the compose row, the in-memory jobs do not.
-	unregisterSchedulesForService({ composeId: composeRow.composeId, appName: composeRow.appName });
-	unregisterBackupsForService({ appName: composeRow.appName, composeId: composeRow.composeId });
+	unregisterSchedulesForService({
+		composeId: composeRow.composeId,
+		appName: composeRow.appName,
+	});
+	unregisterBackupsForService({
+		appName: composeRow.appName,
+		composeId: composeRow.composeId,
+	});
 	const composeDomains = await db.query.domains.findMany({
 		where: eq(domains.composeId, composeRow.composeId),
 	});
@@ -478,10 +495,12 @@ export async function deleteCompose(composeRow: ComposeRow): Promise<void> {
 		const command = files
 			? buildComposeDownCommand(composeRow, files)
 			: buildComposeFallbackDownCommand(composeRow);
-		await runComposeCommand(composeRow, command, {
-			...(files ? { cwd: files.workDir } : {}),
-			onPrimary: runsOnPrimary(composeRow),
-		}).catch(() => {});
+		await bestEffort(`bring down stack ${composeRow.appName}`, () =>
+			runComposeCommand(composeRow, command, {
+				...(files ? { cwd: files.workDir } : {}),
+				onPrimary: runsOnPrimary(composeRow),
+			}),
+		);
 	} catch {
 		// best-effort teardown
 	}
@@ -493,21 +512,29 @@ export async function deleteCompose(composeRow: ComposeRow): Promise<void> {
 			serviceKeys.add(traefikAppName(composeRow, d.serviceName));
 		}
 		for (const key of serviceKeys) {
-			await traefik.removeTraefikConfig(key, composeRow.serverId).catch(() => {});
+			await bestEffort(`remove Traefik config ${key}`, () =>
+				traefik.removeTraefikConfig(key, composeRow.serverId),
+			);
 		}
-		await traefik.removeTraefikConfig(composeRow.appName, composeRow.serverId).catch(() => {});
+		await bestEffort(`remove Traefik config ${composeRow.appName}`, () =>
+			traefik.removeTraefikConfig(composeRow.appName, composeRow.serverId),
+		);
 	}
 
 	await db.delete(compose).where(eq(compose.composeId, composeRow.composeId));
 	const baseDir = getComposeBaseDir(composeRow.appName);
 	if (composeRow.serverId) {
-		await runComposeCommand(composeRow, `rm -rf ${shellQuote(baseDir)}`).catch(() => {});
+		await bestEffort(`remove remote files for ${composeRow.appName}`, () =>
+			runComposeCommand(composeRow, `rm -rf ${shellQuote(baseDir)}`),
+		);
 	}
 	// Always sweep the Nixploy host too: a stack pinned to a server keeps its
 	// rendered file here (no-op for rows that never wrote anything locally).
 	await rm(baseDir, { recursive: true, force: true }).catch(() => {});
 	// Build logs live outside the compose dir and have no FK to cascade through.
-	await removeServiceLogs(composeRow.appName).catch(() => {});
+	await bestEffort(`remove logs for ${composeRow.appName}`, () =>
+		removeServiceLogs(composeRow.appName),
+	);
 }
 
 // ── services / domains ──────────────────────────────────────────────────────
@@ -628,7 +655,9 @@ export async function resyncComposeDomains(composeId: string): Promise<void> {
 			})),
 		});
 		// Best effort: the service may simply not be running yet.
-		await ensureSharedNetworkAttached(row, serviceName).catch(() => {});
+		await bestEffort(`attach ${row.appName}/${serviceName} to the shared network`, () =>
+			ensureSharedNetworkAttached(row, serviceName),
+		);
 	}
 
 	// Remove configs for services that no longer have any domain.
@@ -636,9 +665,9 @@ export async function resyncComposeDomains(composeId: string): Promise<void> {
 		const services = await loadServices(row);
 		for (const serviceName of services) {
 			if (!byService.has(serviceName)) {
-				await traefik
-					.removeTraefikConfig(traefikAppName(row, serviceName), row.serverId)
-					.catch(() => {});
+				await bestEffort(`remove Traefik config ${traefikAppName(row, serviceName)}`, () =>
+					traefik.removeTraefikConfig(traefikAppName(row, serviceName), row.serverId),
+				);
 			}
 		}
 	} catch {
@@ -666,11 +695,9 @@ export async function saveComposeFile(
 	options: ComposeMutationOptions = {},
 ): Promise<void> {
 	if (composeRow.sourceType !== "raw") {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message:
-				"The compose file of a git-backed service is edited in the repository (the checkout is reset on every deploy). Switch the source type to raw to edit it here.",
-		});
+		throw badRequest(
+			"The compose file of a git-backed service is edited in the repository (the checkout is reset on every deploy). Switch the source type to raw to edit it here.",
+		);
 	}
 	const keepPrivileged = composeRow.hostPrivileged && options.callerIsInstanceAdmin === true;
 	// validate before persisting so a broken / unsafe file is rejected early

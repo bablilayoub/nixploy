@@ -2,10 +2,10 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-
 import type { ComposeService } from "@/components/compose/compose-detail";
 import { EnvEditor } from "@/components/services/env-editor";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 export function EnvironmentTab({ compose }: { compose: ComposeService }) {
@@ -21,7 +21,7 @@ export function EnvironmentTab({ compose }: { compose: ComposeService }) {
 					queryKey: trpc.compose.one.queryKey({ composeId: compose.composeId }),
 				});
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

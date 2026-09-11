@@ -12,6 +12,7 @@ import {
 	previewDeployments,
 	redis,
 } from "../../db/schema";
+import { conflict } from "../errors";
 
 /**
  * Longest slug `generateAppName` produces. Swarm service names and DNS
@@ -96,5 +97,5 @@ export const generateAppName = async (name: string): Promise<string> => {
 			return candidate;
 		}
 	}
-	throw new Error(`Could not generate a unique appName for "${name}"`);
+	throw conflict(`Could not generate a unique appName for "${name}"`);
 };

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { servers } from "../../db/schema";
 import { verifyRemoteHostKey } from "../../utils/exec";
+import { notFound, preconditionFailed } from "../errors";
 
 /**
  * Docker operations against the local host or a remote managed server.
@@ -31,10 +32,10 @@ export const getDocker = async (serverId?: string | null): Promise<Docker> => {
 		with: { sshKey: true },
 	});
 	if (!server) {
-		throw new Error(`Server not found: ${serverId}`);
+		throw notFound(`Server not found: ${serverId}`);
 	}
 	if (!server.sshKey) {
-		throw new Error(`Server ${server.name} (${serverId}) has no SSH key attached`);
+		throw preconditionFailed(`Server ${server.name} (${serverId}) has no SSH key attached`);
 	}
 
 	return new Docker({
@@ -104,7 +105,9 @@ export const removeApplicationImages = async (
 	serverId?: string | null,
 ): Promise<void> => {
 	const docker = await getDocker(serverId);
-	const images = await docker.listImages({ filters: { reference: [`${appName}:*`] } });
+	const images = await docker.listImages({
+		filters: { reference: [`${appName}:*`] },
+	});
 	for (const image of images) {
 		for (const tag of image.RepoTags ?? []) {
 			if (!tag.startsWith(`${appName}:`)) continue;
@@ -171,7 +174,7 @@ export const cloneSwarmService = async (
 	const docker = await getDocker();
 	const current = await inspectSwarmService(sourceAppName);
 	if (!current?.Spec) {
-		throw new Error(`Swarm service "${sourceAppName}" does not exist`);
+		throw preconditionFailed(`Swarm service "${sourceAppName}" does not exist`);
 	}
 	const existing = await inspectSwarmService(targetAppName);
 	if (existing) {

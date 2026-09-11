@@ -1,7 +1,7 @@
-import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { users } from "../../db/schema";
+import { forbidden } from "../errors";
 
 /** better-auth admin plugin: first user gets `role: "admin"` on the user row. */
 export function isInstanceAdminRole(role: string | null | undefined): boolean {
@@ -28,9 +28,6 @@ export async function assertInstanceAdmin(session: {
 		role = row?.role ?? null;
 	}
 	if (!isInstanceAdminRole(role)) {
-		throw new TRPCError({
-			code: "FORBIDDEN",
-			message: "This action requires the instance admin role",
-		});
+		throw forbidden("This action requires the instance admin role");
 	}
 }

@@ -1,5 +1,6 @@
 import { join, normalize, sep } from "node:path";
 import { getConfigDir } from "../deployment/paths";
+import { badRequest } from "../errors";
 
 /** Root of all Nixploy-managed on-disk state — see `deployment/paths.ts`. */
 export { getConfigDir };
@@ -37,7 +38,7 @@ export const resolveComposeFilePath = (
 	const codeDir = getComposeCodeDir(appName);
 	const resolved = normalize(join(codeDir, composePath));
 	if (resolved !== codeDir && !resolved.startsWith(codeDir + sep)) {
-		throw new Error(`composePath escapes the code directory: ${composePath}`);
+		throw badRequest(`composePath escapes the code directory: ${composePath}`);
 	}
 	return resolved;
 };

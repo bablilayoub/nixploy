@@ -2,15 +2,16 @@ import { parse, stringify } from "yaml";
 import { getSwarmNetwork } from "../application/paths";
 import { mergeNodeConstraint } from "../cluster/placement";
 import { parseEnv } from "../deployment/env";
+import { badRequest, DomainError } from "../errors";
 
 /**
  * A compose file the platform refuses to run (privileged services, host
  * binds, interpolation into dangerous keys, …). Routers map it to
  * BAD_REQUEST; the deploy worker logs it as the deployment error.
  */
-export class ComposeValidationError extends Error {
+export class ComposeValidationError extends DomainError {
 	constructor(message: string) {
-		super(message);
+		super("BAD_REQUEST", message);
 		this.name = "ComposeValidationError";
 	}
 }
@@ -38,10 +39,10 @@ export type ComposeEnv = Readonly<Record<string, string>>;
 export function parseComposeFile(content: string): ComposeFileSpec {
 	const spec = parse(content) as ComposeFileSpec | null;
 	if (!spec || typeof spec !== "object") {
-		throw new Error("Invalid compose file: not a YAML mapping");
+		throw badRequest("Invalid compose file: not a YAML mapping");
 	}
 	if (!spec.services || Object.keys(spec.services).length === 0) {
-		throw new Error("Invalid compose file: no services defined");
+		throw badRequest("Invalid compose file: no services defined");
 	}
 	return spec;
 }
@@ -88,7 +89,7 @@ export function interpolateComposeString(input: string, env: ComposeEnv): string
 				if (depth > 0) j += 1;
 			}
 			if (depth !== 0) {
-				throw new Error(`Invalid compose interpolation (unterminated \${): "${input}"`);
+				throw badRequest(`Invalid compose interpolation (unterminated \${): "${input}"`);
 			}
 			out += expandBraced(input.slice(i + 2, j), env, input);
 			i = j + 1;
@@ -110,7 +111,7 @@ export function interpolateComposeString(input: string, env: ComposeEnv): string
 function expandBraced(inner: string, env: ComposeEnv, whole: string): string {
 	const named = VAR_NAME_RE.exec(inner);
 	if (!named) {
-		throw new Error(`Invalid compose interpolation format: "${whole}"`);
+		throw badRequest(`Invalid compose interpolation format: "${whole}"`);
 	}
 	const name = named[0];
 	const rest = inner.slice(name.length);
@@ -125,7 +126,7 @@ function expandBraced(inner: string, env: ComposeEnv, whole: string): string {
 				? one
 				: null;
 	if (!op) {
-		throw new Error(`Invalid compose interpolation format: "${whole}"`);
+		throw badRequest(`Invalid compose interpolation format: "${whole}"`);
 	}
 	const arg = rest.slice(op.length);
 	// `:` variants treat an empty value like an unset one.
@@ -137,7 +138,7 @@ function expandBraced(inner: string, env: ComposeEnv, whole: string): string {
 		case ":?":
 		case "?":
 			if (!missing) return value as string;
-			throw new Error(
+			throw badRequest(
 				`Required compose variable ${name} is missing a value: ${interpolateComposeString(arg, env)}`,
 			);
 		default:
@@ -518,10 +519,10 @@ function assertSafeNetworks(networks: unknown): void {
  */
 export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSafetyOptions): void {
 	if (spec.include !== undefined && spec.include !== null) {
-		throw new Error('Compose "include" is not allowed');
+		throw badRequest('Compose "include" is not allowed');
 	}
 	if (spec.extends !== undefined && spec.extends !== null) {
-		throw new Error('Compose top-level "extends" is not allowed');
+		throw badRequest('Compose top-level "extends" is not allowed');
 	}
 	assertSafeNamedVolumes(spec.volumes);
 	assertSafeConfigsOrSecrets("configs", spec.configs);

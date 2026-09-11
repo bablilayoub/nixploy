@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { type applications, type compose, domains, environments, projects } from "../../db/schema";
+import { badRequest, notFound } from "../errors";
 import { findProjectById, getEnvironmentServices } from "../projects";
 import {
 	envKeysFromDotenv,
@@ -95,7 +96,7 @@ export const exportStack = async (
 		),
 	});
 	if (!environment) {
-		throw new Error(`Environment "${environmentName}" not found in this project`);
+		throw notFound(`Environment "${environmentName}" not found in this project`);
 	}
 
 	const services = await getEnvironmentServices(environment.environmentId);
@@ -259,7 +260,7 @@ export const resolveProjectForStack = async (
 		rows.find((row) => row.name === stack.project.name) ??
 		rows.find((row) => slugifyProjectName(row.name) === slug);
 	if (!match) {
-		throw new Error(
+		throw notFound(
 			`Project "${stack.project.name}" not found — pass projectId or create the project first`,
 		);
 	}
@@ -272,15 +273,18 @@ export const resolveEnvironmentId = async (
 ): Promise<{ environmentId: string; environmentName: string }> => {
 	const targetName = stack.environment?.name ?? stack.environments?.[0]?.name;
 	if (!targetName) {
-		throw new Error("Stack must define environment.name or environments[0].name");
+		throw badRequest("Stack must define environment.name or environments[0].name");
 	}
 	const environment = await db.query.environments.findFirst({
 		where: and(eq(environments.projectId, projectId), eq(environments.name, targetName)),
 	});
 	if (!environment) {
-		throw new Error(`Environment "${targetName}" not found in project`);
+		throw notFound(`Environment "${targetName}" not found in project`);
 	}
-	return { environmentId: environment.environmentId, environmentName: environment.name };
+	return {
+		environmentId: environment.environmentId,
+		environmentName: environment.name,
+	};
 };
 
 export const randomPassword = () => randomBytes(18).toString("base64url");

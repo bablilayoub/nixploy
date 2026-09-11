@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { compose, domains, environments } from "../../db/schema";
+import { bestEffort } from "../../utils/best-effort";
 import {
 	assertComposeServiceName,
 	assertTraefikHost,
@@ -16,6 +16,7 @@ import {
 } from "../compose/compose-file";
 import { createCompose, resyncComposeDomains, updateComposeById } from "../compose/service";
 import { queueDeployment } from "../deployment";
+import { badRequest, notFound } from "../errors";
 import { assertWithinQuota, findProjectById } from "../projects";
 import { findTemplateById, listTemplateSummaries } from "./catalog";
 import { summarizeTemplateServices } from "./services";
@@ -66,7 +67,7 @@ export async function deployTemplate(
 ): Promise<DeployTemplateResult> {
 	const template = findTemplateById(input.templateId);
 	if (!template) {
-		throw new TRPCError({ code: "NOT_FOUND", message: "Template not found" });
+		throw notFound("Template not found");
 	}
 
 	// Org-scope: throws NOT_FOUND/FORBIDDEN when the project is not the caller's.
@@ -81,10 +82,7 @@ export async function deployTemplate(
 		),
 	});
 	if (!environment) {
-		throw new TRPCError({
-			code: "NOT_FOUND",
-			message: `Environment "${input.environmentName}" not found in this project`,
-		});
+		throw notFound(`Environment "${input.environmentName}" not found in this project`);
 	}
 
 	const safety = template.hostPrivileged ? hostPrivilegedComposeSafety() : undefined;
@@ -93,31 +91,25 @@ export async function deployTemplate(
 	try {
 		assertSafeComposeSpec(parseComposeFile(template.compose), safety);
 	} catch (error) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message:
-				error instanceof Error
-					? `Template "${template.name}" failed safety checks: ${error.message}`
-					: `Template "${template.name}" failed safety checks`,
-		});
+		throw badRequest(
+			error instanceof Error
+				? `Template "${template.name}" failed safety checks: ${error.message}`
+				: `Template "${template.name}" failed safety checks`,
+		);
 	}
 	const serviceNames = listComposeServices(template.compose);
 	for (const domain of input.domains ?? []) {
 		if (!serviceNames.includes(domain.serviceName)) {
-			throw new TRPCError({
-				code: "BAD_REQUEST",
-				message: `Service "${domain.serviceName}" is not defined by the ${template.name} compose file`,
-			});
+			throw badRequest(
+				`Service "${domain.serviceName}" is not defined by the ${template.name} compose file`,
+			);
 		}
 		try {
 			assertTraefikHost(domain.host);
 			assertTraefikPath("/");
 			assertComposeServiceName(domain.serviceName);
 		} catch (error) {
-			throw new TRPCError({
-				code: "BAD_REQUEST",
-				message: error instanceof Error ? error.message : "Invalid domain",
-			});
+			throw badRequest(error instanceof Error ? error.message : "Invalid domain");
 		}
 	}
 
@@ -139,7 +131,10 @@ export async function deployTemplate(
 	});
 
 	try {
-		await updateComposeById(service.composeId, { composeFile: template.compose, env });
+		await updateComposeById(service.composeId, {
+			composeFile: template.compose,
+			env,
+		});
 
 		if (input.domains && input.domains.length > 0) {
 			await db.insert(domains).values(
@@ -159,13 +154,19 @@ export async function deployTemplate(
 		}
 	} catch (error) {
 		// Roll back the row so a failed instantiation never leaves an orphan.
-		await db
-			.delete(compose)
-			.where(eq(compose.composeId, service.composeId))
-			.catch(() => {});
+		await bestEffort(`roll back compose row ${service.composeId}`, () =>
+			db.delete(compose).where(eq(compose.composeId, service.composeId)),
+		);
 		throw error;
 	}
 
-	const deploymentId = await queueDeployment({ composeId: service.composeId, type: "deploy" });
-	return { composeId: service.composeId, appName: service.appName, deploymentId };
+	const deploymentId = await queueDeployment({
+		composeId: service.composeId,
+		type: "deploy",
+	});
+	return {
+		composeId: service.composeId,
+		appName: service.appName,
+		deploymentId,
+	};
 }

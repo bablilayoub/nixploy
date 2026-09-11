@@ -1,3 +1,5 @@
+import { badRequest } from "../errors";
+
 /**
  * Parse a Copilot `suggestedPatch` into dotenv KEY=VALUE pairs when possible.
  * Accepts fenced code, bare dotenv, or lines mixed with commentary
@@ -38,7 +40,7 @@ export function isEnvLikePatch(patch: string | null | undefined): boolean {
 export function mergeDotenv(existing: string | null | undefined, patch: string): string {
 	const entries = extractEnvEntries(patch);
 	if (entries.length === 0) {
-		throw new Error("Suggested patch has no KEY=VALUE environment lines to apply");
+		throw badRequest("Suggested patch has no KEY=VALUE environment lines to apply");
 	}
 	const map = new Map<string, string>();
 	for (const raw of (existing ?? "").split("\n")) {

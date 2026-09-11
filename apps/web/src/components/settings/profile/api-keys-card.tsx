@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { authClient } from "@/lib/auth-client";
+import { toastError } from "@/lib/describe-error";
 
 const EXPIRATION_OPTIONS = [
 	{ label: "Never", value: "never", seconds: undefined },
@@ -88,7 +89,7 @@ export function ApiKeysCard() {
 		});
 		setIsPending(false);
 		if (error) {
-			toast.error(error.message ?? "Failed to create API key");
+			toastError(error, "Failed to create API key");
 			return;
 		}
 		toast.success("API key created");
@@ -101,7 +102,7 @@ export function ApiKeysCard() {
 	async function deleteKey(keyId: string) {
 		const { error } = await authClient.apiKey.delete({ keyId });
 		if (error) {
-			toast.error(error.message ?? "Failed to delete API key");
+			toastError(error, "Failed to delete API key");
 			return;
 		}
 		toast.success("API key deleted");

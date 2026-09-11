@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
 import { capabilityHint } from "@/components/services/capability-hint";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { SettingsSection } from "@/components/settings/settings-section";
@@ -23,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
@@ -129,12 +129,12 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 
 	const saveBuildType = useMutation(
 		trpc.application.saveBuildType.mutationOptions({
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 	const update = useMutation(
 		trpc.application.update.mutationOptions({
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -163,7 +163,10 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 				useBuildCache,
 			});
 			if (buildArgsChanged) {
-				await update.mutateAsync({ applicationId, buildArgs: buildArgs || null });
+				await update.mutateAsync({
+					applicationId,
+					buildArgs: buildArgs || null,
+				});
 			}
 			toast.success("Build configuration saved");
 			await invalidate();

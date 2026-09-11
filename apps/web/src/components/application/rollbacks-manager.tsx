@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import type { RollbackEntry } from "./types";
@@ -70,7 +71,7 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 					queryKey: trpc.deployment.byApplication.pathKey(),
 				});
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -81,7 +82,7 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 				setDeleteTarget(null);
 				invalidate();
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 
@@ -189,7 +190,10 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 								// Keep the dialog open (with its spinner) until the mutation settles.
 								event.preventDefault();
 								if (rollbackTarget) {
-									rollback.mutate({ applicationId, rollbackId: rollbackTarget.rollbackId });
+									rollback.mutate({
+										applicationId,
+										rollbackId: rollbackTarget.rollbackId,
+									});
 								}
 							}}
 							disabled={rollback.isPending}

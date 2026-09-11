@@ -2,9 +2,9 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-
 import { EnvEditor } from "@/components/services/env-editor";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -23,7 +23,7 @@ export function EnvironmentTab({ application }: { application: Application }) {
 					queryKey: trpc.application.one.queryKey({ applicationId }),
 				});
 			},
-			onError: (error) => toast.error(error.message),
+			onError: (error) => toastError(error),
 		}),
 	);
 

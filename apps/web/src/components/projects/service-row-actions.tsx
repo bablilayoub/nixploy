@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRightLeft, Copy, Loader2, MoreHorizontal, Tag } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-
 import { capabilityHint } from "@/components/services/capability-hint";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +29,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { toastError } from "@/lib/describe-error";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 import { ServiceTagsDialog } from "./service-tags-dialog";
 import type { ServiceType } from "./service-types";
@@ -82,10 +82,16 @@ export function ServiceRowActions({
 	 */
 	const invalidateServices = async () => {
 		await Promise.all([
-			queryClient.invalidateQueries({ queryKey: trpc[service.type].all.pathKey() }),
-			queryClient.invalidateQueries({ queryKey: trpc.environment.byProject.pathKey() }),
+			queryClient.invalidateQueries({
+				queryKey: trpc[service.type].all.pathKey(),
+			}),
+			queryClient.invalidateQueries({
+				queryKey: trpc.environment.byProject.pathKey(),
+			}),
 			queryClient.invalidateQueries({ queryKey: trpc.project.all.queryKey() }),
-			queryClient.invalidateQueries({ queryKey: trpc.project.one.queryKey({ projectId }) }),
+			queryClient.invalidateQueries({
+				queryKey: trpc.project.one.queryKey({ projectId }),
+			}),
 		]);
 	};
 
@@ -99,7 +105,7 @@ export function ServiceRowActions({
 			toast.success(`${service.name} duplicated`);
 			await invalidateServices();
 		},
-		onError: (error) => toast.error(error.message),
+		onError: (error) => toastError(error),
 	});
 
 	const move = useMutation({
@@ -116,7 +122,7 @@ export function ServiceRowActions({
 			setMoveOpen(false);
 			await invalidateServices();
 		},
-		onError: (error) => toast.error(error.message),
+		onError: (error) => toastError(error),
 	});
 
 	const environmentOptions = (projectsQuery.data ?? []).flatMap((project) =>

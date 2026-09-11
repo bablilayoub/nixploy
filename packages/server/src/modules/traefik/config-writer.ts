@@ -6,6 +6,7 @@ import { stringify } from "yaml";
 import { db } from "../../db";
 import { certificates } from "../../db/schema";
 import { execAsyncRemote, execAsyncWithStdin } from "../../utils/exec";
+import { badRequest } from "../errors";
 import { getDynamicDir } from "./paths";
 
 /**
@@ -82,7 +83,9 @@ interface HttpService {
 
 type HttpMiddleware =
 	| { redirectScheme: { scheme: string; permanent: boolean } }
-	| { redirectRegex: { regex: string; replacement: string; permanent: boolean } }
+	| {
+			redirectRegex: { regex: string; replacement: string; permanent: boolean };
+	  }
 	| { basicAuth: { removeHeader: boolean; users: string[] } }
 	| { stripPrefix: { prefixes: string[] } }
 	| { addPrefix: { prefix: string } };
@@ -110,7 +113,7 @@ const sanitizeName = (value: string): string => value.replace(/[^a-zA-Z0-9-]/g, 
 const sanitizeRuleValue = (value: string): string => {
 	const cleaned = value.replace(/`/g, "").trim();
 	if (!cleaned || /[()|\\\n\r]/.test(cleaned)) {
-		throw new Error(`Unsafe Traefik rule value: ${value}`);
+		throw badRequest(`Unsafe Traefik rule value: ${value}`);
 	}
 	return cleaned;
 };
@@ -261,16 +264,16 @@ export const buildTraefikFileConfig = async (
 		const host = sanitizeRuleValue(toPunycode(domain.host));
 		// No wildcards — a Host(`*`) / Host(`*.evil`) rule would catch unrelated traffic.
 		if (host.includes("*") || !/^[a-zA-Z0-9.-]+(\.[a-zA-Z0-9.-]+)*\.?$/.test(host)) {
-			throw new Error(`Invalid Traefik host after punycode: ${domain.host}`);
+			throw badRequest(`Invalid Traefik host after punycode: ${domain.host}`);
 		}
 		const path = domain.path && domain.path !== "/" ? sanitizeRuleValue(domain.path) : null;
 		if (path && (!path.startsWith("/") || /[()|`]/.test(path) || path.includes(".."))) {
-			throw new Error(`Invalid Traefik path: ${domain.path}`);
+			throw badRequest(`Invalid Traefik path: ${domain.path}`);
 		}
 		const rule = `Host(\`${host}\`)${path ? ` && PathPrefix(\`${path}\`)` : ""}`;
 
 		if (domain.serviceName && !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(domain.serviceName)) {
-			throw new Error(`Invalid compose service name: ${domain.serviceName}`);
+			throw badRequest(`Invalid compose service name: ${domain.serviceName}`);
 		}
 		const target = domain.serviceName ? `${appName}-${domain.serviceName}-1` : appName;
 		config.http.services[serviceName] = {
@@ -288,7 +291,7 @@ export const buildTraefikFileConfig = async (
 		if (domain.internalPath && domain.internalPath !== "/" && domain.internalPath !== domain.path) {
 			const internalPath = sanitizeRuleValue(domain.internalPath);
 			if (!internalPath.startsWith("/") || internalPath.includes("..")) {
-				throw new Error(`Invalid Traefik internal path: ${domain.internalPath}`);
+				throw badRequest(`Invalid Traefik internal path: ${domain.internalPath}`);
 			}
 			const addName = `addprefix-${sanitizeName(appName)}-${key}`;
 			middlewares[addName] = { addPrefix: { prefix: internalPath } };

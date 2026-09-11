@@ -6,7 +6,6 @@ import { formatDistanceToNow } from "date-fns";
 import { CalendarClock, Loader2, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
 import { QueryState } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { PageHeader, StatusDot } from "@/components/shell";
@@ -51,6 +50,7 @@ import {
 import { TableCard } from "@/components/ui/table-card";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { describeError, toastError } from "@/lib/describe-error";
 import { scheduleRunStatusDot } from "@/lib/status";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -165,7 +165,7 @@ export function SchedulesView() {
 				setDialogOpen(false);
 				invalidate();
 			},
-			onError: (mutationError) => toast.error(mutationError.message),
+			onError: (mutationError) => toastError(mutationError),
 		}),
 	);
 	const update = useMutation(
@@ -175,7 +175,7 @@ export function SchedulesView() {
 				setDialogOpen(false);
 				invalidate();
 			},
-			onError: (mutationError) => toast.error(mutationError.message),
+			onError: (mutationError) => toastError(mutationError),
 		}),
 	);
 	const remove = useMutation(
@@ -185,7 +185,7 @@ export function SchedulesView() {
 				setDeleteTarget(null);
 				invalidate();
 			},
-			onError: (mutationError) => toast.error(mutationError.message),
+			onError: (mutationError) => toastError(mutationError),
 		}),
 	);
 	const runNow = useMutation(
@@ -195,7 +195,7 @@ export function SchedulesView() {
 				invalidate();
 			},
 			onError: (mutationError) => {
-				toast.error(`Run failed: ${mutationError.message}`);
+				toast.error(`Run failed: ${describeError(mutationError)}`);
 				invalidate();
 			},
 		}),
@@ -203,13 +203,13 @@ export function SchedulesView() {
 	const setEnabled = useMutation(
 		trpc.schedule.enable.mutationOptions({
 			onSuccess: invalidate,
-			onError: (mutationError) => toast.error(mutationError.message),
+			onError: (mutationError) => toastError(mutationError),
 		}),
 	);
 	const setDisabled = useMutation(
 		trpc.schedule.disable.mutationOptions({
 			onSuccess: invalidate,
-			onError: (mutationError) => toast.error(mutationError.message),
+			onError: (mutationError) => toastError(mutationError),
 		}),
 	);
 
@@ -347,7 +347,9 @@ export function SchedulesView() {
 													status={scheduleRunStatusDot[schedule.lastStatus] ?? "neutral"}
 												/>
 												{schedule.lastRunAt
-													? formatDistanceToNow(new Date(schedule.lastRunAt), { addSuffix: true })
+													? formatDistanceToNow(new Date(schedule.lastRunAt), {
+															addSuffix: true,
+														})
 													: schedule.lastStatus}
 											</span>
 										) : (
@@ -364,8 +366,12 @@ export function SchedulesView() {
 											title={rowHint(schedule)}
 											onCheckedChange={(enabled) =>
 												enabled
-													? setEnabled.mutate({ scheduleId: schedule.scheduleId })
-													: setDisabled.mutate({ scheduleId: schedule.scheduleId })
+													? setEnabled.mutate({
+															scheduleId: schedule.scheduleId,
+														})
+													: setDisabled.mutate({
+															scheduleId: schedule.scheduleId,
+														})
 											}
 										/>
 									</TableCell>

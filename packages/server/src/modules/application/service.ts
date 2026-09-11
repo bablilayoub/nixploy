@@ -13,6 +13,7 @@ import {
 	redirects,
 	security,
 } from "../../db/schema";
+import { bestEffort } from "../../utils/best-effort";
 import { assertSafeAppName, assertSafePublishedPort } from "../../utils/validators";
 import { unregisterBackupsForService } from "../backups/scheduler";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
@@ -24,6 +25,7 @@ import {
 	sanitizeSwarmLabels,
 	withNodeConstraint,
 } from "../deployment/swarm";
+import { conflict, notFound, preconditionFailed } from "../errors";
 import { deletePreviewDeployment } from "../preview";
 import { unregisterSchedulesForService } from "../schedules";
 import {
@@ -237,7 +239,9 @@ export const buildApplicationSwarmSpec = (
 				ReadOnly: mount.type === "file",
 				// CreateHostPath exists in the Docker API but is missing from
 				// dockerode's BindOptions typing.
-				BindOptions: { CreateHostPath: true } as unknown as Docker.MountSettings["BindOptions"],
+				BindOptions: {
+					CreateHostPath: true,
+				} as unknown as Docker.MountSettings["BindOptions"],
 			};
 		},
 	);
@@ -315,8 +319,12 @@ export const upsertApplicationSwarmService = async (application: ApplicationRow)
 	const service = docker.getService(application.appName);
 
 	const [applicationMounts, applicationPorts, env, swarmNodeId] = await Promise.all([
-		db.query.mounts.findMany({ where: eq(mounts.applicationId, application.applicationId) }),
-		db.query.ports.findMany({ where: eq(ports.applicationId, application.applicationId) }),
+		db.query.mounts.findMany({
+			where: eq(mounts.applicationId, application.applicationId),
+		}),
+		db.query.ports.findMany({
+			where: eq(ports.applicationId, application.applicationId),
+		}),
 		loadMergedApplicationEnv(application),
 		application.serverId ? getServerSwarmNodeId(application.serverId) : null,
 	]);
@@ -444,7 +452,7 @@ export const createApplication = async (input: CreateApplicationInput): Promise<
 		? assertSafeAppName(input.appName)
 		: await generateAppName(input.name);
 	if (await isAppNameTaken(appName)) {
-		throw new Error(`appName "${appName}" is already in use`);
+		throw conflict(`appName "${appName}" is already in use`);
 	}
 
 	const [application] = await db
@@ -476,7 +484,7 @@ export const updateApplication = async (
 		.where(eq(applications.applicationId, applicationId))
 		.returning();
 	if (!application) {
-		throw new Error(`Application not found: ${applicationId}`);
+		throw notFound(`Application not found: ${applicationId}`);
 	}
 	return application;
 };
@@ -586,14 +594,21 @@ export const deleteApplication = async (
 	});
 	// Built images + rollback pins are not swept by the (dangling-only) cleanup
 	// cron. Image-level: they live on the server the app was built on.
-	await removeApplicationImages(application.appName, application.serverId).catch(() => {});
+	await bestEffort(`remove images for ${application.appName}`, () =>
+		removeApplicationImages(application.appName, application.serverId),
+	);
 	await removeTraefikConfig(application.appName);
 
 	if (!application.serverId) {
-		await fs.rm(getApplicationDir(application.appName), { recursive: true, force: true });
+		await fs.rm(getApplicationDir(application.appName), {
+			recursive: true,
+			force: true,
+		});
 	}
 	// Build logs live outside the app dir and have no FK to cascade through.
-	await removeServiceLogs(application.appName).catch(() => {});
+	await bestEffort(`remove logs for ${application.appName}`, () =>
+		removeServiceLogs(application.appName),
+	);
 
 	await db.delete(applications).where(eq(applications.applicationId, application.applicationId));
 };
@@ -604,7 +619,7 @@ export const startApplication = async (
 ): Promise<void> => {
 	const service = await inspectSwarmService(application.appName);
 	if (!service) {
-		throw new Error("Application has not been deployed yet — deploy it first");
+		throw preconditionFailed("Application has not been deployed yet — deploy it first");
 	}
 	await scaleSwarmService(application.appName, application.replicas || 1);
 	await updateApplication(application.applicationId, { status: "running" });
