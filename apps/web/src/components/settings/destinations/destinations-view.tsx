@@ -23,6 +23,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
@@ -33,19 +40,26 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { missingCapabilityHint } from "@/lib/capabilities";
+import { INSTANCE_ADMIN_HINT, missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
 type DestinationRow = inferRouterOutputs<AppRouter>["destination"]["all"][number];
 
+type Provider = "s3" | "local";
+
+const isLocal = (destination: Pick<DestinationRow, "provider">) => destination.provider === "local";
+
 export function DestinationsView() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
-	const { can } = useCapabilities();
+	// `isInstanceAdmin` is already mounted-gated by the hook, so the
+	// server-rendered option state matches the first client paint.
+	const { can, isInstanceAdmin } = useCapabilities();
 	const canManage = can("destinations.manage");
 	const manageHint = canManage ? undefined : missingCapabilityHint("destinations.manage");
+	const [provider, setProvider] = useState<Provider>("s3");
 	const [name, setName] = useState("");
 	const [bucket, setBucket] = useState("");
 	const [region, setRegion] = useState("");
@@ -72,6 +86,7 @@ export function DestinationsView() {
 				toast.success("Backup destination added");
 				await invalidate();
 				setOpen(false);
+				setProvider("s3");
 				setName("");
 				setBucket("");
 				setRegion("");
@@ -134,7 +149,7 @@ export function DestinationsView() {
 		<div className="flex flex-col gap-6">
 			<PageHeader
 				title="Backup storage"
-				description="S3-compatible storage for database and volume backups."
+				description="S3-compatible buckets — or this host's disk — for database and volume backups."
 			/>
 			<SettingsSection
 				title={
@@ -143,7 +158,7 @@ export function DestinationsView() {
 						Backup storage
 					</span>
 				}
-				description="S3-compatible buckets used for database and volume backups."
+				description="Where database, volume and instance backups are stored. S3-compatible buckets for any org; the panel host's local disk (instance admin only)."
 				actions={
 					<Dialog open={open} onOpenChange={setOpen}>
 						<DialogTrigger asChild>
@@ -155,84 +170,121 @@ export function DestinationsView() {
 						<DialogContent>
 							<DialogHeader>
 								<DialogTitle>Add backup destination</DialogTitle>
-								<DialogDescription>Connect an S3-compatible bucket for backups.</DialogDescription>
+								<DialogDescription>
+									Connect an S3-compatible bucket, or keep backups on this host's disk.
+								</DialogDescription>
 							</DialogHeader>
 							<div className="grid gap-4">
+								<div className="grid gap-2">
+									<Label htmlFor="dest-provider">Storage</Label>
+									<Select
+										value={provider}
+										onValueChange={(value) => setProvider(value as Provider)}
+									>
+										<SelectTrigger id="dest-provider" className="w-full">
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="s3">S3-compatible bucket</SelectItem>
+											<SelectItem value="local" disabled={!isInstanceAdmin}>
+												Local disk (panel host)
+											</SelectItem>
+										</SelectContent>
+									</Select>
+									{provider === "local" ? (
+										<p className="text-sm text-muted-foreground">
+											Archives are written under <code>backups/</code> in the Nixploy config
+											directory of this host, one folder per organization. Keep a copy elsewhere: a
+											lost host takes these backups with it.
+										</p>
+									) : (
+										!isInstanceAdmin && (
+											<p className="text-sm text-muted-foreground">
+												Local disk: {INSTANCE_ADMIN_HINT.toLowerCase()}.
+											</p>
+										)
+									)}
+								</div>
 								<div className="grid gap-2">
 									<Label htmlFor="dest-name">Name</Label>
 									<Input
 										id="dest-name"
-										placeholder="e.g. backups-s3"
+										placeholder={provider === "local" ? "e.g. local-disk" : "e.g. backups-s3"}
 										value={name}
 										onChange={(e) => setName(e.target.value)}
 									/>
 								</div>
-								<div className="grid grid-cols-2 gap-4">
-									<div className="grid gap-2">
-										<Label htmlFor="dest-bucket">Bucket</Label>
-										<Input
-											id="dest-bucket"
-											value={bucket}
-											onChange={(e) => setBucket(e.target.value)}
-										/>
-									</div>
-									<div className="grid gap-2">
-										<Label htmlFor="dest-region">Region</Label>
-										<Input
-											id="dest-region"
-											placeholder="us-east-1"
-											value={region}
-											onChange={(e) => setRegion(e.target.value)}
-										/>
-									</div>
-								</div>
-								<div className="grid gap-2">
-									<Label htmlFor="dest-endpoint">Endpoint</Label>
-									<Input
-										id="dest-endpoint"
-										placeholder="https://s3.us-east-1.amazonaws.com"
-										value={endpoint}
-										onChange={(e) => setEndpoint(e.target.value)}
-									/>
-								</div>
-								<div className="grid gap-2">
-									<Label htmlFor="dest-access-key">Access key ID</Label>
-									<Input
-										id="dest-access-key"
-										value={accessKey}
-										onChange={(e) => setAccessKey(e.target.value)}
-									/>
-								</div>
-								<div className="grid gap-2">
-									<Label htmlFor="dest-secret-key">Secret access key</Label>
-									<Input
-										id="dest-secret-key"
-										type="password"
-										value={secretAccessKey}
-										onChange={(e) => setSecretAccessKey(e.target.value)}
-									/>
-								</div>
+								{provider === "s3" && (
+									<>
+										<div className="grid grid-cols-2 gap-4">
+											<div className="grid gap-2">
+												<Label htmlFor="dest-bucket">Bucket</Label>
+												<Input
+													id="dest-bucket"
+													value={bucket}
+													onChange={(e) => setBucket(e.target.value)}
+												/>
+											</div>
+											<div className="grid gap-2">
+												<Label htmlFor="dest-region">Region</Label>
+												<Input
+													id="dest-region"
+													placeholder="us-east-1"
+													value={region}
+													onChange={(e) => setRegion(e.target.value)}
+												/>
+											</div>
+										</div>
+										<div className="grid gap-2">
+											<Label htmlFor="dest-endpoint">Endpoint</Label>
+											<Input
+												id="dest-endpoint"
+												placeholder="https://s3.us-east-1.amazonaws.com"
+												value={endpoint}
+												onChange={(e) => setEndpoint(e.target.value)}
+											/>
+										</div>
+										<div className="grid gap-2">
+											<Label htmlFor="dest-access-key">Access key ID</Label>
+											<Input
+												id="dest-access-key"
+												value={accessKey}
+												onChange={(e) => setAccessKey(e.target.value)}
+											/>
+										</div>
+										<div className="grid gap-2">
+											<Label htmlFor="dest-secret-key">Secret access key</Label>
+											<Input
+												id="dest-secret-key"
+												type="password"
+												value={secretAccessKey}
+												onChange={(e) => setSecretAccessKey(e.target.value)}
+											/>
+										</div>
+									</>
+								)}
 							</div>
 							<DialogFooter>
 								<Button
 									disabled={
 										createMutation.isPending ||
 										!name ||
-										!bucket ||
-										!region ||
-										!endpoint ||
-										!accessKey ||
-										!secretAccessKey
+										(provider === "s3" &&
+											(!bucket || !region || !endpoint || !accessKey || !secretAccessKey))
 									}
 									onClick={() =>
-										createMutation.mutate({
-											name,
-											bucket,
-											region,
-											endpoint,
-											accessKey,
-											secretAccessKey,
-										})
+										createMutation.mutate(
+											provider === "local"
+												? { name, provider: "local" }
+												: {
+														name,
+														bucket,
+														region,
+														endpoint,
+														accessKey,
+														secretAccessKey,
+													},
+										)
 									}
 								>
 									{createMutation.isPending && <Loader2 className="size-4 animate-spin" />}
@@ -268,9 +320,9 @@ export function DestinationsView() {
 						<TableHeader>
 							<TableRow>
 								<TableHead>Name</TableHead>
-								<TableHead>Bucket</TableHead>
+								<TableHead>Storage</TableHead>
 								<TableHead>Region</TableHead>
-								<TableHead>Endpoint</TableHead>
+								<TableHead>Location</TableHead>
 								<TableHead>Created</TableHead>
 								<TableHead className="w-24 text-right">Actions</TableHead>
 							</TableRow>
@@ -279,10 +331,17 @@ export function DestinationsView() {
 							{(destinations ?? []).map((destination) => (
 								<TableRow key={destination.destinationId}>
 									<TableCell className="font-medium">{destination.name}</TableCell>
-									<TableCell className="text-muted-foreground">{destination.bucket}</TableCell>
-									<TableCell className="text-muted-foreground">{destination.region}</TableCell>
-									<TableCell className="max-w-48 truncate text-muted-foreground">
-										{destination.endpoint}
+									<TableCell className="text-muted-foreground">
+										{isLocal(destination) ? "Local disk" : destination.bucket}
+									</TableCell>
+									<TableCell className="text-muted-foreground">
+										{isLocal(destination) ? "—" : destination.region}
+									</TableCell>
+									<TableCell
+										className="max-w-48 truncate text-muted-foreground"
+										title={destination.storagePath ?? destination.endpoint}
+									>
+										{destination.storagePath ?? destination.endpoint}
 									</TableCell>
 									<TableCell className="text-muted-foreground">
 										{format(new Date(destination.createdAt), "MMM d, yyyy")}
@@ -347,13 +406,20 @@ export function DestinationsView() {
 					<DialogHeader>
 						<DialogTitle>Edit destination</DialogTitle>
 						<DialogDescription>
-							Update the bucket settings. Leave the secret access key blank to keep the current one.
+							{editing && isLocal(editing)
+								? "A local destination only has a name; archives stay where they are."
+								: "Update the bucket settings. Leave the secret access key blank to keep the current one."}
 						</DialogDescription>
 					</DialogHeader>
 					<form
 						onSubmit={(event) => {
 							event.preventDefault();
-							if (editing) {
+							if (editing && isLocal(editing)) {
+								updateMutation.mutate({
+									destinationId: editing.destinationId,
+									name: editName.trim(),
+								});
+							} else if (editing) {
 								updateMutation.mutate({
 									destinationId: editing.destinationId,
 									name: editName.trim(),
@@ -375,60 +441,65 @@ export function DestinationsView() {
 								onChange={(e) => setEditName(e.target.value)}
 							/>
 						</div>
-						<div className="grid grid-cols-2 gap-4">
-							<div className="grid gap-2">
-								<Label htmlFor="edit-dest-bucket">Bucket</Label>
-								<Input
-									id="edit-dest-bucket"
-									value={editBucket}
-									onChange={(e) => setEditBucket(e.target.value)}
-								/>
-							</div>
-							<div className="grid gap-2">
-								<Label htmlFor="edit-dest-region">Region</Label>
-								<Input
-									id="edit-dest-region"
-									value={editRegion}
-									onChange={(e) => setEditRegion(e.target.value)}
-								/>
-							</div>
-						</div>
-						<div className="grid gap-2">
-							<Label htmlFor="edit-dest-endpoint">Endpoint</Label>
-							<Input
-								id="edit-dest-endpoint"
-								value={editEndpoint}
-								onChange={(e) => setEditEndpoint(e.target.value)}
-							/>
-						</div>
-						<div className="grid gap-2">
-							<Label htmlFor="edit-dest-access-key">Access key ID</Label>
-							<Input
-								id="edit-dest-access-key"
-								value={editAccessKey}
-								onChange={(e) => setEditAccessKey(e.target.value)}
-							/>
-						</div>
-						<div className="grid gap-2">
-							<Label htmlFor="edit-dest-secret-key">Secret access key</Label>
-							<Input
-								id="edit-dest-secret-key"
-								type="password"
-								placeholder="Leave blank to keep current"
-								value={editSecretAccessKey}
-								onChange={(e) => setEditSecretAccessKey(e.target.value)}
-							/>
-						</div>
+						{!(editing && isLocal(editing)) && (
+							<>
+								<div className="grid grid-cols-2 gap-4">
+									<div className="grid gap-2">
+										<Label htmlFor="edit-dest-bucket">Bucket</Label>
+										<Input
+											id="edit-dest-bucket"
+											value={editBucket}
+											onChange={(e) => setEditBucket(e.target.value)}
+										/>
+									</div>
+									<div className="grid gap-2">
+										<Label htmlFor="edit-dest-region">Region</Label>
+										<Input
+											id="edit-dest-region"
+											value={editRegion}
+											onChange={(e) => setEditRegion(e.target.value)}
+										/>
+									</div>
+								</div>
+								<div className="grid gap-2">
+									<Label htmlFor="edit-dest-endpoint">Endpoint</Label>
+									<Input
+										id="edit-dest-endpoint"
+										value={editEndpoint}
+										onChange={(e) => setEditEndpoint(e.target.value)}
+									/>
+								</div>
+								<div className="grid gap-2">
+									<Label htmlFor="edit-dest-access-key">Access key ID</Label>
+									<Input
+										id="edit-dest-access-key"
+										value={editAccessKey}
+										onChange={(e) => setEditAccessKey(e.target.value)}
+									/>
+								</div>
+								<div className="grid gap-2">
+									<Label htmlFor="edit-dest-secret-key">Secret access key</Label>
+									<Input
+										id="edit-dest-secret-key"
+										type="password"
+										placeholder="Leave blank to keep current"
+										value={editSecretAccessKey}
+										onChange={(e) => setEditSecretAccessKey(e.target.value)}
+									/>
+								</div>
+							</>
+						)}
 						<DialogFooter>
 							<Button
 								type="submit"
 								disabled={
 									updateMutation.isPending ||
 									!editName.trim() ||
-									!editBucket.trim() ||
-									!editRegion.trim() ||
-									!editEndpoint.trim() ||
-									!editAccessKey.trim()
+									(!(editing && isLocal(editing)) &&
+										(!editBucket.trim() ||
+											!editRegion.trim() ||
+											!editEndpoint.trim() ||
+											!editAccessKey.trim()))
 								}
 							>
 								{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}

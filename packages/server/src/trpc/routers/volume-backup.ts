@@ -4,7 +4,9 @@ import { z } from "zod";
 import { db } from "../../db";
 import { destinations, mounts, volumeBackups } from "../../db/schema";
 import { getServiceContext } from "../../modules/application";
+import { auditFromSession } from "../../modules/audit";
 import { listVolumeBackupKeys, restoreVolumeBackup } from "../../modules/backups/runner";
+import { latestBackupRuns, listBackupRuns } from "../../modules/backups/runs";
 import {
 	isValidBackupCron,
 	registerVolumeBackupSchedule,
@@ -107,8 +109,16 @@ async function assertVolumeOwnedByService(
 
 const volumeBackupIdInput = z.object({ volumeBackupId: z.string().min(1) });
 
+/** Attach each row's newest `backup_run` (status badge in the list). */
+async function withLastRun<T extends { volumeBackupId: string }>(rows: T[]) {
+	const latest = await latestBackupRuns({
+		volumeBackupIds: rows.map((row) => row.volumeBackupId),
+	});
+	return rows.map((row) => ({ ...row, lastRun: latest.get(row.volumeBackupId) ?? null }));
+}
+
 export const volumeBackupRouter = router({
-	/** Volume backups configured for one application/compose service. */
+	/** Volume backups configured for one application/compose service, with their last run. */
 	all: protectedProcedure
 		.input(
 			z.object({
@@ -121,10 +131,20 @@ export const volumeBackupRouter = router({
 			await assertServiceAccess(input.serviceType, input.serviceId, organizationId);
 			const column =
 				input.serviceType === "application" ? volumeBackups.applicationId : volumeBackups.composeId;
-			return await db.query.volumeBackups.findMany({
+			const rows = await db.query.volumeBackups.findMany({
 				where: eq(column, input.serviceId),
 				orderBy: [desc(volumeBackups.createdAt)],
 			});
+			return await withLastRun(rows);
+		}),
+
+	/** Run history of one volume backup, newest first. */
+	runs: protectedProcedure
+		.input(volumeBackupIdInput.extend({ limit: z.number().int().min(1).max(200).optional() }))
+		.query(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			const row = await findVolumeBackupOrThrow(input.volumeBackupId, organizationId);
+			return await listBackupRuns({ volumeBackupId: row.volumeBackupId }, input.limit ?? 20);
 		}),
 
 	/** A single volume backup by id. */
@@ -194,6 +214,13 @@ export const volumeBackupRouter = router({
 				throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 			}
 			registerVolumeBackupSchedule(row);
+			void auditFromSession(ctx, organizationId, {
+				action: "volumeBackup.create",
+				targetType: "volumeBackup",
+				targetId: row.volumeBackupId,
+				targetName: row.name,
+				metadata: { volumeName: row.volumeName, cronExpression: row.cronExpression },
+			});
 			return row;
 		}),
 
@@ -261,6 +288,12 @@ export const volumeBackupRouter = router({
 		const row = await findVolumeBackupOrThrow(input.volumeBackupId, organizationId);
 		unregisterVolumeBackupSchedule(row.volumeBackupId);
 		await db.delete(volumeBackups).where(eq(volumeBackups.volumeBackupId, row.volumeBackupId));
+		void auditFromSession(ctx, organizationId, {
+			action: "volumeBackup.delete",
+			targetType: "volumeBackup",
+			targetId: row.volumeBackupId,
+			targetName: row.name,
+		});
 		return true;
 	}),
 
@@ -269,6 +302,12 @@ export const volumeBackupRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 		const row = await findVolumeBackupOrThrow(input.volumeBackupId, organizationId);
+		void auditFromSession(ctx, organizationId, {
+			action: "volumeBackup.run",
+			targetType: "volumeBackup",
+			targetId: row.volumeBackupId,
+			targetName: row.name,
+		});
 		try {
 			await runVolumeBackupNow(row);
 		} catch (error) {
@@ -294,6 +333,14 @@ export const volumeBackupRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 			const row = await findVolumeBackupOrThrow(input.volumeBackupId, organizationId);
-			return await restoreVolumeBackup(row, input.key);
+			const result = await restoreVolumeBackup(row, input.key);
+			void auditFromSession(ctx, organizationId, {
+				action: "volumeBackup.restore",
+				targetType: "volumeBackup",
+				targetId: row.volumeBackupId,
+				targetName: row.name,
+				metadata: { key: result.key },
+			});
+			return result;
 		}),
 });

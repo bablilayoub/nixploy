@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { DatabaseBackup, Loader2, Pencil, Play, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { BackupRunsSheet, LastRunBadge } from "@/components/backups/backup-runs";
 import { QueryState } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { SettingsSection } from "@/components/settings/settings-section";
@@ -114,8 +115,15 @@ export function InstanceBackups() {
 	);
 	const runMutation = useMutation(
 		trpc.backup.runManually.mutationOptions({
-			onSuccess: () => toast.success("Instance backup started"),
-			onError,
+			// The server answers once both artifacts are stored — the run row is final.
+			onSuccess: () => {
+				toast.success("Instance backup finished");
+				invalidate();
+			},
+			onError: (error) => {
+				onError(error);
+				invalidate();
+			},
 		}),
 	);
 
@@ -195,6 +203,7 @@ export function InstanceBackups() {
 								<TableHead>Destination</TableHead>
 								<TableHead>Prefix</TableHead>
 								<TableHead>Enabled</TableHead>
+								<TableHead>Last run</TableHead>
 								<TableHead>Created</TableHead>
 								<TableHead className="text-right">Actions</TableHead>
 							</TableRow>
@@ -221,11 +230,21 @@ export function InstanceBackups() {
 											}
 										/>
 									</TableCell>
+									<TableCell>
+										<LastRunBadge run={backup.lastRun} />
+									</TableCell>
 									<TableCell className="text-sm text-muted-foreground">
 										{format(new Date(backup.createdAt), "PP")}
 									</TableCell>
 									<TableCell>
 										<div className="flex items-center justify-end gap-1">
+											<BackupRunsSheet
+												kind="backup"
+												id={backup.backupId}
+												title={`the instance backup (${backup.schedule})`}
+												canManage={canManage}
+												onChanged={invalidate}
+											/>
 											<Button
 												variant="ghost"
 												size="icon-sm"

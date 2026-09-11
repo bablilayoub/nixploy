@@ -4,9 +4,11 @@ import { z } from "zod";
 import { db } from "../../db";
 import { backups, destinations } from "../../db/schema";
 import { getServiceContext } from "../../modules/application";
+import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { WEB_SERVER_APP_NAME } from "../../modules/backups/instance-backup";
-import { listBackupKeys, restoreBackup } from "../../modules/backups/runner";
+import { listBackupKeys, restoreBackup, verifyBackup } from "../../modules/backups/runner";
+import { latestBackupRuns, listBackupRuns } from "../../modules/backups/runs";
 import {
 	isValidBackupCron,
 	registerBackupSchedule,
@@ -104,8 +106,23 @@ const createInputSchema = z.discriminatedUnion("databaseType", [
 
 const backupIdInput = z.object({ backupId: z.string().min(1) });
 
+/** Attach each row's newest `backup_run` (status badge in the lists). */
+async function withLastRun<T extends { backupId: string }>(rows: T[]) {
+	const latest = await latestBackupRuns({ backupIds: rows.map((row) => row.backupId) });
+	return rows.map((row) => ({ ...row, lastRun: latest.get(row.backupId) ?? null }));
+}
+
+/** Rejects stored-object keys that could never have been produced by the runner. */
+const objectKeySchema = z
+	.string()
+	.min(1)
+	.max(1024)
+	.refine((key) => !key.includes("\0") && !key.startsWith("/") && !key.split("/").includes(".."), {
+		message: "Invalid object key",
+	});
+
 export const backupRouter = router({
-	/** Backups configured for one database service, or the instance itself. */
+	/** Backups configured for one database service, or the instance itself, with their last run. */
 	all: protectedProcedure.input(allInputSchema).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		if (input.databaseType === "web-server") {
@@ -116,16 +133,28 @@ export const backupRouter = router({
 				orderBy: [desc(backups.createdAt)],
 				with: { destination: true },
 			});
-			return rows
-				.filter((row) => row.destination.organizationId === organizationId)
-				.map(({ destination: _, ...row }) => row);
+			return await withLastRun(
+				rows
+					.filter((row) => row.destination.organizationId === organizationId)
+					.map(({ destination: _, ...row }) => row),
+			);
 		}
 		await assertDatabaseServiceAccess(input.databaseType, input.serviceId, organizationId);
-		return await db.query.backups.findMany({
+		const rows = await db.query.backups.findMany({
 			where: eq(serviceIdColumn(input.databaseType), input.serviceId),
 			orderBy: [desc(backups.createdAt)],
 		});
+		return await withLastRun(rows);
 	}),
+
+	/** Run history of one backup, newest first (status, timing, size, key, error). */
+	runs: protectedProcedure
+		.input(backupIdInput.extend({ limit: z.number().int().min(1).max(200).optional() }))
+		.query(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			const row = await findBackupOrThrow(input.backupId, organizationId);
+			return await listBackupRuns({ backupId: row.backupId }, input.limit ?? 20);
+		}),
 
 	/** A single backup by id. */
 	one: protectedProcedure.input(backupIdInput).query(async ({ ctx, input }) => {
@@ -186,6 +215,13 @@ export const backupRouter = router({
 			throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 		}
 		registerBackupSchedule(row);
+		void auditFromSession(ctx, organizationId, {
+			action: "backup.create",
+			targetType: "backup",
+			targetId: row.backupId,
+			targetName: row.appName,
+			metadata: { databaseType: row.databaseType, schedule: row.schedule },
+		});
 		return row;
 	}),
 
@@ -240,6 +276,12 @@ export const backupRouter = router({
 		}
 		unregisterBackupSchedule(row.backupId);
 		await db.delete(backups).where(eq(backups.backupId, row.backupId));
+		void auditFromSession(ctx, organizationId, {
+			action: "backup.delete",
+			targetType: "backup",
+			targetId: row.backupId,
+			targetName: row.appName,
+		});
 		return true;
 	}),
 
@@ -251,6 +293,12 @@ export const backupRouter = router({
 		if (row.databaseType === "web-server") {
 			await assertInstanceAdmin(ctx.session);
 		}
+		void auditFromSession(ctx, organizationId, {
+			action: "backup.run",
+			targetType: "backup",
+			targetId: row.backupId,
+			targetName: row.appName,
+		});
 		try {
 			await runBackupNow(row);
 		} catch (error) {
@@ -271,11 +319,53 @@ export const backupRouter = router({
 
 	/** Restore the database from a stored dump (newest when `key` omitted). */
 	restore: protectedProcedure
-		.input(backupIdInput.extend({ key: z.string().min(1).optional() }))
+		.input(backupIdInput.extend({ key: objectKeySchema.optional() }))
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
 			const row = await findBackupOrThrow(input.backupId, organizationId);
-			return await restoreBackup(row, input.key);
+			const result = await restoreBackup(row, input.key);
+			void auditFromSession(ctx, organizationId, {
+				action: "backup.restore",
+				targetType: "backup",
+				targetId: row.backupId,
+				targetName: row.appName,
+				metadata: { key: result.key },
+			});
+			return result;
+		}),
+
+	/**
+	 * Test-restore a stored dump into a throwaway container of the same
+	 * engine image and run its liveness query. Never touches the live
+	 * service; the outcome lands in the run history (`trigger: "verify"`).
+	 * Blocks until done (time-boxed to 10 minutes).
+	 */
+	verify: protectedProcedure
+		.input(backupIdInput.extend({ key: objectKeySchema.optional() }))
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
+			const row = await findBackupOrThrow(input.backupId, organizationId);
+			if (row.databaseType === "web-server") {
+				await assertInstanceAdmin(ctx.session);
+			}
+			let result: Awaited<ReturnType<typeof verifyBackup>>;
+			try {
+				result = await verifyBackup(row, input.key);
+			} catch (error) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: error instanceof Error ? error.message : "Restore verification failed",
+				});
+			}
+			void auditFromSession(ctx, organizationId, {
+				action: "backup.verify",
+				targetType: "backup",
+				targetId: row.backupId,
+				targetName: row.appName,
+				metadata: { key: result.key, bytes: result.bytes },
+			});
+			return result;
 		}),
 });

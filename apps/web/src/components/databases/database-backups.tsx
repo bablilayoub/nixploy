@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { DatabaseBackup, Loader2, Pencil, Play, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { BackupRunsSheet, LastRunBadge } from "@/components/backups/backup-runs";
 import type { BackupDatabaseType } from "@/components/databases/database-types";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { SettingsSection } from "@/components/settings/settings-section";
@@ -118,8 +119,15 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 	);
 	const runMutation = useMutation(
 		trpc.backup.runManually.mutationOptions({
-			onSuccess: () => toast.success("Backup started"),
-			onError,
+			// The server answers once the dump is stored — the run row is final.
+			onSuccess: () => {
+				toast.success("Backup finished");
+				invalidate();
+			},
+			onError: (error) => {
+				onError(error);
+				invalidate();
+			},
 		}),
 	);
 
@@ -151,7 +159,7 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 		<>
 			<SettingsSection
 				title="Backups"
-				description="Scheduled dumps uploaded to an S3 destination. Restore from any stored dump."
+				description="Scheduled dumps stored in a backup destination (S3 or local disk). Restore from any stored dump, or verify one in a throwaway container."
 				actions={
 					<Button
 						size="sm"
@@ -212,6 +220,7 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 								<TableHead>Destination</TableHead>
 								<TableHead>Prefix</TableHead>
 								<TableHead>Enabled</TableHead>
+								<TableHead>Last run</TableHead>
 								<TableHead>Created</TableHead>
 								<TableHead className="text-right">Actions</TableHead>
 							</TableRow>
@@ -238,11 +247,21 @@ export function DatabaseBackups({ databaseType, serviceId, databaseName }: Datab
 											}
 										/>
 									</TableCell>
+									<TableCell>
+										<LastRunBadge run={backup.lastRun} />
+									</TableCell>
 									<TableCell className="text-sm text-muted-foreground">
 										{format(new Date(backup.createdAt), "PP")}
 									</TableCell>
 									<TableCell>
 										<div className="flex items-center justify-end gap-1">
+											<BackupRunsSheet
+												kind="backup"
+												id={backup.backupId}
+												title={`the ${backup.database} dump (${backup.schedule})`}
+												canManage={canManage}
+												onChanged={invalidate}
+											/>
 											<Button
 												variant="ghost"
 												size="icon-sm"

@@ -12,6 +12,7 @@ import {
 	runVolumeBackup,
 	type VolumeBackupRow,
 } from "./runner";
+import { sanitizeRunError } from "./runs";
 
 const log = createLogger("backups");
 
@@ -59,10 +60,14 @@ async function guarded(key: string, trigger: "cron" | "manual", fn: () => Promis
 	}
 }
 
+/** `backup_run.trigger` value for a scheduler trigger. */
+const runTrigger = (trigger: "cron" | "manual") =>
+	trigger === "cron" ? ("schedule" as const) : ("manual" as const);
+
 async function executeBackup(backupRow: BackupRow, trigger: "cron" | "manual"): Promise<void> {
 	const destination = await loadDestination(backupRow);
 	try {
-		await runBackup(backupRow);
+		await runBackup(backupRow, { trigger: runTrigger(trigger) });
 		if (destination) {
 			await emitBackupNotification(destination, {
 				serviceName: backupRow.appName,
@@ -70,7 +75,9 @@ async function executeBackup(backupRow: BackupRow, trigger: "cron" | "manual"): 
 			});
 		}
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
+		// Same redaction as the run row: the raw message can embed a full
+		// command line (and therefore credentials) that fans out to chat channels.
+		const message = sanitizeRunError(error);
 		if (destination) {
 			await emitBackupNotification(destination, {
 				serviceName: backupRow.appName,
@@ -91,7 +98,7 @@ async function executeVolumeBackup(
 ): Promise<void> {
 	const destination = await loadDestination(volumeBackup);
 	try {
-		await runVolumeBackup(volumeBackup);
+		await runVolumeBackup(volumeBackup, { trigger: runTrigger(trigger) });
 		if (destination) {
 			await emitBackupNotification(destination, {
 				serviceName: volumeBackup.volumeName,
@@ -99,7 +106,9 @@ async function executeVolumeBackup(
 			});
 		}
 	} catch (error) {
-		const message = error instanceof Error ? error.message : String(error);
+		// Same redaction as the run row: the raw message can embed a full
+		// command line (and therefore credentials) that fans out to chat channels.
+		const message = sanitizeRunError(error);
 		if (destination) {
 			await emitBackupNotification(destination, {
 				serviceName: volumeBackup.volumeName,

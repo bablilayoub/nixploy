@@ -1,12 +1,88 @@
-# Instance backups (web-server)
+# Backups (destinations, run history, instance self-backup)
 
 How to back up the Nixploy instance itself — its Postgres database **and** its
-config directory — and how to restore them by hand. Redis service backups are
-covered at the end.
+config directory — and how to restore them by hand. The parts that apply to
+*every* backup (where archives are stored, run history, restore verification)
+are covered first; Redis service backups are covered at the end.
 
-## What gets backed up
+## Backup destinations (S3 or local disk)
 
-Every run produces **two artifacts** in the destination bucket:
+Settings → **Backup storage** holds the destinations every database, volume and
+instance backup writes to. Two providers share one key layout
+(`<prefix>/<appName>/<ISO-timestamp>.gz`):
+
+| Provider | Where archives land | Who can create it |
+| --- | --- | --- |
+| `s3` (default) | the S3-compatible bucket of the destination row | anyone with `destinations.manage` |
+| `local` | `<config dir>/backups/<organizationId>/<key>` on the **panel host** | instance admin only |
+
+A local destination needs a name only — no bucket, region, endpoint or keys.
+Its on-disk root is reported back as `storagePath` on `destination.all` /
+`destination.one` and shown in the UI. `testConnection` writes and deletes a
+probe file instead of listing a bucket, and archives are written
+write-then-rename (`<file>.part` → `<file>`) so a crash mid-write never leaves
+a truncated file that retention would count as a good backup.
+
+Two things to know before pointing production at `local`:
+
+- **It is the Nixploy host's disk, never the database's host.** Dumps from a
+  remote managed server still travel back through the panel process, so they
+  land on the panel's config volume.
+- **A lost host takes those backups with it.** Local destinations are for a
+  quick second copy, an air-gapped install or trying backups out — not a
+  disaster-recovery plan. Keep an off-host copy (S3, `rsync`, snapshots).
+
+`keepLatestCount` retention, restore and verification behave identically for
+both providers; only the `provider` column differs. The provider cannot be
+changed after creation (a local row has no bucket settings to update).
+
+## Run history
+
+Every execution of a database dump, volume archive, instance export or restore
+verification is one `backup_run` row: inserted as `running` before any work
+starts, then finalised as `success` (with the object key and archive size) or
+`error` with a **redacted** message — command lines are cut back to the program
+name and the destination's keys and the database password are masked, so a
+failure is safe to show in the UI and to fan out over notifications.
+
+- `trigger` is `schedule` (cron tick), `manual` (run-now) or `verify`.
+- `kind` is `database`, `volume` or `instance`.
+- The lists in Backups / Volume backups / Instance backups badge each row with
+  its last run; the history icon opens the last 20 runs with status, trigger,
+  duration, size and the stored object.
+- The newest 200 runs per backup are kept; older rows are pruned after each
+  run. Stored archives are pruned separately by `keepLatestCount`.
+- API: `backup.runs({ backupId, limit? })` and
+  `volumeBackup.runs({ volumeBackupId, limit? })`; `backup.all` /
+  `volumeBackup.all` carry a `lastRun` summary. Reads are org-scoped (no extra
+  capability, same as the backup rows themselves); manual runs, restores and
+  verifications need `backups.manage` and are written to the audit log.
+
+## Restore verification ("Verify")
+
+`backup.verify({ backupId, key? })` — the shield button on a successful run —
+proves a stored dump actually restores, without touching the live service:
+
+1. Start a throwaway container from the **source service's own image**, named
+   `nixploy-verify-<random hex>`, with **no published ports**, `--network none`
+   and a `nixploy.verify=1` label. It needs no real credentials (Postgres runs
+   with `POSTGRES_HOST_AUTH_METHOD=trust`, MySQL/MariaDB with an empty root
+   password, Mongo and Redis without auth), so no secret reaches `docker run`
+   argv.
+2. Wait for the engine's readiness probe (container logs are attached to the
+   error when it never comes up).
+3. Restore the archive into it over stdin, then run the engine's liveness query
+   (`SELECT 1`, `db.stats().ok`, `PING` → `PONG`).
+4. Remove the container in a `finally` block whatever happened.
+
+The whole thing is time-boxed to 10 minutes and recorded as a `backup_run` with
+`trigger: "verify"`, so a verification that fails is visible in the history
+next to the dump it rejected. Instance (`web-server`) dumps are verified
+against the stock Postgres image, since the instance dump is plain SQL.
+
+## What gets backed up (instance)
+
+Every instance run produces **two artifacts** in the destination:
 
 | Artifact | Key layout | Contents |
 | --- | --- | --- |
@@ -56,6 +132,12 @@ or `tar` fails the run instead of uploading an empty archive) and rejects
 gzip files that decompress to zero bytes. Restores stream the archive over
 stdin, so large dumps are not limited by the shell's argument size.
 
+> **Size ceiling.** Dumps and archives are still buffered in the panel
+> process: the gzipped bytes travel back base64-encoded through a 50 MB
+> `maxBuffer`, so a raw dump much above ~37 MB compressed fails and peak
+> memory is roughly 3× the archive. Multipart streaming to S3 is tracked in
+> docs/status.md; until then keep an eye on run sizes in the history.
+
 ## How the dump runs
 
 The runner parses `DATABASE_URL` from the environment. It prefers a local
@@ -72,10 +154,11 @@ host (`apk add postgresql-client`, `apt install postgresql-client`,
 ## Scheduling
 
 Settings → **Backup storage** → **Instance backups** → *Create instance
-backup*. Pick a cron schedule, an S3 destination, a prefix and an optional
-keep-latest count — identical to database backups. Creating an instance
-backup requires the org **admin** role (it captures every tenant's data).
-Run-now, edit, enable/disable and delete work like any other backup row.
+backup*. Pick a cron schedule, a destination, a prefix and an optional
+keep-latest count — identical to database backups. Creating, editing, running
+or deleting an instance backup requires the **instance admin** (the first
+user), never merely an org admin: the dump captures every tenant's data.
+Run-now, enable/disable, run history and verify work like any other backup row.
 
 ## Restoring (manual)
 
@@ -92,11 +175,16 @@ There is no one-click restore on purpose: you are typically restoring onto a
    `DATABASE_URL`/`POSTGRES_PASSWORD` must match the Postgres you restore
    into; keep the installer's fresh values if you let it create Postgres.
 
-2. **Fetch the artifacts** from your bucket (replace prefix/timestamps):
+2. **Fetch the artifacts** from your destination (replace prefix/timestamps):
 
    ```bash
+   # S3 destination:
    aws s3 cp s3://<bucket>/backup/web-server/<ts>.gz dump.sql.gz
    aws s3 cp s3://<bucket>/backup/web-server-config/<ts>.gz config.tar.gz
+
+   # local destination — copy them off the OLD host first:
+   # <config dir>/backups/<organizationId>/backup/web-server/<ts>.gz
+   # <config dir>/backups/<organizationId>/backup/web-server-config/<ts>.gz
    ```
 
 3. **Restore the database.** The dump is plain SQL:
@@ -142,7 +230,7 @@ Backups tab → *Create backup*):
   verifies `rdb_last_bgsave_status: ok`.
 - It then `docker cp`s the whole Redis data directory (`CONFIG GET dir`,
   usually `/data`) — that is `dump.rdb` **plus the AOF** (`appendonlydir/`)
-  when `appendonly` is enabled — into a gzipped tar on S3 at
+  when `appendonly` is enabled — into a gzipped tar in the destination at
   `<prefix>/<appName>/<timestamp>.gz`, with the same retention semantics as
   SQL dumps.
 - **Restore** (Backups tab → restore icon, or `backup.restore`) unpacks the

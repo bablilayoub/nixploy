@@ -1,10 +1,4 @@
-import {
-	DeleteObjectsCommand,
-	GetObjectCommand,
-	ListObjectsV2Command,
-	PutObjectCommand,
-	S3Client,
-} from "@aws-sdk/client-s3";
+import { randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import {
@@ -22,6 +16,7 @@ import {
 import { execAsync, execAsyncRemote, execAsyncWithStdin } from "../../utils/exec";
 import { assertDockerVolumeName } from "../../utils/validators";
 import { shellQuote } from "../compose/paths";
+import { DATABASE_CONFIGS } from "../databases/engine";
 import { PROTECTED_VOLUMES } from "../docker/protected";
 import { notifyEvent } from "../notifications";
 import { getConfigDir } from "../traefik/paths";
@@ -37,10 +32,25 @@ import {
 	WEB_SERVER_CONFIG_SUFFIX,
 } from "./instance-backup";
 import { assertNonEmptyGzip, buildEncodedPipeline, decodePipelineOutput } from "./pipeline";
+import { type BackupRunHandle, type BackupRunTrigger, withBackupRun } from "./runs";
+import { type BackupStore, type DestinationRow, storeFor } from "./storage";
+import {
+	buildVerifyCleanupCommand,
+	buildVerifyContainerName,
+	buildVerifyCreateCommand,
+	buildVerifyLivenessCommand,
+	buildVerifyRestoreCommand,
+	buildVerifyRunCommand,
+	buildVerifyStartCommand,
+	buildVerifyWaitCommand,
+	expectedLivenessOutput,
+	livenessAnswered,
+	type VerifyTarget,
+} from "./verify-commands";
 
 /**
- * Backup runner: database dumps and volume archives to S3-compatible
- * destinations.
+ * Backup runner: database dumps and volume archives to a destination
+ * (S3-compatible bucket or the panel host's disk — see storage.ts).
  *
  * Transport strategy (works identically for the local Docker daemon and for
  * remote managed servers over SSH): the dump/archive command runs inside a
@@ -48,101 +58,72 @@ import { assertNonEmptyGzip, buildEncodedPipeline, decodePipelineOutput } from "
  * the same shell pipeline (see pipeline.ts — the producer's exit status is
  * carried along so a failed dump never uploads an empty archive), the (text)
  * result travels back through execAsync/execAsyncRemote, and the decoded
- * buffer is uploaded to S3. Restore runs the exact reverse pipeline with the
- * base64 archive fed through stdin — never inlined on argv, which Linux caps
- * at 128 KiB per argument (E2BIG).
+ * buffer is written to the destination. Restore runs the exact reverse
+ * pipeline with the base64 archive fed through stdin — never inlined on
+ * argv, which Linux caps at 128 KiB per argument (E2BIG).
+ *
+ * Every run is recorded as a `backup_run` row (runs.ts): `running` while the
+ * dump is in flight, then `success` with the object key and size, or
+ * `error` with a redacted message.
  */
 
-export type DestinationRow = typeof destinations.$inferSelect;
+export type { DestinationRow } from "./storage";
+export { getS3Client } from "./storage";
 export type BackupRow = typeof backups.$inferSelect;
 export type VolumeBackupRow = typeof volumeBackups.$inferSelect;
 
-const sq = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
-
-const run = (serverId: string | null | undefined, command: string) =>
-	serverId ? execAsyncRemote(serverId, command) : execAsync(command);
-
-// ── S3 ──────────────────────────────────────────────────────────────────────
-
-export function getS3Client(destination: DestinationRow): S3Client {
-	return new S3Client({
-		region: destination.region,
-		endpoint: destination.endpoint,
-		forcePathStyle: true,
-		credentials: {
-			accessKeyId: destination.accessKey,
-			secretAccessKey: destination.secretAccessKey,
-		},
-	});
+export interface RunOptions {
+	/** Who started the run — recorded on the `backup_run` row. Defaults to `manual`. */
+	trigger?: BackupRunTrigger;
 }
 
-/** Verify a destination by listing one object in its bucket. */
+/** Outcome of a run: the stored key and the archive size in bytes. */
+export interface RunResult {
+	key: string;
+	bytes: number;
+}
+
+/** Hard time box of a restore verification (container start + restore + query). */
+export const VERIFY_TIMEOUT_MS = 10 * 60 * 1000;
+
+const sq = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+
+const run = (serverId: string | null | undefined, command: string, timeoutMs?: number) =>
+	serverId
+		? execAsyncRemote(serverId, command, { timeoutMs })
+		: execAsync(command, { timeout: timeoutMs });
+
+const CONTAINER_ID_PATTERN = /^[a-f0-9]{12,64}$/i;
+
+// ── destinations ────────────────────────────────────────────────────────────
+
+/** Verify a destination: list one object (S3) or write a probe file (local). */
 export async function testDestination(destination: DestinationRow): Promise<{ success: true }> {
-	const client = getS3Client(destination);
-	await client.send(new ListObjectsV2Command({ Bucket: destination.bucket, MaxKeys: 1 }));
+	await storeFor(destination).test();
 	return { success: true };
 }
 
-async function uploadToDestination(
-	destination: DestinationRow,
-	key: string,
-	body: Buffer,
-): Promise<void> {
-	await getS3Client(destination).send(
-		new PutObjectCommand({ Bucket: destination.bucket, Key: key, Body: body }),
-	);
-}
-
-async function downloadFromDestination(destination: DestinationRow, key: string): Promise<Buffer> {
-	const response = await getS3Client(destination).send(
-		new GetObjectCommand({ Bucket: destination.bucket, Key: key }),
-	);
-	const bytes = await response.Body?.transformToByteArray();
-	if (!bytes) {
-		throw new Error(`Empty response when fetching s3://${destination.bucket}/${key}`);
+async function findDestinationOrThrow(destinationId: string): Promise<DestinationRow> {
+	const destination = await db.query.destinations.findFirst({
+		where: eq(destinations.destinationId, destinationId),
+	});
+	if (!destination) {
+		throw new Error(`Destination not found: ${destinationId}`);
 	}
-	return Buffer.from(bytes);
+	return destination;
 }
 
-/** Object keys under a prefix, oldest first. */
-async function listKeys(destination: DestinationRow, prefix: string): Promise<string[]> {
-	const client = getS3Client(destination);
-	const keys: Array<{ key: string; lastModified: Date }> = [];
-	let continuationToken: string | undefined;
-	do {
-		const response = await client.send(
-			new ListObjectsV2Command({
-				Bucket: destination.bucket,
-				Prefix: prefix,
-				ContinuationToken: continuationToken,
-			}),
-		);
-		for (const object of response.Contents ?? []) {
-			if (object.Key) {
-				keys.push({ key: object.Key, lastModified: object.LastModified ?? new Date(0) });
-			}
-		}
-		continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
-	} while (continuationToken);
-	return keys.sort((a, b) => a.lastModified.getTime() - b.lastModified.getTime()).map((k) => k.key);
-}
-
-/** Delete every object under `<prefix>/<appName>/` beyond the newest `keepLatestCount`. */
+/** Delete every object under `prefix` beyond the newest `keepLatestCount`. */
 async function pruneOldBackups(
-	destination: DestinationRow,
+	store: BackupStore,
 	prefix: string,
 	keepLatestCount: number | null,
 ): Promise<void> {
 	if (!keepLatestCount || keepLatestCount <= 0) return;
-	const keys = await listKeys(destination, prefix);
+	const keys = await store.list(prefix);
 	const excess = keys.slice(0, Math.max(0, keys.length - keepLatestCount));
 	if (excess.length === 0) return;
-	await getS3Client(destination).send(
-		new DeleteObjectsCommand({
-			Bucket: destination.bucket,
-			Delete: { Objects: excess.map((Key) => ({ Key })), Quiet: true },
-		}),
-	);
+	await store.remove(excess);
 }
 
 /** `<prefix>/<appName>/<ISO-timestamp>.gz` (contract layout). */
@@ -151,6 +132,10 @@ export function buildBackupKey(prefix: string, appName: string, date = new Date(
 	return `${prefix}/${appName}/${timestamp}.gz`;
 }
 
+const backupPrefix = (backupRow: BackupRow) => `${backupRow.prefix}/${backupRow.appName}/`;
+const volumePrefix = (volumeBackup: VolumeBackupRow) =>
+	`${volumeBackup.prefix}/${volumeBackup.volumeName}/`;
+
 // ── database dumps ──────────────────────────────────────────────────────────
 
 type LinkedDatabaseRow = {
@@ -158,6 +143,7 @@ type LinkedDatabaseRow = {
 	databaseUser: string;
 	databasePassword: string;
 	databaseRootPassword?: string | null;
+	dockerImage: string;
 };
 
 /** Load the database service row a backup row points at (exactly one FK is set). */
@@ -202,7 +188,12 @@ async function findLinkedDatabase(backupRow: BackupRow): Promise<LinkedDatabaseR
 			});
 			// Redis services have no user — AUTH is password-only.
 			if (row)
-				return { serverId: row.serverId, databaseUser: "", databasePassword: row.databasePassword };
+				return {
+					serverId: row.serverId,
+					databaseUser: "",
+					databasePassword: row.databasePassword,
+					dockerImage: row.dockerImage,
+				};
 			break;
 		}
 	}
@@ -235,7 +226,12 @@ async function findContainerId(appName: string, serverId: string | null): Promis
 	for (const filter of filters) {
 		const output = await run(serverId, `docker ps -q ${filter} | head -n 1`);
 		const containerId = output.trim().split("\n")[0]?.trim();
-		if (containerId) return containerId;
+		if (containerId) {
+			if (!CONTAINER_ID_PATTERN.test(containerId)) {
+				throw new Error(`Unexpected container id for ${appName}`);
+			}
+			return containerId;
+		}
 	}
 	throw new Error(`No running container found for ${appName}`);
 }
@@ -249,33 +245,55 @@ function dumpParams(backupRow: BackupRow, linked: LinkedDatabaseRow): DumpComman
 	};
 }
 
+const runKindFor = (backupRow: BackupRow) =>
+	backupRow.databaseType === "web-server" ? ("instance" as const) : ("database" as const);
+
 /**
- * Run a database dump and upload it to the row's destination.
- * Returns the S3 key of the uploaded archive.
+ * Run a database dump and store it in the row's destination. Recorded as a
+ * `backup_run` row. Returns the key of the stored archive and its size.
  */
-export async function runBackup(backupRow: BackupRow): Promise<{ key: string }> {
-	const databaseType = backupRow.databaseType;
-	if (databaseType === "web-server") {
-		return await runWebServerBackup(backupRow);
+export async function runBackup(
+	backupRow: BackupRow,
+	options: RunOptions = {},
+): Promise<RunResult> {
+	const destination = await findDestinationOrThrow(backupRow.destinationId);
+	return await withBackupRun(
+		{
+			kind: runKindFor(backupRow),
+			scope: { backupId: backupRow.backupId },
+			organizationId: destination.organizationId,
+			destinationId: destination.destinationId,
+			trigger: options.trigger ?? "manual",
+			secrets: [destination.accessKey, destination.secretAccessKey],
+		},
+		async (handle) => {
+			const store = storeFor(destination);
+			if (backupRow.databaseType === "web-server") {
+				return await runWebServerBackup(backupRow, store);
+			}
+			if (backupRow.databaseType === "redis") {
+				return await runRedisBackup(backupRow, store, handle);
+			}
+			return await runDatabaseDump(backupRow, store, handle);
+		},
+	);
+}
+
+async function runDatabaseDump(
+	backupRow: BackupRow,
+	store: BackupStore,
+	handle: BackupRunHandle,
+): Promise<RunResult> {
+	if (backupRow.databaseType === "web-server" || backupRow.databaseType === "redis") {
+		throw new Error(`Unsupported dump engine: ${backupRow.databaseType}`);
 	}
-	if (databaseType === "redis") {
-		return await runRedisBackup(backupRow);
-	}
-	const engine = DB_DUMP_CONFIG[databaseType];
-	const destination = await db.query.destinations.findFirst({
-		where: eq(destinations.destinationId, backupRow.destinationId),
-	});
-	if (!destination) {
-		throw new Error(`Destination not found: ${backupRow.destinationId}`);
-	}
+	const engine = DB_DUMP_CONFIG[backupRow.databaseType];
 	const linked = await findLinkedDatabase(backupRow);
+	handle.redact(linked.databasePassword, linked.databaseRootPassword);
 	const containerId = await findContainerId(backupRow.appName, linked.serverId);
 
 	const params = dumpParams(backupRow, linked);
 	const dumpCommand = engine.dumpCommand(params);
-	if (!/^[a-f0-9]{12,64}$/i.test(containerId)) {
-		throw new Error(`Unexpected container id for ${backupRow.appName}`);
-	}
 	const passwordEnv = engine.passwordEnv?.(params) ?? {};
 	const passwordEntries = Object.entries(passwordEnv);
 	let encoded: string;
@@ -305,25 +323,29 @@ export async function runBackup(backupRow: BackupRow): Promise<{ key: string }> 
 	assertNonEmptyGzip(archive, label);
 
 	const key = buildBackupKey(backupRow.prefix, backupRow.appName);
-	await uploadToDestination(destination, key, archive);
-	await pruneOldBackups(
-		destination,
-		`${backupRow.prefix}/${backupRow.appName}/`,
-		backupRow.keepLatestCount,
-	);
-	return { key };
+	await store.put(key, archive);
+	await pruneOldBackups(store, backupPrefix(backupRow), backupRow.keepLatestCount);
+	return { key, bytes: archive.length };
 }
 
 /** Keys of every stored dump of a backup row, newest first. */
 export async function listBackupKeys(backupRow: BackupRow): Promise<string[]> {
-	const destination = await db.query.destinations.findFirst({
-		where: eq(destinations.destinationId, backupRow.destinationId),
-	});
-	if (!destination) {
-		throw new Error(`Destination not found: ${backupRow.destinationId}`);
-	}
-	const keys = await listKeys(destination, `${backupRow.prefix}/${backupRow.appName}/`);
+	const destination = await findDestinationOrThrow(backupRow.destinationId);
+	const keys = await storeFor(destination).list(backupPrefix(backupRow));
 	return keys.reverse();
+}
+
+/** Resolve the archive to restore/verify: newest when omitted, must belong to the row. */
+async function resolveStoredKey(backupRow: BackupRow, key: string | undefined): Promise<string> {
+	const keys = await listBackupKeys(backupRow);
+	const targetKey = key ?? keys[0];
+	if (!targetKey) {
+		throw new Error(`No stored dump found for ${backupRow.appName}`);
+	}
+	if (!keys.includes(targetKey)) {
+		throw new Error(`Dump ${targetKey} does not belong to backup ${backupRow.backupId}`);
+	}
+	return targetKey;
 }
 
 /**
@@ -341,30 +363,15 @@ export async function restoreBackup(backupRow: BackupRow, key?: string): Promise
 		return await restoreRedisBackup(backupRow, key);
 	}
 	const engine = DB_DUMP_CONFIG[databaseType];
-	const destination = await db.query.destinations.findFirst({
-		where: eq(destinations.destinationId, backupRow.destinationId),
-	});
-	if (!destination) {
-		throw new Error(`Destination not found: ${backupRow.destinationId}`);
-	}
-	const keys = await listBackupKeys(backupRow);
-	const targetKey = key ?? keys[0];
-	if (!targetKey) {
-		throw new Error(`No stored dump found for ${backupRow.appName}`);
-	}
-	if (!keys.includes(targetKey)) {
-		throw new Error(`Dump ${targetKey} does not belong to backup ${backupRow.backupId}`);
-	}
+	const destination = await findDestinationOrThrow(backupRow.destinationId);
+	const targetKey = await resolveStoredKey(backupRow, key);
 
-	const archive = await downloadFromDestination(destination, targetKey);
+	const archive = await storeFor(destination).get(targetKey);
 	const linked = await findLinkedDatabase(backupRow);
 	const containerId = await findContainerId(backupRow.appName, linked.serverId);
 
 	const params = dumpParams(backupRow, linked);
 	const restoreCommand = engine.restoreCommand(params);
-	if (!/^[a-f0-9]{12,64}$/i.test(containerId)) {
-		throw new Error(`Unexpected container id for ${backupRow.appName}`);
-	}
 	const passwordEnv = engine.passwordEnv?.(params) ?? {};
 	const passwordEntries = Object.entries(passwordEnv);
 	const archiveB64 = archive.toString("base64");
@@ -405,17 +412,123 @@ export async function restoreBackup(backupRow: BackupRow, key?: string): Promise
 	return { key: targetKey };
 }
 
-// ── instance self-backup (web-server) ───────────────────────────────────────
+// ── restore verification ────────────────────────────────────────────────────
 
-async function findDestinationOrThrow(destinationId: string): Promise<DestinationRow> {
-	const destination = await db.query.destinations.findFirst({
-		where: eq(destinations.destinationId, destinationId),
-	});
-	if (!destination) {
-		throw new Error(`Destination not found: ${destinationId}`);
+/** Engine, image and names the throwaway verification container needs. */
+async function resolveVerifyTarget(
+	backupRow: BackupRow,
+): Promise<VerifyTarget & { serverId: string | null }> {
+	if (backupRow.databaseType === "web-server") {
+		// The instance dump is plain SQL from pg_dump: any current Postgres
+		// image restores it; the panel's own DB row does not carry an image.
+		const target = parseInstanceDatabaseUrl(process.env.DATABASE_URL);
+		return {
+			engine: "postgres",
+			image: DATABASE_CONFIGS.postgres.defaultImage,
+			database: target.database,
+			user: target.user,
+			serverId: null,
+		};
 	}
-	return destination;
+	const linked = await findLinkedDatabase(backupRow);
+	const engine = backupRow.databaseType;
+	return {
+		engine,
+		image: linked.dockerImage || DATABASE_CONFIGS[engine].defaultImage,
+		database: backupRow.database,
+		user: linked.databaseUser,
+		serverId: linked.serverId,
+	};
 }
+
+/** stderr captured by the exec helpers, for readable verification errors. */
+function stderrOf(error: unknown): string {
+	const stderr = (error as { stderr?: unknown })?.stderr;
+	return typeof stderr === "string" ? stderr.trim() : "";
+}
+
+/**
+ * Verify that a stored dump restores: start a throwaway container of the
+ * source service's image (no ports, no network), restore the archive into
+ * it, run the engine's liveness query, and always remove the container.
+ * Recorded as a `backup_run` row with `trigger: "verify"`; time-boxed to
+ * {@link VERIFY_TIMEOUT_MS}. The live database is never touched.
+ */
+export async function verifyBackup(backupRow: BackupRow, key?: string): Promise<RunResult> {
+	const destination = await findDestinationOrThrow(backupRow.destinationId);
+	const targetKey = await resolveStoredKey(backupRow, key);
+	return await withBackupRun(
+		{
+			kind: runKindFor(backupRow),
+			scope: { backupId: backupRow.backupId },
+			organizationId: destination.organizationId,
+			destinationId: destination.destinationId,
+			trigger: "verify",
+			objectKey: targetKey,
+			secrets: [destination.accessKey, destination.secretAccessKey],
+		},
+		async () => {
+			const label = `Dump ${targetKey}`;
+			const archive = await storeFor(destination).get(targetKey);
+			assertNonEmptyGzip(archive, label);
+			const { serverId, ...target } = await resolveVerifyTarget(backupRow);
+			const name = buildVerifyContainerName(randomBytes(8).toString("hex"));
+			const deadline = Date.now() + VERIFY_TIMEOUT_MS;
+			const remaining = () => {
+				const left = deadline - Date.now();
+				if (left <= 0) {
+					throw new Error(`Restore verification exceeded ${VERIFY_TIMEOUT_MS / 60_000} minutes`);
+				}
+				return left;
+			};
+			const archiveB64 = archive.toString("base64");
+			try {
+				if (target.engine === "redis") {
+					await run(serverId, buildVerifyCreateCommand(name, target), remaining());
+					await execAsyncWithStdin(buildVerifyRestoreCommand(name, target), archiveB64, {
+						serverId,
+						timeout: remaining(),
+					});
+					await run(serverId, buildVerifyStartCommand(name), remaining());
+				} else {
+					await run(serverId, buildVerifyRunCommand(name, target), remaining());
+				}
+				try {
+					await run(serverId, buildVerifyWaitCommand(name, target), remaining());
+				} catch (error) {
+					const detail = stderrOf(error);
+					throw new Error(
+						`${target.engine} container did not become ready${detail ? `: ${detail.slice(-600)}` : ""}`,
+					);
+				}
+				if (target.engine !== "redis") {
+					try {
+						await execAsyncWithStdin(buildVerifyRestoreCommand(name, target), archiveB64, {
+							serverId,
+							timeout: remaining(),
+						});
+					} catch (error) {
+						const detail = stderrOf(error);
+						throw new Error(
+							`Restore into the verification container failed${detail ? `: ${detail.slice(-600)}` : ""}`,
+						);
+					}
+				}
+				const output = await run(serverId, buildVerifyLivenessCommand(name, target), remaining());
+				if (!livenessAnswered(target.engine, output)) {
+					throw new Error(
+						`${target.engine} liveness query answered ${JSON.stringify(output.trim().slice(0, 200))}, expected ${expectedLivenessOutput(target.engine)}`,
+					);
+				}
+				return { key: targetKey, bytes: archive.length };
+			} finally {
+				await run(serverId, buildVerifyCleanupCommand(name)).catch(() => {});
+			}
+		},
+	);
+}
+
+// ── instance self-backup (web-server) ───────────────────────────────────────
 
 /**
  * Dump the instance database by shelling out to a Postgres container when
@@ -429,7 +542,7 @@ async function dumpInstanceFromContainer(
 	for (const filter of buildInstanceContainerFilters(target.host)) {
 		const output = await execAsync(`docker ps -q ${filter} | head -n 1`);
 		const containerId = output.trim().split("\n")[0]?.trim();
-		if (containerId && /^[a-f0-9]{12,64}$/i.test(containerId)) {
+		if (containerId && CONTAINER_ID_PATTERN.test(containerId)) {
 			return await execAsync(
 				buildEncodedPipeline(
 					`docker exec ${shellQuote(containerId)} sh -c ${sq(buildInstanceContainerDumpCommand(target))}`,
@@ -445,13 +558,12 @@ async function dumpInstanceFromContainer(
 /**
  * Back up the Nixploy instance itself: a pg_dump of the DATABASE_URL
  * database plus a tar.gz of the config directory (Traefik dynamic configs,
- * certificates, SSH keys). Uploaded as two sibling artifacts —
+ * certificates, SSH keys). Stored as two sibling artifacts —
  * `<prefix>/<appName>/<ts>.gz` and `<prefix>/<appName>-config/<ts>.gz` —
  * so retention prunes each stream independently. Restore is manual
  * (docs/instance-backup.md).
  */
-async function runWebServerBackup(backupRow: BackupRow): Promise<{ key: string }> {
-	const destination = await findDestinationOrThrow(backupRow.destinationId);
+async function runWebServerBackup(backupRow: BackupRow, store: BackupStore): Promise<RunResult> {
 	const target = parseInstanceDatabaseUrl(process.env.DATABASE_URL);
 
 	// Prefer a local pg_dump (password via PGPASSWORD env, never argv);
@@ -485,19 +597,15 @@ async function runWebServerBackup(backupRow: BackupRow): Promise<{ key: string }
 		`${backupRow.appName}${WEB_SERVER_CONFIG_SUFFIX}`,
 		date,
 	);
-	await uploadToDestination(destination, dumpKey, dump);
-	await uploadToDestination(destination, configKey, configArchive);
+	await store.put(dumpKey, dump);
+	await store.put(configKey, configArchive);
+	await pruneOldBackups(store, backupPrefix(backupRow), backupRow.keepLatestCount);
 	await pruneOldBackups(
-		destination,
-		`${backupRow.prefix}/${backupRow.appName}/`,
-		backupRow.keepLatestCount,
-	);
-	await pruneOldBackups(
-		destination,
+		store,
 		`${backupRow.prefix}/${backupRow.appName}${WEB_SERVER_CONFIG_SUFFIX}/`,
 		backupRow.keepLatestCount,
 	);
-	return { key: dumpKey };
+	return { key: dumpKey, bytes: dump.length + configArchive.length };
 }
 
 // ── redis ────────────────────────────────────────────────────────────────────
@@ -505,15 +613,16 @@ async function runWebServerBackup(backupRow: BackupRow): Promise<{ key: string }
 /**
  * Snapshot a redis service: BGSAVE (or blocking SAVE) inside the container,
  * wait for persistence to finish, then `docker cp` the whole data directory
- * (dump.rdb plus the AOF when appendonly is enabled) into a tar.gz on S3.
+ * (dump.rdb plus the AOF when appendonly is enabled) into a tar.gz.
  */
-async function runRedisBackup(backupRow: BackupRow): Promise<{ key: string }> {
-	const destination = await findDestinationOrThrow(backupRow.destinationId);
+async function runRedisBackup(
+	backupRow: BackupRow,
+	store: BackupStore,
+	handle: BackupRunHandle,
+): Promise<RunResult> {
 	const linked = await findLinkedDatabase(backupRow);
+	handle.redact(linked.databasePassword);
 	const containerId = await findContainerId(backupRow.appName, linked.serverId);
-	if (!/^[a-f0-9]{12,64}$/i.test(containerId)) {
-		throw new Error(`Unexpected container id for ${backupRow.appName}`);
-	}
 
 	// Password on stdin (first line) — never on docker/ps argv.
 	const dirOutput = await execAsyncWithStdin(
@@ -536,13 +645,9 @@ async function runRedisBackup(backupRow: BackupRow): Promise<{ key: string }> {
 	assertNonEmptyGzip(archive, label);
 
 	const key = buildBackupKey(backupRow.prefix, backupRow.appName);
-	await uploadToDestination(destination, key, archive);
-	await pruneOldBackups(
-		destination,
-		`${backupRow.prefix}/${backupRow.appName}/`,
-		backupRow.keepLatestCount,
-	);
-	return { key };
+	await store.put(key, archive);
+	await pruneOldBackups(store, backupPrefix(backupRow), backupRow.keepLatestCount);
+	return { key, bytes: archive.length };
 }
 
 /**
@@ -552,21 +657,11 @@ async function runRedisBackup(backupRow: BackupRow): Promise<{ key: string }> {
  */
 async function restoreRedisBackup(backupRow: BackupRow, key?: string): Promise<{ key: string }> {
 	const destination = await findDestinationOrThrow(backupRow.destinationId);
-	const keys = await listBackupKeys(backupRow);
-	const targetKey = key ?? keys[0];
-	if (!targetKey) {
-		throw new Error(`No stored dump found for ${backupRow.appName}`);
-	}
-	if (!keys.includes(targetKey)) {
-		throw new Error(`Dump ${targetKey} does not belong to backup ${backupRow.backupId}`);
-	}
+	const targetKey = await resolveStoredKey(backupRow, key);
 
-	const archive = await downloadFromDestination(destination, targetKey);
+	const archive = await storeFor(destination).get(targetKey);
 	const linked = await findLinkedDatabase(backupRow);
 	const containerId = await findContainerId(backupRow.appName, linked.serverId);
-	if (!/^[a-f0-9]{12,64}$/i.test(containerId)) {
-		throw new Error(`Unexpected container id for ${backupRow.appName}`);
-	}
 
 	// The tar holds the data dir at its original absolute path (e.g. `data/`),
 	// so extracting into the container root puts dump.rdb/AOF back in place.
@@ -609,57 +704,59 @@ const VOLUME_MOUNT = "/volume-data";
 
 /**
  * Archive a named Docker volume (tar.gz via a throwaway alpine container)
- * and upload it to the row's destination.
+ * and store it in the row's destination. Recorded as a `backup_run` row.
  */
-export async function runVolumeBackup(volumeBackup: VolumeBackupRow): Promise<{ key: string }> {
+export async function runVolumeBackup(
+	volumeBackup: VolumeBackupRow,
+	options: RunOptions = {},
+): Promise<RunResult> {
 	assertDockerVolumeName(volumeBackup.volumeName);
 	if (PROTECTED_VOLUMES.has(volumeBackup.volumeName)) {
 		throw new Error(`Refusing to back up platform volume: ${volumeBackup.volumeName}`);
 	}
-	const destination = await db.query.destinations.findFirst({
-		where: eq(destinations.destinationId, volumeBackup.destinationId),
-	});
-	if (!destination) {
-		throw new Error(`Destination not found: ${volumeBackup.destinationId}`);
-	}
-	const serverId = await resolveVolumeServerId(volumeBackup);
+	const destination = await findDestinationOrThrow(volumeBackup.destinationId);
+	return await withBackupRun(
+		{
+			kind: "volume",
+			scope: { volumeBackupId: volumeBackup.volumeBackupId },
+			organizationId: destination.organizationId,
+			destinationId: destination.destinationId,
+			trigger: options.trigger ?? "manual",
+			secrets: [destination.accessKey, destination.secretAccessKey],
+		},
+		async () => {
+			const store = storeFor(destination);
+			const serverId = await resolveVolumeServerId(volumeBackup);
 
-	// `docker run -v <name>:…` silently creates a missing volume, which would
-	// upload an empty archive and prune real ones — require it to exist.
-	await run(
-		serverId,
-		`docker volume inspect ${sq(volumeBackup.volumeName)} --format '{{.Name}}'`,
-	).catch(() => {
-		throw new Error(`Volume ${volumeBackup.volumeName} does not exist on the target server`);
-	});
+			// `docker run -v <name>:…` silently creates a missing volume, which would
+			// upload an empty archive and prune real ones — require it to exist.
+			await run(
+				serverId,
+				`docker volume inspect ${sq(volumeBackup.volumeName)} --format '{{.Name}}'`,
+			).catch(() => {
+				throw new Error(`Volume ${volumeBackup.volumeName} does not exist on the target server`);
+			});
 
-	const archiveCmd =
-		`docker run --rm -v ${sq(`${volumeBackup.volumeName}:${VOLUME_MOUNT}`)} alpine ` +
-		`sh -c ${sq(`tar czf - -C ${VOLUME_MOUNT} .`)}`;
-	const encoded = await run(serverId, buildEncodedPipeline(archiveCmd, "base64"));
-	const label = `Archive of volume ${volumeBackup.volumeName}`;
-	const archive = decodePipelineOutput(encoded, label);
-	assertNonEmptyGzip(archive, label);
+			const archiveCmd =
+				`docker run --rm -v ${sq(`${volumeBackup.volumeName}:${VOLUME_MOUNT}`)} alpine ` +
+				`sh -c ${sq(`tar czf - -C ${VOLUME_MOUNT} .`)}`;
+			const encoded = await run(serverId, buildEncodedPipeline(archiveCmd, "base64"));
+			const label = `Archive of volume ${volumeBackup.volumeName}`;
+			const archive = decodePipelineOutput(encoded, label);
+			assertNonEmptyGzip(archive, label);
 
-	const key = buildBackupKey(volumeBackup.prefix, volumeBackup.volumeName);
-	await uploadToDestination(destination, key, archive);
-	await pruneOldBackups(
-		destination,
-		`${volumeBackup.prefix}/${volumeBackup.volumeName}/`,
-		volumeBackup.keepLatestCount,
+			const key = buildBackupKey(volumeBackup.prefix, volumeBackup.volumeName);
+			await store.put(key, archive);
+			await pruneOldBackups(store, volumePrefix(volumeBackup), volumeBackup.keepLatestCount);
+			return { key, bytes: archive.length };
+		},
 	);
-	return { key };
 }
 
 /** Keys of every stored archive of a volume backup, newest first. */
 export async function listVolumeBackupKeys(volumeBackup: VolumeBackupRow): Promise<string[]> {
-	const destination = await db.query.destinations.findFirst({
-		where: eq(destinations.destinationId, volumeBackup.destinationId),
-	});
-	if (!destination) {
-		throw new Error(`Destination not found: ${volumeBackup.destinationId}`);
-	}
-	const keys = await listKeys(destination, `${volumeBackup.prefix}/${volumeBackup.volumeName}/`);
+	const destination = await findDestinationOrThrow(volumeBackup.destinationId);
+	const keys = await storeFor(destination).list(volumePrefix(volumeBackup));
 	return keys.reverse();
 }
 
@@ -672,12 +769,7 @@ export async function restoreVolumeBackup(
 	if (PROTECTED_VOLUMES.has(volumeBackup.volumeName)) {
 		throw new Error(`Refusing to restore into platform volume: ${volumeBackup.volumeName}`);
 	}
-	const destination = await db.query.destinations.findFirst({
-		where: eq(destinations.destinationId, volumeBackup.destinationId),
-	});
-	if (!destination) {
-		throw new Error(`Destination not found: ${volumeBackup.destinationId}`);
-	}
+	const destination = await findDestinationOrThrow(volumeBackup.destinationId);
 	const keys = await listVolumeBackupKeys(volumeBackup);
 	const targetKey = key ?? keys[0];
 	if (!targetKey) {
@@ -689,7 +781,7 @@ export async function restoreVolumeBackup(
 		);
 	}
 
-	const archive = await downloadFromDestination(destination, targetKey);
+	const archive = await storeFor(destination).get(targetKey);
 	const serverId = await resolveVolumeServerId(volumeBackup);
 	const restoreCmd =
 		`docker run --rm -i -v ${sq(`${volumeBackup.volumeName}:${VOLUME_MOUNT}`)} alpine ` +

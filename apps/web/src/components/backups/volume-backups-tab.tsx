@@ -6,6 +6,7 @@ import { ArchiveRestore, DatabaseBackup, Loader2, Pencil, Play, Plus, Trash2 } f
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { BackupRunsSheet, LastRunBadge } from "@/components/backups/backup-runs";
 import { QueryState } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { EmptyState } from "@/components/services/empty-state";
@@ -164,10 +165,16 @@ export function VolumeBackupsTab({
 	);
 	const runNow = useMutation(
 		trpc.volumeBackup.runManually.mutationOptions({
-			onSuccess: () => toast.success("Backup uploaded"),
+			onSuccess: () => {
+				toast.success("Backup uploaded");
+				invalidate();
+			},
 			// The server answers BAD_REQUEST "already running" while a run is in
 			// flight — its message is already user-facing, so show it verbatim.
-			onError: (mutationError) => toast.error(mutationError.message),
+			onError: (mutationError) => {
+				toast.error(mutationError.message);
+				invalidate();
+			},
 		}),
 	);
 	const restore = useMutation(
@@ -246,7 +253,7 @@ export function VolumeBackupsTab({
 		<>
 			<SettingsSection
 				title="Volume Backups"
-				description="Volume archives to S3 on a cron."
+				description="Volume archives to a backup destination on a cron."
 				actions={
 					<Button
 						size="sm"
@@ -298,6 +305,7 @@ export function VolumeBackupsTab({
 									<TableHead>Schedule</TableHead>
 									<TableHead>Destination</TableHead>
 									<TableHead>Enabled</TableHead>
+									<TableHead>Last run</TableHead>
 									<TableHead className="text-right">Actions</TableHead>
 								</TableRow>
 							</TableHeader>
@@ -325,8 +333,18 @@ export function VolumeBackupsTab({
 												}
 											/>
 										</TableCell>
+										<TableCell>
+											<LastRunBadge run={backup.lastRun} />
+										</TableCell>
 										<TableCell className="text-right">
 											<div className="flex justify-end gap-1">
+												<BackupRunsSheet
+													kind="volumeBackup"
+													id={backup.volumeBackupId}
+													title={backup.name}
+													canManage={canManage}
+													onChanged={invalidate}
+												/>
 												<Button
 													variant="ghost"
 													size="sm"
