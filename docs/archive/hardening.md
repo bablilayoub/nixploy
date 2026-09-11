@@ -1,5 +1,10 @@
 # Hardening plan (Phase 9)
 
+> **Historical.** This is the Phase 9 *engineering* checklist (indexes, file
+> sizes, test coverage) and it is done. Runtime isolation — tenant networks,
+> container capability/pids/ulimit defaults, database external ports — is
+> documented in [`../hardening.md`](../hardening.md).
+
 No new features. This phase is about making what already exists fast, safe and
 maintainable. Every item below was found by measuring the current tree, not by
 guessing — the evidence is quoted inline so you can re-check it.

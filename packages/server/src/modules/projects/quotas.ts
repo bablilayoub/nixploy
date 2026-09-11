@@ -50,6 +50,44 @@ export async function getOrgQuotas(organizationId: string): Promise<OrgQuotas> {
 	return { ...defaultQuotas(), ...parsed.quotas };
 }
 
+/** Docker CPU shares per core — 1024 shares == 1 CPU, the engine's own unit. */
+const CPU_SHARES_PER_CORE = 1024;
+
+/** Never hand a workload less than 0.05 CPU: it would never finish booting. */
+const MIN_NANO_CPUS = 50_000_000;
+
+/**
+ * Per-service resource ceiling derived from the org quota, in the units the
+ * swarm spec wants. Applied as `Resources.Limits` **only where the service
+ * itself sets none** — an explicit per-service limit always wins.
+ */
+export interface QuotaResourceDefaults {
+	memoryBytes?: number;
+	nanoCpus?: number;
+}
+
+/**
+ * `maxMemoryMb` / `maxCpuShares` from the org metadata as swarm limits.
+ * `maxCpuShares` is read as Docker CPU shares (1024 = one core), so
+ * `2048` means "two cores per service".
+ */
+export async function getQuotaResourceDefaults(
+	organizationId: string,
+): Promise<QuotaResourceDefaults> {
+	const quotas = await getOrgQuotas(organizationId);
+	const defaults: QuotaResourceDefaults = {};
+	if (quotas.maxMemoryMb != null && quotas.maxMemoryMb > 0) {
+		defaults.memoryBytes = Math.floor(quotas.maxMemoryMb) * 1024 * 1024;
+	}
+	if (quotas.maxCpuShares != null && quotas.maxCpuShares > 0) {
+		defaults.nanoCpus = Math.max(
+			MIN_NANO_CPUS,
+			Math.floor((quotas.maxCpuShares / CPU_SHARES_PER_CORE) * 1e9),
+		);
+	}
+	return defaults;
+}
+
 export async function getOrgBranding(organizationId: string): Promise<OrgBranding> {
 	const org = await db.query.organizations.findFirst({
 		where: eq(organizations.id, organizationId),

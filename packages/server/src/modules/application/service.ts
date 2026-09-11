@@ -19,14 +19,20 @@ import { unregisterBackupsForService } from "../backups/scheduler";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
 import { envToArray, mergeEnv } from "../deployment/env";
 import { removeServiceLogs } from "../deployment/maintenance";
+import { ensureEnvironmentNetwork, pruneEnvironmentNetwork } from "../deployment/network";
 import {
+	applicationHasDomain,
 	buildContainerSpec,
+	buildTaskResources,
+	DEFAULT_LOG_DRIVER,
+	loadQuotaDefaults,
 	sanitizeNetworkAttachments,
 	sanitizeSwarmLabels,
 	withNodeConstraint,
 } from "../deployment/swarm";
 import { conflict, notFound, preconditionFailed } from "../errors";
 import { deletePreviewDeployment } from "../preview";
+import type { QuotaResourceDefaults } from "../projects/quotas";
 import { unregisterSchedulesForService } from "../schedules";
 import {
 	DEFAULT_CONTAINER_PORT,
@@ -44,7 +50,7 @@ import {
 	removeSwarmService,
 	scaleSwarmService,
 } from "./docker";
-import { getApplicationDir, resolveFileMountPath } from "./paths";
+import { getApplicationDir, getSwarmNetwork, resolveFileMountPath } from "./paths";
 
 export type Application = typeof applications.$inferSelect;
 
@@ -199,6 +205,12 @@ export interface ApplicationSwarmSpecOptions {
 	 * (`getServerSwarmNodeId`); merged into the placement as `node.id==…`.
 	 */
 	swarmNodeId?: string | null;
+	/** Private per-environment overlay (see `deployment/network.ts`). */
+	environmentNetwork: string;
+	/** Join `nixploy-network` — true only when Traefik routes to the service. */
+	routed: boolean;
+	/** Per-service `Resources.Limits` fallbacks derived from the org quota. */
+	quotaDefaults?: QuotaResourceDefaults;
 }
 
 /**
@@ -217,7 +229,7 @@ export const buildApplicationSwarmSpec = (
 	>,
 	image: string,
 	env: string[],
-	options: ApplicationSwarmSpecOptions = {},
+	options: ApplicationSwarmSpecOptions,
 ): Docker.ServiceSpec => {
 	const mountSpecs: Docker.MountSettings[] = applicationMounts.map(
 		(mount): Docker.MountSettings => {
@@ -279,17 +291,18 @@ export const buildApplicationSwarmSpec = (
 				command: application.command,
 				healthCheck: (application.healthCheckSwarm as Docker.HealthConfig | null) ?? null,
 			}),
-			Resources: {
-				Limits: Object.keys(limits).length > 0 ? limits : undefined,
-				Reservations: Object.keys(reservations).length > 0 ? reservations : undefined,
-			},
+			Resources: buildTaskResources(limits, reservations, options.quotaDefaults),
 			RestartPolicy:
 				(application.restartPolicySwarm as Docker.TaskRestartPolicy | null) ?? undefined,
 			Placement: withNodeConstraint(
 				application.placementSwarm as Docker.Placement | null,
 				options.swarmNodeId,
 			),
-			Networks: sanitizeNetworkAttachments(application.networkSwarm),
+			Networks: sanitizeNetworkAttachments(application.networkSwarm, {
+				environmentNetwork: options.environmentNetwork,
+				shared: options.routed,
+			}),
+			LogDriver: { ...DEFAULT_LOG_DRIVER, Options: { ...DEFAULT_LOG_DRIVER.Options } },
 		},
 		Mode: (application.modeSwarm as Docker.ServiceMode | null) ?? {
 			Replicated: { Replicas: application.replicas },
@@ -318,16 +331,25 @@ export const upsertApplicationSwarmService = async (application: ApplicationRow)
 	const docker = await getDocker();
 	const service = docker.getService(application.appName);
 
-	const [applicationMounts, applicationPorts, env, swarmNodeId] = await Promise.all([
-		db.query.mounts.findMany({
-			where: eq(mounts.applicationId, application.applicationId),
-		}),
-		db.query.ports.findMany({
-			where: eq(ports.applicationId, application.applicationId),
-		}),
-		loadMergedApplicationEnv(application),
-		application.serverId ? getServerSwarmNodeId(application.serverId) : null,
-	]);
+	const [applicationMounts, applicationPorts, env, swarmNodeId, environment, routed] =
+		await Promise.all([
+			db.query.mounts.findMany({
+				where: eq(mounts.applicationId, application.applicationId),
+			}),
+			db.query.ports.findMany({
+				where: eq(ports.applicationId, application.applicationId),
+			}),
+			loadMergedApplicationEnv(application),
+			application.serverId ? getServerSwarmNodeId(application.serverId) : null,
+			db.query.environments.findFirst({
+				where: eq(environments.environmentId, application.environmentId),
+				with: { project: true },
+			}),
+			applicationHasDomain(application.applicationId),
+		]);
+	if (!environment) throw notFound(`Environment not found: ${application.environmentId}`);
+	const environmentNetwork = await ensureEnvironmentNetwork(environment);
+	const quotaDefaults = await loadQuotaDefaults(environment.project.organizationId);
 
 	let current: ServiceInspectInfo | null = null;
 	try {
@@ -359,7 +381,7 @@ export const upsertApplicationSwarmService = async (application: ApplicationRow)
 		applicationPorts,
 		image,
 		env,
-		{ swarmNodeId },
+		{ swarmNodeId, environmentNetwork, routed, quotaDefaults },
 	);
 
 	if (!current) {
@@ -389,6 +411,53 @@ export const upsertApplicationSwarmService = async (application: ApplicationRow)
 /* -------------------------------------------------------------------------- */
 
 /**
+ * Keep the live service's `nixploy-network` membership in sync with its
+ * domains.
+ *
+ * Applications only join the shared, Traefik-facing overlay while they are
+ * actually routed (see `deployment/network.ts`), and domains are added and
+ * removed long after the deploy that built the spec — so the first domain has
+ * to attach the network and the last one removed has to detach it, or Traefik
+ * answers 502 / the service lingers next to every other tenant.
+ *
+ * A never-deployed service is skipped; the next deploy builds the right spec.
+ * Attaching rolls the tasks (start-first), which is the same cost as any
+ * other spec change.
+ */
+export const syncApplicationSharedNetwork = async (
+	application: Pick<Application, "applicationId" | "appName">,
+): Promise<void> => {
+	const docker = await getDocker();
+	const service = docker.getService(application.appName);
+	const current = (await service.inspect().catch(() => null)) as ServiceInspectInfo | null;
+	if (!current?.Spec?.TaskTemplate) return;
+
+	const sharedName = getSwarmNetwork();
+	const sharedId = await docker
+		.getNetwork(sharedName)
+		.inspect()
+		.then((network: { Id?: string }) => network.Id ?? null)
+		.catch(() => null);
+
+	const task = current.Spec.TaskTemplate as Docker.ContainerTaskSpec;
+	const networks = (task.Networks ?? []) as Docker.NetworkAttachmentConfig[];
+	const isShared = (entry: Docker.NetworkAttachmentConfig) =>
+		entry.Target === sharedName || (sharedId != null && entry.Target === sharedId);
+
+	const routed = await applicationHasDomain(application.applicationId);
+	if (networks.some(isShared) === routed) return;
+
+	const next = routed
+		? [...networks, { Target: sharedName }]
+		: networks.filter((entry) => !isShared(entry));
+	await service.update({
+		version: current.Version?.Index,
+		...current.Spec,
+		TaskTemplate: { ...task, Networks: next },
+	});
+};
+
+/**
  * Re-write the Traefik dynamic config for an application from the current
  * domains/redirects/security rows. Call after every routing-affecting
  * mutation. The YAML always lands on the Nixploy host, whatever server the
@@ -400,6 +469,7 @@ export const syncApplicationTraefik = async (
 	const [appDomains, appRedirects, appSecurity] = await Promise.all([
 		db.query.domains.findMany({
 			where: eq(domains.applicationId, application.applicationId),
+			with: { middlewares: true },
 		}),
 		db.query.redirects.findMany({
 			where: eq(redirects.applicationId, application.applicationId),
@@ -421,6 +491,7 @@ export const syncApplicationTraefik = async (
 				https: domain.https,
 				certificateType: domain.certificateType,
 				certificateId: domain.certificateId,
+				middlewares: domain.middlewares,
 			})),
 		redirects: appRedirects.map((redirect) => ({
 			regex: redirect.regex,
@@ -433,6 +504,12 @@ export const syncApplicationTraefik = async (
 			password: entry.password,
 		})),
 	});
+
+	// The route only works if Traefik can reach the backend: the first domain
+	// attaches the shared overlay, the last one removed detaches it again.
+	await bestEffort(`sync shared network for ${application.appName}`, () =>
+		syncApplicationSharedNetwork(application),
+	);
 };
 
 /* -------------------------------------------------------------------------- */
@@ -561,7 +638,7 @@ export const duplicateApplication = async (
  * (mounts, ports, domains, deployments... cascade).
  */
 export const deleteApplication = async (
-	application: Pick<Application, "applicationId" | "appName" | "serverId">,
+	application: Pick<Application, "applicationId" | "appName" | "serverId" | "environmentId">,
 ): Promise<void> => {
 	// Schedules and backups are node-schedule jobs held in memory: the row
 	// cascade never reaches them, so a job firing after the delete would exec
@@ -611,6 +688,10 @@ export const deleteApplication = async (
 	);
 
 	await db.delete(applications).where(eq(applications.applicationId, application.applicationId));
+
+	// The environment overlay outlives its services; `network rm` refuses one
+	// that still has endpoints, so this only lands when the last one left.
+	await pruneEnvironmentNetwork(application.environmentId);
 };
 
 /** Start a stopped application by scaling back to its configured replicas. */

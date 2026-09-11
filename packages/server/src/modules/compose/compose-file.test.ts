@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	applyComposeHardening,
 	assertSafeComposeSpec,
 	buildDeployComposeFile,
 	composeEnvMap,
@@ -819,5 +820,141 @@ describe("env helpers", () => {
 		expect(shouldRedactEnvValue("false")).toBe(false);
 		expect(shouldRedactEnvValue("s3cr3t-pass")).toBe(true);
 		expect(shouldRedactEnvValue("   ")).toBe(false);
+	});
+});
+
+describe("compose container hardening", () => {
+	const spec = (yaml: string) => parseComposeFile(yaml);
+
+	it("drops every capability and injects the minimal add-set, logging, pids and ulimits", () => {
+		const out = applyComposeHardening(spec("services:\n  web:\n    image: nginx:alpine\n"));
+		const web = out.services?.web as Record<string, unknown>;
+		expect(web.cap_drop).toEqual(["ALL"]);
+		expect(web.cap_add).toEqual([
+			"CHOWN",
+			"DAC_OVERRIDE",
+			"FOWNER",
+			"KILL",
+			"NET_BIND_SERVICE",
+			"SETGID",
+			"SETUID",
+		]);
+		expect(web.security_opt).toEqual(["no-new-privileges:true"]);
+		expect(web.pids_limit).toBe(1024);
+		expect(web.ulimits).toEqual({ nofile: { soft: 65536, hard: 65536 } });
+		expect(web.logging).toEqual({
+			driver: "json-file",
+			options: { "max-size": "10m", "max-file": "3" },
+		});
+	});
+
+	it("merges an allowed cap_add on top of the baseline and keeps the file's own limits", () => {
+		const out = applyComposeHardening(
+			spec(
+				"services:\n  web:\n    image: nginx:alpine\n    cap_add: [SYS_CHROOT]\n    pids_limit: 2048\n",
+			),
+		);
+		const web = out.services?.web as Record<string, unknown>;
+		expect(web.cap_add).toContain("SYS_CHROOT");
+		expect(web.cap_add).toContain("CHOWN");
+		expect(web.cap_drop).toEqual(["ALL"]);
+		expect(web.pids_limit).toBe(2048);
+	});
+
+	it("leaves swarm-ignored keys out of stack files", () => {
+		// `docker stack deploy` warns and drops security_opt/pids_limit/ulimits.
+		const out = applyComposeHardening(
+			spec("services:\n  web:\n    image: nginx:alpine\n"),
+			"stack",
+		);
+		const web = out.services?.web as Record<string, unknown>;
+		expect(web.cap_drop).toEqual(["ALL"]);
+		expect(web.logging).toBeDefined();
+		expect(web.security_opt).toBeUndefined();
+		expect(web.pids_limit).toBeUndefined();
+		expect(web.ulimits).toBeUndefined();
+	});
+});
+
+describe("assertSafeComposeSpec — resource / scheduling escapes", () => {
+	const check = (yaml: string) => () => assertSafeComposeSpec(parseComposeFile(yaml));
+
+	it("rejects cgroup_parent", () => {
+		expect(check("services:\n  x:\n    image: a\n    cgroup_parent: /docker\n")).toThrow(
+			/cgroup_parent/,
+		);
+	});
+
+	it("requires a bounded size= on every tmpfs", () => {
+		expect(check("services:\n  x:\n    image: a\n    tmpfs: /run\n")).toThrow(/explicit size=/);
+		expect(check('services:\n  x:\n    image: a\n    tmpfs: ["/run:size=4g"]\n')).toThrow(
+			/larger than 1g/,
+		);
+		expect(check('services:\n  x:\n    image: a\n    tmpfs: ["/run:size=64m"]\n')).not.toThrow();
+	});
+
+	it("rejects log drivers that ship output off the host", () => {
+		expect(check("services:\n  x:\n    image: a\n    logging:\n      driver: gelf\n")).toThrow(
+			/logging driver/,
+		);
+		expect(
+			check("services:\n  x:\n    image: a\n    logging:\n      driver: json-file\n"),
+		).not.toThrow();
+	});
+
+	it("bounds pids_limit and the nofile ulimit", () => {
+		expect(check("services:\n  x:\n    image: a\n    pids_limit: 99999\n")).toThrow(/pids_limit/);
+		expect(
+			check(
+				"services:\n  x:\n    image: a\n    ulimits:\n      nofile:\n        soft: 2000000\n        hard: 2000000\n",
+			),
+		).toThrow(/nofile/);
+	});
+
+	it("rejects global mode and manager-node placement", () => {
+		expect(check("services:\n  x:\n    image: a\n    deploy:\n      mode: global\n")).toThrow(
+			/deploy.mode: global/,
+		);
+		expect(
+			check(
+				'services:\n  x:\n    image: a\n    deploy:\n      placement:\n        constraints: ["node.role == manager"]\n',
+			),
+		).toThrow(/manager nodes/);
+	});
+});
+
+describe("injectNetwork — environment overlay", () => {
+	it("joins every service to the environment overlay under a qualified alias", () => {
+		const out = injectNetwork(
+			parseComposeFile("services:\n  web:\n    image: a\n  db:\n    image: b\n"),
+			{
+				appName: "shop",
+				composeType: "docker-compose",
+				exposedServices: ["web"],
+				environmentNetwork: "production-abc12345-net",
+			},
+		);
+		expect(out.networks?.["production-abc12345-net"]).toEqual({
+			external: true,
+			name: "production-abc12345-net",
+		});
+		expect(out.services?.web?.networks).toEqual({
+			"shop-net": {},
+			"production-abc12345-net": { aliases: ["shop-web"] },
+			"nixploy-network": { aliases: ["shop-web"] },
+		});
+		// An unexposed service stays off the shared, Traefik-facing overlay.
+		expect(out.services?.db?.networks).toEqual({
+			"shop-net": {},
+			"production-abc12345-net": { aliases: ["shop-db"] },
+		});
+	});
+
+	it("omits the environment overlay when no name is given", () => {
+		const out = injectNetwork(parseComposeFile("services:\n  web:\n    image: a\n"), {
+			appName: "shop",
+			composeType: "docker-compose",
+		});
+		expect(out.services?.web?.networks).toEqual({ "shop-net": {} });
 	});
 });

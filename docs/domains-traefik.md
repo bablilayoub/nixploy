@@ -14,12 +14,20 @@ internet ─► :80  ─► redirect → :443
               $NIXPLOY_CONFIG_DIR/traefik/dynamic/<appName>.yml
                             │
                             ▼
-                  http://<appName>:<port>   (overlay network)
+                  http://<appName>:<port>   (nixploy-network)
 ```
 
 - Traefik runs as the global swarm service `nixploy-traefik` (image
   `traefik:v3.5.0`), publishing host ports 80 and 443, attached to the shared
-  overlay network (`NIXPLOY_NETWORK`, default `nixploy-network`).
+  tenant overlay (`NIXPLOY_NETWORK`, default `nixploy-network`) **and** to
+  `nixploy-internal`, where it reaches the panel for the dashboard router.
+- **A service joins `nixploy-network` only while it has a domain.** That is
+  what makes `http://<appName>:<port>` resolvable for Traefik; a service with
+  no route stays on its environment's private overlay, invisible to every
+  other tenant. The membership is reconciled on every domain create/update/
+  delete, so the first domain attaches the network (one rolling update of that
+  service) and the last one removed detaches it. Managed databases never join
+  it. Full model: [`hardening.md`](./hardening.md).
 - **Port 80 always redirects to HTTPS**, at the *entrypoint* (static
   `traefik.yml`). ACME HTTP-01 challenges are still served on `:80` before the
   redirect. The writer also emits a per-router `redirectScheme` for every
@@ -109,8 +117,8 @@ but leaves it out of the rendered YAML.
 ### forwardAuth with Authentik / Authelia
 
 Deploy the SSO proxy as a normal Nixploy service and point `address` at its
-**app name** — Traefik and the service share the `nixploy-network` overlay, so
-the container name resolves. A private target is only accepted when it is a
+**app name** — the SSO proxy needs a domain of its own (which is what puts it
+on `nixploy-network` next to Traefik), and the container name then resolves. A private target is only accepted when it is a
 service of the same organization; anything else must be a public HTTPS URL
 (the same SSRF guard the notification providers use).
 
@@ -198,7 +206,9 @@ Requirements for a working route:
 
 Debug a 502 in this order: router exists in the app's YAML → target
 host:port in `servers[].url` → container running and listening on that port
-(`docker ps`) → service attached to `nixploy-network`.
+(`docker ps`) → service attached to `nixploy-network`
+(`docker service inspect <appName> --format '{{json .Spec.TaskTemplate.Networks}}'`;
+a service with no domain row is deliberately not on it).
 
 ## Real internet domains
 
@@ -257,7 +267,8 @@ Managed servers join the **primary** Swarm (see `setupServer` in
 `modules/cluster/servers.ts`, which also records the node's Swarm id).
 Traefik remains the cluster-wide global service on managers. Worker nodes do
 not get their own Traefik or overlay init — they run user workloads pinned to
-them via `node.id` placement constraints, attached to `nixploy-network`.
+them via `node.id` placement constraints, attached to their environment's
+overlay (plus `nixploy-network` when routed).
 Manager remotes get Traefik config dirs prepared so the global Traefik service
 can bind-mount if scheduled there.
 

@@ -25,9 +25,12 @@ export interface TraefikDomainInput {
 	host: string;
 	port: number;
 	path?: string | null;
+	internalPath?: string | null;
 	https: boolean;
 	certificateType: "letsencrypt" | "none" | "custom";
 	certificateId?: string | null;
+	/** Per-domain middleware rows; validated per kind by the writer. */
+	middlewares?: Array<{ kind: string; config: unknown; order?: number; enabled?: boolean }>;
 }
 
 export interface TraefikAppConfigInput {

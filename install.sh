@@ -25,7 +25,9 @@
 #   NIXPLOY_PORT                 Opt-in: ALSO publish the app on this host port (plain
 #                                HTTP, all interfaces). Unset = Traefik only (:80/:443).
 #   NIXPLOY_CONFIG_DIR           Host config directory          (default: /etc/nixploy)
-#   NIXPLOY_NETWORK              Swarm overlay network          (default: nixploy-network)
+#   NIXPLOY_NETWORK              Shared tenant overlay          (default: nixploy-network)
+#                                The panel and Postgres sit on the separate, tenant-free
+#                                `nixploy-internal` overlay; only Traefik joins both.
 #   TRUSTED_PROXIES              Forwarded to the app            (default: 1 — Traefik fronts it)
 #   LOG_LEVEL / LOG_FORMAT       Forwarded to the app when set (debug|info|warn|error / json)
 #   DATABASE_POOL_MAX            Forwarded to the app when set
@@ -58,6 +60,9 @@ NIXPLOY_REPO="${NIXPLOY_REPO:-bablilayoub/nixploy}"
 NIXPLOY_BRANCH="${NIXPLOY_BRANCH:-$NIXPLOY_VERSION}"
 
 NETWORK_NAME="${NIXPLOY_NETWORK:-nixploy-network}"
+# Panel ↔ Postgres. No tenant workload is ever attached to it, so a compromised
+# app container cannot resolve `nixploy:3000` / `nixploy-postgres:5432`.
+INTERNAL_NETWORK_NAME="nixploy-internal"
 APP_IMAGE="${NIXPLOY_IMAGE:-ghcr.io/bablilayoub/nixploy:${NIXPLOY_VERSION}}"
 POSTGRES_IMAGE="postgres:${POSTGRES_VERSION}"
 TRAEFIK_IMAGE="traefik:${TRAEFIK_VERSION}"
@@ -276,12 +281,77 @@ init_swarm() {
 		docker swarm init --advertise-addr "${addr}" >/dev/null
 		ok "Swarm initialized (${addr})"
 	fi
-	if docker network inspect "${NETWORK_NAME}" >/dev/null 2>&1; then
-		ok "Network ${NETWORK_NAME}"
+	ensure_network "${NETWORK_NAME}"
+	ensure_network "${INTERNAL_NETWORK_NAME}"
+}
+
+# Idempotent attachable overlay. Swarm networks are cluster-scoped objects.
+ensure_network() {
+	local name="$1"
+	if docker network inspect "${name}" >/dev/null 2>&1; then
+		ok "Network ${name}"
 	else
-		docker network create --driver overlay --attachable "${NETWORK_NAME}" >/dev/null
-		ok "Created network ${NETWORK_NAME}"
+		docker network create --driver overlay --attachable "${name}" >/dev/null
+		ok "Created network ${name}"
 	fi
+}
+
+# Whether a swarm service is already attached to a network (the spec stores ids).
+service_on_network() {
+	local service="$1" network="$2" id
+	id="$(docker network inspect "${network}" --format '{{.Id}}' 2>/dev/null || true)"
+	[ -n "${id}" ] || return 1
+	docker service inspect "${service}" \
+		--format '{{range .Spec.TaskTemplate.Networks}}{{.Target}} {{end}}' 2>/dev/null \
+		| tr ' ' '\n' | grep -qx "${id}"
+}
+
+# ── network segmentation migration ───────────────────────────────────────────
+# Installs from before the segmentation change put `nixploy` and
+# `nixploy-postgres` on the shared tenant overlay, where every application
+# container could resolve `nixploy:3000` and `nixploy-postgres:5432`. Move them
+# onto `nixploy-internal` and take them off the tenant overlay.
+#
+# Order matters and every step is idempotent:
+#   1. Traefik joins `nixploy-internal` (it must still reach the panel);
+#   2. Postgres joins `nixploy-internal`, then leaves the tenant overlay;
+#   3. the panel joins `nixploy-internal`, then leaves the tenant overlay.
+# Each `--network-add`/`--network-rm` recreates the service's tasks, so this
+# runs without `--detach` to let one settle before the next starts.
+attach_internal_network() {
+	local service="$1"
+	docker service inspect "${service}" >/dev/null 2>&1 || return 0
+	service_on_network "${service}" "${INTERNAL_NETWORK_NAME}" && return 0
+	if docker service update --network-add "${INTERNAL_NETWORK_NAME}" "${service}" >/dev/null 2>&1; then
+		ok "Attached ${service} to ${INTERNAL_NETWORK_NAME}"
+	else
+		warn "Could not attach ${service} to ${INTERNAL_NETWORK_NAME}"
+	fi
+}
+
+detach_tenant_network() {
+	local service="$1"
+	docker service inspect "${service}" >/dev/null 2>&1 || return 0
+	service_on_network "${service}" "${NETWORK_NAME}" || return 0
+	# Never strand a service with no network at all.
+	if ! service_on_network "${service}" "${INTERNAL_NETWORK_NAME}"; then
+		warn "${service} is not on ${INTERNAL_NETWORK_NAME} yet — leaving ${NETWORK_NAME} attached"
+		return 0
+	fi
+	if docker service update --network-rm "${NETWORK_NAME}" "${service}" >/dev/null 2>&1; then
+		ok "Detached ${service} from ${NETWORK_NAME}"
+	else
+		warn "Could not detach ${service} from ${NETWORK_NAME}"
+	fi
+}
+
+migrate_internal_network() {
+	ensure_network "${INTERNAL_NETWORK_NAME}"
+	attach_internal_network nixploy-traefik
+	attach_internal_network nixploy-postgres
+	detach_tenant_network nixploy-postgres
+	attach_internal_network nixploy
+	detach_tenant_network nixploy
 }
 
 # ── secrets & config ─────────────────────────────────────────────────────────
@@ -679,7 +749,7 @@ create_postgres() {
 	# single quotes). 60 s grace lets a checkpoint finish on stop.
 	docker service create \
 		--name nixploy-postgres \
-		--network "${NETWORK_NAME}" \
+		--network "${INTERNAL_NETWORK_NAME}" \
 		--constraint 'node.role == manager' \
 		--replicas 1 \
 		--detach \
@@ -696,7 +766,7 @@ create_postgres() {
 wait_for_postgres() {
 	local i
 	for i in $(seq 1 60); do
-		if docker run --rm --network "${NETWORK_NAME}" "${POSTGRES_IMAGE}" \
+		if docker run --rm --network "${INTERNAL_NETWORK_NAME}" "${POSTGRES_IMAGE}" \
 			pg_isready -h nixploy-postgres -U "${POSTGRES_USER:-nixploy}" -d "${POSTGRES_DB:-nixploy}" >/dev/null 2>&1; then
 			ok "Postgres ready"
 			return
@@ -724,6 +794,7 @@ create_traefik() {
 	docker service create \
 		--name nixploy-traefik \
 		--network "${NETWORK_NAME}" \
+		--network "${INTERNAL_NETWORK_NAME}" \
 		--mode global \
 		--constraint 'node.role == manager' \
 		--detach \
@@ -783,7 +854,7 @@ create_app() {
 	collect_app_env_args --env
 	docker service create \
 		--name nixploy \
-		--network "${NETWORK_NAME}" \
+		--network "${INTERNAL_NETWORK_NAME}" \
 		--constraint 'node.role == manager' \
 		--replicas 1 \
 		--detach \
@@ -962,6 +1033,9 @@ main() {
 
 	step "Container images"
 	pull_images
+
+	step "Network segmentation"
+	migrate_internal_network
 
 	step "Database"
 	create_postgres

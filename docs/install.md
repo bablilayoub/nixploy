@@ -43,7 +43,9 @@ Public `/register` is disabled after that.
 
 1. Detects the OS and installs Docker (unless `NIXPLOY_SKIP_DOCKER_INSTALL=1`)
 2. `docker swarm init` (single-node manager)
-3. Creates the `nixploy-network` overlay
+3. Creates the two platform overlays: `nixploy-network` (shared, Traefik-facing
+   — only tenant services that have a domain join it) and `nixploy-internal`
+   (panel ↔ Postgres, no tenant workload ever). See [hardening](./hardening.md)
 4. Detects the public IP (`api.ipify.org`, falling back to the primary
    interface — NAT'd clouds put a private address on the NIC) and writes
    secrets under `/etc/nixploy/.env` (or `$NIXPLOY_CONFIG_DIR`)
@@ -53,7 +55,9 @@ Public `/register` is disabled after that.
    yet. The `nixploy` service gets a 90 s stop grace period, a memory limit
    (`NIXPLOY_MEMORY_LIMIT`, default `2g`, `512m` reserved) and rotated JSON
    logs; `nixploy-postgres` gets a `pg_isready` healthcheck, the same log
-   rotation and a 60 s stop grace period so a checkpoint can finish
+   rotation and a 60 s stop grace period so a checkpoint can finish.
+   `nixploy` and `nixploy-postgres` are attached to `nixploy-internal` only;
+   `nixploy-traefik` is on both overlays
 
 The script is **idempotent** — safe to re-run. A re-run keeps the existing
 secrets, `BETTER_AUTH_URL`, the dashboard router (`00-nixploy-dashboard.yml`)
@@ -97,7 +101,7 @@ nixploy doctor
 | `NIXPLOY_VERSION` / `NIXPLOY_IMAGE` | Pin image tag or full ref. The ref is also passed to the panel as `NIXPLOY_IMAGE` |
 | `NIXPLOY_PORT` | Opt-in: additionally host-publish the app on this port (plain HTTP). Unset = Traefik only |
 | `NIXPLOY_CONFIG_DIR` | Host data dir (default `/etc/nixploy`). Inside the container it is always `/etc/nixploy` |
-| `NIXPLOY_NETWORK` | Swarm overlay network (default `nixploy-network`); forwarded to the panel when set |
+| `NIXPLOY_NETWORK` | Shared tenant overlay (default `nixploy-network`); forwarded to the panel when set. The panel/Postgres overlay is always `nixploy-internal` |
 | `TRUSTED_PROXIES` | Forwarded to the panel; defaults to `1` because only Traefik reaches it (client IPs for rate limits come from `X-Forwarded-For`) |
 | `NIXPLOY_BUILD_FROM_SOURCE=1` | Force local image build |
 | `NIXPLOY_SKIP_DOCKER_INSTALL=1` | Assume Docker is already present |
@@ -212,7 +216,39 @@ See the header comments in [`update.sh`](../update.sh).
 | Panel boots before Postgres after a reboot | Expected: the entrypoint waits up to 60 s (`NIXPLOY_DB_WAIT_SECONDS`) and the migrator retries connection errors before giving up |
 | TLS stuck | DNS A record, Let's Encrypt email (not `nixploy@localhost`), Traefik logs |
 | Deploy never finishes | Application → Deployments → Logs; Docker disk space |
-| Traefik not routing | Domain attached? Service status `done`? `nixploy-network` connected? |
+| Traefik not routing | Domain attached? Service status `done`? `docker service inspect <appName> --format '{{json .Spec.TaskTemplate.Networks}}'` — a service only joins `nixploy-network` while it has a domain |
+| App can't reach another service by name | They must be in the **same environment**: each environment has its own overlay (`<env>-<id8>-net`). Cross-environment and cross-organisation DNS is intentionally gone |
+| Panel can't reach Postgres after an upgrade | `docker service inspect nixploy --format '{{json .Spec.TaskTemplate.Networks}}'` must list `nixploy-internal`; re-run `update.sh` (the migration is idempotent) |
+
+## Network segmentation migration (upgrading an older install)
+
+Installs made before tenant network segmentation had `nixploy` and
+`nixploy-postgres` on the shared tenant overlay, where any application
+container could resolve `nixploy:3000` and `nixploy-postgres:5432`. Both
+`install.sh` and `update.sh` now run an **idempotent** migration
+(`migrate_internal_network`) before rolling the services:
+
+1. create `nixploy-internal` if missing;
+2. `docker service update --network-add nixploy-internal nixploy-traefik`
+   (so Traefik can still reach the panel);
+3. same for `nixploy-postgres`, then `--network-rm nixploy-network`;
+4. same for `nixploy`, then `--network-rm nixploy-network`.
+
+Each step is skipped when already done, and a service is never detached from
+the tenant overlay before it is attached to the internal one. Every
+`--network-add` / `--network-rm` recreates that service's tasks, so expect a
+short panel restart on the first upgrade. `DATABASE_URL` is unchanged —
+`nixploy-postgres` resolves on the new network exactly as before.
+
+Verify afterwards:
+
+```bash
+docker network inspect nixploy-internal --format '{{range .Services}}{{.Name}} {{end}}'
+# nixploy nixploy-postgres nixploy-traefik
+
+docker service inspect nixploy --format '{{json .Spec.TaskTemplate.Networks}}'
+# exactly one target: the nixploy-internal id
+```
 
 More: [architecture](./architecture.md), [domains](./domains-traefik.md),
-[deployment flow](./deployment-flow.md).
+[hardening](./hardening.md), [deployment flow](./deployment-flow.md).

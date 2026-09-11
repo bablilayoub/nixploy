@@ -3,6 +3,8 @@ import {
 	labelsSwarmSchema,
 	modeSwarmSchema,
 	networkSwarmSchema,
+	privilegesSwarmSchema,
+	relaxesContainerHardening,
 	restartPolicySwarmSchema,
 	rollbackConfigSwarmSchema,
 	updateConfigSwarmSchema,
@@ -75,5 +77,46 @@ describe("swarm override schemas", () => {
 		expect(networkSwarmSchema.safeParse([{ Target: "ingress" }]).success).toBe(false);
 		expect(networkSwarmSchema.safeParse([{ Target: "nixploy-x", Extra: 1 }]).success).toBe(false);
 		expect(networkSwarmSchema.safeParse([{ Target: "nixploy-x; rm -rf /" }]).success).toBe(false);
+	});
+});
+
+describe("container hardening overrides", () => {
+	it("accepts a docker-shaped privileges object and rejects typos / raw CAP_ names", () => {
+		expect(
+			privilegesSwarmSchema.parse({
+				capabilityAdd: ["NET_ADMIN"],
+				capabilityDrop: ["ALL"],
+				securityOpt: ["no-new-privileges:true"],
+				pidsLimit: 2048,
+			}),
+		).toEqual({
+			capabilityAdd: ["NET_ADMIN"],
+			capabilityDrop: ["ALL"],
+			securityOpt: ["no-new-privileges:true"],
+			pidsLimit: 2048,
+		});
+		expect(privilegesSwarmSchema.safeParse({ capabilityAdd: ["CAP_NET_ADMIN"] }).success).toBe(
+			false,
+		);
+		expect(privilegesSwarmSchema.safeParse({ securityOpt: ["seccomp=weird"] }).success).toBe(false);
+		expect(privilegesSwarmSchema.safeParse({ capability_add: ["CHOWN"] }).success).toBe(false);
+	});
+
+	it("flags only the values that actually weaken the sandbox", () => {
+		// Re-stating the baseline changes nothing and stays open to org admins.
+		expect(relaxesContainerHardening(null)).toBe(false);
+		expect(
+			relaxesContainerHardening({
+				capabilityAdd: ["CHOWN", "SETUID"],
+				capabilityDrop: ["ALL"],
+				securityOpt: ["no-new-privileges:true"],
+				pidsLimit: 1024,
+			}),
+		).toBe(false);
+		expect(relaxesContainerHardening({ capabilityAdd: ["SYS_ADMIN"] })).toBe(true);
+		expect(relaxesContainerHardening({ capabilityDrop: ["NET_RAW"] })).toBe(true);
+		expect(relaxesContainerHardening({ securityOpt: ["no-new-privileges:false"] })).toBe(true);
+		expect(relaxesContainerHardening({ securityOpt: ["seccomp=unconfined"] })).toBe(true);
+		expect(relaxesContainerHardening({ pidsLimit: 8192 })).toBe(true);
 	});
 });

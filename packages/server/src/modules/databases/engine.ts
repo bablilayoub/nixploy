@@ -2,20 +2,31 @@ import { randomBytes } from "node:crypto";
 import Docker from "dockerode";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
-import { mariadb, mongo, mysql, postgres, redis, servers } from "../../db/schema";
+import { environments, mariadb, mongo, mysql, postgres, redis, servers } from "../../db/schema";
 import { bestEffort } from "../../utils/best-effort";
 import { execAsyncRemote } from "../../utils/exec";
 import { assertSafePublishedPort } from "../../utils/validators";
-import { getSwarmNetwork } from "../application/paths";
 import { mergeNodeConstraint } from "../cluster/placement";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
-import { conflict, notFound, preconditionFailed } from "../errors";
+import { ensureEnvironmentNetworkById, pruneEnvironmentNetwork } from "../deployment/network";
+import {
+	DEFAULT_CAPABILITY_ADD,
+	DEFAULT_CAPABILITY_DROP,
+	DEFAULT_LOG_DRIVER,
+	DEFAULT_PIDS_LIMIT,
+	DEFAULT_PRIVILEGES,
+	defaultUlimits,
+	loadQuotaDefaults,
+} from "../deployment/swarm";
+import { badRequest, conflict, notFound, preconditionFailed } from "../errors";
+import type { QuotaResourceDefaults } from "../projects/quotas";
 
 /**
  * Shared engine for the five one-click database services (postgres, mysql,
  * mariadb, mongo, redis). Every database is a single-container Docker Swarm
- * service on `nixploy-network` with a named volume `<appName>-data` and an
- * optional host-mode published port for external connections.
+ * service on its **environment's private overlay** (never the shared,
+ * Traefik-facing `nixploy-network`) with a named volume `<appName>-data` and
+ * an optional host-mode published port for external connections.
  *
  * Swarm SERVICE objects (create/update/inspect/scale/rm) are always issued
  * to the primary manager through dockerode: managed servers join the primary
@@ -384,18 +395,28 @@ export interface ServiceDefinition {
 	cpuReservation?: number;
 	cpuLimit?: number;
 	kind: DatabaseKind;
+	/**
+	 * Overlays the service joins — the environment's private network, never
+	 * the shared `nixploy-network`: a managed database is reached by the
+	 * tenant's own services (same environment) and by the panel through
+	 * `docker exec`, never over the Traefik-facing overlay.
+	 */
+	networks: string[];
+	/** Org-quota fallbacks for `Resources.Limits` (row values still win). */
+	quotaDefaults?: QuotaResourceDefaults;
 }
 
 function buildServiceDefinition<K extends DatabaseKind>(
 	kind: K,
 	row: DatabaseRowMap[K],
+	context: { networks: string[]; quotaDefaults?: QuotaResourceDefaults },
 ): ServiceDefinition {
 	const config = DATABASE_CONFIGS[kind];
 	const base = row as BaseRow;
 	const credentialEnv = Object.entries(config.containerEnv(row)).map(([k, v]) => `${k}=${v}`);
 	const args = base.command ? splitArgs(base.command) : config.defaultArgs(row);
 	if (base.externalPort != null) {
-		assertSafePublishedPort(base.externalPort, "externalPort");
+		assertSafeDatabaseExternalPort(base.externalPort);
 	}
 
 	return {
@@ -412,6 +433,8 @@ function buildServiceDefinition<K extends DatabaseKind>(
 		cpuReservation: parseCpu(base.cpuReservation),
 		cpuLimit: parseCpu(base.cpuLimit),
 		kind,
+		networks: context.networks,
+		quotaDefaults: context.quotaDefaults,
 	};
 }
 
@@ -428,6 +451,13 @@ export function buildDatabaseSwarmSpec(
 	const limits: Record<string, number> = {};
 	if (def.memoryLimit !== undefined) limits.MemoryBytes = def.memoryLimit;
 	if (def.cpuLimit !== undefined) limits.NanoCPUs = def.cpuLimit;
+	if (limits.MemoryBytes === undefined && def.quotaDefaults?.memoryBytes !== undefined) {
+		limits.MemoryBytes = def.quotaDefaults.memoryBytes;
+	}
+	if (limits.NanoCPUs === undefined && def.quotaDefaults?.nanoCpus !== undefined) {
+		limits.NanoCPUs = def.quotaDefaults.nanoCpus;
+	}
+	limits.Pids = DEFAULT_PIDS_LIMIT;
 	const reservations: Record<string, number> = {};
 	if (def.memoryReservation !== undefined) reservations.MemoryBytes = def.memoryReservation;
 	if (def.cpuReservation !== undefined) reservations.NanoCPUs = def.cpuReservation;
@@ -455,13 +485,20 @@ export function buildDatabaseSwarmSpec(
 						},
 					},
 				],
+				// Baseline hardening, written explicitly so a hand-edited live
+				// spec is reset on the next deploy (see deployment/swarm.ts).
+				CapabilityAdd: [...DEFAULT_CAPABILITY_ADD],
+				CapabilityDrop: [...DEFAULT_CAPABILITY_DROP],
+				Privileges: { ...DEFAULT_PRIVILEGES },
+				Ulimits: defaultUlimits(),
 			},
 			Resources: {
-				...(Object.keys(limits).length > 0 ? { Limits: limits } : {}),
+				Limits: limits,
 				...(Object.keys(reservations).length > 0 ? { Reservations: reservations } : {}),
 			},
-			Networks: [{ Target: getSwarmNetwork() }],
+			Networks: def.networks.map((target) => ({ Target: target })),
 			RestartPolicy: { Condition: "any" },
+			LogDriver: { ...DEFAULT_LOG_DRIVER, Options: { ...DEFAULT_LOG_DRIVER.Options } },
 			...(swarmNodeId ? { Placement: { Constraints: mergeNodeConstraint([], swarmNodeId) } } : {}),
 		},
 		Mode: { Replicated: { Replicas: replicas } },
@@ -483,21 +520,59 @@ export function buildDatabaseSwarmSpec(
 	};
 }
 
+/**
+ * Host ports the platform itself owns. `assertSafePublishedPort` already
+ * refuses everything below 1024 (80/443) plus the well-known database ports
+ * (5432/3306/6379/27017) and the Docker/Swarm control ports, but not the
+ * panel's own :3000 — publishing a database there would make the swarm
+ * ingress fight the panel for the port on every node.
+ */
+const platformReservedPorts = (): Set<number> => {
+	const reserved = new Set<number>([3000, 4789, 7946]);
+	const panelPort = Number.parseInt(process.env.NIXPLOY_PORT ?? "", 10);
+	if (Number.isInteger(panelPort)) reserved.add(panelPort);
+	const appPort = Number.parseInt(process.env.PORT ?? "", 10);
+	if (Number.isInteger(appPort)) reserved.add(appPort);
+	return reserved;
+};
+
+/**
+ * Validate a database's opt-in external port.
+ *
+ * Swarm's host-mode publish binds **every** interface (there is no
+ * `127.0.0.1:` form for a service port), so an external port is a real
+ * internet-facing listener — hence the platform-port collision check on top
+ * of the shared privileged/sensitive-port deny list.
+ */
+export function assertSafeDatabaseExternalPort(port: number): void {
+	assertSafePublishedPort(port, "externalPort");
+	if (platformReservedPorts().has(port)) {
+		throw badRequest(
+			`externalPort ${port} is reserved by the Nixploy platform (panel / swarm control plane)`,
+		);
+	}
+}
+
 // ── network ─────────────────────────────────────────────────────────────────
 
-/** The shared overlay is cluster-scoped: create it on the primary manager when missing. */
-async function ensureNetwork(): Promise<void> {
-	const networks = await docker.listNetworks({
-		filters: { name: [getSwarmNetwork()] },
+/**
+ * The environment's private overlay is cluster-scoped: create it on the
+ * primary manager when missing and return its name. A database that somehow
+ * has no environment row left falls back to no attachment at all rather than
+ * landing on the shared, Traefik-facing overlay.
+ */
+async function ensureDatabaseNetworks(environmentId: string): Promise<string[]> {
+	const environmentNetwork = await ensureEnvironmentNetworkById(environmentId);
+	return environmentNetwork ? [environmentNetwork] : [];
+}
+
+/** Owning organisation of a database, for the quota-derived resource limits. */
+async function loadDatabaseOrganizationId(environmentId: string): Promise<string | null> {
+	const environment = await db.query.environments.findFirst({
+		where: eq(environments.environmentId, environmentId),
+		with: { project: { columns: { organizationId: true } } },
 	});
-	const exists = networks.some((n) => n.Name === getSwarmNetwork());
-	if (!exists) {
-		await docker.createNetwork({
-			Name: getSwarmNetwork(),
-			Driver: "overlay",
-			Attachable: true,
-		});
-	}
+	return environment?.project.organizationId ?? null;
 }
 
 // ── service inspect / status ────────────────────────────────────────────────
@@ -659,9 +734,16 @@ export async function deployDatabase<K extends DatabaseKind>(
 	kind: K,
 	row: DatabaseRowMap[K],
 ): Promise<{ created: boolean }> {
-	const def = buildServiceDefinition(kind, row);
-	const swarmNodeId = isRemote(row.serverId) ? await getServerSwarmNodeId(row.serverId) : null;
-	await ensureNetwork();
+	const base = row as BaseRow;
+	const [swarmNodeId, networks, organizationId] = await Promise.all([
+		isRemote(row.serverId) ? getServerSwarmNodeId(row.serverId) : null,
+		ensureDatabaseNetworks(base.environmentId),
+		loadDatabaseOrganizationId(base.environmentId),
+	]);
+	const def = buildServiceDefinition(kind, row, {
+		networks,
+		quotaDefaults: await loadQuotaDefaults(organizationId),
+	});
 	await assertManagedDatabaseService(def.name, kind, "update");
 
 	const service = docker.getService(def.name);
@@ -741,6 +823,22 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * cleanup runs on the pinned server (`serverId`) over SSH.
  */
 export async function removeDatabase(
+	appName: string,
+	serverId: string | null,
+	kind?: DatabaseKind,
+	environmentId?: string | null,
+): Promise<void> {
+	try {
+		await removeDatabaseService(appName, serverId, kind);
+	} finally {
+		// Drop the environment overlay once the last service of the environment
+		// left it; `network rm` refuses one that still has endpoints, so this is
+		// a no-op while siblings are alive.
+		await pruneEnvironmentNetwork(environmentId);
+	}
+}
+
+async function removeDatabaseService(
 	appName: string,
 	serverId: string | null,
 	kind?: DatabaseKind,
@@ -834,8 +932,9 @@ export async function getDatabaseStatus(appName: string): Promise<DatabaseStatus
 
 /**
  * Build a connection URL for a database row.
- * - internal: host is the swarm service name (resolvable by any container on
- *   `nixploy-network`) with the container's native port.
+ * - internal: host is the swarm service name (resolvable by any container in
+ *   the same environment, i.e. on the environment's private overlay) with the
+ *   container's native port.
  * - external: host is the server's IP (or `localhost` for the Nixploy host
  *   itself) with the published `externalPort`; throws when none is set.
  * Passwords come from `encryptedText` columns and are already decrypted when

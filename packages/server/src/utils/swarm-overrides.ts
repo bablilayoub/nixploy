@@ -87,9 +87,16 @@ export const labelsSwarmSchema = z
 	});
 
 /**
- * Extra overlay networks. Only attachable `nixploy-*` networks are accepted
- * (`sanitizeNetworkAttachments` enforces the same rule at spec time); the
- * shared `nixploy-network` is always attached and does not need listing.
+ * Extra overlay networks **on top of** the two Nixploy derives itself: the
+ * environment's private overlay (always) and the shared `nixploy-network`
+ * (only while the service has a domain). Neither can be named here —
+ * `sanitizeNetworkAttachments` seeds them and ignores any attempt to re-add
+ * the shared one, so a service without a route can never put itself next to
+ * the panel.
+ *
+ * What remains is the platform namespace (`nixploy-*`), which reaches
+ * infrastructure no tenant should join: `nixploy.networkSwarm` is therefore
+ * gated on the **instance admin** role in `routers/application.ts`.
  */
 export const swarmNetworkTargetSchema = z
 	.string()
@@ -109,6 +116,74 @@ export const networkSwarmSchema = z
 			.strict(),
 	)
 	.max(MAX_SWARM_NETWORKS, { message: `At most ${MAX_SWARM_NETWORKS} networks` });
+
+/* ── container hardening overrides ───────────────────────────────────────── */
+
+/** Linux capability name without the `CAP_` prefix (`NET_ADMIN`, `SYS_TIME`). */
+const capabilityNameSchema = z
+	.string()
+	.min(2)
+	.max(32)
+	.regex(/^[A-Z][A-Z0-9_]*$/, "Capabilities are upper-case names without the CAP_ prefix")
+	// The engine wants the bare name; accepting both spellings would make the
+	// baseline comparison in `relaxesContainerHardening` miss `CAP_SYS_ADMIN`.
+	.refine((cap) => !cap.startsWith("CAP_"), "Drop the CAP_ prefix (SYS_ADMIN, not CAP_SYS_ADMIN)");
+
+/** `security_opt` values the engine understands and we are willing to accept. */
+const securityOptSchema = z.enum([
+	"no-new-privileges:true",
+	"no-new-privileges:false",
+	"seccomp=unconfined",
+	"apparmor=unconfined",
+]);
+
+export const MAX_SWARM_CAPABILITIES = 16;
+
+/**
+ * Per-service relaxation of the baseline container hardening
+ * (`deployment/swarm.ts`: `CapabilityDrop: [ALL]` + a minimal add-set,
+ * `NoNewPrivileges`, `Pids` 1024). Everything here weakens the sandbox, so
+ * the router requires the **instance admin** role — an org owner must not be
+ * able to hand its own workload `SYS_ADMIN` on a shared node.
+ */
+export const privilegesSwarmSchema = z
+	.object({
+		capabilityAdd: z.array(capabilityNameSchema).max(MAX_SWARM_CAPABILITIES).optional(),
+		capabilityDrop: z.array(capabilityNameSchema).max(64).optional(),
+		securityOpt: z.array(securityOptSchema).max(4).optional(),
+		pidsLimit: z.number().int().min(1).max(16384).optional(),
+	})
+	.strict();
+
+export type PrivilegesSwarm = z.infer<typeof privilegesSwarmSchema>;
+
+/** Capabilities the baseline already grants — asking for them changes nothing. */
+const BASELINE_CAPABILITIES = new Set([
+	"CHOWN",
+	"DAC_OVERRIDE",
+	"FOWNER",
+	"KILL",
+	"NET_BIND_SERVICE",
+	"SETGID",
+	"SETUID",
+]);
+
+/**
+ * Whether an override actually weakens the sandbox — an extra capability
+ * beyond the baseline, a `security_opt` that turns a confinement off, a
+ * narrower `CapabilityDrop` than `ALL`, or a raised pids ceiling.
+ *
+ * A no-op override (re-stating the baseline) stays available to org admins;
+ * anything else is instance-admin only.
+ */
+export function relaxesContainerHardening(value: PrivilegesSwarm | null | undefined): boolean {
+	if (!value) return false;
+	if (value.capabilityAdd?.some((cap) => !BASELINE_CAPABILITIES.has(cap))) return true;
+	if (value.capabilityDrop && !value.capabilityDrop.includes("ALL")) return true;
+	if (value.securityOpt?.some((opt) => opt !== "no-new-privileges:true")) return true;
+	if (value.pidsLimit !== undefined && value.pidsLimit > 1024) return true;
+	return false;
+}
 
 export type UpdateConfigSwarm = z.infer<typeof updateConfigSwarmSchema>;
 export type RollbackConfigSwarm = z.infer<typeof rollbackConfigSwarmSchema>;

@@ -173,3 +173,12 @@ with the same care as the database.
 
 Production install (`install.sh`) writes `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`,
 Postgres password and `BETTER_AUTH_URL` to `/etc/nixploy/.env`.
+
+## Runtime isolation
+
+Identity is only half of the story: what a tenant's *container* can reach is
+covered in [hardening.md](./hardening.md) — the per-environment overlay, the
+tenant-free `nixploy-internal` network for panel ↔ Postgres, the baseline
+container defaults (`CapabilityDrop: ALL`, `no-new-privileges`, pids/ulimit
+caps, log rotation, quota-derived CPU/memory limits) and the opt-in database
+external ports.

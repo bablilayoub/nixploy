@@ -24,6 +24,7 @@ Guides for running and developing Nixploy.
 | [deployment-flow.md](./deployment-flow.md) | Queue → build → Swarm → Traefik · previews · fork gate |
 | [domains-traefik.md](./domains-traefik.md) | Domains, TLS, traefik.me vs Let’s Encrypt |
 | [auth.md](./auth.md) | better-auth, orgs, roles, **capabilities**, API keys, 2FA |
+| [hardening.md](./hardening.md) | Tenant network segmentation, container defaults, database external ports |
 | [audit.md](./audit.md) | Audit log + role gates |
 | [docker.md](./docker.md) | Docker control center / daemon ops |
 | [observability.md](./observability.md) | Metrics, logs, incidents, uptime |
@@ -54,7 +55,7 @@ Use this against the marketing site / README when docs drift:
 | [codebase-map.md](./codebase-map.md) | File-level map: entry points, routers → modules, on-disk layout, env vars, crons |
 | [status.md](./status.md) | Living snapshot: health checks, dependency upgrade candidates, known debt, backlog, session log |
 | [archive/next.md](./archive/next.md) | Phase 10 checklist (done) |
-| [archive/hardening.md](./archive/hardening.md) | Phase 9 hardening checklist (done) |
+| [archive/hardening.md](./archive/hardening.md) | Phase 9 engineering checklist (done) — isolation lives in [hardening.md](./hardening.md) |
 | [AGENTS.md](../AGENTS.md) | Repo conventions |
 | [CLAUDE.md](../CLAUDE.md) | Claude Code entry point: commands, hard rules, gotchas |
 

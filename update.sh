@@ -19,7 +19,10 @@
 #   TRUSTED_PROXIES              Forwarded to the app          (default: 1 — Traefik fronts it)
 #   LOG_LEVEL / LOG_FORMAT       Forwarded to the app when set (debug|info|warn|error / json)
 #   DATABASE_POOL_MAX            Forwarded to the app when set
-#   NIXPLOY_NETWORK              Forwarded to the app when set (custom overlay network)
+#   NIXPLOY_NETWORK              Shared tenant overlay         (default: nixploy-network).
+#                                Forwarded to the app when set; the panel and Postgres
+#                                are moved onto `nixploy-internal` on the first run
+#                                after upgrading (idempotent, see migrate_internal_network).
 #   NIXPLOY_LETSENCRYPT_EMAIL    Replace the ACME email in traefik.yml (default: keep)
 #   TRAEFIK_VERSION              Traefik image tag             (default: v3.5.0)
 #   NIXPLOY_UPDATE_TRAEFIK       1 = also pull & force Traefik  (default: 1)
@@ -400,6 +403,77 @@ backup_database() {
 	done
 }
 
+# ── network segmentation ─────────────────────────────────────────────────────
+# Shared, Traefik-facing tenant overlay; only routed tenant services join it.
+NETWORK_NAME="${NIXPLOY_NETWORK:-nixploy-network}"
+# Panel ↔ Postgres. No tenant workload is ever attached to it.
+INTERNAL_NETWORK_NAME="nixploy-internal"
+
+ensure_network() {
+	local name="$1"
+	docker network inspect "${name}" >/dev/null 2>&1 && return 0
+	if docker network create --driver overlay --attachable "${name}" >/dev/null; then
+		ok "Created network ${name}"
+	else
+		warn "Could not create network ${name}"
+	fi
+}
+
+# Whether a swarm service is already attached to a network (spec stores ids).
+service_on_network() {
+	local service="$1" network="$2" id
+	id="$(docker network inspect "${network}" --format '{{.Id}}' 2>/dev/null || true)"
+	[ -n "${id}" ] || return 1
+	docker service inspect "${service}" \
+		--format '{{range .Spec.TaskTemplate.Networks}}{{.Target}} {{end}}' 2>/dev/null \
+		| tr ' ' '\n' | grep -qx "${id}"
+}
+
+attach_internal_network() {
+	local service="$1"
+	docker service inspect "${service}" >/dev/null 2>&1 || return 0
+	service_on_network "${service}" "${INTERNAL_NETWORK_NAME}" && return 0
+	if docker service update --network-add "${INTERNAL_NETWORK_NAME}" "${service}" >/dev/null 2>&1; then
+		ok "Attached ${service} to ${INTERNAL_NETWORK_NAME}"
+	else
+		warn "Could not attach ${service} to ${INTERNAL_NETWORK_NAME}"
+	fi
+}
+
+detach_tenant_network() {
+	local service="$1"
+	docker service inspect "${service}" >/dev/null 2>&1 || return 0
+	service_on_network "${service}" "${NETWORK_NAME}" || return 0
+	# Never strand a service with no network at all.
+	if ! service_on_network "${service}" "${INTERNAL_NETWORK_NAME}"; then
+		warn "${service} is not on ${INTERNAL_NETWORK_NAME} yet — leaving ${NETWORK_NAME} attached"
+		return 0
+	fi
+	if docker service update --network-rm "${NETWORK_NAME}" "${service}" >/dev/null 2>&1; then
+		ok "Detached ${service} from ${NETWORK_NAME}"
+	else
+		warn "Could not detach ${service} from ${NETWORK_NAME}"
+	fi
+}
+
+# One-time (idempotent) migration for installs made before tenant network
+# segmentation: `nixploy` and `nixploy-postgres` used to sit on the shared
+# tenant overlay, where any application container could resolve `nixploy:3000`
+# and `nixploy-postgres:5432`.
+#
+# Order matters — Traefik must reach the panel on the new network before the
+# panel leaves the old one, and Postgres must be reachable before the panel
+# moves. Each `--network-add`/`--network-rm` recreates the service's tasks.
+migrate_internal_network() {
+	ensure_network "${NETWORK_NAME}"
+	ensure_network "${INTERNAL_NETWORK_NAME}"
+	attach_internal_network nixploy-traefik
+	attach_internal_network nixploy-postgres
+	detach_tenant_network nixploy-postgres
+	attach_internal_network nixploy
+	detach_tenant_network nixploy
+}
+
 # ── roll services ────────────────────────────────────────────────────────────
 LOG_ARGS=(--log-driver json-file --log-opt max-size=10m --log-opt max-file=3)
 ROLL_ARGS=(
@@ -653,6 +727,9 @@ main() {
 
 	step "Config"
 	refresh_traefik_yml
+
+	step "Network segmentation"
+	migrate_internal_network
 
 	step "Roll services"
 	update_app

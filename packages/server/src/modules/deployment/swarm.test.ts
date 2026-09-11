@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { buildContainerSpec, buildRuntimeSpecs, withNodeConstraint } from "./swarm";
+import { environmentNetworkName } from "./network";
+import {
+	buildContainerSpec,
+	buildRuntimeSpecs,
+	buildTaskResources,
+	DEFAULT_CAPABILITY_ADD,
+	DEFAULT_PIDS_LIMIT,
+	sanitizeNetworkAttachments,
+	withNodeConstraint,
+} from "./swarm";
 
 describe("withNodeConstraint", () => {
 	it("leaves the user's placement untouched for unpinned services", () => {
@@ -118,5 +127,143 @@ describe("buildContainerSpec", () => {
 			Test: ["CMD-SHELL", "curl -f http://localhost/ || exit 1"],
 		});
 		expect(wire.Mounts).toEqual([{ Type: "volume", Source: "data", Target: "/data" }]);
+	});
+});
+
+describe("buildContainerSpec hardening", () => {
+	const wire = () =>
+		JSON.parse(
+			JSON.stringify(
+				buildContainerSpec({
+					imageTag: "app:latest",
+					env: [],
+					mounts: [],
+					command: null,
+					healthCheck: null,
+				}),
+			),
+		) as Record<string, unknown>;
+
+	it("drops every capability and adds back only the minimal start-up set", () => {
+		const spec = wire();
+		expect(spec.CapabilityDrop).toEqual(["ALL"]);
+		expect(spec.CapabilityAdd).toEqual([
+			"CHOWN",
+			"DAC_OVERRIDE",
+			"FOWNER",
+			"KILL",
+			"NET_BIND_SERVICE",
+			"SETGID",
+			"SETUID",
+		]);
+		// NET_RAW (ARP/DNS spoofing on a shared L2) and SYS_* stay dropped.
+		expect(DEFAULT_CAPABILITY_ADD).not.toContain("NET_RAW");
+		expect(DEFAULT_CAPABILITY_ADD).not.toContain("MKNOD");
+	});
+
+	it("writes no-new-privileges and a file-descriptor ceiling explicitly", () => {
+		const spec = wire();
+		// Explicit (not undefined) so a live spec that grew Privileges out of
+		// band is reset by the merge in upsertSwarmService.
+		expect(spec.Privileges).toEqual({ NoNewPrivileges: true });
+		expect(spec.Ulimits).toEqual([{ Name: "nofile", Soft: 65536, Hard: 65536 }]);
+	});
+});
+
+describe("buildTaskResources", () => {
+	it("always caps Pids and keeps the service's own limits", () => {
+		expect(buildTaskResources({ MemoryBytes: 512, NanoCPUs: 5e8 }, {})).toEqual({
+			Limits: { MemoryBytes: 512, NanoCPUs: 5e8, Pids: DEFAULT_PIDS_LIMIT },
+			Reservations: undefined,
+		});
+	});
+
+	it("fills missing limits from the org quota but never overrides explicit ones", () => {
+		expect(
+			buildTaskResources({ MemoryBytes: 512 }, {}, { memoryBytes: 999, nanoCpus: 2e9 }),
+		).toEqual({
+			Limits: { MemoryBytes: 512, NanoCPUs: 2e9, Pids: DEFAULT_PIDS_LIMIT },
+			Reservations: undefined,
+		});
+	});
+
+	it("keeps reservations only when the service set some", () => {
+		expect(buildTaskResources({}, { MemoryBytes: 128 }).Reservations).toEqual({
+			MemoryBytes: 128,
+		});
+		expect(buildTaskResources({}, {}).Reservations).toBeUndefined();
+	});
+});
+
+describe("sanitizeNetworkAttachments", () => {
+	const envNet = "production-abc12345-net";
+
+	it("attaches only the environment overlay when the service has no domain", () => {
+		expect(sanitizeNetworkAttachments(null, { environmentNetwork: envNet, shared: false })).toEqual(
+			[{ Target: envNet }],
+		);
+	});
+
+	it("adds the shared overlay for routed services so Traefik can reach them", () => {
+		expect(sanitizeNetworkAttachments(null, { environmentNetwork: envNet, shared: true })).toEqual([
+			{ Target: envNet },
+			{ Target: "nixploy-network" },
+		]);
+	});
+
+	it("never lets an override re-add the shared overlay for an unrouted service", () => {
+		// Otherwise a service with no domain could put itself next to the panel.
+		expect(
+			sanitizeNetworkAttachments([{ Target: "nixploy-network" }], {
+				environmentNetwork: envNet,
+				shared: false,
+			}),
+		).toEqual([{ Target: envNet }]);
+	});
+
+	it("never attaches the panel overlay, even when an admin asks for it", () => {
+		// nixploy-internal carries the panel and the platform Postgres.
+		expect(
+			sanitizeNetworkAttachments([{ Target: "nixploy-internal" }], {
+				environmentNetwork: envNet,
+				shared: true,
+			}),
+		).toEqual([{ Target: envNet }, { Target: "nixploy-network" }]);
+	});
+
+	it("keeps admin-listed platform overlays and drops everything else", () => {
+		expect(
+			sanitizeNetworkAttachments(
+				[
+					{ Target: "nixploy-extra", Aliases: ["api"] },
+					{ Target: "ingress" },
+					{ Target: "other-tenant-env-net" },
+					"nope",
+				],
+				{ environmentNetwork: envNet, shared: false },
+			),
+		).toEqual([{ Target: envNet }, { Target: "nixploy-extra", Aliases: ["api"] }]);
+	});
+});
+
+describe("environmentNetworkName", () => {
+	it("derives a readable, unique, non-platform name", () => {
+		expect(
+			environmentNetworkName({
+				environmentId: "da5e4350-1111-2222-3333-444455556666",
+				name: "production",
+			}),
+		).toBe("production-da5e4350-net");
+		expect(environmentNetworkName({ environmentId: "abcdefgh", name: "Staging EU!" })).toBe(
+			"staging-eu-abcdefgh-net",
+		);
+	});
+
+	it("never lands in the platform namespace", () => {
+		// `nixploy-*` is admin-only in sanitizeNetworkAttachments — a tenant must
+		// not be able to name an environment into it.
+		expect(
+			environmentNetworkName({ environmentId: "deadbeef", name: "nixploy" }).startsWith("nixploy-"),
+		).toBe(false);
 	});
 });

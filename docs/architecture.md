@@ -92,8 +92,42 @@ organizationId` (see `assertApplicationAccess` and friends in
 ## Infrastructure assumptions
 
 - Docker **Swarm** mode (single node is fine): applications run as swarm
-  services, compose as `docker stack deploy`, everything attaches to the
-  shared overlay network `NIXPLOY_NETWORK` (default `nixploy-network`).
+  services, compose as `docker compose` / `docker stack deploy`.
+- **Network segmentation** (full detail in [`hardening.md`](./hardening.md)):
+
+  | Overlay | Members |
+  | --- | --- |
+  | `nixploy-internal` | `nixploy`, `nixploy-postgres`, `nixploy-traefik` — no tenant workload, ever |
+  | `nixploy-network` (`NIXPLOY_NETWORK`) | `nixploy-traefik` + tenant services **that have a domain** |
+  | `<env-slug>-<env-id8>-net` | every application / database / compose service of one environment |
+  | `<appName>-net` | the services of one compose stack |
+
+  ```
+                            :80/:443
+                               │
+                      ┌────────▼─────────┐
+                      │  nixploy-traefik │
+                      └───┬──────────┬───┘
+          nixploy-internal│          │nixploy-network
+               ┌──────────▼──┐    ┌──▼───────────────────────────┐
+               │   nixploy   │    │ routed tenant services only  │
+               └──────┬──────┘    └──┬────────────────────┬──────┘
+                      │              │                    │
+            ┌─────────▼───────┐  ┌───▼──────────────┐ ┌───▼──────────────┐
+            │ nixploy-postgres│  │ production-…-net │ │ staging-…-net    │
+            └─────────────────┘  │ app · db · stack │ │ app · db · stack │
+                                 └──────────────────┘ └──────────────────┘
+  ```
+
+  The environment overlay is created before a deploy and removed after the
+  last service of the environment is deleted. Membership of `nixploy-network`
+  is derived from the domain rows, so adding the first domain attaches it and
+  removing the last one detaches it (`syncApplicationSharedNetwork`). Managed
+  databases never join it — the panel talks to them with `docker exec`.
+- Every tenant `ContainerSpec` carries the baseline hardening (`CapabilityDrop:
+  ALL` + a minimal add-set, `NoNewPrivileges`, `Pids` 1024, `nofile` 65536,
+  rotating json-file logs, quota-derived CPU/memory limits) — see
+  [`hardening.md`](./hardening.md).
 - Traefik v3 runs as the global swarm service `nixploy-traefik`, publishing
   host ports 80/443, configured through the **file provider** watching the
   dynamic dir under `NIXPLOY_CONFIG_DIR` (default `/etc/nixploy`, dev default

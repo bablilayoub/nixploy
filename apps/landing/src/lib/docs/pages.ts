@@ -196,8 +196,24 @@ export const docsPages: DocPage[] = [
 				type: "ul",
 				items: [
 					"Let's Encrypt (HTTP-01) when the panel / service has a real DNS name",
+					"Let's Encrypt (DNS-01) for wildcard hosts — configure a DNS provider under Settings → Platform → Wildcard certificates",
 					"Custom certificates uploaded under Settings → Certificates",
 					"None / HTTP-only for internal smoke tests",
+				],
+			},
+			{ type: "h2", text: "Middlewares" },
+			{
+				type: "p",
+				text: "Every domain — application or compose — carries an ordered list of Traefik middlewares, typed and validated by the panel (no raw YAML).",
+			},
+			{
+				type: "ul",
+				items: [
+					"Rate limit (429 over the burst) and IP allow-list (403 outside the CIDRs)",
+					"Headers: custom request/response headers, HSTS, CORS — Host and X-Forwarded-* stay proxy-owned",
+					"Compression, sticky sessions, and maintenance mode (serve a maintenance page without touching DNS)",
+					"Forward auth for an SSO proxy such as Authentik or Authelia",
+					"Redirects and basic auth are available on compose services too, per compose-file service",
 				],
 			},
 			{ type: "h2", text: "traefik.me" },
@@ -408,6 +424,31 @@ export const docsPages: DocPage[] = [
 					"Audit log for meaningful mutations",
 					"Basic-auth middleware on applications",
 					"Compose safety checks (no docker.sock binds, no privileged by tenants)",
+				],
+			},
+			{ type: "h2", text: "Network isolation" },
+			{
+				type: "p",
+				text: "Each environment gets its own private overlay network. Your services resolve each other by name inside it; another organization's containers cannot see them at all.",
+			},
+			{
+				type: "ul",
+				items: [
+					"The panel and its Postgres sit on a separate overlay no tenant container ever joins",
+					"A service joins the shared, Traefik-facing network only while it has a domain",
+					"Managed databases publish no host port unless you opt in — reachable by name from your own environment",
+					"Compose stacks keep their own per-stack network on top",
+				],
+			},
+			{ type: "h2", text: "Container defaults" },
+			{
+				type: "ul",
+				items: [
+					"All Linux capabilities dropped, with a minimal set added back (no NET_RAW, no SYS_*)",
+					"no-new-privileges on every tenant container",
+					"Process (1024) and file-descriptor (65536) ceilings",
+					"Rotating JSON logs (10 MB × 3) so one service cannot fill the disk",
+					"Org quota CPU/memory applied as per-service limits when the service sets none",
 				],
 			},
 		],

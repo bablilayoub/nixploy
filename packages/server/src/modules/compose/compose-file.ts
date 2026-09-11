@@ -287,6 +287,40 @@ const DOCKER_SOCKET_SOURCES = new Set(["/var/run/docker.sock", "/run/docker.sock
 /** Network drivers a tenant file may declare (everything else reaches the host / LAN). */
 const ALLOWED_NETWORK_DRIVERS = new Set(["bridge", "overlay"]);
 
+/* ── container hardening (compose shape) ─────────────────────────────────── */
+
+/**
+ * Compose-shaped mirror of the swarm hardening defaults in
+ * `deployment/swarm.ts` — injected by {@link applyComposeHardening} into
+ * every rendered service that does not set the key itself. Kept as literal
+ * YAML keys here so this module stays free of dockerode/db imports.
+ */
+export const COMPOSE_CAP_DROP: readonly string[] = ["ALL"];
+export const COMPOSE_CAP_ADD: readonly string[] = [
+	"CHOWN",
+	"DAC_OVERRIDE",
+	"FOWNER",
+	"KILL",
+	"NET_BIND_SERVICE",
+	"SETGID",
+	"SETUID",
+];
+export const COMPOSE_SECURITY_OPT: readonly string[] = ["no-new-privileges:true"];
+export const COMPOSE_PIDS_LIMIT = 1024;
+export const COMPOSE_NOFILE_ULIMIT = 65536;
+export const COMPOSE_LOGGING = {
+	driver: "json-file",
+	options: { "max-size": "10m", "max-file": "3" },
+} as const;
+
+/** Ceilings a tenant file may not raise past (the defaults are much lower). */
+const MAX_PIDS_LIMIT = 4096;
+const MAX_NOFILE_ULIMIT = 1_000_000;
+const MAX_TMPFS_BYTES = 1024 ** 3;
+
+/** Log drivers that keep `docker compose logs` (and the panel viewer) working. */
+const ALLOWED_LOG_DRIVERS = new Set(["json-file", "local"]);
+
 export interface ComposeSafetyOptions {
 	/** Allow bind-mount of the Docker engine socket only (exact host paths). */
 	allowDockerSocket?: boolean;
@@ -507,6 +541,127 @@ function assertSafeNetworks(networks: unknown): void {
 	}
 }
 
+/** Parse a docker size suffix (`64m`, `1g`, `512k`, plain bytes) into bytes. */
+function parseSizeBytes(value: string): number | null {
+	const match = /^\s*(\d+(?:\.\d+)?)\s*([kmgt]?)b?\s*$/i.exec(value);
+	if (!match?.[1]) return null;
+	const unit = (match[2] ?? "").toLowerCase();
+	const multiplier =
+		unit === "k"
+			? 1024
+			: unit === "m"
+				? 1024 ** 2
+				: unit === "g"
+					? 1024 ** 3
+					: unit === "t"
+						? 1024 ** 4
+						: 1;
+	return Math.floor(Number.parseFloat(match[1]) * multiplier);
+}
+
+/**
+ * Service-level `tmpfs:` is RAM. Without an explicit `size=` docker lets the
+ * mount grow to half the host's memory, which is a one-line memory DoS for
+ * every other tenant on the node — so a bounded `size=` is mandatory.
+ * (Long-form `type: tmpfs` volumes are rejected outright elsewhere.)
+ */
+function assertSafeTmpfs(serviceName: string, tmpfs: unknown): void {
+	if (tmpfs === undefined || tmpfs === null) return;
+	const entries = Array.isArray(tmpfs) ? tmpfs.map(String) : [String(tmpfs)];
+	for (const entry of entries) {
+		// Short syntax is `/path:opt1,opt2`, so the first option follows a colon.
+		const size = /[:,]\s*size=([^,]+)/i.exec(entry)?.[1];
+		if (!size) {
+			throw new ComposeValidationError(
+				`Compose service "${serviceName}" must give every tmpfs an explicit size= (max 1g): "${entry}"`,
+			);
+		}
+		const bytes = parseSizeBytes(size);
+		if (bytes === null || bytes > MAX_TMPFS_BYTES) {
+			throw new ComposeValidationError(
+				`Compose service "${serviceName}" must not mount a tmpfs larger than 1g: "${entry}"`,
+			);
+		}
+	}
+}
+
+/**
+ * A foreign log driver (`syslog`, `gelf`, `fluentd`, `awslogs`, …) ships the
+ * stack's output to an arbitrary endpoint and breaks `docker compose logs`
+ * (and therefore the panel's log viewer).
+ */
+function assertSafeLogging(serviceName: string, logging: unknown): void {
+	if (!logging || typeof logging !== "object" || Array.isArray(logging)) return;
+	const driver = (logging as Record<string, unknown>).driver;
+	if (driver === undefined || driver === null) return;
+	if (!ALLOWED_LOG_DRIVERS.has(String(driver).trim().toLowerCase())) {
+		throw new ComposeValidationError(
+			`Compose service "${serviceName}" must not use logging driver ${String(driver)} (json-file/local only)`,
+		);
+	}
+}
+
+/** Fork-bomb ceiling: the injected default is 1024, tenants may raise it to 4096. */
+function assertSafePidsLimit(serviceName: string, value: unknown): void {
+	if (value === undefined || value === null) return;
+	const limit = Number(value);
+	if (!Number.isFinite(limit) || limit <= 0 || limit > MAX_PIDS_LIMIT) {
+		throw new ComposeValidationError(
+			`Compose service "${serviceName}" must keep pids_limit between 1 and ${MAX_PIDS_LIMIT}`,
+		);
+	}
+}
+
+/** `nofile` above ~1M exhausts the host's file-descriptor tables. */
+function assertSafeUlimits(serviceName: string, ulimits: unknown): void {
+	if (!ulimits || typeof ulimits !== "object" || Array.isArray(ulimits)) return;
+	for (const [name, value] of Object.entries(ulimits as Record<string, unknown>)) {
+		const numbers =
+			value && typeof value === "object" && !Array.isArray(value)
+				? Object.values(value as Record<string, unknown>).map(Number)
+				: [Number(value)];
+		for (const entry of numbers) {
+			if (!Number.isFinite(entry) || entry < 0) {
+				throw new ComposeValidationError(
+					`Compose service "${serviceName}" has an invalid ulimit "${name}"`,
+				);
+			}
+			if (name.toLowerCase() === "nofile" && entry > MAX_NOFILE_ULIMIT) {
+				throw new ComposeValidationError(
+					`Compose service "${serviceName}" must keep the nofile ulimit at or below ${MAX_NOFILE_ULIMIT}`,
+				);
+			}
+		}
+	}
+}
+
+/**
+ * `deploy.mode: global` puts a task on *every* node of the swarm, and a
+ * `node.role == manager` constraint targets the nodes that hold the panel,
+ * Postgres and the docker socket. Nixploy pins tasks by `node.id` instead
+ * (see `injectNodeConstraint`), which runs after this check.
+ */
+function assertSafeDeploy(serviceName: string, deploy: unknown): void {
+	if (!deploy || typeof deploy !== "object" || Array.isArray(deploy)) return;
+	const record = deploy as Record<string, unknown>;
+	if (typeof record.mode === "string" && record.mode.trim().toLowerCase() === "global") {
+		throw new ComposeValidationError(
+			`Compose service "${serviceName}" must not use deploy.mode: global (it would run on every node)`,
+		);
+	}
+	const placement = record.placement;
+	if (!placement || typeof placement !== "object" || Array.isArray(placement)) return;
+	const constraints = (placement as Record<string, unknown>).constraints;
+	const list = Array.isArray(constraints) ? constraints.map(String) : [];
+	for (const constraint of list) {
+		if (/node\.role\s*(==|!=)\s*manager/i.test(constraint)) {
+			throw new ComposeValidationError(
+				`Compose service "${serviceName}" must not target manager nodes in deploy.placement.constraints`,
+			);
+		}
+	}
+}
+
 /**
  * Reject compose features that escape the container into the Nixploy host
  * (docker.sock, privileged, host namespaces, dangerous caps, Traefik label hijack).
@@ -567,6 +722,11 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 			"extra_hosts",
 			"sysctls",
 			"env_file",
+			"cgroup_parent",
+			"tmpfs",
+			"pids_limit",
+			"ulimits",
+			"logging",
 		] as const;
 		for (const key of dangerousKeys) {
 			const value = service[key];
@@ -645,6 +805,18 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 		if (service.sysctls !== undefined && service.sysctls !== null && !options?.allowSysctls) {
 			throw new ComposeValidationError(`Compose service "${serviceName}" must not set sysctls`);
 		}
+		// `cgroup_parent` moves the container into an operator-owned cgroup and
+		// escapes every limit Nixploy sets (`cgroup`/`cgroupns` are blocked above).
+		if (service.cgroup_parent !== undefined && service.cgroup_parent !== null) {
+			throw new ComposeValidationError(
+				`Compose service "${serviceName}" must not set cgroup_parent`,
+			);
+		}
+		assertSafeTmpfs(serviceName, service.tmpfs);
+		assertSafeLogging(serviceName, service.logging);
+		assertSafePidsLimit(serviceName, service.pids_limit);
+		assertSafeUlimits(serviceName, service.ulimits);
+		assertSafeDeploy(serviceName, service.deploy);
 
 		if (service.ports !== undefined && service.ports !== null) {
 			throw new ComposeValidationError(
@@ -748,6 +920,11 @@ function toNetworkMap(
  * - every service joins a private per-app network (`<appName>-net`) so bare
  *   service names (`db`, `redis`) only resolve inside this stack — on the
  *   shared overlay they would round-robin across tenants;
+ * - every service also joins the **environment** overlay
+ *   (`environmentNetwork`, see `deployment/network.ts`) under the qualified
+ *   alias `<appName>-<serviceName>`, so the tenant's own applications and
+ *   databases in that environment can reach the stack without anybody else
+ *   seeing it;
  * - only `exposedServices` (the Traefik targets) also join `nixploy-network`,
  *   with the alias `<appName>-<serviceName>` Traefik routes to. Any tenant
  *   reference to the shared network is dropped first.
@@ -758,10 +935,13 @@ export function injectNetwork(
 		appName: string;
 		composeType: "docker-compose" | "stack";
 		exposedServices?: Iterable<string>;
+		/** Private per-environment overlay; omitted only by legacy callers. */
+		environmentNetwork?: string | null;
 	},
 ): ComposeFileSpec {
 	const shared = getSwarmNetwork();
 	const privateNet = privateNetworkName(input.appName);
+	const environmentNet = input.environmentNetwork || null;
 	const exposed = new Set(input.exposedServices ?? []);
 
 	const networks: Record<string, unknown> =
@@ -772,6 +952,10 @@ export function injectNetwork(
 		input.composeType === "stack"
 			? { name: privateNet, driver: "overlay", attachable: true }
 			: { name: privateNet };
+	if (environmentNet) {
+		// Created by the deploy path before the compose command runs.
+		networks[environmentNet] = { external: true, name: environmentNet };
+	}
 	if (exposed.size > 0) {
 		networks[shared] = { external: true, name: shared };
 	} else {
@@ -782,13 +966,68 @@ export function injectNetwork(
 	for (const [serviceName, service] of Object.entries(spec.services ?? {})) {
 		const attached = toNetworkMap(service.networks);
 		delete attached[shared];
+		if (environmentNet) delete attached[environmentNet];
 		attached[privateNet] = {};
+		if (environmentNet) {
+			attached[environmentNet] = { aliases: [`${input.appName}-${serviceName}`] };
+		}
 		if (exposed.has(serviceName)) {
 			attached[shared] = { aliases: [`${input.appName}-${serviceName}`] };
 		}
 		services[serviceName] = { ...service, networks: attached };
 	}
 	return { ...spec, networks, services };
+}
+
+/**
+ * Baseline container hardening for every rendered compose service, applied
+ * after the safety checks so it can never be interpolated away.
+ *
+ * Keys the file already sets win — the deny-list above has already bounded
+ * them (`pids_limit` ≤ 4096, `nofile` ≤ 1M, json-file/local logging, no
+ * `security_opt`, no dangerous `cap_add`) — so this only fills the blanks.
+ * `cap_drop: [ALL]` is always written and the minimal add-set is merged on
+ * top of whatever the file asked for.
+ *
+ * `docker stack deploy` (swarm) honours `cap_add`/`cap_drop` and `logging`
+ * but silently ignores `security_opt`, `pids_limit` and `ulimits`, so those
+ * three are only injected for the `docker-compose` runtime; swarm stacks get
+ * the same protection through the platform's own service specs where
+ * Nixploy owns them.
+ */
+export function applyComposeHardening(
+	spec: ComposeFileSpec,
+	composeType: "docker-compose" | "stack" = "docker-compose",
+): ComposeFileSpec {
+	const services: Record<string, ComposeServiceSpec> = {};
+	for (const [serviceName, service] of Object.entries(spec.services ?? {})) {
+		const next: ComposeServiceSpec = { ...service };
+
+		const declared = Array.isArray(service.cap_add)
+			? service.cap_add.map((cap) => String(cap).toUpperCase().replace(/^CAP_/, ""))
+			: typeof service.cap_add === "string"
+				? [String(service.cap_add).toUpperCase().replace(/^CAP_/, "")]
+				: [];
+		next.cap_add = [...new Set([...COMPOSE_CAP_ADD, ...declared])];
+		next.cap_drop = [...COMPOSE_CAP_DROP];
+
+		if (next.logging === undefined || next.logging === null) {
+			next.logging = { driver: COMPOSE_LOGGING.driver, options: { ...COMPOSE_LOGGING.options } };
+		}
+
+		if (composeType === "docker-compose") {
+			next.security_opt = [...COMPOSE_SECURITY_OPT];
+			if (next.pids_limit === undefined || next.pids_limit === null) {
+				next.pids_limit = COMPOSE_PIDS_LIMIT;
+			}
+			if (next.ulimits === undefined || next.ulimits === null) {
+				next.ulimits = { nofile: { soft: COMPOSE_NOFILE_ULIMIT, hard: COMPOSE_NOFILE_ULIMIT } };
+			}
+		}
+
+		services[serviceName] = next;
+	}
+	return { ...spec, services };
 }
 
 /**
@@ -859,6 +1098,11 @@ export interface DeployComposeInput {
 	/** Source service names (before the suffix) that have a Nixploy domain. */
 	exposedServices?: Iterable<string>;
 	/**
+	 * Private per-environment overlay every service joins on top of
+	 * `<appName>-net` (see `deployment/network.ts`). Must already exist.
+	 */
+	environmentNetwork?: string | null;
+	/**
 	 * Stack mode only: primary-swarm node id of the server the row is pinned
 	 * to (`getServerSwarmNodeId`); every service is placed on it.
 	 */
@@ -888,10 +1132,12 @@ export function buildDeployComposeFile(
 	const exposedServices = [...(input.exposedServices ?? [])].map((name) =>
 		suffix ? `${name}-${suffix}` : name,
 	);
+	spec = applyComposeHardening(spec, input.composeType);
 	spec = injectNetwork(spec, {
 		appName: input.appName,
 		composeType: input.composeType,
 		exposedServices,
+		environmentNetwork: input.environmentNetwork,
 	});
 	if (input.composeType === "stack") {
 		spec = injectNodeConstraint(normalizeForStack(spec), input.swarmNodeId);

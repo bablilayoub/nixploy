@@ -2,7 +2,15 @@ import { randomBytes } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
-import { compose, deployments, domains, environments, mounts } from "../../db/schema";
+import {
+	compose,
+	deployments,
+	domains,
+	environments,
+	mounts,
+	redirects,
+	security,
+} from "../../db/schema";
 import { bestEffort } from "../../utils/best-effort";
 import { assertSafeAppName } from "../../utils/validators";
 import { isAppNameTaken as isAnyAppNameTaken } from "../application/app-name";
@@ -10,6 +18,7 @@ import { getSwarmNetwork } from "../application/paths";
 import { unregisterBackupsForService } from "../backups/scheduler";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
 import { removeServiceLogs } from "../deployment/maintenance";
+import { ensureEnvironmentNetworkById, pruneEnvironmentNetwork } from "../deployment/network";
 import { badRequest, conflict, notFound, preconditionFailed } from "../errors";
 import { unregisterSchedulesForService } from "../schedules";
 import { DEFAULT_CONTAINER_PORT } from "../traefik/config-writer";
@@ -390,6 +399,10 @@ export async function prepareComposeFiles(composeRow: ComposeRow): Promise<Prepa
 	const swarmNodeId =
 		onPrimary && composeRow.serverId ? await getServerSwarmNodeId(composeRow.serverId) : null;
 
+	// Declared `external: true` in the rendered file, so it has to exist before
+	// the compose/stack command runs.
+	const environmentNetwork = await ensureEnvironmentNetworkById(composeRow.environmentId);
+
 	const transformed = buildDeployComposeFile(
 		rawContent,
 		{
@@ -398,6 +411,7 @@ export async function prepareComposeFiles(composeRow: ComposeRow): Promise<Prepa
 			suffix: composeSuffix(composeRow),
 			env,
 			exposedServices: await exposedServiceNames(composeRow.composeId),
+			environmentNetwork,
 			swarmNodeId,
 		},
 		composeRow.hostPrivileged ? hostPrivilegedComposeSafety() : undefined,
@@ -535,6 +549,9 @@ export async function deleteCompose(composeRow: ComposeRow): Promise<void> {
 	await bestEffort(`remove logs for ${composeRow.appName}`, () =>
 		removeServiceLogs(composeRow.appName),
 	);
+	// `network rm` refuses an overlay that still has endpoints, so this only
+	// lands when this was the last service of the environment.
+	await pruneEnvironmentNetwork(composeRow.environmentId);
 }
 
 // ── services / domains ──────────────────────────────────────────────────────
@@ -628,9 +645,17 @@ export async function resyncComposeDomains(composeId: string): Promise<void> {
 	});
 	if (!row) return;
 
-	const composeDomains = await db.query.domains.findMany({
-		where: eq(domains.composeId, composeId),
-	});
+	// Domains carry their own middleware rows; redirects and basic-auth are
+	// per compose SERVICE (each service gets its own Traefik config file), so
+	// both are loaded once and filtered per group below.
+	const [composeDomains, composeRedirects, composeSecurity] = await Promise.all([
+		db.query.domains.findMany({
+			where: eq(domains.composeId, composeId),
+			with: { middlewares: true },
+		}),
+		db.query.redirects.findMany({ where: eq(redirects.composeId, composeId) }),
+		db.query.security.findMany({ where: eq(security.composeId, composeId) }),
+	]);
 
 	const byService = new Map<string, typeof composeDomains>();
 	for (const d of composeDomains) {
@@ -652,7 +677,22 @@ export async function resyncComposeDomains(composeId: string): Promise<void> {
 				https: d.https,
 				certificateType: d.certificateType,
 				certificateId: d.certificateId,
+				middlewares: d.middlewares,
 			})),
+			redirects: composeRedirects
+				.filter((redirect) => redirect.serviceName === serviceName)
+				.map((redirect) => ({
+					regex: redirect.regex,
+					replacement: redirect.replacement,
+					permanent: redirect.permanent,
+				})),
+			basicAuth: composeSecurity
+				.filter((entry) => entry.serviceName === serviceName)
+				.map((entry) => ({
+					username: entry.username,
+					// bcrypt hash (decrypted by the column); Traefik users-file format.
+					password: entry.password,
+				})),
 		});
 		// Best effort: the service may simply not be running yet.
 		await bestEffort(`attach ${row.appName}/${serviceName} to the shared network`, () =>

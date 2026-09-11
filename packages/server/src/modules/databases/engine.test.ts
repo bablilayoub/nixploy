@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	assertSafeDatabaseExternalPort,
 	buildDatabaseSwarmSpec,
 	DATABASE_CONFIGS,
 	isManagedDatabaseLabels,
@@ -22,6 +23,7 @@ describe("buildDatabaseSwarmSpec placement", () => {
 		publishedPort: null,
 		targetPort: 5432,
 		kind: "postgres",
+		networks: ["production-abc12345-net"],
 	};
 	const taskTemplate = (spec: Record<string, unknown>) =>
 		spec.TaskTemplate as { Placement?: { Constraints?: string[] } };
@@ -184,5 +186,89 @@ describe("isManagedDatabaseLabels", () => {
 		expect(isManagedDatabaseLabels(null)).toBe(false);
 		expect(isManagedDatabaseLabels({ "nixploy.managed": "true" })).toBe(false);
 		expect(isManagedDatabaseLabels({ "nixploy.service.type": "postgres" })).toBe(false);
+	});
+});
+
+describe("buildDatabaseSwarmSpec hardening", () => {
+	const def: ServiceDefinition = {
+		name: "pg-abc123",
+		image: "postgres:17",
+		env: [],
+		args: [],
+		volumeName: "pg-abc123-data",
+		dataDir: "/var/lib/postgresql/data",
+		publishedPort: null,
+		targetPort: 5432,
+		kind: "postgres",
+		networks: ["production-abc12345-net"],
+	};
+	const task = (spec: Record<string, unknown>) =>
+		spec.TaskTemplate as {
+			ContainerSpec: Record<string, unknown>;
+			Networks: unknown;
+			Resources: unknown;
+			LogDriver: unknown;
+		};
+
+	it("joins the environment overlay only — never the Traefik-facing one", () => {
+		// The panel reaches a managed database with `docker exec`, so there is
+		// no reason for it to be resolvable by every routed tenant service.
+		expect(task(buildDatabaseSwarmSpec(def, 1)).Networks).toEqual([
+			{ Target: "production-abc12345-net" },
+		]);
+	});
+
+	it("drops capabilities, forbids privilege escalation and rotates logs", () => {
+		const container = task(buildDatabaseSwarmSpec(def, 1)).ContainerSpec;
+		expect(container.CapabilityDrop).toEqual(["ALL"]);
+		expect(container.CapabilityAdd).toEqual([
+			"CHOWN",
+			"DAC_OVERRIDE",
+			"FOWNER",
+			"KILL",
+			"NET_BIND_SERVICE",
+			"SETGID",
+			"SETUID",
+		]);
+		expect(container.Privileges).toEqual({ NoNewPrivileges: true });
+		expect(container.Ulimits).toEqual([{ Name: "nofile", Soft: 65536, Hard: 65536 }]);
+		expect(task(buildDatabaseSwarmSpec(def, 1)).LogDriver).toEqual({
+			Name: "json-file",
+			Options: { "max-size": "10m", "max-file": "3" },
+		});
+	});
+
+	it("caps Pids and fills missing limits from the org quota", () => {
+		expect(task(buildDatabaseSwarmSpec(def, 1)).Resources).toEqual({ Limits: { Pids: 1024 } });
+		const quota = buildDatabaseSwarmSpec(
+			{ ...def, memoryLimit: 512, quotaDefaults: { memoryBytes: 999, nanoCpus: 2e9 } },
+			1,
+		);
+		expect(task(quota).Resources).toEqual({
+			Limits: { MemoryBytes: 512, NanoCPUs: 2e9, Pids: 1024 },
+		});
+	});
+
+	it("publishes an external port only when the row opted in", () => {
+		expect(buildDatabaseSwarmSpec(def, 1)).not.toHaveProperty("EndpointSpec");
+		expect(buildDatabaseSwarmSpec({ ...def, publishedPort: 35432 }, 1).EndpointSpec).toEqual({
+			Mode: "vip",
+			Ports: [{ Protocol: "tcp", PublishedPort: 35432, TargetPort: 5432, PublishMode: "host" }],
+		});
+	});
+});
+
+describe("assertSafeDatabaseExternalPort", () => {
+	it("accepts a high, unreserved port", () => {
+		expect(() => assertSafeDatabaseExternalPort(35432)).not.toThrow();
+	});
+
+	it("refuses the platform's own ports and the shared deny-list", () => {
+		// Swarm host-mode publishes on every interface, so these really collide.
+		expect(() => assertSafeDatabaseExternalPort(3000)).toThrow(/reserved by the Nixploy platform/);
+		expect(() => assertSafeDatabaseExternalPort(7946)).toThrow(/reserved by the Nixploy platform/);
+		expect(() => assertSafeDatabaseExternalPort(443)).toThrow(/not allowed/);
+		expect(() => assertSafeDatabaseExternalPort(5432)).toThrow(/not allowed/);
+		expect(() => assertSafeDatabaseExternalPort(2375)).toThrow(/not allowed/);
 	});
 });

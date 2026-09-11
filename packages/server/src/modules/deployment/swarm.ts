@@ -1,13 +1,15 @@
 import type Docker from "dockerode";
-import { eq } from "drizzle-orm";
+import { and, count, eq, isNull } from "drizzle-orm";
 import { db } from "../../db";
-import { environments, mounts, ports } from "../../db/schema";
+import { domains, environments, mounts, ports } from "../../db/schema";
 import { getSwarmNetwork, resolveFileMountPath } from "../application/paths";
 import { mergeNodeConstraint } from "../cluster/placement";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
+import { getQuotaResourceDefaults, type QuotaResourceDefaults } from "../projects/quotas";
 import type { DeploymentContext } from "./context";
 import { getDocker } from "./docker";
 import { envToArray, mergeEnv } from "./env";
+import { ensureEnvironmentNetwork, INTERNAL_NETWORK_NAME, isPlatformNetwork } from "./network";
 import type { ApplicationRow } from "./sources";
 
 /** Drop Traefik/hijack labels from user-supplied swarm label maps. */
@@ -22,18 +24,61 @@ export function sanitizeSwarmLabels(raw: unknown): Record<string, string> | unde
 	return Object.keys(out).length > 0 ? out : undefined;
 }
 
-/** Only allow the shared overlay (plus explicit attachable targets named nixploy-*). */
-export function sanitizeNetworkAttachments(raw: unknown): Docker.NetworkAttachmentConfig[] {
-	const fallback: Docker.NetworkAttachmentConfig[] = [{ Target: getSwarmNetwork() }];
-	if (!Array.isArray(raw) || raw.length === 0) return fallback;
-	const allowed = raw.filter((entry): entry is Docker.NetworkAttachmentConfig => {
-		if (!entry || typeof entry !== "object") return false;
+/** Which overlays a tenant service belongs on. See `deployment/network.ts`. */
+export interface TenantNetworkContext {
+	/** Private per-environment overlay; every service of the env joins it. */
+	environmentNetwork: string;
+	/**
+	 * Join the shared `nixploy-network` so Traefik can dial the service. True
+	 * only for services that are actually routed (≥ 1 domain, or a preview).
+	 */
+	shared: boolean;
+}
+
+/**
+ * Network attachments for a tenant swarm service: always the environment's
+ * private overlay, `nixploy-network` only when the service is routed, plus
+ * any extra platform (`nixploy-*`) overlay the instance admin listed in
+ * `networkSwarm`.
+ *
+ * Two targets can never come from the override list, whoever asks:
+ * `nixploy-network` (derived from the domains — a service with no route must
+ * not be able to put itself next to Traefik and every other tenant) and
+ * `nixploy-internal` (the panel ↔ Postgres overlay, which no tenant workload
+ * may ever join).
+ */
+export function sanitizeNetworkAttachments(
+	raw: unknown,
+	context: TenantNetworkContext,
+): Docker.NetworkAttachmentConfig[] {
+	const shared = getSwarmNetwork();
+	const attachments: Docker.NetworkAttachmentConfig[] = [{ Target: context.environmentNetwork }];
+	if (context.shared) attachments.push({ Target: shared });
+	// Seeded with the two networks an override must never be able to name.
+	const seen = new Set<string>([context.environmentNetwork, shared, INTERNAL_NETWORK_NAME]);
+	if (!Array.isArray(raw)) return attachments;
+	for (const entry of raw) {
+		if (!entry || typeof entry !== "object") continue;
 		const target = (entry as { Target?: unknown }).Target;
-		return (
-			typeof target === "string" && (target === getSwarmNetwork() || target.startsWith("nixploy-"))
-		);
-	});
-	return allowed.length > 0 ? allowed : fallback;
+		if (typeof target !== "string" || !isPlatformNetwork(target)) continue;
+		if (seen.has(target)) continue;
+		seen.add(target);
+		attachments.push(entry as Docker.NetworkAttachmentConfig);
+	}
+	return attachments;
+}
+
+/**
+ * Whether the application is routed through Traefik, i.e. has at least one
+ * non-preview domain. Preview domains belong to the `<app>-pr-<n>` services,
+ * which attach to the shared overlay on their own.
+ */
+export async function applicationHasDomain(applicationId: string): Promise<boolean> {
+	const [row] = await db
+		.select({ value: count() })
+		.from(domains)
+		.where(and(eq(domains.applicationId, applicationId), isNull(domains.previewDeploymentId)));
+	return (row?.value ?? 0) > 0;
 }
 
 /** Parse `"512m"` / `"1g"` / `"1024"` (bytes) into bytes. */
@@ -89,6 +134,61 @@ const isNotFound = (error: unknown): boolean =>
 	error !== null &&
 	(error as { statusCode?: number }).statusCode === 404;
 
+/* -------------------------------------------------------------------------- */
+/*  Container hardening defaults                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Baseline hardening applied to every tenant workload (applications,
+ * databases and — in compose shape — compose stacks).
+ *
+ * Docker's default capability set is ~14 caps wide and includes `NET_RAW`
+ * (ARP/DNS spoofing on a shared L2), `SETPCAP`, `MKNOD` and `AUDIT_WRITE`.
+ * We drop everything and add back only what standard images need to start:
+ * dropping privileges (`gosu`/`su-exec` → SETUID/SETGID), fixing ownership
+ * of a fresh data volume (CHOWN/FOWNER/DAC_OVERRIDE), binding :80/:443
+ * inside the container (NET_BIND_SERVICE) and signalling children (KILL).
+ *
+ * Verified on a local swarm with `traefik/whoami`, `nginx:alpine`,
+ * `postgres:17`, `mysql:9`, `mariadb:11`, `redis:8-alpine` and
+ * `louislam/uptime-kuma`: all start, initialise their data dir and serve.
+ */
+export const DEFAULT_CAPABILITY_DROP: readonly string[] = ["ALL"];
+export const DEFAULT_CAPABILITY_ADD: readonly string[] = [
+	"CHOWN",
+	"DAC_OVERRIDE",
+	"FOWNER",
+	"KILL",
+	"NET_BIND_SERVICE",
+	"SETGID",
+	"SETUID",
+];
+
+/** `no-new-privileges`: a setuid binary inside the container cannot re-gain caps. */
+export const DEFAULT_PRIVILEGES = { NoNewPrivileges: true } as const;
+
+/** Fork-bomb ceiling (`TaskTemplate.Resources.Limits.Pids`). */
+export const DEFAULT_PIDS_LIMIT = 1024;
+
+/** File-descriptor ceiling; `nofile` is the one limit images routinely blow. */
+export const DEFAULT_NOFILE_ULIMIT = 65536;
+
+/**
+ * Log rotation for tenant tasks. `docker service logs` (and the panel's log
+ * viewer) needs json-file or journald, and an unbounded json-file fills the
+ * host disk — the platform services have carried these options since the
+ * installer was written, tenant services did not.
+ */
+export const DEFAULT_LOG_DRIVER = {
+	Name: "json-file",
+	Options: { "max-size": "10m", "max-file": "3" },
+} as const;
+
+/** `ContainerSpec.Ulimits` entries the engine accepts (API ≥ 1.45). */
+export const defaultUlimits = (): Array<{ Name: string; Soft: number; Hard: number }> => [
+	{ Name: "nofile", Soft: DEFAULT_NOFILE_ULIMIT, Hard: DEFAULT_NOFILE_ULIMIT },
+];
+
 export interface ContainerSpecInput {
 	imageTag: string;
 	env: string[];
@@ -102,6 +202,11 @@ export interface ContainerSpecInput {
  * are dropped by JSON serialization and the engine then keeps the OLD value
  * on service update — so clearing a custom command, every env var, or a
  * healthcheck must send `[]`/`null`, not omit the key.
+ *
+ * The hardening keys are written explicitly for the same reason **and** so a
+ * live spec that grew `Privileges` / `CapabilityAdd` out of band (a manual
+ * `docker service update`) is reset on the next deploy instead of surviving
+ * the merge in {@link upsertSwarmService}.
  */
 export function buildContainerSpec(input: ContainerSpecInput): Docker.ContainerSpec {
 	return {
@@ -110,7 +215,42 @@ export function buildContainerSpec(input: ContainerSpecInput): Docker.ContainerS
 		Mounts: input.mounts,
 		Command: input.command ? ["/bin/sh", "-c", input.command] : null,
 		HealthCheck: input.healthCheck,
+		CapabilityAdd: [...DEFAULT_CAPABILITY_ADD],
+		CapabilityDrop: [...DEFAULT_CAPABILITY_DROP],
+		Privileges: { ...DEFAULT_PRIVILEGES },
+		Ulimits: defaultUlimits(),
 	} as unknown as Docker.ContainerSpec;
+}
+
+/**
+ * `TaskTemplate.Resources` for a tenant service: the row's explicit limits
+ * win, the org quota fills the blanks, and `Pids` is always capped.
+ */
+export function buildTaskResources(
+	limits: Docker.ResourceLimits,
+	reservations: Docker.ResourceRequirements["Reservations"],
+	defaults: QuotaResourceDefaults = {},
+): Docker.ResourceRequirements {
+	const merged: Docker.ResourceLimits & { Pids?: number } = { ...limits };
+	if (merged.MemoryBytes === undefined && defaults.memoryBytes !== undefined) {
+		merged.MemoryBytes = defaults.memoryBytes;
+	}
+	if (merged.NanoCPUs === undefined && defaults.nanoCpus !== undefined) {
+		merged.NanoCPUs = defaults.nanoCpus;
+	}
+	merged.Pids = DEFAULT_PIDS_LIMIT;
+	return {
+		Limits: merged,
+		Reservations: reservations && Object.keys(reservations).length > 0 ? reservations : undefined,
+	};
+}
+
+/** Resource defaults derived from the org quota of an environment's project. */
+export async function loadQuotaDefaults(
+	organizationId: string | null | undefined,
+): Promise<QuotaResourceDefaults> {
+	if (!organizationId) return {};
+	return getQuotaResourceDefaults(organizationId);
 }
 
 export interface UpsertSwarmServiceOptions {
@@ -197,17 +337,26 @@ export async function upsertSwarmService(
 	await ensureSwarmNetwork(docker);
 	const swarmNodeId = ctx.serverId ? await getServerSwarmNodeId(ctx.serverId) : null;
 
-	const [applicationMounts, applicationPorts, environment] = await Promise.all([
+	const [applicationMounts, applicationPorts, environment, routed] = await Promise.all([
 		db.query.mounts.findMany({ where: eq(mounts.applicationId, application.applicationId) }),
 		db.query.ports.findMany({ where: eq(ports.applicationId, application.applicationId) }),
 		db.query.environments.findFirst({
 			where: eq(environments.environmentId, application.environmentId),
 			with: { project: true },
 		}),
+		// A preview always carries its own generated domain.
+		options.preview ? Promise.resolve(true) : applicationHasDomain(application.applicationId),
 	]);
+	if (!environment) {
+		throw new Error(`Environment ${application.environmentId} not found`);
+	}
+
+	// Private per-environment overlay; the shared one only when Traefik routes here.
+	const environmentNetwork = await ensureEnvironmentNetwork(environment);
+	const quotaDefaults = await loadQuotaDefaults(environment.project.organizationId);
 
 	// Env inheritance: project → environment → service (service wins).
-	const mergedEnv = mergeEnv(environment?.project.env, environment?.env, application.env);
+	const mergedEnv = mergeEnv(environment.project.env, environment.env, application.env);
 	const env = envToArray(mergedEnv);
 
 	const { mounts: mountSpecs, ports: portSpecs } = buildRuntimeSpecs(
@@ -240,17 +389,18 @@ export async function upsertSwarmService(
 				command: application.command,
 				healthCheck: (application.healthCheckSwarm as Docker.HealthConfig | null) ?? null,
 			}),
-			Resources: {
-				Limits: Object.keys(limits).length > 0 ? limits : undefined,
-				Reservations: Object.keys(reservations).length > 0 ? reservations : undefined,
-			},
+			Resources: buildTaskResources(limits, reservations, quotaDefaults),
 			RestartPolicy:
 				(application.restartPolicySwarm as Docker.TaskRestartPolicy | null) ?? undefined,
 			Placement: withNodeConstraint(
 				application.placementSwarm as Docker.Placement | null,
 				swarmNodeId,
 			),
-			Networks: sanitizeNetworkAttachments(application.networkSwarm),
+			Networks: sanitizeNetworkAttachments(application.networkSwarm, {
+				environmentNetwork,
+				shared: routed,
+			}),
+			LogDriver: { ...DEFAULT_LOG_DRIVER, Options: { ...DEFAULT_LOG_DRIVER.Options } },
 		},
 		// Previews are throwaway single replicas; the parent's mode/replica
 		// overrides (global mode, N replicas) are production sizing.

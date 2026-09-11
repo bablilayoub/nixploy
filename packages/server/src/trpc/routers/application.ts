@@ -31,6 +31,7 @@ import {
 } from "../../modules/application";
 import type { ApplicationWithTenancy } from "../../modules/application/org";
 import { auditFromSession } from "../../modules/audit";
+import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { redactServerCommandLog } from "../../modules/cluster";
 import {
 	applicationReadiness,
@@ -77,6 +78,25 @@ function publicApplicationServer<T>(application: T): T {
 		},
 	} as T;
 }
+
+/**
+ * Overrides that weaken the platform's own isolation are instance-admin only.
+ *
+ * `networkSwarm` can only target the platform namespace (`nixploy-*`, see
+ * `utils/swarm-overrides.ts`) — the environment overlay and the domain-derived
+ * `nixploy-network` attachment are computed, not configurable — so every value
+ * it accepts reaches infrastructure a tenant must not join. The same gate
+ * covers a future `privilegesSwarm` column (`relaxesContainerHardening`).
+ */
+const assertHardeningOverrideAllowed = async (
+	session: { user: { id: string; role?: string | null } },
+	input: { networkSwarm?: unknown },
+): Promise<void> => {
+	const networks = input.networkSwarm;
+	if (Array.isArray(networks) && networks.length > 0) {
+		await assertInstanceAdmin(session);
+	}
+};
 
 /** Fields that change the swarm service spec and trigger a re-upsert. */
 const swarmSpecFields = {
@@ -300,6 +320,7 @@ export const applicationRouter = router({
 			}
 			await assertApplicationAccess(input.applicationId, organizationId);
 			await assertServerInOrganization(input.serverId, organizationId);
+			await assertHardeningOverrideAllowed(ctx.session, input);
 
 			const { applicationId, ...data } = input;
 			const application = await updateApplication(applicationId, data);

@@ -64,8 +64,13 @@ describe("loadMergedApplicationEnv", () => {
 });
 
 describe("buildApplicationSwarmSpec", () => {
+	const netOptions = { environmentNetwork: "production-abc12345-net", routed: false };
 	const wire = (env: string[]) =>
-		JSON.parse(JSON.stringify(buildApplicationSwarmSpec(application, [], [], "myapp:latest", env)));
+		JSON.parse(
+			JSON.stringify(
+				buildApplicationSwarmSpec(application, [], [], "myapp:latest", env, netOptions),
+			),
+		);
 
 	it("puts the merged env on the container spec", () => {
 		const spec = wire(["PROJECT_VAR=1", "DATABASE_URL=postgres://db/app"]);
@@ -86,7 +91,7 @@ describe("buildApplicationSwarmSpec", () => {
 					[],
 					"myapp:latest",
 					[],
-					{ swarmNodeId: "node123" },
+					{ ...netOptions, swarmNodeId: "node123" },
 				),
 			),
 		);
