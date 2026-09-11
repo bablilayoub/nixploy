@@ -1,12 +1,12 @@
 import { relations } from "drizzle-orm";
-import { boolean, integer, pgTable, text } from "drizzle-orm/pg-core";
+import { bigint, boolean, index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { encryptedText } from "../custom-columns";
 import { applications } from "./application";
 import { organizations } from "./auth";
 import { compose } from "./compose";
 import { mariadb, mongo, mysql, postgres, redis } from "./database";
-import { databaseType, serviceType } from "./enums";
+import { backupRunKind, backupRunStatus, databaseType, serviceType } from "./enums";
 import { createdAt, idColumn } from "./utils";
 
 /** An S3-compatible bucket where backups are uploaded. */
@@ -80,6 +80,43 @@ export const volumeBackups = pgTable("volume_backup", {
 	createdAt: createdAt(),
 });
 
+/**
+ * One row per backup execution (database dump, volume archive or instance
+ * export). `backupId` / `volumeBackupId` are both null for instance runs.
+ */
+export const backupRuns = pgTable(
+	"backup_run",
+	{
+		backupRunId: idColumn("backup_run_id"),
+		backupId: text("backup_id").references(() => backups.backupId, { onDelete: "cascade" }),
+		volumeBackupId: text("volume_backup_id").references(() => volumeBackups.volumeBackupId, {
+			onDelete: "cascade",
+		}),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		kind: backupRunKind("kind").notNull(),
+		status: backupRunStatus("status").notNull().default("running"),
+		startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+		finishedAt: timestamp("finished_at", { withTimezone: true }),
+		/** Uploaded object size. */
+		bytes: bigint("bytes", { mode: "number" }),
+		/** S3 key of the uploaded object. */
+		objectKey: text("object_key"),
+		destinationId: text("destination_id").references(() => destinations.destinationId, {
+			onDelete: "set null",
+		}),
+		error: text("error"),
+		/** `schedule` | `manual`. */
+		trigger: text("trigger").notNull().default("manual"),
+	},
+	(table) => [
+		index("backup_run_org_started_idx").on(table.organizationId, table.startedAt.desc()),
+		index("backup_run_backup_started_idx").on(table.backupId, table.startedAt.desc()),
+		index("backup_run_volume_started_idx").on(table.volumeBackupId, table.startedAt.desc()),
+	],
+);
+
 export const destinationsRelations = relations(destinations, ({ one, many }) => ({
 	organization: one(organizations, {
 		fields: [destinations.organizationId],
@@ -137,3 +174,29 @@ export const insertBackupSchema = createInsertSchema(backups);
 export const selectBackupSchema = createSelectSchema(backups);
 export const insertVolumeBackupSchema = createInsertSchema(volumeBackups);
 export const selectVolumeBackupSchema = createSelectSchema(volumeBackups);
+
+export const backupRunsRelations = relations(backupRuns, ({ one }) => ({
+	organization: one(organizations, {
+		fields: [backupRuns.organizationId],
+		references: [organizations.id],
+	}),
+	backup: one(backups, {
+		fields: [backupRuns.backupId],
+		references: [backups.backupId],
+	}),
+	volumeBackup: one(volumeBackups, {
+		fields: [backupRuns.volumeBackupId],
+		references: [volumeBackups.volumeBackupId],
+	}),
+	destination: one(destinations, {
+		fields: [backupRuns.destinationId],
+		references: [destinations.destinationId],
+	}),
+}));
+
+export const insertBackupRunSchema = createInsertSchema(backupRuns);
+export const selectBackupRunSchema = createSelectSchema(backupRuns);
+export type BackupRun = typeof backupRuns.$inferSelect;
+export type NewBackupRun = typeof backupRuns.$inferInsert;
+export type BackupRunKind = BackupRun["kind"];
+export type BackupRunStatus = BackupRun["status"];

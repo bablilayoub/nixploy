@@ -46,6 +46,27 @@ export const deploymentStatus = pgEnum("deployment_status", [
 	"cancelled",
 ]);
 
+/**
+ * What started a deployment. `manual` = a signed-in user clicked Deploy,
+ * `api` = REST/CLI/MCP call with an API key, `webhook` = provider push,
+ * `system` = boot recovery / internal maintenance.
+ */
+export const deploymentTrigger = pgEnum("deployment_trigger", [
+	"manual",
+	"webhook",
+	"api",
+	"schedule",
+	"preview",
+	"rollback",
+	"redeploy",
+	"gitops",
+	"system",
+]);
+
+export const backupRunKind = pgEnum("backup_run_kind", ["database", "volume", "instance"]);
+
+export const backupRunStatus = pgEnum("backup_run_status", ["running", "success", "error"]);
+
 export const previewStatus = pgEnum("preview_status", [
 	"idle",
 	"running",

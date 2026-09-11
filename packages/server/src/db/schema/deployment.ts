@@ -3,7 +3,7 @@ import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { applications } from "./application";
 import { compose } from "./compose";
-import { deploymentStatus, previewStatus } from "./enums";
+import { deploymentStatus, deploymentTrigger, previewStatus } from "./enums";
 import { servers } from "./server";
 import { createdAt, idColumn } from "./utils";
 
@@ -21,6 +21,15 @@ export const deployments = pgTable(
 		pid: text("pid"),
 		isPreview: boolean("is_preview").notNull().default(false),
 		errorMessage: text("error_message"),
+		/** Provenance: resolved after clone (git) or set from the webhook payload. */
+		commitSha: text("commit_sha"),
+		/** Full commit message; the UI shows the first line. */
+		commitMessage: text("commit_message"),
+		commitAuthor: text("commit_author"),
+		/** What started the job (null on rows older than migration 0020). */
+		trigger: deploymentTrigger("trigger"),
+		/** User id for `manual`/`api`, `webhook:<provider>` for pushes, `system` otherwise. */
+		triggeredBy: text("triggered_by"),
 		startedAt: timestamp("started_at", { withTimezone: true }),
 		finishedAt: timestamp("finished_at", { withTimezone: true }),
 		applicationId: text("application_id").references(() => applications.applicationId, {
@@ -137,6 +146,8 @@ export const rollbacksRelations = relations(rollbacks, ({ one }) => ({
 
 export const insertDeploymentSchema = createInsertSchema(deployments);
 export const selectDeploymentSchema = createSelectSchema(deployments);
+export type Deployment = typeof deployments.$inferSelect;
+export type DeploymentTrigger = NonNullable<Deployment["trigger"]>;
 export const insertPreviewDeploymentSchema = createInsertSchema(previewDeployments);
 export const selectPreviewDeploymentSchema = createSelectSchema(previewDeployments);
 export const insertRollbackSchema = createInsertSchema(rollbacks);
