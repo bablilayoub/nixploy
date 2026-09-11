@@ -68,27 +68,43 @@ async function imageExists(image: string): Promise<{ ok: boolean; error?: string
 	const hubRepo =
 		ref.registry === "docker.io" || ref.registry === "docker.n8n.io" ? ref.repository : null;
 
+	let lastNetworkError: string | null = null;
 	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-		if (hubRepo) {
-			const status = await dockerHubTagExists(hubRepo, ref.tag);
-			if (status === "ok") return { ok: true };
-			if (status === "missing") {
-				return { ok: false, error: "tag not found on Docker Hub" };
+		try {
+			if (hubRepo) {
+				const status = await dockerHubTagExists(hubRepo, ref.tag);
+				if (status === "ok") return { ok: true };
+				if (status === "missing") {
+					return { ok: false, error: "tag not found on Docker Hub" };
+				}
+				await sleep(1_500 * 2 ** attempt);
+				continue;
 			}
-			await sleep(1_500 * 2 ** attempt);
-			continue;
-		}
 
-		const digest = await fetchRemoteDigest(image);
-		if (digest) return { ok: true };
-		if (attempt + 1 < MAX_RETRIES) {
-			await sleep(1_000 * 2 ** attempt);
-			continue;
+			const digest = await fetchRemoteDigest(image);
+			if (digest) return { ok: true };
+			if (attempt + 1 < MAX_RETRIES) {
+				await sleep(1_000 * 2 ** attempt);
+				continue;
+			}
+			return { ok: false, error: "manifest not found or registry returned non-OK" };
+		} catch (error) {
+			// A dropped connection or a timed-out registry (`fetch failed`,
+			// ECONNRESET, abort) is transient: retry like a rate limit instead
+			// of failing the whole catalog check on one flaky mirror.
+			lastNetworkError = error instanceof Error ? error.message : String(error);
+			if (attempt + 1 < MAX_RETRIES) {
+				await sleep(1_000 * 2 ** attempt);
+			}
 		}
-		return { ok: false, error: "manifest not found or registry returned non-OK" };
 	}
 
-	return { ok: false, error: "rate limited after retries" };
+	return {
+		ok: false,
+		error: lastNetworkError
+			? `registry unreachable after ${MAX_RETRIES} attempts: ${lastNetworkError}`
+			: "rate limited after retries",
+	};
 }
 
 /**
