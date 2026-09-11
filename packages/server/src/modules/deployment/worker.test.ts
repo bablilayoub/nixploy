@@ -34,6 +34,7 @@ const { updates, deploymentRow, applicationLookup, hooks, pipeline } = vi.hoiste
 	pipeline: {
 		buildImage: vi.fn(async () => "app:latest"),
 		upsertSwarmService: vi.fn(async () => {}),
+		waitForServiceConvergence: vi.fn(async () => {}),
 	},
 }));
 
@@ -100,7 +101,10 @@ vi.mock("./hooks", async (importOriginal) => ({
 	runComposeExecHook: hooks.runComposeExecHook,
 }));
 vi.mock("./builders", () => ({ buildImage: pipeline.buildImage }));
-vi.mock("./swarm", () => ({ upsertSwarmService: pipeline.upsertSwarmService }));
+vi.mock("./swarm", () => ({
+	upsertSwarmService: pipeline.upsertSwarmService,
+	waitForServiceConvergence: pipeline.waitForServiceConvergence,
+}));
 vi.mock("./network", () => ({ ensureEnvironmentNetwork: vi.fn(async () => "env-net") }));
 vi.mock("./sources", () => ({
 	cloneGitSource: vi.fn(async () => "/tmp/code"),

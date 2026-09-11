@@ -423,3 +423,7 @@ through `modules/backups` to S3 destinations on schedules.
   down previews past their `expiresAt`, and prunes deployment log files older
   than 30 days. Deleting an application or compose service also removes its
   log files, which live outside the app dir and have no FK to cascade through.
+
+## Convergence gate (2026-09-11)
+
+After `upsertSwarmService` the worker waits for one task of the service to reach `running` (Swarm reports it only after the image's HEALTHCHECK passed) before running the post-deploy hook and logging `Deployment successful`. Three consecutive failed/rejected tasks fail the deployment with the engine's reason; the budget is `NIXPLOY_CONVERGENCE_TIMEOUT_MS` (default 180 s). With start-first updates the previous version keeps serving in the meantime.

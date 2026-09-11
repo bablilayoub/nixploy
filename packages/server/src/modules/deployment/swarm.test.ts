@@ -292,3 +292,33 @@ describe("resolveContainerPrivileges", () => {
 		});
 	});
 });
+
+describe("assessConvergence", () => {
+	it("reports running as soon as one task runs", async () => {
+		const { assessConvergence } = await import("./swarm");
+		expect(
+			assessConvergence([
+				{ Status: { State: "failed" }, CreatedAt: "2026-01-01T00:00:00Z" },
+				{ Status: { State: "running" }, CreatedAt: "2026-01-01T00:00:05Z" },
+			]),
+		).toEqual({ state: "running" });
+	});
+
+	it("fails after three consecutive failed tasks with the engine reason", async () => {
+		const { assessConvergence } = await import("./swarm");
+		expect(
+			assessConvergence([
+				{ Status: { State: "failed", Err: "exec: not found" }, CreatedAt: "2026-01-01T00:00:03Z" },
+				{ Status: { State: "rejected", Err: "no such image" }, CreatedAt: "2026-01-01T00:00:02Z" },
+				{ Status: { State: "failed", Err: "oom" }, CreatedAt: "2026-01-01T00:00:01Z" },
+			]),
+		).toEqual({ state: "failed", reason: "exec: not found" });
+	});
+
+	it("keeps waiting while tasks are preparing", async () => {
+		const { assessConvergence } = await import("./swarm");
+		expect(
+			assessConvergence([{ Status: { State: "preparing" }, CreatedAt: "2026-01-01T00:00:00Z" }]),
+		).toEqual({ state: "pending" });
+	});
+});

@@ -57,7 +57,7 @@ import {
 	resolveImageDigest,
 	resolveRegistryAuth,
 } from "./sources";
-import { upsertSwarmService } from "./swarm";
+import { upsertSwarmService, waitForServiceConvergence } from "./swarm";
 
 const log = createLogger("deploy-worker");
 
@@ -336,6 +336,17 @@ async function runApplicationJob(
 		preview: Boolean(preview),
 	});
 	checkpoint();
+
+	// `done` means the new version serves: wait for one running task (Swarm
+	// reports `running` only after the image's HEALTHCHECK passed). A rollout
+	// whose tasks keep failing fails the deployment with the engine's reason;
+	// with start-first updates the previous version keeps serving meanwhile.
+	ctx.logger.line("Waiting for the service to start...");
+	await waitForServiceConvergence(deployTarget.appName, {
+		log: (line) => ctx.logger.line(line),
+	});
+	checkpoint();
+	ctx.logger.line("Service is running");
 
 	if (preview) {
 		// Route (parent's container port) + parent's basic-auth/redirects.

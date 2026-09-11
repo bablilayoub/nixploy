@@ -180,6 +180,7 @@ Helpers: `modules/deployment/paths.ts` (canonical `getConfigDir`, apps, logs, ss
 | `NIXPLOY_COMMAND_TIMEOUT_MS` | exec, docker | local spawn hard timeout, process tree killed on expiry (default 30 min; fallback for SSH too) |
 | `NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS` | exec | SSH command hard timeout (default 30 min) |
 | `NIXPLOY_DEPLOY_TIMEOUT_MS` | worker | per-deployment deadline, job cancelled + row `error` on expiry (default 60 min) |
+| `NIXPLOY_CONVERGENCE_TIMEOUT_MS` | 180000 | Budget for a rollout to produce one running task before the deployment is marked `done`; tasks that keep failing fail the deployment with the engine's reason (`deployment/swarm.ts` `waitForServiceConvergence`). |
 | `NIXPLOY_SHUTDOWN_GRACE_MS` | server.ts, queue | SIGTERM wait for running deploys before they are cancelled (default 60 s; keep below Swarm `--stop-grace-period`). Rows still `queued` are never touched — the next boot claims them |
 | `NIXPLOY_CRON_CATCH_UP` | schedules, backups | `1` replays every overdue schedule/backup ONCE at boot (sequentially, detached). Default off: ticks missed while the panel was down are only warned about. Safe against double runs because `last_run_at` is stamped before the run starts |
 | `NIXPLOY_MIGRATIONS_DIR`, `NIXPLOY_APP_VERSION`, `NIXPLOY_IMAGE` | image, updates | set by Dockerfile / install |
