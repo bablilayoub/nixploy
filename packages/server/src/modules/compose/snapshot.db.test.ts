@@ -9,6 +9,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { TenantFixture } from "../../trpc/tenancy.harness";
 
+// Compose interpolation syntax under test, spelled without a literal `${…}`
+// so Biome does not read it as a forgotten template string.
+const IMAGE_PLACEHOLDER = ["$", "{IMAGE}"].join("");
+const SOURCE_WITH_VARIABLE = `services:\n  web:\n    image: ${IMAGE_PLACEHOLDER}\n`;
+
 const testUrl = process.env.DATABASE_URL_TEST;
 
 describe.skipIf(!testUrl)("compose deployment snapshots", () => {
@@ -69,7 +74,7 @@ describe.skipIf(!testUrl)("compose deployment snapshots", () => {
 		await snapshot.recordComposeSnapshot({
 			composeId: tenant.composeId,
 			deploymentId,
-			sourceFile: "services:\n  web:\n    image: ${IMAGE}\n",
+			sourceFile: SOURCE_WITH_VARIABLE,
 			renderedFile: "services:\n  web:\n    image: traefik/whoami:v1\n",
 			serviceEnv: "IMAGE=traefik/whoami:v1",
 			mergedEnv: "SHARED=1\nIMAGE=traefik/whoami:v1",
@@ -185,7 +190,7 @@ describe.skipIf(!testUrl)("compose deployment snapshots", () => {
 		await snapshot.recordComposeSnapshot({
 			composeId: tenant.composeId,
 			deploymentId,
-			sourceFile: "services:\n  web:\n    image: ${IMAGE}\n",
+			sourceFile: SOURCE_WITH_VARIABLE,
 			renderedFile: "services:\n  web:\n    image: traefik/whoami:v1\n",
 			serviceEnv: "IMAGE=traefik/whoami:v1",
 			// Deliberately different: writing the MERGED env back would absorb
@@ -204,7 +209,7 @@ describe.skipIf(!testUrl)("compose deployment snapshots", () => {
 		const updated = await dbModule.db.query.compose.findFirst({
 			where: drizzle.eq(schema.compose.composeId, tenant.composeId),
 		});
-		expect(updated?.composeFile).toContain("${IMAGE}");
+		expect(updated?.composeFile).toContain(IMAGE_PLACEHOLDER);
 		expect(updated?.env).toBe("IMAGE=traefik/whoami:v1");
 		expect(updated?.env).not.toContain("SHARED=from-project");
 	});

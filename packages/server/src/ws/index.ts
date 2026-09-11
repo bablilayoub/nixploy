@@ -7,8 +7,8 @@ import { handleDeploymentLogs } from "./deployment-logs";
 import { handleDockerLogs } from "./docker-logs";
 import { handleDockerStats } from "./docker-stats";
 import { handleDockerTerminal } from "./docker-terminal";
-import { handleServerTerminal } from "./server-terminal";
 import { handlePlatformEvents } from "./events";
+import { handleServerTerminal } from "./server-terminal";
 
 export type WsConnectionHandler = (
 	ws: WebSocket,
