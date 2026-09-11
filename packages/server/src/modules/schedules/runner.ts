@@ -8,6 +8,7 @@ import {
 	remoteCommandTimeoutMs,
 } from "../../utils/exec";
 import { badRequest, preconditionFailed } from "../errors";
+import { runImageJob } from "./image-job";
 
 /**
  * Executes a schedule's command/script against its target:
@@ -15,10 +16,18 @@ import { badRequest, preconditionFailed } from "../errors";
  *   locally or over SSH when the service is placed on a remote server)
  * - `server`: on a remote managed server over SSH
  * - `nixploy-server`: inside the Nixploy container itself (the local process)
+ *
+ * `runMode: "image"` is the second axis: the command runs in a throwaway
+ * `docker run --rm` container built from the row's image instead of exec-ing
+ * into a running one, so a STOPPED service can still host a job (see
+ * `image-job.ts`). It is only meaningful for `application` / `compose`
+ * targets, which is where the env and the overlay network come from.
  */
 
 export type ScheduleTarget = {
 	scheduleType: "application" | "compose" | "server" | "nixploy-server";
+	runMode?: "exec" | "image" | null;
+	image?: string | null;
 	appName?: string | null;
 	applicationId?: string | null;
 	composeId?: string | null;
@@ -106,6 +115,15 @@ async function findContainerId(
  * failure happened on a remote server).
  */
 export async function runScheduleCommand(target: ScheduleTarget): Promise<string> {
+	if (target.runMode === "image") {
+		if (target.scheduleType !== "application" && target.scheduleType !== "compose") {
+			throw badRequest(
+				"Image schedules run against an application or compose service — server and host schedules are always exec",
+			);
+		}
+		return runImageJob(target);
+	}
+
 	const inner = buildInnerCommand(target);
 
 	switch (target.scheduleType) {

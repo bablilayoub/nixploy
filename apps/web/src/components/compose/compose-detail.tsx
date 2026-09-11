@@ -13,6 +13,7 @@ import { EnvironmentTab } from "@/components/compose/environment-tab";
 import { GeneralTab } from "@/components/compose/general-tab";
 import { LogsTab } from "@/components/compose/logs-tab";
 import { MonitoringTab } from "@/components/compose/monitoring-tab";
+import { RollbacksTab } from "@/components/compose/rollbacks-tab";
 import { SettingsTab } from "@/components/compose/settings-tab";
 import { TerminalTab } from "@/components/compose/terminal-tab";
 import { SchedulesPanel } from "@/components/schedules/schedules-panel";
@@ -65,6 +66,7 @@ const TOP_TABS = [
 /** Sub-tab → its top-level tab, so ?tab=logs / ?tab=deployments deep-link. */
 const SUB_TAB_PARENT: Record<string, string> = {
 	deployments: "deploy",
+	rollbacks: "deploy",
 	schedules: "deploy",
 	logs: "runtime",
 	monitoring: "runtime",
@@ -284,10 +286,14 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 					>
 						<SubTabsList>
 							<SubTabsTrigger value="deployments">Deployments</SubTabsTrigger>
+							<SubTabsTrigger value="rollbacks">Rollbacks</SubTabsTrigger>
 							<SubTabsTrigger value="schedules">Schedules</SubTabsTrigger>
 						</SubTabsList>
 						<TabsContent value="deployments" className="mt-0">
 							<DeploymentsTab compose={compose} />
+						</TabsContent>
+						<TabsContent value="rollbacks" className="mt-0">
+							<RollbacksTab compose={compose} />
 						</TabsContent>
 						<TabsContent value="schedules" className="mt-0">
 							<SchedulesPanel

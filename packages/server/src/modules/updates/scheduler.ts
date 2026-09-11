@@ -3,6 +3,7 @@ import { createLogger } from "../../lib/logger";
 import { bestEffort } from "../../utils/best-effort";
 import { applyUpdate, clearStaleUpdateFlag } from "./apply";
 import { checkForUpdates } from "./check";
+import { autoUpdateAllowed } from "./releases";
 import { DEFAULT_CHECK_CRON, getUpdateSettings, patchUpdateSettings } from "./settings";
 
 const log = createLogger("updates");
@@ -29,6 +30,15 @@ async function runUpdatePass(): Promise<void> {
 			);
 		}
 		if (result.updateAvailable && settings.autoUpdateEnabled) {
+			// A pin caps how far automatic updates may go. Say so instead of
+			// silently doing nothing every six hours.
+			const candidate = result.release?.tag ?? null;
+			if (!autoUpdateAllowed(candidate, settings.pinnedVersion)) {
+				log.info(
+					`Auto-update held back: ${candidate} is newer than the pin v${settings.pinnedVersion}`,
+				);
+				return;
+			}
 			log.info(`Auto-update: rolling ${result.latestImage}`);
 			await applyUpdate({ image: result.latestImage });
 		}

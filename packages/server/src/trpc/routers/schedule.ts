@@ -15,9 +15,11 @@ import {
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
 import {
+	assertJobImage,
 	getScheduleRunState,
 	isValidCron,
 	registerSchedule,
+	runOnceFromImage,
 	runSchedule,
 	type ScheduleRow,
 	unregisterSchedule,
@@ -160,6 +162,34 @@ const withRunState = (row: ScheduleRow) => ({
 });
 
 const scheduleTypeSchema = z.enum(["application", "compose", "server", "nixploy-server"]);
+/**
+ * How the command runs (product audit, Platform row "No standalone job/cron
+ * service"): `exec` into a running container, or a throwaway `docker run --rm`
+ * from `image`. A second axis on top of `scheduleType` — every org-scope and
+ * access check keeps working unchanged.
+ */
+const runModeSchema = z.enum(["exec", "image"]);
+const imageSchema = z.string().min(1).max(512);
+
+/**
+ * Image jobs only make sense where the env and the overlay network come
+ * from. Also rejects an image ref before it can reach a shell.
+ */
+function assertImageModeTarget(
+	runMode: "exec" | "image" | undefined,
+	scheduleType: "application" | "compose" | "server" | "nixploy-server",
+	image: string | null | undefined,
+): void {
+	if (runMode !== "image") return;
+	if (scheduleType !== "application" && scheduleType !== "compose") {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message:
+				"Image schedules run against an application or compose service — server and host schedules are always exec",
+		});
+	}
+	assertJobImage(image);
+}
 
 const targetInput = {
 	scheduleType: scheduleTypeSchema,
@@ -357,6 +387,8 @@ export const scheduleRouter = router({
 				command: z.string().min(1),
 				script: z.string().nullish(),
 				enabled: z.boolean().optional(),
+				runMode: runModeSchema.optional(),
+				image: imageSchema.nullish(),
 				...targetInput,
 			}),
 		)
@@ -370,6 +402,7 @@ export const scheduleRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "schedules.manage");
 			await assertTargetAccess(ctx.session, input);
+			assertImageModeTarget(input.runMode, input.scheduleType, input.image);
 			const appName = await resolveCanonicalAppName(input);
 			const [row] = await db
 				.insert(schedules)
@@ -381,6 +414,8 @@ export const scheduleRouter = router({
 					script: input.script ?? null,
 					enabled: input.enabled ?? true,
 					scheduleType: input.scheduleType,
+					runMode: input.runMode ?? "exec",
+					image: input.runMode === "image" ? assertJobImage(input.image) : null,
 					appName,
 					applicationId: input.applicationId ?? null,
 					composeId: input.composeId ?? null,
@@ -399,6 +434,8 @@ export const scheduleRouter = router({
 				targetName: row.name,
 				metadata: {
 					scheduleType: row.scheduleType,
+					runMode: row.runMode,
+					image: row.image,
 					cronExpression: row.cronExpression,
 					appName: row.appName,
 					serverId: row.serverId,
@@ -418,6 +455,8 @@ export const scheduleRouter = router({
 				shellType: z.enum(["bash", "sh"]).optional(),
 				command: z.string().min(1).optional(),
 				script: z.string().nullish(),
+				runMode: runModeSchema.optional(),
+				image: imageSchema.nullish(),
 				appName: z.string().nullish(),
 			}),
 		)
@@ -432,9 +471,15 @@ export const scheduleRouter = router({
 					message: `Invalid cron expression: ${input.cronExpression}`,
 				});
 			}
+			const nextRunMode = input.runMode ?? row.runMode;
+			const nextImage = input.image === undefined ? row.image : input.image;
+			assertImageModeTarget(nextRunMode, row.scheduleType, nextImage);
 			const { scheduleId, appName: _ignoredAppName, ...rest } = input;
 			const values = {
 				...rest,
+				runMode: nextRunMode,
+				// A row switched back to `exec` keeps no stale image around.
+				image: nextRunMode === "image" ? assertJobImage(nextImage) : null,
 				// Keep appName canonical — never accept a client override on update.
 				appName: await resolveCanonicalAppName(row),
 			};
@@ -501,6 +546,60 @@ export const scheduleRouter = router({
 				metadata: { scheduleType: row.scheduleType, appName: row.appName },
 			});
 			return await runSchedule(row, "manual");
+		}),
+
+	/**
+	 * Run a command once from an image, with no schedule behind it (product
+	 * audit, Platform row "no one-off run once from an image"). Same container
+	 * as an image schedule — hardening baseline, 0600 env file, the service's
+	 * environment overlay — and the output lands in the service's history.
+	 */
+	runOnce: protectedProcedure
+		.input(
+			z.object({
+				name: z.string().min(1).max(120).optional(),
+				image: imageSchema,
+				command: z.string().min(1),
+				shellType: z.enum(["bash", "sh"]).optional(),
+				applicationId: z.string().nullish(),
+				composeId: z.string().nullish(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertCapability(ctx.session.user.id, organizationId, "schedules.manage");
+			// The command runs with the service's merged env — the same bar
+			// reading those secrets clears.
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.read");
+			const scheduleType = input.applicationId ? "application" : "compose";
+			if (!input.applicationId && !input.composeId) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Pass an applicationId or a composeId",
+				});
+			}
+			await assertTargetAccess(ctx.session, {
+				scheduleType,
+				applicationId: input.applicationId ?? null,
+				composeId: input.composeId ?? null,
+			});
+			const image = assertJobImage(input.image);
+			const name = input.name ?? "Run once";
+			void auditFromSession(ctx, organizationId, {
+				action: "schedule.runOnce",
+				targetType: scheduleType,
+				targetId: input.applicationId ?? input.composeId ?? "",
+				targetName: name,
+				metadata: { image },
+			});
+			return await runOnceFromImage({
+				name,
+				image,
+				command: input.command,
+				shellType: input.shellType ?? "sh",
+				applicationId: input.applicationId ?? null,
+				composeId: input.composeId ?? null,
+			});
 		}),
 
 	/** Enable and register the cron job. */

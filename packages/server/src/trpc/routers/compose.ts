@@ -8,6 +8,7 @@ import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { ComposeValidationError } from "../../modules/compose/compose-file";
 import { listComposeContainers } from "../../modules/compose/containers";
+import { fetchComposeFromUrl } from "../../modules/compose/remote";
 import {
 	createCompose,
 	deleteCompose,
@@ -20,6 +21,12 @@ import {
 	stopCompose,
 	updateComposeById,
 } from "../../modules/compose/service";
+import {
+	findComposeSnapshot,
+	findComposeSnapshotByDeployment,
+	listComposeRollbackTargets,
+	restoreComposeSnapshot,
+} from "../../modules/compose/snapshot";
 import { composeReadiness, provenanceForSession, queueDeployment } from "../../modules/deployment";
 import {
 	assertCapability,
@@ -27,6 +34,7 @@ import {
 	hasCapability,
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
+import { bestEffort } from "../../utils/best-effort";
 import { textBlobSchema, watchPathsSchema } from "../../utils/input-limits";
 import { assertSafeGitCloneUrl } from "../../utils/public-url";
 import { appNameSchema } from "../../utils/validators";
@@ -419,4 +427,137 @@ export const composeRouter = router({
 		const row = await findComposeForOrg(input.composeId, organizationId);
 		return await listComposeContainers(row.appName, row.serverId);
 	}),
+
+	/**
+	 * Snapshots this compose service can be rolled back to, newest first.
+	 * Every render writes one; only snapshots whose deployment succeeded are
+	 * offered.
+	 */
+	rollbackTargets: protectedProcedure.input(composeIdInput).query(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		await findComposeForOrg(input.composeId, organizationId);
+		return await listComposeRollbackTargets(input.composeId);
+	}),
+
+	/**
+	 * Roll back to a snapshot: restore the compose body + the service-level env
+	 * that deployment ran with, then enqueue a normal deployment for them.
+	 * Git-backed rows keep reading the compose file from their repository — the
+	 * response says so in `restoredComposeFile`.
+	 */
+	rollback: protectedProcedure
+		.input(
+			composeIdInput.extend({
+				/** Either the snapshot id or the deployment it was captured for. */
+				snapshotId: z.string().min(1).optional(),
+				deploymentId: z.string().min(1).optional(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			// Same capability the application rollback asserts.
+			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			const row = await findComposeForOrg(input.composeId, organizationId);
+			if (!input.snapshotId && !input.deploymentId) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Pass a snapshotId or a deploymentId",
+				});
+			}
+			const snapshot = input.snapshotId
+				? await findComposeSnapshot(input.composeId, input.snapshotId)
+				: await findComposeSnapshotByDeployment(input.composeId, input.deploymentId ?? "");
+			if (!snapshot) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Rollback snapshot not found" });
+			}
+
+			// Put the snapshot's inputs back on the row, then deploy them the
+			// normal way — a router never deploys by itself.
+			const restored = await restoreComposeSnapshot(row, snapshot);
+			const deploymentId = await queueDeployment({
+				composeId: row.composeId,
+				type: "redeploy",
+				title: "Rollback",
+				trigger: "rollback",
+				triggeredBy: ctx.session.user.id,
+				// No commit for a compose rollback; name the deployment it restores.
+				commitMessage: `Rollback to deployment ${snapshot.deploymentId}`,
+			});
+			await auditFromSession(ctx, organizationId, {
+				action: "compose.rollback",
+				targetType: "compose",
+				targetId: row.composeId,
+				targetName: row.name,
+				metadata: {
+					snapshotId: snapshot.snapshotId,
+					sourceDeploymentId: snapshot.deploymentId,
+					deploymentId,
+				},
+			});
+			return {
+				deploymentId,
+				snapshotId: snapshot.snapshotId,
+				sourceDeploymentId: snapshot.deploymentId,
+				// Git rows re-read the file from the branch — only the env was restored.
+				restoredComposeFile: restored.restoredComposeFile,
+			};
+		}),
+
+	/**
+	 * Create a compose service from a compose file at a URL ("deploy from
+	 * compose URL", product audit Platform row). The URL goes through the
+	 * egress guard and the body through the same safety checks
+	 * `saveComposeFile` runs — nothing is deployed until `compose.deploy`.
+	 */
+	createFromUrl: protectedProcedure
+		.input(
+			z.object({
+				name: z.string().min(1).max(120),
+				description: z.string().nullish(),
+				environmentId: z.string().min(1),
+				url: z.string().min(1).max(2048),
+				composeType: z.enum(["docker-compose", "stack"]).optional(),
+				appName: appNameSchema.optional(),
+				serverId: z.string().nullish(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertCapability(ctx.session.user.id, organizationId, "service.create");
+			await assertWithinQuota(organizationId, { services: true });
+			await assertEnvironmentAccess(input.environmentId, organizationId);
+			await assertServerInOrganization(input.serverId, organizationId);
+
+			const composeFile = await fetchComposeFromUrl(input.url);
+			const created = await createCompose({
+				name: input.name,
+				description: input.description ?? null,
+				environmentId: input.environmentId,
+				composeType: input.composeType ?? "docker-compose",
+				sourceType: "raw",
+				appName: input.appName,
+				serverId: input.serverId ?? null,
+			});
+			try {
+				await saveComposeFile(created, composeFile, { callerIsInstanceAdmin: false });
+			} catch (error) {
+				// Never leave a half-built row behind when the file is refused.
+				await bestEffort(`roll back compose row ${created.composeId}`, () =>
+					deleteCompose(created),
+				);
+				if (error instanceof ComposeValidationError) {
+					throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+				}
+				throw error;
+			}
+			await auditFromSession(ctx, organizationId, {
+				action: "compose.createFromUrl",
+				targetType: "compose",
+				targetId: created.composeId,
+				targetName: created.name,
+				metadata: { url: input.url },
+			});
+			return created;
+		}),
 });

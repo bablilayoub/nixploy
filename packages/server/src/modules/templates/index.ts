@@ -20,10 +20,63 @@ import { badRequest, notFound } from "../errors";
 import { assertWithinQuota, findProjectById } from "../projects";
 import { findTemplateById, listTemplateSummaries } from "./catalog";
 import { summarizeTemplateServices } from "./services";
+import { findSourcedTemplate, listSourcedTemplates } from "./sources";
+import type { Template, TemplateSummary } from "./types";
 
 export type { TemplateServiceSummary } from "./services";
+export type {
+	SourcedTemplate,
+	SyncTemplateSourceResult,
+	TemplateSourceRow,
+} from "./sources";
+export {
+	assertTemplateSourceUrl,
+	findSourcedTemplate,
+	findTemplateSource,
+	listSourcedTemplates,
+	listTemplateSources,
+	parseRemoteTemplateId,
+	readTemplateSourceReport,
+	remoteTemplateId,
+	removeTemplateSourceCache,
+	syncTemplateSource,
+} from "./sources";
 export type { Template, TemplateEnvVar, TemplateSummary } from "./types";
 export { findTemplateById, listTemplateSummaries, summarizeTemplateServices };
+
+/** A gallery entry; `source` is set only for entries from a template source. */
+export type TemplateSummaryWithSource = TemplateSummary & {
+	source?: { templateSourceId: string; name: string };
+};
+
+/**
+ * The catalog one organization sees: the built-in templates plus the cached
+ * entries of its enabled template sources (namespaced `<sourceId>/<id>`, with
+ * a `source` badge). Nothing is fetched here — the read path only reads the
+ * caches `template.sourcesSync` wrote.
+ *
+ * `organizationId` is nullable so the router keeps ONE return type: a caller
+ * belonging to no organization simply gets the built-in catalog.
+ */
+export async function listTemplateSummariesForOrg(
+	organizationId: string | null,
+): Promise<TemplateSummaryWithSource[]> {
+	const sourced = organizationId ? await listSourcedTemplates(organizationId) : [];
+	return [
+		...listTemplateSummaries(),
+		...sourced.map(({ compose: _compose, ...summary }) => summary),
+	];
+}
+
+/** Resolve a template id against the built-in catalog first, then the org's sources. */
+export async function findTemplateForOrg(
+	organizationId: string | null,
+	templateId: string,
+): Promise<Template | undefined> {
+	const builtIn = findTemplateById(templateId);
+	if (builtIn || !organizationId) return builtIn;
+	return (await findSourcedTemplate(organizationId, templateId)) ?? undefined;
+}
 
 export interface TemplateDomainInput {
 	host: string;
@@ -65,7 +118,7 @@ export async function deployTemplate(
 	organizationId: string,
 	input: DeployTemplateInput,
 ): Promise<DeployTemplateResult> {
-	const template = findTemplateById(input.templateId);
+	const template = await findTemplateForOrg(organizationId, input.templateId);
 	if (!template) {
 		throw notFound("Template not found");
 	}

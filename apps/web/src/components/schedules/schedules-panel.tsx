@@ -21,6 +21,7 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -98,6 +99,14 @@ const EMPTY_FORM = {
 	enabled: true,
 	scheduleType: "nixploy-server" as ScheduleType,
 	targetId: "",
+	/**
+	 * `exec` runs the command inside a RUNNING container of the service;
+	 * `image` runs it in a throwaway `docker run --rm` container, so a stopped
+	 * service can still host a job (product audit, Platform row "No standalone
+	 * job/cron service").
+	 */
+	runMode: "exec" as "exec" | "image",
+	image: "",
 };
 
 type ScheduleForm = typeof EMPTY_FORM;
@@ -189,6 +198,10 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 		scheduleType: defaultScheduleType,
 	});
 	const [deleteTarget, setDeleteTarget] = useState<ScheduleRow | null>(null);
+	// "Run once from an image" — a job with no cron behind it.
+	const [onceOpen, setOnceOpen] = useState(false);
+	const [onceImage, setOnceImage] = useState("");
+	const [onceCommand, setOnceCommand] = useState("");
 
 	useEffect(() => {
 		if (!dialogOpen) {
@@ -261,12 +274,18 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 	});
 
 	const saving = create.isPending || update.isPending;
+	// Image jobs need the env and the overlay of a service; a shell on a
+	// managed host has neither.
+	const formScheduleType = isGlobal ? form.scheduleType : source.serviceType;
+	const supportsImageMode = formScheduleType === "application" || formScheduleType === "compose";
+	const runMode = supportsImageMode ? form.runMode : "exec";
 	const needsTarget = isGlobal && form.scheduleType === "server";
 	const targetAllowed = editing !== null || allowsType(form.scheduleType);
 	const isValid =
 		form.name.trim() !== "" &&
 		looksLikeCron(form.cronExpression) &&
 		form.command.trim() !== "" &&
+		(runMode !== "image" || form.image.trim() !== "") &&
 		(!needsTarget || form.targetId.trim() !== "") &&
 		targetAllowed;
 
@@ -284,6 +303,8 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 			enabled: schedule.enabled,
 			scheduleType: schedule.scheduleType,
 			targetId: targetIdOf(schedule),
+			runMode: schedule.runMode,
+			image: schedule.image ?? "",
 		});
 		setDialogOpen(true);
 	};
@@ -296,6 +317,8 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 				cronExpression: form.cronExpression,
 				shellType: form.shellType,
 				command: form.command,
+				runMode,
+				image: runMode === "image" ? form.image.trim() : null,
 			});
 			return;
 		}
@@ -308,23 +331,52 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 			command: form.command,
 			enabled: form.enabled,
 			scheduleType,
+			runMode,
+			image: runMode === "image" ? form.image.trim() : null,
 			serverId: scheduleType === "server" ? targetId : null,
 			applicationId: scheduleType === "application" ? targetId : null,
 			composeId: scheduleType === "compose" ? targetId : null,
 		});
 	};
 
+	/**
+	 * A one-off job. Only offered where a service supplies the env and the
+	 * overlay network (the global placement has no single target).
+	 */
+	const runOnce = useSaveMutation(trpc.schedule.runOnce.mutationOptions(), {
+		invalidate: [listKey],
+		errorMessage: "Run failed",
+		onSuccess: (result) => {
+			setOnceOpen(false);
+			toast.success(
+				result.output.trim()
+					? `Job finished: ${result.output.trim().split("\n").slice(-1)[0]}`
+					: "Job finished",
+			);
+		},
+	});
+
+	const canRunOnce = !isGlobal && supportsImageMode && canCreate;
+
 	const addButton = (variant?: "outline") => (
-		<Button
-			size="sm"
-			variant={variant}
-			disabled={!canCreate}
-			title={createHint}
-			onClick={() => setDialogOpen(true)}
-		>
-			<Plus className="size-4" />
-			Add schedule
-		</Button>
+		<div className="flex items-center gap-2">
+			{canRunOnce ? (
+				<Button size="sm" variant="outline" title={createHint} onClick={() => setOnceOpen(true)}>
+					<Play className="size-4" />
+					Run once
+				</Button>
+			) : null}
+			<Button
+				size="sm"
+				variant={variant}
+				disabled={!canCreate}
+				title={createHint}
+				onClick={() => setDialogOpen(true)}
+			>
+				<Plus className="size-4" />
+				Add schedule
+			</Button>
+		</div>
 	);
 
 	const table = (
@@ -374,7 +426,19 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 						{schedules.map((schedule) => (
 							<TableRow key={schedule.scheduleId}>
 								<TableCell className={isGlobal ? "font-medium" : "max-w-40 truncate font-medium"}>
-									{schedule.name}
+									<span className="flex items-center gap-2">
+										<span className="truncate">{schedule.name}</span>
+										{/* An image job runs in its own container — say so, it changes what the command can see. */}
+										{schedule.runMode === "image" ? (
+											<Badge
+												variant="outline"
+												className="shrink-0 text-[11px] font-normal"
+												title={schedule.image ?? undefined}
+											>
+												Job
+											</Badge>
+										) : null}
+									</span>
 								</TableCell>
 								{isGlobal ? (
 									<TableCell>
@@ -560,6 +624,43 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 					</p>
 				)}
 			</div>
+			{supportsImageMode ? (
+				<div className="grid gap-2">
+					<Label htmlFor="schedule-run-mode">Runs in</Label>
+					<Select
+						value={form.runMode}
+						onValueChange={(value) => setForm({ ...form, runMode: value as "exec" | "image" })}
+					>
+						<SelectTrigger id="schedule-run-mode">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="exec">The running container</SelectItem>
+							<SelectItem value="image">A new container from an image</SelectItem>
+						</SelectContent>
+					</Select>
+					<p className="text-xs text-muted-foreground">
+						{form.runMode === "image"
+							? "A throwaway container on this service's network, with its environment variables. Works while the service is stopped."
+							: "Runs inside a container of this service — it has to be running."}
+					</p>
+				</div>
+			) : null}
+			{supportsImageMode && form.runMode === "image" ? (
+				<div className="grid gap-2">
+					<Label htmlFor="schedule-image">Image</Label>
+					<Input
+						id="schedule-image"
+						className="font-mono text-sm"
+						placeholder="alpine:3.20"
+						value={form.image}
+						onChange={(event) => setForm({ ...form, image: event.target.value })}
+					/>
+					<p className="text-xs text-muted-foreground">
+						The image needs a shell — scratch and distroless images cannot run a job.
+					</p>
+				</div>
+			) : null}
 			<div className="grid gap-2">
 				<Label htmlFor="schedule-shell">Shell</Label>
 				<Select
@@ -629,8 +730,67 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 		</>
 	);
 
+	const runOnceDialog = (
+		<Dialog open={onceOpen} onOpenChange={setOnceOpen}>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>Run once from an image</DialogTitle>
+					<DialogDescription>
+						Runs the command in a throwaway container on this service's network, with its
+						environment variables. No schedule is created; the output lands in the service's run
+						history.
+					</DialogDescription>
+				</DialogHeader>
+				<div className="grid gap-4">
+					<div className="grid gap-2">
+						<Label htmlFor="once-image">Image</Label>
+						<Input
+							id="once-image"
+							className="font-mono text-sm"
+							placeholder="alpine:3.20"
+							value={onceImage}
+							onChange={(event) => setOnceImage(event.target.value)}
+						/>
+					</div>
+					<div className="grid gap-2">
+						<Label htmlFor="once-command">Command</Label>
+						<Textarea
+							id="once-command"
+							className="font-mono text-sm"
+							rows={3}
+							placeholder="npm run migrate"
+							value={onceCommand}
+							onChange={(event) => setOnceCommand(event.target.value)}
+						/>
+					</div>
+				</div>
+				<DialogFooter>
+					<Button variant="outline" onClick={() => setOnceOpen(false)}>
+						Cancel
+					</Button>
+					<Button
+						disabled={runOnce.isPending || onceImage.trim() === "" || onceCommand.trim() === ""}
+						onClick={() =>
+							runOnce.mutate({
+								image: onceImage.trim(),
+								command: onceCommand.trim(),
+								applicationId:
+									!isGlobal && source.serviceType === "application" ? source.serviceId : null,
+								composeId: !isGlobal && source.serviceType === "compose" ? source.serviceId : null,
+							})
+						}
+					>
+						{runOnce.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+						Run now
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	);
+
 	const dialogs = (
 		<>
+			{runOnceDialog}
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>
 					<DialogHeader>

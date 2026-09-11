@@ -10,6 +10,42 @@ Upgrade mechanics (rollback, pre-update dump, downgrade guard) are in
 
 ---
 
+## In-app updater: release notes and version pinning
+
+Settings → Platform → Updates used to show a digest and nothing else — you
+could see that *something* changed, not what, and could not choose which
+version to roll to (product audit, Platform row "Updater shows digest only").
+
+**Release notes.** Every update check resolves the GitHub release for the
+image it tracks: the release for the tag when the image is pinned
+(`…/nixploy:v1.2.3`), the newest release when it is a moving tag
+(`:latest`). The body is fetched through the egress guard
+(`assertPublicHttpsUrl` + `pinnedFetch`: https only, public addresses only, no
+redirects, capped body), truncated to 16 kB **by bytes**, and cached with the
+check so the dashboard poll never hits GitHub. A rate-limited, offline or
+air-gapped instance simply shows no notes — release notes never fail a check.
+
+**Update to a version.** `updates.runUpdate({ version })` accepts a plain
+release (`1.2.3` / `v1.2.3`; pre-release suffixes are not accepted) and
+replaces **only the tag** of the image the instance already tracks — the
+registry and repository stay the ones it trusts, and the existing
+`ghcr.io/bablilayoub/nixploy` allow-list still applies.
+
+**Downgrades are gated.** Nixploy applies migrations on boot and never
+reverses them, so an older image meets a newer schema. `runUpdate` refuses a
+lower version unless you pass `allowDowngrade: true`; the UI asks first and
+points at the pre-update dump, which is the actual way back. The contract is
+unchanged from `update.sh`'s `NIXPLOY_ALLOW_DOWNGRADE` — see
+[install.md → Downgrade](./install.md#downgrade) for the restore procedure.
+
+**Pinning.** `pinnedVersion` in the update settings is a ceiling for
+**automatic** updates: the checker logs "held back" instead of rolling past
+it, and `runUpdate({ version })` refuses a target above it. Leave it empty to
+follow the image tag wherever it goes. A pin does not stop a deliberate
+update — raise or clear it first.
+
+---
+
 ## v0.2.0
 
 The first release after the stability sweep and the September improvement

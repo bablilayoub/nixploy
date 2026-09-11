@@ -58,3 +58,67 @@ domain. It creates a **compose** service with the template's compose file,
 env, and optional domain (subject to the org's service quota), then queues its first deployment. The server side
 is the standard compose create + deploy path — templates carry no special
 runtime logic.
+
+## Template sources (bring your own catalog)
+
+The built-in catalog is compiled into the image, so it only changes with a
+release. An organization can add its own catalogs under
+**Settings → Templates** (product audit, Platform row "Templates are a fixed
+TS catalog"). Sources are **org-scoped**: a source belongs to one organization
+and only ever appears in that organization's gallery.
+
+Two kinds:
+
+| Kind | What it points at |
+| --- | --- |
+| `http-json` | One JSON document: a bare array of templates, or `{ "templates": [ … ] }` so the index can carry its own metadata. |
+| `git` | A repository whose `templates/index.json` has that same shape. Cloned shallow, read, and discarded — only the cache survives. |
+
+Entries use exactly the `Template` shape above, minus two fields: `category`
+defaults to `"Custom"` when omitted, and **`hostPrivileged` is never accepted
+from a remote source** (it relaxes the compose safety checks and is an
+instance-admin decision about the built-in catalog only).
+
+### Syncing
+
+Nothing is fetched while browsing the gallery. **Sync now** (or
+`template.sourcesSync`) does the work and writes
+`<config>/templates/sources/<id>.json` with mode `0600` — compose bodies
+routinely carry example credentials.
+
+A sync:
+
+1. fetches the index through the egress guard — `assertSafeOutboundUrl` +
+   `pinnedFetch` for `http-json` (https only unless the instance allows
+   private egress, only vetted addresses dialled, **redirects are never
+   followed**, body capped at 4 MiB), `assertSafeGitCloneUrl` plus the
+   hardened git environment for `git`;
+2. validates every entry with zod (ids kebab-case, links https, env keys
+   shell-safe, compose body ≤ 128 KiB, ≤ 500 templates per source);
+3. probes every image the templates reference with the same registry check
+   `pnpm test:template-images` uses.
+
+**A bad entry is dropped with a reason, not fatal** — one broken template in a
+200-entry catalog should not take the other 199 offline. **An unreachable
+image is a warning, not a rejection** — a template pointing at a private
+registry is perfectly valid, we simply cannot confirm its tag anonymously.
+Both show up on the source row in Settings → Templates.
+
+Remote ids are namespaced `<templateSourceId>/<id>`, so a source can never
+shadow a built-in template, and the gallery card carries the source's name as
+a badge. Disabling a source hides its templates immediately; deleting one
+drops the row and the cache — services already deployed from it are untouched.
+
+Managing sources requires the **admin** or **owner** org role: a source's
+compose bodies become deployable templates for the whole organization.
+
+## Deploy from a compose URL
+
+`compose.createFromUrl({ url, environmentId, name })` creates a raw compose
+service from a compose file at an http(s) URL. The URL goes through the same
+egress guard, the body through the same safety checks `saveComposeFile` runs,
+and nothing is deployed until `compose.deploy`.
+
+Give it the **raw** file URL: redirects are not followed, and an HTML response
+(the usual mistake — a repository page instead of the raw file) is rejected
+with that message.

@@ -3,6 +3,13 @@ import { join } from "node:path";
 import { execAsync } from "../../utils/exec";
 import { shellQuote } from "../deployment/paths";
 import { fetchRemoteDigest, normalizeDigest, parseImageRef } from "./registry";
+import {
+	fetchLatestRelease,
+	fetchRelease,
+	imageVersionTag,
+	parseVersion,
+	type ReleaseInfo,
+} from "./releases";
 import { getUpdateSettings, patchUpdateSettings, type UpdateSettings } from "./settings";
 
 export const NIXPLOY_SERVICE_NAME = "nixploy";
@@ -137,6 +144,28 @@ export interface UpdateCheckResult {
 	checkedAt: string;
 	settings: UpdateSettings;
 	error: string | null;
+	/**
+	 * Release the tracked image points at: the release for the image's version
+	 * tag, or the newest release when the image is a moving tag (`:latest`).
+	 * Null when the repository has no matching release or GitHub was
+	 * unreachable — release notes never fail a check.
+	 */
+	release: ReleaseInfo | null;
+}
+
+/**
+ * Release the operator is being offered. A pinned version tag resolves that
+ * exact release; `:latest` (and any non-semver tag) resolves the newest one.
+ * Never throws: notes are an explanation, not a precondition.
+ */
+export async function resolveTargetRelease(image: string): Promise<ReleaseInfo | null> {
+	try {
+		const tag = imageVersionTag(image);
+		return parseVersion(tag) ? await fetchRelease(tag) : await fetchLatestRelease();
+	} catch {
+		// Rate limited, offline, or an air-gapped install — carry on without notes.
+		return null;
+	}
 }
 
 export async function checkForUpdates(options?: {
@@ -172,6 +201,8 @@ export async function checkForUpdates(options?: {
 	const updateAvailable =
 		!!latestDigest && !!currentDigest && latestDigest !== currentDigest && !error;
 
+	const release = await resolveTargetRelease(latestImage);
+
 	const result: UpdateCheckResult = {
 		appVersion,
 		serviceName: NIXPLOY_SERVICE_NAME,
@@ -183,6 +214,7 @@ export async function checkForUpdates(options?: {
 		checkedAt,
 		settings,
 		error,
+		release,
 	};
 
 	if (options?.persist !== false) {
@@ -192,6 +224,13 @@ export async function checkForUpdates(options?: {
 			currentDigest,
 			updateAvailable,
 			lastError: error,
+			// Cached with the check so `updates.getStatus` can render notes
+			// without hitting GitHub on every dashboard poll.
+			...(release && {
+				releaseTag: release.tag,
+				releaseNotes: release.notes,
+				releaseUrl: release.url,
+			}),
 		});
 		result.settings = await getUpdateSettings();
 	}

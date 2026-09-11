@@ -53,7 +53,15 @@ function TemplateCard({
 					<div className="min-w-0 flex-1">
 						<div className="flex items-start justify-between gap-2">
 							<h3 className="truncate text-sm font-medium text-foreground">{template.name}</h3>
-							{template.hostPrivileged ? (
+							{/* Which catalog this came from: the built-ins carry no source. */}
+							{template.source ? (
+								<Badge
+									variant="secondary"
+									className="shrink-0 max-w-32 truncate text-[11px] font-normal"
+								>
+									{template.source.name}
+								</Badge>
+							) : template.hostPrivileged ? (
 								<Badge variant="outline" className="shrink-0 text-[11px] font-normal">
 									Instance admin
 								</Badge>

@@ -10,6 +10,7 @@ export {
 	getRunningDigest,
 	getRunningImageRef,
 	NIXPLOY_SERVICE_NAME,
+	resolveTargetRelease,
 	type UpdateCheckResult,
 } from "./check";
 export {
@@ -19,6 +20,22 @@ export {
 	type ParsedImageRef,
 	parseImageRef,
 } from "./registry";
+export {
+	assertVersionAllowed,
+	autoUpdateAllowed,
+	compareVersions,
+	fetchLatestRelease,
+	fetchRelease,
+	imageVersionTag,
+	MAX_RELEASE_NOTES_BYTES,
+	NIXPLOY_REPO,
+	parseVersion,
+	type ReleaseInfo,
+	releaseTag,
+	truncateNotes,
+	VERSION_PATTERN,
+	withImageTag,
+} from "./releases";
 export { initUpdateChecker, isValidUpdateCron, rescheduleUpdateChecker } from "./scheduler";
 export {
 	DEFAULT_CHECK_CRON,

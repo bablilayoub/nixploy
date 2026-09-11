@@ -6,6 +6,7 @@ import {
 	Building2,
 	GitBranch,
 	KeyRound,
+	LayoutGrid,
 	Package,
 	Server,
 	ServerCog,
@@ -63,6 +64,7 @@ export const settingsNavGroups: SettingsNavGroup[] = [
 			{ label: "Git providers", href: "/dashboard/settings/git-providers", icon: GitBranch },
 			{ label: "Registries", href: "/dashboard/settings/registries", icon: Package },
 			{ label: "Backup storage", href: "/dashboard/settings/destinations", icon: Archive },
+			{ label: "Templates", href: "/dashboard/settings/templates", icon: LayoutGrid },
 		],
 	},
 	// Instance-wide settings (this Nixploy install, not one organization).

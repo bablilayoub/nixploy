@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, RefreshCw } from "lucide-react";
+import { ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -20,6 +20,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { HelpLink } from "@/components/ui/help-link";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -27,6 +28,9 @@ import { useDraft } from "@/hooks/use-draft";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { formatRelative } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
+
+/** `1.2.3` / `v1.2.3` — the same shape the server accepts. */
+const VERSION_INPUT = /^v?\d+\.\d+\.\d+$/;
 
 /** "Checked 3 hours ago" — one shared formatter, not `toLocaleString` (UX audit F27). */
 function formatWhen(iso: string | null | undefined): string {
@@ -46,6 +50,10 @@ export function UpdatesCard() {
 
 	// Deployments in flight when the update was requested; opens the "update anyway?" confirm.
 	const [blockedBy, setBlockedBy] = useState<number | null>(null);
+	// Version typed into "Update to…", held while the downgrade confirm is open.
+	const [targetVersion, setTargetVersion] = useState("");
+	const [downgradeTo, setDowngradeTo] = useState<string | null>(null);
+	const [notesOpen, setNotesOpen] = useState(false);
 
 	// The switches mirror the server, but a dirty draft is not re-seeded: the
 	// 60s poll would otherwise flip an optimistic switch back until the
@@ -55,6 +63,9 @@ export function UpdatesCard() {
 		autoUpdate: statusQuery.data?.autoUpdateEnabled ?? false,
 	});
 	const { autoCheck, autoUpdate } = toggles.value;
+
+	// The pin mirrors the server but is typed freely, so it gets its own draft.
+	const pin = useDraft(statusQuery.data?.pinnedVersion ?? "");
 
 	const statusKey = trpc.updates.getStatus.queryKey();
 
@@ -98,8 +109,38 @@ export function UpdatesCard() {
 		{ invalidate: [statusKey] },
 	);
 
+	/**
+	 * The server refuses a downgrade unless it is acknowledged (migrations are
+	 * never reversed). Catch that one refusal and ask, instead of showing a
+	 * dead-end toast.
+	 */
+	const versionMutation = useSaveMutation(
+		trpc.updates.runUpdate.mutationOptions({
+			onSuccess: (result) => {
+				if (result.started) {
+					toast.success(result.message);
+					setTargetVersion("");
+				} else if (result.blockedByDeployments) {
+					setBlockedBy(result.activeDeployments ?? 1);
+				} else {
+					toast.message(result.message);
+				}
+			},
+			onError: (error) => {
+				if (/older than/i.test(error.message) && targetVersion) {
+					setDowngradeTo(targetVersion);
+				}
+			},
+		}),
+		{ invalidate: [statusKey], errorMessage: "Update failed" },
+	);
+
 	const data = statusQuery.data;
-	const busy = settingsMutation.isPending || checkMutation.isPending || applyMutation.isPending;
+	const busy =
+		settingsMutation.isPending ||
+		checkMutation.isPending ||
+		applyMutation.isPending ||
+		versionMutation.isPending;
 
 	const statusBadge = data?.updateInProgress ? (
 		<Badge variant="secondary" className="gap-1.5">
@@ -175,6 +216,40 @@ export function UpdatesCard() {
 								</AlertDialogContent>
 							</AlertDialog>
 							<AlertDialog
+								open={downgradeTo !== null}
+								onOpenChange={(open) => {
+									if (!open) setDowngradeTo(null);
+								}}
+							>
+								<AlertDialogContent>
+									<AlertDialogHeader>
+										<AlertDialogTitle>Downgrade to {downgradeTo}?</AlertDialogTitle>
+										<AlertDialogDescription>
+											{downgradeTo} is older than the version running here. Nixploy applies database
+											migrations on boot and never reverses them, so the older image may not be able
+											to read the current schema. A pre-update database dump is taken first —
+											restoring it is the way back. <HelpLink slug="install" />
+										</AlertDialogDescription>
+									</AlertDialogHeader>
+									<AlertDialogFooter>
+										<AlertDialogCancel>Cancel</AlertDialogCancel>
+										<AlertDialogAction
+											variant="destructive"
+											onClick={(event) => {
+												event.preventDefault();
+												const version = downgradeTo;
+												setDowngradeTo(null);
+												if (version) {
+													versionMutation.mutate({ version, allowDowngrade: true });
+												}
+											}}
+										>
+											Downgrade anyway
+										</AlertDialogAction>
+									</AlertDialogFooter>
+								</AlertDialogContent>
+							</AlertDialog>
+							<AlertDialog
 								open={blockedBy !== null}
 								onOpenChange={(open) => {
 									if (!open) setBlockedBy(null);
@@ -242,6 +317,122 @@ export function UpdatesCard() {
 							) : null}
 						</p>
 					)}
+
+					{data.releaseNotes ? (
+						<div className="rounded-md border">
+							<div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+								<div className="flex items-center gap-2 text-sm">
+									<span className="font-medium">{data.releaseTag ?? "Latest release"}</span>
+									<span className="text-muted-foreground">release notes</span>
+								</div>
+								<div className="flex items-center gap-1">
+									<Button
+										type="button"
+										size="sm"
+										variant="ghost"
+										onClick={() => setNotesOpen((open) => !open)}
+									>
+										{notesOpen ? "Hide" : "Show"}
+									</Button>
+									{data.releaseUrl ? (
+										<Button type="button" size="sm" variant="ghost" asChild>
+											<a href={data.releaseUrl} target="_blank" rel="noreferrer noopener">
+												<ExternalLink className="size-4" />
+												GitHub
+											</a>
+										</Button>
+									) : null}
+								</div>
+							</div>
+							{notesOpen ? (
+								<pre className="max-h-72 overflow-auto border-t px-3 py-2 text-xs whitespace-pre-wrap break-words text-muted-foreground">
+									{data.releaseNotes}
+								</pre>
+							) : null}
+						</div>
+					) : null}
+
+					<div className="flex flex-col gap-2">
+						<div className="grid gap-0.5">
+							<Label htmlFor="target-version">Update to a specific version</Label>
+							<p className="text-xs text-muted-foreground">
+								Rolls the tracked image to that release tag. Downgrades ask for confirmation —
+								database migrations are never reversed. <HelpLink slug="install" />
+							</p>
+						</div>
+						<div className="flex flex-wrap items-center gap-2">
+							<Input
+								id="target-version"
+								className="max-w-40"
+								placeholder="1.2.3"
+								value={targetVersion}
+								disabled={busy || data.updateInProgress}
+								onChange={(event) => setTargetVersion(event.target.value)}
+							/>
+							<Button
+								type="button"
+								size="sm"
+								variant="outline"
+								disabled={
+									busy || data.updateInProgress || !VERSION_INPUT.test(targetVersion.trim())
+								}
+								onClick={() => versionMutation.mutate({ version: targetVersion.trim() })}
+							>
+								{versionMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+								Update to {targetVersion.trim() || "…"}
+							</Button>
+						</div>
+					</div>
+
+					<div className="flex flex-col gap-2">
+						<div className="grid gap-0.5">
+							<Label htmlFor="pinned-version">Pin to a version</Label>
+							<p className="text-xs text-muted-foreground">
+								Automatic updates never roll past this release. Leave empty to follow the image tag.
+							</p>
+						</div>
+						<div className="flex flex-wrap items-center gap-2">
+							<Input
+								id="pinned-version"
+								className="max-w-40"
+								placeholder="No pin"
+								value={pin.value}
+								disabled={busy}
+								onChange={(event) => pin.set(event.target.value)}
+							/>
+							<Button
+								type="button"
+								size="sm"
+								variant="outline"
+								disabled={
+									busy ||
+									!pin.dirty ||
+									(pin.value.trim() !== "" && !VERSION_INPUT.test(pin.value.trim()))
+								}
+								onClick={() =>
+									settingsMutation.mutate({
+										pinnedVersion: pin.value.trim() === "" ? null : pin.value.trim(),
+									})
+								}
+							>
+								Save pin
+							</Button>
+							{data.pinnedVersion ? (
+								<Button
+									type="button"
+									size="sm"
+									variant="ghost"
+									disabled={busy}
+									onClick={() => {
+										pin.set("");
+										settingsMutation.mutate({ pinnedVersion: null });
+									}}
+								>
+									Clear
+								</Button>
+							) : null}
+						</div>
+					</div>
 
 					<div className="flex items-center justify-between gap-4">
 						<div className="grid gap-0.5">

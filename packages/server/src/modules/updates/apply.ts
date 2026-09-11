@@ -5,8 +5,9 @@ import { bestEffort } from "../../utils/best-effort";
 import { execAsync } from "../../utils/exec";
 import { getConfigDir, shellQuote } from "../deployment/paths";
 import { countActiveDeployments } from "../observability/health";
-import { NIXPLOY_SERVICE_NAME } from "./check";
+import { getAppVersion, NIXPLOY_SERVICE_NAME } from "./check";
 import { assertValidImageRef } from "./registry";
+import { assertVersionAllowed, releaseTag, withImageTag } from "./releases";
 import { getUpdateSettings, patchUpdateSettings } from "./settings";
 
 const log = createLogger("updates");
@@ -30,6 +31,8 @@ export interface ApplyUpdateResult {
 	activeDeployments?: number;
 	/** Path of the pre-update database dump, `null` when it was skipped (no postgres container). */
 	backupPath?: string | null;
+	/** True when the target release is OLDER than the running version. */
+	isDowngrade?: boolean;
 }
 
 /** Tag of an image ref: `ghcr.io/x/nixploy:v0.2.0@sha256:…` → `v0.2.0` (`""` when untagged). */
@@ -142,6 +145,17 @@ export async function preUpdateDatabaseDump(image: string): Promise<string | nul
 export async function applyUpdate(options?: {
 	/** Override the image from settings (rarely needed). */
 	image?: string;
+	/**
+	 * Roll to a specific release instead of whatever the tracked tag points at
+	 * (`1.2.3` / `v1.2.3`). Re-tags the settings image, so the registry and
+	 * repository stay the ones the instance already trusts.
+	 */
+	version?: string;
+	/**
+	 * Acknowledge that rolling to an OLDER release does not reverse database
+	 * migrations (docs/upgrade-notes.md). Required for a downgrade.
+	 */
+	allowDowngrade?: boolean;
 	/** Roll even while deployments are running. */
 	force?: boolean;
 }): Promise<ApplyUpdateResult> {
@@ -162,9 +176,22 @@ export async function applyUpdate(options?: {
 		};
 	}
 
+	// A version pins the TAG of the image the instance already tracks; the
+	// registry/repository are never taken from the caller.
+	let requested = options?.image?.trim() || settings.image;
+	let isDowngrade = false;
+	if (options?.version) {
+		({ isDowngrade } = assertVersionAllowed({
+			currentVersion: getAppVersion(),
+			targetVersion: options.version,
+			allowDowngrade: options.allowDowngrade,
+			pinnedVersion: settings.pinnedVersion,
+		}));
+		requested = withImageTag(settings.image, releaseTag(options.version));
+	}
 	// Validate before anything touches a shell: the ref is stored settings /
 	// caller input, and `exec` runs through `sh -c`.
-	const image = assertValidImageRef(options?.image?.trim() || settings.image).canonical;
+	const image = assertValidImageRef(requested).canonical;
 
 	if (!options?.force) {
 		const active = await countActiveDeployments().catch((error: unknown) => {
@@ -260,10 +287,13 @@ export async function applyUpdate(options?: {
 	return {
 		started: true,
 		image,
-		message: backupPath
-			? "Update started — database dumped, the dashboard restarts in a few seconds"
-			: "Update started — the dashboard restarts in a few seconds",
+		message: isDowngrade
+			? "Downgrade started — database migrations are NOT reversed; restore the pre-update dump if the older version cannot read the schema"
+			: backupPath
+				? "Update started — database dumped, the dashboard restarts in a few seconds"
+				: "Update started — the dashboard restarts in a few seconds",
 		backupPath,
+		isDowngrade,
 	};
 }
 

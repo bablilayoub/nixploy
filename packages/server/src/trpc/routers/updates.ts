@@ -12,9 +12,11 @@ import {
 	getAppVersion,
 	getUpdateSettings,
 	isValidUpdateCron,
+	parseVersion,
 	patchUpdateSettings,
 	rescheduleUpdateChecker,
 	resolveStuckUpdate,
+	VERSION_PATTERN,
 } from "../../modules/updates";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
@@ -55,11 +57,19 @@ function assertAllowedUpdateImage(image: string): string {
 	return canonical;
 }
 
+/** `1.2.3` / `v1.2.3`; `null` clears the pin. */
+const versionSchema = z
+	.string()
+	.trim()
+	.regex(VERSION_PATTERN, "Expected a release like 1.2.3 or v1.2.3");
+
 const settingsInput = z.object({
 	autoCheckEnabled: z.boolean().optional(),
 	autoUpdateEnabled: z.boolean().optional(),
 	checkCron: z.string().min(1).max(64).optional(),
 	image: z.string().min(1).max(256).optional(),
+	/** Ceiling for automatic updates; `null` removes it. */
+	pinnedVersion: versionSchema.nullish(),
 });
 
 export const updatesRouter = router({
@@ -106,12 +116,30 @@ export const updatesRouter = router({
 	 * `force` is set (the UI asks for confirmation first).
 	 */
 	runUpdate: protectedProcedure
-		.input(z.object({ force: z.boolean().optional() }).optional())
+		.input(
+			z
+				.object({
+					force: z.boolean().optional(),
+					/**
+					 * Roll to this release instead of the tracked tag. Only the TAG
+					 * of the configured image is replaced — the registry and
+					 * repository stay the ones this instance already trusts.
+					 */
+					version: versionSchema.optional(),
+					/** Required to roll to an OLDER release (migrations do not roll back). */
+					allowDowngrade: z.boolean().optional(),
+				})
+				.optional(),
+		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await requireInstanceAdmin(ctx.session);
 			const settings = await getUpdateSettings();
 			const force = input?.force ?? false;
-			const result = await applyUpdate({ force });
+			const result = await applyUpdate({
+				force,
+				version: input?.version,
+				allowDowngrade: input?.allowDowngrade,
+			});
 			void auditFromSession(ctx, organizationId, {
 				action: "platform.update",
 				targetType: "web_server",
@@ -121,6 +149,8 @@ export const updatesRouter = router({
 					started: result.started,
 					image: result.image,
 					force,
+					...(input?.version && { version: input.version }),
+					...(result.isDowngrade && { downgrade: true }),
 					...(result.blockedByDeployments && {
 						blockedByDeployments: true,
 						activeDeployments: result.activeDeployments,
@@ -135,6 +165,22 @@ export const updatesRouter = router({
 	updateSettings: protectedProcedure.input(settingsInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await requireInstanceAdmin(ctx.session);
 		const image = input.image !== undefined ? assertAllowedUpdateImage(input.image) : undefined;
+		// `pinnedVersion: null` clears the pin; `undefined` leaves it alone.
+		const pinnedVersion =
+			input.pinnedVersion === undefined
+				? undefined
+				: input.pinnedVersion === null
+					? null
+					: (() => {
+							const parsed = parseVersion(input.pinnedVersion);
+							if (!parsed) {
+								throw new TRPCError({
+									code: "BAD_REQUEST",
+									message: `Invalid version "${input.pinnedVersion}"`,
+								});
+							}
+							return `${parsed.major}.${parsed.minor}.${parsed.patch}`;
+						})();
 		const checkCron = input.checkCron?.trim();
 		if (checkCron !== undefined && !isValidUpdateCron(checkCron)) {
 			throw new TRPCError({
@@ -151,6 +197,7 @@ export const updatesRouter = router({
 			}),
 			...(checkCron !== undefined && { checkCron }),
 			...(image !== undefined && { image }),
+			...(pinnedVersion !== undefined && { pinnedVersion }),
 		});
 		await rescheduleUpdateChecker();
 		void auditFromSession(ctx, organizationId, {
@@ -162,6 +209,7 @@ export const updatesRouter = router({
 				autoUpdateEnabled: next.autoUpdateEnabled,
 				checkCron: next.checkCron,
 				image: next.image,
+				pinnedVersion: next.pinnedVersion,
 			},
 		});
 		return next;

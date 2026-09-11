@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { eq, inArray, max } from "drizzle-orm";
@@ -8,10 +9,20 @@ import { createLogger } from "../../lib/logger";
 import { getConfigDir } from "../application/paths";
 import { badRequest, conflict } from "../errors";
 import { isValidCronExpression } from "./cron";
+import { runImageJob } from "./image-job";
 import { runScheduleCommand } from "./runner";
 
 const log = createLogger("schedules");
 
+export type { ImageJobCommandInput, ImageJobTarget } from "./image-job";
+export {
+	assertJobImage,
+	buildImageJobCommand,
+	jobContainerName,
+	jobEnvFilePath,
+	runImageJob,
+	scheduleTimeoutMs,
+} from "./image-job";
 export type { ScheduleTarget } from "./runner";
 export { runScheduleCommand } from "./runner";
 
@@ -59,9 +70,24 @@ export function isScheduleRunning(scheduleId: string): boolean {
 	return inFlight.has(scheduleId);
 }
 
-/** Persist a run's output and mirror it into a deployment row for history. */
+/** The fields `recordRun` needs — a full schedule row satisfies it. */
+interface RunSubject {
+	scheduleId: string;
+	name: string;
+	applicationId?: string | null;
+	composeId?: string | null;
+	serverId?: string | null;
+}
+
+/**
+ * Persist a run's output and mirror it into a deployment row for history.
+ *
+ * The log file is written 0600: a schedule's output regularly contains what
+ * its command printed — connection strings, dump paths, API responses — and
+ * the config directory is shared with every other on-disk artefact.
+ */
 async function recordRun(
-	row: ScheduleRow,
+	row: RunSubject,
 	result: {
 		trigger: "cron" | "manual";
 		status: "done" | "error";
@@ -84,7 +110,7 @@ async function recordRun(
 		`Status: ${result.status}`,
 		"",
 	].join("\n");
-	await writeFile(logPath, header + result.output, "utf8");
+	await writeFile(logPath, header + result.output, { encoding: "utf8", mode: 0o600 });
 
 	try {
 		await db.insert(deployments).values({
@@ -95,9 +121,9 @@ async function recordRun(
 			errorMessage: result.errorMessage ?? null,
 			startedAt: result.startedAt,
 			finishedAt: result.finishedAt,
-			applicationId: row.applicationId,
-			composeId: row.composeId,
-			serverId: row.serverId,
+			applicationId: row.applicationId ?? null,
+			composeId: row.composeId ?? null,
+			serverId: row.serverId ?? null,
 			scheduleId: row.scheduleId,
 			trigger: "schedule",
 			triggeredBy: `schedule:${row.scheduleId}`,
@@ -184,6 +210,67 @@ export async function runSchedule(
 		return { success: false, output: message, startedAt, finishedAt };
 	} finally {
 		inFlight.delete(row.scheduleId);
+	}
+}
+
+export interface RunOnceInput {
+	/** Shown in the run log and the deployment row. */
+	name: string;
+	image: string;
+	shellType: "bash" | "sh";
+	command: string;
+	applicationId?: string | null;
+	composeId?: string | null;
+}
+
+/**
+ * "Run once from an image" — a job with no schedule behind it (product
+ * audit, Platform row "no one-off run once from an image").
+ *
+ * Deliberately does NOT create a `schedule` row: a one-off is not a cron, and
+ * a disabled row with an unreachable cron expression would be a worse lie. It
+ * still records the same run log + deployment row every scheduled run writes,
+ * so the output shows up in the service's history like any other run. The
+ * synthetic `once-<uuid>` id is what ties the two together.
+ */
+export async function runOnceFromImage(input: RunOnceInput): Promise<ScheduleRunResult> {
+	const subject: RunSubject = {
+		scheduleId: `once-${randomUUID()}`,
+		name: input.name,
+		applicationId: input.applicationId ?? null,
+		composeId: input.composeId ?? null,
+	};
+	const startedAt = new Date();
+	try {
+		const output = await runImageJob({
+			image: input.image,
+			shellType: input.shellType,
+			command: input.command,
+			applicationId: input.applicationId ?? null,
+			composeId: input.composeId ?? null,
+		});
+		const finishedAt = new Date();
+		await recordRun(subject, {
+			trigger: "manual",
+			status: "done",
+			output,
+			startedAt,
+			finishedAt,
+		});
+		return { success: true, output, startedAt, finishedAt };
+	} catch (error) {
+		const finishedAt = new Date();
+		const message = error instanceof Error ? error.message : String(error);
+		const stderr = error instanceof Error && "stderr" in error ? String(error.stderr) : "";
+		await recordRun(subject, {
+			trigger: "manual",
+			status: "error",
+			output: [message, stderr].filter(Boolean).join("\n\n"),
+			errorMessage: message,
+			startedAt,
+			finishedAt,
+		});
+		throw error;
 	}
 }
 

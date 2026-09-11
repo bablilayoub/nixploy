@@ -23,6 +23,17 @@ export interface UpdateSettings {
 	/** Last known running digest from a successful check. */
 	currentDigest: string | null;
 	updateAvailable: boolean;
+	/**
+	 * Ceiling for automatic updates (`1.2.3`, no `v`). When set, the scheduler
+	 * refuses to roll past it and `runUpdate({ version })` rejects anything
+	 * newer. Null = track the image tag wherever it goes.
+	 */
+	pinnedVersion: string | null;
+	/** Release tag the cached notes belong to. */
+	releaseTag: string | null;
+	/** Markdown body of that release, truncated by `modules/updates/releases.ts`. */
+	releaseNotes: string | null;
+	releaseUrl: string | null;
 }
 
 export const DEFAULT_UPDATE_IMAGE = "ghcr.io/bablilayoub/nixploy:latest";
@@ -40,6 +51,10 @@ const defaults: UpdateSettings = {
 	latestDigest: null,
 	currentDigest: null,
 	updateAvailable: false,
+	pinnedVersion: null,
+	releaseTag: null,
+	releaseNotes: null,
+	releaseUrl: null,
 };
 
 function readExtras(metricsConfig: unknown): Record<string, unknown> {
@@ -76,6 +91,15 @@ export function parseUpdateSettings(metricsConfig: unknown): UpdateSettings {
 		latestDigest: asString(extras.updateLatestDigest, null),
 		currentDigest: asString(extras.updateCurrentDigest, null),
 		updateAvailable: asBool(extras.updateAvailable, false),
+		pinnedVersion: asString(extras.updatePinnedVersion, null),
+		releaseTag: asString(extras.updateReleaseTag, null),
+		// Notes are markdown with blank lines — `asString` trims but must not
+		// collapse an intentionally long body, so only emptiness is normalized.
+		releaseNotes:
+			typeof extras.updateReleaseNotes === "string" && extras.updateReleaseNotes
+				? extras.updateReleaseNotes
+				: null,
+		releaseUrl: asString(extras.updateReleaseUrl, null),
 	};
 }
 
@@ -106,6 +130,10 @@ export async function patchUpdateSettings(patch: Partial<UpdateSettings>): Promi
 		updateLatestDigest: next.latestDigest,
 		updateCurrentDigest: next.currentDigest,
 		updateAvailable: next.updateAvailable,
+		updatePinnedVersion: next.pinnedVersion,
+		updateReleaseTag: next.releaseTag,
+		updateReleaseNotes: next.releaseNotes,
+		updateReleaseUrl: next.releaseUrl,
 	};
 	const metricsConfig = { ...base, [EXTRAS_KEY]: extras };
 

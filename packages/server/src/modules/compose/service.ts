@@ -53,6 +53,7 @@ import {
 	resolveComposeFilePath,
 	shellQuote,
 } from "./paths";
+import { recordComposeSnapshot, resolveCurrentDeploymentId } from "./snapshot";
 import {
 	type ComposeRow,
 	cloneComposeSource,
@@ -351,14 +352,30 @@ async function exposedServiceNames(composeId: string): Promise<Set<string>> {
 	return names;
 }
 
+export interface PrepareComposeFilesOptions {
+	/**
+	 * Deployment this render belongs to. When it resolves (explicitly, or via
+	 * the currently-claimed job — see `snapshot.ts#resolveCurrentDeploymentId`)
+	 * the rendered file + env are snapshotted so `compose.rollback` can restore
+	 * them. Pass `null` to skip the snapshot entirely.
+	 */
+	deploymentId?: string | null;
+}
+
 /**
  * Materialize everything a deploy needs on disk: clone the git source when
  * applicable, render the compose file (env interpolated, safety-checked,
  * suffix + networks injected) to `docker-compose.nixploy.yml`, and write the
  * merged project → environment → service env file.
  * Also used by the deploy engine's worker for compose jobs.
+ *
+ * When this render belongs to a deployment it also records a rollback
+ * snapshot (see `snapshot.ts`) — best effort, never a deploy blocker.
  */
-export async function prepareComposeFiles(composeRow: ComposeRow): Promise<PreparedComposeFiles> {
+export async function prepareComposeFiles(
+	composeRow: ComposeRow,
+	options: PrepareComposeFilesOptions = {},
+): Promise<PreparedComposeFiles> {
 	const { appName } = composeRow;
 	const envFilePath = getComposeEnvPath(appName);
 	const composeFilePath = getComposeDeployFilePath(appName);
@@ -434,6 +451,24 @@ export async function prepareComposeFiles(composeRow: ComposeRow): Promise<Prepa
 		if (shouldRedactEnvValue(value)) secrets.push(value);
 	}
 
+	// Rollback snapshot: exactly what this deployment deploys. `undefined`
+	// means "figure it out" (the worker does not pass one yet), `null` means
+	// "this render is not a deployment" (start/stop/delete).
+	const deploymentId =
+		options.deploymentId === undefined
+			? await resolveCurrentDeploymentId(composeRow.composeId)
+			: options.deploymentId;
+	if (deploymentId) {
+		await recordComposeSnapshot({
+			composeId: composeRow.composeId,
+			deploymentId,
+			sourceFile: rawContent,
+			renderedFile: transformed,
+			serviceEnv: composeRow.env ?? null,
+			mergedEnv,
+		});
+	}
+
 	return {
 		workDir: getComposeBaseDir(appName),
 		composeFilePath,
@@ -459,7 +494,8 @@ async function updateStatus(composeId: string, status: "idle" | "running" | "don
 export async function startCompose(composeRow: ComposeRow): Promise<void> {
 	await updateStatus(composeRow.composeId, "running");
 	try {
-		const files = await prepareComposeFiles(composeRow);
+		// Not a deployment: never snapshot, never displace the worker's own row.
+		const files = await prepareComposeFiles(composeRow, { deploymentId: null });
 		await runComposeCommand(composeRow, buildComposeDeployCommand(composeRow, files), {
 			cwd: files.workDir,
 			onPrimary: runsOnPrimary(composeRow),
@@ -479,7 +515,8 @@ export async function startCompose(composeRow: ComposeRow): Promise<void> {
 /** Stop without removing: `docker compose stop`, or `docker stack rm` for stacks. */
 export async function stopCompose(composeRow: ComposeRow): Promise<void> {
 	try {
-		const files = await prepareComposeFiles(composeRow);
+		// Not a deployment: never snapshot, never displace the worker's own row.
+		const files = await prepareComposeFiles(composeRow, { deploymentId: null });
 		await runComposeCommand(composeRow, buildComposeStopCommand(composeRow, files), {
 			cwd: files.workDir,
 			onPrimary: runsOnPrimary(composeRow),
@@ -514,7 +551,7 @@ export async function deleteCompose(composeRow: ComposeRow): Promise<void> {
 		// When the files cannot be prepared (clone failure, file now failing
 		// safety, empty file) fall back to the name-only teardown so the
 		// containers never outlive the row.
-		const files = await prepareComposeFiles(composeRow).catch(() => null);
+		const files = await prepareComposeFiles(composeRow, { deploymentId: null }).catch(() => null);
 		const command = files
 			? buildComposeDownCommand(composeRow, files)
 			: buildComposeFallbackDownCommand(composeRow);
