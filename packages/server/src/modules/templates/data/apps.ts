@@ -73,7 +73,7 @@ volumes:
 		],
 		compose: `services:
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     restart: always
     command: server /data --console-address ":9001"
     environment:
