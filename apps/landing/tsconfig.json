@@ -1,9 +1,23 @@
 {
-	// Same shared strictness as the panel and the server; see tsconfig.base.json.
-	"extends": "../../tsconfig.base.json",
+	// Self-contained on purpose: nixploy.com is deployed from `apps/landing`
+	// alone (Dokploy/Railpack copies just this folder), so there is no
+	// `../../tsconfig.base.json` at build time. Keep the options in sync with
+	// tsconfig.base.json by hand; the Next-specific overrides follow them.
 	"compilerOptions": {
-		// Next-specific overrides only.
+		"target": "ES2022",
 		"lib": ["dom", "dom.iterable", "ES2023"],
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"moduleDetection": "force",
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"isolatedModules": true,
+		"resolveJsonModule": true,
+		"verbatimModuleSyntax": true,
+		"noEmit": true,
 		"allowJs": true,
 		"jsx": "react-jsx",
 		"incremental": true,
