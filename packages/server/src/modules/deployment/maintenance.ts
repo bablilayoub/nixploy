@@ -51,8 +51,18 @@ const getLogsRoot = (): string => path.join(getConfigDir(), "logs");
 const getSchedulesLogDir = (): string =>
 	process.env.NIXPLOY_SCHEDULES_LOG_PATH ?? path.join(getConfigDir(), "schedules");
 
-const errorMessage = (error: unknown): string =>
-	error instanceof Error ? error.message : String(error);
+/**
+ * Drizzle wraps a driver failure in a `DrizzleQueryError` whose message is the
+ * SQL and the parameters — the actual reason sits on `cause`. Logging only the
+ * message is how a broken maintenance step can fail hourly for weeks while the
+ * log says nothing but "Failed query: …".
+ */
+const errorMessage = (error: unknown): string => {
+	if (!(error instanceof Error)) return String(error);
+	const cause = (error as { cause?: unknown }).cause;
+	const causeMessage = cause instanceof Error ? cause.message : null;
+	return causeMessage ? `${error.message} — cause: ${causeMessage}` : error.message;
+};
 
 /**
  * Audit retention in days from the env value: unset → default, `0` → keep
@@ -135,6 +145,11 @@ export async function pruneDeploymentRows(
 	const now = options.now ?? new Date();
 	const cutoff = new Date(now.getTime() - (options.retentionMs ?? DEPLOYMENT_ROW_RETENTION_MS));
 
+	// The cutoff goes in as an ISO string, not a Date: `db.execute` sends a raw
+	// statement through postgres-js's unsafe path, which cannot serialize a JS
+	// Date. Passing one made every hourly run fail with ERR_INVALID_ARG_TYPE —
+	// drizzle reported it as "Failed query: …" with the real cause hidden — so
+	// deployment rows and their log files were never pruned on any install.
 	const deleted = (await db.execute(sql`
 		WITH ranked AS (
 			SELECT deployment_id,
@@ -148,7 +163,7 @@ export async function pruneDeploymentRows(
 		USING ranked AS r
 		WHERE d.deployment_id = r.deployment_id
 			AND r.position > ${keep}
-			AND d.created_at < ${cutoff}
+			AND d.created_at < ${cutoff.toISOString()}::timestamptz
 			AND d.status NOT IN ('running', 'queued')
 			AND NOT EXISTS (SELECT 1 FROM rollback AS rb WHERE rb.deployment_id = d.deployment_id)
 		RETURNING d.log_path

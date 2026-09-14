@@ -175,14 +175,18 @@ describe("pruneDeploymentRows", () => {
 		expect(sql).toContain("not exists (select 1 from rollback");
 		expect(sql).toContain("returning d.log_path");
 		expect(params[0]).toBe(DEPLOYMENTS_KEPT_PER_TARGET);
-		expect(params[1]).toEqual(new Date(now.getTime() - 30 * DAY));
+		// An ISO string, never a Date: `db.execute` goes through postgres-js's
+		// unsafe path, which throws ERR_INVALID_ARG_TYPE on a Date. This suite
+		// mocks the driver, so only `maintenance.db.test.ts` proves the query
+		// actually runs — keep both.
+		expect(params[1]).toBe(new Date(now.getTime() - 30 * DAY).toISOString());
 	});
 
 	it("honours custom cap and retention", async () => {
 		await pruneDeploymentRows({ keepPerTarget: 5, retentionMs: DAY, now: new Date(1_000_000) });
 		const { params } = render(state.executed[0]);
 		expect(params[0]).toBe(5);
-		expect(params[1]).toEqual(new Date(1_000_000 - DAY));
+		expect(params[1]).toBe(new Date(1_000_000 - DAY).toISOString());
 	});
 });
 
