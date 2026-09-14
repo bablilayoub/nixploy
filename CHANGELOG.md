@@ -13,6 +13,17 @@ this file is the summary.
 
 Nothing yet.
 
+## [0.2.2] — 2026-09-14
+
+### Fixed
+
+- External connection URLs of databases on the Nixploy host showed
+  `localhost`; they now use the host's public address (`NIXPLOY_PUBLIC_HOST`
+  to override, detected public IPv4 otherwise).
+- Renaming (or changing any single setting of) a database re-sent the
+  default image and was refused as a version downgrade on newer instances —
+  or silently reset the image. Partial updates leave the image alone.
+
 ## [0.2.1] — 2026-09-12
 
 Follow-up to 0.2.0 after its release pipeline was exercised end to end.
