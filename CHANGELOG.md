@@ -13,6 +13,17 @@ this file is the summary.
 
 Nothing yet.
 
+## [0.2.7] — 2026-09-14
+
+### Fixed
+
+- Builds from source (nixpacks, railpack, Dockerfile) failed on every
+  released install with "BuildKit is enabled but the buildx component is
+  missing or broken": the image installed the docker CLI without the buildx
+  plugin. It ships `docker-cli-buildx` now, and a host without the plugin
+  falls back to the classic builder (no layer cache, no BuildKit secrets)
+  with a log line saying how to install it, instead of failing the deploy.
+
 ## [0.2.6] — 2026-09-14
 
 ### Fixed
