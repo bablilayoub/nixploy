@@ -10,6 +10,47 @@ Upgrade mechanics (rollback, pre-update dump, downgrade guard) are in
 
 ---
 
+## v0.2.8
+
+**Housekeeping starts deleting things — because it never ran before.** The
+hourly maintenance pass has failed on every install since it was written: it
+passed a JavaScript `Date` into a raw SQL statement, which the Postgres driver
+refuses. Nothing was ever pruned. After upgrading, the first pass does the
+backlog in one go:
+
+- deployment rows beyond the newest 50 per service **and** older than 30 days,
+- deployment and schedule log files older than 30 days,
+- expired preview deployments, and incidents past their retention,
+- audit rows older than `NIXPLOY_AUDIT_RETENTION_DAYS` (default 365; `0` keeps
+  them forever) — the only one of these with a knob. The deployment and log
+  thresholds are fixed in code today.
+
+Rows referenced by a rollback pin are never deleted, and running or queued
+deployments are never touched. An instance that has been running for months
+will see one large delete in the first hour and nothing unusual after that. If
+you need to keep an old build log, copy it out **before** upgrading.
+
+**A build host that cannot export a layer cache now builds anyway.** Asking
+buildx's default `docker` driver for `--cache-to type=local` fails the whole
+build ("Cache export is not supported for the docker driver"), which is what
+every Dockerfile build did on a stock Docker daemon. The panel probes the
+build host and, when it cannot export a cache, builds without one and logs why
+plus how to get it back (turn on the containerd image store, or create a
+`docker-container` builder). Nothing to do unless you want the cache: builds
+that already worked keep working, at the same speed.
+
+**Redeploy is gone from the application and compose headers.** It queued
+exactly the same job as Deploy — same builder, same rollout — so the two
+buttons only implied a difference that did not exist. `application.redeploy`
+and `compose.redeploy` are unchanged for API, CLI and webhook callers.
+
+**Creating an application opens it.** The create dialog now asks for the
+source (a Docker image or a repository) and lands on the new service instead
+of returning to the list. Scripted UI flows that clicked the service in the
+table afterwards should wait for the service URL instead.
+
+---
+
 ## In-app updater: release notes and version pinning
 
 **What "newer" means.** The installer pins the panel to the release tag it

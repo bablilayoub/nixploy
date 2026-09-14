@@ -11,6 +11,10 @@ this file is the summary.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.2.8] — 2026-09-15
+
 ### Added
 
 - **Inherited variables are visible from the service.** The Environment tab of
