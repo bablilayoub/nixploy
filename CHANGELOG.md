@@ -13,6 +13,18 @@ this file is the summary.
 
 Nothing yet.
 
+## [0.2.6] — 2026-09-14
+
+### Fixed
+
+- The update dialog offered to pull an older image than the one running
+  ("This pulls …:v0.2.1" on a v0.2.3 host): `update.sh` rolls the service
+  without touching the panel's settings, so the tracked image went stale and
+  confirming would have downgraded the instance onto a newer schema. Checks
+  adopt the tag the service actually runs, the dialog shows the image that
+  will really be pulled, and an update refuses an older release unless a
+  downgrade is acknowledged.
+
 ## [0.2.5] — 2026-09-14
 
 ### Fixed
