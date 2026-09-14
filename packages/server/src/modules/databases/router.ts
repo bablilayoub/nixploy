@@ -218,6 +218,11 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 		.partial()
 		.extend({ [idField]: z.string().min(1) })
 		.extend({
+			// `.partial()` keeps the create-time `.default(config.defaultImage)`,
+			// so an update that never mentioned the image (a rename, a port
+			// change) arrived as `dockerImage: "postgres:17"` — and on a Postgres
+			// 18 row the version guard refused it as a downgrade. Truly optional.
+			dockerImage: z.string().min(1).optional(),
 			/** Acknowledges the data-loss risk of a major engine upgrade. */
 			confirmMajorUpgrade: z.boolean().optional(),
 		});
