@@ -53,7 +53,7 @@
 #
 set -euo pipefail
 
-NIXPLOY_VERSION="${NIXPLOY_VERSION:-v0.2.5}"
+NIXPLOY_VERSION="${NIXPLOY_VERSION:-v0.2.6}"
 NIXPLOY_CONFIG_DIR="${NIXPLOY_CONFIG_DIR:-/etc/nixploy}"
 # Host-side directory; re-asserted after sourcing .env (older installs stored
 # the container path there).
