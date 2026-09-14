@@ -126,7 +126,7 @@ export function GithubPanel() {
 					<DialogTrigger asChild>
 						<Button size="sm" disabled={!canManage} title={manageHint}>
 							<Plus className="size-4" />
-							Add GitHub Provider
+							Add GitHub provider
 						</Button>
 					</DialogTrigger>
 					<DialogContent>

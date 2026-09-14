@@ -103,7 +103,9 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 						<TableHeader>
 							<TableRow>
 								<TableHead>Image</TableHead>
-								<TableHead>Version</TableHead>
+								{/* It is the local tag the image is pinned under, derived from the
+								    deployment id — "Version" read like a release number. */}
+								<TableHead>Image tag</TableHead>
 								<TableHead>Created</TableHead>
 								<TableHead className="text-right">Actions</TableHead>
 							</TableRow>

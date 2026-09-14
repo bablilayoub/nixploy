@@ -125,6 +125,7 @@ export function ServiceAlertRulesCard({
 						<Label>Threshold</Label>
 						<Input
 							type="number"
+							aria-label="Threshold"
 							min={1}
 							value={threshold}
 							onChange={(event) => setThreshold(event.target.value)}

@@ -35,6 +35,9 @@ export function DeploymentsChart() {
 		...row,
 		label: row.date.slice(5), // MM-DD
 	}));
+	// A fortnight of flat zeroes is a chart that says nothing; a fresh instance
+	// gets a sentence instead.
+	const hasDeployments = rows.some((row) => row.done > 0 || row.error > 0);
 
 	return (
 		<section className="flex h-full flex-col rounded-lg border border-border p-4 sm:p-5">
@@ -56,6 +59,10 @@ export function DeploymentsChart() {
 					>
 						{null}
 					</QueryState>
+				) : !hasDeployments ? (
+					<div className="flex h-[220px] items-center justify-center text-center text-sm text-muted-foreground">
+						No deployments in the last 14 days.
+					</div>
 				) : (
 					<ChartContainer config={chartConfig} className="aspect-auto h-[220px] w-full">
 						<AreaChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>

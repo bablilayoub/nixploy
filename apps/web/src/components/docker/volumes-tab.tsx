@@ -132,13 +132,19 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 						{volumes.map((volume) => (
 							<TableRow key={volume.Name}>
 								<TableCell className="max-w-72">
-									<span className="font-mono text-xs font-medium">{volume.Name}</span>{" "}
-									{volume.protected && (
-										<Badge variant="outline" className="ml-1.5 text-muted-foreground">
-											<Lock className="mr-1 size-3" />
-											protected
-										</Badge>
-									)}
+									{/* An anonymous volume's name is a 64-char hash; unconstrained it
+									    ran straight across the Mountpoint column. */}
+									<span className="flex min-w-0 items-center gap-1.5">
+										<span className="truncate font-mono text-xs font-medium" title={volume.Name}>
+											{volume.Name}
+										</span>
+										{volume.protected && (
+											<Badge variant="outline" className="shrink-0 text-muted-foreground">
+												<Lock className="mr-1 size-3" />
+												protected
+											</Badge>
+										)}
+									</span>
 								</TableCell>
 								<TableCell className="text-xs text-muted-foreground">{volume.Driver}</TableCell>
 								<TableCell className="max-w-72 truncate font-mono text-xs text-muted-foreground">

@@ -106,7 +106,7 @@ export function GitlabPanel() {
 					<DialogTrigger asChild>
 						<Button size="sm" disabled={!canManage} title={manageHint}>
 							<Plus className="size-4" />
-							Add GitLab Provider
+							Add GitLab provider
 						</Button>
 					</DialogTrigger>
 					<DialogContent>

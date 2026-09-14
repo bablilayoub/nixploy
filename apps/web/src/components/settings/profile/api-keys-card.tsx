@@ -207,7 +207,7 @@ export function ApiKeysCard() {
 						<DialogTrigger asChild>
 							<Button size="sm">
 								<Plus className="size-4" />
-								Create API Key
+								Create API key
 							</Button>
 						</DialogTrigger>
 						<DialogContent>

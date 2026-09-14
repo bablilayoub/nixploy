@@ -237,7 +237,7 @@ export function evaluateInstanceBackupAlert(
 		return {
 			kind: "instanceBackup",
 			severity: "warning",
-			summary: `No instance backup has ever completed. Configure one under Settings → Backups so the panel database and config can be restored (docs/instance-backup.md).`,
+			summary: `No instance backup has ever completed. Configure one under Settings → Backup storage so the panel database and config can be restored (docs/instance-backup.md).`,
 			fields: [{ name: "Last successful backup", value: "never" }],
 		};
 	}
@@ -247,7 +247,7 @@ export function evaluateInstanceBackupAlert(
 	return {
 		kind: "instanceBackup",
 		severity: "warning",
-		summary: `The last successful instance backup was ${ageDays} days ago (threshold ${days}). Check Settings → Backups and the destination credentials.`,
+		summary: `The last successful instance backup was ${ageDays} days ago (threshold ${days}). Check Settings → Backup storage and the destination credentials.`,
 		fields: [
 			{ name: "Last successful backup", value: new Date(at).toISOString() },
 			{ name: "Age", value: `${ageDays} days` },

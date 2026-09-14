@@ -43,7 +43,7 @@ const SOURCE_TYPES: { value: SourceType; label: string }[] = [
 	{ value: "gitlab", label: "GitLab" },
 	{ value: "bitbucket", label: "Bitbucket" },
 	{ value: "gitea", label: "Gitea" },
-	{ value: "docker", label: "Docker Image" },
+	{ value: "docker", label: "Docker image" },
 	{ value: "drop", label: "Drop (zip upload)" },
 ];
 
@@ -393,7 +393,7 @@ export function SourceConfig({ application }: { application: Application }) {
 							{providerOptions.length === 0 && (
 								<p className="text-xs text-muted-foreground">
 									No {GIT_PROVIDER_LABELS[sourceType]} providers configured. Add one under Settings
-									→ Git Providers.
+									→ Git providers.
 								</p>
 							)}
 						</div>

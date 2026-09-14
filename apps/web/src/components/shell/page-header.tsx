@@ -29,8 +29,11 @@ export function PageHeader({
 			<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
 				<div className="flex min-w-0 flex-1 flex-col gap-1">
 					<h1 className="truncate text-2xl font-bold tracking-tight">{title}</h1>
+					{/* Wraps rather than truncates: page descriptions carry links and
+					    real instructions, and the Servers page was cut mid-word with no
+					    way to read the rest (a title attribute only helps plain strings). */}
 					{description ? (
-						<p className="truncate text-sm text-muted-foreground" title={descriptionTitle}>
+						<p className="text-sm text-muted-foreground" title={descriptionTitle}>
 							{description}
 						</p>
 					) : null}

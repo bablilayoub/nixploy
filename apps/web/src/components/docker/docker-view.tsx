@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useMounted } from "@/hooks/use-mounted";
+import { useSyncedTab } from "@/hooks/use-synced-tab";
 import { authClient } from "@/lib/auth-client";
 import { capabilityLabel } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
@@ -55,6 +56,8 @@ export function invalidateDockerQueries(
 	]);
 }
 
+const DOCKER_TABS = ["containers", "images", "swarm", "networks", "volumes", "system"];
+
 /** Docker control center: full control over the daemon from the dashboard. */
 export function DockerView() {
 	const trpc = useTRPC();
@@ -63,6 +66,11 @@ export function DockerView() {
 	const activeOrganizationId = activeOrganization?.id ?? null;
 	// undefined = nothing picked yet → fall back to the first daemon the caller may use.
 	const [serverId, setServerId] = useState<string | null | undefined>(undefined);
+	// `?tab=` like every other tabbed page: a Docker sub-tab is worth linking to
+	// ("look at the volumes on this host") and worth surviving a refresh.
+	const [dockerTab, selectDockerTab] = useSyncedTab("containers", (value) =>
+		DOCKER_TABS.includes(value),
+	);
 	const serversQuery = useQuery(trpc.server.all.queryOptions());
 	const servers = serversQuery.data ?? [];
 
@@ -135,7 +143,7 @@ export function DockerView() {
 		);
 	} else {
 		body = (
-			<Tabs defaultValue="containers">
+			<Tabs value={dockerTab} onValueChange={selectDockerTab} activationMode="manual">
 				<TabsList variant="line" className="w-full justify-start overflow-x-auto border-b">
 					<TabsTrigger value="containers">Containers</TabsTrigger>
 					<TabsTrigger value="images">Images</TabsTrigger>

@@ -208,7 +208,7 @@ function DashboardDomainFields({
 					onClick={() => onSave(trimmed || null)}
 				>
 					{isSaving && <Loader2 className="size-4 animate-spin" />}
-					{trimmed ? "Save domain" : "Remove"}
+					{trimmed || !savedDomain ? "Save domain" : "Remove"}
 				</Button>
 			</div>
 
@@ -421,17 +421,6 @@ export function ServerSettingsView() {
 					id="access"
 					title="Access"
 					description="Serve this panel from your own domain with automatic HTTPS."
-					actions={
-						<Button
-							type="button"
-							size="sm"
-							disabled={updateMutation.isPending || settingsQuery.isPending}
-							onClick={saveAccess}
-						>
-							{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-							Save email
-						</Button>
-					}
 				>
 					{settingsQuery.isPending ? (
 						<div className="grid gap-4">
@@ -447,15 +436,29 @@ export function ServerSettingsView() {
 								isSaving={updateMutation.isPending}
 								onSave={(host) => updateMutation.mutate({ host })}
 							/>
-							<div className="grid gap-2">
-								<Label htmlFor="letsencrypt-email">Let&apos;s Encrypt email</Label>
-								<Input
-									id="letsencrypt-email"
-									type="email"
-									placeholder="admin@example.com"
-									value={letsEncryptEmail}
-									onChange={(event) => accessDraft.set(event.target.value)}
-								/>
+							<div className="flex max-w-xl flex-wrap items-end gap-2">
+								<div className="grid min-w-64 flex-1 gap-2">
+									<Label htmlFor="letsencrypt-email">Let&apos;s Encrypt email</Label>
+									<Input
+										id="letsencrypt-email"
+										type="email"
+										placeholder="admin@example.com"
+										value={letsEncryptEmail}
+										onChange={(event) => accessDraft.set(event.target.value)}
+									/>
+								</div>
+								<Button
+									type="button"
+									size="sm"
+									className="h-9"
+									disabled={
+										updateMutation.isPending || settingsQuery.isPending || !accessDraft.dirty
+									}
+									onClick={saveAccess}
+								>
+									{updateMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+									Save email
+								</Button>
 							</div>
 						</>
 					)}

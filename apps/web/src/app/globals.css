@@ -141,6 +141,24 @@
 	}
 }
 
+/*
+ * Horizontal scroll hint for tables. The `local` gradients travel with the
+ * content and the `scroll` shadows stay pinned to the edges, so a shadow shows
+ * up exactly when there is more table in that direction and disappears at the
+ * ends — no JS, no measuring, and nothing to see when the table fits.
+ */
+@utility scroll-shadow-x {
+	background:
+		linear-gradient(to right, var(--background) 40%, transparent) left center / 2rem 100% no-repeat
+		local,
+		linear-gradient(to left, var(--background) 40%, transparent) right center / 2rem 100% no-repeat
+		local,
+		radial-gradient(farthest-side at 0 50%, rgb(0 0 0 / 14%), transparent) left center / 0.75rem
+		100% no-repeat scroll,
+		radial-gradient(farthest-side at 100% 50%, rgb(0 0 0 / 14%), transparent) right center / 0.75rem
+		100% no-repeat scroll;
+}
+
 @utility no-scrollbar {
 	-ms-overflow-style: none;
 	scrollbar-width: none;

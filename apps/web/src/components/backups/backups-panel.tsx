@@ -765,15 +765,13 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 						<DatabaseBackup className="size-8 text-muted-foreground" />
 						<p className="text-sm font-medium">No backup storage configured</p>
 						<p className="text-sm text-muted-foreground">
-							Add a destination under{" "}
-							<Link
-								href="/dashboard/settings/destinations"
-								className="font-medium text-foreground underline-offset-4 hover:underline"
-							>
-								Settings → Backup storage
-							</Link>{" "}
-							before creating backups.
+							Backups need somewhere to go — an S3 bucket or a directory on this host.
 						</p>
+						{/* The empty state is the one place that knows what is missing, so it
+						    carries the button rather than only naming the page. */}
+						<Button asChild size="sm" variant="outline" className="mt-2">
+							<Link href="/dashboard/settings/destinations">Add backup storage</Link>
+						</Button>
 					</div>
 				) : (
 					table

@@ -463,6 +463,9 @@ export const applicationRouter = router({
 				action: "application.deploy",
 				targetType: "application",
 				targetId: input.applicationId,
+				// Deploys are the bulk of the audit trail; without the name every
+				// one of those rows reads as a bare uuid.
+				targetName: application.name,
 				metadata: { deploymentId },
 			});
 			return { applicationId: input.applicationId, deploymentId };

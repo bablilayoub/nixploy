@@ -165,6 +165,7 @@ export function SshKeysView() {
 											</div>
 											<Textarea
 												readOnly
+												aria-label="Private key"
 												className="h-32 font-mono text-xs"
 												value={generated.privateKey}
 											/>
@@ -176,6 +177,7 @@ export function SshKeysView() {
 											</div>
 											<Textarea
 												readOnly
+												aria-label="Public key"
 												className="h-20 font-mono text-xs"
 												value={generated.publicKey}
 											/>

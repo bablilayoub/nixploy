@@ -8,6 +8,7 @@ import { QueryState } from "@/components/query-state";
 import { PageHeader } from "@/components/shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DateTime } from "@/components/ui/date-time";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -53,16 +54,6 @@ function ActionBadge({ action }: { action: string }) {
 			{action}
 		</Badge>
 	);
-}
-
-function formatTime(value: Date | string): string {
-	const date = typeof value === "string" ? new Date(value) : value;
-	return date.toLocaleString(undefined, {
-		month: "short",
-		day: "numeric",
-		hour: "2-digit",
-		minute: "2-digit",
-	});
 }
 
 /**
@@ -256,7 +247,10 @@ export function ActivityView({ embedded = false }: { embedded?: boolean } = {}) 
 							{rows.map((row) => (
 								<TableRow key={row.auditId}>
 									<TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-										{formatTime(row.createdAt)}
+										{/* Shared formatter: this table used its own 12-hour
+										    `toLocaleString`, so the audit trail disagreed with every
+										    other timestamp in the panel. */}
+										<DateTime value={row.createdAt} mode="absolute" />
 									</TableCell>
 									<TableCell className="text-xs">
 										{row.actorEmail ?? (row.actorId ? row.actorId.slice(0, 8) : "system")}

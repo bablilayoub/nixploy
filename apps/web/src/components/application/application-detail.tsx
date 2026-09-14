@@ -22,6 +22,7 @@ import { LogViewer } from "@/components/services/log-viewer";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
 import { SaveBarTabsContent } from "@/components/services/save-bar";
 import { ServiceAlertRulesCard } from "@/components/services/service-alert-rules-card";
+import { ServiceLoadError } from "@/components/services/service-load-error";
 import { ServiceTerminal } from "@/components/services/service-terminal";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
 import { Button } from "@/components/ui/button";
@@ -119,14 +120,12 @@ export function ApplicationDetail({ projectId, id }: { projectId: string; id: st
 
 	if (isError || !application) {
 		return (
-			<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
-				<p>{error?.message ?? "Application not found."}</p>
-				{isError && (
-					<Button variant="outline" size="sm" onClick={() => refetch()}>
-						Retry
-					</Button>
-				)}
-			</div>
+			<ServiceLoadError
+				label="Application"
+				projectId={projectId}
+				error={isError ? error : null}
+				onRetry={() => refetch()}
+			/>
 		);
 	}
 

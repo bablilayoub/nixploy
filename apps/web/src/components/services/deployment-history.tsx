@@ -250,6 +250,12 @@ export function DeploymentHistory({
 
 	const deployments =
 		(deploymentsQuery.data?.pages.flatMap((page) => page.deployments) as DeploymentRow[]) ?? [];
+	// The log drawer holds the row it was opened with; re-reading it from the
+	// list keeps its title status honest when the deployment settles while the
+	// drawer is open (it used to say "Running" under a finished log).
+	const openLogDeployment = logDeployment
+		? (deployments.find((row) => row.deploymentId === logDeployment.deploymentId) ?? logDeployment)
+		: null;
 	const latestError = deployments.find((deployment) => deployment.status === "error");
 	const hasActive = deployments.some((deployment) => isActive(deployment.status));
 
@@ -341,8 +347,8 @@ export function DeploymentHistory({
 							<TableRow>
 								<TableHead>Title</TableHead>
 								<TableHead>Status</TableHead>
-								<TableHead>Created</TableHead>
-								<TableHead>Duration</TableHead>
+								<TableHead className="hidden md:table-cell">Created</TableHead>
+								<TableHead className="hidden md:table-cell">Duration</TableHead>
 								<TableHead className="text-right">Actions</TableHead>
 							</TableRow>
 						</TableHeader>
@@ -363,7 +369,7 @@ export function DeploymentHistory({
 											)}
 										</span>
 										{deployment.commitSha && (
-											<span className="mt-0.5 flex max-w-md items-center gap-1.5 text-xs font-normal text-muted-foreground">
+											<span className="mt-0.5 flex max-w-[55vw] items-center gap-1.5 text-xs font-normal text-muted-foreground sm:max-w-md">
 												{(() => {
 													const sha = deployment.commitSha;
 													const href = commitUrl?.(sha) ?? null;
@@ -399,10 +405,16 @@ export function DeploymentHistory({
 											</span>
 										)}
 										{deployment.errorMessage && (
-											<span className="block max-w-md truncate text-xs font-normal text-destructive">
+											<span className="block max-w-[55vw] truncate text-xs font-normal text-destructive sm:max-w-md">
 												{deployment.errorMessage}
 											</span>
 										)}
+										{/* Phones drop the Created and Duration columns; the same facts fold
+										    under the title so the row still answers "when" and "how long". */}
+										<span className="mt-0.5 block text-xs font-normal text-muted-foreground md:hidden">
+											<DateTime value={deployment.createdAt} /> ·{" "}
+											{formatDuration(deployment.startedAt, deployment.finishedAt)}
+										</span>
 									</TableCell>
 									<TableCell>
 										<DeploymentStatusBadge
@@ -410,10 +422,10 @@ export function DeploymentHistory({
 											queuePosition={deployment.queuePosition}
 										/>
 									</TableCell>
-									<TableCell className="text-muted-foreground">
+									<TableCell className="hidden text-muted-foreground md:table-cell">
 										<DateTime value={deployment.createdAt} />
 									</TableCell>
-									<TableCell className="text-muted-foreground">
+									<TableCell className="hidden text-muted-foreground md:table-cell">
 										{formatDuration(deployment.startedAt, deployment.finishedAt)}
 									</TableCell>
 									<TableCell className="text-right">
@@ -485,12 +497,12 @@ export function DeploymentHistory({
 			<Dialog open={logDeployment !== null} onOpenChange={(open) => !open && closeLogs()}>
 				<DialogContent className="flex max-h-[85vh] w-[calc(100%-2rem)] flex-col sm:max-w-5xl">
 					<DialogHeader>
-						<DialogTitle>{logDeployment?.title ?? "Deployment logs"}</DialogTitle>
+						<DialogTitle>{openLogDeployment?.title ?? "Deployment logs"}</DialogTitle>
 						<DialogDescription>
-							{logDeployment && (
+							{openLogDeployment && (
 								<>
-									<DateTime value={logDeployment.createdAt} mode="absolute" /> ·{" "}
-									{deploymentStatusLabel[logDeployment.status] ?? logDeployment.status}
+									<DateTime value={openLogDeployment.createdAt} mode="absolute" /> ·{" "}
+									{deploymentStatusLabel[openLogDeployment.status] ?? openLogDeployment.status}
 								</>
 							)}
 						</DialogDescription>

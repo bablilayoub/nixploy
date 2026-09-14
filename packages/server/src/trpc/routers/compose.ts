@@ -344,6 +344,7 @@ export const composeRouter = router({
 			action: "compose.deploy",
 			targetType: "compose",
 			targetId: input.composeId,
+			targetName: row.name,
 			metadata: { deploymentId },
 		});
 		return { deploymentId };

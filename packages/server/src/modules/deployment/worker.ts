@@ -641,7 +641,12 @@ async function recordDeployFailure(job: QueueJob): Promise<void> {
 		message: deployment?.errorMessage ?? "Deployment failed",
 		serviceId,
 		serviceName,
-		metadata: { deploymentId: job.deploymentId },
+		// The kind is what turns `serviceId` into a page the panel can link to;
+		// without it an incident names the service it cannot take you to.
+		metadata: {
+			deploymentId: job.deploymentId,
+			serviceKind: job.applicationId ? "application" : "compose",
+		},
 	});
 	if (deployment?.logPath) {
 		const { readFile } = await import("node:fs/promises");

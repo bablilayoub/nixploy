@@ -580,7 +580,7 @@ export function SetupForm() {
 									<span>
 										<span className="font-medium text-foreground">Connect Git</span>
 										<span className="block text-muted-foreground">
-											Settings → Git Providers for GitHub, GitLab, and more.
+											Settings → Git providers for GitHub, GitLab, and more.
 										</span>
 									</span>
 								</li>

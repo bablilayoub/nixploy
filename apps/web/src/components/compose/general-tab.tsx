@@ -377,7 +377,7 @@ export function GeneralTab({
 								{!providersLoading && providers.length === 0 && (
 									<p className="text-sm text-muted-foreground">
 										No {GIT_PROVIDER_LABELS[sourceType]} provider configured yet — add one under
-										Settings → Git Providers.
+										Settings → Git providers.
 									</p>
 								)}
 							</div>

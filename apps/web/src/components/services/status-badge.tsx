@@ -1,5 +1,6 @@
 import { StatusDot, type StatusDotStatus } from "@/components/shell";
 import { Badge } from "@/components/ui/badge";
+import { deploymentStatusDot, deploymentStatusLabel } from "@/lib/status";
 import { cn } from "@/lib/utils";
 
 type ServiceStatus = "idle" | "running" | "done" | "error" | null | undefined;
@@ -41,26 +42,22 @@ export function ServiceStatusBadge({ status }: { status: ServiceStatus }) {
 
 type DeploymentStatus = "queued" | "running" | "done" | "error" | "cancelled" | null | undefined;
 
-type DeploymentStatusStyle = {
-	label: string;
-	status: StatusDotStatus;
-	variant: "secondary" | "success" | "destructive" | "info";
-};
+type BadgeVariant = "secondary" | "success" | "destructive" | "info";
 
-/** Also the fallback for a status the panel does not know yet. */
-const DEPLOYMENT_STATUS_RUNNING: DeploymentStatusStyle = {
-	label: "Running",
-	status: "success",
-	variant: "success",
-};
-
-const deploymentStatusConfig: Record<string, DeploymentStatusStyle> = {
-	queued: { label: "Queued", status: "neutral", variant: "secondary" },
-	running: DEPLOYMENT_STATUS_RUNNING,
-	// "Succeeded", not "Done" — it reads as an outcome next to Error/Cancelled (UX audit F26).
-	done: { label: "Succeeded", status: "info", variant: "info" },
-	error: { label: "Error", status: "error", variant: "destructive" },
-	cancelled: { label: "Cancelled", status: "neutral", variant: "secondary" },
+/**
+ * Only the badge colour lives here — the words come from
+ * `deploymentStatusLabel`, so the badge, the dashboard list and the log drawer
+ * cannot drift apart again (the badge used to say "Error" where the rest of
+ * the panel said "Failed").
+ */
+const deploymentBadgeVariant: Record<string, BadgeVariant> = {
+	queued: "secondary",
+	// Blue while it runs, green once it succeeded — the same reading as the dots
+	// in the dashboard list, which had the two colours the other way round here.
+	running: "info",
+	done: "success",
+	error: "destructive",
+	cancelled: "secondary",
 };
 
 export function DeploymentStatusBadge({
@@ -71,16 +68,15 @@ export function DeploymentStatusBadge({
 	/** 1-based place in the server's deploy line; shown as "Queued (#n)". */
 	queuePosition?: number | null;
 }) {
-	const config = deploymentStatusConfig[status ?? "running"] ?? DEPLOYMENT_STATUS_RUNNING;
-	const label =
-		status === "queued" && queuePosition ? `${config.label} (#${queuePosition})` : config.label;
+	const key = status ?? "running";
+	const dot = deploymentStatusDot[key] ?? "neutral";
+	const base = deploymentStatusLabel[key] ?? "Running";
+	const label = key === "queued" && queuePosition ? `${base} (#${queuePosition})` : base;
 
 	return (
-		<Badge variant={config.variant} className="gap-1.5 font-normal">
-			<StatusDot
-				status={config.status}
-				className={cn("ring-0", config.status === "success" && "animate-pulse")}
-			/>
+		<Badge variant={deploymentBadgeVariant[key] ?? "success"} className="gap-1.5 font-normal">
+			{/* Only work in flight pulses; a finished deployment is a static fact. */}
+			<StatusDot status={dot} className={cn("ring-0", key === "running" && "animate-pulse")} />
 			{label}
 		</Badge>
 	);

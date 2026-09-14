@@ -2,7 +2,6 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { formatDistanceToNow } from "date-fns";
 import { CalendarClock, Loader2, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -23,6 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DateTime } from "@/components/ui/date-time";
 import {
 	Dialog,
 	DialogContent,
@@ -397,7 +397,11 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 				isGlobal ? (
 					<div className="flex flex-col items-center gap-2 rounded-xl border border-dashed py-16 text-center">
 						<CalendarClock className="size-8 text-muted-foreground" />
-						<p className="text-sm text-muted-foreground">No schedules yet.</p>
+						<p className="text-sm font-medium">No schedules yet</p>
+						<p className="max-w-sm text-sm text-muted-foreground">
+							Run a command on a cron: a database migration inside a service, a cleanup script on a
+							server, or a job on this host.
+						</p>
 						{addButton("outline")}
 					</div>
 				) : (
@@ -461,9 +465,11 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 											title={schedule.lastError ?? undefined}
 										>
 											<StatusDot status={scheduleRunStatusDot[schedule.lastStatus] ?? "neutral"} />
-											{schedule.lastRunAt
-												? formatDistanceToNow(new Date(schedule.lastRunAt), { addSuffix: true })
-												: schedule.lastStatus}
+											{schedule.lastRunAt ? (
+												<DateTime value={schedule.lastRunAt} />
+											) : (
+												schedule.lastStatus
+											)}
 										</span>
 									) : (
 										<span className="text-sm text-muted-foreground">Never</span>

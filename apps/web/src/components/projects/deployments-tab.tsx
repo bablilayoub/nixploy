@@ -1,13 +1,13 @@
 "use client";
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { formatDistanceToNow } from "date-fns";
 import { ChevronRight, Loader2, Rocket } from "lucide-react";
 import Link from "next/link";
 
 import { QueryState } from "@/components/query-state";
 import { StatusDot, type StatusDotStatus } from "@/components/shell";
 import { Button } from "@/components/ui/button";
+import { DateTime } from "@/components/ui/date-time";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
@@ -154,9 +154,7 @@ export function DeploymentsTab({ projectId }: { projectId: string }) {
 											{deployment.title}
 										</TableCell>
 										<TableCell className="w-40 text-sm text-muted-foreground">
-											{formatDistanceToNow(new Date(deployment.createdAt), {
-												addSuffix: true,
-											})}
+											<DateTime value={deployment.createdAt} />
 										</TableCell>
 										<TableCell className="w-24 text-right text-sm text-muted-foreground tabular-nums">
 											{formatDuration(deployment.startedAt, deployment.finishedAt)}

@@ -110,7 +110,7 @@ export function BitbucketPanel() {
 					<DialogTrigger asChild>
 						<Button size="sm" disabled={!canManage} title={manageHint}>
 							<Plus className="size-4" />
-							Add Bitbucket Provider
+							Add Bitbucket provider
 						</Button>
 					</DialogTrigger>
 					<DialogContent>

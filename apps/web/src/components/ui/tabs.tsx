@@ -23,7 +23,10 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-	"group/tabs-list inline-flex w-fit items-center justify-center rounded-lg p-[3px] text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col data-[variant=line]:rounded-none",
+	// `max-w-full` + a hidden scrollbar keeps a long tab row inside the page on
+	// phones instead of widening it; `scroll-shadow-x` is the cue that there is
+	// more past the edge.
+	"no-scrollbar scroll-shadow-x group/tabs-list inline-flex w-fit max-w-full items-center justify-center overflow-x-auto rounded-lg p-[3px] text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col data-[variant=line]:rounded-none",
 	{
 		variants: {
 			variant: {

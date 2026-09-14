@@ -55,8 +55,8 @@ const RECENTS_KEY = "nixploy:command-palette:recents";
 const MAX_RECENTS = 5;
 
 type PaletteGroup =
-	| "This Service"
-	| "This Project"
+	| "This service"
+	| "This project"
 	| "Projects"
 	| "Pages"
 	| "Templates"
@@ -293,7 +293,7 @@ export function CommandPalette({ className }: { className?: string }) {
 					id: `service-tab:${serviceId}:${destination.id}`,
 					label: destination.label,
 					hint: kindLabel,
-					group: "This Service",
+					group: "This service",
 					icon: destination.icon,
 					keywords: destination.keywords,
 					run: tab(destination.tab),
@@ -358,7 +358,7 @@ export function CommandPalette({ className }: { className?: string }) {
 					id: `service:${service.type}:${service.id}`,
 					label: service.name,
 					hint: meta.label,
-					group: "This Project",
+					group: "This project",
 					icon: meta.icon,
 					keywords: [service.name, meta.label, service.type],
 					run: go(`/dashboard/projects/${projectId}/services/${service.type}/${service.id}`),
@@ -370,7 +370,7 @@ export function CommandPalette({ className }: { className?: string }) {
 					id: "new:application",
 					label: "New application",
 					hint: currentProjectQuery.data?.name,
-					group: "This Project",
+					group: "This project",
 					icon: AppWindow,
 					keywords: ["create", "deploy", "service"],
 					run: go(`/dashboard/projects/${projectId}?new=application`),
@@ -379,7 +379,7 @@ export function CommandPalette({ className }: { className?: string }) {
 					id: "new:database",
 					label: "New database",
 					hint: currentProjectQuery.data?.name,
-					group: "This Project",
+					group: "This project",
 					icon: Plus,
 					keywords: ["create", "postgres", "mysql", "mariadb", "mongo", "redis"],
 					run: go(`/dashboard/projects/${projectId}?new=postgres`),
@@ -388,7 +388,7 @@ export function CommandPalette({ className }: { className?: string }) {
 					id: "new:compose",
 					label: "New compose service",
 					hint: currentProjectQuery.data?.name,
-					group: "This Project",
+					group: "This project",
 					icon: Boxes,
 					keywords: ["create", "docker", "service", "stack"],
 					run: go(`/dashboard/projects/${projectId}?new=compose`),
@@ -397,7 +397,7 @@ export function CommandPalette({ className }: { className?: string }) {
 					id: "project:manage-tags",
 					label: "Manage tags",
 					hint: currentProjectQuery.data?.name,
-					group: "This Project",
+					group: "This project",
 					icon: Tags,
 					keywords: ["label", "filter", "tag", "tags"],
 					run: go(`/dashboard/projects/${projectId}?new=tags`),
@@ -409,7 +409,7 @@ export function CommandPalette({ className }: { className?: string }) {
 					id: "compose:copilot",
 					label: "Open Deploy Copilot",
 					hint: "Compose",
-					group: "This Project",
+					group: "This project",
 					icon: Bot,
 					keywords: ["ai", "chat", "generate", "compose", "yaml", "assistant"],
 					run: go(`/dashboard/projects/${projectId}/services/compose/${composeId}?copilot=1`),
@@ -421,7 +421,7 @@ export function CommandPalette({ className }: { className?: string }) {
 					id: "app:copilot",
 					label: "Open Deploy Copilot",
 					hint: "Application",
-					group: "This Project",
+					group: "This project",
 					icon: Bot,
 					keywords: ["ai", "chat", "explain", "assistant"],
 					run: go(
@@ -620,7 +620,7 @@ export function CommandPalette({ className }: { className?: string }) {
 				id: `search:${row.type}:${row.id}`,
 				label: row.name,
 				hint: row.projectName,
-				group: "This Project" as const,
+				group: "This project" as const,
 				icon: meta.icon,
 				keywords: [row.name, row.projectName, meta.label, row.type],
 				run: () =>
@@ -636,12 +636,12 @@ export function CommandPalette({ className }: { className?: string }) {
 
 	const groups: { heading: PaletteGroup; items: PaletteItem[] }[] = [
 		{
-			heading: "This Service",
-			items: items.filter((item) => item.group === "This Service" && !recentSet.has(item.id)),
+			heading: "This service",
+			items: items.filter((item) => item.group === "This service" && !recentSet.has(item.id)),
 		},
 		{
-			heading: "This Project",
-			items: items.filter((item) => item.group === "This Project" && !recentSet.has(item.id)),
+			heading: "This project",
+			items: items.filter((item) => item.group === "This project" && !recentSet.has(item.id)),
 		},
 		{
 			heading: "Projects",

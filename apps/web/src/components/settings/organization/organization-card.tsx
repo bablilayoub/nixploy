@@ -119,10 +119,8 @@ export function OrganizationCard() {
 
 	return (
 		<>
-			<SettingsSection
-				title="Organization"
-				description="General settings for your active organization."
-			>
+			{/* Named for what it holds; the page is already titled "Organization". */}
+			<SettingsSection title="Name" description="How this organization is addressed and routed.">
 				<form onSubmit={onNameSubmit} className="grid gap-4">
 					<div className="grid gap-2">
 						<Label htmlFor="org-name">Name</Label>
@@ -138,6 +136,10 @@ export function OrganizationCard() {
 					<div className="grid gap-2">
 						<Label htmlFor="org-slug">Slug</Label>
 						<Input id="org-slug" disabled value={activeOrganization?.slug ?? ""} />
+						<p className="text-xs text-muted-foreground">
+							Set when the organization was created and fixed afterwards — invitation links and API
+							references use it.
+						</p>
 					</div>
 					<div className="flex items-center gap-3">
 						<DisabledHint hint={renameHint}>

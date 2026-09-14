@@ -15,7 +15,10 @@ export function UnderlineTabsList({ className, ...props }: ComponentProps<typeof
 		<TabsList
 			variant="line"
 			className={cn(
-				"h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-b bg-transparent p-0",
+				// Narrow screens scroll the strip; `scroll-shadow-x` is the only hint
+				// that there are more tabs off the edge (the scrollbar itself is
+				// hidden — it sat on top of the active underline).
+				"no-scrollbar scroll-shadow-x h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-b bg-transparent p-0",
 				className,
 			)}
 			{...props}

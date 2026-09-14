@@ -81,8 +81,9 @@ export function ProfileCard() {
 		disabled: nameUnchanged,
 	});
 
+	// The page is already titled "Profile"; the card names what it holds.
 	return (
-		<SettingsSection title="Profile" description="Your name and avatar.">
+		<SettingsSection title="Name and avatar">
 			<div className="flex flex-col gap-6">
 				<div className="flex items-center gap-4">
 					<UserAvatar

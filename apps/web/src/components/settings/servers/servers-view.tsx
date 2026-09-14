@@ -150,9 +150,9 @@ export function ServersView() {
 					</span>
 				}
 			/>
+			{/* The page header already says "Servers" and what they are. */}
 			<SettingsSection
-				title="Servers"
-				description="Remote Docker hosts connected over SSH."
+				title="Connected hosts"
 				actions={<CreateServerDialog disabled={!canManage} disabledReason={manageHint} />}
 			>
 				<QueryState

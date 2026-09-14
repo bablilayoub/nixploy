@@ -153,14 +153,23 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 					<TableBody>
 						{containers.map((container) => (
 							<TableRow key={container.ID}>
-								<TableCell>
-									<span className="font-mono text-xs font-medium">{container.Names}</span>{" "}
-									{container.protected && (
-										<Badge variant="outline" className="ml-1.5 text-muted-foreground">
-											<Lock className="mr-1 size-3" />
-											protected
-										</Badge>
-									)}
+								<TableCell className="max-w-72">
+									{/* Swarm task names run past 60 characters; unconstrained the cell
+									    pushed the rest of the row off the table. */}
+									<span className="flex min-w-0 items-center gap-1.5">
+										<span
+											className="truncate font-mono text-xs font-medium"
+											title={container.Names}
+										>
+											{container.Names}
+										</span>
+										{container.protected && (
+											<Badge variant="outline" className="shrink-0 text-muted-foreground">
+												<Lock className="mr-1 size-3" />
+												protected
+											</Badge>
+										)}
+									</span>
 								</TableCell>
 								<TableCell className="max-w-48 truncate font-mono text-xs text-muted-foreground">
 									{container.Image}

@@ -197,13 +197,11 @@ export function RecentDeployments() {
 			</style>
 			<div className="mb-4 space-y-1">
 				<h3 className="text-sm font-medium">Recent deployments</h3>
-				<p className="text-sm text-muted-foreground">
-					{isPending
-						? "Loading…"
-						: deployments.length === 0
-							? "No deployments yet"
-							: "Latest across your organization"}
-				</p>
+				{/* Static text: branching this on `isPending` made the server (which
+				    renders with the prefetched data) and the client's first paint
+				    disagree, which cost a hydration error on every dashboard load.
+				    Loading and empty already have their own states below. */}
+				<p className="text-sm text-muted-foreground">Latest across your organization</p>
 			</div>
 			<QueryState
 				isPending={isPending}

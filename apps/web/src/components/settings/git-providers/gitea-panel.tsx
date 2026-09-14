@@ -104,7 +104,7 @@ export function GiteaPanel() {
 					<DialogTrigger asChild>
 						<Button size="sm" disabled={!canManage} title={manageHint}>
 							<Plus className="size-4" />
-							Add Gitea Provider
+							Add Gitea provider
 						</Button>
 					</DialogTrigger>
 					<DialogContent>

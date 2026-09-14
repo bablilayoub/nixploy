@@ -1,7 +1,17 @@
 "use client";
 
-import { ArrowDownToLine, Download, Loader2, RefreshCw, Trash2, WrapText } from "lucide-react";
+import {
+	AlertTriangle,
+	ArrowDownToLine,
+	Copy,
+	Download,
+	Loader2,
+	RefreshCw,
+	Trash2,
+	WrapText,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { NotRunningState, type RuntimeEmptyProps } from "@/components/services/not-running-state";
 import { StatusDot } from "@/components/shell";
@@ -59,7 +69,10 @@ const classifyLine = (line: string): { level: LineLevel; text: string } => {
 			? { level: "success", text: line }
 			: { level: "error", text: line };
 	}
-	if (/\b(ERROR|FATAL|PANIC)\b/.test(line) || /\bfailed to\b|\berror:/i.test(line))
+	// `failed` on its own, not only `failed to`: the line that actually explains
+	// a broken deploy is usually "Deployment failed: …" or "Build failed", and
+	// the errors-only filter was hiding exactly the line it exists to find.
+	if (/\b(ERROR|FATAL|PANIC)\b/.test(line) || /\bfail(ed|ure)\b|\berror:/i.test(line))
 		return { level: "error", text: line };
 	if (/\b(WARN|WARNING|CANCELED)\b/.test(line)) return { level: "warn", text: line };
 	if (/\bDONE\b/.test(line) || /\bSUCCESS(FUL)?\b/.test(line) || /\bsuccessfully\b/i.test(line))
@@ -356,6 +369,31 @@ export function LogViewer({
 		return !hiddenLevels.has(level);
 	});
 
+	// "Why did it fail" is the question a log is opened with, and a thousand-line
+	// build answers it in one line somewhere in the middle. This narrows to that
+	// line in one click and restores the full stream in a second.
+	const errorCount = lines.filter((line) => classifyLine(line).level === "error").length;
+	const errorsOnly =
+		errorCount > 0 &&
+		(["warn", "success", "info", "debug", "default"] as LineLevel[]).every((level) =>
+			hiddenLevels.has(level),
+		);
+	const toggleErrorsOnly = () =>
+		setHiddenLevels(
+			errorsOnly
+				? new Set()
+				: new Set(["warn", "success", "info", "debug", "default"] as LineLevel[]),
+		);
+
+	const copyLogs = async () => {
+		try {
+			await navigator.clipboard.writeText(visibleLines.join("\n"));
+			toast.success("Logs copied");
+		} catch {
+			toast.error("Failed to copy — use Download instead");
+		}
+	};
+
 	const toggleLevel = (level: LineLevel) => {
 		setHiddenLevels((previous) => {
 			const next = new Set(previous);
@@ -521,11 +559,35 @@ export function LogViewer({
 						{LEVEL_STYLES[level].tag}
 					</button>
 				))}
+				{errorCount > 0 && (
+					<Button
+						variant={errorsOnly ? "secondary" : "outline"}
+						size="sm"
+						className="h-6 px-2 text-[11px]"
+						onClick={toggleErrorsOnly}
+					>
+						<AlertTriangle className="size-3" />
+						{errorsOnly ? "Show all" : `${errorCount} ${errorCount === 1 ? "error" : "errors"}`}
+					</Button>
+				)}
 				<span className="ml-auto text-[11px] text-muted-foreground">
 					{visibleLines.length === lines.length
 						? `${lines.length} lines`
 						: `${visibleLines.length} / ${lines.length} lines`}
 				</span>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							variant="outline"
+							size="icon-sm"
+							aria-label="Copy logs"
+							onClick={() => void copyLogs()}
+						>
+							<Copy className="size-3.5" />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent>Copy what is shown</TooltipContent>
+				</Tooltip>
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<Button

@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Check, Loader2 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { StatusPageCard } from "@/components/monitoring/status-page-card";
@@ -29,6 +30,21 @@ import { useTRPC } from "@/lib/trpc";
  * Incident timeline. Rendered as the Monitoring page's "Incidents" tab (UX
  * audit F11); `embedded` drops the page title that tab already carries.
  */
+/**
+ * Deploy-failure incidents record the service kind in their metadata (older
+ * rows do not), which is what makes a linkable service page out of the ids the
+ * row already carries.
+ */
+function serviceHref(incident: {
+	projectId?: string | null;
+	serviceId?: string | null;
+	metadata?: Record<string, unknown> | null;
+}): string | null {
+	const kind = incident.metadata?.serviceKind;
+	if (!incident.projectId || !incident.serviceId || typeof kind !== "string") return null;
+	return `/dashboard/projects/${incident.projectId}/services/${kind}/${incident.serviceId}?tab=deploy`;
+}
+
 export function IncidentsView({ embedded = false }: { embedded?: boolean } = {}) {
 	const trpc = useTRPC();
 	const { can } = useCapabilities();
@@ -120,10 +136,31 @@ export function IncidentsView({ embedded = false }: { embedded?: boolean } = {})
 											className="text-xs text-muted-foreground"
 										/>
 									</div>
-									<p className="mt-1 text-muted-foreground">
-										{incident.kind}
-										{incident.serviceName ? ` · ${incident.serviceName}` : ""}
-										{incident.severity ? ` · ${incident.severity}` : ""}
+									<p className="mt-1 flex flex-wrap items-center gap-1.5 text-muted-foreground">
+										<span>{incident.kind}</span>
+										{incident.serviceName ? (
+											<>
+												<span aria-hidden>·</span>
+												{/* An incident that names a service should take you to it —
+												    that is the next thing anyone reading this wants. */}
+												{serviceHref(incident) ? (
+													<Link
+														href={serviceHref(incident) ?? "#"}
+														className="underline underline-offset-2 hover:text-foreground"
+													>
+														{incident.serviceName}
+													</Link>
+												) : (
+													<span>{incident.serviceName}</span>
+												)}
+											</>
+										) : null}
+										{incident.severity ? (
+											<>
+												<span aria-hidden>·</span>
+												<span>{incident.severity}</span>
+											</>
+										) : null}
 									</p>
 									{incident.message && (
 										<p className="mt-2 whitespace-pre-wrap text-muted-foreground">

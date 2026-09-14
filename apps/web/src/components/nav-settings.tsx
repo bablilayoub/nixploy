@@ -14,9 +14,21 @@ import {
 	User,
 } from "lucide-react";
 
+import { usePathname, useRouter } from "next/navigation";
+
 import { SubNav, type SubNavGroup, type SubNavItem } from "@/components/shell/sub-nav";
+import {
+	Select,
+	SelectContent,
+	SelectGroup,
+	SelectItem,
+	SelectLabel,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useMounted } from "@/hooks/use-mounted";
+import { cn } from "@/lib/utils";
 
 /** Who may open a settings page. Read views stay open to every member. */
 export interface SettingsNavGate {
@@ -115,15 +127,48 @@ export function filterSettingsNavGroups(
  * Settings sub-navigation — vertical side menu on settings pages, filtered by
  * the caller's capabilities. Instance-admin pages only appear after mount so
  * the server-rendered markup (no session yet) matches the first client paint.
+ *
+ * Below `md` the twelve links become one select (UX audit F19): stacked, the
+ * menu pushed every settings page ~700 px down the phone screen, so the page
+ * you navigated to was never the first thing you saw.
  */
 export function NavSettings({ className }: { className?: string }) {
 	const { can, isInstanceAdmin } = useCapabilities();
 	const mounted = useMounted();
+	const router = useRouter();
+	const pathname = usePathname();
 
 	const groups = filterSettingsNavGroups(settingsNavGroups, {
 		can,
 		isInstanceAdmin: mounted && isInstanceAdmin,
 	});
+	const items = groups.flatMap((group) => group.items);
+	const current =
+		items.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.href ??
+		items[0]?.href;
 
-	return <SubNav orientation="vertical" groups={groups} className={className} />;
+	return (
+		<>
+			<div className={cn("md:hidden", className)}>
+				<Select value={current} onValueChange={(href) => router.push(href)}>
+					<SelectTrigger className="w-full" aria-label="Settings page">
+						<SelectValue placeholder="Settings" />
+					</SelectTrigger>
+					<SelectContent>
+						{groups.map((group) => (
+							<SelectGroup key={group.label}>
+								<SelectLabel>{group.label}</SelectLabel>
+								{group.items.map((item) => (
+									<SelectItem key={item.href} value={item.href}>
+										{item.label}
+									</SelectItem>
+								))}
+							</SelectGroup>
+						))}
+					</SelectContent>
+				</Select>
+			</div>
+			<SubNav orientation="vertical" groups={groups} className={cn("hidden md:flex", className)} />
+		</>
+	);
 }
