@@ -13,6 +13,22 @@ this file is the summary.
 
 Nothing yet.
 
+## [0.2.4] — 2026-09-14
+
+### Fixed
+
+- The panel returned Traefik's `500 Internal Server Error` for every
+  response with an empty body — the GitHub App callback redirect, empty
+  404s, any 204. Traefik's buffering middleware (a 4 MiB request-body
+  backstop in front of `/api/`) buffers responses too and fails on a
+  bodyless one; it is gone, and the app's own payload caps stand. Existing
+  installs pick up the new routing file the next time the dashboard domain
+  is saved, or immediately after this update.
+- `update.sh` / `install.sh` decide readiness from the new task itself
+  (the same check the image HEALTHCHECK runs) before trying the proxy, so a
+  working update is no longer reported as a failure when the panel is not
+  reachable at `BETTER_AUTH_URL` from the host.
+
 ## [0.2.3] — 2026-09-14
 
 ### Fixed
