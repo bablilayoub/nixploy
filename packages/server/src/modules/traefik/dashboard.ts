@@ -18,16 +18,20 @@ export const DASHBOARD_HEADERS_MIDDLEWARE = "nixploy-dashboard-headers";
 export const DASHBOARD_HSTS_SECONDS = 31_536_000;
 
 /**
- * Request-body cap in front of the panel's API routes (4 MiB — the app-side
- * caps are 1–2 MiB, this is the backstop that keeps a multi-GB POST out of
- * the single Node process). Only `/api/` minus `/api/mcp` is buffered:
- * Traefik's buffering middleware also buffers the *response*, which would
- * stall the MCP endpoint's SSE stream and Next's streamed HTML; WebSocket
- * upgrades hijack the connection and are unaffected but live under `/ws/`.
+ * There is deliberately NO `buffering` middleware in front of the panel.
+ *
+ * It used to cap request bodies at 4 MiB on `/api/`, but Traefik's buffering
+ * middleware buffers the *response* too, and oxy fails with
+ * `failed to read response, err: no data ready` whenever the backend answers
+ * with an EMPTY body — Traefik then returns its own `500 Internal Server
+ * Error`. Every bodyless response was affected: the GitHub App callback's
+ * 307 redirect, `204`s, empty `404`s (observed on a live install, 2026-09-14;
+ * `/api/version` and `/api/ready` passed because they carry JSON).
+ *
+ * Request size is capped by the app instead — the REST adapter refuses a
+ * `content-length` over 1 MiB and the webhook routes cap their own payloads —
+ * so the backstop is not worth a proxy that mangles ordinary responses.
  */
-export const DASHBOARD_BUFFERING_MIDDLEWARE = "nixploy-dashboard-buffering";
-export const DASHBOARD_MAX_REQUEST_BODY_BYTES = 4_194_304;
-export const DASHBOARD_API_RULE = "PathPrefix(`/api/`) && !PathPrefix(`/api/mcp`)";
 
 const isValidDomain = (value: string): boolean =>
 	/^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/i.test(value);
@@ -47,12 +51,10 @@ export const normalizeDashboardDomain = (raw: string | null | undefined): string
  * YAML for the dashboard routing file:
  * - when **no** domain is configured, a priority-1 catch-all on `websecure` so
  *   `https://<server-ip>` reaches the dashboard with the self-signed default
- *   certificate, plus a priority-2 sibling for `/api/` that adds the
- *   request-body buffer;
- * - when a domain **is** configured, the same pair scoped to `Host(<domain>)`
+ *   certificate;
+ * - when a domain **is** configured, the same router scoped to `Host(<domain>)`
  *   with the Let's Encrypt resolver — the certificate is issued on the first
- *   request (the longer `&&` rule wins for `/api/` by Traefik's default
- *   priority) — and the catch-all is dropped: it answered on every hostname
+ *   request — and the catch-all is dropped: it answered on every hostname
  *   pointed at the box (bare IP, stray DNS), which fingerprinted the panel on
  *   vhosts nobody configured (audit security.md §2.10). Tenant domains are
  *   unaffected either way; they always carry their own `Host()` routers.
@@ -75,16 +77,6 @@ export const buildDashboardRouterYaml = (domain: string | null, target: string):
         - ${DASHBOARD_HEADERS_MIDDLEWARE}
       tls: {}
       priority: 1
-    nixploy-dashboard-api:
-      rule: ${DASHBOARD_API_RULE}
-      entryPoints:
-        - websecure
-      service: nixploy-dashboard
-      middlewares:
-        - ${DASHBOARD_HEADERS_MIDDLEWARE}
-        - ${DASHBOARD_BUFFERING_MIDDLEWARE}
-      tls: {}
-      priority: 2
 `;
 	const domainRouters = domain
 		? `    nixploy-dashboard-domain:
@@ -94,16 +86,6 @@ export const buildDashboardRouterYaml = (domain: string | null, target: string):
       service: nixploy-dashboard
       middlewares:
         - ${DASHBOARD_HEADERS_MIDDLEWARE}
-      tls:
-        certResolver: letsencrypt
-    nixploy-dashboard-domain-api:
-      rule: Host(\`${domain}\`) && ${DASHBOARD_API_RULE}
-      entryPoints:
-        - websecure
-      service: nixploy-dashboard
-      middlewares:
-        - ${DASHBOARD_HEADERS_MIDDLEWARE}
-        - ${DASHBOARD_BUFFERING_MIDDLEWARE}
       tls:
         certResolver: letsencrypt
 `
@@ -116,9 +98,6 @@ ${catchAllRouters}${domainRouters}  middlewares:
         stsSeconds: ${DASHBOARD_HSTS_SECONDS}
         stsIncludeSubdomains: false
         stsPreload: false
-    ${DASHBOARD_BUFFERING_MIDDLEWARE}:
-      buffering:
-        maxRequestBodyBytes: ${DASHBOARD_MAX_REQUEST_BODY_BYTES}
   services:
     nixploy-dashboard:
       loadBalancer:

@@ -6,10 +6,8 @@ vi.mock("./config-writer", () => ({ writeFileOnServer: vi.fn() }));
 
 import {
 	buildDashboardRouterYaml,
-	DASHBOARD_BUFFERING_MIDDLEWARE,
 	DASHBOARD_HEADERS_MIDDLEWARE,
 	DASHBOARD_HSTS_SECONDS,
-	DASHBOARD_MAX_REQUEST_BODY_BYTES,
 	normalizeDashboardDomain,
 } from "./dashboard";
 
@@ -33,22 +31,14 @@ const load = (domain: string | null) =>
 	parse(buildDashboardRouterYaml(domain, "http://nixploy:3000")) as Config;
 
 describe("buildDashboardRouterYaml", () => {
-	it("keeps the priority-1 catch-all and adds a buffered /api/ sibling above it", () => {
+	it("serves everything through one priority-1 catch-all until a domain is set", () => {
 		const { http } = load(null);
-		expect(Object.keys(http.routers).sort()).toEqual([
-			"nixploy-dashboard",
-			"nixploy-dashboard-api",
-		]);
+		expect(Object.keys(http.routers)).toEqual(["nixploy-dashboard"]);
 		const catchAll = http.routers["nixploy-dashboard"];
-		const api = http.routers["nixploy-dashboard-api"];
 		expect(catchAll?.rule).toBe("PathPrefix(`/`)");
 		expect(catchAll?.priority).toBe(1);
-		expect(api?.rule).toBe("PathPrefix(`/api/`) && !PathPrefix(`/api/mcp`)");
-		expect(api?.priority).toBe(2);
-		for (const router of Object.values(http.routers)) {
-			expect(router.entryPoints).toEqual(["websecure"]);
-			expect(router.service).toBe("nixploy-dashboard");
-		}
+		expect(catchAll?.entryPoints).toEqual(["websecure"]);
+		expect(catchAll?.service).toBe("nixploy-dashboard");
 		expect(http.services["nixploy-dashboard"]).toEqual({
 			loadBalancer: { servers: [{ url: "http://nixploy:3000" }] },
 		});
@@ -66,31 +56,28 @@ describe("buildDashboardRouterYaml", () => {
 		expect(http.services["nixploy-dashboard"]).toBeDefined();
 	});
 
-	it("puts HSTS on every dashboard router and the body cap on the API routers only", () => {
+	it("routes the configured domain with Let's Encrypt and HSTS", () => {
 		const { http } = load("panel.example.com");
-		expect(Object.keys(http.routers).sort()).toEqual([
-			"nixploy-dashboard-domain",
-			"nixploy-dashboard-domain-api",
-		]);
-		for (const [name, router] of Object.entries(http.routers)) {
-			expect(router.middlewares, name).toContain(DASHBOARD_HEADERS_MIDDLEWARE);
-			if (name.endsWith("-api")) {
-				expect(router.middlewares, name).toContain(DASHBOARD_BUFFERING_MIDDLEWARE);
-			} else {
-				expect(router.middlewares, name).not.toContain(DASHBOARD_BUFFERING_MIDDLEWARE);
-			}
-		}
-		expect(http.routers["nixploy-dashboard-domain"]?.rule).toBe("Host(`panel.example.com`)");
-		expect(http.routers["nixploy-dashboard-domain-api"]?.rule).toBe(
-			"Host(`panel.example.com`) && PathPrefix(`/api/`) && !PathPrefix(`/api/mcp`)",
-		);
-		expect(http.routers["nixploy-dashboard-domain"]?.tls).toEqual({ certResolver: "letsencrypt" });
-		expect(http.routers["nixploy-dashboard-domain-api"]?.tls).toEqual({
-			certResolver: "letsencrypt",
-		});
+		expect(Object.keys(http.routers)).toEqual(["nixploy-dashboard-domain"]);
+		const router = http.routers["nixploy-dashboard-domain"];
+		expect(router?.rule).toBe("Host(`panel.example.com`)");
+		expect(router?.middlewares).toContain(DASHBOARD_HEADERS_MIDDLEWARE);
+		expect(router?.tls).toEqual({ certResolver: "letsencrypt" });
 	});
 
-	it("declares HSTS without subdomains/preload and a 4 MiB request buffer", () => {
+	it("never puts a buffering middleware in front of the panel", () => {
+		// Traefik's buffering middleware buffers responses too, and oxy answers
+		// `500 Internal Server Error` for any EMPTY body — it broke the GitHub
+		// App callback's redirect and every 204/empty 404 on a live install
+		// (2026-09-14). Request size is capped by the app instead.
+		for (const domain of [null, "panel.example.com"]) {
+			const yaml = buildDashboardRouterYaml(domain, "http://nixploy:3000");
+			expect(yaml, String(domain)).not.toContain("buffering");
+			expect(yaml, String(domain)).not.toContain("maxRequestBodyBytes");
+		}
+	});
+
+	it("declares HSTS without subdomains or preload, and nothing else", () => {
 		const { http } = load(null);
 		expect(http.middlewares[DASHBOARD_HEADERS_MIDDLEWARE]).toEqual({
 			headers: {
@@ -100,14 +87,8 @@ describe("buildDashboardRouterYaml", () => {
 			},
 		});
 		expect(DASHBOARD_HSTS_SECONDS).toBe(31_536_000);
-		expect(http.middlewares[DASHBOARD_BUFFERING_MIDDLEWARE]).toEqual({
-			buffering: { maxRequestBodyBytes: DASHBOARD_MAX_REQUEST_BODY_BYTES },
-		});
-		expect(DASHBOARD_MAX_REQUEST_BODY_BYTES).toBe(4_194_304);
-		// Only the two panel middlewares exist — nothing here can leak onto tenant routers.
-		expect(Object.keys(http.middlewares).sort()).toEqual(
-			[DASHBOARD_BUFFERING_MIDDLEWARE, DASHBOARD_HEADERS_MIDDLEWARE].sort(),
-		);
+		// One panel middleware exists — nothing here can leak onto tenant routers.
+		expect(Object.keys(http.middlewares)).toEqual([DASHBOARD_HEADERS_MIDDLEWARE]);
 	});
 });
 
