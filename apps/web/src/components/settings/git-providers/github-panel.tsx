@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { GitBranch, Loader2, Plus, RefreshCw, Rocket } from "lucide-react";
+import { ExternalLink, GitBranch, Loader2, Plus, RefreshCw, Rocket } from "lucide-react";
 import { useState } from "react";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
@@ -194,6 +194,12 @@ export function GithubPanel() {
 					<TableBody>
 						{providers.map(({ github, gitProvider }) => {
 							const configured = Boolean(github.githubAppId);
+							// Creating the App and installing it on an account are two
+							// separate steps on GitHub; nothing works until the second.
+							const installed = Boolean(github.githubInstallationId);
+							const installUrl = github.githubAppName
+								? `https://github.com/apps/${encodeURIComponent(github.githubAppName)}/installations/new`
+								: null;
 							return (
 								<TableRow key={github.githubId}>
 									<TableCell className="font-medium">{gitProvider.name}</TableCell>
@@ -201,8 +207,15 @@ export function GithubPanel() {
 										{github.githubAppName ?? "—"}
 									</TableCell>
 									<TableCell>
-										<Badge variant={configured ? "default" : "secondary"}>
-											{configured ? "Configured" : "Not configured"}
+										<Badge
+											variant={configured && installed ? "default" : "secondary"}
+											title={
+												configured && !installed
+													? "The App exists but is not installed on an account or organization yet"
+													: undefined
+											}
+										>
+											{!configured ? "Not configured" : installed ? "Installed" : "Not installed"}
 										</Badge>
 									</TableCell>
 									<TableCell className="text-muted-foreground">
@@ -233,6 +246,14 @@ export function GithubPanel() {
 												)}
 												{configured ? "Recreate App" : "Create GitHub App"}
 											</Button>
+											{configured && !installed && installUrl && (
+												<Button variant="default" size="sm" asChild title={manageHint}>
+													<a href={installUrl} target="_blank" rel="noreferrer">
+														<ExternalLink className="size-4" />
+														Install on GitHub
+													</a>
+												</Button>
+											)}
 											{configured && (
 												<Button
 													variant="ghost"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { toast } from "sonner";
@@ -18,9 +18,32 @@ export function GitProvidersView() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 
+	const syncInstallation = useMutation(trpc.github.syncInstallation.mutationOptions());
+
 	useEffect(() => {
 		const connected = searchParams.get("github");
 		const githubError = searchParams.get("githubError");
+		// The App manifest sets `setup_url` to this page, so GitHub lands here
+		// after the operator installs the App. Sync the installation id right
+		// away instead of leaving them to find the refresh button.
+		const setupAction = searchParams.get("setup_action");
+		if (setupAction === "install" || setupAction === "update") {
+			void (async () => {
+				const rows = await queryClient.fetchQuery(trpc.github.all.queryOptions()).catch(() => null);
+				const target =
+					rows?.find(({ github }) => !github.githubInstallationId) ?? rows?.[rows.length - 1];
+				if (!target) return;
+				try {
+					await syncInstallation.mutateAsync({ githubId: target.github.githubId });
+					toast.success("GitHub App installed");
+				} catch (error) {
+					toast.error(error instanceof Error ? error.message : "Could not sync the installation");
+				}
+				void queryClient.invalidateQueries({ queryKey: trpc.github.all.queryKey() });
+			})();
+			router.replace("/dashboard/settings/git-providers");
+			return;
+		}
 		if (!connected && !githubError) return;
 
 		if (connected === "connected") {
@@ -35,7 +58,14 @@ export function GitProvidersView() {
 		}
 
 		router.replace("/dashboard/settings/git-providers");
-	}, [searchParams, router, queryClient, trpc.github.all]);
+	}, [
+		searchParams,
+		router,
+		queryClient,
+		trpc.github.all,
+		trpc.github.syncInstallation,
+		syncInstallation.mutateAsync,
+	]);
 
 	return (
 		<div className="flex flex-col gap-4">

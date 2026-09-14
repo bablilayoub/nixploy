@@ -233,12 +233,31 @@ export async function setupGithubApp(input: {
 		.where(eq(github.githubId, row.githubId))
 		.returning();
 
-	await syncGithubInstallation(row.githubId);
+	// A freshly created App has no installation until the operator installs it
+	// on an account or organization, so this is a best-effort head start — the
+	// panel offers an "Install on GitHub" button and syncs on the way back.
+	await syncGithubInstallation(row.githubId, { optional: true });
 	return updated;
 }
 
-/** Re-fetch the app's installations and store the most recent one. */
-export async function syncGithubInstallation(githubId: string) {
+/**
+ * Where the operator installs a created App on their account or organization.
+ * Creating the App (the manifest flow) and INSTALLING it are two separate
+ * steps on GitHub's side; nothing works until the second one happened.
+ */
+export const githubAppInstallUrl = (slug: string): string =>
+	`https://github.com/apps/${encodeURIComponent(slug)}/installations/new`;
+
+/**
+ * Re-fetch the app's installations and store the most recent one.
+ *
+ * `optional: true` is for the moment right after the App was created, when
+ * having no installation yet is the expected state, not a failure.
+ */
+export async function syncGithubInstallation(
+	githubId: string,
+	options: { optional?: boolean } = {},
+) {
 	const [row] = await db.select().from(github).where(eq(github.githubId, githubId)).limit(1);
 	if (!row?.githubAppId || !row.githubPrivateKey) {
 		throw new Error("GitHub App is not configured yet");
@@ -251,7 +270,12 @@ export async function syncGithubInstallation(githubId: string) {
 	});
 	const installation = installations.find((i) => i.app_id === row.githubAppId) ?? installations[0];
 	if (!installation) {
-		throw new Error("No GitHub App installation found — install the app on an account/org first");
+		if (options.optional) return row;
+		throw new Error(
+			row.githubAppName
+				? `GitHub App "${row.githubAppName}" is not installed yet — install it at ${githubAppInstallUrl(row.githubAppName)}, then sync again`
+				: "No GitHub App installation found — install the app on an account or organization first",
+		);
 	}
 	const [updated] = await db
 		.update(github)
