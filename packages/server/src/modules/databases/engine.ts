@@ -14,6 +14,7 @@ import { bestEffort } from "../../utils/best-effort";
 import { execAsyncRemote } from "../../utils/exec";
 import { assertSafePublishedPort } from "../../utils/validators";
 import { mergeNodeConstraint } from "../cluster/placement";
+import { resolveLocalPublicHost } from "../cluster/public-host";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
 import { ensureEnvironmentNetworkById, pruneEnvironmentNetwork } from "../deployment/network";
 import {
@@ -935,8 +936,10 @@ export async function getDatabaseStatus(appName: string): Promise<DatabaseStatus
  * - internal: host is the swarm service name (resolvable by any container in
  *   the same environment, i.e. on the environment's private overlay) with the
  *   container's native port.
- * - external: host is the server's IP (or `localhost` for the Nixploy host
- *   itself) with the published `externalPort`; throws when none is set.
+ * - external: host is the server's IP — a remote server's `ipAddress` row, or
+ *   for the Nixploy host itself `resolveLocalPublicHost()` (explicit
+ *   `NIXPLOY_PUBLIC_HOST`, else the detected public IPv4, `localhost` only in
+ *   development) — with the published `externalPort`; throws when none is set.
  * Passwords come from `encryptedText` columns and are already decrypted when
  * the row is read through Drizzle.
  */
@@ -952,7 +955,7 @@ export async function buildConnectionUrl<K extends DatabaseKind>(
 	if (!row.externalPort) {
 		throw preconditionFailed(`Database ${row.appName} has no external port configured`);
 	}
-	let host = "localhost";
+	let host = await resolveLocalPublicHost();
 	if (isRemote(row.serverId)) {
 		const [server] = await db.select().from(servers).where(eq(servers.serverId, row.serverId));
 		if (!server) {

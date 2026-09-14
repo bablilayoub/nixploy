@@ -8,6 +8,7 @@ import { db } from "../../db";
 import { webServerSettings } from "../../db/schema";
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
+import { detectPublicIp } from "../../modules/cluster/public-host";
 import { dockerCleanup } from "../../modules/deployment";
 import { emitDockerCleanupNotification } from "../../modules/notifications";
 import { resolveCallerOrganizationId } from "../../modules/projects";
@@ -23,24 +24,6 @@ import {
 import { invalidatePrivateEgressCache } from "../../utils/public-url";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
-
-/** Public IPv4 of this host, or null when detection fails (offline, etc.). */
-async function detectPublicIp(): Promise<string | null> {
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), 4000);
-	try {
-		const res = await fetch("https://api.ipify.org", {
-			signal: controller.signal,
-			redirect: "error",
-		});
-		const text = (await res.text()).trim();
-		return /^\d{1,3}(\.\d{1,3}){3}$/.test(text) ? text : null;
-	} catch {
-		return null;
-	} finally {
-		clearTimeout(timer);
-	}
-}
 
 type Session = NonNullable<TRPCContext["session"]>;
 
@@ -298,7 +281,7 @@ export const webServerRouter = router({
 			const [v4, v6, serverIp] = await Promise.all([
 				resolve4(domain).catch(() => [] as string[]),
 				resolve6(domain).catch(() => [] as string[]),
-				detectPublicIp(),
+				detectPublicIp({ fresh: true }),
 			]);
 			const resolvedIps = [...v4, ...v6];
 			return {
