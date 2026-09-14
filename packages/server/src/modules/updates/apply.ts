@@ -4,11 +4,19 @@ import { createLogger } from "../../lib/logger";
 import { bestEffort } from "../../utils/best-effort";
 import { execAsync } from "../../utils/exec";
 import { getConfigDir, shellQuote } from "../deployment/paths";
+import { badRequest } from "../errors";
 import { countActiveDeployments } from "../observability/health";
 import { resolveUpdateCandidate } from "./candidate";
 import { getAppVersion, NIXPLOY_SERVICE_NAME } from "./check";
 import { assertValidImageRef } from "./registry";
-import { assertVersionAllowed, releaseTag, withImageTag } from "./releases";
+import {
+	assertVersionAllowed,
+	compareVersions,
+	imageVersionTag,
+	parseVersion,
+	releaseTag,
+	withImageTag,
+} from "./releases";
 import { getUpdateSettings, patchUpdateSettings } from "./settings";
 
 const log = createLogger("updates");
@@ -202,6 +210,22 @@ export async function applyUpdate(options?: {
 	// Validate before anything touches a shell: the ref is stored settings /
 	// caller input, and `exec` runs through `sh -c`.
 	const image = assertValidImageRef(requested).canonical;
+
+	// Last line of defence: whatever produced this ref (stale settings, a
+	// hand-typed image), never roll to an OLDER release without the explicit
+	// acknowledgement — migrations are not reversed, so the older build meets
+	// a newer schema. `options.version` already went through
+	// `assertVersionAllowed`; this catches every other path.
+	if (!options?.version && !options?.allowDowngrade) {
+		const targetTag = imageVersionTag(image);
+		const target = parseVersion(targetTag);
+		if (target && compareVersions(targetTag, getAppVersion()) < 0) {
+			throw badRequest(
+				`${releaseTag(targetTag)} is older than the running v${getAppVersion()}. ` +
+					"Database migrations are not reversed on downgrade — pass allowDowngrade to proceed anyway.",
+			);
+		}
+	}
 
 	if (!options?.force) {
 		const active = await countActiveDeployments().catch((error: unknown) => {

@@ -14,6 +14,13 @@ export interface UpdateSettings {
 	checkCron: string;
 	/** Image ref to track (default ghcr.io/bablilayoub/nixploy:latest). */
 	image: string;
+	/**
+	 * Image the next update would actually pull, as resolved by the last check
+	 * (`modules/updates/candidate.ts`): the newest release under the pin for a
+	 * version-tagged install, the tracked tag itself for a moving one. The UI
+	 * must show THIS, never `image` — they differ on every pinned install.
+	 */
+	targetImage: string | null;
 	lastCheckedAt: string | null;
 	lastUpdateAt: string | null;
 	lastError: string | null;
@@ -44,6 +51,7 @@ const defaults: UpdateSettings = {
 	autoUpdateEnabled: false,
 	checkCron: DEFAULT_CHECK_CRON,
 	image: DEFAULT_UPDATE_IMAGE,
+	targetImage: null,
 	lastCheckedAt: null,
 	lastUpdateAt: null,
 	lastError: null,
@@ -84,6 +92,7 @@ export function parseUpdateSettings(metricsConfig: unknown): UpdateSettings {
 		checkCron: asString(extras.updateCheckCron, defaults.checkCron) ?? defaults.checkCron,
 		image:
 			asString(extras.updateImage, process.env.NIXPLOY_IMAGE ?? defaults.image) ?? defaults.image,
+		targetImage: asString(extras.updateTargetImage, null),
 		lastCheckedAt: asString(extras.updateLastCheckedAt, null),
 		lastUpdateAt: asString(extras.updateLastUpdateAt, null),
 		lastError: asString(extras.updateLastError, null),
@@ -123,6 +132,7 @@ export async function patchUpdateSettings(patch: Partial<UpdateSettings>): Promi
 		autoUpdateEnabled: next.autoUpdateEnabled,
 		updateCheckCron: next.checkCron,
 		updateImage: next.image,
+		updateTargetImage: next.targetImage,
 		updateLastCheckedAt: next.lastCheckedAt,
 		updateLastUpdateAt: next.lastUpdateAt,
 		updateLastError: next.lastError,

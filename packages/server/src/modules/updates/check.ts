@@ -169,13 +169,39 @@ export async function resolveTargetRelease(image: string): Promise<ReleaseInfo |
 	}
 }
 
+/**
+ * Tracked image to adopt from the service spec, or null when the stored one
+ * already agrees. Only the TAG is taken over: the repository is whatever the
+ * operator installed from, and a digest suffix (`@sha256:…`) is dropped so
+ * the tracked ref stays a tag the updater can re-point.
+ */
+export function adoptRunningImage(tracked: string, running: string | null): string | null {
+	if (!running) return null;
+	const ref = running.split("@")[0]?.trim();
+	if (!ref || ref === tracked) return null;
+	// Never adopt across repositories — that would silently change registries.
+	const repository = (value: string) => value.slice(0, value.lastIndexOf(":")) || value;
+	if (repository(ref) !== repository(tracked)) return null;
+	return ref;
+}
+
 export async function checkForUpdates(options?: {
 	/** Persist the result into web-server settings (default true). */
 	persist?: boolean;
 }): Promise<UpdateCheckResult> {
-	const settings = await getUpdateSettings();
+	let settings = await getUpdateSettings();
 	const checkedAt = new Date().toISOString();
 	const appVersion = getAppVersion();
+
+	// `update.sh` rolls the service without touching the panel's settings, so
+	// the stored tracked image goes stale (it kept saying :v0.2.1 while the
+	// service ran :v0.2.3 — and an in-app update would then have DOWNGRADED
+	// the instance). What the service actually runs wins.
+	const runningRef = await getRunningImageRef();
+	const adopted = adoptRunningImage(settings.image, runningRef);
+	if (adopted) {
+		settings = await patchUpdateSettings({ image: adopted });
+	}
 
 	// A version-pinned image (what install.sh writes) is immutable, so the
 	// release channel is GitHub's newest release, not the tag's digest.
@@ -194,7 +220,7 @@ export async function checkForUpdates(options?: {
 	let error: string | null = null;
 
 	try {
-		currentImage = await getRunningImageRef();
+		currentImage = runningRef;
 		currentDigest = await getRunningDigest(currentImage);
 		latestDigest = await fetchRemoteDigest(latestImage);
 
@@ -233,6 +259,7 @@ export async function checkForUpdates(options?: {
 
 	if (options?.persist !== false) {
 		await patchUpdateSettings({
+			targetImage: candidate.image,
 			lastCheckedAt: checkedAt,
 			latestDigest,
 			currentDigest,

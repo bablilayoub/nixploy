@@ -197,9 +197,9 @@ export function UpdatesCard() {
 											{data.updateAvailable ? "Update Nixploy?" : "Reinstall Nixploy image?"}
 										</AlertDialogTitle>
 										<AlertDialogDescription>
-											This pulls {data.image} and rolls the Swarm service. The dashboard will
-											briefly disconnect while the new container starts. Your data, secrets and
-											certificates are kept. <HelpLink slug="install" />
+											This pulls {data.targetImage ?? data.image} and rolls the Swarm service. The
+											dashboard will briefly disconnect while the new container starts. Your data,
+											secrets and certificates are kept. <HelpLink slug="install" />
 										</AlertDialogDescription>
 									</AlertDialogHeader>
 									<AlertDialogFooter>
