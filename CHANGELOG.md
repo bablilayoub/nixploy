@@ -11,7 +11,118 @@ this file is the summary.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Inherited variables are visible from the service.** The Environment tab of
+  every application, compose stack and database lists what it gets from the
+  organization, the project and the environment, marks the ones the service
+  overrides, and links to the chain. Until now that whole layer was invisible
+  from where it matters.
+- The service header says when it was last deployed and by whom.
+- Deployment logs get an **errors-only filter** (one click from a thousand-line
+  build to the line that failed) and a copy button.
+- Docker sub-tabs are deep-linkable (`?tab=volumes`) and survive a refresh.
+- The API smoke test can build an app **from source** (`SMOKE_BUILD_REPO` /
+  `SMOKE_BUILD_TYPE`) and CI now does. Every other step deploys a prebuilt
+  image, which is exactly why the v0.2.7 buildx breakage passed CI and broke
+  every real build. ~45 s.
+- An incident that names a service links to it — deploy-failure incidents now
+  record which kind of service failed, which is what makes the link possible.
+- **Creating an application asks for its source.** The dialog takes a Docker
+  image or a repository URL (or "set up later"), saves it with the service and
+  opens the new service page — a new app used to land in the list unusable
+  until you found two more forms on two more tabs.
+- **The add-domain dialog checks DNS while you type**: whether the host
+  resolves, where to, and this server's public IP, so a mispointed A record is
+  visible before saving instead of after the certificate fails. New
+  `domain.checkDns` procedure.
+- Saving environment variables says they apply on the next deployment and
+  offers a Deploy button in the toast; the editor footer says the same.
+- The panel shows a service's public address where you look for it: under the
+  service title (with a copy button and a link that opens the site) and in the
+  project's services table. It used to live only in the Domains tab.
+- Dashboard project rows carry a health summary — how many services are
+  failing, how many are running — instead of only a service count.
+- A dismissible "Finish setting up" checklist on the dashboard with five live
+  checks (panel domain with TLS, git provider, first service, first successful
+  deployment, first domain), each linking to the page that does it.
+- A service that cannot be deployed yet says why under its title ("Set a
+  repository URL or Docker image first"). The reason used to be a tooltip on
+  the disabled Deploy button.
+
+### Changed
+
+- Page descriptions wrap instead of being truncated — the Servers page cut its
+  own instructions mid-word, with no way to read the rest.
+- Cards no longer repeat the page title: "Organization" → "Name" (with a note
+  on why the slug is fixed), "Profile" → "Name and avatar", the Servers card →
+  "Connected hosts".
+- Platform → Access saves the Let's Encrypt email from a button next to the
+  field rather than one in the card header, which sat next to the domain it did
+  not save.
+- The empty schedules and project-services states say what the thing is for and
+  offer a way in ("Browse templates").
+- The rollbacks table's "Version" column is called "Image tag" — it is the
+  local tag the image is pinned under, not a release number.
+- A service page that cannot load is no longer a dead end: it names what is
+  missing, links back to the project, and only offers Retry when retrying
+  could work (a deleted service used to show a Retry button that could not
+  succeed, and no way back).
+- The add-domain dialog hides the certificate picker unless something actually
+  terminates TLS, and clears the choice when HTTPS is switched off.
+- Monitoring leads with the fleet: the Prometheus endpoint card moved below it
+  instead of pushing the service list and its charts off the screen.
+- The backups empty state carries an "Add backup storage" button instead of
+  naming the settings page in prose.
+- **Redeploy is gone from the application and compose headers.** It queued
+  exactly the same job as Deploy — same builder, same rollout — under a second
+  name, so the two buttons only suggested a difference that was not there. The
+  `application.redeploy` / `compose.redeploy` API procedures are unchanged.
+- Deployment status reads the same everywhere: a failed deployment is
+  "Failed", not "Error" in one place and "Failed" in another, and the badge
+  colours match the dashboard's dots (blue while running, green when
+  succeeded).
+- Long tables and tab strips show a shadow at the edge they can scroll toward,
+  and the tab strip's own scrollbar (which sat on top of the active underline)
+  is hidden.
+- Phones: the settings menu is a select instead of twelve stacked links that
+  pushed every settings page off the screen; the deployments table folds its
+  Created and Duration columns under the title; the project toolbar wraps
+  instead of pushing "Add service" past the right edge.
+- The deployments chart says "No deployments in the last 14 days" instead of
+  drawing an empty grid.
+
+### Fixed
+
+- **Housekeeping never ran.** The hourly maintenance pass failed on every
+  install: `pruneDeploymentRows` passed a JavaScript `Date` into a raw
+  statement, which the Postgres driver refuses, so old deployment rows and
+  their log files were never removed. Confirmed on a live instance (the step
+  failed once an hour, every hour). The maintenance logger also swallowed the
+  driver's reason, which is why the log only ever said "Failed query: …".
+- The audit trail showed a raw uuid instead of the service name on every
+  deploy row, and rendered its timestamps in 12-hour time while the rest of the
+  panel uses 24-hour.
+- Long Docker container, network and volume names ran across the neighbouring
+  columns and pushed the rest of the row off the table; they truncate now, so
+  the containers list fits without horizontal scrolling.
+- The log viewer's errors-only filter hid the very line it exists to find:
+  "Deployment failed: …" was not classified as an error because only "failed
+  to" matched.
+- Twelve middleware fields, two database credential fields, an alert threshold
+  and the generated SSH key boxes had visible labels that were never associated
+  with their control, so a screen reader announced an unnamed text box.
+- Between roughly 850 and 1000 px the organization switcher overlapped the top
+  navigation links.
+- The "no instance backup" platform alert pointed at "Settings → Backups",
+  which is not what that page is called.
+- Every dashboard load logged a React hydration error: the recent-deployments
+  subtitle rendered "Loading…" on the client while the server had already
+  rendered the loaded text. Relative timestamps in the project list, project
+  deployments table and schedules panel go through `<DateTime>` now, which is
+  hydration-safe.
+- The deployment log drawer kept saying "Running" after the deployment it was
+  showing had finished.
 
 ## [0.2.7] — 2026-09-14
 
