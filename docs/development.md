@@ -180,6 +180,14 @@ KEY=$(NIXPLOY_URL=http://localhost:3000 \
 #    backup run → runs list → delete project → assert no Swarm leftovers.
 NIXPLOY_URL=http://localhost:3000 NIXPLOY_API_KEY="$KEY" node tools/golden-path-api.mjs
 
+# 2b. Same run, plus one app built FROM SOURCE (clone → Dockerfile build →
+#     Swarm rollout, ~45 s). Every other step deploys a prebuilt image, so this
+#     is the only step that exercises the builders at all — the v0.2.7 buildx
+#     breakage shipped because nothing did. CI sets these two variables.
+NIXPLOY_URL=http://localhost:3000 NIXPLOY_API_KEY="$KEY" \
+  SMOKE_BUILD_REPO=https://github.com/docker/welcome-to-docker.git \
+  SMOKE_BUILD_TYPE=dockerfile node tools/golden-path-api.mjs
+
 # 3. The UI golden path: login → project → application → docker source →
 #    Deploy → "Succeeded" → domain dialog → every surface in light and dark
 #    with a clean-console assertion → delete the project again.

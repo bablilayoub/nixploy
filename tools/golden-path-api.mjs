@@ -28,6 +28,15 @@
  *                            probe still follows the domain's own https flag.
  *   SMOKE_SKIP_DOCKER_CHECK  1 → do not shell out to `docker service ls`
  *   SMOKE_KEEP               1 → skip the delete step (debugging only)
+ *   SMOKE_BUILD_REPO         git URL to additionally build FROM SOURCE. Off by
+ *                            default because a real build is slow, but this is
+ *                            the only step that exercises the builders — the
+ *                            v0.2.7 buildx breakage shipped precisely because
+ *                            every smoke deployed a prebuilt image.
+ *   SMOKE_BUILD_TYPE         dockerfile (default) | nixpacks | railpack |
+ *                            static | paketo_buildpacks | heroku_buildpacks
+ *   SMOKE_BUILD_BRANCH       default "main"
+ *   SMOKE_BUILD_DOCKERFILE   default "Dockerfile" (dockerfile builds only)
  */
 
 import { execFile } from "node:child_process";
@@ -44,6 +53,10 @@ const DOMAIN_SUFFIX = process.env.SMOKE_DOMAIN_SUFFIX ?? "traefik.me";
 const TRAEFIK_ORIGIN = process.env.SMOKE_TRAEFIK_ORIGIN ?? "";
 const SKIP_DOCKER_CHECK = process.env.SMOKE_SKIP_DOCKER_CHECK === "1";
 const KEEP = process.env.SMOKE_KEEP === "1";
+const BUILD_REPO = process.env.SMOKE_BUILD_REPO ?? "";
+const BUILD_TYPE = process.env.SMOKE_BUILD_TYPE ?? "dockerfile";
+const BUILD_BRANCH = process.env.SMOKE_BUILD_BRANCH ?? "main";
+const BUILD_DOCKERFILE = process.env.SMOKE_BUILD_DOCKERFILE ?? "Dockerfile";
 
 if (!API_KEY) {
 	console.error("NIXPLOY_API_KEY is required");
@@ -373,6 +386,30 @@ async function main() {
 	await post("application.start", { applicationId });
 	const backUp = await waitFor(`${host} to answer again`, reachable, { intervalMs: 4000 });
 	ok(`started — ${host} → ${backUp}`);
+
+	if (BUILD_REPO) {
+		step(`build from source (${BUILD_TYPE})`);
+		const builtApp = await post("application.create", {
+			name: `build-${stamp}`,
+			projectId: state.projectId,
+			environmentId,
+		});
+		await post("application.saveSource", {
+			applicationId: builtApp.applicationId,
+			sourceType: "git",
+			gitUrl: BUILD_REPO,
+			gitBranch: BUILD_BRANCH,
+		});
+		await post("application.saveBuildType", {
+			applicationId: builtApp.applicationId,
+			buildType: BUILD_TYPE,
+			...(BUILD_TYPE === "dockerfile" ? { dockerfile: BUILD_DOCKERFILE } : {}),
+		});
+		info(`building ${BUILD_REPO}#${BUILD_BRANCH} with ${BUILD_TYPE}`);
+		const build = await post("application.deploy", { applicationId: builtApp.applicationId });
+		await awaitDeployment(builtApp.applicationId, build.deploymentId, "the source build to finish");
+		ok(`built and deployed from source in ${elapsed()}`);
+	}
 
 	step("create a Postgres service");
 	const database = await post("postgres.create", {
