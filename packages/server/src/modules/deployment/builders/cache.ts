@@ -1,5 +1,10 @@
 import { getBuildCachePath, shellQuote } from "../paths";
-import { BUILDX_MISSING_HINT, hasBuildx } from "./buildx";
+import {
+	BUILDX_MISSING_HINT,
+	CACHE_EXPORT_UNSUPPORTED_HINT,
+	hasBuildx,
+	supportsBuildCacheExport,
+} from "./buildx";
 import type { BuildInput } from "./index";
 
 /**
@@ -32,6 +37,14 @@ export async function prepareBuildCache(input: BuildInput): Promise<{
 	// nothing to cache into, and asking for it fails the build outright.
 	if (!(await hasBuildx(input.ctx.serverId))) {
 		input.ctx.logger.line(`Build cache: disabled — ${BUILDX_MISSING_HINT}`);
+		return { enabled: false, cacheDir, buildxCacheFlags: "", noCacheFlag: "" };
+	}
+
+	// Having buildx is not the same as being able to export a cache: the default
+	// `docker` driver refuses, and the build fails rather than skipping the
+	// cache, so check before asking for one.
+	if (!(await supportsBuildCacheExport(input.ctx.serverId))) {
+		input.ctx.logger.line(`Build cache: disabled — ${CACHE_EXPORT_UNSUPPORTED_HINT}`);
 		return { enabled: false, cacheDir, buildxCacheFlags: "", noCacheFlag: "" };
 	}
 

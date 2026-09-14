@@ -94,6 +94,14 @@ this file is the summary.
 
 ### Fixed
 
+- **Dockerfile builds failed on a stock Docker install.** The per-app layer
+  cache is on by default, and buildx's default `docker` driver cannot export
+  one — the build died with "Cache export is not supported for the docker
+  driver" instead of simply building without a cache. Docker Desktop hides
+  this by shipping the containerd image store, which is why it never showed up
+  in local testing. The build host is now probed for cache-export support, and
+  a host without it builds anyway, with a log line saying how to get the cache
+  back. Found by the new source-build smoke step on its first CI run.
 - **Housekeeping never ran.** The hourly maintenance pass failed on every
   install: `pruneDeploymentRows` passed a JavaScript `Date` into a raw
   statement, which the Postgres driver refuses, so old deployment rows and
