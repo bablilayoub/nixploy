@@ -2,6 +2,7 @@ import { normalize } from "node:path";
 import { parseEnv } from "../env";
 import { shellQuote } from "../paths";
 import { withBuildArgFlags } from "./build-env";
+import { hasBuildx } from "./buildx";
 import { prepareBuildCache } from "./cache";
 import type { BuildInput } from "./index";
 
@@ -51,8 +52,12 @@ export async function buildWithDockerfile(input: BuildInput, imageTag: string): 
 					"read them with RUN --mount=type=secret,id=<NAME> cat /run/secrets/<NAME>",
 			);
 		}
+		// `docker build` is the fallback when the host has no buildx plugin;
+		// it cannot take `--secret` or the cache flags, which are already
+		// empty in that case (see cache.ts / withBuildArgFlags).
+		const builder = (await hasBuildx(ctx.serverId)) ? "docker buildx build --load" : "docker build";
 		await ctx.run(
-			`docker buildx build --load -f ${shellQuote(dockerfilePath)} -t ${shellQuote(imageTag)}${target}${flags.buildArgs}${flags.secrets}${cacheFlags} ${shellQuote(contextPath)}`,
+			`${builder} -f ${shellQuote(dockerfilePath)} -t ${shellQuote(imageTag)}${target}${flags.buildArgs}${flags.secrets}${cacheFlags} ${shellQuote(contextPath)}`,
 		);
 	});
 }

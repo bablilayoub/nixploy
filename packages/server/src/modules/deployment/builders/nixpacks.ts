@@ -1,6 +1,7 @@
 import { commandExists } from "../docker";
 import { shellQuote } from "../paths";
 import { withSourcedBuildEnv } from "./build-env";
+import { BUILDX_MISSING_HINT, hasBuildx } from "./buildx";
 import { prepareBuildCache } from "./cache";
 import type { BuildInput } from "./index";
 import { ensureToolBinary, NIXPACKS_TOOL } from "./tools";
@@ -38,9 +39,15 @@ export async function buildWithNixpacks(input: BuildInput, imageTag: string): Pr
 
 	// Values go through a 0600 env file the CLI reads from its own
 	// environment; only the NAMES are on argv (security audit 2.4).
+	// nixpacks shells out to `docker build`, which defaults to BuildKit and
+	// dies with "BuildKit is enabled but the buildx component is missing" when
+	// the plugin is absent. Ask for the classic builder instead of failing.
+	const buildkit = (await hasBuildx(ctx.serverId)) ? "" : "DOCKER_BUILDKIT=0 ";
+	if (buildkit) ctx.logger.line(BUILDX_MISSING_HINT);
+
 	await withSourcedBuildEnv(ctx, input.application.appName, env, async ({ prefix, flags }) => {
 		await ctx.run(
-			`${prefix}${binary} build ${shellQuote(buildDir)} --name ${shellQuote(imageTag)}${flags}${noCache}${cacheKey}`,
+			`${prefix}${buildkit}${binary} build ${shellQuote(buildDir)} --name ${shellQuote(imageTag)}${flags}${noCache}${cacheKey}`,
 		);
 	});
 }

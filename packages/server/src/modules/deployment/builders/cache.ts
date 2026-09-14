@@ -1,4 +1,5 @@
 import { getBuildCachePath, shellQuote } from "../paths";
+import { BUILDX_MISSING_HINT, hasBuildx } from "./buildx";
 import type { BuildInput } from "./index";
 
 /**
@@ -25,6 +26,13 @@ export async function prepareBuildCache(input: BuildInput): Promise<{
 			buildxCacheFlags: "",
 			noCacheFlag: "--no-cache",
 		};
+	}
+
+	// The local cache exporter is a BuildKit feature: without buildx there is
+	// nothing to cache into, and asking for it fails the build outright.
+	if (!(await hasBuildx(input.ctx.serverId))) {
+		input.ctx.logger.line(`Build cache: disabled — ${BUILDX_MISSING_HINT}`);
+		return { enabled: false, cacheDir, buildxCacheFlags: "", noCacheFlag: "" };
 	}
 
 	// Create the cache dir on the build host (local or remote via ctx.run).
