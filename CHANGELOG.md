@@ -13,6 +13,16 @@ this file is the summary.
 
 Nothing yet.
 
+## [0.2.5] — 2026-09-14
+
+### Fixed
+
+- Creating a GitHub App reported "No GitHub App installation found" and left
+  a configured-looking provider that could not list repositories: the App
+  had been created but not yet *installed* on an account. The panel now
+  shows Installed / Not installed with an "Install on GitHub" button, and
+  stores the installation automatically when GitHub sends you back.
+
 ## [0.2.4] — 2026-09-14
 
 ### Fixed

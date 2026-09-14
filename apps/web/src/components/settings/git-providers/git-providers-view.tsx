@@ -58,14 +58,7 @@ export function GitProvidersView() {
 		}
 
 		router.replace("/dashboard/settings/git-providers");
-	}, [
-		searchParams,
-		router,
-		queryClient,
-		trpc.github.all,
-		trpc.github.syncInstallation,
-		syncInstallation.mutateAsync,
-	]);
+	}, [searchParams, router, queryClient, trpc.github.all, syncInstallation.mutateAsync]);
 
 	return (
 		<div className="flex flex-col gap-4">
