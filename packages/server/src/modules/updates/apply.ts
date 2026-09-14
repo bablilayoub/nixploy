@@ -5,6 +5,7 @@ import { bestEffort } from "../../utils/best-effort";
 import { execAsync } from "../../utils/exec";
 import { getConfigDir, shellQuote } from "../deployment/paths";
 import { countActiveDeployments } from "../observability/health";
+import { resolveUpdateCandidate } from "./candidate";
 import { getAppVersion, NIXPLOY_SERVICE_NAME } from "./check";
 import { assertValidImageRef } from "./registry";
 import { assertVersionAllowed, releaseTag, withImageTag } from "./releases";
@@ -177,8 +178,17 @@ export async function applyUpdate(options?: {
 	}
 
 	// A version pins the TAG of the image the instance already tracks; the
-	// registry/repository are never taken from the caller.
-	let requested = options?.image?.trim() || settings.image;
+	// registry/repository are never taken from the caller. With neither an
+	// image nor a version, roll to what the last check offered (the newest
+	// release under the pin) — not to the tag the installer pinned, which
+	// would re-pull the version that already runs.
+	let requested =
+		options?.image?.trim() ||
+		resolveUpdateCandidate({
+			trackedImage: settings.image,
+			latestReleaseTag: settings.releaseTag ?? null,
+			pinnedVersion: settings.pinnedVersion,
+		}).image;
 	let isDowngrade = false;
 	if (options?.version) {
 		({ isDowngrade } = assertVersionAllowed({

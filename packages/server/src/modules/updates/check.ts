@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execAsync } from "../../utils/exec";
 import { shellQuote } from "../deployment/paths";
+import { resolveUpdateCandidate } from "./candidate";
 import { fetchRemoteDigest, normalizeDigest, parseImageRef } from "./registry";
 import {
 	fetchLatestRelease,
@@ -173,9 +174,19 @@ export async function checkForUpdates(options?: {
 	persist?: boolean;
 }): Promise<UpdateCheckResult> {
 	const settings = await getUpdateSettings();
-	const latestImage = settings.image;
 	const checkedAt = new Date().toISOString();
 	const appVersion = getAppVersion();
+
+	// A version-pinned image (what install.sh writes) is immutable, so the
+	// release channel is GitHub's newest release, not the tag's digest.
+	const tracksVersion = parseVersion(imageVersionTag(settings.image)) !== null;
+	const latestRelease = tracksVersion ? await fetchLatestRelease().catch(() => null) : null;
+	const candidate = resolveUpdateCandidate({
+		trackedImage: settings.image,
+		latestReleaseTag: latestRelease?.tag ?? null,
+		pinnedVersion: settings.pinnedVersion,
+	});
+	const latestImage = candidate.image;
 
 	let currentImage: string | null = null;
 	let currentDigest: string | null = null;
@@ -201,7 +212,10 @@ export async function checkForUpdates(options?: {
 	const updateAvailable =
 		!!latestDigest && !!currentDigest && latestDigest !== currentDigest && !error;
 
-	const release = await resolveTargetRelease(latestImage);
+	const release =
+		latestRelease && candidate.tag === latestRelease.tag
+			? latestRelease
+			: await resolveTargetRelease(latestImage);
 
 	const result: UpdateCheckResult = {
 		appVersion,

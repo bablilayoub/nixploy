@@ -13,6 +13,15 @@ this file is the summary.
 
 Nothing yet.
 
+## [0.2.3] — 2026-09-14
+
+### Fixed
+
+- The in-app updater reported "up to date" on every installed release: it
+  compared the digest of the tag the installer pinned (`:v0.2.1`) with
+  itself. Version-tagged installs now follow GitHub's newest release (under
+  the pin) and `Update` rolls to that tag; moving tags keep the digest check.
+
 ## [0.2.2] — 2026-09-14
 
 ### Fixed

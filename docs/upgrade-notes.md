@@ -12,6 +12,14 @@ Upgrade mechanics (rollback, pre-update dump, downgrade guard) are in
 
 ## In-app updater: release notes and version pinning
 
+**What "newer" means.** The installer pins the panel to the release tag it
+installed (`NIXPLOY_IMAGE=ghcr.io/…/nixploy:v0.2.1`), and that tag never
+changes. The checker therefore treats GitHub's newest release as the update
+channel for version-tagged images: it offers the newest release under your
+pin, compares its digest with the running container, and `Update` rolls to
+that tag. A moving tag (`:latest`, `:main`) is its own channel — the digest
+comparison alone decides.
+
 Settings → Platform → Updates used to show a digest and nothing else — you
 could see that *something* changed, not what, and could not choose which
 version to roll to (product audit, Platform row "Updater shows digest only").
