@@ -235,20 +235,29 @@ async function main() {
 		await createDialog.getByLabel("Name", { exact: true }).fill(appName);
 		await createDialog.getByRole("button", { name: "Create", exact: true }).click();
 		await page.getByText(`Application "${appName}" created`).waitFor({ timeout: 30_000 });
+		// Creating a service opens it: the dialog can take the source up front, so
+		// the panel navigates on its own. Clicking the row link as well raced with
+		// that navigation ("element was detached from the DOM"). Fall back to the
+		// link only if the navigation did not happen.
 		await page
-			.locator('a[href*="/services/application/"]')
-			.filter({ hasText: appName })
-			.first()
-			.click();
-		await page.waitForURL(/\/services\/application\/[^/?]+/, { timeout: 60_000 });
+			.waitForURL(/\/services\/application\/[^/?]+/, { timeout: 30_000 })
+			.catch(async () => {
+				await page
+					.locator('a[href*="/services/application/"]')
+					.filter({ hasText: appName })
+					.first()
+					.click();
+				await page.waitForURL(/\/services\/application\/[^/?]+/, { timeout: 60_000 });
+			});
 		const applicationUrl = page.url().split("?")[0];
 		ok(`application ${appName} → ${applicationUrl}`);
 
 		step("set the source to a Docker image");
 		await page.getByRole("combobox").first().click();
-		await page.getByRole("option", { name: "Docker Image" }).click();
-		// Scoped by id: the closed Select still exposes an option named
-		// "Docker Image", which getByLabel would also match.
+		// Case-insensitive: the option reads "Docker image" (sentence case).
+		await page.getByRole("option", { name: /^docker image$/i }).click();
+		// Scoped by id: the closed Select still exposes that option, which
+		// getByLabel would also match.
 		await page.locator("#docker-image").fill("traefik/whoami:v1.10.1");
 		await page.getByRole("button", { name: "Save source" }).click();
 		await page.getByText("Source configuration saved").waitFor({ timeout: 30_000 });
