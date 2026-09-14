@@ -7,6 +7,7 @@ import { type ComponentProps, Fragment, useState } from "react";
 import { toast } from "sonner";
 
 import { capabilityHint } from "@/components/services/capability-hint";
+import { ServiceUrl } from "@/components/services/service-url";
 import { ServiceStatusBadge } from "@/components/services/status-badge";
 import {
 	AlertDialog,
@@ -27,6 +28,7 @@ import { TableCard } from "@/components/ui/table-card";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useRunningDeployments } from "@/hooks/use-running-deployments";
 import { toastError } from "@/lib/describe-error";
+import type { DomainLike } from "@/lib/service-url";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 
 import { ServiceRowActions } from "./service-row-actions";
@@ -44,6 +46,8 @@ export interface ServiceEntry {
 	description?: string | null;
 	status: string;
 	tags?: Array<{ tagId: string; name: string; color: string }>;
+	/** Primary HTTP domain, when the service has one (applications and compose). */
+	domain?: DomainLike | null;
 }
 
 const TYPE_ORDER = Object.keys(SERVICE_TYPE_META) as ServiceType[];
@@ -266,11 +270,12 @@ export function ServicesTable({
 													)}
 												</span>
 											</TableCell>
-											<TableCell>
-												<div className="flex flex-col gap-1">
+											<TableCell className="max-w-64">
+												<div className="flex min-w-0 flex-col gap-1">
 													<Link
 														href={href}
-														className="text-sm font-medium after:absolute after:inset-0 hover:underline"
+														className="truncate text-sm font-medium after:absolute after:inset-0 hover:underline"
+														title={service.name}
 													>
 														{service.name}
 													</Link>
@@ -292,8 +297,14 @@ export function ServicesTable({
 													)}
 												</div>
 											</TableCell>
-											<TableCell className="max-w-64 truncate text-sm text-muted-foreground">
-												{service.description || "—"}
+											<TableCell className="max-w-72 text-sm text-muted-foreground">
+												{service.domain ? (
+													<span className="relative z-10 flex min-w-0">
+														<ServiceUrl domain={service.domain} compact />
+													</span>
+												) : (
+													<span className="block truncate">{service.description || "—"}</span>
+												)}
 											</TableCell>
 											<TableCell className="w-20 text-right">
 												<div className="flex items-center justify-end gap-1">

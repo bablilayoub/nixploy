@@ -104,6 +104,7 @@ export function EnvEditor({
 	loading,
 	canRead = true,
 	canEdit = true,
+	footerHint,
 	downloadName = ".env",
 }: {
 	/**
@@ -129,6 +130,12 @@ export function EnvEditor({
 	canEdit?: boolean;
 	/** File name used by "Download .env". */
 	downloadName?: string;
+	/**
+	 * Extra line next to the KEY=VALUE hint. Services use it to say that saved
+	 * variables only reach the container on the next deployment — saving used
+	 * to look like it had applied them.
+	 */
+	footerHint?: string;
 }) {
 	const serverValue = value ?? "";
 	const [draft, setDraft] = useState(serverValue);
@@ -283,6 +290,7 @@ export function EnvEditor({
 				<p className="text-xs text-muted-foreground">
 					One <code className="font-mono">KEY=VALUE</code> pair per line. Lines starting with{" "}
 					<code className="font-mono">#</code> are comments.
+					{footerHint ? <span className="block">{footerHint}</span> : null}
 				</p>
 				{unlocked && (
 					<div className="flex items-center gap-2">

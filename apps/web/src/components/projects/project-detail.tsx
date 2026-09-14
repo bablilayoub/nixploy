@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { confirmDiscardUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { primaryDomain } from "@/lib/service-url";
 import { useTRPC } from "@/lib/trpc";
 
 import { AddServiceMenu } from "./add-service-menu";
@@ -45,7 +46,7 @@ type ProjectTab = "services" | "environment" | "deployments";
 
 const PROJECT_TABS: { value: ProjectTab; label: string }[] = [
 	{ value: "services", label: "Services" },
-	{ value: "environment", label: "Environment Variables" },
+	{ value: "environment", label: "Environment variables" },
 	{ value: "deployments", label: "Deployments" },
 ];
 
@@ -138,6 +139,34 @@ export function ProjectDetail({
 		enabled: tab === "services",
 	});
 
+	// One project-wide domain query feeds the address column; per-row queries
+	// would be one request per service.
+	const domainsQuery = useQuery({
+		...trpc.domain.all.queryOptions({ projectId }),
+		enabled: tab === "services",
+	});
+	const primaryDomains = useMemo(() => {
+		const rows = domainsQuery.data ?? [];
+		const byService = new Map<string, typeof rows>();
+		for (const row of rows) {
+			const key = row.applicationId
+				? `application:${row.applicationId}`
+				: row.composeId
+					? `compose:${row.composeId}`
+					: null;
+			if (!key) continue;
+			const bucket = byService.get(key);
+			if (bucket) bucket.push(row);
+			else byService.set(key, [row]);
+		}
+		const result = new Map<string, (typeof rows)[number]>();
+		for (const [key, bucket] of byService) {
+			const picked = primaryDomain(bucket);
+			if (picked) result.set(key, picked);
+		}
+		return result;
+	}, [domainsQuery.data]);
+
 	const serviceRefs = useMemo(
 		() => [
 			...(applicationsQuery.data ?? []).map((row) => ({
@@ -180,6 +209,7 @@ export function ProjectDetail({
 			description: row.description,
 			status: row.status,
 			tags: tagsByService[`application:${row.applicationId}`],
+			domain: primaryDomains.get(`application:${row.applicationId}`),
 		})),
 		...(composeQuery.data ?? []).map((row) => ({
 			type: "compose" as const,
@@ -188,6 +218,7 @@ export function ProjectDetail({
 			description: row.description,
 			status: row.status,
 			tags: tagsByService[`compose:${row.composeId}`],
+			domain: primaryDomains.get(`compose:${row.composeId}`),
 		})),
 		...(postgresQuery.data ?? []).map((row) => ({
 			type: "postgres" as const,
@@ -360,7 +391,9 @@ export function ProjectDetail({
 						</div>
 					)}
 					{tab === "services" && (
-						<div className="flex items-center gap-2">
+						// Wraps on phones — the row used to push "Add service" off the
+						// right edge, where nothing hinted it was there.
+						<div className="flex flex-wrap items-center gap-2">
 							<DisabledHint hint={canWriteProject ? undefined : capabilityHint("project.write")}>
 								<CreateEnvironmentDialog projectId={projectId} onCreated={selectEnvironment}>
 									<Button variant="outline" size="sm" disabled={!canWriteProject}>
@@ -464,13 +497,20 @@ export function ProjectDetail({
 						</div>
 						{/* The toolbar instance owns the ?new= deep link — never seed both. */}
 						{!search && activeEnvironment && (
-							<AddServiceMenu
-								projectId={projectId}
-								environmentId={activeEnvironment.environmentId}
-								environmentName={activeEnvironment.name}
-								disabled={!canCreateService}
-								disabledReason={capabilityHint("service.create")}
-							/>
+							<div className="flex flex-wrap items-center justify-center gap-2">
+								<AddServiceMenu
+									projectId={projectId}
+									environmentId={activeEnvironment.environmentId}
+									environmentName={activeEnvironment.name}
+									disabled={!canCreateService}
+									disabledReason={capabilityHint("service.create")}
+								/>
+								{/* The shortest path to a first running service, and the one
+								    a new operator is least likely to find on their own. */}
+								<Button asChild variant="outline">
+									<Link href="/dashboard/templates">Browse templates</Link>
+								</Button>
+							</div>
 						)}
 					</div>
 				))}

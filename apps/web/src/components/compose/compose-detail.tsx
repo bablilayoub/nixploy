@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { Layers, Loader2, Play, RefreshCw, Rocket, Square } from "lucide-react";
+import { Loader2, Play, Rocket, Square } from "lucide-react";
 import { useState } from "react";
 import { UnderlineTabsList, UnderlineTabsTrigger } from "@/components/application/underline-tabs";
 import { BackupsPanel } from "@/components/backups/backups-panel";
@@ -21,6 +21,7 @@ import { SchedulesPanel } from "@/components/schedules/schedules-panel";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { CopilotChatDrawer } from "@/components/services/copilot-chat-drawer";
 import { SaveBarTabsContent } from "@/components/services/save-bar";
+import { ServiceLoadError } from "@/components/services/service-load-error";
 import { type ServiceActions, ServicePageHeader } from "@/components/services/service-page-header";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
 import {
@@ -33,7 +34,6 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/use-capabilities";
@@ -126,10 +126,6 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 		trpc.compose.deploy.mutationOptions({ onSuccess: follow }),
 		{ successMessage: "Deployment queued", invalidate, errorMessage },
 	);
-	const redeployMutation = useSaveMutation(
-		trpc.compose.redeploy.mutationOptions({ onSuccess: follow }),
-		{ successMessage: "Redeployment queued", invalidate, errorMessage },
-	);
 	const stopMutation = useSaveMutation(
 		trpc.compose.stop.mutationOptions({ onSuccess: () => setConfirmStop(false) }),
 		{ successMessage: "Compose service stopped", invalidate, errorMessage },
@@ -158,27 +154,18 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 
 	if (isError || !data) {
 		return (
-			<div className="flex flex-col items-center justify-center gap-2 py-24 text-center">
-				<Layers className="size-8 text-muted-foreground" />
-				<p className="font-medium">Compose service not found</p>
-				<p className="text-sm text-muted-foreground">
-					{error?.message ?? "It may have been deleted, or you don't have access to it."}
-				</p>
-				{isError && (
-					<Button variant="outline" size="sm" onClick={() => refetch()}>
-						Retry
-					</Button>
-				)}
-			</div>
+			<ServiceLoadError
+				label="Compose service"
+				projectId={projectId}
+				error={isError ? error : null}
+				onRetry={() => refetch()}
+			/>
 		);
 	}
 
 	const compose = data;
 	const anyActionPending =
-		deployMutation.isPending ||
-		redeployMutation.isPending ||
-		stopMutation.isPending ||
-		startMutation.isPending;
+		deployMutation.isPending || stopMutation.isPending || startMutation.isPending;
 	const isRunning = compose.status === "running" || compose.status === "done";
 	const hasDeployed =
 		isRunning ||
@@ -209,17 +196,6 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 			hint: deployHint,
 		},
 	];
-	if (hasDeployed) {
-		serviceActions.push({
-			key: "redeploy",
-			label: "Redeploy",
-			icon: RefreshCw,
-			onClick: () => redeployMutation.mutate({ composeId }),
-			pending: redeployMutation.isPending,
-			disabled: deployDisabled,
-			hint: deployHint,
-		});
-	}
 	if (isRunning) {
 		serviceActions.push({
 			key: "stop",
@@ -251,9 +227,20 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 				name={compose.name}
 				subtitle={compose.description ?? compose.appName}
 				status={compose.status}
+				domainsFor={{ composeId }}
 				inFlight={inFlight}
 				actions={serviceActions}
 				lastError={lastError}
+				lastDeploy={
+					lastDeployment?.status === "done"
+						? {
+								finishedAt: lastDeployment.finishedAt,
+								triggeredBy: lastDeployment.triggeredBy,
+								triggeredByName: lastDeployment.triggeredByName,
+							}
+						: null
+				}
+				notice={canDeploy && !readiness.canDeploy ? readiness.reason : null}
 				onViewLogs={
 					lastDeployment ? () => followDeployment(lastDeployment.deploymentId) : undefined
 				}

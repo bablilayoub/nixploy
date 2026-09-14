@@ -1,17 +1,20 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, count, desc, eq, ilike, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import {
 	applications,
 	compose,
+	domains,
 	environments,
+	gitProviders,
 	mariadb,
 	mongo,
 	mysql,
 	postgres,
 	projects,
 	redis,
+	webServerSettings,
 } from "../../db/schema";
 import { auditFromSession } from "../../modules/audit";
 import { getDeploymentStatsSince } from "../../modules/deployment/queries";
@@ -94,6 +97,63 @@ export const projectRouter = router({
 			projectCount: projectRows[0]?.value ?? 0,
 			services,
 			deploymentsLastDay,
+		};
+	}),
+
+	/**
+	 * Checklist behind the dashboard's "Finish setting up" card: the five steps
+	 * between a fresh install and a service running on a real domain. Each one
+	 * is a cheap existence probe, all in one round trip, so the card can show
+	 * live state instead of static advice.
+	 */
+	onboarding: protectedProcedure.query(async ({ ctx }) => {
+		const organizationId = await resolveCallerOrganizationId(
+			ctx.session.user.id,
+			ctx.session.session.activeOrganizationId,
+		);
+		const [providerRows, projectRows, services, domainRows, deploymentStats, settingsRows] =
+			await Promise.all([
+				db
+					.select({ value: count() })
+					.from(gitProviders)
+					.where(eq(gitProviders.organizationId, organizationId)),
+				db
+					.select({ value: count() })
+					.from(projects)
+					.where(eq(projects.organizationId, organizationId)),
+				getOrganizationServiceStatusCounts(organizationId),
+				// Domains hang off a service, not off the organization, so the count
+				// walks the same application/compose union the deployment stats use.
+				db
+					.select({ value: count() })
+					.from(domains)
+					.leftJoin(applications, eq(domains.applicationId, applications.applicationId))
+					.leftJoin(compose, eq(domains.composeId, compose.composeId))
+					.innerJoin(
+						environments,
+						sql`${environments.environmentId} = coalesce(${applications.environmentId}, ${compose.environmentId})`,
+					)
+					.innerJoin(projects, eq(environments.projectId, projects.projectId))
+					.where(eq(projects.organizationId, organizationId)),
+				getDeploymentStatsSince(organizationId, new Date(0)),
+				db
+					.select({
+						host: webServerSettings.host,
+						certificateType: webServerSettings.certificateType,
+					})
+					.from(webServerSettings)
+					.limit(1),
+			]);
+		const settings = settingsRows[0];
+		return {
+			// Instance-level, but only ever reported as a boolean — the host is
+			// already visible to anyone who can open the panel.
+			panelDomain: Boolean(settings?.host) && settings?.certificateType !== "none",
+			gitProvider: (providerRows[0]?.value ?? 0) > 0,
+			project: (projectRows[0]?.value ?? 0) > 0,
+			service: services.total > 0,
+			domain: (domainRows[0]?.value ?? 0) > 0,
+			deployment: deploymentStats.done > 0,
 		};
 	}),
 

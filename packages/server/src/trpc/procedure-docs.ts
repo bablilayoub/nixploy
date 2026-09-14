@@ -186,6 +186,11 @@ const docs: Record<string, ProcedureDoc> = {
 		description:
 			"Project count, services grouped by status, and deployments in the last 24 hours. Backs the dashboard header.",
 	},
+	"project.onboarding": {
+		summary: "Onboarding checklist state",
+		description:
+			"Which of the first-run steps are done — panel domain with TLS, a git provider, a service, a successful deployment, a domain. Backs the dashboard's getting-started card.",
+	},
 	"project.search": {
 		summary: "Search services by name",
 		description:
@@ -545,6 +550,11 @@ const docs: Record<string, ProcedureDoc> = {
 	},
 
 	// ────────────────────────────────────────────────────────────── domains
+	"domain.checkDns": {
+		summary: "Check a host's DNS",
+		description:
+			"Resolves a hostname and compares the A records with this server's public IP. Advisory — DNS may be propagating, and hosts behind a CDN resolve elsewhere on purpose.",
+	},
 	"domain.all": {
 		summary: "List domains",
 		description:

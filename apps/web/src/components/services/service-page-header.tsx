@@ -1,13 +1,16 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, type LucideIcon, MoreVertical, ScrollText } from "lucide-react";
+import { Info, Loader2, type LucideIcon, MoreVertical, ScrollText } from "lucide-react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { ServiceUrlBar } from "@/components/services/service-url";
 import { DeploymentStatusBadge, ServiceStatusBadge } from "@/components/services/status-badge";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
+import { DateTime } from "@/components/ui/date-time";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import {
 	DropdownMenu,
@@ -15,6 +18,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { describeTriggeredBy } from "@/hooks/use-running-deployments";
 import { useTRPC } from "@/lib/trpc";
 
 /**
@@ -115,8 +119,11 @@ export function ServicePageHeader({
 	inFlight,
 	actions,
 	lastError,
+	lastDeploy,
+	notice,
 	onViewLogs,
 	before,
+	domainsFor,
 }: {
 	projectId: string;
 	projectName?: string | null;
@@ -130,17 +137,52 @@ export function ServicePageHeader({
 	actions?: ServiceActions;
 	/** First line of the last failed deployment's error, if the last one failed. */
 	lastError?: string | null;
+	/**
+	 * The last deployment that succeeded. "Running" answers whether it is up;
+	 * this answers since when and because of whom, which is the other half of
+	 * the question an operator opens a service page with.
+	 */
+	lastDeploy?: {
+		finishedAt: Date | string | null;
+		triggeredBy?: string | null;
+		triggeredByName?: string | null;
+	} | null;
+	/**
+	 * Why the service cannot be deployed yet ("Set a repository URL or Docker
+	 * image first"). It also sits on the disabled Deploy button as a tooltip,
+	 * which a first-time operator never hovers — so it is said out loud here.
+	 */
+	notice?: string | null;
 	/** Opens that deployment's log drawer (Deploy tab). */
 	onViewLogs?: () => void;
 	/** Slot rendered before the action cluster (Deploy Copilot). */
 	before?: ReactNode;
+	/**
+	 * Service whose domains become the address line under the title. Databases
+	 * pass nothing; applications and compose stacks pass their id, which hits
+	 * the same cached `domain.all` query the Domains tab uses.
+	 */
+	domainsFor?: { applicationId?: string; composeId?: string };
 }) {
+	const trpc = useTRPC();
+	const router = useRouter();
+	const pathname = usePathname();
+	const searchParams = useSearchParams();
 	const crumbs = useServiceBreadcrumb({
 		projectId,
 		environmentId,
 		projectName,
 		environmentName,
 	});
+	const domainsQuery = useQuery({
+		...trpc.domain.all.queryOptions(domainsFor ?? {}),
+		enabled: Boolean(domainsFor?.applicationId ?? domainsFor?.composeId),
+	});
+	const showDomainsTab = () => {
+		const next = new URLSearchParams(searchParams.toString());
+		next.set("tab", "domains");
+		router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+	};
 	const list = actions ?? [];
 	const overflow = list.filter((action) => !action.primary);
 	const anyPending = list.some((action) => action.pending);
@@ -190,6 +232,21 @@ export function ServicePageHeader({
 			description={
 				<span className="flex flex-col gap-1">
 					{subtitle ? <span className="truncate">{subtitle}</span> : null}
+					{(domainsQuery.data?.length ?? 0) > 0 ? (
+						<ServiceUrlBar domains={domainsQuery.data ?? []} onShowAll={showDomainsTab} />
+					) : null}
+					{lastDeploy?.finishedAt && !lastError ? (
+						<span className="flex items-center gap-1.5">
+							Deployed <DateTime value={lastDeploy.finishedAt} />
+							{describeTriggeredBy(lastDeploy) ? ` ${describeTriggeredBy(lastDeploy)}` : null}
+						</span>
+					) : null}
+					{notice && !lastError ? (
+						<span className="flex items-center gap-1.5">
+							<Info className="size-3.5 shrink-0" />
+							<span className="truncate">{notice}</span>
+						</span>
+					) : null}
 					{lastError ? (
 						<span className="flex items-center gap-1.5 text-destructive">
 							<span className="truncate">Last deployment failed: {lastError}</span>

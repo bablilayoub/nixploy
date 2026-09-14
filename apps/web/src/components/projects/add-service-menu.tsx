@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CopyButton } from "@/components/services/copy-button";
@@ -98,6 +99,13 @@ const DATABASE_CREDENTIAL_FIELDS: Record<DatabaseType, CredentialField[]> = {
 
 type ServiceDialog = "application" | "compose" | DatabaseType;
 
+/**
+ * How the new application gets its code. Asking here is the difference
+ * between landing on a service you can deploy and landing on one that needs
+ * two more forms found on two more tabs (UX audit F6).
+ */
+type SourceKind = "later" | "docker" | "git";
+
 export function AddServiceMenu({
 	projectId,
 	environmentId,
@@ -123,6 +131,7 @@ export function AddServiceMenu({
 }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
+	const router = useRouter();
 
 	const [dialog, setDialog] = useState<ServiceDialog | null>(null);
 
@@ -134,6 +143,10 @@ export function AddServiceMenu({
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
 	const [composeType, setComposeType] = useState<"docker-compose" | "stack">("docker-compose");
+	const [sourceKind, setSourceKind] = useState<SourceKind>("docker");
+	const [dockerImage, setDockerImage] = useState("");
+	const [gitUrl, setGitUrl] = useState("");
+	const [gitBranch, setGitBranch] = useState("");
 	const [credentials, setCredentials] = useState<Record<string, string>>({});
 	const [createdDatabase, setCreatedDatabase] = useState<CreatedDatabase | null>(null);
 
@@ -141,6 +154,10 @@ export function AddServiceMenu({
 		setName("");
 		setDescription("");
 		setComposeType("docker-compose");
+		setSourceKind("docker");
+		setDockerImage("");
+		setGitUrl("");
+		setGitBranch("");
 		setCredentials({});
 	};
 
@@ -172,6 +189,10 @@ export function AddServiceMenu({
 			onSuccess: (application) => toast.success(`Application "${application.name}" created`),
 		}),
 		{ invalidate: serviceKeys("application"), onSuccess: closeDialog },
+	);
+
+	const saveSource = useMutation(
+		trpc.application.saveSource.mutationOptions({ onError: onMutationError }),
 	);
 
 	const createCompose = useSaveMutation(
@@ -211,6 +232,7 @@ export function AddServiceMenu({
 	const isDatabaseDialog = dialog !== null && dialog !== "application" && dialog !== "compose";
 	const isPending =
 		createApplication.isPending ||
+		saveSource.isPending ||
 		createCompose.isPending ||
 		createPostgres.isPending ||
 		createMysql.isPending ||
@@ -218,26 +240,65 @@ export function AddServiceMenu({
 		createMongo.isPending ||
 		createRedis.isPending;
 
-	const submit = () => {
-		const trimmed = name.trim();
-		if (!trimmed) return;
-		if (dialog === "application") {
-			createApplication.mutate({
+	/**
+	 * Create the application, attach the source the dialog collected, then open
+	 * it. Landing on the new service (rather than back on the list) is the point
+	 * — it is where the next thing to do lives.
+	 */
+	const submitApplication = async (trimmed: string) => {
+		const image = dockerImage.trim();
+		const repository = gitUrl.trim();
+		const branch = gitBranch.trim();
+		try {
+			const application = await createApplication.mutateAsync({
 				name: trimmed,
 				description: description.trim() || undefined,
 				projectId,
 				environmentName,
 			});
+			if (sourceKind === "docker" && image) {
+				await saveSource.mutateAsync({
+					applicationId: application.applicationId,
+					sourceType: "docker",
+					dockerImage: image,
+				});
+			} else if (sourceKind === "git" && repository) {
+				await saveSource.mutateAsync({
+					applicationId: application.applicationId,
+					sourceType: "git",
+					gitUrl: repository,
+					gitBranch: branch || "main",
+				});
+			}
+			router.push(
+				`/dashboard/projects/${projectId}/services/application/${application.applicationId}`,
+			);
+		} catch {
+			// Both mutations already toasted through `toastError`.
+		}
+	};
+
+	const submit = () => {
+		const trimmed = name.trim();
+		if (!trimmed) return;
+		if (dialog === "application") {
+			void submitApplication(trimmed);
 			return;
 		}
 		if (dialog === "compose") {
-			createCompose.mutate({
-				name: trimmed,
-				description: description.trim() || undefined,
-				environmentId,
-				composeType,
-				sourceType: "raw",
-			});
+			createCompose.mutate(
+				{
+					name: trimmed,
+					description: description.trim() || undefined,
+					environmentId,
+					composeType,
+					sourceType: "raw",
+				},
+				{
+					onSuccess: (service) =>
+						router.push(`/dashboard/projects/${projectId}/services/compose/${service.composeId}`),
+				},
+			);
 			return;
 		}
 		if (!dialog) return;
@@ -361,6 +422,66 @@ export function AddServiceMenu({
 									<HelpLink slug="deploy" />
 								</p>
 							</div>
+						)}
+						{dialog === "application" && (
+							<>
+								<div className="flex flex-col gap-2">
+									<Label htmlFor="service-source">Source</Label>
+									<Select
+										value={sourceKind}
+										onValueChange={(value) => setSourceKind(value as SourceKind)}
+									>
+										<SelectTrigger id="service-source" className="w-full">
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="docker">Docker image</SelectItem>
+											<SelectItem value="git">Git repository</SelectItem>
+											<SelectItem value="later">Set up later</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+								{sourceKind === "docker" && (
+									<div className="flex flex-col gap-2">
+										<Label htmlFor="service-image">Docker image</Label>
+										<Input
+											id="service-image"
+											placeholder="nginx:alpine"
+											value={dockerImage}
+											onChange={(event) => setDockerImage(event.target.value)}
+											autoComplete="off"
+										/>
+									</div>
+								)}
+								{sourceKind === "git" && (
+									<>
+										<div className="flex flex-col gap-2">
+											<Label htmlFor="service-git-url">Repository URL</Label>
+											<Input
+												id="service-git-url"
+												placeholder="https://github.com/user/repo.git"
+												value={gitUrl}
+												onChange={(event) => setGitUrl(event.target.value)}
+												autoComplete="off"
+											/>
+										</div>
+										<div className="flex flex-col gap-2">
+											<Label htmlFor="service-git-branch">Branch</Label>
+											<Input
+												id="service-git-branch"
+												placeholder="main"
+												value={gitBranch}
+												onChange={(event) => setGitBranch(event.target.value)}
+												autoComplete="off"
+											/>
+											<p className="text-sm text-muted-foreground">
+												A repository behind a connected provider (private repos, pull-request
+												previews) is picked on the service's General tab instead.
+											</p>
+										</div>
+									</>
+								)}
+							</>
 						)}
 						{(dialog === "application" || dialog === "compose") && (
 							<div className="flex flex-col gap-2">

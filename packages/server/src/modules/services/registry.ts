@@ -164,11 +164,15 @@ export interface ServiceKindModule<K extends ServiceKind = ServiceKind> {
 	listByEnvironment(environmentId: string, executor?: DbExecutor): Promise<ServiceRowMap[K][]>;
 	/** Listing projection across many environments (fleet view). */
 	listSummaries(environmentIds: string[], executor?: DbExecutor): Promise<ServiceSummary[]>;
-	/** `(environmentId, count)` pairs for a batch of environments. */
+	/**
+	 * `(environmentId, status, count)` rows for a batch of environments — the
+	 * dashboard needs both the per-kind totals and the health breakdown, and one
+	 * grouped query answers both.
+	 */
 	countByEnvironment(
 		environmentIds: string[],
 		executor?: DbExecutor,
-	): Promise<Array<{ environmentId: string; value: number }>>;
+	): Promise<Array<{ environmentId: string; status: ServiceStatusValue; value: number }>>;
 	/** `(status, count)` pairs across a whole organization. */
 	statusCounts(
 		organizationId: string,
@@ -304,10 +308,10 @@ function defineServiceKind<K extends ServiceKind>(kind: K): ServiceKindDef<K> {
 		async countByEnvironment(environmentIds, executor = db) {
 			if (environmentIds.length === 0) return [];
 			return await executor
-				.select({ environmentId: table.environmentId, value: count() })
+				.select({ environmentId: table.environmentId, status: table.status, value: count() })
 				.from(table)
 				.where(inArray(table.environmentId, environmentIds))
-				.groupBy(table.environmentId);
+				.groupBy(table.environmentId, table.status);
 		},
 
 		async statusCounts(organizationId, executor = db) {

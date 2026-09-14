@@ -7,7 +7,7 @@ import { useTRPC } from "@/lib/trpc";
 /**
  * Lifecycle mutations of one application, shared by the header buttons and
  * the runtime empty states (Deploy / Start CTA) so both use the same toasts,
- * invalidation and pending state. A queued deploy/redeploy is "followed":
+ * invalidation and pending state. A queued deploy is "followed":
  * the page switches to the Deployments tab and opens that row's log drawer.
  */
 export function useApplicationActions({ applicationId }: { applicationId: string }) {
@@ -30,10 +30,6 @@ export function useApplicationActions({ applicationId }: { applicationId: string
 		successMessage: "Deployment queued",
 		invalidate,
 	});
-	const redeploy = useSaveMutation(
-		trpc.application.redeploy.mutationOptions({ onSuccess: follow }),
-		{ successMessage: "Redeployment queued", invalidate },
-	);
 	const start = useSaveMutation(trpc.application.start.mutationOptions(), {
 		successMessage: "Application started",
 		invalidate,
@@ -43,9 +39,9 @@ export function useApplicationActions({ applicationId }: { applicationId: string
 		invalidate,
 	});
 
-	const isBusy = deploy.isPending || redeploy.isPending || start.isPending || stop.isPending;
+	const isBusy = deploy.isPending || start.isPending || stop.isPending;
 
-	return { deploy, redeploy, start, stop, isBusy };
+	return { deploy, start, stop, isBusy };
 }
 
 export type ApplicationActions = ReturnType<typeof useApplicationActions>;

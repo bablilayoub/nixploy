@@ -7,7 +7,7 @@ import {
 	versionFromImage,
 } from "@nixploy/server/modules/databases/versions";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Eye, EyeOff, Loader2, Play, RefreshCw, Square } from "lucide-react";
+import { Eye, EyeOff, Loader2, Play, RefreshCw, Square } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -29,10 +29,12 @@ import { capabilityHint } from "@/components/services/capability-hint";
 import { CopyButton } from "@/components/services/copy-button";
 import { DangerZone } from "@/components/services/danger-zone";
 import { EnvEditor } from "@/components/services/env-editor";
+import { InheritedEnv } from "@/components/services/inherited-env";
 import { LogViewer } from "@/components/services/log-viewer";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
 import { SaveBarTabsContent, useSaveBar } from "@/components/services/save-bar";
 import { ServiceActionsCard } from "@/components/services/service-actions-card";
+import { ServiceLoadError } from "@/components/services/service-load-error";
 import { type ServiceActions, ServicePageHeader } from "@/components/services/service-page-header";
 import { ServiceTerminal } from "@/components/services/service-terminal";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
@@ -123,7 +125,12 @@ function SecretField({ label, value }: { label: string; value: string }) {
 		<div className="space-y-1.5">
 			<Label>{label}</Label>
 			<div className="flex items-center gap-1">
-				<Input readOnly value={revealed ? value : "••••••••••••"} className="font-mono" />
+				<Input
+					readOnly
+					aria-label={label}
+					value={revealed ? value : "••••••••••••"}
+					className="font-mono"
+				/>
 				<RevealButton revealed={revealed} onToggle={() => setRevealed((v) => !v)} />
 				<CopyButton value={value} label={`Copy ${label.toLowerCase()}`} />
 			</div>
@@ -161,7 +168,7 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 		<div className="space-y-1.5">
 			<Label>{label}</Label>
 			<div className="flex items-center gap-1">
-				<Input readOnly value={value} className="font-mono" />
+				<Input readOnly aria-label={label} value={value} className="font-mono" />
 				<CopyButton value={value} label={`Copy ${label.toLowerCase()}`} />
 			</div>
 		</div>
@@ -308,23 +315,12 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 
 	if (rowQuery.isError || !db) {
 		return (
-			<div className="flex flex-1 flex-col items-center justify-center gap-2 p-10 text-center">
-				<AlertTriangle className="size-8 text-muted-foreground" />
-				<h2 className="text-lg font-semibold">{cfg.label} not found</h2>
-				<p className="text-sm text-muted-foreground">
-					{rowQuery.error?.message ?? "This database does not exist or you don't have access."}
-				</p>
-				<div className="flex gap-2">
-					{rowQuery.isError && (
-						<Button variant="outline" onClick={() => rowQuery.refetch()}>
-							Retry
-						</Button>
-					)}
-					<Button variant="outline" onClick={() => router.push(`/dashboard/projects/${projectId}`)}>
-						Back to project
-					</Button>
-				</div>
-			</div>
+			<ServiceLoadError
+				label={cfg.label}
+				projectId={projectId}
+				error={rowQuery.isError ? rowQuery.error : null}
+				onRetry={() => rowQuery.refetch()}
+			/>
 		);
 	}
 
@@ -438,7 +434,14 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 				</SaveBarTabsContent>
 
 				<SaveBarTabsContent value="environment" className="mt-6">
-					<EnvironmentTab ns={ns} idInput={idInput} env={db.env} invalidate={invalidate} />
+					<EnvironmentTab
+						ns={ns}
+						idInput={idInput}
+						env={db.env}
+						invalidate={invalidate}
+						projectId={projectId}
+						environmentId={(db as { environmentId?: string }).environmentId}
+					/>
 				</SaveBarTabsContent>
 
 				{cfg.supportsBackups && (
@@ -1122,7 +1125,14 @@ function ConnectionTab({
 	);
 }
 
-function EnvironmentTab({ ns, idInput, env, invalidate }: TabProps & { env: string | null }) {
+function EnvironmentTab({
+	ns,
+	idInput,
+	env,
+	invalidate,
+	projectId,
+	environmentId,
+}: TabProps & { env: string | null; projectId: string; environmentId?: string }) {
 	const { can } = useCapabilities();
 	const saveMutation = useSaveMutation(ns.saveEnvironment.mutationOptions(), {
 		successMessage: "Environment variables saved",
@@ -1135,15 +1145,18 @@ function EnvironmentTab({ ns, idInput, env, invalidate }: TabProps & { env: stri
 			title="Environment variables"
 			description="Service-level variables. Reload the service to apply changes."
 		>
-			<EnvEditor
-				value={env}
-				loading={saveMutation.isPending}
-				// The server nulls `env` for members without secrets.read; the editor
-				// cannot tell that apart from an unset env, so pass the capability.
-				canRead={can("secrets.read")}
-				canEdit={can("secrets.write")}
-				onSave={(nextEnv) => saveMutation.mutateAsync({ ...idInput, env: nextEnv })}
-			/>
+			<div className="flex flex-col gap-4">
+				<EnvEditor
+					value={env}
+					loading={saveMutation.isPending}
+					// The server nulls `env` for members without secrets.read; the editor
+					// cannot tell that apart from an unset env, so pass the capability.
+					canRead={can("secrets.read")}
+					canEdit={can("secrets.write")}
+					onSave={(nextEnv) => saveMutation.mutateAsync({ ...idInput, env: nextEnv })}
+				/>
+				<InheritedEnv projectId={projectId} environmentId={environmentId} ownEnv={env} />
+			</div>
 		</SettingsSection>
 	);
 }

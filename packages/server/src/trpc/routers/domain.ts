@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { resolve4, resolve6 } from "node:dns/promises";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -22,6 +23,7 @@ import {
 } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
+import { detectPublicIp } from "../../modules/cluster/public-host";
 import { resyncComposeDomains } from "../../modules/compose/service";
 import { isUniqueViolation } from "../../modules/errors";
 import { syncPreviewTraefik } from "../../modules/preview/traefik";
@@ -412,6 +414,43 @@ const rethrowUniqueViolation = (error: unknown): never => {
 };
 
 export const domainRouter = router({
+	/**
+	 * Does this host resolve to this server? The answer decides whether a new
+	 * domain will ever work, and it is the first thing to check when one does
+	 * not — so the panel asks before the operator has to learn `dig`.
+	 *
+	 * Advisory: DNS may still be propagating, and a host behind a CDN or a
+	 * load balancer resolves elsewhere on purpose.
+	 */
+	checkDns: protectedProcedure
+		.input(z.object({ host: z.string().min(1).max(253) }))
+		.query(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			// One lookup per second per org: the add-domain dialog calls this while
+			// the operator types.
+			if (
+				!takeRateLimitToken(`domain-dns-check:${organizationId}`, { windowMs: 60_000, max: 60 })
+			) {
+				throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many DNS checks" });
+			}
+			const host = input.host.trim().toLowerCase().replace(/\.$/, "");
+			if (!/^[a-z0-9.-]+$/.test(host) || !host.includes(".")) {
+				return { host, resolved: [] as string[], serverIp: null, matches: false, checked: false };
+			}
+			const [v4, v6, serverIp] = await Promise.all([
+				resolve4(host).catch(() => [] as string[]),
+				resolve6(host).catch(() => [] as string[]),
+				detectPublicIp(),
+			]);
+			return {
+				host,
+				resolved: [...v4, ...v6],
+				serverIp,
+				matches: serverIp !== null && v4.includes(serverIp),
+				checked: true,
+			};
+		}),
+
 	/** Domains for an application, compose, or (when neither set) a project. */
 	all: protectedProcedure
 		.input(

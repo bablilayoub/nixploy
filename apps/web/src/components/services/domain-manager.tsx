@@ -287,6 +287,7 @@ function MiddlewareFieldsEditor({
 				<div className="space-y-1">
 					<Label className="text-xs">Average</Label>
 					<Input
+						aria-label="Average"
 						inputMode="numeric"
 						value={text("average")}
 						onChange={(event) => set("average", event.target.value)}
@@ -295,6 +296,7 @@ function MiddlewareFieldsEditor({
 				<div className="space-y-1">
 					<Label className="text-xs">Burst</Label>
 					<Input
+						aria-label="Burst"
 						inputMode="numeric"
 						value={text("burst")}
 						onChange={(event) => set("burst", event.target.value)}
@@ -303,6 +305,7 @@ function MiddlewareFieldsEditor({
 				<div className="space-y-1">
 					<Label className="text-xs">Period</Label>
 					<Input
+						aria-label="Period"
 						placeholder="1s"
 						value={text("period")}
 						onChange={(event) => set("period", event.target.value)}
@@ -317,6 +320,7 @@ function MiddlewareFieldsEditor({
 			<div className="space-y-1">
 				<Label className="text-xs">Allowed CIDRs (one per line)</Label>
 				<Textarea
+					aria-label="Allowed CIDRs (one per line)"
 					rows={3}
 					className="font-mono text-xs"
 					placeholder={"10.0.0.0/8\n203.0.113.4/32"}
@@ -333,6 +337,7 @@ function MiddlewareFieldsEditor({
 				<div className="space-y-1">
 					<Label className="text-xs">Response headers (Name: value)</Label>
 					<Textarea
+						aria-label="Response headers (Name: value)"
 						rows={2}
 						className="font-mono text-xs"
 						placeholder="X-Robots-Tag: noindex"
@@ -343,6 +348,7 @@ function MiddlewareFieldsEditor({
 				<div className="space-y-1">
 					<Label className="text-xs">Request headers (Name: value)</Label>
 					<Textarea
+						aria-label="Request headers (Name: value)"
 						rows={2}
 						className="font-mono text-xs"
 						placeholder="X-Tenant: acme"
@@ -354,6 +360,7 @@ function MiddlewareFieldsEditor({
 					<div className="space-y-1">
 						<Label className="text-xs">HSTS max-age (seconds)</Label>
 						<Input
+							aria-label="HSTS max-age (seconds)"
 							inputMode="numeric"
 							placeholder="31536000"
 							value={text("stsSeconds")}
@@ -363,6 +370,7 @@ function MiddlewareFieldsEditor({
 					<div className="space-y-1">
 						<Label className="text-xs">CORS origins</Label>
 						<Input
+							aria-label="CORS origins"
 							placeholder="https://app.example.com"
 							value={text("corsOrigins")}
 							onChange={(event) => set("corsOrigins", event.target.value)}
@@ -405,6 +413,7 @@ function MiddlewareFieldsEditor({
 			<div className="space-y-1">
 				<Label className="text-xs">Minimum response size (bytes, optional)</Label>
 				<Input
+					aria-label="Minimum response size (bytes, optional)"
 					inputMode="numeric"
 					placeholder="1024"
 					value={text("minResponseBodyBytes")}
@@ -420,6 +429,7 @@ function MiddlewareFieldsEditor({
 				<div className="space-y-1">
 					<Label className="text-xs">Auth endpoint</Label>
 					<Input
+						aria-label="Auth endpoint"
 						className="font-mono text-xs"
 						placeholder="http://authelia:9091/api/verify?rd=https://auth.example.com"
 						value={text("address")}
@@ -432,6 +442,7 @@ function MiddlewareFieldsEditor({
 				<div className="space-y-1">
 					<Label className="text-xs">Headers to copy from the auth response</Label>
 					<Input
+						aria-label="Headers to copy from the auth response"
 						className="font-mono text-xs"
 						placeholder="Remote-User, Remote-Groups, Remote-Email"
 						value={text("authResponseHeaders")}
@@ -457,6 +468,7 @@ function MiddlewareFieldsEditor({
 			<div className="space-y-1">
 				<Label className="text-xs">Cookie name</Label>
 				<Input
+					aria-label="Cookie name"
 					placeholder="nixploy_sticky"
 					value={text("name")}
 					onChange={(event) => set("name", event.target.value)}
@@ -726,6 +738,18 @@ export function DomainManager({
 	const [certificateId, setCertificateId] = useState<string | null>(null);
 	const [serviceName, setServiceName] = useState<string | null>(null);
 	const [hostCheck, setHostCheck] = useState<"idle" | "checking" | "available" | "taken">("idle");
+	/**
+	 * Where the host currently resolves versus where this server is. Domains
+	 * are the first thing that goes wrong on a self-hosted PaaS and the failure
+	 * is invisible — the panel says everything is fine while the browser cannot
+	 * reach it, because the A record was never pointed here (UX audit F7).
+	 */
+	const [dnsCheck, setDnsCheck] = useState<{
+		host: string;
+		resolved: string[];
+		serverIp: string | null;
+		matches: boolean;
+	} | null>(null);
 
 	// Reset the form whenever the dialog closes.
 	useEffect(() => {
@@ -743,6 +767,7 @@ export function DomainManager({
 			setCertificateId(null);
 			setServiceName(composeServices?.[0] ?? null);
 			setHostCheck("idle");
+			setDnsCheck(null);
 		}
 	}, [dialogOpen, composeServices]);
 
@@ -761,6 +786,39 @@ export function DomainManager({
 		}, 400);
 		return () => clearTimeout(timer);
 	}, [dialogOpen, host, editing, trpcClient]);
+
+	// Same debounce, one question further: does the host point here? Skipped for
+	// wildcards (nothing to resolve) and for *.traefik.me (always 127.0.0.1).
+	useEffect(() => {
+		const trimmed = host.trim().toLowerCase();
+		const skip =
+			!dialogOpen ||
+			!trimmed.includes(".") ||
+			trimmed.startsWith("*.") ||
+			trimmed.endsWith(".traefik.me");
+		if (skip) {
+			setDnsCheck(null);
+			return;
+		}
+		const timer = setTimeout(() => {
+			trpcClient.domain.checkDns
+				.query({ host: trimmed })
+				.then((result) =>
+					setDnsCheck(
+						result.checked
+							? {
+									host: result.host,
+									resolved: result.resolved,
+									serverIp: result.serverIp,
+									matches: result.matches,
+								}
+							: null,
+					),
+				)
+				.catch(() => setDnsCheck(null));
+		}, 600);
+		return () => clearTimeout(timer);
+	}, [dialogOpen, host, trpcClient]);
 
 	const invalidate = [
 		serviceType === "application"
@@ -1119,12 +1177,12 @@ export function DomainManager({
 								<Button
 									type="button"
 									variant="outline"
-									size="icon"
+									className="shrink-0"
 									onClick={generateHost}
-									aria-label="Generate a free traefik.me domain"
-									title="Generate a free traefik.me domain"
+									title="Generate a free *.traefik.me domain that resolves to 127.0.0.1"
 								>
 									<RefreshCw className="size-4" />
+									Test domain
 								</Button>
 							</div>
 							{hostCheck === "checking" && (
@@ -1142,6 +1200,27 @@ export function DomainManager({
 									<XCircle className="size-3" /> This host is already in use
 								</p>
 							)}
+							{dnsCheck &&
+								(dnsCheck.matches ? (
+									<p className="flex items-center gap-1 text-xs text-success">
+										<CheckCircle2 className="size-3" /> DNS points at this server (
+										{dnsCheck.serverIp})
+									</p>
+								) : dnsCheck.resolved.length > 0 ? (
+									<p className="text-xs text-amber-600 dark:text-amber-400">
+										{dnsCheck.host} resolves to {dnsCheck.resolved.join(", ")}
+										{dnsCheck.serverIp
+											? ` — this server is ${dnsCheck.serverIp}. Point an A record here, or ignore this if a CDN or load balancer sits in front.`
+											: " — check that it reaches this server."}
+									</p>
+								) : (
+									<p className="text-xs text-muted-foreground">
+										{dnsCheck.host} does not resolve yet
+										{dnsCheck.serverIp
+											? ` — add an A record pointing at ${dnsCheck.serverIp}.`
+											: "."}
+									</p>
+								))}
 						</div>
 
 						<div className="space-y-1.5">
@@ -1294,11 +1373,25 @@ export function DomainManager({
 									<Label htmlFor="domain-https">HTTPS</Label>
 									<p className="text-xs text-muted-foreground">Serve this domain over TLS.</p>
 								</div>
-								<Switch id="domain-https" checked={https} onCheckedChange={setHttps} />
+								<Switch
+									id="domain-https"
+									checked={https}
+									onCheckedChange={(checked) => {
+										setHttps(checked);
+										// The certificate select disappears with the switch; leaving a
+										// resolver selected behind it would save a promise we do not keep.
+										if (!checked) {
+											setCertificateType("none");
+											setCertificateId(null);
+										}
+									}}
+								/>
 							</div>
 						)}
 
-						{(protocol === "http" || tlsMode === "terminate") && (
+						{/* A certificate only matters when something terminates TLS; the
+						    select used to sit there on a plain-HTTP domain. */}
+						{((protocol === "http" && https) || tlsMode === "terminate") && (
 							<div className="space-y-1.5">
 								<Label>Certificate</Label>
 								<Select
@@ -1330,26 +1423,30 @@ export function DomainManager({
 							</div>
 						)}
 
-						{certificateType === "custom" && (protocol === "http" || tlsMode === "terminate") && (
-							<div className="space-y-1.5">
-								<Label>Custom certificate</Label>
-								<Select
-									value={certificateId ?? ""}
-									onValueChange={(value) => setCertificateId(value || null)}
-								>
-									<SelectTrigger>
-										<SelectValue placeholder="Select a certificate" />
-									</SelectTrigger>
-									<SelectContent>
-										{(certificatesQuery.data ?? []).map((certificate) => (
-											<SelectItem key={certificate.certificateId} value={certificate.certificateId}>
-												{certificate.name}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</div>
-						)}
+						{certificateType === "custom" &&
+							((protocol === "http" && https) || tlsMode === "terminate") && (
+								<div className="space-y-1.5">
+									<Label>Custom certificate</Label>
+									<Select
+										value={certificateId ?? ""}
+										onValueChange={(value) => setCertificateId(value || null)}
+									>
+										<SelectTrigger>
+											<SelectValue placeholder="Select a certificate" />
+										</SelectTrigger>
+										<SelectContent>
+											{(certificatesQuery.data ?? []).map((certificate) => (
+												<SelectItem
+													key={certificate.certificateId}
+													value={certificate.certificateId}
+												>
+													{certificate.name}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+							)}
 						<DialogFooter>
 							<Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
 								Cancel

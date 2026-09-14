@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Play, RefreshCw, Rocket, Square } from "lucide-react";
+import { Loader2, Play, Rocket, Square } from "lucide-react";
 import { useState } from "react";
 
 import { capabilityHint } from "@/components/services/capability-hint";
@@ -39,8 +39,8 @@ export function ApplicationHeader({
 	/** Lifecycle mutations owned by the page (shared with the runtime empty states). */
 	actions: ApplicationActions;
 	/**
-	 * A successful deployment exists, so Start / Redeploy can succeed. Before
-	 * that the server answers PRECONDITION_FAILED — the buttons stay hidden.
+	 * A successful deployment exists, so Start can succeed. Before that the
+	 * server answers PRECONDITION_FAILED — the button stays hidden.
 	 */
 	hasDeployed: boolean;
 }) {
@@ -48,7 +48,7 @@ export function ApplicationHeader({
 	const { can } = useCapabilities();
 	const applicationId = application.applicationId;
 	const [confirmStop, setConfirmStop] = useState(false);
-	const { deploy, redeploy, start, stop, isBusy } = actions;
+	const { deploy, start, stop, isBusy } = actions;
 	const followDeployment = useFollowDeployment();
 
 	// Live deploy state (UX audit F13): the shared running-deployments query
@@ -89,17 +89,6 @@ export function ApplicationHeader({
 			hint: deployHint,
 		},
 	];
-	if (hasDeployed) {
-		serviceActions.push({
-			key: "redeploy",
-			label: "Redeploy",
-			icon: RefreshCw,
-			onClick: () => redeploy.mutate({ applicationId }),
-			pending: redeploy.isPending,
-			disabled: deployDisabled,
-			hint: deployHint,
-		});
-	}
 	if (isRunning) {
 		serviceActions.push({
 			key: "stop",
@@ -131,9 +120,20 @@ export function ApplicationHeader({
 				name={application.name}
 				subtitle={application.description || application.appName}
 				status={application.status}
+				domainsFor={{ applicationId }}
 				inFlight={inFlight}
 				actions={serviceActions}
 				lastError={lastError}
+				lastDeploy={
+					lastDeployment?.status === "done"
+						? {
+								finishedAt: lastDeployment.finishedAt,
+								triggeredBy: lastDeployment.triggeredBy,
+								triggeredByName: lastDeployment.triggeredByName,
+							}
+						: null
+				}
+				notice={canDeploy && !readiness.canDeploy ? readiness.reason : null}
 				onViewLogs={
 					lastDeployment ? () => followDeployment(lastDeployment.deploymentId) : undefined
 				}

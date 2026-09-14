@@ -175,6 +175,8 @@ export interface EnvironmentServiceCounts {
 	mongo: number;
 	redis: number;
 	total: number;
+	/** Health breakdown of the same services — what the dashboard rows scan for. */
+	byStatus: ServiceStatusCounts;
 }
 
 export const emptyServiceCounts = (): EnvironmentServiceCounts => ({
@@ -186,10 +188,14 @@ export const emptyServiceCounts = (): EnvironmentServiceCounts => ({
 	mongo: 0,
 	redis: 0,
 	total: 0,
+	byStatus: emptyServiceStatusCounts(),
 });
 
 /** Counts key of a service kind (`application` is the only plural one). */
-const COUNT_KEY_BY_KIND: Record<ServiceKind, keyof Omit<EnvironmentServiceCounts, "total">> = {
+const COUNT_KEY_BY_KIND: Record<
+	ServiceKind,
+	keyof Omit<EnvironmentServiceCounts, "total" | "byStatus">
+> = {
 	application: "applications",
 	compose: "compose",
 	postgres: "postgres",
@@ -218,8 +224,10 @@ export async function getServiceCountsByEnvironment(
 	for (const { key, rows } of perKind) {
 		for (const row of rows) {
 			const entry = countsByEnvironment.get(row.environmentId) ?? emptyServiceCounts();
-			entry[key] = row.value;
+			entry[key] += row.value;
 			entry.total += row.value;
+			entry.byStatus[row.status] += row.value;
+			entry.byStatus.total += row.value;
 			countsByEnvironment.set(row.environmentId, entry);
 		}
 	}
