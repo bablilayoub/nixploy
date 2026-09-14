@@ -705,6 +705,17 @@ probe_via_traefik() {
 		--resolve "${1}:443:127.0.0.1" "https://${1}${2}" 2>/dev/null || true
 }
 
+# Inside the running nixploy task, exactly what the image HEALTHCHECK runs:
+# no Traefik, DNS, certificate or published port involved, so "the app is
+# up" and "the app is reachable through the proxy" are told apart. $1 is
+# unused (target), $2 = path. Prints the HTTP status ("" when no task runs).
+probe_via_exec() {
+	local cid
+	cid="$(docker ps -q -f label=com.docker.swarm.service.name=nixploy 2>/dev/null | head -n 1)"
+	[ -n "${cid}" ] || return 0
+	docker exec "${cid}" sh -c "curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 12 \"http://127.0.0.1:\${PORT:-3000}${2}\"" 2>/dev/null || true
+}
+
 # $1 = host port, $2 = path.
 probe_via_port() {
 	curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 12 \
@@ -733,6 +744,9 @@ probe_ready() {
 
 app_is_ready() {
 	local host="$1" port="${2:-}"
+	# The in-container probe is authoritative for "the new task serves";
+	# the proxy and port probes are how operators reach it.
+	probe_ready probe_via_exec "" && return 0
 	probe_ready probe_via_traefik "${host}" && return 0
 	[ -n "${port}" ] && probe_ready probe_via_port "${port}" && return 0
 	return 1
@@ -793,7 +807,12 @@ wait_for_app() {
 		docker service logs --tail 50 nixploy >&2 2>/dev/null || true
 		die "Update failed — debug: docker service logs -f nixploy · roll back: docker service rollback nixploy"
 	fi
-	ok "App is up (via Traefik on this host)"
+	if probe_ready probe_via_traefik "${host}"; then
+		ok "App is up (via Traefik on this host)"
+	else
+		ok "App is up (new task answers /api/ready)"
+		warn "Not reachable through Traefik as https://${host} from this host — check the dashboard domain (Settings → Server) and BETTER_AUTH_URL in ${ENV_FILE}"
+	fi
 
 	local running
 	running="$(docker service inspect nixploy --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null || true)"
