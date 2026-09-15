@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { Suspense } from "react";
 
 import { UnderlineTabsList, UnderlineTabsTrigger } from "@/components/application/underline-tabs";
@@ -11,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSyncedTab } from "@/hooks/use-synced-tab";
+import { useTRPC } from "@/lib/trpc";
 
 const TABS = ["fleet", "incidents", "audit"];
 
@@ -28,9 +30,18 @@ export function MonitoringPage() {
 }
 
 function MonitoringTabs() {
+	const trpc = useTRPC();
 	const { can } = useCapabilities();
 	const canAudit = can("audit.read");
 	const [tab, selectTab] = useSyncedTab("fleet", (value) => TABS.includes(value));
+
+	// Unresolved incidents are the one number on this page worth seeing without
+	// opening the tab — it is the difference between "have a look" and "go now".
+	// Same query the tab runs, so it is one request either way.
+	const openIncidents = useQuery({
+		...trpc.observability.incidents.queryOptions({ limit: 100 }),
+		select: (rows) => rows.filter((incident) => !incident.resolvedAt).length,
+	});
 	// A member without audit.read landing on ?tab=audit sees the fleet instead
 	// of an error branch the page cannot recover from.
 	const active = tab === "audit" && !canAudit ? "fleet" : tab;
@@ -44,7 +55,14 @@ function MonitoringTabs() {
 			<Tabs value={active} onValueChange={selectTab} className="w-full">
 				<UnderlineTabsList>
 					<UnderlineTabsTrigger value="fleet">Fleet</UnderlineTabsTrigger>
-					<UnderlineTabsTrigger value="incidents">Incidents</UnderlineTabsTrigger>
+					<UnderlineTabsTrigger value="incidents">
+						Incidents
+						{openIncidents.data ? (
+							<span className="ms-1.5 rounded-full bg-destructive/15 px-1.5 text-xs tabular-nums text-destructive">
+								{openIncidents.data}
+							</span>
+						) : null}
+					</UnderlineTabsTrigger>
 					{canAudit ? <UnderlineTabsTrigger value="audit">Audit log</UnderlineTabsTrigger> : null}
 				</UnderlineTabsList>
 				<TabsContent value="fleet" className="mt-6">

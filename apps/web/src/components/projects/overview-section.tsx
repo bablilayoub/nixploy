@@ -89,7 +89,15 @@ export function OverviewCards() {
 						<>
 							{services.running} running
 							{services.error > 0 ? (
-								<span className="text-destructive"> · {services.error} error</span>
+								<>
+									{" · "}
+									<Link
+										href="/dashboard/monitoring"
+										className="text-destructive underline-offset-4 hover:underline"
+									>
+										{services.error} error
+									</Link>
+								</>
 							) : null}
 						</>
 					)
@@ -105,7 +113,15 @@ export function OverviewCards() {
 						<>
 							{deployments.done} succeeded
 							{deployments.error > 0 ? (
-								<span className="text-destructive"> · {deployments.error} failed</span>
+								<>
+									{" · "}
+									<Link
+										href="/dashboard/monitoring?tab=incidents"
+										className="text-destructive underline-offset-4 hover:underline"
+									>
+										{deployments.error} failed
+									</Link>
+								</>
 							) : null}
 						</>
 					)

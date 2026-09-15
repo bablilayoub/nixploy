@@ -272,7 +272,15 @@ export function ProjectDetail({
 		redisQuery.isPending;
 
 	const filteredServices = services.filter((service) => {
-		const matchesSearch = service.name.toLowerCase().includes(search.trim().toLowerCase());
+		// Name, description and kind: typing "postgres" should find the database
+		// even when it is called `leet-db`, and typing a word from the
+		// description should find the service it describes.
+		const needle = search.trim().toLowerCase();
+		const matchesSearch =
+			!needle ||
+			[service.name, service.description, service.type].some((field) =>
+				field?.toLowerCase().includes(needle),
+			);
 		const matchesTag = !tagFilter || service.tags?.some((tag) => tag.tagId === tagFilter);
 		return matchesSearch && matchesTag;
 	});
@@ -346,6 +354,11 @@ export function ProjectDetail({
 					{PROJECT_TABS.map((item) => (
 						<UnderlineTabsTrigger key={item.value} value={item.value}>
 							{item.label}
+							{/* Only Services can be counted without a second query; the
+							    others would cost a round trip to say nothing useful. */}
+							{item.value === "services" && !isLoadingServices ? (
+								<span className="ms-1.5 tabular-nums text-muted-foreground">{services.length}</span>
+							) : null}
 						</UnderlineTabsTrigger>
 					))}
 				</UnderlineTabsList>
