@@ -238,10 +238,10 @@ Next 16 App Router, Tailwind v4, Motion, magicui components. Pages: `/`, `/featu
 ## 10. CI / release / packaging
 
 - `.github/workflows/ci.yml` — PR + main: Biome, `pnpm typecheck`, migrate a Postgres service, `pnpm test` (full suite), template image manifest probe, Swarm+Traefik whoami smoke; manual `api-golden-path` job with secrets.
-- `.github/workflows/docker.yml` — main pushes (not `[skip ci]`): GHCR `latest` + sha images.
+- `.github/workflows/docker.yml` — main pushes (not `[release]`/`[ci skip]`): GHCR `main` + sha images, built per architecture on native runners (`ubuntu-latest`, `ubuntu-24.04-arm`) and merged into one manifest list. It never touches `latest`.
 - `.github/workflows/release.yml` — tag `v[0-9]*`: assert tag = root `package.json` version, push `ghcr.io/bablilayoub/nixploy:vX.Y.Z` + `latest`, pin `install.sh`/`update.sh`, GitHub Release with notes.
 - `.github/workflows/publish-cli.yml` — tag `cli-v*`: npm publish `@nixploy/cli` (needs `NPM_TOKEN`).
-- `tools/release.sh paas|cli|both [--bump patch|minor|major] [--dry-run]` — bumps versions (root, web, landing, server), pins install defaults, commits `[skip ci]`, tags, pushes only the tag.
+- `tools/release.sh paas|cli|both [--bump patch|minor|major] [--dry-run]` — bumps versions (root, web, landing, server), pins install defaults, commits `[release]` (never `[skip ci]` — GitHub applies that to tag pushes too), tags, pushes the commits then the tag.
 - `docker/Dockerfile` — node:22-alpine, pnpm 10, `next build`, runtime adds docker-cli, compose plugin, git, openssh, curl, postgresql-client; runs as root for the docker socket.
 
 ## 11. Tests

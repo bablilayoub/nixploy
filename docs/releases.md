@@ -80,7 +80,8 @@ Workflow: [`.github/workflows/release.yml`](../.github/workflows/release.yml)
    `ghcr.io/<repo>:vX.Y.Z` with `imagetools create`, and everything after that (Trivy,
    cosign, `:latest`) works on the manifest-list digest. Until v0.2.8 both architectures
    were built on one amd64 runner with arm64 under QEMU: the emulated Next.js build took
-   15 minutes on a good day and 80+ on a bad one.
+   15 minutes on a good day and 80+ on a bad one. `docker.yml` was moved to the same split
+   straight after.
 4. Attaches a SLSA **provenance** attestation and an SPDX **SBOM** to the image
    (`provenance: true`, `sbom: true`) and stamps the OCI labels
    (`org.opencontainers.image.source|revision|version|created`) from
@@ -145,7 +146,9 @@ going stale.
 [`.github/workflows/docker.yml`](../.github/workflows/docker.yml) (`main` + sha tags, never
 `latest`; also multi-arch with provenance + SBOM, and cosign-signed) — versioned tags and
 `latest` are owned by the Release workflow only. Continuous builds do **not** wait for the
-CI gate; they are throwaway images for testing.
+CI gate; they are throwaway images for testing. That workflow uses the same native-runner
+split as the release build: a `build` matrix on `ubuntu-latest` + `ubuntu-24.04-arm` pushing
+by digest, then a `merge` job that assembles the manifest list and cosign-signs its digest.
 
 Supported image architectures: `linux/amd64`, `linux/arm64` (Raspberry Pi 4/5, Ampere,
 Graviton, Apple-silicon Docker). `install.sh` already accepts both; before this an arm64 host
