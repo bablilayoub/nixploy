@@ -48,7 +48,9 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
+import { useTableView } from "@/hooks/use-table-view";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps, invalidateDockerQueries } from "./docker-view";
@@ -59,6 +61,9 @@ type VolumeRow = {
 	Mountpoint: string;
 	protected?: boolean;
 };
+
+/** Module scope so the table view's memo is not invalidated every render. */
+const searchVolume = (row: VolumeRow) => [row.Name, row.Driver, row.Mountpoint];
 
 export function VolumesTab({ serverId }: DockerTabProps) {
 	const trpc = useTRPC();
@@ -98,16 +103,18 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 		},
 	);
 
+	const volumes = (volumesQuery.data ?? []) as VolumeRow[];
+	const view = useTableView({ rows: volumes, search: searchVolume });
+
 	if (volumesQuery.isLoading) return <Skeleton className="h-64 w-full" />;
 	if (volumesQuery.isError) return <DockerError error={volumesQuery.error} />;
-
-	const volumes = (volumesQuery.data ?? []) as VolumeRow[];
 
 	return (
 		<div className="space-y-3 pt-4">
 			<div className="flex items-center justify-between">
 				<p className="text-sm text-muted-foreground">{volumes.length} volumes</p>
 				<div className="flex items-center gap-2">
+					<TableSearch view={view} placeholder="Search volumes…" />
 					<Button variant="outline" size="sm" onClick={() => setPruneOpen(true)}>
 						Prune unused
 					</Button>
@@ -118,7 +125,7 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 				</div>
 			</div>
 
-			<TableCard>
+			<TableCard footer={<TablePagination view={view} noun="volumes" />}>
 				<Table>
 					<TableHeader>
 						<TableRow>
@@ -129,7 +136,8 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{volumes.map((volume) => (
+						{view.visible.length === 0 ? <TableNoMatch view={view} colSpan={4} /> : null}
+						{view.visible.map((volume) => (
 							<TableRow key={volume.Name}>
 								<TableCell className="max-w-72">
 									{/* An anonymous volume's name is a 64-char hash; unconstrained it

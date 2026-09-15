@@ -1,6 +1,6 @@
 "use client";
 
-import { type QueryClient, useQuery } from "@tanstack/react-query";
+import { type QueryClient, useQueries, useQuery } from "@tanstack/react-query";
 import { Container, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -58,6 +58,12 @@ export function invalidateDockerQueries(
 
 const DOCKER_TABS = ["containers", "images", "swarm", "networks", "volumes", "system"];
 
+/** Count beside a tab label; absent until the tab's own query has answered. */
+function TabCount({ value }: { value: number | undefined }) {
+	if (value === undefined) return null;
+	return <span className="ms-1.5 tabular-nums text-muted-foreground">{value}</span>;
+}
+
 /** Docker control center: full control over the daemon from the dashboard. */
 export function DockerView() {
 	const trpc = useTRPC();
@@ -99,6 +105,25 @@ export function DockerView() {
 	// is the first managed server rather than "This server".
 	const effectiveServerId: string | null =
 		serverId !== undefined ? serverId : isInstanceAdmin ? null : firstServerId;
+
+	// Counts on the triggers. Each tab already runs exactly these queries against
+	// the same server, so the numbers come out of the cache the tab will use —
+	// no extra round trips, and you can see where the volumes are without
+	// opening every tab.
+	const listCounts = useQueries({
+		queries: [
+			trpc.docker.containers.queryOptions({ serverId: effectiveServerId }),
+			trpc.docker.images.queryOptions({ serverId: effectiveServerId }),
+			trpc.docker.networks.queryOptions({ serverId: effectiveServerId }),
+			trpc.docker.volumes.queryOptions({ serverId: effectiveServerId }),
+		],
+		combine: ([containers, images, networks, volumes]) => ({
+			containers: containers?.data?.length,
+			images: images?.data?.length,
+			networks: networks?.data?.length,
+			volumes: volumes?.data?.length,
+		}),
+	});
 
 	const selector = (
 		<Select
@@ -145,13 +170,25 @@ export function DockerView() {
 		body = (
 			<Tabs value={dockerTab} onValueChange={selectDockerTab} activationMode="manual">
 				<TabsList variant="line" className="w-full justify-start overflow-x-auto border-b">
-					<TabsTrigger value="containers">Containers</TabsTrigger>
-					<TabsTrigger value="images">Images</TabsTrigger>
+					<TabsTrigger value="containers">
+						Containers
+						<TabCount value={listCounts.containers} />
+					</TabsTrigger>
+					<TabsTrigger value="images">
+						Images
+						<TabCount value={listCounts.images} />
+					</TabsTrigger>
 					{/* Nodes/services are cluster-wide: docker.nodes and swarmServices
 					    reject everyone but the instance admin, even with a serverId. */}
 					{isInstanceAdmin && <TabsTrigger value="swarm">Swarm</TabsTrigger>}
-					<TabsTrigger value="networks">Networks</TabsTrigger>
-					<TabsTrigger value="volumes">Volumes</TabsTrigger>
+					<TabsTrigger value="networks">
+						Networks
+						<TabCount value={listCounts.networks} />
+					</TabsTrigger>
+					<TabsTrigger value="volumes">
+						Volumes
+						<TabCount value={listCounts.volumes} />
+					</TabsTrigger>
 					<TabsTrigger value="system">System</TabsTrigger>
 				</TabsList>
 				<TabsContent value="containers">

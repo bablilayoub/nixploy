@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { SettingsSection } from "@/components/layout/settings-section";
+import { LoadError } from "@/components/query-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,8 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
+import { useTableView } from "@/hooks/use-table-view";
 import { authClient, useSession } from "@/lib/auth-client";
 import { toastError } from "@/lib/describe-error";
 
@@ -80,6 +83,10 @@ export function ApiKeysCard() {
 		.includes("admin");
 
 	const [keys, setKeys] = useState<ApiKeyListItem[]>([]);
+	const view = useTableView({
+		rows: keys,
+		search: (row) => [row.name, row.prefix],
+	});
 	const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [loadError, setLoadError] = useState<string | null>(null);
@@ -187,6 +194,7 @@ export function ApiKeysCard() {
 
 	return (
 		<SettingsSection
+			wide
 			title="API keys"
 			description="Personal API keys for the REST API and CLI. A key carries the scope you pick here, never more than your own permissions, and is bound to one organization."
 			actions={
@@ -334,19 +342,20 @@ export function ApiKeysCard() {
 					<Skeleton className="h-9 w-full" />
 				</div>
 			) : loadError ? (
-				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-8 text-center">
-					<p className="text-sm font-medium">Could not load API keys</p>
-					<p className="text-sm text-muted-foreground">{loadError}</p>
-					<Button variant="outline" size="sm" onClick={() => void loadKeys()}>
-						Retry
-					</Button>
-				</div>
+				<LoadError
+					title="Could not load API keys"
+					message={loadError}
+					onRetry={() => void loadKeys()}
+				/>
 			) : keys.length === 0 ? (
 				<p className="text-sm text-muted-foreground">
 					No API keys yet. Create one to use the REST API or CLI.
 				</p>
 			) : (
-				<TableCard>
+				<TableCard
+					toolbar={<TableSearch view={view} placeholder="Search keys…" className="ms-auto" />}
+					footer={<TablePagination view={view} noun="keys" />}
+				>
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -360,7 +369,8 @@ export function ApiKeysCard() {
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{keys.map((key) => {
+							{view.visible.length === 0 ? <TableNoMatch view={view} colSpan={7} /> : null}
+							{view.visible.map((key) => {
 								const info = describeApiKey(key);
 								return (
 									<TableRow key={key.id}>

@@ -7,6 +7,7 @@ import { Database, Loader2, Pencil, Plug, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
+import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { PageHeader } from "@/components/shell";
 import { Badge } from "@/components/ui/badge";
@@ -38,8 +39,10 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
+import { useTableView } from "@/hooks/use-table-view";
 import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -66,6 +69,11 @@ export function RegistriesView() {
 		error,
 		refetch,
 	} = useQuery(trpc.registry.all.queryOptions());
+
+	const view = useTableView({
+		rows: registries ?? [],
+		search: (row) => [row.registryName, row.username, row.registryUrl, row.registryType],
+	});
 
 	const listKey = trpc.registry.all.queryKey();
 
@@ -124,6 +132,7 @@ export function RegistriesView() {
 				description="Credentials for private registries (Hub, GHCR, or your own)."
 			/>
 			<SettingsSection
+				wide
 				title={
 					<span className="flex items-center gap-2">
 						<Database className="size-4 text-muted-foreground" />
@@ -243,15 +252,14 @@ export function RegistriesView() {
 						</div>
 					}
 					empty={
-						<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-							<Database className="size-8 text-muted-foreground" />
-							<p className="text-sm text-muted-foreground">
-								No registries yet. Add credentials for Docker Hub, GHCR, or a private registry to
-								pull (and push) private images.
-							</p>
-						</div>
+						<EmptyState
+							icon={Database}
+							title="No registries"
+							description="Add credentials for Docker Hub, GHCR, or a private registry to pull (and push) private images."
+						/>
 					}
 				>
+					<TableSearch view={view} placeholder="Search registries…" className="mb-3 ms-auto" />
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -264,7 +272,8 @@ export function RegistriesView() {
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{(registries ?? []).map((registry) => (
+							{view.visible.length === 0 ? <TableNoMatch view={view} colSpan={6} /> : null}
+							{view.visible.map((registry) => (
 								<TableRow key={registry.registryId}>
 									<TableCell className="font-medium">{registry.registryName}</TableCell>
 									<TableCell className="text-muted-foreground">{registry.username}</TableCell>
@@ -331,6 +340,7 @@ export function RegistriesView() {
 							))}
 						</TableBody>
 					</Table>
+					<TablePagination view={view} noun="registries" className="mt-3" />
 				</QueryState>
 			</SettingsSection>
 			<Dialog open={editing !== null} onOpenChange={(isOpen) => !isOpen && setEditing(null)}>

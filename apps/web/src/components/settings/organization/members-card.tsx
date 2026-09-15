@@ -5,7 +5,9 @@ import { Link2, Loader2, Plus, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { SettingsSection } from "@/components/layout/settings-section";
+import { LoadError } from "@/components/query-state";
 import { CopyButton } from "@/components/services/copy-button";
+import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { MemberCapabilitiesDialog } from "@/components/settings/organization/member-capabilities-dialog";
 import { StatusDot } from "@/components/shell";
@@ -39,8 +41,10 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { UserAvatar } from "@/components/user-avatar";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useTableView } from "@/hooks/use-table-view";
 import { authClient, useSession } from "@/lib/auth-client";
 import { missingCapabilityHint } from "@/lib/capabilities";
 import { toastError } from "@/lib/describe-error";
@@ -71,6 +75,9 @@ interface InvitationRow {
 	expiresAt: string | Date;
 }
 
+/** Module scope so the table view's memo is not invalidated every render. */
+const searchMember = (row: MemberRow) => [row.user?.name, row.user?.email, row.role];
+
 function invitationLink(invitationId: string): string {
 	if (typeof window === "undefined") return `/accept-invitation/${invitationId}`;
 	return `${window.location.origin}/accept-invitation/${invitationId}`;
@@ -87,6 +94,7 @@ export function MembersCard() {
 	const manageHint = canManage ? undefined : missingCapabilityHint("members.manage");
 
 	const [members, setMembers] = useState<MemberRow[]>([]);
+	const view = useTableView({ rows: members, search: searchMember });
 	const [invitations, setInvitations] = useState<InvitationRow[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [loadError, setLoadError] = useState<string | null>(null);
@@ -315,6 +323,7 @@ export function MembersCard() {
 
 	return (
 		<SettingsSection
+			wide
 			title="Members"
 			description="People with access to this organization."
 			actions={inviteDialog}
@@ -325,20 +334,22 @@ export function MembersCard() {
 					<Skeleton className="h-10 w-full" />
 				</div>
 			) : loadError ? (
-				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-					<p className="text-sm font-medium">Could not load members</p>
-					<p className="text-sm text-muted-foreground">{loadError}</p>
-					<Button variant="outline" size="sm" onClick={() => void loadMembers()}>
-						Retry
-					</Button>
-				</div>
+				<LoadError
+					title="Could not load members"
+					message={loadError}
+					onRetry={() => void loadMembers()}
+				/>
 			) : members.length === 0 ? (
-				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-					<Users className="size-8 text-muted-foreground" />
-					<p className="text-sm text-muted-foreground">No members found for this organization.</p>
-				</div>
+				<EmptyState
+					icon={Users}
+					title="No members"
+					description="Nobody else has access to this organization yet."
+				/>
 			) : (
-				<TableCard>
+				<TableCard
+					toolbar={<TableSearch view={view} placeholder="Search members…" className="ms-auto" />}
+					footer={<TablePagination view={view} noun="members" />}
+				>
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -349,7 +360,8 @@ export function MembersCard() {
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{members.map((member) => {
+							{view.visible.length === 0 ? <TableNoMatch view={view} colSpan={4} /> : null}
+							{view.visible.map((member) => {
 								const isSelf = member.userId === session?.user?.id;
 								const isOwner = member.role === "owner";
 								const displayName = member.user?.name ?? member.user?.email ?? "Unknown";

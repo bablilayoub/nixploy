@@ -27,6 +27,8 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TablePagination } from "@/components/ui/table-toolbar";
+import { useTableView } from "@/hooks/use-table-view";
 import { describeError } from "@/lib/describe-error";
 import { formatBytes, formatDuration } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
@@ -94,7 +96,10 @@ export function LastRunBadge({ run }: { run: LastRunSummary | null | undefined }
 }
 
 /** How many runs the sheet lists. */
-const RUNS_LIMIT = 20;
+// Runs are paginated in the client, so the fetch can afford real history
+// instead of the last twenty rows — the older ones were simply unreachable.
+const RUNS_LIMIT = 100;
+const RUNS_PAGE_SIZE = 10;
 
 /**
  * "Runs" button + side sheet with the recent history of one backup. For
@@ -132,6 +137,13 @@ export function BackupRunsSheet({
 			query.state.data?.some((run) => run.status === "running") ? 5000 : false,
 	});
 	const runs = runsQuery.data ?? [];
+	const view = useTableView({
+		rows: runs,
+		// Nothing here reads as a name, so the pager carries the whole job.
+		search: () => [],
+		pageSize: RUNS_PAGE_SIZE,
+		searchFrom: Number.POSITIVE_INFINITY,
+	});
 
 	const invalidate = () => {
 		void queryClient.invalidateQueries({ queryKey: runsOptions.queryKey });
@@ -212,7 +224,7 @@ export function BackupRunsSheet({
 									</TableRow>
 								</TableHeader>
 								<TableBody>
-									{runs.map((run) => {
+									{view.visible.map((run) => {
 										const verifying =
 											verifyMutation.isPending && verifyMutation.variables?.key === run.objectKey;
 										const verifiable =
@@ -292,6 +304,7 @@ export function BackupRunsSheet({
 								</TableBody>
 							</Table>
 						</div>
+						<TablePagination view={view} noun="runs" className="mt-3" />
 					</QueryState>
 				</div>
 			</SheetContent>

@@ -44,7 +44,9 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { useLiveEventsConnected } from "@/hooks/use-live-events";
+import { useTableView } from "@/hooks/use-table-view";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
@@ -67,6 +69,9 @@ type ContainerRow = {
 	CreatedAt: string;
 	protected?: boolean;
 };
+
+/** Module scope so the table view's memo is not invalidated every render. */
+const searchContainer = (row: ContainerRow) => [row.Names, row.Image, row.State, row.Status];
 
 function StateBadge({ state }: { state: string }) {
 	const variant =
@@ -117,6 +122,9 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 		}),
 	);
 
+	const containers = (containersQuery.data ?? []) as ContainerRow[];
+	const view = useTableView({ rows: containers, search: searchContainer });
+
 	if (containersQuery.isLoading) {
 		return <Skeleton className="h-64 w-full" />;
 	}
@@ -124,21 +132,22 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 		return <DockerError error={containersQuery.error} />;
 	}
 
-	const containers = (containersQuery.data ?? []) as ContainerRow[];
-
 	return (
 		<div className="space-y-3 pt-4">
-			<div className="flex items-center justify-between">
+			<div className="flex flex-wrap items-center justify-between gap-2">
 				<p className="text-sm text-muted-foreground">
 					{containers.length} container{containers.length === 1 ? "" : "s"}
 				</p>
-				<Button variant="outline" size="sm" onClick={invalidate}>
-					<RefreshCw className="size-3.5" />
-					Refresh
-				</Button>
+				<div className="flex items-center gap-2">
+					<TableSearch view={view} placeholder="Search containers…" />
+					<Button variant="outline" size="sm" onClick={invalidate}>
+						<RefreshCw className="size-3.5" />
+						Refresh
+					</Button>
+				</div>
 			</div>
 
-			<TableCard>
+			<TableCard footer={<TablePagination view={view} noun="containers" />}>
 				<Table>
 					<TableHeader>
 						<TableRow>
@@ -151,7 +160,8 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{containers.map((container) => (
+						{view.visible.length === 0 ? <TableNoMatch view={view} colSpan={6} /> : null}
+						{view.visible.map((container) => (
 							<TableRow key={container.ID}>
 								<TableCell className="max-w-72">
 									{/* Swarm task names run past 60 characters; unconstrained the cell

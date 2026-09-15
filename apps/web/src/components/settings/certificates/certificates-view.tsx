@@ -7,6 +7,7 @@ import { Award, Loader2, Pencil, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
+import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { PageHeader, StatusDot } from "@/components/shell";
 import { Button } from "@/components/ui/button";
@@ -31,9 +32,11 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
+import { useTableView } from "@/hooks/use-table-view";
 import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -57,6 +60,11 @@ export function CertificatesView() {
 		error,
 		refetch,
 	} = useQuery(trpc.certificate.all.queryOptions());
+
+	const view = useTableView({
+		rows: certificates ?? [],
+		search: (row) => [row.name],
+	});
 
 	useEffect(() => {
 		if (!open) {
@@ -103,6 +111,7 @@ export function CertificatesView() {
 			<Dialog open={open} onOpenChange={setOpen}>
 				<PageHeader title="Certificates" description="Custom TLS certificates served by Traefik." />
 				<SettingsSection
+					wide
 					title={
 						<span className="flex items-center gap-2">
 							<Award className="size-4 text-muted-foreground" />
@@ -132,14 +141,14 @@ export function CertificatesView() {
 							</div>
 						}
 						empty={
-							<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-								<Award className="size-8 text-muted-foreground" />
-								<p className="text-sm text-muted-foreground">
-									No certificates yet. Add one to serve custom TLS certificates.
-								</p>
-							</div>
+							<EmptyState
+								icon={Award}
+								title="No certificates"
+								description="Add one to serve custom TLS certificates."
+							/>
 						}
 					>
+						<TableSearch view={view} placeholder="Search certificates…" className="mb-3 ms-auto" />
 						<Table>
 							<TableHeader>
 								<TableRow>
@@ -152,7 +161,8 @@ export function CertificatesView() {
 								</TableRow>
 							</TableHeader>
 							<TableBody>
-								{(certificates ?? []).map((certificate) => (
+								{view.visible.length === 0 ? <TableNoMatch view={view} colSpan={7} /> : null}
+								{view.visible.map((certificate) => (
 									<TableRow key={certificate.certificateId}>
 										<TableCell className="font-medium">{certificate.name}</TableCell>
 										<TableCell className="hidden md:table-cell">
@@ -201,6 +211,7 @@ export function CertificatesView() {
 								))}
 							</TableBody>
 						</Table>
+						<TablePagination view={view} noun="certificates" className="mt-3" />
 					</QueryState>
 				</SettingsSection>
 				<DialogContent className="max-w-2xl">

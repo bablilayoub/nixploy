@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
+import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { CreateServerDialog } from "@/components/settings/servers/create-server-dialog";
 import { ServerCapacityCell } from "@/components/settings/servers/server-capacity-cell";
@@ -44,9 +45,11 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
+import { useTableView } from "@/hooks/use-table-view";
 import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -79,6 +82,11 @@ export function ServersView() {
 		error,
 		refetch,
 	} = useQuery(trpc.server.all.queryOptions());
+
+	const view = useTableView({
+		rows: servers ?? [],
+		search: (server) => [server.name, server.description, server.ipAddress, server.username],
+	});
 
 	const serverIds = servers?.map((server) => server.serverId) ?? [];
 	const { data: statsByServerId, isPending: statsPending } = useQuery({
@@ -153,7 +161,13 @@ export function ServersView() {
 			{/* The page header already says "Servers" and what they are. */}
 			<SettingsSection
 				title="Connected hosts"
-				actions={<CreateServerDialog disabled={!canManage} disabledReason={manageHint} />}
+				wide
+				actions={
+					<>
+						<TableSearch view={view} placeholder="Search hosts…" />
+						<CreateServerDialog disabled={!canManage} disabledReason={manageHint} />
+					</>
+				}
 			>
 				<QueryState
 					isPending={isPending}
@@ -168,12 +182,11 @@ export function ServersView() {
 						</div>
 					}
 					empty={
-						<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-							<Server className="size-8 text-muted-foreground" />
-							<p className="text-sm text-muted-foreground">
-								No servers yet. Add one to deploy workloads on remote hosts.
-							</p>
-						</div>
+						<EmptyState
+							icon={Server}
+							title="No servers"
+							description="Add one to deploy workloads on remote hosts."
+						/>
 					}
 				>
 					<Table>
@@ -189,7 +202,8 @@ export function ServersView() {
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{(servers ?? []).map((server) => (
+							{view.visible.length === 0 ? <TableNoMatch view={view} colSpan={7} /> : null}
+							{view.visible.map((server) => (
 								<TableRow key={server.serverId}>
 									<TableCell>
 										<div className="grid">
@@ -326,6 +340,7 @@ export function ServersView() {
 							))}
 						</TableBody>
 					</Table>
+					<TablePagination view={view} noun="hosts" className="mt-3" />
 				</QueryState>
 			</SettingsSection>
 			<Dialog open={editing !== null} onOpenChange={(isOpen) => !isOpen && setEditing(null)}>

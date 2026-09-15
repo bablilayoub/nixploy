@@ -84,6 +84,7 @@ export function SystemTab({ serverId }: DockerTabProps) {
 
 			{isInstanceAdmin && (
 				<SettingsSection
+					wide
 					title="Cleanup"
 					description="Remove stopped containers, unused networks and dangling images."
 					actions={

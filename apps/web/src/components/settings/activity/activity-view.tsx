@@ -27,6 +27,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { Pagination } from "@/components/ui/table-toolbar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toastError } from "@/lib/describe-error";
@@ -293,29 +294,16 @@ export function ActivityView({ embedded = false }: { embedded?: boolean } = {}) 
 			</QueryState>
 
 			{pageCount > 1 && (
-				<div className="flex items-center justify-between text-sm text-muted-foreground">
-					<span>
-						Page {page + 1} of {pageCount} · {total} entries
-					</span>
-					<div className="flex gap-2">
-						<Button
-							variant="outline"
-							size="sm"
-							disabled={page === 0}
-							onClick={() => setPage((value) => value - 1)}
-						>
-							Previous
-						</Button>
-						<Button
-							variant="outline"
-							size="sm"
-							disabled={page >= pageCount - 1}
-							onClick={() => setPage((value) => value + 1)}
-						>
-							Next
-						</Button>
-					</div>
-				</div>
+				// Server-side paging, same pager as every client-side table.
+				<Pagination
+					page={page}
+					pageCount={pageCount}
+					from={page * PAGE_SIZE + 1}
+					to={page * PAGE_SIZE + rows.length}
+					total={total}
+					noun="entries"
+					onPage={setPage}
+				/>
 			)}
 		</div>
 	);

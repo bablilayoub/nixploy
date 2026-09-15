@@ -51,9 +51,11 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
+import { useTableView } from "@/hooks/use-table-view";
 import { describeError } from "@/lib/describe-error";
 import { scheduleRunStatusDot } from "@/lib/status";
 import { useTRPC } from "@/lib/trpc";
@@ -64,6 +66,14 @@ type GlobalScheduleRow = RouterOutputs["schedule"]["all"][number];
 type ServiceScheduleRow = RouterOutputs["schedule"]["byService"][number];
 /** Both queries return the same schedule columns; only `all` adds `targetName`. */
 type ScheduleRow = GlobalScheduleRow | ServiceScheduleRow;
+
+/** Module scope so the table view's memo is not invalidated every render. */
+const searchSchedule = (row: ScheduleRow) => [
+	row.name,
+	row.cronExpression,
+	row.command,
+	"targetName" in row ? row.targetName : null,
+];
 type ScheduleType = GlobalScheduleRow["scheduleType"];
 
 /**
@@ -224,6 +234,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 	});
 	const { isPending, isError, error, refetch } = isGlobal ? globalQuery : serviceQuery;
 	const schedules: ScheduleRow[] = (isGlobal ? globalQuery.data : serviceQuery.data) ?? [];
+	const view = useTableView({ rows: schedules, search: searchSchedule });
 	const listKey = isGlobal
 		? trpc.schedule.all.queryKey()
 		: trpc.schedule.byService.queryKey(serviceInput);
@@ -413,7 +424,11 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 				)
 			}
 		>
-			<TableCard framed={isGlobal}>
+			<TableCard
+				framed={isGlobal}
+				toolbar={<TableSearch view={view} placeholder="Search schedules…" className="ms-auto" />}
+				footer={<TablePagination view={view} noun="schedules" />}
+			>
 				<Table>
 					<TableHeader>
 						<TableRow>
@@ -427,7 +442,8 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{schedules.map((schedule) => (
+						{view.visible.length === 0 ? <TableNoMatch view={view} colSpan={6} /> : null}
+						{view.visible.map((schedule) => (
 							<TableRow key={schedule.scheduleId}>
 								<TableCell className={isGlobal ? "font-medium" : "max-w-40 truncate font-medium"}>
 									<span className="flex items-center gap-2">
@@ -879,6 +895,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 	return (
 		<>
 			<SettingsSection
+				wide
 				title="Schedules"
 				description={serviceDescription(source.serviceType)}
 				actions={addButton()}

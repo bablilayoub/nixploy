@@ -25,7 +25,9 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
+import { useTableView } from "@/hooks/use-table-view";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps } from "./docker-view";
@@ -37,6 +39,8 @@ type NetworkRow = {
 	Scope: string;
 	protected: boolean;
 };
+/** Module scope so the table view's memo is not invalidated every render. */
+const searchNetwork = (row: NetworkRow) => [row.Name, row.Driver, row.Scope];
 
 export function NetworksTab({ serverId }: DockerTabProps) {
 	const trpc = useTRPC();
@@ -58,22 +62,26 @@ export function NetworksTab({ serverId }: DockerTabProps) {
 		},
 	);
 
+	const networks = (networksQuery.data ?? []) as NetworkRow[];
+	const view = useTableView({ rows: networks, search: searchNetwork });
+
 	if (networksQuery.isLoading) return <Skeleton className="h-64 w-full" />;
 	if (networksQuery.isError) return <DockerError error={networksQuery.error} />;
 
-	const networks = (networksQuery.data ?? []) as NetworkRow[];
-
 	return (
 		<div className="space-y-3 pt-4">
-			<div className="flex items-center justify-between">
+			<div className="flex flex-wrap items-center justify-between gap-2">
 				<p className="text-sm text-muted-foreground">{networks.length} networks</p>
-				<Button variant="outline" size="sm" onClick={invalidate}>
-					<RefreshCw className="size-3.5" />
-					Refresh
-				</Button>
+				<div className="flex items-center gap-2">
+					<TableSearch view={view} placeholder="Search networks…" />
+					<Button variant="outline" size="sm" onClick={invalidate}>
+						<RefreshCw className="size-3.5" />
+						Refresh
+					</Button>
+				</div>
 			</div>
 
-			<TableCard>
+			<TableCard footer={<TablePagination view={view} noun="networks" />}>
 				<Table>
 					<TableHeader>
 						<TableRow>
@@ -91,7 +99,8 @@ export function NetworksTab({ serverId }: DockerTabProps) {
 								</TableCell>
 							</TableRow>
 						)}
-						{networks.map((network) => (
+						{view.visible.length === 0 ? <TableNoMatch view={view} colSpan={4} /> : null}
+						{view.visible.map((network) => (
 							<TableRow key={network.ID}>
 								<TableCell className="max-w-72">
 									{/* Swarm task names run past 60 characters; unconstrained the cell

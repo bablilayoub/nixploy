@@ -26,7 +26,9 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
+import { useTableView } from "@/hooks/use-table-view";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps, invalidateDockerQueries } from "./docker-view";
@@ -38,6 +40,8 @@ type ImageRow = {
 	Size: string;
 	CreatedSince: string;
 };
+/** Module scope so the table view's memo is not invalidated every render. */
+const searchImage = (row: ImageRow) => [row.Repository, row.Tag, row.ID];
 
 export function ImagesTab({ serverId }: DockerTabProps) {
 	const trpc = useTRPC();
@@ -77,10 +81,11 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 		},
 	);
 
+	const images = (imagesQuery.data ?? []) as ImageRow[];
+	const view = useTableView({ rows: images, search: searchImage });
+
 	if (imagesQuery.isLoading) return <Skeleton className="h-64 w-full" />;
 	if (imagesQuery.isError) return <DockerError error={imagesQuery.error} />;
-
-	const images = (imagesQuery.data ?? []) as ImageRow[];
 
 	return (
 		<div className="space-y-3 pt-4">
@@ -108,7 +113,8 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 					)}
 					Pull image
 				</Button>
-				<div className="ml-auto flex items-center gap-2">
+				<div className="ms-auto flex items-center gap-2">
+					<TableSearch view={view} placeholder="Search images…" />
 					<Button variant="outline" size="sm" onClick={() => setPruneOpen(true)}>
 						Prune dangling
 					</Button>
@@ -119,7 +125,7 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 				</div>
 			</div>
 
-			<TableCard>
+			<TableCard footer={<TablePagination view={view} noun="images" />}>
 				<Table>
 					<TableHeader>
 						<TableRow>
@@ -132,7 +138,8 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{images.map((image) => (
+						{view.visible.length === 0 ? <TableNoMatch view={view} colSpan={6} /> : null}
+						{view.visible.map((image) => (
 							<TableRow key={`${image.Repository}:${image.Tag}:${image.ID}`}>
 								<TableCell className="font-mono text-xs font-medium">{image.Repository}</TableCell>
 								<TableCell className="font-mono text-xs text-muted-foreground">

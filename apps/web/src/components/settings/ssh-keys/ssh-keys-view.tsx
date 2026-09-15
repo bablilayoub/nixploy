@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
+import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
@@ -31,9 +32,11 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
+import { useTableView } from "@/hooks/use-table-view";
 import { missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
@@ -84,6 +87,11 @@ export function SshKeysView() {
 		refetch,
 	} = useQuery(trpc.sshKey.all.queryOptions());
 
+	const view = useTableView({
+		rows: sshKeys ?? [],
+		search: (row) => [row.name, row.description],
+	});
+
 	useEffect(() => {
 		if (!open) {
 			setName("");
@@ -127,6 +135,7 @@ export function SshKeysView() {
 		<div className="flex flex-col gap-8">
 			<PageHeader title="SSH keys" description="Keypairs used to connect to remote servers." />
 			<SettingsSection
+				wide
 				title="SSH keys"
 				description="Keypairs used to connect to remote servers."
 				actions={
@@ -229,14 +238,14 @@ export function SshKeysView() {
 						</div>
 					}
 					empty={
-						<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-							<KeyRound className="size-8 text-muted-foreground" />
-							<p className="text-sm text-muted-foreground">
-								No SSH keys yet. Generate one to connect remote servers.
-							</p>
-						</div>
+						<EmptyState
+							icon={KeyRound}
+							title="No SSH keys"
+							description="Generate one to connect remote servers."
+						/>
 					}
 				>
+					<TableSearch view={view} placeholder="Search keys…" className="mb-3 ms-auto" />
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -247,7 +256,8 @@ export function SshKeysView() {
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{(sshKeys ?? []).map((key) => (
+							{view.visible.length === 0 ? <TableNoMatch view={view} colSpan={5} /> : null}
+							{view.visible.map((key) => (
 								<TableRow key={key.sshKeyId}>
 									<TableCell>
 										<div className="grid">
@@ -290,6 +300,7 @@ export function SshKeysView() {
 							))}
 						</TableBody>
 					</Table>
+					<TablePagination view={view} noun="keys" className="mt-3" />
 				</QueryState>
 			</SettingsSection>
 			<Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>

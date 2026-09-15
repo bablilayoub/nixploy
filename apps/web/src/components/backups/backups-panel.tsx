@@ -742,6 +742,7 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 	return (
 		<>
 			<SettingsSection
+				wide
 				title={isVolume ? "Volume backups" : "Backups"}
 				description={
 					isVolume
