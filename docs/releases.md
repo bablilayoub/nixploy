@@ -73,11 +73,14 @@ Workflow: [`.github/workflows/release.yml`](../.github/workflows/release.yml)
    test`, the web tests when that package has a `test` script, and the Traefik
    static-config drift check. The same workflow gates every PR, so the release gate cannot
    drift from CI. The `release` job `needs:` it; a red tree never reaches `:latest`.
-2. Asserts tag ↔ `package.json`
-3. Builds and pushes `ghcr.io/<repo>:vX.Y.Z` for `linux/amd64` **and** `linux/arm64`.
-   arm64 is emulated with QEMU on the amd64 runner, so the release build is slow (expect
-   20–40 minutes cold; the GHA layer cache helps on re-runs). Native `ubuntu-24.04-arm`
-   runners + a manifest merge are the upgrade path if that becomes painful.
+2. Asserts tag ↔ `package.json` (in the build job, before anything is pushed)
+3. Builds `linux/amd64` and `linux/arm64` **in parallel on native runners** —
+   `ubuntu-latest` and `ubuntu-24.04-arm` — each pushing an untagged manifest by digest
+   with its own GHA cache scope. The `release` job then merges the two digests into
+   `ghcr.io/<repo>:vX.Y.Z` with `imagetools create`, and everything after that (Trivy,
+   cosign, `:latest`) works on the manifest-list digest. Until v0.2.8 both architectures
+   were built on one amd64 runner with arm64 under QEMU: the emulated Next.js build took
+   15 minutes on a good day and 80+ on a bad one.
 4. Attaches a SLSA **provenance** attestation and an SPDX **SBOM** to the image
    (`provenance: true`, `sbom: true`) and stamps the OCI labels
    (`org.opencontainers.image.source|revision|version|created`) from

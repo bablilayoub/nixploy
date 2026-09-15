@@ -50,9 +50,22 @@ jobs:
     with:
       ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
-  release:
+  build:
+    name: Build ${{ matrix.platform }}
     needs: checks
-    runs-on: ubuntu-latest
+    # One native runner per architecture instead of QEMU on amd64. The arm64
+    # leg used to emulate the whole Next.js build: ~15 min on a good day and
+    # 80+ on a bad one (v0.2.8). Each job pushes an untagged manifest by
+    # digest and `release` merges them into the tag.
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Resolve tag
         id: tag
@@ -87,14 +100,79 @@ jobs:
             exit 1
           fi
 
-      - name: Set up QEMU
-        # linux/arm64 is emulated on the amd64 runner: the Next.js build runs
-        # under QEMU and takes several times longer than the native build (expect
-        # 20–40 min for a cold cache). Native `ubuntu-24.04-arm` runners plus a
-        # manifest merge would be the fast path if this becomes a problem.
-        uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4.3.0
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
-          platforms: arm64
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: ${{ matrix.platform }}
+          # No tag: the image is addressed by digest until the manifest list is
+          # assembled, so a half-built release never occupies :vX.Y.Z.
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          # SLSA provenance + SPDX SBOM are attached as attestation manifests
+          # (they show up as extra "unknown/unknown" entries in the GHCR UI).
+          provenance: true
+          sbom: true
+          build-args: |
+            NIXPLOY_APP_VERSION=${{ steps.tag.outputs.version }}
+          # Per-architecture cache scope: a shared one would have the two
+          # runners overwrite each other's cache manifest.
+          cache-from: type=gha,scope=release-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.platform }}
+
+      - name: Export the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - name: Upload the digest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digest-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    needs: [checks, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          case "$TAG" in
+            v*) ;;
+            *)
+              echo "Tag must start with v (got: $TAG)"
+              exit 1
+              ;;
+          esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.tag.outputs.tag }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
@@ -135,24 +213,30 @@ jobs:
           tags: |
             type=raw,value=${{ steps.tag.outputs.tag }}
 
-      - name: Build and push
-        id: build
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+      - name: Download the per-architecture digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          context: .
-          file: docker/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # SLSA provenance + SPDX SBOM are attached as attestation manifests
-          # (they show up as extra "unknown/unknown" entries in the GHCR UI).
-          provenance: true
-          sbom: true
-          build-args: |
-            NIXPLOY_APP_VERSION=${{ steps.tag.outputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - name: Create the manifest list
+        id: build
+        # Assembles the two per-architecture manifests into the tag. Everything
+        # below (Trivy, cosign, :latest) works on the resulting list digest, so
+        # the scanned and signed artefact is exactly what :vX.Y.Z resolves to.
+        working-directory: /tmp/digests
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<<"$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "${REGISTRY}/${IMAGE_NAME}@sha256:%s " *)
+          DIGEST="$(docker buildx imagetools inspect \
+            "${REGISTRY}/${IMAGE_NAME}:${{ steps.tag.outputs.tag }}" \
+            --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "manifest ${DIGEST}"
 
       - name: Trivy scan (CRITICAL is fatal on a release)
         # Stricter than the PR scan (advisory, CRITICAL+HIGH): a release is the
