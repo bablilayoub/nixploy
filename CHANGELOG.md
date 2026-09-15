@@ -11,7 +11,88 @@ this file is the summary.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **The template catalog goes from 86 to 145 entries.** New across every
+  category: LibreChat, Langflow, Qdrant and LocalAI; Baserow, Appsmith,
+  Formbricks, Redmine, Odoo and Grist; Joomla and Drupal; Element and ejabberd;
+  pgweb, RedisInsight, SQLPad and DbGate; Wallos and Maybe; Memos, Trilium,
+  HedgeDoc, Docmost, SiYuan and Shiori; Komga, Calibre-Web, Jellyseerr, Sonarr,
+  Radarr, Prowlarr, Bazarr and qBittorrent; Healthchecks, Beszel and Speedtest
+  Tracker; Mailpit; Planka, Wekan, Kanboard, Homepage, Dashy, Heimdall and
+  Baïkal; ZITADEL, Infisical and Passbolt; SFTPGo, ownCloud Infinite Scale and
+  Seafile; SearXNG, CyberChef, linkding, PrivateBin, Verdaccio, Jenkins,
+  DocuSeal and Kutt.
+
+### Changed
+
+- **Settings and service cards are two columns on wide screens.** The heading
+  and its explanation sit beside the controls instead of above them, so a card
+  is no longer 1100px wide with a 300px input hugging its left edge. Sections
+  whose body is a table keep the full width, and everything stacks exactly as
+  before below `lg`.
+- **Long tables get search and pagination.** Docker containers, images, volumes
+  and networks; organization members; schedules; backup runs; servers,
+  registries, certificates, SSH keys and API keys. Both appear only once a list
+  is long enough to need them, so a five-row table is unchanged. Backup runs
+  also fetch real history now (100 runs, paged) instead of the last twenty,
+  which were all you could reach.
+- **Counts on tabs.** Docker (containers, images, networks, volumes), Git
+  providers, a project's Services, a service's Domains — and an unresolved
+  incident count on Monitoring, badged in red. Each reads the query its own tab
+  already runs, so nothing costs an extra request.
+- The Git provider tabs are in the URL like every other tabbed surface, so a
+  refresh or a shared link no longer drops you back on GitHub.
+- **Empty states and load failures look the same everywhere.** Sixteen surfaces
+  had hand-rolled their own with different padding, a different radius, no icon
+  and no title; they now share `EmptyState` and a new `LoadError`. The audit
+  log's bespoke pager is the shared one too, so the panel has a single pager
+  rather than two that disagreed about wording and controls.
+- A service's deployment history sits in a card like everything else on the tab
+  — it was the one block rendered bare.
+- **The log viewer is one toolbar instead of two.** Seven controls over two rows
+  became a status, a filter, a **Levels** menu with per-level counts, the
+  errors-only pill, the line count and three buttons; copy, download and clear
+  moved into an overflow menu. Follow-latest no longer uses the download arrow,
+  which sat one button away from the actual download and looked identical to it.
+  Lines are numbered against the unfiltered stream and a level shows as a
+  coloured rule instead of an `ERR`/`WRN`/`INF` chip in front of every line — the
+  column of tags made the output read as a table rather than as logs.
+- Searching services in a project now matches the description and the kind, not
+  just the name — "postgres" finds the database even when it is called `leet-db`.
+- A failed count on the dashboard is a link to what failed rather than a dead
+  number.
+- **Templates page redesigned.** Four columns from `xl` (most categories hold
+  four to eight entries, so three left a stranded card on almost every row), the
+  whole card opens the details dialog instead of a duplicate button, every card
+  reserves two description lines so rows share a baseline, and each one now says
+  how many values the deploy form will ask for.
+- **Template images refreshed.** Shared bases move to PostgreSQL 17, Redis 8,
+  MongoDB 8, MySQL 8.4, MariaDB 11.8 and PostGIS 17-3.5; Audiobookshelf (2.9.0 →
+  2.36.0), Linkwarden, Mealie and Homarr were years of releases behind their
+  pins. Every logo in the catalog now resolves to a real mark, and marks that
+  disappeared against one of the two themes are tinted for it — the black
+  glyphs (Langflow, Appsmith, Directus, CloudBeaver, Trilium, ownCloud,
+  Infisical, Heimdall) in dark mode, and Radarr's pale yellow in light mode.
+
+### Fixed
+
+- **The terminal no longer blames the wrong thing.** Attaching to an image with
+  no shell closed the session with "Deploy the service first" on a service that
+  was plainly running. It now says the image has no `/bin/sh`, which is what
+  actually happened.
+- **The top navigation no longer vanishes when an overlay opens.** Radix locks
+  the page by putting `overflow: hidden` on `<body>`, which turns it into a
+  scroll container — and a `position: sticky` header then sticks to the top of
+  the *body box*, far above the fold. Opening the theme menu or the command
+  palette halfway down a long page made the whole nav disappear. The lock now
+  goes on `<html>`, the element that actually scrolls.
+- Pages no longer shift sideways when a dialog, dropdown or the command palette
+  opens: the scrollbar gutter is reserved permanently.
+- The dashboard checklist step **"Serve the panel on your own domain"** could
+  never turn green: it also tested a `certificate_type` column that no part of
+  the UI writes. A configured panel host already implies HTTPS — the dashboard
+  router is always emitted with the Let's Encrypt resolver.
 
 ## [0.2.8] — 2026-09-15
 

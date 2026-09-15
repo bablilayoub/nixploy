@@ -48,7 +48,7 @@ Full installer options: [`docs/install.md`](./docs/install.md). Update with [`up
 | **Automate** | REST API + `/swagger` · `@nixploy/cli` · GitOps (`nixploy.yaml`) · **MCP** (`POST /api/mcp`) |
 | **AI** | Deploy Copilot — explain failures, confirm-gated chat, generate compose (BYO key) |
 | **Infra** | Remote Swarm servers · Docker control center · registries · schedules · in-app GHCR updates · `doctor` |
-| **Catalog** | 86+ one-click templates (15 categories), CI-checked image tags |
+| **Catalog** | 145 one-click templates (15 categories), CI-checked image tags |
 
 Product docs: [nixploy.com/docs](https://nixploy.com/docs) · API: [nixploy.com/api](https://nixploy.com/api)
 

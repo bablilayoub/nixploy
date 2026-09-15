@@ -92,7 +92,7 @@ Router → module map:
 | `deployment`, `previewDeployment`, `rollback` | `modules/deployment/{queue,worker,queries,recovery,reconciler,maintenance,events,logger,cleanup,rollback}.ts`, `modules/preview/*` (PR lifecycle, fork gate, PR comments, `source-ref.ts` fork/PR head refs, `traefik.ts` preview YAML) |
 | `domain`, `certificate` | `modules/traefik/*` (`config-writer.ts` YAML, `dashboard.ts`, `setup.ts` static config + swarm service, `paths.ts`) |
 | `project`, `environment`, `organization`, `tag` | `modules/projects/*` (org resolution, roles, capabilities, quotas, env-var inheritance, cascade deletes, overview counts), `modules/tags/index.ts` |
-| `template` | `modules/templates/*` (`catalog.ts` = 15 categories, 86 templates in `data/*.ts`; `services.ts` deploy-as-compose; `images.ts` registry probe) |
+| `template` | `modules/templates/*` (`catalog.ts` = 15 categories, 145 templates in `data/*.ts`; `services.ts` deploy-as-compose; `images.ts` registry probe) |
 | `backup`, `volumeBackup`, `destination` | `modules/backups/*` (`runner.ts` dump/restore incl. Redis + instance self-backup, `pipeline.ts` exit-status trailer + empty-gzip guard, `scheduler.ts`, `dump-commands.ts`) |
 | `schedule` | `modules/schedules/*` (node-schedule jobs running shell in containers/servers; `cron.ts` strict cron validation; scripts streamed over stdin) |
 | `notification` | `modules/notifications/{index,providers}.ts` (slack, discord, telegram, email, gotify, ntfy, pushover, mattermost, lark, teams, custom) |

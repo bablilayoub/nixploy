@@ -541,7 +541,7 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 	{
 		slug: "templates",
 		title: "Templates",
-		description: "86 one-click compose stacks across 15 categories, plus your own catalogs.",
+		description: "145 one-click compose stacks across 15 categories, plus your own catalogs.",
 		blocks: [
 			{ type: "h2", text: "Categories" },
 			{

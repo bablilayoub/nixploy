@@ -1,11 +1,11 @@
 /**
  * Static content for the marketing home page. Numbers mirror the product
- * (86 templates / 15 categories / 5 databases / ~300 endpoints) — update
+ * (145 templates / 15 categories / 5 databases / ~300 endpoints) — update
  * them when the catalog changes.
  */
 
 export const heroStats = [
-	{ value: 86, suffix: "+", label: "one-click templates" },
+	{ value: 145, suffix: "+", label: "one-click templates" },
 	{ value: 5, suffix: "", label: "database engines, with backups" },
 	{ value: 300, suffix: "+", label: "REST endpoints behind one API key" },
 ] as const;
@@ -56,7 +56,7 @@ export const features = [
 	{
 		icon: "layers",
 		title: "Compose stacks and templates",
-		body: "Paste a compose file or pick one of 86 templates. Nixploy renders, validates and deploys it as a plain stack you can edit, back up and move.",
+		body: "Paste a compose file or pick one of 145 templates. Nixploy renders, validates and deploys it as a plain stack you can edit, back up and move.",
 	},
 	{
 		icon: "database",
