@@ -41,7 +41,7 @@ ref to the panel as `NIXPLOY_IMAGE`.
    takes direct commits, so they come out empty — these two files *are* the
    release notes.
 1. Bump `"version"` in the root [`package.json`](../package.json) (and keep `apps/web` / other workspace versions in sync if you treat them as the product version).
-2. Commit on `main` with `[release]` in the message so **CI** and **Docker** skip that push (their `if:` guards look for it). Do **not** use `[release]`: GitHub applies it to the tag push as well, so the Release workflow is silently skipped — that is what happened to the first v0.2.0 tag. The match is a plain substring, so a commit message that merely *mentions* the marker (a changelog line, a commit explaining the rule) is skipped too — spell it out as skip-ci in prose.
+2. Commit on `main` with `[release]` in the message so **CI** and **Docker** skip that push (their `if:` guards look for it). Do **not** reach for GitHub's own skip marker (`[` + `skip ci` + `]`, and its `ci skip` / `no ci` / `skip actions` spellings): GitHub applies that one to the tag push as well, so the Release workflow is silently skipped — that is what happened to the first v0.2.0 tag. GitHub matches it as a plain substring **anywhere in the commit message, body included**, so a commit that merely *mentions* the marker — a changelog line, a commit explaining this very rule — skips every push-triggered workflow and leaves zero runs behind, not a skipped one. Write it as skip-ci in prose. (Cost this repo one silent push: `9d316bb`, 2026-09-15.)
 3. Tag and push:
 
 ```bash

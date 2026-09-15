@@ -130,6 +130,7 @@ Details and status live in `docs/status.md`; this is the short list you must not
 ## Working agreement for Claude
 
 - Prefer small, focused commits. Commit only when asked. Commit messages: conventional (`fix:`, `feat:`, `chore:`), body explains why. Never push tags (`v*`, `cli-v*`) casually — they trigger releases.
+- **Never write GitHub's CI skip marker in a commit message, not even in prose.** GitHub matches `[`+`skip ci`+`]` (and `ci skip` / `no ci` / `skip actions` / `actions skip`) as a plain substring of the *whole* message, body included, and then creates **no workflow runs at all** — not a skipped run, nothing, so it looks like Actions is broken rather than like a deliberate skip. Say skip-ci. The repo's own marker for release commits is `[release]`, which is just an `if:` guard in `ci.yml` / `docker.yml` and is safe to write (docs/releases.md).
 - Before large cleanup, check `docs/status.md` backlog so work is not duplicated and mark items in progress / done there.
 - When you learn something non-obvious about this codebase, put it in `docs/status.md` (if it is a task) or `docs/codebase-map.md` / this file (if it is durable knowledge), not only in chat.
 - Never run `pnpm install` inside a single workspace package. Never edit generated files under `packages/server/drizzle/meta/` by hand.

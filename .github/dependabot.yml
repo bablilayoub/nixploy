@@ -20,6 +20,13 @@ updates:
       # bumped by hand with the manual auth loop (CLAUDE.md gotchas).
       - dependency-name: better-auth
       - dependency-name: "@better-auth/api-key"
+      # The types must describe the Node we actually ship (docker/Dockerfile is
+      # node:22-alpine, engines say >=22), not the newest release line — types
+      # ahead of the runtime typecheck against APIs that are not there in
+      # production. The major moves by hand with the base image; see the docker
+      # ecosystem below, which is ignored for the same reason.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
