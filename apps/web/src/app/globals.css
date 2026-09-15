@@ -131,6 +131,12 @@
 	}
 	html {
 		@apply overflow-x-hidden;
+		/*
+		 * Reserve the scrollbar gutter permanently. Radix removes the scrollbar
+		 * while a dialog, dropdown or the command palette is open; without a
+		 * stable gutter the whole page shifts sideways every time one opens.
+		 */
+		scrollbar-gutter: stable;
 	}
 	body {
 		@apply min-h-svh w-full bg-background text-foreground antialiased;
@@ -180,6 +186,42 @@
  */
 /* The activity tray (UX audit F14) sits bottom-right; while it has items the
    sonner toast stack lifts above it so a toast never hides the pill. */
+/*
+ * Keep the sticky top nav stuck while a Radix overlay holds the scroll lock.
+ *
+ * `react-remove-scroll-bar` (under every Radix dialog, dropdown, select and
+ * sheet) locks the page by putting `overflow: hidden !important` on <body>.
+ * That turns <body> into a scroll container, and `position: sticky` resolves
+ * against the *nearest* one — so the header stopped sticking to the viewport
+ * and stuck to the top of the body box instead, which sits far above the fold
+ * once the page is scrolled. Opening the theme menu or the command palette
+ * halfway down a long page made the whole nav vanish.
+ *
+ * <html> is the element that actually scrolls here, so the lock belongs on it:
+ * the page still cannot move, the scroll offset is preserved, and <body> stays
+ * a plain block box, which is what sticky needs. The scrollbar-gutter above
+ * already covers the width react-remove-scroll-bar would have compensated for.
+ */
+/*
+ * `html body` and not `body`: react-remove-scroll-bar injects its rule into a
+ * <style> tag at runtime, so it always comes later in the cascade and wins any
+ * !important tie. One extra element in the selector outranks it on specificity,
+ * which is decided before source order.
+ *
+ * `position: relative` from that rule is left alone — it is harmless here, and
+ * absolutely positioned descendants may be resolving against it.
+ */
+html body[data-scroll-locked] {
+	/* biome-ignore lint/complexity/noImportantStyles: overrides an injected `!important` rule */
+	overflow: visible !important;
+	/* biome-ignore lint/complexity/noImportantStyles: overrides an injected `!important` rule */
+	margin-right: 0 !important;
+}
+
+html:has(body[data-scroll-locked]) {
+	overflow: hidden;
+}
+
 body[data-activity-tray="1"] [data-sonner-toaster][data-y-position="bottom"] {
 	--offset-bottom: 4.25rem;
 	--mobile-offset-bottom: 4.25rem;
