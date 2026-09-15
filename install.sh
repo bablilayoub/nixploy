@@ -61,7 +61,7 @@
 #
 set -euo pipefail
 
-NIXPLOY_VERSION="${NIXPLOY_VERSION:-v0.2.8}"
+NIXPLOY_VERSION="${NIXPLOY_VERSION:-v0.2.9}"
 # NIXPLOY_PORT left unset unless the operator exports it (see create_app publish logic).
 NIXPLOY_CONFIG_DIR="${NIXPLOY_CONFIG_DIR:-/etc/nixploy}"
 # The host-side directory. Re-asserted after sourcing .env because older
