@@ -68,4 +68,70 @@ volumes:
   mumble-data:
 `,
 	},
+	{
+		id: "element-web",
+		name: "Element",
+		description:
+			"Matrix web client — point it at your own homeserver (or matrix.org) for end-to-end encrypted chat and calls in the browser.",
+		logo: "element",
+		tags: ["chat", "matrix"],
+		links: {
+			website: "https://element.io",
+			github: "https://github.com/element-hq/element-web",
+			docs: "https://element.io/help",
+		},
+		suggestedDomain: { serviceName: "element", port: 80 },
+		env: [],
+		compose: `services:
+  element:
+    image: vectorim/element-web:latest
+    restart: always
+`,
+	},
+	{
+		id: "ejabberd",
+		name: "ejabberd",
+		description:
+			"Battle-tested XMPP server — messaging, MUC rooms and push, with a web admin on its own port.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/ejabberd.svg",
+		tags: ["chat", "xmpp"],
+		links: {
+			website: "https://www.ejabberd.im",
+			github: "https://github.com/processone/ejabberd",
+			docs: "https://docs.ejabberd.im",
+		},
+		suggestedDomain: { serviceName: "ejabberd", port: 5280 },
+		env: [
+			{
+				key: "XMPP_DOMAIN",
+				default: "localhost",
+				description: "XMPP domain served by this instance (e.g. chat.example.com)",
+			},
+			{
+				key: "EJABBERD_ADMIN_USER",
+				default: "admin",
+				description: "Local part of the first admin account",
+			},
+			{
+				key: "EJABBERD_ADMIN_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of that admin account",
+			},
+		],
+		compose: `services:
+  ejabberd:
+    image: ejabberd/ecs:latest
+    restart: always
+    environment:
+      XMPP_DOMAIN: \${XMPP_DOMAIN}
+      EJABBERD_ADMIN: \${EJABBERD_ADMIN_USER}@\${XMPP_DOMAIN}
+      CTL_ON_CREATE: register \${EJABBERD_ADMIN_USER} \${XMPP_DOMAIN} \${EJABBERD_ADMIN_PASSWORD}
+    volumes:
+      - ejabberd-database:/home/ejabberd/database
+      - ejabberd-uploads:/home/ejabberd/upload
+volumes:
+  ejabberd-database:
+  ejabberd-uploads:
+`,
+	},
 ];

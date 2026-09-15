@@ -86,7 +86,7 @@ export const knowledgeTemplates: TemplateData[] = [
     volumes:
       - outline-data:/var/lib/outline/data
   outline_db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: outline
@@ -95,7 +95,7 @@ export const knowledgeTemplates: TemplateData[] = [
     volumes:
       - outline-db-data:/var/lib/postgresql/data
   outline_redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: always
     volumes:
       - outline-redis-data:/data
@@ -173,7 +173,7 @@ volumes:
 		],
 		compose: `services:
   linkwarden:
-    image: ghcr.io/linkwarden/linkwarden:v2.9.3
+    image: ghcr.io/linkwarden/linkwarden:v2.16.3
     restart: always
     depends_on:
       - linkwarden_db
@@ -184,7 +184,7 @@ volumes:
     volumes:
       - linkwarden-data:/data
   linkwarden_db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: linkwarden
@@ -320,7 +320,7 @@ volumes:
       - paperless-export:/usr/src/paperless/export
       - paperless-consume:/usr/src/paperless/consume
   paperless_redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: always
     volumes:
       - paperless-redis-data:/data
@@ -416,7 +416,7 @@ volumes:
       ADMIN_PASSWORD: \${ADMIN_PASSWORD}
       BASE_URL: \${BASE_URL}
   miniflux_db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: miniflux
@@ -511,7 +511,7 @@ volumes:
 		],
 		compose: `services:
   wikijs-db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: wikijs
@@ -560,6 +560,237 @@ volumes:
       - dokuwiki-data:/config
 volumes:
   dokuwiki-data:
+`,
+	},
+	{
+		id: "memos",
+		name: "Memos",
+		description:
+			"Lightweight note stream — plain Markdown memos, tags and a public/private toggle, with a REST API for capture.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/png/memos.png",
+		tags: ["notes", "markdown"],
+		links: {
+			website: "https://www.usememos.com",
+			github: "https://github.com/usememos/memos",
+			docs: "https://www.usememos.com/docs",
+		},
+		suggestedDomain: { serviceName: "memos", port: 5230 },
+		env: [],
+		compose: `services:
+  memos:
+    image: neosmemo/memos:stable
+    restart: always
+    volumes:
+      - memos-data:/var/opt/memos
+volumes:
+  memos-data:
+`,
+	},
+	{
+		id: "trilium",
+		name: "Trilium Notes",
+		description:
+			"Hierarchical note tree for big personal knowledge bases — note cloning, scripting and full-text search.",
+		logo: "trilium",
+		tags: ["notes", "wiki", "knowledge-base"],
+		links: {
+			website: "https://github.com/TriliumNext/Trilium",
+			github: "https://github.com/TriliumNext/Trilium",
+			docs: "https://triliumnext.github.io/Docs/",
+		},
+		suggestedDomain: { serviceName: "trilium", port: 8080 },
+		env: [],
+		compose: `services:
+  trilium:
+    image: triliumnext/trilium:latest
+    restart: always
+    volumes:
+      - trilium-data:/home/node/trilium-data
+volumes:
+  trilium-data:
+`,
+	},
+	{
+		id: "hedgedoc",
+		name: "HedgeDoc",
+		description:
+			"Real-time collaborative Markdown — several cursors in one document, presentation mode and per-note permissions.",
+		logo: "hedgedoc",
+		tags: ["notes", "markdown", "collaboration"],
+		links: {
+			website: "https://hedgedoc.org",
+			github: "https://github.com/hedgedoc/hedgedoc",
+			docs: "https://docs.hedgedoc.org",
+		},
+		suggestedDomain: { serviceName: "hedgedoc", port: 3000 },
+		env: [
+			{
+				key: "CMD_DOMAIN",
+				default: "localhost",
+				description: "Hostname the instance is served on (no scheme), e.g. pad.example.com",
+			},
+			{
+				key: "CMD_SESSION_SECRET",
+				default: "{{generateSecret}}",
+				description: "Signs session cookies",
+			},
+			{
+				key: "POSTGRES_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of the hedgedoc PostgreSQL user",
+			},
+		],
+		compose: `services:
+  hedgedoc:
+    image: quay.io/hedgedoc/hedgedoc:1.12.0-alpine
+    restart: always
+    depends_on:
+      - hedgedoc_db
+    environment:
+      CMD_DB_URL: postgres://hedgedoc:\${POSTGRES_PASSWORD}@hedgedoc_db:5432/hedgedoc
+      CMD_DOMAIN: \${CMD_DOMAIN}
+      CMD_PROTOCOL_USESSL: "true"
+      CMD_URL_ADDPORT: "false"
+      CMD_SESSION_SECRET: \${CMD_SESSION_SECRET}
+      CMD_ALLOW_ANONYMOUS: "false"
+    volumes:
+      - hedgedoc-uploads:/hedgedoc/public/uploads
+  hedgedoc_db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: hedgedoc
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_DB: hedgedoc
+    volumes:
+      - hedgedoc-db:/var/lib/postgresql/data
+volumes:
+  hedgedoc-uploads:
+  hedgedoc-db:
+`,
+	},
+	{
+		id: "docmost",
+		name: "Docmost",
+		description:
+			"Team wiki with real-time collaborative pages, spaces, permissions and comments — a self-hosted Confluence stand-in.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/docmost.svg",
+		tags: ["wiki", "collaboration", "knowledge-base"],
+		links: {
+			website: "https://docmost.com",
+			github: "https://github.com/docmost/docmost",
+			docs: "https://docmost.com/docs",
+		},
+		suggestedDomain: { serviceName: "docmost", port: 3000 },
+		env: [
+			{
+				key: "APP_URL",
+				default: "http://localhost:3000",
+				description: "Public URL of the instance (e.g. https://wiki.example.com)",
+			},
+			{
+				key: "APP_SECRET",
+				default: "{{generateSecret}}",
+				description: "Signs sessions and encrypts stored tokens",
+			},
+			{
+				key: "POSTGRES_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of the docmost PostgreSQL user",
+			},
+		],
+		compose: `services:
+  docmost:
+    image: docmost/docmost:latest
+    restart: always
+    depends_on:
+      - docmost_db
+      - docmost_redis
+    environment:
+      APP_URL: \${APP_URL}
+      APP_SECRET: \${APP_SECRET}
+      DATABASE_URL: postgresql://docmost:\${POSTGRES_PASSWORD}@docmost_db:5432/docmost?schema=public
+      REDIS_URL: redis://docmost_redis:6379
+    volumes:
+      - docmost-data:/app/data/storage
+  docmost_db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: docmost
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_DB: docmost
+    volumes:
+      - docmost-db:/var/lib/postgresql/data
+  docmost_redis:
+    image: redis:8-alpine
+    restart: always
+    volumes:
+      - docmost-redis:/data
+volumes:
+  docmost-data:
+  docmost-db:
+  docmost-redis:
+`,
+	},
+	{
+		id: "siyuan",
+		name: "SiYuan",
+		description:
+			"Block-based knowledge base — bidirectional links, a document tree and offline-first storage you keep.",
+		logo: "siyuan",
+		tags: ["notes", "knowledge-base", "markdown"],
+		links: {
+			website: "https://b3log.org/siyuan/en/",
+			github: "https://github.com/siyuan-note/siyuan",
+			docs: "https://github.com/siyuan-note/siyuan/blob/master/README.md",
+		},
+		suggestedDomain: { serviceName: "siyuan", port: 6806 },
+		env: [
+			{
+				key: "SIYUAN_ACCESS_CODE",
+				default: "{{generateSecret}}",
+				description: "Code required to open the workspace over the network",
+			},
+		],
+		compose: `services:
+  siyuan:
+    image: b3log/siyuan:latest
+    restart: always
+    command: --workspace=/siyuan/workspace --accessAuthCode=\${SIYUAN_ACCESS_CODE}
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+    volumes:
+      - siyuan-workspace:/siyuan/workspace
+volumes:
+  siyuan-workspace:
+`,
+	},
+	{
+		id: "shiori",
+		name: "Shiori",
+		description:
+			"Simple bookmark manager — saves a readable copy and an archive of every page, with a CLI alongside the web UI.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/png/shiori.png",
+		tags: ["bookmarks", "read-later"],
+		links: {
+			website: "https://github.com/go-shiori/shiori",
+			github: "https://github.com/go-shiori/shiori",
+			docs: "https://github.com/go-shiori/shiori/wiki",
+		},
+		suggestedDomain: { serviceName: "shiori", port: 8080 },
+		env: [],
+		compose: `services:
+  shiori:
+    image: ghcr.io/go-shiori/shiori:latest
+    restart: always
+    environment:
+      SHIORI_DIR: /shiori
+    volumes:
+      - shiori-data:/shiori
+volumes:
+  shiori-data:
 `,
 	},
 ];

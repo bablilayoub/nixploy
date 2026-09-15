@@ -125,7 +125,7 @@ volumes:
       - mattermost-config:/mattermost/config
       - mattermost-plugins:/mattermost/plugins
   mattermost_db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: mmuser
@@ -192,7 +192,7 @@ volumes:
       DATABASE_DIRECT_URL: postgresql://postgres:\${POSTGRES_PASSWORD}@calcom_db:5432/calcom
       EMAIL_FROM: notifications@example.com
   calcom_db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
@@ -264,7 +264,7 @@ volumes:
     volumes:
       - chatwoot-data:/app/storage
   chatwoot_db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
@@ -272,7 +272,7 @@ volumes:
     volumes:
       - chatwoot-db-data:/var/lib/postgresql/data
   chatwoot_redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: always
     volumes:
       - chatwoot-redis-data:/data
@@ -323,7 +323,7 @@ volumes:
     volumes:
       - immich-model-cache:/cache
   immich_redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: always
   immich_db:
     image: tensorchord/pgvecto-rs:pg14-v0.2.0
@@ -517,6 +517,271 @@ volumes:
       CRYPTO_KEY: \${PG_META_CRYPTO_KEY}
 volumes:
   supabase-db-data:
+`,
+	},
+	{
+		id: "baserow",
+		name: "Baserow",
+		description:
+			"Open-source Airtable alternative — spreadsheet-style databases with views, forms and a REST API for every table.",
+		logo: "baserow",
+		tags: ["database", "nocode", "spreadsheet"],
+		links: {
+			website: "https://baserow.io",
+			github: "https://gitlab.com/baserow/baserow",
+			docs: "https://baserow.io/docs",
+		},
+		suggestedDomain: { serviceName: "baserow", port: 80 },
+		env: [
+			{
+				key: "BASEROW_PUBLIC_URL",
+				default: "http://localhost",
+				description: "Public URL of the instance (e.g. https://baserow.example.com)",
+			},
+			{
+				key: "SECRET_KEY",
+				default: "{{generateSecret}}",
+				description: "Django secret key — changing it invalidates every session",
+			},
+		],
+		compose: `services:
+  baserow:
+    image: baserow/baserow:latest
+    restart: always
+    environment:
+      BASEROW_PUBLIC_URL: \${BASEROW_PUBLIC_URL}
+      SECRET_KEY: \${SECRET_KEY}
+    volumes:
+      - baserow-data:/baserow/data
+volumes:
+  baserow-data:
+`,
+	},
+	{
+		id: "appsmith",
+		name: "Appsmith",
+		description:
+			"Build internal tools from your own databases and APIs — drag-and-drop UI, JavaScript anywhere, role-based access.",
+		logo: "appsmith",
+		tags: ["low-code", "internal-tools"],
+		links: {
+			website: "https://www.appsmith.com",
+			github: "https://github.com/appsmithorg/appsmith",
+			docs: "https://docs.appsmith.com",
+		},
+		suggestedDomain: { serviceName: "appsmith", port: 80 },
+		env: [],
+		compose: `services:
+  appsmith:
+    image: appsmith/appsmith-ce:latest
+    restart: always
+    environment:
+      APPSMITH_DISABLE_TELEMETRY: "true"
+    volumes:
+      - appsmith-stacks:/appsmith-stacks
+volumes:
+  appsmith-stacks:
+`,
+	},
+	{
+		id: "formbricks",
+		name: "Formbricks",
+		description:
+			"Privacy-first survey and experience platform — in-app and link surveys, targeting, and results you own.",
+		logo: "formbricks",
+		tags: ["forms", "surveys", "privacy"],
+		links: {
+			website: "https://formbricks.com",
+			github: "https://github.com/formbricks/formbricks",
+			docs: "https://formbricks.com/docs",
+		},
+		suggestedDomain: { serviceName: "formbricks", port: 3000 },
+		env: [
+			{
+				key: "WEBAPP_URL",
+				default: "http://localhost:3000",
+				description: "Public URL of the instance (e.g. https://forms.example.com)",
+			},
+			{
+				key: "NEXTAUTH_SECRET",
+				default: "{{generateSecret}}",
+				description: "Signing secret for sessions",
+			},
+			{
+				key: "ENCRYPTION_KEY",
+				default: "{{generateSecret}}",
+				description: "Encrypts stored credentials and two-factor secrets",
+			},
+			{
+				key: "POSTGRES_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of the formbricks PostgreSQL user",
+			},
+		],
+		compose: `services:
+  formbricks:
+    image: ghcr.io/formbricks/formbricks:latest
+    restart: always
+    depends_on:
+      - formbricks_db
+    environment:
+      WEBAPP_URL: \${WEBAPP_URL}
+      NEXTAUTH_URL: \${WEBAPP_URL}
+      NEXTAUTH_SECRET: \${NEXTAUTH_SECRET}
+      ENCRYPTION_KEY: \${ENCRYPTION_KEY}
+      DATABASE_URL: postgresql://formbricks:\${POSTGRES_PASSWORD}@formbricks_db:5432/formbricks
+    volumes:
+      - formbricks-uploads:/home/nextjs/apps/web/uploads
+  formbricks_db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: formbricks
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_DB: formbricks
+    volumes:
+      - formbricks-db:/var/lib/postgresql/data
+volumes:
+  formbricks-uploads:
+  formbricks-db:
+`,
+	},
+	{
+		id: "redmine",
+		name: "Redmine",
+		description:
+			"Long-running project management classic — issues, wikis, Gantt charts, time tracking and per-project roles.",
+		logo: "redmine",
+		tags: ["project-management", "issues"],
+		links: {
+			website: "https://www.redmine.org",
+			github: "https://github.com/redmine/redmine",
+			docs: "https://www.redmine.org/guide",
+		},
+		suggestedDomain: { serviceName: "redmine", port: 3000 },
+		env: [
+			{
+				key: "POSTGRES_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of the redmine PostgreSQL user",
+			},
+			{
+				key: "SECRET_KEY_BASE",
+				default: "{{generateSecret}}",
+				description: "Rails session secret — changing it signs everyone out",
+			},
+		],
+		compose: `services:
+  redmine:
+    image: redmine:6
+    restart: always
+    depends_on:
+      - redmine_db
+    environment:
+      REDMINE_DB_POSTGRES: redmine_db
+      REDMINE_DB_DATABASE: redmine
+      REDMINE_DB_USERNAME: redmine
+      REDMINE_DB_PASSWORD: \${POSTGRES_PASSWORD}
+      REDMINE_SECRET_KEY_BASE: \${SECRET_KEY_BASE}
+    volumes:
+      - redmine-files:/usr/src/redmine/files
+  redmine_db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: redmine
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_DB: redmine
+    volumes:
+      - redmine-db:/var/lib/postgresql/data
+volumes:
+  redmine-files:
+  redmine-db:
+`,
+	},
+	{
+		id: "odoo",
+		name: "Odoo",
+		description:
+			"Full business suite — CRM, sales, invoicing, inventory, HR and a module store, all on one database.",
+		logo: "odoo",
+		tags: ["erp", "crm", "business"],
+		links: {
+			website: "https://www.odoo.com",
+			github: "https://github.com/odoo/odoo",
+			docs: "https://www.odoo.com/documentation",
+		},
+		suggestedDomain: { serviceName: "odoo", port: 8069 },
+		env: [
+			{
+				key: "POSTGRES_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of the odoo PostgreSQL user",
+			},
+		],
+		compose: `services:
+  odoo:
+    image: odoo:18
+    restart: always
+    depends_on:
+      - odoo_db
+    environment:
+      HOST: odoo_db
+      USER: odoo
+      PASSWORD: \${POSTGRES_PASSWORD}
+    volumes:
+      - odoo-data:/var/lib/odoo
+  odoo_db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - odoo-db:/var/lib/postgresql/data
+volumes:
+  odoo-data:
+  odoo-db:
+`,
+	},
+	{
+		id: "grist",
+		name: "Grist",
+		description:
+			"Spreadsheet with a real database underneath — formulas in Python, typed columns, access rules down to the cell.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/grist.svg",
+		tags: ["spreadsheet", "database", "nocode"],
+		links: {
+			website: "https://www.getgrist.com",
+			github: "https://github.com/gristlabs/grist-core",
+			docs: "https://support.getgrist.com",
+		},
+		suggestedDomain: { serviceName: "grist", port: 8484 },
+		env: [
+			{
+				key: "GRIST_SESSION_SECRET",
+				default: "{{generateSecret}}",
+				description: "Signs session cookies",
+			},
+			{
+				key: "GRIST_SINGLE_ORG",
+				default: "docs",
+				description: "Name of the single team site this instance serves",
+			},
+		],
+		compose: `services:
+  grist:
+    image: gristlabs/grist:latest
+    restart: always
+    environment:
+      GRIST_SESSION_SECRET: \${GRIST_SESSION_SECRET}
+      GRIST_SINGLE_ORG: \${GRIST_SINGLE_ORG}
+      GRIST_DEFAULT_EMAIL: you@example.com
+    volumes:
+      - grist-data:/persist
+volumes:
+  grist-data:
 `,
 	},
 ];

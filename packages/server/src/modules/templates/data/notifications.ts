@@ -126,7 +126,7 @@ volumes:
     volumes:
       - listmonk-uploads:/listmonk/uploads
   listmonk_db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: listmonk
@@ -160,6 +160,43 @@ volumes:
       - apprise-config:/config
 volumes:
   apprise-config:
+`,
+	},
+	{
+		id: "mailpit",
+		name: "Mailpit",
+		description:
+			"SMTP trap for development — every message your apps send lands in a web inbox instead of a real one, with an API to assert on.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/mailpit.svg",
+		tags: ["email", "smtp", "testing"],
+		links: {
+			website: "https://mailpit.axllent.org",
+			github: "https://github.com/axllent/mailpit",
+			docs: "https://mailpit.axllent.org/docs/",
+		},
+		suggestedDomain: { serviceName: "mailpit", port: 8025 },
+		env: [
+			{
+				key: "MP_UI_AUTH",
+				default: "",
+				description:
+					'Optional "user:password" pair protecting the web UI — leave empty only on a private network',
+			},
+		],
+		compose: `services:
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: always
+    environment:
+      MP_MAX_MESSAGES: "5000"
+      MP_DATABASE: /data/mailpit.db
+      MP_UI_AUTH: \${MP_UI_AUTH}
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+    volumes:
+      - mailpit-data:/data
+volumes:
+  mailpit-data:
 `,
 	},
 ];

@@ -53,7 +53,7 @@ export const productivityTemplates: TemplateData[] = [
     volumes:
       - nextcloud-data:/var/www/html
   nextcloud_db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: nextcloud
@@ -103,7 +103,7 @@ volumes:
     volumes:
       - gitea-data:/data
   gitea_db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: gitea
@@ -265,7 +265,7 @@ volumes:
 		],
 		compose: `services:
   joplin-db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: joplin
@@ -376,6 +376,260 @@ volumes:
       - kimai-data:/opt/kimai/var
 volumes:
   kimai-data:
+`,
+	},
+	{
+		id: "planka",
+		name: "Planka",
+		description:
+			"Kanban boards in the Trello shape — lists, cards, labels, due dates and attachments, updated live across clients.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/planka.svg",
+		tags: ["kanban", "project-management"],
+		links: {
+			website: "https://planka.app",
+			github: "https://github.com/plankanban/planka",
+			docs: "https://docs.planka.cloud",
+		},
+		suggestedDomain: { serviceName: "planka", port: 1337 },
+		env: [
+			{
+				key: "BASE_URL",
+				default: "http://localhost:1337",
+				description: "Public URL of the instance (e.g. https://boards.example.com)",
+			},
+			{
+				key: "SECRET_KEY",
+				default: "{{generateSecret}}",
+				description: "Signs session tokens",
+			},
+			{
+				key: "DEFAULT_ADMIN_EMAIL",
+				default: "admin@example.com",
+				description: "Email of the account created on first boot",
+			},
+			{
+				key: "DEFAULT_ADMIN_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of that account",
+			},
+			{
+				key: "POSTGRES_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of the planka PostgreSQL user",
+			},
+		],
+		compose: `services:
+  planka:
+    image: ghcr.io/plankanban/planka:latest
+    restart: always
+    depends_on:
+      - planka_db
+    environment:
+      BASE_URL: \${BASE_URL}
+      SECRET_KEY: \${SECRET_KEY}
+      DATABASE_URL: postgresql://planka:\${POSTGRES_PASSWORD}@planka_db/planka
+      DEFAULT_ADMIN_EMAIL: \${DEFAULT_ADMIN_EMAIL}
+      DEFAULT_ADMIN_PASSWORD: \${DEFAULT_ADMIN_PASSWORD}
+      DEFAULT_ADMIN_NAME: Admin
+      DEFAULT_ADMIN_USERNAME: admin
+    volumes:
+      - planka-favicons:/app/public/favicons
+      - planka-user-avatars:/app/public/user-avatars
+      - planka-attachments:/app/private/attachments
+  planka_db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: planka
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_DB: planka
+    volumes:
+      - planka-db:/var/lib/postgresql/data
+volumes:
+  planka-favicons:
+  planka-user-avatars:
+  planka-attachments:
+  planka-db:
+`,
+	},
+	{
+		id: "wekan",
+		name: "Wekan",
+		description:
+			"Open-source kanban with swimlanes, per-board permissions and rules that move cards for you.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/wekan.svg",
+		tags: ["kanban", "project-management"],
+		links: {
+			website: "https://wekan.github.io",
+			github: "https://github.com/wekan/wekan",
+			docs: "https://github.com/wekan/wekan/wiki",
+		},
+		suggestedDomain: { serviceName: "wekan", port: 8080 },
+		env: [
+			{
+				key: "ROOT_URL",
+				default: "http://localhost:8080",
+				description: "Public URL of the instance — Wekan builds every link from it",
+			},
+		],
+		compose: `services:
+  wekan:
+    image: wekanteam/wekan:latest
+    restart: always
+    depends_on:
+      - wekan_db
+    environment:
+      ROOT_URL: \${ROOT_URL}
+      PORT: "8080"
+      MONGO_URL: mongodb://wekan_db:27017/wekan
+      WITH_API: "true"
+  wekan_db:
+    image: mongo:8
+    restart: always
+    command: mongod --logpath /dev/null --oplogSize 128 --quiet
+    volumes:
+      - wekan-db:/data/db
+volumes:
+  wekan-db:
+`,
+	},
+	{
+		id: "kanboard",
+		name: "Kanboard",
+		description:
+			"Minimalist project kanban — WIP limits, subtasks and time tracking in one small PHP app with no build step.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/kanboard.svg",
+		tags: ["kanban", "project-management"],
+		links: {
+			website: "https://kanboard.org",
+			github: "https://github.com/kanboard/kanboard",
+			docs: "https://docs.kanboard.org",
+		},
+		suggestedDomain: { serviceName: "kanboard", port: 80 },
+		env: [],
+		compose: `services:
+  kanboard:
+    image: kanboard/kanboard:latest
+    restart: always
+    volumes:
+      - kanboard-data:/var/www/app/data
+      - kanboard-plugins:/var/www/app/plugins
+volumes:
+  kanboard-data:
+  kanboard-plugins:
+`,
+	},
+	{
+		id: "homepage",
+		name: "Homepage",
+		description:
+			"Configurable start page for a homelab — service tiles with live widgets, bookmarks and search, all from YAML.",
+		logo: "homepage",
+		tags: ["dashboard", "homelab"],
+		links: {
+			website: "https://gethomepage.dev",
+			github: "https://github.com/gethomepage/homepage",
+			docs: "https://gethomepage.dev/configs/",
+		},
+		suggestedDomain: { serviceName: "homepage", port: 3000 },
+		env: [
+			{
+				key: "HOMEPAGE_ALLOWED_HOSTS",
+				default: "localhost:3000",
+				description:
+					"Comma-separated host:port list the app will answer on — it refuses unknown Host headers",
+			},
+		],
+		compose: `services:
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    restart: always
+    environment:
+      HOMEPAGE_ALLOWED_HOSTS: \${HOMEPAGE_ALLOWED_HOSTS}
+    volumes:
+      - homepage-config:/app/config
+volumes:
+  homepage-config:
+`,
+	},
+	{
+		id: "dashy",
+		name: "Dashy",
+		description:
+			"Homelab dashboard with status checks, themes, keyboard shortcuts and an editor that writes its own config.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/png/dashy.png",
+		tags: ["dashboard", "homelab"],
+		links: {
+			website: "https://dashy.to",
+			github: "https://github.com/Lissy93/dashy",
+			docs: "https://dashy.to/docs/",
+		},
+		suggestedDomain: { serviceName: "dashy", port: 8080 },
+		env: [],
+		compose: `services:
+  dashy:
+    image: lissy93/dashy:latest
+    restart: always
+    environment:
+      NODE_ENV: production
+    volumes:
+      - dashy-config:/app/user-data
+volumes:
+  dashy-config:
+`,
+	},
+	{
+		id: "heimdall",
+		name: "Heimdall",
+		description:
+			"Application dashboard that keeps it simple — a tile per service, optional API widgets, nothing else.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/heimdall.svg",
+		tags: ["dashboard", "homelab"],
+		links: {
+			website: "https://heimdall.site",
+			github: "https://github.com/linuxserver/Heimdall",
+			docs: "https://docs.linuxserver.io/images/docker-heimdall/",
+		},
+		suggestedDomain: { serviceName: "heimdall", port: 80 },
+		env: [],
+		compose: `services:
+  heimdall:
+    image: lscr.io/linuxserver/heimdall:latest
+    restart: always
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Etc/UTC
+    volumes:
+      - heimdall-config:/config
+volumes:
+  heimdall-config:
+`,
+	},
+	{
+		id: "baikal",
+		name: "Baïkal",
+		description:
+			"Lightweight CalDAV and CardDAV server — your calendars and contacts sync to iOS, Android and Thunderbird.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/baikal.svg",
+		tags: ["calendar", "contacts", "caldav"],
+		links: {
+			website: "https://sabre.io/baikal/",
+			github: "https://github.com/sabre-io/Baikal",
+			docs: "https://sabre.io/baikal/install/",
+		},
+		suggestedDomain: { serviceName: "baikal", port: 80 },
+		env: [],
+		compose: `services:
+  baikal:
+    image: ckulka/baikal:nginx
+    restart: always
+    volumes:
+      - baikal-config:/var/www/baikal/config
+      - baikal-data:/var/www/baikal/Specific
+volumes:
+  baikal-config:
+  baikal-data:
 `,
 	},
 ];

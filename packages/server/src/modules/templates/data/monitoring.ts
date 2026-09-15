@@ -189,12 +189,174 @@ volumes:
 		env: [],
 		compose: `services:
   homarr:
-    image: ghcr.io/homarr-labs/homarr:v1.72.0
+    image: ghcr.io/homarr-labs/homarr:v1.77.1
     restart: always
     volumes:
       - homarr-data:/appdata
 volumes:
   homarr-data:
+`,
+	},
+	{
+		id: "healthchecks",
+		name: "Healthchecks",
+		description:
+			"Dead-man's-switch monitoring for cron jobs and backups — each job pings a URL, silence raises the alert.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/healthchecks.svg",
+		tags: ["monitoring", "cron", "alerting"],
+		links: {
+			website: "https://healthchecks.io",
+			github: "https://github.com/healthchecks/healthchecks",
+			docs: "https://healthchecks.io/docs/self_hosted/",
+		},
+		suggestedDomain: { serviceName: "healthchecks", port: 8000 },
+		env: [
+			{
+				key: "SITE_ROOT",
+				default: "http://localhost:8000",
+				description: "Public URL of the instance — it is baked into the ping URLs it hands out",
+			},
+			{
+				key: "SECRET_KEY",
+				default: "{{generateSecret}}",
+				description: "Django secret key — changing it signs everyone out",
+			},
+			{
+				key: "SUPERUSER_EMAIL",
+				default: "admin@example.com",
+				description: "Email of the account created on first boot",
+			},
+			{
+				key: "SUPERUSER_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of that account",
+			},
+			{
+				key: "POSTGRES_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of the healthchecks PostgreSQL user",
+			},
+		],
+		compose: `services:
+  healthchecks:
+    image: healthchecks/healthchecks:latest
+    restart: always
+    depends_on:
+      - healthchecks_db
+    environment:
+      SITE_ROOT: \${SITE_ROOT}
+      SITE_NAME: Healthchecks
+      SECRET_KEY: \${SECRET_KEY}
+      SUPERUSER_EMAIL: \${SUPERUSER_EMAIL}
+      SUPERUSER_PASSWORD: \${SUPERUSER_PASSWORD}
+      ALLOWED_HOSTS: "*"
+      DB: postgres
+      DB_HOST: healthchecks_db
+      DB_NAME: healthchecks
+      DB_USER: healthchecks
+      DB_PASSWORD: \${POSTGRES_PASSWORD}
+    volumes:
+      - healthchecks-data:/data
+  healthchecks_db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: healthchecks
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_DB: healthchecks
+    volumes:
+      - healthchecks-db:/var/lib/postgresql/data
+volumes:
+  healthchecks-data:
+  healthchecks-db:
+`,
+	},
+	{
+		id: "beszel",
+		name: "Beszel",
+		description:
+			"Tiny server monitor — CPU, memory, disk, network and container stats from agents on each machine, with alerts.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/beszel.svg",
+		tags: ["monitoring", "metrics"],
+		links: {
+			website: "https://beszel.dev",
+			github: "https://github.com/henrygd/beszel",
+			docs: "https://beszel.dev/guide/getting-started",
+		},
+		suggestedDomain: { serviceName: "beszel", port: 8090 },
+		env: [],
+		compose: `services:
+  beszel:
+    image: henrygd/beszel:latest
+    restart: always
+    volumes:
+      - beszel-data:/beszel_data
+volumes:
+  beszel-data:
+`,
+	},
+	{
+		id: "speedtest-tracker",
+		name: "Speedtest Tracker",
+		description:
+			"Runs Ookla speed tests on a schedule and charts the result — evidence for the conversation with your ISP.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/speedtest-tracker.svg",
+		tags: ["monitoring", "network"],
+		links: {
+			website: "https://docs.speedtest-tracker.dev",
+			github: "https://github.com/alexjustesen/speedtest-tracker",
+			docs: "https://docs.speedtest-tracker.dev/getting-started/installation",
+		},
+		suggestedDomain: { serviceName: "speedtest-tracker", port: 80 },
+		env: [
+			{
+				key: "APP_KEY",
+				default: "",
+				description:
+					"Laravel key in the form `base64:...` (`echo -n 'base64:'; openssl rand -base64 32`)",
+			},
+			{
+				key: "APP_URL",
+				default: "http://localhost",
+				description: "Public URL of the instance",
+			},
+			{
+				key: "POSTGRES_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of the speedtest PostgreSQL user",
+			},
+		],
+		compose: `services:
+  speedtest-tracker:
+    image: lscr.io/linuxserver/speedtest-tracker:latest
+    restart: always
+    depends_on:
+      - speedtest_db
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      APP_KEY: \${APP_KEY}
+      APP_URL: \${APP_URL}
+      DB_CONNECTION: pgsql
+      DB_HOST: speedtest_db
+      DB_PORT: "5432"
+      DB_DATABASE: speedtest
+      DB_USERNAME: speedtest
+      DB_PASSWORD: \${POSTGRES_PASSWORD}
+    volumes:
+      - speedtest-config:/config
+  speedtest_db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: speedtest
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_DB: speedtest
+    volumes:
+      - speedtest-db:/var/lib/postgresql/data
+volumes:
+  speedtest-config:
+  speedtest-db:
 `,
 	},
 ];

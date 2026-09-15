@@ -42,6 +42,6 @@ services:
 			const failures = results.filter((result) => !result.ok);
 			expect(failures, failures.map((f) => `${f.image}: ${f.error}`).join("\n")).toEqual([]);
 		},
-		120_000,
+		600_000,
 	);
 });

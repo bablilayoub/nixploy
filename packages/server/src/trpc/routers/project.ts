@@ -14,7 +14,6 @@ import {
 	postgres,
 	projects,
 	redis,
-	webServerSettings,
 } from "../../db/schema";
 import { auditFromSession } from "../../modules/audit";
 import { getDeploymentStatsSince } from "../../modules/deployment/queries";
@@ -32,6 +31,7 @@ import {
 	resolveEnvironmentVariables,
 	toEnvString,
 } from "../../modules/projects";
+import { getDashboardDomain } from "../../modules/traefik";
 import { textBlobSchema } from "../../utils/input-limits";
 import { protectedProcedure, router } from "../init";
 import { redactEnvironmentServicesSecrets } from "../redact-secrets";
@@ -111,7 +111,7 @@ export const projectRouter = router({
 			ctx.session.user.id,
 			ctx.session.session.activeOrganizationId,
 		);
-		const [providerRows, projectRows, services, domainRows, deploymentStats, settingsRows] =
+		const [providerRows, projectRows, services, domainRows, deploymentStats, dashboardDomain] =
 			await Promise.all([
 				db
 					.select({ value: count() })
@@ -136,19 +136,19 @@ export const projectRouter = router({
 					.innerJoin(projects, eq(environments.projectId, projects.projectId))
 					.where(eq(projects.organizationId, organizationId)),
 				getDeploymentStatsSince(organizationId, new Date(0)),
-				db
-					.select({
-						host: webServerSettings.host,
-						certificateType: webServerSettings.certificateType,
-					})
-					.from(webServerSettings)
-					.limit(1),
+				// The same resolver the Traefik writer uses, so the step agrees with
+				// what is actually routed — including installs that got their domain
+				// from NIXPLOY_DOMAIN and never saved it in the panel.
+				getDashboardDomain(),
 			]);
-		const settings = settingsRows[0];
 		return {
 			// Instance-level, but only ever reported as a boolean — the host is
-			// already visible to anyone who can open the panel.
-			panelDomain: Boolean(settings?.host) && settings?.certificateType !== "none",
+			// already visible to anyone who can open the panel. A configured host
+			// implies HTTPS: buildDashboardRouterYaml always attaches the
+			// letsencrypt resolver to the dashboard router. (It must NOT also test
+			// webServerSettings.certificateType — no UI ever writes that column, so
+			// it stays "none" and the step never ticked on any install.)
+			panelDomain: Boolean(dashboardDomain),
 			gitProvider: (providerRows[0]?.value ?? 0) > 0,
 			project: (projectRows[0]?.value ?? 0) > 0,
 			service: services.total > 0,

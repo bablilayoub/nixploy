@@ -30,8 +30,12 @@ export type ImageHealthResult = {
 	error?: string;
 };
 
-const CONCURRENCY = 4;
-const MAX_RETRIES = 4;
+// The catalog is ~110 distinct images and this runs anonymously, so Docker
+// Hub's per-IP budget is the binding constraint, not latency: go slower and
+// wait longer rather than report a tag that plainly exists as missing.
+const CONCURRENCY = 3;
+export const MAX_IMAGE_CHECK_RETRIES = 6;
+const MAX_RETRIES = MAX_IMAGE_CHECK_RETRIES;
 
 async function sleep(ms: number) {
 	await new Promise((resolve) => setTimeout(resolve, ms));
@@ -77,14 +81,14 @@ async function imageExists(image: string): Promise<{ ok: boolean; error?: string
 				if (status === "missing") {
 					return { ok: false, error: "tag not found on Docker Hub" };
 				}
-				await sleep(1_500 * 2 ** attempt);
+				await sleep(Math.min(20_000, 1_500 * 2 ** attempt));
 				continue;
 			}
 
 			const digest = await fetchRemoteDigest(image);
 			if (digest) return { ok: true };
 			if (attempt + 1 < MAX_RETRIES) {
-				await sleep(1_000 * 2 ** attempt);
+				await sleep(Math.min(20_000, 1_000 * 2 ** attempt));
 				continue;
 			}
 			return { ok: false, error: "manifest not found or registry returned non-OK" };
@@ -94,7 +98,7 @@ async function imageExists(image: string): Promise<{ ok: boolean; error?: string
 			// of failing the whole catalog check on one flaky mirror.
 			lastNetworkError = error instanceof Error ? error.message : String(error);
 			if (attempt + 1 < MAX_RETRIES) {
-				await sleep(1_000 * 2 ** attempt);
+				await sleep(Math.min(20_000, 1_000 * 2 ** attempt));
 			}
 		}
 	}

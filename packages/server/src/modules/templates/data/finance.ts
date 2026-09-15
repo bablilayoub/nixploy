@@ -77,7 +77,7 @@ volumes:
     volumes:
       - firefly-upload:/var/www/html/storage/upload
   firefly_db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: firefly
@@ -117,7 +117,7 @@ volumes:
 		],
 		compose: `services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: ghostfolio
@@ -126,7 +126,7 @@ volumes:
     volumes:
       - ghostfolio-db-data:/var/lib/postgresql/data
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: always
   ghostfolio:
     image: ghostfolio/ghostfolio:latest
@@ -141,6 +141,90 @@ volumes:
       ACCESS_TOKEN_SALT: \${ACCESS_TOKEN_SALT}
 volumes:
   ghostfolio-db-data:
+`,
+	},
+	{
+		id: "wallos",
+		name: "Wallos",
+		description:
+			"Subscription tracker — every recurring charge in one place, with renewal reminders and spend by category.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/wallos.svg",
+		tags: ["finance", "subscriptions"],
+		links: {
+			website: "https://wallosapp.com",
+			github: "https://github.com/ellite/Wallos",
+			docs: "https://github.com/ellite/Wallos#readme",
+		},
+		suggestedDomain: { serviceName: "wallos", port: 80 },
+		env: [],
+		compose: `services:
+  wallos:
+    image: bellamy/wallos:latest
+    restart: always
+    environment:
+      TZ: Etc/UTC
+    volumes:
+      - wallos-db:/var/www/html/db
+      - wallos-logos:/var/www/html/images/uploads/logos
+volumes:
+  wallos-db:
+  wallos-logos:
+`,
+	},
+	{
+		id: "maybe-finance",
+		name: "Maybe",
+		description:
+			"Personal finance and wealth dashboard — accounts, net worth over time, budgets and holdings in one ledger.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/maybe.svg",
+		tags: ["finance", "budgeting", "investing"],
+		links: {
+			website: "https://maybefinance.com",
+			github: "https://github.com/maybe-finance/maybe",
+			docs: "https://github.com/maybe-finance/maybe#readme",
+		},
+		suggestedDomain: { serviceName: "maybe", port: 3000 },
+		env: [
+			{
+				key: "SECRET_KEY_BASE",
+				default: "{{generateSecret}}",
+				description: "Rails session secret — changing it signs everyone out",
+			},
+			{
+				key: "POSTGRES_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of the maybe PostgreSQL user",
+			},
+		],
+		compose: `services:
+  maybe:
+    image: ghcr.io/maybe-finance/maybe:latest
+    restart: always
+    depends_on:
+      - maybe_db
+    environment:
+      SELF_HOSTED: "true"
+      RAILS_FORCE_SSL: "false"
+      RAILS_ASSUME_SSL: "false"
+      SECRET_KEY_BASE: \${SECRET_KEY_BASE}
+      DB_HOST: maybe_db
+      POSTGRES_DB: maybe
+      POSTGRES_USER: maybe
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+    volumes:
+      - maybe-storage:/rails/storage
+  maybe_db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: maybe
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_DB: maybe
+    volumes:
+      - maybe-db:/var/lib/postgresql/data
+volumes:
+  maybe-storage:
+  maybe-db:
 `,
 	},
 ];

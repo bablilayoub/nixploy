@@ -69,7 +69,7 @@ volumes:
 		],
 		compose: `services:
   postgresql:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: authentik
@@ -78,7 +78,7 @@ volumes:
     volumes:
       - authentik-db:/var/lib/postgresql/data
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: always
   server:
     image: ghcr.io/goauthentik/server:latest
@@ -248,6 +248,200 @@ volumes:
       - pihole-etc:/etc/pihole
 volumes:
   pihole-etc:
+`,
+	},
+	{
+		id: "zitadel",
+		name: "ZITADEL",
+		description:
+			"Identity platform with OIDC, SAML, passkeys and multi-tenancy — an open-source Auth0 you run yourself.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/zitadel.svg",
+		tags: ["sso", "identity", "oidc"],
+		links: {
+			website: "https://zitadel.com",
+			github: "https://github.com/zitadel/zitadel",
+			docs: "https://zitadel.com/docs",
+		},
+		suggestedDomain: { serviceName: "zitadel", port: 8080 },
+		env: [
+			{
+				key: "ZITADEL_MASTERKEY",
+				default: "",
+				description:
+					"Exactly 32 characters used to encrypt secrets at rest (`openssl rand -hex 16`)",
+			},
+			{
+				key: "ZITADEL_EXTERNALDOMAIN",
+				default: "localhost",
+				description: "Hostname the instance is served on, without scheme or port",
+			},
+			{
+				key: "POSTGRES_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of the zitadel PostgreSQL user",
+			},
+		],
+		compose: `services:
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:latest
+    restart: always
+    depends_on:
+      - zitadel_db
+    command: start-from-init --masterkeyFromEnv --tlsMode external
+    environment:
+      ZITADEL_MASTERKEY: \${ZITADEL_MASTERKEY}
+      ZITADEL_EXTERNALDOMAIN: \${ZITADEL_EXTERNALDOMAIN}
+      ZITADEL_EXTERNALPORT: "443"
+      ZITADEL_EXTERNALSECURE: "true"
+      ZITADEL_PORT: "8080"
+      ZITADEL_DATABASE_POSTGRES_HOST: zitadel_db
+      ZITADEL_DATABASE_POSTGRES_PORT: "5432"
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: \${POSTGRES_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: \${POSTGRES_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+  zitadel_db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_DB: zitadel
+    volumes:
+      - zitadel-db:/var/lib/postgresql/data
+volumes:
+  zitadel-db:
+`,
+	},
+	{
+		id: "infisical",
+		name: "Infisical",
+		description:
+			"Secret manager for teams — environments per project, versioned values, and SDKs or a CLI to inject them at runtime.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/infisical.svg",
+		tags: ["secrets", "security"],
+		links: {
+			website: "https://infisical.com",
+			github: "https://github.com/Infisical/infisical",
+			docs: "https://infisical.com/docs/documentation/getting-started/introduction",
+		},
+		suggestedDomain: { serviceName: "infisical", port: 8080 },
+		env: [
+			{
+				key: "SITE_URL",
+				default: "http://localhost:8080",
+				description: "Public URL of the instance (e.g. https://secrets.example.com)",
+			},
+			{
+				key: "ENCRYPTION_KEY",
+				default: "",
+				description: "Exactly 32 hex characters used to encrypt secrets (`openssl rand -hex 16`)",
+			},
+			{
+				key: "AUTH_SECRET",
+				default: "",
+				description: "Base64 signing secret for sessions (`openssl rand -base64 32`)",
+			},
+			{
+				key: "POSTGRES_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of the infisical PostgreSQL user",
+			},
+		],
+		compose: `services:
+  infisical:
+    image: infisical/infisical:latest-postgres
+    restart: always
+    depends_on:
+      - infisical_db
+      - infisical_redis
+    environment:
+      SITE_URL: \${SITE_URL}
+      ENCRYPTION_KEY: \${ENCRYPTION_KEY}
+      AUTH_SECRET: \${AUTH_SECRET}
+      DB_CONNECTION_URI: postgres://infisical:\${POSTGRES_PASSWORD}@infisical_db:5432/infisical
+      REDIS_URL: redis://infisical_redis:6379
+  infisical_db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: infisical
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_DB: infisical
+    volumes:
+      - infisical-db:/var/lib/postgresql/data
+  infisical_redis:
+    image: redis:8-alpine
+    restart: always
+    volumes:
+      - infisical-redis:/data
+volumes:
+  infisical-db:
+  infisical-redis:
+`,
+	},
+	{
+		id: "passbolt",
+		name: "Passbolt",
+		description:
+			"Team password manager built on OpenPGP — shared folders, per-secret permissions and a browser extension.",
+		logo: "passbolt",
+		tags: ["passwords", "security", "team"],
+		links: {
+			website: "https://www.passbolt.com",
+			github: "https://github.com/passbolt/passbolt_api",
+			docs: "https://www.passbolt.com/docs",
+		},
+		suggestedDomain: { serviceName: "passbolt", port: 80 },
+		env: [
+			{
+				key: "APP_FULL_BASE_URL",
+				default: "https://passbolt.example.com",
+				description: "Public HTTPS URL — Passbolt refuses to register users without it",
+			},
+			{
+				key: "MYSQL_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of the passbolt MySQL user",
+			},
+			{
+				key: "MYSQL_ROOT_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "MariaDB root password",
+			},
+		],
+		compose: `services:
+  passbolt:
+    image: passbolt/passbolt:latest-ce
+    restart: always
+    depends_on:
+      - passbolt_db
+    environment:
+      APP_FULL_BASE_URL: \${APP_FULL_BASE_URL}
+      DATASOURCES_DEFAULT_HOST: passbolt_db
+      DATASOURCES_DEFAULT_DATABASE: passbolt
+      DATASOURCES_DEFAULT_USERNAME: passbolt
+      DATASOURCES_DEFAULT_PASSWORD: \${MYSQL_PASSWORD}
+    volumes:
+      - passbolt-gpg:/etc/passbolt/gpg
+      - passbolt-jwt:/etc/passbolt/jwt
+  passbolt_db:
+    image: mariadb:11.8
+    restart: always
+    environment:
+      MYSQL_DATABASE: passbolt
+      MYSQL_USER: passbolt
+      MYSQL_PASSWORD: \${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: \${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - passbolt-db:/var/lib/mysql
+volumes:
+  passbolt-gpg:
+  passbolt-jwt:
+  passbolt-db:
 `,
 	},
 ];

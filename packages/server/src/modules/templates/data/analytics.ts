@@ -40,7 +40,7 @@ export const analyticsTemplates: TemplateData[] = [
       DATABASE_URL: postgres://postgres:postgres@plausible_db:5432/plausible
       CLICKHOUSE_DATABASE_URL: http://plausible_events_db:8123/plausible
   plausible_db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_PASSWORD: postgres
@@ -92,7 +92,7 @@ volumes:
       DATABASE_TYPE: postgresql
       APP_SECRET: \${APP_SECRET}
   umami_db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: umami
@@ -140,7 +140,7 @@ volumes:
     volumes:
       - metabase-data:/metabase-data
   metabase_db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: metabase
@@ -180,7 +180,7 @@ volumes:
 		],
 		compose: `services:
   matomo-db:
-    image: mariadb:11
+    image: mariadb:11.8
     restart: always
     environment:
       MARIADB_DATABASE: matomo

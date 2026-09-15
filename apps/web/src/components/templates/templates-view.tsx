@@ -31,6 +31,28 @@ export type TemplateSummary = inferRouterOutputs<AppRouter>["template"]["all"][n
 
 const ALL_CATEGORIES = "all";
 
+/**
+ * Shared by the skeleton and both result layouts so they cannot drift apart.
+ * Four columns from `xl` on purpose: most categories hold four to eight
+ * templates, so a three-column grid left almost every section with one
+ * stranded card on a row of its own.
+ */
+const GRID_CLASS = "grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+
+/**
+ * One gallery entry.
+ *
+ * The whole card is the "open details" target — a stretched transparent button
+ * rather than a wrapper `<button>`, so the Deploy button can sit inside it
+ * without nesting one interactive element in another. Deploy is raised above
+ * that overlay with `z-10`; everything else is inert text.
+ *
+ * Deliberately NOT here: a second "Details" button (it did exactly what
+ * clicking the card does) and the tag list (the tags mostly restate the
+ * category heading above the grid — they stay searchable, just not printed on
+ * every card). What replaced them is the one fact you want before committing:
+ * how many values the deploy form will ask for.
+ */
 function TemplateCard({
 	template,
 	onInspect,
@@ -43,44 +65,48 @@ function TemplateCard({
 	/** Reason the caller cannot deploy (disables the button), or null. */
 	deployBlocker: string | null;
 }) {
+	const settingsCount = template.env.length;
 	return (
-		<article className="group flex h-full flex-col rounded-lg border border-border transition-colors hover:border-foreground/20">
-			<button type="button" onClick={onInspect} className="flex flex-1 flex-col p-4 text-left">
-				<div className="flex items-start gap-3">
-					<div className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border">
-						<TemplateLogo name={template.name} logo={template.logo} />
-					</div>
-					<div className="min-w-0 flex-1">
-						<div className="flex items-start justify-between gap-2">
-							<h3 className="truncate text-sm font-medium text-foreground">{template.name}</h3>
-							{/* Which catalog this came from: the built-ins carry no source. */}
-							{template.source ? (
-								<Badge
-									variant="secondary"
-									className="shrink-0 max-w-32 truncate text-[11px] font-normal"
-								>
-									{template.source.name}
-								</Badge>
-							) : template.hostPrivileged ? (
-								<Badge variant="outline" className="shrink-0 text-[11px] font-normal">
-									Instance admin
-								</Badge>
-							) : (
-								<span className="sr-only">{template.category}</span>
-							)}
-						</div>
-						<p className="mt-1.5 line-clamp-2 text-sm text-muted-foreground">
-							{template.description}
-						</p>
-					</div>
+		<article className="group relative flex h-full flex-col rounded-xl border border-border bg-card p-4 transition-colors hover:border-foreground/20 hover:bg-accent/40">
+			<div className="flex items-center gap-2.5">
+				<div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+					<TemplateLogo name={template.name} logo={template.logo} />
 				</div>
-			</button>
-			<div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
-				<Button variant="ghost" size="sm" className="text-muted-foreground" onClick={onInspect}>
-					Details
-				</Button>
+				<h3 className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+					{template.name}
+				</h3>
+				{/* Which catalog this came from: the built-ins carry no source. */}
+				{template.source ? (
+					<Badge variant="secondary" className="max-w-28 shrink-0 truncate font-normal">
+						{template.source.name}
+					</Badge>
+				) : template.hostPrivileged ? (
+					<Badge variant="outline" className="shrink-0 font-normal">
+						Instance admin
+					</Badge>
+				) : null}
+			</div>
+
+			{/* Two lines, always — reserving the height keeps every row of the grid
+			    on the same baseline whether a description is 6 words or 30. */}
+			<p className="mt-3 line-clamp-2 min-h-9 text-xs leading-[1.125rem] text-muted-foreground">
+				{template.description}
+			</p>
+
+			<div className="mt-4 flex items-end justify-between gap-2 pt-0.5">
+				<span className="text-[11px] text-muted-foreground/80">
+					{settingsCount === 0
+						? "No setup needed"
+						: `${settingsCount} ${settingsCount === 1 ? "setting" : "settings"}`}
+				</span>
+				{/* Quiet until the card is engaged, then it reads as the primary action.
+				    The stacked `group-hover:hover:` is not redundant: the button's own
+				    `hover:bg-secondary/80` would otherwise fight `group-hover:bg-primary`
+				    at the moment the pointer is actually on the button. */}
 				<Button
 					size="sm"
+					variant="secondary"
+					className="relative z-10 group-hover:bg-primary group-hover:text-primary-foreground group-hover:hover:bg-primary/90"
 					onClick={onDeploy}
 					disabled={deployBlocker !== null}
 					title={deployBlocker ?? undefined}
@@ -88,6 +114,14 @@ function TemplateCard({
 					Deploy
 				</Button>
 			</div>
+
+			<button
+				type="button"
+				onClick={onInspect}
+				className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+			>
+				<span className="sr-only">{template.name} details</span>
+			</button>
 		</article>
 	);
 }
@@ -221,15 +255,20 @@ export function TemplatesView() {
 				error={error}
 				onRetry={() => refetch()}
 				skeleton={
-					<ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-						{["one", "two", "three", "four", "five", "six"].map((row) => (
-							<li key={row} className="rounded-lg border p-4">
-								<div className="flex gap-3">
-									<Skeleton className="size-10 shrink-0 rounded-md" />
-									<div className="min-w-0 flex-1 space-y-2">
-										<Skeleton className="h-4 w-28" />
-										<Skeleton className="h-3 w-full" />
-									</div>
+					<ul className={GRID_CLASS}>
+						{["one", "two", "three", "four", "five", "six", "seven", "eight"].map((row) => (
+							<li key={row} className="rounded-xl border bg-card p-4">
+								<div className="flex items-center gap-2.5">
+									<Skeleton className="size-9 shrink-0 rounded-lg" />
+									<Skeleton className="h-4 w-28" />
+								</div>
+								<div className="mt-3 space-y-1.5">
+									<Skeleton className="h-3 w-full" />
+									<Skeleton className="h-3 w-2/3" />
+								</div>
+								<div className="mt-4 flex items-center justify-between">
+									<Skeleton className="h-3 w-16" />
+									<Skeleton className="h-8 w-16 rounded-md" />
 								</div>
 							</li>
 						))}
@@ -248,13 +287,18 @@ export function TemplatesView() {
 					<div className="flex flex-col gap-8">
 						{grouped.map(([categoryName, rows]) => (
 							<section key={categoryName} className="space-y-3">
-								<div className="flex items-center gap-2">
-									<h2 className="text-sm font-medium capitalize">{categoryName}</h2>
-									<Badge variant="secondary" className="font-normal tabular-nums">
+								{/* The rule carries the eye from the label across to the row it
+								    labels, which is what separates the sections — not the gap. */}
+								<div className="flex items-center gap-3">
+									<h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+										{categoryName}
+									</h2>
+									<span className="text-[11px] tabular-nums text-muted-foreground/60">
 										{rows.length}
-									</Badge>
+									</span>
+									<span aria-hidden className="h-px flex-1 bg-border" />
 								</div>
-								<ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+								<ul className={GRID_CLASS}>
 									{rows.map((template) => (
 										<li key={template.id}>
 											<TemplateCard
@@ -270,7 +314,7 @@ export function TemplatesView() {
 						))}
 					</div>
 				) : (
-					<ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+					<ul className={GRID_CLASS}>
 						{filtered.map((template) => (
 							<li key={template.id}>
 								<TemplateCard

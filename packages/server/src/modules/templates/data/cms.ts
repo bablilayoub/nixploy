@@ -40,7 +40,7 @@ export const cmsTemplates: TemplateData[] = [
     volumes:
       - wordpress-data:/var/www/html
   wordpress_db:
-    image: mariadb:11
+    image: mariadb:11.8
     restart: always
     environment:
       MARIADB_ROOT_PASSWORD: \${MARIADB_ROOT_PASSWORD}
@@ -94,7 +94,7 @@ volumes:
     volumes:
       - ghost-data:/var/lib/ghost/content
   ghost_db:
-    image: mysql:8.0
+    image: mysql:8.4
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: \${MYSQL_ROOT_PASSWORD}
@@ -143,7 +143,7 @@ volumes:
     volumes:
       - strapi-data:/srv/app
   strapi_db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: strapi
@@ -225,7 +225,7 @@ volumes:
       - directus-uploads:/directus/uploads
       - directus-extensions:/directus/extensions
   directus_db:
-    image: postgis/postgis:16-3.4-alpine
+    image: postgis/postgis:17-3.5-alpine
     restart: always
     environment:
       POSTGRES_USER: directus
@@ -268,7 +268,7 @@ volumes:
     environment:
       NC_DB: "pg://nocodb_db:5432?u=nocodb&p=\${POSTGRES_PASSWORD}&d=nocodb"
   nocodb_db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     restart: always
     environment:
       POSTGRES_USER: nocodb
@@ -310,6 +310,108 @@ volumes:
       - halo-data:/root/.halo2
 volumes:
   halo-data:
+`,
+	},
+	{
+		id: "joomla",
+		name: "Joomla",
+		description:
+			"Veteran PHP CMS — multilingual content, granular ACLs and a large extension directory, from the official image.",
+		logo: "joomla",
+		tags: ["cms", "php"],
+		links: {
+			website: "https://www.joomla.org",
+			github: "https://github.com/joomla/joomla-cms",
+			docs: "https://docs.joomla.org",
+		},
+		suggestedDomain: { serviceName: "joomla", port: 80 },
+		env: [
+			{
+				key: "MYSQL_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "Password of the joomla MySQL user",
+			},
+			{
+				key: "MYSQL_ROOT_PASSWORD",
+				default: "{{generateSecret}}",
+				description: "MySQL root password",
+			},
+		],
+		compose: `services:
+  joomla:
+    image: joomla:5-apache
+    restart: always
+    depends_on:
+      - joomla_db
+    environment:
+      JOOMLA_DB_HOST: joomla_db
+      JOOMLA_DB_USER: joomla
+      JOOMLA_DB_PASSWORD: \${MYSQL_PASSWORD}
+      JOOMLA_DB_NAME: joomla
+    volumes:
+      - joomla-data:/var/www/html
+  joomla_db:
+    image: mysql:8.4
+    restart: always
+    environment:
+      MYSQL_DATABASE: joomla
+      MYSQL_USER: joomla
+      MYSQL_PASSWORD: \${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: \${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - joomla-db:/var/lib/mysql
+volumes:
+  joomla-data:
+  joomla-db:
+`,
+	},
+	{
+		id: "drupal",
+		name: "Drupal",
+		description:
+			"Content framework for structured, permission-heavy sites — custom entities, fields and views without writing PHP.",
+		logo: "drupal",
+		tags: ["cms", "php"],
+		links: {
+			website: "https://www.drupal.org",
+			github: "https://github.com/drupal/drupal",
+			docs: "https://www.drupal.org/documentation",
+		},
+		suggestedDomain: { serviceName: "drupal", port: 80 },
+		env: [
+			{
+				key: "POSTGRES_PASSWORD",
+				default: "{{generateSecret}}",
+				description:
+					"Password of the drupal PostgreSQL user — the installer asks for it, with host `drupal_db`",
+			},
+		],
+		compose: `services:
+  drupal:
+    image: drupal:11-apache
+    restart: always
+    depends_on:
+      - drupal_db
+    volumes:
+      - drupal-modules:/var/www/html/modules
+      - drupal-profiles:/var/www/html/profiles
+      - drupal-themes:/var/www/html/themes
+      - drupal-sites:/var/www/html/sites
+  drupal_db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: drupal
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_DB: drupal
+    volumes:
+      - drupal-db:/var/lib/postgresql/data
+volumes:
+  drupal-modules:
+  drupal-profiles:
+  drupal-themes:
+  drupal-sites:
+  drupal-db:
 `,
 	},
 ];

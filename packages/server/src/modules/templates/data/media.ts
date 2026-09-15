@@ -84,7 +84,7 @@ volumes:
 		env: [],
 		compose: `services:
   audiobookshelf:
-    image: ghcr.io/advplyr/audiobookshelf:2.9.0
+    image: ghcr.io/advplyr/audiobookshelf:2.36.0
     restart: always
     volumes:
       - audiobookshelf-audiobooks:/audiobooks
@@ -166,6 +166,240 @@ volumes:
 volumes:
   kavita-data:
   kavita-library:
+`,
+	},
+	{
+		id: "komga",
+		name: "Komga",
+		description:
+			"Comic and manga server — organises CBZ/CBR/PDF libraries, reads in the browser and speaks the OPDS protocol.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/komga.svg",
+		tags: ["media", "comics", "books"],
+		links: {
+			website: "https://komga.org",
+			github: "https://github.com/gotson/komga",
+			docs: "https://komga.org/docs/introduction",
+		},
+		suggestedDomain: { serviceName: "komga", port: 25600 },
+		env: [],
+		compose: `services:
+  komga:
+    image: gotson/komga:latest
+    restart: always
+    environment:
+      TZ: Etc/UTC
+    volumes:
+      - komga-config:/config
+      - komga-books:/books
+volumes:
+  komga-config:
+  komga-books:
+`,
+	},
+	{
+		id: "calibre-web",
+		name: "Calibre-Web",
+		description:
+			"Browse, read and send an existing Calibre library — OPDS, Kobo sync and per-user shelves over the web.",
+		logo: "calibreweb",
+		tags: ["media", "books", "ebooks"],
+		links: {
+			website: "https://github.com/janeczku/calibre-web",
+			github: "https://github.com/janeczku/calibre-web",
+			docs: "https://github.com/janeczku/calibre-web/wiki",
+		},
+		suggestedDomain: { serviceName: "calibre-web", port: 8083 },
+		env: [],
+		compose: `services:
+  calibre-web:
+    image: lscr.io/linuxserver/calibre-web:latest
+    restart: always
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Etc/UTC
+    volumes:
+      - calibre-config:/config
+      - calibre-books:/books
+volumes:
+  calibre-config:
+  calibre-books:
+`,
+	},
+	{
+		id: "jellyseerr",
+		name: "Jellyseerr",
+		description:
+			"Request portal for Jellyfin, Plex and Emby — users ask for a film or show, you approve, the *arr stack fetches it.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/jellyseerr.svg",
+		tags: ["media", "requests"],
+		links: {
+			website: "https://docs.jellyseerr.dev",
+			github: "https://github.com/fallenbagel/jellyseerr",
+			docs: "https://docs.jellyseerr.dev/getting-started/docker",
+		},
+		suggestedDomain: { serviceName: "jellyseerr", port: 5055 },
+		env: [],
+		compose: `services:
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    restart: always
+    environment:
+      TZ: Etc/UTC
+      LOG_LEVEL: info
+    volumes:
+      - jellyseerr-config:/app/config
+volumes:
+  jellyseerr-config:
+`,
+	},
+	{
+		id: "sonarr",
+		name: "Sonarr",
+		description:
+			"TV series manager — watches your indexers for new episodes, hands them to a download client and renames the result.",
+		logo: "sonarr",
+		tags: ["media", "tv", "automation"],
+		links: {
+			website: "https://sonarr.tv",
+			github: "https://github.com/Sonarr/Sonarr",
+			docs: "https://wiki.servarr.com/sonarr",
+		},
+		suggestedDomain: { serviceName: "sonarr", port: 8989 },
+		env: [],
+		compose: `services:
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    restart: always
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Etc/UTC
+    volumes:
+      - sonarr-config:/config
+      - sonarr-media:/data
+volumes:
+  sonarr-config:
+  sonarr-media:
+`,
+	},
+	{
+		id: "radarr",
+		name: "Radarr",
+		description:
+			"Film counterpart to Sonarr — quality profiles, release monitoring and automatic imports into your library.",
+		logo: "radarr",
+		tags: ["media", "movies", "automation"],
+		links: {
+			website: "https://radarr.video",
+			github: "https://github.com/Radarr/Radarr",
+			docs: "https://wiki.servarr.com/radarr",
+		},
+		suggestedDomain: { serviceName: "radarr", port: 7878 },
+		env: [],
+		compose: `services:
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    restart: always
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Etc/UTC
+    volumes:
+      - radarr-config:/config
+      - radarr-media:/data
+volumes:
+  radarr-config:
+  radarr-media:
+`,
+	},
+	{
+		id: "prowlarr",
+		name: "Prowlarr",
+		description:
+			"One indexer manager for the whole *arr stack — configure trackers once and every app inherits them.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/prowlarr.svg",
+		tags: ["media", "indexers", "automation"],
+		links: {
+			website: "https://prowlarr.com",
+			github: "https://github.com/Prowlarr/Prowlarr",
+			docs: "https://wiki.servarr.com/prowlarr",
+		},
+		suggestedDomain: { serviceName: "prowlarr", port: 9696 },
+		env: [],
+		compose: `services:
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    restart: always
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Etc/UTC
+    volumes:
+      - prowlarr-config:/config
+volumes:
+  prowlarr-config:
+`,
+	},
+	{
+		id: "bazarr",
+		name: "Bazarr",
+		description:
+			"Subtitle companion for Sonarr and Radarr — finds, scores and keeps subtitles in the languages you pick.",
+		logo: "https://cdn.jsdelivr.net/gh/selfhst/icons/svg/bazarr.svg",
+		tags: ["media", "subtitles", "automation"],
+		links: {
+			website: "https://www.bazarr.media",
+			github: "https://github.com/morpheus65535/bazarr",
+			docs: "https://wiki.bazarr.media",
+		},
+		suggestedDomain: { serviceName: "bazarr", port: 6767 },
+		env: [],
+		compose: `services:
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    restart: always
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Etc/UTC
+    volumes:
+      - bazarr-config:/config
+      - bazarr-media:/data
+volumes:
+  bazarr-config:
+  bazarr-media:
+`,
+	},
+	{
+		id: "qbittorrent",
+		name: "qBittorrent",
+		description:
+			"BitTorrent client with a full web UI — categories, RSS rules and per-torrent limits, driven from the browser.",
+		logo: "qbittorrent",
+		tags: ["media", "downloads", "torrent"],
+		links: {
+			website: "https://www.qbittorrent.org",
+			github: "https://github.com/qbittorrent/qBittorrent",
+			docs: "https://github.com/qbittorrent/qBittorrent/wiki",
+		},
+		suggestedDomain: { serviceName: "qbittorrent", port: 8080 },
+		env: [],
+		compose: `services:
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    restart: always
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Etc/UTC
+      WEBUI_PORT: "8080"
+    volumes:
+      - qbittorrent-config:/config
+      - qbittorrent-downloads:/downloads
+volumes:
+  qbittorrent-config:
+  qbittorrent-downloads:
 `,
 	},
 ];

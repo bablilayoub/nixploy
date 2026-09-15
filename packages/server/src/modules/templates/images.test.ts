@@ -6,7 +6,7 @@ vi.mock("../updates/registry", async (importOriginal) => {
 	return { ...actual, fetchRemoteDigest: (image: string) => fetchRemoteDigest(image) };
 });
 
-import { checkCatalogImages } from "./images";
+import { checkCatalogImages, MAX_IMAGE_CHECK_RETRIES } from "./images";
 
 describe("checkCatalogImages", () => {
 	beforeEach(() => {
@@ -37,6 +37,12 @@ describe("checkCatalogImages", () => {
 		await vi.runAllTimersAsync();
 		const [result] = await pending;
 		expect(result?.ok).toBe(false);
-		expect(result?.error).toMatch(/registry unreachable after 4 attempts: fetch failed/);
+		// Reads the budget from the module: it is tuned against Docker Hub's
+		// anonymous limits and grows with the catalog, so pinning the number
+		// here only ever produced a false failure.
+		expect(result?.error).toMatch(
+			new RegExp(`registry unreachable after ${MAX_IMAGE_CHECK_RETRIES} attempts: fetch failed`),
+		);
+		expect(fetchRemoteDigest).toHaveBeenCalledTimes(MAX_IMAGE_CHECK_RETRIES);
 	});
 });
