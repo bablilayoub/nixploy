@@ -2,10 +2,12 @@
 
 import {
 	AlertTriangle,
-	ArrowDownToLine,
+	ChevronsDown,
 	Copy,
 	Download,
+	ListFilter,
 	Loader2,
+	MoreHorizontal,
 	RefreshCw,
 	Trash2,
 	WrapText,
@@ -16,6 +18,15 @@ import { toast } from "sonner";
 import { NotRunningState, type RuntimeEmptyProps } from "@/components/services/not-running-state";
 import { StatusDot } from "@/components/shell";
 import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuCheckboxItem,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -84,55 +95,72 @@ const classifyLine = (line: string): { level: LineLevel; text: string } => {
 
 const LEVEL_STYLES: Record<
 	Exclude<LineLevel, "default">,
-	{ tag: string; badge: string; text: string }
+	{ tag: string; label: string; badge: string; text: string; rule: string }
 > = {
 	error: {
 		tag: "ERR",
+		label: "Errors",
 		badge: "bg-destructive/15 text-destructive",
 		text: "text-destructive",
+		rule: "bg-destructive",
 	},
 	warn: {
 		tag: "WRN",
+		label: "Warnings",
 		badge: "bg-warning/15 text-warning",
 		text: "text-warning",
+		rule: "bg-warning",
 	},
 	success: {
 		tag: "OK",
+		label: "Success",
 		badge: "bg-success/15 text-success",
 		text: "text-success",
+		rule: "bg-success",
 	},
 	info: {
 		tag: "INF",
+		label: "Info",
 		badge: "bg-info/15 text-info",
 		text: "text-info",
+		rule: "bg-info",
 	},
 	debug: {
 		tag: "DBG",
+		label: "Debug",
 		badge: "bg-muted text-muted-foreground",
 		text: "text-muted-foreground",
+		rule: "bg-muted-foreground/40",
 	},
 };
 
-/** One log line: level badge in a fixed gutter, dimmed timestamp, colored text. */
-function LogLine({ line, wrap }: { line: string; wrap: boolean }) {
+/**
+ * One log line: line number, a level rule, the dimmed timestamp, the text.
+ *
+ * The three-letter badge that used to sit in front of every line is gone. It
+ * repeated what the colour of the text already said, and a column of ERR / INF /
+ * DBG chips down the left made the whole block read as a table of tags rather
+ * than as output. The rule keeps errors just as findable while the text itself
+ * starts at a straight left edge.
+ *
+ * The number is the line's position in the *unfiltered* stream, so it still
+ * means something after a filter narrows the view — and gives you something to
+ * point at when someone asks which line failed.
+ */
+function LogLine({ line, number, wrap }: { line: string; number: number; wrap: boolean }) {
 	const { level, text } = classifyLine(line);
 	const style = level === "default" ? null : LEVEL_STYLES[level];
 	const timestamp = text.match(TIMESTAMP_REGEX);
 	const body = timestamp ? text.slice(timestamp[0].length) : text;
 	return (
-		<div className="flex gap-2">
-			<span className="w-8 shrink-0 select-none text-right leading-5">
-				{style && (
-					<span
-						className={cn(
-							"inline-block rounded px-1 py-px text-[11px] font-semibold leading-3",
-							style.badge,
-						)}
-					>
-						{style.tag}
-					</span>
-				)}
+		<div className="group flex gap-2">
+			<span className="w-10 shrink-0 select-none pe-1 text-right text-muted-foreground/50 tabular-nums">
+				{number}
 			</span>
+			<span
+				aria-hidden
+				className={cn("w-0.5 shrink-0 rounded-full", style ? style.rule : "bg-transparent")}
+			/>
 			<span
 				className={cn(
 					"min-w-0 flex-1",
@@ -363,16 +391,30 @@ export function LogViewer({
 	};
 
 	const needle = filter.trim().toLowerCase();
-	const visibleLines = lines.filter((line) => {
-		if (needle && !line.toLowerCase().includes(needle)) return false;
+	// Numbered against the unfiltered stream so a line keeps its identity while
+	// a filter is on, and counted per level in the same pass the filter makes.
+	const levelCounts: Record<LineLevel, number> = {
+		error: 0,
+		warn: 0,
+		success: 0,
+		info: 0,
+		debug: 0,
+		default: 0,
+	};
+	const visible: { line: string; number: number }[] = [];
+	lines.forEach((line, index) => {
 		const { level } = classifyLine(line);
-		return !hiddenLevels.has(level);
+		levelCounts[level] += 1;
+		if (needle && !line.toLowerCase().includes(needle)) return;
+		if (hiddenLevels.has(level)) return;
+		visible.push({ line, number: index + 1 });
 	});
+	const visibleLines = visible.map((row) => row.line);
 
 	// "Why did it fail" is the question a log is opened with, and a thousand-line
 	// build answers it in one line somewhere in the middle. This narrows to that
 	// line in one click and restores the full stream in a second.
-	const errorCount = lines.filter((line) => classifyLine(line).level === "error").length;
+	const errorCount = levelCounts.error;
 	const errorsOnly =
 		errorCount > 0 &&
 		(["warn", "success", "info", "debug", "default"] as LineLevel[]).every((level) =>
@@ -450,8 +492,16 @@ export function LogViewer({
 
 	return (
 		<div className="overflow-hidden rounded-lg border border-border bg-card">
-			<div className="flex items-center justify-between gap-2 border-b border-border bg-black/[0.02] px-3 py-1.5 dark:bg-white/[0.02]">
-				<div className="flex items-center gap-2 text-xs text-muted-foreground">
+			{/*
+			 * One toolbar, not two. It used to be a status row and a filter row —
+			 * seven controls over two lines, with the follow-latest arrow sitting
+			 * one button away from the download arrow and looking identical to it.
+			 * What is left here is what a log is actually driven with: what it is
+			 * doing, a search box, a level filter, and the one question anybody
+			 * opens a failed deploy to ask. The rest lives behind the overflow.
+			 */}
+			<div className="flex flex-wrap items-center gap-2 border-b border-border bg-black/[0.02] px-3 py-2 dark:bg-white/[0.02]">
+				<div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
 					<StatusDot
 						status={
 							status === "connected"
@@ -463,20 +513,84 @@ export function LogViewer({
 										: "neutral"
 						}
 					/>
-					{status === "connected" && "Live"}
-					{status === "connecting" && (
-						<span className="inline-flex items-center gap-1.5">
-							<Loader2 className="size-3 animate-spin" /> Connecting…
-						</span>
-					)}
-					{status === "disconnected" && "Disconnected — reconnecting…"}
-					{status === "finished" && "Stream finished"}
-					{status === "error" && (
-						<span className="text-destructive" title={errorMessage ?? undefined}>
-							{errorMessage ?? "Connection failed"}
-						</span>
-					)}
+					<span className="truncate">
+						{status === "connected" && "Live"}
+						{status === "connecting" && (
+							<span className="inline-flex items-center gap-1.5">
+								<Loader2 className="size-3 animate-spin" /> Connecting…
+							</span>
+						)}
+						{status === "disconnected" && "Reconnecting…"}
+						{status === "finished" && "Finished"}
+						{status === "error" && (
+							<span className="text-destructive" title={errorMessage ?? undefined}>
+								{errorMessage ?? "Connection failed"}
+							</span>
+						)}
+					</span>
 				</div>
+
+				<Input
+					placeholder="Filter…"
+					aria-label="Filter logs"
+					value={filter}
+					onChange={(event) => setFilter(event.target.value)}
+					className="h-7 w-32 font-mono text-xs sm:w-44"
+				/>
+
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button
+							variant={hiddenLevels.size > 0 ? "secondary" : "outline"}
+							size="sm"
+							className="h-7 gap-1.5 px-2 text-xs"
+						>
+							<ListFilter className="size-3.5" />
+							{hiddenLevels.size > 0 ? `${hiddenLevels.size} hidden` : "Levels"}
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="start" className="w-44">
+						<DropdownMenuLabel>Show levels</DropdownMenuLabel>
+						{(Object.keys(LEVEL_STYLES) as (keyof typeof LEVEL_STYLES)[]).map((level) => (
+							<DropdownMenuCheckboxItem
+								key={level}
+								checked={!hiddenLevels.has(level)}
+								onCheckedChange={() => toggleLevel(level)}
+								onSelect={(event) => event.preventDefault()}
+							>
+								<span className="flex-1">{LEVEL_STYLES[level].label}</span>
+								<span className="tabular-nums text-muted-foreground">{levelCounts[level]}</span>
+							</DropdownMenuCheckboxItem>
+						))}
+						{hiddenLevels.size > 0 ? (
+							<>
+								<DropdownMenuSeparator />
+								<DropdownMenuItem onSelect={() => setHiddenLevels(new Set())}>
+									Show everything
+								</DropdownMenuItem>
+							</>
+						) : null}
+					</DropdownMenuContent>
+				</DropdownMenu>
+
+				{errorCount > 0 && (
+					<Button
+						variant={errorsOnly ? "secondary" : "outline"}
+						size="sm"
+						className={cn("h-7 gap-1.5 px-2 text-xs", !errorsOnly && "text-destructive")}
+						onClick={toggleErrorsOnly}
+					>
+						<AlertTriangle className="size-3.5" />
+						{errorsOnly ? "Show all" : `${errorCount} ${errorCount === 1 ? "error" : "errors"}`}
+					</Button>
+				)}
+
+				<span className="ms-auto text-xs tabular-nums text-muted-foreground">
+					{visible.length === lines.length
+						? `${lines.length} ${lines.length === 1 ? "line" : "lines"}`
+						: `${visible.length} of ${lines.length}`}
+				</span>
+
 				<div className="flex items-center gap-1">
 					{(status === "disconnected" || status === "error") && (
 						<Tooltip>
@@ -498,109 +612,60 @@ export function LogViewer({
 							<Button
 								variant={wrap ? "secondary" : "outline"}
 								size="icon-sm"
-								aria-label="Toggle line wrap"
+								aria-label="Wrap long lines"
+								aria-pressed={wrap}
 								onClick={() => setWrap((value) => !value)}
 							>
 								<WrapText className="size-3.5" />
 							</Button>
 						</TooltipTrigger>
-						<TooltipContent>Toggle line wrap</TooltipContent>
+						<TooltipContent>Wrap long lines</TooltipContent>
 					</Tooltip>
 					<Tooltip>
 						<TooltipTrigger asChild>
 							<Button
 								variant={pinned ? "secondary" : "outline"}
 								size="icon-sm"
-								aria-label="Scroll to latest output"
+								aria-label="Follow latest output"
+								aria-pressed={pinned}
 								onClick={scrollToBottom}
 							>
-								<ArrowDownToLine className="size-3.5" />
+								{/* Not an arrow-to-line: that is the download glyph, and the
+								    two sat next to each other meaning different things. */}
+								<ChevronsDown className="size-3.5" />
 							</Button>
 						</TooltipTrigger>
-						<TooltipContent>Follow latest logs</TooltipContent>
+						<TooltipContent>Follow latest output</TooltipContent>
 					</Tooltip>
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<Button
-								variant="outline"
-								size="icon-sm"
-								aria-label="Clear logs"
-								onClick={() => {
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<Button variant="outline" size="icon-sm" aria-label="More log actions">
+								<MoreHorizontal className="size-3.5" />
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="end">
+							<DropdownMenuItem onSelect={() => void copyLogs()}>
+								<Copy className="size-4" />
+								Copy what is shown
+							</DropdownMenuItem>
+							<DropdownMenuItem onSelect={downloadLogs}>
+								<Download className="size-4" />
+								Download as .txt
+							</DropdownMenuItem>
+							<DropdownMenuSeparator />
+							<DropdownMenuItem
+								variant="destructive"
+								onSelect={() => {
 									setLines([]);
 									bufferRef.current = "";
 								}}
 							>
-								<Trash2 className="size-3.5" />
-							</Button>
-						</TooltipTrigger>
-						<TooltipContent>Clear</TooltipContent>
-					</Tooltip>
+								<Trash2 className="size-4" />
+								Clear
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
 				</div>
-			</div>
-			<div className="flex flex-wrap items-center gap-2 border-b border-border bg-black/[0.02] px-3 py-1.5 dark:bg-white/[0.02]">
-				<Input
-					placeholder="Filter logs…"
-					aria-label="Filter logs"
-					value={filter}
-					onChange={(event) => setFilter(event.target.value)}
-					className="h-7 w-44 font-mono text-xs"
-				/>
-				{(Object.keys(LEVEL_STYLES) as (keyof typeof LEVEL_STYLES)[]).map((level) => (
-					<button
-						key={level}
-						type="button"
-						onClick={() => toggleLevel(level)}
-						className={cn(
-							"rounded px-1.5 py-0.5 text-[10px] font-semibold transition-opacity",
-							LEVEL_STYLES[level].badge,
-							hiddenLevels.has(level) && "opacity-30 line-through",
-						)}
-					>
-						{LEVEL_STYLES[level].tag}
-					</button>
-				))}
-				{errorCount > 0 && (
-					<Button
-						variant={errorsOnly ? "secondary" : "outline"}
-						size="sm"
-						className="h-6 px-2 text-[11px]"
-						onClick={toggleErrorsOnly}
-					>
-						<AlertTriangle className="size-3" />
-						{errorsOnly ? "Show all" : `${errorCount} ${errorCount === 1 ? "error" : "errors"}`}
-					</Button>
-				)}
-				<span className="ml-auto text-[11px] text-muted-foreground">
-					{visibleLines.length === lines.length
-						? `${lines.length} lines`
-						: `${visibleLines.length} / ${lines.length} lines`}
-				</span>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button
-							variant="outline"
-							size="icon-sm"
-							aria-label="Copy logs"
-							onClick={() => void copyLogs()}
-						>
-							<Copy className="size-3.5" />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent>Copy what is shown</TooltipContent>
-				</Tooltip>
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button
-							variant="outline"
-							size="icon-sm"
-							aria-label="Download logs"
-							onClick={downloadLogs}
-						>
-							<Download className="size-3.5" />
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent>Download as .txt</TooltipContent>
-				</Tooltip>
 			</div>
 			<div
 				ref={containerRef}
@@ -625,13 +690,12 @@ export function LogViewer({
 								? status === "connecting"
 									? "Waiting for logs…"
 									: "No logs yet."
-								: "No lines match the current filters."}
+								: "No lines match the current filter."}
 						</span>
 					)
 				) : (
-					visibleLines.map((line, index) => (
-						// biome-ignore lint/suspicious/noArrayIndexKey: log lines are append-only, index keys are stable
-						<LogLine key={index} line={line} wrap={wrap} />
+					visible.map((row) => (
+						<LogLine key={row.number} line={row.line} number={row.number} wrap={wrap} />
 					))
 				)}
 			</div>

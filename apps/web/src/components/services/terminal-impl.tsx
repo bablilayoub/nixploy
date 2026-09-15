@@ -55,6 +55,14 @@ export function ServiceTerminal({
 	const terminalRef = useRef<Terminal | null>(null);
 	const [status, setStatus] = useState<TerminalStatus>("connecting");
 	const [lastError, setLastError] = useState<string | null>(null);
+	/**
+	 * The last slice of what the container actually printed. A docker exec that
+	 * fails because the image ships no shell reports it on stderr and then the
+	 * socket closes — there is no error frame — so without this the overlay fell
+	 * back to "deploy the service first" for a service that is plainly running.
+	 */
+	const tailRef = useRef("");
+	const [noShell, setNoShell] = useState(false);
 	// A closed shell cannot be resumed, so reconnecting is an explicit action
 	// that starts a fresh session rather than a silent background retry.
 	const [session, setSession] = useState(0);
@@ -146,6 +154,11 @@ export function ServiceTerminal({
 			);
 			ws.binaryType = "arraybuffer";
 
+			/** Keep only the last couple of KB — enough to read the closing error. */
+			const noteOutput = (chunk: string) => {
+				tailRef.current = (tailRef.current + chunk).slice(-2048);
+			};
+
 			ws.onopen = () => {
 				if (disposed) return;
 				setStatus("connected");
@@ -167,14 +180,21 @@ export function ServiceTerminal({
 							// Plain terminal output.
 						}
 					}
+					noteOutput(event.data);
 					terminal?.write(event.data);
 				} else {
-					terminal?.write(new Uint8Array(event.data));
+					const bytes = new Uint8Array(event.data);
+					noteOutput(new TextDecoder().decode(bytes));
+					terminal?.write(bytes);
 				}
 			};
 			ws.onclose = () => {
 				if (disposed) return;
 				setStatus("disconnected");
+				// `exec: "sh": executable file not found in $PATH` — a scratch or
+				// distroless image. Worth naming, because the generic advice
+				// ("deploy it first") sends you to fix something that is not broken.
+				setNoShell(/executable file not found|no such file or directory/i.test(tailRef.current));
 				terminal?.writeln("\r\n\x1b[90m--- Connection closed ---\x1b[0m");
 			};
 			ws.onerror = () => {
@@ -197,6 +217,8 @@ export function ServiceTerminal({
 	const startNewSession = () => {
 		setStatus("connecting");
 		setLastError(null);
+		setNoShell(false);
+		tailRef.current = "";
 		setSession((current) => current + 1);
 	};
 	// The server closes with "No running container found …" when nothing is
@@ -233,10 +255,18 @@ export function ServiceTerminal({
 							<span className="font-medium text-foreground">Connection closed</span>
 							{lastError ? (
 								<p className="max-w-md text-xs text-destructive">{lastError}</p>
-							) : (
+							) : noShell ? (
+								<p className="max-w-md text-xs">
+									This image has no shell, so there is nothing to attach to. A terminal needs
+									<code className="mx-1 font-mono">/bin/sh</code>
+									in the image — scratch and distroless images ship without one.
+								</p>
+							) : serviceStatus === "idle" ? (
 								<p className="max-w-md text-xs">
 									Deploy the service first, then start a new session.
 								</p>
+							) : (
+								<p className="max-w-md text-xs">The session ended. Start a new one to reconnect.</p>
 							)}
 							<Button size="sm" variant="secondary" onClick={startNewSession}>
 								<RotateCcw className="size-4" />

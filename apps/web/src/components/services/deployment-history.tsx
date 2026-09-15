@@ -1,12 +1,13 @@
 "use client";
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, Bot, ChevronDown, Loader2, RefreshCw, ScrollText } from "lucide-react";
+import { Ban, Bot, ChevronDown, Loader2, RefreshCw, Rocket, ScrollText } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-
+import { SettingsSection } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
+import { EmptyState } from "@/components/services/empty-state";
 import { LogViewer } from "@/components/services/log-viewer";
 import { DeploymentStatusBadge } from "@/components/services/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -307,12 +308,7 @@ export function DeploymentHistory({
 	};
 
 	return (
-		<section className="flex flex-col gap-4">
-			<div className="flex flex-col gap-1">
-				<h2 className="text-sm font-medium">Deployments</h2>
-				<p className="text-sm text-muted-foreground">{description}</p>
-			</div>
-
+		<SettingsSection title="Deployments" description={description} wide>
 			{cachedExplanation.data && latestError && (
 				<div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
 					<p className="text-muted-foreground">
@@ -337,9 +333,11 @@ export function DeploymentHistory({
 					))}
 				</div>
 			) : deployments.length === 0 ? (
-				<p className="py-8 text-center text-sm text-muted-foreground">
-					No deployments yet. Hit Deploy to ship the first one.
-				</p>
+				<EmptyState
+					icon={Rocket}
+					title="No deployments"
+					description="Hit Deploy to ship the first one."
+				/>
 			) : (
 				<TableCard>
 					<Table>
@@ -612,6 +610,6 @@ export function DeploymentHistory({
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
-		</section>
+		</SettingsSection>
 	);
 }
