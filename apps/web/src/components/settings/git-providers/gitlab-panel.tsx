@@ -5,6 +5,8 @@ import { format } from "date-fns";
 import { GitMerge, Loader2, Plug, Plus } from "lucide-react";
 import { useState } from "react";
 import { SettingsSection } from "@/components/layout/settings-section";
+import { LoadError } from "@/components/query-state";
+import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { EditProviderDialog } from "@/components/settings/git-providers/edit-provider-dialog";
 import { Button } from "@/components/ui/button";
@@ -94,6 +96,7 @@ export function GitlabPanel() {
 
 	return (
 		<SettingsSection
+			wide
 			title={
 				<span className="flex items-center gap-2">
 					<GitMerge className="size-4 text-muted-foreground" />
@@ -172,20 +175,17 @@ export function GitlabPanel() {
 					<Skeleton className="h-10 w-full" />
 				</div>
 			) : isError ? (
-				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-					<p className="text-sm font-medium">Could not load GitLab providers</p>
-					<p className="text-sm text-muted-foreground">
-						{error.message || "Try again in a moment."}
-					</p>
-					<Button variant="outline" size="sm" onClick={() => void refetch()}>
-						Retry
-					</Button>
-				</div>
+				<LoadError
+					title="Could not load GitLab providers"
+					message={error.message || "Try again in a moment."}
+					onRetry={() => void refetch()}
+				/>
 			) : !providers || providers.length === 0 ? (
-				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-					<GitMerge className="size-8 text-muted-foreground" />
-					<p className="text-sm text-muted-foreground">No GitLab providers yet.</p>
-				</div>
+				<EmptyState
+					icon={GitMerge}
+					title="No GitLab providers"
+					description="No GitLab providers yet — add one to deploy from GitLab repositories."
+				/>
 			) : (
 				<Table>
 					<TableHeader>

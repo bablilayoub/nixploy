@@ -5,6 +5,8 @@ import { format } from "date-fns";
 import { Loader2, Plug, Plus } from "lucide-react";
 import { useState } from "react";
 import { SettingsSection } from "@/components/layout/settings-section";
+import { LoadError } from "@/components/query-state";
+import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { EditProviderDialog } from "@/components/settings/git-providers/edit-provider-dialog";
 import { WebhookSecretDialog } from "@/components/settings/git-providers/webhook-secret-dialog";
@@ -97,6 +99,7 @@ export function GiteaPanel() {
 
 	return (
 		<SettingsSection
+			wide
 			title="Gitea"
 			description="Gitea instances connected with an access token."
 			actions={
@@ -161,19 +164,17 @@ export function GiteaPanel() {
 					<Skeleton className="h-10 w-full" />
 				</div>
 			) : isError ? (
-				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-					<p className="text-sm font-medium">Could not load Gitea providers</p>
-					<p className="text-sm text-muted-foreground">
-						{error.message || "Try again in a moment."}
-					</p>
-					<Button variant="outline" size="sm" onClick={() => void refetch()}>
-						Retry
-					</Button>
-				</div>
+				<LoadError
+					title="Could not load Gitea providers"
+					message={error.message || "Try again in a moment."}
+					onRetry={() => void refetch()}
+				/>
 			) : !providers || providers.length === 0 ? (
-				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-					<p className="text-sm text-muted-foreground">No Gitea providers yet.</p>
-				</div>
+				<EmptyState
+					icon={Plug}
+					title="No Gitea providers"
+					description="Add one to deploy from Gitea repositories."
+				/>
 			) : (
 				<Table>
 					<TableHeader>

@@ -157,6 +157,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 	return (
 		<>
 			<SettingsSection
+				wide
 				title="Mounts"
 				description="Persist data with volumes, bind host paths, or inject config files."
 				actions={

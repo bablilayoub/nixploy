@@ -215,6 +215,7 @@ export function UsersCard() {
 
 	return (
 		<SettingsSection
+			wide
 			id="users"
 			title="Users"
 			description={CARD_DESCRIPTION}

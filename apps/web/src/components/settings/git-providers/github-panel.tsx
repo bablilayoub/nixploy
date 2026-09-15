@@ -5,6 +5,8 @@ import { format } from "date-fns";
 import { ExternalLink, GitBranch, Loader2, Plus, RefreshCw, Rocket } from "lucide-react";
 import { useState } from "react";
 import { SettingsSection } from "@/components/layout/settings-section";
+import { LoadError } from "@/components/query-state";
+import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { EditProviderDialog } from "@/components/settings/git-providers/edit-provider-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -114,6 +116,7 @@ export function GithubPanel() {
 
 	return (
 		<SettingsSection
+			wide
 			title={
 				<span className="flex items-center gap-2">
 					<GitBranch className="size-4 text-muted-foreground" />
@@ -164,22 +167,17 @@ export function GithubPanel() {
 					<Skeleton className="h-10 w-full" />
 				</div>
 			) : isError ? (
-				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-					<p className="text-sm font-medium">Could not load GitHub providers</p>
-					<p className="text-sm text-muted-foreground">
-						{error.message || "Try again in a moment."}
-					</p>
-					<Button variant="outline" size="sm" onClick={() => void refetch()}>
-						Retry
-					</Button>
-				</div>
+				<LoadError
+					title="Could not load GitHub providers"
+					message={error.message || "Try again in a moment."}
+					onRetry={() => void refetch()}
+				/>
 			) : !providers || providers.length === 0 ? (
-				<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-					<GitBranch className="size-8 text-muted-foreground" />
-					<p className="text-sm text-muted-foreground">
-						No GitHub providers yet. Add one to deploy from GitHub repositories.
-					</p>
-				</div>
+				<EmptyState
+					icon={GitBranch}
+					title="No GitHub providers"
+					description="No GitHub providers yet. Add one to deploy from GitHub repositories"
+				/>
 			) : (
 				<Table>
 					<TableHeader>

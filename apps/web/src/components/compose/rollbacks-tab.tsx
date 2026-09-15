@@ -91,6 +91,7 @@ export function RollbacksTab({ compose }: { compose: ComposeService }) {
 	return (
 		<>
 			<SettingsSection
+				wide
 				title="Rollbacks"
 				description={
 					isGitBacked

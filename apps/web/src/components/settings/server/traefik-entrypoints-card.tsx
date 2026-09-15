@@ -111,6 +111,7 @@ export function TraefikEntrypointsCard() {
 	return (
 		<>
 			<SettingsSection
+				wide
 				title="TCP and UDP entrypoints"
 				description="Extra ports Traefik listens on, so a service can be routed at layer 4 instead of over HTTP."
 				actions={

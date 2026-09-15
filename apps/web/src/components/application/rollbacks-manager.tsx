@@ -73,6 +73,7 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 	return (
 		<>
 			<SettingsSection
+				wide
 				title="Rollbacks"
 				description="Images from past successful deploys. Roll back without rebuilding."
 			>

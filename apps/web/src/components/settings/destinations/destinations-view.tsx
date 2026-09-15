@@ -7,6 +7,7 @@ import { HardDrive, Loader2, Pencil, Plug, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
+import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { InstanceBackups } from "@/components/settings/destinations/instance-backups";
 import { PageHeader } from "@/components/shell";
@@ -130,6 +131,7 @@ export function DestinationsView() {
 				description="S3-compatible buckets — or this host's disk — for database and volume backups."
 			/>
 			<SettingsSection
+				wide
 				title={
 					<span className="flex items-center gap-2">
 						<HardDrive className="size-4 text-muted-foreground" />
@@ -286,12 +288,11 @@ export function DestinationsView() {
 						</div>
 					}
 					empty={
-						<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-							<HardDrive className="size-8 text-muted-foreground" />
-							<p className="text-sm text-muted-foreground">
-								No backup destinations yet. Add one to enable backups.
-							</p>
-						</div>
+						<EmptyState
+							icon={HardDrive}
+							title="No backup destinations"
+							description="Add one to enable backups."
+						/>
 					}
 				>
 					<Table>

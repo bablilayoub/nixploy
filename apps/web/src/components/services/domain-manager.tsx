@@ -966,6 +966,7 @@ export function DomainManager({
 	return (
 		<>
 			<SettingsSection
+				wide
 				title="Domains"
 				description="Route traffic to this service through Traefik."
 				actions={

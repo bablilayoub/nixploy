@@ -137,6 +137,7 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 	return (
 		<>
 			<SettingsSection
+				wide
 				title="Ports"
 				description="Publish container ports on the swarm, bypassing the reverse proxy."
 				actions={

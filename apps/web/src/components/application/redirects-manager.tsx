@@ -126,6 +126,7 @@ export function RedirectsManager(parent: TraefikParent) {
 	return (
 		<>
 			<SettingsSection
+				wide
 				title="Redirects"
 				description={
 					serviceName

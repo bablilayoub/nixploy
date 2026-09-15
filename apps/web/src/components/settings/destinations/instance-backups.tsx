@@ -140,6 +140,7 @@ export function InstanceBackups() {
 	return (
 		<>
 			<SettingsSection
+				wide
 				title="Instance backups"
 				description="Scheduled dumps of this Nixploy instance itself — the platform database plus the config directory (Traefik configs, certificates). Restore is manual, see docs/instance-backup.md."
 				actions={

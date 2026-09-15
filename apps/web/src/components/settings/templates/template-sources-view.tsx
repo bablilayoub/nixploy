@@ -131,6 +131,7 @@ export function TemplateSourcesView() {
 				description="Bring your own template catalogs alongside the built-in ones."
 			/>
 			<SettingsSection
+				wide
 				title={
 					<span className="flex items-center gap-2">
 						<LayoutGrid className="size-4 text-muted-foreground" />

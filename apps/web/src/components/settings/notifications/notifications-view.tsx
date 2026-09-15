@@ -6,6 +6,7 @@ import { Bell, Loader2, Pencil, Plus, Send } from "lucide-react";
 import { useState } from "react";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
+import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import {
 	NOTIFICATION_TYPE_LABELS,
@@ -71,6 +72,7 @@ export function NotificationsView() {
 				description="Channels that receive deployment, backup and platform events."
 			/>
 			<SettingsSection
+				wide
 				title={
 					<span className="flex items-center gap-2">
 						<Bell className="size-4 text-muted-foreground" />
@@ -103,12 +105,11 @@ export function NotificationsView() {
 						</div>
 					}
 					empty={
-						<div className="flex flex-col items-center gap-2 rounded-md border border-dashed py-10 text-center">
-							<Bell className="size-8 text-muted-foreground" />
-							<p className="text-sm text-muted-foreground">
-								No notification channels yet. Add one to get alerted.
-							</p>
-						</div>
+						<EmptyState
+							icon={Bell}
+							title="No notification channels"
+							description="Add one to get alerted."
+						/>
 					}
 				>
 					<div className="grid gap-6">

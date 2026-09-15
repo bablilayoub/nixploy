@@ -100,6 +100,15 @@ export function ApplicationDetail({ projectId, id }: { projectId: string; id: st
 		error,
 		refetch,
 	} = useQuery(trpc.application.one.queryOptions({ applicationId: id }));
+	// Shares the cache with the header, which already asks for the same list —
+	// the count on the tab costs nothing and answers "is anything routed here?"
+	// without opening the tab.
+	const domainsQuery = useQuery({
+		...trpc.domain.all.queryOptions({ applicationId: id }),
+		enabled: Boolean(id),
+	});
+	const domainCount = domainsQuery.data?.length;
+
 	const actions = useApplicationActions({ applicationId: id });
 	const { can } = useCapabilities();
 	// Start / Redeploy only make sense once a deployment succeeded (the swarm
@@ -179,7 +188,12 @@ export function ApplicationDetail({ projectId, id }: { projectId: string; id: st
 						<UnderlineTabsTrigger value="general">General</UnderlineTabsTrigger>
 						<UnderlineTabsTrigger value="deploy">Deploy</UnderlineTabsTrigger>
 						<UnderlineTabsTrigger value="runtime">Runtime</UnderlineTabsTrigger>
-						<UnderlineTabsTrigger value="domains">Domains</UnderlineTabsTrigger>
+						<UnderlineTabsTrigger value="domains">
+							Domains
+							{domainCount ? (
+								<span className="ms-1.5 tabular-nums text-muted-foreground">{domainCount}</span>
+							) : null}
+						</UnderlineTabsTrigger>
 						<UnderlineTabsTrigger value="environment">Environment</UnderlineTabsTrigger>
 						<UnderlineTabsTrigger value="backups">Backups</UnderlineTabsTrigger>
 						<UnderlineTabsTrigger value="advanced">Advanced</UnderlineTabsTrigger>

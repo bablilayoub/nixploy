@@ -203,6 +203,7 @@ export function PreviewDeploymentsPanel({
 		<SettingsStack>
 			{settings}
 			<SettingsSection
+				wide
 				title="Preview deployments"
 				description={description}
 				actions={

@@ -143,6 +143,7 @@ export function SecurityManager(parent: TraefikParent) {
 	return (
 		<>
 			<SettingsSection
+				wide
 				title="Security"
 				description={
 					serviceName
