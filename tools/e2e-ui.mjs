@@ -67,6 +67,10 @@ const IGNORED_CONSOLE = [
 	/favicon/i,
 	// React DevTools suggestion banner.
 	/Download the React DevTools/i,
+	// The runner's network moved under the browser mid-request. Chrome reports
+	// it as a console error on whatever page was loading; it says nothing about
+	// the panel, and failing the whole run on it makes the assertion noise.
+	/net::ERR_(NETWORK_CHANGED|INTERNET_DISCONNECTED|NETWORK_IO_SUSPENDED|NAME_NOT_RESOLVED)/,
 ];
 
 let stepNumber = 0;
