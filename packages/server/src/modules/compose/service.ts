@@ -14,6 +14,7 @@ import {
 import { bestEffort } from "../../utils/best-effort";
 import { assertSafeAppName } from "../../utils/validators";
 import { getSwarmNetwork } from "../application/paths";
+import { materializeFileMount } from "../application/service";
 import { unregisterBackupsForService } from "../backups/scheduler";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
 import type { DeploymentContext } from "../deployment/context";
@@ -50,6 +51,7 @@ import {
 	shouldRedactEnvValue,
 } from "./compose-file";
 import { invalidateComposeContainers, listComposeContainers } from "./containers";
+import { loadComposeMounts, toComposeMounts } from "./mount-rows";
 import {
 	getComposeBaseDir,
 	getComposeDeployFilePath,
@@ -454,6 +456,16 @@ export async function prepareComposeFiles(
 		);
 	}
 
+	// Mount rows of the stack. `file` mounts are written to the target host
+	// first — the deploy engine only resolves the bind source, it never
+	// creates it — exactly as the application path does.
+	const mountRows = await loadComposeMounts(composeRow.composeId);
+	for (const mount of mountRows) {
+		if (mount.type === "file" && mount.filePath) {
+			await materializeFileMount(appName, mount.filePath, mount.content ?? "", composeRow.serverId);
+		}
+	}
+
 	const transformed = buildDeployComposeFile(
 		rawContent,
 		{
@@ -465,6 +477,7 @@ export async function prepareComposeFiles(
 			environmentNetwork,
 			swarmNodeId,
 			builtImages,
+			mounts: toComposeMounts(appName, mountRows),
 		},
 		safety,
 	);

@@ -86,9 +86,9 @@ Every item here closes a gap that is either embarrassing (a UI switch that does 
 
 Still to do in this slice: tag-triggered deploys (`tagPattern` + `deployOnTag` on push webhooks), `listRefs` for a branch/tag picker instead of a free-text field, and rollback-with-config (`currentDeploymentId`, an encrypted env snapshot on the rollback row, and drift detection when the orchestrator rolls back behind the panel's back).
 
-### 2. Compose parity pack *(L — the prerequisite, mostly landed 2026-09-17)*
+### 2. Compose parity pack *(L — the prerequisite, landed 2026-09-17 except host ports)*
 
-Four half-built things at once, all in compose. **Auto-deploy, cancel and build-from-source shipped**; mounts/ports remain.
+Four half-built things at once, all in compose. **Auto-deploy, cancel, build-from-source and mounts shipped**; published host ports remain.
 
 **Build from source.** `compose.buildEnabled` / `buildPushRegistryId` / `buildArgs` columns. [`compose/safety.ts`](../packages/server/src/modules/compose/safety.ts) gains an `allowBuild` option accepting a bounded `build:` shape only — `context` (realpath-confined inside the checkout), `dockerfile`, `args` (keys only), `target`; still rejecting `dockerfile_inline`, `ssh`, `secrets`, `network`, `cache_from`. New `compose/build.ts` runs the existing Dockerfile builder per build service, tags `<appName>-<svc>:<deploymentId>`, optionally pushes, and [`rewrite.ts`](../packages/server/src/modules/compose/rewrite.ts) swaps `build:` for `image:` in the rendered file. Worker order becomes checkout → render → safety(raw+rendered) → build → `compose up`, with a cancel checkpoint per service. Snapshots store the image tags so rollback re-renders with the old ones.
 

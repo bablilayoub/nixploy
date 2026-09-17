@@ -218,6 +218,13 @@
       "when": 1789664500343,
       "tag": "0030_woozy_junta",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1789665670957,
+      "tag": "0031_conscious_squadron_supreme",
+      "breakpoints": true
     }
   ]
 }

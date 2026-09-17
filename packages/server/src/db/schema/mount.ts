@@ -24,6 +24,12 @@ export const mounts = pgTable("mount", {
 	content: text("content"),
 	/** Path inside the container. */
 	mountPath: text("mount_path").notNull(),
+	/**
+	 * Compose only: which service of the stack the mount attaches to. A stack
+	 * has many containers, so unlike every other kind the parent id is not
+	 * enough to say where the volume goes. NULL for the single-container kinds.
+	 */
+	serviceName: text("service_name"),
 	serviceType: serviceType("service_type").notNull().default("application"),
 	applicationId: text("application_id").references(() => applications.applicationId, {
 		onDelete: "cascade",

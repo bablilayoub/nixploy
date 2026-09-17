@@ -3,6 +3,7 @@ import { getSwarmNetwork } from "../application/paths";
 import { mergeNodeConstraint } from "../cluster/placement";
 import { applyBuiltImages } from "./build";
 import { escapeComposeInterpolation, renderComposeSpec } from "./interpolate";
+import { type ComposeMount, injectComposeMounts } from "./mounts";
 import {
 	type ComposeEnv,
 	type ComposeFileSpec,
@@ -218,6 +219,13 @@ export interface DeployComposeInput {
 	 * validation-only paths, where nothing has been built yet.
 	 */
 	builtImages?: ReadonlyMap<string, string>;
+	/**
+	 * Mount rows of the stack, injected AFTER the safety check: they were
+	 * validated when saved (bind paths are instance-admin only, file mounts
+	 * are materialized by Nixploy), unlike anything the tenant writes in the
+	 * compose file itself. Each one names the raw service it attaches to.
+	 */
+	mounts?: readonly ComposeMount[];
 }
 
 /**
@@ -244,6 +252,12 @@ export function buildDeployComposeFile(
 		spec = randomizeServiceNames(spec, suffix);
 	}
 	const exposedServices = [...(input.exposedServices ?? [])].map((name) =>
+		suffix ? `${name}-${suffix}` : name,
+	);
+	// After the rename, so the mapping turns a row's raw service name into the
+	// suffixed one; after the safety check, because these rows are trusted and
+	// the file's own bind mounts are not.
+	spec = injectComposeMounts(spec, input.mounts ?? [], (name) =>
 		suffix ? `${name}-${suffix}` : name,
 	);
 	spec = applyComposeHardening(spec, input.composeType);

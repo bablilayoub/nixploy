@@ -1482,8 +1482,13 @@ const docs: Record<string, ProcedureDoc> = {
 		capability: ["ai.use"],
 	},
 	"mount.byApplication": {
-		summary: "List mounts of a service",
-		description: "Bind, volume and file mounts attached to a service.",
+		summary: "List mounts of an application",
+		description: "Bind, volume and file mounts attached to an application.",
+	},
+	"mount.byCompose": {
+		summary: "List mounts of a compose stack",
+		description:
+			"Bind, volume and file mounts attached to a compose stack. Each row names the service of the stack it mounts into.",
 	},
 	"mount.one": {
 		summary: "Get one mount",
@@ -1492,7 +1497,7 @@ const docs: Record<string, ProcedureDoc> = {
 	"mount.create": {
 		summary: "Create a mount",
 		description:
-			"Bind, named volume or file mount. File mounts are written to the service's config directory on deploy.",
+			"Bind, named volume or file mount. Pass either applicationId or composeId; a compose mount also needs serviceName, because a stack has more than one container. File mounts are written to the service's config directory on deploy.",
 		capability: ["service.write", "secrets.write"],
 		instanceAdmin: true,
 	},

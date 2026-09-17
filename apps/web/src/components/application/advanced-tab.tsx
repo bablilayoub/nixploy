@@ -47,7 +47,7 @@ export function AdvancedTab() {
 				<UnderlineTabsTrigger value="rollbacks">Rollbacks</UnderlineTabsTrigger>
 			</UnderlineTabsList>
 			<TabsContent value="mounts" className="mt-6">
-				<MountsManager applicationId={applicationId} />
+				<MountsManager target={{ kind: "application", applicationId }} />
 			</TabsContent>
 			<TabsContent value="ports" className="mt-6">
 				<PortsManager applicationId={applicationId} />

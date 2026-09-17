@@ -6,6 +6,7 @@ import { Loader2, Play, Rocket, Square } from "lucide-react";
 import { useState } from "react";
 import { UnderlineTabsList, UnderlineTabsTrigger } from "@/components/application/underline-tabs";
 import { BackupsPanel } from "@/components/backups/backups-panel";
+import { AdvancedTab } from "@/components/compose/advanced-tab";
 import { ComposeFileTab } from "@/components/compose/compose-file-tab";
 import { DeploymentsTab } from "@/components/compose/deployments-tab";
 import { DomainsTab } from "@/components/compose/domains-tab";
@@ -61,6 +62,7 @@ const TOP_TABS = [
 	"domains",
 	"environment",
 	"backups",
+	"advanced",
 	"settings",
 ];
 
@@ -258,6 +260,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 					<UnderlineTabsTrigger value="domains">Domains</UnderlineTabsTrigger>
 					<UnderlineTabsTrigger value="environment">Environment</UnderlineTabsTrigger>
 					<UnderlineTabsTrigger value="backups">Backups</UnderlineTabsTrigger>
+					<UnderlineTabsTrigger value="advanced">Advanced</UnderlineTabsTrigger>
 					<UnderlineTabsTrigger value="settings">Settings</UnderlineTabsTrigger>
 				</UnderlineTabsList>
 				<SaveBarTabsContent value="general" className="mt-6">
@@ -328,6 +331,9 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 					<BackupsPanel
 						target={{ kind: "volume", serviceType: "compose", serviceId: compose.composeId }}
 					/>
+				</SaveBarTabsContent>
+				<SaveBarTabsContent value="advanced" className="mt-6">
+					<AdvancedTab compose={compose} />
 				</SaveBarTabsContent>
 				<SaveBarTabsContent value="settings" className="mt-6">
 					<SettingsTab projectId={projectId} compose={compose} />

@@ -59,9 +59,19 @@ const EMPTY_FORM = {
 	volumeName: "",
 	filePath: "",
 	content: "",
+	serviceName: "",
 };
 
-export function MountsManager({ applicationId }: { applicationId: string }) {
+/**
+ * Which service owns the mounts. A compose stack also has to say which of its
+ * containers a mount goes in, so it passes the service names of the rendered
+ * file; an application has exactly one container and passes none.
+ */
+export type MountTarget =
+	| { kind: "application"; applicationId: string }
+	| { kind: "compose"; composeId: string; serviceNames: readonly string[] };
+
+export function MountsManager({ target }: { target: MountTarget }) {
 	const trpc = useTRPC();
 	const { can } = useCapabilities();
 	const canWrite = can("service.write");
@@ -79,15 +89,17 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 		}
 	}, [dialogOpen]);
 
-	const {
-		data: mounts,
-		isLoading,
-		isError,
-		error,
-		refetch,
-	} = useQuery(trpc.mount.byApplication.queryOptions({ applicationId }));
+	const isCompose = target.kind === "compose";
+	const listOptions = isCompose
+		? trpc.mount.byCompose.queryOptions({ composeId: target.composeId })
+		: trpc.mount.byApplication.queryOptions({ applicationId: target.applicationId });
+	const { data: mounts, isLoading, isError, error, refetch } = useQuery(listOptions);
 
-	const invalidate = [trpc.mount.byApplication.queryKey({ applicationId })];
+	const invalidate = [
+		isCompose
+			? trpc.mount.byCompose.queryKey({ composeId: target.composeId })
+			: trpc.mount.byApplication.queryKey({ applicationId: target.applicationId }),
+	];
 
 	const create = useSaveMutation(
 		trpc.mount.create.mutationOptions({ onSuccess: () => setDialogOpen(false) }),
@@ -113,6 +125,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 			volumeName: mount.volumeName ?? "",
 			filePath: mount.filePath ?? "",
 			content: mount.content ?? "",
+			serviceName: mount.serviceName ?? "",
 		});
 		setDialogOpen(true);
 	};
@@ -127,10 +140,13 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 				volumeName: form.type === "volume" ? form.volumeName || null : null,
 				filePath: form.type === "file" ? form.filePath || null : null,
 				content: form.type === "file" ? form.content || null : null,
+				...(isCompose ? { serviceName: form.serviceName } : {}),
 			});
 		} else {
 			create.mutate({
-				applicationId,
+				...(isCompose
+					? { composeId: target.composeId, serviceName: form.serviceName }
+					: { applicationId: target.applicationId }),
 				type: form.type,
 				mountPath: form.mountPath,
 				hostPath: form.type === "bind" ? form.hostPath || null : null,
@@ -143,6 +159,7 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 
 	const isValid =
 		form.mountPath.trim() !== "" &&
+		(!isCompose || form.serviceName.trim() !== "") &&
 		(form.type !== "bind" || form.hostPath.trim() !== "") &&
 		(form.type !== "volume" || form.volumeName.trim() !== "") &&
 		(form.type !== "file" || form.filePath.trim() !== "");
@@ -246,7 +263,9 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 					<DialogHeader>
 						<DialogTitle>{editing ? "Edit mount" : "Add mount"}</DialogTitle>
 						<DialogDescription>
-							Mounts are applied to the service on the next update.
+							{isCompose
+								? "Mounts are written into the rendered compose file on the next deploy."
+								: "Mounts are applied to the service on the next update."}
 						</DialogDescription>
 					</DialogHeader>
 					<form
@@ -256,6 +275,29 @@ export function MountsManager({ applicationId }: { applicationId: string }) {
 						}}
 						className="flex flex-col gap-4"
 					>
+						{isCompose && (
+							<div className="flex flex-col gap-2">
+								<Label>Service</Label>
+								<Select
+									value={form.serviceName}
+									onValueChange={(v) => setForm((f) => ({ ...f, serviceName: v }))}
+								>
+									<SelectTrigger className="w-full">
+										<SelectValue placeholder="Pick a service of the stack" />
+									</SelectTrigger>
+									<SelectContent>
+										{target.serviceNames.map((name) => (
+											<SelectItem key={name} value={name}>
+												{name}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+								<p className="text-sm text-muted-foreground">
+									A stack has more than one container, so a mount has to name the one it goes in.
+								</p>
+							</div>
+						)}
 						<div className="flex flex-col gap-2">
 							<Label>Type</Label>
 							<Select
