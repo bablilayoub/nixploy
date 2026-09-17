@@ -38,9 +38,11 @@ import {
 	cancelDeployment as cancelQueuedDeployment,
 	provenanceForSession,
 	queueDeployment,
+	resolveRequestedRef,
 	SOURCE_NOT_CONFIGURED,
 } from "../../modules/deployment";
 import { getDeploymentLogPath } from "../../modules/deployment/paths";
+import { badRequest, notFound, preconditionFailed } from "../../modules/errors";
 import { assertCapability, assertWithinQuota, hasCapability } from "../../modules/projects";
 import { textBlobSchema, watchPathsSchema } from "../../utils/input-limits";
 import { assertSafeGitCloneUrl } from "../../utils/public-url";
@@ -447,16 +449,24 @@ export const applicationRouter = router({
 	}),
 
 	deploy: protectedProcedure
-		.input(applicationIdInput.extend({ title: z.string().optional() }))
+		.input(
+			applicationIdInput.extend({
+				title: z.string().optional(),
+				/** Branch, tag or commit sha to build instead of the configured branch. */
+				ref: z.string().min(1).max(255).optional(),
+			}),
+		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
 			await assertDeployable(application);
+			const ref = resolveRequestedRef(application, input.ref);
 			const deploymentId = await queueDeployment({
 				applicationId: input.applicationId,
 				type: "deploy",
 				title: input.title?.trim() || undefined,
+				ref,
 				...provenanceForSession(ctx.session),
 			});
 			await auditFromSession(ctx, organizationId, {
@@ -466,9 +476,49 @@ export const applicationRouter = router({
 				// Deploys are the bulk of the audit trail; without the name every
 				// one of those rows reads as a bare uuid.
 				targetName: application.name,
-				metadata: { deploymentId },
+				metadata: ref ? { deploymentId, ref } : { deploymentId },
 			});
 			return { applicationId: input.applicationId, deploymentId };
+		}),
+
+	/**
+	 * Build the exact commit a past deployment built. The historical row only
+	 * has to belong to this application and carry a resolved sha — the ref is
+	 * that sha, so this works even after the branch moved on or was deleted.
+	 */
+	redeployFromDeployment: protectedProcedure
+		.input(z.object({ deploymentId: z.string().min(1) }))
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
+			const deployment = await db.query.deployments.findFirst({
+				where: eq(deployments.deploymentId, input.deploymentId),
+			});
+			if (!deployment?.applicationId) throw notFound("Deployment not found");
+			if (deployment.isPreview) {
+				throw badRequest("Preview deployments are redeployed from the Previews tab");
+			}
+			const application = await assertApplicationAccess(deployment.applicationId, organizationId);
+			await assertDeployable(application);
+			if (!deployment.commitSha) {
+				throw preconditionFailed("That deployment did not record a commit to rebuild");
+			}
+			const ref = resolveRequestedRef(application, deployment.commitSha);
+			const deploymentId = await queueDeployment({
+				applicationId: application.applicationId,
+				type: "redeploy",
+				title: `Redeploy ${deployment.commitSha.slice(0, 7)}`,
+				ref,
+				...provenanceForSession(ctx.session),
+			});
+			await auditFromSession(ctx, organizationId, {
+				action: "application.deploy",
+				targetType: "application",
+				targetId: application.applicationId,
+				targetName: application.name,
+				metadata: { deploymentId, ref, fromDeploymentId: input.deploymentId },
+			});
+			return { applicationId: application.applicationId, deploymentId };
 		}),
 
 	redeploy: protectedProcedure.input(applicationIdInput).mutation(async ({ ctx, input }) => {

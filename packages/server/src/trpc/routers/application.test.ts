@@ -38,9 +38,15 @@ vi.mock("../../modules/application", async (importOriginal) => {
 	return { ...actual, assertApplicationAccess: mocks.assertApplicationAccess };
 });
 vi.mock("../../modules/deployment", async () => {
-	// Real readiness predicate, stubbed queue.
+	// Real readiness predicate and ref validation, stubbed queue.
 	const provenance = await import("../../modules/deployment/provenance");
-	return { ...provenance, queueDeployment: mocks.queueDeployment, cancelDeployment: vi.fn() };
+	const ref = await import("../../modules/deployment/ref");
+	return {
+		...provenance,
+		...ref,
+		queueDeployment: mocks.queueDeployment,
+		cancelDeployment: vi.fn(),
+	};
 });
 vi.mock("../../modules/audit", () => ({ auditFromSession: vi.fn(async () => {}) }));
 
@@ -112,6 +118,50 @@ describe("application.deploy provenance", () => {
 			trigger: "manual",
 			triggeredBy: "user-1",
 		});
+	});
+
+	it("passes a trimmed requested ref through to the queue", async () => {
+		// The ref rides the JOB, never the row: nothing here writes to the
+		// application, so the configured branch survives a one-off deploy.
+		// `buildRefDeployTarget` (worker.test.ts) covers the other half.
+		mocks.assertApplicationAccess.mockResolvedValue({
+			...baseRow,
+			sourceType: "github" as const,
+			owner: "acme",
+			repository: "web",
+		});
+		const caller = applicationRouter.createCaller(ctxFor({ id: "sess-1", token: "t" }));
+		await caller.deploy({ applicationId: "app-1", ref: " v1.2.0 " });
+		expect(mocks.queueDeployment).toHaveBeenCalledWith(
+			expect.objectContaining({ applicationId: "app-1", type: "deploy", ref: "v1.2.0" }),
+		);
+	});
+
+	it("refuses a ref on a docker-image source instead of deploying the wrong thing", async () => {
+		mocks.assertApplicationAccess.mockResolvedValue({
+			...baseRow,
+			sourceType: "docker",
+			dockerImage: "traefik/whoami:v1.10.1",
+		});
+		const caller = applicationRouter.createCaller(ctxFor({ id: "sess-1", token: "t" }));
+		await expect(caller.deploy({ applicationId: "app-1", ref: "v1.2.0" })).rejects.toThrow(
+			/no git ref to deploy/,
+		);
+		expect(mocks.queueDeployment).not.toHaveBeenCalled();
+	});
+
+	it("rejects a ref that could reach git's option parser", async () => {
+		mocks.assertApplicationAccess.mockResolvedValue({
+			...baseRow,
+			sourceType: "github" as const,
+			owner: "acme",
+			repository: "web",
+		});
+		const caller = applicationRouter.createCaller(ctxFor({ id: "sess-1", token: "t" }));
+		await expect(
+			caller.deploy({ applicationId: "app-1", ref: "--upload-pack=evil" }),
+		).rejects.toThrow();
+		expect(mocks.queueDeployment).not.toHaveBeenCalled();
 	});
 
 	it("records an API-key caller as an api deploy by the key owner", async () => {

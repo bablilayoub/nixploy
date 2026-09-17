@@ -204,6 +204,13 @@
       "when": 1789151163255,
       "tag": "0028_ancient_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1789634292065,
+      "tag": "0029_goofy_wendell_rand",
+      "breakpoints": true
     }
   ]
 }

@@ -57,6 +57,8 @@ export interface QueueJob {
 	previewDeploymentId?: string;
 	type: "deploy" | "redeploy";
 	serverId: string | null;
+	/** Branch/tag/sha the caller asked for; null = the configured branch. */
+	requestedRef?: string;
 }
 
 export type CancelLookup = "pending" | "running" | null;
@@ -198,6 +200,7 @@ interface ClaimedRow {
 	server_id: string | null;
 	app_name: string | null;
 	preview_deployment_id: string | null;
+	requested_ref: string | null;
 }
 
 /**
@@ -231,7 +234,8 @@ export async function claimNextDeployment(serverId: string | null): Promise<Queu
 		) s
 		where d."deployment_id" = s."deployment_id"
 		returning d."deployment_id", d."application_id", d."compose_id",
-			d."title", d."server_id", d."app_name", d."preview_deployment_id"
+			d."title", d."server_id", d."app_name", d."preview_deployment_id",
+			d."requested_ref"
 	`)) as unknown as ClaimedRow[];
 
 	const row = rows[0];
@@ -247,6 +251,7 @@ export async function claimNextDeployment(serverId: string | null): Promise<Queu
 		// the verb, and every redeploy title ends in "redeploy".
 		type: row.title?.toLowerCase().endsWith("redeploy") ? "redeploy" : "deploy",
 		serverId: row.server_id,
+		requestedRef: row.requested_ref ?? undefined,
 	};
 }
 

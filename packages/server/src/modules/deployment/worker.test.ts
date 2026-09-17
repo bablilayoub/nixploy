@@ -423,6 +423,35 @@ describe("buildPreviewDeployTarget", () => {
 	});
 });
 
+describe("buildRefDeployTarget", () => {
+	const application = {
+		appName: "myapp",
+		sourceType: "github",
+		branch: "main",
+		gitBranch: "main",
+	} as unknown as ApplicationRow;
+
+	it("returns the application untouched when no ref was requested", async () => {
+		const { buildRefDeployTarget } = await import("./worker");
+		expect(buildRefDeployTarget(application, undefined)).toBe(application);
+	});
+
+	it("points the checkout at the requested ref without changing the stored branch", async () => {
+		const { buildRefDeployTarget } = await import("./worker");
+		const target = buildRefDeployTarget(application, "v1.2.0");
+		expect(target).toMatchObject({ branch: "v1.2.0", gitBranch: "v1.2.0" });
+		// The row itself must be unchanged: the next webhook push still builds main.
+		expect(application.branch).toBe("main");
+		expect(application.gitBranch).toBe("main");
+	});
+
+	it("ignores a ref for a docker-image source, which has no checkout", async () => {
+		const { buildRefDeployTarget } = await import("./worker");
+		const docker = { ...application, sourceType: "docker" } as ApplicationRow;
+		expect(buildRefDeployTarget(docker, "v1.2.0")).toBe(docker);
+	});
+});
+
 /**
  * A compose preview job must render and deploy the PREVIEW project
  * (`<app>-pr-<n>`), never production: no rollback snapshot against the parent,

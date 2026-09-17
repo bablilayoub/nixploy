@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Play, Rocket, Square } from "lucide-react";
+import { GitBranch, Loader2, Play, Rocket, Square } from "lucide-react";
 import { useState } from "react";
 
 import { capabilityHint } from "@/components/services/capability-hint";
@@ -17,6 +17,17 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import {
 	firstLine,
@@ -27,6 +38,9 @@ import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
 import type { ApplicationActions } from "./use-application-actions";
+
+/** Sources that check out a ref; mirrors `modules/deployment/ref.ts`. */
+const GIT_SOURCE_TYPES = new Set(["git", "github", "gitlab", "bitbucket", "gitea"]);
 
 export function ApplicationHeader({
 	application,
@@ -48,6 +62,8 @@ export function ApplicationHeader({
 	const { can } = useCapabilities();
 	const applicationId = application.applicationId;
 	const [confirmStop, setConfirmStop] = useState(false);
+	const [refDialogOpen, setRefDialogOpen] = useState(false);
+	const [ref, setRef] = useState("");
 	const { deploy, start, stop, isBusy } = actions;
 	const followDeployment = useFollowDeployment();
 
@@ -89,6 +105,18 @@ export function ApplicationHeader({
 			hint: deployHint,
 		},
 	];
+	// A one-off build of a branch, tag or commit. Hidden for docker-image and
+	// drop sources, which have no ref to point at (the server refuses one).
+	if (GIT_SOURCE_TYPES.has(application.sourceType)) {
+		serviceActions.push({
+			key: "deploy-ref",
+			label: "Deploy a ref",
+			icon: GitBranch,
+			onClick: () => setRefDialogOpen(true),
+			disabled: deployDisabled,
+			hint: deployHint,
+		});
+	}
 	if (isRunning) {
 		serviceActions.push({
 			key: "stop",
@@ -147,6 +175,64 @@ export function ApplicationHeader({
 					/>
 				}
 			/>
+			<Dialog
+				open={refDialogOpen}
+				onOpenChange={(open) => {
+					setRefDialogOpen(open);
+					if (!open) setRef("");
+				}}
+			>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Deploy a branch, tag or commit</DialogTitle>
+						<DialogDescription>
+							Builds the ref you name instead of {application.branch ?? "the configured branch"}.
+							This is a one-off: the service keeps its branch, so the next push still builds it.
+						</DialogDescription>
+					</DialogHeader>
+					<form
+						id="deploy-ref-form"
+						className="grid gap-2"
+						onSubmit={(event) => {
+							event.preventDefault();
+							const value = ref.trim();
+							if (!value) return;
+							deploy.mutate(
+								{ applicationId, ref: value },
+								{
+									onSuccess: () => {
+										setRefDialogOpen(false);
+										setRef("");
+									},
+								},
+							);
+						}}
+					>
+						<Label htmlFor="deploy-ref">Ref</Label>
+						<Input
+							id="deploy-ref"
+							value={ref}
+							onChange={(event) => setRef(event.target.value)}
+							placeholder="v1.2.0, feature/checkout, or a commit sha"
+							autoComplete="off"
+							autoFocus
+						/>
+					</form>
+					<DialogFooter>
+						<Button
+							variant="outline"
+							onClick={() => setRefDialogOpen(false)}
+							disabled={deploy.isPending}
+						>
+							Cancel
+						</Button>
+						<Button type="submit" form="deploy-ref-form" disabled={deploy.isPending || !ref.trim()}>
+							{deploy.isPending && <Loader2 className="size-4 animate-spin" />}
+							Deploy
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 			<AlertDialog open={confirmStop} onOpenChange={setConfirmStop}>
 				<AlertDialogContent>
 					<AlertDialogHeader>

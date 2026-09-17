@@ -54,6 +54,7 @@ export {
 	setServerConcurrency,
 	startQueueLoop,
 } from "./queue";
+export { resolveRequestedRef } from "./ref";
 
 export interface DeploymentJobInput extends Partial<DeploymentProvenance> {
 	applicationId?: string;
@@ -62,6 +63,13 @@ export interface DeploymentJobInput extends Partial<DeploymentProvenance> {
 	type: "deploy" | "redeploy";
 	/** Row title; defaults to "Deployment" / "Redeploy" (previews prefixed). */
 	title?: string;
+	/**
+	 * Branch, tag or commit sha to build instead of the service's configured
+	 * branch. Validated with `assertSafeGitRef` by the caller AND again at use
+	 * (`cloneGitSource`). Ignored for preview jobs, which resolve their own ref
+	 * from the preview row, and for docker-image sources, which have none.
+	 */
+	ref?: string;
 }
 
 /**
@@ -204,6 +212,7 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
 			commitSha: job.commitSha ?? null,
 			commitMessage: job.commitMessage ?? null,
 			commitAuthor: job.commitAuthor ?? null,
+			requestedRef: job.ref ?? null,
 		});
 		return await supersedeQueuedJobs(tx, { appName, deploymentId });
 	});

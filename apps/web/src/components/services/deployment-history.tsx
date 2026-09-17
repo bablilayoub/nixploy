@@ -1,7 +1,16 @@
 "use client";
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, Bot, ChevronDown, Loader2, RefreshCw, Rocket, ScrollText } from "lucide-react";
+import {
+	Ban,
+	Bot,
+	ChevronDown,
+	History,
+	Loader2,
+	RefreshCw,
+	Rocket,
+	ScrollText,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -86,7 +95,7 @@ export type DeploymentHistoryProps = {
 	kind: "application" | "compose";
 	serviceId: string;
 	description: string;
-	/** Application deployments can be cancelled while running. */
+	/** Show Cancel on queued/running rows (`application.cancelDeployment` takes any kind). */
 	canCancel?: boolean;
 	/** Provider commit page for a sha; omit (or return null) to render the sha as text. */
 	commitUrl?: (sha: string) => string | null;
@@ -228,6 +237,13 @@ export function DeploymentHistory({
 	);
 	const redeployPending =
 		kind === "application" ? redeployApplication.isPending : redeployCompose.isPending;
+
+	// Rebuild the exact commit a past row built. Only offered for applications:
+	// a compose stack has a snapshot rollback instead (Advanced → Rollbacks).
+	const redeployCommit = useSaveMutation(
+		trpc.application.redeployFromDeployment.mutationOptions(redeployHandlers),
+		{ successMessage: "Rebuild queued", invalidate: [listPathKey] },
+	);
 
 	const applyPatch = useMutation(
 		trpc.ai.applySuggestedPatch.mutationOptions({
@@ -453,6 +469,33 @@ export function DeploymentHistory({
 													Explain
 												</Button>
 											)}
+											{/* The list already excludes preview rows (queries.ts filters
+											    isPreview), so a row with a sha is always rebuildable. */}
+											{kind === "application" &&
+												!isActive(deployment.status) &&
+												deployment.commitSha && (
+													<Button
+														variant="ghost"
+														size="sm"
+														disabled={redeployCommit.isPending || !canDeploy}
+														title={
+															canDeploy
+																? `Build ${shortSha(deployment.commitSha)} again`
+																: capabilityHint("service.deploy")
+														}
+														onClick={() =>
+															redeployCommit.mutate({ deploymentId: deployment.deploymentId })
+														}
+													>
+														{redeployCommit.isPending &&
+														redeployCommit.variables?.deploymentId === deployment.deploymentId ? (
+															<Loader2 className="size-4 animate-spin" />
+														) : (
+															<History className="size-4" />
+														)}
+														Redeploy this commit
+													</Button>
+												)}
 											{canCancel && isActive(deployment.status) && (
 												<Button
 													variant="ghost"

@@ -289,9 +289,30 @@ export const commandRegistry: RegistryEntry[] = [
 		kind: "mutation",
 		summary: "Queue a fresh build and rollout",
 		argument: { field: "applicationId", label: "<applicationId>", description: "Application ID" },
-		options: [{ field: "title", flag: "--title <title>", description: "Deployment title" }],
+		options: [
+			{ field: "title", flag: "--title <title>", description: "Deployment title" },
+			{
+				field: "ref",
+				flag: "--ref <ref>",
+				description: "Branch, tag or commit to build instead of the configured branch",
+			},
+		],
 		single: true,
 		message: "Deployment queued.",
+	},
+	{
+		group: "app",
+		verb: "redeploy-commit",
+		procedure: "application.redeployFromDeployment",
+		kind: "mutation",
+		summary: "Rebuild the commit an earlier deployment built",
+		argument: {
+			field: "deploymentId",
+			label: "<deploymentId>",
+			description: "Deployment to rebuild",
+		},
+		single: true,
+		message: "Rebuild queued.",
 	},
 	{
 		group: "app",

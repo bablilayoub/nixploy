@@ -34,6 +34,14 @@ export const deployments = pgTable(
 		/** Full commit message; the UI shows the first line. */
 		commitMessage: text("commit_message"),
 		commitAuthor: text("commit_author"),
+		/**
+		 * The ref the caller asked for (branch, tag or sha) when it was not the
+		 * service's configured branch. NULL means "the configured branch", which
+		 * is what every webhook push and every plain Deploy records. Kept beside
+		 * `commitSha` because the two answer different questions: this is what
+		 * was requested, that is what it resolved to.
+		 */
+		requestedRef: text("requested_ref"),
 		/** What started the job (null on rows older than migration 0020). */
 		trigger: deploymentTrigger("trigger"),
 		/** User id for `manual`/`api`, `webhook:<provider>` for pushes, `system` otherwise. */

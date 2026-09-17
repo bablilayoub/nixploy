@@ -309,6 +309,12 @@ const docs: Record<string, ProcedureDoc> = {
 			"Enqueues a full build (clone/pull → builder → image) followed by a Swarm rollout. Returns immediately with the deployment row; poll `deployment.getLogs`.",
 		capability: ["service.deploy"],
 	},
+	"application.redeployFromDeployment": {
+		summary: "Rebuild the commit a past deployment built",
+		description:
+			"Queues a build of the exact commit recorded on an earlier deployment of the same application. Works after the branch has moved on or been deleted; refuses rows with no resolved commit and preview rows.",
+		capability: ["service.deploy"],
+	},
 	"application.redeploy": {
 		summary: "Re-roll the current build",
 		description:

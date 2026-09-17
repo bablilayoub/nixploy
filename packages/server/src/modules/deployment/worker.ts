@@ -202,6 +202,21 @@ export function buildPreviewDeployTarget(
 	return { ...application, appName: preview.appName, env, branch: ref, gitBranch: ref };
 }
 
+/**
+ * Point a deploy at a one-off ref (branch, tag or sha) without touching the
+ * service's configured branch. `cloneGitSource` reads `branch`, so overriding
+ * that pair is all it takes — the same trick `buildPreviewDeployTarget` uses.
+ * Docker-image sources have no checkout, so the ref is ignored there (the
+ * router refuses it, this is the belt-and-braces half).
+ */
+export function buildRefDeployTarget(
+	application: ApplicationRow,
+	requestedRef: string | undefined,
+): ApplicationRow {
+	if (!requestedRef || application.sourceType === "docker") return application;
+	return { ...application, branch: requestedRef, gitBranch: requestedRef };
+}
+
 async function runApplicationJob(
 	ctx: DeploymentContext,
 	job: QueueJob,
@@ -229,9 +244,13 @@ async function runApplicationJob(
 
 	// Preview deploys an isolated Swarm service under preview.appName and
 	// builds the PR source — never mutate the production service.
+	// A one-off ref deploy (`nixploy app deploy --ref v1.2.0`, "Redeploy this
+	// commit") overrides the checkout the same way, and only for this job: the
+	// stored `branch` is untouched, so the next webhook push still builds the
+	// configured branch. Previews win — their ref comes from the preview row.
 	const deployTarget: ApplicationRow = preview
 		? buildPreviewDeployTarget(application, preview)
-		: application;
+		: buildRefDeployTarget(application, job.requestedRef);
 
 	// Register every secret that could leak into command output: the fully
 	// merged env (project → environment → application), not just the app's own.
