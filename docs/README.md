@@ -54,6 +54,7 @@ Use this against the marketing site / README when docs drift:
 | [development.md](./development.md) | Local setup, env, verification loop |
 | [codebase-map.md](./codebase-map.md) | File-level map: entry points, routers → modules, on-disk layout, env vars, crons |
 | [status.md](./status.md) | Living snapshot: health checks, dependency upgrade candidates, known debt, backlog, session log |
+| [roadmap.md](./roadmap.md) | What we build next and why: the competitive plan, sequenced into releases |
 | [archive/next.md](./archive/next.md) | Phase 10 checklist (done) |
 | [archive/hardening.md](./archive/hardening.md) | Phase 9 engineering checklist (done) — isolation lives in [hardening.md](./hardening.md) |
 | [AGENTS.md](../AGENTS.md) | Repo conventions |
