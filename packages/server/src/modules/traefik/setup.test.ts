@@ -11,6 +11,9 @@ const { state, execAsync, writeFileOnServer, readFile } = vi.hoisted(() => ({
 	state: {
 		email: null as string | null,
 		acmeDnsProvider: null as string | null,
+		acmeDnsCredentials: null as Record<string, string> | null,
+		/** Env the running proxy already has, as `KEY=VALUE` lines. */
+		serviceEnv: [] as string[],
 		/** Current traefik.yml on disk; null = missing. */
 		existingStatic: null as string | null,
 		serviceExists: true,
@@ -31,7 +34,11 @@ vi.mock("../../db", () => ({
 		select: () => ({
 			from: () => ({
 				limit: async () => [
-					{ letsEncryptEmail: state.email, acmeDnsProvider: state.acmeDnsProvider },
+					{
+						letsEncryptEmail: state.email,
+						acmeDnsProvider: state.acmeDnsProvider,
+						acmeDnsCredentials: state.acmeDnsCredentials,
+					},
 				],
 				orderBy: async () => state.entrypoints,
 			}),
@@ -50,7 +57,13 @@ vi.mock("./dashboard", () => ({
 	writeDashboardRouterConfig: vi.fn(async () => {}),
 }));
 
-import { buildTraefikStaticConfig, ensureTraefikSetup, TRAEFIK_SERVICE_NAME } from "./setup";
+import {
+	buildAcmeDnsEnv,
+	buildAcmeDnsEnvUpdate,
+	buildTraefikStaticConfig,
+	ensureTraefikSetup,
+	TRAEFIK_SERVICE_NAME,
+} from "./setup";
 
 const restarts = () =>
 	state.commands.filter(
@@ -111,6 +124,8 @@ describe("ensureTraefikSetup", () => {
 		state.commands.length = 0;
 		state.email = null;
 		state.acmeDnsProvider = null;
+		state.acmeDnsCredentials = null;
+		state.serviceEnv.length = 0;
 		state.existingStatic = null;
 		state.serviceExists = true;
 		state.entrypoints.length = 0;
@@ -123,6 +138,9 @@ describe("ensureTraefikSetup", () => {
 			state.commands.push(command);
 			if (command.includes("docker service ls")) {
 				return state.serviceExists ? `${TRAEFIK_SERVICE_NAME}\n` : "";
+			}
+			if (command.includes("docker service inspect")) {
+				return state.serviceEnv.join("\n");
 			}
 			return "";
 		});
@@ -157,6 +175,138 @@ describe("ensureTraefikSetup", () => {
 		state.serviceExists = false;
 		await ensureTraefikSetup();
 		expect(creates()).toHaveLength(1);
+		expect(restarts()).toEqual([]);
+	});
+});
+
+describe("buildAcmeDnsEnv", () => {
+	it("emits only the variables the selected provider declares", () => {
+		expect(
+			buildAcmeDnsEnv("cloudflare", {
+				CF_DNS_API_TOKEN: "tok",
+				// An operator-supplied blob is not a free hand on Traefik's
+				// environment: anything the provider did not declare is dropped.
+				TRAEFIK_ANYTHING: "nope",
+				AWS_SECRET_ACCESS_KEY: "other-provider",
+			}),
+		).toEqual([{ key: "CF_DNS_API_TOKEN", value: "tok" }]);
+	});
+
+	it("treats a blank value as not configured", () => {
+		expect(buildAcmeDnsEnv("cloudflare", { CF_DNS_API_TOKEN: "   " })).toEqual([]);
+	});
+
+	it("emits nothing without a provider, an unknown provider or no credentials", () => {
+		expect(buildAcmeDnsEnv(null, { CF_DNS_API_TOKEN: "tok" })).toEqual([]);
+		expect(buildAcmeDnsEnv("not-a-provider", { CF_DNS_API_TOKEN: "tok" })).toEqual([]);
+		expect(buildAcmeDnsEnv("cloudflare", null)).toEqual([]);
+	});
+
+	it("keeps every variable a multi-key provider needs", () => {
+		expect(
+			buildAcmeDnsEnv("route53", {
+				AWS_ACCESS_KEY_ID: "id",
+				AWS_SECRET_ACCESS_KEY: "secret",
+				AWS_REGION: "eu-central-1",
+			}).map((entry) => entry.key),
+		).toEqual(["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"]);
+	});
+});
+
+describe("buildAcmeDnsEnvUpdate", () => {
+	it("does nothing when the proxy already has exactly these values", () => {
+		// The whole point of the diff: --env-add recreates the proxy task, and
+		// that is a ~9 s outage for every routed domain.
+		expect(
+			buildAcmeDnsEnvUpdate(
+				["CF_DNS_API_TOKEN=tok", "TZ=UTC"],
+				[{ key: "CF_DNS_API_TOKEN", value: "tok" }],
+			),
+		).toEqual([]);
+	});
+
+	it("adds a new variable and updates a rotated one", () => {
+		expect(buildAcmeDnsEnvUpdate([], [{ key: "CF_DNS_API_TOKEN", value: "tok" }])).toEqual([
+			"--env-add 'CF_DNS_API_TOKEN=tok'",
+		]);
+		expect(
+			buildAcmeDnsEnvUpdate(["CF_DNS_API_TOKEN=old"], [{ key: "CF_DNS_API_TOKEN", value: "new" }]),
+		).toEqual(["--env-add 'CF_DNS_API_TOKEN=new'"]);
+	});
+
+	it("removes the keys a previous provider set when switching", () => {
+		expect(
+			buildAcmeDnsEnvUpdate(
+				["CF_DNS_API_TOKEN=tok"],
+				[
+					{ key: "AWS_ACCESS_KEY_ID", value: "id" },
+					{ key: "AWS_SECRET_ACCESS_KEY", value: "secret" },
+				],
+			),
+		).toEqual([
+			"--env-rm 'CF_DNS_API_TOKEN'",
+			"--env-add 'AWS_ACCESS_KEY_ID=id'",
+			"--env-add 'AWS_SECRET_ACCESS_KEY=secret'",
+		]);
+	});
+
+	it("never removes an env var this feature does not own", () => {
+		// An operator who added their own variable to the proxy keeps it.
+		expect(buildAcmeDnsEnvUpdate(["TZ=UTC", "HTTP_PROXY=x"], [])).toEqual([]);
+	});
+
+	it("clears the credentials when the provider is switched off", () => {
+		expect(buildAcmeDnsEnvUpdate(["CF_DNS_API_TOKEN=tok"], [])).toEqual([
+			"--env-rm 'CF_DNS_API_TOKEN'",
+		]);
+	});
+});
+
+describe("ensureTraefikSetup — DNS-01 credentials", () => {
+	const envUpdates = () =>
+		state.commands.filter((command) => command.includes("docker service update --detach --env"));
+
+	beforeEach(() => {
+		state.commands.length = 0;
+		state.email = null;
+		state.acmeDnsProvider = "cloudflare";
+		state.acmeDnsCredentials = { CF_DNS_API_TOKEN: "tok" };
+		state.serviceEnv.length = 0;
+		state.existingStatic = null;
+		state.serviceExists = true;
+		state.entrypoints.length = 0;
+		writeFileOnServer.mockClear();
+	});
+
+	it("passes the credentials when it creates the proxy", async () => {
+		state.serviceExists = false;
+		await ensureTraefikSetup();
+		expect(creates()[0]).toContain("--env 'CF_DNS_API_TOKEN=tok'");
+	});
+
+	it("pushes a rotated token onto the running proxy", async () => {
+		state.existingStatic = buildTraefikStaticConfig(null, { provider: "cloudflare" });
+		state.serviceEnv.push("CF_DNS_API_TOKEN=old");
+		await ensureTraefikSetup();
+		expect(envUpdates()).toHaveLength(1);
+		expect(envUpdates()[0]).toContain("--env-add 'CF_DNS_API_TOKEN=tok'");
+	});
+
+	it("leaves the proxy alone when the credentials already match", async () => {
+		state.existingStatic = buildTraefikStaticConfig(null, { provider: "cloudflare" });
+		state.serviceEnv.push("CF_DNS_API_TOKEN=tok");
+		await ensureTraefikSetup();
+		expect(envUpdates()).toEqual([]);
+		expect(restarts()).toEqual([]);
+	});
+
+	it("does not also force a restart — --env-add already recreated the task", async () => {
+		// The static config changed AND the credentials changed. One task
+		// recreation is enough; a second would be another ~9 s of downtime.
+		state.existingStatic = "stale: true\n";
+		state.serviceEnv.push("CF_DNS_API_TOKEN=old");
+		await ensureTraefikSetup();
+		expect(envUpdates()).toHaveLength(1);
 		expect(restarts()).toEqual([]);
 	});
 });

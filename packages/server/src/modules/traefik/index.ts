@@ -7,6 +7,13 @@
  * and deployment modules).
  */
 
+export {
+	CERTIFICATE_EXPIRY_WARNING_DAYS,
+	daysUntil,
+	describeExpiry,
+	parseCertificateExpiry,
+	warnAboutExpiringCertificates,
+} from "./certificate-expiry";
 export type {
 	TraefikBasicAuthEntry,
 	TraefikDomainEntry,

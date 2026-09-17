@@ -571,7 +571,10 @@ The hourly maintenance cron (`modules/deployment/maintenance.ts`, `7 * * * *`):
   1 000 per service (a service in a crash loop writes a row every few seconds,
   and the per-service cap is what stops one sick service owning the table);
 - drops `audit_log` rows older than `NIXPLOY_AUDIT_RETENTION_DAYS` (default
-  `365`; `0` keeps them forever).
+  `365`; `0` keeps them forever);
+- warns about uploaded TLS certificates expiring within 21 days — an incident
+  plus the `certificateExpiry` notification event, once a day per certificate
+  (see [domains & Traefik](./domains-traefik.md#expiry-warnings)).
 
 ## Healthchecks
 

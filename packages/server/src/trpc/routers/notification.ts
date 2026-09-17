@@ -118,6 +118,7 @@ const eventTogglesSchema = z.object({
 	serverThreshold: z.boolean().optional(),
 	serviceAlert: z.boolean().optional(),
 	uptimeFlip: z.boolean().optional(),
+	certificateExpiry: z.boolean().optional(),
 });
 
 const createNotificationSchema = z

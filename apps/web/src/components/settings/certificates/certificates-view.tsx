@@ -43,6 +43,34 @@ import type { AppRouter } from "@/lib/trpc-types";
 
 type CertificateRow = inferRouterOutputs<AppRouter>["certificate"]["all"][number];
 
+/**
+ * Expiry of an uploaded certificate. These are PEMs an operator pasted in —
+ * Nixploy did not issue them and cannot renew them — so the only useful thing
+ * to show is how long is left, loudly once that is short.
+ */
+function ExpiryCell({ expiresAt, alerts }: { expiresAt: string | Date | null; alerts: boolean }) {
+	if (!expiresAt) {
+		return (
+			<span className="flex items-center gap-2 text-sm text-muted-foreground">
+				<StatusDot status="neutral" />
+				Unknown
+			</span>
+		);
+	}
+	const date = new Date(expiresAt);
+	const days = Math.floor((date.getTime() - Date.now()) / 86_400_000);
+	const status = days < 0 ? "error" : days <= 21 ? "warning" : "success";
+	return (
+		<span className="flex items-center gap-2 text-sm">
+			<StatusDot status={status} />
+			<span title={format(date, "MMM d, yyyy HH:mm")}>
+				{days < 0 ? `Expired ${Math.abs(days)}d ago` : `in ${days}d`}
+			</span>
+			{alerts ? null : <span className="text-xs text-muted-foreground">(alerts off)</span>}
+		</span>
+	);
+}
+
 export function CertificatesView() {
 	const trpc = useTRPC();
 	const [open, setOpen] = useState(false);
@@ -89,14 +117,14 @@ export function CertificatesView() {
 	const [editName, setEditName] = useState("");
 	const [editCertificateData, setEditCertificateData] = useState("");
 	const [editPrivateKey, setEditPrivateKey] = useState("");
-	const [editAutoRenew, setEditAutoRenew] = useState(false);
+	const [editExpiryAlerts, setEditExpiryAlerts] = useState(true);
 
 	useEffect(() => {
 		if (editing) {
 			setEditName(editing.name);
 			setEditCertificateData(editing.certificateData);
 			setEditPrivateKey("");
-			setEditAutoRenew(editing.autoRenew);
+			setEditExpiryAlerts(editing.expiryAlerts);
 		}
 	}, [editing]);
 
@@ -155,7 +183,7 @@ export function CertificatesView() {
 									<TableHead>Name</TableHead>
 									<TableHead className="hidden md:table-cell">Path</TableHead>
 									<TableHead className="hidden md:table-cell">Server</TableHead>
-									<TableHead>Auto-renew</TableHead>
+									<TableHead>Expires</TableHead>
 									<TableHead className="hidden md:table-cell">Created</TableHead>
 									<TableHead className="w-12" />
 								</TableRow>
@@ -174,10 +202,10 @@ export function CertificatesView() {
 											{certificate.serverName ?? "This server"}
 										</TableCell>
 										<TableCell>
-											<span className="flex items-center gap-2 text-sm">
-												<StatusDot status={certificate.autoRenew ? "success" : "neutral"} />
-												{certificate.autoRenew ? "On" : "Off"}
-											</span>
+											<ExpiryCell
+												expiresAt={certificate.expiresAt}
+												alerts={certificate.expiryAlerts}
+											/>
 										</TableCell>
 										<TableCell className="hidden text-muted-foreground md:table-cell">
 											{format(new Date(certificate.createdAt), "MMM d, yyyy")}
@@ -283,7 +311,7 @@ export function CertificatesView() {
 								updateMutation.mutate({
 									certificateId: editing.certificateId,
 									name: editName.trim(),
-									autoRenew: editAutoRenew,
+									expiryAlerts: editExpiryAlerts,
 									...(editCertificateData.trim() ? { certificateData: editCertificateData } : {}),
 									...(editPrivateKey.trim() ? { privateKey: editPrivateKey } : {}),
 								});
@@ -320,12 +348,12 @@ export function CertificatesView() {
 						</div>
 						<div className="flex items-center gap-2">
 							<Switch
-								id="edit-cert-autorenew"
-								checked={editAutoRenew}
-								onCheckedChange={setEditAutoRenew}
+								id="edit-cert-expiry-alerts"
+								checked={editExpiryAlerts}
+								onCheckedChange={setEditExpiryAlerts}
 							/>
-							<Label htmlFor="edit-cert-autorenew" className="font-normal">
-								Auto-renew
+							<Label htmlFor="edit-cert-expiry-alerts" className="font-normal">
+								Warn me before it expires
 							</Label>
 						</div>
 						<DialogFooter>

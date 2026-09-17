@@ -225,7 +225,12 @@ export const webServerRouter = router({
 		const dnsProviderChanged =
 			input.acmeDnsProvider !== undefined &&
 			(input.acmeDnsProvider ?? null) !== (existing?.acmeDnsProvider ?? null);
-		if (emailChanged || hostChanged || dnsProviderChanged) {
+		// Credentials do not touch traefik.yml — they are environment variables
+		// on the proxy service — but `ensureTraefikSetup` is what pushes them,
+		// so a credentials-only save has to run it too. Without this, rotating a
+		// DNS token saved the row and left the proxy on the old one.
+		const dnsCredentialsChanged = input.acmeDnsCredentials !== undefined;
+		if (emailChanged || hostChanged || dnsProviderChanged || dnsCredentialsChanged) {
 			try {
 				await ensureTraefikSetup();
 				traefikConfigRewritten = true;
@@ -250,7 +255,7 @@ export const webServerRouter = router({
 			metadata: {
 				certificateType: input.certificateType,
 				acmeDnsProviderChanged: dnsProviderChanged,
-				acmeDnsCredentialsChanged: input.acmeDnsCredentials !== undefined,
+				acmeDnsCredentialsChanged: dnsCredentialsChanged,
 				allowPrivateEgress: input.allowPrivateEgress,
 				hostChanged,
 				traefikConfigRewritten,

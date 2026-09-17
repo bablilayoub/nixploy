@@ -9,6 +9,7 @@ import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { assertCapability } from "../../modules/projects";
 import {
 	getCertificatesDir,
+	parseCertificateExpiry,
 	REMOTE_TRAEFIK_DIR,
 	removeFileOnServer,
 	TRAEFIK_CERTIFICATES_CONTAINER_DIR,
@@ -131,7 +132,8 @@ export const certificateRouter = router({
 				certificateData: z.string().min(1),
 				/** PEM private key (encrypted at rest), written as `<id>.key`. */
 				privateKey: z.string().min(1),
-				autoRenew: z.boolean().optional(),
+				/** Warn before it expires (there is nothing to auto-renew here). */
+				expiryAlerts: z.boolean().optional(),
 				serverId: z.string().nullable().optional(),
 			}),
 		)
@@ -160,7 +162,11 @@ export const certificateRouter = router({
 						certificateData: input.certificateData,
 						privateKey: input.privateKey,
 						certificatePath,
-						autoRenew: input.autoRenew ?? false,
+						expiryAlerts: input.expiryAlerts ?? true,
+						// Best effort: a chain Node's parser dislikes may still be one
+						// Traefik serves happily, and refusing the upload over a date
+						// we only wanted for a warning would be the tail wagging the dog.
+						expiresAt: parseCertificateExpiry(input.certificateData),
 						organizationId,
 						serverId,
 					})
@@ -176,7 +182,11 @@ export const certificateRouter = router({
 					targetType: "certificate",
 					targetId: certificate.certificateId,
 					targetName: certificate.name,
-					metadata: { serverId, autoRenew: certificate.autoRenew },
+					metadata: {
+						serverId,
+						expiryAlerts: certificate.expiryAlerts,
+						expiresAt: certificate.expiresAt?.toISOString() ?? null,
+					},
 				});
 				return publicCertificate(certificate);
 			} catch (error) {
@@ -191,7 +201,7 @@ export const certificateRouter = router({
 				name: z.string().min(1).optional(),
 				certificateData: z.string().min(1).optional(),
 				privateKey: z.string().min(1).optional(),
-				autoRenew: z.boolean().optional(),
+				expiryAlerts: z.boolean().optional(),
 				serverId: z.string().nullable().optional(),
 			}),
 		)
@@ -227,7 +237,14 @@ export const certificateRouter = router({
 			const { certificateId, ...fields } = input;
 			const [certificate] = await db
 				.update(certificates)
-				.set(fields)
+				.set({
+					...fields,
+					// A new chain has a new expiry; leaving the old date would warn
+					// (or stay silent) about a certificate that is no longer there.
+					...(input.certificateData !== undefined && {
+						expiresAt: parseCertificateExpiry(input.certificateData),
+					}),
+				})
 				.where(eq(certificates.certificateId, certificateId))
 				.returning();
 			if (!certificate) {

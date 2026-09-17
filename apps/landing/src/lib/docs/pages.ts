@@ -765,6 +765,7 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 				items: [
 					"Per-service and host threshold alert rules",
 					"Uptime probes with flip notifications",
+					"Expiry warnings for uploaded TLS certificates, from 21 days out",
 					"Incident timeline on the Monitoring page — acknowledge records who is looking at it and leaves the incident open; resolve closes it with an optional note",
 					"Public status page at /status/<token>: chosen probes, their state, 90-day uptime and recent incident titles, on an unauthenticated link you can rotate or take offline",
 					"Fleet overview across local and remote servers",

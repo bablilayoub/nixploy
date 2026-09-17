@@ -118,10 +118,10 @@ New `service_event` table (`kind`: task_started · task_failed · oom_killed · 
 
 Annotations (`readOnlyHint` / `destructiveHint` / `idempotentHint`) on all 32 MCP tools; task tools `deploy_and_wait`, `explain_last_failure`, `get_service_runtime_summary`; MCP prompts (`troubleshoot_service`, `explain_failed_deploy`) and resources (`nixploy://service/{id}`, `nixploy://deployment/{id}/log`). Expose `ai.*` as CLI verbs. Publish `/llms.txt`, `/llms-full.txt`, `/agents.md` and per-page `.md` on the landing site, plus an installable agent skill. An **MCP setup** sheet next to API keys that renders the Claude Code / Cursor / Codex config snippets.
 
-### Also in v0.3 — two one-line fixes
+### Also in v0.3 — two one-line fixes ✅ *(landed 2026-09-17)*
 
-- Wire `certificate.autoRenew` to something, or remove the flag. A toggle that silently does nothing is worse than no toggle.
-- Finish DNS-01: pass `acmeDnsCredentials` to the Traefik service on write instead of printing a `docker service update --env-add` line for the operator to run by hand.
+- ~~Wire `certificate.autoRenew` to something, or remove the flag. A toggle that silently does nothing is worse than no toggle.~~ It could never have been wired to renewal — these are PEMs somebody pasted in. Replaced with what an operator actually needs: `expiry_alerts` + a parsed `expires_at`, an incident and a `certificateExpiry` notification from 21 days out (migration 0035).
+- ~~Finish DNS-01: pass `acmeDnsCredentials` to the Traefik service on write instead of printing a `docker service update --env-add` line for the operator to run by hand.~~ `ensureTraefikSetup` now pushes them itself, diffing the proxy's current environment first (an `--env-add` recreates the task, which is a ~9 s outage for every routed domain) and emitting only the keys the selected provider declares.
 
 ---
 

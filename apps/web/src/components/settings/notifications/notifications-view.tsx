@@ -138,6 +138,7 @@ export function NotificationsView() {
 												notification.serverThreshold && "Thresholds",
 												notification.serviceAlert && "Service alerts",
 												notification.uptimeFlip && "Uptime",
+												notification.certificateExpiry && "Cert expiry",
 											].filter(Boolean);
 											return (
 												<TableRow key={notification.notificationId}>

@@ -8,6 +8,7 @@ import { createLogger } from "../../lib/logger";
 import { getConfigDir } from "../application/paths";
 import { pruneServiceEvents } from "../observability/service-events";
 import { deletePreviewDeployment } from "../preview";
+import { warnAboutExpiringCertificates } from "../traefik/certificate-expiry";
 import { getDeploymentExplainPath } from "./paths";
 
 const log = createLogger("deployment-maintenance");
@@ -21,6 +22,7 @@ const log = createLogger("deployment-maintenance");
  *   older than the retention window
  * - prunes schedule run logs under `<config>/schedules`
  * - caps `incident`, `service_event` and `audit_log` rows
+ * - warns about uploaded TLS certificates that are about to expire
  *
  * Every step is best-effort: a failure on one preview, one row or one file
  * is logged and never stops the pass.
@@ -344,6 +346,7 @@ export async function runMaintenancePass(): Promise<void> {
 		["prune schedule logs", () => pruneScheduleLogs()],
 		["prune incidents", () => pruneIncidents()],
 		["prune service events", () => pruneServiceEvents()],
+		["warn about expiring certificates", () => warnAboutExpiringCertificates()],
 		["prune audit log", () => pruneAuditLogs()],
 	];
 	for (const [label, step] of steps) {

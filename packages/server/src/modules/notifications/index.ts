@@ -44,7 +44,8 @@ export type NotificationEvent =
 	| "dockerCleanup"
 	| "serverThreshold"
 	| "serviceAlert"
-	| "uptimeFlip";
+	| "uptimeFlip"
+	| "certificateExpiry";
 
 /**
  * Dispatch a payload to a single notification row, using the config column

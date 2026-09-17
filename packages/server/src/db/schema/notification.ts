@@ -36,6 +36,8 @@ export const notifications = pgTable("notification", {
 	serverThreshold: boolean("server_threshold").notNull().default(false),
 	serviceAlert: boolean("service_alert").notNull().default(false),
 	uptimeFlip: boolean("uptime_flip").notNull().default(false),
+	/** An uploaded TLS certificate is about to expire. */
+	certificateExpiry: boolean("certificate_expiry").notNull().default(false),
 	organizationId: text("organization_id")
 		.notNull()
 		.references(() => organizations.id, { onDelete: "cascade" }),

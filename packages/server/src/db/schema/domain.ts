@@ -1,5 +1,14 @@
 import { relations } from "drizzle-orm";
-import { boolean, index, integer, jsonb, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+	boolean,
+	index,
+	integer,
+	jsonb,
+	pgTable,
+	text,
+	timestamp,
+	uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { encryptedText } from "../custom-columns";
 import { applications } from "./application";
@@ -123,7 +132,19 @@ export const certificates = pgTable("certificate", {
 	privateKey: encryptedText("private_key").notNull(),
 	/** Path where the cert chain is written for Traefik's file provider. */
 	certificatePath: text("certificate_path").notNull(),
-	autoRenew: boolean("auto_renew").notNull().default(false),
+	/**
+	 * Warn before this certificate expires.
+	 *
+	 * This column used to be `auto_renew`, a toggle with **no consumer** — and
+	 * one that could never have had one: these are certificates somebody pasted
+	 * in, and Nixploy has no way to renew a PEM it did not issue. What an
+	 * operator actually needs is to hear about it before it lapses, which is
+	 * what this does. Defaults ON: a certificate that expires unnoticed is an
+	 * outage, and the alert is an incident row, not a pager.
+	 */
+	expiryAlerts: boolean("expiry_alerts").notNull().default(true),
+	/** `notAfter` parsed from the uploaded chain; NULL when it could not be read. */
+	expiresAt: timestamp("expires_at", { withTimezone: true }),
 	/**
 	 * Owning organization. Host certificates (`serverId` null) are written to
 	 * the shared Traefik dynamic dir, so without this column they would be

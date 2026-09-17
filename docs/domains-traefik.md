@@ -170,15 +170,24 @@ label, the same span a wildcard certificate covers — with
   provider appends a second resolver `letsencrypt-dns` to the static
   `traefik.yml` and restarts the proxy (both resolvers share `acme.json`,
   which Traefik keys by resolver name, so no new bind mount is needed).
-- The provider **credentials** are stored encrypted in the panel, but Traefik
-  reads them from its own process environment. Apply them once on the host:
+- The provider **credentials** are stored encrypted in the panel and pushed to
+  the proxy for you: saving them runs `docker service update --env-add …` on
+  `nixploy-traefik` (and `--env-rm` for the keys a previous provider set).
+  Nothing to apply by hand.
 
-  ```bash
-  docker service update --env-add CF_DNS_API_TOKEN=<token> nixploy-traefik
-  ```
+  Only the variables the **selected provider declares** are ever set — the
+  credentials blob is operator-supplied, and an arbitrary key would otherwise
+  be able to set anything in Traefik's environment. The panel diffs the current
+  environment first: `--env-add` recreates the proxy's task, which is a ~9 s
+  outage for every routed domain, and that is far too expensive to pay on a
+  settings save that changed nothing.
 
-  (One `--env-add` per variable; the settings card prints the exact list for
-  the selected provider.)
+  Worth knowing where the secret ends up: lego (which Traefik embeds) reads
+  DNS credentials from its process environment — there is no file or config
+  field for them — so the values are readable with `docker service inspect` on
+  a manager, and appear briefly on the host's process list while the update
+  runs. That is root-on-the-manager territory, which already holds the panel's
+  encryption key; no shape of this feature avoids it.
 - Certificate type **None** or **Custom** works for wildcards without any DNS
   provider.
 - Nixploy cannot prove that an organization owns the parent zone, and
@@ -313,6 +322,27 @@ a service with no domain row is deliberately not on it).
 Custom certificates: upload cert/key in Settings → Certificates, then choose
 **Custom** in the domain dialog; the pair is inlined into the app's dynamic
 YAML as `tls.certificates`.
+
+### Expiry warnings
+
+Nixploy reads `notAfter` from the leaf of the uploaded chain and shows how long
+is left on the Certificates table. With **Warn me before it expires** on (the
+default) it opens an incident, and fans out to any notification channel with
+**Certificate expiry** enabled, once a day from 21 days out — and keeps going
+after the date has passed, because a lapsed certificate is an outage rather
+than a reminder.
+
+This column used to be called **Auto-renew**, and it had no consumer. It could
+not have had one: these are certificates somebody pasted in, and Nixploy has no
+way to renew a PEM it did not issue — Let's Encrypt certificates are Traefik's
+business and renew themselves. What an operator actually needs is to hear about
+it in time, which is what the switch now does. Existing rows were migrated with
+warnings **on**, whatever the old toggle said.
+
+A chain the parser cannot read is uploaded anyway and simply shows an unknown
+expiry: a blob Node dislikes may still be one Traefik serves happily, and
+refusing the upload over a date we only wanted for a warning would be the tail
+wagging the dog.
 
 ## Compose domains
 

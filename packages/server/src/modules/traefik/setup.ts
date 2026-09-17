@@ -65,6 +65,8 @@ export interface AcmeDnsSettings {
 	provider: string;
 	/** Resolvers Traefik asks before considering the TXT record propagated. */
 	resolvers?: string[];
+	/** Provider credentials, as the env vars lego reads (`CF_DNS_API_TOKEN`, …). */
+	credentials?: Record<string, string> | null;
 }
 
 /** Only the codes above may be rendered — the value lands in the static YAML. */
@@ -73,6 +75,84 @@ const normalizeDnsProvider = (provider: string | null | undefined): string | nul
 	if (!code) return null;
 	return ACME_DNS_PROVIDERS.some((entry) => entry.code === code) ? code : null;
 };
+
+/** Env var names a provider is allowed to set (its entry in {@link ACME_DNS_PROVIDERS}). */
+const providerEnvKeys = (provider: string | null): readonly string[] =>
+	ACME_DNS_PROVIDERS.find((entry) => entry.code === provider)?.envKeys ?? [];
+
+/**
+ * The environment Traefik needs for the DNS-01 challenge.
+ *
+ * lego (which Traefik embeds) reads provider credentials from the process
+ * environment — there is no file or config field for them — so they have to
+ * reach the proxy as env vars on its Swarm service. Two consequences worth
+ * being explicit about: the values are readable with `docker service inspect`
+ * on a manager, and they are briefly on the host's process list while the
+ * `docker service` command runs. Both are root-on-the-manager territory, which
+ * already holds the panel's encryption key; there is no shape of this feature
+ * that avoids them.
+ *
+ * **Only the keys the selected provider declares are emitted.** The credentials
+ * blob is operator-supplied, and an arbitrary key would otherwise be able to
+ * set anything in Traefik's environment — or, with a crafted name, smuggle a
+ * second flag into the command.
+ */
+export function buildAcmeDnsEnv(
+	provider: string | null | undefined,
+	credentials: Record<string, string> | null | undefined,
+): Array<{ key: string; value: string }> {
+	const code = normalizeDnsProvider(provider);
+	if (!code || !credentials) return [];
+	const allowed = providerEnvKeys(code);
+	const env: Array<{ key: string; value: string }> = [];
+	for (const key of allowed) {
+		const value = credentials[key];
+		// A blank value is "not configured", not "set to empty": passing it would
+		// make lego fail with a confusing auth error instead of the clear
+		// "provider not configured" one.
+		if (typeof value !== "string" || value.trim() === "") continue;
+		env.push({ key, value });
+	}
+	return env;
+}
+
+/** Every env key any provider could have set, so switching providers cleans up. */
+const ALL_ACME_DNS_ENV_KEYS: readonly string[] = [
+	...new Set(ACME_DNS_PROVIDERS.flatMap((entry) => entry.envKeys as readonly string[])),
+];
+
+/**
+ * `--env-add` / `--env-rm` flags that move the proxy's current environment to
+ * the desired one, or `[]` when it already matches.
+ *
+ * Pure so the diff is testable: it decides whether the proxy's tasks are
+ * recreated, and recreating them is a ~9 s outage for every routed domain.
+ * Only keys this feature owns are ever removed — an operator who added their
+ * own env var to the service keeps it.
+ */
+export function buildAcmeDnsEnvUpdate(
+	current: readonly string[],
+	desired: ReadonlyArray<{ key: string; value: string }>,
+): string[] {
+	const currentPairs = new Map<string, string>();
+	for (const entry of current) {
+		const eq = entry.indexOf("=");
+		if (eq > 0) currentPairs.set(entry.slice(0, eq), entry.slice(eq + 1));
+	}
+	const desiredKeys = new Set(desired.map((entry) => entry.key));
+
+	const flags: string[] = [];
+	for (const key of ALL_ACME_DNS_ENV_KEYS) {
+		if (!desiredKeys.has(key) && currentPairs.has(key)) {
+			flags.push(`--env-rm ${shq(key)}`);
+		}
+	}
+	for (const entry of desired) {
+		if (currentPairs.get(entry.key) === entry.value) continue;
+		flags.push(`--env-add ${shq(`${entry.key}=${entry.value}`)}`);
+	}
+	return flags;
+}
 
 /**
  * Traefik v3 static configuration. The file provider watches the dynamic
@@ -143,7 +223,12 @@ export const getAcmeSettings = async (): Promise<{
 	const [settings] = await db.select().from(webServerSettings).limit(1);
 	return {
 		email: settings?.letsEncryptEmail ?? null,
-		dns: settings?.acmeDnsProvider ? { provider: settings.acmeDnsProvider } : null,
+		dns: settings?.acmeDnsProvider
+			? {
+					provider: settings.acmeDnsProvider,
+					credentials: (settings.acmeDnsCredentials ?? null) as Record<string, string> | null,
+				}
+			: null,
 	};
 };
 
@@ -157,6 +242,27 @@ const readStaticConfig = async (
 		return content || null;
 	}
 	return readFile(filePath, "utf8").catch(() => null);
+};
+
+/**
+ * The proxy service's current environment as `KEY=VALUE` lines. Empty when the
+ * service is missing or the daemon cannot be read — the caller then treats
+ * every desired variable as new, which is the safe direction (it sets them
+ * again rather than assuming they are already there).
+ */
+const readTraefikEnv = async (serverId: string | null | undefined): Promise<string[]> => {
+	try {
+		const out = await runOn(
+			serverId,
+			`docker service inspect --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' ${TRAEFIK_SERVICE_NAME}`,
+		);
+		return out
+			.split("\n")
+			.map((line) => line.trim())
+			.filter(Boolean);
+	} catch {
+		return [];
+	}
 };
 
 /**
@@ -282,7 +388,23 @@ export const ensureTraefikSetup = async (serverId?: string | null): Promise<void
 	// traefik.yml (new ACME email from Settings, a template change shipped by
 	// an upgrade) touches it, via a restart: the static config is read once at
 	// start, so rewriting the file alone changed nothing for the running proxy.
+	const dnsEnv = buildAcmeDnsEnv(acme.dns?.provider, acme.dns?.credentials);
+
 	if (await traefikServiceExists(serverId)) {
+		// The DNS-01 credentials live in the service's environment, so a changed
+		// token is applied with `--env-add` rather than by rewriting a file.
+		// Diffed first: `--env-add` recreates the proxy's task, and that is a
+		// ~9 s outage for every routed domain (measured) — far too expensive to
+		// pay on every settings save.
+		const envFlags = buildAcmeDnsEnvUpdate(await readTraefikEnv(serverId), dnsEnv);
+		if (envFlags.length > 0) {
+			await runOn(
+				serverId,
+				`docker service update --detach ${envFlags.join(" ")} ${TRAEFIK_SERVICE_NAME}`,
+			);
+			// That update already recreated the task, so it re-read traefik.yml too.
+			return;
+		}
 		if (staticChanged) {
 			await restartTraefik(serverId);
 		}
@@ -311,6 +433,7 @@ export const ensureTraefikSetup = async (serverId?: string | null): Promise<void
 			`--mount type=bind,source=${staticPath},destination=/etc/traefik/traefik.yml,readonly`,
 			`--mount type=bind,source=${dynamicDir},destination=${TRAEFIK_DYNAMIC_CONTAINER_DIR}`,
 			`--mount type=bind,source=${acmePath},destination=${TRAEFIK_ACME_CONTAINER_PATH}`,
+			...dnsEnv.map((entry) => `--env ${shq(`${entry.key}=${entry.value}`)}`),
 			TRAEFIK_IMAGE,
 		].join(" \\\n  "),
 	);
