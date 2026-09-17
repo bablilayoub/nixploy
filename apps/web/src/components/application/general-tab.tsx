@@ -8,15 +8,16 @@ import { SourceConfig } from "./source-config";
 
 export function GeneralTab() {
 	const application = useApplication();
-	const buildsFromSource = application.sourceType !== "docker" && application.sourceType !== "drop";
+	// Only a pre-built image skips the builder. A `drop` upload is extracted
+	// into the code directory and built exactly like a git checkout — the
+	// worker runs `buildImage` for it (deployment/worker.ts), so hiding the
+	// picker left the build type unreachable for the one source that most
+	// needs it set.
+	const buildsFromSource = application.sourceType !== "docker";
 	return (
 		<SettingsStack>
 			<SourceConfig application={application} />
-			{buildsFromSource ? (
-				<BuildTypeConfig application={application} />
-			) : (
-				<BuildTypeInfoCard sourceType={application.sourceType} />
-			)}
+			{buildsFromSource ? <BuildTypeConfig application={application} /> : <BuildTypeInfoCard />}
 			<ResourcesForm application={application} />
 		</SettingsStack>
 	);

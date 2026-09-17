@@ -80,6 +80,27 @@ export const findApplicationByAppNameForUser = async (
 	return membership ? application : null;
 };
 
+/**
+ * The id twin of `findApplicationByAppNameForUser`, for the surfaces that
+ * identify an application by id and a caller by user id alone (the drop
+ * upload route). Same contract: null covers both "does not exist" and
+ * "belongs to another tenant", so neither can be probed.
+ */
+export const findApplicationForUser = async (
+	applicationId: string,
+	userId: string,
+): Promise<ApplicationWithTenancy | null> => {
+	const application = await findApplication(applicationId);
+	if (!application) return null;
+	const membership = await db.query.members.findFirst({
+		where: and(
+			eq(members.userId, userId),
+			eq(members.organizationId, application.environment.project.organizationId),
+		),
+	});
+	return membership ? application : null;
+};
+
 /** Load an environment and verify org ownership. */
 export const assertEnvironmentAccess = async (environmentId: string, organizationId: string) => {
 	const environment = await db.query.environments.findFirst({

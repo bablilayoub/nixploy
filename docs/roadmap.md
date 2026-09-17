@@ -22,7 +22,7 @@ It was built from: a research pass over the competing panels' current feature se
 | --- | --- |
 | Can't deploy a specific commit/tag | ~~`application.deploy` took no ref~~ — **fixed 2026-09-17** |
 | Compose "Auto deploy" switch is inert | ~~the webhook handler queried `applications` only~~ — **fixed 2026-09-17** |
-| Drop/zip source can't be uploaded | `getDropZipPath` has readers ([sources.ts:398](../packages/server/src/modules/deployment/sources.ts:398), provenance.ts:110) and no writer anywhere |
+| Drop/zip source can't be uploaded | ~~readers but no writer~~ — **fixed 2026-09-17** |
 | `certificate.autoRenew` does nothing | stored + shown ([certificates-view.tsx:178](../apps/web/src/components/settings/certificates/certificates-view.tsx:178)), zero consumers |
 | DNS-01 is half-wired | only the provider *name* reaches `traefik.yml` ([setup.ts:146](../packages/server/src/modules/traefik/setup.ts:146)); credentials never reach the Traefik service |
 | Compose rejects what competitors accept | ~~`build:` and host `ports:` refused~~ — **both opt-in since 2026-09-17** |
@@ -98,7 +98,7 @@ Four half-built things at once, all in compose — auto-deploy, cancel, build-fr
 
 *Why it matters:* unblocks the importer, external template catalogues, and adopting running workloads. Every competing panel has all of this — it is table stakes for switching.
 
-### 3. Drop upload + CLI daily loop *(M)*
+### 3. Drop upload ✅ + CLI daily loop *(M — upload landed 2026-09-17)*
 
 The drop source is fully implemented on the worker side and has no way in. Add `application.createDropUpload` (a route handler streaming to `<config>/applications/<appName>/code.zip`, 0600, size-capped, zip-magic checked), drag-and-drop in the source panel, and `nixploy up` / `nixploy deploy --drop ./app.zip` — the flag the UI already tells people to use.
 

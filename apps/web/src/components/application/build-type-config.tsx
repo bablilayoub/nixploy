@@ -305,25 +305,16 @@ export function BuildTypeConfig({ application }: { application: Application }) {
 	);
 }
 
-/** Shown for docker/drop sources: no build step, the image is used as-is. */
-export function BuildTypeInfoCard({ sourceType }: { sourceType: Application["sourceType"] }) {
+/** Shown for a docker source: no build step, the image is used as-is. */
+export function BuildTypeInfoCard() {
 	return (
 		<SettingsSection title="Build" description="How the source is built into a deployable image.">
 			<div className="flex items-start gap-3 rounded-lg border border-dashed border-border p-4">
 				<Container className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
 				<p className="text-sm text-muted-foreground">
-					{sourceType === "docker" ? (
-						<>
-							This application deploys a pre-built <strong>Docker image</strong> — there is no build
-							step. To build from source instead, switch the source type to Git and pick a builder
-							here (Nixpacks, Railpack, Dockerfile, Static, buildpacks).
-						</>
-					) : (
-						<>
-							This application deploys an <strong>uploaded zip</strong> — there is no build step. To
-							build from source instead, switch the source type to Git and pick a builder here.
-						</>
-					)}
+					This application deploys a pre-built <strong>Docker image</strong> — there is no build
+					step. To build from source instead, switch the source type to Git or a zip upload and pick
+					a builder here (Nixpacks, Railpack, Dockerfile, Static, buildpacks).
 				</p>
 			</div>
 		</SettingsSection>

@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
+import { DropUpload } from "@/components/application/drop-upload";
 import {
 	GIT_PROVIDER_LABELS,
 	GitProviderRepoPicker,
@@ -477,17 +477,7 @@ export function SourceConfig({ application }: { application: Application }) {
 					</>
 				)}
 
-				{sourceType === "drop" && (
-					<div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-						Upload a <span className="font-medium text-foreground">.zip</span> of your project to
-						deploy it. Trigger a deployment with the{" "}
-						<span className="font-medium text-foreground">Deploy</span> button and upload the
-						archive through the Nixploy API or CLI (
-						<code className="rounded bg-muted px-1">nixploy deploy --drop ./app.zip</code>
-						). The zip is extracted into the application&apos;s code directory and built with the
-						selected build type.
-					</div>
-				)}
+				{sourceType === "drop" && <DropUpload applicationId={application.applicationId} />}
 
 				{isGitLike && (
 					<>

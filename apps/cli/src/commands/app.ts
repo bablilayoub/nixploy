@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { apiGet, apiPost } from "../client.js";
+import { apiGet, apiPost, apiUpload } from "../client.js";
 import { usageError } from "../errors.js";
 import { addOutputOptions, printRecord, printResult } from "../utils/output.js";
 import { followDeploymentLogs } from "./deployment.js";
@@ -189,6 +189,36 @@ export function augmentAppCommand(app: Command): Command {
 			domains: domains.map((domain) => domain.host).join(", "),
 		});
 	});
+
+	app
+		.command("upload")
+		.description("Upload the source archive of a drop (zip upload) application")
+		.argument("<applicationId>", "Application ID")
+		.argument("<archive>", "Path to a .zip of the project")
+		.option("--deploy", "Queue a deployment once the archive is stored")
+		.action(async (applicationId: string, archive: string, options: { deploy?: boolean }) => {
+			const { readFile } = await import("node:fs/promises");
+			let body: Buffer;
+			try {
+				body = await readFile(archive);
+			} catch {
+				throw usageError(`Cannot read ${archive}`);
+			}
+			const result = await apiUpload<{ bytes: number }>(
+				`api/applications/${encodeURIComponent(applicationId)}/source`,
+				body,
+			);
+			printResult({ applicationId, bytes: result.bytes }, `Uploaded ${result.bytes} bytes.`);
+			if (options.deploy) {
+				const deployment = await apiPost<{ deploymentId: string }>("application.deploy", {
+					applicationId,
+				});
+				printResult(
+					{ deploymentId: deployment.deploymentId },
+					`Deployment ${deployment.deploymentId} queued.`,
+				);
+			}
+		});
 
 	addServiceEnvCommands(app, "app", "<applicationId>", "Application ID");
 

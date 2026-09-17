@@ -192,6 +192,45 @@ export const apiPost = <T>(
  * `/api/health`): needs the base URL only, no API key. Non-2xx responses
  * still resolve — readiness returns 503 with a body worth showing.
  */
+/**
+ * POST a binary body to a route handler outside the tRPC surface (today only
+ * the drop-source upload). Kept beside `api` so URL, key and organization
+ * resolution stay in one place, but it does not go through `/api/<router>.<proc>`
+ * and its timeout scales with the payload — a 200 MB archive on a slow link
+ * would otherwise trip the 30 s default.
+ */
+export async function apiUpload<T = unknown>(
+	path: string,
+	body: Uint8Array,
+	options: RequestOptions = {},
+): Promise<T> {
+	const baseUrl = resolveApiUrl(options.apiUrl);
+	const apiKey = resolveApiKey(options.apiKey);
+	const organizationId = resolveOrganizationId(options.organizationId);
+
+	const response = await fetch(new URL(`${baseUrl}/${path.replace(/^\//, "")}`), {
+		method: "POST",
+		headers: {
+			"x-api-key": apiKey,
+			"user-agent": USER_AGENT,
+			"content-type": "application/zip",
+			...(organizationId ? { "x-organization-id": organizationId } : {}),
+		},
+		body,
+		signal: AbortSignal.timeout(options.timeoutMs ?? 10 * 60_000),
+	});
+
+	const text = await response.text();
+	const parsed = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+	if (!response.ok) {
+		throw new ApiError(
+			typeof parsed.message === "string" ? parsed.message : `Upload failed (${response.status})`,
+			response.status,
+		);
+	}
+	return parsed as T;
+}
+
 export async function apiPublic<T = unknown>(
 	path: string,
 	options?: Pick<RequestOptions, "apiUrl">,
