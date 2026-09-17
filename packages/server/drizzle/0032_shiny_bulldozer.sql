@@ -1,0 +1,1 @@
+ALTER TABLE "compose" ADD COLUMN "publish_ports" boolean DEFAULT false NOT NULL;

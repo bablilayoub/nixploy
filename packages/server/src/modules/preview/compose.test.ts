@@ -29,6 +29,7 @@ const row = {
 	autoDeploy: true,
 	watchPaths: null,
 	buildEnabled: false,
+	publishPorts: false,
 	buildArgs: null,
 	isPreviewDeploymentsActive: true,
 	previewForksRequireApproval: true,

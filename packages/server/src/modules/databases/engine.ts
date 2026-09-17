@@ -12,7 +12,7 @@ import {
 } from "../../db/schema";
 import { bestEffort } from "../../utils/best-effort";
 import { execAsyncRemote } from "../../utils/exec";
-import { assertSafePublishedPort } from "../../utils/validators";
+import { assertSafeTenantHostPort } from "../../utils/validators";
 import { mergeNodeConstraint } from "../cluster/placement";
 import { resolveLocalPublicHost } from "../cluster/public-host";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
@@ -26,7 +26,7 @@ import {
 	defaultUlimits,
 	loadQuotaDefaults,
 } from "../deployment/swarm";
-import { badRequest, conflict, notFound, preconditionFailed } from "../errors";
+import { conflict, notFound, preconditionFailed } from "../errors";
 import type { QuotaResourceDefaults } from "../projects/quotas";
 import { randomAppNameSuffix, slugifyName } from "../services/app-name";
 import { SERVICE_REGISTRY } from "../services/registry";
@@ -522,22 +522,6 @@ export function buildDatabaseSwarmSpec(
 }
 
 /**
- * Host ports the platform itself owns. `assertSafePublishedPort` already
- * refuses everything below 1024 (80/443) plus the well-known database ports
- * (5432/3306/6379/27017) and the Docker/Swarm control ports, but not the
- * panel's own :3000 — publishing a database there would make the swarm
- * ingress fight the panel for the port on every node.
- */
-const platformReservedPorts = (): Set<number> => {
-	const reserved = new Set<number>([3000, 4789, 7946]);
-	const panelPort = Number.parseInt(process.env.NIXPLOY_PORT ?? "", 10);
-	if (Number.isInteger(panelPort)) reserved.add(panelPort);
-	const appPort = Number.parseInt(process.env.PORT ?? "", 10);
-	if (Number.isInteger(appPort)) reserved.add(appPort);
-	return reserved;
-};
-
-/**
  * Validate a database's opt-in external port.
  *
  * Swarm's host-mode publish binds **every** interface (there is no
@@ -546,12 +530,7 @@ const platformReservedPorts = (): Set<number> => {
  * of the shared privileged/sensitive-port deny list.
  */
 export function assertSafeDatabaseExternalPort(port: number): void {
-	assertSafePublishedPort(port, "externalPort");
-	if (platformReservedPorts().has(port)) {
-		throw badRequest(
-			`externalPort ${port} is reserved by the Nixploy platform (panel / swarm control plane)`,
-		);
-	}
+	assertSafeTenantHostPort(port, "externalPort");
 }
 
 // ── network ─────────────────────────────────────────────────────────────────

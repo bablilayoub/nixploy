@@ -72,6 +72,7 @@ export function GeneralTab({
 		isolatedDeployment: compose.isolatedDeployment,
 		autoDeploy: compose.autoDeploy,
 		buildEnabled: compose.buildEnabled,
+		publishPorts: compose.publishPorts,
 		buildArgs: compose.buildArgs ?? "",
 		sourceType: compose.sourceType,
 		gitUrl: compose.gitUrl ?? "",
@@ -89,6 +90,7 @@ export function GeneralTab({
 		autoDeploy,
 		buildEnabled,
 		buildArgs,
+		publishPorts,
 		sourceType,
 		gitUrl,
 		gitBranch,
@@ -191,6 +193,7 @@ export function GeneralTab({
 			autoDeploy,
 			buildEnabled,
 			buildArgs: buildArgs.trim() || null,
+			publishPorts,
 			sourceType,
 			gitUrl: sourceType === "git" ? gitUrl || null : null,
 			gitBranch: sourceType === "git" ? gitBranch || null : null,
@@ -294,6 +297,22 @@ export function GeneralTab({
 							</p>
 						</div>
 					)}
+					<div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+						<div>
+							<Label htmlFor="publish-ports">Publish host ports</Label>
+							<p className="text-sm text-muted-foreground">
+								Let services in this stack bind host ports with <code>ports:</code>. A published
+								port bypasses Traefik, so domains, TLS and middlewares do not apply to it.
+								Privileged, database and platform ports stay blocked.
+							</p>
+						</div>
+						<Switch
+							id="publish-ports"
+							checked={publishPorts}
+							disabled={!canWrite}
+							onCheckedChange={(checked) => draft.patch({ publishPorts: checked })}
+						/>
+					</div>
 					<div className="flex flex-col gap-2">
 						<Label htmlFor="compose-pre-deploy">Pre-deploy command</Label>
 						<Textarea

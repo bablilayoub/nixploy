@@ -1,6 +1,7 @@
 import { badRequest } from "../errors";
 import { parseBuildBlock } from "./build";
 import { type ComposeFileSpec, type ComposeServiceSpec, ComposeValidationError } from "./parse";
+import { assertSafeComposePorts } from "./ports";
 
 /**
  * Compose safety policy: what a tenant file may not do (host escapes, shared
@@ -86,6 +87,11 @@ export interface ComposeSafetyOptions {
 	 * has not opted in must not be able to make compose read a host path.
 	 */
 	allowBuild?: boolean;
+	/**
+	 * Allow `ports:` (validated by `./ports.ts`). Off by default — see the
+	 * `publishPorts` column for why.
+	 */
+	allowPorts?: boolean;
 }
 
 /** Safety options used for instance-admin host-privileged compose rows. */
@@ -437,6 +443,9 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 	if (spec.extends !== undefined && spec.extends !== null) {
 		throw badRequest('Compose top-level "extends" is not allowed');
 	}
+	// Published ports are validated across the whole spec (host-port clashes
+	// between two services matter), not per service like everything else.
+	if (options?.allowPorts) assertSafeComposePorts(spec);
 	assertSafeNamedVolumes(spec.volumes);
 	assertSafeConfigsOrSecrets("configs", spec.configs);
 	assertSafeConfigsOrSecrets("secrets", spec.secrets);
@@ -581,9 +590,9 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 		assertSafeUlimits(serviceName, service.ulimits);
 		assertSafeDeploy(serviceName, service.deploy);
 
-		if (service.ports !== undefined && service.ports !== null) {
+		if (service.ports !== undefined && service.ports !== null && !options?.allowPorts) {
 			throw new ComposeValidationError(
-				`Compose service "${serviceName}" must not publish host ports (use Nixploy domains / Traefik)`,
+				`Compose service "${serviceName}" must not publish host ports (use Nixploy domains / Traefik, or enable "Publish host ports" on the stack)`,
 			);
 		}
 

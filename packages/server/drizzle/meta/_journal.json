@@ -225,6 +225,13 @@
       "when": 1789665670957,
       "tag": "0031_conscious_squadron_supreme",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1789666178286,
+      "tag": "0032_shiny_bulldozer",
+      "breakpoints": true
     }
   ]
 }

@@ -438,6 +438,7 @@ export async function prepareComposeFiles(
 	const safety: ComposeSafetyOptions = {
 		...(composeRow.hostPrivileged ? hostPrivilegedComposeSafety() : {}),
 		allowBuild: composeRow.buildEnabled,
+		allowPorts: composeRow.publishPorts,
 	};
 
 	// Build first, render second: the rendered file must not contain `build:`
@@ -856,10 +857,13 @@ export async function saveComposeFile(
 	const keepPrivileged = composeRow.hostPrivileged && options.callerIsInstanceAdmin === true;
 	// validate before persisting so a broken / unsafe file is rejected early
 	listComposeServices(composeFile);
-	assertSafeComposeSpec(
-		parseComposeFile(composeFile),
-		keepPrivileged ? hostPrivilegedComposeSafety() : undefined,
-	);
+	// Same options the deploy-time render uses, so a file that would deploy is
+	// not refused at save (and one that would be refused is caught here first).
+	assertSafeComposeSpec(parseComposeFile(composeFile), {
+		...(keepPrivileged ? hostPrivilegedComposeSafety() : {}),
+		allowBuild: composeRow.buildEnabled,
+		allowPorts: composeRow.publishPorts,
+	});
 	await db
 		.update(compose)
 		.set({

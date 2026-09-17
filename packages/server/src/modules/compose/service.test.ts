@@ -66,6 +66,7 @@ const privilegedRow = {
 	autoDeploy: true,
 	watchPaths: null,
 	buildEnabled: false,
+	publishPorts: false,
 	buildArgs: null,
 	isPreviewDeploymentsActive: false,
 	previewForksRequireApproval: true,

@@ -25,7 +25,7 @@ It was built from: a research pass over the competing panels' current feature se
 | Drop/zip source can't be uploaded | `getDropZipPath` has readers ([sources.ts:398](../packages/server/src/modules/deployment/sources.ts:398), provenance.ts:110) and no writer anywhere |
 | `certificate.autoRenew` does nothing | stored + shown ([certificates-view.tsx:178](../apps/web/src/components/settings/certificates/certificates-view.tsx:178)), zero consumers |
 | DNS-01 is half-wired | only the provider *name* reaches `traefik.yml` ([setup.ts:146](../packages/server/src/modules/traefik/setup.ts:146)); credentials never reach the Traefik service |
-| Compose rejects what competitors accept | `build:` **supported since 2026-09-17** (opt-in per stack); host `ports:` still refused [safety.ts:572](../packages/server/src/modules/compose/safety.ts:572) |
+| Compose rejects what competitors accept | ~~`build:` and host `ports:` refused~~ — **both opt-in since 2026-09-17** |
 | REST responses untyped | 0 routers call `.output()` |
 | Runtime logs never persisted | `ingestServiceLog` has one caller — the deploy worker on failure, [worker.ts:655](../packages/server/src/modules/deployment/worker.ts:655) |
 | SSO is env-only, no UI | [modules/auth/sso.ts](../packages/server/src/modules/auth/sso.ts) reads `NIXPLOY_OIDC_*` |
@@ -64,7 +64,7 @@ Listing these so the backlog stays honest:
 
 ## Release plan
 
-Four releases plus a continuous trust track. Order chosen because **compose parity is a hard prerequisite for the importer**: real-world compose stacks routinely use `build:` and published `ports:`, which Nixploy refused. `build:` landed 2026-09-17; published ports remain.
+Four releases plus a continuous trust track. Order chosen because **compose parity is a hard prerequisite for the importer**: real-world compose stacks routinely use `build:` and published `ports:`, which Nixploy refused. Both landed 2026-09-17.
 
 | Release | Theme | Contents | Size |
 | --- | --- | --- | --- |
@@ -86,9 +86,9 @@ Every item here closes a gap that is either embarrassing (a UI switch that does 
 
 Still to do in this slice: tag-triggered deploys (`tagPattern` + `deployOnTag` on push webhooks), `listRefs` for a branch/tag picker instead of a free-text field, and rollback-with-config (`currentDeploymentId`, an encrypted env snapshot on the rollback row, and drift detection when the orchestrator rolls back behind the panel's back).
 
-### 2. Compose parity pack *(L — the prerequisite, landed 2026-09-17 except host ports)*
+### 2. ✅ Compose parity pack *(L — the prerequisite, landed 2026-09-17)*
 
-Four half-built things at once, all in compose. **Auto-deploy, cancel, build-from-source and mounts shipped**; published host ports remain.
+Four half-built things at once, all in compose — auto-deploy, cancel, build-from-source, mounts and published host ports. All shipped.
 
 **Build from source.** `compose.buildEnabled` / `buildPushRegistryId` / `buildArgs` columns. [`compose/safety.ts`](../packages/server/src/modules/compose/safety.ts) gains an `allowBuild` option accepting a bounded `build:` shape only — `context` (realpath-confined inside the checkout), `dockerfile`, `args` (keys only), `target`; still rejecting `dockerfile_inline`, `ssh`, `secrets`, `network`, `cache_from`. New `compose/build.ts` runs the existing Dockerfile builder per build service, tags `<appName>-<svc>:<deploymentId>`, optionally pushes, and [`rewrite.ts`](../packages/server/src/modules/compose/rewrite.ts) swaps `build:` for `image:` in the rendered file. Worker order becomes checkout → render → safety(raw+rendered) → build → `compose up`, with a cancel checkpoint per service. Snapshots store the image tags so rollback re-renders with the old ones.
 

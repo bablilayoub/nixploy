@@ -131,6 +131,36 @@ export function assertSafePublishedPort(port: number, label = "publishedPort"): 
 }
 
 /**
+ * Host ports the platform itself owns. `assertSafePublishedPort` already
+ * refuses everything below 1024 (80/443) plus the well-known database ports
+ * and the Docker/Swarm control ports, but not the panel's own :3000 —
+ * publishing there would make the swarm ingress fight the panel for the port
+ * on every node.
+ */
+export const platformReservedPorts = (): Set<number> => {
+	const reserved = new Set<number>([3000, 4789, 7946]);
+	const panelPort = Number.parseInt(process.env.NIXPLOY_PORT ?? "", 10);
+	if (Number.isInteger(panelPort)) reserved.add(panelPort);
+	const appPort = Number.parseInt(process.env.PORT ?? "", 10);
+	if (Number.isInteger(appPort)) reserved.add(appPort);
+	return reserved;
+};
+
+/**
+ * A host port a tenant workload may publish: the shared privileged/sensitive
+ * deny list plus the platform's own ports. Used by managed databases and by
+ * compose stacks that opted into publishing ports.
+ */
+export function assertSafeTenantHostPort(port: number, label = "publishedPort"): void {
+	assertSafePublishedPort(port, label);
+	if (platformReservedPorts().has(port)) {
+		throw badRequest(
+			`${label} ${port} is reserved by the Nixploy platform (panel / swarm control plane)`,
+		);
+	}
+}
+
+/**
  * Safe `docker pull` / image reference: no whitespace, no leading dashes
  * (flag injection), and only common OCI ref characters.
  */

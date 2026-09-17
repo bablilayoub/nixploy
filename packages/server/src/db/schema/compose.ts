@@ -42,6 +42,14 @@ export const compose = pgTable(
 		/** `KEY=VALUE` build args shared by every build service of the stack. */
 		buildArgs: encryptedText("build_args"),
 
+		/**
+		 * Allow the stack to publish host ports. Off by default: a stack that
+		 * binds :80/:443 fights Traefik for the port and routes around domains,
+		 * TLS and middlewares entirely. Opting in still cannot take a
+		 * privileged, well-known-database or platform-owned port.
+		 */
+		publishPorts: boolean("publish_ports").notNull().default(false),
+
 		// ── previews ────────────────────────────────────────────────────────────
 		// Same names and semantics as the application columns (see
 		// `schema/application.ts`); `modules/preview` reads both through one

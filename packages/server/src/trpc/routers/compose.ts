@@ -176,6 +176,13 @@ export const composeRouter = router({
 				 */
 				buildEnabled: z.boolean().optional(),
 				buildArgs: textBlobSchema.nullish(),
+				/**
+				 * Let the stack publish host ports. Turning it ON is
+				 * instance-admin only: a published port bypasses Traefik, so it
+				 * escapes domains, TLS, middlewares and the access log the same
+				 * way a host-privileged stack escapes the container baseline.
+				 */
+				publishPorts: z.boolean().optional(),
 				// Preview knobs — identical names, bounds and semantics to the
 				// application router's (see `routers/application.ts`).
 				isPreviewDeploymentsActive: z.boolean().optional(),
@@ -213,6 +220,12 @@ export const composeRouter = router({
 			// row is instance-admin only — same gate as `saveComposeFile`.
 			let callerIsInstanceAdmin = false;
 			if (row.hostPrivileged) {
+				await assertInstanceAdmin(ctx.session);
+				callerIsInstanceAdmin = true;
+			}
+
+			// Turning publishing ON needs the instance admin; turning it off does not.
+			if (input.publishPorts === true && !row.publishPorts) {
 				await assertInstanceAdmin(ctx.session);
 				callerIsInstanceAdmin = true;
 			}
