@@ -392,7 +392,7 @@ const docs: Record<string, ProcedureDoc> = {
 	"compose.update": {
 		summary: "Update a compose service",
 		description:
-			"Source, compose path, isolation suffix, auto-deploy and watch paths. Isolated deployments rename every service in the rendered file.",
+			"Source, compose path, isolation suffix, auto-deploy, watch paths and build-from-source settings. Isolated deployments rename every service in the rendered file; enabling buildEnabled lets the stack use build: blocks, which Nixploy builds and rewrites to image: before deploying.",
 		capability: ["service.write"],
 		instanceAdmin: true,
 	},

@@ -31,6 +31,17 @@ export const compose = pgTable(
 		autoDeploy: boolean("auto_deploy").notNull().default(true),
 		watchPaths: text("watch_paths").array(),
 
+		// ── build from source ───────────────────────────────────────────────────
+		/**
+		 * Allow `build:` blocks in the compose file. Off by default: Nixploy
+		 * builds those images itself and rewrites them to `image:` before the
+		 * file reaches docker (see `modules/compose/build.ts`), so a stack that
+		 * has not opted in is still refused at safety-check time.
+		 */
+		buildEnabled: boolean("build_enabled").notNull().default(false),
+		/** `KEY=VALUE` build args shared by every build service of the stack. */
+		buildArgs: encryptedText("build_args"),
+
 		// ── previews ────────────────────────────────────────────────────────────
 		// Same names and semantics as the application columns (see
 		// `schema/application.ts`); `modules/preview` reads both through one

@@ -1,6 +1,7 @@
 import { stringify } from "yaml";
 import { getSwarmNetwork } from "../application/paths";
 import { mergeNodeConstraint } from "../cluster/placement";
+import { applyBuiltImages } from "./build";
 import { escapeComposeInterpolation, renderComposeSpec } from "./interpolate";
 import {
 	type ComposeEnv,
@@ -210,6 +211,13 @@ export interface DeployComposeInput {
 	 * to (`getServerSwarmNodeId`); every service is placed on it.
 	 */
 	swarmNodeId?: string | null;
+	/**
+	 * Images Nixploy built for services that declare `build:`, keyed by the
+	 * RAW service name (before the suffix). Each one replaces its `build:`
+	 * block, so the deployed file only ever pulls. Empty on the
+	 * validation-only paths, where nothing has been built yet.
+	 */
+	builtImages?: ReadonlyMap<string, string>;
 }
 
 /**
@@ -227,6 +235,9 @@ export function buildDeployComposeFile(
 	assertSafeComposeSpec(raw, options);
 	let spec = renderComposeSpec(raw, input.env ?? {});
 	assertSafeComposeSpec(spec, options);
+	// Before anything renames services: `builtImages` is keyed by the raw
+	// name, and after this step the file has no `build:` left at all.
+	spec = applyBuiltImages(spec, input.builtImages ?? new Map());
 
 	const suffix = input.suffix || "";
 	if (suffix) {

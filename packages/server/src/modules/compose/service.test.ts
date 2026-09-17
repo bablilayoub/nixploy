@@ -65,6 +65,8 @@ const privilegedRow = {
 	composePath: "./docker-compose.yml",
 	autoDeploy: true,
 	watchPaths: null,
+	buildEnabled: false,
+	buildArgs: null,
 	isPreviewDeploymentsActive: false,
 	previewForksRequireApproval: true,
 	previewEnv: null,

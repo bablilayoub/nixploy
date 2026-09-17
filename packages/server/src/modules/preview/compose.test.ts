@@ -28,6 +28,8 @@ const row = {
 	composePath: "./compose.yaml",
 	autoDeploy: true,
 	watchPaths: null,
+	buildEnabled: false,
+	buildArgs: null,
 	isPreviewDeploymentsActive: true,
 	previewForksRequireApproval: true,
 	previewEnv: null,

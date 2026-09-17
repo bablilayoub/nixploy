@@ -71,6 +71,8 @@ export function GeneralTab({
 		composeType: compose.composeType,
 		isolatedDeployment: compose.isolatedDeployment,
 		autoDeploy: compose.autoDeploy,
+		buildEnabled: compose.buildEnabled,
+		buildArgs: compose.buildArgs ?? "",
 		sourceType: compose.sourceType,
 		gitUrl: compose.gitUrl ?? "",
 		gitBranch: compose.gitBranch ?? "",
@@ -85,6 +87,8 @@ export function GeneralTab({
 		composeType,
 		isolatedDeployment,
 		autoDeploy,
+		buildEnabled,
+		buildArgs,
 		sourceType,
 		gitUrl,
 		gitBranch,
@@ -185,6 +189,8 @@ export function GeneralTab({
 			composeType,
 			isolatedDeployment,
 			autoDeploy,
+			buildEnabled,
+			buildArgs: buildArgs.trim() || null,
 			sourceType,
 			gitUrl: sourceType === "git" ? gitUrl || null : null,
 			gitBranch: sourceType === "git" ? gitBranch || null : null,
@@ -255,6 +261,39 @@ export function GeneralTab({
 							onCheckedChange={(checked) => draft.patch({ autoDeploy: checked })}
 						/>
 					</div>
+					<div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+						<div>
+							<Label htmlFor="build-enabled">Build services from source</Label>
+							<p className="text-sm text-muted-foreground">
+								Let services in this stack use <code>build:</code>. Nixploy builds each one from the
+								repository and deploys the resulting image — compose never reads a path on the host.
+							</p>
+						</div>
+						<Switch
+							id="build-enabled"
+							checked={buildEnabled}
+							disabled={!canWrite}
+							onCheckedChange={(checked) => draft.patch({ buildEnabled: checked })}
+						/>
+					</div>
+					{buildEnabled && (
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="compose-build-args">Build args</Label>
+							<Textarea
+								id="compose-build-args"
+								className="min-h-16 font-mono text-xs sm:max-w-lg"
+								placeholder="NODE_ENV=production"
+								value={buildArgs}
+								disabled={!canWrite}
+								onChange={(event) => draft.patch({ buildArgs: event.target.value })}
+							/>
+							<p className="text-sm text-muted-foreground">
+								One <code>KEY=VALUE</code> per line, shared by every build service of the stack.
+								Credential-shaped keys are passed as BuildKit secrets instead of build args, so they
+								stay out of the image history.
+							</p>
+						</div>
+					)}
 					<div className="flex flex-col gap-2">
 						<Label htmlFor="compose-pre-deploy">Pre-deploy command</Label>
 						<Textarea

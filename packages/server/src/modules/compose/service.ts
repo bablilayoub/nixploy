@@ -16,6 +16,7 @@ import { assertSafeAppName } from "../../utils/validators";
 import { getSwarmNetwork } from "../application/paths";
 import { unregisterBackupsForService } from "../backups/scheduler";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
+import type { DeploymentContext } from "../deployment/context";
 import { removeServiceLogs } from "../deployment/maintenance";
 import { ensureEnvironmentNetworkById, pruneEnvironmentNetwork } from "../deployment/network";
 import { badRequest, conflict, notFound, preconditionFailed } from "../errors";
@@ -23,6 +24,8 @@ import { unregisterSchedulesForService } from "../schedules";
 import { generateAppName, isAppNameTaken, randomAppNameSuffix } from "../services/app-name";
 import { toTraefikDomainEntry } from "../traefik/config-writer";
 import { getTraefik } from "./adapters";
+import { collectComposeBuildTargets } from "./build";
+import { buildComposeImages } from "./build-runner";
 import {
 	buildComposeDeployCommand,
 	buildComposeDownCommand,
@@ -38,6 +41,7 @@ import {
 import {
 	assertSafeComposeSpec,
 	buildDeployComposeFile,
+	type ComposeSafetyOptions,
 	composeEnvMap,
 	hostPrivilegedComposeSafety,
 	listComposeServices,
@@ -353,6 +357,19 @@ export interface PrepareComposeFilesOptions {
 	 * them. Pass `null` to skip the snapshot entirely.
 	 */
 	deploymentId?: string | null;
+	/**
+	 * Deploy context for stacks that build from source. When the row has
+	 * `buildEnabled` and the file declares `build:` services, their images are
+	 * built here (before the render) and the rendered file points at them.
+	 * Absent on the paths that only re-render an already-deployed stack
+	 * (start/stop/domain resync), which must never trigger a build.
+	 */
+	build?: {
+		ctx: DeploymentContext;
+		deploymentId: string;
+		/** Called before each service builds, so a cancel lands between builds. */
+		onBeforeService?: (serviceName: string) => Promise<void> | void;
+	};
 }
 
 /**
@@ -416,6 +433,27 @@ export async function prepareComposeFiles(
 	// the compose/stack command runs.
 	const environmentNetwork = await ensureEnvironmentNetworkById(composeRow.environmentId);
 
+	const safety: ComposeSafetyOptions = {
+		...(composeRow.hostPrivileged ? hostPrivilegedComposeSafety() : {}),
+		allowBuild: composeRow.buildEnabled,
+	};
+
+	// Build first, render second: the rendered file must not contain `build:`
+	// at all, so docker never resolves a context itself. Only a real deploy
+	// passes `options.build`; every other render reuses whatever images the
+	// last deploy produced (they are tagged per deployment and kept).
+	let builtImages: ReadonlyMap<string, string> = new Map();
+	if (composeRow.buildEnabled && options.build) {
+		const targets = collectComposeBuildTargets(parseComposeFile(rawContent));
+		builtImages = await buildComposeImages(
+			options.build.ctx,
+			composeRow,
+			targets,
+			options.build.deploymentId,
+			options.build.onBeforeService,
+		);
+	}
+
 	const transformed = buildDeployComposeFile(
 		rawContent,
 		{
@@ -426,8 +464,9 @@ export async function prepareComposeFiles(
 			exposedServices: await exposedServiceNames(composeRow.composeId),
 			environmentNetwork,
 			swarmNodeId,
+			builtImages,
 		},
-		composeRow.hostPrivileged ? hostPrivilegedComposeSafety() : undefined,
+		safety,
 	);
 	// Both carry resolved secrets — owner-only.
 	await writeComposeFile(composeRow, composeFilePath, transformed, {

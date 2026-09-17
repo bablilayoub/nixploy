@@ -1,4 +1,5 @@
 import { badRequest } from "../errors";
+import { parseBuildBlock } from "./build";
 import { type ComposeFileSpec, type ComposeServiceSpec, ComposeValidationError } from "./parse";
 
 /**
@@ -79,6 +80,12 @@ export interface ComposeSafetyOptions {
 	allowCapabilities?: ReadonlySet<string> | readonly string[];
 	/** Allow `sysctls` (needed for VPN templates like wg-easy). */
 	allowSysctls?: boolean;
+	/**
+	 * Allow `build:` blocks (validated by `./build.ts`, then built by Nixploy
+	 * and replaced with `image:` before deploy). Off by default: a stack that
+	 * has not opted in must not be able to make compose read a host path.
+	 */
+	allowBuild?: boolean;
 }
 
 /** Safety options used for instance-admin host-privileged compose rows. */
@@ -442,9 +449,14 @@ export function assertSafeComposeSpec(spec: ComposeFileSpec, options?: ComposeSa
 			throw new ComposeValidationError(`Compose service "${serviceName}" must not use extends`);
 		}
 		if (service.build !== undefined && service.build !== null) {
-			throw new ComposeValidationError(
-				`Compose service "${serviceName}" must not use build: (host context / dockerfile_inline reads are blocked)`,
-			);
+			if (!options?.allowBuild) {
+				throw new ComposeValidationError(
+					`Compose service "${serviceName}" must not use build: (enable "Build services from source" on the stack to allow it)`,
+				);
+			}
+			// Validates the block's shape and refuses every escape hatch
+			// (dockerfile_inline, ssh, remote contexts, `..` paths).
+			parseBuildBlock(serviceName, service.build);
 		}
 		if (service.env_file !== undefined && service.env_file !== null) {
 			throw new ComposeValidationError(

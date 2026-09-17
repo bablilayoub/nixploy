@@ -41,6 +41,9 @@ export function redactComposeSecrets<T>(row: T): T {
 		preDeployCommand: null,
 		postDeployCommand: null,
 		previewEnv: null,
+		// Build args routinely carry tokens (private registries, package
+		// feeds) and land in the image build, so they follow the same rule.
+		buildArgs: null,
 	};
 	const environment = source.environment as
 		| ({ env?: string | null; project?: Record<string, unknown> } & Record<string, unknown>)

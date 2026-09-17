@@ -169,6 +169,13 @@ export const composeRouter = router({
 				composePath: z.string().min(1).optional(),
 				autoDeploy: z.boolean().optional(),
 				watchPaths: watchPathsSchema.nullish(),
+				/**
+				 * Let the stack's `build:` services build from the repository.
+				 * Nixploy builds them and rewrites them to `image:` before the
+				 * file reaches docker (`modules/compose/build.ts`).
+				 */
+				buildEnabled: z.boolean().optional(),
+				buildArgs: textBlobSchema.nullish(),
 				// Preview knobs — identical names, bounds and semantics to the
 				// application router's (see `routers/application.ts`).
 				isPreviewDeploymentsActive: z.boolean().optional(),
@@ -217,7 +224,8 @@ export const composeRouter = router({
 			if (
 				input.preDeployCommand !== undefined ||
 				input.postDeployCommand !== undefined ||
-				input.previewEnv !== undefined
+				input.previewEnv !== undefined ||
+				input.buildArgs !== undefined
 			) {
 				// Hook commands are shell and `previewEnv` holds credentials —
 				// both are redacted like other secrets.

@@ -464,6 +464,15 @@ async function runComposeJob(
 	// one would offer a PR's file as a production rollback target.
 	const files = await prepareComposeFiles(target, {
 		deploymentId: preview ? null : job.deploymentId,
+		// Only a real deploy builds: `prepareComposeFiles` is also called by
+		// start/stop/domain resync, which must reuse the images the last deploy
+		// produced rather than rebuild behind the operator's back. Previews of a
+		// build-enabled stack build their own images under the preview appName.
+		build: {
+			ctx,
+			deploymentId: job.deploymentId,
+			onBeforeService: () => checkpoint(),
+		},
 	});
 	for (const secret of files.secrets) ctx.logger.addSecret(secret);
 	checkpoint();
