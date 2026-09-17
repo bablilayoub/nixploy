@@ -272,6 +272,7 @@ async function runApplicationJob(
 	if (registryAuth) ctx.logger.addSecret(registryAuth.password);
 
 	let imageTag: string;
+	await ctx.step("source");
 	if (application.sourceType === "docker") {
 		ctx.logger.line("Using docker image source");
 		imageTag = await pullDockerImage(ctx, application);
@@ -302,6 +303,7 @@ async function runApplicationJob(
 		}
 
 		const buildDir = resolveBuildDir(codeDir, application.buildPath || "/");
+		await ctx.step("build");
 		imageTag = await buildImage({
 			ctx,
 			application: deployTarget,
@@ -321,6 +323,7 @@ async function runApplicationJob(
 	// against the environment the production service shares.
 	const preDeployCommand = application.preDeployCommand?.trim();
 	if (!preview && preDeployCommand) {
+		await ctx.step("pre_deploy");
 		const network = await ensureEnvironmentNetwork(application.environment);
 		await runPreDeployHook(ctx, {
 			appName: application.appName,
@@ -338,6 +341,7 @@ async function runApplicationJob(
 	// already run a registry reference and previews are throwaway.
 	let pushedRef: string | null = null;
 	if (!preview && application.sourceType !== "docker" && application.pushRegistryId) {
+		await ctx.step("push");
 		const pushRegistry = await resolvePushRegistry(application.pushRegistryId);
 		if (pushRegistry) {
 			pushedRef = await pushBuiltImage(ctx, {
@@ -350,6 +354,7 @@ async function runApplicationJob(
 		checkpoint();
 	}
 
+	await ctx.step("rollout");
 	await upsertSwarmService(ctx, deployTarget, pushedRef ?? imageTag, {
 		preview: Boolean(preview),
 	});
@@ -359,6 +364,7 @@ async function runApplicationJob(
 	// reports `running` only after the image's HEALTHCHECK passed). A rollout
 	// whose tasks keep failing fails the deployment with the engine's reason;
 	// with start-first updates the previous version keeps serving meanwhile.
+	await ctx.step("converge");
 	ctx.logger.line("Waiting for the service to start...");
 	await waitForServiceConvergence(deployTarget.appName, {
 		log: (line) => ctx.logger.line(line),
@@ -383,6 +389,7 @@ async function runApplicationJob(
 		// deploy failure — the new version is serving, but broken.
 		const postDeployCommand = application.postDeployCommand?.trim();
 		if (postDeployCommand) {
+			await ctx.step("post_deploy");
 			await runPostDeployHook(ctx, {
 				appName: application.appName,
 				command: postDeployCommand,
@@ -391,6 +398,7 @@ async function runApplicationJob(
 		}
 
 		// Traefik routing — best effort, the domain router re-syncs anyway.
+		await ctx.step("route");
 		await syncApplicationTraefik(application).catch((error) => {
 			ctx.logger.line(
 				`Warning: failed to sync Traefik config: ${error instanceof Error ? error.message : String(error)}`,
@@ -399,6 +407,7 @@ async function runApplicationJob(
 
 		// Pin the running image as a rollback target (best effort: a failed
 		// pin must not fail a deployment that is already serving traffic).
+		await ctx.step("finalize");
 		try {
 			const pinned = await pinRollbackImage(ctx, application, job.deploymentId, imageTag, {
 				pushedRef,
@@ -462,6 +471,10 @@ async function runComposeJob(
 	for (const [, value] of parseEnv(target.env)) ctx.logger.addSecret(value);
 
 	// Materialize compose file + merged env file (clones git sources too).
+	// One step for the whole call: it clones, renders and (when the stack opts
+	// in) builds, and splitting it would mean threading `ctx.step` through
+	// `prepareComposeFiles` for a distinction nobody reads.
+	await ctx.step("render");
 	ctx.logger.line("Preparing compose files...");
 	// Snapshot the rendered file + env against THIS job (compose rollbacks).
 	// Previews are throwaway and share the parent's composeId — snapshotting
@@ -488,6 +501,7 @@ async function runComposeJob(
 	// must never run against the environment production shares.
 	const preDeployCommand = preview ? null : row.preDeployCommand?.trim();
 	if (preDeployCommand) {
+		await ctx.step("pre_deploy");
 		await runComposeExecHook(ctx, {
 			appName: row.appName,
 			command: preDeployCommand,
@@ -500,6 +514,7 @@ async function runComposeJob(
 	// isolation, rendered file) — see modules/compose/commands.ts.
 	const command = buildComposeDeployCommand(target, files);
 
+	await ctx.step("rollout");
 	ctx.logger.line(
 		target.composeType === "stack" ? "Deploying stack..." : "Starting compose project...",
 	);
@@ -516,6 +531,7 @@ async function runComposeJob(
 	// Post-deploy hook: the project is up, wait for a container and exec.
 	const postDeployCommand = preview ? null : row.postDeployCommand?.trim();
 	if (postDeployCommand) {
+		await ctx.step("post_deploy");
 		await runComposeExecHook(ctx, {
 			appName: row.appName,
 			command: postDeployCommand,
@@ -528,6 +544,7 @@ async function runComposeJob(
 	// Per-service Traefik configs — best effort. A preview writes its own
 	// files (one per exposed service, under the preview project's key) and
 	// must never rewrite production's.
+	await ctx.step("route");
 	if (preview) {
 		await syncPreviewTraefik(preview.previewDeploymentId).catch((error) => {
 			ctx.logger.line(
@@ -766,6 +783,16 @@ async function processJob(job: QueueJob): Promise<void> {
 				});
 				registerDeploymentProcess(job.deploymentId, proc);
 				await proc.done;
+			},
+			step: async (step) => {
+				await db
+					.update(deployments)
+					.set({ currentStep: step })
+					.where(eq(deployments.deploymentId, job.deploymentId))
+					.catch(() => {
+						// The step is reporting, not control flow: losing one costs a
+						// "which phase?" answer, never the deployment.
+					});
 			},
 		};
 

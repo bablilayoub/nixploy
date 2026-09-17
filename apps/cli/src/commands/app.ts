@@ -2,6 +2,11 @@ import type { Command } from "commander";
 import { apiGet, apiPost, apiUpload } from "../client.js";
 import { usageError } from "../errors.js";
 import { addOutputOptions, printRecord, printResult } from "../utils/output.js";
+import {
+	DEFAULT_WAIT_TIMEOUT_SECONDS,
+	reportOutcome,
+	waitForDeployment,
+} from "../utils/wait-deployment.js";
 import { followDeploymentLogs } from "./deployment.js";
 import { addServiceEnvCommands } from "./service-env.js";
 
@@ -196,29 +201,49 @@ export function augmentAppCommand(app: Command): Command {
 		.argument("<applicationId>", "Application ID")
 		.argument("<archive>", "Path to a .zip of the project")
 		.option("--deploy", "Queue a deployment once the archive is stored")
-		.action(async (applicationId: string, archive: string, options: { deploy?: boolean }) => {
-			const { readFile } = await import("node:fs/promises");
-			let body: Buffer;
-			try {
-				body = await readFile(archive);
-			} catch {
-				throw usageError(`Cannot read ${archive}`);
-			}
-			const result = await apiUpload<{ bytes: number }>(
-				`api/applications/${encodeURIComponent(applicationId)}/source`,
-				body,
-			);
-			printResult({ applicationId, bytes: result.bytes }, `Uploaded ${result.bytes} bytes.`);
-			if (options.deploy) {
+		.option("--wait", "With --deploy: block until it finishes; exit non-zero if it failed")
+		.option(
+			"--wait-timeout <seconds>",
+			`Give up waiting after this long (default ${DEFAULT_WAIT_TIMEOUT_SECONDS})`,
+		)
+		.action(
+			async (
+				applicationId: string,
+				archive: string,
+				options: { deploy?: boolean; wait?: boolean; waitTimeout?: string },
+			) => {
+				const { readFile } = await import("node:fs/promises");
+				let body: Buffer;
+				try {
+					body = await readFile(archive);
+				} catch {
+					throw usageError(`Cannot read ${archive}`);
+				}
+				const result = await apiUpload<{ bytes: number }>(
+					`api/applications/${encodeURIComponent(applicationId)}/source`,
+					body,
+				);
+				printResult({ applicationId, bytes: result.bytes }, `Uploaded ${result.bytes} bytes.`);
+				if (!options.deploy) return;
 				const deployment = await apiPost<{ deploymentId: string }>("application.deploy", {
 					applicationId,
 				});
-				printResult(
-					{ deploymentId: deployment.deploymentId },
-					`Deployment ${deployment.deploymentId} queued.`,
-				);
-			}
-		});
+				if (!options.wait) {
+					printResult(
+						{ deploymentId: deployment.deploymentId },
+						`Deployment ${deployment.deploymentId} queued.`,
+					);
+					return;
+				}
+				const timeout = options.waitTimeout
+					? Number(options.waitTimeout)
+					: DEFAULT_WAIT_TIMEOUT_SECONDS;
+				if (!Number.isFinite(timeout) || timeout <= 0) {
+					throw usageError("--wait-timeout expects a positive number of seconds");
+				}
+				reportOutcome(await waitForDeployment(deployment.deploymentId, timeout));
+			},
+		);
 
 	addServiceEnvCommands(app, "app", "<applicationId>", "Application ID");
 

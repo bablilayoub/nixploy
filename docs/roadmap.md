@@ -98,11 +98,13 @@ Four half-built things at once, all in compose — auto-deploy, cancel, build-fr
 
 *Why it matters:* unblocks the importer, external template catalogues, and adopting running workloads. Every competing panel has all of this — it is table stakes for switching.
 
-### 3. Drop upload ✅ + CLI daily loop *(M — upload landed 2026-09-17)*
+### 3. Drop upload ✅ + CLI daily loop ✅ *(M — landed 2026-09-17)*
 
 The drop source is fully implemented on the worker side and has no way in. Add `application.createDropUpload` (a route handler streaming to `<config>/applications/<appName>/code.zip`, 0600, size-capped, zip-magic checked), drag-and-drop in the source panel, and `nixploy up` / `nixploy deploy --drop ./app.zip` — the flag the UI already tells people to use.
 
 Same release: `deployment.wait` (long-poll ≤55 s) and one machine-readable deploy outcome `{status, failingStep, lastLogLines, urls, healthcheck}` behind `--wait` everywhere. This is the contract v0.6's agent work and the `--wait` MCP tools build on.
+
+*What shipped:* `deployment.current_step` (migration 0034) + `modules/deployment/steps.ts`, so `failingStep` is a column the worker writes rather than something parsed out of a free-text log. `deployment.wait` long-polls on the `finish` event with a 2 s re-read behind it (a lost notification must not hang a caller for the whole timeout) and returns the outcome object above plus live Swarm task counts. `--wait` / `--wait-timeout` on every deploy verb, `nixploy deployment wait`, and a non-zero exit on failure **or** timeout.
 
 ### 4. Service event timeline ✅ *(M — landed 2026-09-17)*
 

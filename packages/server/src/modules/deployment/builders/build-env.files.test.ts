@@ -33,6 +33,7 @@ const makeCtx = () => {
 			run: async (command: string) => {
 				commands.push(command);
 			},
+			step: async () => {},
 		},
 	};
 };

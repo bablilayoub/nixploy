@@ -1,4 +1,5 @@
 import type { DeploymentLogger } from "./logger";
+import type { DeployStep } from "./steps";
 
 export interface DeploymentRunOptions {
 	cwd?: string;
@@ -26,4 +27,10 @@ export interface DeploymentContext {
 	serverId: string | null;
 	logger: DeploymentLogger;
 	run: (command: string, opts?: DeploymentRunOptions) => Promise<void>;
+	/**
+	 * Record which phase the job has reached (`deployment.current_step`), so a
+	 * failure can report *where* it failed without anything parsing the log.
+	 * Best-effort: a step that fails to persist must never fail a deploy.
+	 */
+	step: (step: DeployStep) => Promise<void>;
 }

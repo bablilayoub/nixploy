@@ -2,6 +2,11 @@ import { Command } from "commander";
 import { apiGet, apiPost } from "../client.js";
 import { usageError } from "../errors.js";
 import { addOutputOptions, printList, printRecord, printResult } from "../utils/output.js";
+import {
+	DEFAULT_WAIT_TIMEOUT_SECONDS,
+	reportOutcome,
+	waitForDeployment,
+} from "../utils/wait-deployment.js";
 
 /**
  * Deployment history, log streaming, cancellation and rollback.
@@ -143,6 +148,23 @@ export function deploymentCommand(): Command {
 			done: chunk.done,
 			logBytes: chunk.offset,
 		});
+	});
+
+	addOutputOptions(
+		deployment
+			.command("wait")
+			.description("Wait for a deployment and report its outcome (exit 1 if it failed)")
+			.argument("<deploymentId>", "Deployment ID")
+			.option(
+				"--timeout <seconds>",
+				`Give up waiting after this long (default ${DEFAULT_WAIT_TIMEOUT_SECONDS})`,
+			),
+	).action(async (deploymentId: string, options: { timeout?: string }) => {
+		const timeout = options.timeout ? Number(options.timeout) : DEFAULT_WAIT_TIMEOUT_SECONDS;
+		if (!Number.isFinite(timeout) || timeout <= 0) {
+			throw usageError("--timeout expects a positive number of seconds");
+		}
+		reportOutcome(await waitForDeployment(deploymentId, timeout));
 	});
 
 	deployment

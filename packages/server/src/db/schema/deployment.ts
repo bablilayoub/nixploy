@@ -42,6 +42,16 @@ export const deployments = pgTable(
 		 * was requested, that is what it resolved to.
 		 */
 		requestedRef: text("requested_ref"),
+		/**
+		 * The pipeline phase the job is in, or the one it died in
+		 * (`modules/deployment/steps.ts`). NULL while the row is still queued,
+		 * and on rows written before migration 0034.
+		 *
+		 * A column rather than something parsed out of the log: the log is free
+		 * text, and a machine-readable "failing step" that depends on matching
+		 * English sentences breaks the first time someone rewords a line.
+		 */
+		currentStep: text("current_step"),
 		/** What started the job (null on rows older than migration 0020). */
 		trigger: deploymentTrigger("trigger"),
 		/** User id for `manual`/`api`, `webhook:<provider>` for pushes, `system` otherwise. */

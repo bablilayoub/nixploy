@@ -431,6 +431,58 @@ without per-page timers. Queuing a deploy switches to
 `?tab=deployments&deployment=<id>`; `DeploymentHistory` opens that row's log
 drawer as soon as it is listed.
 
+### Steps, and the machine-readable outcome
+
+Every pipeline records the phase it is in on `deployment.current_step`
+(`modules/deployment/steps.ts`): `source · render · build · pre_deploy · push ·
+rollout · converge · post_deploy · route · finalize`. A step is written when it
+*starts*, so the step on a failed row is the one it died in, and a phase the
+service did not ask for (no hooks, no push registry) simply never appears.
+
+A column rather than something parsed out of the log. The build log is free
+text and always was; a "failing step" that depends on matching English
+sentences breaks the first time somebody rewords a line.
+
+`deployment.wait` turns that into one answer a script or an agent can branch
+on (`modules/deployment/outcome.ts`):
+
+```jsonc
+{
+  "status": "error", "done": true, "ok": false,
+  "step": "build", "failingStep": "build",
+  "errorMessage": "…", "durationMs": 41230,
+  "queuePosition": null,
+  "service": { "kind": "application", "id": "…", "appName": "api-45a9fb" },
+  "urls": ["https://api.example.com"],
+  "lastLogLines": ["…"],
+  "health": { "running": 0, "desired": 2, "state": "down" }
+}
+```
+
+- `waitMs` (0–55 000) long-polls until the deployment is terminal. Past 55 s a
+  proxy or a browser gives up anyway, so a longer wait is several calls, not
+  one very patient request. The wait is a `finish` event **plus** a 2 s
+  re-read: a lost notification (dropped `LISTEN` connection, worker killed
+  between the DB write and the publish) would otherwise hang a caller for the
+  whole timeout while the row has been terminal for a minute.
+- The caller is authorised **before** the wait starts, so nobody can hold a
+  request open on a deployment they cannot see, or learn that one exists from
+  how long the call takes.
+- `health` is read only once the deploy is finished and only for a Swarm-backed
+  service: mid-rollout the counts describe the version being replaced, and a
+  plain (non-stack) compose project has no Swarm service to inspect. A daemon
+  that cannot be read answers `unknown`, never `down` — "I could not look" and
+  "nothing is running" are different answers.
+
+From a terminal, `--wait` blocks and **exits non-zero when the deploy failed**,
+which is the whole point in a pipeline:
+
+```bash
+nixploy app deploy api-abc123 --ref v1.4.0 --wait
+nixploy compose deploy cmp_abc --wait --wait-timeout 1800
+nixploy deployment wait dep_abc
+```
+
 ## Compose deploy pipeline
 
 `modules/compose/service.ts`: the compose file is **rendered** first —

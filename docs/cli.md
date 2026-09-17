@@ -317,6 +317,28 @@ nixploy incident probes
 nixploy incident logs "connection refused" --limit 50
 ```
 
+### Waiting for a deploy (`--wait`)
+
+Every verb that queues a deployment takes `--wait`: it blocks until the
+deployment finishes and **exits non-zero if it did not succeed**, so a deploy
+step actually fails the pipeline it runs in.
+
+```bash
+nixploy app deploy app_abc --wait                     # blocks, exit 1 on failure
+nixploy app deploy app_abc --ref v1.4.0 --wait
+nixploy app redeploy app_abc --wait --wait-timeout 1800
+nixploy app upload app_abc ./app.zip --deploy --wait
+nixploy compose deploy cmp_abc --wait
+nixploy deployment wait dep_abc                       # wait on one already queued
+```
+
+On failure it prints the step it died in, the reason and the tail of the build
+log; on success, the duration, the running/desired task counts and the URLs.
+`--json` prints the whole outcome object (see
+[deployment flow](./deployment-flow.md#steps-and-the-machine-readable-outcome)).
+`--wait-timeout` defaults to 900 seconds; a timeout also exits non-zero —
+"I do not know yet" is not "it worked".
+
 ### `events` — a service's timeline
 
 Why a service restarted, from a terminal: task failures, out-of-memory kills,

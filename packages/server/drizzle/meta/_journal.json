@@ -239,6 +239,13 @@
       "when": 1789671750153,
       "tag": "0033_dry_cable",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1789681290196,
+      "tag": "0034_warm_talkback",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,13 @@ import { db } from "../../db";
 import { deployments } from "../../db/schema";
 import { getQueuePosition } from "../../modules/deployment";
 import {
+	buildDeploymentOutcome,
+	DEFAULT_LOG_LINES,
+	MAX_LOG_LINES,
+	MAX_WAIT_MS,
+	waitForDeployment,
+} from "../../modules/deployment/outcome";
+import {
 	type DeploymentListResult,
 	getDeploymentDailyCounts,
 	getDeploymentStatsByProject,
@@ -197,6 +204,42 @@ export const deploymentRouter = router({
 				ctx.session.session.activeOrganizationId,
 			);
 			return getDeploymentStatsByProject(input.projectId, organizationId);
+		}),
+
+	/**
+	 * The machine-readable verdict on a deployment: status, the step it died
+	 * in, the log tail, the URLs it should answer on, and whether Swarm has
+	 * tasks running (`modules/deployment/outcome.ts`).
+	 *
+	 * `waitMs` turns it into a long poll: it returns as soon as the deployment
+	 * reaches a terminal state, or when the wait runs out — in which case
+	 * `done` is simply still false and the caller can ask again. Capped at 55 s
+	 * because a proxy or a browser gives up past that anyway.
+	 */
+	wait: protectedProcedure
+		.input(
+			z.object({
+				deploymentId: z.string().min(1),
+				waitMs: z.number().int().min(0).max(MAX_WAIT_MS).default(0),
+				logLines: z.number().int().min(0).max(MAX_LOG_LINES).default(DEFAULT_LOG_LINES),
+			}),
+		)
+		.query(async ({ ctx, input }) => {
+			const organizationId = await resolveCallerOrganizationId(
+				ctx.session.user.id,
+				ctx.session.session.activeOrganizationId,
+			);
+			// Authorise BEFORE waiting: a caller who cannot see this deployment
+			// must not be able to hold a request open on it, or to learn that it
+			// exists from how long the call takes.
+			const deployment = await assertDeploymentAccess(input.deploymentId, organizationId);
+			if (input.waitMs > 0) {
+				await waitForDeployment(input.deploymentId, input.waitMs);
+			}
+			// Re-read through the access helper so the outcome is built from the
+			// row as it is now, with its parents joined.
+			const settled = await assertDeploymentAccess(input.deploymentId, organizationId);
+			return buildDeploymentOutcome(settled ?? deployment, { logLines: input.logLines });
 		}),
 
 	/**

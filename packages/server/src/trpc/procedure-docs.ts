@@ -497,6 +497,11 @@ const docs: Record<string, ProcedureDoc> = {
 		summary: "Deployment statistics for a project",
 		description: "Totals, success rate and average duration for the project.",
 	},
+	"deployment.wait": {
+		summary: "Wait for a deployment and read its outcome",
+		description:
+			"Status, the step it failed in, the tail of the build log, the URLs it should answer on, and Swarm's live task counts. `waitMs` (up to 55000) long-polls until the deployment finishes; `0` returns immediately.",
+	},
 	"deployment.getLogs": {
 		summary: "Read a deployment log",
 		description:

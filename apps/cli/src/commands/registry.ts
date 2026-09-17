@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { apiGet, apiPost, type QueryInput } from "../client.js";
-import { usageError } from "../errors.js";
+import { CliError, EXIT_ERROR, usageError } from "../errors.js";
 import {
 	addOutputOptions,
 	printList,
@@ -8,6 +8,12 @@ import {
 	printResult,
 	printValues,
 } from "../utils/output.js";
+import {
+	DEFAULT_WAIT_TIMEOUT_SECONDS,
+	deploymentIdFrom,
+	reportOutcome,
+	waitForDeployment,
+} from "../utils/wait-deployment.js";
 
 /**
  * Allow-list of tRPC procedures exposed as thin CLI verbs.
@@ -65,6 +71,12 @@ export interface RegistryEntry {
 	message?: string;
 	/** Requires `--yes`; deletes data or rolls infrastructure. */
 	destructive?: boolean;
+	/**
+	 * The verb returns `{ deploymentId }`. Adds `--wait` / `--wait-timeout`,
+	 * which block until the deployment finishes and exit non-zero if it did
+	 * not succeed — so a deploy step in a pipeline actually fails the pipeline.
+	 */
+	queuesDeployment?: boolean;
 	aliases?: string[];
 }
 
@@ -286,6 +298,7 @@ export const commandRegistry: RegistryEntry[] = [
 		group: "app",
 		verb: "deploy",
 		procedure: "application.deploy",
+		queuesDeployment: true,
 		kind: "mutation",
 		summary: "Queue a fresh build and rollout",
 		argument: { field: "applicationId", label: "<applicationId>", description: "Application ID" },
@@ -304,6 +317,7 @@ export const commandRegistry: RegistryEntry[] = [
 		group: "app",
 		verb: "redeploy-commit",
 		procedure: "application.redeployFromDeployment",
+		queuesDeployment: true,
 		kind: "mutation",
 		summary: "Rebuild the commit an earlier deployment built",
 		argument: {
@@ -318,6 +332,7 @@ export const commandRegistry: RegistryEntry[] = [
 		group: "app",
 		verb: "redeploy",
 		procedure: "application.redeploy",
+		queuesDeployment: true,
 		kind: "mutation",
 		summary: "Re-roll the current build without rebuilding the source",
 		argument: { field: "applicationId", label: "<applicationId>", description: "Application ID" },
@@ -435,6 +450,7 @@ export const commandRegistry: RegistryEntry[] = [
 		group: "compose",
 		verb: "deploy",
 		procedure: "compose.deploy",
+		queuesDeployment: true,
 		kind: "mutation",
 		summary: "Render, validate and deploy the compose stack",
 		argument: { field: "composeId", label: "<composeId>", description: "Compose ID" },
@@ -445,6 +461,7 @@ export const commandRegistry: RegistryEntry[] = [
 		group: "compose",
 		verb: "redeploy",
 		procedure: "compose.redeploy",
+		queuesDeployment: true,
 		kind: "mutation",
 		summary: "Redeploy a compose service from its current source",
 		argument: { field: "composeId", label: "<composeId>", description: "Compose ID" },
@@ -1299,6 +1316,14 @@ export function buildRegistryCommand(entry: RegistryEntry): Command {
 	if (entry.destructive) {
 		command.option("-y, --yes", "Confirm the destructive action (required)");
 	}
+	if (entry.queuesDeployment) {
+		command
+			.option("--wait", "Block until the deployment finishes; exit non-zero if it failed")
+			.option(
+				"--wait-timeout <seconds>",
+				`Give up waiting after this long (default ${DEFAULT_WAIT_TIMEOUT_SECONDS})`,
+			);
+	}
 	addOutputOptions(command);
 
 	command.action(async (...args: unknown[]) => {
@@ -1314,6 +1339,23 @@ export function buildRegistryCommand(entry: RegistryEntry): Command {
 			entry.kind === "query"
 				? await apiGet<unknown>(entry.procedure, input as QueryInput)
 				: await apiPost<unknown>(entry.procedure, Object.keys(input).length ? input : undefined);
+
+		if (entry.queuesDeployment && options.wait === true) {
+			const deploymentId = deploymentIdFrom(payload);
+			if (!deploymentId) {
+				throw new CliError("The panel queued nothing to wait for", EXIT_ERROR);
+			}
+			const timeout = options.waitTimeout
+				? Number(options.waitTimeout)
+				: DEFAULT_WAIT_TIMEOUT_SECONDS;
+			if (!Number.isFinite(timeout) || timeout <= 0) {
+				throw usageError("--wait-timeout expects a positive number of seconds");
+			}
+			// `reportOutcome` prints and throws on failure, so it replaces the
+			// "queued." confirmation entirely — two verdicts would contradict.
+			reportOutcome(await waitForDeployment(deploymentId, timeout));
+			return;
+		}
 		renderPayload(entry, payload);
 	});
 
