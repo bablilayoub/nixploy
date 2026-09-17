@@ -9,6 +9,7 @@ export function DeploymentsTab({ compose }: { compose: ComposeService }) {
 			kind="compose"
 			serviceId={compose.composeId}
 			description="Build and deployment history for this compose service."
+			canCancel
 			commitUrl={(sha) =>
 				buildCommitUrl(
 					{

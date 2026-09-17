@@ -534,6 +534,17 @@ export const applicationRouter = router({
 		return { applicationId: input.applicationId, deploymentId };
 	}),
 
+	/**
+	 * Cancel a queued or running deployment of ANY service kind. The module
+	 * function never cared which kind a job belonged to (it kills the
+	 * registered child processes and finalizes the row), but this procedure
+	 * used to resolve tenancy through the application relation alone, so a
+	 * compose build could not be stopped from anywhere. It now resolves the
+	 * org through whichever parent the row actually has.
+	 *
+	 * Stays on the `application` router under its original name so existing
+	 * panel, CLI and MCP callers keep working.
+	 */
 	cancelDeployment: protectedProcedure
 		.input(z.object({ deploymentId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
@@ -541,13 +552,14 @@ export const applicationRouter = router({
 			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 			const deployment = await db.query.deployments.findFirst({
 				where: eq(deployments.deploymentId, input.deploymentId),
-				with: { application: { with: { environment: { with: { project: true } } } } },
+				with: {
+					application: { with: { environment: { with: { project: true } } } },
+					compose: { with: { environment: { with: { project: true } } } },
+				},
 			});
-			if (
-				!deployment?.application ||
-				deployment.application.environment.project.organizationId !== organizationId
-			) {
-				throw new TRPCError({ code: "NOT_FOUND", message: "Deployment not found" });
+			const parent = deployment?.application ?? deployment?.compose;
+			if (!parent || parent.environment.project.organizationId !== organizationId) {
+				throw notFound("Deployment not found");
 			}
 			await cancelQueuedDeployment(input.deploymentId);
 			return { deploymentId: input.deploymentId };

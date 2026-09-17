@@ -21,16 +21,17 @@ export { buildCommitUrl, type CommitLinkSource, webRepoFromGitUrl } from "./comm
 export {
 	type GitWebhookDispatch,
 	handleGitWebhook,
+	queueWebhookComposeDeployment,
 	queueWebhookDeployment,
 	webhookProvenance,
 } from "./handler";
 export {
 	applicationMatchesPreviewWebhook,
-	applicationMatchesWebhook,
 	globCacheSize,
 	type PreviewWebhookCandidate,
-	type WebhookApplicationCandidate,
+	serviceMatchesWebhook,
 	type WebhookRepoContext,
+	type WebhookServiceCandidate,
 	watchPathsMatch,
 } from "./match";
 export {

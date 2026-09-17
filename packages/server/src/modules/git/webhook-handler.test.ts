@@ -20,15 +20,15 @@ import { db } from "../../db";
 import { classifyPullRequestAction, previewAppName, previewHost } from "../preview";
 import {
 	applicationMatchesPreviewWebhook,
-	applicationMatchesWebhook,
 	extractPushCommit,
 	globCacheSize,
 	handleGitWebhook,
 	isGitlabMetadataOnlyUpdate,
 	type PreviewWebhookCandidate,
-	type WebhookApplicationCandidate,
+	serviceMatchesWebhook,
 	WebhookIgnored,
 	type WebhookRepoContext,
+	type WebhookServiceCandidate,
 	WebhookUnauthorized,
 	watchPathsMatch,
 	webhookProvenance,
@@ -146,8 +146,8 @@ describe("watchPathsMatch", () => {
 	});
 });
 
-describe("applicationMatchesWebhook", () => {
-	const baseApp: WebhookApplicationCandidate = {
+describe("serviceMatchesWebhook", () => {
+	const baseApp: WebhookServiceCandidate = {
 		sourceType: "github",
 		repository: "nixploy",
 		owner: "NixployHQ",
@@ -163,35 +163,56 @@ describe("applicationMatchesWebhook", () => {
 	};
 
 	it("matches same repo+branch with case-insensitive owner", () => {
-		expect(applicationMatchesWebhook(baseApp, baseWebhook)).toBe(true);
+		expect(serviceMatchesWebhook(baseApp, baseWebhook)).toBe(true);
 	});
 
 	it("rejects a different branch, repository, provider or auto-deploy off", () => {
-		expect(applicationMatchesWebhook(baseApp, { ...baseWebhook, branch: "develop" })).toBe(false);
-		expect(applicationMatchesWebhook(baseApp, { ...baseWebhook, repository: "other" })).toBe(false);
-		expect(applicationMatchesWebhook({ ...baseApp, sourceType: "gitlab" }, baseWebhook)).toBe(
-			false,
-		);
-		expect(applicationMatchesWebhook({ ...baseApp, autoDeploy: false }, baseWebhook)).toBe(false);
+		expect(serviceMatchesWebhook(baseApp, { ...baseWebhook, branch: "develop" })).toBe(false);
+		expect(serviceMatchesWebhook(baseApp, { ...baseWebhook, repository: "other" })).toBe(false);
+		expect(serviceMatchesWebhook({ ...baseApp, sourceType: "gitlab" }, baseWebhook)).toBe(false);
+		expect(serviceMatchesWebhook({ ...baseApp, autoDeploy: false }, baseWebhook)).toBe(false);
 	});
 
 	it("rejects when the owner differs or the app has no repository", () => {
-		expect(applicationMatchesWebhook(baseApp, { ...baseWebhook, owner: "someone-else" })).toBe(
-			false,
-		);
-		expect(applicationMatchesWebhook({ ...baseApp, repository: null }, baseWebhook)).toBe(false);
+		expect(serviceMatchesWebhook(baseApp, { ...baseWebhook, owner: "someone-else" })).toBe(false);
+		expect(serviceMatchesWebhook({ ...baseApp, repository: null }, baseWebhook)).toBe(false);
 	});
 
 	it("applies watch paths against the delivery's changed files", () => {
 		const watched = { ...baseApp, watchPaths: ["src"] };
-		expect(applicationMatchesWebhook(watched, { ...baseWebhook, changedPaths: ["src/a.ts"] })).toBe(
+		expect(serviceMatchesWebhook(watched, { ...baseWebhook, changedPaths: ["src/a.ts"] })).toBe(
 			true,
 		);
-		expect(
-			applicationMatchesWebhook(watched, { ...baseWebhook, changedPaths: ["docs/b.md"] }),
-		).toBe(false);
+		expect(serviceMatchesWebhook(watched, { ...baseWebhook, changedPaths: ["docs/b.md"] })).toBe(
+			false,
+		);
 		// No file list in the delivery (e.g. Bitbucket) → deploy.
-		expect(applicationMatchesWebhook(watched, baseWebhook)).toBe(true);
+		expect(serviceMatchesWebhook(watched, baseWebhook)).toBe(true);
+	});
+
+	// A git-backed compose stack carries the identical columns, so the same
+	// predicate decides both. A `raw` stack has no repository and must never
+	// match, whatever the delivery says.
+	it("matches a git-backed compose stack and never a raw one", () => {
+		const gitCompose: WebhookServiceCandidate = {
+			sourceType: "github",
+			repository: "nixploy",
+			owner: "NixployHQ",
+			branch: "main",
+			autoDeploy: true,
+			watchPaths: null,
+		};
+		expect(serviceMatchesWebhook(gitCompose, baseWebhook)).toBe(true);
+
+		const rawCompose: WebhookServiceCandidate = {
+			sourceType: "raw",
+			repository: null,
+			owner: null,
+			branch: null,
+			autoDeploy: true,
+			watchPaths: null,
+		};
+		expect(serviceMatchesWebhook(rawCompose, baseWebhook)).toBe(false);
 	});
 });
 

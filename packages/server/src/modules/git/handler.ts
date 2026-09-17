@@ -6,7 +6,7 @@ import { classifyPullRequestAction } from "../preview";
 import { previewSourceRefForPullRequest } from "../preview/source-ref";
 import {
 	applicationMatchesPreviewWebhook,
-	applicationMatchesWebhook,
+	serviceMatchesWebhook,
 	type WebhookRepoContext,
 } from "./match";
 import { verifyAndExtractBitbucket } from "./providers/bitbucket";
@@ -184,33 +184,55 @@ export async function handleGitWebhook(
 	// Candidates pre-filtered in SQL (same provider, auto-deploy on, and —
 	// when the webhook URL names one — linked to that provider row); the
 	// repo/branch/watch-path match itself runs in JS through the pure,
-	// tested `applicationMatchesWebhook`.
+	// tested `serviceMatchesWebhook`.
 	const conditions = [eq(applications.sourceType, provider), eq(applications.autoDeploy, true)];
 	if (providerId) {
 		conditions.push(eq(PROVIDER_COLUMN[provider], providerId));
 	}
-	const candidates = await db
-		.select({
-			applicationId: applications.applicationId,
-			sourceType: applications.sourceType,
-			repository: applications.repository,
-			owner: applications.owner,
-			branch: applications.branch,
-			autoDeploy: applications.autoDeploy,
-			watchPaths: applications.watchPaths,
-		})
-		.from(applications)
-		.where(and(...conditions));
+	// A git-backed compose stack carries the same provider/repository/owner/
+	// branch/autoDeploy/watchPaths columns, so it goes through the same
+	// predicate. `raw` stacks have no repository and never match.
+	const composeConditions = [eq(compose.sourceType, provider), eq(compose.autoDeploy, true)];
+	if (providerId) {
+		composeConditions.push(eq(COMPOSE_PROVIDER_COLUMN[provider], providerId));
+	}
+	const [candidates, composeCandidates] = await Promise.all([
+		db
+			.select({
+				applicationId: applications.applicationId,
+				sourceType: applications.sourceType,
+				repository: applications.repository,
+				owner: applications.owner,
+				branch: applications.branch,
+				autoDeploy: applications.autoDeploy,
+				watchPaths: applications.watchPaths,
+			})
+			.from(applications)
+			.where(and(...conditions)),
+		db
+			.select({
+				composeId: compose.composeId,
+				sourceType: compose.sourceType,
+				repository: compose.repository,
+				owner: compose.owner,
+				branch: compose.branch,
+				autoDeploy: compose.autoDeploy,
+				watchPaths: compose.watchPaths,
+			})
+			.from(compose)
+			.where(and(...composeConditions)),
+	]);
 
 	const context: WebhookRepoContext = { provider, ...extracted };
-	const matches = candidates.filter((candidate) => applicationMatchesWebhook(candidate, context));
+	const matches = candidates.filter((candidate) => serviceMatchesWebhook(candidate, context));
+	const composeMatches = composeCandidates.filter((candidate) =>
+		serviceMatchesWebhook(candidate, context),
+	);
 
 	return {
 		provider,
 		applicationIds: matches.map((match) => match.applicationId),
-		// Compose services do not auto-deploy from pushes (only previews react
-		// to pull requests), so a push delivery never names one.
-		composeIds: [],
+		composeIds: composeMatches.map((match) => match.composeId),
 		branch: extracted.branch,
 		type: extracted.type,
 		commit: extracted.commit,
@@ -242,6 +264,21 @@ export async function queueWebhookDeployment(
 ): Promise<string> {
 	return await queueDeployment({
 		applicationId,
+		type: "redeploy",
+		title,
+		trigger: "webhook",
+		...provenance,
+	});
+}
+
+/** The compose twin of `queueWebhookDeployment`. */
+export async function queueWebhookComposeDeployment(
+	composeId: string,
+	title: string,
+	provenance: Partial<DeploymentProvenance> = {},
+): Promise<string> {
+	return await queueDeployment({
+		composeId,
 		type: "redeploy",
 		title,
 		trigger: "webhook",

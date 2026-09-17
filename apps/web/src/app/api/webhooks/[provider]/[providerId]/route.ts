@@ -4,6 +4,7 @@ import {
 	handleGitWebhook,
 	handlePreviewWebhookForApplication,
 	handlePreviewWebhookForCompose,
+	queueWebhookComposeDeployment,
 	queueWebhookDeployment,
 	WebhookIgnored,
 	WebhookUnauthorized,
@@ -142,11 +143,17 @@ export async function POST(req: Request, { params }: RouteParams) {
 	for (const applicationId of result.applicationIds) {
 		deploymentIds.push(await queueWebhookDeployment(applicationId, title, provenance));
 	}
+	// Git-backed compose stacks auto-deploy on push like applications do; the
+	// dispatcher matched them with the same repo/branch/watch-path predicate.
+	for (const composeId of result.composeIds) {
+		deploymentIds.push(await queueWebhookComposeDeployment(composeId, title, provenance));
+	}
 
 	return Response.json({
 		branch: result.branch,
 		type: result.type,
 		applicationIds: result.applicationIds,
+		composeIds: result.composeIds,
 		deploymentIds,
 	});
 }

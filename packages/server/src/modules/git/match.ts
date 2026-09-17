@@ -7,8 +7,12 @@ import type { GitWebhookProvider } from "./providers/shared";
  * directly (`webhook-handler.test.ts`).
  */
 
-/** Subset of an application row relevant to push webhook matching. */
-export interface WebhookApplicationCandidate {
+/**
+ * Subset of a service row relevant to push webhook matching. An application
+ * and a git-backed compose stack carry the identical columns, so one shape and
+ * one predicate serve both.
+ */
+export interface WebhookServiceCandidate {
 	sourceType: string;
 	repository: string | null;
 	owner: string | null;
@@ -104,20 +108,21 @@ export const watchPathsMatch = (
 };
 
 /**
- * Pure repo→application match: same provider, repository and branch, owner
+ * Pure repo→service match: same provider, repository and branch, owner
  * compared case-insensitively, auto-deploy enabled, and the delivery's
- * changed files passing the application's watch-path filter.
+ * changed files passing the service's watch-path filter. Used for both
+ * applications and git-backed compose stacks.
  */
-export const applicationMatchesWebhook = (
-	application: WebhookApplicationCandidate,
+export const serviceMatchesWebhook = (
+	service: WebhookServiceCandidate,
 	webhook: WebhookRepoContext,
 ): boolean => {
-	if (application.sourceType !== webhook.provider) return false;
-	if (!application.autoDeploy) return false;
-	if (!application.repository || application.repository !== webhook.repository) return false;
-	if ((application.owner ?? "").toLowerCase() !== webhook.owner.toLowerCase()) return false;
-	if (application.branch !== webhook.branch) return false;
-	return watchPathsMatch(webhook.changedPaths, application.watchPaths);
+	if (service.sourceType !== webhook.provider) return false;
+	if (!service.autoDeploy) return false;
+	if (!service.repository || service.repository !== webhook.repository) return false;
+	if ((service.owner ?? "").toLowerCase() !== webhook.owner.toLowerCase()) return false;
+	if (service.branch !== webhook.branch) return false;
+	return watchPathsMatch(webhook.changedPaths, service.watchPaths);
 };
 
 /**
