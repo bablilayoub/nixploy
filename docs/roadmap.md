@@ -114,9 +114,11 @@ New `service_event` table (`kind`: task_started · task_failed · oom_killed · 
 
 *What shipped differently from this sketch:* no `restart` kind (it would double-count `task_started`), no `alert` / `uptime_flip` (those are incidents, which have their own timeline and their own resolve semantics), and `recordRollback` is not a producer — it runs on every *successful* deploy to pin an image, so the rollback row comes from the audit mirror instead.
 
-### 5. Agent surfaces *(S)*
+### 5. Agent surfaces ✅ *(S — landed 2026-09-18)*
 
 Annotations (`readOnlyHint` / `destructiveHint` / `idempotentHint`) on all 32 MCP tools; task tools `deploy_and_wait`, `explain_last_failure`, `get_service_runtime_summary`; MCP prompts (`troubleshoot_service`, `explain_failed_deploy`) and resources (`nixploy://service/{id}`, `nixploy://deployment/{id}/log`). Expose `ai.*` as CLI verbs. Publish `/llms.txt`, `/llms-full.txt`, `/agents.md` and per-page `.md` on the landing site, plus an installable agent skill. An **MCP setup** sheet next to API keys that renders the Claude Code / Cursor / Codex config snippets.
+
+*What shipped:* all of it except the packaged skill — `/agents.md` is that content, and a second copy in a skill directory would be wrong within a release. 36 tools now (the four task tools plus `get_service_events`), annotations declared by hand with a test that fails the build on a missing one, and a `copilot` CLI group for `ai.*`.
 
 ### Also in v0.3 — two one-line fixes ✅ *(landed 2026-09-17)*
 

@@ -4,6 +4,7 @@ import { auditCommand } from "./audit.js";
 import { authCommand } from "./auth.js";
 import { augmentBackupCommand } from "./backup.js";
 import { augmentComposeCommand } from "./compose.js";
+import { copilotCommand } from "./copilot.js";
 import { dbCommand } from "./db.js";
 import { deploymentCommand, legacyDeployCommand } from "./deployment.js";
 import { doctorCommand } from "./doctor.js";
@@ -50,6 +51,7 @@ export function registerCommands(program: Command): Command {
 		deploymentCommand(),
 		auditCommand(),
 		eventsCommand(),
+		copilotCommand(),
 		doctorCommand(),
 		gitopsCommand(),
 		legacyDeployCommand(),

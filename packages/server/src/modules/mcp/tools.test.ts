@@ -23,6 +23,7 @@ vi.mock("../../db", async (importOriginal) => {
 	};
 });
 
+import { MCP_TOOL_ANNOTATIONS } from "./annotations";
 import { diffEnvKeys, mcpToolByName, mcpTools, parseEnvBlob, serializeEnvBlob } from "./tools";
 
 const EXPECTED_TOOLS = [
@@ -45,6 +46,11 @@ const EXPECTED_TOOLS = [
 	"list_rollback_points",
 	"get_deployment_provenance",
 	"get_platform_health",
+	"get_service_events",
+	// agent task tools: one call where an agent would otherwise write a loop
+	"deploy_and_wait",
+	"explain_last_failure",
+	"get_service_runtime_summary",
 	// guarded writes
 	"deploy_service",
 	"deploy_compose",
@@ -637,6 +643,52 @@ describe("tool descriptions", () => {
 		for (const tool of mcpTools) {
 			if (WRITE_TOOLS.has(tool.name)) continue;
 			expect(tool.description.length, tool.name).toBeGreaterThan(40);
+		}
+	});
+});
+
+describe("MCP tool annotations", () => {
+	it("annotates every tool — a hint that is merely absent is better than one that is wrong", () => {
+		const missing = mcpTools.filter((tool) => !MCP_TOOL_ANNOTATIONS[tool.name]);
+		expect(
+			missing.map((tool) => tool.name),
+			"add these to MCP_TOOL_ANNOTATIONS in modules/mcp/annotations.ts",
+		).toEqual([]);
+	});
+
+	it("annotates no tool that does not exist", () => {
+		const names = new Set(mcpTools.map((tool) => tool.name));
+		expect(Object.keys(MCP_TOOL_ANNOTATIONS).filter((name) => !names.has(name))).toEqual([]);
+	});
+
+	it("never calls a mutating tool read-only", () => {
+		// The whole hazard this file exists for: `readOnlyHint: true` on
+		// something that mutates is how an agent stops production while it
+		// believes it is only looking around.
+		const readOnly = Object.entries(MCP_TOOL_ANNOTATIONS)
+			.filter(([, annotation]) => annotation.readOnlyHint)
+			.map(([name]) => name);
+		for (const name of readOnly) {
+			expect(name, `${name} is marked read-only`).toMatch(/^(list_|get_|explain_last_failure$)/);
+		}
+	});
+
+	it("marks a read-only tool as neither destructive nor non-idempotent", () => {
+		for (const [name, annotation] of Object.entries(MCP_TOOL_ANNOTATIONS)) {
+			if (!annotation.readOnlyHint) continue;
+			expect(annotation.destructiveHint, name).toBe(false);
+			expect(annotation.idempotentHint, name).toBe(true);
+		}
+	});
+
+	it("asks for confirmation before anything that interrupts or removes", () => {
+		for (const name of [
+			"stop_service",
+			"remove_domain",
+			"rollback_deployment",
+			"cancel_deployment",
+		]) {
+			expect(MCP_TOOL_ANNOTATIONS[name]?.destructiveHint, name).toBe(true);
 		}
 	});
 });

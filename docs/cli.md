@@ -339,6 +339,22 @@ log; on success, the duration, the running/desired task counts and the URLs.
 `--wait-timeout` defaults to 900 seconds; a timeout also exits non-zero —
 "I do not know yet" is not "it worked".
 
+### `copilot` — Deploy Copilot from a terminal
+
+Needs Copilot configured on the instance (Settings → Platform → Copilot) and
+the `ai.use` capability.
+
+```bash
+nixploy copilot status                                  # configured? which model?
+nixploy copilot explain dep_abc                          # asks the model
+nixploy copilot explanation dep_abc                      # cached only, no model call
+nixploy copilot ask "why is this slow?" --application-id app_abc
+nixploy copilot compose "postgres 17 and redis" > docker-compose.yml
+```
+
+`compose` prints raw YAML on stdout so it pipes straight into a file; it saves
+and deploys nothing.
+
 ### `events` — a service's timeline
 
 Why a service restarted, from a terminal: task failures, out-of-memory kills,

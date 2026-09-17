@@ -31,8 +31,21 @@ interface RpcResult {
 	result: {
 		serverInfo?: { name: string };
 		protocolVersion?: string;
-		capabilities?: { tools?: unknown };
-		tools?: { name: string; description?: string; inputSchema: { type: string } }[];
+		capabilities?: { tools?: unknown; prompts?: unknown; resources?: unknown };
+		tools?: {
+			name: string;
+			description?: string;
+			inputSchema: { type: string };
+			annotations?: {
+				title?: string;
+				readOnlyHint?: boolean;
+				destructiveHint?: boolean;
+				idempotentHint?: boolean;
+			};
+		}[];
+		prompts?: { name: string; title?: string; description?: string }[];
+		resourceTemplates?: { uriTemplate: string; name: string }[];
+		messages?: { role: string; content: { type: string; text: string } }[];
 		isError?: boolean;
 		content?: { text: string }[];
 	};
@@ -92,5 +105,65 @@ describe("handleMcpRequest", () => {
 		const body = await parse(res);
 		// Zod rejection surfaces as isError content, not an HTTP error.
 		expect(body.result.isError).toBe(true);
+	});
+});
+
+describe("agent surfaces", () => {
+	it("ships behaviour annotations on every listed tool", async () => {
+		const listed = (await parse(await handleMcpRequest(rpc("tools/list"), fakeCtx))).result.tools;
+		expect(listed?.length).toBe(mcpTools.length);
+		for (const tool of listed ?? []) {
+			expect(tool.annotations, `${tool.name} has no annotations`).toBeDefined();
+			expect(typeof tool.annotations?.readOnlyHint, tool.name).toBe("boolean");
+			expect(typeof tool.annotations?.destructiveHint, tool.name).toBe("boolean");
+			expect(tool.annotations?.title, tool.name).toBeTruthy();
+		}
+	});
+
+	it("marks the read tools read-only and the disruptive ones destructive", async () => {
+		const listed = (await parse(await handleMcpRequest(rpc("tools/list"), fakeCtx))).result.tools;
+		const byName = new Map((listed ?? []).map((tool) => [tool.name, tool.annotations]));
+		expect(byName.get("list_projects")?.readOnlyHint).toBe(true);
+		expect(byName.get("get_service_events")?.readOnlyHint).toBe(true);
+		expect(byName.get("deploy_service")?.readOnlyHint).toBe(false);
+		expect(byName.get("stop_service")?.destructiveHint).toBe(true);
+		expect(byName.get("rollback_deployment")?.destructiveHint).toBe(true);
+	});
+
+	it("lists the two investigations as prompts", async () => {
+		const result = (await parse(await handleMcpRequest(rpc("prompts/list"), fakeCtx))).result;
+		expect((result.prompts ?? []).map((prompt) => prompt.name).sort()).toEqual([
+			"explain_failed_deploy",
+			"troubleshoot_service",
+		]);
+	});
+
+	it("renders a prompt into a plan that names the tools to use", async () => {
+		const result = (
+			await parse(
+				await handleMcpRequest(
+					rpc("prompts/get", { name: "troubleshoot_service", arguments: { service: "api" } }),
+					fakeCtx,
+				),
+			)
+		).result;
+		const text = result.messages?.[0]?.content.text ?? "";
+		expect(text).toContain('"api"');
+		expect(text).toContain("get_service_runtime_summary");
+		expect(text).toContain("get_service_events");
+		// A plan, not a licence: an investigation prompt must not invite the
+		// agent to change anything while it is looking.
+		expect(text.replace(/\s+/g, " ")).toContain(
+			"Do not deploy, restart, stop or roll anything back",
+		);
+	});
+
+	it("exposes the service and deployment-log resource templates", async () => {
+		const result = (await parse(await handleMcpRequest(rpc("resources/templates/list"), fakeCtx)))
+			.result;
+		expect((result.resourceTemplates ?? []).map((entry) => entry.uriTemplate).sort()).toEqual([
+			"nixploy://deployment/{deploymentId}/log",
+			"nixploy://service/{applicationId}",
+		]);
 	});
 });

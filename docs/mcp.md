@@ -17,6 +17,11 @@ Every tool call is dispatched into the same tRPC routers the panel, REST API
 and CLI use — org scoping, role/capability checks and audit logging apply
 exactly as they do for any other API-key client.
 
+> **Settings → Profile → Connect an agent (MCP)** renders the config for Claude
+> Code, Cursor and Codex with this instance's own URL already filled in. The API
+> key stays a placeholder there on purpose — those files usually live in a git
+> repository.
+
 ## 1. Create an API key
 
 In the panel: **Settings → Profile → API keys → Create**. Copy the key — it is
@@ -101,9 +106,63 @@ returned by `initialize` and none is needed on later calls.
 
 ## 3. Tool reference
 
-32 tools (13 before this pass). All inputs are validated with zod; outputs are compact JSON. Every
+36 tools. All inputs are validated with zod; outputs are compact JSON. Every
 call goes through `appRouter.createCaller`, so the capability listed below is
 enforced by the router, not by the tool.
+
+### Behaviour annotations
+
+Every tool ships `title`, `readOnlyHint`, `destructiveHint` and
+`idempotentHint` (`modules/mcp/annotations.ts`), so a host knows what to put a
+confirmation dialog in front of and an agent knows what it can call while it is
+only looking.
+
+They are **declared by hand, one line per tool, and a test fails the build when
+a tool ships without an entry.** Inferring them from a name would be cheaper
+and occasionally wrong, and `readOnlyHint: true` on something that mutates is
+how an agent stops production while it believes it is investigating.
+
+- `destructiveHint: true` on `stop_service`, `remove_domain`,
+  `rollback_deployment` and `cancel_deployment`. Broader than "deletes rows":
+  stopping a service destroys no data and is still not something an agent
+  should do unprompted.
+- `idempotentHint: false` on the deploy tools — calling one twice queues two
+  builds, so a retry after a timeout is not free.
+- `openWorldHint` is deliberately unset. Its default is `true`, which is the
+  honest answer for a PaaS: a deploy clones from a git host and pulls from a
+  registry, and even a read reaches a Docker daemon.
+
+### Task tools
+
+Four tools answer in one call what an agent would otherwise write a loop for:
+
+| Tool | Instead of |
+| --- | --- |
+| `deploy_and_wait` | `deploy_service` + polling `list_deployments`. Returns the outcome: failing step, log tail, URLs, live task counts. Waits up to 55 s; if `done` is false, call it again with the same `deploymentId` rather than deploying again. |
+| `explain_last_failure` | finding the last failed deployment, reading its log, and asking Copilot separately. Reuses a cached explanation unless `force` is set, and degrades to the outcome alone when Copilot is not configured. |
+| `get_service_runtime_summary` | five calls: status, Swarm task counts, domains, recent deployments and recent timeline events. |
+| `get_service_events` | guessing. The service event timeline is what answers *why did it restart?* — the deployment list only knows about deploys. |
+
+### Prompts
+
+Two investigation plans, listed under `prompts/list`:
+
+- `troubleshoot_service` — runtime summary, then the timeline, then logs, in
+  the order that answers fastest. It explicitly tells the agent not to deploy,
+  restart, stop or roll back while investigating.
+- `explain_failed_deploy` — the failing step and what changed around it.
+
+A prompt grants nothing: everything it suggests still goes through the tools,
+which go through the routers.
+
+### Resources
+
+- `nixploy://service/{applicationId}` — a service's state and last events, JSON.
+- `nixploy://deployment/{deploymentId}/log` — a build log, truncated to its tail.
+
+Neither template lists its members. Enumerating every service and deployment of
+an organization is a lot of payload for something a host renders as a picker,
+and the tools already answer "what is there" with pagination and filters.
 
 ### Read-only
 

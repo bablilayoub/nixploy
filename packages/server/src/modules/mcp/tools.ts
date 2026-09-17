@@ -882,6 +882,203 @@ export const mcpTools: McpToolDefinition[] = [
 		handler: (caller, input: { incidentId: string; note?: string }) =>
 			caller.observability.resolveIncident(input),
 	},
+	{
+		name: "get_service_events",
+		description:
+			"A service's event timeline, newest first: tasks that started or died, out-of-memory kills, deploys, rollbacks, drift the reconciler corrected, and config changes with who made them. This is where 'why did it restart?' is answered — the deployment list only knows about deploys.",
+		inputSchema: z.object({
+			serviceType: z
+				.enum(["application", "compose", "postgres", "mysql", "mariadb", "mongo", "redis"])
+				.describe("Kind of service the id belongs to"),
+			serviceId: z.string().min(1).describe("Service ID (from list_services)"),
+			kinds: z
+				.array(z.string().min(1).max(40))
+				.max(20)
+				.optional()
+				.describe("Filter, e.g. ['oom_killed','task_failed','deploy_failed']"),
+			limit: z.number().int().min(1).max(100).optional().describe("Events to return (default 30)"),
+		}),
+		handler: async (
+			caller,
+			input: {
+				serviceType:
+					| "application"
+					| "compose"
+					| "postgres"
+					| "mysql"
+					| "mariadb"
+					| "mongo"
+					| "redis";
+				serviceId: string;
+				kinds?: string[];
+				limit?: number;
+			},
+		) => {
+			const page = await caller.observability.serviceEvents({
+				serviceType: input.serviceType,
+				serviceId: input.serviceId,
+				kinds: input.kinds,
+				limit: input.limit ?? 30,
+			});
+			return {
+				events: page.events.map((event) => ({
+					kind: event.kind,
+					severity: event.severity,
+					title: event.title,
+					message: event.message,
+					occurredAt: event.occurredAt,
+					actorEmail: event.actorEmail,
+					metadata: event.metadata,
+				})),
+				nextCursor: page.nextCursor,
+			};
+		},
+	},
+	{
+		name: "deploy_and_wait",
+		description:
+			"Queue a deploy and block until it finishes, then return the verdict: status, the pipeline step it died in, the tail of the build log, the URLs it should answer on and Swarm's live task counts. Prefer this over deploy_service + polling. Waits up to 55s per call — if `done` is false the deploy is still running and the same deploymentId can be handed to deploy_and_wait again. Requires the service.deploy capability.",
+		inputSchema: z
+			.object({
+				applicationId: applicationIdField.optional(),
+				composeId: z.string().min(1).optional().describe("Compose service ID"),
+				deploymentId: z
+					.string()
+					.min(1)
+					.optional()
+					.describe("Wait on a deployment that is already queued instead of starting one"),
+				ref: z
+					.string()
+					.min(1)
+					.optional()
+					.describe("Branch, tag or commit to build instead of the configured branch"),
+			})
+			.refine(
+				(value) =>
+					[value.applicationId, value.composeId, value.deploymentId].filter(Boolean).length === 1,
+				{ message: "Exactly one of applicationId, composeId or deploymentId is required" },
+			),
+		handler: async (
+			caller,
+			input: {
+				applicationId?: string;
+				composeId?: string;
+				deploymentId?: string;
+				ref?: string;
+			},
+		) => {
+			const deploymentId =
+				input.deploymentId ??
+				(input.applicationId
+					? (
+							await caller.application.deploy({
+								applicationId: input.applicationId,
+								...(input.ref ? { ref: input.ref } : {}),
+							})
+						).deploymentId
+					: (await caller.compose.deploy({ composeId: input.composeId as string })).deploymentId);
+			// One long poll. A caller that needs longer calls again with the id,
+			// which keeps a single MCP request inside every proxy's patience.
+			return caller.deployment.wait({ deploymentId, waitMs: 55_000, logLines: 40 });
+		},
+	},
+	{
+		name: "explain_last_failure",
+		description:
+			"Find the most recent failed deployment of a service and explain it: the failing step, the error, the log tail, the events around it, and Deploy Copilot's diagnosis when Copilot is configured (a cached explanation is reused; nothing is sent to a model unless `force` is set). Returns null when the service has no failed deployment.",
+		inputSchema: z
+			.object({
+				applicationId: applicationIdField.optional(),
+				composeId: z.string().min(1).optional().describe("Compose service ID"),
+				force: z
+					.boolean()
+					.optional()
+					.describe("Ask the model again instead of reusing a cached explanation"),
+			})
+			.refine((value) => Boolean(value.applicationId) !== Boolean(value.composeId), {
+				message: "Exactly one of applicationId or composeId is required",
+			}),
+		handler: async (
+			caller,
+			input: { applicationId?: string; composeId?: string; force?: boolean },
+		) => {
+			const page = input.applicationId
+				? await caller.deployment.byApplication({
+						applicationId: input.applicationId,
+						limit: 20,
+					})
+				: await caller.deployment.byCompose({ composeId: input.composeId as string, limit: 20 });
+			const failed = page.deployments.find((row) => row.status === "error");
+			if (!failed) return null;
+
+			const outcome = await caller.deployment.wait({
+				deploymentId: failed.deploymentId,
+				waitMs: 0,
+				logLines: 60,
+			});
+			// Copilot is optional and may be unconfigured, out of quota or simply
+			// off: an explanation is the bonus, the outcome is the answer.
+			const explanation = await (input.force
+				? caller.ai.explainDeployment({ deploymentId: failed.deploymentId, force: true })
+				: caller.ai.getExplanation({ deploymentId: failed.deploymentId })
+			).catch(() => null);
+			return { outcome, explanation };
+		},
+	},
+	{
+		name: "get_service_runtime_summary",
+		description:
+			"Everything needed to answer 'is this service healthy, and if not why': stored status, Swarm task counts, its domains, the last few deployments, the last few timeline events and any open incident. One call instead of five.",
+		inputSchema: z.object({
+			applicationId: applicationIdField.describe("Application ID (from list_services)"),
+		}),
+		handler: async (caller, input: { applicationId: string }) => {
+			const application = await caller.application.one(input);
+			const [deploymentPage, domains, events] = await Promise.all([
+				caller.deployment.byApplication({ applicationId: input.applicationId, limit: 5 }),
+				caller.domain.byApplication({ applicationId: input.applicationId }).catch(() => []),
+				caller.observability
+					.serviceEvents({
+						serviceType: "application",
+						serviceId: input.applicationId,
+						limit: 10,
+					})
+					.then((page) => page.events)
+					.catch(() => []),
+			]);
+			const latest = deploymentPage.deployments[0];
+			const outcome = latest
+				? await caller.deployment
+						.wait({ deploymentId: latest.deploymentId, waitMs: 0, logLines: 0 })
+						.catch(() => null)
+				: null;
+			return {
+				service: {
+					applicationId: application.applicationId,
+					name: application.name,
+					appName: application.appName,
+					status: application.status,
+					sourceType: application.sourceType,
+					buildType: application.buildType,
+				},
+				health: outcome?.health ?? null,
+				urls: outcome?.urls ?? [],
+				domains: domains.map((domain) => ({
+					host: domain.host,
+					path: domain.path,
+					port: domain.port,
+					https: domain.https,
+				})),
+				deployments: deploymentPage.deployments.map(compactDeployment),
+				events: events.map((event) => ({
+					kind: event.kind,
+					severity: event.severity,
+					title: event.title,
+					occurredAt: event.occurredAt,
+				})),
+			};
+		},
+	},
 ];
 
 export const mcpToolByName = new Map(mcpTools.map((tool) => [tool.name, tool]));
