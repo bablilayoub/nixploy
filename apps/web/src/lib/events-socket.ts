@@ -45,6 +45,17 @@ export interface ServiceStatusFrame {
 	appName?: string | null;
 }
 
+/** A service's timeline gained rows (`service_event`). */
+export interface ServiceEventFrame {
+	kind: "service-event";
+	serviceKind: string;
+	serviceId: string;
+	appName: string;
+	/** The loudest event kind of the batch that produced this frame. */
+	eventKind: string;
+	severity: string;
+}
+
 export type ControlFrameKind = "ready" | "heartbeat" | "error";
 
 export interface ControlFrame {
@@ -62,10 +73,15 @@ const CONTROL_KINDS: ReadonlySet<string> = new Set<ControlFrameKind>([
 const isControlFrame = (frame: LiveEventFrame): frame is ControlFrame =>
 	CONTROL_KINDS.has(frame.kind);
 
-export type LiveEventFrame = DeploymentFrame | QueueFrame | ServiceStatusFrame | ControlFrame;
+export type LiveEventFrame =
+	| DeploymentFrame
+	| QueueFrame
+	| ServiceStatusFrame
+	| ServiceEventFrame
+	| ControlFrame;
 
 /** Frames a consumer acts on (the control frames are handled in here). */
-export type LiveEvent = DeploymentFrame | QueueFrame | ServiceStatusFrame;
+export type LiveEvent = DeploymentFrame | QueueFrame | ServiceStatusFrame | ServiceEventFrame;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
@@ -99,6 +115,16 @@ export function parseEventFrame(data: string): LiveEventFrame | null {
 		case "queue":
 			if (typeof raw.depth !== "number") return null;
 			return { kind: "queue", depth: raw.depth };
+		case "service-event":
+			if (typeof raw.serviceKind !== "string" || typeof raw.serviceId !== "string") return null;
+			return {
+				kind: "service-event",
+				serviceKind: raw.serviceKind,
+				serviceId: raw.serviceId,
+				appName: typeof raw.appName === "string" ? raw.appName : "",
+				eventKind: typeof raw.eventKind === "string" ? raw.eventKind : "",
+				severity: typeof raw.severity === "string" ? raw.severity : "info",
+			};
 		case "service-status":
 			if (
 				typeof raw.serviceKind !== "string" ||

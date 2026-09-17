@@ -109,3 +109,18 @@ describe("frameInvalidations", () => {
 		expect(paths(frameInvalidations({ kind: "queue", depth: 4 }))).toEqual(["deployment.recent"]);
 	});
 });
+
+describe("service-event frames", () => {
+	it("refetches the timeline and nothing else", () => {
+		expect(
+			frameInvalidations({
+				kind: "service-event",
+				serviceKind: "application",
+				serviceId: "app-1",
+				appName: "web-abc123",
+				eventKind: "oom_killed",
+				severity: "error",
+			}),
+		).toEqual([{ path: "observability.serviceEvents" }]);
+	});
+});

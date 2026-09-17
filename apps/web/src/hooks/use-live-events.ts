@@ -46,7 +46,8 @@ export type InvalidationTarget =
 	| { path: "docker.containers" }
 	| { path: "service.one"; serviceKind: string; id: string }
 	| { path: "service.all"; serviceKind: string }
-	| { path: "service.getStatus"; serviceKind: string; id: string };
+	| { path: "service.getStatus"; serviceKind: string; id: string }
+	| { path: "observability.serviceEvents" };
 
 const TERMINAL_STATUSES = new Set(["done", "error", "cancelled"]);
 
@@ -65,6 +66,10 @@ export function frameInvalidations(event: LiveEvent): InvalidationTarget[] {
 	switch (event.kind) {
 		case "queue":
 			return [{ path: "deployment.recent" }];
+		// The timeline page refetches; nothing else on screen depends on it, so
+		// this frame deliberately invalidates one query and no service listings.
+		case "service-event":
+			return [{ path: "observability.serviceEvents" }];
 		case "service-status": {
 			const targets: InvalidationTarget[] = [{ path: "docker.containers" }];
 			if (event.serviceKind === "application") {
@@ -174,6 +179,8 @@ export function useLiveEvents(): void {
 					return trpc.compose.containers.queryKey({ composeId: target.composeId });
 				case "docker.containers":
 					return trpc.docker.containers.pathKey();
+				case "observability.serviceEvents":
+					return trpc.observability.serviceEvents.pathKey();
 				case "service.one": {
 					// The five database routers share one shape: `<kind>.one({ <kind>Id })`.
 					const namespace = namespaceOf(target.serviceKind);

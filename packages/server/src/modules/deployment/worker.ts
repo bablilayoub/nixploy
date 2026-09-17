@@ -20,6 +20,10 @@ import {
 	runsOnPrimary,
 } from "../compose/service";
 import { invalidateDockerListings } from "../docker/containers";
+import {
+	recordDeploymentEvent,
+	recordDeploymentOutcomeEvent,
+} from "../observability/deploy-events";
 import { buildPreviewComposeTarget } from "../preview/compose";
 import { parsePreviewSourceRef } from "../preview/source-ref";
 import { syncPreviewTraefik } from "../preview/traefik";
@@ -768,6 +772,11 @@ async function processJob(job: QueueJob): Promise<void> {
 		// The row is already `running` (claim query) — only the service row and
 		// the log still need the transition.
 		await setServiceStatus(job, "running");
+		// Detached: the timeline is history, not part of the deploy's critical
+		// path, and its writer never throws at us.
+		void recordDeploymentEvent(job.deploymentId, "deploy_started", {
+			metadata: { type: job.type, ...(job.serverId ? { serverId: job.serverId } : {}) },
+		});
 		log.line(
 			`Deployment ${job.deploymentId} started (${job.type}${job.serverId ? `, server ${job.serverId}` : ", local"})`,
 		);
@@ -877,6 +886,13 @@ async function processJob(job: QueueJob): Promise<void> {
 					},
 				);
 			}
+			void recordDeploymentOutcomeEvent(job.deploymentId, terminalStatus, errorMessage).catch(
+				(eventError: unknown) => {
+					log.error("Failed to record the deploy timeline event", {
+						error: errorText(eventError),
+					});
+				},
+			);
 			if (terminalStatus === "error") {
 				void recordDeployFailure(job).catch((obsError: unknown) => {
 					log.error("Failed to record deploy observability", { error: errorText(obsError) });

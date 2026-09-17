@@ -9,6 +9,7 @@ import { deploymentCommand, legacyDeployCommand } from "./deployment.js";
 import { doctorCommand } from "./doctor.js";
 import { augmentDomainCommand } from "./domain.js";
 import { envCommand } from "./env.js";
+import { eventsCommand } from "./events.js";
 import { gitopsCommand, registerGitopsTopLevelCommands } from "./gitops.js";
 import { augmentOrgCommand } from "./org.js";
 import { buildRegistryGroups } from "./registry.js";
@@ -48,6 +49,7 @@ export function registerCommands(program: Command): Command {
 		envCommand(),
 		deploymentCommand(),
 		auditCommand(),
+		eventsCommand(),
 		doctorCommand(),
 		gitopsCommand(),
 		legacyDeployCommand(),

@@ -703,7 +703,8 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 	{
 		slug: "observability",
 		title: "Observability",
-		description: "Logs, metrics history, Prometheus, terminal, alerts, uptime, and incidents.",
+		description:
+			"Logs, metrics history, Prometheus, terminal, the service event timeline, alerts, uptime, and incidents.",
 		blocks: [
 			{ type: "h2", text: "Live surfaces" },
 			{
@@ -733,6 +734,30 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 					"Services with no sample yet emit no CPU/memory series; the status gauge is always emitted, so status == 0 is the honest “it is down” signal",
 					"One organization per key — there is deliberately no instance-wide dump that would expose every tenant's names",
 				],
+			},
+			{ type: "h2", text: "Service event timeline" },
+			{
+				type: "p",
+				text: "Runtime → Events on every service page answers the question a Swarm panel usually cannot: why did it restart? One list of what happened to the service, newest first, filterable by failures, deploys or changes.",
+			},
+			{
+				type: "ul",
+				items: [
+					"Task started, task failed and killed rows, with the exit code and the daemon's own error string",
+					"Status drift the reconciler had to correct — something changed the service outside Nixploy",
+					"Every deployment transition, and the rollback or config change that came just before it",
+					"Who changed what: settings, environment variables, source, build type, start and stop all carry the actor",
+					"Deploys, rollbacks and kills are drawn on the metrics charts too, so a spike and its cause sit next to each other",
+					"Read it from a terminal with nixploy events list <serviceId>, or over REST",
+				],
+			},
+			{
+				type: "note",
+				text: "Exit 137 is reported as a kill, not asserted as an out-of-memory: Swarm's task API carries no OOMKilled flag, and a stop that timed out produces the same code. The row says both causes and keeps the exit code — a panel that guessed here would be wrong often enough to matter.",
+			},
+			{
+				type: "p",
+				text: "Deploy Copilot reads the last events before a failure as context, so “explain this failed deploy” can see the out-of-memory kill four minutes earlier instead of guessing from the build log alone.",
 			},
 			{ type: "h2", text: "Alerts & incidents" },
 			{

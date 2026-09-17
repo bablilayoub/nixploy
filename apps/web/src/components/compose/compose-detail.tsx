@@ -22,6 +22,7 @@ import { SchedulesPanel } from "@/components/schedules/schedules-panel";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { CopilotChatDrawer } from "@/components/services/copilot-chat-drawer";
 import { SaveBarTabsContent } from "@/components/services/save-bar";
+import { ServiceEvents } from "@/components/services/service-events";
 import { ServiceLoadError } from "@/components/services/service-load-error";
 import { type ServiceActions, ServicePageHeader } from "@/components/services/service-page-header";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
@@ -74,6 +75,7 @@ const SUB_TAB_PARENT: Record<string, string> = {
 	schedules: "deploy",
 	logs: "runtime",
 	monitoring: "runtime",
+	events: "runtime",
 	terminal: "runtime",
 };
 
@@ -308,6 +310,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 						<SubTabsList>
 							<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
 							<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>
+							<SubTabsTrigger value="events">Events</SubTabsTrigger>
 							<SubTabsTrigger value="terminal">Terminal</SubTabsTrigger>
 						</SubTabsList>
 						<TabsContent value="logs" className="mt-0">
@@ -315,6 +318,9 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 						</TabsContent>
 						<TabsContent value="monitoring" className="mt-0">
 							<MonitoringTab compose={compose} />
+						</TabsContent>
+						<TabsContent value="events" className="mt-0">
+							<ServiceEvents serviceType="compose" serviceId={compose.composeId} />
 						</TabsContent>
 						<TabsContent value="terminal" className="mt-0">
 							<TerminalTab compose={compose} />

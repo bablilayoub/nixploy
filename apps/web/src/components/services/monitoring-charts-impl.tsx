@@ -1,5 +1,7 @@
 "use client";
 
+import { SERVICE_EVENT_CHART_KINDS } from "@nixploy/server/modules/observability/event-kinds";
+import type { ServiceKind } from "@nixploy/server/modules/services/kinds";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, ArrowDown, ArrowUp, Cpu, Database, HardDrive, ListOrdered } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -15,6 +17,7 @@ import {
 } from "recharts";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { NotRunningState, type RuntimeEmptyProps } from "@/components/services/not-running-state";
+import { type ChartAnnotation, snapEventsToSamples } from "@/lib/chart-annotations";
 import { formatBytes } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -30,6 +33,8 @@ interface StatsFrame {
 }
 
 interface Sample {
+	/** Epoch ms of the sample; the x axis is categorical, this is what events snap to. */
+	at: number;
 	time: string;
 	cpu: number;
 	memoryPercent: number;
@@ -177,6 +182,7 @@ function MetricChart({
 	data,
 	series,
 	formatValue,
+	annotations = [],
 }: {
 	title: string;
 	/** Value chip shown on the right of the header (latest reading). */
@@ -184,6 +190,7 @@ function MetricChart({
 	data: Sample[];
 	series: { key: keyof Sample; label: string; color: string; gradientId: string }[];
 	formatValue: (value: number) => string;
+	annotations?: ChartAnnotation[];
 }) {
 	// Peak marker per series (dashed line at the window's max).
 	const peaks = series.map((item) => ({
@@ -255,6 +262,23 @@ function MetricChart({
 								isAnimationActive={false}
 							/>
 						))}
+						{annotations.map((annotation) => (
+							<ReferenceLine
+								key={annotation.id}
+								x={annotation.x}
+								stroke={annotation.color}
+								strokeDasharray="2 3"
+								strokeOpacity={0.85}
+								// `insideTop`, not `top`: the chart leaves 4px of margin above
+								// the plot area and a label placed there is clipped away.
+								label={{
+									value: annotation.mark,
+									position: "insideTop",
+									fill: annotation.color,
+									fontSize: 11,
+								}}
+							/>
+						))}
 						{peaks.map(
 							(peak) =>
 								peak.value > 0 && (
@@ -295,11 +319,16 @@ const RANGES: { value: Range; label: string }[] = [
 export function MonitoringCharts({
 	appName,
 	serverId,
+	serviceType,
+	serviceId,
 	serviceStatus,
 	notRunningAction,
 }: {
 	appName: string;
 	serverId?: string | null;
+	/** Both or neither: without them the charts render without event markers. */
+	serviceType?: ServiceKind;
+	serviceId?: string;
 } & RuntimeEmptyProps) {
 	const trpc = useTRPC();
 	const [range, setRange] = useState<Range>("live");
@@ -331,6 +360,7 @@ export function MonitoringCharts({
 			const previous = index > 0 ? rows[index - 1] : undefined;
 			const elapsedSeconds = previous ? Math.max((row.t - previous.t) / 1000, 1) : 30;
 			return {
+				at: new Date(row.t).getTime(),
 				time: new Date(row.t).toLocaleTimeString("en-GB", { hour12: false }),
 				cpu: row.cpu,
 				memoryPercent: row.memoryTotal > 0 ? (row.memoryUsed / row.memoryTotal) * 100 : 0,
@@ -362,6 +392,29 @@ export function MonitoringCharts({
 		const expectedSlots = (24 * 60 * 60) / 30;
 		return Math.min(100, (rows.length / expectedSlots) * 100);
 	}, [uptimeQuery.data]);
+
+	/**
+	 * Deploys, rollbacks and kills drawn on top of the metric lines — the whole
+	 * point of the timeline is that a spike and its cause sit next to each other.
+	 *
+	 * The query key carries no time window on purpose: it would change every
+	 * minute and mint a new cache entry each time. The newest events are fetched
+	 * once, the socket's `service-event` frame refetches them, and the ones
+	 * outside the plotted window are dropped when they fail to snap to a sample.
+	 */
+	const eventsQuery = useQuery({
+		...trpc.observability.serviceEvents.queryOptions({
+			serviceType: serviceType as ServiceKind,
+			serviceId: serviceId as string,
+			kinds: [...SERVICE_EVENT_CHART_KINDS],
+			limit: 100,
+		}),
+		enabled: Boolean(serviceType && serviceId),
+	});
+	const annotations = useMemo(
+		() => snapEventsToSamples(samples, eventsQuery.data?.events ?? []),
+		[samples, eventsQuery.data],
+	);
 
 	// Per-replica breakdown (only rendered when the service has >1 container).
 	const replicasQuery = useQuery({
@@ -429,6 +482,7 @@ export function MonitoringCharts({
 				};
 
 				const sample: Sample = {
+					at: now,
 					time: new Date(now).toLocaleTimeString("en-GB", { hour12: false }),
 					cpu: frame.cpu,
 					memoryPercent: frame.memory.percent,
@@ -634,6 +688,7 @@ export function MonitoringCharts({
 						data={samples}
 						series={[{ key: "cpu", label: "CPU", color: METRICS.cpu, gradientId: "chart-cpu" }]}
 						formatValue={(value) => `${value.toFixed(0)}%`}
+						annotations={annotations}
 					/>
 					<MetricChart
 						title="Memory usage"
@@ -648,6 +703,7 @@ export function MonitoringCharts({
 							},
 						]}
 						formatValue={(value) => `${value.toFixed(0)}%`}
+						annotations={annotations}
 					/>
 					<div className="lg:col-span-2">
 						<MetricChart
@@ -663,6 +719,7 @@ export function MonitoringCharts({
 								{ key: "txRate", label: "Sent", color: METRICS.tx, gradientId: "chart-tx" },
 							]}
 							formatValue={(value) => `${formatBytes(value)}/s`}
+							annotations={annotations}
 						/>
 					</div>
 				</div>

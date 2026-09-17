@@ -888,6 +888,11 @@ const docs: Record<string, ProcedureDoc> = {
 		description:
 			"Alert firings, deploy-failure streaks, watchdog events and uptime flips, newest first.",
 	},
+	"observability.serviceEvents": {
+		summary: "List a service's event timeline",
+		description:
+			"Deploys, task failures, out-of-memory kills, status drift and config changes for one service, newest first. Keyset-paginated with `cursor`.",
+	},
 	"observability.alertRules": {
 		summary: "List alert rules of a service",
 		description: "CPU, memory, restart and deploy-failure-streak rules with thresholds.",

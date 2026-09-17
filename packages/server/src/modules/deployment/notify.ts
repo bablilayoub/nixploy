@@ -12,11 +12,12 @@ import { deploymentEvents } from "./events";
  * Platform event bus — the push half of "push instead of poll"
  * (architecture audit #14 / §4.5).
  *
- * One emitter carries three kinds of frame:
+ * One emitter carries four kinds of frame:
  * - `deployment` — every status transition of a deployment row
  *   (`queued → running → done | error | cancelled`),
  * - `queue` — how many jobs an organization currently has waiting,
- * - `service-status` — a correction written by the status reconciler.
+ * - `service-status` — a correction written by the status reconciler,
+ * - `service-event` — a service's timeline gained rows.
  *
  * Producers call {@link publishPlatformEvent}. Consumers are `/ws/events`
  * (which filters by the socket's organization) and, in the split, the panel's
@@ -67,13 +68,37 @@ export interface ServiceStatusEventFrame {
 	appName?: string | null;
 }
 
-export type PlatformEvent = DeploymentEventFrame | QueueEventFrame | ServiceStatusEventFrame;
+/**
+ * A service's timeline gained rows (`modules/observability/service-events.ts`).
+ *
+ * Carries the batch's loudest event rather than every row: a crash loop must
+ * not become one socket frame per failed task, and the panel only needs to
+ * know the timeline moved to refetch its page.
+ */
+export interface ServiceEventFrame {
+	kind: "service-event";
+	organizationId: string;
+	serviceKind: ServiceKind;
+	serviceId: string;
+	appName: string;
+	/** A `ServiceEventKind`; a client that does not know it still refetches. */
+	eventKind: string;
+	/** info | warning | error */
+	severity: string;
+}
+
+export type PlatformEvent =
+	| DeploymentEventFrame
+	| QueueEventFrame
+	| ServiceStatusEventFrame
+	| ServiceEventFrame;
 
 /** The event minus the field a client must never see. */
 export type ClientFrame =
 	| (Omit<DeploymentEventFrame, "organizationId"> & { kind: "deployment" })
 	| (Omit<QueueEventFrame, "organizationId"> & { kind: "queue" })
-	| (Omit<ServiceStatusEventFrame, "organizationId"> & { kind: "service-status" });
+	| (Omit<ServiceStatusEventFrame, "organizationId"> & { kind: "service-status" })
+	| (Omit<ServiceEventFrame, "organizationId"> & { kind: "service-event" });
 
 /** Strip the tenant id before a frame goes out over a socket. */
 export function toClientFrame(event: PlatformEvent): ClientFrame {
@@ -195,6 +220,23 @@ export function decodePlatformEvent(payload: string): PlatformEvent | null {
 				id: candidate.id,
 				status: candidate.status,
 				appName: nullableString(candidate.appName),
+			};
+		}
+		case "service-event": {
+			if (!isNonEmptyString(candidate.serviceId) || !isNonEmptyString(candidate.eventKind)) {
+				return null;
+			}
+			if (!(SERVICE_KINDS as readonly string[]).includes(candidate.serviceKind as string)) {
+				return null;
+			}
+			return {
+				kind: "service-event",
+				organizationId: candidate.organizationId,
+				serviceKind: candidate.serviceKind as ServiceKind,
+				serviceId: candidate.serviceId,
+				appName: isNonEmptyString(candidate.appName) ? candidate.appName : "",
+				eventKind: candidate.eventKind,
+				severity: isNonEmptyString(candidate.severity) ? candidate.severity : "info",
 			};
 		}
 		default:

@@ -72,6 +72,14 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
 	} catch (error) {
 		console.error(`Audit write failed (${entry.action}):`, error);
 	}
+	// Outside the try: a service mutation that was audited should still reach
+	// the service timeline if the mirror fails, and vice versa. Imported lazily
+	// so the audit module stays free of the observability import graph.
+	void import("../observability/audit-events")
+		.then(({ mirrorAuditOntoTimeline }) => mirrorAuditOntoTimeline(entry))
+		.catch(() => {
+			// The timeline is history, not the audit trail: never surface here.
+		});
 }
 
 /** Minimal shape of a tRPC context an audit call needs. */

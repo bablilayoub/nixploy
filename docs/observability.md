@@ -185,6 +185,77 @@ Two actions close the loop (`observability.acknowledgeIncident` /
 
 Resolved incidents are dropped by the retention pass 90 days later.
 
+## Service event timeline
+
+**Runtime → Events** on every service page answers the one question a Swarm
+panel could not: *why did it restart?* One `service_event` row per fact about
+a service, newest first, filterable by All / Failures / Deploys / Changes.
+
+| Kind | Written by | Means |
+| --- | --- | --- |
+| `task_started` | reconciler | a Swarm task reached `running` |
+| `task_failed` | reconciler | a task ended `failed` / `rejected` / `orphaned` |
+| `oom_killed` | reconciler | the container was killed (exit 137 or a reported OOM) |
+| `status_changed` | reconciler | drift it had to correct — something changed the service outside Nixploy |
+| `deploy_started` · `deploy_finished` · `deploy_failed` · `deploy_cancelled` | deploy worker | a deployment transition, with its id |
+| `rollback` | audit bridge | a rollback was applied |
+| `config_changed` | audit bridge | settings, env, source, build type, start/stop — anything a mutation audited |
+
+Three producers, no cron of its own:
+
+- **The status reconciler** (`*/1 * * * *`) already reads every Swarm service
+  and task to correct statuses; the same two API calls carry exit codes and
+  error strings, so the timeline costs no extra daemon round-trip
+  (`modules/deployment/reconciler-timeline.ts` + the pure derivation in
+  `modules/observability/task-events.ts`).
+- **The deploy worker**, on every transition it writes
+  (`modules/observability/deploy-events.ts`). Preview deploys are recorded on
+  the **parent** service, tagged `preview: true`.
+- **The audit trail**: `recordAudit` mirrors any entry naming a service onto
+  the timeline (`modules/observability/audit-events.ts`), so a router that
+  starts auditing a new mutation gets a timeline row for free. Deploy verbs are
+  skipped — the worker already writes those, with the deployment id attached.
+
+Things worth knowing:
+
+- **Writes are idempotent, not cursor-based.** The reconciler re-reads the
+  same finished task every pass, so each row carries a `dedupe_key` unique per
+  service and the insert is `on conflict do nothing`. There is no cursor to
+  keep, invalidate or recover.
+- **A pass looks back 30 minutes.** A task whose state is older than that was
+  seen by an earlier pass. The cost: the first pass after an upgrade does not
+  backfill history — the timeline starts when the feature does.
+- **Exit 137 is reported as a kill, not asserted as an OOM.** Swarm's task API
+  carries no `OOMKilled` flag (it is on the container, which is already gone),
+  and `docker kill` produces the same code. The row says so, and keeps the exit
+  code in `metadata`.
+- **A pass records at most 20 events per service**, newest first, and logs what
+  it dropped — a service churning faster than that is exactly the one being
+  investigated, so the cap is never silent.
+- **Plain (non-stack) compose has no tasks to read.** Its timeline carries
+  deploys, rollbacks and config changes but no per-container rows.
+- Rows never contain secret values: task metadata is exit codes and ids, and
+  config rows carry changed field *names* and counts.
+
+The chart annotations on **Runtime → Monitoring** are the same rows: deploys,
+rollbacks and kills drawn as dashed vertical lines, so a spike and its cause
+sit next to each other. Only the loud kinds are drawn — annotating every kind
+turns the chart into a picket fence.
+
+Deploy Copilot reads the last 20 events before a failure as context, so
+"explain this failed deploy" can see the OOM four minutes earlier instead of
+guessing from the build log alone.
+
+Read it from a terminal:
+
+```bash
+nixploy events list <serviceId> --type application --kind oom_killed,task_failed --since 24h
+```
+
+REST: `GET /api/observability.serviceEvents?serviceType=application&serviceId=…`
+(`kinds` accepts a comma-separated list; `cursor` continues from the previous
+page's `nextCursor`).
+
 ## Public status page
 
 `observability.enableStatusPage({ probeIds, title })` publishes selected
@@ -496,6 +567,9 @@ The hourly maintenance cron (`modules/deployment/maintenance.ts`, `7 * * * *`):
   anti-join per directory, the table is never loaded into memory);
 - removes schedule run output under `<config>/schedules` older than 30 days;
 - drops incidents resolved more than 90 days ago or older than 180 days;
+- drops `service_event` rows older than 90 days, and anything beyond the newest
+  1 000 per service (a service in a crash loop writes a row every few seconds,
+  and the per-service cap is what stops one sick service owning the table);
 - drops `audit_log` rows older than `NIXPLOY_AUDIT_RETENTION_DAYS` (default
   `365`; `0` keeps them forever).
 

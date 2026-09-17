@@ -23,8 +23,11 @@ import {
 	summarizeTaskStates,
 } from "../databases/engine";
 import { notifyEvent } from "../notifications";
+import type { SwarmTaskFacts } from "../observability/task-events";
+import type { ServiceKind } from "../services/kinds";
 import { getDocker } from "./docker";
 import { publishServiceStatusCorrections } from "./notify";
+import { recordReconciledEvents, type TimelineService } from "./reconciler-timeline";
 
 const log = createLogger("status-reconciler");
 
@@ -91,6 +94,50 @@ const NO_SERVICE: ServiceState = {
 };
 
 /**
+ * Dockerode's `Task` onto the flat shape the timeline derivation reads. Tasks
+ * whose service was not in the same listing are dropped: without a service
+ * name there is nothing to attach the event to.
+ */
+interface RawSwarmTask {
+	ID?: string;
+	ServiceID?: string;
+	Slot?: number;
+	DesiredState?: string;
+	Status?: {
+		State?: string;
+		Message?: string;
+		Err?: string;
+		Timestamp?: string;
+		ContainerStatus?: { ExitCode?: number };
+	};
+}
+
+function toTaskFacts(
+	tasks: readonly RawSwarmTask[],
+	nameByServiceId: ReadonlyMap<string, string>,
+): SwarmTaskFacts[] {
+	const facts: SwarmTaskFacts[] = [];
+	for (const task of tasks) {
+		const serviceName = task.ServiceID ? nameByServiceId.get(task.ServiceID) : undefined;
+		if (!task.ID || !serviceName) continue;
+		const status = task.Status;
+		const exitCode = status?.ContainerStatus?.ExitCode;
+		facts.push({
+			id: task.ID,
+			serviceName,
+			slot: typeof task.Slot === "number" ? task.Slot : null,
+			state: (status?.State ?? "").toLowerCase(),
+			desiredState: (task.DesiredState ?? "").toLowerCase(),
+			message: status?.Message ?? null,
+			error: status?.Err ?? null,
+			exitCode: typeof exitCode === "number" ? exitCode : null,
+			timestamp: status?.Timestamp ?? null,
+		});
+	}
+	return facts;
+}
+
+/**
  * Every swarm service's state in TWO Docker API calls — `listServices()` plus
  * `listTasks()`, grouped by `ServiceID` in memory — instead of the two calls
  * *per service* the pass used to make (audit #8: 100 services meant 200+
@@ -98,11 +145,18 @@ const NO_SERVICE: ServiceState = {
  * be read at all: the caller then skips the swarm-backed rows rather than
  * mistaking "cannot see docker" for "nothing is deployed".
  */
-interface SwarmSnapshot {
+export interface SwarmSnapshot {
 	/** Service name → live task summary. */
 	byName: Map<string, ServiceState>;
 	/** `com.docker.stack.namespace` label → the stack's service names. */
 	byStack: Map<string, string[]>;
+	/**
+	 * Every task the pass saw, flattened with its service name resolved. The
+	 * status probe only needs the states, but the same two API calls also carry
+	 * exit codes and error strings — which is the whole service timeline, for
+	 * free (`reconciler-timeline.ts`).
+	 */
+	tasks: SwarmTaskFacts[];
 }
 
 export async function loadSwarmSnapshot(): Promise<SwarmSnapshot | null> {
@@ -119,9 +173,11 @@ export async function loadSwarmSnapshot(): Promise<SwarmSnapshot | null> {
 		}
 		const byName = new Map<string, ServiceState>();
 		const byStack = new Map<string, string[]>();
+		const nameByServiceId = new Map<string, string>();
 		for (const service of services) {
 			const name = service.Spec?.Name;
 			if (!name) continue;
+			if (service.ID) nameByServiceId.set(service.ID, name);
 			byName.set(name, {
 				exists: true,
 				desired: service.Spec?.Mode?.Replicated?.Replicas ?? 0,
@@ -132,7 +188,7 @@ export async function loadSwarmSnapshot(): Promise<SwarmSnapshot | null> {
 			];
 			if (stack) byStack.set(stack, [...(byStack.get(stack) ?? []), name]);
 		}
-		return { byName, byStack };
+		return { byName, byStack, tasks: toTaskFacts(tasks, nameByServiceId) };
 	} catch (error) {
 		log.warn("Could not read swarm state — skipping swarm-backed reconciliation this pass", {
 			error: error instanceof Error ? error.message : String(error),
@@ -205,7 +261,7 @@ interface SwarmBackedRow {
 }
 
 interface SwarmBackedKind {
-	kind: string;
+	kind: ServiceKind;
 	load: () => Promise<SwarmBackedRow[]>;
 	update: (id: string, status: StoredStatus) => Promise<unknown>;
 }
@@ -282,6 +338,9 @@ const SWARM_BACKED: SwarmBackedKind[] = [
  */
 export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 	const corrections: StatusCorrection[] = [];
+	// Every row the pass touches, kept so the timeline half can attach a task
+	// to the service that owns it without loading them a second time.
+	const timelineServices: TimelineService[] = [];
 
 	const busyDeployments = await db.query.deployments.findMany({
 		where: eq(deployments.status, "running"),
@@ -313,6 +372,12 @@ export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 		for (const descriptor of SWARM_BACKED) {
 			const rows = await descriptor.load();
 			for (const row of rows) {
+				timelineServices.push({
+					serviceType: descriptor.kind,
+					serviceId: row.id,
+					appName: row.appName,
+					environmentId: row.environmentId,
+				});
 				if (descriptor.kind === "application" && busyApplications.has(row.id)) continue;
 				try {
 					// Service state comes from the primary manager for every row,
@@ -357,6 +422,15 @@ export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 			environmentId: true,
 		},
 	});
+
+	for (const row of composeRows) {
+		timelineServices.push({
+			serviceType: "compose",
+			serviceId: row.composeId,
+			appName: row.appName,
+			environmentId: row.environmentId,
+		});
+	}
 
 	const applyCompose = async (row: (typeof composeRows)[number]): Promise<boolean> => {
 		if (busyCompose.has(row.composeId)) return true;
@@ -422,6 +496,8 @@ export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 	}
 
 	await notifyWatchdog(corrections);
+	// Same pass, same snapshot: the timeline costs no extra daemon call.
+	await recordReconciledEvents({ snapshot, services: timelineServices, corrections });
 	return corrections;
 }
 

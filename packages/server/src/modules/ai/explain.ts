@@ -4,6 +4,7 @@ import { db } from "../../db";
 import { applications, compose, deployments, domains } from "../../db/schema";
 import { redactSensitiveText } from "../../utils/public-url";
 import { notFound, preconditionFailed } from "../errors";
+import { recentServiceEvents } from "../observability/service-events";
 import { completeChat } from "./client";
 import { writeCachedExplanation } from "./explanation-cache";
 import { validateComposeYaml } from "./generate-compose";
@@ -75,6 +76,26 @@ async function loadDeploymentForOrg(deploymentId: string, organizationId: string
 	return deployment;
 }
 
+/** Recent timeline entries handed to the model as context. */
+const TIMELINE_EVENTS = 20;
+
+/**
+ * The service's recent history as a few plain lines, oldest first. Redacted
+ * with the same secret list as the log: an event title is model-written, but
+ * its metadata comes from tenant config and must go through the same filter.
+ */
+function renderServiceTimeline(
+	events: ReadonlyArray<{ occurredAt: Date; kind: string; title: string; message: string | null }>,
+	secrets: readonly string[],
+): string {
+	if (events.length === 0) return "";
+	const lines = events.map((event) => {
+		const detail = event.message ? ` — ${event.message}` : "";
+		return `- ${event.occurredAt.toISOString()} [${event.kind}] ${event.title}${detail}`;
+	});
+	return `\nRecent service events (oldest first):\n${redactSecrets(lines.join("\n"), [...secrets])}\n`;
+}
+
 export async function explainDeploymentFailure(
 	deploymentId: string,
 	organizationId: string,
@@ -143,11 +164,25 @@ Be concrete. Prefer fixes the user can apply in Nixploy (build type, Dockerfile,
 When the fix is environment variables, put ONLY dotenv KEY=VALUE lines in suggestedPatch (no prose) so Nixploy can apply them automatically.
 Never invent secrets.`;
 
+	// What happened around the failure, not just inside the build: an OOM kill
+	// four minutes earlier, a config change an hour before, a rollback. Without
+	// it the model can only read the log and guess at everything else.
+	const serviceId = deployment.applicationId ?? deployment.composeId;
+	const timeline = serviceId
+		? renderServiceTimeline(
+				await recentServiceEvents(serviceId, {
+					limit: TIMELINE_EVENTS,
+					before: deployment.finishedAt ?? undefined,
+				}).catch(() => []),
+				secrets,
+			)
+		: "";
+
 	const user = `Service: ${serviceName} (${serviceKind})
 Build type: ${buildType}
 Deployment status: ${deployment.status}
 Error message: ${errorMessage ?? "(none)"}
-
+${timeline}
 Log tail:
 \`\`\`
 ${safeLog}

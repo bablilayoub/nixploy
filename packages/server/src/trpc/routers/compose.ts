@@ -27,6 +27,7 @@ import {
 	restoreComposeSnapshot,
 } from "../../modules/compose/snapshot";
 import { composeReadiness, provenanceForSession, queueDeployment } from "../../modules/deployment";
+import { parseEnv } from "../../modules/deployment/env";
 import {
 	assertCapability,
 	assertWithinQuota,
@@ -262,6 +263,14 @@ export const composeRouter = router({
 				});
 			}
 			const updated = await updateComposeById(composeId, values, { callerIsInstanceAdmin });
+			// Field NAMES only: several of these columns hold secrets.
+			void auditFromSession(ctx, organizationId, {
+				action: "compose.update",
+				targetType: "compose",
+				targetId: updated.composeId,
+				targetName: updated.appName,
+				metadata: { fields: Object.keys(values).sort() },
+			});
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
 				organizationId,
@@ -391,6 +400,12 @@ export const composeRouter = router({
 		await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 		const row = await findComposeForOrg(input.composeId, organizationId);
 		await startCompose(row);
+		void auditFromSession(ctx, organizationId, {
+			action: "compose.start",
+			targetType: "compose",
+			targetId: row.composeId,
+			targetName: row.appName,
+		});
 		return true;
 	}),
 
@@ -400,6 +415,12 @@ export const composeRouter = router({
 		await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 		const row = await findComposeForOrg(input.composeId, organizationId);
 		await stopCompose(row);
+		void auditFromSession(ctx, organizationId, {
+			action: "compose.stop",
+			targetType: "compose",
+			targetId: row.composeId,
+			targetName: row.appName,
+		});
 		return true;
 	}),
 
@@ -409,8 +430,16 @@ export const composeRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
-			await findComposeForOrg(input.composeId, organizationId);
+			const row = await findComposeForOrg(input.composeId, organizationId);
 			await saveEnvironment(input.composeId, input.env);
+			// Counts, never keys or values.
+			void auditFromSession(ctx, organizationId, {
+				action: "compose.saveEnvironment",
+				targetType: "compose",
+				targetId: row.composeId,
+				targetName: row.appName,
+				metadata: { variables: parseEnv(input.env).length },
+			});
 			return true;
 		}),
 
@@ -430,6 +459,13 @@ export const composeRouter = router({
 				callerIsInstanceAdmin = true;
 			}
 			await saveComposeFile(row, input.composeFile, { callerIsInstanceAdmin });
+			void auditFromSession(ctx, organizationId, {
+				action: "compose.saveComposeFile",
+				targetType: "compose",
+				targetId: row.composeId,
+				targetName: row.appName,
+				metadata: { bytes: input.composeFile.length },
+			});
 			return true;
 		}),
 

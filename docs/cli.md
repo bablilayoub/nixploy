@@ -317,6 +317,23 @@ nixploy incident probes
 nixploy incident logs "connection refused" --limit 50
 ```
 
+### `events` — a service's timeline
+
+Why a service restarted, from a terminal: task failures, out-of-memory kills,
+deploys and config changes on one list (see
+[observability](./observability.md#service-event-timeline)).
+
+```bash
+nixploy events list app_abc                                       # newest first
+nixploy events list cmp_abc --type compose --kind oom_killed,task_failed
+nixploy events list pg_abc  --type postgres --since 24h --limit 100
+nixploy events list app_abc --cursor "<nextCursor from the previous page>"
+```
+
+`--type` is the service kind (`application` by default), `--kind` a
+comma-separated list of event kinds, `--since` an ISO date or a `30m`/`24h`/`7d`
+window.
+
 ### `project`, `environment`, `template`, `tag`
 
 ```bash

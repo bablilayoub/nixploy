@@ -20,6 +20,7 @@ import {
 	projects,
 	redis,
 	redisTags,
+	serviceEvents,
 	serviceType,
 	tags,
 } from "../../db/schema";
@@ -334,6 +335,10 @@ function defineServiceKind<K extends ServiceKind>(kind: K): ServiceKindDef<K> {
 
 		async deleteByIds(serviceIds, executor = db) {
 			if (serviceIds.length === 0) return;
+			// `service_event.service_id` is polymorphic and so has no foreign key
+			// to cascade with; without this the timeline of a deleted service
+			// would linger until the retention pass got to it.
+			await executor.delete(serviceEvents).where(inArray(serviceEvents.serviceId, serviceIds));
 			await executor.delete(table).where(inArray(idColumn, serviceIds));
 		},
 

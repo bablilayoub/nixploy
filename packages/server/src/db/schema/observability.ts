@@ -9,6 +9,7 @@ import {
 	pgTable,
 	text,
 	timestamp,
+	uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { applications } from "./application";
 import { organizations } from "./auth";
@@ -105,6 +106,75 @@ export const serviceLogs = pgTable(
 		index("service_log_org_created_idx").on(table.organizationId, table.createdAt),
 	],
 );
+
+/**
+ * Per-service timeline: the answer to "why did it restart?".
+ *
+ * One row per *fact* about a service — a task that died, a deploy that
+ * started, a rollback, a config change — written by the reconciler, the deploy
+ * worker and the audit bridge. Separate from `incident` on purpose: an
+ * incident is something a human should act on and close, an event is history
+ * and is never resolved.
+ *
+ * `serviceId` is the primary key of whichever of the seven service tables
+ * `serviceType` names, so there is no FK: a polymorphic column cannot have
+ * one. Rows are reaped when their organization is deleted (that FK is real)
+ * and by {@link pruneServiceEvents} for age and per-service volume; a deleted
+ * service's rows go with the retention pass, not with the row.
+ */
+export const serviceEvents = pgTable(
+	"service_event",
+	{
+		serviceEventId: idColumn("service_event_id"),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		/** A `ServiceKind`: application | compose | postgres | mysql | mariadb | mongo | redis. */
+		serviceType: text("service_type").notNull(),
+		/** Primary key of the row in the table `serviceType` names. */
+		serviceId: text("service_id").notNull(),
+		/** Denormalised so the timeline stays readable after a rename. */
+		appName: text("app_name").notNull(),
+		/** One of `SERVICE_EVENT_KINDS` (modules/observability/event-kinds.ts). */
+		kind: text("kind").notNull(),
+		/** info | warning | error */
+		severity: text("severity").notNull().default("info"),
+		title: text("title").notNull(),
+		message: text("message"),
+		deploymentId: text("deployment_id"),
+		/** Who caused it, for the events a human triggered. Null for the machine ones. */
+		actorId: text("actor_id"),
+		actorEmail: text("actor_email"),
+		/**
+		 * Stable identity of the fact this row records, unique per service.
+		 *
+		 * The reconciler re-reads the same finished Swarm task on every pass, so
+		 * the writes are made idempotent here — `on conflict do nothing` against
+		 * this index — instead of with a per-service cursor it would have to
+		 * keep, invalidate and recover. NULL for one-shot events (a deploy
+		 * transition happens once by construction), and Postgres treats NULLs as
+		 * distinct, so those never collide.
+		 */
+		dedupeKey: text("dedupe_key"),
+		/** Exit codes, task ids, old/new values — never a secret value. */
+		metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+		/** When it happened (Docker's timestamp), not when we noticed. */
+		occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		index("service_event_service_idx").on(table.serviceId, table.occurredAt.desc()),
+		index("service_event_org_created_idx").on(table.organizationId, table.occurredAt.desc()),
+		uniqueIndex("service_event_dedupe_idx").on(table.serviceId, table.dedupeKey),
+	],
+);
+
+export const serviceEventsRelations = relations(serviceEvents, ({ one }) => ({
+	organization: one(organizations, {
+		fields: [serviceEvents.organizationId],
+		references: [organizations.id],
+	}),
+}));
 
 /** Optional HTTP uptime probe configuration (one row per domain when enabled). */
 export const uptimeProbes = pgTable("uptime_probe", {

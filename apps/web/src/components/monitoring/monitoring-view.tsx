@@ -345,7 +345,12 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 								</Button>
 							</div>
 							<div className="p-4">
-								<MonitoringCharts appName={selected.appName} serverId={selected.serverId} />
+								<MonitoringCharts
+									appName={selected.appName}
+									serverId={selected.serverId}
+									serviceType={selected.kind}
+									serviceId={selected.serviceId}
+								/>
 							</div>
 						</>
 					) : (

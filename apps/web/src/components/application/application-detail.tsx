@@ -22,6 +22,7 @@ import { LogViewer } from "@/components/services/log-viewer";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
 import { SaveBarTabsContent } from "@/components/services/save-bar";
 import { ServiceAlertRulesCard } from "@/components/services/service-alert-rules-card";
+import { ServiceEvents } from "@/components/services/service-events";
 import { ServiceLoadError } from "@/components/services/service-load-error";
 import { ServiceTerminal } from "@/components/services/service-terminal";
 import { SubTabsList, SubTabsTrigger } from "@/components/services/sub-tabs";
@@ -55,6 +56,7 @@ const SUB_TAB_PARENT: Record<string, string> = {
 	schedules: "deploy",
 	logs: "runtime",
 	monitoring: "runtime",
+	events: "runtime",
 	terminal: "runtime",
 };
 
@@ -244,6 +246,7 @@ export function ApplicationDetail({ projectId, id }: { projectId: string; id: st
 							<SubTabsList>
 								<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
 								<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>
+								<SubTabsTrigger value="events">Events</SubTabsTrigger>
 								<SubTabsTrigger value="terminal">Terminal</SubTabsTrigger>
 							</SubTabsList>
 							<TabsContent value="logs" className="mt-0">
@@ -262,12 +265,23 @@ export function ApplicationDetail({ projectId, id }: { projectId: string; id: st
 										<MonitoringCharts
 											appName={application.appName}
 											serverId={application.serverId}
+											serviceType="application"
+											serviceId={application.applicationId}
 											serviceStatus={application.status}
 											notRunningAction={runtimeAction}
 										/>
 									</SettingsSection>
 									<ServiceAlertRulesCard applicationId={application.applicationId} />
 								</SettingsStack>
+							</TabsContent>
+							<TabsContent value="events" className="mt-0">
+								<SettingsSection
+									bare
+									title="Events"
+									description="Deploys, restarts, failed tasks and config changes, newest first."
+								>
+									<ServiceEvents serviceType="application" serviceId={application.applicationId} />
+								</SettingsSection>
 							</TabsContent>
 							<TabsContent value="terminal" className="mt-0">
 								<SettingsSection bare title="Terminal" description="Shell into the container.">

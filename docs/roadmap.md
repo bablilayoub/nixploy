@@ -104,11 +104,13 @@ The drop source is fully implemented on the worker side and has no way in. Add `
 
 Same release: `deployment.wait` (long-poll ≤55 s) and one machine-readable deploy outcome `{status, failingStep, lastLogLines, urls, healthcheck}` behind `--wait` everywhere. This is the contract v0.6's agent work and the `--wait` MCP tools build on.
 
-### 4. Service event timeline *(M)*
+### 4. Service event timeline ✅ *(M — landed 2026-09-17)*
 
-New `service_event` table (`kind`: task_failed · oom_killed · restart · deploy_* · rollback · scaled · config_changed · env_changed · alert · uptime_flip), written by the reconciler (per-service task lists from `docker.listTasks`, exit 137 + `State.OOMKilled` → oom_killed), the worker, `recordRollback`, and an `auditFromSession` hook for config/env changes. Pushed as a `service-event` frame on `/ws/events`; rendered as a Runtime → Events sub-tab and as annotations on the metrics charts.
+New `service_event` table (`kind`: task_started · task_failed · oom_killed · deploy_* · rollback · status_changed · config_changed · scaled), written by the reconciler (the task list it already fetches; exit 137 or a reported OOM → `oom_killed`), the deploy worker, and a `recordAudit` mirror for config changes. Pushed as a `service-event` frame on `/ws/events`; rendered as a Runtime → Events sub-tab and as annotations on the metrics charts. Read from a terminal with `nixploy events list`.
 
-*Why it matters:* "why did it restart?" is unanswerable in every Swarm panel today, and it is the single best context injection for Copilot — feed the last 20 events into `explain.ts` and failure explanations stop being guesses.
+*Why it matters:* "why did it restart?" is unanswerable in every Swarm panel today, and it is the single best context injection for Copilot — the last 20 events before a failure now go into `explain.ts`, so failure explanations stop being guesses.
+
+*What shipped differently from this sketch:* no `restart` kind (it would double-count `task_started`), no `alert` / `uptime_flip` (those are incidents, which have their own timeline and their own resolve semantics), and `recordRollback` is not a producer — it runs on every *successful* deploy to pin an image, so the rollback row comes from the audit mirror instead.
 
 ### 5. Agent surfaces *(S)*
 

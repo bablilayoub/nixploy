@@ -34,6 +34,7 @@ import { LogViewer } from "@/components/services/log-viewer";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
 import { SaveBarTabsContent, useSaveBar } from "@/components/services/save-bar";
 import { ServiceActionsCard } from "@/components/services/service-actions-card";
+import { ServiceEvents } from "@/components/services/service-events";
 import { ServiceLoadError } from "@/components/services/service-load-error";
 import { type ServiceActions, ServicePageHeader } from "@/components/services/service-page-header";
 import { ServiceTerminal } from "@/components/services/service-terminal";
@@ -92,6 +93,7 @@ interface DatabaseDetailProps {
 const SUB_TAB_PARENT: Record<string, string> = {
 	logs: "runtime",
 	monitoring: "runtime",
+	events: "runtime",
 	terminal: "runtime",
 };
 
@@ -467,6 +469,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 						<SubTabsList>
 							<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
 							<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>
+							<SubTabsTrigger value="events">Events</SubTabsTrigger>
 							<SubTabsTrigger value="terminal">Terminal</SubTabsTrigger>
 						</SubTabsList>
 						<TabsContent value="logs" className="mt-0">
@@ -484,9 +487,20 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 								<MonitoringCharts
 									appName={db.appName}
 									serverId={db.serverId}
+									serviceType={type}
+									serviceId={id}
 									serviceStatus={status}
 									notRunningAction={runtimeAction}
 								/>
+							</SettingsSection>
+						</TabsContent>
+						<TabsContent value="events" className="mt-0">
+							<SettingsSection
+								bare
+								title="Events"
+								description="Restarts, failed tasks and config changes, newest first."
+							>
+								<ServiceEvents serviceType={type} serviceId={id} />
 							</SettingsSection>
 						</TabsContent>
 						<TabsContent value="terminal" className="mt-0">

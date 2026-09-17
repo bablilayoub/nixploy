@@ -7,6 +7,33 @@ import { notifyEvent } from "../notifications";
 import { assertCapability } from "../projects/capabilities";
 
 export {
+	mirrorAuditOntoTimeline,
+	serviceEventFromAudit,
+} from "./audit-events";
+export { recordDeploymentEvent, recordDeploymentOutcomeEvent } from "./deploy-events";
+export {
+	isServiceEventKind,
+	SERVICE_EVENT_CHART_KINDS,
+	SERVICE_EVENT_KIND_LABELS,
+	SERVICE_EVENT_KIND_SEVERITY,
+	SERVICE_EVENT_KINDS,
+	type ServiceEventKind,
+	type ServiceEventSeverity,
+	serviceEventKindLabel,
+} from "./event-kinds";
+export {
+	deleteServiceEvents,
+	listServiceEvents,
+	pruneServiceEvents,
+	recentServiceEvents,
+	recordServiceEvent,
+	recordServiceEventDetached,
+	recordServiceEvents,
+	SERVICE_EVENT_PAGE_SIZE,
+	type ServiceEventInput,
+	type ServiceEventRow,
+} from "./service-events";
+export {
 	disableStatusPage,
 	enableStatusPage,
 	generateStatusPageToken,

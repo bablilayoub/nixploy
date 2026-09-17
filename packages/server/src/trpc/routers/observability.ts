@@ -13,17 +13,41 @@ import {
 	getStatusPage,
 	listAlertRules,
 	listIncidents,
+	listServiceEvents,
 	listUptimeProbes,
 	resolveIncident,
 	rotateStatusPageToken,
+	SERVICE_EVENT_PAGE_SIZE,
 	searchServiceLogs,
 	setUptimeProbe,
 	upsertAlertRule,
 } from "../../modules/observability";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
+import { serviceKindSchema } from "../../modules/services/registry";
 import { protectedProcedure, router } from "../init";
 
 const metricSchema = z.enum(["cpu", "memory", "restarts", "deploy_failure_streak"]);
+
+/**
+ * Event kinds to filter by.
+ *
+ * Also accepts a comma-separated string: the REST adapter flattens a query
+ * string into `Record<string, string>` and cannot express an array, so
+ * `?kinds=oom_killed,task_failed` is the only shape a curl or CLI caller has.
+ * The panel passes a real array over tRPC.
+ */
+const serviceEventKindsInput = z
+	.union([z.array(z.string().min(1).max(40)).max(20), z.string().min(1).max(500)])
+	.optional()
+	.transform((value) =>
+		typeof value === "string"
+			? value
+					.split(",")
+					.map((kind) => kind.trim())
+					.filter(Boolean)
+					.slice(0, 20)
+			: value,
+	);
 
 const assertDomainAccess = async (domainId: string, organizationId: string) => {
 	const domain = await db.query.domains.findFirst({
@@ -277,6 +301,46 @@ export const observabilityRouter = router({
 				targetId: input.alertRuleId,
 			});
 			return { ok: true };
+		}),
+
+	/**
+	 * One page of a service's event timeline, newest first.
+	 *
+	 * Read-only and gated by org membership alone, like `incidents`: the rows
+	 * carry exit codes, task ids and changed field names, never values. The org
+	 * is checked twice on purpose — once to resolve the caller's, once against
+	 * the service's — because `service_event.service_id` is polymorphic and the
+	 * org predicate is the only thing that makes the read tenant-safe.
+	 */
+	serviceEvents: protectedProcedure
+		.input(
+			z.object({
+				serviceType: serviceKindSchema,
+				serviceId: z.string().min(1),
+				kinds: serviceEventKindsInput,
+				/** ISO instant; the metrics charts pass their visible window. */
+				since: z.string().datetime().optional(),
+				limit: z.number().int().min(1).max(200).default(SERVICE_EVENT_PAGE_SIZE),
+				cursor: z.string().min(1).max(200).nullish(),
+			}),
+		)
+		.query(async ({ ctx, input }) => {
+			const organizationId = await resolveCallerOrganizationId(
+				ctx.session.user.id,
+				ctx.session.session.activeOrganizationId,
+			);
+			const context = await getServiceContext(input.serviceType, input.serviceId);
+			if (context.organizationId !== organizationId) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Service not found" });
+			}
+			return listServiceEvents({
+				organizationId,
+				serviceId: input.serviceId,
+				kinds: input.kinds,
+				since: input.since ? new Date(input.since) : undefined,
+				limit: input.limit,
+				cursor: input.cursor,
+			});
 		}),
 
 	searchLogs: protectedProcedure

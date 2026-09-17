@@ -9,7 +9,12 @@ export function MonitoringTab({ compose }: { compose: ComposeService }) {
 	return (
 		<SettingsStack>
 			<SettingsSection title="Monitoring" description="CPU, memory, and network." bare>
-				<MonitoringCharts appName={compose.appName} serverId={compose.serverId} />
+				<MonitoringCharts
+					appName={compose.appName}
+					serverId={compose.serverId}
+					serviceType="compose"
+					serviceId={compose.composeId}
+				/>
 			</SettingsSection>
 			<ServiceAlertRulesCard composeId={compose.composeId} />
 		</SettingsStack>

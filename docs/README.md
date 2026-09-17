@@ -39,7 +39,7 @@ Use this against the marketing site / README when docs drift:
 - [x] Deploy: multi-git, image, zip, builders, queue, rollback, PR previews + fork gate  
 - [x] Databases + backups (S3 or local disk) with run history + restore verification, volume backups, instance backup  
 - [x] Traefik domains / LE / custom certs / redirects / basic-auth  
-- [x] Observability: logs, metrics history, terminal, alerts, uptime, incidents  
+- [x] Observability: logs, metrics history, terminal, alerts, uptime, incidents, per-service event timeline  
 - [x] Orgs, roles, capabilities, 2FA, audit, notifications (many channels)  
 - [x] REST + Swagger + CLI + GitOps + MCP  
 - [x] Deploy Copilot (explain / chat / generate compose)  

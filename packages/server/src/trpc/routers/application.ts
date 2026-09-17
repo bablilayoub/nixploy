@@ -41,6 +41,7 @@ import {
 	resolveRequestedRef,
 	SOURCE_NOT_CONFIGURED,
 } from "../../modules/deployment";
+import { parseEnv } from "../../modules/deployment/env";
 import { getDeploymentLogPath } from "../../modules/deployment/paths";
 import { badRequest, notFound, preconditionFailed } from "../../modules/errors";
 import { assertCapability, assertWithinQuota, hasCapability } from "../../modules/projects";
@@ -369,6 +370,15 @@ export const applicationRouter = router({
 			if (specChanged) {
 				await upsertApplicationSwarmService(application);
 			}
+			// Field NAMES only: several of these columns hold secrets, and the
+			// audit row (and the service timeline it feeds) must carry neither.
+			void auditFromSession(ctx, organizationId, {
+				action: "application.update",
+				targetType: "application",
+				targetId: application.applicationId,
+				targetName: application.appName,
+				metadata: { fields: Object.keys(data).sort() },
+			});
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
 				organizationId,
@@ -578,6 +588,15 @@ export const applicationRouter = router({
 			await assertApplicationAccess(input.applicationId, organizationId);
 			const application = await saveEnvironment(input.applicationId, input.env, input.buildArgs);
 			await upsertApplicationSwarmService(application);
+			// Counts, never keys or values — an env key name can be as telling
+			// as the value it holds.
+			void auditFromSession(ctx, organizationId, {
+				action: "application.saveEnvironment",
+				targetType: "application",
+				targetId: application.applicationId,
+				targetName: application.appName,
+				metadata: { variables: parseEnv(input.env).length },
+			});
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
 				organizationId,
@@ -618,6 +637,13 @@ export const applicationRouter = router({
 			await assertApplicationAccess(input.applicationId, organizationId);
 			const { applicationId, ...data } = input;
 			const application = await updateApplication(applicationId, data);
+			void auditFromSession(ctx, organizationId, {
+				action: "application.saveBuildType",
+				targetType: "application",
+				targetId: application.applicationId,
+				targetName: application.appName,
+				metadata: { buildType: input.buildType },
+			});
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
 				organizationId,
@@ -752,6 +778,13 @@ export const applicationRouter = router({
 			}
 
 			const application = await updateApplication(input.applicationId, data);
+			void auditFromSession(ctx, organizationId, {
+				action: "application.saveSource",
+				targetType: "application",
+				targetId: application.applicationId,
+				targetName: application.appName,
+				metadata: { sourceType: input.sourceType },
+			});
 			const canSeeSecrets = await hasCapability(
 				ctx.session.user.id,
 				organizationId,
@@ -766,6 +799,12 @@ export const applicationRouter = router({
 		await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 		const application = await assertApplicationAccess(input.applicationId, organizationId);
 		const updated = await reloadApplication(application);
+		void auditFromSession(ctx, organizationId, {
+			action: "application.reload",
+			targetType: "application",
+			targetId: application.applicationId,
+			targetName: application.appName,
+		});
 		const canSeeSecrets = await hasCapability(ctx.session.user.id, organizationId, "secrets.read");
 		return canSeeSecrets ? updated : redactApplicationSecrets(updated);
 	}),
@@ -782,6 +821,12 @@ export const applicationRouter = router({
 			});
 		}
 		await startApplication(application);
+		void auditFromSession(ctx, organizationId, {
+			action: "application.start",
+			targetType: "application",
+			targetId: application.applicationId,
+			targetName: application.appName,
+		});
 		return { applicationId: application.applicationId };
 	}),
 
@@ -791,6 +836,12 @@ export const applicationRouter = router({
 		await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 		const application = await assertApplicationAccess(input.applicationId, organizationId);
 		await stopApplication(application);
+		void auditFromSession(ctx, organizationId, {
+			action: "application.stop",
+			targetType: "application",
+			targetId: application.applicationId,
+			targetName: application.appName,
+		});
 		return { applicationId: application.applicationId };
 	}),
 
