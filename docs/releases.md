@@ -1,7 +1,7 @@
 # Releases
 
 Nixploy PaaS ships via [GitHub Releases](https://github.com/bablilayoub/nixploy/releases)
-(Dokploy-style): each tag runs the quality gate, builds the multi-arch GHCR image
+each tag runs the quality gate, builds the multi-arch GHCR image
 (`linux/amd64` + `linux/arm64`, with provenance and SBOM attestations), scans it with
 Trivy, signs it with cosign, publishes release notes, and attaches version-pinned
 `install.sh` / `update.sh` / `uninstall.sh` plus a `SHA256SUMS` file.

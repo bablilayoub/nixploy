@@ -160,7 +160,7 @@ export default function FeaturesPage() {
 								"Org tenancy from day one",
 								"Encrypted secrets at rest",
 								"OpenAPI on your panel, not a SaaS gateway",
-								"Migrate from Coolify or Dokploy with a concept map",
+								"Migrate from another panel with a concept map",
 							].map((line) => (
 								<li key={line} className="flex gap-2 border-t border-border pt-3">
 									<span className="text-foreground" aria-hidden>

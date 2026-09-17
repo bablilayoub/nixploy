@@ -88,8 +88,8 @@ function invalidateDatabaseStatus(appName: string, serverId: string | null | und
 /**
  * Factory producing the tRPC router for one database type. All five database
  * routers (postgres/mysql/mariadb/mongo/redis) share the exact same
- * Dokploy-style procedure surface; only the table, id column and per-type
- * credential fields differ.
+ * procedure surface; only the table, id column and per-type credential
+ * fields differ.
  */
 
 interface DatabaseRouterOptions<K extends DatabaseKind> {

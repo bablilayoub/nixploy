@@ -1,6 +1,6 @@
 name: Release
 
-# Tag-driven PaaS release (Dokploy-style):
+# Tag-driven PaaS release:
 #   1. Bump package.json version (e.g. 0.1.0)
 #   2. Commit, then: git tag v0.1.0 && git push origin v0.1.0
 # The `checks` gate (typecheck, Biome, vitest incl. tenancy on Postgres 17,
@@ -279,7 +279,7 @@ jobs:
           pin_script() {
             local src="$1"
             local dest="$2"
-            # Dokploy-style: shebang, then forced default for this tag, then rest of script.
+            # Shebang, then the forced default for this tag, then the rest of the script.
             {
               head -n 1 "$src"
               echo "NIXPLOY_VERSION=\"\${NIXPLOY_VERSION:-${TAG}}\""

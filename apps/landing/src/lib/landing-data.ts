@@ -119,7 +119,7 @@ export const plans = [
 		price: "Talk to us",
 		period: "",
 		blurb:
-			"Hands-on help migrating from Dokploy, Coolify or a hand-rolled setup, and priority answers when something breaks.",
+			"Hands-on help migrating from another panel or a hand-rolled setup, and priority answers when something breaks.",
 		cta: { label: "Email hello@nixploy.com", href: "mailto:hello@nixploy.com" },
 		highlight: false,
 		items: [

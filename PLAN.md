@@ -1,6 +1,6 @@
-# Nixploy — Dokploy-Replica Build Plan
+# Nixploy — Build Plan
 
-A free, self-hostable PaaS that simplifies deployment and management of applications and databases — a faithful functional replica of [Dokploy](https://github.com/dokploy/dokploy) (v0.29.x, Apache-2.0 core).
+A free, self-hostable PaaS that simplifies deployment and management of applications and databases, covering the feature surface operators expect from a panel in this class.
 
 ## Status (Aug 2026)
 
@@ -16,11 +16,11 @@ A free, self-hostable PaaS that simplifies deployment and management of applicat
 
 ## 1. Tech Stack (decided)
 
-Dokploy's own stack is proven for exactly this product, so we replicate it — with Tailwind CSS + shadcn/ui as required.
+This stack is proven for exactly this product — with Tailwind CSS + shadcn/ui as required.
 
 | Layer | Choice | Why |
 |---|---|---|
-| Monorepo | **pnpm workspaces** (`apps/*`, `packages/*`) | Matches Dokploy; share server logic |
+| Monorepo | **pnpm workspaces** (`apps/*`, `packages/*`) | Share server logic across the panel, CLI and worker |
 | Frontend | **Next.js 16 (App Router) + React 19 + TypeScript** | One process serves UI + API + WS |
 | Styling | **Tailwind CSS v4 + shadcn/ui (Radix)** | Per requirements |
 | Data fetching | **TanStack Query** (via tRPC client) | Server-state caching |
@@ -29,7 +29,7 @@ Dokploy's own stack is proven for exactly this product, so we replicate it — w
 | Auth | **better-auth** (organization, admin, twoFactor, api-key plugins) + bcrypt | Org-based multi-tenancy out of the box |
 | Container engine | **Docker Swarm (single-node default) via dockerode**; remote servers over **ssh2** | Swarm rolling updates = free zero-downtime |
 | Reverse proxy | **Traefik v3**, file provider (static `traefik.yml` + per-app dynamic YAML) | Hot-reload routing, ACME/Let's Encrypt built in |
-| Queue | **Custom in-memory FIFO queue** with per-server concurrency (no Redis/BullMQ for self-hosted) | Dokploy self-hosted does the same |
+| Queue | **Custom in-memory FIFO queue** with per-server concurrency (no Redis/BullMQ for self-hosted) | One less service to run on a single box |
 | Cron | **node-schedule** | Backups, schedules, cleanup |
 | Realtime | **ws** websocket server: deployment logs, container logs, docker stats, web terminal (xterm.js + node-pty) | |
 | Email | nodemailer / Resend + react-email | Notifications |
@@ -125,7 +125,7 @@ Secrets at rest: encrypted column helper (AES) for env vars, DB passwords, regis
 - Features: preview URL commented back on the pull request (GitHub/GitLab/Gitea); Mattermost, Lark/Feishu and Microsoft Teams notification channels wired end to end
 - UX: App Router error/global-error/not-found/loading boundaries; no-organization empty state with a create-org CTA; explicit terminal "start new session"; accessible names for icon-only actions
 
-### Phase 8 — Beat Dokploy/Coolify (reliability + Copilot + templates) — DONE
+### Phase 8 — Pull ahead on reliability, Copilot and templates — DONE
 
 Wins on **trust + speed + sharp edges**, not feature checklists.
 
@@ -171,7 +171,7 @@ First-boot `/setup` → Login → Dashboard → Project → Environment →
 2. **Local/remote execution duality** — `execAsync` / `execAsyncRemote(serverId)`.
 3. **Preview deployments** — wildcard DNS + PR lifecycle (webhook wiring and PR comments shipped).
 4. **Permissions layer** — org roles (owner/admin/member); granular toggles later.
-5. **Traefik config correctness** — port Dokploy's YAML-generation logic closely.
+5. **Traefik config correctness** — the file-provider YAML has to be exactly right or routing silently breaks.
 
 ## 8. Validation
 

@@ -167,7 +167,7 @@ REST paths are `GET|POST /api/<router>.<procedure>` with an `x-api-key` header. 
 | Observability | [`docs/observability.md`](./docs/observability.md) |
 | Auth & capabilities | [`docs/auth.md`](./docs/auth.md) |
 | Docker control center | [`docs/docker.md`](./docs/docker.md) |
-| Migrate Coolify / Dokploy | [`docs/migrate-from-coolify.md`](./docs/migrate-from-coolify.md) · [`docs/migrate-from-dokploy.md`](./docs/migrate-from-dokploy.md) |
+| Migrate from another panel | [`docs/migrate-from-another-panel.md`](./docs/migrate-from-another-panel.md) |
 
 ## Repository layout
 

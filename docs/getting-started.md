@@ -132,8 +132,7 @@ of several TCP services behind one port, see
 ## Next reading
 
 - [Install](./install.md)
-- [Migrate from Dokploy](./migrate-from-dokploy.md) /
-  [Coolify](./migrate-from-coolify.md)
+- [Migrate from another panel](./migrate-from-another-panel.md)
 - [Domains & Traefik](./domains-traefik.md)
 - [Deployment flow](./deployment-flow.md)
 - [Architecture](./architecture.md)

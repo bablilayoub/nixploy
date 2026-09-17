@@ -250,7 +250,7 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 	},
 	{
 		slug: "migrate",
-		title: "Migrate from Coolify or Dokploy",
+		title: "Migrate from another panel",
 		description: "No magic import — recreate services and cut DNS when green.",
 		blocks: [
 			{ type: "h2", text: "Approach" },
@@ -268,7 +268,7 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 			{
 				type: "ul",
 				items: [
-					"Coolify/Dokploy project ≈ Nixploy project + environment",
+					"A project elsewhere ≈ Nixploy project + environment",
 					"Application / service ≈ application, compose, or database service type",
 					"Traefik labels ≈ Nixploy Domains (managed YAML, not hand-edited labels)",
 					"S3 backups ≈ Destinations + backup schedules",
@@ -277,7 +277,7 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 			},
 			{
 				type: "note",
-				text: "One difference worth planning for: each environment gets its own private overlay network, so a service resolves only services of its own environment. Put things that talk to each other in one environment. Deep guides live in the repo: docs/migrate-from-coolify.md and docs/migrate-from-dokploy.md.",
+				text: "One difference worth planning for: each environment gets its own private overlay network, so a service resolves only services of its own environment. Put things that talk to each other in one environment. The deep guide lives in the repo: docs/migrate-from-another-panel.md.",
 			},
 		],
 	},

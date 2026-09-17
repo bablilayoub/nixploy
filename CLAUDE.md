@@ -11,7 +11,7 @@ Product intent: [`PLAN.md`](PLAN.md) (Phases 1–10 shipped). Operator/contribut
 
 ## What this is
 
-Nixploy is a self-hosted PaaS (Dokploy/Coolify-class): one Node process (Next.js 16 App Router with a custom `server.ts`) that hosts the UI, tRPC, a REST/OpenAPI adapter, an MCP endpoint, WebSocket streams, an in-memory deploy queue and node-schedule crons. It drives a single-node Docker Swarm (remote servers join it over SSH) and writes Traefik v3 file-provider YAML for routing/TLS.
+Nixploy is a self-hosted PaaS: one Node process (Next.js 16 App Router with a custom `server.ts`) that hosts the UI, tRPC, a REST/OpenAPI adapter, an MCP endpoint, WebSocket streams, an in-memory deploy queue and node-schedule crons. It drives a single-node Docker Swarm (remote servers join it over SSH) and writes Traefik v3 file-provider YAML for routing/TLS.
 
 pnpm monorepo:
 

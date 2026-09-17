@@ -3,7 +3,7 @@
 **Rule:** ship the four product tracks below. Do **not** pull in SSO/SCIM,
 Stripe billing, build-server role, Redis queue, or Kubernetes.
 
-Working checklist for Phase 10. Phases 1–9 are done (see [`PLAN.md`](../PLAN.md)).
+Working checklist for Phase 10. Phases 1–9 are done (see [`PLAN.md`](../../PLAN.md)).
 
 ---
 

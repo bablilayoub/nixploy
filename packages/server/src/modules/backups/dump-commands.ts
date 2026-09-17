@@ -52,7 +52,7 @@ export const DB_DUMP_CONFIG: Record<BackupDatabaseType, DumpEngineConfig> = {
 	postgres: {
 		extension: "sql",
 		// Local connections inside the official postgres image are trust-authenticated,
-		// so no password is needed here (same approach as Dokploy). `--clean
+		// so no password is needed here. `--clean
 		// --if-exists` makes the dump restorable into a database that already
 		// holds the schema (psql runs with ON_ERROR_STOP).
 		dumpCommand: ({ database, databaseUser }) =>

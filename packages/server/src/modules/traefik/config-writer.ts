@@ -366,8 +366,7 @@ export function assertSafeRedirectReplacement(
 }
 
 /**
- * Build the Traefik v3 file-provider config for one app, modeled on Dokploy's
- * `manageDomain`/`createRouterConfig`:
+ * Build the Traefik v3 file-provider config for one app:
  * - one service per domain (`http://<appName>:<port>` load balancer);
  * - one `web` router per domain, plus a `websecure` router (the platform
  *   redirects :80→:443 at the entrypoint, so every domain needs a TLS

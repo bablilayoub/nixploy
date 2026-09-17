@@ -268,7 +268,7 @@ install_docker() {
 		return
 	fi
 	[ "${NIXPLOY_SKIP_DOCKER_INSTALL:-0}" = "1" ] && die "Docker missing and NIXPLOY_SKIP_DOCKER_INSTALL=1"
-	# Official convenience script (same path Coolify/Dokploy installers use).
+	# Official convenience script (the conventional path for installers of this kind).
 	run_quiet "Installing Docker Engine" bash -c "curl -fsSL https://get.docker.com | sh"
 	need_cmd docker || die "Docker install failed"
 	systemctl enable --now docker 2>/dev/null || service docker start 2>/dev/null || true

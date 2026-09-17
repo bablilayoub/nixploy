@@ -8,8 +8,8 @@ lives in `packages/server/src/lib/auth.ts`; the handler is mounted at
 
 ## First-boot setup (no public register)
 
-Self-hosted instances must not leave an open `/register` page. Nixploy mirrors
-Dokploy:
+Self-hosted instances must not leave an open `/register` page. Nixploy claims
+the first admin instead:
 
 1. When the `user` table is empty, unauthenticated visitors are sent to
    **`/setup`** to create the owner account (name, email, password).

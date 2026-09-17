@@ -20,7 +20,7 @@ body:
     id: alternatives
     attributes:
       label: Alternatives considered
-      description: Workarounds you use now, or how Dokploy / Coolify / others handle it.
+      description: Workarounds you use now, or how other tools handle it.
   - type: dropdown
     id: area
     attributes:

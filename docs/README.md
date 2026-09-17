@@ -14,8 +14,7 @@ Guides for running and developing Nixploy.
 | [api.md](./api.md) | Operators / CI | REST conventions, responses, capabilities per endpoint, typed client, Swagger |
 | [cli.md](./cli.md) | Operators / CI | `@nixploy/cli`: auth & profiles, every command group, exit codes, scripting |
 | [mcp.md](./mcp.md) | Operators / AI | MCP server tools (32), auth, client config |
-| [migrate-from-coolify.md](./migrate-from-coolify.md) | Operators | Concept map + cutover from Coolify |
-| [migrate-from-dokploy.md](./migrate-from-dokploy.md) | Operators | Concept map + cutover from Dokploy |
+| [migrate-from-another-panel.md](./migrate-from-another-panel.md) | Operators | Concept map + cutover from another self-hosted panel |
 
 ## Product / ops deep dives
 

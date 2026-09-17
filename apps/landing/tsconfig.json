@@ -1,6 +1,6 @@
 {
 	// Self-contained on purpose: nixploy.com is deployed from `apps/landing`
-	// alone (Dokploy/Railpack copies just this folder), so there is no
+	// alone (some build setups copy just this folder), so there is no
 	// `../../tsconfig.base.json` at build time. Keep the options in sync with
 	// tsconfig.base.json by hand; the Next-specific overrides follow them.
 	"compilerOptions": {

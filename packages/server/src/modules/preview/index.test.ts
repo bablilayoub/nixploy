@@ -119,7 +119,7 @@ import {
 } from "./index";
 
 describe("previewAppName / previewHost", () => {
-	it("uses the Dokploy-style variant naming", () => {
+	it("names a preview after its parent and pull request", () => {
 		expect(previewAppName("echo-4a4487", "12")).toBe("echo-4a4487-pr-12");
 		expect(previewHost("echo-4a4487", "12")).toBe("pr-12-echo-4a4487.example.test");
 	});

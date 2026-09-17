@@ -15,7 +15,7 @@ export const site = {
 	installWithDomain:
 		"NIXPLOY_DOMAIN=panel.example.com NIXPLOY_LETSENCRYPT_EMAIL=you@example.com curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash",
 	/** Short credit — About page only. */
-	inspiredBy: "Inspired by Dokploy and Coolify — built to be better.",
+	inspiredBy: "Inspired by the self-hosted deploy tools that came before — built to be better.",
 } as const;
 
 export const footerLinks = [

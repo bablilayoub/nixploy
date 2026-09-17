@@ -85,7 +85,7 @@ Production build before shipping big UI changes:
 `AGENTS.md` (conventions), `docs/architecture.md`, `docs/development.md`,
 `docs/auth.md`, `docs/deployment-flow.md`, `docs/domains-traefik.md`,
 `docs/templates.md`, `docs/install.md`, `docs/getting-started.md`,
-`docs/migrate-from-dokploy.md`, `docs/migrate-from-coolify.md`,
+`docs/migrate-from-another-panel.md`,
 `docs/codebase-map.md` (file-level map), `docs/status.md` (living backlog —
 update after each session), `PLAN.md` (product blueprint). Keep them in sync when you
 change behavior.

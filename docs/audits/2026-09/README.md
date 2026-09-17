@@ -9,7 +9,7 @@ evidence; nothing here was fixed yet.
 | --- | --- | --- |
 | [security.md](./security.md) | Posture beyond the sweep: blast radius, isolation, egress, supply chain, audit | 4 high, 14 med, ~20 low/hardening |
 | [architecture.md](./architecture.md) | Queue, crons, metrics, logs, DB, Docker/SSH transport, process model, upgrades | 5 high, 9 med, 6 low |
-| [product-gaps.md](./product-gaps.md) | Feature gaps vs Dokploy / Coolify / Railway; half-built features | 38 gaps (16 P1), 20 half-built |
+| [product-gaps.md](./product-gaps.md) | Feature gaps versus competing panels and managed platforms; half-built features | 38 gaps (16 P1), 20 half-built |
 | [ops-dx.md](./ops-dx.md) | Install/update, DR, platform observability, CI/CD, tests, docs, CLI | 5 high, 21 med, 5 low |
 | [code-health.md](./code-health.md) | Structure, duplication, error handling, transactions, contracts, dead code | 4 high, 6 med, 4 low |
 | [ux.md](./ux.md) | Panel onboarding, IA, forms, feedback, a11y, responsiveness (drove the real app, 98 screenshots) | 4 high, 17 med, 14 low |
