@@ -68,7 +68,7 @@ Four releases plus a continuous trust track. Order chosen because **compose pari
 
 | Release | Theme | Contents | Size |
 | --- | --- | --- | --- |
-| **v0.3** | Finish the loop | Compose parity, releases/deploy-any-ref, drop upload, service event timeline, agent surfaces | mostly S/M |
+| **v0.3** ✅ | Finish the loop | Compose parity, releases/deploy-any-ref, drop upload, service event timeline, agent surfaces | mostly S/M — **complete 2026-09-18** |
 | **v0.4** | Free your platform | SSO providers UI, teams + project access, panel forward-auth, whitelabel | L |
 | **v0.5** | The door | Manifest v2 → importers → same-host takeover → template compatibility | XL |
 | **v0.6** | Live in it | Runtime log store + search, ephemeral environments, Copilot v2 | L |
@@ -76,7 +76,9 @@ Four releases plus a continuous trust track. Order chosen because **compose pari
 
 ---
 
-## v0.3 — Finish the loop
+## v0.3 — Finish the loop ✅
+
+**Complete (2026-09-18).** Every item below shipped; each carries a note on what landed differently from the sketch.
 
 Every item here closes a gap that is either embarrassing (a UI switch that does nothing) or blocks v0.5. Mostly small, ships fast, and the first three are prerequisites for the importer.
 
