@@ -10,6 +10,62 @@ Upgrade mechanics (rollback, pre-update dump, downgrade guard) are in
 
 ---
 
+## v0.4.0 (the v0.3 + v0.4 roadmap releases)
+
+Eleven migrations (`0029`…`0039`), all additive. Nothing needs an operator
+action before upgrading; everything below is something that will look
+different afterwards.
+
+**`certificate.autoRenew` is gone, replaced by expiry alerts.** The toggle had
+no consumer — Nixploy cannot renew a certificate somebody pasted in — so the
+column was dropped and `expiry_alerts` (**on** by default, whatever the old
+toggle said, because it meant nothing either way) plus `expires_at` took its
+place. From 21 days before expiry you get one incident and one
+`certificateExpiry` notification per certificate per day, continuing after the
+date has passed. Existing certificates have no `expires_at` until the hourly
+maintenance pass backfills them; a chain the parser dislikes keeps working and
+shows an unknown expiry.
+
+**DNS-01 credentials now reach the proxy by themselves.** If you previously ran
+the `docker service update --env-add` line the panel printed, nothing breaks —
+the writer emits only the keys your provider declares and diffs against what is
+already set, so a no-op save does not touch the service. The first save that
+*does* change something recreates the Traefik task, which is a few seconds of
+proxy downtime for every routed domain. Save DNS credentials at a quiet moment.
+
+**Single sign-on moved from environment variables to rows.** `NIXPLOY_OIDC_*`
+is imported into a provider row **once**, on the first boot after upgrading, and
+ignored afterwards. Edit the provider in Settings → Single sign-on from then on;
+leaving the old variables in place is harmless but they no longer do anything.
+The redirect URI is unchanged (`/api/auth/callback/<provider>`).
+
+**Teams change nothing until you use them.** Every existing member is
+`project_scope = organization`, which is exactly today's behaviour. Switching
+someone to `teams` in Settings → Organization → Teams narrows them to the
+projects their teams are attached to — and a teams-scoped member who is in no
+team sees nothing at all. Owners and admins cannot be scoped, and nobody can
+change their own scope.
+
+**Audit rows per deploy went up.** Service mutations that used to write nothing
+(`update`, `saveEnvironment`, `saveBuildType`, `saveSource`, `reload`, `start`,
+`stop`, and the compose equivalents) now write one row each, and every audit row
+naming a service also becomes a timeline event. If you export the audit trail on
+a schedule, expect more rows; `NIXPLOY_AUDIT_RETENTION_DAYS` still applies.
+
+**Compose host ports are opt-in and instance-admin only.** Existing stacks are
+unaffected — a file with `ports:` is still refused until somebody with the
+instance-admin role turns the switch on for that stack. The platform port
+deny-list applies either way.
+
+**Forward auth needs the panel to be reachable from Traefik.** In a normal
+install it is: both share `nixploy-internal` and the default
+`http://nixploy:3000` resolves. Set `NIXPLOY_PANEL_INTERNAL_URL` only if you
+renamed the service. The sign-in redirect also needs a panel address a browser
+can reach — configure the panel's own domain before protecting an app, or the
+middleware answers 403 with a message saying exactly that.
+
+---
+
 ## v0.2.8
 
 **Housekeeping starts deleting things — because it never ran before.** The

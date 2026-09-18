@@ -9,7 +9,102 @@ pin. Operator-facing detail — what to check before upgrading, what will look
 different afterwards — lives in [docs/upgrade-notes.md](docs/upgrade-notes.md);
 this file is the summary.
 
-## [Unreleased]
+## [0.4.0] — 2026-09-18
+
+Two roadmap releases in one tag: **v0.3 "finish the loop"** and **v0.4 "free
+your platform"**. Everything the incumbent panels put behind an *Enterprise*
+column — single sign-on, teams, forward auth, whitelabel — is here and free.
+Eleven migrations (`0029`…`0039`); all of them additive.
+
+### Added
+
+- **Single sign-on, configured in the panel.** SSO used to be four environment
+  variables: one provider per instance, and changing it meant editing a unit
+  file and restarting. It is rows now, with presets for Authentik, Keycloak,
+  Entra, Okta, ZITADEL, Google and GitHub, plus what env vars could never
+  express — which organization a provisioned user lands in, and an IdP group →
+  role mapping that can re-apply on every sign-in. Requiring SSO is per
+  organization and refuses to lock you out: instance admins stay exempt as
+  break-glass, the switch cannot be enabled until an admin or owner has a
+  linked SSO identity, and removing the last provider while an org requires it
+  is refused. Existing `NIXPLOY_OIDC_*` variables are imported into a row once,
+  on first boot, so an upgrade changes nothing.
+- **Teams and project-level access.** A role has always said *what* a member
+  may do; nothing said *where*. A team is a set of people attached to a set of
+  projects, and a member whose project scope is `teams` sees only the projects
+  their teams reach — everything else is not found, not forbidden, for reads
+  and writes alike. Nothing changes for anyone until you switch a member over.
+  Deny by default: a teams-scoped member in no team sees nothing.
+- **Any domain behind the panel login.** One middleware on a domain and that
+  host is behind this instance's sign-in, with your organization's two-factor
+  and required-SSO rules, because it is the same login. Narrow by role, team,
+  email domain or named people; bypass paths for health checks and webhooks;
+  optional `X-Forwarded-User` / `-Email` / `-Groups` for the app. The session
+  cookie is host-only and signed with the instance key chain, so rotating
+  `ENCRYPTION_KEYS` is a rotation and not a mass sign-out.
+- **Whitelabel, free.** Product name, logos (light and dark), favicon, accent,
+  footer, support and docs URLs, email from-name and optional custom CSS —
+  applied to the browser tab, the login and setup pages and the dashboard
+  shell. Instance-level, because the pages that need it most render before
+  anyone has an organization.
+- **Deploy any branch, tag or commit.** `application.deploy({ ref })` and
+  "Redeploy this commit" on any historical row, so a green build from
+  yesterday is one click away after the branch has moved on. The configured
+  branch is untouched — the next webhook push still builds it.
+- **Compose parity.** Stacks build from source (a bounded `build:` shape:
+  context, dockerfile, target and args, with every escape hatch refused by
+  name), take mounts and published host ports, auto-deploy from a webhook, and
+  can have a build cancelled. Host ports are opt-in per stack and
+  instance-admin only — a stack binding `:80` fights the proxy for the port.
+- **Upload the archive a `drop` application deploys.** The worker half has
+  always existed and there was no way to put a file there. Drag-and-drop in
+  the panel, `nixploy app upload <id> ./app.zip [--deploy]` in the CLI, zip
+  magic checked before it is stored.
+- **A per-service event timeline.** `Runtime → Events` on all seven service
+  kinds: task failures with their exit code, OOM kills, restarts, deploys,
+  rollbacks, scale and config changes. Written by the status reconciler from
+  the task list it already fetches, so it costs no extra daemon round-trip,
+  and rendered as annotations on the metrics charts so a spike sits next to
+  its cause.
+- **A deploy outcome a script can branch on.** `deployment.wait` long-polls up
+  to 55 s and returns `{ status, failingStep, log tail, urls, health,
+  duration }`; `--wait` on every CLI deploy verb exits non-zero with the
+  failing step on a failure *and* on a timeout. The failing step is a column
+  the worker writes, not English parsed out of a log.
+- **Agent surfaces.** Tool annotations on all 36 MCP tools (hand-declared,
+  with a test that fails the build on a missing entry), four task tools,
+  investigation prompts and resource templates; `llms.txt`, `llms-full.txt`,
+  `agents.md` and per-page `.md` on the docs site; an MCP setup card next to
+  API keys; a `nixploy copilot` command group.
+- **Certificate expiry warnings.** An incident and a notification from 21 days
+  out, once a day per certificate, parsed from the leaf of the chain.
+
+### Changed
+
+- **DNS-01 credentials reach Traefik.** Saving a provider used to store the
+  credentials and print a `docker service update` line for the operator to run
+  by hand; only the provider *name* ever reached the proxy. They are pushed
+  now — only the keys the selected provider declares, and only when they
+  actually differ, because that update recreates the proxy task.
+- `certificate.autoRenew` is gone. It had no consumer and could not have had
+  one: these are certificates somebody pasted in, and Nixploy cannot renew a
+  certificate it did not issue. Replaced with expiry alerts, on by default.
+- Every service mutation writes an audit row. `application.update`,
+  `saveEnvironment`, `saveBuildType`, `saveSource`, `reload`, `start`, `stop`
+  and the compose equivalents wrote none at all, against this repository's own
+  rule.
+- `application.cancelDeployment` works for any service kind, not just
+  applications.
+
+### Fixed
+
+- The compose **Auto deploy** switch did nothing: the webhook handler only
+  ever queried applications.
+- A compose stack's build could not be cancelled from any surface.
+- The panel hid the builder picker for a `drop` source, which is the one
+  source that most needs it set.
+
+## [0.2.9] — 2026-09-15
 
 ### Added
 
