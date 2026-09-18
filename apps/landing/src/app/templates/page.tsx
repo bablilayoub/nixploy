@@ -56,7 +56,7 @@ export default function TemplatesPage() {
 												{template.name}
 											</span>
 											<span className="mt-1 block text-xs leading-relaxed text-muted line-clamp-3">
-												{template.description}
+												{template.description.replaceAll("`", "")}
 											</span>
 										</span>
 									</Link>

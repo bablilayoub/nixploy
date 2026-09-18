@@ -19,18 +19,44 @@ export async function generateMetadata({
 	const template = findTemplate(slug);
 	if (!template) return { title: "Template — Nixploy" };
 	const title = `How to self-host ${template.name} on your own server`;
+	// Backticks are Markdown for the body, noise in a search result snippet.
+	const summary = template.description.replaceAll("`", "");
 	return {
 		// The root layout appends "· Nixploy"; saying it twice is how the docs
 		// pages used to read before the template was added.
 		title,
-		description: `Deploy ${template.name} on your own VPS in one click with Nixploy: Docker Compose, automatic HTTPS, a persistent volume and backups. ${template.description}`,
+		description: `Deploy ${template.name} on your own VPS in one click with Nixploy: Docker Compose, automatic HTTPS, a persistent volume and backups. ${summary}`,
 		alternates: { canonical: `${site.url}/templates/${slug}` },
-		openGraph: { title, description: template.description, type: "article" },
+		openGraph: { title, description: summary, type: "article" },
 	};
 }
 
 const logoUrl = (logo: string): string =>
 	logo.startsWith("http") ? logo : `https://cdn.simpleicons.org/${logo}`;
+
+/**
+ * Catalog prose is plain text that occasionally uses Markdown backticks for a
+ * service name or a shell snippet. The panel shows it raw; a public page
+ * should not, so the spans between backticks become `<code>` here rather than
+ * editing 11 catalog entries the panel also reads.
+ */
+function Prose({ text }: { text: string }) {
+	return (
+		<>
+			{text.split("`").map((part, index) =>
+				index % 2 === 1 ? (
+					// biome-ignore lint/suspicious/noArrayIndexKey: split parts of one fixed string
+					<code key={index} className="font-mono text-[0.9em] text-foreground">
+						{part}
+					</code>
+				) : (
+					// biome-ignore lint/suspicious/noArrayIndexKey: split parts of one fixed string
+					<span key={index}>{part}</span>
+				),
+			)}
+		</>
+	);
+}
 
 /** One labelled fact in the spec strip. */
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
@@ -89,7 +115,7 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 						Self-host {template.name}
 					</h1>
 					<p className="mt-3 max-w-2xl text-lg leading-relaxed text-muted">
-						{template.description}
+						<Prose text={template.description} />
 					</p>
 				</div>
 			</div>
@@ -170,7 +196,9 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 								{asked.map((variable) => (
 									<li key={variable.key}>
 										<span className="font-mono text-xs">{variable.key}</span>
-										<span className="block text-xs text-muted">{variable.description}</span>
+										<span className="block text-xs text-muted">
+											<Prose text={variable.description} />
+										</span>
 									</li>
 								))}
 							</ul>
