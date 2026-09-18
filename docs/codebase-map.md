@@ -211,6 +211,7 @@ Helpers: `modules/deployment/paths.ts` (canonical `getConfigDir`, apps, logs, ss
 | `NIXPLOY_DB_WAIT_SECONDS` | entrypoint, migrate.mjs | how long to wait for Postgres before migrating (default 60) |
 | `NIXPLOY_AUDIT_RETENTION_DAYS` | deployment maintenance | audit log retention (default 365, `0` = forever) |
 | `NIXPLOY_AUDIT_FORWARD` | audit | `1` mirrors every audit row to the instance-admin notification channels, batched once a minute |
+| `NIXPLOY_PANEL_INTERNAL_URL` | traefik dashboard + forward auth | How Traefik reaches the panel from inside the overlay (default `http://nixploy:3000`). Set to `http://host.docker.internal:3100` for a local checkout, where the panel runs on the host |
 | `NIXPLOY_ALLOW_PRIVATE_EGRESS` | public-url | `1` forces the private-egress toggle on (normally the instance-admin `web_server_settings.allow_private_egress`, default off) |
 | `NIXPLOY_MAX_PROBES_PER_ORG` | observability | cap on uptime probes per organization (default 50, `0` = unlimited) |
 | `NIXPLOY_MEMORY_LIMIT` | install.sh / update.sh | `--limit-memory` of the `nixploy` service (default `2g`) |
@@ -303,3 +304,29 @@ the organization. The Prometheus endpoint is API-key only and runs with no
 store, so it stays organization-wide.
 
 See `docs/auth.md` § "Teams & project access".
+
+## Forward auth (2026-09-18)
+
+`modules/app-auth/` puts any tenant domain behind the panel's own login. Three
+pure-ish files and three route handlers:
+
+- `policy.ts` — the `nixployAuth` zod schema and `evaluateAppAuthPolicy`. No
+  database, no crypto: "would this person get in?" is testable without a
+  request. `middlewares.ts` imports the schema rather than restating it.
+- `tokens.ts` — the session cookie and the one-time exchange code, both
+  `<payload>.<hmac>` over `signingKeys()` (first signs, any verifies, so
+  `ENCRYPTION_KEYS` rotation is not a mass sign-out), both bound to a host.
+- `index.ts` — `loadProtectedDomain` (10 s TTL cache; `verify` runs on every
+  request), `resolveAppAuthIdentity` (role, teams, and the project filter),
+  `hostMatchesDomain` (the open-redirect guard) and `panelPublicOrigin`.
+- `apps/web/src/app/api/app-auth/verify`, `app-auth/authorize` and
+  `%5Fnixploy/callback`. The last folder is `%5F` because Next treats a leading
+  underscore as a private folder and would not route it; the public path is
+  still `/_nixploy/callback`.
+
+`config-writer.ts` emits a second router per protected domain at priority
+100000 pointing at `nixploy-dashboard` **without** the forwardAuth middleware,
+so the code exchange runs on the tenant's hostname and the cookie it sets is
+host-only.
+
+See `docs/auth.md` § "Put an app behind the panel login".

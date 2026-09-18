@@ -179,6 +179,86 @@ forgetting it is silent rather than a type error.
 Managing teams is `members.manage` (Settings → Organization → Teams), and every
 change writes an audit row.
 
+## Put an app behind the panel login (forward auth)
+
+A `nixployAuth` middleware on a domain (Domains tab of the service) puts that
+host behind this panel's sign-in. There is no second identity provider and no
+per-app user list: it is the same login, so the organization's two-factor and
+required-SSO rules apply unchanged.
+
+### The three legs
+
+| Leg | Where it runs | What it does |
+| --- | --- | --- |
+| `GET /api/app-auth/verify?domain=<id>` | panel, called by Traefik | Answers 204 (allowed), 401 (no session, not a navigation) or 302 (go sign in) |
+| `GET /app-auth/authorize` | panel, browser | Requires a panel session, evaluates the policy, mints a one-time code |
+| `GET /_nixploy/callback` | panel, **on the tenant's host** | Exchanges the code for the session cookie, redirects back |
+
+The config writer emits a second router per protected domain,
+`Host(<app>) && PathPrefix(/_nixploy/)` at priority 100000, pointing at the
+`nixploy-dashboard` service and carrying **no** forwardAuth middleware — a
+callback behind the auth it exists to complete is a redirect loop. That router
+is why the cookie is set on the app's own hostname: host-only, so one protected
+app's session is never sent to another and the panel's own session cookie never
+reaches a tenant domain.
+
+Traefik reaches the panel at `http://nixploy:3000` over `nixploy-internal`.
+`NIXPLOY_PANEL_INTERNAL_URL` overrides that — needed for a local checkout,
+where the panel runs on the host and the proxy runs in Swarm
+(`http://host.docker.internal:3100`).
+
+### The tokens
+
+Both are `<base64url payload>.<hmac>`, signed with a key derived from the
+`ENCRYPTION_KEYS` chain (`signingKeys()` in `lib/encryption.ts`): **signed with
+the first, accepted from any**, so rotating the chain is a rotation and not a
+mass sign-out. Domain-separated by an `info` string, so a session cookie can
+never be used as an exchange code or the reverse.
+
+- **Session cookie** `nixploy_app_auth` — HttpOnly, SameSite=Lax, `Secure` when
+  the domain serves HTTPS, no `Domain` attribute. Bound to the host it was
+  issued for and checked against the forwarded host on every request. 12 hours
+  by default, a week at most. **There is no session table** — the check is a
+  signature, which is why it costs nothing on the request path.
+- **Exchange code** — 2 minutes, single use. The replay guard is an in-memory
+  set on `globalThis`, like the deploy queue's slot accounting: `nixploy` runs
+  as a single replica by design.
+
+### The policy
+
+Everything narrows from one baseline — a member of the organization that owns
+the app — and **an empty field does not narrow**. A rule that locked everyone
+out would be indistinguishable from a misconfiguration, and the operator would
+lose the app they just protected.
+
+| Field | Effect |
+| --- | --- |
+| `minRole` | Rank, not equality: `deployer` admits admins and owners |
+| `teamIds` | Member of any listed team |
+| `userIds` | A grant that skips role and team rules — but not the project check |
+| `emailDomains` | Exact match on the part after the last `@` (`endsWith` would admit `notexample.com`) |
+| `bypassPaths` | Prefixes served with no authentication at all; health checks and webhooks carry no browser session |
+| `injectHeaders` | `X-Forwarded-User` / `-Email` / `-Groups` (the org role plus every team name) |
+| `sessionHours` | Cookie lifetime |
+
+**Teams apply here too.** A member whose `project_scope` is `teams` and whose
+teams do not reach the project this app lives in is refused, before the user
+grant. The app's own hostname must not be a second door into a project the
+panel hides.
+
+### Failing closed
+
+A missing domain id, an unreadable policy, or a forwarded host that does not
+match the domain row all answer 403 rather than letting the request through.
+The verify endpoint is reachable on the panel's public origin as well — that is
+harmless, since it reads headers and a cookie and grants nothing to its own
+caller — but it is why the authorize leg re-checks the host against the real
+domain row before redirecting to it. Without that it would be an open redirect
+wearing a session.
+
+Policies are cached for ten seconds (`verify` runs on every request, including
+every asset) and `domain.saveMiddlewares` invalidates on the way past.
+
 ## Instance admin
 
 The first user (better-auth `admin()` plugin, `user.role = "admin"`) is the

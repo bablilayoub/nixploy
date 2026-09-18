@@ -108,6 +108,7 @@ export const domainMiddlewareKind = pgEnum("domain_middleware_kind", [
 	"headers",
 	"compress",
 	"forwardAuth",
+	"nixployAuth",
 	"stickyCookie",
 	"maintenance",
 ]);

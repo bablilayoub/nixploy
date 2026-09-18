@@ -14,6 +14,10 @@
 
 import { isIP } from "node:net";
 import { z } from "zod";
+import {
+	AUTH_RESPONSE_HEADERS,
+	nixployAuthConfigSchema as appAuthConfigSchema,
+} from "../app-auth/policy";
 import { badRequest } from "../errors";
 
 /** Middleware kinds, mirroring the `domain_middleware_kind` pg enum. */
@@ -23,6 +27,7 @@ export const DOMAIN_MIDDLEWARE_KINDS = [
 	"headers",
 	"compress",
 	"forwardAuth",
+	"nixployAuth",
 	"stickyCookie",
 	"maintenance",
 ] as const;
@@ -185,6 +190,14 @@ const forwardAuthConfigSchema = z.object({
 		.optional(),
 });
 
+/**
+ * Panel-backed forward auth. The policy itself lives in
+ * `modules/app-auth/policy.ts` (it is evaluated per request, not rendered), so
+ * this schema is imported rather than restated — two copies would drift and
+ * the renderer would emit a route for a config the verifier rejects.
+ */
+const nixployAuthConfigSchema = appAuthConfigSchema;
+
 const stickyCookieConfigSchema = z.object({
 	name: z
 		.string()
@@ -204,6 +217,7 @@ export const DOMAIN_MIDDLEWARE_CONFIG_SCHEMAS = {
 	headers: headersConfigSchema,
 	compress: compressConfigSchema,
 	forwardAuth: forwardAuthConfigSchema,
+	nixployAuth: nixployAuthConfigSchema,
 	stickyCookie: stickyCookieConfigSchema,
 	maintenance: maintenanceConfigSchema,
 } as const;
@@ -290,6 +304,11 @@ export type RenderedMiddleware =
 	  }
 	| { errors: { status: string[]; service: string; query: string } };
 
+/** Domain id a `nixployAuth` middleware renders its verify URL for. */
+export interface MiddlewareRenderContext {
+	domainId?: string | null;
+}
+
 /** Cookie config applied to the domain's service load balancer. */
 export interface StickyCookie {
 	name?: string;
@@ -309,6 +328,29 @@ export const MAINTENANCE_SERVICE = "nixploy-dashboard";
 export const MAINTENANCE_QUERY = "/__maintenance";
 
 /**
+ * Where Traefik asks the panel whether a request may pass.
+ *
+ * A swarm service name, not a public URL: the proxy and the panel share
+ * `nixploy-internal`, so the check never leaves the overlay and never depends
+ * on the panel's own domain resolving — which it may not, on an install
+ * reached by IP. The domain id is a query parameter because the middleware is
+ * per domain and the verifier must not have to guess a policy from a host a
+ * caller supplied.
+ *
+ * `NIXPLOY_PANEL_INTERNAL_URL` overrides the service name. Two callers need
+ * that: a local checkout, where the panel runs on the host and the proxy runs
+ * in Swarm (`http://host.docker.internal:3100`), and an install that renamed
+ * the service. It is an operator knob, never tenant input.
+ */
+export const panelInternalUrl = (): string =>
+	(process.env.NIXPLOY_PANEL_INTERNAL_URL?.trim() || "http://nixploy:3000").replace(/\/+$/, "");
+
+export const appAuthVerifyUrl = (): string => `${panelInternalUrl()}/api/app-auth/verify`;
+
+/** Path prefix the panel serves on a protected tenant host (the code exchange). */
+export const APP_AUTH_CALLBACK_PREFIX = "/_nixploy/";
+
+/**
  * Render one middleware row. Returns `null` for `stickyCookie`, which is not a
  * middleware at all — it configures the service's load balancer, so the writer
  * handles it separately (see {@link renderStickyCookie}).
@@ -316,6 +358,7 @@ export const MAINTENANCE_QUERY = "/__maintenance";
 export const renderMiddleware = (
 	kind: DomainMiddlewareKind,
 	config: unknown,
+	context?: MiddlewareRenderContext,
 ): RenderedMiddleware | null => {
 	switch (kind) {
 		case "rateLimit": {
@@ -356,6 +399,26 @@ export const renderMiddleware = (
 					...(parsed.authResponseHeaders?.length
 						? { authResponseHeaders: parsed.authResponseHeaders }
 						: {}),
+				},
+			};
+		}
+		case "nixployAuth": {
+			const parsed = parseMiddlewareConfig("nixployAuth", config);
+			if (!context?.domainId) {
+				// Without an id the verifier cannot know which policy applies, and
+				// a forwardAuth that cannot decide would fail open on a 2xx or shut
+				// the domain out on anything else. Refusing to render is the only
+				// honest answer; the writer turns this into a missing route, not a
+				// route with no auth.
+				throw badRequest("nixployAuth middleware needs the domain it belongs to");
+			}
+			return {
+				forwardAuth: {
+					address: `${appAuthVerifyUrl()}?domain=${encodeURIComponent(context.domainId)}`,
+					// Traefik populates X-Forwarded-* from the real connection, so the
+					// verifier can trust the host and path it is asked about.
+					trustForwardHeader: true,
+					...(parsed.injectHeaders ? { authResponseHeaders: [...AUTH_RESPONSE_HEADERS] } : {}),
 				},
 			};
 		}
@@ -407,6 +470,18 @@ export const describeMiddleware = (kind: DomainMiddlewareKind, config: unknown):
 				return "gzip / brotli responses";
 			case "forwardAuth":
 				return parseMiddlewareConfig("forwardAuth", config).address;
+			case "nixployAuth": {
+				const parsed = parseMiddlewareConfig("nixployAuth", config);
+				const limits = [
+					parsed.minRole ? `${parsed.minRole}+` : null,
+					parsed.teamIds?.length ? `${parsed.teamIds.length} team(s)` : null,
+					parsed.userIds?.length ? `${parsed.userIds.length} user(s)` : null,
+					parsed.emailDomains?.length ? parsed.emailDomains.join(", ") : null,
+				].filter(Boolean);
+				return limits.length > 0
+					? `panel sign-in — ${limits.join(", ")}`
+					: "panel sign-in — any member of the organization";
+			}
 			case "stickyCookie":
 				return renderStickyCookie(config).name ?? "nixploy_sticky";
 			case "maintenance":

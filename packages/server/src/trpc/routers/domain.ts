@@ -11,10 +11,14 @@ import {
 	domainMiddlewares,
 	domains,
 	environments,
+	members,
 	projects,
+	teams,
 	traefikEntrypoints,
 	webServerSettings,
 } from "../../db/schema";
+import { invalidateProtectedDomain } from "../../modules/app-auth/index";
+import type { NixployAuthConfig } from "../../modules/app-auth/policy";
 import {
 	assertApplicationAccess,
 	assertProjectAccess,
@@ -415,6 +419,52 @@ const rethrowUniqueViolation = (error: unknown): never => {
 	}
 	throw error;
 };
+
+/**
+ * Validate a panel forward-auth policy against the organization that owns the
+ * domain.
+ *
+ * A team or a user id from another tenant would not *grant* anything — the
+ * policy is evaluated against the caller's membership of this organization, so
+ * a foreign id simply never matches — but storing one would let an operator
+ * enumerate ids by watching which ones the form accepted, and it would quietly
+ * lock a policy that looks configured. Both are refused.
+ */
+async function assertNixployAuthAllowed(
+	config: NixployAuthConfig,
+	organizationId: string,
+): Promise<void> {
+	if (config.teamIds?.length) {
+		const owned = await db
+			.select({ teamId: teams.teamId })
+			.from(teams)
+			.where(and(eq(teams.organizationId, organizationId), inArray(teams.teamId, config.teamIds)));
+		const known = new Set(owned.map((row) => row.teamId));
+		const missing = config.teamIds.filter((teamId) => !known.has(teamId));
+		if (missing.length > 0) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: "One or more teams do not belong to this organization",
+			});
+		}
+	}
+	if (config.userIds?.length) {
+		const owned = await db
+			.select({ userId: members.userId })
+			.from(members)
+			.where(
+				and(eq(members.organizationId, organizationId), inArray(members.userId, config.userIds)),
+			);
+		const known = new Set(owned.map((row) => row.userId));
+		const missing = config.userIds.filter((userId) => !known.has(userId));
+		if (missing.length > 0) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: "One or more users are not members of this organization",
+			});
+		}
+	}
+}
 
 export const domainRouter = router({
 	/**
@@ -871,6 +921,9 @@ export const domainRouter = router({
 				if (row.kind === "forwardAuth") {
 					await assertForwardAuthAllowed((config as { address: string }).address, organizationId);
 				}
+				if (row.kind === "nixployAuth") {
+					await assertNixployAuthAllowed(config as NixployAuthConfig, organizationId);
+				}
 				validated.push({ kind: row.kind, config, enabled: row.enabled });
 			}
 
@@ -891,6 +944,10 @@ export const domainRouter = router({
 					);
 				}
 			});
+
+			// The verify endpoint caches policies for ten seconds; a save is the
+			// one moment where waiting that long is visibly wrong.
+			invalidateProtectedDomain(input.domainId);
 
 			try {
 				await resyncServiceTraefik(domain);

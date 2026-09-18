@@ -69,7 +69,7 @@ Four releases plus a continuous trust track. Order chosen because **compose pari
 | Release | Theme | Contents | Size |
 | --- | --- | --- | --- |
 | **v0.3** ✅ | Finish the loop | Compose parity, releases/deploy-any-ref, drop upload, service event timeline, agent surfaces | mostly S/M — **complete 2026-09-18** |
-| **v0.4** | Free your platform | SSO providers UI, teams + project access, panel forward-auth, whitelabel | L |
+| **v0.4** ✅ | Free your platform | SSO providers UI, teams + project access, panel forward-auth, whitelabel | L |
 | **v0.5** | The door | Manifest v2 → importers → same-host takeover → template compatibility | XL |
 | **v0.6** | Live in it | Runtime log store + search, ephemeral environments, Copilot v2 | L |
 | *continuous* | Trust | Footprint budget, upgrade CI, cosign-verified install, disclosure SLA | — |
@@ -160,6 +160,10 @@ The elegant part: `resolveProjectFilter(userId, orgId)` memoized per request lik
 A new `nixployAuth` middleware kind: Traefik `forwardAuth` pointing at `/api/app-auth/verify`, a stateless HMAC cookie signed with the `ENCRYPTION_KEYS` chain (rotation-safe), a one-time code exchange on `/_nixploy/callback` (an extra router the config writer emits per protected domain), and allow-lists by role / team / user / email domain with bypass paths for health checks and webhooks. Optional `X-Forwarded-User/Email/Groups` injection.
 
 *Demo:* flip one switch on `staging.acme.dev` and it is behind your org's SSO, with your 2FA policy, in five seconds. Bonus: "protect previews with panel login" as a per-parent option.
+
+*What shipped (migration 0039, one enum value):* the `nixployAuth` middleware kind, three route handlers, and a second Traefik router per protected domain. Four details differ from the sketch. The callback is `/_nixploy/callback` as planned but the directory is `%5Fnixploy` — Next treats a leading underscore as a private folder and silently does not route it. The extra router carries an explicit priority rather than relying on Traefik's rule-length ranking, which ties when the app router also has a path. The panel's internal address became `NIXPLOY_PANEL_INTERNAL_URL` because a local checkout runs the panel on the host and the proxy in Swarm, and `http://nixploy:3000` resolves nowhere there. And the allow-list gained one axis the plan did not name: **teams**. A member whose project scope is `teams` and whose teams do not reach the project the app lives in is refused, before the explicit user grant — otherwise the app's own hostname would have been a second door into a project the panel hides. Policies are cached for ten seconds because `verify` runs on every request including every asset. Verified end to end on the local Swarm against a real `traefik/whoami`: the browser round trip lands on the app with `X-Forwarded-User/-Email/-Groups` filled in, a bypass path answers 200 unauthenticated, an XHR gets 401 rather than a redirect, a forged signature and an edited payload both get 401, a replayed code 400, an open redirect to a foreign host 404, and a spoofed `X-Forwarded-Host` 403.
+
+**Not shipped:** the "protect previews with panel login" per-parent option. A preview domain inherits its parent's middlewares already, so protecting the parent protects every preview built from it; a separate switch would be a second way to say the same thing.
 
 ### 9. Whitelabel, free ✅ *(S — landed 2026-09-18)*
 

@@ -1,4 +1,11 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from "node:crypto";
+import {
+	createCipheriv,
+	createDecipheriv,
+	createHash,
+	createHmac,
+	randomBytes,
+	scryptSync,
+} from "node:crypto";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
@@ -196,6 +203,25 @@ export function decrypt(payload: string): string {
 		lastError = new Error("Unsupported state or unable to authenticate data");
 	}
 	throw lastError ?? new Error("Malformed encrypted payload");
+}
+
+/**
+ * HMAC keys derived from the encryption key chain, primary first.
+ *
+ * For signing things that are handed to a browser and come back — the
+ * forward-auth session cookie and its one-time exchange code. Sign with the
+ * first, accept any, which is what makes `ENCRYPTION_KEYS="new,old"` a
+ * rotation rather than a mass sign-out.
+ *
+ * Domain-separated from the AES material by the `info` string so a signing key
+ * and an encryption key are never the same bytes, even for the same passphrase.
+ */
+export function signingKeys(info: string): Buffer[] {
+	return keyMaterials().map((material) =>
+		createHmac("sha256", material.v2 ?? material.v1)
+			.update(`nixploy-sign:${info}`, "utf8")
+			.digest(),
+	);
 }
 
 export function isEncrypted(value: string): boolean {

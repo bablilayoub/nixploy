@@ -681,3 +681,64 @@ describe("toTraefikDomainEntry", () => {
 		).toMatchObject({ protocol: "tcp", entrypoint: "pg-15432", tlsMode: "passthrough" });
 	});
 });
+
+describe("panel forward auth (nixployAuth)", () => {
+	const protectedDomain: TraefikDomainEntry = {
+		...baseDomain,
+		domainId: "dom_1",
+		https: true,
+		certificateType: "letsencrypt",
+		middlewares: [{ kind: "nixployAuth", config: {}, order: 0, enabled: true }],
+	};
+
+	it("chains the verify middleware and exposes the callback past it", async () => {
+		const config = await buildTraefikFileConfig({ appName: "myapp", domains: [protectedDomain] });
+		const routers = config.http?.routers ?? {};
+		const middlewares = config.http?.middlewares ?? {};
+
+		const chained = routers["myapp-router-websecure-0"]?.middlewares ?? [];
+		const authName = chained.find((name) => name.includes("nixployAuth"));
+		expect(authName).toBeDefined();
+		expect(middlewares[authName as string]).toMatchObject({
+			forwardAuth: { address: expect.stringContaining("domain=dom_1") },
+		});
+
+		// The callback router must reach the panel WITHOUT the middleware it
+		// exists to complete, or the exchange is a redirect loop.
+		const callback = routers["myapp-appauth-0-websecure"];
+		expect(callback).toBeDefined();
+		expect(callback?.service).toBe("nixploy-dashboard");
+		expect(callback?.middlewares).toBeUndefined();
+		expect(callback?.rule).toContain("PathPrefix(`/_nixploy/`)");
+		expect(callback?.priority).toBeGreaterThan(1000);
+		expect(callback?.tls).toEqual({ certResolver: "letsencrypt" });
+	});
+
+	it("adds a plain-http callback router only for an https-off domain", async () => {
+		const secure = await buildTraefikFileConfig({ appName: "myapp", domains: [protectedDomain] });
+		expect(secure.http?.routers?.["myapp-appauth-0"]).toBeUndefined();
+
+		const plain = await buildTraefikFileConfig({
+			appName: "myapp",
+			domains: [{ ...protectedDomain, https: false, certificateType: "none" }],
+		});
+		expect(plain.http?.routers?.["myapp-appauth-0"]?.entryPoints).toEqual(["web"]);
+	});
+
+	it("emits no callback router for a domain nobody protected", async () => {
+		const config = await buildTraefikFileConfig({ appName: "myapp", domains: [baseDomain] });
+		const names = Object.keys(config.http?.routers ?? {});
+		expect(names.some((name) => name.includes("appauth"))).toBe(false);
+	});
+
+	it("refuses to write the file when the row has no domain id", async () => {
+		// Fail closed: a middleware that cannot name its policy would otherwise
+		// render a forwardAuth the verifier answers 403 to, for every request.
+		await expect(
+			buildTraefikFileConfig({
+				appName: "myapp",
+				domains: [{ ...protectedDomain, domainId: null }],
+			}),
+		).rejects.toThrow(/domain it belongs to/);
+	});
+});

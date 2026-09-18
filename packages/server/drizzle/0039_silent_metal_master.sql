@@ -1,0 +1,1 @@
+ALTER TYPE "public"."domain_middleware_kind" ADD VALUE 'nixployAuth' BEFORE 'stickyCookie';

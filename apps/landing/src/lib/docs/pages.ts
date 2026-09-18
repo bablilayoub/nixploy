@@ -965,6 +965,53 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 		],
 	},
 	{
+		slug: "forward-auth",
+		title: "Put any app behind the panel login",
+		description:
+			"One switch on a domain and it is behind your organization's sign-in, with your 2FA and SSO rules.",
+		blocks: [
+			{
+				type: "p",
+				text: "An internal dashboard, a staging site, a metrics UI that never had a login of its own — add the Nixploy sign-in middleware to its domain and it is behind your organization's authentication in about five seconds. No second identity provider, no sidecar, no per-app user list. It is free, like everything else here.",
+			},
+			{ type: "h2", text: "Turning it on" },
+			{
+				type: "ul",
+				items: [
+					"Open the service, go to Domains, expand the domain and add the Nixploy sign-in middleware",
+					"By default any member of the organization that owns the app may reach it",
+					"Narrow it by minimum role, by team, by email domain, or by naming individual people",
+					"Add bypass paths for health checks and webhooks — they carry no browser session and would otherwise be locked out the moment you protect the app",
+					"Optionally forward X-Forwarded-User, X-Forwarded-Email and X-Forwarded-Groups so the app can personalise without its own login",
+				],
+			},
+			{ type: "h2", text: "How the login travels" },
+			{
+				type: "p",
+				text: "Traefik asks the panel about every request. With no session the browser is sent to the panel, signs in there (your password, TOTP or IdP — it is the same login, so the same two-factor and required-SSO rules apply), and comes back to the app with a one-time code. The app's own hostname then sets a session cookie that is scoped to that host alone: one protected app's session is never sent to another, and the panel's own session cookie never reaches a tenant domain.",
+			},
+			{
+				type: "p",
+				text: "The cookie is signed with the instance encryption key chain, so rotating ENCRYPTION_KEYS is a rotation and not a mass sign-out. Sessions last 12 hours by default and at most a week. There is no session table: the check is a signature, which is why it costs nothing on the request path.",
+			},
+			{ type: "h2", text: "What it is not" },
+			{
+				type: "ul",
+				items: [
+					"Not a replacement for an app's own authorization — it decides who reaches the app, not what they may do inside it",
+					"Not usable on a TCP or UDP route; it is an HTTP middleware",
+					"Not a way around a missing panel domain — the sign-in redirect needs an address a browser can reach",
+					"An https-off domain still works, but the cookie is then issued without the Secure attribute, which is the honest consequence of serving the app in plain text",
+				],
+			},
+			{ type: "h2", text: "Protecting a preview" },
+			{
+				type: "p",
+				text: "Preview deployments inherit the middlewares of the domain they were forked from, so protecting the parent's domain protects every preview built from it.",
+			},
+		],
+	},
+	{
 		slug: "teams",
 		title: "Teams & project access",
 		description:

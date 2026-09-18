@@ -88,6 +88,7 @@ type MiddlewareKind =
 	| "headers"
 	| "compress"
 	| "forwardAuth"
+	| "nixployAuth"
 	| "stickyCookie"
 	| "maintenance";
 
@@ -97,6 +98,10 @@ const MIDDLEWARE_META: Record<MiddlewareKind, { label: string; help: string }> =
 	headers: { label: "Headers", help: "Add request/response headers, HSTS and CORS." },
 	compress: { label: "Compression", help: "gzip / brotli responses." },
 	forwardAuth: { label: "Forward auth", help: "Delegate auth to an SSO proxy." },
+	nixployAuth: {
+		label: "Nixploy sign-in",
+		help: "Put the domain behind this panel's login, with your 2FA and SSO policy.",
+	},
 	stickyCookie: { label: "Sticky sessions", help: "Pin a client to one replica." },
 	maintenance: { label: "Maintenance mode", help: "Serve a maintenance page instead." },
 };
@@ -126,6 +131,14 @@ const DEFAULT_FIELDS: Record<MiddlewareKind, MiddlewareFields> = {
 	},
 	compress: { minResponseBodyBytes: "" },
 	forwardAuth: { address: "", trustForwardHeader: true, authResponseHeaders: "" },
+	nixployAuth: {
+		minRole: "",
+		teamIds: "",
+		emailDomains: "",
+		bypassPaths: "",
+		sessionHours: "12",
+		injectHeaders: false,
+	},
 	stickyCookie: { name: "", secure: false, httpOnly: true },
 	maintenance: {},
 };
@@ -199,6 +212,21 @@ const fieldsToConfig = (
 				...(responseHeaders.length > 0 ? { authResponseHeaders: responseHeaders } : {}),
 			};
 		}
+		case "nixployAuth": {
+			const minRole = String(fields.minRole ?? "").trim();
+			const teamIds = splitList(String(fields.teamIds ?? ""));
+			const emailDomains = splitList(String(fields.emailDomains ?? ""));
+			const bypassPaths = splitList(String(fields.bypassPaths ?? ""));
+			const sessionHours = numberOrUndefined(fields.sessionHours);
+			return {
+				...(minRole ? { minRole } : {}),
+				...(teamIds.length > 0 ? { teamIds } : {}),
+				...(emailDomains.length > 0 ? { emailDomains } : {}),
+				...(bypassPaths.length > 0 ? { bypassPaths } : {}),
+				...(sessionHours !== undefined ? { sessionHours } : {}),
+				...(fields.injectHeaders ? { injectHeaders: true } : {}),
+			};
+		}
 		case "stickyCookie":
 			return {
 				...(String(fields.name ?? "").trim() ? { name: String(fields.name).trim() } : {}),
@@ -249,6 +277,15 @@ const configToFields = (kind: MiddlewareKind, config: unknown): MiddlewareFields
 					? source.authResponseHeaders.join(", ")
 					: "",
 			};
+		case "nixployAuth":
+			return {
+				minRole: String(source.minRole ?? ""),
+				teamIds: Array.isArray(source.teamIds) ? source.teamIds.join(", ") : "",
+				emailDomains: Array.isArray(source.emailDomains) ? source.emailDomains.join(", ") : "",
+				bypassPaths: Array.isArray(source.bypassPaths) ? source.bypassPaths.join("\n") : "",
+				sessionHours: String(source.sessionHours ?? 12),
+				injectHeaders: Boolean(source.injectHeaders),
+			};
 		case "stickyCookie":
 			return {
 				name: String(source.name ?? ""),
@@ -259,6 +296,139 @@ const configToFields = (kind: MiddlewareKind, config: unknown): MiddlewareFields
 			return base;
 	}
 };
+
+/**
+ * Policy editor for panel sign-in.
+ *
+ * Everything here narrows from the same baseline — a member of the
+ * organization that owns the app — so an empty field means "do not narrow",
+ * never "allow nobody". The teams picker is only offered to somebody who can
+ * read teams (`members.manage`); for anyone else the field is hidden rather
+ * than shown as opaque ids they cannot resolve.
+ */
+function NixployAuthFields({
+	fields,
+	set,
+	text,
+}: {
+	fields: MiddlewareFields;
+	set: (name: string, value: string | boolean) => void;
+	text: (name: string) => string;
+}) {
+	const trpc = useTRPC();
+	const { can } = useCapabilities();
+	const canReadTeams = can("members.manage");
+	const teamsQuery = useQuery({ ...trpc.team.all.queryOptions(), enabled: canReadTeams });
+	const teams = teamsQuery.data ?? [];
+	const selectedTeams = new Set(splitList(text("teamIds")));
+
+	return (
+		<div className="space-y-3">
+			<p className="text-xs text-muted-foreground">
+				Requests without a Nixploy session are sent to this panel to sign in, then back. Your
+				organization's two-factor and single sign-on rules apply, because they are the same login.{" "}
+				<HelpLink slug="forward-auth" />
+			</p>
+
+			<div className="grid gap-2 sm:grid-cols-2">
+				<div className="space-y-1">
+					<Label className="text-xs">Minimum role</Label>
+					<Select
+						value={text("minRole") || "any"}
+						onValueChange={(value) => set("minRole", value === "any" ? "" : value)}
+					>
+						<SelectTrigger className="h-8">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="any">Any member</SelectItem>
+							<SelectItem value="member">Member or higher</SelectItem>
+							<SelectItem value="deployer">Deployer or higher</SelectItem>
+							<SelectItem value="admin">Admin or higher</SelectItem>
+							<SelectItem value="owner">Owner only</SelectItem>
+						</SelectContent>
+					</Select>
+				</div>
+				<div className="space-y-1">
+					<Label className="text-xs">Session length (hours)</Label>
+					<Input
+						aria-label="Session length (hours)"
+						inputMode="numeric"
+						value={text("sessionHours")}
+						onChange={(event) => set("sessionHours", event.target.value)}
+					/>
+				</div>
+			</div>
+
+			{canReadTeams && teams.length > 0 ? (
+				<div className="space-y-1">
+					<Label className="text-xs">Teams (none selected means every member)</Label>
+					<div className="flex flex-wrap gap-2">
+						{teams.map((team) => {
+							const checked = selectedTeams.has(team.teamId);
+							return (
+								<label
+									key={team.teamId}
+									htmlFor={`mw-nixployauth-team-${team.teamId}`}
+									className="flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1 text-xs"
+								>
+									<Checkbox
+										id={`mw-nixployauth-team-${team.teamId}`}
+										checked={checked}
+										onCheckedChange={() => {
+											const next = new Set(selectedTeams);
+											if (checked) next.delete(team.teamId);
+											else next.add(team.teamId);
+											set("teamIds", [...next].join(", "));
+										}}
+									/>
+									{team.name}
+								</label>
+							);
+						})}
+					</div>
+				</div>
+			) : null}
+
+			<div className="space-y-1">
+				<Label className="text-xs">Allowed email domains (optional)</Label>
+				<Input
+					aria-label="Allowed email domains"
+					className="font-mono text-xs"
+					placeholder="acme.com, contractors.acme.com"
+					value={text("emailDomains")}
+					onChange={(event) => set("emailDomains", event.target.value)}
+				/>
+			</div>
+
+			<div className="space-y-1">
+				<Label className="text-xs">Paths served without signing in (one per line)</Label>
+				<Textarea
+					aria-label="Paths served without signing in"
+					rows={2}
+					className="font-mono text-xs"
+					placeholder={"/healthz\n/api/webhooks"}
+					value={text("bypassPaths")}
+					onChange={(event) => set("bypassPaths", event.target.value)}
+				/>
+				<p className="text-xs text-muted-foreground">
+					Health checks and webhooks carry no browser session, so they need a way past the gate.
+				</p>
+			</div>
+
+			<div className="flex items-center gap-2">
+				<Checkbox
+					id="mw-nixployauth-injectHeaders"
+					checked={Boolean(fields.injectHeaders)}
+					onCheckedChange={(checked) => set("injectHeaders", checked === true)}
+				/>
+				<Label htmlFor="mw-nixployauth-injectHeaders" className="text-xs font-normal">
+					Send X-Forwarded-User, -Email and -Groups to the app
+				</Label>
+			</div>
+		</div>
+	);
+}
 
 function MiddlewareFieldsEditor({
 	kind,
@@ -421,6 +591,10 @@ function MiddlewareFieldsEditor({
 				/>
 			</div>
 		);
+	}
+
+	if (kind === "nixployAuth") {
+		return <NixployAuthFields fields={fields} set={set} text={text} />;
 	}
 
 	if (kind === "forwardAuth") {

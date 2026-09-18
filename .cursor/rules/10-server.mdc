@@ -21,6 +21,9 @@ alwaysApply: false
   must declare `filtered` / `inherited` / `exempt` in `PROJECT_AXIS`
   (`trpc/tenancy-coverage.ts`) or CI fails — counters and search included. A
   hidden project answers NOT_FOUND, never FORBIDDEN.
+- Domain middlewares are a closed set (`modules/traefik/middlewares.ts`): one
+  zod schema and one renderer per kind, no raw-YAML hole. `nixployAuth` is the
+  panel forward-auth kind; its policy lives in `modules/app-auth/policy.ts`.
 - Input validation with zod on every procedure.
 
 ## Engine

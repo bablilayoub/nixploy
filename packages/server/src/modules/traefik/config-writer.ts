@@ -8,7 +8,12 @@ import { certificates } from "../../db/schema";
 import { execAsyncRemote, execAsyncWithStdin } from "../../utils/exec";
 import { badRequest } from "../errors";
 import type { DomainMiddlewareKind, RenderedMiddleware, StickyCookie } from "./middlewares";
-import { renderMiddleware, renderStickyCookie } from "./middlewares";
+import {
+	APP_AUTH_CALLBACK_PREFIX,
+	MAINTENANCE_SERVICE,
+	renderMiddleware,
+	renderStickyCookie,
+} from "./middlewares";
 import { getDynamicDir } from "./paths";
 
 /**
@@ -18,6 +23,15 @@ import { getDynamicDir } from "./paths";
  * port-less domain flapped between the two on every edit.
  */
 export const DEFAULT_CONTAINER_PORT = 80;
+
+/**
+ * Priority of the forward-auth callback router.
+ *
+ * Above any rule a tenant can write (Traefik's default priority is the rule's
+ * length in bytes, and a host plus a long path stays well under this), so the
+ * exchange path always reaches the panel rather than the protected app.
+ */
+export const APP_AUTH_ROUTER_PRIORITY = 100_000;
 
 // ─── Public contract types ───────────────────────────────────────────────────
 
@@ -37,6 +51,13 @@ export type TraefikRouteProtocol = "http" | "tcp" | "udp";
 export type TraefikTlsMode = "none" | "terminate" | "passthrough";
 
 export interface TraefikDomainEntry {
+	/**
+	 * The `domain` row id. Only `nixployAuth` needs it — its verify URL names
+	 * the policy to apply — but it is on the shared shape so the mapping in
+	 * {@link toTraefikDomainEntry} carries it for every caller rather than each
+	 * one remembering.
+	 */
+	domainId?: string | null;
 	host: string;
 	/** Container port the router forwards to (defaults to {@link DEFAULT_CONTAINER_PORT}). */
 	port: number;
@@ -108,6 +129,8 @@ interface HttpRouter {
 	entryPoints: string[];
 	middlewares?: string[];
 	tls?: { certResolver?: string; domains?: TlsDomain[] };
+	/** Explicit match order; Traefik otherwise ranks by rule length. */
+	priority?: number;
 }
 
 interface HttpService {
@@ -496,8 +519,9 @@ export const buildTraefikFileConfig = async (
 			.map((row, position) => ({ row, position }))
 			.filter(({ row }) => row.enabled !== false)
 			.sort((a, b) => (a.row.order ?? 0) - (b.row.order ?? 0) || a.position - b.position);
+		let protectedByPanel = false;
 		for (const [index, { row }] of rows.entries()) {
-			const rendered = renderMiddleware(row.kind, row.config);
+			const rendered = renderMiddleware(row.kind, row.config, { domainId: domain.domainId });
 			if (!rendered) {
 				// stickyCookie is a load-balancer option, not a middleware.
 				service.loadBalancer.sticky = { cookie: renderStickyCookie(row.config) };
@@ -506,6 +530,42 @@ export const buildTraefikFileConfig = async (
 			const name = `mw-${sanitizeName(appName)}-${key}-${index}-${sanitizeName(row.kind)}`;
 			middlewares[name] = rendered;
 			domainMiddlewares.push(name);
+			if (row.kind === "nixployAuth") protectedByPanel = true;
+		}
+
+		// The panel serves the code exchange on the tenant's OWN host, so the
+		// session cookie it sets is host-only and never shared with another
+		// domain. That needs a router that reaches the panel and, crucially,
+		// does NOT carry the forwardAuth middleware — a callback behind the auth
+		// it exists to complete is a redirect loop. Priority beats the app
+		// router explicitly rather than relying on Traefik's rule-length
+		// heuristic, which ties when the app router also has a path.
+		if (protectedByPanel) {
+			const callbackRule = `${hostRule} && PathPrefix(\`${APP_AUTH_CALLBACK_PREFIX}\`)`;
+			const callbackName = `${sanitizeName(appName)}-appauth-${key}`;
+			http.routers[`${callbackName}-websecure`] = {
+				rule: callbackRule,
+				service: MAINTENANCE_SERVICE,
+				entryPoints: ["websecure"],
+				priority: APP_AUTH_ROUTER_PRIORITY,
+				tls:
+					domain.certificateType === "letsencrypt"
+						? wildcard
+							? { certResolver: DNS_CERT_RESOLVER, domains: [{ main: matchHost }] }
+							: { certResolver: "letsencrypt" }
+						: {},
+			};
+			if (!domain.https) {
+				// An https-off domain still completes the exchange on :80; the
+				// cookie is then issued without the Secure attribute (see the
+				// callback route), which is the honest consequence of the choice.
+				http.routers[callbackName] = {
+					rule: callbackRule,
+					service: MAINTENANCE_SERVICE,
+					entryPoints: ["web"],
+					priority: APP_AUTH_ROUTER_PRIORITY,
+				};
+			}
 		}
 
 		if (domain.https) {
@@ -684,6 +744,7 @@ export const buildTraefikFileConfig = async (
  * a deploy used to erase a domain's middleware chain).
  */
 export interface TraefikDomainRow {
+	domainId?: string | null;
 	host: string;
 	port: number | null;
 	path: string | null;
@@ -701,6 +762,7 @@ export interface TraefikDomainRow {
 
 /** Map one `domain` row onto the writer's input shape. */
 export const toTraefikDomainEntry = (row: TraefikDomainRow): TraefikDomainEntry => ({
+	domainId: row.domainId ?? null,
 	host: row.host,
 	port: row.port ?? DEFAULT_CONTAINER_PORT,
 	path: row.path,

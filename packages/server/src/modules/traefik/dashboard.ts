@@ -1,6 +1,7 @@
 import { db } from "../../db";
 import { webServerSettings } from "../../db/schema";
 import { writeFileOnServer } from "./config-writer";
+import { panelInternalUrl } from "./middlewares";
 import { getDynamicDir, REMOTE_TRAEFIK_DIR, TRAEFIK_DYNAMIC_CONTAINER_DIR } from "./paths";
 
 /** Dynamic-config file that routes the Nixploy dashboard itself. */
@@ -148,8 +149,9 @@ export const writeDashboardRouterConfig = async (
 ): Promise<void> => {
 	const dynamicDir = serverId ? `${REMOTE_TRAEFIK_DIR}/dynamic` : getDynamicDir();
 	// In the swarm the app is reachable by service name; Traefik shares the
-	// overlay network with it.
-	const target = "http://nixploy:3000";
+	// overlay network with it. `NIXPLOY_PANEL_INTERNAL_URL` overrides that for
+	// a local checkout, where the panel runs on the host.
+	const target = panelInternalUrl();
 	await writeFileOnServer(
 		`${dynamicDir}/${DASHBOARD_CONFIG_FILE}`,
 		buildDashboardRouterYaml(domain, target),

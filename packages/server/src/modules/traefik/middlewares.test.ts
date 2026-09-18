@@ -28,6 +28,7 @@ describe("parseMiddlewareConfig", () => {
 			"headers",
 			"compress",
 			"forwardAuth",
+			"nixployAuth",
 			"stickyCookie",
 			"maintenance",
 		]);
@@ -161,5 +162,47 @@ describe("describeMiddleware", () => {
 		expect(describeMiddleware("rateLimit", { average: 2, burst: 4 })).toBe("2/1s (burst 4)");
 		expect(describeMiddleware("ipAllowList", { sourceRange: ["10.0.0.0/8"] })).toBe("10.0.0.0/8");
 		expect(describeMiddleware("rateLimit", { nope: true })).toBe("invalid configuration");
+	});
+});
+
+describe("nixployAuth", () => {
+	it("renders a forwardAuth at the panel, carrying the domain it guards", () => {
+		const rendered = renderMiddleware("nixployAuth", {}, { domainId: "dom_1" });
+		expect(rendered).toEqual({
+			forwardAuth: {
+				address: "http://nixploy:3000/api/app-auth/verify?domain=dom_1",
+				trustForwardHeader: true,
+			},
+		});
+	});
+
+	it("asks for the injected headers only when the policy wants them", () => {
+		const rendered = renderMiddleware(
+			"nixployAuth",
+			{ injectHeaders: true },
+			{ domainId: "d" },
+		) as {
+			forwardAuth: { authResponseHeaders?: string[] };
+		};
+		expect(rendered.forwardAuth.authResponseHeaders).toEqual([
+			"X-Forwarded-User",
+			"X-Forwarded-Email",
+			"X-Forwarded-Groups",
+		]);
+	});
+
+	it("refuses to render without a domain id", () => {
+		// A forwardAuth that cannot tell the verifier which policy applies would
+		// either fail open or shut the domain out; neither is a config to write.
+		expect(() => renderMiddleware("nixployAuth", {}, {})).toThrow(/domain it belongs to/);
+	});
+
+	it("describes the policy in one line", () => {
+		expect(describeMiddleware("nixployAuth", {})).toBe(
+			"panel sign-in — any member of the organization",
+		);
+		expect(describeMiddleware("nixployAuth", { minRole: "deployer", teamIds: ["t"] })).toBe(
+			"panel sign-in — deployer+, 1 team(s)",
+		);
 	});
 });
