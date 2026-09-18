@@ -83,8 +83,10 @@ export interface ProtectedDomain {
 const globalForPolicies = globalThis as typeof globalThis & {
 	__nixployAppAuthPolicies?: TtlCache<ProtectedDomain | null>;
 };
-const policyCache = (globalForPolicies.__nixployAppAuthPolicies ??=
-	createTtlCache<ProtectedDomain | null>({ ttlMs: 10_000 }));
+globalForPolicies.__nixployAppAuthPolicies ??= createTtlCache<ProtectedDomain | null>({
+	ttlMs: 10_000,
+});
+const policyCache = globalForPolicies.__nixployAppAuthPolicies;
 
 /** Drop a domain's cached policy after a middleware write. */
 export const invalidateProtectedDomain = (domainId: string): void =>
