@@ -1,3 +1,5 @@
+import { publicSsoProviders } from "@nixploy/server/modules/auth/sso";
+import { isSsoGateBlocked } from "@nixploy/server/modules/auth/sso-gate";
 import { isTwoFactorGateBlocked } from "@nixploy/server/modules/auth/two-factor-gate";
 import {
 	resolveCallerOrganizationId,
@@ -5,6 +7,7 @@ import {
 } from "@nixploy/server/modules/projects/index";
 import { redirect } from "next/navigation";
 
+import { SsoRequiredGate } from "@/components/auth/sso-required-gate";
 import { TwoFactorRequiredGate } from "@/components/auth/two-factor-required-gate";
 import { AuthenticatedLayout } from "@/components/layout/authenticated-layout";
 import { OrgBrandingProvider } from "@/components/org-branding-provider";
@@ -29,6 +32,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
 			);
 			if (await isTwoFactorGateBlocked(session.user.id, organizationId)) {
 				return <TwoFactorRequiredGate />;
+			}
+			// Same idea for the SSO requirement — but there is nothing to set up
+			// here, so the interstitial offers the identity provider instead.
+			if (await isSsoGateBlocked(session.user.id, organizationId)) {
+				return <SsoRequiredGate providers={await publicSsoProviders()} />;
 			}
 		} catch {
 			// Org resolution failed — org-scoped pages handle that themselves.

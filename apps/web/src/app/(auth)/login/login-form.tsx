@@ -23,18 +23,19 @@ import { safeNextPath } from "@/lib/safe-next-path";
 
 import { type LoginInput, loginSchema } from "@/server/actions/auth.schema";
 
-export interface SsoInfo {
-	enabled: boolean;
+export interface SsoProviderInfo {
 	providerId: string;
 	name: string;
+	preset: string;
 }
 
-export function LoginForm({ sso }: { sso?: SsoInfo }) {
+export function LoginForm({ ssoProviders = [] }: { ssoProviders?: SsoProviderInfo[] }) {
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const nextPath = safeNextPath(searchParams.get("next"));
 	const [formError, setFormError] = useState<string | null>(null);
-	const [ssoPending, setSsoPending] = useState(false);
+	/** The provider a redirect is in flight for; disables every button. */
+	const [ssoPending, setSsoPending] = useState<string | null>(null);
 	const form = useForm<LoginInput>({
 		resolver: zodResolver(loginSchema),
 		defaultValues: { email: "", password: "" },
@@ -45,23 +46,22 @@ export function LoginForm({ sso }: { sso?: SsoInfo }) {
 	 * so this is the standard /sign-in/social route; the response carries the
 	 * authorization URL to send the browser to.
 	 */
-	async function signInWithSso() {
-		if (!sso?.enabled) return;
+	async function signInWithSso(provider: SsoProviderInfo) {
 		setFormError(null);
-		setSsoPending(true);
+		setSsoPending(provider.providerId);
 		try {
 			const res = await fetch("/api/auth/sign-in/social", {
 				method: "POST",
 				headers: { "Content-Type": "application/json", Origin: window.location.origin },
 				body: JSON.stringify({
-					provider: sso.providerId,
+					provider: provider.providerId,
 					callbackURL: nextPath,
 					errorCallbackURL: "/login",
 				}),
 			});
 			const data = (await res.json().catch(() => ({}))) as { url?: string; message?: string };
 			if (!res.ok || !data.url) {
-				const msg = data.message ?? `Could not start ${sso.name} sign-in (${res.status})`;
+				const msg = data.message ?? `Could not start ${provider.name} sign-in (${res.status})`;
 				toast.error(msg);
 				setFormError(msg);
 				return;
@@ -72,7 +72,7 @@ export function LoginForm({ sso }: { sso?: SsoInfo }) {
 			toast.error(msg);
 			setFormError(msg);
 		} finally {
-			setSsoPending(false);
+			setSsoPending(null);
 		}
 	}
 
@@ -176,23 +176,28 @@ export function LoginForm({ sso }: { sso?: SsoInfo }) {
 					</form>
 				</Form>
 
-				{sso?.enabled && (
+				{ssoProviders.length > 0 && (
 					<div className="mt-4 grid gap-4">
 						<div className="flex items-center gap-3">
 							<span className="h-px flex-1 bg-border" />
 							<span className="text-xs text-muted-foreground">or</span>
 							<span className="h-px flex-1 bg-border" />
 						</div>
-						<Button
-							type="button"
-							variant="outline"
-							className="w-full"
-							disabled={ssoPending}
-							onClick={() => void signInWithSso()}
-						>
-							<KeyRound className="size-4" />
-							{ssoPending ? "Redirecting…" : `Continue with ${sso.name}`}
-						</Button>
+						{ssoProviders.map((provider) => (
+							<Button
+								key={provider.providerId}
+								type="button"
+								variant="outline"
+								className="w-full"
+								disabled={ssoPending !== null}
+								onClick={() => void signInWithSso(provider)}
+							>
+								<KeyRound className="size-4" />
+								{ssoPending === provider.providerId
+									? "Redirecting…"
+									: `Continue with ${provider.name}`}
+							</Button>
+						))}
 					</div>
 				)}
 			</CardContent>

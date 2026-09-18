@@ -7,6 +7,7 @@ import { db } from "../db";
 import { auth } from "../lib/auth";
 import { createLogger } from "../lib/logger";
 import { getOrganizationId } from "../modules/application/org";
+import { isSsoGateBlocked, SSO_REQUIRED_MESSAGE } from "../modules/auth/sso-gate";
 import {
 	isTwoFactorGateBlocked,
 	TWO_FACTOR_REQUIRED_MESSAGE,
@@ -208,9 +209,14 @@ export const protectedProcedure = t.procedure.use(errorBoundary).use(async ({ ct
 	// with no organization (first-run setup) are exempt — org resolution
 	// fails FORBIDDEN for them and org-scoped procedures reject on their own.
 	let twoFactorGated = false;
+	// Same shape for the SSO requirement: a member who did not arrive through
+	// the IdP is blocked until they do. Instance admins are exempt inside the
+	// gate itself — they are the way back in when the IdP is down.
+	let ssoGated = false;
 	try {
 		const orgId = await organizationId();
 		twoFactorGated = await isTwoFactorGateBlocked(session.user.id, orgId);
+		ssoGated = await isSsoGateBlocked(session.user.id, orgId);
 	} catch {
 		// No organization (FORBIDDEN) or an unreachable database: org-scoped
 		// procedures reject or fail on their own queries — the gate must not
@@ -221,6 +227,9 @@ export const protectedProcedure = t.procedure.use(errorBoundary).use(async ({ ct
 			code: "FORBIDDEN",
 			message: TWO_FACTOR_REQUIRED_MESSAGE,
 		});
+	}
+	if (ssoGated) {
+		throw new TRPCError({ code: "FORBIDDEN", message: SSO_REQUIRED_MESSAGE });
 	}
 
 	const run = () =>

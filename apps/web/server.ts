@@ -4,6 +4,7 @@ import { closeWebSocketServer, setupWebSocketServer } from "@nixploy/server/ws";
 import next from "next";
 // Stateful server modules are imported by relative path on purpose (same
 // module instance as the tRPC/cron graph under tsx) — see startBackgroundWork.
+import { initAuth } from "../../packages/server/src/lib/auth";
 import {
 	describeProcessRole,
 	isUnknownProcessRole,
@@ -11,6 +12,7 @@ import {
 	processRole,
 } from "../../packages/server/src/lib/role";
 import { shutdownGraceMs } from "../../packages/server/src/lib/shutdown";
+import { startAuthRebuildBridge } from "../../packages/server/src/modules/auth/sso-notify";
 import { startEventBridge } from "../../packages/server/src/modules/deployment/notify";
 import { PEER_IP_HEADER } from "../../packages/server/src/utils/rate-limit";
 // Importing worker.ts starts nothing — it only exports the background half
@@ -155,6 +157,14 @@ async function main() {
 
 	// WebSocket endpoints: /ws/deployment, /ws/events, /ws/logs, /ws/stats, /ws/terminal.
 	setupWebSocketServer(server);
+
+	// SSO providers live in the database, and better-auth freezes its plugin
+	// array at construction — so the instance built at import time has none and
+	// is swapped for a configured one here. Password sign-in works throughout.
+	// Both roles do this: the panel serves the login page, and the worker's own
+	// auth instance is what API-key and session checks run against.
+	await initAuth();
+	await startAuthRebuildBridge();
 
 	if (isWorkerRole()) {
 		// Role `all`: the deploy queue, the crons, boot recovery and the Traefik

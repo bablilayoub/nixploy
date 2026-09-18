@@ -11,6 +11,7 @@ import {
 	redis,
 } from "../db/schema";
 import { assertInstanceAdmin } from "../modules/auth/instance-admin";
+import { isSsoGateBlocked, SSO_REQUIRED_MESSAGE } from "../modules/auth/sso-gate";
 import {
 	isTwoFactorGateBlocked,
 	TWO_FACTOR_REQUIRED_MESSAGE,
@@ -36,6 +37,9 @@ export async function resolveWsOrganizationId(session: WsSession): Promise<strin
 	);
 	if (await isTwoFactorGateBlocked(session.user.id, organizationId)) {
 		throw new Error(TWO_FACTOR_REQUIRED_MESSAGE);
+	}
+	if (await isSsoGateBlocked(session.user.id, organizationId)) {
+		throw new Error(SSO_REQUIRED_MESSAGE);
 	}
 	return organizationId;
 }

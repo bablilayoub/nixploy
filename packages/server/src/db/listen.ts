@@ -44,6 +44,11 @@ export const CHANNELS = {
 	deployCancel: "nixploy_deploy_cancel",
 	/** Deployment/service/queue status frames for `/ws/events`. */
 	events: "nixploy_events",
+	/**
+	 * An SSO provider changed — every process must rebuild its better-auth
+	 * instance, because the plugin array is frozen at construction.
+	 */
+	authRebuild: "nixploy_auth_rebuild",
 } as const;
 
 export type Channel = (typeof CHANNELS)[keyof typeof CHANNELS];

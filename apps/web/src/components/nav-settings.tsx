@@ -90,6 +90,12 @@ export const settingsNavGroups: SettingsNavGroup[] = [
 				icon: ServerCog,
 				gate: { instanceAdmin: true },
 			},
+			{
+				label: "Single sign-on",
+				href: "/dashboard/settings/sso",
+				icon: KeyRound,
+				gate: { instanceAdmin: true },
+			},
 		],
 	},
 ];

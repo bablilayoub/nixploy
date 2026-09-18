@@ -203,58 +203,83 @@ every session and prints the password. Run it on the host; it reads
 password and change it immediately. (The better-auth admin plugin cannot clear
 an enrolled TOTP secret, which is why this is a script and not a button.)
 
-## Single sign-on (OIDC)
+## Single sign-on
 
-Optional, configured entirely from the environment — no migration, no
-`NEXT_PUBLIC_*` in the client bundle (the login page resolves it server-side
-and passes it as a prop):
+Configured in the panel: **Settings → Single sign-on** (instance admin only).
+Providers are rows, not environment variables, so changing an IdP no longer
+means editing a unit file and restarting — and an instance can offer more than
+one.
 
-```bash
-NIXPLOY_OIDC_ISSUER=https://auth.example.com/application/o/nixploy/
-NIXPLOY_OIDC_CLIENT_ID=...
-NIXPLOY_OIDC_CLIENT_SECRET=...
-NIXPLOY_OIDC_PROVIDER_NAME=Authentik   # button label, optional
-NIXPLOY_OIDC_DEFAULT_ORG=acme-ops      # org *slug* new users JIT-join
-```
+Presets fill in the fiddly parts for Authentik, Keycloak, Microsoft Entra ID,
+Okta, ZITADEL, Google Workspace and GitHub; **Custom OpenID Connect** takes any
+provider with a discovery document, or explicit endpoints when it has none.
 
-With all three required variables set, `/login` grows a
-**Continue with `<provider>`** button. Nixploy uses better-auth's
-`genericOAuth` plugin, which in 1.7 registers the provider as a first-class
-social provider: sign-in goes through `/api/auth/sign-in/social` with
-`provider: "oidc"` and the callback is
-`/api/auth/callback/oidc`. Endpoints are read from OIDC discovery
-(`<issuer>/.well-known/openid-configuration`); scopes are `openid profile
-email`.
+**Redirect URI to register at the IdP:**
+`https://panel.example.com/api/auth/callback/<provider-id>`
 
-**Redirect URI to register with the IdP:**
-`https://panel.example.com/api/auth/callback/oidc`
+The form shows it for the slug you type. It is better-auth's core
+`/callback/:id` route, not the generic-OAuth plugin's own
+`/oauth2/callback/:id` — `genericOAuth` registers each provider as a *social*
+provider. The slug is part of that URI, which is why it cannot be renamed once
+the provider exists.
 
-**JIT provisioning.** A user the IdP authenticates is created even though public
-registration is closed (the OIDC callback already authenticated them), and
-joins the organization whose **slug** is `NIXPLOY_OIDC_DEFAULT_ORG` as
-`member`. Users who already belong to an organization keep it. With no default
-org configured (or a slug that does not exist) the user lands with no
-organization and sees the create-organization screen; instance admins can then
-invite them properly.
+### What a provider decides
 
-### Authentik
+| Field | What it does |
+| --- | --- |
+| Allowed email domains | Only these domains may sign in through it. Empty admits any the IdP authenticates. Matched on the exact domain — `notexample.com` is not `example.com`. |
+| New users join / as | The organization a user the IdP provisions lands in, and the role they start with. |
+| Group claim | Which claim carries group names (`groups` for most; ZITADEL uses a namespaced one). |
+| Group → role | `platform-admins = admin`, one per line. The **highest** matched role wins, and names match case-insensitively. |
+| Re-apply on every sign-in | Removing someone from a group in the IdP demotes them here too. Off by default, because it also overrides a role an owner set by hand. |
 
-1. Applications → Providers → Create → **OAuth2/OpenID Provider**.
-2. Client type `Confidential`, redirect URI
-   `https://panel.example.com/api/auth/callback/oidc`.
-3. Signing key: any; scopes `openid`, `profile`, `email`.
-4. Issuer is the provider's *OpenID Configuration Issuer*, e.g.
-   `https://auth.example.com/application/o/nixploy/`.
+The allow-list is a standing rule, not a one-off admission check: a user whose
+domain is removed from it stops being able to sign in, not merely being
+creatable.
 
-### Keycloak
+### Requiring it
 
-1. Clients → Create client → `OpenID Connect`, client authentication **On**.
-2. Valid redirect URIs: `https://panel.example.com/api/auth/callback/oidc`.
-3. Credentials tab → client secret.
-4. Issuer: `https://keycloak.example.com/realms/<realm>`.
+**Settings → Organization → General → Security** has *Require single sign-on*,
+per organization. Members who did not arrive through an IdP are shown an
+interstitial offering it, and are blocked from every org-scoped procedure and
+WebSocket until they do.
 
-Restart the panel after changing any `NIXPLOY_OIDC_*` value — the plugin list is
-built at boot.
+Two things keep that from becoming a support ticket:
+
+- **Instance admins are exempt.** They are the way back in when the IdP is down
+  or misconfigured. Gating them would mean nobody could turn the switch off.
+- **The switch refuses to lock you out.** It cannot be enabled unless at least
+  one admin or owner of the organization already has a linked SSO identity (or
+  is an instance admin). The panel disables the switch with the reason attached
+  rather than letting you discover the guard by hitting it. Removing the last
+  provider while an organization still requires SSO is refused for the same
+  reason.
+
+### Migrating from the environment variables
+
+`NIXPLOY_OIDC_ISSUER` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_PROVIDER_NAME` /
+`_DEFAULT_ORG` still work: on first boot after upgrading they are imported into
+a provider row with the slug `oidc`, so existing redirect URIs keep working and
+nobody has to do anything. The import happens **once** — after that the row is
+authoritative, and stale variables left in the environment cannot overwrite an
+edit made in the panel. They can be deleted at your convenience.
+
+### How a change takes effect
+
+better-auth freezes its plugin array at construction, so saving a provider
+rebuilds the auth instance rather than waiting for a restart. In a `panel` /
+`worker` split the mutation also NOTIFYs on `nixploy_auth_rebuild` and the
+other process rebuilds too. Sessions live in Postgres, so nobody is signed out;
+what a rebuild does reset is better-auth's in-memory rate-limit counters, which
+is why this is on a mutation and not a timer.
+
+### Group and role plumbing
+
+Groups are read from the **ID token better-auth stored**, not from the OAuth
+profile: `mapProfileToUser` does not run for a user who already exists, so it
+cannot drive anything that must happen on every sign-in. The token was already
+verified against the provider's JWKS before it was written; reading it back is
+reading our own row.
 
 ## Instance user management
 

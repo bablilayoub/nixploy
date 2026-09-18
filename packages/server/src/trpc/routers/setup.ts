@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { hasInstanceEmailProvider } from "../../modules/auth/password-reset";
 import { getInvitationPreview, needsSetup, requiresSetupToken } from "../../modules/auth/setup";
-import { publicSsoInfo } from "../../modules/auth/sso";
+import { publicSsoProviders } from "../../modules/auth/sso";
 import { clientIpFromRequest, takeIpRateLimitToken } from "../../utils/rate-limit";
 import { publicProcedure, router } from "../init";
 
@@ -36,9 +36,10 @@ export const setupRouter = router({
 		if (!takeIpRateLimitToken("auth-config", ip, { windowMs: 60_000, max: 60 })) {
 			throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "Too many requests" });
 		}
-		const sso = publicSsoInfo();
 		return {
-			sso,
+			// A list now: an instance may offer several IdPs. The shape stays an
+			// array even with one, so the login page has no special case.
+			ssoProviders: await publicSsoProviders(),
 			passwordResetAvailable: await hasInstanceEmailProvider(),
 		};
 	}),

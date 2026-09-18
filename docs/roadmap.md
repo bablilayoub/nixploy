@@ -133,13 +133,15 @@ Annotations (`readOnlyHint` / `destructiveHint` / `idempotentHint`) on all 32 MC
 
 The marketing line writes itself: a comparison table where the other column says *Enterprise* four times.
 
-### 6. SSO providers UI *(M, the core)*
+### 6. SSO providers UI ✅ *(M — landed 2026-09-18)*
 
 New `sso_provider` table (provider slug, preset for Authentik/Keycloak/Entra/Okta/Zitadel/Google/GitHub, issuer, client id, `encryptedText` secret, scopes, allowed email domains, default org + role, `group_claim`, `group_mappings` jsonb, `sync_role_on_login`). Replace the env reader in [`modules/auth/sso.ts`](../packages/server/src/modules/auth/sso.ts) with a cached DB loader, seeding once from the existing env vars. Because better-auth plugins are constructed once, add a `rebuildAuth()` on `globalThis` (the `deployment/events.ts` pattern) triggered over `LISTEN/NOTIFY` so panel and worker both rebuild. Group→role mapping evaluated in the existing `databaseHooks`; `sso.required` per org enforced by a new `sso-gate.ts` mirroring [`two-factor-gate.ts`](../packages/server/src/modules/auth/two-factor-gate.ts), with instance admins exempt as break-glass.
 
 **Lockout safety is the whole game here:** refuse to enable "require SSO" unless an instance admin has a linked SSO identity or a password fallback remains; link an SSO login to an existing account only when the IdP asserts `email_verified`.
 
 Then SAML (protocol switch + IdP metadata upload, assertion signature/audience/replay validation) and passkeys (`@better-auth/passkey` pinned to the same 1.7.3 line, schema introspected per the CLAUDE.md recipe) as follow-ons. SCIM deferred.
+
+*What shipped (migration 0036):* all of the above, verified end to end against a real Keycloak — provisioning, group→role mapping, `syncRoleOnLogin` demoting on the next sign-in, the email allow-list refusing an **existing** user whose domain was removed, and the gate blocking exactly the member with no SSO identity while leaving instance admins through. Three things landed differently from the sketch: the auth instance lives on `globalThis` behind a Proxy (a module-local one is rebuilt in the wrong copy — `transpilePackages` evaluates the package twice); groups are read from the stored `account.id_token`, not from `mapProfileToUser`, which does not run for a user who already exists; and the redirect URI is `/api/auth/callback/<id>`, the core social route, not the plugin's `/oauth2/callback/:id`. The `email_verified` condition on account linking is better-auth's own behaviour and was not re-implemented. **SAML and passkeys remain follow-ons.**
 
 ### 7. Teams and project-level access *(L)*
 

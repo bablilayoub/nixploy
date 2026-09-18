@@ -79,6 +79,13 @@ export const organizations = pgTable("organization", {
 	metadata: text("metadata"),
 	/** When true, members without 2FA on their account are gated out of the org. */
 	requireTwoFactor: boolean("require_two_factor").notNull().default(false),
+	/**
+	 * When true, members must have signed in through an SSO provider. Instance
+	 * admins are exempt: they are the break-glass path back in when the IdP is
+	 * down or misconfigured, and an org that can lock every one of its owners
+	 * out is a support ticket waiting to happen.
+	 */
+	requireSso: boolean("require_sso").notNull().default(false),
 	createdAt: createdAt(),
 });
 

@@ -1291,6 +1291,46 @@ const docs: Record<string, ProcedureDoc> = {
 		summary: "Check whether first-boot setup is pending",
 		description: "Public: true until the first owner account exists.",
 	},
+	// ─────────────────────────────────────────────────────────────────── sso
+	"sso.presets": {
+		summary: "List identity-provider presets",
+		description:
+			"The known IdPs (Authentik, Keycloak, Entra, Okta, ZITADEL, Google, GitHub) with their default scopes, group claim and setup notes.",
+	},
+	"sso.all": {
+		summary: "List SSO providers",
+		description: "Every configured identity provider. Client secrets are never returned.",
+	},
+	"sso.redirectUri": {
+		summary: "Redirect URI for a provider id",
+		description:
+			"The callback URL to register at the identity provider. Derived from the panel's configured base URL.",
+	},
+	"sso.create": {
+		summary: "Add an SSO provider",
+		description:
+			"Instance admin only. Every URL goes through the outbound-request guard, and the auth instance is rebuilt so the provider works immediately.",
+	},
+	"sso.update": {
+		summary: "Update an SSO provider",
+		description:
+			"Instance admin only. Omit `clientSecret` to keep the stored one — the panel never reads it back.",
+	},
+	"sso.delete": {
+		summary: "Remove an SSO provider",
+		description:
+			"Instance admin only. Refused while an organization still requires SSO and this is the last provider.",
+	},
+	"sso.requirement": {
+		summary: "Read this organization's SSO requirement",
+		description:
+			"Whether SSO is required, whether it could be enabled at all, and why not — so the panel can disable the switch instead of failing on save.",
+	},
+	"sso.setRequirement": {
+		summary: "Require SSO for this organization",
+		description:
+			"Needs `settings.manage`. Turning it on is refused when no admin or owner has an SSO identity yet, which would lock everyone out — including whoever would turn it off.",
+	},
 	"setup.authConfig": {
 		summary: "Get the public auth configuration",
 		description:

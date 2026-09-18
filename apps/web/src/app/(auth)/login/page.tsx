@@ -1,5 +1,5 @@
 import { needsSetup } from "@nixploy/server/modules/auth/setup";
-import { publicSsoInfo } from "@nixploy/server/modules/auth/sso";
+import { publicSsoProviders } from "@nixploy/server/modules/auth/sso";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -25,10 +25,10 @@ export default async function LoginPage() {
 	}
 	// Resolved on the server and handed down as a prop: the client bundle must
 	// stay free of NEXT_PUBLIC_* configuration (CLAUDE.md).
-	const sso = publicSsoInfo();
+	const ssoProviders = await publicSsoProviders();
 	return (
 		<Suspense>
-			<LoginForm sso={sso} />
+			<LoginForm ssoProviders={ssoProviders} />
 		</Suspense>
 	);
 }

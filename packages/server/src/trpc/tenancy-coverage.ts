@@ -76,6 +76,9 @@ export const EXEMPT = [
 	"gitea.one",
 	"bitbucket.all",
 	"bitbucket.one",
+	// Instance-level, not tenant data: identity providers appear on the login
+	// page for the whole instance, and the procedure is instance admin only.
+	"sso.all",
 	// Audit is org-filtered; covered indirectly via project seed volume of work.
 	"audit.all",
 	// The caller's OWN memberships, not org rows: `organization.list` joins

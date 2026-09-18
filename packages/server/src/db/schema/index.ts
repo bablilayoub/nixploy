@@ -19,6 +19,7 @@ export * from "./registry";
 export * from "./schedule";
 export * from "./security";
 export * from "./server";
+export * from "./sso";
 export * from "./tag";
 export * from "./template-source";
 export * from "./utils";

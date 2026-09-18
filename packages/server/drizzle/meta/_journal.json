@@ -253,6 +253,13 @@
       "when": 1789681864237,
       "tag": "0035_red_silhouette",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1789736570003,
+      "tag": "0036_awesome_the_hand",
+      "breakpoints": true
     }
   ]
 }
