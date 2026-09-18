@@ -175,6 +175,46 @@ export const twoFactors = pgTable("two_factor", {
 	lockedUntil: timestamp("locked_until", { withTimezone: true }),
 });
 
+/**
+ * WebAuthn credentials (`@better-auth/passkey`).
+ *
+ * Column names and nullability mirror the plugin's own `schema` exactly —
+ * introspected at runtime from `passkey().schema`, per the upgrade recipe in
+ * CLAUDE.md, not copied from a blog post. `credentialID` and `userId` are the
+ * two the plugin looks rows up by, so both carry an index.
+ *
+ * Nothing here is a secret: a WebAuthn public key is public by construction
+ * and the private half never leaves the authenticator. That is the whole point
+ * of the mechanism, and why this table needs no `encryptedText`.
+ */
+export const passkeys = pgTable(
+	"passkey",
+	{
+		id: text("id").primaryKey(),
+		/** Human label the user typed ("MacBook Touch ID"). */
+		name: text("name"),
+		publicKey: text("public_key").notNull(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		credentialID: text("credential_id").notNull(),
+		/** Signature counter; the plugin uses it to detect a cloned authenticator. */
+		counter: integer("counter").notNull(),
+		deviceType: text("device_type").notNull(),
+		/** Whether the credential is synced to a cloud keychain. */
+		backedUp: boolean("backed_up").notNull(),
+		/** Comma-separated WebAuthn transports ("internal,hybrid"). */
+		transports: text("transports"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+		/** Authenticator model identifier, when the device reports one. */
+		aaguid: text("aaguid"),
+	},
+	(table) => [
+		index("passkey_user_id_idx").on(table.userId),
+		index("passkey_credential_id_idx").on(table.credentialID),
+	],
+);
+
 // ── relations ───────────────────────────────────────────────────────────────
 
 export const usersRelations = relations(users, ({ many, one }) => ({
@@ -187,6 +227,11 @@ export const usersRelations = relations(users, ({ many, one }) => ({
 		fields: [users.id],
 		references: [twoFactors.userId],
 	}),
+	passkeys: many(passkeys),
+}));
+
+export const passkeysRelations = relations(passkeys, ({ one }) => ({
+	user: one(users, { fields: [passkeys.userId], references: [users.id] }),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({

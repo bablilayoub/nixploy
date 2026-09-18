@@ -8,6 +8,7 @@ import { db } from "../../db";
 import { webServerSettings } from "../../db/schema";
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
+import { publishAuthRebuild } from "../../modules/auth/sso-notify";
 import { detectPublicIp } from "../../modules/cluster/public-host";
 import { dockerCleanup } from "../../modules/deployment";
 import { emitDockerCleanupNotification } from "../../modules/notifications";
@@ -21,6 +22,7 @@ import {
 	restartTraefik,
 	writeDashboardRouterConfig,
 } from "../../modules/traefik";
+import { bestEffort } from "../../utils/best-effort";
 import { invalidatePrivateEgressCache } from "../../utils/public-url";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
@@ -245,6 +247,15 @@ export const webServerRouter = router({
 					}
 				}
 			}
+		}
+
+		// The panel's domain IS the passkey relying party: WebAuthn credentials are
+		// bound to it, and the auth instance resolves it at construction. Rebuild
+		// both halves of a split deployment so the change takes effect without a
+		// restart — and note that existing passkeys do not survive it, because
+		// they were registered against the old domain.
+		if (hostChanged) {
+			await bestEffort("publish auth rebuild after a host change", () => publishAuthRebuild());
 		}
 
 		void auditFromSession(ctx, organizationId, {

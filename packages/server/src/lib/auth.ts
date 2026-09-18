@@ -1,4 +1,5 @@
 import { apiKey } from "@better-auth/api-key";
+import { passkey } from "@better-auth/passkey";
 import bcrypt from "bcryptjs";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -19,6 +20,7 @@ import {
 	assertMemberActionRank,
 	loadCallerMembership,
 } from "../modules/auth/org-rank";
+import { type PasskeyRelyingParty, resolvePasskeyRelyingParty } from "../modules/auth/passkey-rp";
 import {
 	EMAIL_NOT_CONFIGURED_MESSAGE,
 	hasInstanceEmailProvider,
@@ -126,7 +128,10 @@ export const trustedOriginsWithDashboardDomain = async (): Promise<string[]> => 
  * ({@link rebuildAuth}). Everything else about it is static, which is why this
  * takes only the providers.
  */
-function buildAuth(ssoProviders: readonly SsoProviderConfig[]) {
+function buildAuth(
+	ssoProviders: readonly SsoProviderConfig[],
+	relyingParty: PasskeyRelyingParty | null,
+) {
 	const ssoByProviderId = new Map(ssoProviders.map((entry) => [entry.providerId, entry]));
 	/**
 	 * The SSO provider a better-auth hook context belongs to.
@@ -167,6 +172,7 @@ function buildAuth(ssoProviders: readonly SsoProviderConfig[]) {
 				invitation: schema.invitations,
 				apikey: schema.apikeys,
 				twoFactor: schema.twoFactors,
+				passkey: schema.passkeys,
 			},
 		}),
 		emailAndPassword: {
@@ -277,6 +283,30 @@ function buildAuth(ssoProviders: readonly SsoProviderConfig[]) {
 			}),
 			admin({ impersonationSessionDuration: IMPERSONATION_SESSION_SECONDS }),
 			twoFactor(),
+			/**
+			 * Passkeys, but only where WebAuthn can actually work. The plugin
+			 * defaults `rpID` to "localhost", so registering it on an install
+			 * reached by IP would offer a button that fails inside the browser
+			 * with nothing the operator can act on. `resolvePasskeyRelyingParty`
+			 * returns null there and the panel says why instead
+			 * (`setup.authConfig.passkeys`).
+			 */
+			...(relyingParty
+				? [
+						passkey({
+							rpID: relyingParty.rpId,
+							rpName: "Nixploy",
+							origin: relyingParty.origins,
+							authenticatorSelection: {
+								// Let the platform authenticator (Touch ID, Windows Hello,
+								// a phone over hybrid) and a roaming security key both
+								// enrol; forcing either one strands somebody's hardware.
+								residentKey: "preferred",
+								userVerification: "preferred",
+							},
+						}),
+					]
+				: []),
 			apiKey({
 				enableMetadata: true,
 				// A recognisable prefix so secret scanners (GitHub, gitleaks) catch a
@@ -588,7 +618,9 @@ const globalForAuth = globalThis as typeof globalThis & { __nixployAuth?: Auth }
 function currentAuth(): Auth {
 	const existing = globalForAuth.__nixployAuth;
 	if (existing) return existing;
-	const built = buildAuth([]);
+	// A pre-boot fallback: `initAuth()` replaces it with the real thing, which
+	// is where the relying party and the SSO providers are resolved.
+	const built = buildAuth([], null);
 	globalForAuth.__nixployAuth = built;
 	return built;
 }
@@ -626,12 +658,38 @@ export const auth: Auth = new Proxy({} as Auth, {
  */
 export async function rebuildAuth(): Promise<void> {
 	const providers = await loadSsoProviders();
-	globalForAuth.__nixployAuth = buildAuth(providers);
+	const relyingParty = await resolvePanelRelyingParty();
+	globalForAuth.__nixployAuth = buildAuth(providers, relyingParty);
 	authLog.info(
 		providers.length > 0
 			? `Auth rebuilt with ${providers.length} SSO provider(s): ${providers.map((p) => p.providerId).join(", ")}`
 			: "Auth rebuilt with no SSO providers",
 	);
+	authLog.info(
+		relyingParty
+			? `Passkeys enabled for ${relyingParty.rpId}`
+			: "Passkeys disabled: the panel has no domain name to bind credentials to",
+	);
+}
+
+/**
+ * The relying party for this instance, from the configured dashboard domain
+ * with `BETTER_AUTH_URL` as the fallback.
+ *
+ * Read on every rebuild rather than cached, because changing the panel's domain
+ * changes it — and `webServer.updateSettings` publishes a rebuild for exactly
+ * that reason. Existing passkeys do not survive the change; they were bound to
+ * the old domain and nothing can migrate them.
+ */
+export async function resolvePanelRelyingParty(): Promise<PasskeyRelyingParty | null> {
+	let host: string | null = null;
+	try {
+		const [row] = await db.select().from(schema.webServerSettings).limit(1);
+		host = row?.host?.trim().toLowerCase() ?? null;
+	} catch {
+		// First boot, before the table exists.
+	}
+	return resolvePasskeyRelyingParty(host, process.env.BETTER_AUTH_URL);
 }
 
 /**

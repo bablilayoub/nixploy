@@ -873,6 +873,7 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 					"First user via /setup — public /register is disabled afterward, and the installer generates a one-time setup token so a scanner cannot win the race on a fresh host",
 					"Invitations are shareable links that disclose only a masked email; the sign-up must carry the invitation id and match that exact address",
 					"Optional TOTP 2FA, with an org-wide require-2FA gate that blocks every org-scoped call until the member enrols",
+					"Passkeys (WebAuthn) — Touch ID, Windows Hello, a phone or a security key, instead of a password. They need the panel to have a domain name, because a credential is bound to one; an instance reached by IP is told so rather than shown a button that cannot work",
 					"Password reset by email, plus a break-glass host command when no mail is configured",
 					"Optional OIDC single sign-on (NIXPLOY_OIDC_ISSUER / CLIENT_ID / CLIENT_SECRET, plus an optional default org slug for JIT membership) — Authentik, Keycloak, any OpenID provider",
 					"Per-account sign-in lockout on top of the per-IP limit: 10 failures in 15 minutes",

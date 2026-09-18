@@ -281,6 +281,13 @@
       "when": 1789742942908,
       "tag": "0039_silent_metal_master",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1789751757876,
+      "tag": "0040_mature_invaders",
+      "breakpoints": true
     }
   ]
 }

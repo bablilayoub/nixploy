@@ -312,6 +312,55 @@ that account's full capability set, including the gates above.
   member can always enable it and continue; users with no organization
   (first-run setup) are exempt.
 
+## Passkeys (WebAuthn)
+
+`@better-auth/passkey`, pinned to the same 1.7.3 line as `better-auth` itself.
+The `passkey` table mirrors the plugin's own `schema`, **introspected at runtime**
+(`passkey().schema`) rather than copied from a blog post — the recipe in
+CLAUDE.md. Nothing in it is a secret: a WebAuthn public key is public by
+construction and the private half never leaves the authenticator.
+
+A passkey replaces the **password**, not the second factor. Enrolling one does
+not satisfy an organization's require-2FA gate — that gate is about TOTP — and
+the SSO gate is unchanged too, because it is about which identity provider
+asserted the user, not which factor they used.
+
+### It needs a domain
+
+WebAuthn binds every credential to an **rpID**: a bare domain, no scheme and no
+port. Three things follow, and `modules/auth/passkey-rp.ts` is where they live:
+
+- **An install reached by IP cannot offer passkeys at all.** There is no domain
+  to bind to. The plugin is simply not registered, `setup.authConfig` reports
+  `passkeysAvailable: false`, and the panel explains why instead of showing a
+  button that fails inside the browser. This matters because the plugin's own
+  default for `rpID` is `"localhost"` — registering it unconditionally is
+  exactly that silent failure on every real install.
+- **Changing the panel's domain invalidates every existing passkey.** They were
+  registered against the old one and nothing can migrate them; users enrol
+  again. `webServer.updateSettings` publishes an auth rebuild when the host
+  changes, so the new relying party takes effect without a restart.
+- **The origin carries the port, the rpID does not.** `http://localhost:3100` is
+  a valid origin for rpID `localhost`, which is what makes a local checkout work
+  without a domain.
+
+The relying party is resolved from the configured dashboard domain, falling back
+to `BETTER_AUTH_URL`. Both origins are accepted, so a checkout pointed at a
+staging domain can present a credential from either.
+
+### Surfaces
+
+| Where | What |
+| --- | --- |
+| Settings → Profile → Passkeys | Add, name, and remove; shows whether a credential is synced to a cloud keychain or lives on one device |
+| Login page | "Sign in with a passkey" — no email first, because a discoverable credential identifies the account by itself |
+| `setup.authConfig` | `passkeysAvailable`, so the login page knows whether to offer the button |
+
+Registration uses `residentKey: "preferred"` and `userVerification: "preferred"`:
+a platform authenticator (Touch ID, Windows Hello, a phone over hybrid) and a
+roaming security key both enrol, where forcing either one strands somebody's
+hardware.
+
 ## Passwords
 
 - **New** passwords (sign-up, invitation, reset, change) must be at least 12

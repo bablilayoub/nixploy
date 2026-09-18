@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { resolvePanelRelyingParty } from "../../lib/auth";
 import { hasInstanceEmailProvider } from "../../modules/auth/password-reset";
 import { getInvitationPreview, needsSetup, requiresSetupToken } from "../../modules/auth/setup";
 import { publicSsoProviders } from "../../modules/auth/sso";
@@ -41,6 +42,11 @@ export const setupRouter = router({
 			// array even with one, so the login page has no special case.
 			ssoProviders: await publicSsoProviders(),
 			passwordResetAvailable: await hasInstanceEmailProvider(),
+			// Whether WebAuthn can work here at all. The login page needs it to
+			// decide between offering a passkey button and explaining why there
+			// is none — the plugin is simply not registered when the panel has no
+			// domain to bind credentials to.
+			passkeysAvailable: (await resolvePanelRelyingParty()) !== null,
 		};
 	}),
 

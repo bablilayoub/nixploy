@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle, KeyRound } from "lucide-react";
+import { AlertCircle, Fingerprint, KeyRound } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -19,6 +19,7 @@ import {
 	FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { authClient } from "@/lib/auth-client";
 import { describeError } from "@/lib/describe-error";
 import { safeNextPath } from "@/lib/safe-next-path";
 
@@ -30,7 +31,14 @@ export interface SsoProviderInfo {
 	preset: string;
 }
 
-export function LoginForm({ ssoProviders = [] }: { ssoProviders?: SsoProviderInfo[] }) {
+export function LoginForm({
+	ssoProviders = [],
+	passkeysAvailable = false,
+}: {
+	ssoProviders?: SsoProviderInfo[];
+	/** False when the panel has no domain — WebAuthn has nothing to bind to. */
+	passkeysAvailable?: boolean;
+}) {
 	const router = useRouter();
 	const branding = useBranding();
 	const searchParams = useSearchParams();
@@ -38,6 +46,35 @@ export function LoginForm({ ssoProviders = [] }: { ssoProviders?: SsoProviderInf
 	const [formError, setFormError] = useState<string | null>(null);
 	/** The provider a redirect is in flight for; disables every button. */
 	const [ssoPending, setSsoPending] = useState<string | null>(null);
+	const [passkeyPending, setPasskeyPending] = useState(false);
+
+	/**
+	 * Sign in with a passkey.
+	 *
+	 * No email first: the credential identifies the account, which is the point
+	 * — a discoverable credential means the browser offers the accounts it holds
+	 * for this domain and the server learns who it is from the assertion.
+	 */
+	async function signInWithPasskey() {
+		setFormError(null);
+		setPasskeyPending(true);
+		try {
+			const { error } = await authClient.signIn.passkey();
+			if (error) {
+				setFormError(describeError(error));
+				return;
+			}
+			router.push(nextPath);
+			router.refresh();
+		} catch (error) {
+			// The browser throws rather than returning when the user dismisses the
+			// system sheet. That is a cancellation, not a failure to report.
+			if (error instanceof DOMException && error.name === "NotAllowedError") return;
+			setFormError(describeError(error));
+		} finally {
+			setPasskeyPending(false);
+		}
+	}
 	const form = useForm<LoginInput>({
 		resolver: zodResolver(loginSchema),
 		defaultValues: { email: "", password: "" },
@@ -178,13 +215,25 @@ export function LoginForm({ ssoProviders = [] }: { ssoProviders?: SsoProviderInf
 					</form>
 				</Form>
 
-				{ssoProviders.length > 0 && (
+				{(ssoProviders.length > 0 || passkeysAvailable) && (
 					<div className="mt-4 grid gap-4">
 						<div className="flex items-center gap-3">
 							<span className="h-px flex-1 bg-border" />
 							<span className="text-xs text-muted-foreground">or</span>
 							<span className="h-px flex-1 bg-border" />
 						</div>
+						{passkeysAvailable && (
+							<Button
+								type="button"
+								variant="outline"
+								className="w-full"
+								disabled={passkeyPending || ssoPending !== null}
+								onClick={() => void signInWithPasskey()}
+							>
+								<Fingerprint className="size-4" />
+								{passkeyPending ? "Waiting for your device…" : "Sign in with a passkey"}
+							</Button>
+						)}
 						{ssoProviders.map((provider) => (
 							<Button
 								key={provider.providerId}

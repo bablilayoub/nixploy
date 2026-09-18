@@ -1,3 +1,4 @@
+import { resolvePanelRelyingParty } from "@nixploy/server/auth";
 import { needsSetup } from "@nixploy/server/modules/auth/setup";
 import { publicSsoProviders } from "@nixploy/server/modules/auth/sso";
 import type { Metadata } from "next";
@@ -25,10 +26,13 @@ export default async function LoginPage() {
 	}
 	// Resolved on the server and handed down as a prop: the client bundle must
 	// stay free of NEXT_PUBLIC_* configuration (CLAUDE.md).
-	const ssoProviders = await publicSsoProviders();
+	const [ssoProviders, relyingParty] = await Promise.all([
+		publicSsoProviders(),
+		resolvePanelRelyingParty(),
+	]);
 	return (
 		<Suspense>
-			<LoginForm ssoProviders={ssoProviders} />
+			<LoginForm ssoProviders={ssoProviders} passkeysAvailable={relyingParty !== null} />
 		</Suspense>
 	);
 }

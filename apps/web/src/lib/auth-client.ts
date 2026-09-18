@@ -1,6 +1,7 @@
 "use client";
 
 import { apiKeyClient } from "@better-auth/api-key/client";
+import { passkeyClient } from "@better-auth/passkey/client";
 import { orgAc, orgPluginRoles } from "@nixploy/server/lib/org-roles";
 import { adminClient, organizationClient, twoFactorClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
@@ -20,6 +21,10 @@ export const authClient = createAuthClient({
 		adminClient(),
 		twoFactorClient(),
 		apiKeyClient(),
+		// Registered unconditionally: the server only mounts the passkey routes
+		// when the panel has a domain, and the client asks `setup.authConfig`
+		// whether to offer the button rather than guessing from the plugin list.
+		passkeyClient(),
 	],
 });
 

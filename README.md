@@ -71,7 +71,7 @@ Full installer options: [`docs/install.md`](./docs/install.md). Update with [`up
 | **Compose** | Native Compose / Swarm stacks with domains, logs, AI compose generate |
 | **Edge** | Traefik v3 + Let's Encrypt / custom certs (DNS-01, expiry alerts) · redirects · basic-auth · **any domain behind the panel login** · TCP/UDP routes · traefik.me smoke hosts |
 | **Observe** | Live logs & metrics (48h history) · web terminal · alert rules · uptime probes · incidents |
-| **Team** | Orgs · roles (viewer→owner) · **capability overlays** · **teams + per-project access** · 2FA · **SSO (OIDC, group→role)** · audit log + CSV export · quotas · **white-label** |
+| **Team** | Orgs · roles (viewer→owner) · **capability overlays** · **teams + per-project access** · 2FA · **passkeys (WebAuthn)** · **SSO (OIDC, group→role)** · audit log + CSV export · quotas · **white-label** |
 | **Notify** | Slack, Discord, Telegram, email, Gotify, ntfy, Pushover, Mattermost, Lark, Teams, webhooks |
 | **Automate** | REST API + `/swagger` · `@nixploy/cli` (`--wait` returns a real outcome) · GitOps (`nixploy.yaml`) · **MCP** (`POST /api/mcp`, 35 annotated tools) |
 | **AI** | Deploy Copilot — explain failures, confirm-gated chat, generate compose (BYO key) · `llms.txt` / `agents.md` / per-page Markdown |
