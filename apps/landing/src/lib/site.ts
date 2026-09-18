@@ -17,16 +17,3 @@ export const site = {
 	/** Short credit — About page only. */
 	inspiredBy: "Inspired by the self-hosted deploy tools that came before — built to be better.",
 } as const;
-
-export const footerLinks = [
-	{ href: "/features", label: "Features" },
-	{ href: "/templates", label: "Templates" },
-	{ href: "/agents", label: "Agents" },
-	{ href: "/compare", label: "Compare" },
-	{ href: "/docs", label: "Docs" },
-	{ href: "/api", label: "API" },
-	{ href: "/docs/install", label: "Install" },
-	{ href: "/pricing", label: "Pricing" },
-	{ href: "/about", label: "About" },
-	{ href: "/privacy", label: "Privacy" },
-] as const;

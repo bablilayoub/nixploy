@@ -25,19 +25,19 @@ export function InstallCommand({ className }: { className?: string }) {
 			onClick={copy}
 			aria-label="Copy install command"
 			className={cn(
-				"group flex max-w-full items-center justify-between gap-4 rounded-full border border-border bg-surface px-5 py-3 text-left font-mono text-[13px] text-foreground/90 transition-colors hover:border-border-strong",
+				"group flex max-w-full items-center justify-between gap-4 rounded-lg border border-[#2a2a2e] bg-[#17171a] px-5 py-3 text-left font-mono text-[13px] text-[#e6e6e3] transition-colors hover:border-[#3d3d42]",
 				className,
 			)}
 		>
 			<span className="truncate">
-				<span className="mr-2 text-muted-2">$</span>
+				<span className="mr-2 text-[#7d7d85]">$</span>
 				<span className="hidden sm:inline">{site.install}</span>
 				<span className="sm:hidden">curl …/install.sh | sudo bash</span>
 			</span>
 			{copied ? (
-				<Check className="size-4 shrink-0 text-foreground" />
+				<Check className="size-4 shrink-0 text-[#e6e6e3]" />
 			) : (
-				<Copy className="size-4 shrink-0 text-muted-2 group-hover:text-foreground" />
+				<Copy className="size-4 shrink-0 text-[#7d7d85] group-hover:text-[#e6e6e3]" />
 			)}
 		</button>
 	);

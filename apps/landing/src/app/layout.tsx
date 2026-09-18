@@ -1,24 +1,23 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Sans, JetBrains_Mono, Syne } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { site } from "@/lib/site";
 import "./globals.css";
 
-const syne = Syne({
+/*
+ * One family for everything except code. Geist covers headings and body at
+ * different weights, which is why there is no separate display face any more —
+ * `font-display` still exists as a class so the vocabulary does not change, it
+ * just resolves to the same family.
+ */
+const geist = Geist({
 	subsets: ["latin"],
-	variable: "--font-syne",
+	variable: "--font-geist",
 	display: "swap",
 });
 
-const plex = IBM_Plex_Sans({
+const geistMono = Geist_Mono({
 	subsets: ["latin"],
-	weight: ["400", "500", "600"],
-	variable: "--font-plex",
-	display: "swap",
-});
-
-const mono = JetBrains_Mono({
-	subsets: ["latin"],
-	variable: "--font-mono",
+	variable: "--font-geist-mono",
 	display: "swap",
 });
 
@@ -51,12 +50,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-	themeColor: "#0a0b0e",
+	themeColor: "#08080a",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
 	return (
-		<html lang="en" className={`dark ${syne.variable} ${plex.variable} ${mono.variable}`}>
+		<html lang="en" className={`dark ${geist.variable} ${geistMono.variable}`}>
 			<body className="bg-background font-sans text-foreground antialiased">{children}</body>
 		</html>
 	);

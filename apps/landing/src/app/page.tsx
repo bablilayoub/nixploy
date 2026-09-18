@@ -1,16 +1,20 @@
 import { Footer } from "@/components/footer";
-import { CodeToProduction } from "@/components/home/code-to-production";
-import { Cta } from "@/components/home/cta";
-import { Faq } from "@/components/home/faq";
+import { Agents } from "@/components/home/agents";
 import { Features } from "@/components/home/features";
 import { Hero } from "@/components/home/hero";
-import { Pricing } from "@/components/home/pricing";
-import { Security } from "@/components/home/security";
-import { StackStrip } from "@/components/home/stack-strip";
+import { OpenSource } from "@/components/home/open-source";
+import { Positioning } from "@/components/home/positioning";
 import { Statement } from "@/components/home/statement";
-import { Stats } from "@/components/home/stats";
+import { Templates } from "@/components/home/templates";
 import { Navbar } from "@/components/navbar";
 
+/*
+ * Order is the hierarchy, and it is deliberate:
+ * typography → product screenshot → product explanation → features → MCP →
+ * templates → positioning → open source → footer.
+ * Anything that does not improve clarity does not belong on this page; the
+ * detail lives on /features, /templates, /agents, /compare and /pricing.
+ */
 export default function Home() {
 	return (
 		<div className="relative min-h-screen bg-atmosphere">
@@ -19,15 +23,12 @@ export default function Home() {
 				<Navbar />
 				<main>
 					<Hero />
-					<StackStrip />
-					<Stats />
 					<Statement />
-					<CodeToProduction />
 					<Features />
-					<Security />
-					<Pricing />
-					<Faq />
-					<Cta />
+					<Agents />
+					<Templates />
+					<Positioning />
+					<OpenSource />
 				</main>
 				<Footer />
 			</div>

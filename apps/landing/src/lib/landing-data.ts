@@ -1,101 +1,112 @@
 /**
  * Static content for the marketing home page. Numbers mirror the product
- * (145 templates / 15 categories / 5 databases / ~300 endpoints) — update
- * them when the catalog changes.
+ * (145 templates / 5 database engines / ~300 REST endpoints) — update them
+ * when the catalog or the router surface changes.
  */
-
-export const heroStats = [
-	{ value: 145, suffix: "+", label: "one-click templates" },
-	{ value: 5, suffix: "", label: "database engines, with backups" },
-	{ value: 300, suffix: "+", label: "REST endpoints behind one API key" },
-] as const;
-
-/** Technologies shown in the strip under the hero (simpleicons slugs). */
-export const stack = [
-	{ name: "Docker Swarm", logo: "docker" },
-	{ name: "Traefik", logo: "traefikproxy" },
-	{ name: "Let's Encrypt", logo: "letsencrypt" },
-	{ name: "PostgreSQL", logo: "postgresql" },
-	{ name: "MySQL", logo: "mysql" },
-	{ name: "MariaDB", logo: "mariadb" },
-	{ name: "MongoDB", logo: "mongodb" },
-	{ name: "Redis", logo: "redis" },
-	{ name: "GitHub", logo: "github" },
-	{ name: "GitLab", logo: "gitlab" },
-	{ name: "Bitbucket", logo: "bitbucket" },
-	{ name: "Gitea", logo: "gitea" },
-	{ name: "Nixpacks", logo: "railway" },
-	{ name: "Docker Compose", logo: "docker" },
-] as const;
-
-export const steps = [
-	{
-		title: "Connect a source",
-		body: "GitHub, GitLab, Bitbucket, Gitea, any Git URL, a Docker image or a zip. Pick the branch and the builder — Nixpacks, Railpack, buildpacks, Dockerfile or static.",
-	},
-	{
-		title: "Define environments and targets",
-		body: "Group services into projects and environments with inherited variables. Pin a service to any server that joined your Swarm, set replicas, resources and health checks.",
-	},
-	{
-		title: "Push",
-		body: "The webhook fires, the build queues, the image is produced on the host and the Swarm rolls it out with zero downtime. Fork pull requests wait for your approval.",
-	},
-	{
-		title: "Route, watch, roll back",
-		body: "Traefik hot-loads the domain and issues the Let's Encrypt certificate. Logs and metrics stream live, alerts reach your channels, and any previous image is one click away.",
-	},
-] as const;
 
 export const features = [
 	{
 		icon: "git",
-		title: "Git push deployments",
-		body: "Webhooks from every major provider, five builders, BuildKit cache, per-branch previews and instant rollbacks — without writing a pipeline.",
+		title: "Git deployments",
+		body: "Deploy directly from GitHub, GitLab, Bitbucket or Gitea. Push to a branch and the build, rollout and health check run without a pipeline.",
 	},
 	{
-		icon: "layers",
-		title: "Compose stacks and templates",
-		body: "Paste a compose file or pick one of 145 templates. Nixploy renders, validates and deploys it as a plain stack you can edit, back up and move.",
+		icon: "lock",
+		title: "Automatic HTTPS",
+		body: "Traefik and Let's Encrypt are configured for you. Attach a hostname and the certificate is issued and renewed in the background.",
 	},
 	{
 		icon: "database",
-		title: "Databases with real backups",
-		body: "Postgres, MySQL, MariaDB, MongoDB and Redis as managed services. Scheduled dumps to any S3-compatible bucket, restore from the panel, verified exit status.",
+		title: "Databases",
+		body: "PostgreSQL, MySQL, MariaDB, MongoDB and Redis as managed services, with connection strings, versions and resource limits you control.",
 	},
 	{
-		icon: "globe",
-		title: "Domains and TLS",
-		body: "Attach a hostname and Traefik routes it with a Let's Encrypt or custom certificate. Redirects, basic-auth and path rewrites live in the same tab.",
+		icon: "archive",
+		title: "Backups",
+		body: "Scheduled dumps to any S3-compatible bucket, restore from the panel, and a verified exit status so a silent empty backup cannot happen.",
 	},
 	{
 		icon: "activity",
-		title: "Logs, metrics and alerts",
-		body: "Live build and container logs, a web terminal, 48 hours of per-container metrics, uptime probes, incident tracking and threshold alerts.",
+		title: "Monitoring",
+		body: "Live build and container logs, per-container metrics, uptime probes, incident tracking and threshold alerts to your channels.",
+	},
+	{
+		icon: "branch",
+		title: "Preview deployments",
+		body: "Isolated environments for branches and pull requests, each with its own domain, its own network and an expiry.",
+	},
+	{
+		icon: "server",
+		title: "Multi-server",
+		body: "Add servers over SSH and they join the same Swarm. Pin a service to a node, and read metrics from every one of them.",
 	},
 	{
 		icon: "terminal",
 		title: "API, CLI and MCP",
-		body: "Every panel action is a REST endpoint with OpenAPI docs, a CLI command and an MCP tool — same permissions, same audit log for humans and agents.",
+		body: "Every panel action is a REST endpoint, a CLI command and an MCP tool — the same permissions and the same audit log for people and agents.",
 	},
 ] as const;
 
-export const security = [
-	{
-		title: "Secrets encrypted at rest",
-		body: "Environment variables, database passwords, registry credentials and notification configs are AES-256-GCM encrypted and redacted for members without the secrets capability.",
-	},
-	{
-		title: "Roles, capabilities and 2FA",
-		body: "Owner to viewer roles with per-member capability overlays. Organizations can require TOTP for everyone; API keys are scoped, rate-limited per key and expire.",
-	},
-	{
-		title: "Audit log and safe defaults",
-		body: "Every destructive action is recorded with actor and target. Compose files are rendered and validated before they run, tenants get private networks, platform resources cannot be pruned.",
-	},
+/** The agent transcript in the MCP section. Tool names are real MCP tools. */
+export const agentTranscript = {
+	user: "Deploy the latest version of my API.",
+	agent: ["Deployment created", "Build completed", "Health check passed", "Production updated"],
+} as const;
+
+/*
+ * Featured templates on the home page, by id. Only ids — the name and the
+ * logo slug are read from `lib/templates.ts`, which is generated from
+ * `modules/templates/data/*`, so this section cannot advertise a template we
+ * do not ship. An id that stops existing simply drops out of the grid.
+ *
+ * Chosen to span categories (apps, CMS, productivity, monitoring, AI,
+ * analytics) rather than to be the twelve most popular.
+ */
+export const featuredTemplateIds = [
+	"n8n",
+	"supabase",
+	"wordpress",
+	"ghost",
+	"gitea",
+	"nextcloud",
+	"vaultwarden",
+	"grafana",
+	"uptime-kuma",
+	"ollama",
+	"plausible",
+	"immich",
 ] as const;
 
-export const securityBadges = ["AES-256", "TOTP 2FA", "Audit log"] as const;
+/**
+ * Positioning, stated as what Nixploy is rather than as a comparison. The
+ * sourced competitor claims live in `lib/compare.ts` and stay there.
+ */
+export const positioning = [
+	{
+		title: "Self-hosted",
+		body: "The panel, the proxy and the database run on hardware you rent or own.",
+	},
+	{
+		title: "Open source",
+		body: "Apache-2.0, in the open, with no license key and no edition to upgrade to.",
+	},
+	{
+		title: "No per-app fees",
+		body: "Run one service or two hundred; the bill is the server, not the count.",
+	},
+	{
+		title: "Your own servers",
+		body: "Any Linux host with root. Add more over SSH whenever you need them.",
+	},
+	{
+		title: "Your own data",
+		body: "Databases, backups and logs stay on your disks, in your region.",
+	},
+	{
+		title: "Your own infrastructure",
+		body: "Plain Docker Swarm and Traefik underneath — inspectable, and yours to keep.",
+	},
+] as const;
 
 export const plans = [
 	{

@@ -1,36 +1,36 @@
 @import "tailwindcss";
 
 /*
- * Nixploy landing theme — charcoal base (matches the panther mark on black),
- * one warm accent (panther-eye gold) for actions and one cool tone for data.
+ * Nixploy landing theme — near-black, white ink, strict greyscale. There is no
+ * hue anywhere: emphasis comes from luminance, weight and border contrast only.
+ * Do not reintroduce a chromatic accent, a coloured glow or a gradient.
+ *
  * The class vocabulary (bg-atmosphere, text-muted, bg-surface, border-border,
  * font-display …) is shared by every page, so changing values here restyles
  * the whole site.
  */
 @theme {
-	--font-sans: var(--font-plex), "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-	--font-display: var(--font-syne), "Syne", ui-sans-serif, system-ui, sans-serif;
-	--font-mono: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+	--font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+	--font-display: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+	--font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
-	--color-background: #09090b;
-	--color-surface: #101012;
-	--color-surface-2: #151518;
-	--color-surface-3: #1c1c20;
-	--color-border: #232327;
-	--color-border-strong: #333338;
+	--color-background: #08080a;
+	--color-surface: #0d0d10;
+	--color-surface-2: #121216;
+	--color-surface-3: #17171c;
+	--color-border: #1e1e24;
+	--color-border-strong: #2c2c34;
 	--color-foreground: #fafafa;
-	--color-muted: #9a9aa3;
-	--color-muted-2: #6b6b74;
+	--color-muted: #9a9aa4;
+	--color-muted-2: #6a6a74;
 	--color-accent: #ffffff;
 	--color-accent-strong: #e4e4e7;
-	--color-accent-soft: rgba(255, 255, 255, 0.08);
+	--color-accent-soft: rgba(255, 255, 255, 0.07);
 	--color-cool: #d4d4d8;
-	--color-cool-soft: rgba(255, 255, 255, 0.06);
+	--color-cool-soft: rgba(255, 255, 255, 0.05);
 	--color-success: #e4e4e7;
-	--color-danger: #a1a1aa;
+	--color-danger: #8b8b94;
 
-	--animate-marquee: marquee var(--duration, 60s) linear infinite;
-	--animate-marquee-vertical: marquee-vertical var(--duration, 40s) linear infinite;
 	--animate-shimmer-slide: shimmer-slide var(--speed) ease-in-out infinite alternate;
 	--animate-spin-around: spin-around calc(var(--speed) * 2) infinite linear;
 	--animate-orbit: orbit calc(var(--duration) * 1s) linear infinite;
@@ -57,7 +57,7 @@ body {
 
 ::selection {
 	background: #fafafa;
-	color: #09090b;
+	color: #08080a;
 }
 
 :focus-visible {
@@ -70,12 +70,17 @@ body {
 	font-family: var(--font-display);
 }
 
-/* Page atmosphere: a warm glow at the top, a cool one bottom-right, faint grid. */
+/*
+ * Page atmosphere: one very faint white wash under the hero. No colour, no
+ * bloom — just enough lift that the fold does not read as a flat rectangle.
+ */
 .bg-atmosphere {
 	background-color: var(--color-background);
-	background-image:
-		radial-gradient(ellipse 60% 40% at 50% -5%, rgba(255, 255, 255, 0.1), transparent 60%),
-		radial-gradient(ellipse 40% 30% at 50% 22%, rgba(255, 255, 255, 0.04), transparent 60%);
+	background-image: radial-gradient(
+		ellipse 75% 38% at 50% -10%,
+		rgba(255, 255, 255, 0.055),
+		transparent 62%
+	);
 }
 
 .bg-grain::before {
@@ -83,51 +88,45 @@ body {
 	pointer-events: none;
 	position: absolute;
 	inset: 0;
-	opacity: 0.035;
+	opacity: 0.03;
 	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-.bg-grid {
-	background-image:
-		linear-gradient(to right, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-		linear-gradient(to bottom, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
-	background-size: 48px 48px;
-	mask-image: radial-gradient(ellipse 60% 55% at 50% 0%, #000 20%, transparent 70%);
-}
-
-/* Soft monochrome halo behind framed artwork */
-.halo {
-	position: absolute;
-	inset: -12% -8%;
-	z-index: -1;
-	border-radius: 9999px;
-	background: radial-gradient(50% 50% at 50% 35%, rgba(255, 255, 255, 0.16), transparent 70%);
-	filter: blur(48px);
-	pointer-events: none;
+/* Faint dot field behind the hero, masked so it never reaches the fold. */
+.bg-dots {
+	background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+	background-size: 26px 26px;
+	mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 10%, transparent 72%);
 }
 
 /* Cards */
 .card {
-	background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
+	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 1rem;
+	border-radius: 0.875rem;
 }
 
 .card-hover {
 	transition:
 		border-color 200ms ease,
-		transform 200ms ease,
-		box-shadow 200ms ease;
+		background-color 200ms ease;
 }
 
 .card-hover:hover {
 	border-color: var(--color-border-strong);
-	box-shadow: 0 20px 60px -30px rgba(255, 255, 255, 0.12);
+	background: var(--color-surface-2);
 }
 
-/* Gold text */
+/* The framed product shot. A hairline and depth, not a glow. */
+.panel-glow {
+	box-shadow:
+		0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+		0 40px 90px -50px rgba(0, 0, 0, 1);
+}
+
+/* Emphasis text — luminance, not hue. */
 .text-gradient {
-	background: linear-gradient(180deg, #ffffff 0%, #d4d4d8 60%, #a1a1aa 100%);
+	background: linear-gradient(180deg, #ffffff 0%, #d4d4d8 58%, #9a9aa4 100%);
 	-webkit-background-clip: text;
 	background-clip: text;
 	color: transparent;
@@ -137,9 +136,9 @@ body {
 .eyebrow {
 	font-family: var(--font-mono);
 	font-size: 0.7rem;
-	letter-spacing: 0.18em;
+	letter-spacing: 0.16em;
 	text-transform: uppercase;
-	color: var(--color-muted);
+	color: var(--color-muted-2);
 }
 
 /* Code blocks */
@@ -173,17 +172,6 @@ body {
 	animation: var(--animate-caret);
 }
 
-/* Marquee */
-.animate-marquee {
-	animation: var(--animate-marquee);
-}
-.animate-marquee-vertical {
-	animation: var(--animate-marquee-vertical);
-}
-.marquee-mask {
-	mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent);
-}
-
 .animate-shimmer-slide {
 	animation: var(--animate-shimmer-slide);
 }
@@ -204,24 +192,6 @@ body {
 }
 .animate-scan {
 	animation: var(--animate-scan);
-}
-
-@keyframes marquee {
-	from {
-		transform: translateX(0);
-	}
-	to {
-		transform: translateX(calc(-100% - var(--gap, 1rem)));
-	}
-}
-
-@keyframes marquee-vertical {
-	from {
-		transform: translateY(0);
-	}
-	to {
-		transform: translateY(calc(-100% - var(--gap, 1rem)));
-	}
 }
 
 @keyframes shimmer-slide {
@@ -310,8 +280,6 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.animate-marquee,
-	.animate-marquee-vertical,
 	.animate-shimmer-slide,
 	.animate-spin-around,
 	.animate-orbit,

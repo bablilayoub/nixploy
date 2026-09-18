@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
-/** Landing is always dark charcoal — use the light mark. */
+/** The whole site is near-black, so the white mark is the only one used. */
 export const NIXPLOY_MARK_SRC = "/brand/nixploy-mark-light.png";
 
 export function LogoMark({ className }: { className?: string }) {

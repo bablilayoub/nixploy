@@ -80,7 +80,7 @@ export function Navbar() {
 					</a>
 					<Link
 						href="/docs/install"
-						className="hidden h-9 items-center rounded-full bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-accent-strong sm:inline-flex"
+						className="hidden h-9 items-center rounded-full bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-foreground/90 sm:inline-flex"
 					>
 						Install
 					</Link>
