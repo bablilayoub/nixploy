@@ -32,7 +32,8 @@ async function login() {
 	await shot("01-login", 800);
 	await page.getByLabel(/email/i).fill(requireEnv("SMOKE_EMAIL"));
 	await page.locator('input[type="password"]').first().fill(requireEnv("SMOKE_PASSWORD"));
-	await page.getByRole("button", { name: /sign in/i }).click();
+	// Exact: the passkey button also matches /sign in/i and trips strict mode.
+	await page.getByRole("button", { name: "Sign in", exact: true }).click();
 	await page.waitForURL(/dashboard/i, { timeout: 30_000 });
 	await page.waitForLoadState("networkidle");
 }

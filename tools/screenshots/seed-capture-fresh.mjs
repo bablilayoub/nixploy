@@ -35,7 +35,7 @@ async function formLogin() {
 				timeout: 60_000,
 			},
 		),
-		page.getByRole("button", { name: /sign in/i }).click(),
+		page.getByRole("button", { name: "Sign in", exact: true }).click(),
 	]);
 	if (page.url().includes("two-factor")) {
 		throw new Error("two-factor required — disable 2FA for screenshot capture");
