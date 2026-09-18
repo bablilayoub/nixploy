@@ -1291,6 +1291,26 @@ const docs: Record<string, ProcedureDoc> = {
 		summary: "Check whether first-boot setup is pending",
 		description: "Public: true until the first owner account exists.",
 	},
+	// ────────────────────────────────────────────────────────────── branding
+	"branding.public": {
+		summary: "Read the instance branding",
+		description:
+			"Product name, logos, favicon, accent and copy. Public: the login page and the setup wizard render it before any session exists.",
+	},
+	"branding.settings": {
+		summary: "Read the branding settings",
+		description: "Instance admin only. The stored values, for the settings form.",
+	},
+	"branding.update": {
+		summary: "Update the instance branding",
+		description:
+			"Instance admin only. Custom CSS is sanitised on save; support and docs URLs go through the outbound-request guard.",
+	},
+	"branding.clearAsset": {
+		summary: "Remove an uploaded branding asset",
+		description:
+			"Instance admin only. Uploading is a route handler (`POST /api/branding/upload/<slot>`) because the payload is binary.",
+	},
 	// ─────────────────────────────────────────────────────────────────── sso
 	"sso.presets": {
 		summary: "List identity-provider presets",

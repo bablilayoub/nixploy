@@ -34,9 +34,30 @@ export function proxy(req: NextRequest) {
 		return NextResponse.redirect(new URL("/setup", req.url));
 	}
 
+	/*
+	 * Operator-uploaded branding assets get a sandbox on top of the global
+	 * `frame-ancestors` policy: an SVG is a document that can carry script, and
+	 * this one is served from the panel's own origin. `modules/branding` strips
+	 * the obvious weapons on upload; this covers what a denylist misses if the
+	 * file is ever opened as a top-level document rather than through an `img`.
+	 *
+	 * Here rather than in `next.config.ts` or on the route's own Response,
+	 * because neither of those survives: a per-path `headers()` entry never
+	 * matched this route (verified — a marker header did not appear either),
+	 * and a header set in a handler is replaced by the global config's.
+	 */
+	if (pathname.startsWith("/api/branding/")) {
+		const response = NextResponse.next();
+		response.headers.set(
+			"Content-Security-Policy",
+			"sandbox; default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+		);
+		return response;
+	}
+
 	return NextResponse.next();
 }
 
 export const config = {
-	matcher: ["/dashboard/:path*", "/register", "/register/:path*"],
+	matcher: ["/dashboard/:path*", "/register", "/register/:path*", "/api/branding/:path*"],
 };

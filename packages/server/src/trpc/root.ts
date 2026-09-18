@@ -4,6 +4,7 @@ import { applicationRouter } from "./routers/application";
 import { auditRouter } from "./routers/audit";
 import { backupRouter } from "./routers/backup";
 import { bitbucketRouter } from "./routers/bitbucket";
+import { brandingRouter } from "./routers/branding";
 import { certificateRouter } from "./routers/certificate";
 import { composeRouter } from "./routers/compose";
 import { deploymentRouter } from "./routers/deployment";
@@ -50,6 +51,7 @@ export const appRouter = router({
 	application: applicationRouter,
 	audit: auditRouter,
 	backup: backupRouter,
+	branding: brandingRouter,
 	bitbucket: bitbucketRouter,
 	certificate: certificateRouter,
 	compose: composeRouter,

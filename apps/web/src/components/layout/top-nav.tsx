@@ -5,7 +5,7 @@ import { Download, Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-
+import { useBranding } from "@/components/branding-provider";
 import { CommandPalette } from "@/components/command-palette";
 import { ProfileDropdown } from "@/components/layout/profile-dropdown";
 import { isSidebarNavActive, sidebarNavGroups } from "@/components/layout/sidebar-data";
@@ -68,6 +68,7 @@ function NavLink({
 /** Vercel-style sticky top navigation — brand, links, search, account. */
 export function TopNav() {
 	const pathname = usePathname();
+	const branding = useBranding();
 	const [mobileOpen, setMobileOpen] = useState(false);
 	const updateAvailable = useUpdateAvailable();
 
@@ -78,7 +79,11 @@ export function TopNav() {
 					<Link href="/dashboard" className="hidden shrink-0 sm:inline-flex">
 						<Logo />
 					</Link>
-					<Link href="/dashboard" className="inline-flex shrink-0 sm:hidden" aria-label="Nixploy">
+					<Link
+						href="/dashboard"
+						className="inline-flex shrink-0 sm:hidden"
+						aria-label={branding.productName}
+					>
 						<LogoMark className="size-7" />
 					</Link>
 					<Separator orientation="vertical" className="hidden h-4 sm:block" />

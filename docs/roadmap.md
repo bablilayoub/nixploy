@@ -157,9 +157,11 @@ A new `nixployAuth` middleware kind: Traefik `forwardAuth` pointing at `/api/app
 
 *Demo:* flip one switch on `staging.acme.dev` and it is behind your org's SSO, with your 2FA policy, in five seconds. Bonus: "protect previews with panel login" as a per-parent option.
 
-### 9. Whitelabel, free *(S)*
+### 9. Whitelabel, free ✅ *(S — landed 2026-09-18)*
 
 Per-org and per-instance logo (light/dark), favicon, product name, accent, footer, support/docs URLs, email from-name, optional sanitised custom CSS, status-page custom domain. Assets under `<config>/branding/`, served by a route handler, magic-byte checked, SVG sanitised. The org branding provider already sets `--primary` and a luminance-derived `--primary-foreground` — this extends the token set and adds the login/setup pages, which have no org context yet.
+
+*What shipped (migration 0037):* an `instance_branding` singleton — product name, accent, logo (light/dark), favicon, footer, support/docs URLs, email from-name and sanitised custom CSS — applied to the browser tab, the favicon, the login and setup pages and the dashboard shell. **Instance-level, not per-org**, because the surfaces that need it most render before anyone has an organization; the existing per-org accent and display name still win inside the dashboard. Assets are identified by magic bytes rather than by the name the browser sent, SVGs are stripped of script, handlers and external references, and the serving route is sandboxed by a CSP — which had to go in `src/proxy.ts`, because a header set on a route handler's Response is replaced by the global one and a per-path `next.config` entry never matched. Status-page custom domain deferred.
 
 ---
 

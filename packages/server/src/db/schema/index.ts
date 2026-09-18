@@ -2,6 +2,7 @@ export * from "./application";
 export * from "./audit";
 export * from "./auth";
 export * from "./backup";
+export * from "./branding";
 export * from "./compose";
 export * from "./compose-snapshot";
 export * from "./database";

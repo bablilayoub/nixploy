@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
+import { useBranding } from "@/components/branding-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -31,6 +32,7 @@ export interface SsoProviderInfo {
 
 export function LoginForm({ ssoProviders = [] }: { ssoProviders?: SsoProviderInfo[] }) {
 	const router = useRouter();
+	const branding = useBranding();
 	const searchParams = useSearchParams();
 	const nextPath = safeNextPath(searchParams.get("next"));
 	const [formError, setFormError] = useState<string | null>(null);
@@ -122,7 +124,7 @@ export function LoginForm({ ssoProviders = [] }: { ssoProviders?: SsoProviderInf
 		<Card>
 			<CardHeader className="text-center">
 				<CardTitle className="text-xl">Welcome back</CardTitle>
-				<CardDescription>Sign in to your Nixploy instance</CardDescription>
+				<CardDescription>Sign in to your {branding.productName} instance</CardDescription>
 			</CardHeader>
 			<CardContent>
 				<Form {...form}>

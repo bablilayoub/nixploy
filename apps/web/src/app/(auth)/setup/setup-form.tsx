@@ -17,6 +17,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { useBranding } from "@/components/branding-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -78,6 +79,7 @@ const STEP_LABELS: Record<WizardStep, string> = {
  */
 export function SetupForm() {
 	const router = useRouter();
+	const branding = useBranding();
 	const searchParams = useSearchParams();
 	const trpc = useTRPC();
 	const [step, setStep] = useState<WizardStep>("welcome");
@@ -270,7 +272,7 @@ export function SetupForm() {
 				{step === "welcome" && (
 					<>
 						<CardHeader className="text-center">
-							<CardTitle className="text-xl">Welcome to Nixploy</CardTitle>
+							<CardTitle className="text-xl">Welcome to {branding.productName}</CardTitle>
 							<CardDescription>
 								Self-hosted PaaS on this server. A short setup creates your owner account and
 								organization — public registration stays closed afterward.
