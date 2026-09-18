@@ -1,21 +1,49 @@
-# Nixploy
-
 <p align="center">
-  <img src="apps/web/public/brand/nixploy-mark-light.png" alt="Nixploy" width="96" height="96" />
+  <img src="apps/web/public/brand/nixploy-mark-light.png" alt="Nixploy" width="88" height="88" />
 </p>
 
-**Ship anything. Own everything.**
+<h1 align="center">Nixploy</h1>
 
-Nixploy is a free, self-hostable Platform as a Service. Deploy applications, databases, and Docker Compose stacks on infrastructure you control — with Git deploys, Traefik TLS, monitoring, and a first-class CLI.
+<p align="center">
+  <strong>Deploy like a managed platform. Run it on your own server.</strong><br />
+  Git push → build → HTTPS → database → monitoring → rollback. On hardware you control, with no per-app pricing.
+</p>
 
-**Website:** [nixploy.com](https://nixploy.com) · **GitHub:** [bablilayoub/nixploy](https://github.com/bablilayoub/nixploy)
+<p align="center">
+  <a href="https://nixploy.com">Website</a> ·
+  <a href="https://nixploy.com/docs">Docs</a> ·
+  <a href="https://nixploy.com/templates">145 templates</a> ·
+  <a href="https://nixploy.com/agents">AI agents</a> ·
+  <a href="https://nixploy.com/api">API</a> ·
+  <a href="https://github.com/bablilayoub/nixploy/releases">Releases</a>
+</p>
 
-[![CI](https://github.com/bablilayoub/nixploy/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/bablilayoub/nixploy/actions/workflows/ci.yml)
-[![Release](https://github.com/bablilayoub/nixploy/actions/workflows/release.yml/badge.svg)](https://github.com/bablilayoub/nixploy/actions/workflows/release.yml)
-![License](https://img.shields.io/badge/license-Apache--2.0-blue)
-![Node](https://img.shields.io/badge/node-%3E%3D22-green)
-![pnpm](https://img.shields.io/badge/pnpm-%3E%3D10-orange)
-![Docker](https://img.shields.io/badge/docker-swarm-blue)
+<p align="center">
+  <a href="https://github.com/bablilayoub/nixploy/actions/workflows/ci.yml"><img src="https://github.com/bablilayoub/nixploy/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="https://github.com/bablilayoub/nixploy/actions/workflows/release.yml"><img src="https://github.com/bablilayoub/nixploy/actions/workflows/release.yml/badge.svg" alt="Release" /></a>
+  <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License" />
+  <img src="https://img.shields.io/badge/node-%3E%3D22-green" alt="Node" />
+  <img src="https://img.shields.io/badge/docker-swarm-blue" alt="Docker Swarm" />
+</p>
+
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="Nixploy dashboard" width="880" />
+</p>
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash
+```
+
+## Why Nixploy
+
+- **HTTPS without touching nginx or certbot.** Point DNS at the box, type the domain. Traefik issues and renews the certificate.
+- **Deploy from Git, a Docker image, or a zip.** Nixpacks, Railpack, Dockerfile, buildpacks or static — detected, cached, and cancellable.
+- **A database is one click, and so is restoring it.** Postgres, MySQL, MariaDB, MongoDB, Redis, with encrypted backups to S3 or disk and verified restores.
+- **See why it broke.** Live logs, a web terminal into the container, 48 h of metrics, and a per-service timeline that records OOM kills, restarts and config changes.
+- **Undo a bad deploy.** Roll back to any previous release, config and environment included.
+- **Run many servers from one panel.** Remote hosts join over SSH; deploys, logs and backups work the same on all of them.
+- **Hand it to an AI agent.** An MCP endpoint with 35 annotated tools, through the same routers as the UI — so the org scope, capability checks and audit trail still apply. [See what that looks like](https://nixploy.com/agents).
+- **Nothing is paywalled.** SSO, teams, forward auth, audit export and white-labelling are in the box. There is no paid tier to upgrade to.
 
 ## Install
 
@@ -41,12 +69,12 @@ Full installer options: [`docs/install.md`](./docs/install.md). Update with [`up
 | **Deploy** | GitHub / GitLab / Bitbucket / Gitea / generic Git, Docker images, zip · Nixpacks / Railpack / Dockerfile / buildpacks / static · BuildKit cache · PR previews (fork gate) · rollbacks |
 | **Data** | Postgres, MySQL, MariaDB, MongoDB, Redis · DB backups to S3 · volume backups · **instance self-backup** (panel DB + config) |
 | **Compose** | Native Compose / Swarm stacks with domains, logs, AI compose generate |
-| **Edge** | Traefik v3 + Let's Encrypt / custom certs · redirects · basic-auth · traefik.me smoke hosts |
+| **Edge** | Traefik v3 + Let's Encrypt / custom certs (DNS-01, expiry alerts) · redirects · basic-auth · **any domain behind the panel login** · TCP/UDP routes · traefik.me smoke hosts |
 | **Observe** | Live logs & metrics (48h history) · web terminal · alert rules · uptime probes · incidents |
-| **Team** | Orgs · roles (viewer→owner) · **capability overlays** · 2FA · audit log · quotas · white-label |
+| **Team** | Orgs · roles (viewer→owner) · **capability overlays** · **teams + per-project access** · 2FA · **SSO (OIDC, group→role)** · audit log + CSV export · quotas · **white-label** |
 | **Notify** | Slack, Discord, Telegram, email, Gotify, ntfy, Pushover, Mattermost, Lark, Teams, webhooks |
-| **Automate** | REST API + `/swagger` · `@nixploy/cli` · GitOps (`nixploy.yaml`) · **MCP** (`POST /api/mcp`) |
-| **AI** | Deploy Copilot — explain failures, confirm-gated chat, generate compose (BYO key) |
+| **Automate** | REST API + `/swagger` · `@nixploy/cli` (`--wait` returns a real outcome) · GitOps (`nixploy.yaml`) · **MCP** (`POST /api/mcp`, 35 annotated tools) |
+| **AI** | Deploy Copilot — explain failures, confirm-gated chat, generate compose (BYO key) · `llms.txt` / `agents.md` / per-page Markdown |
 | **Infra** | Remote Swarm servers · Docker control center · registries · schedules · in-app GHCR updates · `doctor` |
 | **Catalog** | 145 one-click templates (15 categories), CI-checked image tags |
 
@@ -57,15 +85,9 @@ Product docs: [nixploy.com/docs](https://nixploy.com/docs) · API: [nixploy.com/
 <table>
   <tr>
     <td width="50%" align="center" valign="top">
-      <strong>Dashboard</strong><br />
-      <img src="docs/images/dashboard.png" alt="Projects dashboard" />
-    </td>
-    <td width="50%" align="center" valign="top">
       <strong>Templates</strong><br />
       <img src="docs/images/templates.png" alt="Template catalog" />
     </td>
-  </tr>
-  <tr>
     <td width="50%" align="center" valign="top">
       <strong>Project</strong><br />
       <img src="docs/images/project.png" alt="Project services" />
