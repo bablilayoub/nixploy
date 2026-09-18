@@ -1,3 +1,4 @@
+import { templateCount } from "@/lib/templates";
 import { type DocBlock, type DocPage, docsPages } from "./pages";
 
 /**
@@ -77,6 +78,8 @@ export function renderLlmsTxt(): string {
 		"",
 		"## Optional",
 		"",
+		`- [Templates](${SITE}/templates): ${templateCount} reviewed Compose stacks, one page each —`,
+		"  what each one runs, which variables it asks for and how to back it up.",
 		`- [Everything, in one file](${SITE}/llms-full.txt)`,
 		`- [API catalog](${SITE}/api)`,
 		`- [Source](https://github.com/bablilayoub/nixploy)`,

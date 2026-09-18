@@ -46,9 +46,23 @@ deployable as compose services. Catalog code lives in
 
 3. Run `pnpm test` — the catalog tests will reject invalid YAML, dangling env
    refs, duplicate ids or host ports.
+4. Regenerate the landing catalog, which is what nixploy.com/templates and the
+   per-template pages render:
+
+   ```bash
+   pnpm -F @nixploy/server exec tsx ../../apps/landing/scripts/generate-template-catalog.mts
+   pnpm exec biome check --write apps/landing/src/lib/templates.ts
+   ```
+
+   `apps/landing` deliberately has no dependency on `@nixploy/server` (it would
+   pull drizzle, dockerode and ssh2 into a marketing build), so the data is
+   generated and committed, the same way `docs/api-catalog.ts` is. Compose
+   bodies are not copied — `images`, `volumes` and `env` are derived from them
+   once, at generation time.
 
 The gallery UI (search + category pills) and the ⌘K palette pick new entries
-up automatically — no frontend changes needed.
+up automatically — no frontend changes needed. A new template also gets its own
+page at `nixploy.com/templates/<id>`, in the sitemap, once step 4 has run.
 
 ## Deploy flow
 

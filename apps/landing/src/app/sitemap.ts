@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { docsSlugs } from "@/lib/docs/nav";
 import { site } from "@/lib/site";
+import { templateSlugs } from "@/lib/templates";
 
 /**
  * Derived from `docsNav`, not from a second hand-written list — the previous
@@ -13,6 +14,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
 		"/docs",
 		...docsSlugs.map((slug) => `/docs/${slug}`),
 		"/api",
+		"/templates",
+		...templateSlugs.map((slug) => `/templates/${slug}`),
 		"/pricing",
 		"/about",
 		"/privacy",
@@ -21,6 +24,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 		url: `${site.url}${path}`,
 		lastModified: new Date(),
 		changeFrequency: path === "" || path.startsWith("/docs") ? "weekly" : "monthly",
-		priority: path === "" ? 1 : path === "/docs" || path === "/api" ? 0.9 : 0.7,
+		priority:
+			path === "" ? 1 : path === "/docs" || path === "/api" || path === "/templates" ? 0.9 : 0.7,
 	}));
 }
