@@ -11,8 +11,25 @@ function blockKey(block: DocBlock): string {
 		case "ol":
 			return `${block.type}:${block.items.join("|")}`;
 		case "pre":
-			return `pre:${block.code.slice(0, 80)}`;
+			return `pre:${block.code}`;
 	}
+}
+
+/*
+ * Block keys are content-derived, and a page may legitimately repeat a block —
+ * the install one-liner appears twice on several docs pages, which collided and
+ * made React drop one of them. Duplicates get an occurrence suffix. The code
+ * block's key must be the whole snippet, not a prefix: two long commands that
+ * share an opening collide otherwise.
+ */
+function withKeys(blocks: readonly DocBlock[]): { key: string; block: DocBlock }[] {
+	const seen = new Map<string, number>();
+	return blocks.map((block) => {
+		const base = blockKey(block);
+		const seenBefore = seen.get(base) ?? 0;
+		seen.set(base, seenBefore + 1);
+		return { key: seenBefore === 0 ? base : `${base}#${seenBefore}`, block };
+	});
 }
 
 function Block({ block }: { block: DocBlock }) {
@@ -67,8 +84,8 @@ export function DocBody({ page }: { page: DocPage }) {
 			</h1>
 			<p className="mt-3 max-w-2xl text-lg leading-relaxed text-muted">{page.description}</p>
 			<div className="mt-10">
-				{page.blocks.map((block) => (
-					<Block key={blockKey(block)} block={block} />
+				{withKeys(page.blocks).map(({ key, block }) => (
+					<Block key={key} block={block} />
 				))}
 			</div>
 			<p className="mt-14 border-t border-border pt-6 text-sm text-muted">
