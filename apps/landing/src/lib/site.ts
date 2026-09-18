@@ -21,6 +21,7 @@ export const site = {
 export const footerLinks = [
 	{ href: "/features", label: "Features" },
 	{ href: "/templates", label: "Templates" },
+	{ href: "/agents", label: "Agents" },
 	{ href: "/docs", label: "Docs" },
 	{ href: "/api", label: "API" },
 	{ href: "/docs/install", label: "Install" },

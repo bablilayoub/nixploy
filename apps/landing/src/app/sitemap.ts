@@ -14,6 +14,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 		"/docs",
 		...docsSlugs.map((slug) => `/docs/${slug}`),
 		"/api",
+		"/agents",
 		"/templates",
 		...templateSlugs.map((slug) => `/templates/${slug}`),
 		"/pricing",
@@ -25,6 +26,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
 		lastModified: new Date(),
 		changeFrequency: path === "" || path.startsWith("/docs") ? "weekly" : "monthly",
 		priority:
-			path === "" ? 1 : path === "/docs" || path === "/api" || path === "/templates" ? 0.9 : 0.7,
+			path === ""
+				? 1
+				: path === "/docs" || path === "/api" || path === "/templates" || path === "/agents"
+					? 0.9
+					: 0.7,
 	}));
 }
