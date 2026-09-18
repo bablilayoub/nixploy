@@ -14,6 +14,7 @@ const links = [
 	{ href: "/features", label: "Features" },
 	{ href: "/templates", label: "Templates" },
 	{ href: "/agents", label: "Agents" },
+	{ href: "/compare", label: "Compare" },
 	{ href: "/docs", label: "Docs" },
 	{ href: "/api", label: "API" },
 	{ href: "/pricing", label: "Pricing" },

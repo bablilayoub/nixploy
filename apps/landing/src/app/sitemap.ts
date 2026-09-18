@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { comparisonSlugs } from "@/lib/compare";
 import { docsSlugs } from "@/lib/docs/nav";
 import { site } from "@/lib/site";
 import { templateSlugs } from "@/lib/templates";
@@ -15,6 +16,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
 		...docsSlugs.map((slug) => `/docs/${slug}`),
 		"/api",
 		"/agents",
+		"/compare",
+		// The canonical form every comparison page declares; `/compare/<slug>`
+		// is the route folder behind a rewrite and stays out of the sitemap.
+		...comparisonSlugs.map((slug) => `/nixploy-vs-${slug}`),
 		"/templates",
 		...templateSlugs.map((slug) => `/templates/${slug}`),
 		"/pricing",
@@ -28,7 +33,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
 		priority:
 			path === ""
 				? 1
-				: path === "/docs" || path === "/api" || path === "/templates" || path === "/agents"
+				: path === "/docs" ||
+						path === "/api" ||
+						path === "/templates" ||
+						path === "/agents" ||
+						path.startsWith("/nixploy-vs-")
 					? 0.9
 					: 0.7,
 	}));
