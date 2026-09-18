@@ -2,6 +2,8 @@ import type { IncomingMessage } from "node:http";
 import type { WebSocket } from "ws";
 import type { PlatformEvent } from "../modules/deployment";
 import { onPlatformEvent, toClientFrame } from "../modules/deployment";
+import { ALL_PROJECTS, resolveProjectFilter } from "../modules/projects/project-scope";
+import { SERVICE_REGISTRY, type ServiceKind } from "../modules/services/registry";
 import { resolveWsOrganizationId } from "./access";
 import type { WsSession } from "./auth";
 import { closeWithError, sendJson } from "./utils";
@@ -39,9 +41,24 @@ const HEARTBEAT_MS = 30_000;
 /** How often the caller's organization is re-resolved (org switch, membership change). */
 const REAUTH_MS = 60_000;
 
-/** True when `event` belongs to `organizationId` — the only delivery rule. */
+/** True when `event` belongs to `organizationId`. */
 export function shouldDeliver(event: PlatformEvent, organizationId: string): boolean {
 	return event.organizationId === organizationId;
+}
+
+/**
+ * The service a frame is about, as `(kind, id)`, or null for a frame that
+ * names none (the queue-depth frame is a count, not a service).
+ */
+export function frameServiceRef(event: PlatformEvent): { kind: ServiceKind; id: string } | null {
+	if (event.kind === "deployment") {
+		if (event.applicationId) return { kind: "application", id: event.applicationId };
+		if (event.composeId) return { kind: "compose", id: event.composeId };
+		return null;
+	}
+	if (event.kind === "service-status") return { kind: event.serviceKind, id: event.id };
+	if (event.kind === "service-event") return { kind: event.serviceKind, id: event.serviceId };
+	return null;
 }
 
 export async function handlePlatformEvents(
@@ -71,10 +88,52 @@ export async function handlePlatformEvents(
 		unsubscribe();
 	};
 
+	/**
+	 * Team scoping for the push stream.
+	 *
+	 * A frame carries an appName and a service id, so delivering one for a
+	 * project the viewer cannot open would tell them it exists — the one thing
+	 * the whole feature is for. The filter is refreshed on the same slow timer
+	 * that re-checks the organization, and the service → project lookup is
+	 * cached per socket, so a busy deploy costs one query per service rather
+	 * than one per frame.
+	 */
+	let projectFilter = await resolveProjectFilter(session.user.id).catch(() => ALL_PROJECTS);
+	const projectByService = new Map<string, string | null>();
+
+	const visible = async (event: PlatformEvent): Promise<boolean> => {
+		const ref = frameServiceRef(event);
+		// A frame that names no service (queue depth) is a number for the whole
+		// organization and gives nothing away.
+		if (!ref) return true;
+		const cacheKey = `${ref.kind}:${ref.id}`;
+		let projectId = projectByService.get(cacheKey);
+		if (projectId === undefined) {
+			projectId =
+				(await SERVICE_REGISTRY[ref.kind].module.findTenancy(ref.id).catch(() => undefined))
+					?.projectId ?? null;
+			projectByService.set(cacheKey, projectId);
+		}
+		// A service whose project cannot be resolved (deleted mid-flight) is
+		// withheld: the safe direction for a frame nobody can check.
+		if (projectId === null) return false;
+		return projectFilter.kind === "all" || projectFilter.projectIds.has(projectId);
+	};
+
 	const unsubscribe = onPlatformEvent((event) => {
 		if (closed) return;
 		if (!shouldDeliver(event, organizationId)) return;
-		sendJson(ws, toClientFrame(event));
+		// Unrestricted is the overwhelmingly common case and stays synchronous:
+		// a deploy emits a frame per transition, and deferring every one of them
+		// to a microtask to ask a question with a constant answer is latency
+		// nobody asked for.
+		if (projectFilter.kind === "all") {
+			sendJson(ws, toClientFrame(event));
+			return;
+		}
+		void visible(event).then((ok) => {
+			if (ok && !closed) sendJson(ws, toClientFrame(event));
+		});
 	});
 
 	ws.on("close", cleanup);
@@ -93,6 +152,9 @@ export async function handlePlatformEvents(
 			if (closed) return;
 			try {
 				const current = await resolveWsOrganizationId(session);
+				// Team membership can change under a long-lived socket too.
+				projectFilter = await resolveProjectFilter(session.user.id).catch(() => projectFilter);
+				projectByService.clear();
 				if (current === organizationId) return;
 				// The caller switched organizations (or lost access to this one):
 				// drop the socket and let the client reconnect into the new scope

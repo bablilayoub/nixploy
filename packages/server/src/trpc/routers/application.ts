@@ -4,18 +4,12 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import {
-	applications,
-	deployments,
-	environments,
-	projects,
-	registry,
-	rollbacks,
-} from "../../db/schema";
+import { applications, deployments, environments, registry, rollbacks } from "../../db/schema";
 import { generateId } from "../../db/schema/utils";
 import {
 	assertApplicationAccess,
 	assertEnvironmentAccess,
+	assertProjectAccess,
 	createApplication,
 	deleteApplication,
 	duplicateApplication,
@@ -45,6 +39,7 @@ import { parseEnv } from "../../modules/deployment/env";
 import { getDeploymentLogPath } from "../../modules/deployment/paths";
 import { badRequest, notFound, preconditionFailed } from "../../modules/errors";
 import { assertCapability, assertWithinQuota, hasCapability } from "../../modules/projects";
+import { assertProjectVisible } from "../../modules/projects/project-scope";
 import { textBlobSchema, watchPathsSchema } from "../../utils/input-limits";
 import { assertSafeGitCloneUrl } from "../../utils/public-url";
 import {
@@ -162,12 +157,7 @@ export const applicationRouter = router({
 		.input(z.object({ projectId: z.string().min(1), environmentName: z.string().optional() }))
 		.query(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			const project = await db.query.projects.findFirst({
-				where: eq(projects.projectId, input.projectId),
-			});
-			if (!project || project.organizationId !== organizationId) {
-				throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
-			}
+			await assertProjectAccess(input.projectId, organizationId);
 			const envs = await db.query.environments.findMany({
 				where: input.environmentName
 					? and(
@@ -229,6 +219,7 @@ export const applicationRouter = router({
 		if (!application || application.environment.project.organizationId !== organizationId) {
 			throw new TRPCError({ code: "NOT_FOUND", message: "Application not found" });
 		}
+		assertProjectVisible(application.environment.projectId, "Application");
 		const [canSeeSecrets, readiness] = await Promise.all([
 			hasCapability(ctx.session.user.id, organizationId, "secrets.read"),
 			applicationReadiness(application),
@@ -261,12 +252,7 @@ export const applicationRouter = router({
 			if (environmentId) {
 				await assertEnvironmentAccess(environmentId, organizationId);
 			} else {
-				const project = await db.query.projects.findFirst({
-					where: eq(projects.projectId, input.projectId),
-				});
-				if (!project || project.organizationId !== organizationId) {
-					throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
-				}
+				const project = await assertProjectAccess(input.projectId, organizationId);
 				const environmentName = input.environmentName ?? "default";
 				let environment = await db.query.environments.findFirst({
 					where: and(
@@ -568,6 +554,7 @@ export const applicationRouter = router({
 				},
 			});
 			const parent = deployment?.application ?? deployment?.compose;
+			if (parent) assertProjectVisible(parent.environment.projectId, "Deployment");
 			if (!parent || parent.environment.project.organizationId !== organizationId) {
 				throw notFound("Deployment not found");
 			}

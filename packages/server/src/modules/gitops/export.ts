@@ -4,6 +4,7 @@ import { db } from "../../db";
 import { type applications, type compose, domains, environments, projects } from "../../db/schema";
 import { badRequest, notFound } from "../errors";
 import { findProjectById, getEnvironmentServices } from "../projects";
+import { projectIdFilter } from "../projects/project-scope";
 import {
 	envKeysFromDotenv,
 	type GitopsApplication,
@@ -254,7 +255,9 @@ export const resolveProjectForStack = async (
 	}
 	const slug = stack.project.slug ?? slugifyProjectName(stack.project.name);
 	const rows = await db.query.projects.findMany({
-		where: eq(projects.organizationId, organizationId),
+		// Resolving a project by slug must not reach one the caller cannot open;
+		// the explicit-id path above already goes through `findProjectById`.
+		where: and(eq(projects.organizationId, organizationId), projectIdFilter(projects.projectId)),
 	});
 	const match =
 		rows.find((row) => row.name === stack.project.name) ??

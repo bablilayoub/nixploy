@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { TenantFixture } from "./tenancy.harness";
-import { COVERED, EXEMPT, isListOrGetProcedure } from "./tenancy-coverage";
+import { COVERED, EXEMPT, isListOrGetProcedure, PROJECT_AXIS } from "./tenancy-coverage";
 
 const testUrl = process.env.DATABASE_URL_TEST;
 
@@ -249,6 +249,122 @@ describe.skipIf(!testUrl)("tenant isolation", () => {
 	});
 });
 
+describe.skipIf(!testUrl)("teams and project scope", () => {
+	type Harness = typeof import("./tenancy.harness");
+
+	let harness: Harness;
+	let tenant: TenantFixture;
+	let scoped: Awaited<ReturnType<Harness["seedTeamScopedMember"]>>;
+	let teamless: Awaited<ReturnType<Harness["seedTeamScopedMember"]>>;
+	let scopedCaller: ReturnType<Harness["createTestCaller"]>;
+	let teamlessCaller: ReturnType<Harness["createTestCaller"]>;
+
+	beforeAll(async () => {
+		process.env.DATABASE_URL = testUrl as string;
+		if (!process.env.NIXPLOY_CONFIG_DIR) {
+			process.env.NIXPLOY_CONFIG_DIR = await mkdtemp(join(tmpdir(), "nixploy-teams-"));
+		}
+		harness = await import("./tenancy.harness");
+		tenant = await harness.seedOneTenant("teams");
+		scoped = await harness.seedTeamScopedMember(tenant);
+		teamless = await harness.seedTeamScopedMember(tenant, { inTeam: false });
+		scopedCaller = harness.createTestCaller(scoped.session);
+		teamlessCaller = harness.createTestCaller(teamless.session);
+	}, 60_000);
+
+	afterAll(async () => {
+		if (scoped) await harness.wipeTeamScopedMember(scoped);
+		if (teamless) await harness.wipeTeamScopedMember(teamless);
+		if (tenant) await harness.wipeTenant(tenant);
+	});
+
+	/**
+	 * A project the caller cannot reach must be indistinguishable from one that
+	 * does not exist: FORBIDDEN would confirm it is there.
+	 */
+	const expectNotFound = async (promise: Promise<unknown>) => {
+		await expect(promise).rejects.toMatchObject({ code: "NOT_FOUND" });
+	};
+
+	it("lists only the projects the member's teams reach", async () => {
+		const list = await scopedCaller.project.all();
+		expect(list.map((row) => row.projectId)).toEqual([tenant.projectId]);
+	});
+
+	it("hides a project of the caller's own organization", async () => {
+		const own = await scopedCaller.project.one({ projectId: tenant.projectId });
+		expect(own.projectId).toBe(tenant.projectId);
+		await expectNotFound(scopedCaller.project.one({ projectId: scoped.otherProjectId }));
+	});
+
+	it("hides the services inside it, for reads and for writes", async () => {
+		await expectNotFound(scopedCaller.application.all({ projectId: scoped.otherProjectId }));
+		await expectNotFound(
+			scopedCaller.application.one({ applicationId: scoped.otherApplicationId }),
+		);
+		await expectNotFound(
+			scopedCaller.application.update({
+				applicationId: scoped.otherApplicationId,
+				description: "written by someone who should not see this",
+			}),
+		);
+		await expectNotFound(scopedCaller.compose.all({ projectId: scoped.otherProjectId }));
+	});
+
+	it("does not write when it refuses", async () => {
+		// The mutation above must have been refused before the UPDATE, not after.
+		const ownerCaller = harness.createTestCaller(tenant.session);
+		const untouched = await ownerCaller.application.one({
+			applicationId: scoped.otherApplicationId,
+		});
+		expect(untouched.description).toBeNull();
+	});
+
+	it("refuses to create a service in a project it cannot see", async () => {
+		await expectNotFound(
+			scopedCaller.application.create({
+				name: "sneaky",
+				projectId: scoped.otherProjectId,
+				environmentId: scoped.otherEnvironmentId,
+			}),
+		);
+	});
+
+	it("shows a teams-scoped member with no team nothing at all", async () => {
+		expect(await teamlessCaller.project.all()).toEqual([]);
+		await expectNotFound(teamlessCaller.project.one({ projectId: tenant.projectId }));
+		await expectNotFound(teamlessCaller.application.one({ applicationId: tenant.applicationId }));
+	});
+
+	it("does not leak hidden projects through the dashboard counters", async () => {
+		// A counter is a read. "2 projects, 6 services" in an organization where
+		// the caller may open one of them names the rest just as surely as a list.
+		const overview = await scopedCaller.project.overview();
+		expect(overview.projectCount).toBe(1);
+
+		const teamlessOverview = await teamlessCaller.project.overview();
+		expect(teamlessOverview.projectCount).toBe(0);
+		expect(teamlessOverview.services.total).toBe(0);
+		expect(teamlessOverview.deploymentsLastDay.total).toBe(0);
+	});
+
+	it("does not leak hidden services through the command palette", async () => {
+		const ownerHits = await harness
+			.createTestCaller(tenant.session)
+			.project.search({ query: "other-app" });
+		expect(ownerHits.length).toBeGreaterThan(0);
+		expect(await scopedCaller.project.search({ query: "other-app" })).toEqual([]);
+	});
+
+	it("leaves an organization-scoped member of the same org unaffected", async () => {
+		const ownerCaller = harness.createTestCaller(tenant.session);
+		const list = await ownerCaller.project.all();
+		expect(list.map((row) => row.projectId).sort()).toEqual(
+			[tenant.projectId, scoped.otherProjectId, teamless.otherProjectId].sort(),
+		);
+	});
+});
+
 describe("tenancy coverage registry", () => {
 	it("lists every *.all / *.one / *.list procedure as COVERED or EXEMPT", async () => {
 		const { appRouter } = await import("./root");
@@ -261,5 +377,18 @@ describe("tenancy coverage registry", () => {
 		expect(missing, `Add to COVERED or EXEMPT: ${missing.join(", ")}`).toEqual([]);
 		expect(staleCovered, `Remove stale COVERED entries: ${staleCovered.join(", ")}`).toEqual([]);
 		expect(staleExempt, `Remove stale EXEMPT entries: ${staleExempt.join(", ")}`).toEqual([]);
+	});
+
+	it("declares a project axis for every *.all / *.one / *.list procedure", async () => {
+		const { appRouter } = await import("./root");
+		const procedures = Object.keys(appRouter._def.procedures);
+		const listGets = procedures.filter(isListOrGetProcedure).sort();
+		const undeclared = listGets.filter((path) => !PROJECT_AXIS[path]);
+		const stale = Object.keys(PROJECT_AXIS).filter((path) => !procedures.includes(path));
+		expect(
+			undeclared,
+			`Declare in PROJECT_AXIS how these filter by project: ${undeclared.join(", ")}`,
+		).toEqual([]);
+		expect(stale, `Remove stale PROJECT_AXIS entries: ${stale.join(", ")}`).toEqual([]);
 	});
 });

@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import Docker from "dockerode";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import { environments, projects } from "../../db/schema";
@@ -15,7 +15,7 @@ import {
 } from "../../modules/monitoring/history";
 import { getLocalServerStats } from "../../modules/monitoring/local-host";
 import { parseDockerStatsJsonLine } from "../../modules/monitoring/remote";
-import { resolveCallerOrganizationId } from "../../modules/projects";
+import { projectIdFilter, resolveCallerOrganizationId } from "../../modules/projects";
 import { findServiceByAppName, SERVICE_DEFS } from "../../modules/services/registry";
 import { execAsyncRemote } from "../../utils/exec";
 import type { TRPCContext } from "../init";
@@ -198,7 +198,9 @@ export const monitoringRouter = router({
 	fleetOverview: protectedProcedure.query(async ({ ctx }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		const orgProjects = await db.query.projects.findMany({
-			where: eq(projects.organizationId, organizationId),
+			// Org-wide listing: narrow it here, or a team-scoped member sees every
+			// service in the organization on the fleet page.
+			where: and(eq(projects.organizationId, organizationId), projectIdFilter(projects.projectId)),
 			columns: { projectId: true, name: true },
 		});
 		if (orgProjects.length === 0) return [];

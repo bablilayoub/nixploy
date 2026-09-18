@@ -27,6 +27,7 @@ import {
 	getOrganizationServiceStatusCounts,
 	getServiceCountsByEnvironment,
 	hasCapability,
+	projectIdFilter,
 	resolveCallerOrganizationId,
 	resolveEnvironmentVariables,
 	toEnvString,
@@ -54,7 +55,9 @@ export const projectRouter = router({
 			ctx.session.session.activeOrganizationId,
 		);
 		const projectList = await db.query.projects.findMany({
-			where: eq(projects.organizationId, organizationId),
+			// Team scoping: the org-wide project list is where a scoped member
+			// would otherwise learn that the other projects exist at all.
+			where: and(eq(projects.organizationId, organizationId), projectIdFilter(projects.projectId)),
 			orderBy: desc(projects.createdAt),
 			with: {
 				environments: {
@@ -89,7 +92,11 @@ export const projectRouter = router({
 			db
 				.select({ value: count() })
 				.from(projects)
-				.where(eq(projects.organizationId, organizationId)),
+				// Counters leak too: "2 projects" in an organization where the
+				// caller may open one of them is the sentence teams exist to avoid.
+				.where(
+					and(eq(projects.organizationId, organizationId), projectIdFilter(projects.projectId)),
+				),
 			getOrganizationServiceStatusCounts(organizationId),
 			getDeploymentStatsSince(organizationId, new Date(Date.now() - DAY_IN_MS)),
 		]);
@@ -120,7 +127,9 @@ export const projectRouter = router({
 				db
 					.select({ value: count() })
 					.from(projects)
-					.where(eq(projects.organizationId, organizationId)),
+					.where(
+						and(eq(projects.organizationId, organizationId), projectIdFilter(projects.projectId)),
+					),
 				getOrganizationServiceStatusCounts(organizationId),
 				// Domains hang off a service, not off the organization, so the count
 				// walks the same application/compose union the deployment stats use.
@@ -134,7 +143,9 @@ export const projectRouter = router({
 						sql`${environments.environmentId} = coalesce(${applications.environmentId}, ${compose.environmentId})`,
 					)
 					.innerJoin(projects, eq(environments.projectId, projects.projectId))
-					.where(eq(projects.organizationId, organizationId)),
+					.where(
+						and(eq(projects.organizationId, organizationId), projectIdFilter(projects.projectId)),
+					),
 				getDeploymentStatsSince(organizationId, new Date(0)),
 				// The same resolver the Traefik writer uses, so the step agrees with
 				// what is actually routed — including installs that got their domain
@@ -196,7 +207,12 @@ export const projectRouter = router({
 				ctx.session.session.activeOrganizationId,
 			);
 			const orgProjects = await db.query.projects.findMany({
-				where: eq(projects.organizationId, organizationId),
+				// The palette searches every service in the organization, which is
+				// exactly the shape of leak teams exist to close.
+				where: and(
+					eq(projects.organizationId, organizationId),
+					projectIdFilter(projects.projectId),
+				),
 				columns: { projectId: true, name: true },
 			});
 			if (orgProjects.length === 0) return [];

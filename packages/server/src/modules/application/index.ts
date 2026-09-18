@@ -12,6 +12,7 @@ export type { ApplicationWithTenancy, ServiceContext, ServiceType } from "./org"
 export {
 	assertApplicationAccess,
 	assertEnvironmentAccess,
+	assertProjectAccess,
 	findApplication,
 	findApplicationByAppNameForUser,
 	findEnvironmentByName,

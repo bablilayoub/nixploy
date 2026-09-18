@@ -147,9 +147,13 @@ Then SAML (protocol switch + IdP metadata upload, assertion signature/audience/r
 
 `team` / `team_member` / `team_project` tables plus `member.project_scope` (`organization` | `teams`). Effective capabilities for (user, org, project) = role defaults ∪ member overrides ∪ team overrides − revokes, with rank-bound capabilities (`servers.manage`, `docker.manage`, `settings.manage`, `members.manage`) never grantable from a team overlay.
 
-The elegant part: `resolveProjectFilter(userId, orgId)` memoized per request like `getOrganizationId`, threaded into `getServiceContext` / `assertApplicationAccess` / `assertEnvironmentAccess` — which means **every existing service router is covered without touching it**, because they all already funnel through those three. List procedures take the filter explicitly, and [`tenancy-coverage.ts`](../packages/server/src/trpc/tenancy-coverage.ts) gains a `PROJECT_SCOPED` axis so a new list procedure fails CI until it declares how it filters. `/ws/events` drops frames for hidden projects.
+The elegant part: `resolveProjectFilter(userId, orgId)` memoized per request like `getOrganizationId`, threaded into `getServiceContext` / `assertApplicationAccess` / `assertEnvironmentAccess` — which means **every existing service router is covered without touching it**, because they all already funnel through those three. List procedures take the filter explicitly, and [`tenancy-coverage.ts`](../packages/server/src/trpc/tenancy-coverage.ts) gains a project axis so a new list procedure fails CI until it declares how it filters. `/ws/events` drops frames for hidden projects.
 
 *Deny by default:* a teams-scoped member with no team sees nothing.
+
+*What shipped (migration 0038):* the three tables, `member.project_scope`, the `AsyncLocalStorage` filter, the `team` router and the Settings → Organization → Teams surface, verified in the panel with a second account: a teams-scoped member in no team sees `Projects 0 / Services 0`, joining a team that reaches one project turns that into `1 / 1`, and the other project's URL renders **Page not found**. Three things landed differently from the sketch. The filter is resolved from the **user alone**, not `(userId, orgId)` — forcing the active organization inside `protectedProcedure` would make every protected procedure pay for an org resolution it may not need, and the union over memberships is the honest answer while a session can switch organizations mid-flight. The axis in `tenancy-coverage.ts` is called `PROJECT_AXIS` and has three values (`filtered` / `inherited` / `exempt`) rather than a boolean, because "reaches its rows only through a funnel that already checks" is the answer for most procedures and deserves to be stated. And the **capability overlay per team was dropped**: threading a project through every `assertCapability` call is a much deeper change than the filter, and the shipped model — role says *what*, team says *where* — is the part that closes the gap. Driving the panel as a scoped member also turned up leaks the plan had not named: the dashboard counters, the command palette, `schedule.all` and the forwardAuth target validator all reported organization-wide truth. Counters are reads; they are filtered now, with quota accounting deliberately left organization-wide.
+
+**Remaining follow-on:** per-team capability overlays.
 
 ### 8. Panel forward-auth for any domain *(M)*
 
@@ -262,7 +266,7 @@ Features do not migrate anyone by themselves.
 Per release, before it ships:
 
 - `pnpm typecheck` (4 workspaces), `pnpm exec biome check --error-on-warnings`, `pnpm knip`.
-- `DATABASE_URL_TEST=… pnpm test` — the tenancy suite silently skips without it, and **every feature here touches tenancy**. Teams work additionally extends `tenancy-coverage.ts` with the `PROJECT_SCOPED` axis and the capability matrix with a teams-scoped member hitting a foreign project.
+- `DATABASE_URL_TEST=… pnpm test` — the tenancy suite silently skips without it, and **every feature here touches tenancy**. Teams work additionally extends `tenancy-coverage.ts` with the `PROJECT_AXIS` registry and the capability matrix with a teams-scoped member hitting a foreign project.
 - `pnpm test:template-images` when the catalogue or template sources change.
 - Real Swarm smoke: `pnpm smoke:golden-path` plus the source-build step (`SMOKE_BUILD_REPO`) that has already caught two builder bugs no prebuilt-image smoke could.
 - Drive the panel in the browser, light **and** dark, watching for hydration warnings — every UI item above.

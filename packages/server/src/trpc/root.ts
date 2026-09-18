@@ -39,6 +39,7 @@ import { setupRouter } from "./routers/setup";
 import { sshKeyRouter } from "./routers/ssh-key";
 import { ssoRouter } from "./routers/sso";
 import { tagRouter } from "./routers/tag";
+import { teamRouter } from "./routers/team";
 import { templateRouter } from "./routers/template";
 import { traefikRouter } from "./routers/traefik";
 import { updatesRouter } from "./routers/updates";
@@ -87,6 +88,7 @@ export const appRouter = router({
 	sshKey: sshKeyRouter,
 	sso: ssoRouter,
 	tag: tagRouter,
+	team: teamRouter,
 	template: templateRouter,
 	traefik: traefikRouter,
 	updates: updatesRouter,

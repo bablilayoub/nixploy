@@ -38,6 +38,7 @@ export const docsNav: DocsNavGroup[] = [
 			{ href: "/docs/observability", label: "Observability" },
 			{ href: "/docs/servers", label: "Servers & Docker" },
 			{ href: "/docs/security", label: "Auth & security" },
+			{ href: "/docs/teams", label: "Teams & project access" },
 			{ href: "/docs/private-egress", label: "Outbound requests" },
 			{ href: "/docs/key-rotation", label: "Key rotation" },
 			{ href: "/docs/schedules", label: "Schedules & notify" },

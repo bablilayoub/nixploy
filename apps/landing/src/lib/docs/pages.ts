@@ -965,6 +965,50 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 		],
 	},
 	{
+		slug: "teams",
+		title: "Teams & project access",
+		description:
+			"Give a member access to some projects and not others, without inventing a new role.",
+		blocks: [
+			{
+				type: "p",
+				text: "A role answers what someone may do. A team answers where. A contractor can be a deployer on the two projects their team owns and not know the others exist. Teams are free, like everything else here.",
+			},
+			{ type: "h2", text: "How it works" },
+			{
+				type: "ul",
+				items: [
+					"A team is a name, a set of people, and a set of projects — all three editable at any time under Settings → Organization → Teams",
+					"Every member has a project scope: organization (the default — sees every project) or teams (sees only the projects their teams reach)",
+					"Nothing changes for anyone until you switch a member to the teams scope, so adding teams to a running install is safe",
+					"Deny by default: a teams-scoped member who is in no team sees no projects at all",
+					"Owners and admins administer the whole organization and cannot be scoped to teams — lower their role first",
+					"You cannot change your own project scope; ask another admin, so nobody scopes themselves out of the projects they administer",
+				],
+			},
+			{ type: "h2", text: "What a hidden project looks like" },
+			{
+				type: "p",
+				text: "Not found, never forbidden. A project outside a member's teams is indistinguishable from one that does not exist, for reads and for writes alike — otherwise the error code itself would confirm it is there. The same applies to everything inside it: applications, compose stacks, databases, domains, backups, schedules and the live event stream.",
+			},
+			{ type: "h2", text: "Roles still decide capabilities" },
+			{
+				type: "p",
+				text: "A team never grants a capability. Someone who cannot deploy does not gain the ability by joining a team that owns a project, and the rank-bound capabilities (servers, Docker, organization settings, members) stay admin-only. Combine the two axes: the role sets the ceiling, the team sets the reach.",
+			},
+			{ type: "h2", text: "From the API" },
+			{
+				type: "ul",
+				items: [
+					"team.all lists teams with their members and projects",
+					"team.setMembers and team.setProjects replace either list wholesale",
+					"team.setMemberScope switches one member between organization and teams",
+					"All of them require members.manage, and every change writes an audit row",
+				],
+			},
+		],
+	},
+	{
 		slug: "private-egress",
 		title: "Outbound requests",
 		description: "The egress policy, and the instance-admin toggle that widens it.",

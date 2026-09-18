@@ -15,6 +15,9 @@ import {
 	registry,
 	servers,
 	sshKeys,
+	teamMembers,
+	teamProjects,
+	teams,
 	users,
 } from "../db/schema";
 import type { TRPCContext } from "./init";
@@ -267,6 +270,106 @@ export async function seedOneTenant(label: string): Promise<TenantFixture> {
 		postgresId: postgresRow.postgresId,
 		session: makeSession(userId, organizationId),
 	};
+}
+
+/** A second user in the same organization, scoped to one team. */
+export type TeamScopedFixture = {
+	userId: string;
+	teamId: string;
+	/** A second project of the SAME organization that the team does not reach. */
+	otherProjectId: string;
+	otherEnvironmentId: string;
+	otherApplicationId: string;
+	session: NonNullable<TRPCContext["session"]>;
+};
+
+/**
+ * Seed the case teams exist for: one organization, two projects, and a member
+ * who may only see the first.
+ *
+ * `inTeam: false` seeds the deny-by-default case — a teams-scoped member who
+ * belongs to no team at all and must therefore see nothing.
+ */
+export async function seedTeamScopedMember(
+	fixture: TenantFixture,
+	{ inTeam = true }: { inTeam?: boolean } = {},
+): Promise<TeamScopedFixture> {
+	const suffix = randomUUID().slice(0, 8);
+	const userId = `tenancy_team_user_${suffix}`;
+
+	await db.insert(users).values({
+		id: userId,
+		name: "Team Member",
+		email: `${userId}@tenancy.test`,
+		emailVerified: true,
+	});
+	await db.insert(members).values({
+		id: `member_team_${suffix}`,
+		userId,
+		organizationId: fixture.organizationId,
+		role: "admin",
+		projectScope: "teams",
+	});
+
+	const otherProject = must(
+		(
+			await db
+				.insert(projects)
+				.values({ name: `Other ${suffix}`, organizationId: fixture.organizationId })
+				.returning()
+		)[0],
+		"other project",
+	);
+	const otherEnvironment = must(
+		(
+			await db
+				.insert(environments)
+				.values({ name: "production", projectId: otherProject.projectId })
+				.returning()
+		)[0],
+		"other environment",
+	);
+	const otherApplication = must(
+		(
+			await db
+				.insert(applications)
+				.values({
+					name: "other-app",
+					appName: `other-app-${suffix}`,
+					environmentId: otherEnvironment.environmentId,
+				})
+				.returning()
+		)[0],
+		"other application",
+	);
+
+	const team = must(
+		(
+			await db
+				.insert(teams)
+				.values({ organizationId: fixture.organizationId, name: `Team ${suffix}` })
+				.returning()
+		)[0],
+		"team",
+	);
+	if (inTeam) {
+		await db.insert(teamMembers).values({ teamId: team.teamId, userId });
+		await db.insert(teamProjects).values({ teamId: team.teamId, projectId: fixture.projectId });
+	}
+
+	return {
+		userId,
+		teamId: team.teamId,
+		otherProjectId: otherProject.projectId,
+		otherEnvironmentId: otherEnvironment.environmentId,
+		otherApplicationId: otherApplication.applicationId,
+		session: makeSession(userId, fixture.organizationId),
+	};
+}
+
+export async function wipeTeamScopedMember(scoped: TeamScopedFixture): Promise<void> {
+	await db.delete(users).where(eq(users.id, scoped.userId));
+	await db.delete(projects).where(eq(projects.projectId, scoped.otherProjectId));
 }
 
 export async function wipeTenant(fixture: TenantFixture): Promise<void> {

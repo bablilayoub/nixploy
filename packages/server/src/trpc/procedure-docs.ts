@@ -1130,6 +1130,55 @@ const docs: Record<string, ProcedureDoc> = {
 		capability: ["members.manage"],
 	},
 
+	// ─────────────────────────────────────────────────────────────── teams
+	"team.all": {
+		summary: "List teams",
+		description:
+			"Every team of the active organization with its members and the projects it reaches. Teams decide *where* a member works; their organization role still decides what they may do.",
+		capability: ["members.manage"],
+	},
+	"team.memberScopes": {
+		summary: "List members with their project scope",
+		description:
+			"Everyone in the organization with their role and whether they see every project (`organization`) or only their teams' (`teams`).",
+		capability: ["members.manage"],
+	},
+	"team.create": {
+		summary: "Create a team",
+		description:
+			"Names a new, empty team. Attach projects with `team.setProjects` and people with `team.setMembers`; a team constrains nobody until a member's project scope is set to `teams`.",
+		capability: ["members.manage"],
+	},
+	"team.update": {
+		summary: "Rename a team",
+		description: "Changes the team's name or description. Membership and projects are untouched.",
+		capability: ["members.manage"],
+	},
+	"team.delete": {
+		summary: "Delete a team",
+		description:
+			"Removes the team and its memberships and project attachments. Members scoped to `teams` immediately lose the projects only this team reached — the audit row records how many people were affected.",
+		capability: ["members.manage"],
+	},
+	"team.setMembers": {
+		summary: "Replace a team's members",
+		description:
+			"Sets the team's member list wholesale. User ids that are not already members of the organization are ignored — a team is a subset of the membership, never a way into it.",
+		capability: ["members.manage"],
+	},
+	"team.setProjects": {
+		summary: "Replace a team's projects",
+		description:
+			"Sets the projects this team reaches, wholesale. Project ids belonging to another organization are ignored.",
+		capability: ["members.manage"],
+	},
+	"team.setMemberScope": {
+		summary: "Set a member's project scope",
+		description:
+			"Switches a member between `organization` (sees every project) and `teams` (sees only the projects their teams reach; none if they are in no team). Refused for your own membership, and for owners and admins, who administer the whole organization.",
+		capability: ["members.manage"],
+	},
+
 	// ──────────────────────────────────────────────────────────── platform
 	"audit.all": {
 		summary: "List audit events",

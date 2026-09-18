@@ -49,7 +49,10 @@ Production build before shipping big UI changes:
   `<name>Router`, register in `trpc/root.ts`. Tenant data ⇒
   `protectedProcedure` + `resolveCallerOrganizationId(userId, activeOrgId)`
   (async, falls back to first membership — never read `activeOrganizationId`
-  raw). Logic lives in `modules/<domain>/`, routers stay thin.
+  raw). Logic lives in `modules/<domain>/`, routers stay thin. A list/get
+  procedure must also declare its project axis in `PROJECT_AXIS`
+  (`trpc/tenancy-coverage.ts`) — teams narrow *which projects* a member sees,
+  enforced by an AsyncLocalStorage filter the tenancy funnels already read.
 - **New page**: under `apps/web/src/app/(dashboard)/dashboard/…`, with
   skeleton + error-with-retry + empty states; add it to the command palette
   (`components/command-palette/command-palette.tsx`) if navigable. Sentence

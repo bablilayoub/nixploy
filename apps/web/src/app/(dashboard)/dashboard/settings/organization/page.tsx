@@ -6,6 +6,7 @@ import { OrganizationCard } from "@/components/settings/organization/organizatio
 import { QuotasCard } from "@/components/settings/organization/quotas-card";
 import { SecurityCard } from "@/components/settings/organization/security-card";
 import { SharedVariablesCard } from "@/components/settings/organization/shared-variables-card";
+import { TeamsCard } from "@/components/settings/organization/teams-card";
 import { PageHeader } from "@/components/shell";
 
 export const metadata: Metadata = {
@@ -15,13 +16,17 @@ export const metadata: Metadata = {
 export default function OrganizationSettingsPage() {
 	return (
 		<div className="flex flex-col gap-8">
-			<PageHeader title="Organization" description="Name, members, roles, and capabilities." />
+			<PageHeader
+				title="Organization"
+				description="Name, members, roles, capabilities, and teams."
+			/>
 			<SettingsStack>
 				<OrganizationCard />
 				<QuotasCard />
 				<SharedVariablesCard />
 				<SecurityCard />
 				<MembersCard />
+				<TeamsCard />
 				<DangerZoneCard />
 			</SettingsStack>
 		</div>

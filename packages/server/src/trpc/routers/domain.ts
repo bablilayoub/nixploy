@@ -17,6 +17,7 @@ import {
 } from "../../db/schema";
 import {
 	assertApplicationAccess,
+	assertProjectAccess,
 	getOrganizationId,
 	getServiceContext,
 	syncApplicationTraefik,
@@ -27,7 +28,7 @@ import { detectPublicIp } from "../../modules/cluster/public-host";
 import { resyncComposeDomains } from "../../modules/compose/service";
 import { isUniqueViolation } from "../../modules/errors";
 import { syncPreviewTraefik } from "../../modules/preview/traefik";
-import { assertCapability } from "../../modules/projects";
+import { assertCapability, projectIdFilter } from "../../modules/projects";
 import {
 	domainMiddlewareKindSchema,
 	isWildcardHost,
@@ -372,19 +373,21 @@ const assertForwardAuthAllowed = async (address: string, organizationId: string)
 		}
 		return;
 	}
+	// Project-filtered as well as org-filtered: accepting a name the caller
+	// cannot otherwise see turns this validator into an existence oracle.
 	const [applicationRows, composeRows] = await Promise.all([
 		db
 			.select({ appName: applications.appName })
 			.from(applications)
 			.innerJoin(environments, eq(applications.environmentId, environments.environmentId))
 			.innerJoin(projects, eq(environments.projectId, projects.projectId))
-			.where(eq(projects.organizationId, organizationId)),
+			.where(and(eq(projects.organizationId, organizationId), projectIdFilter(projects.projectId))),
 		db
 			.select({ appName: compose.appName })
 			.from(compose)
 			.innerJoin(environments, eq(compose.environmentId, environments.environmentId))
 			.innerJoin(projects, eq(environments.projectId, projects.projectId))
-			.where(eq(projects.organizationId, organizationId)),
+			.where(and(eq(projects.organizationId, organizationId), projectIdFilter(projects.projectId))),
 	]);
 	const host = target.host;
 	const owned =
@@ -477,12 +480,7 @@ export const domainRouter = router({
 				});
 			}
 			if (input.projectId) {
-				const project = await db.query.projects.findFirst({
-					where: eq(projects.projectId, input.projectId),
-				});
-				if (!project || project.organizationId !== organizationId) {
-					throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
-				}
+				await assertProjectAccess(input.projectId, organizationId);
 				const environmentRows = await db.query.environments.findMany({
 					where: eq(environments.projectId, input.projectId),
 					columns: { environmentId: true },

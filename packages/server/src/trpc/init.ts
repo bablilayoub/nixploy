@@ -14,6 +14,12 @@ import {
 } from "../modules/auth/two-factor-gate";
 import { type DomainErrorCode, isDomainError } from "../modules/errors";
 import { type CapabilityScope, runWithCapabilityScope } from "../modules/projects/capabilities";
+import {
+	ALL_PROJECTS,
+	type ProjectFilter,
+	resolveProjectFilterForSession,
+	runWithProjectFilter,
+} from "../modules/projects/project-scope";
 
 const log = createLogger("trpc");
 
@@ -232,14 +238,35 @@ export const protectedProcedure = t.procedure.use(errorBoundary).use(async ({ ct
 		throw new TRPCError({ code: "FORBIDDEN", message: SSO_REQUIRED_MESSAGE });
 	}
 
+	/**
+	 * Team scoping: which projects this caller may reach. Resolved once and put
+	 * in an AsyncLocalStorage store, which is what makes the tenancy funnels
+	 * (`findProjectById`, `assertApplicationAccess`, `getServiceContext`, …)
+	 * enforce it for every router without a signature change.
+	 *
+	 * A user with no teams-scoped membership anywhere — which is everyone until
+	 * somebody changes it — resolves to "all" after one indexed read.
+	 */
+	let projectFilter: ProjectFilter = ALL_PROJECTS;
+	try {
+		projectFilter = await resolveProjectFilterForSession(session, session.user.id);
+	} catch (error) {
+		// The database is unreachable; the procedure itself is about to fail on
+		// the same database. Leaving the filter at "all" changes nothing — every
+		// path this could have narrowed also checks the organization.
+		log.warn(`could not resolve the caller's project filter: ${String(error)}`);
+	}
+
 	const run = () =>
-		next({
-			ctx: {
-				...ctx,
-				session,
-				organizationId,
-			},
-		});
+		runWithProjectFilter(projectFilter, () =>
+			next({
+				ctx: {
+					...ctx,
+					session,
+					organizationId,
+				},
+			}),
+		);
 
 	// API-key callers arrive with a capability ceiling on the context
 	// (`lib/api-key-context.ts`: key scope + organization binding). Entering it

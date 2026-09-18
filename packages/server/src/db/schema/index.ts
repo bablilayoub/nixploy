@@ -22,5 +22,6 @@ export * from "./security";
 export * from "./server";
 export * from "./sso";
 export * from "./tag";
+export * from "./team";
 export * from "./template-source";
 export * from "./utils";

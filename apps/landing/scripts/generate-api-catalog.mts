@@ -76,6 +76,7 @@ const ROUTER_TITLES: Record<string, string> = {
 	setup: "Setup (public)",
 	sshKey: "SSH keys",
 	tag: "Tags",
+	team: "Teams",
 	template: "Templates",
 	traefik: "Traefik entrypoints",
 	updates: "Updates",

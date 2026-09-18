@@ -1,9 +1,9 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
-import { applications, environments, members } from "../../db/schema";
+import { applications, environments, members, projects } from "../../db/schema";
 import type { TRPCContext } from "../../trpc/init";
 import { notFound } from "../errors";
-import { resolveCallerOrganizationId } from "../projects";
+import { assertProjectVisible, resolveCallerOrganizationId } from "../projects";
 import { SERVICE_REGISTRY, type ServiceKind } from "../services/registry";
 
 type Session = NonNullable<TRPCContext["session"]>;
@@ -52,6 +52,9 @@ export const assertApplicationAccess = async (
 	if (!application || application.environment.project.organizationId !== organizationId) {
 		throw notFound("Application not found");
 	}
+	// Every service router funnels through here, so one check covers all of
+	// them: a project outside the caller's teams answers "not found".
+	assertProjectVisible(application.environment.projectId, "Application");
 	return application;
 };
 
@@ -101,6 +104,23 @@ export const findApplicationForUser = async (
 	return membership ? application : null;
 };
 
+/**
+ * Load a project and verify the caller may reach it.
+ *
+ * The org check and the team check in one place, because a dozen routers used
+ * to inline the first and would each have had to remember the second.
+ */
+export const assertProjectAccess = async (projectId: string, organizationId: string) => {
+	const project = await db.query.projects.findFirst({
+		where: eq(projects.projectId, projectId),
+	});
+	if (!project || project.organizationId !== organizationId) {
+		throw notFound("Project not found");
+	}
+	assertProjectVisible(project.projectId);
+	return project;
+};
+
 /** Load an environment and verify org ownership. */
 export const assertEnvironmentAccess = async (environmentId: string, organizationId: string) => {
 	const environment = await db.query.environments.findFirst({
@@ -110,6 +130,7 @@ export const assertEnvironmentAccess = async (environmentId: string, organizatio
 	if (!environment || environment.project.organizationId !== organizationId) {
 		throw notFound("Environment not found");
 	}
+	assertProjectVisible(environment.projectId, "Environment");
 	return environment;
 };
 
@@ -126,6 +147,7 @@ export const findEnvironmentByName = async (
 	if (!environment || environment.project.organizationId !== organizationId) {
 		throw notFound("Environment not found");
 	}
+	assertProjectVisible(environment.projectId, "Environment");
 	return environment;
 };
 
@@ -151,6 +173,7 @@ export const getServiceContext = async (
 	if (!row) {
 		throw notFound(`${serviceType} service not found`);
 	}
+	assertProjectVisible(row.projectId, "Service");
 	return {
 		serviceId,
 		appName: row.appName,

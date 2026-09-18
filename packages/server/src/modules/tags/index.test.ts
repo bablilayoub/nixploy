@@ -48,6 +48,7 @@ const tenancy = (organizationId: string) => ({
 	appName: "svc-abc123",
 	serverId: null,
 	environmentId: "env_1",
+	projectId: "project_1",
 	organizationId,
 });
 

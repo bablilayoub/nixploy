@@ -24,6 +24,7 @@ import {
 	serviceType,
 	tags,
 } from "../../db/schema";
+import { projectIdFilter } from "../projects/project-scope";
 import {
 	DATABASE_KINDS,
 	type DatabaseServiceKind,
@@ -118,6 +119,8 @@ export interface ServiceTenancy {
 	appName: string;
 	serverId: string | null;
 	environmentId: string;
+	/** Needed by the team project filter, which gates on the project. */
+	projectId: string;
 	organizationId: string;
 }
 
@@ -245,6 +248,7 @@ function defineServiceKind<K extends ServiceKind>(kind: K): ServiceKindDef<K> {
 				appName: table.appName,
 				serverId: table.serverId,
 				environmentId: table.environmentId,
+				projectId: projects.projectId,
 				organizationId: projects.organizationId,
 			})
 			.from(table)
@@ -321,7 +325,12 @@ function defineServiceKind<K extends ServiceKind>(kind: K): ServiceKindDef<K> {
 				.from(table)
 				.innerJoin(environments, eq(table.environmentId, environments.environmentId))
 				.innerJoin(projects, eq(environments.projectId, projects.projectId))
-				.where(eq(projects.organizationId, organizationId))
+				// A dashboard counter is a read like any other: "6 services" in an
+				// organization where the caller may open two of them names the rest
+				// just as surely as a list would.
+				.where(
+					and(eq(projects.organizationId, organizationId), projectIdFilter(projects.projectId)),
+				)
 				.groupBy(table.status);
 		},
 

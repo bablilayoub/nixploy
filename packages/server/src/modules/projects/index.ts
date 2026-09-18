@@ -18,11 +18,13 @@ import {
 	type ServiceRow,
 } from "../services/registry";
 import { getCertificatesDir, REMOTE_TRAEFIK_DIR, removeFileOnServer } from "../traefik";
+import { assertProjectVisible } from "./project-scope";
 import type { OrgRole } from "./roles";
 import { ORG_ROLE_RANK, orgRoleRank } from "./roles";
 
 export * from "./capabilities";
 export * from "./env-resolution";
+export * from "./project-scope";
 export type { OrgRole } from "./roles";
 export { ORG_ROLE_RANK, orgRoleRank } from "./roles";
 
@@ -119,6 +121,9 @@ export async function findProjectById(projectId: string, organizationId: string)
 	if (project.organizationId !== organizationId) {
 		throw forbidden("You do not have access to this project");
 	}
+	// Team scoping: a project outside the caller's teams is NOT FOUND, never
+	// forbidden — otherwise the error code tells them it exists.
+	assertProjectVisible(project.projectId);
 	return project;
 }
 
@@ -138,6 +143,7 @@ export async function findEnvironmentById(environmentId: string, organizationId:
 	if (environment.project.organizationId !== organizationId) {
 		throw forbidden("You do not have access to this environment");
 	}
+	assertProjectVisible(environment.projectId, "Environment");
 	return environment;
 }
 

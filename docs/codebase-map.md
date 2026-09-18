@@ -80,7 +80,7 @@ Exports (`package.json#exports`): `.` (db, auth, encryption, exec), `./db`, `./s
 
 ### `trpc/`
 
-`init.ts` (context, `protectedProcedure` with memoized `ctx.organizationId()` + org-level 2FA gate), `root.ts` (42 routers), `routers/*.ts` (~300 procedures), `openapi.ts` (REST/OpenAPI generation), `redact-secrets.ts`, `assert-org-refs.ts` (validate cross-refs like `serverId`, `certificateId` belong to the org), `tenancy.harness.ts` + `tenancy.test.ts` (two-org isolation suite, needs `DATABASE_URL_TEST`), `tenancy-coverage.ts` (registry: every `*.all|one|list` must be COVERED or EXEMPT or CI fails).
+`init.ts` (context, `protectedProcedure` with memoized `ctx.organizationId()`, org-level 2FA and SSO gates, and the per-request project filter store), `root.ts` (43 routers), `routers/*.ts` (~300 procedures), `openapi.ts` (REST/OpenAPI generation), `redact-secrets.ts`, `assert-org-refs.ts` (validate cross-refs like `serverId`, `certificateId` belong to the org), `tenancy.harness.ts` + `tenancy.test.ts` (two-org isolation suite, needs `DATABASE_URL_TEST`), `tenancy-coverage.ts` (two registries: every `*.all|one|list` must be COVERED or EXEMPT on the organization axis **and** declare `filtered` / `inherited` / `exempt` in `PROJECT_AXIS` on the project axis, or CI fails).
 
 Router → module map:
 
@@ -277,3 +277,29 @@ Callers: `application/org.ts` (`getServiceContext`), `tags/index.ts`, `projects/
 6. Register its tRPC router in `trpc/root.ts` and add the route segment under `/dashboard/projects/[projectId]/services/<kind>/[id]`.
 
 Transactions: `db/index.ts` exports `DbExecutor` (`db` or an open transaction). Write helpers take `executor: DbExecutor = db`, so a caller can pull several into one `db.transaction(...)`; on a transaction handle `executor.transaction()` opens a SAVEPOINT, so helpers may wrap their own writes and still compose. Wrapped so far: `setServiceTags` (delete + insert), the environment cascade's row deletions in `projects/index.ts`, and GitOps `syncDomains` / `applyDatabase`. Swarm, Traefik and file side effects stay outside the transaction (they are best-effort and cannot be rolled back).
+
+## Project scoping (2026-09-18)
+
+`modules/projects/project-scope.ts` is the whole of it. A role says what a
+member may do; a **team** says where. `resolveProjectFilter(userId)` answers
+`{kind: "all"}` — one indexed read — unless some membership has
+`member.project_scope = 'teams'`, in which case it answers an allow-list of
+project ids. `protectedProcedure` resolves it once per request (memoized on the
+session object) and enters an `AsyncLocalStorage` store; the tenancy funnels
+call `assertProjectVisible` and the list procedures call `projectIdFilter` /
+`visibleProjectIds`, so ~100 call sites needed no signature change.
+
+**Absence of a store means unrestricted** — crons, the worker, webhooks and boot
+recovery run outside a request. Deny-by-default lives in the filter (a
+teams-scoped member with no team gets an empty set), not in remembering to enter
+the store. A hidden project is `NOT_FOUND`, never `FORBIDDEN`.
+
+Counters count as reads: `project.overview`, `project.onboarding`,
+`project.search`, `statusCounts` in `services/registry.ts`,
+`getDeploymentStatsSince` / `getDeploymentDailyCounts`, `schedule.all`,
+`monitoring.fleetOverview` and the GitOps slug lookup are all filtered. Quota
+accounting (`projects/quotas.ts`) deliberately is **not** — a quota belongs to
+the organization. The Prometheus endpoint is API-key only and runs with no
+store, so it stays organization-wide.
+
+See `docs/auth.md` § "Teams & project access".

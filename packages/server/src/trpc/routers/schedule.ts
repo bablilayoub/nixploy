@@ -12,6 +12,7 @@ import {
 	assertCapability,
 	assertOrgRole,
 	hasCapability,
+	projectIdFilter,
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
 import {
@@ -214,7 +215,9 @@ export const scheduleRouter = router({
 			canSeeHostSchedules = false;
 		}
 		const orgProjects = await db.query.projects.findMany({
-			where: eq(projects.organizationId, organizationId),
+			// Team scoping: a schedule names its service, so listing one from a
+			// hidden project would name the project too.
+			where: and(eq(projects.organizationId, organizationId), projectIdFilter(projects.projectId)),
 			columns: { projectId: true },
 		});
 		const projectIds = orgProjects.map((row) => row.projectId);

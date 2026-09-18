@@ -106,6 +106,12 @@ export const apiCatalog: ApiRouterGroup[] = [
 			},
 			{
 				method: "POST",
+				path: "application.redeployFromDeployment",
+				summary: "Rebuild the commit a past deployment built",
+				capability: ["service.deploy"],
+			},
+			{
+				method: "POST",
 				path: "application.reload",
 				summary: "Restart an application",
 				capability: ["service.runtime"],
@@ -283,6 +289,17 @@ export const apiCatalog: ApiRouterGroup[] = [
 		],
 	},
 	{
+		router: "branding",
+		title: "branding",
+		description: "branding",
+		endpoints: [
+			{ method: "POST", path: "branding.clearAsset", summary: "Remove an uploaded branding asset" },
+			{ method: "GET", path: "branding.public", summary: "Read the instance branding" },
+			{ method: "GET", path: "branding.settings", summary: "Read the branding settings" },
+			{ method: "POST", path: "branding.update", summary: "Update the instance branding" },
+		],
+	},
+	{
 		router: "certificate",
 		title: "Certificates",
 		description: "Custom TLS certificates",
@@ -431,6 +448,11 @@ export const apiCatalog: ApiRouterGroup[] = [
 				method: "GET",
 				path: "deployment.statsByProject",
 				summary: "Deployment statistics for a project",
+			},
+			{
+				method: "GET",
+				path: "deployment.wait",
+				summary: "Wait for a deployment and read its outcome",
 			},
 		],
 	},
@@ -583,6 +605,7 @@ export const apiCatalog: ApiRouterGroup[] = [
 			{ method: "GET", path: "domain.all", summary: "List domains" },
 			{ method: "GET", path: "domain.byApplication", summary: "List domains of an application" },
 			{ method: "GET", path: "domain.byCompose", summary: "List domains of a compose service" },
+			{ method: "GET", path: "domain.checkDns", summary: "Check a host's DNS" },
 			{
 				method: "POST",
 				path: "domain.create",
@@ -1059,7 +1082,8 @@ export const apiCatalog: ApiRouterGroup[] = [
 		title: "Mounts",
 		description: "Service mounts (bind, volume, file)",
 		endpoints: [
-			{ method: "GET", path: "mount.byApplication", summary: "List mounts of a service" },
+			{ method: "GET", path: "mount.byApplication", summary: "List mounts of an application" },
+			{ method: "GET", path: "mount.byCompose", summary: "List mounts of a compose stack" },
 			{
 				method: "POST",
 				path: "mount.create",
@@ -1254,6 +1278,11 @@ export const apiCatalog: ApiRouterGroup[] = [
 				capability: ["settings.manage"],
 			},
 			{ method: "GET", path: "observability.searchLogs", summary: "Search persisted service logs" },
+			{
+				method: "GET",
+				path: "observability.serviceEvents",
+				summary: "List a service's event timeline",
+			},
 			{
 				method: "POST",
 				path: "observability.setUptimeProbe",
@@ -1467,7 +1496,7 @@ export const apiCatalog: ApiRouterGroup[] = [
 			{
 				method: "GET",
 				path: "previewDeployment.byApplication",
-				summary: "List pull-request previews",
+				summary: "List an application's pull-request previews",
 			},
 			{
 				method: "POST",
@@ -1487,6 +1516,7 @@ export const apiCatalog: ApiRouterGroup[] = [
 				summary: "Deny a fork preview",
 				capability: ["service.deploy"],
 			},
+			{ method: "GET", path: "previewDeployment.list", summary: "List pull-request previews" },
 			{ method: "GET", path: "previewDeployment.one", summary: "Get one preview deployment" },
 		],
 	},
@@ -1514,6 +1544,7 @@ export const apiCatalog: ApiRouterGroup[] = [
 				summary: "Preview the merged env of an environment",
 				capability: ["secrets.read"],
 			},
+			{ method: "GET", path: "project.onboarding", summary: "Onboarding checklist state" },
 			{ method: "GET", path: "project.one", summary: "Get one project" },
 			{ method: "GET", path: "project.overview", summary: "Organization counters" },
 			{
@@ -1892,6 +1923,25 @@ export const apiCatalog: ApiRouterGroup[] = [
 		],
 	},
 	{
+		router: "sso",
+		title: "sso",
+		description: "sso",
+		endpoints: [
+			{ method: "GET", path: "sso.all", summary: "List SSO providers" },
+			{ method: "POST", path: "sso.create", summary: "Add an SSO provider" },
+			{ method: "POST", path: "sso.delete", summary: "Remove an SSO provider" },
+			{ method: "GET", path: "sso.presets", summary: "List identity-provider presets" },
+			{ method: "GET", path: "sso.redirectUri", summary: "Redirect URI for a provider id" },
+			{
+				method: "GET",
+				path: "sso.requirement",
+				summary: "Read this organization's SSO requirement",
+			},
+			{ method: "POST", path: "sso.setRequirement", summary: "Require SSO for this organization" },
+			{ method: "POST", path: "sso.update", summary: "Update an SSO provider" },
+		],
+	},
+	{
 		router: "tag",
 		title: "Tags",
 		description: "Organization tags and service assignments",
@@ -1911,6 +1961,56 @@ export const apiCatalog: ApiRouterGroup[] = [
 				path: "tag.update",
 				summary: "Rename or recolour a tag",
 				capability: ["tags.manage"],
+			},
+		],
+	},
+	{
+		router: "team",
+		title: "Teams",
+		description: "Teams: which projects a member may reach (members.manage)",
+		endpoints: [
+			{ method: "GET", path: "team.all", summary: "List teams", capability: ["members.manage"] },
+			{
+				method: "POST",
+				path: "team.create",
+				summary: "Create a team",
+				capability: ["members.manage"],
+			},
+			{
+				method: "POST",
+				path: "team.delete",
+				summary: "Delete a team",
+				capability: ["members.manage"],
+			},
+			{
+				method: "GET",
+				path: "team.memberScopes",
+				summary: "List members with their project scope",
+				capability: ["members.manage"],
+			},
+			{
+				method: "POST",
+				path: "team.setMembers",
+				summary: "Replace a team's members",
+				capability: ["members.manage"],
+			},
+			{
+				method: "POST",
+				path: "team.setMemberScope",
+				summary: "Set a member's project scope",
+				capability: ["members.manage"],
+			},
+			{
+				method: "POST",
+				path: "team.setProjects",
+				summary: "Replace a team's projects",
+				capability: ["members.manage"],
+			},
+			{
+				method: "POST",
+				path: "team.update",
+				summary: "Rename a team",
+				capability: ["members.manage"],
 			},
 		],
 	},
@@ -1938,7 +2038,8 @@ export const apiCatalog: ApiRouterGroup[] = [
 	{
 		router: "traefik",
 		title: "Traefik entrypoints",
-		description: "TCP and UDP entrypoints published on the proxy",
+		description:
+			"Instance-level Traefik entrypoints for TCP/UDP routing (instance admin; changing them restarts the proxy)",
 		endpoints: [
 			{
 				method: "POST",
@@ -2035,7 +2136,8 @@ export const apiCatalog: ApiRouterGroup[] = [
 	{
 		router: "volumeFiles",
 		title: "Volume files",
-		description: "Browse, read and edit files inside a Docker volume",
+		description:
+			"Browse, read, write and delete files inside a Docker volume (instance admin, docker.manage)",
 		endpoints: [
 			{
 				method: "POST",
@@ -2126,4 +2228,4 @@ export const apiCatalog: ApiRouterGroup[] = [
 ];
 
 /** Total endpoints in the catalog above. */
-export const apiEndpointCount = 390;
+export const apiEndpointCount = 417;

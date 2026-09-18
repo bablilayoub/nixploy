@@ -18,6 +18,7 @@ import {
 } from "../modules/auth/two-factor-gate";
 import { findServerById } from "../modules/cluster/servers";
 import { hasCapability, resolveCallerOrganizationId } from "../modules/projects";
+import { assertProjectVisible } from "../modules/projects/project-scope";
 import type { WsSession } from "./auth";
 import { resolveContainerAppName } from "./docker";
 
@@ -82,6 +83,7 @@ async function assertWsAppAccess(appName: string, organizationId: string): Promi
 
 	const rows = await Promise.all(matchers);
 	const row = rows.find(Boolean);
+	if (row) assertProjectVisible(row.environment.projectId, "Service");
 	if (!row || row.environment.project.organizationId !== organizationId) {
 		throw new Error(`Service not found: ${appName}`);
 	}

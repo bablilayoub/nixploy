@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { databaseLogicals, environments, projects } from "../../db/schema";
+import { databaseLogicals, environments } from "../../db/schema";
 import { assertServerInOrganization } from "../../trpc/assert-org-refs";
 import type { TRPCContext } from "../../trpc/init";
 import { protectedProcedure, router } from "../../trpc/init";
@@ -9,6 +9,7 @@ import { redactDatabaseSecrets } from "../../trpc/redact-secrets";
 import { textBlobSchema } from "../../utils/input-limits";
 import { createTtlCache, DOCKER_LISTING_TTL_MS } from "../../utils/ttl-cache";
 import { appNameSchema, assertSafeDockerImageRef } from "../../utils/validators";
+import { assertProjectAccess } from "../application";
 import { auditFromSession } from "../audit";
 import { unregisterBackupsForService } from "../backups/scheduler";
 import { invalidateDockerListings } from "../docker/containers";
@@ -26,6 +27,7 @@ import {
 	hasCapability,
 	resolveCallerOrganizationId,
 } from "../projects";
+import { assertProjectVisible } from "../projects/project-scope";
 import { generateAppName, isAppNameTaken } from "../services/app-name";
 import { SERVICE_REGISTRY, type ServiceIdColumn } from "../services/registry";
 import {
@@ -115,6 +117,7 @@ async function assertEnvironmentAccess(environmentId: string, organizationId: st
 	if (!environment || environment.project.organizationId !== organizationId) {
 		throw notFound("Environment not found");
 	}
+	assertProjectVisible(environment.projectId, "Environment");
 	return environment;
 }
 
@@ -262,12 +265,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			)
 			.query(async ({ ctx, input }) => {
 				const organizationId = await getOrganizationId(ctx);
-				const project = await db.query.projects.findFirst({
-					where: eq(projects.projectId, input.projectId),
-				});
-				if (!project || project.organizationId !== organizationId) {
-					throw notFound("Project not found");
-				}
+				await assertProjectAccess(input.projectId, organizationId);
 				const envs = await db.query.environments.findMany({
 					where: input.environmentName
 						? and(

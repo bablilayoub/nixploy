@@ -112,6 +112,9 @@ export async function assertWithinQuota(
 	const quotas = await getOrgQuotas(organizationId);
 
 	if (checks.projects && quotas.maxProjects != null) {
+		// Deliberately NOT project-filtered: a quota is a property of the
+		// organization, and counting only what the caller can see would let a
+		// teams-scoped member create past the limit.
 		const [row] = await db
 			.select({ value: count() })
 			.from(projects)

@@ -4,6 +4,7 @@ import { applications, compose, deployments, environments, projects, users } fro
 import { assertApplicationAccess } from "../application";
 import { findComposeForOrg } from "../compose/service";
 import { findProjectById } from "../projects";
+import { projectIdFilter } from "../projects/project-scope";
 
 /**
  * Read-side deployment queries for the organization-wide deployments
@@ -197,7 +198,13 @@ export async function listRecentDeployments(
 	options: { limit: number; cursor?: string | null },
 ): Promise<DeploymentListResult> {
 	return queryDeployments(
-		and(eq(projects.organizationId, organizationId), eq(deployments.isPreview, false)),
+		and(
+			eq(projects.organizationId, organizationId),
+			eq(deployments.isPreview, false),
+			// Org-wide listing: it has to narrow itself, because nothing it
+			// returns passes through a per-project access check first.
+			projectIdFilter(projects.projectId),
+		),
 		options,
 	);
 }
@@ -242,6 +249,7 @@ export async function getDeploymentStatsSince(
 		.where(
 			and(
 				eq(projects.organizationId, organizationId),
+				projectIdFilter(projects.projectId),
 				eq(deployments.isPreview, false),
 				gte(deployments.createdAt, since),
 			),
@@ -293,6 +301,7 @@ export async function getDeploymentDailyCounts(
 		.where(
 			and(
 				eq(projects.organizationId, organizationId),
+				projectIdFilter(projects.projectId),
 				eq(deployments.isPreview, false),
 				gte(deployments.createdAt, since),
 			),

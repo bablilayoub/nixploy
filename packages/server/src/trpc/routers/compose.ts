@@ -2,8 +2,8 @@ import { TRPCError } from "@trpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { compose, environments, projects } from "../../db/schema";
-import { assertEnvironmentAccess } from "../../modules/application";
+import { compose, environments } from "../../db/schema";
+import { assertEnvironmentAccess, assertProjectAccess } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { listComposeContainers } from "../../modules/compose/containers";
@@ -77,12 +77,7 @@ export const composeRouter = router({
 		)
 		.query(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			const project = await db.query.projects.findFirst({
-				where: eq(projects.projectId, input.projectId),
-			});
-			if (!project || project.organizationId !== organizationId) {
-				throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
-			}
+			await assertProjectAccess(input.projectId, organizationId);
 			const envs = await db.query.environments.findMany({
 				where: input.environmentName
 					? and(

@@ -5,6 +5,7 @@ import { assertSafeOutboundUrl, pinnedFetch } from "../../utils/public-url";
 import { badRequest, notFound } from "../errors";
 import { notifyEvent } from "../notifications";
 import { assertCapability } from "../projects/capabilities";
+import { projectIdFilter } from "../projects/project-scope";
 
 export {
 	mirrorAuditOntoTimeline,
@@ -87,6 +88,13 @@ export async function listIncidents(
 	const conditions = [eq(incidents.organizationId, organizationId)];
 	if (opts.projectId) {
 		conditions.push(eq(incidents.projectId, opts.projectId));
+	}
+	// Team scoping. An incident with no project (an uptime flip on a domain, a
+	// platform alert) is org-level and stays visible: it names a host, not a
+	// tenant's service.
+	const scoped = projectIdFilter(incidents.projectId);
+	if (scoped) {
+		conditions.push(or(isNull(incidents.projectId), scoped) as NonNullable<ReturnType<typeof or>>);
 	}
 	return db.query.incidents.findMany({
 		where: and(...conditions),

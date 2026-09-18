@@ -115,6 +115,70 @@ validates `revoke` against the caller's own set too.
 | `deployer` | member + deploy/runtime, templates, backups, schedules |
 | `admin` / `owner` | full catalog |
 
+## Teams & project access
+
+A role says *what* a member may do. A **team** says *where*.
+
+| Table | Holds |
+| --- | --- |
+| `team` | name, description, `organization_id` (unique name per org) |
+| `team_member` | `(team_id, user_id)` — people |
+| `team_project` | `(team_id, project_id)` — reach |
+
+Plus one column on the membership: `member.project_scope`, `organization`
+(default) or `teams`. **Nothing changes for anyone until that column is
+switched**, so teams can be added to a running install without touching
+existing behaviour.
+
+### How the filter travels
+
+`resolveProjectFilter(userId)` (`modules/projects/project-scope.ts`) reads the
+user's memberships once. If none is teams-scoped it answers `{kind: "all"}` and
+stops — one indexed read, the common case. Otherwise it unions the projects of
+the organizations that do **not** constrain them with the projects their teams
+reach, and answers an allow-list.
+
+`protectedProcedure` resolves it once per request (memoized on the session
+object, like `getOrganizationId`) and enters an `AsyncLocalStorage` store. That
+is what makes the existing tenancy funnels — `findProjectById`,
+`findEnvironmentById`, `assertApplicationAccess`, `assertEnvironmentAccess`,
+`findComposeForOrg`, `getServiceContext` — enforce it for every router without
+a signature change.
+
+**Absence of a store means unrestricted.** Crons, the deploy worker, webhook
+handlers and boot recovery run outside a request and must keep seeing every
+project. Deny-by-default lives in the filter itself — a teams-scoped member with
+no team resolves to an empty allow-list — not in whether somebody remembered to
+enter the store.
+
+### Rules the server keeps
+
+- A hidden project answers **NOT FOUND, never FORBIDDEN**, for reads and writes
+  alike. A distinguishable error code would confirm the project exists.
+- Counters are reads too. `project.overview`, `project.onboarding`, the service
+  status counts, the deployment stats and the command palette are all filtered;
+  "2 projects, 6 services" would name the rest just as surely as a list.
+- Quota accounting is deliberately **not** filtered: a quota is a property of
+  the organization, and counting only the visible part would let a scoped member
+  create past the limit.
+- `/ws/events` drops frames whose service belongs to a hidden project
+  (`ws/events.ts`, with a synchronous fast path for the unrestricted case).
+- A team never grants a capability. Rank-bound capabilities stay admin-only.
+- Owners and admins cannot be scoped to teams, and nobody can change their own
+  project scope — both would be self-inflicted lockouts.
+
+### Keeping new code covered
+
+`trpc/tenancy-coverage.ts` carries a second axis, `PROJECT_AXIS`: every
+`*.all` / `*.one` / `*.list` procedure must declare `filtered` (narrows by the
+filter itself), `inherited` (reaches rows only through a funnel that calls
+`assertProjectVisible`) or `exempt` (not project data). A new list procedure
+fails `tenancy.test.ts` until it picks one — the filter is ambient, so
+forgetting it is silent rather than a type error.
+
+Managing teams is `members.manage` (Settings → Organization → Teams), and every
+change writes an audit row.
+
 ## Instance admin
 
 The first user (better-auth `admin()` plugin, `user.role = "admin"`) is the

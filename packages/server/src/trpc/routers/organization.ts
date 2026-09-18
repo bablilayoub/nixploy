@@ -17,6 +17,7 @@ import {
 	orgRoleRank,
 	parseCapabilityOverrides,
 	parseOrgMetadata,
+	projectIdFilter,
 	publicCapabilityCatalog,
 	resolveCallerOrganizationId,
 	roleDefaultCapabilities,
@@ -111,7 +112,9 @@ export const organizationRouter = router({
 			db
 				.select({ value: count() })
 				.from(projects)
-				.where(eq(projects.organizationId, organizationId)),
+				.where(
+					and(eq(projects.organizationId, organizationId), projectIdFilter(projects.projectId)),
+				),
 			getOrganizationServiceStatusCounts(organizationId),
 		]);
 		return {

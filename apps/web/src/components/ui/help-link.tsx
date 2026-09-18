@@ -24,6 +24,7 @@ export const DOC_SLUGS = [
 	"observability",
 	"servers",
 	"security",
+	"teams",
 	"private-egress",
 	"key-rotation",
 	"schedules",

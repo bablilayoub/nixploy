@@ -21,6 +21,7 @@ import type { DeploymentContext } from "../deployment/context";
 import { removeServiceLogs } from "../deployment/maintenance";
 import { ensureEnvironmentNetworkById, pruneEnvironmentNetwork } from "../deployment/network";
 import { badRequest, conflict, notFound, preconditionFailed } from "../errors";
+import { assertProjectVisible } from "../projects/project-scope";
 import { unregisterSchedulesForService } from "../schedules";
 import { generateAppName, isAppNameTaken, randomAppNameSuffix } from "../services/app-name";
 import { toTraefikDomainEntry } from "../traefik/config-writer";
@@ -102,6 +103,7 @@ export async function findComposeForOrg(
 	if (!row || row.environment.project.organizationId !== organizationId) {
 		throw notFound("Compose service not found");
 	}
+	assertProjectVisible(row.environment.projectId, "Compose service");
 	return row;
 }
 

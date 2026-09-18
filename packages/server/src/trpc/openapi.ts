@@ -239,6 +239,7 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
 	setup: "First-boot setup and invitation preview (public)",
 	sshKey: "SSH keys for git and server access",
 	tag: "Organization tags and service assignments",
+	team: "Teams: which projects a member may reach (members.manage)",
 	template: "One-click template catalog",
 	updates: "In-app panel updates from GHCR",
 	volumeBackup: "Named-volume backup schedules",

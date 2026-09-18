@@ -100,6 +100,13 @@ export const members = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		role: text("role").notNull(),
+		/**
+		 * `organization` (every project, the default and what every existing
+		 * member is) or `teams` (only the projects this member's teams are
+		 * attached to). Deny by default in the `teams` case: a member in no team
+		 * sees nothing, which is the only safe reading of "scoped to teams".
+		 */
+		projectScope: text("project_scope").notNull().default("organization"),
 		/** Optional grant/revoke overlays on top of the role's default capabilities. */
 		capabilityOverrides: jsonb("capability_overrides").$type<{
 			grant?: string[];

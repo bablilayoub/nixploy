@@ -15,6 +15,12 @@ alwaysApply: false
 - Tenant data ⇒ `protectedProcedure` + `resolveCallerOrganizationId` (see
   00-general). Access-check helpers live in `modules/application/org.ts`
   (`assertApplicationAccess`, `assertEnvironmentAccess`, `getServiceContext`).
+- Second axis: teams. The per-request project filter lives in an
+  AsyncLocalStorage store (`modules/projects/project-scope.ts`); the funnels
+  above already call `assertProjectVisible`. A new `*.all|one|list` procedure
+  must declare `filtered` / `inherited` / `exempt` in `PROJECT_AXIS`
+  (`trpc/tenancy-coverage.ts`) or CI fails — counters and search included. A
+  hidden project answers NOT_FOUND, never FORBIDDEN.
 - Input validation with zod on every procedure.
 
 ## Engine
