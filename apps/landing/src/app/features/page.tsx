@@ -100,7 +100,7 @@ export default function FeaturesPage() {
 												alt={section.imageAlt ?? ""}
 												width={1280}
 												height={800}
-												className="h-auto w-full"
+												className="h-auto w-full grayscale"
 											/>
 										</figure>
 									) : null}
@@ -114,7 +114,7 @@ export default function FeaturesPage() {
 												alt={section.imageAlt ?? ""}
 												width={1280}
 												height={800}
-												className="h-auto w-full"
+												className="h-auto w-full grayscale"
 											/>
 										</figure>
 									) : null}

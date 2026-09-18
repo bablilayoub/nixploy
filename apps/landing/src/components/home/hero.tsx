@@ -1,8 +1,7 @@
-import { PanelPreview } from "@/components/home/panel-preview";
 import { GithubIcon } from "@/components/icons";
 import { InstallCommand } from "@/components/install-command";
 import { BlurFade } from "@/components/magicui/blur-fade";
-import { Button, Container } from "@/components/ui";
+import { Button, Container, WindowFrame } from "@/components/ui";
 import { site } from "@/lib/site";
 
 export function Hero() {
@@ -48,9 +47,18 @@ export function Hero() {
 				</div>
 			</Container>
 
+			{/*
+			 * A real capture of the running panel, not an illustration — the
+			 * dashboard is the page's proof that the product exists.
+			 */}
 			<Container className="relative">
 				<BlurFade delay={0.4}>
-					<PanelPreview className="mt-16 sm:mt-20" />
+					<WindowFrame
+						className="mt-16 sm:mt-20"
+						src="/screenshots/02-dashboard.png"
+						alt="The Nixploy dashboard: two projects, six services across three running and one errored, deployment history for the last fourteen days, and the most recent deployments across the organization"
+						priority
+					/>
 				</BlurFade>
 			</Container>
 		</section>

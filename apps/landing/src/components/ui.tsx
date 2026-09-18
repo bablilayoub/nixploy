@@ -132,3 +132,49 @@ export function Button({
 		</Link>
 	);
 }
+
+/**
+ * App-window frame around a real capture of the panel.
+ *
+ * Screenshots are desaturated by default: the panel uses green, red and blue
+ * for status and charts, and this site is strictly monochrome. The capture
+ * stays honest — only its saturation is dropped — and dark UI greyscales
+ * cleanly. Pass `color` only if a shot genuinely needs its hues.
+ */
+export function WindowFrame({
+	src,
+	alt,
+	className,
+	priority = false,
+	color = false,
+}: {
+	src: string;
+	alt: string;
+	className?: string;
+	priority?: boolean;
+	color?: boolean;
+}) {
+	return (
+		<div
+			className={cn(
+				"overflow-hidden rounded-xl border border-border bg-surface",
+				"shadow-[0_1px_0_0_rgba(255,255,255,0.05)_inset,0_40px_90px_-50px_rgba(0,0,0,1)]",
+				className,
+			)}
+		>
+			<div className="flex items-center gap-1.5 border-b border-border px-4 py-2.5">
+				<span className="size-2.5 rounded-full bg-surface-3" />
+				<span className="size-2.5 rounded-full bg-surface-3" />
+				<span className="size-2.5 rounded-full bg-surface-3" />
+			</div>
+			{/* biome-ignore lint/performance/noImgElement: static marketing asset, full-width */}
+			<img
+				src={src}
+				alt={alt}
+				className={cn("block w-full", !color && "grayscale")}
+				loading={priority ? "eager" : "lazy"}
+				decoding="async"
+			/>
+		</div>
+	);
+}
