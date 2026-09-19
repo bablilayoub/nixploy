@@ -106,7 +106,7 @@ returned by `initialize` and none is needed on later calls.
 
 ## 3. Tool reference
 
-38 tools. All inputs are validated with zod; outputs are compact JSON. Every
+41 tools. All inputs are validated with zod; outputs are compact JSON. Every
 call goes through `appRouter.createCaller`, so the capability listed below is
 enforced by the router, not by the tool.
 
@@ -123,7 +123,7 @@ and occasionally wrong, and `readOnlyHint: true` on something that mutates is
 how an agent stops production while it believes it is investigating.
 
 - `destructiveHint: true` on `stop_service`, `remove_domain`,
-  `rollback_deployment` and `cancel_deployment`. Broader than "deletes rows":
+  `rollback_deployment`, `cancel_deployment` and `delete_preview`. Broader than "deletes rows":
   stopping a service destroys no data and is still not something an agent
   should do unprompted.
 - `idempotentHint: false` on the deploy tools — calling one twice queues two
@@ -173,6 +173,7 @@ and the tools already answer "what is there" with pagination and filters.
 | `list_databases` | Database services of a project across all five engines | `<engine>.all` |
 | `get_database` | One database's configuration plus its live container status | `<engine>.one` + `getStatus` |
 | `get_service_logs` | Build/deploy log of a service (latest deployment, or a given `deploymentId`), capped to the last 16k chars | `deployment.getLogs` |
+| `get_preview` | One preview deployment: ref, status, hosts, expiry, the pull request it belongs to | `previewDeployment.one` |
 | `get_runtime_logs` | Runtime log history — what a service printed, kept by the worker past the container's lifetime; terms, `"phrases"`, `-excludes`, `level:error`, `container:web`, `/regex/`; newest first, paged by `before` | `observability.runtimeLogs` |
 | `list_deployments` | Recent deployments of one service with status and duration | `deployment.byApplication` / `byCompose` |
 | `get_deployment_provenance` | Commit SHA, message, author, trigger and who triggered each recent deployment | `deployment.byApplication` / `byCompose` |
@@ -197,6 +198,8 @@ Each needs the capability in the last column; without it the tool answers
 | Tool | What it does | tRPC procedure | Capability |
 | --- | --- | --- | --- |
 | `deploy_service` | Queue a fresh build + rollout of an application | `application.deploy` | `service.deploy` |
+| `create_preview` | An ephemeral copy of an application or compose stack from a branch, tag or sha (`ref`) or a pull request (`pullRequestNumber`), routed at its own wildcard host; returns the `deploymentId` to wait on | `previewDeployment.create` |
+| `delete_preview` | Tear a preview down (variant service or project, routes, rows) | `previewDeployment.delete` |
 | `deploy_compose` | Render, validate and apply a compose stack (recreates its containers) | `compose.deploy` | `service.deploy` |
 | `rollback_deployment` | Redeploy from a stored image pin — does not rebuild or undo migrations | `application.rollback` | `service.deploy` |
 | `cancel_deployment` | Kill a queued or running deployment | `application.cancelDeployment` | `service.deploy` |

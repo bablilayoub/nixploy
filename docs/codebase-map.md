@@ -115,7 +115,9 @@ Router → module map:
 
 `index.ts` (routes, heartbeat 30 s, Origin check against the trusted origins, leaves non-Nixploy upgrades to Next HMR), `auth.ts`, `access.ts` (org resolution incl. the 2FA gate, capability checks, container-label ownership for control-center streams), `events.ts` (`/ws/events` — one org-scoped push stream per tab: deployment, queue and service-status frames), `deployment-logs.ts` (replay file + follow `deploymentEvents`; in role `panel` woken by a 500 ms `fs.stat` of the log file instead), `docker-logs.ts`, `docker-stats.ts`, `docker-terminal.ts` (exec into container), `docker.ts`, `utils.ts`.
 
-### Previews (2026-09-11)
+### Previews (2026-09-11, branch previews 2026-09-20)
+
+A preview row has a `kind`: `pull_request` (the provider lifecycle: comment, fork gate, webhook teardown) or `branch` (created by hand from any ref, keyed by `previewKeyForRef` = `b<6 hex>` of the ref, only expires or is deleted). Both share the naming (`naming.ts`, `PREVIEW_KEY_RE`), the routes and the deploy path; PR-only code checks the kind.
 
 `modules/preview/parent.ts` — `PreviewParent`: the shape an application row and a compose row both reduce to (appName, serverId, default branch, the five preview knobs, provider columns); the lifecycle (cap, TTL, fork gate, PR comment, create/redeploy/delete, supersede/cancel, expiry teardown) is written once against it. Adding a third preview parent means adding a loader here, not branching the lifecycle. `modules/preview/naming.ts` — leaf naming rules shared by the lifecycle, the PR comment and the compose helpers (`previewAppName`, `previewHost`, `previewComposeHost`, `previewLimitReached`, `previewExpiryFromTtl`). `modules/preview/compose.ts` — the compose-only half: exposed-service lookup, `buildPreviewComposeTarget` (twin of `buildPreviewDeployTarget`), project teardown. `preview_deployment` names exactly one parent (`application_id` / `compose_id`, CHECK `preview_deployment_one_parent`, migration 0028).
 

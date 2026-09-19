@@ -302,11 +302,21 @@ nixploy backup restore bkp_abc --key dumps/2026-09-11.sql.gz --yes
 it — it restores into a disposable container and reports whether the dump is
 usable.
 
-### `preview` — pull-request previews
+### `preview` — ephemeral environments
+
+A preview is an isolated copy of an application or a compose stack at its own
+wildcard host, built from a pull request (webhook-driven, with the PR comment
+and the fork gate) or from any git ref by hand (a branch, a tag, a sha — no
+PR machinery, it only expires or is deleted).
 
 ```bash
+nixploy preview create --application-id app_abc --ref feat/cart --wait   # URL, health and log tail when it lands
+nixploy preview create --compose-id cmp_abc --ref v1.4.0
+nixploy preview create --application-id app_abc --pr 123 --branch feature/x
 nixploy preview list app_abc
-nixploy preview approve pd_abc     # releases a fork PR held by the approval gate
+nixploy preview list-compose cmp_abc
+nixploy preview redeploy pd_abc --wait   # build it again from its ref
+nixploy preview approve pd_abc           # releases a fork PR held by the approval gate
 nixploy preview deny pd_abc
 nixploy preview delete pd_abc --yes
 ```

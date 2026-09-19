@@ -105,6 +105,7 @@ vi.mock("../traefik", () => ({
 vi.mock("./traefik", () => ({ syncPreviewTraefik, removePreviewTraefik: vi.fn(async () => {}) }));
 vi.mock("./comment", () => ({ upsertPreviewComment }));
 
+import { isReservedAppName } from "../../utils/validators";
 import {
 	classifyPullRequestAction,
 	createPreviewDeployment,
@@ -114,6 +115,7 @@ import {
 	previewComposeHost,
 	previewExpiryFromTtl,
 	previewHost,
+	previewKeyForRef,
 	previewLimitReached,
 	previewParentRef,
 } from "./index";
@@ -139,6 +141,17 @@ describe("previewAppName / previewHost", () => {
 	it("refuses a non-numeric pull request number", () => {
 		expect(() => previewAppName("shop", "7; rm -rf /")).toThrow(/Invalid pull request number/);
 		expect(() => previewComposeHost("shop", "../..", "web")).toThrow(/Invalid pull request number/);
+		expect(() => previewAppName("shop", "bZZZZZZ")).toThrow(/Invalid pull request number/);
+	});
+
+	it("names a branch preview after a short hash of its ref", () => {
+		const key = previewKeyForRef("feat/cart");
+		expect(key).toMatch(/^b[0-9a-f]{6}$/);
+		expect(previewKeyForRef("feat/cart ")).toBe(key);
+		expect(previewKeyForRef("feat/cart-2")).not.toBe(key);
+		expect(previewAppName("shop", key)).toBe(`shop-pr-${key}`);
+		expect(previewHost("shop", key)).toMatch(new RegExp(`^pr-${key}-shop\\.`));
+		expect(isReservedAppName(`shop-pr-${key}`)).toBe(true);
 	});
 });
 

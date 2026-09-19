@@ -10,12 +10,14 @@ import {
 	createPreviewDeployment,
 	deletePreviewDeployment,
 	type PreviewParentRef,
+	previewKeyForRef,
 	previewParentRef,
 	redeployPreviewDeployment,
 	withPreviewDomain,
 } from "../../modules/preview";
 import { upsertPreviewComment } from "../../modules/preview/comment";
 import { assertCapability } from "../../modules/projects";
+import { assertSafeGitRef } from "../../utils/public-url";
 import { protectedProcedure, router } from "../init";
 
 /** A preview hangs off exactly one parent; every input names it the same way. */
@@ -117,11 +119,15 @@ export const previewDeploymentRouter = router({
 				.object({
 					applicationId: z.string().min(1).optional(),
 					composeId: z.string().min(1).optional(),
+					/** A pull-request preview; omit and give `ref` for a branch preview. */
 					pullRequestNumber: z
 						.string()
 						.min(1)
 						.max(16)
-						.regex(/^\d+$/, "pullRequestNumber must be numeric"),
+						.regex(/^\d+$/, "pullRequestNumber must be numeric")
+						.optional(),
+					/** A branch, tag or sha to preview without a pull request. */
+					ref: z.string().min(1).max(255).optional(),
 					branch: z.string().nullable().optional(),
 					pullRequestId: z.string().nullable().optional(),
 					pullRequestTitle: z.string().max(500).nullable().optional(),
@@ -130,6 +136,9 @@ export const previewDeploymentRouter = router({
 				})
 				.refine((value) => Boolean(value.applicationId) !== Boolean(value.composeId), {
 					message: "Exactly one of applicationId or composeId is required",
+				})
+				.refine((value) => Boolean(value.pullRequestNumber) || Boolean(value.ref), {
+					message: "Give a pullRequestNumber (pull-request preview) or a ref (branch preview)",
 				}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -137,10 +146,22 @@ export const previewDeploymentRouter = router({
 			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 			const parent = await assertPreviewParentAccess(input, organizationId);
 
+			// A branch preview is keyed by a short hash of the ref, so the same
+			// ref maps to the same variant and a second create is a conflict.
+			const { ref, ...rest } = input;
+			const source = input.pullRequestNumber
+				? { kind: "pull_request" as const, pullRequestNumber: input.pullRequestNumber }
+				: {
+						kind: "branch" as const,
+						pullRequestNumber: previewKeyForRef(assertSafeGitRef(ref ?? "", "ref")),
+						branch: assertSafeGitRef(ref ?? "", "ref"),
+					};
+
 			// Manual preview: the deployment row is attributed to this user
 			// (webhook-driven previews pass `webhook:<provider>` instead).
 			const preview = await createPreviewDeployment({
-				...input,
+				...rest,
+				...source,
 				triggeredBy: ctx.session.user.id,
 			});
 			void auditFromSession(ctx, organizationId, {
@@ -149,10 +170,44 @@ export const previewDeploymentRouter = router({
 				targetName: preview.appName,
 				metadata: {
 					previewDeploymentId: preview.previewDeploymentId,
-					pullRequestNumber: input.pullRequestNumber,
+					kind: source.kind,
+					pullRequestNumber: source.pullRequestNumber,
+					ref: source.kind === "branch" ? source.branch : undefined,
 				},
 			});
 			return preview;
+		}),
+
+	/**
+	 * Build the preview again from its ref — a branch preview after a push,
+	 * a PR preview whose webhook was missed. Not for a preview parked behind
+	 * the fork gate: `approve` is the only way through that.
+	 */
+	redeploy: protectedProcedure
+		.input(z.object({ previewDeploymentId: z.string().min(1) }))
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
+			const { preview, parent } = await findPreview(input.previewDeploymentId, organizationId);
+			if (preview.previewStatus === "awaiting_approval") {
+				throw new TRPCError({
+					code: "PRECONDITION_FAILED",
+					message: "This preview is awaiting approval — approve it instead of redeploying",
+				});
+			}
+			const result = await redeployPreviewDeployment(preview.previewDeploymentId, {
+				triggeredBy: ctx.session.user.id,
+			});
+			void auditFromSession(ctx, organizationId, {
+				action: "previewDeployment.redeploy",
+				...auditTarget(parent),
+				targetName: preview.appName,
+				metadata: {
+					previewDeploymentId: preview.previewDeploymentId,
+					deploymentId: result.deploymentId,
+				},
+			});
+			return result;
 		}),
 
 	/** Tear down a preview: remove the variant service / project, its routes and rows. */

@@ -78,11 +78,14 @@ export const MCP_TOOL_ANNOTATIONS: Record<string, McpToolAnnotations> = {
 	get_service_events: read("Read a service's event timeline"),
 	get_service_runtime_summary: read("Summarise a service's runtime"),
 	get_runtime_logs: read("Search runtime log history"),
+	get_preview: read("Read one preview deployment"),
 	explain_last_failure: read("Explain the last failed deploy"),
 
 	// ── writes ───────────────────────────────────────────────────────────────
 	// A deploy is not idempotent: calling it twice queues two builds.
 	deploy_service: write("Deploy an application", false),
+	// The same ref maps to the same variant, so a second create is a conflict, not a second copy.
+	create_preview: write("Create a preview deployment", false),
 	deploy_compose: write("Deploy a compose stack", false),
 	deploy_and_wait: write("Deploy and wait for the result", false),
 	restart_service: write("Restart a service", false),
@@ -101,4 +104,5 @@ export const MCP_TOOL_ANNOTATIONS: Record<string, McpToolAnnotations> = {
 	remove_domain: dangerous("Remove a domain", true),
 	rollback_deployment: dangerous("Roll back to an earlier image", false),
 	cancel_deployment: dangerous("Cancel a running deployment", true),
+	delete_preview: dangerous("Delete a preview deployment", true),
 };

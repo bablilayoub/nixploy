@@ -43,7 +43,7 @@ export const RESERVED_APP_NAMES = new Set([
  * Name shapes owned by the platform: `<app>-pr-<n>` is the swarm service +
  * Traefik file of a PR preview.
  */
-export const RESERVED_APP_NAME_PATTERNS: readonly RegExp[] = [/-pr-\d+$/];
+export const RESERVED_APP_NAME_PATTERNS: readonly RegExp[] = [/-pr-(\d+|b[0-9a-f]{6})$/];
 
 export const isReservedAppName = (value: string): boolean =>
 	RESERVED_APP_NAMES.has(value) || RESERVED_APP_NAME_PATTERNS.some((re) => re.test(value));

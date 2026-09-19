@@ -719,6 +719,105 @@ export const mcpTools: McpToolDefinition[] = [
 		},
 	},
 	{
+		name: "create_preview",
+		description:
+			"Spin up an ephemeral copy of an application or compose stack from a branch, tag or sha (`ref`), or from a pull request (`pullRequestNumber`): an isolated service or project routed at its own wildcard host, with the parent's preview env. Returns the preview and the deploymentId to wait on with deploy_and_wait's sibling, list_deployments, or get_preview. Requires service.deploy.",
+		inputSchema: z.object({
+			applicationId: z
+				.string()
+				.min(1)
+				.optional()
+				.describe("Parent application (exactly one parent)"),
+			composeId: z
+				.string()
+				.min(1)
+				.optional()
+				.describe("Parent compose service (exactly one parent)"),
+			ref: z
+				.string()
+				.min(1)
+				.max(255)
+				.optional()
+				.describe("Branch, tag or sha for a branch preview"),
+			pullRequestNumber: z
+				.string()
+				.regex(/^\d+$/)
+				.optional()
+				.describe("Pull request number for a pull-request preview"),
+			expiresInHours: z
+				.number()
+				.int()
+				.min(1)
+				.max(24 * 30)
+				.optional()
+				.describe("Tear it down automatically after this many hours"),
+		}),
+		handler: async (
+			caller,
+			input: {
+				applicationId?: string;
+				composeId?: string;
+				ref?: string;
+				pullRequestNumber?: string;
+				expiresInHours?: number;
+			},
+		) => {
+			const preview = await caller.previewDeployment.create({
+				applicationId: input.applicationId,
+				composeId: input.composeId,
+				ref: input.ref,
+				pullRequestNumber: input.pullRequestNumber,
+				expiresAt: input.expiresInHours
+					? new Date(Date.now() + input.expiresInHours * 60 * 60 * 1000)
+					: undefined,
+			});
+			return {
+				previewDeploymentId: preview.previewDeploymentId,
+				appName: preview.appName,
+				kind: preview.kind,
+				ref: preview.branch,
+				previewStatus: preview.previewStatus,
+				urls: preview.domains.map(
+					(domain) => `${domain.https ? "https" : "http"}://${domain.host}`,
+				),
+				expiresAt: preview.expiresAt,
+				deploymentId: preview.deploymentId ?? null,
+			};
+		},
+	},
+	{
+		name: "get_preview",
+		description:
+			"One preview deployment: its ref, status, hosts, expiry and the pull request it belongs to, if any.",
+		inputSchema: z.object({ previewDeploymentId: z.string().min(1).describe("Preview ID") }),
+		handler: async (caller, input: { previewDeploymentId: string }) => {
+			const preview = await caller.previewDeployment.one(input);
+			return {
+				previewDeploymentId: preview.previewDeploymentId,
+				appName: preview.appName,
+				kind: preview.kind,
+				ref: preview.branch,
+				pullRequestNumber: preview.kind === "pull_request" ? preview.pullRequestNumber : null,
+				pullRequestURL: preview.pullRequestURL,
+				previewStatus: preview.previewStatus,
+				urls: preview.domains.map(
+					(domain) => `${domain.https ? "https" : "http"}://${domain.host}`,
+				),
+				commitSha: preview.commitSha,
+				expiresAt: preview.expiresAt,
+				createdAt: preview.createdAt,
+			};
+		},
+	},
+	{
+		name: "delete_preview",
+		description:
+			"Tear a preview down: the variant service or project, its routes and its rows. The parent is untouched. Requires service.deploy.",
+		inputSchema: z.object({ previewDeploymentId: z.string().min(1).describe("Preview ID") }),
+		handler: (caller, input: { previewDeploymentId: string }) =>
+			caller.previewDeployment.delete(input),
+	},
+	{
 		name: "get_deployment_provenance",
 		description:
 			"What produced each recent deployment of a service: commit SHA, commit message and author, what triggered it (manual, api, webhook:<provider>, schedule) and who. Read-only; rows created before the provenance migration report nulls.",

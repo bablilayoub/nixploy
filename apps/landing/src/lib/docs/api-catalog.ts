@@ -1567,6 +1567,12 @@ export const apiCatalog: ApiRouterGroup[] = [
 			},
 			{ method: "GET", path: "previewDeployment.list", summary: "List pull-request previews" },
 			{ method: "GET", path: "previewDeployment.one", summary: "Get one preview deployment" },
+			{
+				method: "POST",
+				path: "previewDeployment.redeploy",
+				summary: "Redeploy a preview",
+				capability: ["service.deploy"],
+			},
 		],
 	},
 	{
@@ -2310,4 +2316,4 @@ export const apiCatalog: ApiRouterGroup[] = [
 ];
 
 /** Total endpoints in the catalog above. */
-export const apiEndpointCount = 430;
+export const apiEndpointCount = 431;

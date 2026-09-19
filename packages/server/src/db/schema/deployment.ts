@@ -11,7 +11,7 @@ import {
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { applications } from "./application";
 import { compose } from "./compose";
-import { deploymentStatus, deploymentTrigger, previewStatus } from "./enums";
+import { deploymentStatus, deploymentTrigger, previewKind, previewStatus } from "./enums";
 import { servers } from "./server";
 import { createdAt, idColumn } from "./utils";
 
@@ -125,8 +125,20 @@ export const previewDeployments = pgTable(
 		 * with the production stack it was forked from.
 		 */
 		appName: text("app_name").notNull(),
+		/**
+		 * `pull_request` rows carry the PR columns below and take part in the
+		 * webhook lifecycle; a `branch` row was created by hand from a ref and
+		 * only expires or is deleted.
+		 */
+		kind: previewKind("kind").notNull().default("pull_request"),
+		/** The ref to build: a branch, tag or sha for `branch` rows; a branch name, a PR head ref or a fork spec for `pull_request` rows. */
 		branch: text("branch"),
 		pullRequestId: text("pull_request_id"),
+		/**
+		 * The preview's key: the PR number for `pull_request` rows, `b<6 hex>`
+		 * of the ref for `branch` rows. It is what `<appName>-pr-<key>` and the
+		 * `pr-<key>-…` hosts are named after, for both kinds.
+		 */
 		pullRequestNumber: text("pull_request_number"),
 		pullRequestTitle: text("pull_request_title"),
 		pullRequestURL: text("pull_request_url"),

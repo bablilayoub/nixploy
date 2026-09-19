@@ -545,7 +545,13 @@ const docs: Record<string, ProcedureDoc> = {
 	"previewDeployment.create": {
 		summary: "Create a preview deployment",
 		description:
-			"Creates (or redeploys) a preview for a pull request on an application or a compose service (exactly one id). Fork PRs land in `awaiting-approval` when the fork gate is on.",
+			"Creates (or redeploys) a preview for a pull request on an application or a compose service (exactly one id). Fork PRs land in `awaiting-approval` when the fork gate is on. Give `pullRequestNumber` for a pull-request preview, or `ref` (a branch, tag or sha) for a branch preview keyed by a short hash of the ref — no comment, fork gate or webhook applies to those; they only expire or are deleted. Returns `deploymentId` to wait on.",
+		capability: ["service.deploy"],
+	},
+	"previewDeployment.redeploy": {
+		summary: "Redeploy a preview",
+		description:
+			"Builds the preview again from its ref: a branch preview after a push, a pull-request preview whose webhook was missed. Returns the deploymentId to wait on. A preview parked behind the fork gate must be approved instead.",
 		capability: ["service.deploy"],
 	},
 	"previewDeployment.approve": {

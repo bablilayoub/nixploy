@@ -30,6 +30,7 @@ export {
 	previewComposeHost,
 	previewExpiryFromTtl,
 	previewHost,
+	previewKeyForRef,
 	previewLimitReached,
 } from "./naming";
 export {
@@ -53,6 +54,13 @@ export {
 export { composePreviewTraefikKey, removePreviewTraefik, syncPreviewTraefik } from "./traefik";
 
 export type CreatePreviewInput = PreviewParentRef & {
+	/**
+	 * `pull_request` (default): `pullRequestNumber` is the PR number and the
+	 * provider machinery applies. `branch`: `pullRequestNumber` is the key
+	 * derived from the ref (`previewKeyForRef`), `branch` is the ref, and no
+	 * comment, fork gate or webhook ever touches the row.
+	 */
+	kind?: "pull_request" | "branch";
 	pullRequestNumber: string;
 	/**
 	 * Source to build: a branch name, a provider PR ref (`refs/pull/<n>/head`)
@@ -236,13 +244,16 @@ export async function createPreviewDeployment(
 		);
 	}
 
+	const kind = input.kind ?? "pull_request";
 	const variantAppName = previewAppName(parent.appName, input.pullRequestNumber);
 	const existing = await db.query.previewDeployments.findFirst({
 		where: eq(previewDeployments.appName, variantAppName),
 	});
 	if (existing) {
 		throw new PreviewConflictError(
-			`A preview deployment for PR #${input.pullRequestNumber} already exists`,
+			kind === "pull_request"
+				? `A preview deployment for PR #${input.pullRequestNumber} already exists`
+				: `A preview for ref "${input.branch ?? ""}" already exists (${existing.appName})`,
 		);
 	}
 
@@ -252,13 +263,16 @@ export async function createPreviewDeployment(
 	const current = await countPreviews(parent);
 	if (previewLimitReached(current, parent.previewLimit)) {
 		// Tell the PR author why nothing was deployed — the webhook itself is
-		// answered with a 200 and nobody reads the panel's logs.
-		const { upsertPreviewComment } = await import("./comment");
-		await upsertPreviewComment({
-			...refFor(parent),
-			pullRequestNumber: input.pullRequestNumber,
-			status: "limit_reached",
-		}).catch(() => {});
+		// answered with a 200 and nobody reads the panel's logs. A branch
+		// preview has no PR to tell; its caller gets the error directly.
+		if (kind === "pull_request") {
+			const { upsertPreviewComment } = await import("./comment");
+			await upsertPreviewComment({
+				...refFor(parent),
+				pullRequestNumber: input.pullRequestNumber,
+				status: "limit_reached",
+			}).catch(() => {});
+		}
 		throw new PreviewLimitError(
 			`Preview limit reached for "${parent.name}": ${current} of ${parent.previewLimit} previews already exist. Delete one, or raise the limit on the Previews tab.`,
 		);
@@ -268,6 +282,7 @@ export async function createPreviewDeployment(
 		.insert(previewDeployments)
 		.values({
 			appName: variantAppName,
+			kind,
 			branch: input.branch ?? parent.defaultBranch,
 			pullRequestId: input.pullRequestId ?? null,
 			pullRequestNumber: input.pullRequestNumber,

@@ -75,6 +75,13 @@ export const previewStatus = pgEnum("preview_status", [
 	"awaiting_approval",
 ]);
 
+/**
+ * What a preview was made from: a provider pull request (webhook-driven,
+ * PR comment, fork gate, torn down on close) or a plain git ref someone
+ * picked by hand — a branch, a tag, a sha — with none of that machinery.
+ */
+export const previewKind = pgEnum("preview_kind", ["pull_request", "branch"]);
+
 export const certificateType = pgEnum("certificate_type", ["letsencrypt", "custom", "none"]);
 
 /**

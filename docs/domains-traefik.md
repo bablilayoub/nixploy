@@ -424,6 +424,18 @@ Enable **Preview Deployments** on an application's Source tab
 
 Manual create from the Preview Deployments tab still works without the toggle.
 
+**Branch previews (2026-09-20).** A preview no longer needs a pull request:
+the tab, `previewDeployment.create({ ref })`, `nixploy preview create --ref`
+and the `create_preview` MCP tool spin one up from any branch, tag or sha.
+It is keyed by a short hash of the ref (`<appName>-pr-b<6 hex>`,
+`pr-b<6 hex>-<appName>.<wildcard>`), so the same ref always maps to the same
+variant and a second create is a conflict rather than a second copy. Nothing
+PR-shaped applies to it — no comment, no fork gate, no webhook teardown; it
+expires on the parent's TTL or is deleted by hand. `previewDeployment.redeploy`
+builds any preview again from its ref (a branch preview after a push, a PR
+preview whose webhook was missed); one parked behind the fork gate must be
+approved instead.
+
 ### Fork pull requests require approval
 
 Fork PRs can carry arbitrary code, so they are **not auto-built** by

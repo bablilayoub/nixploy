@@ -3,7 +3,17 @@
 import { useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { format } from "date-fns";
-import { Check, ExternalLink, GitPullRequest, Loader2, Plus, Trash2, X } from "lucide-react";
+import {
+	Check,
+	ExternalLink,
+	GitBranch,
+	GitPullRequest,
+	Loader2,
+	Plus,
+	RefreshCw,
+	Trash2,
+	X,
+} from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
@@ -31,6 +41,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
@@ -159,6 +176,10 @@ export function PreviewDeploymentsPanel({
 	const [prUrl, setPrUrl] = useState("");
 	const [expiresInDays, setExpiresInDays] = useState("");
 	const [deleteTarget, setDeleteTarget] = useState<PreviewDeployment | null>(null);
+	// A pull-request preview follows the PR (comment, fork gate, teardown on
+	// close); a branch preview is any ref by hand and only expires or is deleted.
+	const [sourceKind, setSourceKind] = useState<"pull_request" | "branch">("pull_request");
+	const [ref, setRef] = useState("");
 
 	const {
 		data: previews,
@@ -179,10 +200,16 @@ export function PreviewDeploymentsPanel({
 				setPrTitle("");
 				setPrUrl("");
 				setExpiresInDays("");
+				setRef("");
 			},
 		}),
 		{ successMessage: "Preview deployment queued", invalidate },
 	);
+
+	const redeploy = useSaveMutation(trpc.previewDeployment.redeploy.mutationOptions(), {
+		successMessage: "Preview build queued",
+		invalidate,
+	});
 
 	const remove = useSaveMutation(
 		trpc.previewDeployment.delete.mutationOptions({ onSuccess: () => setDeleteTarget(null) }),
@@ -221,41 +248,80 @@ export function PreviewDeploymentsPanel({
 							</DialogHeader>
 							<div className="flex flex-col gap-4">
 								<div className="flex flex-col gap-2">
-									<Label htmlFor="pr-number">Pull request number</Label>
-									<Input
-										id="pr-number"
-										placeholder="123"
-										value={prNumber}
-										onChange={(e) => setPrNumber(e.target.value)}
-									/>
+									<Label htmlFor="preview-source">Source</Label>
+									<Select
+										value={sourceKind}
+										onValueChange={(value) => setSourceKind(value as "pull_request" | "branch")}
+									>
+										<SelectTrigger id="preview-source" className="w-full">
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="pull_request">Pull request</SelectItem>
+											<SelectItem value="branch">Branch, tag or commit</SelectItem>
+										</SelectContent>
+									</Select>
+									<p className="text-xs text-muted-foreground">
+										{sourceKind === "pull_request"
+											? "Follows the pull request: a comment with the URL, the fork gate, teardown when it closes."
+											: "Any git ref, no pull request needed. It expires on the TTL or when you delete it."}
+									</p>
 								</div>
-								<div className="flex flex-col gap-2">
-									<Label htmlFor="pr-branch">Branch (optional)</Label>
-									<Input
-										id="pr-branch"
-										placeholder="feature/my-branch"
-										value={branch}
-										onChange={(e) => setBranch(e.target.value)}
-									/>
-								</div>
-								<div className="flex flex-col gap-2">
-									<Label htmlFor="pr-title">Title (optional)</Label>
-									<Input
-										id="pr-title"
-										placeholder="Add new feature"
-										value={prTitle}
-										onChange={(e) => setPrTitle(e.target.value)}
-									/>
-								</div>
-								<div className="flex flex-col gap-2">
-									<Label htmlFor="pr-url">Pull request URL (optional)</Label>
-									<Input
-										id="pr-url"
-										placeholder="https://github.com/org/repo/pull/123"
-										value={prUrl}
-										onChange={(e) => setPrUrl(e.target.value)}
-									/>
-								</div>
+								{sourceKind === "branch" ? (
+									<div className="flex flex-col gap-2">
+										<Label htmlFor="preview-ref">Ref</Label>
+										<Input
+											id="preview-ref"
+											placeholder="feat/cart, v1.4.0 or a commit sha"
+											value={ref}
+											onChange={(e) => setRef(e.target.value)}
+											className="font-mono"
+										/>
+									</div>
+								) : (
+									<>
+										<div className="flex flex-col gap-2">
+											<Label htmlFor="pr-number">Pull request number</Label>
+											<Input
+												id="pr-number"
+												placeholder="123"
+												value={prNumber}
+												onChange={(e) => setPrNumber(e.target.value)}
+											/>
+										</div>
+										<div className="flex flex-col gap-2">
+											<Label htmlFor="pr-branch">Branch (optional)</Label>
+											<Input
+												id="pr-branch"
+												placeholder="feature/my-branch"
+												value={branch}
+												onChange={(e) => setBranch(e.target.value)}
+											/>
+										</div>
+									</>
+								)}
+								{sourceKind === "pull_request" && (
+									<>
+										<div className="flex flex-col gap-2">
+											<Label htmlFor="pr-title">Title (optional)</Label>
+											<Input
+												id="pr-title"
+												placeholder="Add new feature"
+												value={prTitle}
+												onChange={(e) => setPrTitle(e.target.value)}
+											/>
+										</div>
+										<div className="flex flex-col gap-2">
+											<Label htmlFor="pr-url">Pull request URL (optional)</Label>
+											<Input
+												id="pr-url"
+												placeholder="https://github.com/org/repo/pull/123"
+												value={prUrl}
+												onChange={(e) => setPrUrl(e.target.value)}
+											/>
+										</div>
+									</>
+								)}
 								<div className="flex flex-col gap-2">
 									<Label htmlFor="pr-expires">Expires in (days, optional)</Label>
 									<Input
@@ -268,23 +334,31 @@ export function PreviewDeploymentsPanel({
 									/>
 									<p className="text-xs text-muted-foreground">
 										Nixploy tears the preview down automatically once it expires. Leave empty to
-										keep it until the pull request closes or you delete it.
+										keep it until{" "}
+										{sourceKind === "pull_request" ? "the pull request closes or " : ""}you delete
+										it.
 									</p>
 								</div>
 							</div>
 							<DialogFooter>
 								<Button
 									onClick={() =>
-										create.mutate({
-											...target,
-											pullRequestNumber: prNumber.trim(),
-											branch: branch.trim() || null,
-											pullRequestTitle: prTitle.trim() || null,
-											pullRequestURL: prUrl.trim() || null,
-											expiresAt: parseExpiry(expiresInDays),
-										})
+										create.mutate(
+											sourceKind === "branch"
+												? { ...target, ref: ref.trim(), expiresAt: parseExpiry(expiresInDays) }
+												: {
+														...target,
+														pullRequestNumber: prNumber.trim(),
+														branch: branch.trim() || null,
+														pullRequestTitle: prTitle.trim() || null,
+														pullRequestURL: prUrl.trim() || null,
+														expiresAt: parseExpiry(expiresInDays),
+													},
+										)
 									}
-									disabled={!prNumber.trim() || create.isPending}
+									disabled={
+										(sourceKind === "branch" ? !ref.trim() : !prNumber.trim()) || create.isPending
+									}
 								>
 									{create.isPending && <Loader2 className="size-4 animate-spin" />}
 									Create
@@ -332,7 +406,12 @@ export function PreviewDeploymentsPanel({
 							{(previews ?? []).map((preview) => (
 								<TableRow key={preview.previewDeploymentId}>
 									<TableCell className="font-medium">
-										{preview.pullRequestURL ? (
+										{preview.kind === "branch" ? (
+											<span className="inline-flex items-center gap-1 font-mono text-xs">
+												<GitBranch className="size-3.5 text-muted-foreground" />
+												{preview.branch}
+											</span>
+										) : preview.pullRequestURL ? (
 											<a
 												href={preview.pullRequestURL}
 												target="_blank"
@@ -413,16 +492,30 @@ export function PreviewDeploymentsPanel({
 												</Button>
 											</div>
 										) : (
-											<Button
-												variant="ghost"
-												size="sm"
-												disabled={!canDeploy}
-												title={deployHint}
-												onClick={() => setDeleteTarget(preview)}
-												aria-label={`Delete preview for PR #${preview.pullRequestNumber}`}
-											>
-												<Trash2 className="size-4 text-destructive" />
-											</Button>
+											<div className="flex items-center justify-end gap-1">
+												<Button
+													variant="ghost"
+													size="sm"
+													disabled={!canDeploy || redeploy.isPending}
+													title={deployHint ?? "Build again from its ref"}
+													onClick={() =>
+														redeploy.mutate({ previewDeploymentId: preview.previewDeploymentId })
+													}
+													aria-label={`Redeploy preview ${preview.appName}`}
+												>
+													<RefreshCw className="size-4" />
+												</Button>
+												<Button
+													variant="ghost"
+													size="sm"
+													disabled={!canDeploy}
+													title={deployHint}
+													onClick={() => setDeleteTarget(preview)}
+													aria-label={`Delete preview ${preview.appName}`}
+												>
+													<Trash2 className="size-4 text-destructive" />
+												</Button>
+											</div>
 										)}
 									</TableCell>
 								</TableRow>
@@ -439,8 +532,11 @@ export function PreviewDeploymentsPanel({
 						<AlertDialogHeader>
 							<AlertDialogTitle>Delete preview deployment?</AlertDialogTitle>
 							<AlertDialogDescription>
-								This tears down the preview for PR #{deleteTarget?.pullRequestNumber}, removes its
-								routes and deletes the record. This cannot be undone.
+								This tears down the preview{" "}
+								{deleteTarget?.kind === "branch"
+									? `of ${deleteTarget.branch}`
+									: `for PR #${deleteTarget?.pullRequestNumber}`}
+								, removes its routes and deletes the record. This cannot be undone.
 							</AlertDialogDescription>
 						</AlertDialogHeader>
 						<AlertDialogFooter>

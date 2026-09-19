@@ -1,4 +1,24 @@
+import { createHash } from "node:crypto";
 import { getWildcardDomain } from "../application/paths";
+
+/**
+ * The key a preview variant is named after: the PR number for a pull-request
+ * preview, `b<6 hex>` of the ref for a branch preview. One alphabet for both
+ * so every consumer (service name, hosts, Traefik keys, the reserved
+ * app-name pattern) keeps a single shape.
+ */
+export const PREVIEW_KEY_RE = /^(\d{1,10}|b[0-9a-f]{6})$/;
+
+export function assertPreviewKey(key: string): void {
+	if (!PREVIEW_KEY_RE.test(key)) {
+		throw new Error(`Invalid pull request number or preview key: ${key}`);
+	}
+}
+
+/** Deterministic: the same ref always maps to the same variant, so creating it twice is a conflict, not a duplicate. */
+export function previewKeyForRef(ref: string): string {
+	return `b${createHash("sha1").update(ref.trim()).digest("hex").slice(0, 6)}`;
+}
 
 /**
  * Pure naming rules for PR previews, kept in a leaf module so the comment
@@ -19,13 +39,13 @@ export function assertNumericPullRequest(pullRequestNumber: string): void {
  * keeps a preview from ever colliding with the production stack.
  */
 export function previewAppName(appName: string, pullRequestNumber: string): string {
-	assertNumericPullRequest(pullRequestNumber);
+	assertPreviewKey(pullRequestNumber);
 	return `${appName}-pr-${pullRequestNumber}`;
 }
 
 /** Wildcard host for an application PR preview: `pr-<n>-<appName>.<wildcardDomain>`. */
 export function previewHost(appName: string, pullRequestNumber: string): string {
-	assertNumericPullRequest(pullRequestNumber);
+	assertPreviewKey(pullRequestNumber);
 	return `pr-${pullRequestNumber}-${appName}.${getWildcardDomain()}`;
 }
 
@@ -41,7 +61,7 @@ export function previewComposeHost(
 	pullRequestNumber: string,
 	serviceName: string,
 ): string {
-	assertNumericPullRequest(pullRequestNumber);
+	assertPreviewKey(pullRequestNumber);
 	return `pr-${pullRequestNumber}-${appName}-${serviceName}.${getWildcardDomain()}`;
 }
 
