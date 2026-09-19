@@ -84,11 +84,34 @@ Landed in `apps/web` (uncommitted at the time of writing): UX audit F8/F9/F10/F1
 
 ## Next steps
 
-0. **Work the improvement audit** — [`audits/2026-09/README.md`](./audits/2026-09/README.md). Sprint A (§1, all 15 items) landed 2026-09-11 (commits `8b5c899`…`3844db6`); Sprint B landed 2026-09-11 (`fe7b566`…`89ca766`: error boundary, deploy provenance + pre-flight, backup run history + local destination + verify, half-built features, shared org env). Sprint C (network isolation + container hardening, durable queue + metrics store, Traefik middleware layer, unified service pages) in progress — the **unified service pages + discoverability** slice landed 2026-09-11 (see the UX sprint B section above: F8-F11, F13-F17, F26, F27, F31, F34); then §3.4+ (worker split, SSH pool, push events), §4 steps 2-5, remaining §2 (scoped keys/SSO, CLI/MCP parity, wildcard) and §6.
-1. **Merge** `chore/sprint-1-hygiene` then `work/stability-and-landing` into `main`, push, let CI + Docker run; cut a release (`./tools/release.sh paas --bump minor`) — the sweep changes operator-visible behaviour (installer env, compose rendering, remote servers), so `v0.2.0` is the honest number.
-2. **Real multi-node test** of the remote-server path on a second Linux host (join as worker, pin an app + a database, deploy, stop/start, remove server).
-3. Mirror the operator-facing doc changes onto the landing docs.
-4. Follow-ups above, smallest first; then the remaining major upgrades.
+Refreshed 2026-09-20 (the v0.2-era list that stood here — sprint merges, the
+`v0.2.0` release, the multi-node test — is done or superseded; see the session
+log).
+
+1. **Cut a release.** Everything from the roadmap's v0.3, v0.4, v0.5 (minus
+   the takeover) and most of v0.6 is on `main` and green: manifest v2 + secrets
+   bundle, the live-API importer, blueprints catalogue, external upstreams,
+   export-as-template, runtime log history, ephemeral environments (branch
+   previews, commit statuses, a database per preview), the route
+   diagnostician, verified installs, the upgrade CI job, the update preflight.
+   The maintainer decides the number (`./tools/release.sh paas --bump minor
+   --dry-run` first); write the known-regressions note the trust track asks for.
+2. **Verify on the live VPS what CI cannot:** the runtime log harvester over a
+   day of real output (bytes per service, the 2 000-line marker), the external
+   upstream hourly re-check, a preview with a database on a real repository
+   with a commit status arriving on the provider.
+3. **Importer against a live source panel** (roadmap §11): fixtures only so
+   far; then the offline-dump path.
+4. **Same-host takeover** (§12) needs a VM with the source panel installed —
+   do not ship the script untested.
+5. **Roadmap leftovers:** image previews (§15), Copilot v2's investigations and
+   propose-and-approve remediation (§16), per-org runtime log retention,
+   `NIXPLOY_LITE`, publishing the measured footprint on the site, per-team
+   capability overlays (§7).
+6. **Panel surfaces added this week were typechecked and unit-tested, not
+   browser-driven:** the upstream page, the preview panel's source switch, the
+   Runtime → History tab, the Update dialog's preflight, the diagnosis dialog.
+   One pass in light and dark with the console open.
 
 ## Session log
 
