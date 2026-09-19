@@ -368,6 +368,12 @@ export const apiCatalog: ApiRouterGroup[] = [
 			},
 			{
 				method: "GET",
+				path: "compose.exportTemplate",
+				summary: "Export a compose service as a template",
+				capability: ["secrets.read"],
+			},
+			{
+				method: "GET",
 				path: "compose.loadServices",
 				summary: "List service names in the compose file",
 			},
@@ -2298,4 +2304,4 @@ export const apiCatalog: ApiRouterGroup[] = [
 ];
 
 /** Total endpoints in the catalog above. */
-export const apiEndpointCount = 428;
+export const apiEndpointCount = 429;

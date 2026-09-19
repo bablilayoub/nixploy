@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { compose, environments } from "../../db/schema";
+import { compose, domains, environments } from "../../db/schema";
 import { assertEnvironmentAccess, assertProjectAccess } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
@@ -34,6 +34,7 @@ import {
 	hasCapability,
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
+import { exportComposeAsTemplate } from "../../modules/templates/export";
 import { bestEffort } from "../../utils/best-effort";
 import { textBlobSchema, watchPathsSchema } from "../../utils/input-limits";
 import { assertSafeGitCloneUrl } from "../../utils/public-url";
@@ -560,6 +561,27 @@ export const composeRouter = router({
 	 * egress guard and the body through the same safety checks
 	 * `saveComposeFile` runs — nothing is deployed until `compose.deploy`.
 	 */
+	/**
+	 * The stack as a `Template` another instance can serve from a template
+	 * source (docs/templates.md → "Export a running stack as a template").
+	 * Secret-shaped env values leave as `{{generateSecret}}`; the rest are
+	 * the defaults, so the export needs `secrets.read` like the env tab.
+	 */
+	exportTemplate: protectedProcedure.input(composeIdInput).query(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		await assertCapability(ctx.session.user.id, organizationId, "secrets.read");
+		const row = await findComposeForOrg(input.composeId, organizationId);
+		const routed = await db.query.domains.findMany({
+			where: eq(domains.composeId, row.composeId),
+		});
+		return exportComposeAsTemplate(
+			row,
+			routed.filter(
+				(domain) => (domain.protocol ?? "http") === "http" && !domain.previewDeploymentId,
+			),
+		);
+	}),
+
 	createFromUrl: protectedProcedure
 		.input(
 			z.object({

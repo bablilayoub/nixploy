@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import type { Command } from "commander";
 import { apiGet, apiPost } from "../client.js";
 import { readFileOrStdin } from "../utils/io.js";
-import { addOutputOptions, printRaw, printResult } from "../utils/output.js";
+import { addOutputOptions, printRaw, printResult, printWarning } from "../utils/output.js";
 import { resolveEnvironmentId } from "./db.js";
 import { followDeploymentLogs } from "./deployment.js";
 import { addServiceEnvCommands } from "./service-env.js";
@@ -77,6 +77,30 @@ export function augmentComposeCommand(compose: Command): Command {
 			printResult(created, `Compose service created from URL (${created.composeId}).`);
 		},
 	);
+
+	compose
+		.command("export-template")
+		.description(
+			"Export the stack as a template (the shape a template source serves); secrets leave as placeholders",
+		)
+		.argument("<composeId>", "Compose ID")
+		.option("-o, --out <file>", "Write the template JSON here instead of stdout")
+		.action(async (composeId: string, options: { out?: string }) => {
+			const result = await apiGet<{ template: unknown; notes: string[] }>(
+				"compose.exportTemplate",
+				{ composeId },
+			);
+			const json = `${JSON.stringify(result.template, null, 2)}\n`;
+			for (const note of result.notes) {
+				printWarning(note);
+			}
+			if (options.out) {
+				await writeFile(options.out, json, "utf8");
+				printResult({ out: options.out }, `Template written to ${options.out}.`);
+				return;
+			}
+			printRaw(json, { newline: false });
+		});
 
 	compose
 		.command("logs")

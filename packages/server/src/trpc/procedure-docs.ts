@@ -471,6 +471,12 @@ const docs: Record<string, ProcedureDoc> = {
 			"Fetches a compose file over http(s) through the egress guard (no redirects followed, body capped) and stores it after the usual safety checks. Nothing is deployed until `compose.deploy`.",
 		capability: ["service.create"],
 	},
+	"compose.exportTemplate": {
+		summary: "Export a compose service as a template",
+		description:
+			"The stack in the template-source shape (`remoteTemplateSchema`): the compose file, env keys with their current values as defaults — secret-shaped keys replaced with `{{generateSecret}}`, the stack's own hostnames with `{{domain}}` — and a suggested domain. Raw-source stacks only; host-privileged stacks are refused.",
+		capability: ["secrets.read"],
+	},
 
 	// ────────────────────────────────────────────────────────── deployments
 	"deployment.byApplication": {

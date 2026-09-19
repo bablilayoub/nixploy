@@ -159,6 +159,7 @@ nixploy compose start|stop cmp_abc
 nixploy compose rollback cmp_abc --deployment-id dep_prev --yes --wait   # the file that deployment captured
 nixploy compose delete cmp_abc --yes
 nixploy compose env get|set|import|export cmp_abc
+nixploy compose export-template cmp_abc -o shop.template.json   # the shape a template source serves; secrets leave as placeholders
 ```
 
 ### `db` — databases

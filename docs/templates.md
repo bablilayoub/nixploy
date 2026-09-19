@@ -151,6 +151,37 @@ drops the row and the cache — services already deployed from it are untouched.
 Managing sources requires the **admin** or **owner** org role: a source's
 compose bodies become deployable templates for the whole organization.
 
+## Export a running stack as a template
+
+The reverse of a template source: **Settings → Export as template** on a
+compose service (`compose.exportTemplate`, `nixploy compose export-template
+<id> -o shop.template.json`) downloads the stack in exactly the shape a
+source serves — validated with `remoteTemplateSchema` on the way out, so a
+file written by this never fails a sync. Put it in a repository's
+`templates/index.json` (or behind an https URL) and add it as a source on any
+instance, including this one.
+
+Three rewrites, each listed next to the download:
+
+- a **secret-shaped env key** (`PASSWORD`, `TOKEN`, `KEY`, `SECRET`, …)
+  leaves with `{{generateSecret}}` as its default — a template is for
+  redistribution, and a real credential must never leave in one;
+- a value that is one of the stack's **own hostnames**, bare or as a URL,
+  becomes `{{domain}}` (`https://shop.example.com/app` →
+  `https://{{domain}}/app`), so a `BASE_URL` is right on the first deploy
+  elsewhere;
+- everything else is kept verbatim as the default — the values the operator
+  already chose are the sane ones.
+
+The suggested domain is the stack's first routed HTTP domain, else the first
+service that publishes or exposes a port. Raw-source stacks only (a git-backed
+stack's file lives in the repository); a host-privileged stack is refused,
+since a source cannot carry `hostPrivileged`. The export needs `secrets.read`
+— it embeds the env defaults. **Check the remaining defaults before
+publishing the file**: a credential that rides inside a URL under a key that
+is not secret-shaped (`DATABASE_URL=postgres://user:pw@db/…`) is kept
+verbatim, because only the key is inspected.
+
 ## Deploy from a compose URL
 
 `compose.createFromUrl({ url, environmentId, name })` creates a raw compose
