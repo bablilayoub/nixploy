@@ -1,6 +1,9 @@
+import { Mail } from "lucide-react";
 import type { Metadata } from "next";
+
 import { PageShell } from "@/components/page-shell";
 import { PlanCards } from "@/components/plan-cards";
+import { Panel, Pill, SectionTitle } from "@/components/ui";
 import { faqs } from "@/lib/landing-data";
 import { site } from "@/lib/site";
 
@@ -9,40 +12,38 @@ export const metadata: Metadata = {
 	description: "Self-host Nixploy for free. Forever. Open source.",
 };
 
+/*
+ * The reference's pricing page: the plan table, a centred note with one pill
+ * under it, then the questions. The FAQ lives here rather than on the home
+ * page because every question on it is about cost, hosting or what happens
+ * when something breaks.
+ */
 export default function PricingPage() {
 	return (
 		<PageShell
 			eyebrow="Pricing"
 			title="Free to self-host. No feature gates."
 			description="Nixploy is open source. You pay for your server — not for a control plane."
-			wide
 		>
 			<PlanCards />
-			<p className="mt-10 max-w-2xl text-sm text-muted">
-				Apache-2.0. Install on as many servers as you like. No telemetry you cannot disable.
-				Questions?{" "}
-				<a
-					href={`mailto:${site.email}`}
-					className="text-foreground underline decoration-foreground/40 underline-offset-4"
-				>
-					{site.email}
-				</a>
-			</p>
 
-			{/*
-			 * The FAQ lives here rather than on the home page: every question on it is
-			 * about cost, hosting or what happens when something breaks.
-			 */}
-			<section className="mt-20 border-t border-border pt-14">
-				<h2 className="font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-					Questions people ask first
-				</h2>
-				<dl className="mt-10 grid gap-x-12 gap-y-9 sm:grid-cols-2">
+			<div className="mt-16 flex flex-col items-center text-center">
+				<p className="mx-auto max-w-[40rem] text-body text-balance text-muted">
+					Apache-2.0. Install on as many servers as you like. No telemetry you cannot disable.
+				</p>
+				<Pill href={`mailto:${site.email}`} variant="ghost" icon={Mail} external className="mt-6">
+					Email {site.email}
+				</Pill>
+			</div>
+
+			<section className="mt-32">
+				<SectionTitle title="Questions people ask first" />
+				<dl className="mt-12 grid gap-4 md:grid-cols-2">
 					{faqs.map((item) => (
-						<div key={item.q}>
-							<dt className="text-[15px] font-semibold tracking-tight text-foreground">{item.q}</dt>
-							<dd className="mt-2 text-[14px] leading-relaxed text-muted">{item.a}</dd>
-						</div>
+						<Panel key={item.q}>
+							<dt className="text-body font-medium text-foreground">{item.q}</dt>
+							<dd className="mt-2 text-small text-muted">{item.a}</dd>
+						</Panel>
 					))}
 				</dl>
 			</section>

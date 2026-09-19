@@ -1,13 +1,17 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { Footer } from "@/components/footer";
+import { Cta } from "@/components/home/cta";
 import { Navbar } from "@/components/navbar";
-import { site } from "@/lib/site";
+import { Container, PageHeader } from "@/components/ui";
+import { cn } from "@/lib/utils";
 
-export function ProseLink({ href, children }: { href: string; children: React.ReactNode }) {
+/** An inline link in running text: the accent, underlined on hover. */
+export function ProseLink({ href, children }: { href: string; children: ReactNode }) {
 	const external = href.startsWith("http");
 	const className =
-		"text-foreground underline decoration-foreground/40 underline-offset-4 transition-colors hover:decoration-foreground";
+		"text-accent-strong underline decoration-transparent underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground/40";
 	if (external) {
 		return (
 			<a href={href} target="_blank" rel="noreferrer" className={className}>
@@ -22,67 +26,59 @@ export function ProseLink({ href, children }: { href: string; children: React.Re
 	);
 }
 
+/*
+ * Every page that is not the home page: the nav, a centred header in the
+ * reference's product-page style (or a left-aligned one for reading pages),
+ * the page's own blocks, then the same closing glow the home page ends on and
+ * the footer. `width` picks the column: the full 1280px, or a 42rem reading
+ * column for prose.
+ */
 export function PageShell({
 	children,
 	eyebrow,
 	title,
 	description,
-	wide = false,
+	icon,
+	actions,
+	align = "center",
+	size = "display",
+	width = "full",
+	close = true,
+	className,
 }: {
-	children: React.ReactNode;
+	children: ReactNode;
 	eyebrow?: string;
 	title?: string;
-	description?: string;
-	wide?: boolean;
+	description?: ReactNode;
+	icon?: ReactNode;
+	actions?: ReactNode;
+	align?: "center" | "left";
+	size?: "display" | "headline";
+	width?: "full" | "prose";
+	/** The closing card. Off for pages that end on their own action. */
+	close?: boolean;
+	className?: string;
 }) {
 	return (
-		<div className="relative flex min-h-screen flex-col bg-atmosphere">
-			<div className="bg-grain pointer-events-none absolute inset-0" aria-hidden />
+		<div className="relative flex min-h-screen flex-col">
 			<Navbar />
-			<main className="relative flex-1 pb-20">
-				<div
-					className={`relative mx-auto px-5 pt-28 sm:px-6 sm:pt-36 ${wide ? "max-w-5xl" : "max-w-3xl"}`}
-				>
+			<main id="main-content" className="relative flex-1 pb-24 lg:pb-32">
+				<Container className={cn(width === "prose" && "max-w-[42rem]", className)}>
 					{title ? (
-						<div className="mb-12">
-							{eyebrow ? <p className="mb-3 eyebrow">{eyebrow}</p> : null}
-							<h1 className="font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
-								{title}
-							</h1>
-							{description ? (
-								<p className="mt-4 max-w-2xl text-lg leading-relaxed text-muted">{description}</p>
-							) : null}
-						</div>
+						<PageHeader
+							eyebrow={eyebrow}
+							title={title}
+							description={description}
+							icon={icon}
+							actions={actions}
+							align={align}
+							size={size}
+						/>
 					) : null}
-					{children}
-				</div>
+					<div className={title ? "mt-14 lg:mt-20" : "pt-16 lg:pt-24"}>{children}</div>
+				</Container>
 			</main>
-			<section className="relative border-t border-border">
-				<div className="mx-auto max-w-6xl px-5 py-16 text-center sm:px-6 sm:py-20">
-					<h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-						Install Nixploy on your metal
-					</h2>
-					<p className="mx-auto mt-3 max-w-lg text-muted">
-						One command. Docker Swarm, Traefik, and the panel — yours.
-					</p>
-					<div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-						<Link
-							href="/docs/install"
-							className="inline-flex h-11 items-center rounded-full bg-foreground px-5 text-sm font-medium text-background transition-colors hover:bg-foreground/90"
-						>
-							Install guide
-						</Link>
-						<a
-							href={site.github}
-							target="_blank"
-							rel="noreferrer"
-							className="inline-flex h-11 items-center rounded-full border border-border px-5 text-sm font-medium text-foreground transition-colors hover:bg-surface"
-						>
-							Star on GitHub
-						</a>
-					</div>
-				</div>
-			</section>
+			{close ? <Cta compact /> : null}
 			<Footer />
 		</div>
 	);

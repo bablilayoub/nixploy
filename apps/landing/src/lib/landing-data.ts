@@ -1,71 +1,189 @@
+import { site } from "@/lib/site";
+
 /**
- * Static content for the marketing home page. Numbers mirror the product
- * (145 templates / 5 database engines / ~300 REST endpoints) — update them
- * when the catalog or the router surface changes.
+ * Static content for the marketing home page.
+ *
+ * Every number here is counted from something, never remembered, and every
+ * figure says where it was read. Where the source is generated
+ * (`lib/templates.ts`) the value is imported rather than written down; where
+ * it is not, the comment says exactly what to re-run or re-measure. A stale
+ * number on this page is a claim, not a typo.
  */
 
+/** The fold's badge: the headline item of the latest release, linking to the changelog. */
+export const heroBadge = {
+	version: "v0.4.0",
+	text: "SSO configured in the panel",
+	href: `${site.github}/blob/main/CHANGELOG.md`,
+} as const;
+
+/** The fold's three lines; the middle one is the emphasised one. */
+export const heroTitle = ["Deploy applications", "and databases", "on servers you own"] as const;
+
+export const heroLead =
+	"Git deploys, Docker Compose stacks, five databases, domains with TLS, backups, monitoring, and an API for humans and agents. One install, Apache-2.0.";
+
+/**
+ * What `docker stats` reports for the three Swarm services on the production
+ * box. Re-measure with
+ * `ssh nixploy docker stats --no-stream --format "{{.Name}} {{.MemUsage}}"`
+ * and update `measuredOn`; do not round a stale number up or down.
+ */
+export const controlPlane = {
+	measuredOn: "19 Sep 2026",
+	services: [
+		{ name: "nixploy", mib: 389 },
+		{ name: "nixploy-postgres", mib: 53 },
+		{ name: "nixploy-traefik", mib: 26 },
+	],
+} as const;
+
+export const controlPlaneTotalMib = controlPlane.services.reduce((sum, s) => sum + s.mib, 0);
+
+/** The five one-click engines (`modules/services/kinds.ts`, DATABASE_KINDS), with their marks. */
+export const databaseEngines = [
+	{ label: "PostgreSQL", slug: "postgresql" },
+	{ label: "MySQL", slug: "mysql" },
+	{ label: "MariaDB", slug: "mariadb" },
+	{ label: "MongoDB", slug: "mongodb" },
+	{ label: "Redis", slug: "redis" },
+] as const;
+
+export const databaseEngineCount = databaseEngines.length;
+
+/** `grep -c 'name: "' packages/server/src/modules/mcp/tools.ts` */
+export const mcpToolCount = 36;
+
+/**
+ * The feature grid: twelve cells, one claim each. Every claim maps to a
+ * shipped module — git providers and builders (`deployment/sources.ts`,
+ * `deployment/builders/`), compose (`modules/compose`), engines
+ * (`services/kinds.ts`), Traefik (`modules/traefik`), the sampler and the
+ * event timeline (`modules/monitoring`, `service_event`), backups with a
+ * verified restore (`modules/backups`), previews (`modules/preview`),
+ * rollback snapshots, teams/SSO/audit (`modules/projects`, `modules/auth`),
+ * the REST adapter and the CLI, MCP (`modules/mcp`), the template catalog.
+ * `icon` names a lucide icon; the component maps it.
+ */
 export const features = [
 	{
 		icon: "git",
-		title: "Git deployments",
-		body: "Deploy directly from GitHub, GitLab, Bitbucket or Gitea. Push to a branch and the build, rollout and health check run without a pipeline.",
+		title: "Git deploys",
+		text: "Push to GitHub, GitLab, Bitbucket or Gitea. nixpacks, railpack, a Dockerfile, buildpacks or static-to-nginx build it.",
 	},
 	{
-		icon: "lock",
-		title: "Automatic HTTPS",
-		body: "Traefik and Let's Encrypt are configured for you. Attach a hostname and the certificate is issued and renewed in the background.",
+		icon: "compose",
+		title: "Docker Compose stacks",
+		text: "Deploy a compose file as a stack with per-service domains, a private network and builds from source.",
 	},
 	{
 		icon: "database",
-		title: "Databases",
-		body: "PostgreSQL, MySQL, MariaDB, MongoDB and Redis as managed services, with connection strings, versions and resource limits you control.",
+		title: "Five databases",
+		text: "Postgres, MySQL, MariaDB, MongoDB and Redis as one-click services, connection strings in the panel.",
 	},
 	{
-		icon: "archive",
-		title: "Backups",
-		body: "Scheduled dumps to any S3-compatible bucket, restore from the panel, and a verified exit status so a silent empty backup cannot happen.",
+		icon: "globe",
+		title: "Domains and TLS",
+		text: "Traefik routes every domain and issues the Let's Encrypt certificate. TCP and UDP ports route the same way.",
 	},
 	{
 		icon: "activity",
-		title: "Monitoring",
-		body: "Live build and container logs, per-container metrics, uptime probes, incident tracking and threshold alerts to your channels.",
+		title: "Monitoring and alerts",
+		text: "CPU, memory, network and disk per container, streamed logs, uptime probes and a per-service event timeline.",
 	},
 	{
-		icon: "branch",
-		title: "Preview deployments",
-		body: "Isolated environments for branches and pull requests, each with its own domain, its own network and an expiry.",
+		icon: "backup",
+		title: "Backups that restore",
+		text: "Scheduled dumps to S3 or disk, volume backups, and a restore verified in a throwaway container.",
 	},
 	{
-		icon: "server",
-		title: "Multi-server",
-		body: "Add servers over SSH and they join the same Swarm. Pin a service to a node, and read metrics from every one of them.",
+		icon: "preview",
+		title: "Previews per pull request",
+		text: "Every pull request gets its own environment and domain. Fork pull requests wait for an approve gate.",
 	},
 	{
-		icon: "terminal",
-		title: "API, CLI and MCP",
-		body: "Every panel action is a REST endpoint, a CLI command and an MCP tool — the same permissions and the same audit log for people and agents.",
+		icon: "rollback",
+		title: "Rollbacks with config",
+		text: "Redeploy any row of the history, or roll back to a pinned image with its environment and hooks.",
+	},
+	{
+		icon: "team",
+		title: "Teams, SSO and audit",
+		text: "Roles, per-member capabilities, project-scoped teams, OIDC single sign-on and an exportable audit log. Free.",
+	},
+	{
+		icon: "api",
+		title: "REST API and CLI",
+		text: "Every procedure is a REST endpoint with OpenAPI on your panel; @nixploy/cli wraps it for the terminal.",
+	},
+	{
+		icon: "agent",
+		title: "MCP for agents",
+		text: `${mcpToolCount} tools through the same routers as the panel, so scope, capabilities and audit apply to an agent too.`,
+	},
+	{
+		icon: "templates",
+		title: "One-click templates",
+		text: "Reviewed compose stacks with pinned images and named volumes, each asking only for the variables it needs.",
 	},
 ] as const;
 
-/** The agent transcript in the MCP section. Tool names are real MCP tools. */
-export const agentTranscript = {
-	user: "Deploy the latest version of my API.",
-	agent: ["Deployment created", "Build completed", "Health check passed", "Production updated"],
-} as const;
+export type FeatureIcon = (typeof features)[number]["icon"];
 
-/*
- * Featured templates on the home page, by id. Only ids — the name and the
- * logo slug are read from `lib/templates.ts`, which is generated from
- * `modules/templates/data/*`, so this section cannot advertise a template we
- * do not ship. An id that stops existing simply drops out of the grid.
- *
- * Chosen to span categories (apps, CMS, productivity, monitoring, AI,
- * analytics) rather than to be the twelve most popular.
+/**
+ * The tabbed product window: the full-window captures under
+ * `public/screenshots/` (3200×2000, 2x), taken against a running instance on
+ * 18 Sep 2026 by `tools/screenshots/capture-landing.mjs`.
+ */
+export const screens = [
+	{
+		id: "overview",
+		label: "Overview",
+		src: "/screenshots/02-dashboard.png",
+		alt: "The organization overview: projects, services with their states, deployments in the last 24 hours, Docker containers and a deployment chart",
+	},
+	{
+		id: "project",
+		label: "Projects",
+		src: "/screenshots/03-project.png",
+		alt: "A project's production environment: applications, a Postgres and a Redis service with their status and domain",
+	},
+	{
+		id: "deploy",
+		label: "Deployments",
+		src: "/screenshots/05-deployments.png",
+		alt: "The deploy tab of a service: recent deployments with image digest, status, age and duration, each with Logs and Redeploy this commit",
+	},
+	{
+		id: "monitoring",
+		label: "Monitoring",
+		src: "/screenshots/06-monitoring.png",
+		alt: "The runtime tab of a database service: CPU, memory, network and disk cards above the CPU and memory charts",
+	},
+	{
+		id: "docker",
+		label: "Docker",
+		src: "/screenshots/07-docker.png",
+		alt: "The Docker page: containers on the host with their image, state and ports",
+	},
+	{
+		id: "templates",
+		label: "Templates",
+		src: "/screenshots/07-templates.png",
+		alt: "The template catalog in the panel: one-click stacks with their category and description",
+	},
+] as const;
+
+/**
+ * Featured templates on the home page, by id. Only ids: the name, category
+ * and logo slug are read from `lib/templates.ts`, which is generated from
+ * `modules/templates/data/*`, so the strip cannot advertise a template we do
+ * not ship — an id that stops existing simply drops out. 48 entries, chosen
+ * to span categories rather than to be the most popular.
  */
 export const featuredTemplateIds = [
 	"n8n",
 	"supabase",
-	"wordpress",
 	"ghost",
 	"gitea",
 	"nextcloud",
@@ -75,36 +193,75 @@ export const featuredTemplateIds = [
 	"ollama",
 	"plausible",
 	"immich",
+	"minio",
+	"mattermost",
+	"calcom",
+	"chatwoot",
+	"directus",
+	"strapi",
+	"portainer",
+	"jellyfin",
+	"keycloak",
+	"authentik",
+	"meilisearch",
+	"excalidraw",
+	"metabase",
+	"paperless-ngx",
+	"pihole",
+	"qdrant",
+	"wordpress",
+	"umami",
+	"outline",
+	"prometheus",
+	"syncthing",
+	"open-webui",
+	"flowise",
+	"baserow",
+	"hoppscotch",
+	"formbricks",
+	"navidrome",
+	"audiobookshelf",
+	"ntfy",
+	"gotify",
+	"listmonk",
+	"actual-budget",
+	"firefly-iii",
+	"adguard-home",
+	"wg-easy",
+	"nginx-proxy-manager",
+	"code-server",
 ] as const;
 
 /**
- * Positioning, stated as what Nixploy is rather than as a comparison. The
- * sourced competitor claims live in `lib/compare.ts` and stay there.
+ * The four stat cards. Templates from the generated catalog, tools from
+ * `modules/mcp/tools.ts`, engines from `modules/services/kinds.ts`, the
+ * control plane from `docker stats` above.
  */
-export const positioning = [
+export const stats = [
 	{
-		title: "Self-hosted",
-		body: "The panel, the proxy and the database run on hardware you rent or own.",
+		id: "templates",
+		label: "Templates",
+		value: 145,
+		text: "Reviewed compose stacks, generated from the same catalog the panel installs from.",
 	},
 	{
-		title: "Open source",
-		body: "Apache-2.0, in the open, with no license key and no edition to upgrade to.",
+		id: "mcp",
+		label: "MCP tools",
+		value: mcpToolCount,
+		text: "Each one dispatches through the panel's own routers, so an agent gets exactly your permissions.",
 	},
 	{
-		title: "No per-app fees",
-		body: "Run one service or two hundred; the bill is the server, not the count.",
+		id: "databases",
+		label: "Database engines",
+		value: databaseEngineCount,
+		text: "Postgres, MySQL, MariaDB, MongoDB and Redis, each a first-class service with backups.",
 	},
 	{
-		title: "Your own servers",
-		body: "Any Linux host with root. Add more over SSH whenever you need them.",
-	},
-	{
-		title: "Your own data",
-		body: "Databases, backups and logs stay on your disks, in your region.",
-	},
-	{
-		title: "Your own infrastructure",
-		body: "Plain Docker Swarm and Traefik underneath — inspectable, and yours to keep.",
+		id: "control-plane",
+		label: "Control plane",
+		value: controlPlaneTotalMib,
+		unit: "MiB",
+		text: `The panel, Postgres and Traefik together, measured with docker stats on the production box on ${controlPlane.measuredOn}.`,
 	},
 ] as const;
 

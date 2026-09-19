@@ -1,7 +1,8 @@
+import { ChevronRight } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import { PageShell, ProseLink } from "@/components/page-shell";
+import { Card, Panel, SectionTitle } from "@/components/ui";
 import { comparisons, VERIFIED_ON } from "@/lib/compare";
 import { site } from "@/lib/site";
 
@@ -12,56 +13,78 @@ export const metadata: Metadata = {
 	alternates: { canonical: `${site.url}/compare` },
 };
 
+/*
+ * One card per comparison, the whole card a link, then how the pages are
+ * written. The copy is bound by the rules at the top of lib/compare.ts:
+ * nothing on this page asserts anything about another project.
+ */
 export default function ComparePage() {
 	return (
 		<PageShell
-			wide
 			eyebrow="Compare"
 			title="How Nixploy compares"
 			description="This category is crowded, and three of these projects are older and larger than this one. Here is where each actually differs — sourced, dated, and including the rows where they win."
 		>
-			<div className="space-y-4">
+			<div className="grid gap-4 lg:grid-cols-3">
 				{comparisons.map((entry) => (
-					<Link
+					<Card
 						key={entry.slug}
 						href={`/nixploy-vs-${entry.slug}`}
-						className="block rounded-xl border border-border bg-surface/40 p-5 transition-colors hover:border-foreground/30 hover:bg-surface"
+						label={`Nixploy vs ${entry.name}`}
+						className="group p-8 sm:p-10"
 					>
-						<div className="flex flex-wrap items-baseline justify-between gap-2">
-							<span className="font-display text-lg font-semibold tracking-tight text-foreground">
-								Nixploy vs {entry.name}
+						{/* The card is the link, so the trailing "Read the comparison" is text, not a nested anchor. */}
+						<div className="flex h-full flex-col">
+							<h2 className="text-title text-foreground">Nixploy vs {entry.name}</h2>
+							<p className="mt-2 font-mono text-micro text-muted-2">{entry.stars} stars</p>
+							<p className="mt-5 flex-1 text-body text-muted">{entry.headline}</p>
+							<span className="mt-8 inline-flex items-center gap-1 text-body font-medium text-accent-strong transition-colors group-hover:text-foreground">
+								Read the comparison
+								<ChevronRight
+									className="size-4 transition-transform group-hover:translate-x-0.5"
+									aria-hidden
+								/>
 							</span>
-							<span className="text-xs text-muted">{entry.stars} stars</span>
 						</div>
-						<p className="mt-2 text-sm leading-relaxed text-muted">{entry.headline}</p>
-					</Link>
+					</Card>
 				))}
 			</div>
 
-			<section className="mt-12">
-				<h2 className="font-display text-xl font-semibold tracking-tight">How these are written</h2>
-				<ul className="mt-4 space-y-2.5 text-sm leading-relaxed text-muted">
-					<li>
-						· <span className="text-foreground">Everything is sourced.</span> Each claim about
-						another project links to the pricing page, licence file or documentation it was read
-						from — read, not remembered. Two of them contradicted what a search summary said.
-					</li>
-					<li>
-						· <span className="text-foreground">Dated.</span> Last checked {VERIFIED_ON}. These
-						projects ship weekly; if a row is stale,{" "}
-						<ProseLink href={`${site.github}/issues`}>open an issue</ProseLink> and it gets fixed.
-					</li>
-					<li>
-						· <span className="text-foreground">No mudslinging.</span> No claims about anybody
-						else&apos;s reliability, memory use or security history. Those age badly and are not
-						ours to make.
-					</li>
-					<li>
-						· <span className="text-foreground">Every page says where they win.</span> One of these
-						three does not paywall anything at all, and the page for it says so in the heading. A
-						comparison whose author wins every row is an advertisement.
-					</li>
-				</ul>
+			<section className="mt-32">
+				<SectionTitle title="How these are written" />
+				<div className="mt-12 grid gap-4 md:grid-cols-2">
+					<Panel>
+						<h3 className="text-body font-medium text-foreground">Everything is sourced</h3>
+						<p className="mt-2 text-small text-muted">
+							Each claim about another project links to the pricing page, licence file or
+							documentation it was read from — read, not remembered. Two of them contradicted what a
+							search summary said.
+						</p>
+					</Panel>
+					<Panel>
+						<h3 className="text-body font-medium text-foreground">Dated</h3>
+						<p className="mt-2 text-small text-muted">
+							Last checked {VERIFIED_ON}. These projects ship weekly; if a row is stale,{" "}
+							<ProseLink href={`${site.github}/issues`}>open an issue</ProseLink> and it gets fixed.
+						</p>
+					</Panel>
+					<Panel>
+						<h3 className="text-body font-medium text-foreground">No mudslinging</h3>
+						<p className="mt-2 text-small text-muted">
+							No claims about anybody else&apos;s reliability, memory use or security history. Those
+							age badly and are not ours to make.
+						</p>
+					</Panel>
+					<Panel>
+						<h3 className="text-body font-medium text-foreground">
+							Every page says where they win
+						</h3>
+						<p className="mt-2 text-small text-muted">
+							One of these three does not paywall anything at all, and the page for it says so in
+							the heading. A comparison whose author wins every row is an advertisement.
+						</p>
+					</Panel>
+				</div>
 			</section>
 		</PageShell>
 	);

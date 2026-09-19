@@ -1,17 +1,23 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
 import { site } from "@/lib/site";
 import "./globals.css";
 
 /*
- * One family for everything except code. Geist covers headings and body at
- * different weights, which is why there is no separate display face any more —
- * `font-display` still exists as a class so the vocabulary does not change, it
- * just resolves to the same family.
+ * Three faces: Space Grotesk for headings (the display token — angular like
+ * the mark, and not the house font of a hosting company), Geist for body,
+ * Geist Mono for terminals and code. `h1`–`h3` take the display face through
+ * a base rule in globals.css, so no heading needs a class for it.
  */
 const geist = Geist({
 	subsets: ["latin"],
 	variable: "--font-geist",
+	display: "swap",
+});
+
+const spaceGrotesk = Space_Grotesk({
+	subsets: ["latin"],
+	variable: "--font-space-grotesk",
 	display: "swap",
 });
 
@@ -55,7 +61,10 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
 	return (
-		<html lang="en" className={`dark ${geist.variable} ${geistMono.variable}`}>
+		<html
+			lang="en"
+			className={`dark ${geist.variable} ${spaceGrotesk.variable} ${geistMono.variable}`}
+		>
 			<body className="bg-background font-sans text-foreground antialiased">{children}</body>
 		</html>
 	);

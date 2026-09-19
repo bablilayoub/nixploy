@@ -1,10 +1,14 @@
+import type { LucideIcon } from "lucide-react";
+import { Bot, DatabaseBackup, Lock, RotateCcw, ScrollText } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
+
 import { InstallCommand } from "@/components/install-command";
 import { PageShell, ProseLink } from "@/components/page-shell";
+import { brandIconSrc, Card, LearnMore, Panel, Pill, Tile } from "@/components/ui";
 import { site } from "@/lib/site";
-import { findTemplate, type TemplateEntry, templateSlugs } from "@/lib/templates";
+import { findTemplate, type TemplateEntry, templateCount, templateSlugs } from "@/lib/templates";
 
 export function generateStaticParams() {
 	return templateSlugs.map((slug) => ({ slug }));
@@ -31,9 +35,6 @@ export async function generateMetadata({
 	};
 }
 
-const logoUrl = (logo: string): string =>
-	logo.startsWith("http") ? logo : `https://cdn.simpleicons.org/${logo}`;
-
 /**
  * Catalog prose is plain text that occasionally uses Markdown backticks for a
  * service name or a shell snippet. The panel shows it raw; a public page
@@ -58,29 +59,75 @@ function Prose({ text }: { text: string }) {
 	);
 }
 
-/** One labelled fact in the spec strip. */
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+/** The template's mark at the size the header tile holds. */
+function TemplateMark({ logo }: { logo: string }) {
 	return (
-		<div className="border-t border-border py-3">
-			<dt className="text-xs uppercase tracking-wide text-muted">{label}</dt>
-			<dd className="mt-1 text-sm text-foreground">{children}</dd>
-		</div>
+		// biome-ignore lint/performance/noImgElement: remote brand marks from a CDN, no loader configured
+		<img src={brandIconSrc(logo)} alt="" width={28} height={28} className="size-7" />
 	);
 }
 
-function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+/*
+ * One labelled fact: a mono eyebrow over a mono value, on its own small
+ * surface. Padding is set as the two longhands because `Panel` already sets
+ * `p-6` and the shorthand is emitted before its own override.
+ */
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+	return (
+		<Panel tone="surface" className="px-4 py-4">
+			<dt className="eyebrow">{label}</dt>
+			<dd className="mt-2 font-mono text-micro text-foreground">{children}</dd>
+		</Panel>
+	);
+}
+
+function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
 	return (
 		<li className="flex gap-4">
-			<span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-border text-xs text-muted">
-				{n}
-			</span>
-			<div className="min-w-0">
-				<p className="text-sm font-medium text-foreground">{title}</p>
-				<p className="mt-1 text-sm leading-relaxed text-muted">{children}</p>
+			<Tile size={32}>
+				<span className="font-mono text-micro text-muted-2">{n}</span>
+			</Tile>
+			<div className="min-w-0 pt-1">
+				<p className="text-body font-medium text-foreground">{title}</p>
+				<p className="mt-1 text-small text-muted">{children}</p>
 			</div>
 		</li>
 	);
 }
+
+/** What every template gets from the platform around it — the same five lines on all 145 pages. */
+const included: { key: string; icon: LucideIcon; text: ReactNode }[] = [
+	{
+		key: "tls",
+		icon: Lock,
+		text: "Automatic HTTPS through Traefik and Let's Encrypt, renewed for you.",
+	},
+	{
+		key: "observe",
+		icon: ScrollText,
+		text: "Live logs, a web terminal into the container, and CPU/memory/network history.",
+	},
+	{
+		key: "backups",
+		icon: DatabaseBackup,
+		text: "Encrypted backups to S3 or disk, on a schedule, with verified restores.",
+	},
+	{
+		key: "rollback",
+		icon: RotateCcw,
+		text: "Roll back to the previous version when an update goes wrong.",
+	},
+	{
+		key: "mcp",
+		icon: Bot,
+		text: (
+			<>
+				An MCP endpoint, so an AI agent can deploy, read the logs and diagnose it for you — see{" "}
+				<ProseLink href="/docs/mcp">the MCP guide</ProseLink>.
+			</>
+		),
+	},
+];
 
 export default async function TemplatePage({ params }: { params: Promise<{ slug: string }> }) {
 	const { slug } = await params;
@@ -89,177 +136,177 @@ export default async function TemplatePage({ params }: { params: Promise<{ slug:
 	return <TemplateBody template={template} />;
 }
 
+/*
+ * The product-page shape: the mark, the category, "Self-host X", then a pair
+ * of big cards (how to deploy it | what the stack is), one full card for what
+ * the platform adds, and the self-hosting note. Every fact is read from the
+ * generated catalog, so the page cannot describe a stack the panel no longer
+ * ships.
+ */
 function TemplateBody({ template }: { template: TemplateEntry }) {
 	const generated = template.env.filter((variable) => variable.generated);
 	const asked = template.env.filter((variable) => !variable.generated);
+	const hasUpstream = template.links.website || template.links.docs || template.links.github;
 
 	return (
-		<PageShell wide>
-			<div className="mb-10 flex items-start gap-4">
-				{/* biome-ignore lint/performance/noImgElement: remote brand marks from a CDN, no loader configured */}
-				<img
-					src={logoUrl(template.logo)}
-					alt=""
-					width={48}
-					height={48}
-					className="size-12 shrink-0 rounded-lg"
-				/>
-				<div className="min-w-0">
-					<p className="eyebrow">
-						<Link href="/templates" className="hover:text-foreground">
-							Templates
-						</Link>{" "}
-						· {template.category}
+		<PageShell
+			icon={<TemplateMark logo={template.logo} />}
+			eyebrow={template.category}
+			title={`Self-host ${template.name}`}
+			description={<Prose text={template.description} />}
+			actions={
+				<>
+					<Pill href="/docs/install" arrow>
+						Install Nixploy
+					</Pill>
+					{template.links.website ? (
+						<Pill href={template.links.website} variant="ghost" external>
+							Website
+						</Pill>
+					) : null}
+				</>
+			}
+		>
+			<div className="grid gap-4 lg:grid-cols-12">
+				<Card className="p-8 sm:p-10 lg:col-span-7">
+					<h2 className="text-title text-foreground">Deploy {template.name} with Nixploy</h2>
+					<p className="mt-3 text-body text-muted">
+						Install Nixploy on any Docker host — a €5 VPS is enough for most of these:
 					</p>
-					<h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-						Self-host {template.name}
-					</h1>
-					<p className="mt-3 max-w-2xl text-lg leading-relaxed text-muted">
-						<Prose text={template.description} />
-					</p>
-				</div>
-			</div>
-
-			<section className="space-y-4">
-				<h2 className="font-display text-xl font-semibold tracking-tight">
-					Why self-host {template.name}?
-				</h2>
-				<p className="text-sm leading-relaxed text-muted">
-					Running it yourself means the data lives on a disk you control, there is no per-seat price
-					as the team grows, and nothing is retired or repriced by somebody else. The cost is the
-					part Nixploy takes over: a reverse proxy, certificates that renew, a volume that survives
-					a redeploy, backups you can actually restore, and a way to see the logs when it
-					misbehaves.
-				</p>
-			</section>
-
-			<section className="mt-10">
-				<h2 className="font-display text-xl font-semibold tracking-tight">
-					Deploy {template.name} with Nixploy
-				</h2>
-				<p className="mt-3 text-sm text-muted">
-					Install Nixploy on any Docker host — a €5 VPS is enough for most of these:
-				</p>
-				<div className="mt-4">
-					<InstallCommand />
-				</div>
-				<ol className="mt-8 space-y-5">
-					<Step n={1} title="Open Templates in the panel">
-						Search for {template.name} and open it. The compose file, the variables and the
-						suggested domain are already filled in.
-					</Step>
-					<Step n={2} title="Give it a domain">
-						Point a DNS record at your server and enter it. Traefik requests the certificate on the
-						first request — there is no separate certbot step and nothing to renew by hand.
-					</Step>
-					<Step n={3} title="Deploy">
-						Nixploy renders the compose file, validates it against the platform's safety rules, and
-						brings the stack up on a private per-environment network. Live logs stream while it
-						happens.
-					</Step>
-					{template.volumes.length > 0 ? (
-						<Step n={4} title="Schedule a backup">
-							{template.name} keeps its state in{" "}
-							{template.volumes.length === 1 ? "a named volume" : "named volumes"} (
-							{template.volumes.join(", ")}). Add a schedule and Nixploy streams the dump to S3 or
-							to disk, encrypted, and can verify a restore.
+					<InstallCommand className="mt-6" />
+					<ol className="mt-10 flex flex-col gap-6">
+						<Step n={1} title="Open Templates in the panel">
+							Search for {template.name} and open it. The compose file, the variables and the
+							suggested domain are already filled in.
 						</Step>
-					) : null}
-				</ol>
-			</section>
+						<Step n={2} title="Give it a domain">
+							Point a DNS record at your server and enter it. Traefik requests the certificate on
+							the first request — there is no separate certbot step and nothing to renew by hand.
+						</Step>
+						<Step n={3} title="Deploy">
+							Nixploy renders the compose file, validates it against the platform's safety rules,
+							and brings the stack up on a private per-environment network. Live logs stream while
+							it happens.
+						</Step>
+						{template.volumes.length > 0 ? (
+							<Step n={4} title="Schedule a backup">
+								{template.name} keeps its state in{" "}
+								{template.volumes.length === 1 ? "a named volume" : "named volumes"} (
+								{template.volumes.join(", ")}). Add a schedule and Nixploy streams the dump to S3 or
+								to disk, encrypted, and can verify a restore.
+							</Step>
+						) : null}
+					</ol>
+				</Card>
 
-			<section className="mt-12">
-				<h2 className="font-display text-xl font-semibold tracking-tight">What this deploys</h2>
-				<dl className="mt-4 grid gap-x-10 sm:grid-cols-2">
-					<Fact label="Images">
-						<ul className="space-y-1">
-							{template.images.map((image) => (
-								<li key={image} className="font-mono text-xs break-all">
-									{image}
-								</li>
-							))}
-						</ul>
-					</Fact>
-					<Fact label="Routed to">
-						<span className="font-mono text-xs">
-							{template.serviceName}:{template.port}
-						</span>
-					</Fact>
-					{template.volumes.length > 0 ? (
-						<Fact label="Persistent volumes">
-							<span className="font-mono text-xs">{template.volumes.join(", ")}</span>
-						</Fact>
-					) : null}
-					{asked.length > 0 ? (
-						<Fact label="Variables it asks for">
-							<ul className="space-y-1.5">
-								{asked.map((variable) => (
-									<li key={variable.key}>
-										<span className="font-mono text-xs">{variable.key}</span>
-										<span className="block text-xs text-muted">
-											<Prose text={variable.description} />
-										</span>
+				<Card className="p-8 sm:p-10 lg:col-span-5">
+					<h2 className="text-title text-foreground">What this deploys</h2>
+					<dl className="mt-6 flex flex-col gap-3">
+						<Fact label="Images">
+							<ul className="flex flex-col gap-1">
+								{template.images.map((image) => (
+									<li key={image} className="break-all">
+										{image}
 									</li>
 								))}
 							</ul>
 						</Fact>
-					) : null}
-					{generated.length > 0 ? (
-						<Fact label="Secrets Nixploy generates">
-							<span className="font-mono text-xs">
+						<Fact label="Routed to">
+							{template.serviceName}:{template.port}
+						</Fact>
+						{template.volumes.length > 0 ? (
+							<Fact label="Persistent volumes">{template.volumes.join(", ")}</Fact>
+						) : null}
+						{asked.length > 0 ? (
+							<Fact label="Variables it asks for">
+								<ul className="flex flex-col gap-2">
+									{asked.map((variable) => (
+										<li key={variable.key}>
+											{variable.key}
+											<span className="mt-0.5 block font-sans text-muted">
+												<Prose text={variable.description} />
+											</span>
+										</li>
+									))}
+								</ul>
+							</Fact>
+						) : null}
+						{generated.length > 0 ? (
+							<Fact label="Secrets Nixploy generates">
 								{generated.map((variable) => variable.key).join(", ")}
-							</span>
-							<span className="mt-1 block text-xs text-muted">
-								Created at deploy time and stored encrypted — you never invent or paste them.
-							</span>
-						</Fact>
-					) : null}
-					{template.hostPrivileged ? (
-						<Fact label="Privileged">
-							Needs the Docker socket or elevated capabilities, so only the instance admin can
-							deploy it.
-						</Fact>
-					) : null}
-				</dl>
-			</section>
+								<span className="mt-1 block font-sans text-muted">
+									Created at deploy time and stored encrypted — you never invent or paste them.
+								</span>
+							</Fact>
+						) : null}
+						{template.hostPrivileged ? (
+							<Fact label="Privileged">
+								<span className="font-sans">
+									Needs the Docker socket or elevated capabilities, so only the instance admin can
+									deploy it.
+								</span>
+							</Fact>
+						) : null}
+					</dl>
+				</Card>
+			</div>
 
-			<section className="mt-12">
-				<h2 className="font-display text-xl font-semibold tracking-tight">What you get with it</h2>
-				<ul className="mt-4 space-y-2 text-sm leading-relaxed text-muted">
-					<li>· Automatic HTTPS through Traefik and Let&apos;s Encrypt, renewed for you.</li>
-					<li>· Live logs, a web terminal into the container, and CPU/memory/network history.</li>
-					<li>· Encrypted backups to S3 or disk, on a schedule, with verified restores.</li>
-					<li>· Roll back to the previous version when an update goes wrong.</li>
-					<li>
-						· An MCP endpoint, so an AI agent can deploy, read the logs and diagnose it for you —
-						see <ProseLink href="/docs/mcp">the MCP guide</ProseLink>.
-					</li>
+			<Card className="mt-4 p-8 sm:p-10">
+				<h2 className="text-title text-foreground">What you get with it</h2>
+				<ul className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-5">
+					{included.map(({ key, icon: Icon, text }) => (
+						<li key={key} className="flex flex-col gap-4">
+							<Tile size={40}>
+								<Icon className="size-5" aria-hidden />
+							</Tile>
+							<p className="text-small text-muted">{text}</p>
+						</li>
+					))}
 				</ul>
-			</section>
+			</Card>
 
-			{template.links.website || template.links.docs || template.links.github ? (
-				<section className="mt-12 border-t border-border pt-6">
-					<h2 className="text-sm font-medium text-foreground">{template.name} upstream</h2>
-					<p className="mt-2 text-sm text-muted">
-						Nixploy packages the project; it is not affiliated with it.{" "}
-						{template.links.website ? (
-							<>
-								<ProseLink href={template.links.website}>Website</ProseLink>
-								{template.links.docs || template.links.github ? " · " : ""}
-							</>
-						) : null}
-						{template.links.docs ? (
-							<>
-								<ProseLink href={template.links.docs}>Docs</ProseLink>
-								{template.links.github ? " · " : ""}
-							</>
-						) : null}
-						{template.links.github ? (
-							<ProseLink href={template.links.github}>Source</ProseLink>
-						) : null}
+			<div className="mt-4 grid gap-4 lg:grid-cols-2">
+				<Panel className="p-8">
+					<h2 className="text-subtitle text-foreground">Why self-host {template.name}?</h2>
+					<p className="mt-3 text-body text-muted">
+						Running it yourself means the data lives on a disk you control, there is no per-seat
+						price as the team grows, and nothing is retired or repriced by somebody else. The cost
+						is the part Nixploy takes over: a reverse proxy, certificates that renew, a volume that
+						survives a redeploy, backups you can actually restore, and a way to see the logs when it
+						misbehaves.
 					</p>
-				</section>
-			) : null}
+				</Panel>
+				<Panel className="flex flex-col p-8">
+					<h2 className="text-subtitle text-foreground">{template.name} upstream</h2>
+					<p className="mt-3 flex-1 text-body text-muted">
+						{hasUpstream ? (
+							<>
+								Nixploy packages the project; it is not affiliated with it.{" "}
+								{template.links.website ? (
+									<>
+										<ProseLink href={template.links.website}>Website</ProseLink>
+										{template.links.docs || template.links.github ? " · " : ""}
+									</>
+								) : null}
+								{template.links.docs ? (
+									<>
+										<ProseLink href={template.links.docs}>Docs</ProseLink>
+										{template.links.github ? " · " : ""}
+									</>
+								) : null}
+								{template.links.github ? (
+									<ProseLink href={template.links.github}>Source</ProseLink>
+								) : null}
+							</>
+						) : (
+							"Nixploy packages the project; it is not affiliated with it."
+						)}
+					</p>
+					<div className="mt-6">
+						<LearnMore href="/templates">All {templateCount} templates</LearnMore>
+					</div>
+				</Panel>
+			</div>
 		</PageShell>
 	);
 }

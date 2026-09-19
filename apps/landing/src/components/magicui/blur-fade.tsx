@@ -1,11 +1,20 @@
 "use client";
 
+/**
+ * Entrance wrapper: translate + blur + fade, optionally on scroll into view.
+ * Changed from upstream: honours prefers-reduced-motion. Motion writes inline
+ * styles, so a CSS media query cannot reach it — instead we swap in variants
+ * that hold the final state (opacity only, no transform, no blur) and a
+ * zero-length transition, keeping the same element and class names.
+ */
+
 import {
 	AnimatePresence,
 	type MotionProps,
 	motion,
 	type UseInViewOptions,
 	useInView,
+	useReducedMotion,
 	type Variants,
 } from "motion/react";
 import { useRef } from "react";
@@ -25,6 +34,11 @@ interface BlurFadeProps extends MotionProps {
 	blur?: string;
 }
 
+const staticVariants: Variants = {
+	hidden: { opacity: 1 },
+	visible: { opacity: 1 },
+};
+
 export function BlurFade({
 	children,
 	className,
@@ -41,6 +55,7 @@ export function BlurFade({
 	const ref = useRef(null);
 	const inViewResult = useInView(ref, { once: true, margin: inViewMargin });
 	const isInView = !inView || inViewResult;
+	const reduced = useReducedMotion() === true;
 	const defaultVariants: Variants = {
 		hidden: {
 			[direction === "left" || direction === "right" ? "x" : "y"]:
@@ -54,17 +69,17 @@ export function BlurFade({
 			filter: "blur(0px)",
 		},
 	};
-	const combinedVariants = variant ?? defaultVariants;
+	const combinedVariants = reduced ? staticVariants : (variant ?? defaultVariants);
 
 	return (
 		<AnimatePresence>
 			<motion.div
 				ref={ref}
-				initial="hidden"
-				animate={isInView ? "visible" : "hidden"}
+				initial={reduced ? false : "hidden"}
+				animate={reduced || isInView ? "visible" : "hidden"}
 				exit="hidden"
 				variants={combinedVariants}
-				transition={{ delay: 0.04 + delay, duration, ease: "easeOut" }}
+				transition={reduced ? { duration: 0 } : { delay: 0.04 + delay, duration, ease: "easeOut" }}
 				className={className}
 				{...props}
 			>

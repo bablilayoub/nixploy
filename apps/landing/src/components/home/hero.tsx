@@ -1,65 +1,82 @@
-import { GithubIcon } from "@/components/icons";
+import { ArrowRight } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+
 import { InstallCommand } from "@/components/install-command";
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Button, Container, WindowFrame } from "@/components/ui";
-import { site } from "@/lib/site";
+import { AnimatedGridPattern } from "@/components/magicui/animated-grid-pattern";
+import { Container, Pill, TerminalFrame } from "@/components/ui";
+import { heroBadge, heroLead, heroTitle, screens } from "@/lib/landing-data";
 
+/*
+ * The fold: the latest release as a badge, three centred lines with the
+ * middle one lit, one sentence, the two actions, the one-liner, and the
+ * panel in a window on graph paper. Nothing here animates in — this is the
+ * first paint, and a fold that fades in is a fold that arrives late.
+ */
 export function Hero() {
+	const [first, second, third] = heroTitle;
+	const cover = screens[0];
+
 	return (
-		<section className="relative pt-32 pb-20 sm:pt-40 sm:pb-24">
-			<div className="bg-dots pointer-events-none absolute inset-x-0 top-0 h-[55vh]" aria-hidden />
-
-			<Container className="relative">
-				<div className="mx-auto max-w-3xl text-center">
-					<BlurFade delay={0.05}>
-						<p className="eyebrow">Open source · Self-hosted · Your infrastructure</p>
-					</BlurFade>
-
-					<BlurFade delay={0.1}>
-						<h1 className="mt-6 font-display text-[2.4rem] leading-[1.06] font-semibold tracking-tight text-balance text-foreground sm:text-[3.75rem]">
-							Deploy anything to your own servers.
-						</h1>
-					</BlurFade>
-
-					<BlurFade delay={0.18}>
-						<p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted sm:text-lg">
-							Nixploy turns your VPS into a modern deployment platform. Deploy applications,
-							databases and services with the simplicity of a managed platform — while keeping your
-							infrastructure under your control.
-						</p>
-					</BlurFade>
-
-					<BlurFade delay={0.26}>
-						<div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-							<Button href="/docs/install" className="w-full sm:w-auto">
-								Get started
-							</Button>
-							<Button href={site.github} variant="secondary" external className="w-full sm:w-auto">
-								<GithubIcon className="size-4" />
-								View on GitHub
-							</Button>
-						</div>
-					</BlurFade>
-
-					<BlurFade delay={0.32}>
-						<InstallCommand className="mx-auto mt-7 w-full max-w-[46rem]" />
-					</BlurFade>
-				</div>
-			</Container>
-
+		<section className="relative overflow-hidden">
 			{/*
-			 * A real capture of the running panel, not an illustration — the
-			 * dashboard is the page's proof that the product exists.
+			 * Graph paper with a few squares lighting up at random, dying out towards
+			 * the edges, and one soft glow behind the title so the grid reads as depth.
 			 */}
-			<Container className="relative">
-				<BlurFade delay={0.4}>
-					<WindowFrame
-						className="mt-16 sm:mt-20"
-						src="/screenshots/02-dashboard.png"
-						alt="The Nixploy dashboard: two projects, six services across three running and one errored, deployment history for the last fourteen days, and the most recent deployments across the organization"
-						priority
-					/>
-				</BlurFade>
+			<div className="pointer-events-none absolute inset-x-0 top-0 h-[900px]" aria-hidden>
+				<AnimatedGridPattern className="[mask-image:radial-gradient(ellipse_70%_80%_at_50%_0%,#000_25%,transparent_100%)] text-foreground" />
+				<div className="absolute top-0 left-1/2 h-[560px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.07),transparent_65%)]" />
+			</div>
+
+			<Container className="pt-20 lg:pt-28">
+				<div className="flex flex-col items-center text-center">
+					<Link
+						href={heroBadge.href}
+						target="_blank"
+						rel="noreferrer"
+						className="inline-flex h-9 items-center gap-2 rounded-full border border-border bg-surface/70 pr-4 pl-1 text-small text-muted transition-colors hover:border-border-strong hover:text-foreground"
+					>
+						<span className="rounded-full bg-surface-3 px-2 py-0.5 font-mono text-micro text-foreground">
+							{heroBadge.version}
+						</span>
+						{heroBadge.text}
+						<ArrowRight className="size-3.5" aria-hidden />
+					</Link>
+
+					<h1 className="mt-8 max-w-[16ch] text-[2.5rem] leading-[1.1] font-medium tracking-[-0.02em] text-balance sm:text-headline lg:text-[4.5rem] lg:leading-[1.05]">
+						<span className="block text-muted">{first}</span>
+						<span className="block text-foreground">{second}</span>
+						<span className="block text-muted">{third}</span>
+					</h1>
+
+					<p className="mt-6 max-w-[44rem] text-lead text-balance text-muted">{heroLead}</p>
+
+					<div className="mt-8 flex flex-wrap items-center justify-center gap-2">
+						<Pill href="/docs/install" size="lg" arrow>
+							Install Nixploy
+						</Pill>
+						<Pill href="/docs" variant="ghost" size="lg">
+							Read the docs
+						</Pill>
+					</div>
+
+					<InstallCommand className="mt-4 w-full max-w-[36rem]" />
+				</div>
+
+				{/* A capture of the running panel, not an illustration: the proof the product exists. */}
+				<div className="mx-auto mt-16 max-w-[1120px] rounded-2xl shadow-[0_40px_120px_-40px_rgba(0,0,0,0.9)] lg:mt-20">
+					<TerminalFrame title="panel.acme.dev" tag="overview" bodyClassName="p-0">
+						<Image
+							src={cover.src}
+							alt={cover.alt}
+							width={3200}
+							height={2000}
+							priority
+							sizes="(min-width:1200px) 1120px, 100vw"
+							className="h-auto w-full"
+						/>
+					</TerminalFrame>
+				</div>
 			</Container>
 		</section>
 	);

@@ -1,5 +1,9 @@
+import { Info } from "lucide-react";
+
 import { ProseLink } from "@/components/page-shell";
+import { CodeBlock, Eyebrow } from "@/components/ui";
 import type { DocBlock, DocPage } from "@/lib/docs/pages";
+import { site } from "@/lib/site";
 
 function blockKey(block: DocBlock): string {
 	switch (block.type) {
@@ -32,19 +36,16 @@ function withKeys(blocks: readonly DocBlock[]): { key: string; block: DocBlock }
 	});
 }
 
+/* One block of a docs page, on the same ladder as the rest of the site. */
 function Block({ block }: { block: DocBlock }) {
 	switch (block.type) {
 		case "h2":
-			return (
-				<h2 className="mt-10 font-display text-xl font-semibold tracking-tight text-foreground first:mt-0">
-					{block.text}
-				</h2>
-			);
+			return <h2 className="mt-12 text-subtitle text-foreground first:mt-0">{block.text}</h2>;
 		case "p":
-			return <p className="mt-3 text-[15px] leading-relaxed text-muted">{block.text}</p>;
+			return <p className="mt-4 text-body text-muted">{block.text}</p>;
 		case "ul":
 			return (
-				<ul className="mt-3 list-disc space-y-2 pl-5 text-[15px] leading-relaxed text-muted">
+				<ul className="mt-4 list-disc space-y-2 pl-5 text-body text-muted marker:text-muted-2">
 					{block.items.map((item) => (
 						<li key={item}>{item}</li>
 					))}
@@ -52,23 +53,20 @@ function Block({ block }: { block: DocBlock }) {
 			);
 		case "ol":
 			return (
-				<ol className="mt-3 list-decimal space-y-2 pl-5 text-[15px] leading-relaxed text-muted">
+				<ol className="mt-4 list-decimal space-y-2 pl-5 text-body text-muted marker:text-muted-2">
 					{block.items.map((item) => (
 						<li key={item}>{item}</li>
 					))}
 				</ol>
 			);
 		case "pre":
-			return (
-				<pre className="mt-4 overflow-x-auto rounded-lg border border-border bg-surface p-4 font-mono text-xs text-foreground/90">
-					{block.code}
-				</pre>
-			);
+			return <CodeBlock code={block.code} className="mt-5" />;
 		case "note":
 			return (
-				<p className="mt-4 rounded-lg border border-border bg-surface/80 px-4 py-3 text-sm text-muted">
-					{block.text}
-				</p>
+				<div className="mt-5 flex gap-3 rounded-2xl border border-border bg-surface px-5 py-4 text-small text-muted">
+					<Info className="mt-0.5 size-4 shrink-0 text-muted-2" aria-hidden />
+					<p>{block.text}</p>
+				</div>
 			);
 		default:
 			return null;
@@ -78,19 +76,16 @@ function Block({ block }: { block: DocBlock }) {
 export function DocBody({ page }: { page: DocPage }) {
 	return (
 		<article>
-			<p className="mb-3 eyebrow">Docs</p>
-			<h1 className="font-display text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-				{page.title}
-			</h1>
-			<p className="mt-3 max-w-2xl text-lg leading-relaxed text-muted">{page.description}</p>
-			<div className="mt-10">
+			<Eyebrow className="mb-4">Docs</Eyebrow>
+			<h1 className="text-title text-balance text-foreground sm:text-headline">{page.title}</h1>
+			<p className="mt-4 text-lead text-muted">{page.description}</p>
+			<div className="mt-12">
 				{withKeys(page.blocks).map(({ key, block }) => (
 					<Block key={key} block={block} />
 				))}
 			</div>
-			<p className="mt-14 border-t border-border pt-6 text-sm text-muted">
-				Also see the repository guides under{" "}
-				<ProseLink href="https://github.com/bablilayoub/nixploy/tree/main/docs">docs/</ProseLink>
+			<p className="mt-16 border-t border-border pt-6 text-small text-muted">
+				Also see the repository guides under <ProseLink href={site.githubDocs}>docs/</ProseLink>
 				{" · "}
 				<ProseLink href="/api">REST API reference</ProseLink>
 			</p>

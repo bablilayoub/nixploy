@@ -1,8 +1,13 @@
+import { BookOpen, KeyRound, ShieldCheck, Zap } from "lucide-react";
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 
 import { InstallCommand } from "@/components/install-command";
 import { PageShell, ProseLink } from "@/components/page-shell";
+import { Card, CodeBlock, Panel, Pill, SectionTitle, TerminalFrame, Tile } from "@/components/ui";
+import { mcpToolCount } from "@/lib/landing-data";
 import { site } from "@/lib/site";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
 	title: "Let an AI agent run your infrastructure",
@@ -60,120 +65,8 @@ const ROLLBACK: Line[] = [
 	},
 ];
 
-function Transcript({ title, lines }: { title: string; lines: Line[] }) {
-	return (
-		<div className="overflow-hidden rounded-xl border border-border bg-surface/40">
-			<div className="border-b border-border px-4 py-2.5 text-xs font-medium text-muted">
-				{title}
-			</div>
-			<div className="space-y-2.5 p-4">
-				{lines.map((line, index) => {
-					if ("tool" in line) {
-						return (
-							<div
-								// biome-ignore lint/suspicious/noArrayIndexKey: a fixed, ordered transcript
-								key={index}
-								className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pl-4 font-mono text-xs"
-							>
-								<span className="text-muted">→</span>
-								<span className="text-foreground">{line.tool}</span>
-								<span className="text-muted">{line.result}</span>
-							</div>
-						);
-					}
-					return (
-						<p
-							// biome-ignore lint/suspicious/noArrayIndexKey: a fixed, ordered transcript
-							key={index}
-							className="text-sm leading-relaxed"
-						>
-							<span
-								className={
-									line.speaker === "you"
-										? "mr-2 text-xs uppercase tracking-wide text-muted"
-										: "mr-2 text-xs uppercase tracking-wide text-muted"
-								}
-							>
-								{line.speaker === "you" ? "You" : "Agent"}
-							</span>
-							<span className={line.speaker === "you" ? "text-foreground" : "text-muted"}>
-								{line.text}
-							</span>
-						</p>
-					);
-				})}
-			</div>
-		</div>
-	);
-}
-
-export default function AgentsPage() {
-	return (
-		<PageShell
-			wide
-			eyebrow="Agents"
-			title="Let an AI agent run your infrastructure"
-			description="Nixploy speaks MCP. Point Claude Code, Cursor or Codex at your panel and it can deploy, read the logs, work out why something broke and roll it back — without you opening a terminal."
-		>
-			<div className="space-y-6">
-				<Transcript title="Deploy" lines={DEPLOY} />
-				<Transcript title="Diagnose" lines={DIAGNOSE} />
-				<Transcript title="Roll back" lines={ROLLBACK} />
-			</div>
-
-			<section className="mt-14">
-				<h2 className="font-display text-xl font-semibold tracking-tight">
-					Why this is safe to hand an agent
-				</h2>
-				<p className="mt-3 text-sm leading-relaxed text-muted">
-					The MCP tools are not a second API. Every one of them dispatches through the same tRPC
-					routers the panel uses, so the organization scope, the capability checks and the audit
-					trail apply identically — an agent holding a read-only API key cannot deploy, and every
-					mutation it makes is a row in the audit log with the key that made it.
-				</p>
-				<ul className="mt-5 space-y-2.5 text-sm leading-relaxed text-muted">
-					<li>
-						· <span className="text-foreground">Annotated tools.</span> All 35 carry
-						<span className="font-mono text-xs"> readOnlyHint</span>,
-						<span className="font-mono text-xs"> destructiveHint</span> and
-						<span className="font-mono text-xs"> idempotentHint</span>, declared by hand with a test
-						that fails the build on a missing entry — so an agent knows what is safe to call while
-						it is still looking around.
-					</li>
-					<li>
-						· <span className="text-foreground">Scoped keys.</span> An API key is read, deploy,
-						write or full, intersected with its owner&apos;s own capabilities, bound to one
-						organization, and expiring by default.
-					</li>
-					<li>
-						· <span className="text-foreground">One call, not a polling loop.</span>{" "}
-						<span className="font-mono text-xs">deploy_and_wait</span> blocks for the real outcome;
-						<span className="font-mono text-xs"> explain_last_failure</span> and
-						<span className="font-mono text-xs"> get_service_runtime_summary</span> answer in one
-						round trip what would otherwise be five.
-					</li>
-					<li>
-						· <span className="text-foreground">It reads the docs too.</span>{" "}
-						<ProseLink href="/llms.txt">/llms.txt</ProseLink>,{" "}
-						<ProseLink href="/agents.md">/agents.md</ProseLink> and a{" "}
-						<span className="font-mono text-xs">.md</span> twin of every docs page, so an agent can
-						look something up instead of guessing.
-					</li>
-				</ul>
-			</section>
-
-			<section className="mt-14">
-				<h2 className="font-display text-xl font-semibold tracking-tight">Connect it</h2>
-				<p className="mt-3 text-sm text-muted">
-					Install Nixploy, mint an API key in Settings → Profile, and copy the config the{" "}
-					<span className="text-foreground">MCP setup</span> card renders for your client — it
-					already has your instance&apos;s own address filled in.
-				</p>
-				<div className="mt-4">
-					<InstallCommand />
-				</div>
-				<pre className="mt-4 overflow-x-auto rounded-xl border border-border bg-surface/40 p-4 font-mono text-xs leading-relaxed text-muted">
-					{`{
+/** The config the panel's MCP setup card renders, with a placeholder host and key. */
+const MCP_CONFIG = `{
   "mcpServers": {
     "nixploy": {
       "type": "http",
@@ -181,13 +74,186 @@ export default function AgentsPage() {
       "headers": { "x-api-key": "nxp_…" }
     }
   }
-}`}
-				</pre>
-				<p className="mt-4 text-sm text-muted">
-					Full reference in <ProseLink href="/docs/mcp">the MCP guide</ProseLink>; the REST surface
-					behind it is at <ProseLink href="/api">the API catalog</ProseLink>.
-				</p>
+}`;
+
+/*
+ * A session in the frame the home page's agent card uses: three dots and a
+ * mono title, then the turns. Speech is body size so it reads as a
+ * conversation; the tool calls in between stay mono and indented so they
+ * read as the trace it leaves behind.
+ */
+function Transcript({ title, lines }: { title: string; lines: Line[] }) {
+	return (
+		<TerminalFrame title={title} tag="session" bodyClassName="p-5 leading-normal">
+			<div className="flex flex-col gap-3">
+				{lines.map((line, index) => {
+					if ("tool" in line) {
+						return (
+							<p
+								// biome-ignore lint/suspicious/noArrayIndexKey: a fixed, ordered transcript
+								key={index}
+								className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pl-4 font-mono text-micro"
+							>
+								<span className="text-foreground">
+									<span className="text-muted-2">› </span>
+									{line.tool}
+								</span>
+								<span className="text-muted">{line.result}</span>
+							</p>
+						);
+					}
+					return (
+						<p
+							// biome-ignore lint/suspicious/noArrayIndexKey: a fixed, ordered transcript
+							key={index}
+							className={cn("text-body", line.speaker === "you" ? "text-foreground" : "text-muted")}
+						>
+							<span className="mr-3 font-mono text-micro text-muted-2">{line.speaker}</span>
+							{line.text}
+						</p>
+					);
+				})}
+			</div>
+		</TerminalFrame>
+	);
+}
+
+/** Text beside the transcript: the reference's text-beside-card block, one per session. */
+function Session({
+	heading,
+	summary,
+	title,
+	lines,
+}: {
+	heading: string;
+	summary: string;
+	title: string;
+	lines: Line[];
+}) {
+	return (
+		<Card className="grid gap-8 p-8 sm:p-10 lg:grid-cols-12 lg:gap-12">
+			<div className="lg:col-span-4">
+				<h2 className="text-title text-foreground">{heading}</h2>
+				<p className="mt-4 max-w-[30ch] text-body text-muted">{summary}</p>
+			</div>
+			<div className="min-w-0 lg:col-span-8">
+				<Transcript title={title} lines={lines} />
+			</div>
+		</Card>
+	);
+}
+
+function Reason({
+	icon,
+	title,
+	children,
+}: {
+	icon: ReactNode;
+	title: string;
+	children: ReactNode;
+}) {
+	return (
+		<Panel>
+			<Tile size={40}>{icon}</Tile>
+			<h3 className="mt-5 text-body font-medium text-foreground">{title}</h3>
+			<p className="mt-2 text-small text-muted">{children}</p>
+		</Panel>
+	);
+}
+
+function Code({ children }: { children: ReactNode }) {
+	return <code className="font-mono text-micro text-foreground">{children}</code>;
+}
+
+export default function AgentsPage() {
+	return (
+		<PageShell
+			eyebrow="Agents"
+			title="Let an AI agent run your infrastructure"
+			description="Nixploy speaks MCP. Point Claude Code, Cursor or Codex at your panel and it can deploy, read the logs, work out why something broke and roll it back — without you opening a terminal."
+			actions={
+				<>
+					<Pill href="/docs/mcp" arrow>
+						Set up the MCP server
+					</Pill>
+					<Pill href="/api" variant="ghost">
+						REST API
+					</Pill>
+				</>
+			}
+		>
+			<div className="flex flex-col gap-4">
+				<Session
+					heading="Deploy"
+					summary="One prompt. Three tool calls. A URL with a certificate."
+					title="mcp · deploy"
+					lines={DEPLOY}
+				/>
+				<Session
+					heading="Diagnose"
+					summary="The events, the logs and the resolved environment, read before anything is written — and the write waits for a yes."
+					title="mcp · diagnose"
+					lines={DIAGNOSE}
+				/>
+				<Session
+					heading="Roll back"
+					summary="The failure explained in its own step, the pinned images listed, the previous build serving again."
+					title="mcp · roll back"
+					lines={ROLLBACK}
+				/>
+			</div>
+
+			<section className="mt-32">
+				<SectionTitle title="Why this is safe to hand an agent">
+					The MCP tools are not a second API. Every one of them dispatches through the same tRPC
+					routers the panel uses, so the organization scope, the capability checks and the audit
+					trail apply identically — an agent holding a read-only API key cannot deploy, and every
+					mutation it makes is a row in the audit log with the key that made it.
+				</SectionTitle>
+				<div className="mt-12 grid gap-4 md:grid-cols-2">
+					<Reason icon={<ShieldCheck className="size-5" aria-hidden />} title="Annotated tools">
+						All {mcpToolCount} carry <Code>readOnlyHint</Code>, <Code>destructiveHint</Code> and{" "}
+						<Code>idempotentHint</Code>, declared by hand with a test that fails the build on a
+						missing entry — so an agent knows what is safe to call while it is still looking around.
+					</Reason>
+					<Reason icon={<KeyRound className="size-5" aria-hidden />} title="Scoped keys">
+						An API key is read, deploy, write or full, intersected with its owner&apos;s own
+						capabilities, bound to one organization, and expiring by default.
+					</Reason>
+					<Reason
+						icon={<Zap className="size-5" aria-hidden />}
+						title="One call, not a polling loop"
+					>
+						<Code>deploy_and_wait</Code> blocks for the real outcome;{" "}
+						<Code>explain_last_failure</Code> and <Code>get_service_runtime_summary</Code> answer in
+						one round trip what would otherwise be five.
+					</Reason>
+					<Reason icon={<BookOpen className="size-5" aria-hidden />} title="It reads the docs too">
+						<ProseLink href="/llms.txt">/llms.txt</ProseLink>,{" "}
+						<ProseLink href="/agents.md">/agents.md</ProseLink> and a <Code>.md</Code> twin of every
+						docs page, so an agent can look something up instead of guessing.
+					</Reason>
+				</div>
 			</section>
+
+			<Card className="mt-32 grid gap-10 p-8 sm:p-10 lg:grid-cols-12">
+				<div className="lg:col-span-5">
+					<h2 className="text-title text-foreground">Connect it</h2>
+					<p className="mt-4 text-body text-muted">
+						Install Nixploy, mint an API key in Settings → Profile, and copy the config the{" "}
+						<span className="text-foreground">MCP setup</span> card renders for your client — it
+						already has your instance&apos;s own address filled in.
+					</p>
+					<p className="mt-6 text-small text-muted">
+						Full reference in <ProseLink href="/docs/mcp">the MCP guide</ProseLink>; the REST
+						surface behind it is at <ProseLink href="/api">the API catalog</ProseLink>.
+					</p>
+				</div>
+				<div className="lg:col-span-7">
+					<InstallCommand />
+					<CodeBlock className="mt-4" title="claude_desktop_config.json" code={MCP_CONFIG} />
+				</div>
+			</Card>
 		</PageShell>
 	);
 }

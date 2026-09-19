@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
-/** The whole site is near-black, so the white mark is the only one used. */
+/** The page is near-black everywhere, so the mark is always white on black. */
 export const NIXPLOY_MARK_SRC = "/brand/nixploy-mark-light.png";
 
 export function LogoMark({ className }: { className?: string }) {
@@ -40,7 +40,7 @@ export function Logo({
 		>
 			<LogoMark className="size-7" />
 			{showWordmark ? (
-				<span className="font-display text-lg font-semibold tracking-tight">Nixploy</span>
+				<span className="font-display text-lead font-semibold tracking-tight">Nixploy</span>
 			) : null}
 		</Link>
 	);

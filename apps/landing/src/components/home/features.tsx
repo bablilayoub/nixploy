@@ -1,60 +1,64 @@
+import type { LucideIcon } from "lucide-react";
 import {
 	Activity,
-	Archive,
+	Bot,
 	Database,
+	DatabaseBackup,
 	GitBranch,
 	GitPullRequest,
-	Lock,
-	Server,
-	Terminal,
+	Globe,
+	Layers,
+	LayoutGrid,
+	RotateCcw,
+	SquareTerminal,
+	Users,
 } from "lucide-react";
 
-import { BlurFade } from "@/components/magicui/blur-fade";
-import { Section, SectionHeading } from "@/components/ui";
-import { features } from "@/lib/landing-data";
+import { Container, SectionTitle } from "@/components/ui";
+import { type FeatureIcon, features } from "@/lib/landing-data";
 
-const icons = {
+/*
+ * Twelve claims in one hairline grid: an icon, a title and one sentence per
+ * cell, no cards and no hover. The hairlines are the 1px gap showing the
+ * border colour through page-coloured cells, so every neighbour gets exactly
+ * one line at every column count and the outer border alone draws the edge.
+ */
+
+const icons: Record<FeatureIcon, LucideIcon> = {
 	git: GitBranch,
-	lock: Lock,
+	compose: Layers,
 	database: Database,
-	archive: Archive,
+	globe: Globe,
 	activity: Activity,
-	branch: GitPullRequest,
-	server: Server,
-	terminal: Terminal,
-} as const;
+	backup: DatabaseBackup,
+	preview: GitPullRequest,
+	rollback: RotateCcw,
+	team: Users,
+	api: SquareTerminal,
+	agent: Bot,
+	templates: LayoutGrid,
+};
 
 export function Features() {
 	return (
-		<Section id="features">
-			<BlurFade inView>
-				<SectionHeading
-					eyebrow="Features"
-					title="Everything a deploy needs"
-					lede="Build, ship, expose, observe and operate — without assembling it yourself."
-				/>
-			</BlurFade>
-
-			{/*
-			 * A ruled grid rather than floating cards: one hairline between cells,
-			 * nothing to hover, nothing to shadow.
-			 */}
-			<div className="mt-14 grid border-t border-border sm:grid-cols-2 lg:grid-cols-4">
-				{features.map((feature, i) => {
-					const Icon = icons[feature.icon];
-					return (
-						<BlurFade key={feature.title} inView delay={0.03 * i}>
-							<div className="h-full border-b border-border px-0 py-7 sm:px-6 sm:[&:nth-child(odd)]:pl-0 lg:border-l lg:px-6 lg:first:border-l-0 lg:[&:nth-child(4n+1)]:border-l-0 lg:[&:nth-child(odd)]:pl-6">
-								<Icon className="size-[18px] text-foreground" strokeWidth={1.6} />
-								<h3 className="mt-4 text-[15px] font-semibold tracking-tight text-foreground">
-									{feature.title}
-								</h3>
-								<p className="mt-2 text-[13.5px] leading-relaxed text-muted">{feature.body}</p>
-							</div>
-						</BlurFade>
-					);
-				})}
-			</div>
-		</Section>
+		<section className="py-24 lg:py-32">
+			<Container>
+				<SectionTitle title="Everything a deploy needs">
+					Build, ship, expose, observe, recover and automate, on Swarm and Traefik you control.
+				</SectionTitle>
+				<ul className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-2 lg:mt-16 lg:grid-cols-4">
+					{features.map((feature) => {
+						const Icon = icons[feature.icon];
+						return (
+							<li key={feature.title} className="bg-background p-8">
+								<Icon className="size-5 text-foreground" aria-hidden />
+								<h3 className="mt-6 text-body font-semibold text-foreground">{feature.title}</h3>
+								<p className="mt-2 text-small text-muted">{feature.text}</p>
+							</li>
+						);
+					})}
+				</ul>
+			</Container>
+		</section>
 	);
 }

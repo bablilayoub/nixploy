@@ -1,122 +1,119 @@
-import { ArrowRight } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { ArrowRight, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode, SVGProps } from "react";
 
+import { CopyButton } from "@/components/copy-button";
 import { cn } from "@/lib/utils";
 
 /*
- * The whole landing page is built from these four primitives. Every section is
- * a <Section>, every section opens with a <SectionHeading>, every panel is a
- * <Card>. Keeping the vocabulary this small is what makes the page read as one
- * document rather than ten separately designed blocks — add a variant here
- * rather than a one-off className in a section.
+ * The vocabulary the home page is built from: one column, big rounded cards,
+ * white pill buttons, an accent text link, a mono strip caption, a rounded
+ * icon tile. Values live in globals.css (`.sheet`, `.card`, `.eyebrow`);
+ * these are the elements that use them. Keep the set small.
  */
 
+/** The 1280px column everything measures from. */
 export function Container({ children, className }: { children: ReactNode; className?: string }) {
-	return <div className={cn("mx-auto w-full max-w-6xl px-5 sm:px-8", className)}>{children}</div>;
+	return <div className={cn("sheet", className)}>{children}</div>;
 }
 
-/** One section: a hairline rule, one vertical rhythm, one container. */
-export function Section({
-	children,
-	id,
-	className,
-	divider = true,
-}: {
-	children: ReactNode;
-	id?: string;
-	className?: string;
-	divider?: boolean;
-}) {
-	return (
-		<section
-			id={id}
-			className={cn("py-20 sm:py-28", divider && "border-t border-border", className)}
-		>
-			<Container>{children}</Container>
-		</section>
-	);
-}
-
-export function SectionHeading({
-	eyebrow,
-	title,
-	lede,
-	align = "left",
-	className,
-}: {
-	eyebrow?: string;
-	title: ReactNode;
-	lede?: ReactNode;
-	align?: "left" | "center";
-	className?: string;
-}) {
-	return (
-		<div className={cn("max-w-2xl", align === "center" && "mx-auto text-center", className)}>
-			{eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
-			<h2 className="mt-3 font-display text-[1.9rem] leading-[1.15] font-semibold tracking-tight text-balance text-foreground sm:text-[2.5rem]">
-				{title}
-			</h2>
-			{lede ? (
-				<p className="mt-4 text-[15px] leading-relaxed text-muted sm:text-base">{lede}</p>
-			) : null}
-		</div>
-	);
-}
-
+/** A big home-page card: one surface up, 32px corners, no border. */
 export function Card({
 	children,
 	className,
-	as: Tag = "div",
+	href,
+	external,
+	label,
 }: {
 	children: ReactNode;
 	className?: string;
-	as?: "div" | "li" | "article";
+	/** Makes the whole card a link. */
+	href?: string;
+	external?: boolean;
+	/** Accessible name of a linked card, so a screen reader does not read the whole card as the link. */
+	label?: string;
 }) {
-	return (
-		<Tag
-			className={cn(
-				"rounded-xl border border-border bg-surface/60 p-6 transition-colors duration-200 hover:border-border-strong",
-				className,
-			)}
-		>
-			{children}
-		</Tag>
+	const classes = cn(
+		"card overflow-hidden",
+		href && "transition-colors duration-200 hover:bg-surface-2",
+		className,
 	);
+	if (href && external) {
+		return (
+			<a
+				href={href}
+				target="_blank"
+				rel="noreferrer"
+				className={cn(classes, "block")}
+				aria-label={label}
+			>
+				{children}
+			</a>
+		);
+	}
+	if (href) {
+		return (
+			<Link href={href} className={cn(classes, "block")} aria-label={label}>
+				{children}
+			</Link>
+		);
+	}
+	return <div className={classes}>{children}</div>;
 }
 
-type ButtonProps = {
+type PillProps = {
 	href: string;
 	children: ReactNode;
-	variant?: "primary" | "secondary" | "ghost";
+	variant?: "primary" | "ghost" | "outline";
+	size?: "sm" | "md" | "lg";
+	/** Trailing arrow, for the page's conversion actions. */
+	arrow?: boolean;
+	/** Leading icon component (a lucide icon or one from `@/components/icons`). */
+	icon?: ComponentType<SVGProps<SVGSVGElement>>;
 	className?: string;
 	external?: boolean;
-	arrow?: boolean;
 };
 
-const variants: Record<NonNullable<ButtonProps["variant"]>, string> = {
-	primary: "bg-foreground text-background hover:bg-foreground/90",
-	secondary: "border border-border-strong text-foreground hover:bg-surface-2",
-	ghost: "text-muted hover:text-foreground",
+const pillVariants: Record<NonNullable<PillProps["variant"]>, string> = {
+	primary: "bg-foreground text-background hover:bg-white",
+	ghost: "bg-surface-3 text-foreground hover:bg-border",
+	outline: "border border-border-strong text-foreground hover:bg-surface",
 };
 
-export function Button({
+const pillSizes: Record<NonNullable<PillProps["size"]>, string> = {
+	// 44px on phones, where the pill is the tap target; the desktop heights are the reference's.
+	sm: "h-9 px-4 text-small max-sm:h-11",
+	md: "h-10 px-4 text-small max-sm:h-11",
+	lg: "h-12 px-6 text-body",
+};
+
+/*
+ * Pill buttons. White is the conversion action and appears with the same
+ * words in the nav, the fold and the closing card; ghost sits beside it;
+ * outline is for the nav's secondary action and small in-figure controls.
+ */
+export function Pill({
 	href,
 	children,
 	variant = "primary",
+	size = "md",
+	arrow = false,
+	icon: Icon,
 	className,
 	external,
-	arrow,
-}: ButtonProps) {
+}: PillProps) {
 	const classes = cn(
-		"inline-flex h-11 items-center justify-center gap-2 rounded-lg px-5 text-sm font-medium transition-colors duration-200",
-		variants[variant],
+		"inline-flex shrink-0 items-center justify-center gap-2 rounded-full font-semibold whitespace-nowrap transition-colors duration-200",
+		pillVariants[variant],
+		pillSizes[size],
 		className,
 	);
 	const inner = (
 		<>
+			{Icon ? <Icon className="size-4" aria-hidden /> : null}
 			{children}
-			{arrow ? <ArrowRight className="size-4" /> : null}
+			{arrow ? <ArrowRight className="size-4" aria-hidden /> : null}
 		</>
 	);
 	if (external) {
@@ -133,48 +130,348 @@ export function Button({
 	);
 }
 
-/**
- * App-window frame around a real capture of the panel.
- *
- * Screenshots are desaturated by default: the panel uses green, red and blue
- * for status and charts, and this site is strictly monochrome. The capture
- * stays honest — only its saturation is dropped — and dark UI greyscales
- * cleanly. Pass `color` only if a shot genuinely needs its hues.
- */
-export function WindowFrame({
-	src,
-	alt,
+/** The accent text link under a feature card: "Learn more ›". */
+export function LearnMore({
+	href,
+	children = "Learn more",
 	className,
-	priority = false,
-	color = false,
+	external,
+	label,
 }: {
-	src: string;
-	alt: string;
+	href: string;
+	children?: ReactNode;
 	className?: string;
-	priority?: boolean;
-	color?: boolean;
+	external?: boolean;
+	/** Accessible name when the visible text repeats across a page ("Learn more" ×6). */
+	label?: string;
+}) {
+	// Vertical padding pulled back with a negative margin: a 44px target that sits on the text's baseline.
+	const classes = cn(
+		"group -my-2.5 inline-flex min-h-11 items-center gap-1 py-2.5 text-body font-medium text-accent-strong transition-colors hover:text-foreground",
+		className,
+	);
+	const inner = (
+		<>
+			{children}
+			<ChevronRight
+				className="size-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0"
+				aria-hidden
+			/>
+		</>
+	);
+	if (external) {
+		return (
+			<a href={href} target="_blank" rel="noreferrer" className={classes} aria-label={label}>
+				{inner}
+			</a>
+		);
+	}
+	return (
+		<Link href={href} className={classes} aria-label={label}>
+			{inner}
+		</Link>
+	);
+}
+
+/** The one uppercase style on the site: a 13px mono strip caption. */
+export function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
+	return <p className={cn("eyebrow", className)}>{children}</p>;
+}
+
+/** A centred section heading: 48px, optional two-line sub in muted. */
+export function SectionTitle({
+	title,
+	children,
+	className,
+}: {
+	title: string;
+	children?: ReactNode;
+	className?: string;
+}) {
+	return (
+		<div className={cn("mx-auto max-w-[40rem] text-center", className)}>
+			<h2 className="text-title text-balance text-foreground sm:text-headline">{title}</h2>
+			{children ? <p className="mt-4 text-lead text-balance text-muted">{children}</p> : null}
+		</div>
+	);
+}
+
+/** A rounded icon tile: the unit every illustration is drawn with. */
+export function Tile({
+	children,
+	size = 56,
+	className,
+	style,
+}: {
+	children: ReactNode;
+	/** Side in px; the radius scales with it. */
+	size?: number;
+	className?: string;
+	style?: React.CSSProperties;
+}) {
+	return (
+		<span
+			className={cn(
+				"inline-flex shrink-0 items-center justify-center bg-surface-2 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+				className,
+			)}
+			style={{ width: size, height: size, borderRadius: Math.round(size * 0.28), ...style }}
+		>
+			{children}
+		</span>
+	);
+}
+
+/*
+ * Brand marks whose own colour is within a few percent of black (measured
+ * from the simple-icons SVG fill) and would vanish on this page. They are
+ * asked for in the foreground colour; every other mark keeps its own.
+ */
+const DARK_MARKS = new Set([
+	"ghost",
+	"vaultwarden",
+	"ollama",
+	"caldotcom",
+	"directus",
+	"umami",
+	"outline",
+	"appsmith",
+	"coder",
+	"github",
+	"mariadb",
+	"mysql",
+	"nextdotjs",
+	"vercel",
+]);
+
+/** simple-icons slug in the project's own colour, or an absolute URL the catalog already carries. */
+export function brandIconSrc(logo: string) {
+	if (logo.startsWith("http")) return logo;
+	return DARK_MARKS.has(logo)
+		? `https://cdn.simpleicons.org/${logo}/f4f4f5`
+		: `https://cdn.simpleicons.org/${logo}`;
+}
+
+/*
+ * A sub-page header: the mark or an icon, a mono eyebrow, the title, one
+ * paragraph and the actions, centred like the reference's product pages.
+ * Reading pages (docs, about) pass `align="left"` and `size="headline"`.
+ */
+export function PageHeader({
+	eyebrow,
+	title,
+	description,
+	align = "center",
+	size = "display",
+	icon,
+	actions,
+	className,
+}: {
+	eyebrow?: string;
+	title: string;
+	description?: ReactNode;
+	align?: "center" | "left";
+	size?: "display" | "headline";
+	/** Rendered above the eyebrow, inside a tile. */
+	icon?: ReactNode;
+	actions?: ReactNode;
+	className?: string;
+}) {
+	const centred = align === "center";
+	return (
+		<header
+			className={cn(
+				"flex flex-col pt-16 lg:pt-24",
+				centred ? "items-center text-center" : "items-start text-left",
+				className,
+			)}
+		>
+			{icon ? (
+				<Tile size={56} className="mb-6 bg-surface ring-1 ring-border">
+					{icon}
+				</Tile>
+			) : null}
+			{eyebrow ? <Eyebrow className="mb-4">{eyebrow}</Eyebrow> : null}
+			<h1
+				className={cn(
+					"max-w-[20ch] text-balance text-foreground",
+					size === "display" ? "text-headline lg:text-display" : "text-title sm:text-headline",
+				)}
+			>
+				{title}
+			</h1>
+			{description ? (
+				<p className="mt-5 max-w-[42rem] text-lead text-balance text-muted">{description}</p>
+			) : null}
+			{actions ? <div className="mt-8 flex flex-wrap items-center gap-2">{actions}</div> : null}
+		</header>
+	);
+}
+
+/** The small card: a hairline, 16px corners, the page colour (or one surface up on a card). */
+export function Panel({
+	children,
+	className,
+	href,
+	external,
+	tone = "page",
+}: {
+	children: ReactNode;
+	className?: string;
+	href?: string;
+	external?: boolean;
+	tone?: "page" | "surface";
+}) {
+	const classes = cn(
+		"rounded-2xl border border-border p-6",
+		tone === "page" ? "bg-background" : "bg-surface-2",
+		href && "block transition-colors duration-200 hover:border-border-strong hover:bg-surface",
+		className,
+	);
+	if (href && external) {
+		return (
+			<a href={href} target="_blank" rel="noreferrer" className={classes}>
+				{children}
+			</a>
+		);
+	}
+	if (href) {
+		return (
+			<Link href={href} className={classes}>
+				{children}
+			</Link>
+		);
+	}
+	return <div className={classes}>{children}</div>;
+}
+
+/*
+ * The one terminal chrome on the site: a 44px title bar with three muted
+ * dots, the title centred, a slot on the right (a tag, a copy button), and
+ * the body on the page colour so the frame reads as a screen, never as a
+ * card on a card. Everything that types, logs or shows code sits in it.
+ */
+export function TerminalFrame({
+	title,
+	tag,
+	children,
+	className,
+	bodyClassName,
+}: {
+	title?: ReactNode;
+	/** Right-hand slot of the bar: a mono word or a control. */
+	tag?: ReactNode;
+	children: ReactNode;
+	className?: string;
+	bodyClassName?: string;
 }) {
 	return (
 		<div
 			className={cn(
-				"overflow-hidden rounded-xl border border-border bg-surface",
-				"shadow-[0_1px_0_0_rgba(255,255,255,0.05)_inset,0_40px_90px_-50px_rgba(0,0,0,1)]",
+				"overflow-hidden rounded-2xl border border-border bg-background shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]",
 				className,
 			)}
 		>
-			<div className="flex items-center gap-1.5 border-b border-border px-4 py-2.5">
-				<span className="size-2.5 rounded-full bg-surface-3" />
-				<span className="size-2.5 rounded-full bg-surface-3" />
-				<span className="size-2.5 rounded-full bg-surface-3" />
+			<div className="flex h-11 shrink-0 items-center gap-3 border-b border-border bg-surface pr-2 pl-4">
+				<span className="flex w-[42px] shrink-0 gap-1.5" aria-hidden>
+					<span className="size-2.5 rounded-full bg-border-strong" />
+					<span className="size-2.5 rounded-full bg-border-strong" />
+					<span className="size-2.5 rounded-full bg-border-strong" />
+				</span>
+				<span className="min-w-0 flex-1 truncate text-center font-mono text-micro text-muted-2">
+					{title}
+				</span>
+				<span className="flex min-w-[42px] shrink-0 items-center justify-end font-mono text-micro text-muted-2">
+					{tag}
+				</span>
 			</div>
-			{/* biome-ignore lint/performance/noImgElement: static marketing asset, full-width */}
-			<img
-				src={src}
-				alt={alt}
-				className={cn("block w-full", !color && "grayscale")}
-				loading={priority ? "eager" : "lazy"}
-				decoding="async"
-			/>
+			<div className={cn("px-5 py-4 text-small leading-7 text-foreground", bodyClassName)}>
+				{children}
+			</div>
+		</div>
+	);
+}
+
+/** A command or a config in the terminal chrome, with a copy control in the bar. */
+export function CodeBlock({
+	code,
+	title = "sh",
+	className,
+}: {
+	code: string;
+	title?: string;
+	className?: string;
+}) {
+	return (
+		<TerminalFrame
+			title={title}
+			tag={<CopyButton text={code} className="-mr-1" />}
+			className={className}
+		>
+			{/* Long one-liners wrap rather than scroll: on a phone a scrolled command is a hidden command. */}
+			<pre className="whitespace-pre-wrap break-all font-mono">
+				<code>{code}</code>
+			</pre>
+		</TerminalFrame>
+	);
+}
+
+/*
+ * The reference's row of section tabs under a product header: rounded chips
+ * with an icon, one surface up, the current one a step brighter. Used for
+ * jump links and category filters.
+ */
+export function ChipRow({
+	items,
+	current,
+	className,
+	label,
+}: {
+	items: readonly { href: string; label: string; icon?: LucideIcon }[];
+	current?: string;
+	className?: string;
+	/** aria-label of the nav. */
+	label: string;
+}) {
+	return (
+		<nav aria-label={label} className={cn("flex flex-wrap justify-center gap-2", className)}>
+			{items.map((item) => {
+				const Icon = item.icon;
+				const active = item.href === current;
+				return (
+					<Link
+						key={item.href}
+						href={item.href}
+						aria-current={active ? "page" : undefined}
+						className={cn(
+							"inline-flex h-11 items-center gap-2 rounded-full px-5 text-body font-medium transition-colors",
+							active
+								? "bg-surface-3 text-foreground"
+								: "bg-surface text-foreground hover:bg-surface-2",
+						)}
+					>
+						{Icon ? <Icon className="size-4 text-muted" aria-hidden /> : null}
+						{item.label}
+					</Link>
+				);
+			})}
+		</nav>
+	);
+}
+
+/*
+ * Reading typography for hand-written pages (about, privacy, compare notes):
+ * the children are plain elements and this wrapper gives them the ladder.
+ */
+export function Prose({ children, className }: { children: ReactNode; className?: string }) {
+	return (
+		<div
+			className={cn(
+				"text-body text-muted [&_a]:text-accent-strong [&_a:hover]:text-foreground [&_code]:rounded-md [&_code]:bg-surface-2 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.9em] [&_code]:text-foreground [&_h2]:mt-12 [&_h2]:text-subtitle [&_h2]:text-foreground [&_h2:first-child]:mt-0 [&_h3]:mt-8 [&_h3]:text-body [&_h3]:font-semibold [&_h3]:text-foreground [&_li]:mt-2 [&_ol]:mt-4 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mt-4 [&_strong]:font-medium [&_strong]:text-foreground [&_ul]:mt-4 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:marker:text-muted-2",
+				className,
+			)}
+		>
+			{children}
 		</div>
 	);
 }

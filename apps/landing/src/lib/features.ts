@@ -1,3 +1,5 @@
+import { templateCount } from "@/lib/templates";
+
 export type FeatureDetail = {
 	name: string;
 	description: string;
@@ -27,9 +29,9 @@ export const featureJumpLinks = [
 
 export const featureHighlights = [
 	{ label: "Sources", value: "Git · image · zip" },
-	{ label: "Builders", value: "5 build strategies" },
+	{ label: "Builders", value: "5 builders" },
 	{ label: "Databases", value: "Postgres → Redis" },
-	{ label: "Templates", value: "86+ one-click" },
+	{ label: "Templates", value: `${templateCount} one-click` },
 	{ label: "API surface", value: "REST · CLI · MCP" },
 	{ label: "Edge", value: "Traefik v3 + LE" },
 ] as const;
@@ -296,7 +298,7 @@ export const featureSections: FeatureSection[] = [
 		id: "ai",
 		eyebrow: "AI & catalog",
 		title: "Deploy Copilot when you want help. Templates when you want speed.",
-		lede: "Bring your own model key. Copilot explains failed deploys, chats with confirm-gated mutations, and generates compose files. The catalog ships 86+ stacks across 15 categories with CI-checked image tags.",
+		lede: `Bring your own model key. Copilot explains failed deploys, chats with confirm-gated mutations, and generates compose files. The catalog ships ${templateCount} stacks across 15 categories with CI-checked image tags.`,
 		docHref: "/docs/ai",
 		imageSrc: "/screenshots/07-templates.png",
 		imageAlt: "Template catalog",

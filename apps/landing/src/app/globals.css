@@ -1,44 +1,95 @@
 @import "tailwindcss";
 
 /*
- * Nixploy landing theme — near-black, white ink, strict greyscale. There is no
- * hue anywhere: emphasis comes from luminance, weight and border contrast only.
- * Do not reintroduce a chromatic accent, a coloured glow or a gradient.
+ * Nixploy landing theme — near-black, one accent, big rounded surfaces.
  *
- * The class vocabulary (bg-atmosphere, text-muted, bg-surface, border-border,
- * font-display …) is shared by every page, so changing values here restyles
- * the whole site.
+ * The home page is one 1280px column: a compact three-column fold, a strip of
+ * marks, then large rounded cards (32px) that each hold one illustration and
+ * one sentence, giant stat lines, a masonry of release notes and a glowing
+ * closing card. Headings are 600; the accent is for links and one beam, never
+ * for a button — buttons are white pills.
  */
 @theme {
 	--font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-	--font-display: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+	--font-display:
+		var(--font-space-grotesk), var(--font-geist), ui-sans-serif, system-ui, sans-serif;
 	--font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
-	--color-background: #08080a;
-	--color-surface: #0d0d10;
-	--color-surface-2: #121216;
-	--color-surface-3: #17171c;
-	--color-border: #1e1e24;
-	--color-border-strong: #2c2c34;
-	--color-foreground: #fafafa;
-	--color-muted: #9a9aa4;
-	--color-muted-2: #6a6a74;
-	--color-accent: #ffffff;
-	--color-accent-strong: #e4e4e7;
-	--color-accent-soft: rgba(255, 255, 255, 0.07);
-	--color-cool: #d4d4d8;
-	--color-cool-soft: rgba(255, 255, 255, 0.05);
-	--color-success: #e4e4e7;
-	--color-danger: #8b8b94;
+	/*
+	 * Surfaces. Eleven units between the page and a card, so a card reads on
+	 * a real monitor without a border; tiles inside a card go one more step up.
+	 */
+	--color-background: #0a0a0c;
+	--color-surface: #151518;
+	--color-surface-2: #1c1c21;
+	--color-surface-3: #232329;
+	--color-border: #2a2a32;
+	--color-border-strong: #3a3a44;
+	--color-mark: #5c5c68;
+	--color-dim: #3f3f48;
 
-	--animate-shimmer-slide: shimmer-slide var(--speed) ease-in-out infinite alternate;
-	--animate-spin-around: spin-around calc(var(--speed) * 2) infinite linear;
-	--animate-orbit: orbit calc(var(--duration) * 1s) linear infinite;
-	--animate-rippling: rippling var(--duration, 600ms) ease-out;
-	--animate-caret: caret 1s steps(1) infinite;
-	--animate-pulse-ring: pulse-ring 2.4s ease-out infinite;
-	--animate-float: float 7s ease-in-out infinite;
-	--animate-scan: scan 3.2s linear infinite;
+	/* Text ramp, APCA Lc against the page beside each. */
+	--color-foreground: #f4f4f5; /* Lc 100 */
+	--color-muted: #b8b8c2; /* Lc  64 (63 on a card) — secondary body */
+	--color-muted-2: #a3a3ad; /* Lc  53 (52 on a card) — mono captions, dates */
+	--color-accent: #5b8cff; /* Lc  43 — strokes and fills */
+	--color-accent-strong: #93b4ff; /* Lc  62 — the accent as link text */
+	--color-accent-dim: #2f5fd0;
+	--color-accent-soft: rgba(91, 140, 255, 0.12);
+	--color-accent-line: rgba(91, 140, 255, 0.32);
+
+	/*
+	 * The type ladder: display 64 / headline 48 / title 32 / subtitle 24 /
+	 * lead 18 / body 16 / small 14 / micro 13. Headings are 600 with tight
+	 * tracking that loosens as the size drops.
+	 */
+	--text-display: 4rem;
+	--text-display--line-height: 1.1;
+	--text-display--letter-spacing: -0.03em;
+	--text-display--font-weight: 600;
+
+	--text-headline: 3rem;
+	--text-headline--line-height: 1.1;
+	--text-headline--letter-spacing: -0.025em;
+	--text-headline--font-weight: 600;
+
+	--text-title: 2rem;
+	--text-title--line-height: 1.1;
+	--text-title--letter-spacing: -0.015em;
+	--text-title--font-weight: 600;
+
+	--text-subtitle: 1.5rem;
+	--text-subtitle--line-height: 1.3;
+	--text-subtitle--letter-spacing: -0.01em;
+	--text-subtitle--font-weight: 600;
+
+	--text-lead: 1.125rem;
+	--text-lead--line-height: 1.55;
+
+	--text-body: 1rem;
+	--text-body--line-height: 1.5;
+
+	--text-small: 0.875rem;
+	--text-small--line-height: 1.5;
+
+	--text-micro: 0.8125rem;
+	--text-micro--line-height: 1.4;
+}
+
+/*
+ * Marquee. Plain utilities rather than
+ * `--animate-*` theme tokens on purpose: a theme token is computed on :root,
+ * where the per-instance `--duration` is not defined, so the whole value goes
+ * invalid and nothing moves (the previous strip never scrolled). Declared
+ * here, `var(--duration)` resolves on the track, which inherits it from the
+ * marquee root's inline style.
+ */
+@utility animate-marquee {
+	animation: marquee var(--duration) linear infinite;
+}
+
+@utility animate-marquee-vertical {
+	animation: marquee-vertical var(--duration) linear infinite;
 }
 
 html {
@@ -56,24 +107,76 @@ body {
 }
 
 ::selection {
-	background: #fafafa;
-	color: #08080a;
+	background: #f4f4f5;
+	color: #0a0a0c;
 }
 
 :focus-visible {
-	outline: 2px solid #fafafa;
+	outline: 2px solid var(--color-accent);
 	outline-offset: 2px;
 	border-radius: 4px;
 }
 
+/* Headings and anything marked `font-display` take the display face. */
+h1,
+h2,
+h3,
 .font-display {
 	font-family: var(--font-display);
 }
 
 /*
- * Page atmosphere: one very faint white wash under the hero. No colour, no
- * bloom — just enough lift that the fold does not read as a flat rectangle.
+ * The column: 1280px centred, 48px page gutters from 1024 up (so it is exactly
+ * 1280 at 1440), 24px below. Everything on the home page measures from it.
  */
+:root {
+	--sheet-max: 1280px;
+	--page-gutter: 24px;
+}
+
+@media (min-width: 1024px) {
+	:root {
+		--page-gutter: 48px;
+	}
+}
+
+.sheet {
+	position: relative;
+	width: min(var(--sheet-max), 100% - 2 * var(--page-gutter));
+	margin-inline: auto;
+}
+
+/*
+ * A big home-page card: one surface up, 32px corners, no border. In the
+ * components layer so a utility on the element (a linked card's hover
+ * colour) can still win over it.
+ */
+@layer components {
+	.card {
+		position: relative;
+		background-color: var(--color-surface);
+		border-radius: 1.5rem;
+		box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.03) inset;
+	}
+
+	@media (min-width: 640px) {
+		.card {
+			border-radius: 2rem;
+		}
+	}
+}
+
+/* A strip's own pause control (see components/home/strip-toggle.tsx). */
+[data-paused="true"] .animate-marquee {
+	animation-play-state: paused;
+}
+
+/* An illustration that is cut off by the bottom of its card. */
+.fade-bottom {
+	mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+}
+
+/* Sub-page atmosphere: one very faint white wash under the page header. */
 .bg-atmosphere {
 	background-color: var(--color-background);
 	background-image: radial-gradient(
@@ -92,205 +195,70 @@ body {
 	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* Faint dot field behind the hero, masked so it never reaches the fold. */
-.bg-dots {
-	background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
-	background-size: 26px 26px;
-	mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 10%, transparent 72%);
-}
-
-/* Cards */
-.card {
+/* Sub-page panel. */
+.bento {
+	position: relative;
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);
-	border-radius: 0.875rem;
+	border-radius: 1.5rem;
+	box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.04) inset;
+	overflow: hidden;
 }
 
-.card-hover {
+.bento-hover {
 	transition:
-		border-color 200ms ease,
-		background-color 200ms ease;
+		border-color 220ms ease,
+		background-color 220ms ease;
 }
 
-.card-hover:hover {
+.bento-hover:hover {
 	border-color: var(--color-border-strong);
 	background: var(--color-surface-2);
 }
 
-/* The framed product shot. A hairline and depth, not a glow. */
-.panel-glow {
-	box-shadow:
-		0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
-		0 40px 90px -50px rgba(0, 0, 0, 1);
+.bento-accent::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	background: radial-gradient(70% 90% at 80% 0%, rgba(91, 140, 255, 0.16), transparent 68%);
 }
 
-/* Emphasis text — luminance, not hue. */
-.text-gradient {
-	background: linear-gradient(180deg, #ffffff 0%, #d4d4d8 58%, #9a9aa4 100%);
-	-webkit-background-clip: text;
-	background-clip: text;
-	color: transparent;
-}
-
-/* Eyebrow label */
+/* The one uppercase style on the site: a 13px mono strip caption. */
 .eyebrow {
 	font-family: var(--font-mono);
-	font-size: 0.7rem;
-	letter-spacing: 0.16em;
+	font-size: var(--text-micro);
+	letter-spacing: 0.12em;
 	text-transform: uppercase;
 	color: var(--color-muted-2);
 }
 
-/* Code blocks */
-.code {
-	font-family: var(--font-mono);
-	font-size: 0.8125rem;
-	line-height: 1.7;
-}
-
-.code .c-cmd {
-	color: var(--color-foreground);
-}
-.code .c-dim {
-	color: var(--color-muted-2);
-}
-.code .c-key {
-	color: var(--color-cool);
-}
-.code .c-str {
-	color: var(--color-accent);
-}
-.code .c-ok {
-	color: var(--color-success);
-}
-
-/* Terminal caret */
-.caret::after {
-	content: "▍";
-	margin-left: 2px;
-	color: #fafafa;
-	animation: var(--animate-caret);
-}
-
-.animate-shimmer-slide {
-	animation: var(--animate-shimmer-slide);
-}
-.animate-spin-around {
-	animation: var(--animate-spin-around);
-}
-.animate-orbit {
-	animation: var(--animate-orbit);
-}
-.animate-rippling {
-	animation: var(--animate-rippling);
-}
-.animate-pulse-ring {
-	animation: var(--animate-pulse-ring);
-}
-.animate-float {
-	animation: var(--animate-float);
-}
-.animate-scan {
-	animation: var(--animate-scan);
-}
-
-@keyframes shimmer-slide {
+@keyframes marquee {
+	from {
+		transform: translateX(0);
+	}
 	to {
-		transform: translate(calc(100cqw - 100%), 0);
+		transform: translateX(calc(-100% - var(--gap)));
 	}
 }
 
-@keyframes spin-around {
-	0% {
-		transform: translateZ(0) rotate(0);
-	}
-	15%,
-	35% {
-		transform: translateZ(0) rotate(90deg);
-	}
-	65%,
-	85% {
-		transform: translateZ(0) rotate(270deg);
-	}
-	100% {
-		transform: translateZ(0) rotate(360deg);
-	}
-}
-
-@keyframes orbit {
-	0% {
-		transform: rotate(calc(var(--angle) * 1deg)) translateY(calc(var(--radius) * 1px))
-			rotate(calc(var(--angle) * -1deg));
-	}
-	100% {
-		transform: rotate(calc(var(--angle) * 1deg + 360deg)) translateY(calc(var(--radius) * 1px))
-			rotate(calc((var(--angle) * -1deg) - 360deg));
-	}
-}
-
-@keyframes rippling {
-	0% {
-		opacity: 1;
-	}
-	100% {
-		transform: scale(2);
-		opacity: 0;
-	}
-}
-
-@keyframes caret {
-	0%,
-	50% {
-		opacity: 1;
-	}
-	50.01%,
-	100% {
-		opacity: 0;
-	}
-}
-
-@keyframes pulse-ring {
-	0% {
-		transform: scale(0.6);
-		opacity: 0.8;
-	}
-	100% {
-		transform: scale(2.2);
-		opacity: 0;
-	}
-}
-
-@keyframes float {
-	0%,
-	100% {
+@keyframes marquee-vertical {
+	from {
 		transform: translateY(0);
 	}
-	50% {
-		transform: translateY(-8px);
+	to {
+		transform: translateY(calc(-100% - var(--gap)));
 	}
 }
 
-@keyframes scan {
-	0% {
-		transform: translateX(-100%);
-	}
-	100% {
-		transform: translateX(300%);
-	}
-}
-
+/*
+ * Reduced motion. Keyframe-driven motion is disabled here; Motion writes
+ * inline styles, so every animated component calls `useReducedMotion()`
+ * itself and renders its final state.
+ */
 @media (prefers-reduced-motion: reduce) {
-	.animate-shimmer-slide,
-	.animate-spin-around,
-	.animate-orbit,
-	.animate-rippling,
-	.animate-pulse-ring,
-	.animate-float,
-	.animate-scan {
-		animation: none;
-	}
-
-	.caret::after {
+	.animate-marquee,
+	.animate-marquee-vertical {
 		animation: none;
 	}
 
