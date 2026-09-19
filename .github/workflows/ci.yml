@@ -258,6 +258,41 @@ jobs:
           E2E_SHOTS: ${{ runner.temp }}/ui-shots
         run: node tools/e2e-ui.mjs
 
+      - name: Footprint budget
+        # The panel's resident memory after a full golden path (setup, two
+        # deploys including a source build, the UI walk), against a ceiling.
+        # A regression that doubles the panel's memory is the kind of change
+        # that reaches a 4 GB box as an OOM restart and nothing else; this is
+        # where it shows first. The live VPS idles at ~390-430 MiB.
+        env:
+          NIXPLOY_PANEL_RSS_BUDGET_MIB: "768"
+        run: |
+          set -euo pipefail
+          container="$(docker compose -f tools/ci/e2e-compose.yml ps -q app)"
+          usage="$(docker stats --no-stream --format '{{.MemUsage}}' "$container")"
+          echo "panel memory: $usage"
+          used="${usage%%/*}"; used="${used// /}"
+          case "$used" in
+            *GiB) mib="$(awk -v v="${used%GiB}" 'BEGIN { printf "%d", v * 1024 }')" ;;
+            *MiB) mib="$(awk -v v="${used%MiB}" 'BEGIN { printf "%d", v }')" ;;
+            *KiB) mib="$(awk -v v="${used%KiB}" 'BEGIN { printf "%d", v / 1024 }')" ;;
+            *) echo "::error::unexpected docker stats format: $usage"; exit 1 ;;
+          esac
+          {
+            echo "### Panel footprint"
+            echo ""
+            echo "| Measure | Value |"
+            echo "| --- | --- |"
+            echo "| Resident memory after the golden path | ${mib} MiB |"
+            echo "| Budget | ${NIXPLOY_PANEL_RSS_BUDGET_MIB} MiB |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$mib" -gt "$NIXPLOY_PANEL_RSS_BUDGET_MIB" ]; then
+            echo "::error::panel uses ${mib} MiB, over the ${NIXPLOY_PANEL_RSS_BUDGET_MIB} MiB budget"
+            docker stats --no-stream
+            exit 1
+          fi
+          echo "within budget (${mib} / ${NIXPLOY_PANEL_RSS_BUDGET_MIB} MiB)"
+
       - name: Panel logs
         if: failure()
         run: |

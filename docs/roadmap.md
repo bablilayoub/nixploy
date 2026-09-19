@@ -247,7 +247,7 @@ Evidence-first investigations over logs + metrics + task errors + Traefik state,
 
 Not a release; a standing commitment, because reliability is the top reason people leave the incumbent.
 
-- **Footprint budget.** Measure panel RSS in CI and fail the build over a ceiling. Today: 427 MiB panel + 51 Postgres + 26 Traefik = ~505 MiB on the live VPS. A `NIXPLOY_LITE` profile and a published number turn that into a claim.
+- **Footprint budget.** ✅ measured (2026-09-19): the e2e job reads the panel container's resident memory after the full golden path and fails over `NIXPLOY_PANEL_RSS_BUDGET_MIB` (768), printing the figure in the job summary. Today: 427 MiB panel + 51 Postgres + 26 Traefik = ~505 MiB on the live VPS. Still open: a `NIXPLOY_LITE` profile and publishing the number on the site.
 - **Upgrade-integration CI.** ✅ (2026-09-19) The `upgrade` job in ci.yml installs the latest GitHub release with `install.sh` (split worker, signed image verified for real), runs the release's own bootstrap + golden path, rolls to the commit's image with `update.sh` through a local registry, and runs the golden path again with the same API key.
 - **Verified installs.** ✅ (2026-09-19) `install.sh` / `update.sh` run `cosign verify` against the repository's workflow identity before pulling and pin the pull to the signed digest; a failed check stops the script. cosign is fetched (pinned release, SHA-256 checked) when the host has none; `NIXPLOY_SKIP_VERIFY=1` opts out. The `installer-signature` CI job runs the block with a real cosign against `:main` plus a foreign-identity negative case.
 - **Security disclosure policy** with a documented triage SLA, and security releases separated from feature releases.
