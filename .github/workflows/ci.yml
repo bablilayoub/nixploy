@@ -489,6 +489,194 @@ jobs:
           docker service rm nixploy-smoke-whoami nixploy-smoke-traefik || true
           docker rm -f nixploy-smoke-static || true
 
+  # The failure mode operators fear most — an update that bricks a working
+  # install — had no test anywhere. This job installs the latest GitHub
+  # release with install.sh (split worker, signed image verified for real,
+  # Traefik on :80/:443), creates an admin and runs the API golden path,
+  # then rolls that install to this commit's image with update.sh through a
+  # local registry and runs the golden path again with the SAME API key: the
+  # data survived, the migrations applied, and the new image deploys.
+  upgrade:
+    name: Upgrade from the latest release
+    needs: image
+    if: >-
+      github.event_name != 'push' ||
+      (github.event.head_commit &&
+       !contains(github.event.head_commit.message, '[release]') &&
+       !contains(github.event.head_commit.message, '[ci skip]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      NIXPLOY_URL: http://localhost:3000
+      E2E_EMAIL: upgrade@nixploy.test
+      E2E_PASSWORD: Upgrade-ci-password!1
+      LOCAL_IMAGE: localhost:5000/nixploy:ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Download the PR image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nixploy-ci-image
+          path: /tmp
+
+      - name: Load the image into a local registry
+        # update.sh pulls before it rolls (a Swarm needs a pullable ref), so
+        # the PR image is served from a registry on localhost. A localhost
+        # registry is insecure by default for the daemon; nothing to configure.
+        run: |
+          set -euo pipefail
+          gunzip -c /tmp/nixploy-ci-image.tar.gz | docker image load
+          docker run -d --name ci-registry -p 127.0.0.1:5000:5000 registry:2
+          for i in $(seq 1 20); do curl -fsS http://127.0.0.1:5000/v2/ >/dev/null && break; sleep 1; done
+          docker tag nixploy:ci "$LOCAL_IMAGE"
+          docker push "$LOCAL_IMAGE"
+
+      - name: Ports 80/443 must be free
+        run: |
+          set -euo pipefail
+          if ss -ltnH '( sport = :80 or sport = :443 )' | grep -q .; then
+            echo "::error::Something already listens on :80/:443 on this runner"
+            ss -ltnp '( sport = :80 or sport = :443 )'
+            exit 1
+          fi
+
+      - name: Latest release
+        id: release
+        run: |
+          set -euo pipefail
+          tag="$(curl -fsSL -H "Authorization: Bearer ${{ github.token }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest" | jq -r .tag_name)"
+          [ -n "$tag" ] && [ "$tag" != "null" ] || { echo "::error::no latest release"; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "latest release: $tag"
+          # The release's own bootstrap and smoke scripts drive the release's
+          # panel: the copies on this branch may already use a procedure the
+          # old version does not have.
+          git fetch --depth 1 origin "refs/tags/$tag:refs/tags/$tag"
+          mkdir -p /tmp/release-tools
+          git show "$tag:tools/bootstrap-instance.mjs" > /tmp/release-tools/bootstrap-instance.mjs
+          git show "$tag:tools/golden-path-api.mjs" > /tmp/release-tools/golden-path-api.mjs
+
+      - name: Install the latest release with install.sh
+        # The repo's install.sh (the one under test) installing the last
+        # published image: NIXPLOY_PORT also publishes :3000 so the bootstrap
+        # and the smoke can talk to the panel without a domain; the split
+        # worker is the shape production runs; the signed image goes through
+        # the real cosign check, which fetches cosign into /etc/nixploy/bin.
+        env:
+          NIXPLOY_VERSION: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          sudo env \
+            NIXPLOY_VERSION="$NIXPLOY_VERSION" \
+            NIXPLOY_SKIP_DOCKER_INSTALL=1 \
+            NIXPLOY_PORT=3000 \
+            NIXPLOY_SPLIT_WORKER=1 \
+            NIXPLOY_LETSENCRYPT_EMAIL=ci@example.com \
+            bash install.sh
+          echo "--- services"
+          docker service ls
+
+      - name: Panel answers with the release version
+        id: before
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            body="$(curl -fsS http://localhost:3000/api/version 2>/dev/null || true)"
+            [ -n "$body" ] && break
+            sleep 2
+          done
+          echo "before: $body"
+          [ -n "$body" ] || { echo "::error::/api/version never answered"; exit 1; }
+          echo "image=$(docker service inspect nixploy --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')" >> "$GITHUB_OUTPUT"
+
+      - name: Create the first admin and an API key
+        id: bootstrap
+        run: node /tmp/release-tools/bootstrap-instance.mjs
+
+      - name: API golden path on the release
+        env:
+          NIXPLOY_API_KEY: ${{ steps.bootstrap.outputs.api-key }}
+          SMOKE_TRAEFIK_ORIGIN: http://127.0.0.1
+          SMOKE_INSECURE_TLS: "1"
+        run: node /tmp/release-tools/golden-path-api.mjs
+
+      - name: Update to this commit's image with update.sh
+        run: |
+          set -euo pipefail
+          sudo env \
+            NIXPLOY_IMAGE="$LOCAL_IMAGE" \
+            NIXPLOY_UPDATE_TRAEFIK=0 \
+            bash update.sh
+          echo "--- services"
+          docker service ls
+          docker service ps nixploy nixploy-worker --no-trunc | head -n 12
+
+      - name: The new image is what runs
+        env:
+          BEFORE_IMAGE: ${{ steps.before.outputs.image }}
+        run: |
+          set -euo pipefail
+          after="$(docker service inspect nixploy --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')"
+          worker="$(docker service inspect nixploy-worker --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')"
+          echo "before: $BEFORE_IMAGE"
+          echo "after:  $after"
+          echo "worker: $worker"
+          case "$after" in "$LOCAL_IMAGE"*) ;; *) echo "::error::nixploy still runs $after"; exit 1 ;; esac
+          case "$worker" in "$LOCAL_IMAGE"*) ;; *) echo "::error::nixploy-worker still runs $worker"; exit 1 ;; esac
+          for i in $(seq 1 60); do
+            body="$(curl -fsS http://localhost:3000/api/ready 2>/dev/null || true)"
+            [ -n "$body" ] && { echo "ready: $body"; break; }
+            sleep 2
+          done
+          [ -n "$body" ] || { echo "::error::/api/ready never answered after the update"; exit 1; }
+          curl -fsS http://localhost:3000/api/version
+
+      - name: API golden path after the update, same key
+        # The key was created on the old version; a working run here means
+        # the data and the schema migration both survived the roll, and the
+        # new image builds and deploys on this Swarm.
+        env:
+          NIXPLOY_API_KEY: ${{ steps.bootstrap.outputs.api-key }}
+          SMOKE_TRAEFIK_ORIGIN: http://127.0.0.1
+          SMOKE_INSECURE_TLS: "1"
+          SMOKE_BUILD_REPO: https://github.com/docker/welcome-to-docker.git
+          SMOKE_BUILD_TYPE: dockerfile
+        run: node tools/golden-path-api.mjs
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/upgrade-logs"
+          sudo cp /var/log/nixploy-install.log /var/log/nixploy-update.log /tmp/nixploy-install.log /tmp/nixploy-update.log \
+            "$RUNNER_TEMP/upgrade-logs/" 2>/dev/null || true
+          docker service ls > "$RUNNER_TEMP/upgrade-logs/services.txt" 2>&1 || true
+          docker service ps --no-trunc $(docker service ls -q) \
+            > "$RUNNER_TEMP/upgrade-logs/service-tasks.txt" 2>&1 || true
+          for svc in $(docker service ls --format '{{.Name}}'); do
+            docker service logs --no-color --timestamps "$svc" \
+              > "$RUNNER_TEMP/upgrade-logs/service-$svc.log" 2>&1 || true
+          done
+          sudo cp -r /etc/nixploy "$RUNNER_TEMP/upgrade-logs/config-root" 2>/dev/null || true
+          sudo rm -f "$RUNNER_TEMP/upgrade-logs/config-root/.env" || true
+          sudo chmod -R a+r "$RUNNER_TEMP/upgrade-logs" || true
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: upgrade-diagnostics
+          path: ${{ runner.temp }}/upgrade-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
   # The installers verify the image's cosign signature and pin the pull to
   # the signed digest before anything runs. This job runs that exact block
   # (extracted from install.sh and update.sh by its markers) with a real

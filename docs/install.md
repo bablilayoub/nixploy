@@ -441,6 +441,13 @@ or be marked as interrupted cleanly. To roll back by hand:
 
 ### Upgrade safety
 
+Every push to `main` runs the **Upgrade from the latest release** CI job: it installs
+the latest GitHub release with `install.sh` on a clean runner (split worker, the signed
+image verified for real, Traefik on :80/:443), creates an admin and runs the API golden
+path, then rolls that install to the commit's image with `update.sh` and runs the golden
+path again with the same API key. A commit that cannot be updated to from the last
+release does not stay green.
+
 Swarm's rollback restores the previous **image**, not the previous
 **database**: a migration that partially applied stays applied. Both update
 paths therefore dump the platform database right before the roll:
