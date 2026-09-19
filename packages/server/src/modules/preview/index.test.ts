@@ -93,6 +93,13 @@ vi.mock("../deployment", () => ({ queueDeployment }));
 vi.mock("../application/paths", () => ({
 	getWildcardDomain: () => "example.test",
 }));
+// The per-preview database reaches the engines (dockerode, exec); this file
+// tests the preview lifecycle, so it is a no-op here.
+vi.mock("./database", () => ({
+	ensurePreviewDatabase: vi.fn(async () => null),
+	dropPreviewDatabase: vi.fn(async () => undefined),
+	previewDatabaseEnv: vi.fn(async () => null),
+}));
 vi.mock("../application/docker", () => ({
 	removeSwarmService: vi.fn(),
 	removeApplicationImages: vi.fn(),

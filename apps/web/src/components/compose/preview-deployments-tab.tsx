@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import type { ComposeService } from "@/components/compose/compose-detail";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
+import { PreviewDatabaseFields } from "@/components/services/preview-database-fields";
 import { PreviewDeploymentsPanel } from "@/components/services/preview-deployments-panel";
 import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
@@ -53,8 +54,15 @@ function PreviewSettingsCard({ compose }: { compose: ComposeService }) {
 		previewEnv: compose.previewEnv ?? "",
 		limit: String(compose.previewLimit ?? 3),
 		ttlHours: compose.previewTtlHours ? String(compose.previewTtlHours) : "",
+		databaseTarget:
+			compose.previewDatabaseKind && compose.previewDatabaseId
+				? `${compose.previewDatabaseKind}:${compose.previewDatabaseId}`
+				: "",
+		seedCommand: compose.previewSeedCommand ?? "",
 	});
-	const { enabled, forkGate, previewEnv, limit, ttlHours } = draft.value;
+	const { enabled, forkGate, previewEnv, limit, ttlHours, databaseTarget, seedCommand } =
+		draft.value;
+	const [databaseKind, databaseId] = databaseTarget ? databaseTarget.split(":", 2) : [null, null];
 
 	const update = useSaveMutation(trpc.compose.update.mutationOptions(), {
 		successMessage: "Preview settings saved",
@@ -76,6 +84,14 @@ function PreviewSettingsCard({ compose }: { compose: ComposeService }) {
 			previewEnv: previewEnv.trim() || null,
 			previewLimit: parsedLimit,
 			previewTtlHours: parsedTtl,
+			previewDatabaseKind: (databaseKind ?? null) as
+				| "postgres"
+				| "mysql"
+				| "mariadb"
+				| "mongo"
+				| null,
+			previewDatabaseId: databaseId ?? null,
+			previewSeedCommand: databaseKind ? seedCommand.trim() || null : null,
 		});
 
 	useSaveBar(draft, {
@@ -172,6 +188,15 @@ function PreviewSettingsCard({ compose }: { compose: ComposeService }) {
 						</p>
 					</div>
 				</div>
+
+				<PreviewDatabaseFields
+					target={{ composeId }}
+					databaseTarget={databaseTarget}
+					seedCommand={seedCommand}
+					disabled={!canWrite}
+					idPrefix="compose-preview"
+					onChange={(patch) => draft.patch(patch)}
+				/>
 
 				<div className="flex items-center justify-end gap-3">
 					<UnsavedChangesPill dirty={draft.dirty} />

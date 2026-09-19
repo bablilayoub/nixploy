@@ -447,6 +447,21 @@ but statuses are). Branch previews get statuses too: a status hangs off a
 commit, not a PR, and the checkout resolves the sha. Best effort: a provider
 without credentials or an API error is logged, never a failed deploy.
 
+**A database per preview (2026-09-20).** Under Preview settings, pick one of
+the environment's postgres / mysql / mariadb / mongo services as the
+**database per preview**: every preview then gets its own logical database on
+it (`shop_a1b2c3_pr_12` / user `…_u`, a row on that service's page like one
+created by hand), receives it as `DATABASE_URL` over everything else, and
+drops it when the preview goes. An optional **seed command** runs once per
+preview with that fresh URL before its first rollout — in the preview's own
+image for an application (the same machinery as the pre-deploy hook), in a
+container of the preview project once it is up for a compose stack — so a
+preview can migrate and load fixtures without ever touching the database the
+environment shares. The database is created when the preview is first
+deployed (a fork-gated preview gets it on approval); a failed create fails
+the preview; a failed drop is logged and the row stays listed on the
+database's page for a manual delete.
+
 ### Fork pull requests require approval
 
 Fork PRs can carry arbitrary code, so they are **not auto-built** by

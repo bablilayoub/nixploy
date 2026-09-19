@@ -33,6 +33,11 @@ export interface PreviewParent {
 	previewForksRequireApproval: boolean;
 	previewLimit: number;
 	previewTtlHours: number | null;
+	/** A logical database per preview on this service of the environment (null = none). */
+	previewDatabaseKind: string | null;
+	previewDatabaseId: string | null;
+	/** Runs once per preview with its fresh DATABASE_URL, before the first rollout. */
+	previewSeedCommand: string | null;
 	// Provider identity: the fork-collaborator lookup, the PR comment and the
 	// commit-link derivation all need it.
 	sourceType: string;
@@ -72,6 +77,9 @@ type ApplicationParentRow = Pick<
 	| "previewForksRequireApproval"
 	| "previewLimit"
 	| "previewTtlHours"
+	| "previewDatabaseKind"
+	| "previewDatabaseId"
+	| "previewSeedCommand"
 	| "sourceType"
 	| "owner"
 	| "repository"
@@ -93,6 +101,9 @@ type ComposeParentRow = Pick<
 	| "previewForksRequireApproval"
 	| "previewLimit"
 	| "previewTtlHours"
+	| "previewDatabaseKind"
+	| "previewDatabaseId"
+	| "previewSeedCommand"
 	| "sourceType"
 	| "owner"
 	| "repository"
@@ -114,6 +125,9 @@ export function applicationPreviewParent(row: ApplicationParentRow): PreviewPare
 		previewForksRequireApproval: row.previewForksRequireApproval,
 		previewLimit: row.previewLimit,
 		previewTtlHours: row.previewTtlHours,
+		previewDatabaseKind: row.previewDatabaseKind,
+		previewDatabaseId: row.previewDatabaseId,
+		previewSeedCommand: row.previewSeedCommand,
 		sourceType: row.sourceType,
 		owner: row.owner,
 		repository: row.repository,
@@ -136,6 +150,9 @@ export function composePreviewParent(row: ComposeParentRow): PreviewParent {
 		previewForksRequireApproval: row.previewForksRequireApproval,
 		previewLimit: row.previewLimit,
 		previewTtlHours: row.previewTtlHours,
+		previewDatabaseKind: row.previewDatabaseKind,
+		previewDatabaseId: row.previewDatabaseId,
+		previewSeedCommand: row.previewSeedCommand,
 		sourceType: row.sourceType,
 		owner: row.owner,
 		repository: row.repository,

@@ -528,7 +528,10 @@ compose job, all in `runComposeJob`:
 - no rollback snapshot (`prepareComposeFiles` is called with
   `deploymentId: null`) — a PR's file must never become a production rollback
   target, and both rows share one `composeId`;
-- neither deploy hook runs, exactly like application previews;
+- neither deploy hook runs, exactly like application previews — with one
+  exception: the parent's **preview seed command**, once per preview, in a
+  container of the preview project after `up`, against the preview's own
+  database (see [domains & Traefik](./domains-traefik.md#preview-deployments));
 - Traefik files are written by `syncPreviewTraefik`, one per compose service
   that has a production HTTP domain, under the preview project's own key
   (`<app>-pr-<n>-<service>` / `<app>-pr-<n>_<service>`);

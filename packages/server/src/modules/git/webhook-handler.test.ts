@@ -5,6 +5,12 @@ vi.mock("../deployment", () => ({ queueDeployment: vi.fn() }));
 vi.mock("../application/paths", () => ({
 	getWildcardDomain: () => "nip.io",
 }));
+// The per-preview database reaches the engines; webhooks are not what this file tests.
+vi.mock("../preview/database", () => ({
+	ensurePreviewDatabase: vi.fn(async () => null),
+	dropPreviewDatabase: vi.fn(async () => undefined),
+	previewDatabaseEnv: vi.fn(async () => null),
+}));
 vi.mock("../application/docker", () => ({
 	removeSwarmService: vi.fn(),
 	removeApplicationImages: vi.fn(),

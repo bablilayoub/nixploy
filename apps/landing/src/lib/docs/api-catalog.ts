@@ -1554,6 +1554,11 @@ export const apiCatalog: ApiRouterGroup[] = [
 				capability: ["service.deploy"],
 			},
 			{
+				method: "GET",
+				path: "previewDeployment.databaseTargets",
+				summary: "Database services a parent may use for per-preview databases",
+			},
+			{
 				method: "POST",
 				path: "previewDeployment.delete",
 				summary: "Delete a preview deployment",
@@ -2316,4 +2321,4 @@ export const apiCatalog: ApiRouterGroup[] = [
 ];
 
 /** Total endpoints in the catalog above. */
-export const apiEndpointCount = 431;
+export const apiEndpointCount = 432;

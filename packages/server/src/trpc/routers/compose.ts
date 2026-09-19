@@ -26,8 +26,10 @@ import {
 	listComposeRollbackTargets,
 	restoreComposeSnapshot,
 } from "../../modules/compose/snapshot";
+import { LOGICAL_DATABASE_KINDS } from "../../modules/databases/logical";
 import { composeReadiness, provenanceForSession, queueDeployment } from "../../modules/deployment";
 import { parseEnv } from "../../modules/deployment/env";
+import { assertPreviewDatabaseTarget } from "../../modules/preview/database";
 import {
 	assertCapability,
 	assertWithinQuota,
@@ -187,6 +189,9 @@ export const composeRouter = router({
 				previewEnv: textBlobSchema.nullish(),
 				previewLimit: z.number().int().min(0).max(100).optional(),
 				previewTtlHours: z.number().int().min(1).max(8760).nullish(),
+				previewDatabaseKind: z.enum(LOGICAL_DATABASE_KINDS).nullish(),
+				previewDatabaseId: z.string().min(1).nullish(),
+				previewSeedCommand: textBlobSchema.nullish(),
 				gitUrl: z.string().nullish(),
 				gitBranch: z.string().nullish(),
 				customGitSSHKeyId: z.string().nullish(),
@@ -235,11 +240,21 @@ export const composeRouter = router({
 				input.preDeployCommand !== undefined ||
 				input.postDeployCommand !== undefined ||
 				input.previewEnv !== undefined ||
-				input.buildArgs !== undefined
+				input.buildArgs !== undefined ||
+				input.previewSeedCommand !== undefined
 			) {
 				// Hook commands are shell and `previewEnv` holds credentials —
 				// both are redacted like other secrets.
 				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			}
+			if (input.previewDatabaseKind !== undefined || input.previewDatabaseId !== undefined) {
+				await assertPreviewDatabaseTarget(
+					{
+						previewDatabaseKind: input.previewDatabaseKind ?? row.previewDatabaseKind,
+						previewDatabaseId: input.previewDatabaseId ?? row.previewDatabaseId,
+					},
+					row.environmentId,
+				);
 			}
 
 			await assertServerInOrganization(input.serverId, organizationId);

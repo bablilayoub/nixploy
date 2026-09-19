@@ -554,6 +554,11 @@ const docs: Record<string, ProcedureDoc> = {
 			"Builds the preview again from its ref: a branch preview after a push, a pull-request preview whose webhook was missed. Returns the deploymentId to wait on. A preview parked behind the fork gate must be approved instead.",
 		capability: ["service.deploy"],
 	},
+	"previewDeployment.databaseTargets": {
+		summary: "Database services a parent may use for per-preview databases",
+		description:
+			"The postgres, mysql, mariadb and mongo services of the parent's own environment — the engines that can hold a logical database per preview. Pick one into `previewDatabaseKind` / `previewDatabaseId` on the application or compose service.",
+	},
 	"previewDeployment.approve": {
 		summary: "Approve a fork preview",
 		description:

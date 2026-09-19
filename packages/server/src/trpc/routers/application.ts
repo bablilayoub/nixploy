@@ -27,6 +27,7 @@ import type { ApplicationWithTenancy } from "../../modules/application/org";
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { redactServerCommandLog } from "../../modules/cluster";
+import { LOGICAL_DATABASE_KINDS } from "../../modules/databases/logical";
 import {
 	applicationReadiness,
 	cancelDeployment as cancelQueuedDeployment,
@@ -38,6 +39,7 @@ import {
 import { parseEnv } from "../../modules/deployment/env";
 import { getDeploymentLogPath } from "../../modules/deployment/paths";
 import { badRequest, notFound, preconditionFailed } from "../../modules/errors";
+import { assertPreviewDatabaseTarget } from "../../modules/preview/database";
 import { assertCapability, assertWithinQuota, hasCapability } from "../../modules/projects";
 import { assertProjectVisible } from "../../modules/projects/project-scope";
 import { textBlobSchema, watchPathsSchema } from "../../utils/input-limits";
@@ -306,6 +308,10 @@ export const applicationRouter = router({
 				previewEnv: textBlobSchema.nullable().optional(),
 				previewLimit: z.number().int().min(0).max(100).optional(),
 				previewTtlHours: z.number().int().min(1).max(8760).nullable().optional(),
+				/** A logical database per preview on this service of the environment (both or neither). */
+				previewDatabaseKind: z.enum(LOGICAL_DATABASE_KINDS).nullable().optional(),
+				previewDatabaseId: z.string().min(1).nullable().optional(),
+				previewSeedCommand: textBlobSchema.nullable().optional(),
 				watchPaths: watchPathsSchema.nullable().optional(),
 				buildArgs: textBlobSchema.nullable().optional(),
 				// Hooks are shell commands; the blob cap keeps a 200 MB paste out
@@ -325,11 +331,21 @@ export const applicationRouter = router({
 				input.buildArgs !== undefined ||
 				input.previewEnv !== undefined ||
 				input.preDeployCommand !== undefined ||
-				input.postDeployCommand !== undefined
+				input.postDeployCommand !== undefined ||
+				input.previewSeedCommand !== undefined
 			) {
 				await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			}
-			await assertApplicationAccess(input.applicationId, organizationId);
+			const current = await assertApplicationAccess(input.applicationId, organizationId);
+			if (input.previewDatabaseKind !== undefined || input.previewDatabaseId !== undefined) {
+				await assertPreviewDatabaseTarget(
+					{
+						previewDatabaseKind: input.previewDatabaseKind ?? current.previewDatabaseKind,
+						previewDatabaseId: input.previewDatabaseId ?? current.previewDatabaseId,
+					},
+					current.environmentId,
+				);
+			}
 			await assertServerInOrganization(input.serverId, organizationId);
 			await assertHardeningOverrideAllowed(ctx.session, input);
 			if (input.pushRegistryId) {

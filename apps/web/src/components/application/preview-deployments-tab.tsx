@@ -3,6 +3,7 @@
 import { Loader2 } from "lucide-react";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
+import { PreviewDatabaseFields } from "@/components/services/preview-database-fields";
 import { PreviewDeploymentsPanel } from "@/components/services/preview-deployments-panel";
 import { useSaveBar } from "@/components/services/save-bar";
 import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
@@ -44,8 +45,14 @@ function PreviewSettingsCard({ application }: { application: Application }) {
 		previewEnv: application.previewEnv ?? "",
 		limit: String(application.previewLimit ?? 3),
 		ttlHours: application.previewTtlHours ? String(application.previewTtlHours) : "",
+		databaseTarget:
+			application.previewDatabaseKind && application.previewDatabaseId
+				? `${application.previewDatabaseKind}:${application.previewDatabaseId}`
+				: "",
+		seedCommand: application.previewSeedCommand ?? "",
 	});
-	const { previewEnv, limit, ttlHours } = draft.value;
+	const { previewEnv, limit, ttlHours, databaseTarget, seedCommand } = draft.value;
+	const [databaseKind, databaseId] = databaseTarget ? databaseTarget.split(":", 2) : [null, null];
 
 	const update = useSaveMutation(trpc.application.update.mutationOptions(), {
 		successMessage: "Preview settings saved",
@@ -65,6 +72,14 @@ function PreviewSettingsCard({ application }: { application: Application }) {
 			previewEnv: previewEnv.trim() || null,
 			previewLimit: parsedLimit,
 			previewTtlHours: parsedTtl,
+			previewDatabaseKind: (databaseKind ?? null) as
+				| "postgres"
+				| "mysql"
+				| "mariadb"
+				| "mongo"
+				| null,
+			previewDatabaseId: databaseId ?? null,
+			previewSeedCommand: databaseKind ? seedCommand.trim() || null : null,
 		});
 
 	useSaveBar(draft, {
@@ -122,6 +137,15 @@ function PreviewSettingsCard({ application }: { application: Application }) {
 						</p>
 					</div>
 				</div>
+
+				<PreviewDatabaseFields
+					target={{ applicationId }}
+					databaseTarget={databaseTarget}
+					seedCommand={seedCommand}
+					disabled={!canWrite}
+					idPrefix="preview"
+					onChange={(patch) => draft.patch(patch)}
+				/>
 
 				<div className="flex items-center justify-end gap-3">
 					<UnsavedChangesPill dirty={draft.dirty} />

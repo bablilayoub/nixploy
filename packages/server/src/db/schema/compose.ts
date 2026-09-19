@@ -64,6 +64,16 @@ export const compose = pgTable(
 		previewLimit: integer("preview_limit").notNull().default(3),
 		/** Default expiry handed to webhook-created previews (null = never expire). */
 		previewTtlHours: integer("preview_ttl_hours"),
+		/**
+		 * Give every preview its own logical database on this service (a
+		 * postgres/mysql/mariadb/mongo of the same environment): created when the
+		 * preview is first deployed, handed to it as `DATABASE_URL`, dropped with
+		 * it. Both null = previews run against whatever `previewEnv` says.
+		 */
+		previewDatabaseKind: text("preview_database_kind"),
+		previewDatabaseId: text("preview_database_id"),
+		/** Runs once per preview, with its fresh DATABASE_URL, before its first rollout (migrations, fixtures). */
+		previewSeedCommand: text("preview_seed_command"),
 
 		gitUrl: text("git_url"),
 		gitBranch: text("git_branch"),

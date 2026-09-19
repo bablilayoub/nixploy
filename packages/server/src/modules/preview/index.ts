@@ -9,6 +9,7 @@ import {
 	removePreviewComposeFiles,
 	teardownPreviewComposeProject,
 } from "./compose";
+import { dropPreviewDatabase, ensurePreviewDatabase } from "./database";
 import {
 	previewAppName,
 	previewComposeHost,
@@ -18,6 +19,7 @@ import {
 } from "./naming";
 import {
 	loadPreviewParent,
+	loadPreviewParentForPreview,
 	type PreviewParent,
 	type PreviewParentRef,
 	previewParentRef,
@@ -339,6 +341,14 @@ export async function createPreviewDeployment(
 			};
 		}
 
+		// Its own database, when the parent asks for one — before the build so
+		// the worker can hand the preview its DATABASE_URL and seed it.
+		await ensurePreviewDatabase(parent, {
+			previewDeploymentId: preview.previewDeploymentId,
+			appName: preview.appName,
+			previewDatabaseLogicalId: null,
+		});
+
 		const deploymentId = await queueDeployment({
 			applicationId: parent.kind === "application" ? parent.id : undefined,
 			composeId: parent.kind === "compose" ? parent.id : undefined,
@@ -392,6 +402,13 @@ export async function redeployPreviewDeployment(
 	});
 	if (!preview) {
 		throw new PreviewNotFoundError(`Preview deployment not found: ${previewDeploymentId}`);
+	}
+
+	// A preview created before the parent opted into per-preview databases,
+	// or one approved through the fork gate, gets its database on the way.
+	const parent = await loadPreviewParentForPreview(preview);
+	if (parent) {
+		await ensurePreviewDatabase(parent, preview);
 	}
 
 	await db
@@ -505,6 +522,10 @@ export async function deletePreviewDeployment(
 	if (!preview) {
 		throw new PreviewNotFoundError(`Preview deployment not found: ${previewDeploymentId}`);
 	}
+
+	// The database goes before the service so a failed drop is logged while
+	// the preview still exists to retry from; the logical row stays either way.
+	await dropPreviewDatabase(preview);
 
 	if (preview.composeId) {
 		const parent = await db.query.compose.findFirst({

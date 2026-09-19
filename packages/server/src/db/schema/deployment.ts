@@ -11,6 +11,7 @@ import {
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { applications } from "./application";
 import { compose } from "./compose";
+import { databaseLogicals } from "./database";
 import { deploymentStatus, deploymentTrigger, previewKind, previewStatus } from "./enums";
 import { servers } from "./server";
 import { createdAt, idColumn } from "./utils";
@@ -161,6 +162,13 @@ export const previewDeployments = pgTable(
 		previewStatus: previewStatus("preview_status").notNull().default("idle"),
 		domainId: text("domain_id"),
 		expiresAt: timestamp("expires_at", { withTimezone: true }),
+		/** The logical database provisioned for this preview (parent's `previewDatabase*`), dropped with it. */
+		previewDatabaseLogicalId: text("preview_database_logical_id").references(
+			() => databaseLogicals.databaseLogicalId,
+			{ onDelete: "set null" },
+		),
+		/** The parent's seed command has not run for this preview yet; the worker runs it once and clears this. */
+		previewSeedPending: boolean("preview_seed_pending").notNull().default(false),
 		/** Parent application, or null when this preview belongs to a compose service. */
 		applicationId: text("application_id").references(() => applications.applicationId, {
 			onDelete: "cascade",

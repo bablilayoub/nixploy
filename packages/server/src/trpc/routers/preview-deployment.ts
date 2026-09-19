@@ -6,6 +6,7 @@ import { previewDeployments } from "../../db/schema";
 import { assertApplicationAccess, getOrganizationId } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
 import { findComposeForOrg } from "../../modules/compose/service";
+import { LOGICAL_DATABASE_KINDS } from "../../modules/databases/logical";
 import {
 	createPreviewDeployment,
 	deletePreviewDeployment,
@@ -16,6 +17,7 @@ import {
 	withPreviewDomain,
 } from "../../modules/preview";
 import { upsertPreviewComment } from "../../modules/preview/comment";
+import { logicalServiceModule } from "../../modules/preview/database";
 import { assertCapability } from "../../modules/projects";
 import { assertSafeGitRef } from "../../utils/public-url";
 import { protectedProcedure, router } from "../init";
@@ -84,6 +86,31 @@ export const previewDeploymentRouter = router({
 			orderBy: desc(previewDeployments.createdAt),
 		});
 		return Promise.all(previews.map(withPreviewDomain));
+	}),
+
+	/**
+	 * Database services a parent may pick for per-preview databases: the
+	 * logical-capable engines of its own environment (a preview reaches its
+	 * database over the environment overlay).
+	 */
+	databaseTargets: protectedProcedure.input(parentInput).query(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		const parent = await assertPreviewParentAccess(input, organizationId);
+		const environmentId =
+			parent.kind === "application"
+				? (await assertApplicationAccess(parent.id, organizationId)).environmentId
+				: (await findComposeForOrg(parent.id, organizationId)).environmentId;
+		const rows = await Promise.all(
+			LOGICAL_DATABASE_KINDS.map(async (kind) =>
+				(await logicalServiceModule(kind).listByEnvironment(environmentId)).map((row) => ({
+					kind,
+					id: logicalServiceModule(kind).rowId(row),
+					name: row.name,
+					appName: row.appName,
+				})),
+			),
+		);
+		return rows.flat();
 	}),
 
 	/** Previews of one application (kept for existing REST/CLI callers). */

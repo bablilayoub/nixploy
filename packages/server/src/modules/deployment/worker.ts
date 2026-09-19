@@ -25,6 +25,7 @@ import {
 	recordDeploymentOutcomeEvent,
 } from "../observability/deploy-events";
 import { buildPreviewComposeTarget } from "../preview/compose";
+import { previewDatabaseEnv } from "../preview/database";
 import { parsePreviewSourceRef } from "../preview/source-ref";
 import { reportPreviewCommitStatus } from "../preview/status";
 import { syncPreviewTraefik } from "../preview/traefik";
@@ -253,9 +254,17 @@ async function runApplicationJob(
 	// commit") overrides the checkout the same way, and only for this job: the
 	// stored `branch` is untouched, so the next webhook push still builds the
 	// configured branch. Previews win — their ref comes from the preview row.
-	const deployTarget: ApplicationRow = preview
+	const baseTarget: ApplicationRow = preview
 		? buildPreviewDeployTarget(application, preview)
 		: buildRefDeployTarget(application, job.requestedRef);
+	// A preview with its own database receives it as DATABASE_URL over
+	// everything else — on the row the rollout reads, so the Swarm spec, the
+	// seed hook and the log redaction all see one env. (Adding it only to the
+	// merged hook env left the service itself without it: smoke-tested.)
+	const previewDatabaseLine = preview ? await previewDatabaseEnv(preview) : null;
+	const deployTarget: ApplicationRow = previewDatabaseLine
+		? { ...baseTarget, env: mergeEnv(baseTarget.env, previewDatabaseLine) }
+		: baseTarget;
 
 	// Register every secret that could leak into command output: the fully
 	// merged env (project → environment → application), not just the app's own.
@@ -335,6 +344,30 @@ async function runApplicationJob(
 			command: preDeployCommand,
 		});
 		checkpoint();
+	} else if (preview?.previewSeedPending) {
+		// The parent's pre-deploy hook never runs for a preview (a PR's
+		// migration must not touch the shared environment); the seed command
+		// runs once, in the preview's own image, against the preview's own
+		// database — which is what makes it safe.
+		const seedCommand = application.previewSeedCommand?.trim();
+		if (seedCommand) {
+			await ctx.step("pre_deploy");
+			const network = await ensureEnvironmentNetwork(application.environment);
+			ctx.logger.line("Seeding the preview database...");
+			await runPreDeployHook(ctx, {
+				appName: deployTarget.appName,
+				deploymentId: job.deploymentId,
+				image: imageTag,
+				network,
+				env: mergedEnv,
+				command: seedCommand,
+			});
+			await db
+				.update(previewDeployments)
+				.set({ previewSeedPending: false })
+				.where(eq(previewDeployments.previewDeploymentId, preview.previewDeploymentId));
+			checkpoint();
+		}
 	}
 
 	// Registry push: the built tag only exists on the node that built it, so
@@ -472,7 +505,11 @@ async function runComposeJob(
 	// A preview renders and deploys an isolated project under
 	// `<appName>-pr-<n>` (its own private network, volumes and Traefik keys)
 	// from the pull request's source — never the production project.
-	const target: typeof row = preview ? buildPreviewComposeTarget(row, preview) : row;
+	let target: typeof row = preview ? buildPreviewComposeTarget(row, preview) : row;
+	if (preview) {
+		const previewDatabaseLine = await previewDatabaseEnv(preview);
+		if (previewDatabaseLine) target = { ...target, env: mergeEnv(target.env, previewDatabaseLine) };
+	}
 
 	for (const [, value] of parseEnv(target.env)) ctx.logger.addSecret(value);
 
@@ -528,6 +565,27 @@ async function runComposeJob(
 	// manager with the file rendered there (tasks are pinned to the row's
 	// server by the injected node constraint). Plain compose runs on the server.
 	await ctx.run(command, { cwd: files.workDir, onPrimary: runsOnPrimary(target) });
+
+	// Compose has no image Nixploy built to run a command in before the
+	// rollout, so a preview's seed runs in a container of the preview project
+	// once it is up — against the preview's own database.
+	if (preview?.previewSeedPending) {
+		const seedCommand = row.previewSeedCommand?.trim();
+		if (seedCommand) {
+			await ctx.step("pre_deploy");
+			ctx.logger.line("Seeding the preview database...");
+			await runComposeExecHook(ctx, {
+				appName: target.appName,
+				command: seedCommand,
+				label: "Preview seed command",
+			});
+			await db
+				.update(previewDeployments)
+				.set({ previewSeedPending: false })
+				.where(eq(previewDeployments.previewDeploymentId, preview.previewDeploymentId));
+			checkpoint();
+		}
+	}
 	checkpoint();
 
 	// The runtime tab's container list is cached for 10 s — a deploy replaces
