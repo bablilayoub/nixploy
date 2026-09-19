@@ -16,11 +16,28 @@ export type RedeployFromApplyResult = {
  * are excluded — they re-sync Traefik directly and need no rebuild.
  */
 export function itemsToRedeploy(result: ApplyStackResult): ApplyStackResult["items"] {
+	// A compose mount is rendered into the file at deploy time, so a stack
+	// whose mounts changed needs a deploy even when its own row did not. An
+	// application's mounts and ports are re-specified on the Swarm service
+	// directly by the apply, so they need none.
+	const composeWithMountChanges = new Set(
+		result.items
+			.filter(
+				(item) =>
+					item.kind === "mount" &&
+					item.parentKind === "compose" &&
+					item.action !== "noop" &&
+					!item.error,
+			)
+			.map((item) => item.parent),
+	);
 	return result.items.filter(
 		(item) =>
 			(item.kind === "application" || item.kind === "compose") &&
 			!item.error &&
-			(item.action === "create" || (item.action === "update" && (item.changes?.length ?? 0) > 0)),
+			(item.action === "create" ||
+				(item.action === "update" && (item.changes?.length ?? 0) > 0) ||
+				(item.kind === "compose" && composeWithMountChanges.has(item.name))),
 	);
 }
 

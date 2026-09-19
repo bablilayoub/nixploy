@@ -1,7 +1,11 @@
 export {
 	type ApplyStackResult,
 	applyStack,
+	domainUpdatePatch,
+	type LoadLiveStackOptions,
+	liveStateFromGraph,
 	loadLiveStackState,
+	type PlanStackOptions,
 	planStack,
 } from "./apply";
 export {
@@ -11,12 +15,18 @@ export {
 	resolveEnvironmentId,
 	resolveProjectForStack,
 } from "./export";
+export { type EnvironmentGraph, loadEnvironmentGraph } from "./live";
 export {
 	buildPlan,
 	type GitopsPlanAction,
 	type GitopsPlanItem,
+	type GitopsPlanKind,
 	type GitopsPlanResult,
+	type LiveService,
 	type LiveStackState,
+	type PlanNeeds,
+	type StackSensitivity,
+	stackSensitivity,
 	summarizePlanNeeds,
 } from "./plan";
 export {
@@ -28,13 +38,23 @@ export {
 export {
 	envKeysFromDotenv,
 	type GitopsApplication,
+	type GitopsBasicAuth,
 	type GitopsCompose,
 	type GitopsDomain,
+	type GitopsHooks,
+	type GitopsMiddleware,
+	type GitopsMount,
+	type GitopsPort,
+	type GitopsPreviews,
+	type GitopsRedirect,
+	type GitopsSwarm,
 	NIXPLOY_STACK_VERSION,
 	type NixployStack,
 	nixployStackSchema,
 	parseStackInput,
 	parseStackYaml,
+	SUPPORTED_STACK_VERSIONS,
 	serializeStackYaml,
 	slugifyProjectName,
+	upgradeStack,
 } from "./schema";

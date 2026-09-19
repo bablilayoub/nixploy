@@ -177,11 +177,13 @@ Per-org and per-instance logo (light/dark), favicon, product name, accent, foote
 
 The flagship. Nothing else in this plan changes a 20-service user's decision as directly.
 
-### 10. Manifest v2 *(M — foundation)*
+### 10. Manifest v2 ✅ *(M — foundation, landed 2026-09-19)*
 
 `NIXPLOY_STACK_VERSION` 2 with a v1 upgrader. The manifest grows to cover the whole service surface: hooks, swarm overrides, mounts, ports, redirects, basic-auth, domain middlewares (typed set only — no raw YAML hole), preview knobs, resources, registries/destinations/notifications by name. Env stays keys-and-references only; values never enter the file. A separate passphrase-encrypted secrets bundle carries values when someone wants a full move.
 
 This is the importer's target format *and* the export half of config-as-code.
+
+*What shipped:* the schema, exporter, planner and apply for all of the above, documented in [`gitops.md`](./gitops.md). Three things landed differently from the sketch. Destinations and notifications are **not** in the file — neither hangs off a service row (backups are per database and schedule, notifications are organization-wide), so naming them would have added references with nothing to attach them to; registries and servers are the references a service actually holds and they are written by name. An omitted array means "leave the rows alone" in v2 (v1 read an omitted `domains` as "delete them all"), so the upgrader spells `domains: []` out on every v1 service that left it out and a v1 file keeps its behaviour. And the secrets bundle is still open: the exporter is ready for it (sensitive fields are already a separate switch), but the passphrase format deserves its own design rather than a footnote here. Two side effects: the mount, redirect and forward-auth validators moved out of their routers into modules so the manifest goes through the same checks the forms do, and the planner compares jsonb canonically — Postgres reorders keys, and a byte compare reported every Swarm override as changed on every apply.
 
 ### 11. Importers *(XL)*
 

@@ -1,5 +1,3 @@
-import { realpath } from "node:fs/promises";
-import path from "node:path";
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -12,16 +10,18 @@ import {
 	removeFileMount,
 	upsertApplicationSwarmService,
 } from "../../modules/application";
-import { resolveFileMountPath } from "../../modules/application/paths";
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { findComposeForOrg } from "../../modules/compose/service";
-import { PROTECTED_VOLUMES } from "../../modules/docker/protected";
 import { notFound } from "../../modules/errors";
 import { assertCapability, hasCapability } from "../../modules/projects";
-import { getConfigDir } from "../../modules/traefik/paths";
+import {
+	assertSafeFilePath,
+	assertSafeHostPath,
+	assertSafeVolumeName,
+	validateMountFields,
+} from "../../modules/services/mounts";
 import { mountContentSchema } from "../../utils/input-limits";
-import { assertDockerVolumeName } from "../../utils/validators";
 import { protectedProcedure, router } from "../init";
 
 const mountFields = {
@@ -37,155 +37,6 @@ const mountFields = {
 	/** file: content written to `filePath` (capped at 256 KiB). */
 	content: mountContentSchema.nullable().optional(),
 } as const;
-
-const BLOCKED_HOST_PATH_PREFIXES = [
-	"/var/run/docker.sock",
-	"/run/docker.sock",
-	"/etc",
-	"/root",
-	"/proc",
-	"/sys",
-	"/boot",
-	"/dev",
-	"/tmp",
-	"/var",
-	"/run",
-	"/home",
-	"/Users",
-	"/usr",
-	"/opt",
-	"/srv",
-	"/mnt",
-	"/media",
-	"/data",
-	"/nix",
-	"/workspace",
-	"/Applications",
-	"/Library",
-	"/System",
-	"/private",
-] as const;
-
-/**
- * Reject bind mounts that would expose host secrets or the Docker socket.
- * Resolve symlinks via realpath (when the path exists) so `/tmp/sock → docker.sock`
- * cannot bypass the prefix denylist.
- */
-const assertSafeHostPath = async (hostPath: string | null | undefined) => {
-	if (!hostPath) return;
-	if (hostPath.includes("\0")) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: "hostPath must not contain null bytes",
-		});
-	}
-	if (!path.isAbsolute(hostPath)) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: "hostPath must be an absolute path",
-		});
-	}
-
-	let candidate = path.resolve(hostPath);
-	const missing: string[] = [];
-	while (candidate !== "/") {
-		try {
-			candidate = await realpath(candidate);
-			break;
-		} catch {
-			missing.unshift(path.basename(candidate));
-			const parent = path.dirname(candidate);
-			if (parent === candidate) break;
-			candidate = parent;
-		}
-	}
-	if (missing.length > 0) {
-		try {
-			candidate = path.join(await realpath(candidate), ...missing);
-		} catch {
-			candidate = path.join(candidate, ...missing);
-		}
-	}
-	const normalized = path.resolve(candidate).replace(/\/+$/, "") || "/";
-	if (normalized === "/") {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: "Bind mount hostPath cannot be the filesystem root",
-		});
-	}
-	const blockedPrefixes = [...BLOCKED_HOST_PATH_PREFIXES, path.resolve(getConfigDir())];
-	for (const blocked of blockedPrefixes) {
-		const blockedNorm = path.resolve(blocked).replace(/\/+$/, "") || "/";
-		if (normalized === blockedNorm || normalized.startsWith(`${blockedNorm}/`)) {
-			throw new TRPCError({
-				code: "BAD_REQUEST",
-				message: `Bind mount hostPath is not allowed: ${blockedNorm}`,
-			});
-		}
-	}
-};
-
-/** Validate that the fields required by the mount type are present. */
-const validateMountFields = (input: {
-	type: "bind" | "volume" | "file";
-	hostPath?: string | null;
-	volumeName?: string | null;
-	filePath?: string | null;
-}) => {
-	if (input.type === "bind" && !input.hostPath) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: "hostPath is required for bind mounts",
-		});
-	}
-	if (input.type === "volume" && !input.volumeName) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: "volumeName is required for volume mounts",
-		});
-	}
-	if (input.type === "file" && !input.filePath) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: "filePath is required for file mounts",
-		});
-	}
-};
-
-const assertSafeVolumeName = (volumeName: string | null | undefined, appName: string) => {
-	if (!volumeName) return;
-	assertDockerVolumeName(volumeName);
-	if (PROTECTED_VOLUMES.has(volumeName)) {
-		throw new TRPCError({
-			code: "FORBIDDEN",
-			message: `Volume "${volumeName}" is a Nixploy platform volume and cannot be mounted`,
-		});
-	}
-	// Prevent cross-tenant attach: only volumes owned by this app.
-	const owned =
-		volumeName === appName ||
-		volumeName.startsWith(`${appName}_`) ||
-		volumeName.startsWith(`${appName}-`);
-	if (!owned) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: `Volume "${volumeName}" must be scoped to this application (name "${appName}", or prefix "${appName}_" / "${appName}-")`,
-		});
-	}
-};
-
-/** Reject file mount paths that escape the application's files directory. */
-const assertSafeFilePath = (appName: string, filePath: string | null | undefined) => {
-	if (!filePath) return;
-	try {
-		resolveFileMountPath(appName, filePath);
-	} catch {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: `Invalid file mount path: ${filePath}`,
-		});
-	}
-};
 
 /**
  * The service a mount belongs to, reduced to what the router needs.

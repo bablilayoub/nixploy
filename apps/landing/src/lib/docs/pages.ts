@@ -1386,11 +1386,60 @@ nixploy audit export --since 30d -o audit.csv`,
 			},
 			{
 				type: "p",
-				text: "Available in the project GitOps UI and via nixploy gitops … CLI commands.",
+				text: "Available in the project GitOps UI and via the nixploy gitops export / plan / apply / sync-url CLI commands.",
+			},
+			{ type: "h2", text: "What the file covers (version 2)" },
+			{
+				type: "p",
+				text: "Every service row and everything attached to it: source and build settings, resources, deploy hooks, Swarm overrides, preview settings, domains with their middleware chains, mounts, published ports, redirects and basic auth. Rows a service references by id — the pull and push registry, the server it is pinned to — are written by name, so the same file applies on another instance.",
+			},
+			{
+				type: "pre",
+				code: `version: 2
+project: { name: shop }
+environment: { name: production }
+applications:
+  - name: api
+    environment: production
+    sourceType: github
+    repository: acme/api
+    branch: main
+    buildType: dockerfile
+    replicas: 2
+    pushRegistry: ghcr
+    hooks: { preDeploy: npm run migrate }
+    previews: { enabled: true, limit: 3 }
+    domains:
+      - host: api.acme.dev
+        https: true
+        certificateType: letsencrypt
+        middlewares:
+          - kind: rateLimit
+            config: { average: 100, burst: 200 }
+    mounts:
+      - { type: volume, mountPath: /var/lib/api, volumeName: api-3f9a1c-data }
+    ports:
+      - { published: 9100, target: 9100 }
+    basicAuth:
+      - { username: metrics, password: change-me }`,
+			},
+			{
+				type: "ul",
+				items: [
+					"An omitted scalar means leave as is, never reset — a file that lists only repository and branch changes only those two columns.",
+					"An array (domains, mounts, ports, redirects, basicAuth, a domain's middlewares) is the whole desired set: rows it lists are created or patched, rows it leaves out are deleted, [] removes every row, and an omitted array leaves the rows alone.",
+					"Values never enter the file: env is key names only, basic-auth passwords are write-only, and hook commands, inline compose files and file-mount contents are exported only to a caller with secrets.read.",
+					"A version 1 file is still accepted and upgraded on read; export always writes version 2.",
+				],
+			},
+			{ type: "h2", text: "What apply checks" },
+			{
+				type: "p",
+				text: "Apply goes through the same checks as the panel forms: service.create and the quota for every new service, service.write for updates, service.deploy for the redeploy (skip it with redeploy: false), secrets.write when the file carries hooks, passwords or file contents, and the instance admin for bind mounts, Swarm network or privilege overrides and publishing compose ports. Mount paths, redirect rules, middleware configs and forward-auth targets are validated exactly as their routers validate them.",
 			},
 			{
 				type: "note",
-				text: "Apply is deliberately not one big transaction: every service is applied independently, so one item that fails is reported with its reason while the rest of the stack is still written. Items that failed to apply are never redeployed, and databases are skipped for redeploy because they have no build.",
+				text: "Apply is deliberately not one big transaction: every service is applied independently, so one item that fails is reported with its reason while the rest of the stack is still written. A service's domains and middleware chains are reconciled in one transaction, then Traefik is rewritten once. Items that failed to apply are never redeployed, and databases are skipped for redeploy because they have no build. The full reference is docs/gitops.md in the repository.",
 			},
 		],
 	},

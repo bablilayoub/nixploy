@@ -437,10 +437,18 @@ table shows plus `organizationId`, `actorId`, `ip`, `userAgent` and the raw
 ```bash
 nixploy gitops export --project-id proj_123 --env production -o nixploy.yaml
 nixploy plan -f nixploy.yaml
-nixploy apply -f nixploy.yaml
-nixploy gitops sync-url --project-id proj_123
-nixploy gitops sync-git --project-id proj_123
+nixploy apply -f nixploy.yaml                # --no-redeploy to only write the rows
+nixploy gitops sync-url --url https://raw.githubusercontent.com/acme/infra/main/nixploy.yaml
+nixploy gitops sync-git -f nixploy.yaml      # same as apply, through the webhook-style endpoint
 ```
+
+The file format is [gitops.md](./gitops.md). `plan` lists every service and
+child row (domains, mounts, ports, redirects, basic auth) with `create` /
+`update` / `delete` / `noop` and the manifest paths that changed. `apply`
+needs the same capabilities the panel forms would — `secrets.write` when the
+file carries hooks, passwords or file contents, the instance admin for bind
+mounts, Swarm network/privilege overrides and `publishPorts` — and reports the
+services it could not write without abandoning the rest.
 
 ## Scripting with `--json`
 

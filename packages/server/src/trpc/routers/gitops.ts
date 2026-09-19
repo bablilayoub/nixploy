@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { auditFromSession } from "../../modules/audit";
+import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import {
 	applyStack,
 	exportStack,
@@ -11,6 +12,7 @@ import {
 	planStack,
 	redeployChangedFromApply,
 	serializeStackYaml,
+	stackSensitivity,
 	summarizePlanNeeds,
 } from "../../modules/gitops";
 import {
@@ -32,8 +34,11 @@ type Session = NonNullable<TRPCContext["session"]>;
  * needs the same per-action capabilities the normal routers gate on —
  * `service.create` (+ the service quota) for every service the plan would
  * create, `service.write` for updates, `service.deploy` when the changed
- * applications/compose get redeployed. The plan is computed against the
- * live state before anything is written.
+ * applications/compose get redeployed, `secrets.write` when the file carries
+ * hook commands, basic-auth passwords or file-mount contents, and the
+ * instance admin for what the panel forms reserve for it (bind mounts,
+ * Swarm network/privilege overrides, publishing compose ports). The plan is
+ * computed against the live state before anything is written.
  */
 async function assertApplyPermissions(
 	session: Session,
@@ -41,8 +46,16 @@ async function assertApplyPermissions(
 	stack: NixployStack,
 	projectId: string | undefined,
 	redeploy: boolean,
+	includeSensitive: boolean,
 ): Promise<void> {
-	const plan = await planStack(stack, organizationId, projectId);
+	const sensitivity = stackSensitivity(stack);
+	if (sensitivity.secrets) {
+		await assertCapability(session.user.id, organizationId, "secrets.write");
+	}
+	if (sensitivity.instanceAdmin.length > 0) {
+		await assertInstanceAdmin(session);
+	}
+	const plan = await planStack(stack, organizationId, projectId, { includeSensitive });
 	const needs = summarizePlanNeeds(plan);
 	if (needs.creates > 0) {
 		await assertCapability(session.user.id, organizationId, "service.create");
@@ -92,13 +105,13 @@ export const gitopsRouter = router({
 			);
 			await findProjectById(input.projectId, organizationId);
 			await assertCapability(ctx.session.user.id, organizationId, "gitops.manage");
-			const includeComposeFile = await hasCapability(
+			const includeSensitive = await hasCapability(
 				ctx.session.user.id,
 				organizationId,
 				"secrets.read",
 			);
 			const stack = await exportStack(input.projectId, input.environmentName, organizationId, {
-				includeComposeFile,
+				includeSensitive,
 			});
 			if (input.asYaml) {
 				return { stack, yaml: serializeStackYaml(stack) };
@@ -123,7 +136,9 @@ export const gitopsRouter = router({
 			if (input.projectId) {
 				await findProjectById(input.projectId, organizationId);
 			}
-			return planStack(stack, organizationId, input.projectId);
+			return planStack(stack, organizationId, input.projectId, {
+				includeSensitive: await hasCapability(ctx.session.user.id, organizationId, "secrets.read"),
+			});
 		}),
 
 	/** Apply desired stack (admin only). Optionally queue redeploys for changed apps/compose. */
@@ -139,14 +154,22 @@ export const gitopsRouter = router({
 			if (input.projectId) {
 				await findProjectById(input.projectId, organizationId);
 			}
+			const includeSensitive = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
 			await assertApplyPermissions(
 				ctx.session,
 				organizationId,
 				stack,
 				input.projectId,
 				input.redeploy !== false,
+				includeSensitive,
 			);
-			const result = await applyStack(stack, organizationId, input.projectId);
+			const result = await applyStack(stack, organizationId, input.projectId, {
+				includeSensitive,
+			});
 			const redeploy =
 				input.redeploy === false
 					? null
@@ -187,14 +210,22 @@ export const gitopsRouter = router({
 			if (input.projectId) {
 				await findProjectById(input.projectId, organizationId);
 			}
+			const includeSensitive = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
 			await assertApplyPermissions(
 				ctx.session,
 				organizationId,
 				stack,
 				input.projectId,
 				input.redeploy !== false,
+				includeSensitive,
 			);
-			const result = await applyStack(stack, organizationId, input.projectId);
+			const result = await applyStack(stack, organizationId, input.projectId, {
+				includeSensitive,
+			});
 			const redeploy =
 				input.redeploy === false
 					? null
@@ -237,14 +268,22 @@ export const gitopsRouter = router({
 			if (input.projectId) {
 				await findProjectById(input.projectId, organizationId);
 			}
+			const includeSensitive = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
 			await assertApplyPermissions(
 				ctx.session,
 				organizationId,
 				stack,
 				input.projectId,
 				input.redeploy !== false,
+				includeSensitive,
 			);
-			const result = await applyStack(stack, organizationId, input.projectId);
+			const result = await applyStack(stack, organizationId, input.projectId, {
+				includeSensitive,
+			});
 			const redeploy =
 				input.redeploy === false
 					? null

@@ -61,10 +61,10 @@ describe("buildPlan domain deletions", () => {
 		expect(plan.summary.delete).toBe(1);
 	});
 
-	it("deletes every live domain when the desired app declares none", () => {
+	it("deletes every live domain when the desired app declares an empty list", () => {
 		const plan = buildPlan(
 			stack({
-				applications: [{ name: "web", environment: "prod" }],
+				applications: [{ name: "web", environment: "prod", domains: [] }],
 			}),
 			liveState({
 				applications: [

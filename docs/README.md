@@ -13,6 +13,7 @@ Guides for running and developing Nixploy.
 | [getting-started.md](./getting-started.md) | Operators | First deploy (whoami / template), Git, CLI |
 | [api.md](./api.md) | Operators / CI | REST conventions, responses, capabilities per endpoint, typed client, Swagger |
 | [cli.md](./cli.md) | Operators / CI | `@nixploy/cli`: auth & profiles, every command group, exit codes, scripting |
+| [gitops.md](./gitops.md) | Operators / CI | `nixploy.yaml` v2 reference: shape, keys, what apply checks, what the file never carries |
 | [mcp.md](./mcp.md) | Operators / AI | MCP server tools (36), annotations, prompts, resources, auth, client config |
 | [migrate-from-another-panel.md](./migrate-from-another-panel.md) | Operators | Concept map + cutover from another self-hosted panel |
 

@@ -343,7 +343,7 @@ export const GitopsCard = forwardRef<
 								id="gitops-yaml"
 								value={yaml}
 								onChange={(event) => setYaml(event.target.value)}
-								placeholder="version: 1&#10;project:&#10;  name: my-project"
+								placeholder="version: 2&#10;project:&#10;  name: my-project"
 								className="min-h-48 font-mono text-xs"
 							/>
 						</div>

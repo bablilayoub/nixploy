@@ -93,21 +93,37 @@ export function gitopsCommand(): Command {
 	addOutputOptions(
 		gitops
 			.command("sync-url")
-			.description("Pull desired state from a stack URL configured on the project")
-			.requiredOption("--project-id <id>", "Project ID"),
-	).action(async (options: { projectId: string }) => {
-		const result = await apiPost("gitops.syncFromUrl", { projectId: options.projectId });
-		printResult(result, "Synced from URL.");
+			.description("Fetch a nixploy.yaml from an https URL (raw GitHub/GitLab file) and apply it")
+			.requiredOption("--url <url>", "https URL of the stack file")
+			.option("--project-id <id>", "Target project ID (optional if stack metadata matches)")
+			.option("--no-redeploy", "Apply without redeploying the changed services"),
+	).action(async (options: { url: string; projectId?: string; redeploy: boolean }) => {
+		const result = await apiPost<{ applied?: number }>("gitops.syncFromUrl", {
+			url: options.url,
+			projectId: options.projectId,
+			redeploy: options.redeploy,
+		});
+		printResult(result, `Synced from URL: ${result?.applied ?? 0} change(s) applied.`);
 	});
 
 	addOutputOptions(
 		gitops
 			.command("sync-git")
-			.description("Pull desired state from the project's configured git remote")
-			.requiredOption("--project-id <id>", "Project ID"),
-	).action(async (options: { projectId: string }) => {
-		const result = await apiPost("gitops.syncFromGit", { projectId: options.projectId });
-		printResult(result, "Synced from git.");
+			.description("Apply a nixploy.yaml from a file or stdin (the webhook-style body)")
+			.option("-f, --file <path>", "Path to nixploy.yaml ('-' reads stdin)")
+			.option("--project-id <id>", "Target project ID (optional if stack metadata matches)")
+			.option("--no-redeploy", "Apply without redeploying the changed services"),
+	).action(async (options: { file?: string; projectId?: string; redeploy: boolean }) => {
+		if (!options.file) {
+			throw usageError("Provide a stack file with -f nixploy.yaml");
+		}
+		const yaml = await readStackFile(options.file);
+		const result = await apiPost<{ applied?: number }>("gitops.syncFromGit", {
+			yaml,
+			projectId: options.projectId,
+			redeploy: options.redeploy,
+		});
+		printResult(result, `Synced: ${result?.applied ?? 0} change(s) applied.`);
 	});
 
 	return gitops;
