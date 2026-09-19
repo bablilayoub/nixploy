@@ -26,6 +26,7 @@ import {
 } from "../observability/deploy-events";
 import { buildPreviewComposeTarget } from "../preview/compose";
 import { parsePreviewSourceRef } from "../preview/source-ref";
+import { reportPreviewCommitStatus } from "../preview/status";
 import { syncPreviewTraefik } from "../preview/traefik";
 import { toTraefikDomainEntry, writeAppTraefikConfig } from "../traefik/config-writer";
 import { buildImage } from "./builders";
@@ -383,6 +384,11 @@ async function runApplicationJob(
 			.update(previewDeployments)
 			.set({ previewStatus: "done" })
 			.where(eq(previewDeployments.previewDeploymentId, preview.previewDeploymentId));
+		void reportPreviewCommitStatus({
+			previewDeploymentId: preview.previewDeploymentId,
+			state: "success",
+			deploymentId: job.deploymentId,
+		});
 	} else {
 		// Post-deploy hook: exec into one task of the rollout we just made,
 		// waiting out the swarm's convergence first. A failure here IS a
@@ -555,6 +561,11 @@ async function runComposeJob(
 			.update(previewDeployments)
 			.set({ previewStatus: "done" })
 			.where(eq(previewDeployments.previewDeploymentId, preview.previewDeploymentId));
+		void reportPreviewCommitStatus({
+			previewDeploymentId: preview.previewDeploymentId,
+			state: "success",
+			deploymentId: job.deploymentId,
+		});
 	} else {
 		await resyncComposeDomains(row.composeId).catch((error) => {
 			ctx.logger.line(
@@ -598,6 +609,13 @@ async function setPreviewStatus(job: QueueJob, terminalStatus: TerminalStatus): 
 		.update(previewDeployments)
 		.set({ previewStatus: terminalStatus === "cancelled" ? "idle" : "error" })
 		.where(eq(previewDeployments.previewDeploymentId, job.previewDeploymentId));
+	if (terminalStatus === "error") {
+		void reportPreviewCommitStatus({
+			previewDeploymentId: job.previewDeploymentId,
+			state: "failure",
+			deploymentId: job.deploymentId,
+		});
+	}
 }
 
 /**

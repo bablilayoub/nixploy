@@ -350,6 +350,16 @@ export async function createPreviewDeployment(
 			commitMessage: input.commitMessage ?? null,
 			commitAuthor: input.commitAuthor ?? null,
 		});
+		// "pending" on the commit when it is known up front (webhook payloads);
+		// a branch preview learns its sha from the checkout and gets the
+		// terminal status from the worker instead.
+		void import("./status").then(({ reportPreviewCommitStatus }) =>
+			reportPreviewCommitStatus({
+				previewDeploymentId: preview.previewDeploymentId,
+				state: "pending",
+				deploymentId,
+			}),
+		);
 
 		return {
 			...preview,
@@ -402,6 +412,13 @@ export async function redeployPreviewDeployment(
 		commitMessage: provenance.commitMessage ?? preview.commitMessage ?? null,
 		commitAuthor: provenance.commitAuthor ?? preview.commitAuthor ?? null,
 	});
+	void import("./status").then(({ reportPreviewCommitStatus }) =>
+		reportPreviewCommitStatus({
+			previewDeploymentId: preview.previewDeploymentId,
+			state: "pending",
+			deploymentId,
+		}),
+	);
 
 	return { previewDeploymentId: preview.previewDeploymentId, deploymentId };
 }

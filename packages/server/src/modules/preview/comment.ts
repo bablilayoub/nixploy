@@ -88,9 +88,13 @@ function findOwnComment(comments: ExistingComment[]): ExistingComment | undefine
 	return comments.find((comment) => comment.body?.includes(PREVIEW_COMMENT_MARKER));
 }
 
-async function jsonFetch(
+/** One JSON request against a provider API with the provider's token scheme; shared with the commit statuses. */
+export async function providerJsonFetch(
 	url: string,
-	init: RequestInit & { token: string; tokenScheme?: "Bearer" | "token" | "PRIVATE-TOKEN" },
+	init: RequestInit & {
+		token: string;
+		tokenScheme?: "Bearer" | "token" | "PRIVATE-TOKEN" | "Basic";
+	},
 ): Promise<unknown> {
 	const { token, tokenScheme = "Bearer", headers, ...rest } = init;
 	const authHeaders: Record<string, string> =
@@ -163,14 +167,14 @@ async function commentOnGitlab(input: {
 	const base = row.gitlabUrl.replace(/\/$/, "");
 	const project = encodeURIComponent(`${input.owner}/${input.repo}`);
 	const notesUrl = `${base}/api/v4/projects/${project}/merge_requests/${input.pullRequestNumber}/notes`;
-	const notes = (await jsonFetch(`${notesUrl}?per_page=100`, {
+	const notes = (await providerJsonFetch(`${notesUrl}?per_page=100`, {
 		token: row.accessToken,
 		tokenScheme: "PRIVATE-TOKEN",
 	})) as { id: number; body?: string }[] | null;
 	const existing = findOwnComment(
 		(notes ?? []).map((note) => ({ id: note.id, body: note.body ?? "" })),
 	);
-	await jsonFetch(existing ? `${notesUrl}/${existing.id}` : notesUrl, {
+	await providerJsonFetch(existing ? `${notesUrl}/${existing.id}` : notesUrl, {
 		method: existing ? "PUT" : "POST",
 		token: row.accessToken,
 		tokenScheme: "PRIVATE-TOKEN",
@@ -189,7 +193,7 @@ async function commentOnGitea(input: {
 	if (!row?.accessToken) throw new Error("Gitea provider has no access token");
 	const base = row.giteaUrl.replace(/\/$/, "");
 	const repoApi = `${base}/api/v1/repos/${input.owner}/${input.repo}`;
-	const comments = (await jsonFetch(
+	const comments = (await providerJsonFetch(
 		`${repoApi}/issues/${input.pullRequestNumber}/comments?limit=100`,
 		{ token: row.accessToken, tokenScheme: "token" },
 	)) as { id: number; body?: string }[] | null;
@@ -197,7 +201,7 @@ async function commentOnGitea(input: {
 		(comments ?? []).map((comment) => ({ id: comment.id, body: comment.body ?? "" })),
 	);
 	if (existing) {
-		await jsonFetch(`${repoApi}/issues/comments/${existing.id}`, {
+		await providerJsonFetch(`${repoApi}/issues/comments/${existing.id}`, {
 			method: "PATCH",
 			token: row.accessToken,
 			tokenScheme: "token",
@@ -205,7 +209,7 @@ async function commentOnGitea(input: {
 		});
 		return;
 	}
-	await jsonFetch(`${repoApi}/issues/${input.pullRequestNumber}/comments`, {
+	await providerJsonFetch(`${repoApi}/issues/${input.pullRequestNumber}/comments`, {
 		method: "POST",
 		token: row.accessToken,
 		tokenScheme: "token",

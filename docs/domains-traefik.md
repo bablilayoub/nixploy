@@ -436,6 +436,17 @@ builds any preview again from its ref (a branch preview after a push, a PR
 preview whose webhook was missed); one parked behind the fork gate must be
 approved instead.
 
+**Commit statuses (2026-09-20).** Besides the PR comment, every preview
+posts a **commit status** named `nixploy/preview` on the commit it builds —
+`pending` when the build is queued (if the commit is already known, i.e. from
+a webhook payload), then `success` linking to the preview host or `failure`.
+That is what the provider's merge box and a reviewer's notification read.
+GitHub (through the App), GitLab, Gitea and Bitbucket (build statuses, with
+the repository app password — the one provider where comments are not posted
+but statuses are). Branch previews get statuses too: a status hangs off a
+commit, not a PR, and the checkout resolves the sha. Best effort: a provider
+without credentials or an API error is logged, never a failed deploy.
+
 ### Fork pull requests require approval
 
 Fork PRs can carry arbitrary code, so they are **not auto-built** by
