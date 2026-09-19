@@ -61,6 +61,25 @@ Tag → workflow map (they do not overlap):
 4. Watch **Actions → Release**. When it finishes, open
    [github.com/bablilayoub/nixploy/releases](https://github.com/bablilayoub/nixploy/releases).
 
+### Release notes: what to write
+
+The trust track asks for a **known-regressions note in every release**; it
+is a habit, not code, so here is the checklist the notes follow:
+
+1. **Known regressions** first, even when the list is "none known": what
+   worked in the previous release and does not in this one, with the
+   workaround. A release with an empty section is a claim; one without the
+   section is silence.
+2. **Manual steps**, if any — the update preflight flags notes that mention
+   "breaking", "regression", "manual step", "before upgrading" or "action
+   required", so use those words when they apply and not otherwise.
+3. **Migrations added** (`packages/server/drizzle/NNNN_*.sql` since the last
+   tag) and whether any of them is one-way in practice (migrations are never
+   reversed on downgrade; say what a downgrade would meet).
+4. **Security fixes** called out separately, with the reporter credited
+   (SECURITY.md).
+5. Then the features, shortest first.
+
 ### What CI does
 
 Workflow: [`.github/workflows/release.yml`](../.github/workflows/release.yml)
