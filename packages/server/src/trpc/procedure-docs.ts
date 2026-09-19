@@ -1264,6 +1264,11 @@ const docs: Record<string, ProcedureDoc> = {
 		description: "Current version and digest, update settings and the result of the last check.",
 		instanceAdmin: true,
 	},
+	"updates.preflight": {
+		summary: "Preflight an update",
+		description:
+			"What to know before pressing Update: free disk for the pull and the dump, whether the registry resolves the target, running deployments, the last instance backup, platform readiness, and whether the release notes mention a breaking change. `ok` is false when a check blocks. Instance admin only.",
+	},
 	"updates.check": {
 		summary: "Check for a panel update",
 		description: "Queries GHCR for the configured image tag and compares digests.",

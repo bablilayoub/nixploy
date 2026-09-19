@@ -4,10 +4,12 @@ import { createLogger } from "../../lib/logger";
 import { bestEffort } from "../../utils/best-effort";
 import { execAsync } from "../../utils/exec";
 import { getConfigDir, shellQuote } from "../deployment/paths";
-import { badRequest } from "../errors";
+import { badRequest, preconditionFailed } from "../errors";
+import { readDiskStats } from "../monitoring/host";
 import { countActiveDeployments } from "../observability/health";
 import { resolveUpdateCandidate } from "./candidate";
 import { getAppVersion, NIXPLOY_SERVICE_NAME } from "./check";
+import { PREFLIGHT_DISK_BLOCK_BYTES } from "./preflight";
 import { assertValidImageRef } from "./registry";
 import {
 	assertVersionAllowed,
@@ -228,6 +230,15 @@ export async function applyUpdate(options?: {
 	}
 
 	if (!options?.force) {
+		// The pull and the dump both write to the config filesystem; running out
+		// half-way leaves a broken image cache and no dump. Same threshold as the
+		// preflight the panel shows.
+		const disk = await readDiskStats(getConfigDir()).catch(() => null);
+		if (disk && disk.totalBytes > 0 && disk.availableBytes < PREFLIGHT_DISK_BLOCK_BYTES) {
+			throw preconditionFailed(
+				`Only ${(disk.availableBytes / 1024 ** 3).toFixed(1)} GiB free on ${disk.path} — free at least 1 GiB before updating (or force).`,
+			);
+		}
 		const active = await countActiveDeployments().catch((error: unknown) => {
 			log.warn("Could not count active deployments before the update", {
 				error: error instanceof Error ? error.message : String(error),

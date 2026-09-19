@@ -1461,6 +1461,29 @@ export const commandRegistry: RegistryEntry[] = [
 	},
 	{
 		group: "updates",
+		verb: "preflight",
+		procedure: "updates.preflight",
+		kind: "query",
+		summary:
+			"Check disk, registry, deployments, backups, health and release notes before an update",
+		options: [
+			{
+				field: "version",
+				flag: "--version <x.y.z>",
+				description: "Preflight a roll to this release",
+			},
+			{
+				field: "allowDowngrade",
+				flag: "--allow-downgrade",
+				description: "Acknowledge a downgrade",
+				type: "boolean",
+			},
+		],
+		single: true,
+		columns: ["image", "currentVersion", "targetVersion", "ok", "blocks", "warnings", "checks"],
+	},
+	{
+		group: "updates",
 		verb: "check",
 		procedure: "updates.check",
 		kind: "mutation",

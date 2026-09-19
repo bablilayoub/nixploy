@@ -16,6 +16,7 @@ import {
 	patchUpdateSettings,
 	rescheduleUpdateChecker,
 	resolveStuckUpdate,
+	runUpdatePreflight,
 	VERSION_PATTERN,
 } from "../../modules/updates";
 import type { TRPCContext } from "../init";
@@ -95,6 +96,25 @@ export const updatesRouter = router({
 			defaultCheckCron: DEFAULT_CHECK_CRON,
 		};
 	}),
+
+	/**
+	 * What to know before pressing Update: disk, registry, running deployments,
+	 * last backup, platform health, the release notes. `ok` is false when a
+	 * check blocks; the panel disables the button on that.
+	 */
+	preflight: protectedProcedure
+		.input(
+			z
+				.object({ version: versionSchema.optional(), allowDowngrade: z.boolean().optional() })
+				.optional(),
+		)
+		.query(async ({ ctx, input }) => {
+			await requireInstanceAdmin(ctx.session);
+			return runUpdatePreflight({
+				version: input?.version,
+				allowDowngrade: input?.allowDowngrade,
+			});
+		}),
 
 	/** Hit the registry now and compare digests. */
 	check: protectedProcedure.mutation(async ({ ctx }) => {

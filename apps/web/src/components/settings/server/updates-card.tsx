@@ -48,6 +48,14 @@ export function UpdatesCard() {
 		refetchInterval: (query) => (query.state.data?.updateInProgress ? 5_000 : 60_000),
 	});
 
+	// The Update dialog is controlled so the preflight runs while it is open
+	// and the confirm can wait for it.
+	const [updateOpen, setUpdateOpen] = useState(false);
+	const preflightQuery = useQuery({
+		...trpc.updates.preflight.queryOptions({}),
+		enabled: updateOpen,
+		staleTime: 0,
+	});
 	// Deployments in flight when the update was requested; opens the "update anyway?" confirm.
 	const [blockedBy, setBlockedBy] = useState<number | null>(null);
 	// Version typed into "Update to…", held while the downgrade confirm is open.
@@ -177,7 +185,7 @@ export function UpdatesCard() {
 								)}
 								Check
 							</Button>
-							<AlertDialog>
+							<AlertDialog open={updateOpen} onOpenChange={setUpdateOpen}>
 								<AlertDialogTrigger asChild>
 									<Button
 										type="button"
@@ -202,11 +210,19 @@ export function UpdatesCard() {
 											secrets and certificates are kept. <HelpLink slug="install" />
 										</AlertDialogDescription>
 									</AlertDialogHeader>
+									<PreflightList
+										preflight={preflightQuery.data ?? null}
+										pending={preflightQuery.isPending || preflightQuery.isFetching}
+										error={preflightQuery.error?.message ?? null}
+										onRecheck={() => preflightQuery.refetch()}
+									/>
 									<AlertDialogFooter>
 										<AlertDialogCancel>Cancel</AlertDialogCancel>
 										<AlertDialogAction
+											disabled={preflightQuery.isPending || preflightQuery.data?.ok === false}
 											onClick={(event) => {
 												event.preventDefault();
+												setUpdateOpen(false);
 												applyMutation.mutate({});
 											}}
 										>
@@ -476,5 +492,92 @@ export function UpdatesCard() {
 				</>
 			) : null}
 		</SettingsSection>
+	);
+}
+
+/**
+ * The preflight checks inside the Update dialog: what the roll cannot recover
+ * from blocks the button; what the operator should weigh is shown and left
+ * to them. Runs when the dialog opens, re-runs on demand.
+ */
+function PreflightList({
+	preflight,
+	pending,
+	error,
+	onRecheck,
+}: {
+	preflight: {
+		ok: boolean;
+		blocks: number;
+		warnings: number;
+		checks: Array<{
+			id: string;
+			level: "ok" | "warn" | "block";
+			title: string;
+			detail: string;
+			url?: string | null;
+		}>;
+	} | null;
+	pending: boolean;
+	error: string | null;
+	onRecheck: () => void;
+}) {
+	const dot: Record<"ok" | "warn" | "block", string> = {
+		ok: "bg-success",
+		warn: "bg-warning",
+		block: "bg-destructive",
+	};
+	return (
+		<div className="flex flex-col gap-2 rounded-lg border border-border p-3 text-sm">
+			<div className="flex items-center justify-between gap-2">
+				<span className="font-medium">
+					{pending && !preflight
+						? "Checking the host…"
+						: preflight
+							? preflight.blocks > 0
+								? `${preflight.blocks} check${preflight.blocks === 1 ? "" : "s"} block this update`
+								: preflight.warnings > 0
+									? `Ready, ${preflight.warnings} warning${preflight.warnings === 1 ? "" : "s"}`
+									: "All checks passed"
+							: "Preflight"}
+				</span>
+				<Button type="button" size="sm" variant="ghost" disabled={pending} onClick={onRecheck}>
+					{pending ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+					Re-check
+				</Button>
+			</div>
+			{error ? <p className="text-xs text-destructive">{error}</p> : null}
+			{preflight ? (
+				<ul className="flex flex-col gap-1.5">
+					{preflight.checks.map((check) => (
+						<li key={check.id} className="flex items-start gap-2">
+							<span
+								className={`mt-1.5 size-2 shrink-0 rounded-full ${dot[check.level]}`}
+								role="img"
+								aria-label={check.level}
+							/>
+							<span className="min-w-0">
+								<span className={check.level === "block" ? "font-medium text-destructive" : ""}>
+									{check.title}
+								</span>
+								{check.detail ? (
+									<span className="block text-xs text-muted-foreground">{check.detail}</span>
+								) : null}
+								{check.url ? (
+									<a
+										href={check.url}
+										target="_blank"
+										rel="noreferrer"
+										className="block text-xs underline underline-offset-2"
+									>
+										Read the release notes
+									</a>
+								) : null}
+							</span>
+						</li>
+					))}
+				</ul>
+			) : null}
+		</div>
 	);
 }

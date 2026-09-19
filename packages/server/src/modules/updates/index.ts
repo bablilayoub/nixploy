@@ -14,6 +14,14 @@ export {
 	type UpdateCheckResult,
 } from "./check";
 export {
+	evaluatePreflight,
+	type PreflightCheck,
+	type PreflightInputs,
+	type PreflightLevel,
+	runUpdatePreflight,
+	type UpdatePreflight,
+} from "./preflight";
+export {
 	assertValidImageRef,
 	fetchRemoteDigest,
 	normalizeDigest,

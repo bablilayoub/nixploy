@@ -2138,6 +2138,7 @@ export const apiCatalog: ApiRouterGroup[] = [
 				summary: "Get update status",
 				instanceAdmin: true,
 			},
+			{ method: "GET", path: "updates.preflight", summary: "Preflight an update" },
 			{
 				method: "POST",
 				path: "updates.runUpdate",
@@ -2321,4 +2322,4 @@ export const apiCatalog: ApiRouterGroup[] = [
 ];
 
 /** Total endpoints in the catalog above. */
-export const apiEndpointCount = 432;
+export const apiEndpointCount = 433;

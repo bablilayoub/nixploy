@@ -105,7 +105,7 @@ Router → module map:
 | `gitops` | `modules/gitops/*` (`schema.ts` nixploy.yaml v2 + v1 upgrader, `live.ts` one environment graph in a fixed number of queries, `export`, `plan` (child collections keyed, jsonb compared canonically, `stackSensitivity`), `apply`, `redeploy`); reference in [`docs/gitops.md`](./gitops.md) |
 | `ai` | `modules/ai/*` (OpenAI-compatible + Anthropic client, explain/auto-explain with cache, chat, `apply-patch` env patches, `generate-compose`, `settings`) |
 | `audit` | `modules/audit/index.ts` (`recordAudit`, `auditFromSession`) |
-| `updates`, `webServer`, `setup` | `modules/updates/*` (GHCR digest check, in-app roll), `modules/traefik/dashboard.ts` + web-server settings, `modules/auth/{setup,instance-admin,org-rank,two-factor-gate,api-key}.ts` |
+| `updates`, `webServer`, `setup` | `modules/updates/*` (GHCR digest check, in-app roll, `preflight.ts` — the checks the Update dialog shows and the low-disk block the roll enforces), `modules/traefik/dashboard.ts` + web-server settings, `modules/auth/{setup,instance-admin,org-rank,two-factor-gate,api-key}.ts` |
 
 ### `utils/`
 

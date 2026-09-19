@@ -466,6 +466,18 @@ paths therefore dump the platform database right before the roll:
 - The in-app updater also refuses to roll while deployments are running — the
   restart would interrupt them — and asks for confirmation ("Update anyway")
   first. Automatic updates never force; they retry on the next check.
+- **Preflight (2026-09-20).** Opening the Update dialog runs `updates.preflight`
+  (also `nixploy updates preflight`): free disk on the config filesystem (below
+  1 GiB **blocks** — the pull and the dump would fail half-way, and
+  `applyUpdate` refuses on its own too, unless forced), whether the registry
+  resolves the target tag (unresolvable **blocks**; "already running this
+  digest" warns), running deployments, the age of the last instance backup
+  (none or older than 7 days warns — the pre-update dump covers the database
+  only), platform readiness (database or Docker failing **blocks**, migrations
+  not `current` warns), a downgrade (**blocks** until acknowledged), and the
+  target's release notes (a mention of a breaking change or manual step warns
+  and links them). A block disables the confirm button; warnings are shown
+  and left to you.
 
 Restore a dump (stops nothing; run it before pinning an older tag):
 

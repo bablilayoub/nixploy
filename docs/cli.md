@@ -461,6 +461,7 @@ nixploy notification test ntf_abc
 
 nixploy updates status
 nixploy updates check
+nixploy updates preflight                       # disk, registry, deployments, backup age, health, release notes
 nixploy updates apply --yes                     # the panel restarts itself
 
 nixploy audit list --since 24h
