@@ -38,6 +38,13 @@ export interface Template {
 		port: number;
 	};
 	/**
+	 * What to do after deploying, in order, one short step each — the second
+	 * domain to add, the client to point at it, the token to hand out. Shown
+	 * in the panel's template details and on the template's landing page.
+	 * Only for templates whose first use is not "open the URL".
+	 */
+	setup?: string[];
+	/**
 	 * Needs host Docker socket and/or elevated capabilities. Deployable only by
 	 * the instance admin; the resulting compose row is marked `hostPrivileged`.
 	 */

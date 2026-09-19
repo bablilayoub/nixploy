@@ -101,6 +101,9 @@ const rows = templates
 				.join(", ")}],`,
 			`\t\tport: ${template.suggestedDomain.port},`,
 			`\t\tserviceName: ${quote(template.suggestedDomain.serviceName)},`,
+			...(template.setup && template.setup.length > 0
+				? [`\t\tsetup: [${template.setup.map(quote).join(", ")}],`]
+				: []),
 			...(template.hostPrivileged ? ["\t\thostPrivileged: true,"] : []),
 			"\t},",
 		].join("\n");
@@ -134,6 +137,8 @@ export interface TemplateEntry {
 	/** Container port the suggested domain routes to. */
 	port: number;
 	serviceName: string;
+	/** Post-deploy steps, one line each, in order. */
+	setup?: string[];
 	/** Needs the Docker socket or elevated capabilities; instance admin only. */
 	hostPrivileged?: boolean;
 }

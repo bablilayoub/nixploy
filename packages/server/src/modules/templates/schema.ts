@@ -54,6 +54,8 @@ export const remoteTemplateSchema = z.object({
 		.default({}),
 	compose: z.string().min(1).max(MAX_TEMPLATE_COMPOSE_BYTES),
 	env: z.array(envVarSchema).max(200).default([]),
+	/** Post-deploy steps, one line each, rendered as a numbered list. */
+	setup: z.array(z.string().min(1).max(600)).max(20).default([]),
 	suggestedDomain: z.object({
 		serviceName: z
 			.string()

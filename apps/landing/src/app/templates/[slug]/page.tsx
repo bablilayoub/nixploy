@@ -251,6 +251,23 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 				</Card>
 			</div>
 
+			{template.setup && template.setup.length > 0 ? (
+				<Card className="mt-4 p-8 sm:p-10">
+					<h2 className="text-title text-foreground">Set it up</h2>
+					<p className="mt-2 text-small text-muted">
+						What to do once the stack is deployed, in order. The panel shows the same steps on the
+						template's details.
+					</p>
+					<ol className="mt-6 flex list-decimal flex-col gap-3 pl-5 text-small text-foreground">
+						{template.setup.map((step) => (
+							<li key={step}>
+								<Prose text={step} />
+							</li>
+						))}
+					</ol>
+				</Card>
+			) : null}
+
 			<Card className="mt-4 p-8 sm:p-10">
 				<h2 className="text-title text-foreground">What you get with it</h2>
 				<ul className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-5">

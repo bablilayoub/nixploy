@@ -41,6 +41,12 @@ deployable as compose services. Catalog code lives in
      ],
      compose: `services:\n  plausible:\n    image: …`,
      suggestedDomain: { serviceName: "plausible", port: 8000 },
+     // Optional: what to do after deploying, in order, one short step each.
+     // Rendered as a numbered list in the panel's template details and on
+     // nixploy.com/templates/<id>. Only for templates whose first use is not
+     // "open the URL" — a tunnel edge that needs a second domain and a CLI
+     // pointed at it, a service that needs a client configured.
+     setup: ["Add `*.tunnels.example.com` as a second domain …", "…"],
    }
    ```
 

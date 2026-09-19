@@ -134,6 +134,20 @@ function DetailsBody({
 				</div>
 			</div>
 
+			{template.setup && template.setup.length > 0 && (
+				<>
+					<Separator />
+					<div className="flex flex-col gap-2">
+						<h3 className="text-sm font-medium">Set it up</h3>
+						<ol className="flex list-decimal flex-col gap-1.5 pl-5 text-sm text-muted-foreground">
+							{template.setup.map((step) => (
+								<li key={step}>{step}</li>
+							))}
+						</ol>
+					</div>
+				</>
+			)}
+
 			<Separator />
 
 			<div className="flex flex-col gap-2">

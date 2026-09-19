@@ -564,6 +564,19 @@ volumes:
 			docs: "https://openhole.dev/docs/self-hosting",
 		},
 		suggestedDomain: { serviceName: "openhole", port: 8080 },
+		// Verified against the OpenHole source (internal/server/config.go,
+		// host.go) and openhole.dev/docs/self-hosting on 2026-09-20: the server
+		// routes by Host header — the endpoint host serves /tunnel and /health,
+		// `<sub>.<tunnel domain>` is proxied to that tunnel — so it needs two
+		// hostnames, one of them a wildcard, and it listens on plain 8080
+		// behind a reverse proxy that sets X-Forwarded-For.
+		setup: [
+			"Before deploying, set the two hostnames: `TUNNEL_ENDPOINT_HOST` is what the CLI connects to (for example `tunnel.example.com`) and `PUBLIC_TUNNEL_DOMAIN` is the zone tunnels are served under (for example `tunnels.example.com`). Keep the generated `REGISTRATION_TOKENS` or paste your own comma-separated list — empty means anyone can open a tunnel on your server.",
+			"DNS, all pointing at this server and DNS-only (a proxied record breaks tunnel routing): an A record for the endpoint host, and a wildcard A record `*.<tunnel domain>`. Shortcut: make the endpoint host a name under the tunnel domain (`tunnel.tunnels.example.com`) and the wildcard record covers both.",
+			"Domains tab of this service: add the endpoint host with HTTPS (Let's Encrypt), then add `*.<tunnel domain>` as a second domain. A wildcard domain is instance-admin only and its certificate needs a DNS-01 provider under Settings → Web server — HTTP-01 cannot validate a wildcard. WebSocket upgrades pass through Traefik as-is.",
+			"Install the CLI on your machine (`curl -fsSL https://openhole.dev/install.sh | sh`) and open a tunnel: `openhole 3000 --server wss://<endpoint host>/tunnel --token <one of REGISTRATION_TOKENS>`; add `--subdomain myapp` for a stable name. The public URL is `https://<sub>.<tunnel domain>`.",
+			'Check `https://<endpoint host>/health` answers `{"status":"ok"}`. Port 8080 is never published; Traefik is the only way in, which is why `TRUST_PROXY_HEADERS` is on — never expose 8080 directly with it set.',
+		],
 		env: [
 			{
 				key: "TUNNEL_ENDPOINT_HOST",
@@ -596,6 +609,11 @@ volumes:
       PUBLIC_URL_SCHEME: https
       TRUST_PROXY_HEADERS: "true"
       SUBDOMAIN_HOLD_SECONDS: "300"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 `,
 	},
 ];
