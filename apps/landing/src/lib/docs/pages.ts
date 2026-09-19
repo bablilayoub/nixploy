@@ -458,6 +458,11 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 				type: "p",
 				text: "Settings → Platform → Access: set the dashboard domain and Let's Encrypt email. Once a dashboard domain is configured the low-priority catch-all router is dropped, so the panel answers on its own host only instead of on every hostname pointed at the box. Traefik's config viewer and restart live under Proxy.",
 			},
+			{ type: "h2", text: "Diagnose a route" },
+			{
+				type: "p",
+				text: "A host answers 502 or 404 and the service says it is running. The stethoscope on the domain row (also nixploy domain diagnose and the get_domain_diagnosis MCP tool) walks the request path in order and names the fix at each step: DNS, the Traefik route file, a second file claiming the same host, the upstream task, the shared-network attachment, the container port (a throwaway busybox on the overlay), Traefik's own answer for the host, and the certificate. Deterministic — no model involved.",
+			},
 			{ type: "h2", text: "External upstreams" },
 			{
 				type: "p",
