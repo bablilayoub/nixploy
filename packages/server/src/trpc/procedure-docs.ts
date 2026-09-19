@@ -1343,6 +1343,24 @@ const docs: Record<string, ProcedureDoc> = {
 			"Fetches the manifest from the given URL (a raw GitHub/GitLab file), applies it and redeploys the changed services. The URL is checked against SSRF targets.",
 		capability: ["gitops.manage"],
 	},
+	"import.inspect": {
+		summary: "List what a source panel's API key can see",
+		description:
+			"Connects to another panel over its REST API (the URL is checked against SSRF targets) and returns its projects, environments and service counts — nothing that could hold a value. The key is used for this call and forgotten.",
+		capability: ["gitops.manage"],
+	},
+	"import.plan": {
+		summary: "Translate one source environment and diff it against the target",
+		description:
+			"Fetches every service of the chosen source environment, translates it to a version-2 nixploy.yaml (keys only) plus notes for what does not carry over, and diffs it against the target project environment (every item is a create when the target does not exist yet). Writes nothing.",
+		capability: ["gitops.manage"],
+	},
+	"import.runApply": {
+		summary: "Import one source environment: rows, then env values, no deploy",
+		description:
+			"Creates the target project and environment when missing (project.write, project quota), applies the translated manifest with the same gates as gitops.runApply, then writes the source's env values, build args and preview env onto the rows (secrets.write). Nothing is deployed; services land idle. Returns the plan, the notes and what could not be applied.",
+		capability: ["gitops.manage", "secrets.write"],
+	},
 	"gitops.syncFromGit": {
 		summary: "Apply a nixploy.yaml sent in the request body",
 		description:

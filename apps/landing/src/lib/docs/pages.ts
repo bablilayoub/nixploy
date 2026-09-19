@@ -253,9 +253,22 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 	{
 		slug: "migrate",
 		title: "Migrate from another panel",
-		description: "No magic import — recreate services and cut DNS when green.",
+		description:
+			"Import one environment over the source panel's API where the importer speaks it, recreate the rest, cut DNS when green.",
 		blocks: [
-			{ type: "h2", text: "Approach" },
+			{ type: "h2", text: "Import over the source's API" },
+			{
+				type: "p",
+				text: "For a source panel the importer speaks (Dokploy today), nixploy import inspect / plan / apply reads one project environment through its REST API with a read-capable key, translates it to a version-2 nixploy.yaml plus the env values, and applies both. Nothing is deployed: services land idle with a list of notes for what did not carry over (git provider connections, basic-auth passwords, database passwords, compose mounts, custom certificates), and you deploy each one when the notes are handled.",
+			},
+			{
+				type: "pre",
+				code: `export NIXPLOY_IMPORT_API_KEY='<source api key>'
+nixploy import inspect --source dokploy --url https://old-panel.example.com
+nixploy import plan  --source dokploy --url https://old-panel.example.com --source-project prj_123
+nixploy import apply --source dokploy --url https://old-panel.example.com --source-project prj_123`,
+			},
+			{ type: "h2", text: "Approach for everything else" },
 			{
 				type: "ol",
 				items: [

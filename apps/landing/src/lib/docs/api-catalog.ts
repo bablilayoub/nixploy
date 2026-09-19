@@ -881,6 +881,31 @@ export const apiCatalog: ApiRouterGroup[] = [
 		],
 	},
 	{
+		router: "import",
+		title: "import",
+		description: "import",
+		endpoints: [
+			{
+				method: "POST",
+				path: "import.inspect",
+				summary: "List what a source panel's API key can see",
+				capability: ["gitops.manage"],
+			},
+			{
+				method: "POST",
+				path: "import.plan",
+				summary: "Translate one source environment and diff it against the target",
+				capability: ["gitops.manage"],
+			},
+			{
+				method: "POST",
+				path: "import.runApply",
+				summary: "Import one source environment: rows, then env values, no deploy",
+				capability: ["gitops.manage", "secrets.write"],
+			},
+		],
+	},
+	{
 		router: "mariadb",
 		title: "MariaDB",
 		description: "MariaDB database services",
@@ -2240,4 +2265,4 @@ export const apiCatalog: ApiRouterGroup[] = [
 ];
 
 /** Total endpoints in the catalog above. */
-export const apiEndpointCount = 419;
+export const apiEndpointCount = 422;

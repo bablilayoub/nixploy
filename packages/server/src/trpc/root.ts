@@ -16,6 +16,7 @@ import { giteaRouter } from "./routers/gitea";
 import { githubRouter } from "./routers/github";
 import { gitlabRouter } from "./routers/gitlab";
 import { gitopsRouter } from "./routers/gitops";
+import { importRouter } from "./routers/import";
 import { mariadbRouter } from "./routers/mariadb";
 import { mongoRouter } from "./routers/mongo";
 import { monitoringRouter } from "./routers/monitoring";
@@ -65,6 +66,7 @@ export const appRouter = router({
 	github: githubRouter,
 	gitlab: gitlabRouter,
 	gitops: gitopsRouter,
+	import: importRouter,
 	mariadb: mariadbRouter,
 	mongo: mongoRouter,
 	monitoring: monitoringRouter,

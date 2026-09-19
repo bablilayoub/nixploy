@@ -185,7 +185,7 @@ This is the importer's target format *and* the export half of config-as-code.
 
 *What shipped:* the schema, exporter, planner and apply for all of the above, documented in [`gitops.md`](./gitops.md). Three things landed differently from the sketch. Destinations and notifications are **not** in the file — neither hangs off a service row (backups are per database and schedule, notifications are organization-wide), so naming them would have added references with nothing to attach them to; registries and servers are the references a service actually holds and they are written by name. An omitted array means "leave the rows alone" in v2 (v1 read an omitted `domains` as "delete them all"), so the upgrader spells `domains: []` out on every v1 service that left it out and a v1 file keeps its behaviour. And the secrets bundle shipped the same day as its own pair of procedures (`gitops.exportSecrets` / `gitops.applySecrets`, plus `secrets` on `runApply`): scrypt with a fresh salt, AES-256-GCM with the version as additional data, env by service name, build args and preview env included, database passwords deliberately not. Two side effects: the mount, redirect and forward-auth validators moved out of their routers into modules so the manifest goes through the same checks the forms do, and the planner compares jsonb canonically — Postgres reorders keys, and a byte compare reported every Swarm override as changed on every apply.
 
-### 11. Importers *(XL)*
+### 11. Importers *(XL — the live-API path landed 2026-09-19)*
 
 `import_job` + `import_mapping` tables. Two source paths per supported panel:
 
@@ -195,6 +195,8 @@ This is the importer's target format *and* the export half of config-as-code.
 Then a pure normalizer to manifest v2 + an in-memory secret bundle, a plan step reusing the GitOps differ, and an apply that wraps the existing GitOps apply per service and **never deploys automatically** (services land `idle`). Where the source encrypts env at rest, its keyring file is needed; without it, env imports as keys with a "paste values" step in the report.
 
 Gated by a new `import.manage` capability; source credentials live only in `encryptedText` and are wiped at terminal status; plan and report JSON never contain values.
+
+*What shipped (live API, one source):* `modules/import` — `SourcePanelClient` (the URL through `assertSafeOutboundUrl`, every request through `pinnedFetch`), lenient `.passthrough()` schemas for the source rows, a pure normaliser to manifest v2 + a secrets payload + notes, and `inspect` / `plan` / `apply` over `gitops.manage` (+ `secrets.write`, `project.write` and the quota when creating). Three things landed differently. No `import_job` / `import_mapping` tables and no stored credentials: the key is passed per call and forgotten, `plan` is repeatable and `apply` is a GitOps apply (idempotent by name) followed by `applySecretsPayload`, so a job table would have recorded what the audit row already does. No new capability: an import *is* a GitOps apply from another panel, and `gitops.manage` already means "may write this environment from a file". And the offline-dump path is still open — it needs a restore into a throwaway Postgres plus the source's keyring for env values, and the live path covers the switcher whose old panel still runs. Verified on fixtures shaped like the source's `project.all` / `*.one` answers (its schema read on 2026-09-19); not yet against a live instance.
 
 ### 12. Same-host takeover *(L — the demo that ends arguments)*
 
@@ -261,7 +263,7 @@ Features do not migrate anyone by themselves.
 
 1. **Comparison page** against the alternatives, with the paid-tier contrast made explicit and every claim linked to a doc.
 2. **Published footprint benchmarks** — same workload, three panels, idle and under deploy. Numbers, method, reproducible script.
-3. **Migration guides per source**, rewritten around the importer once it lands (the current ones say "there is no one-click import").
+3. **Migration guides per source**, rewritten around the importer once it lands — the guide now leads with `nixploy import` (2026-09-19); a per-source walkthrough with screenshots is still to write.
 4. **A launch post per release**, each anchored to one demo: the takeover video is the one that travels.
 5. **`SECURITY.md` with the triage SLA**, and an advisory process that does not batch 30 CVEs into one day.
 

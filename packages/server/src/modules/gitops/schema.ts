@@ -304,6 +304,9 @@ export const gitopsApplicationSchema = z.object({
 	owner: z.string().nullable().optional(),
 	branch: z.string().nullable().optional(),
 	buildPath: z.string().optional(),
+	/** Plain git source (`sourceType: git`): clone URL and branch; checked for SSRF at apply. */
+	gitUrl: z.string().max(2048).nullable().optional(),
+	gitBranch: z.string().max(255).nullable().optional(),
 	dockerImage: safeDockerImageSchema.nullable().optional(),
 	dockerfile: z.string().nullable().optional(),
 	dockerContextPath: z.string().max(4096).nullable().optional(),
@@ -350,6 +353,8 @@ export const gitopsComposeSchema = z
 		repository: z.string().nullable().optional(),
 		owner: z.string().nullable().optional(),
 		branch: z.string().nullable().optional(),
+		gitUrl: z.string().max(2048).nullable().optional(),
+		gitBranch: z.string().max(255).nullable().optional(),
 		autoDeploy: z.boolean().optional(),
 		watchPaths: watchPathsSchema.nullable().optional(),
 		buildEnabled: z.boolean().optional(),

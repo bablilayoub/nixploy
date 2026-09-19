@@ -2,9 +2,68 @@
 
 Nixploy is intentionally familiar if you have run a self-hosted PaaS before:
 the same shape (org → project → environment → services, Docker Swarm +
-Traefik, templates, API keys). There is **no one-click import** of another
-panel's database yet — you recreate services and point traffic when ready.
-This guide maps the concepts and describes a safe cutover.
+Traefik, templates, API keys). For a panel whose API the importer speaks
+(currently Dokploy), one environment at a time comes over with
+`nixploy import`; for everything else, recreate the services by hand. Either
+way you point traffic when the new instance is green. This guide covers the
+importer first, then the concept map and the cutover.
+
+## Import over the source's API
+
+The importer reads one project environment from the source panel through
+its REST API, translates it to a [version-2 `nixploy.yaml`](./gitops.md)
+plus the env values, and applies both here. **It deploys nothing**: the
+services land `idle`, with a list of notes for what did not carry over, and
+you deploy each one when the notes are dealt with.
+
+```bash
+export NIXPLOY_IMPORT_API_KEY='<a read-capable API key of the source panel>'
+nixploy import inspect --source dokploy --url https://old-panel.example.com
+nixploy import plan   --source dokploy --url https://old-panel.example.com --source-project prj_123
+nixploy import apply  --source dokploy --url https://old-panel.example.com --source-project prj_123
+```
+
+`inspect` lists what the key can see (projects, environments, service
+counts). `plan` fetches the environment, prints the translation's notes and
+the diff against the target (every item is a create when the target project
+does not exist yet) and writes nothing. `apply` creates the project and the
+environment when missing, writes the rows, then writes the env values. The
+source key is passed per call and never stored; audit rows carry the source
+host and counts only. The source URL goes through the same egress guard as
+every tenant URL, so a panel on a private address needs the instance's
+private-egress toggle.
+
+What comes over: applications (source, build settings, resources, Swarm
+overrides, preview flags, domains with paths and internal paths, mounts,
+published ports, redirects, by-name server and registry references),
+compose stacks (inline file or git source, isolation, container-scoped
+domains), the five database engines (image, name, user, resources, external
+port), and the env of the project, the environment and every service,
+including build args and preview env.
+
+What the notes will tell you to do by hand, because it cannot be carried:
+
+- **Git provider connections** — the source's GitHub/GitLab/Bitbucket/Gitea
+  app is not yours; connect the provider here and select it on each
+  service before the first deploy. The repository, owner and branch are
+  already set.
+- **Basic auth** — the source stores hashes; re-create the entries with
+  their passwords.
+- **Database passwords** — every imported database gets a new password;
+  update the env values that carry the old one (`DATABASE_URL` and
+  friends), or adopt the old volume with the takeover tool when it lands.
+- **Compose mounts** — here a compose mount names the container it goes in,
+  which the source does not record; add them under the stack's Advanced
+  tab.
+- **Custom certificates, custom ACME resolvers, strip-path, uploaded
+  archives, git submodules, libSQL databases** — not supported here, each
+  reported with the service it belonged to.
+- **Bind mounts and Swarm network overrides** need the instance admin to
+  apply, exactly as in the panel.
+
+`--no-keep-app-names` generates fresh `appName`s instead of keeping the
+source's; keep them (the default) when a same-host takeover is the plan,
+because the old volumes are named after them.
 
 ## Concept map
 

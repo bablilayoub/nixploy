@@ -456,6 +456,20 @@ nixploy gitops apply-secrets --project-id proj_456 --env production -f productio
 The secrets commands read the passphrase from `--passphrase-file` or
 `NIXPLOY_SECRETS_PASSPHRASE` (12 characters minimum), never from an argument.
 
+### `import` — from another panel
+
+```bash
+export NIXPLOY_IMPORT_API_KEY='<source api key>'     # or --api-key-file <path>
+nixploy import inspect --source dokploy --url https://old-panel.example.com
+nixploy import plan    --source dokploy --url https://old-panel.example.com --source-project prj_123 [--source-env staging] [--project-id proj_456] [--env staging]
+nixploy import apply   --source dokploy --url https://old-panel.example.com --source-project prj_123 [--no-keep-app-names]
+```
+
+`plan` prints the translation notes and the diff and writes nothing; `apply`
+creates the project and environment when missing, writes the rows and the
+env values, deploys nothing, and exits non-zero when a service could not be
+written. See [migrate-from-another-panel.md](./migrate-from-another-panel.md).
+
 The file format is [gitops.md](./gitops.md). `plan` lists every service and
 child row (domains, mounts, ports, redirects, basic auth) with `create` /
 `update` / `delete` / `noop` and the manifest paths that changed. `apply`

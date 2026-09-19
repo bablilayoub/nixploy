@@ -12,6 +12,7 @@ import {
 	redirects,
 	security,
 } from "../../db/schema";
+import { assertSafeGitCloneUrl } from "../../utils/public-url";
 import {
 	assertBasicAuthUsername,
 	assertComposeServiceName,
@@ -798,6 +799,9 @@ const applyApplication = async (
 	if (typeof patch.dockerImage === "string" && patch.dockerImage.length > 0) {
 		patch.dockerImage = assertSafeDockerImageRef(patch.dockerImage);
 	}
+	if (typeof patch.gitUrl === "string" && patch.gitUrl.length > 0) {
+		await assertSafeGitCloneUrl(patch.gitUrl);
+	}
 	if (Object.keys(patch).length > 0) {
 		application = await updateApplication(
 			applicationId,
@@ -887,6 +891,9 @@ const applyCompose = async (
 		if (REFERENCE_FIELDS.has(field) || field === "composeFile") continue;
 		const value = desired[field];
 		if (value !== undefined) patch[field] = value;
+	}
+	if (typeof patch.gitUrl === "string" && patch.gitUrl.length > 0) {
+		await assertSafeGitCloneUrl(patch.gitUrl);
 	}
 	if (Object.keys(patch).length > 0) {
 		composeRow = await updateComposeById(
