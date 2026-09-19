@@ -193,6 +193,7 @@ nixploy domain add demo.traefik.me --application-id app_abc --port 80   # plain 
 nixploy domain generate --app-name api          # free *.traefik.me host
 nixploy domain validate app.example.com         # is the host free instance-wide?
 nixploy domain set-https dom_abc --enabled true
+nixploy domain diagnose dom_abc                 # why 502/404: DNS, route file, upstream, network, port, Traefik, cert
 nixploy domain remove dom_abc --yes
 ```
 

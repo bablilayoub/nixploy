@@ -46,6 +46,8 @@ export {
 	normalizeDashboardDomain,
 	writeDashboardRouterConfig,
 } from "./dashboard";
+export type { DomainDiagnosis, DomainFinding, DomainVerdict, FindingStatus } from "./diagnose";
+export { diagnoseDomain } from "./diagnose";
 export type { EntrypointProtocol, TraefikEntrypointSpec } from "./entrypoints";
 export {
 	applyTraefikEntrypoints,

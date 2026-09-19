@@ -79,6 +79,7 @@ export const MCP_TOOL_ANNOTATIONS: Record<string, McpToolAnnotations> = {
 	get_service_runtime_summary: read("Summarise a service's runtime"),
 	get_runtime_logs: read("Search runtime log history"),
 	get_preview: read("Read one preview deployment"),
+	get_domain_diagnosis: read("Diagnose a domain's route"),
 	explain_last_failure: read("Explain the last failed deploy"),
 
 	// ── writes ───────────────────────────────────────────────────────────────

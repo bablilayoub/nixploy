@@ -407,6 +407,15 @@ export const mcpTools: McpToolDefinition[] = [
 		},
 	},
 	{
+		name: "get_domain_diagnosis",
+		description:
+			"Why does a domain answer 502, 404 or nothing? A deterministic walk along the request path — DNS, the Traefik route file, a second file claiming the host, the upstream task, the shared network, the container port, Traefik's own answer, the certificate — each finding with its fix. Use this before guessing at a routing problem; it does what an operator would do by hand, in order.",
+		inputSchema: z.object({
+			domainId: z.string().min(1).describe("Domain ID (from list_domains)"),
+		}),
+		handler: (caller, input: { domainId: string }) => caller.domain.diagnose(input),
+	},
+	{
 		name: "add_domain",
 		description:
 			"Attach a domain (host/path/port) to an application or compose service and re-sync Traefik routing. Requires the domains.manage capability.",

@@ -10,6 +10,7 @@ import {
 	Plus,
 	RefreshCw,
 	SlidersHorizontal,
+	Stethoscope,
 	Trash2,
 	XCircle,
 } from "lucide-react";
@@ -903,6 +904,7 @@ export function DomainManager({
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editing, setEditing] = useState<DomainRow | null>(null);
 	const [deleting, setDeleting] = useState<DomainRow | null>(null);
+	const [diagnosing, setDiagnosing] = useState<DomainRow | null>(null);
 
 	const [host, setHost] = useState("");
 	const [path, setPath] = useState("/");
@@ -1315,6 +1317,15 @@ export function DomainManager({
 												<Button
 													variant="ghost"
 													size="icon-sm"
+													aria-label={`Diagnose domain ${domain.host}`}
+													title="Why does this host answer 502 or 404?"
+													onClick={() => setDiagnosing(domain)}
+												>
+													<Stethoscope className="size-3.5" />
+												</Button>
+												<Button
+													variant="ghost"
+													size="icon-sm"
 													aria-label={`Edit domain ${domain.host}`}
 													disabled={!canManage}
 													title={manageHint}
@@ -1684,6 +1695,122 @@ export function DomainManager({
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
+
+			<DomainDiagnosisDialog domain={diagnosing} onClose={() => setDiagnosing(null)} />
 		</>
+	);
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Route diagnosis                                                           */
+/* -------------------------------------------------------------------------- */
+
+const FINDING_DOT: Record<"ok" | "warn" | "fail" | "skip", string> = {
+	ok: "bg-success",
+	warn: "bg-warning",
+	fail: "bg-destructive",
+	skip: "bg-muted-foreground/40",
+};
+
+/**
+ * "Why does this host answer 502?" — the deterministic walk along the
+ * request path (`domain.diagnose`), each finding with its fix. Runs when the
+ * dialog opens; the port probe starts a throwaway container, so it is not a
+ * background poll.
+ */
+function DomainDiagnosisDialog({
+	domain,
+	onClose,
+}: {
+	domain: { domainId: string; host: string } | null;
+	onClose: () => void;
+}) {
+	const trpc = useTRPC();
+	const diagnosis = useQuery({
+		...trpc.domain.diagnose.queryOptions({ domainId: domain?.domainId ?? "" }),
+		enabled: domain !== null,
+		staleTime: 0,
+	});
+	const data = diagnosis.data;
+	return (
+		<Dialog open={domain !== null} onOpenChange={(open) => !open && onClose()}>
+			<DialogContent className="sm:max-w-xl">
+				<DialogHeader>
+					<DialogTitle>
+						{domain?.host}
+						{data ? (
+							<Badge
+								variant={
+									data.verdict === "healthy"
+										? "outline"
+										: data.verdict === "degraded"
+											? "secondary"
+											: "destructive"
+								}
+								className="ml-2 align-middle capitalize"
+							>
+								{data.verdict}
+							</Badge>
+						) : null}
+					</DialogTitle>
+					<DialogDescription>
+						DNS, the route file, the upstream, the shared network, the port, Traefik's own answer
+						and the certificate — in the order a request travels, each with its fix.{" "}
+						<HelpLink slug="domains" />
+					</DialogDescription>
+				</DialogHeader>
+				{diagnosis.isPending ? (
+					<div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+						<Loader2 className="size-4 animate-spin" /> Walking the request path…
+					</div>
+				) : diagnosis.isError ? (
+					<p className="text-sm text-destructive">{diagnosis.error.message}</p>
+				) : data ? (
+					<ul className="flex flex-col gap-2">
+						{data.findings.map((finding) => (
+							<li key={finding.id} className="flex items-start gap-2 text-sm">
+								<span
+									role="img"
+									aria-label={finding.status}
+									className={`mt-1.5 size-2 shrink-0 rounded-full ${FINDING_DOT[finding.status]}`}
+								/>
+								<span className="min-w-0">
+									<span className={finding.status === "fail" ? "font-medium text-destructive" : ""}>
+										{finding.title}
+									</span>
+									{finding.detail ? (
+										<span className="block text-xs text-muted-foreground">{finding.detail}</span>
+									) : null}
+									{finding.fix ? (
+										<span className="block text-xs">
+											<span className="font-medium">Fix:</span> {finding.fix}
+										</span>
+									) : null}
+								</span>
+							</li>
+						))}
+					</ul>
+				) : null}
+				<DialogFooter>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						disabled={diagnosis.isFetching}
+						onClick={() => diagnosis.refetch()}
+					>
+						{diagnosis.isFetching ? (
+							<Loader2 className="size-4 animate-spin" />
+						) : (
+							<RefreshCw className="size-4" />
+						)}
+						Run again
+					</Button>
+					<Button type="button" size="sm" onClick={onClose}>
+						Close
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
 	);
 }

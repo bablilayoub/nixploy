@@ -624,6 +624,12 @@ export const apiCatalog: ApiRouterGroup[] = [
 				summary: "Delete a domain",
 				capability: ["domains.manage"],
 			},
+			{
+				method: "GET",
+				path: "domain.diagnose",
+				summary: "Diagnose a domain's route",
+				capability: ["service.runtime"],
+			},
 			{ method: "GET", path: "domain.generateDomain", summary: "Generate a free traefik.me host" },
 			{
 				method: "GET",
@@ -2322,4 +2328,4 @@ export const apiCatalog: ApiRouterGroup[] = [
 ];
 
 /** Total endpoints in the catalog above. */
-export const apiEndpointCount = 433;
+export const apiEndpointCount = 434;

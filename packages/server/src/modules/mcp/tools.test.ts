@@ -47,6 +47,7 @@ const EXPECTED_TOOLS = [
 	"create_preview",
 	"get_preview",
 	"delete_preview",
+	"get_domain_diagnosis",
 	"list_rollback_points",
 	"get_deployment_provenance",
 	"get_platform_health",

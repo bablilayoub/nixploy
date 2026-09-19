@@ -561,6 +561,17 @@ export const commandRegistry: RegistryEntry[] = [
 	},
 	{
 		group: "domain",
+		verb: "diagnose",
+		procedure: "domain.diagnose",
+		kind: "query",
+		summary:
+			"Why a host answers 502/404/nothing: DNS, route file, upstream, network, port, Traefik, certificate",
+		argument: { field: "domainId", label: "<domainId>", description: "Domain ID" },
+		single: true,
+		columns: ["host", "verdict", "findings"],
+	},
+	{
+		group: "domain",
 		verb: "remove",
 		procedure: "domain.delete",
 		kind: "mutation",

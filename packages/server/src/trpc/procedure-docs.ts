@@ -617,6 +617,12 @@ const docs: Record<string, ProcedureDoc> = {
 		description: "Removes the row and the Traefik route. Issued certificates are left in place.",
 		capability: ["domains.manage"],
 	},
+	"domain.diagnose": {
+		summary: "Diagnose a domain's route",
+		description:
+			"Why does this host answer 502, 404 or nothing? Checks DNS, the Traefik route file, a second file claiming the host, the upstream task, the shared network, the container port (a throwaway busybox on the overlay), Traefik's own answer for the host, and the certificate — each finding with its fix. Deterministic, no model.",
+		capability: ["service.runtime"],
+	},
 	"domain.middlewares": {
 		summary: "List the middleware chain of a domain",
 		description:

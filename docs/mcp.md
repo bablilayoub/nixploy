@@ -106,7 +106,7 @@ returned by `initialize` and none is needed on later calls.
 
 ## 3. Tool reference
 
-41 tools. All inputs are validated with zod; outputs are compact JSON. Every
+42 tools. All inputs are validated with zod; outputs are compact JSON. Every
 call goes through `appRouter.createCaller`, so the capability listed below is
 enforced by the router, not by the tool.
 
@@ -179,6 +179,7 @@ and the tools already answer "what is there" with pagination and filters.
 | `get_deployment_provenance` | Commit SHA, message, author, trigger and who triggered each recent deployment | `deployment.byApplication` / `byCompose` |
 | `list_rollback_points` | Image pins kept per application (5 most recent) | `rollback.all` |
 | `list_domains` | Domains of an application, compose service, or project | `domain.all` |
+| `get_domain_diagnosis` | Why a host answers 502/404/nothing: DNS, route file, conflicting file, upstream task, shared network, port, Traefik's own answer, certificate — each with the fix | `domain.diagnose` |
 | `list_previews` | Pull-request previews of an application with PR metadata and expiry | `previewDeployment.byApplication` |
 | `get_env` | Variables at one scope (organization / project / environment / service) | `organization.environment`, `project.one`, `environment.byProject`, `<router>.one` |
 | `get_resolved_env` | The merged org → project → environment → service view with each key's origin | `project.getResolvedEnvironment` |

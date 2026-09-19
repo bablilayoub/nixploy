@@ -175,6 +175,21 @@ docker service update --force nixploy-traefik
 Never restore `acme.json` with a permissive umask — a `tar xzf` as another
 user is the usual way it breaks.
 
+### Diagnose a domain first (2026-09-20)
+
+Before any of the recipes below: the stethoscope button on the domain row
+(`domain.diagnose`, `nixploy domain diagnose <id>`, MCP `get_domain_diagnosis`)
+walks the request path deterministically and names the fix — DNS (does the
+host resolve here?), the Traefik route file (present, valid, mentions the
+host?), a second file also claiming the host (Traefik picks one at random),
+the upstream task (running?), the shared `nixploy-network` attachment (the
+usual cause of a 502 that a re-save fixes), the container port (a throwaway
+`busybox nc` on the overlay), Traefik's own answer for the host (404 = no
+router loaded, 502/503 = router without a healthy server), and the
+certificate in `acme.json`. A `fail` is the cause; a `warn` is worth reading;
+`skip` means the probe could not run (say, no Docker socket) and is not
+evidence either way.
+
 ### Traefik returns 404 for a service that is running
 
 A service joins `nixploy-network` **only while it has a domain**. Check both:

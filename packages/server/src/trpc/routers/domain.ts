@@ -32,6 +32,7 @@ import { isUniqueViolation } from "../../modules/errors";
 import { syncPreviewTraefik } from "../../modules/preview/traefik";
 import { assertCapability } from "../../modules/projects";
 import {
+	diagnoseDomain,
 	domainMiddlewareKindSchema,
 	isWildcardHost,
 	parseMiddlewareConfig,
@@ -854,6 +855,20 @@ export const domainRouter = router({
 			targetName: domain.host,
 		});
 		return { domainId: input.domainId };
+	}),
+
+	/**
+	 * Why does this domain answer 502 / 404 / nothing? DNS, the route file, a
+	 * second file claiming the host, the upstream task, the shared network,
+	 * the port, Traefik's own answer and the certificate — each with the fix.
+	 * Runs a throwaway busybox on the shared overlay for the port probe, so
+	 * it is gated like the other runtime actions.
+	 */
+	diagnose: protectedProcedure.input(domainIdInput).query(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
+		await assertDomainAccess(input.domainId, organizationId);
+		return diagnoseDomain(input.domainId);
 	}),
 
 	/** Middleware rows attached to one domain, in chain order. */
