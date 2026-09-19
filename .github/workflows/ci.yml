@@ -297,13 +297,13 @@ jobs:
         if: failure()
         run: |
           mkdir -p "$RUNNER_TEMP/e2e-logs"
-          docker compose -f tools/ci/e2e-compose.yml logs --no-color --timestamps \
+          docker compose -f tools/ci/e2e-compose.yml logs --timestamps \
             > "$RUNNER_TEMP/e2e-logs/compose.log" 2>&1 || true
           docker service ls > "$RUNNER_TEMP/e2e-logs/services.txt" 2>&1 || true
           docker service ps --no-trunc $(docker service ls -q) \
             > "$RUNNER_TEMP/e2e-logs/service-tasks.txt" 2>&1 || true
           for svc in $(docker service ls --format '{{.Name}}'); do
-            docker service logs --no-color --timestamps "$svc" \
+            docker service logs --timestamps "$svc" \
               > "$RUNNER_TEMP/e2e-logs/service-$svc.log" 2>&1 || true
           done
           sudo cp -r /etc/nixploy "$RUNNER_TEMP/e2e-logs/config-root" 2>/dev/null || true
@@ -627,17 +627,23 @@ jobs:
           echo "--- services"
           docker service ls
 
-      - name: Panel answers with the release version
+      - name: Panel is ready through Traefik
         id: before
+        # install.sh checks the new task directly; Swarm keeps it out of the
+        # service VIP until its first successful health probe, so Traefik
+        # answers 502 for up to a minute after "App is up". Wait the way an
+        # operator's browser would: through :443.
         run: |
           set -euo pipefail
-          for i in $(seq 1 60); do
-            body="$(curl -fsS http://localhost:3000/api/version 2>/dev/null || true)"
-            [ -n "$body" ] && break
+          for i in $(seq 1 90); do
+            body="$(curl -ksS --max-time 5 https://127.0.0.1/api/ready 2>/dev/null || true)"
+            case "$body" in *'"ok":true'*) break ;; esac
+            body=""
             sleep 2
           done
-          echo "before: $body"
-          [ -n "$body" ] || { echo "::error::/api/version never answered"; exit 1; }
+          echo "ready: $body"
+          [ -n "$body" ] || { echo "::error::/api/ready never answered 200 through Traefik"; docker service ls; exit 1; }
+          curl -ksS https://127.0.0.1/api/version
           echo "image=$(docker service inspect nixploy --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')" >> "$GITHUB_OUTPUT"
 
       - name: Create the first admin and an API key
@@ -678,13 +684,14 @@ jobs:
           echo "worker: $worker"
           case "$after" in "$LOCAL_IMAGE"*) ;; *) echo "::error::nixploy still runs $after"; exit 1 ;; esac
           case "$worker" in "$LOCAL_IMAGE"*) ;; *) echo "::error::nixploy-worker still runs $worker"; exit 1 ;; esac
-          for i in $(seq 1 60); do
-            body="$(curl -fsS http://localhost:3000/api/ready 2>/dev/null || true)"
-            [ -n "$body" ] && { echo "ready: $body"; break; }
+          for i in $(seq 1 90); do
+            body="$(curl -ksS --max-time 5 https://127.0.0.1/api/ready 2>/dev/null || true)"
+            case "$body" in *'"ok":true'*) echo "ready: $body"; break ;; esac
+            body=""
             sleep 2
           done
-          [ -n "$body" ] || { echo "::error::/api/ready never answered after the update"; exit 1; }
-          curl -fsS http://localhost:3000/api/version
+          [ -n "$body" ] || { echo "::error::/api/ready never answered 200 through Traefik after the update"; docker service ls; exit 1; }
+          curl -ksS https://127.0.0.1/api/version
 
       - name: API golden path after the update, same key
         # The key was created on the old version; a working run here means
@@ -709,8 +716,15 @@ jobs:
           docker service ps --no-trunc $(docker service ls -q) \
             > "$RUNNER_TEMP/upgrade-logs/service-tasks.txt" 2>&1 || true
           for svc in $(docker service ls --format '{{.Name}}'); do
-            docker service logs --no-color --timestamps "$svc" \
+            docker service logs --timestamps "$svc" \
               > "$RUNNER_TEMP/upgrade-logs/service-$svc.log" 2>&1 || true
+          done
+          # The health check's own output: why Swarm kept a task out of the VIP.
+          for cid in $(docker ps -aq --filter label=com.docker.swarm.service.name); do
+            {
+              docker inspect --format '{{.Name}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' "$cid"
+              docker inspect --format '{{json .State.Health}}' "$cid"
+            } >> "$RUNNER_TEMP/upgrade-logs/container-health.txt" 2>&1 || true
           done
           sudo cp -r /etc/nixploy "$RUNNER_TEMP/upgrade-logs/config-root" 2>/dev/null || true
           sudo rm -f "$RUNNER_TEMP/upgrade-logs/config-root/.env" || true
