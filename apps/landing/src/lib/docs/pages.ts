@@ -1430,6 +1430,7 @@ applications:
 					"An array (domains, mounts, ports, redirects, basicAuth, a domain's middlewares) is the whole desired set: rows it lists are created or patched, rows it leaves out are deleted, [] removes every row, and an omitted array leaves the rows alone.",
 					"Values never enter the file: env is key names only, basic-auth passwords are write-only, and hook commands, inline compose files and file-mount contents are exported only to a caller with secrets.read.",
 					"A version 1 file is still accepted and upgraded on read; export always writes version 2.",
+					"The values travel separately: nixploy gitops export-secrets seals the env of the project, the environment and every service by name with a passphrase, and nixploy apply --secrets writes them after the manifest and before the redeploy.",
 				],
 			},
 			{ type: "h2", text: "What apply checks" },

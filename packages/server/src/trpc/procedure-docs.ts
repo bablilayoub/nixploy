@@ -1310,30 +1310,43 @@ const docs: Record<string, ProcedureDoc> = {
 	"gitops.exportStack": {
 		summary: "Export an environment as nixploy.yaml",
 		description:
-			"Desired-state manifest for one project environment, including applications, compose services and databases. Secrets are exported only with secrets.read.",
+			"Version 2 desired-state manifest for one project environment: every service with its domains, middlewares, mounts, ports, redirects, basic auth, hooks, Swarm overrides and preview settings; registries and servers by name; env as key names only. Hook commands, inline compose files and file-mount contents are included only with secrets.read.",
 		capability: ["gitops.manage"],
 	},
 	"gitops.plan": {
 		summary: "Plan a nixploy.yaml apply",
 		description:
-			"Diffs the manifest against the live stack and returns create/update/no-op counts.",
+			"Diffs the manifest against the live stack and returns one create/update/delete/no-op item per service and child row, with the manifest paths that changed. Accepts version 1 and 2 files.",
 		capability: ["gitops.manage"],
 	},
 	"gitops.runApply": {
 		summary: "Apply a nixploy.yaml",
 		description:
-			"Converges the live stack to the manifest and redeploys the services that changed. Not a dry run.",
+			"Converges the live stack to the manifest and redeploys the services that changed (redeploy: false skips it). With `secrets`, a sealed bundle is written after the rows and before the redeploy. Needs secrets.write when the file carries hooks, passwords or file contents, and the instance admin for bind mounts, Swarm network/privilege overrides and publishPorts. Not a dry run.",
 		capability: ["gitops.manage"],
 	},
-	"gitops.syncFromUrl": {
-		summary: "Sync from a manifest URL",
+	"gitops.exportSecrets": {
+		summary: "Seal an environment's env values with a passphrase",
 		description:
-			"Fetches the manifest from the project's configured URL and applies it. The URL is checked against SSRF targets.",
+			"The values the manifest leaves out — project, environment and per-service env plus build args and preview env — as a `nixploy-secrets:1:` bundle (scrypt + AES-256-GCM). Apply it elsewhere with applySecrets or runApply.secrets.",
+		capability: ["gitops.manage", "secrets.read"],
+	},
+	"gitops.applySecrets": {
+		summary: "Write a sealed secrets bundle onto an environment",
+		description:
+			"Opens the bundle with its passphrase and writes the values onto the project, the environment and the services it names, in one transaction. Names the target lacks are reported as missing. The values reach containers on the next deploy.",
+		capability: ["gitops.manage", "secrets.write"],
+	},
+	"gitops.syncFromUrl": {
+		summary: "Apply a nixploy.yaml fetched from an https URL",
+		description:
+			"Fetches the manifest from the given URL (a raw GitHub/GitLab file), applies it and redeploys the changed services. The URL is checked against SSRF targets.",
 		capability: ["gitops.manage"],
 	},
 	"gitops.syncFromGit": {
-		summary: "Sync from the project's git remote",
-		description: "Clones the configured remote, reads `nixploy.yaml` and applies it.",
+		summary: "Apply a nixploy.yaml sent in the request body",
+		description:
+			"The webhook-style variant of runApply: takes the manifest text as `yaml`, applies it and redeploys the changed services.",
 		capability: ["gitops.manage"],
 	},
 	"setup.needsSetup": {

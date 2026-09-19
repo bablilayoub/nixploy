@@ -82,17 +82,17 @@ const serviceNameSchema = z
 		}
 	});
 
+/** Validated only — the validator does not rewrite a path, so the key stays what was written. */
 const traefikPathSchema = z
 	.string()
 	.min(1)
 	.optional()
-	.transform((value, ctx) => {
-		if (value === undefined) return value;
+	.superRefine((value, ctx) => {
+		if (value === undefined) return;
 		try {
-			return assertTraefikPath(value) ?? "/";
+			assertTraefikPath(value);
 		} catch (error) {
 			ctx.addIssue({ code: "custom", message: issueFrom(error, "Invalid path") });
-			return z.NEVER;
 		}
 	});
 

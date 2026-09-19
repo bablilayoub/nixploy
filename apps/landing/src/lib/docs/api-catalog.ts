@@ -837,6 +837,18 @@ export const apiCatalog: ApiRouterGroup[] = [
 		description: "Desired-state export, plan and apply for `nixploy.yaml`",
 		endpoints: [
 			{
+				method: "POST",
+				path: "gitops.applySecrets",
+				summary: "Write a sealed secrets bundle onto an environment",
+				capability: ["gitops.manage", "secrets.write"],
+			},
+			{
+				method: "POST",
+				path: "gitops.exportSecrets",
+				summary: "Seal an environment's env values with a passphrase",
+				capability: ["gitops.manage", "secrets.read"],
+			},
+			{
 				method: "GET",
 				path: "gitops.exportStack",
 				summary: "Export an environment as nixploy.yaml",
@@ -857,13 +869,13 @@ export const apiCatalog: ApiRouterGroup[] = [
 			{
 				method: "POST",
 				path: "gitops.syncFromGit",
-				summary: "Sync from the project's git remote",
+				summary: "Apply a nixploy.yaml sent in the request body",
 				capability: ["gitops.manage"],
 			},
 			{
 				method: "POST",
 				path: "gitops.syncFromUrl",
-				summary: "Sync from a manifest URL",
+				summary: "Apply a nixploy.yaml fetched from an https URL",
 				capability: ["gitops.manage"],
 			},
 		],
@@ -2228,4 +2240,4 @@ export const apiCatalog: ApiRouterGroup[] = [
 ];
 
 /** Total endpoints in the catalog above. */
-export const apiEndpointCount = 417;
+export const apiEndpointCount = 419;

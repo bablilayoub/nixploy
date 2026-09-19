@@ -440,7 +440,13 @@ nixploy plan -f nixploy.yaml
 nixploy apply -f nixploy.yaml                # --no-redeploy to only write the rows
 nixploy gitops sync-url --url https://raw.githubusercontent.com/acme/infra/main/nixploy.yaml
 nixploy gitops sync-git -f nixploy.yaml      # same as apply, through the webhook-style endpoint
+nixploy gitops export-secrets --project-id proj_123 --env production -o production.secrets
+nixploy apply -f nixploy.yaml --secrets production.secrets   # manifest, then values, then redeploy
+nixploy gitops apply-secrets --project-id proj_456 --env production -f production.secrets
 ```
+
+The secrets commands read the passphrase from `--passphrase-file` or
+`NIXPLOY_SECRETS_PASSPHRASE` (12 characters minimum), never from an argument.
 
 The file format is [gitops.md](./gitops.md). `plan` lists every service and
 child row (domains, mounts, ports, redirects, basic auth) with `create` /

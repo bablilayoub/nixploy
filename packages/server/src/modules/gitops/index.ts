@@ -58,3 +58,19 @@ export {
 	slugifyProjectName,
 	upgradeStack,
 } from "./schema";
+export {
+	type ApplySecretsResult,
+	applySecretsPayload,
+	collectSecrets,
+	MAX_PASSPHRASE_LENGTH,
+	MIN_PASSPHRASE_LENGTH,
+	openSecretsBundle,
+	passphraseSchema,
+	SECRETS_BUNDLE_PREFIX,
+	SECRETS_BUNDLE_VERSION,
+	type SecretsPayload,
+	type SecretsSummary,
+	sealSecretsBundle,
+	secretsPayloadSchema,
+	summarizeSecrets,
+} from "./secrets";

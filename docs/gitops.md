@@ -143,9 +143,29 @@ Apply is the same funnel the panel forms use, so a file cannot attach what the f
 
 Every service is applied independently: one that fails is reported with its reason on its item and in `errors`, the rest of the file is still written, and failed items are never redeployed. A service's domain rows and middleware chains are reconciled in one transaction; mounts, ports, redirects and basic auth follow, then Traefik is rewritten once and, for applications, the Swarm service is re-specified when its mounts, ports, resources or Swarm overrides changed. A stack whose mounts changed is redeployed (its file is rendered at deploy time).
 
+## Moving the values: the secrets bundle
+
+The manifest carries env as key names. The values travel separately, sealed with a passphrase you type on both sides:
+
+```bash
+# on the source instance
+export NIXPLOY_SECRETS_PASSPHRASE='correct horse battery staple'   # 12 characters minimum
+nixploy gitops export --project-id proj_123 --env production -o nixploy.yaml
+nixploy gitops export-secrets --project-id proj_123 --env production -o production.secrets
+
+# on the target instance (project and environment created first)
+nixploy apply -f nixploy.yaml --project-id proj_456 --secrets production.secrets
+```
+
+`apply --secrets` writes the manifest, then the values, then redeploys — one call, and the services come up with their env. `nixploy gitops apply-secrets --project-id … --env … -f production.secrets` does the second step on its own (it does not deploy; the values reach a container on the next deploy). The passphrase comes from `--passphrase-file` or `NIXPLOY_SECRETS_PASSPHRASE`, never from an argument.
+
+The bundle holds the env of the project, the environment and every service **by name** (the same key the manifest uses), plus each application's and stack's build args and preview env — the columns the panel redacts behind `secrets.read`. Exporting needs `secrets.read`, applying needs `secrets.write`; a wrong passphrase is refused before anything is written, and a service the bundle names that the target does not have is reported under `missing` rather than created. The format is `nixploy-secrets:1:…` — scrypt with a fresh salt per bundle, AES-256-GCM with the version as additional data — so a bundle cannot be re-labelled and a wrong passphrase fails on the tag rather than producing garbage. Audit rows record counts of services and keys, never values.
+
+Database **passwords** are deliberately not in the bundle: the running container was initialised with the stored one, and a row that says otherwise is a lie the next restore trips over.
+
 ## What the file does not carry
 
-Env **values**, database passwords, registry credentials, certificates and their keys, backups and schedules, notifications, and the deployment history. Domains of the `custom` certificate type keep the certificate they already reference. A separate, passphrase-encrypted secrets bundle for moving env values between instances is planned; until then paste the values after the first apply.
+Registry credentials, certificates and their keys, database passwords, backups and schedules, notifications, and the deployment history. Domains of the `custom` certificate type keep the certificate they already reference.
 
 ## Round trip
 
