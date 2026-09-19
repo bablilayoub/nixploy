@@ -2,7 +2,6 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { bitbucket, deployments, gitea, github, gitlab, previewDeployments } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
-import { getGithubOctokit } from "../git/github";
 import { providerJsonFetch } from "./comment";
 import { withPreviewDomain } from "./index";
 import { loadPreviewParentForPreview } from "./parent";
@@ -129,6 +128,10 @@ export async function reportPreviewCommitStatus(
 					.where(eq(github.githubId, parent.githubId))
 					.limit(1);
 				if (!provider) return false;
+				// Lazily: the Octokit packages are ESM-only and this module sits on
+				// the worker's boot path through the deploy worker; a static import
+				// here crashed both roles at start (CI, 2026-09-20).
+				const { getGithubOctokit } = await import("../git/github");
 				const octokit = getGithubOctokit(provider);
 				const body = providerStatusPayload("github", payload);
 				await octokit.rest.repos.createCommitStatus({
