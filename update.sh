@@ -745,6 +745,14 @@ update_worker() {
 		"${APP_ENV_ARGS[@]}" \
 		"${WORKER_SERVICE}" >/dev/null
 	ok "Rolling ${WORKER_SERVICE} → ${APP_IMAGE}"
+	# The worker runs the migrations; the panel is rolled only once the new
+	# worker task is up, so the panel never races it on the schema.
+	if wait_for_update "${WORKER_SERVICE}"; then
+		ok "${WORKER_SERVICE} is on ${APP_IMAGE}"
+	else
+		warn "${WORKER_SERVICE} did not converge (state: $(service_update_state "${WORKER_SERVICE}")) — the panel roll below will report the outcome"
+		docker service ps "${WORKER_SERVICE}" --no-trunc 2>/dev/null | head -n 6 >&2 || true
+	fi
 }
 
 # Installs made before the Postgres hardening have no healthcheck, unbounded
@@ -868,9 +876,43 @@ app_is_ready() {
 	return 1
 }
 
+# Swarm update state of a service ("" before any update, then updating |
+# completed | paused | rollback_started | rollback_paused | rollback_completed).
+service_update_state() {
+	docker service inspect "$1" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}' 2>/dev/null || true
+}
+
 # Swarm update state of the nixploy service.
 app_update_state() {
-	docker service inspect nixploy --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}' 2>/dev/null || true
+	service_update_state nixploy
+}
+
+# Block until Swarm has finished rolling $1: with stop-first the old task
+# first drains its stop grace period (90 s for the panel and the worker),
+# and only then can the new task take the host-published port and pass its
+# health check. Probing readiness before this point reads the OLD task, and
+# that is how an update once reported success while the new task was still
+# pending on the port. Returns 1 on a rollback or a pause; the caller says
+# what that means.
+wait_for_update() {
+	local service="$1" state="" i
+	local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+	for i in $(seq 1 150); do
+		state="$(service_update_state "${service}")"
+		case "${state}" in
+			completed) [ "${IS_TTY}" != "1" ] || printf '\r\033[K'; return 0 ;;
+			rollback_*|paused) [ "${IS_TTY}" != "1" ] || printf '\r\033[K'; return 1 ;;
+			"") # No update registered (a spec that did not change): nothing to wait for.
+				[ "$i" -lt 3 ] || { [ "${IS_TTY}" != "1" ] || printf '\r\033[K'; return 0; } ;;
+		esac
+		if [ "${IS_TTY}" = "1" ]; then
+			printf '\r   %s%s%s Rolling %s (%s, %d/150)' \
+				"${C_CYAN}" "${frames:i%10:1}" "${C_RESET}" "${service}" "${state:-starting}" "$i"
+		fi
+		sleep 2
+	done
+	[ "${IS_TTY}" != "1" ] || printf '\r\033[K'
+	return 1
 }
 
 wait_for_app() {
@@ -884,9 +926,11 @@ wait_for_app() {
 	host="$(url_host "${url}")"
 	port="${NIXPLOY_PORT:-$(app_published_port)}"
 
-	# The old task is stopped first; give Swarm a moment so we don't read the
-	# old container as "ready".
-	sleep 3
+	# Wait for Swarm to finish the roll before probing: until then the probes
+	# reach the OLD task (stop-first + stop grace period) and a 200 from it
+	# says nothing about the new one. A rollback or a pause falls through to
+	# the state checks below, which explain it.
+	wait_for_update nixploy || true
 	local frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 	for i in $(seq 1 120); do
 		if app_is_ready "${host}" "${port}"; then

@@ -427,7 +427,11 @@ On a [split install](#split-worker) both services are rolled: `nixploy-worker`
 first, because it is the half that runs the migrations, then `nixploy` — whose
 `/api/ready` keeps it out of the service VIP until the schema matches.
 
-The roll is `stop-first` with `--update-failure-action rollback`: the image's
+`update.sh` waits for Swarm to report each roll `completed` — the old task
+drained (stop grace 90 s), the new one placed and past its health check —
+before it probes readiness; probing earlier reaches the old task, which is
+still serving during the drain. The roll is `stop-first` with
+`--update-failure-action rollback`: the image's
 `HEALTHCHECK` (`GET /api/ready`, see [observability.md](./observability.md#platform-health-endpoints))
 gates readiness — it answers 503 while Postgres, the Docker socket or the
 migration state is broken — and a new container that dies within the 60 s
