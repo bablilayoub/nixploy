@@ -2629,6 +2629,42 @@ export const templateCatalog: TemplateEntry[] = [
 		serviceName: "kutt",
 	},
 	{
+		id: "openhole",
+		name: "OpenHole",
+		description:
+			"Self-hosted tunnel edge — gives any local port a public HTTPS URL with one command. This runs the server; the openhole CLI connects to it.",
+		logo: "https://openhole.dev/icon-transparent.png",
+		category: "Developer Tools",
+		tags: ["tunnel", "localhost", "webhooks"],
+		links: {
+			website: "https://openhole.dev",
+			docs: "https://openhole.dev/docs/self-hosting",
+			github: "https://github.com/bablilayoub/openhole",
+		},
+		images: ["ghcr.io/bablilayoub/openhole-server:main"],
+		volumes: [],
+		env: [
+			{
+				key: "TUNNEL_ENDPOINT_HOST",
+				description:
+					"Hostname the CLI connects to (wss://<host>/tunnel) — add it as this service's domain",
+			},
+			{
+				key: "PUBLIC_TUNNEL_DOMAIN",
+				description:
+					"Domain the tunnels are served under — add *.<domain> as a second domain on this service (a wildcard needs a DNS-01 provider in Settings → Web server)",
+			},
+			{
+				key: "REGISTRATION_TOKENS",
+				description:
+					"Comma-separated tokens the CLI must pass with --token; leave empty to let anyone open a tunnel",
+				generated: true,
+			},
+		],
+		port: 8080,
+		serviceName: "openhole",
+	},
+	{
 		id: "pgadmin",
 		name: "pgAdmin 4",
 		description:
@@ -3506,4 +3542,4 @@ export const templateSlugs = templateCatalog.map((template) => template.id);
 export const findTemplate = (id: string): TemplateEntry | undefined =>
 	templateCatalog.find((template) => template.id === id);
 
-export const templateCount = 145;
+export const templateCount = 146;

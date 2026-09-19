@@ -551,4 +551,51 @@ volumes:
   kutt-redis:
 `,
 	},
+	{
+		id: "openhole",
+		name: "OpenHole",
+		description:
+			"Self-hosted tunnel edge — gives any local port a public HTTPS URL with one command. This runs the server; the openhole CLI connects to it.",
+		logo: "https://openhole.dev/icon-transparent.png",
+		tags: ["tunnel", "localhost", "webhooks"],
+		links: {
+			website: "https://openhole.dev",
+			github: "https://github.com/bablilayoub/openhole",
+			docs: "https://openhole.dev/docs/self-hosting",
+		},
+		suggestedDomain: { serviceName: "openhole", port: 8080 },
+		env: [
+			{
+				key: "TUNNEL_ENDPOINT_HOST",
+				default: "tunnel.example.com",
+				description:
+					"Hostname the CLI connects to (wss://<host>/tunnel) — add it as this service's domain",
+			},
+			{
+				key: "PUBLIC_TUNNEL_DOMAIN",
+				default: "tunnels.example.com",
+				description:
+					"Domain the tunnels are served under — add *.<domain> as a second domain on this service (a wildcard needs a DNS-01 provider in Settings → Web server)",
+			},
+			{
+				key: "REGISTRATION_TOKENS",
+				default: "{{generateSecret}}",
+				description:
+					"Comma-separated tokens the CLI must pass with --token; leave empty to let anyone open a tunnel",
+			},
+		],
+		compose: `services:
+  openhole:
+    image: ghcr.io/bablilayoub/openhole-server:main
+    restart: always
+    environment:
+      PUBLIC_TUNNEL_DOMAIN: \${PUBLIC_TUNNEL_DOMAIN}
+      TUNNEL_ENDPOINT_HOST: \${TUNNEL_ENDPOINT_HOST}
+      REGISTRATION_TOKENS: \${REGISTRATION_TOKENS}
+      SERVER_PORT: "8080"
+      PUBLIC_URL_SCHEME: https
+      TRUST_PROXY_HEADERS: "true"
+      SUBDOMAIN_HOLD_SECONDS: "300"
+`,
+	},
 ];

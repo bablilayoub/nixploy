@@ -1,12 +1,12 @@
 /**
  * Regenerates `src/lib/templates.ts` — the data behind nixploy.com/templates
- * and the 145 per-template pages — from the real catalog in
+ * and the per-template pages — from the real catalog in
  * `packages/server/src/modules/templates`.
  *
  * Generated rather than imported, for the same reason `api-catalog.ts` is:
  * `apps/landing` deliberately has no dependency on `@nixploy/server`, and
  * adding one would pull drizzle, dockerode and ssh2 into a marketing build.
- * Hand-maintaining a second copy of 145 entries would drift within a release.
+ * Hand-maintaining a second copy of the entries would drift within a release.
  *
  * Compose bodies are NOT emitted. They are the largest part of the catalog by
  * far and nothing on a template page renders one; what a reader actually wants

@@ -1,4 +1,5 @@
 import { site } from "@/lib/site";
+import { templateCount } from "@/lib/templates";
 
 /**
  * Static content for the marketing home page.
@@ -178,11 +179,12 @@ export const screens = [
  * Featured templates on the home page, by id. Only ids: the name, category
  * and logo slug are read from `lib/templates.ts`, which is generated from
  * `modules/templates/data/*`, so the strip cannot advertise a template we do
- * not ship — an id that stops existing simply drops out. 48 entries, chosen
+ * not ship — an id that stops existing simply drops out. 49 entries, chosen
  * to span categories rather than to be the most popular.
  */
 export const featuredTemplateIds = [
 	"n8n",
+	"openhole",
 	"supabase",
 	"ghost",
 	"gitea",
@@ -241,7 +243,7 @@ export const stats = [
 	{
 		id: "templates",
 		label: "Templates",
-		value: 145,
+		value: templateCount,
 		text: "Reviewed compose stacks, generated from the same catalog the panel installs from.",
 	},
 	{

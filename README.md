@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://nixploy.com">Website</a> ·
   <a href="https://nixploy.com/docs">Docs</a> ·
-  <a href="https://nixploy.com/templates">145 templates</a> ·
+  <a href="https://nixploy.com/templates">146 templates</a> ·
   <a href="https://nixploy.com/agents">AI agents</a> ·
   <a href="https://nixploy.com/api">API</a> ·
   <a href="https://github.com/bablilayoub/nixploy/releases">Releases</a>
@@ -76,7 +76,7 @@ Full installer options: [`docs/install.md`](./docs/install.md). Update with [`up
 | **Automate** | REST API + `/swagger` · `@nixploy/cli` (`--wait` returns a real outcome) · GitOps (`nixploy.yaml`) · **MCP** (`POST /api/mcp`, 35 annotated tools) |
 | **AI** | Deploy Copilot — explain failures, confirm-gated chat, generate compose (BYO key) · `llms.txt` / `agents.md` / per-page Markdown |
 | **Infra** | Remote Swarm servers · Docker control center · registries · schedules · in-app GHCR updates · `doctor` |
-| **Catalog** | 145 one-click templates (15 categories), CI-checked image tags |
+| **Catalog** | 146 one-click templates (15 categories), CI-checked image tags |
 
 Product docs: [nixploy.com/docs](https://nixploy.com/docs) · API: [nixploy.com/api](https://nixploy.com/api)
 

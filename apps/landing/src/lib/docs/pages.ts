@@ -1,3 +1,5 @@
+import { templateCount } from "@/lib/templates";
+
 export type DocBlock =
 	| { type: "p"; text: string }
 	| { type: "ul"; items: string[] }
@@ -541,7 +543,7 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 	{
 		slug: "templates",
 		title: "Templates",
-		description: "145 one-click compose stacks across 15 categories, plus your own catalogs.",
+		description: `${templateCount} one-click compose stacks across 15 categories, plus your own catalogs.`,
 		blocks: [
 			{ type: "h2", text: "Categories" },
 			{
