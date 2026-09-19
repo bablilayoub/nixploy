@@ -2,9 +2,9 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { bitbucket, deployments, gitea, github, gitlab, previewDeployments } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
-import { providerJsonFetch } from "./comment";
 import { withPreviewDomain } from "./index";
 import { loadPreviewParentForPreview } from "./parent";
+import { providerJsonFetch } from "./provider-fetch";
 
 /**
  * Commit statuses for previews: the check on the commit itself ("preview

@@ -5,6 +5,7 @@ import { getGithubOctokit } from "../git/github";
 import { listComposeExposedServices } from "./compose";
 import { previewComposeHost, previewHost } from "./naming";
 import { loadPreviewParent, type PreviewParentRef } from "./parent";
+import { providerJsonFetch } from "./provider-fetch";
 
 /**
  * Hidden marker kept in the comment body so repeated pushes to the same pull
@@ -86,36 +87,6 @@ type ExistingComment = { id: number | string; body: string };
 /** Pick the comment we previously wrote, identified by the hidden marker. */
 function findOwnComment(comments: ExistingComment[]): ExistingComment | undefined {
 	return comments.find((comment) => comment.body?.includes(PREVIEW_COMMENT_MARKER));
-}
-
-/** One JSON request against a provider API with the provider's token scheme; shared with the commit statuses. */
-export async function providerJsonFetch(
-	url: string,
-	init: RequestInit & {
-		token: string;
-		tokenScheme?: "Bearer" | "token" | "PRIVATE-TOKEN" | "Basic";
-	},
-): Promise<unknown> {
-	const { token, tokenScheme = "Bearer", headers, ...rest } = init;
-	const authHeaders: Record<string, string> =
-		tokenScheme === "PRIVATE-TOKEN"
-			? { "PRIVATE-TOKEN": token }
-			: { Authorization: `${tokenScheme} ${token}` };
-	const response = await fetch(url, {
-		...rest,
-		redirect: rest.redirect ?? "error",
-		headers: {
-			"content-type": "application/json",
-			accept: "application/json",
-			...authHeaders,
-			...(headers as Record<string, string> | undefined),
-		},
-	});
-	if (!response.ok) {
-		throw new Error(`${response.status} ${response.statusText}`);
-	}
-	if (response.status === 204) return null;
-	return await response.json().catch(() => null);
 }
 
 async function commentOnGithub(input: {
