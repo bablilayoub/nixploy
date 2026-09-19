@@ -71,9 +71,9 @@ export const projectRouter = router({
 		const countsByEnvironment = await getServiceCountsByEnvironment(environmentIds);
 		const canSeeSecrets = await hasCapability(ctx.session.user.id, organizationId, "secrets.read");
 		return projectList.map((project) => ({
-			...(canSeeSecrets ? project : { ...project, env: null }),
+			...(canSeeSecrets ? project : { ...project, env: null, secretsRedacted: true }),
 			environments: project.environments.map((environment) => ({
-				...(canSeeSecrets ? environment : { ...environment, env: null }),
+				...(canSeeSecrets ? environment : { ...environment, env: null, secretsRedacted: true }),
 				services: countsByEnvironment.get(environment.environmentId) ?? emptyServiceCounts(),
 			})),
 		}));
@@ -184,13 +184,13 @@ export const projectRouter = router({
 			environmentList.map(async (environment) => {
 				const services = await getEnvironmentServices(environment.environmentId);
 				return {
-					...(canSeeSecrets ? environment : { ...environment, env: null }),
+					...(canSeeSecrets ? environment : { ...environment, env: null, secretsRedacted: true }),
 					services: canSeeSecrets ? services : redactEnvironmentServicesSecrets(services),
 				};
 			}),
 		);
 		return {
-			...(canSeeSecrets ? project : { ...project, env: null }),
+			...(canSeeSecrets ? project : { ...project, env: null, secretsRedacted: true }),
 			environments: environmentsWithServices,
 		};
 	}),
@@ -389,7 +389,7 @@ export const projectRouter = router({
 				organizationId,
 				"secrets.read",
 			);
-			return canSeeSecrets ? updated : { ...updated, env: null };
+			return canSeeSecrets ? updated : { ...updated, env: null, secretsRedacted: true };
 		}),
 
 	/**
@@ -411,7 +411,7 @@ export const projectRouter = router({
 			targetId: project.projectId,
 			targetName: project.name,
 		});
-		return { ...project, env: null };
+		return { ...project, env: null, secretsRedacted: true };
 	}),
 
 	/**
@@ -449,7 +449,7 @@ export const projectRouter = router({
 				organizationId,
 				"secrets.read",
 			);
-			return canSeeSecrets ? updated : { ...updated, env: null };
+			return canSeeSecrets ? updated : { ...updated, env: null, secretsRedacted: true };
 		}),
 
 	/**

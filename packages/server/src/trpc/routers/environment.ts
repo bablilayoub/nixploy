@@ -76,7 +76,7 @@ export const environmentRouter = router({
 				"secrets.read",
 			);
 			return environmentList.map((environment) => ({
-				...(canSeeSecrets ? environment : { ...environment, env: null }),
+				...(canSeeSecrets ? environment : { ...environment, env: null, secretsRedacted: true }),
 				services: countsByEnvironment.get(environment.environmentId) ?? emptyServiceCounts(),
 			}));
 		}),
@@ -118,7 +118,7 @@ export const environmentRouter = router({
 				organizationId,
 				"secrets.read",
 			);
-			return canSeeSecrets ? environment : { ...environment, env: null };
+			return canSeeSecrets ? environment : { ...environment, env: null, secretsRedacted: true };
 		}),
 
 	/** Update name/description and/or environment-level env vars (dotenv string). */
@@ -166,7 +166,7 @@ export const environmentRouter = router({
 				organizationId,
 				"secrets.read",
 			);
-			return canSeeSecrets ? updated : { ...updated, env: null };
+			return canSeeSecrets ? updated : { ...updated, env: null, secretsRedacted: true };
 		}),
 
 	/**
@@ -190,7 +190,7 @@ export const environmentRouter = router({
 				targetName: environment.name,
 				metadata: { projectId: environment.projectId },
 			});
-			return { ...environment, env: null };
+			return { ...environment, env: null, secretsRedacted: true };
 		}),
 
 	/**
@@ -227,7 +227,7 @@ export const environmentRouter = router({
 				organizationId,
 				"secrets.read",
 			);
-			return canSeeSecrets ? duplicate : { ...duplicate, env: null };
+			return canSeeSecrets ? duplicate : { ...duplicate, env: null, secretsRedacted: true };
 		}),
 
 	/**
@@ -331,7 +331,7 @@ export const environmentRouter = router({
 				targetName: environment.name,
 				metadata: { sourceId: source.environmentId, servicesCloned: cloned },
 			});
-			return { ...environment, env: null, servicesCloned: cloned };
+			return { ...environment, env: null, secretsRedacted: true, servicesCloned: cloned };
 		}),
 
 	/**
@@ -368,6 +368,6 @@ export const environmentRouter = router({
 				organizationId,
 				"secrets.read",
 			);
-			return canSeeSecrets ? updated : { ...updated, env: null };
+			return canSeeSecrets ? updated : { ...updated, env: null, secretsRedacted: true };
 		}),
 });

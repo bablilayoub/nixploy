@@ -116,7 +116,7 @@ export const mountRouter = router({
 				"secrets.read",
 			);
 			if (canSeeSecrets) return rows;
-			return rows.map((row) => ({ ...row, content: null }));
+			return rows.map((row) => ({ ...row, content: null, secretsRedacted: true }));
 		}),
 
 	byCompose: protectedProcedure
@@ -134,7 +134,7 @@ export const mountRouter = router({
 				"secrets.read",
 			);
 			if (canSeeSecrets) return rows;
-			return rows.map((row) => ({ ...row, content: null }));
+			return rows.map((row) => ({ ...row, content: null, secretsRedacted: true }));
 		}),
 
 	one: protectedProcedure
@@ -147,7 +147,7 @@ export const mountRouter = router({
 				organizationId,
 				"secrets.read",
 			);
-			return canSeeSecrets ? mount : { ...mount, content: null };
+			return canSeeSecrets ? mount : { ...mount, content: null, secretsRedacted: true };
 		}),
 
 	create: protectedProcedure
@@ -231,7 +231,7 @@ export const mountRouter = router({
 				organizationId,
 				"secrets.read",
 			);
-			return canSeeSecrets ? mount : { ...mount, content: null };
+			return canSeeSecrets ? mount : { ...mount, content: null, secretsRedacted: true };
 		}),
 
 	update: protectedProcedure
@@ -315,7 +315,9 @@ export const mountRouter = router({
 				organizationId,
 				"secrets.read",
 			);
-			return canSeeSecrets || !updated ? updated : { ...updated, content: null };
+			return canSeeSecrets || !updated
+				? updated
+				: { ...updated, content: null, secretsRedacted: true };
 		}),
 
 	delete: protectedProcedure

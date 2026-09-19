@@ -1,7 +1,9 @@
 /**
  * Strip decrypted secrets from API responses when the caller lacks
  * `secrets.read`. Keep shapes stable (null fields) so clients don't branch on
- * missing keys.
+ * missing keys, and say so: `secretsRedacted: true` is how a client (the
+ * CLI, an agent) tells "this value is empty" from "you may not see it" — a
+ * null on its own reads as unset.
  */
 
 export function redactApplicationSecrets<T>(row: T): T {
@@ -18,6 +20,7 @@ export function redactApplicationSecrets<T>(row: T): T {
 		// as `command` does.
 		preDeployCommand: null,
 		postDeployCommand: null,
+		secretsRedacted: true,
 	};
 	const environment = source.environment as
 		| ({ env?: string | null; project?: Record<string, unknown> } & Record<string, unknown>)
@@ -44,6 +47,7 @@ export function redactComposeSecrets<T>(row: T): T {
 		// Build args routinely carry tokens (private registries, package
 		// feeds) and land in the image build, so they follow the same rule.
 		buildArgs: null,
+		secretsRedacted: true,
 	};
 	const environment = source.environment as
 		| ({ env?: string | null; project?: Record<string, unknown> } & Record<string, unknown>)
@@ -64,6 +68,7 @@ export function redactDatabaseSecrets<T extends Record<string, unknown>>(row: T)
 		env: null,
 		databasePassword: null,
 		command: null,
+		secretsRedacted: true,
 	};
 	if ("databaseRootPassword" in row) {
 		next.databaseRootPassword = null;
@@ -90,7 +95,7 @@ export function redactDestinationSecrets<
 export function redactScheduleSecrets<
 	T extends { command?: string | null; script?: string | null },
 >(row: T): T {
-	return { ...row, command: null, script: null };
+	return { ...row, command: null, script: null, secretsRedacted: true };
 }
 
 export function redactEnvironmentServicesSecrets<

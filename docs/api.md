@@ -69,6 +69,13 @@ status maps from the tRPC code:
 Cross-tenant reads answer `404`, not `403` — the API never confirms that an id
 exists in another organization.
 
+Secret-bearing fields (`env`, `buildArgs`, `previewEnv`, hook commands, an
+inline `composeFile`, database passwords, file-mount `content`, schedule
+commands) come back as `null` when the key's user lacks `secrets.read`, and
+the row then carries `secretsRedacted: true`. Without the flag a `null` means
+the value is genuinely unset; a client that wants to edit env should check
+the flag before it treats an empty value as empty.
+
 ## Capabilities per endpoint
 
 Every operation in the spec carries `x-nixploy-capability`: the organization
