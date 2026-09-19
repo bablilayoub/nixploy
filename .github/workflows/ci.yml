@@ -646,6 +646,17 @@ jobs:
           curl -ksS https://127.0.0.1/api/version
           echo "image=$(docker service inspect nixploy --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')" >> "$GITHUB_OUTPUT"
 
+      - name: Read the installer's setup token
+        # A production install refuses to create the first admin without the
+        # token install.sh generated (NIXPLOY_SETUP_TOKEN in the config root's
+        # .env). Masked before it can reach a log line.
+        run: |
+          set -euo pipefail
+          token="$(sudo grep '^NIXPLOY_SETUP_TOKEN=' /etc/nixploy/.env | cut -d= -f2- | tr -d '"')"
+          [ -n "$token" ] || { echo "::error::NIXPLOY_SETUP_TOKEN not found in /etc/nixploy/.env"; exit 1; }
+          echo "::add-mask::$token"
+          echo "NIXPLOY_SETUP_TOKEN=$token" >> "$GITHUB_ENV"
+
       - name: Create the first admin and an API key
         id: bootstrap
         env:
