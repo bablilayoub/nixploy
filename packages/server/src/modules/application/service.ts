@@ -36,6 +36,7 @@ import { invalidateDockerListings } from "../docker/containers";
 import { conflict, notFound, preconditionFailed } from "../errors";
 import { deletePreviewDeployment } from "../preview";
 import type { QuotaResourceDefaults } from "../projects/quotas";
+import { removeRuntimeLogs } from "../runtime-logs/store";
 import { unregisterSchedulesForService } from "../schedules";
 import { generateAppName, isAppNameTaken } from "../services/app-name";
 import {
@@ -695,6 +696,9 @@ export const deleteApplication = async (
 	// Build logs live outside the app dir and have no FK to cascade through.
 	await bestEffort(`remove logs for ${application.appName}`, () =>
 		removeServiceLogs(application.appName),
+	);
+	await bestEffort(`remove runtime logs for ${application.appName}`, () =>
+		removeRuntimeLogs(application.appName),
 	);
 
 	await db.delete(applications).where(eq(applications.applicationId, application.applicationId));

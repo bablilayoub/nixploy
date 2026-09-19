@@ -401,6 +401,60 @@ Consumers: the image `HEALTHCHECK` (Swarm restarts a task that stays 503 and
 probes in `install.sh` / `update.sh`, and `nixploy doctor`, which prints the
 report next to the server/CLI versions and warns on a major-version mismatch.
 
+## Runtime log history
+
+The live log tab streams `docker logs --follow`, which ends with the
+container: a crash-looping service's last words, or what a service printed
+last night, are gone by the time someone looks. **Runtime log history** keeps
+them. The worker (`NIXPLOY_ROLE=worker`, or the single-process default; never
+the `panel` role) runs `modules/runtime-logs/harvest.ts` every 30 s:
+`docker logs --timestamps --since <cursor>` for every running container of
+every service — locally through dockerode, on managed servers as one SSH
+command per server — and appends the lines to
+`<config>/runtime-logs/<appName>/<YYYY-MM-DDTHH>.jsonl`. An hour that has
+closed is gzipped in place. Each line stores Docker's own timestamp, the
+compose/stack service it came from, and a **level** classified once, on the
+server (`modules/observability/log-levels.ts` — the same classifier the live
+viewer badges with, so `level:error` and the red lines agree).
+
+Bounded on purpose:
+
+- **2 000 lines per container per pass.** A service printing faster loses the
+  older lines and gets an explicit
+  `[nixploy] more than 2000 lines since the last pass; older lines were dropped`
+  line instead of a silent gap.
+- **Cursors are Docker timestamps** (`state.json` per service), so a worker
+  restart resumes exactly where it stopped; a container never seen before
+  starts ten minutes back, not at its birth.
+- **Retention is per service, instance-wide:** `NIXPLOY_RUNTIME_LOG_RETENTION_DAYS`
+  (default `7`) and `NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE` (default `256`),
+  enforced by the hourly maintenance pass; a deleted service's directory goes
+  with it. `NIXPLOY_RUNTIME_LOGS=0` turns the harvester off (what exists on
+  disk stays readable).
+
+**Reading it.** Every service page has Runtime → **History**; the Monitoring
+page has a **Logs** section across every service the caller can see; the CLI
+has `nixploy logs search`; MCP has `get_runtime_logs`; the API is
+`observability.runtimeLogs` (`service.runtime`, like the live stream). Pages
+are newest-first and keyed by timestamp (`before` = the previous page's
+`nextCursor`). The query is a small grammar:
+
+| Clause | Meaning |
+| --- | --- |
+| `timeout upstream` | every term must appear (case-insensitive substring) |
+| `"connection refused"` | a phrase, matched as one term |
+| `-healthcheck` | the line must not contain the term |
+| `level:error,warn` | one of these levels |
+| `container:web` (`service:` is an alias) | the compose/stack service name |
+| `/^GET \/api/i` | a regular expression, ≤ 200 characters |
+
+A read stops after 500 000 lines or four seconds and says so
+(`truncated: true`) rather than hanging on a chatty day; a regex that
+quantifies a group (`(a+)+`) is refused up front, since no budget saves a
+catastrophic backtrack. Org-wide reads merge services newest-first and cut
+the page at the newest per-service cursor, so paging never skips or repeats
+a line across services.
+
 ## Platform logs
 
 Everything above is about *tenant* services. This section is about the panel
@@ -570,6 +624,9 @@ The hourly maintenance cron (`modules/deployment/maintenance.ts`, `7 * * * *`):
 - drops `service_event` rows older than 90 days, and anything beyond the newest
   1 000 per service (a service in a crash loop writes a row every few seconds,
   and the per-service cap is what stops one sick service owning the table);
+- prunes runtime log history past `NIXPLOY_RUNTIME_LOG_RETENTION_DAYS` and
+  over `NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE` (see [Runtime log
+  history](#runtime-log-history));
 - drops `audit_log` rows older than `NIXPLOY_AUDIT_RETENTION_DAYS` (default
   `365`; `0` keeps them forever);
 - warns about uploaded TLS certificates expiring within 21 days — an incident

@@ -226,6 +226,19 @@ nixploy upstream resync ups_abc                                          # lift 
 nixploy upstream remove ups_abc --yes
 ```
 
+### `logs` — runtime log history
+
+What services printed, kept by the worker past the container's lifetime
+([observability.md](./observability.md#runtime-log-history)). The query
+grammar: terms (all must match), `"phrases"`, `-excludes`, `level:error,warn`,
+`container:web`, `/regex/`.
+
+```bash
+nixploy logs search --app-name shop-a1b2c3 --query 'level:error -healthcheck'
+nixploy logs search --query '"connection refused"' --limit 50        # every service you can see
+nixploy logs search --app-name shop-a1b2c3 --before 1789851600000     # the previous page's cursor
+```
+
 ### `env` — variables at every scope
 
 Variables inherit organization → project → environment → service; the deeper

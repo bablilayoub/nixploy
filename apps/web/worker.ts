@@ -72,6 +72,15 @@ async function initBackgroundSchedules() {
 			},
 		],
 		[
+			"runtime log harvest",
+			async () => {
+				const { initRuntimeLogHarvest } = await import(
+					"../../packages/server/src/modules/runtime-logs/harvest"
+				);
+				initRuntimeLogHarvest();
+			},
+		],
+		[
 			"status reconciler",
 			async () => {
 				const { initStatusReconciler } = await import(

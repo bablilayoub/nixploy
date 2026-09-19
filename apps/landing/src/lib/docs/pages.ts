@@ -839,6 +839,19 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 					"Secrets never reach the log — a line that contains a credential is a bug worth reporting",
 				],
 			},
+			{ type: "h2", text: "Runtime log history" },
+			{
+				type: "p",
+				text: "The live log tab ends with the container. Runtime log history keeps what services printed: the worker collects docker logs every 30 s into hour files under the config directory (gzipped once the hour closes), with Docker's own timestamps and a level classified on the server. Every service page has Runtime → History, the Monitoring page has a Logs section across every service you can see, the CLI has nixploy logs search and MCP has get_runtime_logs.",
+			},
+			{
+				type: "ul",
+				items: [
+					'Query grammar: terms (all must match), "phrases", -excludes, level:error,warn, container:web, /regex/ (≤ 200 characters, quantified groups refused).',
+					"Bounded: 2 000 lines per container per pass with an explicit marker line when more was dropped; a read stops after 500 000 lines or four seconds and says so.",
+					"Retention per service, instance-wide: NIXPLOY_RUNTIME_LOG_RETENTION_DAYS (7) and NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE (256); NIXPLOY_RUNTIME_LOGS=0 turns the harvester off.",
+				],
+			},
 		],
 	},
 	{

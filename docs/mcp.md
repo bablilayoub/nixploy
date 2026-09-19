@@ -106,7 +106,7 @@ returned by `initialize` and none is needed on later calls.
 
 ## 3. Tool reference
 
-37 tools. All inputs are validated with zod; outputs are compact JSON. Every
+38 tools. All inputs are validated with zod; outputs are compact JSON. Every
 call goes through `appRouter.createCaller`, so the capability listed below is
 enforced by the router, not by the tool.
 
@@ -173,6 +173,7 @@ and the tools already answer "what is there" with pagination and filters.
 | `list_databases` | Database services of a project across all five engines | `<engine>.all` |
 | `get_database` | One database's configuration plus its live container status | `<engine>.one` + `getStatus` |
 | `get_service_logs` | Build/deploy log of a service (latest deployment, or a given `deploymentId`), capped to the last 16k chars | `deployment.getLogs` |
+| `get_runtime_logs` | Runtime log history — what a service printed, kept by the worker past the container's lifetime; terms, `"phrases"`, `-excludes`, `level:error`, `container:web`, `/regex/`; newest first, paged by `before` | `observability.runtimeLogs` |
 | `list_deployments` | Recent deployments of one service with status and duration | `deployment.byApplication` / `byCompose` |
 | `get_deployment_provenance` | Commit SHA, message, author, trigger and who triggered each recent deployment | `deployment.byApplication` / `byCompose` |
 | `list_rollback_points` | Image pins kept per application (5 most recent) | `rollback.all` |

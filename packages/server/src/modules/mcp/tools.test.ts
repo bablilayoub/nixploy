@@ -52,6 +52,7 @@ const EXPECTED_TOOLS = [
 	"deploy_and_wait",
 	"explain_last_failure",
 	"get_service_runtime_summary",
+	"get_runtime_logs",
 	// guarded writes
 	"deploy_service",
 	"deploy_compose",

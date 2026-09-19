@@ -28,6 +28,7 @@ import {
 } from "../deployment/swarm";
 import { conflict, notFound, preconditionFailed } from "../errors";
 import type { QuotaResourceDefaults } from "../projects/quotas";
+import { removeRuntimeLogs } from "../runtime-logs/store";
 import { randomAppNameSuffix, slugifyName } from "../services/app-name";
 import { SERVICE_REGISTRY } from "../services/registry";
 
@@ -810,6 +811,7 @@ export async function removeDatabase(
 ): Promise<void> {
 	try {
 		await removeDatabaseService(appName, serverId, kind);
+		await bestEffort(`remove runtime logs for ${appName}`, () => removeRuntimeLogs(appName));
 	} finally {
 		// Drop the environment overlay once the last service of the environment
 		// left it; `network rm` refuses one that still has endpoints, so this is

@@ -92,6 +92,7 @@ export const GROUP_DESCRIPTIONS: Record<string, string> = {
 	env: "Environment variables at every scope",
 	environment: "Project environments",
 	incident: "Incidents, alert rules and uptime probes",
+	logs: "Runtime log history — what services printed, searchable",
 	monitoring: "Fleet and per-service metrics",
 	notification: "Notification channels",
 	org: "Organization profile, settings and capabilities",
@@ -575,6 +576,40 @@ export const commandRegistry: RegistryEntry[] = [
 		kind: "query",
 		summary: "Generate a free *.traefik.me host for a service",
 		options: [{ field: "appName", flag: "--app-name <name>", description: "Service appName" }],
+	},
+	// ------------------------------------------------------------------- logs
+	{
+		group: "logs",
+		verb: "search",
+		procedure: "observability.runtimeLogs",
+		kind: "query",
+		summary:
+			'Search runtime log history (terms, "phrases", -excludes, level:error, container:web, /regex/)',
+		options: [
+			{
+				field: "query",
+				flag: "--query <text>",
+				description: "Search query; omit for the newest lines",
+			},
+			{
+				field: "appName",
+				flag: "--app-name <name>",
+				description: "One service's appName; omit for every service",
+			},
+			{
+				field: "before",
+				flag: "--before <epochMs>",
+				description: "Cursor from a previous page",
+				type: "number",
+			},
+			{
+				field: "limit",
+				flag: "--limit <n>",
+				description: "Lines to return (default 200, max 500)",
+				type: "number",
+			},
+		],
+		columns: ["t", "level", "appName", "container", "message"],
 	},
 	// --------------------------------------------------------------- upstream
 	{

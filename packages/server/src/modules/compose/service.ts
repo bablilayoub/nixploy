@@ -22,6 +22,7 @@ import { removeServiceLogs } from "../deployment/maintenance";
 import { ensureEnvironmentNetworkById, pruneEnvironmentNetwork } from "../deployment/network";
 import { badRequest, conflict, notFound, preconditionFailed } from "../errors";
 import { assertProjectVisible } from "../projects/project-scope";
+import { removeRuntimeLogs } from "../runtime-logs/store";
 import { unregisterSchedulesForService } from "../schedules";
 import { generateAppName, isAppNameTaken, randomAppNameSuffix } from "../services/app-name";
 import { toTraefikDomainEntry } from "../traefik/config-writer";
@@ -662,6 +663,9 @@ export async function deleteCompose(composeRow: ComposeRow): Promise<void> {
 	// Build logs live outside the compose dir and have no FK to cascade through.
 	await bestEffort(`remove logs for ${composeRow.appName}`, () =>
 		removeServiceLogs(composeRow.appName),
+	);
+	await bestEffort(`remove runtime logs for ${composeRow.appName}`, () =>
+		removeRuntimeLogs(composeRow.appName),
 	);
 	// `network rm` refuses an overlay that still has endpoints, so this only
 	// lands when this was the last service of the environment.

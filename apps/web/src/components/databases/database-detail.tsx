@@ -32,6 +32,7 @@ import { EnvEditor } from "@/components/services/env-editor";
 import { InheritedEnv } from "@/components/services/inherited-env";
 import { LogViewer } from "@/components/services/log-viewer";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
+import { RuntimeLogHistory } from "@/components/services/runtime-log-history";
 import { SaveBarTabsContent, useSaveBar } from "@/components/services/save-bar";
 import { ServiceActionsCard } from "@/components/services/service-actions-card";
 import { ServiceEvents } from "@/components/services/service-events";
@@ -95,6 +96,7 @@ const SUB_TAB_PARENT: Record<string, string> = {
 	monitoring: "runtime",
 	events: "runtime",
 	terminal: "runtime",
+	history: "runtime",
 };
 
 function RevealButton({
@@ -471,6 +473,7 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 							<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>
 							<SubTabsTrigger value="events">Events</SubTabsTrigger>
 							<SubTabsTrigger value="terminal">Terminal</SubTabsTrigger>
+							<SubTabsTrigger value="history">History</SubTabsTrigger>
 						</SubTabsList>
 						<TabsContent value="logs" className="mt-0">
 							<SettingsSection bare title="Logs" description="Live container output.">
@@ -511,6 +514,15 @@ export function DatabaseDetail({ type, id, projectId }: DatabaseDetailProps) {
 									serviceStatus={status}
 									notRunningAction={runtimeAction}
 								/>
+							</SettingsSection>
+						</TabsContent>
+						<TabsContent value="history" className="mt-0">
+							<SettingsSection
+								bare
+								title="History"
+								description="What the service printed, kept past the container's lifetime and searchable."
+							>
+								<RuntimeLogHistory appName={db.appName} />
 							</SettingsSection>
 						</TabsContent>
 					</Tabs>

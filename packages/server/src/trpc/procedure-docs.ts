@@ -1000,6 +1000,12 @@ const docs: Record<string, ProcedureDoc> = {
 		description:
 			"Full-text search over the `service_log` table. Runtime container logs are live-only; this covers what the platform persisted (deploy failures, ingested logs).",
 	},
+	"observability.runtimeLogs": {
+		summary: "Search runtime log history",
+		description:
+			"What a service printed, kept beyond the container's lifetime: the worker collects `docker logs` every 30 s into hour files. One service by `appName`, or every visible service merged newest-first. `query` is a small grammar: terms, \"phrases\", -excludes, level:error, container:web, /regex/. Page with `before` (the previous page's `nextCursor`); `truncated` means the read stopped on its scan budget.",
+		capability: ["service.runtime"],
+	},
 
 	// ────────────────────────────────────────────────────── infrastructure
 	"registry.all": {

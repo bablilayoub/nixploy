@@ -20,6 +20,7 @@ import { capabilityHint } from "@/components/services/capability-hint";
 import { DomainManager } from "@/components/services/domain-manager";
 import { LogViewer } from "@/components/services/log-viewer";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
+import { RuntimeLogHistory } from "@/components/services/runtime-log-history";
 import { SaveBarTabsContent } from "@/components/services/save-bar";
 import { ServiceAlertRulesCard } from "@/components/services/service-alert-rules-card";
 import { ServiceEvents } from "@/components/services/service-events";
@@ -58,6 +59,7 @@ const SUB_TAB_PARENT: Record<string, string> = {
 	monitoring: "runtime",
 	events: "runtime",
 	terminal: "runtime",
+	history: "runtime",
 };
 
 const SUB_TAB_DEFAULT: Record<string, string> = {
@@ -248,6 +250,7 @@ export function ApplicationDetail({ projectId, id }: { projectId: string; id: st
 								<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>
 								<SubTabsTrigger value="events">Events</SubTabsTrigger>
 								<SubTabsTrigger value="terminal">Terminal</SubTabsTrigger>
+								<SubTabsTrigger value="history">History</SubTabsTrigger>
 							</SubTabsList>
 							<TabsContent value="logs" className="mt-0">
 								<SettingsSection bare title="Logs" description="Live container output.">
@@ -291,6 +294,15 @@ export function ApplicationDetail({ projectId, id }: { projectId: string; id: st
 										serviceStatus={application.status}
 										notRunningAction={runtimeAction}
 									/>
+								</SettingsSection>
+							</TabsContent>
+							<TabsContent value="history" className="mt-0">
+								<SettingsSection
+									bare
+									title="History"
+									description="What the service printed, kept past the container's lifetime and searchable."
+								>
+									<RuntimeLogHistory appName={application.appName} />
 								</SettingsSection>
 							</TabsContent>
 						</Tabs>

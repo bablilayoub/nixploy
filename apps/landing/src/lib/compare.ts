@@ -136,7 +136,7 @@ const COOLIFY: Comparison = {
 			label: "Agent surface",
 			theirs:
 				"Ships an MCP server whose tools can inspect and operate resources, with read-only MCP resources alongside them.",
-			ours: "37 MCP tools, each carrying hand-declared readOnlyHint / destructiveHint / idempotentHint with a test that fails the build on a missing entry, plus task tools that return a deploy's real outcome in one call instead of a polling loop.",
+			ours: "38 MCP tools, each carrying hand-declared readOnlyHint / destructiveHint / idempotentHint with a test that fails the build on a missing entry, plus task tools that return a deploy's real outcome in one call instead of a polling loop.",
 			source: "https://coolify.io/docs/integrations/mcp",
 		},
 		{

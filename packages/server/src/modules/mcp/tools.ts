@@ -942,6 +942,50 @@ export const mcpTools: McpToolDefinition[] = [
 		},
 	},
 	{
+		name: "get_runtime_logs",
+		description:
+			"Search what a service printed (stdout/stderr) over the last days — kept by the worker beyond the container's lifetime, so a crashed container's last words are still here. Query grammar: plain terms (all must match), \"phrases\", -excluded terms, level:error,warn, container:<compose service>, /regex/. Newest first; page with `before` = the previous nextCursor. Use this before guessing why a service died: the event timeline says that it did, this says what it said.",
+		inputSchema: z.object({
+			appName: z
+				.string()
+				.min(1)
+				.max(64)
+				.optional()
+				.describe("Service appName (from list_services); omit to search every visible service"),
+			query: z.string().max(500).optional().describe("Search query (see the grammar above)"),
+			before: z
+				.number()
+				.int()
+				.positive()
+				.optional()
+				.describe("Epoch ms cursor from a previous page"),
+			limit: z.number().int().min(1).max(500).optional().describe("Lines to return (default 100)"),
+		}),
+		handler: async (
+			caller,
+			input: { appName?: string; query?: string; before?: number; limit?: number },
+		) => {
+			const page = await caller.observability.runtimeLogs({
+				appName: input.appName,
+				query: input.query,
+				before: input.before,
+				limit: input.limit ?? 100,
+			});
+			return {
+				lines: page.lines.map((line) => ({
+					at: new Date(line.t).toISOString(),
+					t: line.t,
+					level: line.level,
+					service: line.appName,
+					container: line.container ?? null,
+					message: line.message,
+				})),
+				nextCursor: page.nextCursor,
+				truncated: page.truncated,
+			};
+		},
+	},
+	{
 		name: "deploy_and_wait",
 		description:
 			"Queue a deploy and block until it finishes, then return the verdict: status, the pipeline step it died in, the tail of the build log, the URLs it should answer on and Swarm's live task counts. Prefer this over deploy_service + polling. Waits up to 55s per call — if `done` is false the deploy is still running and the same deploymentId can be handed to deploy_and_wait again. Requires the service.deploy capability.",

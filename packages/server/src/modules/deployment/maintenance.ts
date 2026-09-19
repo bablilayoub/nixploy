@@ -8,6 +8,7 @@ import { createLogger } from "../../lib/logger";
 import { getConfigDir } from "../application/paths";
 import { pruneServiceEvents } from "../observability/service-events";
 import { deletePreviewDeployment } from "../preview";
+import { pruneRuntimeLogs } from "../runtime-logs/store";
 import { warnAboutExpiringCertificates } from "../traefik/certificate-expiry";
 import { recheckUpstreamTargets } from "../upstreams";
 import { getDeploymentExplainPath } from "./paths";
@@ -349,6 +350,7 @@ export async function runMaintenancePass(): Promise<void> {
 		["prune service events", () => pruneServiceEvents()],
 		["warn about expiring certificates", () => warnAboutExpiringCertificates()],
 		["recheck external upstream targets", () => recheckUpstreamTargets()],
+		["prune runtime logs", () => pruneRuntimeLogs()],
 		["prune audit log", () => pruneAuditLogs()],
 	];
 	for (const [label, step] of steps) {

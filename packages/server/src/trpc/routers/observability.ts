@@ -1,8 +1,8 @@
 import { TRPCError } from "@trpc/server";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { domains } from "../../db/schema";
+import { domains, environments, projects } from "../../db/schema";
 import { assertApplicationAccess, getServiceContext } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
 import {
@@ -22,8 +22,25 @@ import {
 	setUptimeProbe,
 	upsertAlertRule,
 } from "../../modules/observability";
-import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
-import { serviceKindSchema } from "../../modules/services/registry";
+import {
+	assertCapability,
+	projectIdFilter,
+	resolveCallerOrganizationId,
+} from "../../modules/projects";
+import { assertProjectVisible } from "../../modules/projects/project-scope";
+import {
+	isEmptyQuery,
+	type LogQuery,
+	LogQueryError,
+	parseLogQuery,
+	type RuntimeLogLine,
+	readRuntimeLogs,
+} from "../../modules/runtime-logs";
+import {
+	findServiceByAppName,
+	SERVICE_DEFS,
+	serviceKindSchema,
+} from "../../modules/services/registry";
 import { protectedProcedure, router } from "../init";
 
 const metricSchema = z.enum(["cpu", "memory", "restarts", "deploy_failure_streak"]);
@@ -359,6 +376,125 @@ export const observabilityRouter = router({
 				ctx.session.session.activeOrganizationId,
 			);
 			return searchServiceLogs(organizationId, input);
+		}),
+
+	/**
+	 * Runtime log history: what a service printed, kept by the worker beyond
+	 * the container's lifetime (`modules/runtime-logs`). One service by
+	 * `appName`, or — without one — every service the caller can see, merged
+	 * newest-first. `service.runtime`, like the live log stream.
+	 *
+	 * Paging is by timestamp (`before`). Org-wide, a page is cut at the
+	 * newest per-service cursor so no line is skipped or repeated between
+	 * pages: everything older than the cut is re-read on the next page.
+	 */
+	runtimeLogs: protectedProcedure
+		.input(
+			z.object({
+				appName: z.string().min(1).max(64).optional(),
+				query: z.string().max(500).optional(),
+				before: z.number().int().positive().optional(),
+				limit: z.number().int().min(1).max(500).optional(),
+			}),
+		)
+		.query(async ({ ctx, input }) => {
+			const organizationId = await resolveCallerOrganizationId(
+				ctx.session.user.id,
+				ctx.session.session.activeOrganizationId,
+			);
+			await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
+			let query: LogQuery | null = null;
+			if (input.query?.trim()) {
+				try {
+					query = parseLogQuery(input.query);
+				} catch (error) {
+					if (error instanceof LogQueryError) {
+						throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+					}
+					throw error;
+				}
+				if (isEmptyQuery(query)) query = null;
+			}
+			const limit = input.limit ?? 200;
+			type Line = RuntimeLogLine & { appName: string };
+
+			if (input.appName) {
+				const service = await findServiceByAppName(input.appName);
+				if (!service || service.organizationId !== organizationId) {
+					throw new TRPCError({ code: "NOT_FOUND", message: "Service not found" });
+				}
+				assertProjectVisible(service.projectId, "Service");
+				const page = await readRuntimeLogs({
+					appName: input.appName,
+					query,
+					before: input.before ?? null,
+					limit,
+				});
+				const appName = input.appName;
+				return {
+					lines: page.lines.map((line): Line => ({ ...line, appName })),
+					nextCursor: page.nextCursor,
+					truncated: page.truncated,
+					scanned: page.scanned,
+				};
+			}
+
+			// Org-wide: every service in a project the caller can see.
+			const orgProjects = await db.query.projects.findMany({
+				where: and(
+					eq(projects.organizationId, organizationId),
+					projectIdFilter(projects.projectId),
+				),
+				columns: { projectId: true },
+			});
+			const environmentRows =
+				orgProjects.length === 0
+					? []
+					: await db.query.environments.findMany({
+							where: inArray(
+								environments.projectId,
+								orgProjects.map((row) => row.projectId),
+							),
+							columns: { environmentId: true },
+						});
+			const envIds = environmentRows.map((row) => row.environmentId);
+			const summaries =
+				envIds.length === 0
+					? []
+					: (await Promise.all(SERVICE_DEFS.map((def) => def.module.listSummaries(envIds)))).flat();
+
+			const deadline = Date.now() + 4_000;
+			const lines: Line[] = [];
+			let cut: number | null = null;
+			let truncated = false;
+			let scanned = 0;
+			for (const summary of summaries) {
+				const budgetMs = deadline - Date.now();
+				if (budgetMs <= 0) {
+					truncated = true;
+					break;
+				}
+				const page = await readRuntimeLogs({
+					appName: summary.appName,
+					query,
+					before: input.before ?? null,
+					limit,
+					budgetMs,
+				});
+				scanned += page.scanned;
+				truncated ||= page.truncated;
+				for (const line of page.lines) lines.push({ ...line, appName: summary.appName });
+				if (page.nextCursor !== null)
+					cut = cut === null ? page.nextCursor : Math.max(cut, page.nextCursor);
+			}
+			lines.sort((a, b) => b.t - a.t);
+			// Only the range every service has fully covered is returned; the
+			// rest comes back on the next page from `cut` down.
+			const covered = cut === null ? lines : lines.filter((line) => line.t >= (cut as number));
+			const page = covered.slice(0, limit);
+			const last = page[page.length - 1];
+			const nextCursor = covered.length > limit ? (last?.t ?? cut) : cut;
+			return { lines: page, nextCursor, truncated, scanned };
 		}),
 
 	uptimeProbes: protectedProcedure.query(async ({ ctx }) => {

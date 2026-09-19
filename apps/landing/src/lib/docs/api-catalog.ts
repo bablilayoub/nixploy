@@ -1320,6 +1320,12 @@ export const apiCatalog: ApiRouterGroup[] = [
 				summary: "Rotate the status page token",
 				capability: ["settings.manage"],
 			},
+			{
+				method: "GET",
+				path: "observability.runtimeLogs",
+				summary: "Search runtime log history",
+				capability: ["service.runtime"],
+			},
 			{ method: "GET", path: "observability.searchLogs", summary: "Search persisted service logs" },
 			{
 				method: "GET",
@@ -2304,4 +2310,4 @@ export const apiCatalog: ApiRouterGroup[] = [
 ];
 
 /** Total endpoints in the catalog above. */
-export const apiEndpointCount = 429;
+export const apiEndpointCount = 430;

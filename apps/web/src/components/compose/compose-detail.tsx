@@ -18,9 +18,11 @@ import { PreviewDeploymentsTab } from "@/components/compose/preview-deployments-
 import { RollbacksTab } from "@/components/compose/rollbacks-tab";
 import { SettingsTab } from "@/components/compose/settings-tab";
 import { TerminalTab } from "@/components/compose/terminal-tab";
+import { SettingsSection } from "@/components/layout/settings-section";
 import { SchedulesPanel } from "@/components/schedules/schedules-panel";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { CopilotChatDrawer } from "@/components/services/copilot-chat-drawer";
+import { RuntimeLogHistory } from "@/components/services/runtime-log-history";
 import { SaveBarTabsContent } from "@/components/services/save-bar";
 import { ServiceEvents } from "@/components/services/service-events";
 import { ServiceLoadError } from "@/components/services/service-load-error";
@@ -77,6 +79,7 @@ const SUB_TAB_PARENT: Record<string, string> = {
 	monitoring: "runtime",
 	events: "runtime",
 	terminal: "runtime",
+	history: "runtime",
 };
 
 const SUB_TAB_DEFAULT: Record<string, string> = {
@@ -312,6 +315,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 							<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>
 							<SubTabsTrigger value="events">Events</SubTabsTrigger>
 							<SubTabsTrigger value="terminal">Terminal</SubTabsTrigger>
+							<SubTabsTrigger value="history">History</SubTabsTrigger>
 						</SubTabsList>
 						<TabsContent value="logs" className="mt-0">
 							<LogsTab compose={compose} />
@@ -324,6 +328,15 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 						</TabsContent>
 						<TabsContent value="terminal" className="mt-0">
 							<TerminalTab compose={compose} />
+						</TabsContent>
+						<TabsContent value="history" className="mt-0">
+							<SettingsSection
+								bare
+								title="History"
+								description="What the service printed, kept past the container's lifetime and searchable."
+							>
+								<RuntimeLogHistory appName={compose.appName} />
+							</SettingsSection>
 						</TabsContent>
 					</Tabs>
 				</SaveBarTabsContent>

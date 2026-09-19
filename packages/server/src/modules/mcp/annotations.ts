@@ -77,6 +77,7 @@ export const MCP_TOOL_ANNOTATIONS: Record<string, McpToolAnnotations> = {
 	list_rollback_points: read("List rollback points"),
 	get_service_events: read("Read a service's event timeline"),
 	get_service_runtime_summary: read("Summarise a service's runtime"),
+	get_runtime_logs: read("Search runtime log history"),
 	explain_last_failure: read("Explain the last failed deploy"),
 
 	// ── writes ───────────────────────────────────────────────────────────────

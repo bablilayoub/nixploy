@@ -1,6 +1,11 @@
 "use client";
 
 import {
+	classifyLogLine,
+	type LogLineLevel,
+} from "@nixploy/server/modules/observability/log-levels";
+
+import {
 	AlertTriangle,
 	ChevronsDown,
 	Copy,
@@ -51,47 +56,15 @@ const ANSI_REGEX = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 const stripAnsi = (text: string) => text.replace(ANSI_REGEX, "").replace(/\r/g, "");
 
 // ─── Line classification (level badges + colors) ────────────────────────────
+//
+// The classifier lives on the server (`modules/observability/log-levels`,
+// import-free) so the runtime log history stores the same level this viewer
+// shows and `level:error` searches agree with the badges.
 
-type LineLevel = "error" | "warn" | "success" | "info" | "debug" | "default";
-
-/** Explicit `[tag]` prefixes emitted by our own deploy/log pipelines. */
-const PREFIX_TAG_REGEX = /^\[(error|warn(?:ing)?|info|debug|success|ok)\]\s*/i;
+type LineLevel = LogLineLevel;
+const classifyLine = classifyLogLine;
 /** Leading ISO-ish timestamp, dimmed when rendering (e.g. postgres/docker). */
 const TIMESTAMP_REGEX = /^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:\s?UTC|Z)?)\s*/;
-
-const classifyLine = (line: string): { level: LineLevel; text: string } => {
-	const prefix = line.match(PREFIX_TAG_REGEX);
-	if (prefix) {
-		const tag = (prefix[1] ?? "").toLowerCase();
-		const level: LineLevel =
-			tag === "error"
-				? "error"
-				: tag.startsWith("warn")
-					? "warn"
-					: tag === "info"
-						? "info"
-						: tag === "debug"
-							? "debug"
-							: "success";
-		return { level, text: line.slice(prefix[0].length) };
-	}
-	if (/^--- Deployment finished:/i.test(line)) {
-		return /done|success/i.test(line)
-			? { level: "success", text: line }
-			: { level: "error", text: line };
-	}
-	// `failed` on its own, not only `failed to`: the line that actually explains
-	// a broken deploy is usually "Deployment failed: …" or "Build failed", and
-	// the errors-only filter was hiding exactly the line it exists to find.
-	if (/\b(ERROR|FATAL|PANIC)\b/.test(line) || /\bfail(ed|ure)\b|\berror:/i.test(line))
-		return { level: "error", text: line };
-	if (/\b(WARN|WARNING|CANCELED)\b/.test(line)) return { level: "warn", text: line };
-	if (/\bDONE\b/.test(line) || /\bSUCCESS(FUL)?\b/.test(line) || /\bsuccessfully\b/i.test(line))
-		return { level: "success", text: line };
-	if (/\bDEBUG\b/.test(line)) return { level: "debug", text: line };
-	if (/\b(INFO|NOTICE)\b/.test(line) || /\bLOG:/.test(line)) return { level: "info", text: line };
-	return { level: "default", text: line };
-};
 
 const LEVEL_STYLES: Record<
 	Exclude<LineLevel, "default">,

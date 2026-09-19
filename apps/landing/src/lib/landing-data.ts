@@ -53,7 +53,7 @@ export const databaseEngines = [
 export const databaseEngineCount = databaseEngines.length;
 
 /** `grep -c 'name: "' packages/server/src/modules/mcp/tools.ts` */
-export const mcpToolCount = 37;
+export const mcpToolCount = 38;
 
 /**
  * The feature grid: twelve cells, one claim each. Every claim maps to a

@@ -5,9 +5,11 @@ import { AlertTriangle, Cpu, HardDrive, MemoryStick, ShieldCheck } from "lucide-
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { SettingsSection } from "@/components/layout/settings-section";
 import { PrometheusCard } from "@/components/monitoring/prometheus-card";
 import { QueryState } from "@/components/query-state";
 import { MonitoringCharts } from "@/components/services/monitoring-charts";
+import { RuntimeLogHistory } from "@/components/services/runtime-log-history";
 import { ServiceStatusBadge } from "@/components/services/status-badge";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
@@ -363,6 +365,13 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 
 			{/* Setup detail, not a thing to watch — it sat above the fleet and
 			    pushed the service list and its charts below the fold. */}
+			<SettingsSection
+				bare
+				title="Logs"
+				description="Runtime log history across every service you can see — what containers printed, kept by the worker past their lifetime."
+			>
+				<RuntimeLogHistory />
+			</SettingsSection>
 			<PrometheusCard />
 		</div>
 	);

@@ -231,13 +231,15 @@ New template-source kinds that read the large public compose catalogues maintain
 
 ## v0.6 — Live in it
 
-### 14. Runtime log store and search *(L)*
+### 14. Runtime log store and search ✅ *(L — landed 2026-09-19)*
 
 Files, not rows: `<config>/runtime-logs/<appName>/<hour>.jsonl`, gzipped when the hour closes, with a `runtime_log_segment` index table and a per-container cursor. A 30 s harvest cron reuses the sampler's container index and its batched-SSH pattern (`docker logs --timestamps --since <cursor>`), capped per container per pass with an explicit `[nixploy] N lines dropped` marker so truncation is visible. Retention per org (days + megabytes) with instance ceilings.
 
 Search is a small server-side grammar — free terms, `-term`, `"phrase"`, `level:error`, `service:`, `/regex/` (length-capped, timeout-guarded) — streaming over segments, newest-first, cursor-paginated. Move the level classifier out of `log-viewer.tsx` into the server so panel and search agree. Exposed as a Monitoring → Logs tab, a service Runtime → History sub-tab, `nixploy logs search`, and an MCP read tool so Copilot can see what the app printed before it died.
 
 Harvest and gzip run in the **worker** role only — this must not land on the panel's RSS.
+
+*What shipped:* `modules/runtime-logs` — hour files under `<config>/runtime-logs/<appName>/`, gzipped when the hour closes, a 30 s harvest cron registered with the other worker crons (local containers through dockerode with the multiplexed stream demuxed, managed servers as one SSH script per server with per-container `--since` cursors embedded), 2 000 lines per container per pass with an explicit marker line, cursors as Docker timestamps in a per-service `state.json`, retention by days and by bytes per service in the hourly maintenance pass. Two things landed differently. **No `runtime_log_segment` table**: the directory is the index — a read lists one service's hour files and walks them newest-first, retention is a `stat` per file, and the per-org caps became instance-wide env knobs (`NIXPLOY_RUNTIME_LOG_RETENTION_DAYS`, `NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE`) because nothing else in the metrics/log stores is per-org either. And **paging is by timestamp, not by segment offset**: `before` is the previous page's `nextCursor`, which for an org-wide read is the newest per-service cursor — the page is cut there so no line is skipped or repeated across services. The level classifier moved to the server (`observability/log-levels.ts`, import-free, the panel imports it) so stored levels and the viewer's badges are one implementation. Surfaces: Runtime → History on every service page, a Logs section on the Monitoring page, `nixploy logs search`, MCP `get_runtime_logs`, `observability.runtimeLogs`. Not done: per-org retention, and the harvester has been exercised on the local Swarm only.
 
 ### 15. Ephemeral environments *(L)*
 

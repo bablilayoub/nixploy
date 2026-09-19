@@ -92,6 +92,7 @@ Router → module map:
 | `deployment`, `previewDeployment`, `rollback` | `modules/deployment/{queue,worker,queries,recovery,reconciler,maintenance,events,logger,cleanup,rollback}.ts`, `modules/preview/*` (PR lifecycle, fork gate, PR comments, `source-ref.ts` fork/PR head refs, `traefik.ts` preview YAML) |
 | `domain`, `certificate` | `modules/traefik/*` (`config-writer.ts` YAML, `dashboard.ts`, `setup.ts` static config + swarm service, `paths.ts`) |
 | `upstream` | `modules/upstreams/*` — `target.ts` (the origin policy: egress guard + bare names, the dashboard host and the server's own address refused; `UpstreamResolveError` for a name that stopped resolving), `index.ts` (CRUD, `syncUpstreamTraefik` writes the per-app file with `TraefikDomainEntry.upstream`, `recheckUpstreamTargets` runs hourly from the maintenance pass and withholds the route on a policy failure). A domain row's owner is now one of three parents — `domain.ts`, `observability.ts` and `app-auth/index.ts` each resolve all three |
+| `observability.runtimeLogs` | `modules/runtime-logs/*` — `harvest.ts` (30 s worker cron: `docker logs --timestamps --since <cursor>` per running container, local via dockerode with the multiplexed stream demuxed, remote as one SSH script per server; 2 000 lines per container per pass + marker line; cursors in `state.json`), `store.ts` (hour files `<config>/runtime-logs/<appName>/<hour>.jsonl[.gz]`, newest-first reads with a timestamp cursor and a scan/time budget, retention by days and bytes per service from the maintenance pass), `query.ts` (the search grammar), `format.ts` (line shapes, Docker timestamp parsing). Levels come from `modules/observability/log-levels.ts` (import-free; the panel's log viewer uses the same one) |
 | `project`, `environment`, `organization`, `tag` | `modules/projects/*` (org resolution, roles, capabilities, quotas, env-var inheritance, cascade deletes, overview counts), `modules/tags/index.ts` |
 | `template` | `modules/templates/*` (`catalog.ts` = 15 categories, 146 templates in `data/*.ts`; `services.ts` deploy-as-compose; `images.ts` registry probe) |
 | `backup`, `volumeBackup`, `destination` | `modules/backups/*` (`runner.ts` dump/restore incl. Redis + instance self-backup, `pipeline.ts` exit-status trailer + empty-gzip guard, `scheduler.ts`, `dump-commands.ts`) |
@@ -189,6 +190,9 @@ Helpers: `modules/deployment/paths.ts` (canonical `getConfigDir`, apps, logs, ss
 | `NIXPLOY_CONFIG_DIR` (`NIXPLOY_DIR` legacy alias in one helper) | paths | state root |
 | `NIXPLOY_NETWORK` | swarm, compose, traefik | overlay network (default `nixploy-network`) |
 | `NIXPLOY_WILDCARD_DOMAIN` | previews | default `traefik.me` |
+| `NIXPLOY_RUNTIME_LOGS` | runtime-logs | `0` turns the 30 s log harvester off (history on disk stays readable) |
+| `NIXPLOY_RUNTIME_LOG_RETENTION_DAYS` | runtime-logs | hour files older than this are pruned hourly (default `7`) |
+| `NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE` | runtime-logs | oldest hours of a service over this are pruned (default `256`, `0` = no byte cap) |
 | `NIXPLOY_DISABLE_TRAEFIK_BOOT` | server.ts | skip Traefik bootstrap (set in the image) |
 | `NIXPLOY_DEPLOY_CONCURRENCY` | queue | per-server parallel deploys (default 1; the SQL claim's `NOT EXISTS` mutex keeps one app from building twice at once whatever the value) |
 | `NIXPLOY_COMMAND_TIMEOUT_MS` | exec, docker | local spawn hard timeout, process tree killed on expiry (default 30 min; fallback for SSH too) |
