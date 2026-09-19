@@ -542,7 +542,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      NIXPLOY_URL: http://localhost:3000
+      # The panel's origin is what the installer wrote to BETTER_AUTH_URL —
+      # better-auth refuses a sign-up whose Host does not match it
+      # ("Invalid origin"). NIXPLOY_PUBLIC_IP=127.0.0.1 below makes that
+      # origin https://127.0.0.1, served by Traefik's catch-all router with
+      # the self-signed certificate, so the job talks to the same URL an
+      # operator would (and the first run, which used localhost:3000 against
+      # a public-IP origin, is how this comment came to exist).
+      NIXPLOY_URL: https://127.0.0.1
       E2E_EMAIL: upgrade@nixploy.test
       E2E_PASSWORD: Upgrade-ci-password!1
       LOCAL_IMAGE: localhost:5000/nixploy:ci
@@ -612,6 +619,7 @@ jobs:
           sudo env \
             NIXPLOY_VERSION="$NIXPLOY_VERSION" \
             NIXPLOY_SKIP_DOCKER_INSTALL=1 \
+            NIXPLOY_PUBLIC_IP=127.0.0.1 \
             NIXPLOY_PORT=3000 \
             NIXPLOY_SPLIT_WORKER=1 \
             NIXPLOY_LETSENCRYPT_EMAIL=ci@example.com \
@@ -634,11 +642,15 @@ jobs:
 
       - name: Create the first admin and an API key
         id: bootstrap
+        env:
+          # Self-signed certificate on the panel origin (see the job env).
+          NODE_TLS_REJECT_UNAUTHORIZED: "0"
         run: node /tmp/release-tools/bootstrap-instance.mjs
 
       - name: API golden path on the release
         env:
           NIXPLOY_API_KEY: ${{ steps.bootstrap.outputs.api-key }}
+          NODE_TLS_REJECT_UNAUTHORIZED: "0"
           SMOKE_TRAEFIK_ORIGIN: http://127.0.0.1
           SMOKE_INSECURE_TLS: "1"
         run: node /tmp/release-tools/golden-path-api.mjs
@@ -680,6 +692,7 @@ jobs:
         # new image builds and deploys on this Swarm.
         env:
           NIXPLOY_API_KEY: ${{ steps.bootstrap.outputs.api-key }}
+          NODE_TLS_REJECT_UNAUTHORIZED: "0"
           SMOKE_TRAEFIK_ORIGIN: http://127.0.0.1
           SMOKE_INSECURE_TLS: "1"
           SMOKE_BUILD_REPO: https://github.com/docker/welcome-to-docker.git
@@ -701,7 +714,8 @@ jobs:
           done
           sudo cp -r /etc/nixploy "$RUNNER_TEMP/upgrade-logs/config-root" 2>/dev/null || true
           sudo rm -f "$RUNNER_TEMP/upgrade-logs/config-root/.env" || true
-          sudo chmod -R a+r "$RUNNER_TEMP/upgrade-logs" || true
+          # +X: the config root has 700 directories the upload cannot enter otherwise.
+          sudo chmod -R a+rX "$RUNNER_TEMP/upgrade-logs" || true
 
       - name: Upload diagnostics
         if: failure()
