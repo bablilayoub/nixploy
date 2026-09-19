@@ -1,4 +1,4 @@
-import { templateCount } from "@/lib/templates";
+import { templateCount } from "../templates";
 
 export type DocBlock =
 	| { type: "p"; text: string }
