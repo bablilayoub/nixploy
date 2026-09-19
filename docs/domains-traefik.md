@@ -355,6 +355,64 @@ and the Domains tab renders a Redirects and a Security section per routed
 service. Middlewares hang off the domain row, so they are identical for both
 service types.
 
+## External upstreams
+
+An **external upstream** is an HTTP origin outside the Swarm — the box the
+old panel still runs on, a SaaS endpoint, a static host — that Traefik fronts
+exactly as it would a service: domains, Let's Encrypt, middlewares (including
+the panel sign-in), redirects to HTTPS and uptime probes all attach to it the
+same way. The point is migration order: **DNS moves to Nixploy once**, every
+hostname keeps answering from the old host through the new proxy, and each
+workload moves behind its hostname when it is ready — no big-bang cutover, no
+second certificate issuance, no window where a hostname answers nowhere.
+
+Add one from the project page (**Add service → External upstream**) with a
+target URL such as `https://old-host.example.com` or `http://203.0.113.10:8080`,
+then attach domains on its page. Two knobs:
+
+- **Pass the public Host header** (default on): the target sees the public
+  hostname, which is what a reverse-proxied application expects. Turn it off
+  for a SaaS origin that must see its own hostname.
+- **Skip TLS verification of the target**: only for a self-signed https
+  origin. The public side is still terminated by Traefik with a real
+  certificate.
+
+The generated YAML is the ordinary per-app file: the `loadBalancer.servers[].url`
+is the target origin instead of `http://<appName>:<port>`, `passHostHeader`
+follows the switch, and an insecure target adds one `serversTransports`
+entry the file's services reference.
+
+**What the target may be.** Traefik dials the target from inside the proxy
+container, which sits on both platform overlays, so an unchecked URL would be
+a door into the panel, Postgres and every other tenant's service (bypassing
+the middlewares those tenants put on their own domains). The target goes
+through the same egress policy as every tenant URL, plus three rules of its
+own:
+
+- the target is an **origin only** (`scheme://host[:port]`) — path rewrites
+  live on the domain row's internal path, like for any other kind;
+- a **bare name is refused** (`http://other-app:3000`): it would resolve to a
+  Swarm service on this instance;
+- the panel's own dashboard host and the server's own public address are
+  refused — either one routes the tenant's domain back into Traefik.
+
+Cloud metadata, link-local and cluster-internal addresses are always refused;
+a **LAN target** (`http://192.168.1.20:8080`) needs *Allow private egress*
+under Settings → Platform, the same instance toggle that governs LAN
+notification endpoints. The check runs when the upstream is saved **and again
+every hour**: Traefik resolves the name itself on every request, and a record
+re-pointed at the overlay after it was vetted would otherwise stay routable.
+An upstream that stops passing has its route withheld (the row shows **Route
+withheld** with the reason; the domains stay) until the target passes again —
+**Re-check now** on its page, or an edit of the target, lifts the hold. A name
+that merely stops resolving is left alone: that is a DNS outage, not an
+attack.
+
+Only HTTP: a TCP/UDP row on an upstream is refused (a layer-4 router addresses
+`host:port`, not a URL). Writes need `domains.manage`; the upstream is not a
+service, so it has no deploy, status or environment variables, and the
+manifest (`nixploy.yaml`) does not carry it yet.
+
 ## Preview deployments
 
 Enable **Preview Deployments** on an application's Source tab

@@ -569,7 +569,7 @@ const docs: Record<string, ProcedureDoc> = {
 	"domain.all": {
 		summary: "List domains",
 		description:
-			"Domains of an application, a compose service, or every service in a project (exactly one id).",
+			"Domains of an application, a compose service, an external upstream, or every service in a project (exactly one id).",
 	},
 	"domain.byApplication": {
 		summary: "List domains of an application",
@@ -619,6 +619,41 @@ const docs: Record<string, ProcedureDoc> = {
 	"domain.validateHost": {
 		summary: "Check whether a host is available",
 		description: "Instance-wide uniqueness check, optionally ignoring one existing domain row.",
+	},
+
+	// ─────────────────────────────────────────────────── external upstreams
+	"upstream.all": {
+		summary: "List external upstreams",
+		description:
+			"Origins outside the Swarm that Traefik fronts for one environment: name, target URL, host-header mode and whether the route is currently withheld.",
+	},
+	"upstream.one": {
+		summary: "Get one external upstream",
+		description: "The upstream with its environment and project names.",
+	},
+	"upstream.create": {
+		summary: "Create an external upstream",
+		description:
+			"Registers an http(s) origin (no path) as a routing target. The host is vetted against the egress policy: bare names, the overlay, cloud metadata and this panel's own address are refused; LAN targets need private egress enabled by the instance admin. Attach domains with `domain.create` and `externalUpstreamId`.",
+		capability: ["domains.manage"],
+	},
+	"upstream.update": {
+		summary: "Update an external upstream",
+		description:
+			"Changes the name, target URL, host-header mode or TLS verification and rewrites the Traefik route. A new target is vetted like on create and lifts a hold from the hourly re-check.",
+		capability: ["domains.manage"],
+	},
+	"upstream.resync": {
+		summary: "Re-check and rewrite an external upstream's route",
+		description:
+			"Runs the target policy again now and rewrites the Traefik file — the manual counterpart of the hourly re-check, for lifting a hold after the DNS record was fixed.",
+		capability: ["domains.manage"],
+	},
+	"upstream.delete": {
+		summary: "Delete an external upstream",
+		description:
+			"Removes the Traefik route, the row and every domain and uptime probe attached to it.",
+		capability: ["domains.manage"],
 	},
 
 	// ───────────────────────────────────────────────────────────── backups

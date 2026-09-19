@@ -61,10 +61,11 @@ export function augmentDomainCommand(domain: Command): Command {
 	addOutputOptions(
 		domain
 			.command("add")
-			.description("Attach a domain to an application or a compose service")
+			.description("Attach a domain to an application, a compose service or an external upstream")
 			.argument("<host>", "FQDN, e.g. app.example.com")
 			.option("--application-id <id>", "Application to route to")
 			.option("--compose-id <id>", "Compose service to route to")
+			.option("--upstream-id <id>", "External upstream to route to (HTTP only, no --port)")
 			.option("--service-name <name>", "Compose only: which compose-file service to route to")
 			.option("--path <path>", "URL path prefix (default /)")
 			.option("--internal-path <path>", "Path rewritten before reaching the container")
@@ -82,6 +83,7 @@ export function augmentDomainCommand(domain: Command): Command {
 			options: {
 				applicationId?: string;
 				composeId?: string;
+				upstreamId?: string;
 				serviceName?: string;
 				path?: string;
 				internalPath?: string;
@@ -91,8 +93,11 @@ export function augmentDomainCommand(domain: Command): Command {
 				certificateId?: string;
 			},
 		) => {
-			if (Boolean(options.applicationId) === Boolean(options.composeId)) {
-				throw usageError("Provide exactly one of --application-id or --compose-id");
+			const targets = [options.applicationId, options.composeId, options.upstreamId].filter(
+				Boolean,
+			);
+			if (targets.length !== 1) {
+				throw usageError("Provide exactly one of --application-id, --compose-id or --upstream-id");
 			}
 			const port = options.port ? Number(options.port) : undefined;
 			if (port !== undefined && (!Number.isInteger(port) || port < 1 || port > 65535)) {
@@ -103,6 +108,7 @@ export function augmentDomainCommand(domain: Command): Command {
 				host,
 				applicationId: options.applicationId,
 				composeId: options.composeId,
+				externalUpstreamId: options.upstreamId,
 				serviceName: options.serviceName ?? null,
 				path: options.path,
 				internalPath: options.internalPath ?? null,

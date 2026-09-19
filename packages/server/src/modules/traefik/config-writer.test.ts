@@ -39,6 +39,103 @@ const baseDomain: TraefikDomainEntry = {
 	certificateType: "none",
 };
 
+describe("buildTraefikFileConfig — external upstreams", () => {
+	const upstream = {
+		url: "https://old-panel.example.com",
+		passHostHeader: false,
+		insecureSkipVerify: false,
+	};
+
+	it("routes to the origin instead of <appName>:<port> and honours passHostHeader", async () => {
+		const config = await buildTraefikFileConfig({
+			appName: "legacy",
+			domains: [{ ...baseDomain, uniqueConfigKey: "a", upstream }],
+		});
+		expect(config.http?.services["legacy-service-a"]).toEqual({
+			loadBalancer: {
+				servers: [{ url: "https://old-panel.example.com" }],
+				passHostHeader: false,
+			},
+		});
+		expect(config.http?.serversTransports).toBeUndefined();
+		expect(config.http?.routers["legacy-router-a"]?.rule).toBe("Host(`app.example.com`)");
+	});
+
+	it("declares one insecure transport per file when TLS verification is off", async () => {
+		const config = await buildTraefikFileConfig({
+			appName: "legacy",
+			domains: [
+				{
+					...baseDomain,
+					uniqueConfigKey: "a",
+					upstream: { ...upstream, insecureSkipVerify: true },
+				},
+				{
+					...baseDomain,
+					host: "other.example.com",
+					uniqueConfigKey: "b",
+					upstream: { ...upstream, insecureSkipVerify: true },
+				},
+			],
+		});
+		expect(config.http?.serversTransports).toEqual({
+			"legacy-insecure": { insecureSkipVerify: true },
+		});
+		expect(config.http?.services["legacy-service-a"]?.loadBalancer.serversTransport).toBe(
+			"legacy-insecure",
+		);
+		expect(config.http?.services["legacy-service-b"]?.loadBalancer.serversTransport).toBe(
+			"legacy-insecure",
+		);
+	});
+
+	it("keeps the per-domain middleware chain and internal-path rewrite in front of the origin", async () => {
+		const config = await buildTraefikFileConfig({
+			appName: "legacy",
+			domains: [
+				{
+					...baseDomain,
+					uniqueConfigKey: "a",
+					path: "/shop",
+					internalPath: "/store",
+					upstream,
+					middlewares: [{ kind: "compress", config: {} }],
+				},
+			],
+		});
+		const router = config.http?.routers["legacy-router-a"];
+		expect(router?.rule).toBe("Host(`app.example.com`) && PathPrefix(`/shop`)");
+		expect(router?.middlewares).toEqual([
+			"strip-legacy-a",
+			"addprefix-legacy-a",
+			"mw-legacy-a-0-compress",
+		]);
+	});
+
+	it("refuses shapes the target policy would never have written", async () => {
+		await expect(
+			buildTraefikFileConfig({
+				appName: "legacy",
+				domains: [{ ...baseDomain, upstream: { ...upstream, url: "https://x.example.com/p" } }],
+			}),
+		).rejects.toThrow(/must not carry a path/);
+		await expect(
+			buildTraefikFileConfig({
+				appName: "legacy",
+				domains: [{ ...baseDomain, upstream: { ...upstream, url: "ftp://x.example.com" } }],
+			}),
+		).rejects.toThrow(/must be http\(s\)/);
+		await expect(
+			buildTraefikFileConfig({
+				appName: "legacy",
+				domains: [
+					{ ...baseDomain, protocol: "tcp", entrypoint: "pg-15432", tlsMode: "none", upstream },
+				],
+			}),
+		).rejects.toThrow(/routes HTTP only/);
+	});
+});
+
 describe("buildTraefikFileConfig", () => {
 	it("single http domain: web router + default-cert websecure router", async () => {
 		const config = await buildTraefikFileConfig({

@@ -5,6 +5,7 @@ import {
 	applications,
 	compose,
 	domains,
+	externalUpstreams,
 	mariadb,
 	mongo,
 	mysql,
@@ -74,6 +75,10 @@ export const isAppNameTaken = async (appName: string): Promise<boolean> => {
 		db.query.previewDeployments.findFirst({
 			where: eq(previewDeployments.appName, appName),
 			columns: { previewDeploymentId: true },
+		}),
+		db.query.externalUpstreams.findFirst({
+			where: eq(externalUpstreams.appName, appName),
+			columns: { externalUpstreamId: true },
 		}),
 		db
 			.select({ domainId: domains.domainId })

@@ -134,6 +134,21 @@ environment. Put things that talk to each other in the same environment.
 6. Keep the old panel read-only for a few days as a rollback path, then
    decommission it.
 
+### Or: flip DNS once, move services one at a time
+
+The cutover above moves each hostname when its service is ready, which means
+one DNS change per service and a TTL wait each time. **External upstreams**
+turn that around: register the old host as an upstream in Nixploy
+(`Add service → External upstream`, target `https://old-host.example.com`),
+attach every production hostname to it with Let's Encrypt, point DNS at
+Nixploy **once** — every hostname now answers from the old box through the
+new proxy, with a fresh certificate — and then, service by service, recreate
+the workload in Nixploy and move the hostname from the upstream to the new
+service. No window where a hostname answers nowhere, no big-bang evening, and
+the old host is still serving whatever has not moved yet. Details and the
+target rules in
+[domains-traefik.md](./domains-traefik.md#external-upstreams).
+
 ## Backups
 
 Recreate the S3-compatible destinations under **Settings → Backup storage**,

@@ -208,6 +208,23 @@ nixploy domain middleware remove dom_abc rateLimit
 Kinds: `rateLimit`, `ipAllowList`, `headers`, `compress`, `forwardAuth`,
 `stickyCookie`, `maintenance`.
 
+### `upstream` — external upstreams
+
+An origin outside the Swarm that Traefik fronts like a service (the old
+panel's host during a migration, a SaaS endpoint). Domains, certificates,
+middlewares and probes attach to it with the `domain` verbs; the target is
+vetted against the egress policy on every write and hourly after that
+([domains-traefik.md](./domains-traefik.md#external-upstreams)).
+
+```bash
+nixploy upstream create "Legacy shop" --environment-id env_abc --url https://old-host.example.com
+nixploy domain add shop.example.com --upstream-id ups_abc --https      # no --port: the URL carries it
+nixploy upstream list --environment-id env_abc
+nixploy upstream update ups_abc --url http://203.0.113.10:8080 --pass-host-header false
+nixploy upstream resync ups_abc                                          # lift a "route withheld" hold
+nixploy upstream remove ups_abc --yes
+```
+
 ### `env` — variables at every scope
 
 Variables inherit organization → project → environment → service; the deeper

@@ -104,6 +104,7 @@ export const GROUP_DESCRIPTIONS: Record<string, string> = {
 	tag: "Organization tags and service assignments",
 	template: "Browse and deploy catalog templates",
 	updates: "In-app panel updates",
+	upstream: "External upstreams: origins outside the Swarm fronted by Traefik",
 };
 
 const projectIdOption: RegistryOption = {
@@ -122,6 +123,7 @@ const envNameOption: RegistryOption = {
 const APPLICATION_COLUMNS = ["applicationId", "name", "appName", "status", "buildType"];
 const COMPOSE_COLUMNS = ["composeId", "name", "appName", "status", "composeType"];
 const DOMAIN_COLUMNS = ["domainId", "host", "path", "port", "https", "certificateType"];
+const UPSTREAM_COLUMNS = ["externalUpstreamId", "name", "appName", "targetUrl", "blockedReason"];
 
 export const commandRegistry: RegistryEntry[] = [
 	// ---------------------------------------------------------------- project
@@ -573,6 +575,115 @@ export const commandRegistry: RegistryEntry[] = [
 		kind: "query",
 		summary: "Generate a free *.traefik.me host for a service",
 		options: [{ field: "appName", flag: "--app-name <name>", description: "Service appName" }],
+	},
+	// --------------------------------------------------------------- upstream
+	{
+		group: "upstream",
+		verb: "list",
+		procedure: "upstream.all",
+		kind: "query",
+		summary: "List the external upstreams of an environment",
+		options: [
+			{
+				field: "environmentId",
+				flag: "--environment-id <id>",
+				description: "Environment ID",
+				required: true,
+			},
+		],
+		columns: UPSTREAM_COLUMNS,
+	},
+	{
+		group: "upstream",
+		verb: "get",
+		procedure: "upstream.one",
+		kind: "query",
+		summary: "Show one external upstream",
+		argument: { field: "externalUpstreamId", label: "<upstreamId>", description: "Upstream ID" },
+		single: true,
+		columns: [...UPSTREAM_COLUMNS, "passHostHeader", "insecureSkipVerify", "description"],
+	},
+	{
+		group: "upstream",
+		verb: "create",
+		procedure: "upstream.create",
+		kind: "mutation",
+		summary:
+			"Front an origin outside the Swarm with Traefik (attach domains with `domain add --upstream-id`)",
+		argument: { field: "name", label: "<name>", description: "Display name" },
+		options: [
+			{
+				field: "environmentId",
+				flag: "--environment-id <id>",
+				description: "Environment ID",
+				required: true,
+			},
+			{
+				field: "targetUrl",
+				flag: "--url <origin>",
+				description: "http(s)://host[:port] — an origin, no path",
+				required: true,
+			},
+			{ field: "description", flag: "--description <text>", description: "Optional description" },
+			{
+				field: "passHostHeader",
+				flag: "--pass-host-header <bool>",
+				description: "Forward the public Host header (default true; false sends the target's own)",
+				type: "boolean",
+			},
+			{
+				field: "insecureSkipVerify",
+				flag: "--insecure-skip-verify",
+				description: "Skip TLS verification of a self-signed https target",
+				type: "boolean",
+			},
+		],
+		message: "External upstream created.",
+	},
+	{
+		group: "upstream",
+		verb: "update",
+		procedure: "upstream.update",
+		kind: "mutation",
+		summary: "Change an external upstream's name, target or host-header mode",
+		argument: { field: "externalUpstreamId", label: "<upstreamId>", description: "Upstream ID" },
+		options: [
+			{ field: "name", flag: "--name <name>", description: "New display name" },
+			{ field: "targetUrl", flag: "--url <origin>", description: "New target origin" },
+			{ field: "description", flag: "--description <text>", description: "New description" },
+			{
+				field: "passHostHeader",
+				flag: "--pass-host-header <bool>",
+				description: "true | false",
+				type: "boolean",
+			},
+			{
+				field: "insecureSkipVerify",
+				flag: "--insecure-skip-verify <bool>",
+				description: "true | false",
+				type: "boolean",
+			},
+		],
+		message: "External upstream updated.",
+	},
+	{
+		group: "upstream",
+		verb: "resync",
+		procedure: "upstream.resync",
+		kind: "mutation",
+		summary: "Re-check the target now and rewrite the Traefik route",
+		argument: { field: "externalUpstreamId", label: "<upstreamId>", description: "Upstream ID" },
+		message: "Route re-checked.",
+	},
+	{
+		group: "upstream",
+		verb: "remove",
+		procedure: "upstream.delete",
+		kind: "mutation",
+		summary: "Delete an external upstream, its route, domains and probes",
+		argument: { field: "externalUpstreamId", label: "<upstreamId>", description: "Upstream ID" },
+		destructive: true,
+		message: "External upstream removed.",
 	},
 	// --------------------------------------------------------------- schedule
 	{

@@ -55,11 +55,13 @@ const assertDomainAccess = async (domainId: string, organizationId: string) => {
 		with: {
 			application: { with: { environment: { with: { project: true } } } },
 			compose: { with: { environment: { with: { project: true } } } },
+			externalUpstream: { with: { environment: { with: { project: true } } } },
 		},
 	});
 	const owner =
 		domain?.application?.environment.project.organizationId ??
-		domain?.compose?.environment.project.organizationId;
+		domain?.compose?.environment.project.organizationId ??
+		domain?.externalUpstream?.environment.project.organizationId;
 	if (!domain || owner !== organizationId) {
 		throw new TRPCError({ code: "NOT_FOUND", message: "Domain not found" });
 	}

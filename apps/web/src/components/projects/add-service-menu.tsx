@@ -5,6 +5,7 @@ import { ChevronDown, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { capabilityHint } from "@/components/services/capability-hint";
 import { CopyButton } from "@/components/services/copy-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,7 +34,9 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
@@ -97,7 +100,7 @@ const DATABASE_CREDENTIAL_FIELDS: Record<DatabaseType, CredentialField[]> = {
 	redis: [{ key: "databasePassword", label: "Password", secret: true }],
 };
 
-type ServiceDialog = "application" | "compose" | DatabaseType;
+type ServiceDialog = "application" | "compose" | "upstream" | DatabaseType;
 
 /**
  * How the new application gets its code. Asking here is the difference
@@ -132,6 +135,10 @@ export function AddServiceMenu({
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const router = useRouter();
+	// An external upstream is routing configuration, not a service: it is
+	// gated by `domains.manage` on the server, so the item follows that.
+	const { can } = useCapabilities();
+	const canManageDomains = can("domains.manage");
 
 	const [dialog, setDialog] = useState<ServiceDialog | null>(null);
 
@@ -149,6 +156,8 @@ export function AddServiceMenu({
 	const [gitBranch, setGitBranch] = useState("");
 	const [credentials, setCredentials] = useState<Record<string, string>>({});
 	const [createdDatabase, setCreatedDatabase] = useState<CreatedDatabase | null>(null);
+	const [targetUrl, setTargetUrl] = useState("");
+	const [passHostHeader, setPassHostHeader] = useState(true);
 
 	const resetForm = () => {
 		setName("");
@@ -159,6 +168,8 @@ export function AddServiceMenu({
 		setGitUrl("");
 		setGitBranch("");
 		setCredentials({});
+		setTargetUrl("");
+		setPassHostHeader(true);
 	};
 
 	const serviceInput = { projectId, environmentName };
@@ -203,6 +214,13 @@ export function AddServiceMenu({
 		{ invalidate: serviceKeys("compose"), onSuccess: closeDialog },
 	);
 
+	const createUpstream = useSaveMutation(
+		trpc.upstream.create.mutationOptions({
+			onSuccess: (row) => toast.success(`External upstream "${row.name}" created`),
+		}),
+		{ invalidate: [trpc.upstream.all.queryKey({ environmentId })], onSuccess: closeDialog },
+	);
+
 	const handleDatabaseCreated = async (
 		type: DatabaseType,
 		serviceName: string,
@@ -229,11 +247,13 @@ export function AddServiceMenu({
 	const createMongo = useMutation(trpc.mongo.create.mutationOptions({ onError: onMutationError }));
 	const createRedis = useMutation(trpc.redis.create.mutationOptions({ onError: onMutationError }));
 
-	const isDatabaseDialog = dialog !== null && dialog !== "application" && dialog !== "compose";
+	const isDatabaseDialog =
+		dialog !== null && dialog !== "application" && dialog !== "compose" && dialog !== "upstream";
 	const isPending =
 		createApplication.isPending ||
 		saveSource.isPending ||
 		createCompose.isPending ||
+		createUpstream.isPending ||
 		createPostgres.isPending ||
 		createMysql.isPending ||
 		createMariadb.isPending ||
@@ -301,6 +321,29 @@ export function AddServiceMenu({
 			);
 			return;
 		}
+		if (dialog === "upstream") {
+			const url = targetUrl.trim();
+			if (!url) {
+				toast.error("Target URL is required");
+				return;
+			}
+			createUpstream.mutate(
+				{
+					name: trimmed,
+					description: description.trim() || undefined,
+					environmentId,
+					targetUrl: url,
+					passHostHeader,
+				},
+				{
+					onSuccess: (row) =>
+						router.push(
+							`/dashboard/projects/${projectId}/services/upstream/${row.externalUpstreamId}`,
+						),
+				},
+			);
+			return;
+		}
 		if (!dialog) return;
 		const databaseDialog = dialog;
 		const slug = slugify(trimmed).replace(/-/g, "_");
@@ -342,7 +385,9 @@ export function AddServiceMenu({
 				? "Create application"
 				: dialog === "compose"
 					? "Create compose service"
-					: `Create ${SERVICE_TYPE_META[dialog].label} database`;
+					: dialog === "upstream"
+						? "Add external upstream"
+						: `Create ${SERVICE_TYPE_META[dialog].label} database`;
 
 	return (
 		<>
@@ -364,6 +409,15 @@ export function AddServiceMenu({
 							{SERVICE_TYPE_META[type].label}
 						</DropdownMenuItem>
 					))}
+					<DropdownMenuSeparator />
+					<DropdownMenuLabel className="text-xs text-muted-foreground">Routing</DropdownMenuLabel>
+					<DropdownMenuItem
+						disabled={!canManageDomains}
+						title={canManageDomains ? undefined : capabilityHint("domains.manage")}
+						onSelect={() => setDialog("upstream")}
+					>
+						External upstream
+					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
 
@@ -382,7 +436,9 @@ export function AddServiceMenu({
 						<DialogDescription>
 							{isDatabaseDialog
 								? "Credentials are optional — leave blank to auto-generate. They are shown once after creation."
-								: `Add a new service to the "${environmentName}" environment.`}
+								: dialog === "upstream"
+									? "Front an origin outside this Swarm with Traefik: attach domains, certificates and middlewares to it like to any service, and move the workload behind them later."
+									: `Add a new service to the "${environmentName}" environment.`}
 						</DialogDescription>
 					</DialogHeader>
 					<form
@@ -483,7 +539,40 @@ export function AddServiceMenu({
 								)}
 							</>
 						)}
-						{(dialog === "application" || dialog === "compose") && (
+						{dialog === "upstream" && (
+							<>
+								<div className="flex flex-col gap-2">
+									<Label htmlFor="upstream-target-url">Target URL</Label>
+									<Input
+										id="upstream-target-url"
+										placeholder="https://old-host.example.com"
+										value={targetUrl}
+										onChange={(event) => setTargetUrl(event.target.value)}
+										autoComplete="off"
+									/>
+									<p className="text-sm text-muted-foreground">
+										An origin only (scheme, host, port). Bare names and cluster-internal addresses
+										are refused; a LAN address needs private egress enabled by the instance admin.{" "}
+										<HelpLink slug="domains" />
+									</p>
+								</div>
+								<div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+									<div>
+										<Label htmlFor="upstream-pass-host">Pass the public Host header</Label>
+										<p className="text-xs text-muted-foreground">
+											On for an app expecting its own hostname; off for a SaaS origin that must see
+											its own.
+										</p>
+									</div>
+									<Switch
+										id="upstream-pass-host"
+										checked={passHostHeader}
+										onCheckedChange={setPassHostHeader}
+									/>
+								</div>
+							</>
+						)}
+						{(dialog === "application" || dialog === "compose" || dialog === "upstream") && (
 							<div className="flex flex-col gap-2">
 								<Label htmlFor="service-description">Description</Label>
 								<Textarea

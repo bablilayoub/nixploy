@@ -67,6 +67,9 @@ export const EXEMPT = [
 	"volumeBackup.one",
 	"domain.all",
 	"domain.one",
+	// Nested under an environment fetched through `findEnvironmentById`.
+	"upstream.all",
+	"upstream.one",
 	// Provider connections — add COVERED cases when seeding git providers.
 	"github.all",
 	"github.one",
@@ -160,6 +163,8 @@ export const PROJECT_AXIS: Record<string, ProjectAxis> = {
 	"volumeBackup.one": "inherited",
 	"domain.all": "inherited",
 	"domain.one": "inherited",
+	"upstream.all": "inherited",
+	"upstream.one": "inherited",
 	"mount.one": "inherited",
 	"port.one": "inherited",
 	"redirect.one": "inherited",

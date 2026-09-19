@@ -11,6 +11,7 @@ import {
 	domainMiddlewares,
 	domains,
 	environments,
+	externalUpstreams,
 	traefikEntrypoints,
 	webServerSettings,
 } from "../../db/schema";
@@ -39,6 +40,7 @@ import {
 	assertForwardAuthAllowed,
 	assertNixployAuthAllowed,
 } from "../../modules/traefik/middleware-guards";
+import { assertUpstreamAccess, syncUpstreamTraefik } from "../../modules/upstreams";
 import { takeRateLimitToken } from "../../utils/rate-limit";
 import {
 	assertComposeServiceName,
@@ -230,25 +232,38 @@ const assertCertificateAllowedForHost = (
 	}
 };
 
-/** A domain row with both possible parents eager-loaded for tenancy checks. */
+/** The parents a domain row can hang off, eager-loaded for tenancy checks. */
+const domainParents = {
+	application: { with: { environment: { with: { project: true } } } },
+	compose: { with: { environment: { with: { project: true } } } },
+	externalUpstream: { with: { environment: { with: { project: true } } } },
+} as const;
+
+/** A domain row with every possible parent eager-loaded for tenancy checks. */
 const findDomain = (domainId: string) =>
 	db.query.domains.findFirst({
 		where: eq(domains.domainId, domainId),
-		with: {
-			application: { with: { environment: { with: { project: true } } } },
-			compose: { with: { environment: { with: { project: true } } } },
-		},
+		with: domainParents,
 	});
 
+/** The organization a loaded domain belongs to, through whichever parent it has. */
+const domainOwner = (domain: {
+	application?: { environment: { project: { organizationId: string } } } | null;
+	compose?: { environment: { project: { organizationId: string } } } | null;
+	externalUpstream?: { environment: { project: { organizationId: string } } } | null;
+}): string | null =>
+	domain.application?.environment.project.organizationId ??
+	domain.compose?.environment.project.organizationId ??
+	domain.externalUpstream?.environment.project.organizationId ??
+	null;
+
 /**
- * Load a domain and verify org ownership through whichever service it is
- * attached to (domain → application|compose → environment → project → org).
+ * Load a domain and verify org ownership through whichever parent it is
+ * attached to (domain → application|compose|upstream → environment → project → org).
  */
 const assertDomainAccess = async (domainId: string, organizationId: string) => {
 	const domain = await findDomain(domainId);
-	const owner =
-		domain?.application?.environment.project.organizationId ??
-		domain?.compose?.environment.project.organizationId;
+	const owner = domain ? domainOwner(domain) : null;
 	if (!domain || owner !== organizationId) {
 		throw new TRPCError({ code: "NOT_FOUND", message: "Domain not found" });
 	}
@@ -273,9 +288,19 @@ const resyncServiceTraefik = async (domain: {
 	applicationId: string | null;
 	composeId: string | null;
 	previewDeploymentId?: string | null;
+	externalUpstreamId?: string | null;
 }): Promise<void> => {
 	if (domain.previewDeploymentId) {
 		await syncPreviewTraefik(domain.previewDeploymentId);
+		return;
+	}
+	if (domain.externalUpstreamId) {
+		const upstream = await db.query.externalUpstreams.findFirst({
+			where: eq(externalUpstreams.externalUpstreamId, domain.externalUpstreamId),
+		});
+		if (upstream) {
+			await syncUpstreamTraefik(upstream);
+		}
 		return;
 	}
 	if (domain.applicationId) {
@@ -333,23 +358,41 @@ const assertHostPathAvailable = async (
 	}
 	const rows = await db.query.domains.findMany({
 		where: and(...conditions),
-		with: {
-			application: { with: { environment: { with: { project: true } } } },
-			compose: { with: { environment: { with: { project: true } } } },
-		},
+		with: domainParents,
 	});
 	const wanted = path || "/";
 	for (const row of rows) {
-		const owner =
-			row.application?.environment.project.organizationId ??
-			row.compose?.environment.project.organizationId ??
-			null;
+		const owner = domainOwner(row);
 		if (owner !== organizationId || (row.path ?? "/") === wanted) {
 			throw new TRPCError({
 				code: "CONFLICT",
 				message: "This host (or host + path) is already routed on this instance",
 			});
 		}
+	}
+};
+
+/**
+ * A domain on an external upstream routes HTTP to the upstream's origin: a
+ * layer-4 row has no URL to dial and a compose service name would retarget
+ * the router to a container that does not exist. Both are refused rather than
+ * silently ignored, like the layer-4 field checks above.
+ */
+const assertExternalDomainShape = (fields: {
+	protocol?: "http" | "tcp" | "udp";
+	serviceName?: string | null;
+}): void => {
+	if (fields.protocol && fields.protocol !== "http") {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "An external upstream routes HTTP only",
+		});
+	}
+	if (fields.serviceName) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "serviceName only applies to compose domains",
+		});
 	}
 };
 
@@ -402,12 +445,13 @@ export const domainRouter = router({
 			};
 		}),
 
-	/** Domains for an application, compose, or (when neither set) a project. */
+	/** Domains for an application, compose, external upstream, or (when none set) a project. */
 	all: protectedProcedure
 		.input(
 			z.object({
 				applicationId: z.string().min(1).optional(),
 				composeId: z.string().min(1).optional(),
+				externalUpstreamId: z.string().min(1).optional(),
 				projectId: z.string().min(1).optional(),
 			}),
 		)
@@ -427,6 +471,13 @@ export const domainRouter = router({
 					orderBy: desc(domains.createdAt),
 				});
 			}
+			if (input.externalUpstreamId) {
+				await assertUpstreamAccess(input.externalUpstreamId, organizationId);
+				return db.query.domains.findMany({
+					where: eq(domains.externalUpstreamId, input.externalUpstreamId),
+					orderBy: desc(domains.createdAt),
+				});
+			}
 			if (input.projectId) {
 				await assertProjectAccess(input.projectId, organizationId);
 				const environmentRows = await db.query.environments.findMany({
@@ -435,7 +486,7 @@ export const domainRouter = router({
 				});
 				const environmentIds = environmentRows.map((row) => row.environmentId);
 				if (environmentIds.length === 0) return [];
-				const [applicationRows, composeRows] = await Promise.all([
+				const [applicationRows, composeRows, upstreamRows] = await Promise.all([
 					db.query.applications.findMany({
 						where: inArray(applications.environmentId, environmentIds),
 						columns: { applicationId: true },
@@ -444,12 +495,18 @@ export const domainRouter = router({
 						where: inArray(compose.environmentId, environmentIds),
 						columns: { composeId: true },
 					}),
+					db.query.externalUpstreams.findMany({
+						where: inArray(externalUpstreams.environmentId, environmentIds),
+						columns: { externalUpstreamId: true },
+					}),
 				]);
 				const applicationIds = applicationRows.map((row) => row.applicationId);
 				const composeIds = composeRows.map((row) => row.composeId);
+				const upstreamIds = upstreamRows.map((row) => row.externalUpstreamId);
 				const filters = [
 					...(applicationIds.length > 0 ? [inArray(domains.applicationId, applicationIds)] : []),
 					...(composeIds.length > 0 ? [inArray(domains.composeId, composeIds)] : []),
+					...(upstreamIds.length > 0 ? [inArray(domains.externalUpstreamId, upstreamIds)] : []),
 				];
 				if (filters.length === 0) return [];
 				return db.query.domains.findMany({
@@ -459,7 +516,7 @@ export const domainRouter = router({
 			}
 			throw new TRPCError({
 				code: "BAD_REQUEST",
-				message: "Provide applicationId, composeId, or projectId",
+				message: "Provide applicationId, composeId, externalUpstreamId, or projectId",
 			});
 		}),
 
@@ -491,7 +548,12 @@ export const domainRouter = router({
 		const organizationId = await getOrganizationId(ctx.session);
 		const domain = await assertDomainAccess(input.domainId, organizationId);
 		// Strip the eager-loaded parents from the response.
-		const { application: _application, compose: _compose, ...row } = domain;
+		const {
+			application: _application,
+			compose: _compose,
+			externalUpstream: _externalUpstream,
+			...row
+		} = domain;
 		return row;
 	}),
 
@@ -514,10 +576,17 @@ export const domainRouter = router({
 					serviceName: z.string().nullable().optional(),
 					applicationId: z.string().optional(),
 					composeId: z.string().optional(),
+					/** Route to an origin outside the Swarm instead of a service. */
+					externalUpstreamId: z.string().optional(),
 				})
-				.refine((value) => Boolean(value.applicationId) !== Boolean(value.composeId), {
-					message: "Exactly one of applicationId or composeId is required",
-				}),
+				.refine(
+					(value) =>
+						[value.applicationId, value.composeId, value.externalUpstreamId].filter(Boolean)
+							.length === 1,
+					{
+						message: "Exactly one of applicationId, composeId or externalUpstreamId is required",
+					},
+				),
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
@@ -533,6 +602,9 @@ export const domainRouter = router({
 						message: "serviceName is required for compose domains",
 					});
 				}
+			} else if (input.externalUpstreamId) {
+				await assertUpstreamAccess(input.externalUpstreamId, organizationId);
+				assertExternalDomainShape({ protocol: input.protocol, serviceName: input.serviceName });
 			}
 
 			const certificateType = input.certificateType ?? "none";
@@ -585,10 +657,15 @@ export const domainRouter = router({
 				certificateType,
 				certificateId: certificateType === "custom" ? (input.certificateId ?? null) : null,
 				serviceName: input.composeId ? (input.serviceName ?? null) : null,
-				domainType: input.applicationId ? ("application" as const) : ("compose" as const),
+				domainType: input.applicationId
+					? ("application" as const)
+					: input.composeId
+						? ("compose" as const)
+						: ("external" as const),
 				uniqueConfigKey: randomBytes(6).toString("hex"),
 				applicationId: input.applicationId ?? null,
 				composeId: input.composeId ?? null,
+				externalUpstreamId: input.externalUpstreamId ?? null,
 			};
 
 			let domain: typeof domains.$inferSelect | undefined;
@@ -644,6 +721,12 @@ export const domainRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "domains.manage");
 			const existing = await assertDomainAccess(input.domainId, organizationId);
+			if (existing.externalUpstreamId) {
+				assertExternalDomainShape({
+					protocol: input.protocol ?? existing.protocol,
+					serviceName: input.serviceName,
+				});
+			}
 
 			const certificateType = input.certificateType ?? existing.certificateType;
 			const nextHost =

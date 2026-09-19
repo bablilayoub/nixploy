@@ -22,10 +22,12 @@ export type {
 	TraefikRedirectEntry,
 	TraefikRouteProtocol,
 	TraefikTlsMode,
+	TraefikUpstreamTarget,
 	WriteAppTraefikConfigInput,
 } from "./config-writer";
 export {
 	assertEntrypointName,
+	assertUpstreamOrigin,
 	buildTraefikFileConfig,
 	DEFAULT_CONTAINER_PORT,
 	DNS_CERT_RESOLVER,

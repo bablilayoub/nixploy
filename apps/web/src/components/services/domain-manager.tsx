@@ -867,10 +867,12 @@ export function DomainManager({
 	serviceId,
 	composeServices,
 }: {
-	serviceType: "application" | "compose";
+	/** `external`: the domains of an external upstream — HTTP only, no container port. */
+	serviceType: "application" | "compose" | "external";
 	serviceId: string;
 	composeServices?: string[];
 }) {
+	const external = serviceType === "external";
 	const trpc = useTRPC();
 	const trpcClient = useTRPCClient();
 	const { can } = useCapabilities();
@@ -882,7 +884,9 @@ export function DomainManager({
 	const domainsQuery = useQuery(
 		serviceType === "application"
 			? trpc.domain.byApplication.queryOptions({ applicationId: serviceId })
-			: trpc.domain.byCompose.queryOptions({ composeId: serviceId }),
+			: serviceType === "compose"
+				? trpc.domain.byCompose.queryOptions({ composeId: serviceId })
+				: trpc.domain.all.queryOptions({ externalUpstreamId: serviceId }),
 	);
 	const certificatesQuery = useQuery(trpc.certificate.all.queryOptions());
 	// Layer-4 entrypoints are instance-level; any member may read them so the
@@ -997,7 +1001,9 @@ export function DomainManager({
 	const invalidate = [
 		serviceType === "application"
 			? trpc.domain.byApplication.queryKey({ applicationId: serviceId })
-			: trpc.domain.byCompose.queryKey({ composeId: serviceId }),
+			: serviceType === "compose"
+				? trpc.domain.byCompose.queryKey({ composeId: serviceId })
+				: trpc.domain.all.queryKey({ externalUpstreamId: serviceId }),
 	];
 	const errorMessage = "Something went wrong";
 
@@ -1066,17 +1072,22 @@ export function DomainManager({
 			toast.error("Host is required");
 			return;
 		}
-		const trimmedPort = port.trim();
-		if (!trimmedPort) {
-			toast.error("Container port is required — the port your app listens on (e.g. 3000)");
-			return;
+		// An external upstream carries its port in the target URL; the domain
+		// row stores none.
+		let parsedPort: number | null = null;
+		if (!external) {
+			const trimmedPort = port.trim();
+			if (!trimmedPort) {
+				toast.error("Container port is required — the port your app listens on (e.g. 3000)");
+				return;
+			}
+			parsedPort = Number.parseInt(trimmedPort, 10);
+			if (!Number.isFinite(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
+				toast.error("Port must be between 1 and 65535");
+				return;
+			}
 		}
-		const parsedPort = Number.parseInt(trimmedPort, 10);
-		if (!Number.isFinite(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
-			toast.error("Port must be between 1 and 65535");
-			return;
-		}
-		const layer4 = protocol !== "http";
+		const layer4 = !external && protocol !== "http";
 		if (layer4 && !entrypoint) {
 			toast.error("Pick a Traefik entrypoint for TCP or UDP routing");
 			return;
@@ -1117,7 +1128,7 @@ export function DomainManager({
 					? trimmedInternalPath
 					: null,
 			port: parsedPort,
-			protocol,
+			protocol: external ? ("http" as RouteProtocol) : protocol,
 			entrypoint: layer4 ? entrypoint : null,
 			tlsMode: protocol === "tcp" ? tlsMode : ("none" as TlsMode),
 			https: layer4 ? false : https,
@@ -1130,8 +1141,10 @@ export function DomainManager({
 			updateMutation.mutate({ domainId: editing.domainId, ...shared });
 		} else if (serviceType === "application") {
 			createMutation.mutate({ ...shared, applicationId: serviceId });
-		} else {
+		} else if (serviceType === "compose") {
 			createMutation.mutate({ ...shared, composeId: serviceId });
+		} else {
+			createMutation.mutate({ ...shared, externalUpstreamId: serviceId });
 		}
 	};
 
@@ -1142,7 +1155,11 @@ export function DomainManager({
 			<SettingsSection
 				wide
 				title="Domains"
-				description="Route traffic to this service through Traefik."
+				description={
+					external
+						? "Hostnames Traefik answers for this upstream — certificates, middlewares and uptime probes apply as for any service."
+						: "Route traffic to this service through Traefik."
+				}
 				actions={
 					<Button size="sm" onClick={openCreate} disabled={!canManage} title={manageHint}>
 						<Plus className="size-4" />
@@ -1398,28 +1415,30 @@ export function DomainManager({
 								))}
 						</div>
 
-						<div className="space-y-1.5">
-							<Label>Protocol</Label>
-							<Select
-								value={protocol}
-								onValueChange={(value) => setProtocol(value as RouteProtocol)}
-							>
-								<SelectTrigger>
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="http">HTTP / HTTPS</SelectItem>
-									<SelectItem value="tcp">TCP (raw stream)</SelectItem>
-									<SelectItem value="udp">UDP (datagrams)</SelectItem>
-								</SelectContent>
-							</Select>
-							<p className="text-xs text-muted-foreground">
-								{protocol === "http"
-									? "Layer 7: paths, middlewares and certificates apply."
-									: "Layer 4: Traefik forwards the raw stream on a dedicated entrypoint. No paths, redirects or middlewares."}{" "}
-								<HelpLink slug="tcp-udp-routing" />
-							</p>
-						</div>
+						{!external && (
+							<div className="space-y-1.5">
+								<Label>Protocol</Label>
+								<Select
+									value={protocol}
+									onValueChange={(value) => setProtocol(value as RouteProtocol)}
+								>
+									<SelectTrigger>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="http">HTTP / HTTPS</SelectItem>
+										<SelectItem value="tcp">TCP (raw stream)</SelectItem>
+										<SelectItem value="udp">UDP (datagrams)</SelectItem>
+									</SelectContent>
+								</Select>
+								<p className="text-xs text-muted-foreground">
+									{protocol === "http"
+										? "Layer 7: paths, middlewares and certificates apply."
+										: "Layer 4: Traefik forwards the raw stream on a dedicated entrypoint. No paths, redirects or middlewares."}{" "}
+									<HelpLink slug="tcp-udp-routing" />
+								</p>
+							</div>
+						)}
 
 						{protocol !== "http" && (
 							<div className="space-y-1.5">
@@ -1484,21 +1503,25 @@ export function DomainManager({
 									/>
 								</div>
 							)}
-							<div className="space-y-1.5">
-								<Label htmlFor="domain-port">Container port</Label>
-								<Input
-									id="domain-port"
-									placeholder={DEFAULT_HTTP_PORT}
-									inputMode="numeric"
-									value={port}
-									onChange={(event) => setPort(event.target.value)}
-								/>
-							</div>
+							{!external && (
+								<div className="space-y-1.5">
+									<Label htmlFor="domain-port">Container port</Label>
+									<Input
+										id="domain-port"
+										placeholder={DEFAULT_HTTP_PORT}
+										inputMode="numeric"
+										value={port}
+										onChange={(event) => setPort(event.target.value)}
+									/>
+								</div>
+							)}
 						</div>
-						<p className="text-xs text-muted-foreground">
-							The port your service listens on inside the container. Traffic to the host is
-							forwarded to this port.
-						</p>
+						{!external && (
+							<p className="text-xs text-muted-foreground">
+								The port your service listens on inside the container. Traffic to the host is
+								forwarded to this port.
+							</p>
+						)}
 
 						{protocol === "http" && (
 							<div className="space-y-1.5">

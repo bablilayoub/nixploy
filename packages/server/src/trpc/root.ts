@@ -44,6 +44,7 @@ import { teamRouter } from "./routers/team";
 import { templateRouter } from "./routers/template";
 import { traefikRouter } from "./routers/traefik";
 import { updatesRouter } from "./routers/updates";
+import { upstreamRouter } from "./routers/upstream";
 import { volumeBackupRouter } from "./routers/volume-backup";
 import { volumeFilesRouter } from "./routers/volume-files";
 import { webServerRouter } from "./routers/web-server";
@@ -94,6 +95,7 @@ export const appRouter = router({
 	template: templateRouter,
 	traefik: traefikRouter,
 	updates: updatesRouter,
+	upstream: upstreamRouter,
 	volumeBackup: volumeBackupRouter,
 	volumeFiles: volumeFilesRouter,
 	webServer: webServerRouter,

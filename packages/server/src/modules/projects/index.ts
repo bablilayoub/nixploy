@@ -18,6 +18,7 @@ import {
 	type ServiceRow,
 } from "../services/registry";
 import { getCertificatesDir, REMOTE_TRAEFIK_DIR, removeFileOnServer } from "../traefik";
+import { removeUpstreamRoutesForEnvironment } from "../upstreams";
 import { assertProjectVisible } from "./project-scope";
 import type { OrgRole } from "./roles";
 import { ORG_ROLE_RANK, orgRoleRank } from "./roles";
@@ -346,6 +347,12 @@ export async function deleteEnvironmentCascade(environmentId: string): Promise<v
 			}),
 		);
 	}
+
+	// External upstreams have no Swarm footprint, only a Traefik file each;
+	// their rows cascade with the environment below.
+	await tearDown("external upstream routes", () =>
+		removeUpstreamRoutesForEnvironment(environmentId),
+	);
 
 	// Every service left the environment overlay; drop it before the rows go
 	// (it is resolved from the environment row, which the transaction removes).

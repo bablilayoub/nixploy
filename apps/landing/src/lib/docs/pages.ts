@@ -458,6 +458,24 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 				type: "p",
 				text: "Settings → Platform → Access: set the dashboard domain and Let's Encrypt email. Once a dashboard domain is configured the low-priority catch-all router is dropped, so the panel answers on its own host only instead of on every hostname pointed at the box. Traefik's config viewer and restart live under Proxy.",
 			},
+			{ type: "h2", text: "External upstreams" },
+			{
+				type: "p",
+				text: "An external upstream is an HTTP origin outside the Swarm — the host your old panel still runs on, a SaaS endpoint — that Traefik fronts like a service: domains, Let's Encrypt, middlewares and uptime probes attach to it the same way. Add one from the project page (Add service → External upstream) with a target such as https://old-host.example.com, attach the hostnames, and point DNS at Nixploy once: every hostname keeps answering from the old host through the new proxy, and each workload moves behind its hostname when it is ready.",
+			},
+			{
+				type: "ul",
+				items: [
+					"The target is an origin only (scheme, host, port); path rewrites live on the domain's internal path.",
+					"Pass the public Host header (default) for a reverse-proxied app; turn it off for a SaaS origin that must see its own hostname.",
+					"Bare names, cluster-internal addresses, cloud metadata, the panel's own host and the server's own address are refused; a LAN target needs private egress enabled under Settings → Platform.",
+					"The target is re-checked hourly. One that stops passing has its route withheld until it passes again (Re-check now on its page); one that merely stops resolving is left alone.",
+				],
+			},
+			{
+				type: "note",
+				text: "HTTP only — a TCP/UDP row on an upstream is refused — and not yet part of the nixploy.yaml manifest.",
+			},
 		],
 	},
 	{

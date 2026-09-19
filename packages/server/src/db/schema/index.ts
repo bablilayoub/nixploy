@@ -24,4 +24,5 @@ export * from "./sso";
 export * from "./tag";
 export * from "./team";
 export * from "./template-source";
+export * from "./upstream";
 export * from "./utils";

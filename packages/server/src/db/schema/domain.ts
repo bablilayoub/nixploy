@@ -23,7 +23,9 @@ import {
 	domainType,
 	portProtocol,
 } from "./enums";
+import { environments } from "./project";
 import { servers } from "./server";
+import { externalUpstreams } from "./upstream";
 import { createdAt, idColumn } from "./utils";
 
 /** A Traefik route (router + service + TLS) attached to a service. */
@@ -68,6 +70,11 @@ export const domains = pgTable(
 			() => previewDeployments.previewDeploymentId,
 			{ onDelete: "cascade" },
 		),
+		/** `domainType: "external"` — the origin outside the Swarm this row fronts. */
+		externalUpstreamId: text("external_upstream_id").references(
+			() => externalUpstreams.externalUpstreamId,
+			{ onDelete: "cascade" },
+		),
 		certificateId: text("certificate_id"),
 		createdAt: createdAt(),
 	},
@@ -75,6 +82,7 @@ export const domains = pgTable(
 		uniqueIndex("domain_host_path_unique").on(table.host, table.path, table.port),
 		index("domain_application_id_idx").on(table.applicationId),
 		index("domain_compose_id_idx").on(table.composeId),
+		index("domain_external_upstream_id_idx").on(table.externalUpstreamId),
 	],
 );
 
@@ -173,6 +181,10 @@ export const domainsRelations = relations(domains, ({ one, many }) => ({
 		fields: [domains.previewDeploymentId],
 		references: [previewDeployments.previewDeploymentId],
 	}),
+	externalUpstream: one(externalUpstreams, {
+		fields: [domains.externalUpstreamId],
+		references: [externalUpstreams.externalUpstreamId],
+	}),
 	certificate: one(certificates, {
 		fields: [domains.certificateId],
 		references: [certificates.certificateId],
@@ -184,6 +196,14 @@ export const domainMiddlewaresRelations = relations(domainMiddlewares, ({ one })
 		fields: [domainMiddlewares.domainId],
 		references: [domains.domainId],
 	}),
+}));
+
+export const externalUpstreamsRelations = relations(externalUpstreams, ({ one, many }) => ({
+	environment: one(environments, {
+		fields: [externalUpstreams.environmentId],
+		references: [environments.environmentId],
+	}),
+	domains: many(domains),
 }));
 
 export const certificatesRelations = relations(certificates, ({ one }) => ({

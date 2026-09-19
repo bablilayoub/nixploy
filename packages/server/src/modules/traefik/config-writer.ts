@@ -50,6 +50,20 @@ export type TraefikRouteProtocol = "http" | "tcp" | "udp";
 /** TCP TLS handling — see the `domain_tls_mode` pgEnum. */
 export type TraefikTlsMode = "none" | "terminate" | "passthrough";
 
+/**
+ * An origin outside the Swarm to route to instead of `<appName>:<port>`.
+ * Validated on write by `modules/upstreams/target.ts`; re-checked here so a
+ * row written under looser rules never reaches the YAML.
+ */
+export interface TraefikUpstreamTarget {
+	/** `http(s)://host[:port]` — an origin, no path. */
+	url: string;
+	/** Forward the public `Host` header (false → Traefik sends the target's own). */
+	passHostHeader: boolean;
+	/** Skip TLS verification of an https target (self-signed origins). */
+	insecureSkipVerify: boolean;
+}
+
 export interface TraefikDomainEntry {
 	/**
 	 * The `domain` row id. Only `nixployAuth` needs it — its verify URL names
@@ -85,6 +99,12 @@ export interface TraefikDomainEntry {
 	certificateId?: string | null;
 	/** Compose only: route to `<appName>-<serviceName>-1` instead of `<appName>`. */
 	serviceName?: string | null;
+	/**
+	 * External upstream only: the origin to route to. Replaces the
+	 * `<appName>:<port>` target entirely; `port` and `serviceName` are ignored.
+	 * HTTP rows only — a layer-4 row with an upstream is refused.
+	 */
+	upstream?: TraefikUpstreamTarget | null;
 	/** Stable suffix for router/service names (defaults to the array index). */
 	uniqueConfigKey?: string | null;
 	/** Per-domain middleware rows, chained after the app-wide ones. */
@@ -138,7 +158,14 @@ interface HttpService {
 		servers: Array<{ url: string }>;
 		passHostHeader: boolean;
 		sticky?: { cookie: StickyCookie };
+		/** Named entry of `http.serversTransports` (external upstreams with TLS verification off). */
+		serversTransport?: string;
 	};
+}
+
+/** Transport options for dialing an upstream; only the one knob Nixploy exposes. */
+interface HttpServersTransport {
+	insecureSkipVerify: boolean;
 }
 
 type HttpMiddleware =
@@ -185,6 +212,7 @@ interface FileConfig {
 		routers: Record<string, HttpRouter>;
 		services: Record<string, HttpService>;
 		middlewares?: Record<string, HttpMiddleware>;
+		serversTransports?: Record<string, HttpServersTransport>;
 	};
 	tcp?: {
 		routers: Record<string, TcpRouter>;
@@ -362,6 +390,31 @@ export const removeFileOnServer = async (
  * HOST from a capture group is refused: the resulting host is not knowable
  * here, so it cannot be checked against the service's domains.
  */
+/**
+ * The writer's own check on an external origin — `modules/upstreams/target.ts`
+ * does the DNS and egress policy work on write; this only refuses shapes
+ * Traefik would misread (a path, credentials, a non-http scheme) so a row
+ * from an older rule set cannot smuggle one in.
+ */
+export function assertUpstreamOrigin(value: string): string {
+	let parsed: URL;
+	try {
+		parsed = new URL(value);
+	} catch {
+		throw badRequest(`Invalid upstream URL: ${value}`);
+	}
+	if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+		throw badRequest(`Upstream URL must be http(s): ${value}`);
+	}
+	if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+		throw badRequest(`Upstream URL must be a bare origin: ${value}`);
+	}
+	if (parsed.pathname !== "/" && parsed.pathname !== "") {
+		throw badRequest(`Upstream URL must not carry a path: ${value}`);
+	}
+	return parsed.origin;
+}
+
 export function assertSafeRedirectReplacement(
 	replacement: string,
 	ownHosts: ReadonlySet<string>,
@@ -412,6 +465,7 @@ export const buildTraefikFileConfig = async (
 		routers: {} as Record<string, HttpRouter>,
 		services: {} as Record<string, HttpService>,
 		middlewares: {} as Record<string, HttpMiddleware> | undefined,
+		serversTransports: undefined as Record<string, HttpServersTransport> | undefined,
 	};
 	const config: FileConfig = { http };
 	const middlewares = http.middlewares as Record<string, HttpMiddleware>;
@@ -487,12 +541,29 @@ export const buildTraefikFileConfig = async (
 			throw badRequest(`Invalid compose service name: ${domain.serviceName}`);
 		}
 		const target = domain.serviceName ? `${appName}-${domain.serviceName}-1` : appName;
-		const service: HttpService = {
-			loadBalancer: {
-				servers: [{ url: `http://${target}:${domain.port ?? DEFAULT_CONTAINER_PORT}` }],
-				passHostHeader: true,
-			},
-		};
+		const service: HttpService = domain.upstream
+			? {
+					loadBalancer: {
+						servers: [{ url: assertUpstreamOrigin(domain.upstream.url) }],
+						passHostHeader: domain.upstream.passHostHeader,
+					},
+				}
+			: {
+					loadBalancer: {
+						servers: [{ url: `http://${target}:${domain.port ?? DEFAULT_CONTAINER_PORT}` }],
+						passHostHeader: true,
+					},
+				};
+		if (domain.upstream?.insecureSkipVerify) {
+			// One transport per file: every upstream domain of this app shares
+			// the same target, so the same verification choice.
+			const transportName = `${sanitizeName(appName)}-insecure`;
+			http.serversTransports = {
+				...(http.serversTransports ?? {}),
+				[transportName]: { insecureSkipVerify: true },
+			};
+			service.loadBalancer.serversTransport = transportName;
+		}
 		http.services[serviceName] = service;
 
 		// Per-domain internal-path rewrite: public `<path>/*` → upstream
@@ -628,6 +699,9 @@ export const buildTraefikFileConfig = async (
 		http.middlewares = undefined;
 		delete (http as { middlewares?: unknown }).middlewares;
 	}
+	if (!http.serversTransports) {
+		delete (http as { serversTransports?: unknown }).serversTransports;
+	}
 
 	// ── layer-4 (tcp / udp) ───────────────────────────────────────────────
 	//
@@ -636,6 +710,11 @@ export const buildTraefikFileConfig = async (
 	// non-TLS TCP router) or one hostname when TLS is terminated/passed
 	// through. UDP is connectionless: no rule at all, the entrypoint IS the
 	// match, so one UDP router per entrypoint is all that can ever work.
+	if (layer4Domains.some((domain) => domain.upstream)) {
+		// A TCP/UDP row addresses `host:port`, not a URL, and an external
+		// origin was validated as an HTTP one; there is no honest mapping.
+		throw badRequest("An external upstream routes HTTP only");
+	}
 	const tcpRouters: Record<string, TcpRouter> = {};
 	const tcpServices: Record<string, Layer4Service> = {};
 	const udpRouters: Record<string, UdpRouter> = {};

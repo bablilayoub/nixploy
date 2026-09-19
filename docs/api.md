@@ -229,6 +229,7 @@ High-level map of the OpenAPI surface (44 routers). Full input/output schemas li
 | `compose` | Compose/stack services — deploy, file, env, containers |
 | `template` | Catalog list + one-click deploy |
 | `domain` | Domains, TLS, traefik.me generator |
+| `upstream` | External upstreams — origins outside the Swarm fronted by Traefik |
 | `deployment` | History, logs, stats |
 | `previewDeployment` | PR previews — approve/deny fork gate |
 | `postgres` / `mysql` / `mariadb` / `mongo` / `redis` | Database services |

@@ -2130,6 +2130,39 @@ export const apiCatalog: ApiRouterGroup[] = [
 		],
 	},
 	{
+		router: "upstream",
+		title: "upstream",
+		description: "upstream",
+		endpoints: [
+			{ method: "GET", path: "upstream.all", summary: "List external upstreams" },
+			{
+				method: "POST",
+				path: "upstream.create",
+				summary: "Create an external upstream",
+				capability: ["domains.manage"],
+			},
+			{
+				method: "POST",
+				path: "upstream.delete",
+				summary: "Delete an external upstream",
+				capability: ["domains.manage"],
+			},
+			{ method: "GET", path: "upstream.one", summary: "Get one external upstream" },
+			{
+				method: "POST",
+				path: "upstream.resync",
+				summary: "Re-check and rewrite an external upstream's route",
+				capability: ["domains.manage"],
+			},
+			{
+				method: "POST",
+				path: "upstream.update",
+				summary: "Update an external upstream",
+				capability: ["domains.manage"],
+			},
+		],
+	},
+	{
 		router: "volumeBackup",
 		title: "Volume backups",
 		description: "Named-volume backup schedules",
@@ -2265,4 +2298,4 @@ export const apiCatalog: ApiRouterGroup[] = [
 ];
 
 /** Total endpoints in the catalog above. */
-export const apiEndpointCount = 422;
+export const apiEndpointCount = 428;

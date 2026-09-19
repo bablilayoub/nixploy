@@ -77,7 +77,11 @@ export const previewStatus = pgEnum("preview_status", [
 
 export const certificateType = pgEnum("certificate_type", ["letsencrypt", "custom", "none"]);
 
-export const domainType = pgEnum("domain_type", ["application", "compose", "preview"]);
+/**
+ * Which parent a domain row hangs off. `external` rows belong to an
+ * `external_upstream` — an origin outside the Swarm that Traefik fronts.
+ */
+export const domainType = pgEnum("domain_type", ["application", "compose", "preview", "external"]);
 
 /**
  * Layer-4 vs layer-7 routing for a domain row. `http` is the historical

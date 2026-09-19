@@ -101,10 +101,14 @@ async function readProtectedDomain(domainId: string): Promise<ProtectedDomain | 
 		with: {
 			application: { with: { environment: { with: { project: true } } } },
 			compose: { with: { environment: { with: { project: true } } } },
+			externalUpstream: { with: { environment: { with: { project: true } } } },
 		},
 	});
 	if (!row) return null;
-	const project = row.application?.environment.project ?? row.compose?.environment.project;
+	const project =
+		row.application?.environment.project ??
+		row.compose?.environment.project ??
+		row.externalUpstream?.environment.project;
 	if (!project) return null;
 
 	const middleware = await db.query.domainMiddlewares.findFirst({

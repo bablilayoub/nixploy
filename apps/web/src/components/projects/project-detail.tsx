@@ -28,6 +28,7 @@ import { ManageTagsDialog } from "./manage-tags-dialog";
 import { ProjectActions } from "./project-actions";
 import { DATABASE_TYPES, type DatabaseType } from "./service-types";
 import { type ServiceEntry, ServicesTable } from "./services-table";
+import { UpstreamsTable } from "./upstreams-table";
 
 type NewServiceDialog = "application" | "compose" | DatabaseType;
 
@@ -145,6 +146,12 @@ export function ProjectDetail({
 		...trpc.domain.all.queryOptions({ projectId }),
 		enabled: tab === "services",
 	});
+	// External upstreams are routing rows, not services: listed under the
+	// services table rather than mixed into it.
+	const upstreamsQuery = useQuery({
+		...trpc.upstream.all.queryOptions({ environmentId: activeEnvironment?.environmentId ?? "" }),
+		enabled: tab === "services" && Boolean(activeEnvironment),
+	});
 	const primaryDomains = useMemo(() => {
 		const rows = domainsQuery.data ?? [];
 		const byService = new Map<string, typeof rows>();
@@ -153,7 +160,9 @@ export function ProjectDetail({
 				? `application:${row.applicationId}`
 				: row.composeId
 					? `compose:${row.composeId}`
-					: null;
+					: row.externalUpstreamId
+						? `upstream:${row.externalUpstreamId}`
+						: null;
 			if (!key) continue;
 			const bucket = byService.get(key);
 			if (bucket) bucket.push(row);
@@ -487,11 +496,26 @@ export function ProjectDetail({
 						))}
 					</div>
 				) : filteredServices.length > 0 ? (
-					<ServicesTable
+					<>
+						<ServicesTable
+							projectId={projectId}
+							environmentName={activeEnvironmentName}
+							services={filteredServices}
+							currentEnvironmentId={activeEnvironment?.environmentId}
+						/>
+						<UpstreamsTable
+							projectId={projectId}
+							upstreams={upstreamsQuery.data ?? []}
+							primaryDomains={primaryDomains}
+							search={search}
+						/>
+					</>
+				) : (upstreamsQuery.data?.length ?? 0) > 0 && !search ? (
+					<UpstreamsTable
 						projectId={projectId}
-						environmentName={activeEnvironmentName}
-						services={filteredServices}
-						currentEnvironmentId={activeEnvironment?.environmentId}
+						upstreams={upstreamsQuery.data ?? []}
+						primaryDomains={primaryDomains}
+						search={search}
 					/>
 				) : (
 					<div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed py-16 text-center">
