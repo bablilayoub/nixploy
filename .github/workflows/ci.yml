@@ -235,6 +235,7 @@ jobs:
           # Runner DNS resolves *.traefik.me to 127.0.0.1, but probing the
           # loopback with an explicit Host header removes the dependency.
           SMOKE_TRAEFIK_ORIGIN: http://127.0.0.1
+          SMOKE_INSECURE_TLS: "1"
           # Also build one app FROM SOURCE. Every other step deploys a prebuilt
           # image, which is why the v0.2.7 buildx breakage (no builder in the
           # runtime image) passed CI and broke every real build. ~45 s.

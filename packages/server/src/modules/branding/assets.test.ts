@@ -68,6 +68,48 @@ describe("sanitiseSvg", () => {
 		const svg = '<svg viewBox="0 0 10 10"><path d="M0 0h10v10z" fill="#fff"/></svg>';
 		expect(sanitiseSvg(svg)).toBe(svg);
 	});
+
+	it("drops a script whose closing tag is spelled unusually", () => {
+		expect(sanitiseSvg("<svg><script>alert(1)</script\t\n bar><rect/></svg>")).toBe(
+			"<svg><rect/></svg>",
+		);
+		// No closing tag at all: everything after the opening tag is script.
+		expect(sanitiseSvg("<svg><rect/><script>alert(1)")).toBe("<svg><rect/>");
+	});
+
+	it("does not let a handler reappear once its neighbour is removed", () => {
+		// A pass that strips `<script>` first would leave `onload=` behind here.
+		const out = sanitiseSvg('<svg on<script></script>load="alert(1)"><rect/></svg>');
+		expect(out).not.toMatch(/on[a-z]+\s*=/i);
+		expect(sanitiseSvg("<svg ONLOAD=\"alert(1)\" onClick='x'><rect/></svg>")).toBe(
+			"<svg><rect/></svg>",
+		);
+	});
+
+	it("drops comments, doctypes with entities and stylesheet instructions", () => {
+		expect(sanitiseSvg("<svg><!-- a --!><rect/></svg>")).toBe("<svg><rect/></svg>");
+		expect(sanitiseSvg('<!DOCTYPE svg [<!ENTITY x "<script>">]><svg>&x;</svg>')).toBe(
+			"<svg>&x;</svg>",
+		);
+		const out = sanitiseSvg(
+			'<?xml version="1.0"?><?xml-stylesheet href="https://evil.test/x.css"?><svg/>',
+		);
+		expect(out).toBe('<?xml version="1.0"?><svg/>');
+	});
+
+	it("blocks script URLs however they are spaced and keeps data images", () => {
+		expect(sanitiseSvg('<svg><a href=" JaVa\tScRiPt:alert(1)">x</a></svg>')).not.toMatch(
+			/script:/i,
+		);
+		expect(sanitiseSvg('<svg><a xlink:href="vbscript:x">x</a></svg>')).not.toContain("vbscript");
+		const image = '<svg><image href="data:image/png;base64,AAAA"/></svg>';
+		expect(sanitiseSvg(image)).toBe(image);
+	});
+
+	it("keeps character data verbatim", () => {
+		const svg = "<svg><style><![CDATA[ a > b { fill: red } ]]></style><rect/></svg>";
+		expect(sanitiseSvg(svg)).toBe(svg);
+	});
 });
 
 describe("isSafeAssetName", () => {

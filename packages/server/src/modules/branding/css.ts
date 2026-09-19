@@ -37,7 +37,7 @@ const FORBIDDEN: Array<{ pattern: RegExp; replacement: string }> = [
 	{ pattern: /<\s*\/\s*style/gi, replacement: "" },
 	// A `<` cannot start a tag here (the value is a text node), but leaving one
 	// in makes a stylesheet that is hard to reason about when it is read back.
-	{ pattern: /<!--|-->/g, replacement: "" },
+	{ pattern: /<!--|--!?>/g, replacement: "" },
 ];
 
 /**

@@ -167,8 +167,9 @@ const get = (path, input) => request("GET", path, { input });
  * One request to Traefik. Goes through `node:http(s)` rather than `fetch` for
  * three reasons the smoke needs: an explicit `Host` header (so CI can hit
  * 127.0.0.1 without any DNS), SNI that matches that host, and
- * `rejectUnauthorized: false` — a `certificateType: "none"` domain is served
- * with Traefik's self-signed default certificate on purpose.
+ * `rejectUnauthorized: false` behind `SMOKE_INSECURE_TLS=1` — a
+ * `certificateType: "none"` domain is served with Traefik's self-signed
+ * default certificate on purpose.
  */
 function probeThroughTraefik({ host, https: useHttps, path = "/" }) {
 	const origin = TRAEFIK_ORIGIN || `${useHttps ? "https" : "http"}://${host}`;
@@ -185,7 +186,10 @@ function probeThroughTraefik({ host, https: useHttps, path = "/" }) {
 				method: "GET",
 				headers: { host },
 				servername: secure ? host : undefined,
-				rejectUnauthorized: false,
+				// A `certificateType: "none"` domain is served with Traefik's
+				// self-signed default certificate, so CI opts in explicitly; a
+				// smoke against a real panel keeps validation on.
+				rejectUnauthorized: process.env.SMOKE_INSECURE_TLS !== "1",
 				timeout: 10_000,
 			},
 			(res) => {

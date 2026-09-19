@@ -233,25 +233,195 @@ export function detectImageKind(bytes: Buffer): ImageKind | null {
 		: null;
 }
 
+/** Elements removed together with everything inside them. */
+const SVG_DROPPED_ELEMENTS = new Set([
+	"script",
+	"foreignobject",
+	"iframe",
+	"embed",
+	"object",
+	"use",
+	"handler",
+	"annotation-xml",
+]);
+
+/** Attributes whose value is a URL and can therefore name a script scheme. */
+const SVG_URL_ATTRIBUTES = new Set(["href", "xlink:href", "src", "xml:base", "action", "data"]);
+
+const SVG_ATTRIBUTE_RE = /([^\s="'/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g;
+
+/** A URL value that would execute: `javascript:` and friends, however spaced or cased. */
+const isScriptUrl = (value: string): boolean => {
+	let scheme = "";
+	for (const char of value) {
+		const code = char.charCodeAt(0);
+		// Browsers skip control characters and whitespace inside the scheme.
+		if (code <= 0x20 || code === 0x7f) continue;
+		scheme += char.toLowerCase();
+		if (scheme.length > 16) break;
+	}
+	return (
+		scheme.startsWith("javascript:") ||
+		scheme.startsWith("vbscript:") ||
+		scheme.startsWith("data:text/")
+	);
+};
+
+/**
+ * Rebuild one start tag without its executable attributes. Returns the tag
+ * unchanged when nothing had to go, so a clean drawing round-trips byte for
+ * byte; a rewritten tag re-quotes every value with double quotes.
+ */
+const sanitiseSvgTag = (tag: string, name: string): string => {
+	const selfClosing = /\/\s*>$/.test(tag);
+	const body = tag.slice(1 + name.length, selfClosing ? tag.lastIndexOf("/") : -1);
+	const kept: string[] = [];
+	let dropped = false;
+	for (const match of body.matchAll(SVG_ATTRIBUTE_RE)) {
+		const attribute = match[1];
+		if (!attribute) continue;
+		const value = match[2] ?? match[3] ?? match[4];
+		const lower = attribute.toLowerCase();
+		if (lower.startsWith("on") || (SVG_URL_ATTRIBUTES.has(lower) && isScriptUrl(value ?? ""))) {
+			dropped = true;
+			continue;
+		}
+		kept.push(value === undefined ? attribute : `${attribute}="${value.replace(/"/g, "&quot;")}"`);
+	}
+	if (!dropped) return tag;
+	return `<${name}${kept.length > 0 ? ` ${kept.join(" ")}` : ""}${selfClosing ? "/" : ""}>`;
+};
+
+/** Index just past the `>` that closes the tag opened at `start`, quotes respected. */
+const svgTagEnd = (svg: string, start: number): number => {
+	let quote: string | null = null;
+	for (let index = start + 1; index < svg.length; index += 1) {
+		const char = svg[index];
+		if (quote) {
+			if (char === quote) quote = null;
+		} else if (char === '"' || char === "'") {
+			quote = char;
+		} else if (char === ">") {
+			return index + 1;
+		}
+	}
+	return svg.length;
+};
+
+/** Index just past a `<!…>` declaration, with a DOCTYPE's internal subset (`[…]`) included. */
+const svgDeclarationEnd = (svg: string, start: number): number => {
+	let subset = false;
+	for (let index = start + 2; index < svg.length; index += 1) {
+		const char = svg[index];
+		if (char === "[") subset = true;
+		else if (char === "]") subset = false;
+		else if (char === ">" && !subset) return index + 1;
+	}
+	return svg.length;
+};
+
 /**
  * Strip everything executable out of an SVG.
  *
  * An SVG is a document: it can carry `<script>`, `on*` handlers, `<foreignObject>`
  * and external references, and the panel serves this file from its own origin.
- * A denylist is not a proof of safety, which is why the asset route also sends
- * a restrictive `Content-Security-Policy` — this removes the obvious weapons
- * and the header covers what it misses.
+ * The file is walked tag by tag rather than pattern-replaced, so a closing tag
+ * spelled `</script\t\n bar>` or a handler that reappears once its neighbour is
+ * removed cannot slip through a single pass. A denylist is still not a proof of
+ * safety, which is why the asset route also sends a restrictive
+ * `Content-Security-Policy` — this removes the obvious weapons and the header
+ * covers what it misses.
  */
 export function sanitiseSvg(svg: string): string {
-	return svg
-		.replace(/<script[\s\S]*?<\/script\s*>/gi, "")
-		.replace(/<foreignObject[\s\S]*?<\/foreignObject\s*>/gi, "")
-		.replace(/<!ENTITY[\s\S]*?>/gi, "")
-		.replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, "")
-		.replace(/\son[a-z]+\s*=\s*'[^']*'/gi, "")
-		.replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, "")
-		.replace(/(href|xlink:href)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, "")
-		.replace(/<\s*(iframe|embed|object|use)\b[\s\S]*?>/gi, "");
+	const out: string[] = [];
+	// Name of the dropped element whose subtree is being skipped, and how deep.
+	let skipping: string | null = null;
+	let depth = 0;
+	const emit = (text: string) => {
+		if (!skipping && text) out.push(text);
+	};
+
+	let index = 0;
+	while (index < svg.length) {
+		const open = svg.indexOf("<", index);
+		if (open === -1) {
+			emit(svg.slice(index));
+			break;
+		}
+		emit(svg.slice(index, open));
+
+		if (svg.startsWith("<!--", open)) {
+			// Comments end at `-->` or the browser-tolerated `--!>`; either way they go.
+			const close = svg.indexOf("--", open + 4);
+			let end = svg.length;
+			for (let at = close; at !== -1 && at < svg.length; at = svg.indexOf("--", at + 1)) {
+				if (svg.startsWith("-->", at) || svg.startsWith("--!>", at)) {
+					end = at + (svg.startsWith("-->", at) ? 3 : 4);
+					break;
+				}
+			}
+			index = end;
+			continue;
+		}
+		if (svg.startsWith("<![CDATA[", open)) {
+			// Character data is text to an XML parser; keep it as one opaque run.
+			const close = svg.indexOf("]]>", open);
+			const end = close === -1 ? svg.length : close + 3;
+			emit(svg.slice(open, end));
+			index = end;
+			continue;
+		}
+		if (svg.startsWith("<!", open)) {
+			// DOCTYPE (with any entity subset) and stray declarations are dropped.
+			index = svgDeclarationEnd(svg, open);
+			continue;
+		}
+		if (svg.startsWith("<?", open)) {
+			// Keep the XML declaration; drop other processing instructions
+			// (`<?xml-stylesheet?>` loads an external sheet).
+			const close = svg.indexOf("?>", open);
+			const end = close === -1 ? svg.length : close + 2;
+			const instruction = svg.slice(open, end);
+			if (/^<\?xml[\s?]/i.test(instruction)) emit(instruction);
+			index = end;
+			continue;
+		}
+
+		const end = svgTagEnd(svg, open);
+		const tag = svg.slice(open, end);
+		index = end;
+		const nameMatch = /^<\/?\s*([^\s/>]+)/.exec(tag);
+		if (!nameMatch?.[1]) {
+			// Not a tag (`< 5`, a bare `<`): text.
+			emit(tag);
+			continue;
+		}
+		const name = nameMatch[1];
+		const lower = name.toLowerCase();
+		const closing = tag.startsWith("</");
+		const selfClosing = !closing && /\/\s*>$/.test(tag);
+
+		if (skipping) {
+			if (lower === skipping) {
+				if (closing) {
+					depth -= 1;
+					if (depth === 0) skipping = null;
+				} else if (!selfClosing) {
+					depth += 1;
+				}
+			}
+			continue;
+		}
+		if (SVG_DROPPED_ELEMENTS.has(lower)) {
+			if (!closing && !selfClosing) {
+				skipping = lower;
+				depth = 1;
+			}
+			continue;
+		}
+		out.push(closing ? tag : sanitiseSvgTag(tag, name));
+	}
+	return out.join("");
 }
 
 /** Store an uploaded asset and point the slot at it. */

@@ -293,7 +293,10 @@ function createHealthServer(): Server {
 				}
 				json(404, { error: "Not found" });
 			} catch (error) {
-				json(503, { ok: false, error: error instanceof Error ? error.message : String(error) });
+				// The reason belongs in the worker log, not in a response anyone
+				// who can reach the port can read.
+				console.error("[worker] health probe failed:", error);
+				json(503, { ok: false, error: "Readiness check failed — see the worker log" });
 			}
 		})();
 	});

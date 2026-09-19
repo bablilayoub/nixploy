@@ -250,10 +250,15 @@ export const assertEntrypointName = (name: string): string => {
 const wildcardHostRule = (baseHost: string): string =>
 	`HostRegexp(\`^[a-zA-Z0-9_-]+\\.${baseHost.replace(/[.]/g, "\\.")}$\`)`;
 
-/** Strip backticks and reject Traefik rule metacharacters in Host/Path values. */
+/**
+ * Reject Traefik rule metacharacters in Host/Path values. A backtick closes
+ * the quoted value inside `Host(\`…\`)`, so it is refused with the rest
+ * rather than silently stripped — a host that needed stripping was never a
+ * host, and the caller should hear that.
+ */
 const sanitizeRuleValue = (value: string): string => {
-	const cleaned = value.replace(/`/g, "").trim();
-	if (!cleaned || /[()|\\\n\r]/.test(cleaned)) {
+	const cleaned = value.trim();
+	if (!cleaned || /[`()|\\\n\r]/.test(cleaned)) {
 		throw badRequest(`Unsafe Traefik rule value: ${value}`);
 	}
 	return cleaned;
@@ -463,7 +468,7 @@ export const buildTraefikFileConfig = async (
 		// normal host, so `*.*.evil` and `*evil.com` are still rejected.
 		const wildcard = isWildcardHost(rawHost);
 		const host = sanitizeRuleValue(toPunycode(wildcard ? rawHost.slice(2) : rawHost));
-		if (host.includes("*") || !/^[a-zA-Z0-9.-]+(\.[a-zA-Z0-9.-]+)*\.?$/.test(host)) {
+		if (host.includes("*") || !/^[a-zA-Z0-9.-]+$/.test(host)) {
 			throw badRequest(`Invalid Traefik host after punycode: ${domain.host}`);
 		}
 		// `*.com` would ask a public-suffix-wide certificate; require a zone.
@@ -671,7 +676,7 @@ export const buildTraefikFileConfig = async (
 			const rawHost = sanitizeRuleValue(domain.host);
 			const wildcard = isWildcardHost(rawHost);
 			const host = sanitizeRuleValue(toPunycode(wildcard ? rawHost.slice(2) : rawHost));
-			if (host.includes("*") || !/^[a-zA-Z0-9.-]+(\.[a-zA-Z0-9.-]+)*\.?$/.test(host)) {
+			if (host.includes("*") || !/^[a-zA-Z0-9.-]+$/.test(host)) {
 				throw badRequest(`Invalid Traefik host after punycode: ${domain.host}`);
 			}
 			const matchHost = wildcard ? `*.${host}` : host;

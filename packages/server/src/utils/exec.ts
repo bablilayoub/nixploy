@@ -127,7 +127,7 @@ function runLocal(
 	},
 ): Promise<LocalRunResult> {
 	return new Promise((resolve, reject) => {
-		const child = spawn("sh", ["-c", command], {
+		const child = spawn("/bin/sh", ["-c", command], {
 			cwd: options.cwd,
 			env: options.env ? { ...process.env, ...options.env } : process.env,
 			stdio: ["pipe", "pipe", "pipe"],
