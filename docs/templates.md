@@ -64,6 +64,29 @@ The gallery UI (search + category pills) and the ⌘K palette pick new entries
 up automatically — no frontend changes needed. A new template also gets its own
 page at `nixploy.com/templates/<id>`, in the sitemap, once step 4 has run.
 
+## Env placeholders
+
+A template's env `default` may carry placeholders that the panel resolves at
+deploy time, before the value reaches the stack's `.env`
+(`modules/templates/placeholders.ts`):
+
+| Placeholder | Resolves to |
+| --- | --- |
+| `{{generateSecret}}` | 48 hex characters, fresh per occurrence (the original one) |
+| `{{generatePassword:N:name}}` | N alphanumeric characters |
+| `{{generateBase64:N:name}}` | base64 of N random bytes |
+| `{{generateHash:N:name}}` | N hex characters |
+| `{{generateUuid:name}}` | a UUID |
+| `{{generateJwt:name:<base64url JSON>}}` | an HS256 JWT signed with the named value |
+| `{{domain}}` | the host attached to the suggested service at deploy, else `localhost` |
+| `{{env:OTHER_KEY}}` | another key's resolved value |
+
+A trailing `:name` makes a generator **memoised for the deploy**: every
+placeholder with the same name resolves to the same value, which is how a
+database password can appear in `POSTGRES_PASSWORD` and inside
+`DATABASE_URL` and still be one password. Without a name, each occurrence is
+fresh. A value the operator provides at deploy is taken verbatim.
+
 ## Deploy flow
 
 `DeployTemplateDialog` asks for project + environment, the declared env vars
@@ -81,12 +104,13 @@ release. An organization can add its own catalogs under
 TS catalog"). Sources are **org-scoped**: a source belongs to one organization
 and only ever appears in that organization's gallery.
 
-Two kinds:
+Three kinds:
 
 | Kind | What it points at |
 | --- | --- |
 | `http-json` | One JSON document: a bare array of templates, or `{ "templates": [ … ] }` so the index can carry its own metadata. |
 | `git` | A repository whose `templates/index.json` has that same shape. Cloned shallow, read, and discarded — only the cache survives. |
+| `blueprints` | A repository laid out as `blueprints/<id>/{meta.json, template.toml, docker-compose.yml}` — the format of the Dokploy templates catalog (`https://github.com/Dokploy/templates.git`, 500+ entries). Each folder is translated by `modules/templates/blueprints.ts`: `[variables]` helpers become deploy-time placeholders named after the variable (so a password used in three keys is generated once), `${domain}` becomes `{{domain}}`, `[[config.mounts]]` files become inline compose `configs:` (the volume line that referenced `../files/<file>` becomes a `configs:` attachment), an undeclared `../files/<dir>` becomes a named volume of the stack, `env_file: .env` becomes explicit `KEY: ${KEY}` entries, and a blueprint with no domain gets its first `expose:`d port suggested. Every translated entry then goes through the same compose safety checks a deploy runs, so a template that mounts the Docker socket, binds host paths, publishes host ports or asks for privileged capabilities is a rejection line, not a gallery card that fails at deploy. On the public catalog that is 417 of 532 deployable (2026-09-19); the rest are listed with their reason on the source row. |
 
 Entries use exactly the `Template` shape above, minus two fields: `category`
 defaults to `"Custom"` when omitted, and **`hostPrivileged` is never accepted
@@ -108,7 +132,8 @@ A sync:
    followed**, body capped at 4 MiB), `assertSafeGitCloneUrl` plus the
    hardened git environment for `git`;
 2. validates every entry with zod (ids kebab-case, links https, env keys
-   shell-safe, compose body ≤ 128 KiB, ≤ 500 templates per source);
+   shell-safe, ≤ 200 env keys, compose body ≤ 128 KiB, ≤ 1000 templates per
+   source);
 3. probes every image the templates reference with the same registry check
    `pnpm test:template-images` uses.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_TEMPLATE_COMPOSE_BYTES, parseTemplateIndex } from "./schema";
+import { MAX_TEMPLATE_COMPOSE_BYTES, MAX_TEMPLATES_PER_SOURCE, parseTemplateIndex } from "./schema";
 
 const valid = {
 	id: "uptime-kuma",
@@ -105,7 +105,10 @@ describe("parseTemplateIndex", () => {
 	});
 
 	it("caps how many templates one source may contribute", () => {
-		const many = Array.from({ length: 501 }, (_, index) => ({ ...valid, id: `t-${index}` }));
+		const many = Array.from({ length: MAX_TEMPLATES_PER_SOURCE + 1 }, (_, index) => ({
+			...valid,
+			id: `t-${index}`,
+		}));
 		expect(() => parseTemplateIndex(many)).toThrow(/JSON array of templates/);
 	});
 });

@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { and, asc, eq } from "drizzle-orm";
 import { simpleGit } from "simple-git";
@@ -12,11 +12,18 @@ import {
 	assertSafeOutboundUrl,
 	pinnedFetch,
 } from "../../utils/public-url";
+import { assertSafeComposeSpec, parseComposeFile } from "../compose/compose-file";
 import { getConfigDir } from "../deployment/paths";
 import { gitProtocolEnv } from "../deployment/sources";
 import { badRequest, notFound } from "../errors";
+import { BlueprintError, mapBlueprint } from "./blueprints";
 import { checkCatalogImages, extractImagesFromCompose } from "./images";
-import { parseTemplateIndex } from "./schema";
+import {
+	MAX_TEMPLATES_PER_SOURCE,
+	parseTemplateIndex,
+	remoteTemplateSchema,
+	TEMPLATE_ID_PATTERN,
+} from "./schema";
 import type { Template } from "./types";
 
 /**
@@ -130,12 +137,15 @@ async function fetchJsonIndex(url: string): Promise<unknown> {
 }
 
 /**
- * Shallow-clone a git source on the Nixploy host and read
- * `templates/index.json`. Only https/ssh transports are possible
- * (`gitProtocolEnv`), and the checkout is discarded after the read — the
- * cache file is the only thing that survives.
+ * Shallow-clone a git source on the Nixploy host and hand the checkout to
+ * `read`. Only https/ssh transports are possible (`gitProtocolEnv`), and the
+ * checkout is discarded afterwards — the cache file is the only thing that
+ * survives.
  */
-async function fetchGitIndex(row: TemplateSourceRow): Promise<unknown> {
+async function withGitCheckout<T>(
+	row: TemplateSourceRow,
+	read: (dir: string) => Promise<T>,
+): Promise<T> {
 	await assertSafeGitCloneUrl(row.url.replace(/^(https?:\/\/)[^/]*@/i, "$1"));
 	const branch = row.branch ? assertSafeGitRef(row.branch) : null;
 	const dir = getTemplateSourceRepoDir(row.templateSourceId);
@@ -149,6 +159,17 @@ async function fetchGitIndex(row: TemplateSourceRow): Promise<unknown> {
 		await git.addRemote("origin", row.url);
 		await git.fetch(["--depth", "1", "origin", ...(branch ? [branch] : ["HEAD"])]);
 		await git.reset(["--hard", "FETCH_HEAD"]);
+		return await read(dir);
+	} finally {
+		await bestEffort(`clean up template source checkout ${row.templateSourceId}`, () =>
+			rm(dir, { recursive: true, force: true }),
+		);
+	}
+}
+
+/** A `git` source: `templates/index.json` in the checkout, same shape as `http-json`. */
+async function fetchGitIndex(row: TemplateSourceRow): Promise<unknown> {
+	return withGitCheckout(row, async (dir) => {
 		const file = path.join(dir, GIT_INDEX_PATH);
 		let raw: string;
 		try {
@@ -164,11 +185,119 @@ async function fetchGitIndex(row: TemplateSourceRow): Promise<unknown> {
 		} catch {
 			throw badRequest(`${GIT_INDEX_PATH} is not valid JSON`);
 		}
-	} finally {
-		await bestEffort(`clean up template source checkout ${row.templateSourceId}`, () =>
-			rm(dir, { recursive: true, force: true }),
-		);
-	}
+	});
+}
+
+const BLUEPRINTS_DIR = "blueprints";
+/** Per-file cap for a blueprint's three files; a compose body is capped again by the schema. */
+const MAX_BLUEPRINT_FILE_BYTES = 512 * 1024;
+
+/** Raw-file URL of a blueprint asset for GitHub/GitLab-hosted repositories, else "". */
+const blueprintAssetUrl = (
+	repoUrl: string,
+	branch: string,
+	id: string,
+): ((file: string) => string) => {
+	const match = /^https:\/\/(github\.com|gitlab\.com)\/([^/]+)\/([^/.]+)(?:\.git)?\/?$/i.exec(
+		repoUrl,
+	);
+	if (!match) return () => "";
+	const [, host, owner, repo] = match;
+	return (file) =>
+		host?.toLowerCase() === "github.com"
+			? `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${BLUEPRINTS_DIR}/${id}/${file}`
+			: `https://gitlab.com/${owner}/${repo}/-/raw/${branch}/${BLUEPRINTS_DIR}/${id}/${file}`;
+};
+
+/**
+ * A `blueprints` source: a repository laid out as
+ * `blueprints/<id>/{meta.json,template.toml,docker-compose.yml}` (the
+ * Dokploy templates catalog). Each folder is translated by `mapBlueprint`
+ * and validated like any remote entry; one bad folder is a rejection line,
+ * not a failed sync.
+ */
+async function fetchBlueprints(
+	row: TemplateSourceRow,
+): Promise<{ templates: Template[]; rejected: string[] }> {
+	return withGitCheckout(row, async (dir) => {
+		const root = path.join(dir, BLUEPRINTS_DIR);
+		let entries: string[];
+		try {
+			entries = (await readdir(root, { withFileTypes: true }))
+				.filter((entry) => entry.isDirectory())
+				.map((entry) => entry.name)
+				.sort();
+		} catch {
+			throw badRequest(`The repository has no ${BLUEPRINTS_DIR}/ directory`);
+		}
+		if (entries.length > MAX_TEMPLATES_PER_SOURCE) {
+			throw badRequest(
+				`The repository has ${entries.length} blueprints; at most ${MAX_TEMPLATES_PER_SOURCE} per source`,
+			);
+		}
+		const assetUrlFor = (id: string) => blueprintAssetUrl(row.url, row.branch || "main", id);
+		const templates: Template[] = [];
+		const rejected: string[] = [];
+		const readCapped = async (file: string): Promise<string> => {
+			const raw = await readFile(file, "utf8");
+			if (raw.length > MAX_BLUEPRINT_FILE_BYTES) {
+				throw new BlueprintError(
+					`${path.basename(file)} is larger than ${MAX_BLUEPRINT_FILE_BYTES} bytes`,
+				);
+			}
+			return raw;
+		};
+		for (const id of entries) {
+			if (!TEMPLATE_ID_PATTERN.test(id)) {
+				rejected.push(`${id}: folder name is not a valid template id`);
+				continue;
+			}
+			const folder = path.join(root, id);
+			try {
+				const [metaRaw, toml, compose] = await Promise.all([
+					readCapped(path.join(folder, "meta.json")),
+					readCapped(path.join(folder, "template.toml")),
+					readCapped(path.join(folder, "docker-compose.yml")),
+				]);
+				let meta: unknown;
+				try {
+					meta = JSON.parse(metaRaw);
+				} catch {
+					throw new BlueprintError("meta.json is not valid JSON");
+				}
+				const mapped = mapBlueprint({ id, meta, toml, compose, assetUrl: assetUrlFor(id) });
+				const parsed = remoteTemplateSchema.safeParse(mapped.template);
+				if (!parsed.success) {
+					const issue = parsed.error.issues[0];
+					rejected.push(`${id}: ${issue ? `${issue.path.join(".")} ${issue.message}` : "invalid"}`);
+					continue;
+				}
+				// The same checks a deploy runs — a template the gallery offers must
+				// deploy, and a host bind mount or a privileged flag would only fail
+				// later, in front of the operator.
+				try {
+					assertSafeComposeSpec(parseComposeFile(parsed.data.compose));
+				} catch (error) {
+					rejected.push(
+						`${id}: compose safety — ${error instanceof Error ? error.message : String(error)}`,
+					);
+					continue;
+				}
+				templates.push(parsed.data);
+			} catch (error) {
+				const message =
+					error instanceof BlueprintError
+						? error.message
+						: (error as NodeJS.ErrnoException)?.code === "ENOENT"
+							? "missing meta.json, template.toml or docker-compose.yml"
+							: error instanceof Error
+								? error.message
+								: String(error);
+				rejected.push(`${id}: ${message}`);
+			}
+		}
+		return { templates, rejected };
+	});
 }
 
 // ── sync ────────────────────────────────────────────────────────────────────
@@ -203,8 +332,12 @@ export async function syncTemplateSource(
 ): Promise<SyncTemplateSourceResult> {
 	const syncedAt = new Date();
 	try {
-		const document = row.kind === "git" ? await fetchGitIndex(row) : await fetchJsonIndex(row.url);
-		const { templates, rejected } = parseTemplateIndex(document);
+		const { templates, rejected } =
+			row.kind === "blueprints"
+				? await fetchBlueprints(row)
+				: parseTemplateIndex(
+						row.kind === "git" ? await fetchGitIndex(row) : await fetchJsonIndex(row.url),
+					);
 
 		let imageWarnings: string[] = [];
 		if (options.probeImages !== false && templates.length > 0) {
@@ -337,10 +470,10 @@ export async function findTemplateSource(
  * change must not stay trusted forever.
  */
 export async function assertTemplateSourceUrl(
-	kind: "git" | "http-json",
+	kind: "git" | "http-json" | "blueprints",
 	url: string,
 ): Promise<void> {
-	if (kind === "git") {
+	if (kind === "git" || kind === "blueprints") {
 		await assertSafeGitCloneUrl(url.replace(/^(https?:\/\/)[^/]*@/i, "$1"));
 		return;
 	}

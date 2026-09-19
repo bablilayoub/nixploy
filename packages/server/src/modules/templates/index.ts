@@ -19,6 +19,7 @@ import { queueDeployment } from "../deployment";
 import { badRequest, notFound } from "../errors";
 import { assertWithinQuota, findProjectById } from "../projects";
 import { findTemplateById, listTemplateSummaries } from "./catalog";
+import { resolveTemplateEnv } from "./placeholders";
 import { summarizeTemplateServices } from "./services";
 import { findSourcedTemplate, listSourcedTemplates } from "./sources";
 import type { Template, TemplateSummary } from "./types";
@@ -99,12 +100,6 @@ export interface DeployTemplateResult {
 	deploymentId: string;
 }
 
-/** `"{{generateSecret}}"` placeholders are replaced with random secrets. */
-function resolveDefault(value: string): string {
-	if (!value.includes("{{generateSecret}}")) return value;
-	return value.replaceAll("{{generateSecret}}", () => randomBytes(24).toString("hex"));
-}
-
 /**
  * Instantiate a template: create a raw compose service whose compose file
  * keeps the template's `${VAR}` placeholders and whose `.env` carries the
@@ -166,9 +161,26 @@ export async function deployTemplate(
 		}
 	}
 
+	// Defaults may carry placeholders (`{{generateSecret}}`, the named
+	// generators, `{{domain}}`, `{{env:KEY}}` — placeholders.ts); a value the
+	// caller provided is taken verbatim. The domain is the one attached to the
+	// suggested service, else the first one, so a `BASE_URL={{domain}}`
+	// default is right on the first deploy.
+	const attachedDomain =
+		input.domains?.find((domain) => domain.serviceName === template.suggestedDomain.serviceName)
+			?.host ??
+		input.domains?.[0]?.host ??
+		null;
+	const resolved = resolveTemplateEnv(
+		template.env.map((entry) => ({
+			key: entry.key,
+			value: input.envValues?.[entry.key] ?? entry.default,
+		})),
+		{ domain: attachedDomain },
+	);
 	const env = template.env
 		.map((entry) => {
-			const raw = input.envValues?.[entry.key] ?? resolveDefault(entry.default);
+			const raw = resolved[entry.key] ?? "";
 			// The value lands in a dotenv file — keep it single-line.
 			return `${entry.key}=${raw.replace(/[\r\n]+/g, " ")}`;
 		})

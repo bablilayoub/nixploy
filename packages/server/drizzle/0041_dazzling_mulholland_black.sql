@@ -1,0 +1,1 @@
+ALTER TYPE "public"."template_source_kind" ADD VALUE 'blueprints';

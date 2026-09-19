@@ -14,7 +14,11 @@ import { createdAt, idColumn } from "./utils";
  * lands in files this change owns; move it over when `enums.ts` is next
  * touched.
  */
-export const templateSourceKind = pgEnum("template_source_kind", ["git", "http-json"]);
+export const templateSourceKind = pgEnum("template_source_kind", [
+	"git",
+	"http-json",
+	"blueprints",
+]);
 
 /**
  * An organization's own template catalog (product audit, Platform row

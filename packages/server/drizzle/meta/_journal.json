@@ -288,6 +288,13 @@
       "when": 1789751757876,
       "tag": "0040_mature_invaders",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1789851361450,
+      "tag": "0041_dazzling_mulholland_black",
+      "breakpoints": true
     }
   ]
 }

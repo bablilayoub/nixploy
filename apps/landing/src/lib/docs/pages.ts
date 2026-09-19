@@ -586,6 +586,7 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 				items: [
 					"http-json — one JSON document: a bare array of templates, or { templates: [ … ] }",
 					"git — a repository whose templates/index.json has the same shape, cloned shallow and discarded",
+					"blueprints — a repository laid out as blueprints/<id>/{meta.json, template.toml, docker-compose.yml}, the Dokploy templates catalog format; each blueprint is translated (helpers become deploy-time placeholders, file mounts become inline configs, env_file becomes environment entries) and run through the compose safety checks, so 417 of the 532 public entries deploy as-is and the rest are listed with their reason",
 					"Nothing is fetched while browsing: Sync now does the work and caches the result on disk with mode 0600",
 					"A bad entry is dropped with a reason rather than taking the whole catalog offline; an image tag that cannot be confirmed anonymously is a warning, not a rejection",
 					"Remote ids are namespaced by their source, so a source can never shadow a built-in template, and hostPrivileged is never accepted from a remote catalog",

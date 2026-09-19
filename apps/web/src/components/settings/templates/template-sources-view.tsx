@@ -54,11 +54,12 @@ import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
 type SourceRow = inferRouterOutputs<AppRouter>["template"]["sourcesList"][number];
-type SourceKind = "git" | "http-json";
+type SourceKind = "git" | "http-json" | "blueprints";
 
 const KIND_LABEL: Record<SourceKind, string> = {
 	"http-json": "JSON index",
 	git: "Git repository",
+	blueprints: "Blueprints repository",
 };
 
 /**
@@ -174,6 +175,7 @@ export function TemplateSourcesView() {
 										<SelectContent>
 											<SelectItem value="http-json">JSON index</SelectItem>
 											<SelectItem value="git">Git repository</SelectItem>
+											<SelectItem value="blueprints">Blueprints repository</SelectItem>
 										</SelectContent>
 									</Select>
 								</div>
@@ -184,7 +186,9 @@ export function TemplateSourcesView() {
 										placeholder={
 											kind === "git"
 												? "https://github.com/acme/templates.git"
-												: "https://templates.example.com/index.json"
+												: kind === "blueprints"
+													? "https://github.com/Dokploy/templates.git"
+													: "https://templates.example.com/index.json"
 										}
 										value={url}
 										onChange={(event) => setUrl(event.target.value)}
@@ -192,10 +196,12 @@ export function TemplateSourcesView() {
 									<p className="text-xs text-muted-foreground">
 										{kind === "git"
 											? "The repository must carry templates/index.json."
-											: "A JSON array of templates, or an object with a templates array."}
+											: kind === "blueprints"
+												? "A repository laid out as blueprints/<id>/{meta.json, template.toml, docker-compose.yml} — the Dokploy templates catalog format. File mounts become inline configs and every secret is generated at deploy."
+												: "A JSON array of templates, or an object with a templates array."}
 									</p>
 								</div>
-								{kind === "git" ? (
+								{kind === "git" || kind === "blueprints" ? (
 									<div className="grid gap-2">
 										<Label htmlFor="source-branch">Branch (optional)</Label>
 										<Input
@@ -216,7 +222,10 @@ export function TemplateSourcesView() {
 											name: name.trim(),
 											url: url.trim(),
 											kind,
-											branch: kind === "git" && branch.trim() ? branch.trim() : null,
+											branch:
+												(kind === "git" || kind === "blueprints") && branch.trim()
+													? branch.trim()
+													: null,
 										})
 									}
 								>

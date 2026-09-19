@@ -53,7 +53,7 @@ export const remoteTemplateSchema = z.object({
 		})
 		.default({}),
 	compose: z.string().min(1).max(MAX_TEMPLATE_COMPOSE_BYTES),
-	env: z.array(envVarSchema).max(64).default([]),
+	env: z.array(envVarSchema).max(200).default([]),
 	suggestedDomain: z.object({
 		serviceName: z
 			.string()
@@ -68,7 +68,7 @@ export const remoteTemplateSchema = z.object({
 });
 
 /** How many templates one source may contribute. */
-export const MAX_TEMPLATES_PER_SOURCE = 500;
+export const MAX_TEMPLATES_PER_SOURCE = 1000;
 
 /**
  * A source document: either a bare array or `{ templates: [...] }`, so an
