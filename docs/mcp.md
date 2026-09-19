@@ -106,7 +106,7 @@ returned by `initialize` and none is needed on later calls.
 
 ## 3. Tool reference
 
-36 tools. All inputs are validated with zod; outputs are compact JSON. Every
+37 tools. All inputs are validated with zod; outputs are compact JSON. Every
 call goes through `appRouter.createCaller`, so the capability listed below is
 enforced by the router, not by the tool.
 
@@ -186,6 +186,7 @@ and the tools already answer "what is there" with pagination and filters.
 | `get_service_metrics` | CPU/memory per replica, by `appName` — local **and** remote nodes | `monitoring.replicaStats` (+ `fleetOverview` fallback) |
 | `get_platform_health` | Database, Docker, migrations, queue depth, Traefik, version | `/api/ready` internals |
 | `list_templates` | One-click template catalog | `template.all` |
+| `list_template_sources` | The organization's remote catalogs with their last sync report | `template.sourcesList` |
 
 ### Guarded writes
 

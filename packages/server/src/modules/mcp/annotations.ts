@@ -63,6 +63,7 @@ export const MCP_TOOL_ANNOTATIONS: Record<string, McpToolAnnotations> = {
 	list_domains: read("List domains"),
 	get_service_metrics: read("Read service metrics"),
 	list_templates: read("List templates"),
+	list_template_sources: read("List template sources"),
 	list_databases: read("List databases"),
 	get_database: read("Read a database"),
 	get_env: read("Read environment variables"),

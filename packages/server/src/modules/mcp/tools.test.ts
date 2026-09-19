@@ -35,6 +35,7 @@ const EXPECTED_TOOLS = [
 	"list_domains",
 	"get_service_metrics",
 	"list_templates",
+	"list_template_sources",
 	"list_databases",
 	"get_database",
 	"get_env",

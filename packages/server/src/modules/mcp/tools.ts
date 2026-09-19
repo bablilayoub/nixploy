@@ -500,6 +500,13 @@ export const mcpTools: McpToolDefinition[] = [
 		inputSchema: z.object({}),
 		handler: (caller) => caller.template.all(),
 	},
+	{
+		name: "list_template_sources",
+		description:
+			"List the organization's remote template catalogs (git repositories or https JSON indexes) with their last sync report — which templates each one contributed and any entries it rejected. Read-only.",
+		inputSchema: z.object({}),
+		handler: (caller) => caller.template.sourcesList(),
+	},
 
 	// ─────────────────────────────────────────────────────── read: databases
 	{
