@@ -148,6 +148,7 @@ nixploy app env get|set|import|export app_abc
 ```bash
 nixploy compose list --project-id proj_123
 nixploy compose create --project-id proj_123 --name stack [--type stack] [--source git]
+nixploy compose create-from-url --project-id proj_123 --name stack --url https://raw.githubusercontent.com/acme/infra/main/docker-compose.yml
 nixploy compose file get cmp_abc -o docker-compose.yml
 nixploy compose file set cmp_abc -f docker-compose.yml     # '-' reads stdin
 nixploy compose deploy cmp_abc
@@ -155,6 +156,7 @@ nixploy compose logs cmp_abc -f
 nixploy compose services cmp_abc          # service keys in the file
 nixploy compose containers cmp_abc        # running containers
 nixploy compose start|stop cmp_abc
+nixploy compose rollback cmp_abc --deployment-id dep_prev --yes --wait   # the file that deployment captured
 nixploy compose delete cmp_abc --yes
 nixploy compose env get|set|import|export cmp_abc
 ```
@@ -288,6 +290,7 @@ nixploy schedule list
 nixploy schedule create --name nightly --cron '0 2 * * *' --type application \
   --application-id app_abc --app-name api-abc123 --command 'php artisan queue:prune'
 nixploy schedule run sch_abc
+nixploy schedule run-once --application-id app_abc --command 'php artisan migrate'   # no schedule, one container
 nixploy schedule enable|disable sch_abc
 nixploy schedule delete sch_abc --yes
 ```
@@ -391,6 +394,11 @@ nixploy template list
 nixploy template get plausible
 nixploy template deploy plausible --project-id proj_123 --env production \
   --var BASE_URL=https://stats.example.com --domain stats.example.com:plausible:8000
+nixploy template sources                                   # remote catalogs of the organization
+nixploy template source-add --name team --url https://github.com/acme/templates --kind git
+nixploy template source-sync tsrc_abc
+nixploy template source-update tsrc_abc --enabled false
+nixploy template source-remove tsrc_abc --yes
 
 nixploy tag list
 nixploy tag create --name critical --color '#ef4444'

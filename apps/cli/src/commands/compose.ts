@@ -44,6 +44,40 @@ export function augmentComposeCommand(compose: Command): Command {
 		},
 	);
 
+	addOutputOptions(
+		compose
+			.command("create-from-url")
+			.description("Create a compose service from a compose file at an https URL")
+			.requiredOption("--project-id <id>", "Project ID")
+			.requiredOption("--name <name>", "Compose service name")
+			.requiredOption("--url <url>", "https URL of the compose file (raw GitHub/GitLab file)")
+			.option("--env <name>", "Environment name (defaults to the first environment)")
+			.option("--description <text>", "Description")
+			.option("--type <type>", "docker-compose | stack", "docker-compose")
+			.option("--server-id <id>", "Pin to a managed server"),
+	).action(
+		async (options: {
+			projectId: string;
+			name: string;
+			url: string;
+			env?: string;
+			description?: string;
+			type: string;
+			serverId?: string;
+		}) => {
+			const environmentId = await resolveEnvironmentId(options.projectId, options.env);
+			const created = await apiPost<{ composeId: string }>("compose.createFromUrl", {
+				name: options.name,
+				description: options.description ?? null,
+				environmentId,
+				url: options.url,
+				composeType: options.type,
+				...(options.serverId ? { serverId: options.serverId } : {}),
+			});
+			printResult(created, `Compose service created from URL (${created.composeId}).`);
+		},
+	);
+
 	compose
 		.command("logs")
 		.description("Print (and optionally follow) the deploy log of a compose service")
