@@ -9,6 +9,97 @@ pin. Operator-facing detail — what to check before upgrading, what will look
 different afterwards — lives in [docs/upgrade-notes.md](docs/upgrade-notes.md);
 this file is the summary.
 
+## [0.5.0] — 2026-09-20
+
+The roadmap's **v0.5 "the door"** and most of **v0.6 "live in it"** in one tag,
+plus the trust track: a way *in* from another panel (over its API or from a
+dead panel's database dump), a way to keep a hostname answering while services
+move one at a time, and the things that used to be guesses — why a host
+answers 502, what a service printed before it died, whether an update is safe
+to press — as deterministic answers. Six migrations (`0040`…`0045`), all
+additive; nothing needs an operator action before upgrading
+([docs/upgrade-notes.md](docs/upgrade-notes.md)).
+
+### Added
+
+- **Import from another panel.** `nixploy import inspect | plan | apply` reads
+  one project environment from the source panel over its REST API and
+  translates it to a version-2 `nixploy.yaml` plus the env values, then applies
+  both here without deploying anything; the notes say what could not carry
+  over. When the source panel is dead, `--dump-file` takes a `pg_dump` of its
+  database instead: it is restored into a throwaway Postgres on no network,
+  read, and the container removed.
+- **Manifest v2 and a secrets bundle.** `nixploy.yaml` now covers the whole
+  service surface (hooks, Swarm overrides, mounts, ports, redirects, basic
+  auth, typed domain middlewares, preview settings, registries and servers by
+  name); a passphrase-sealed bundle carries the env values a manifest never
+  holds. Version-1 files are upgraded on read.
+- **External upstreams.** A domain can front an origin outside the Swarm — the
+  host the old panel still runs on, a SaaS endpoint — with Let's Encrypt,
+  middlewares and uptime probes as for any service, so DNS moves to Nixploy
+  once and workloads follow one at a time. The target is vetted against the
+  egress policy on save and hourly.
+- **Runtime log history.** The worker keeps what services print (`docker logs`
+  every 30 s into hour files, gzipped, 7 days / 256 MiB per service by default)
+  and it is searchable — terms, phrases, excludes, `level:`, `container:`,
+  regex — on every service page, on the Monitoring page across services, with
+  `nixploy logs search` and the `get_runtime_logs` MCP tool. The Copilot reads
+  it too.
+- **Ephemeral environments.** Previews from any branch, tag or sha, or from a
+  prebuilt image, without a pull request; `preview redeploy`; `--wait` on
+  create returning URL, health and log tail; a commit status on the provider
+  for every preview build; and a **database per preview** — a logical database
+  on a chosen service of the environment, handed to the preview as
+  `DATABASE_URL`, seeded once by an optional command, dropped with it.
+- **A route diagnostician.** The stethoscope on a domain row (`nixploy domain
+  diagnose`, `get_domain_diagnosis`) walks the request path in order — DNS,
+  the Traefik route file, a second file claiming the host, the upstream task,
+  the shared-network attachment, the container port, Traefik's own answer,
+  the certificate — and names the fix at each step.
+- **Update preflight.** The Update dialog checks free disk, whether the
+  registry resolves the target, running deployments, the age of the last
+  instance backup, platform readiness, a downgrade, and the target's release
+  notes before the button is enabled; the low-disk block is enforced by the
+  updater itself.
+- **Verified installs and an upgrade job.** `install.sh` / `update.sh` verify
+  the image's cosign signature against this repository's workflow identity and
+  pin the pull to the signed digest; CI installs the latest release on a
+  clean runner and upgrades it to every commit before the commit stays green.
+- **Templates.** The Dokploy templates catalogue as a template-source kind
+  (417 of its 532 entries deploy as-is, the rest listed with the reason);
+  export a running compose stack as a template; deploy-time placeholders
+  (`{{generatePassword:…}}`, `{{domain}}`, `{{env:KEY}}`, JWTs); an
+  **OpenHole** template with setup steps; setup steps as a template field.
+- **Passkeys.** Sign in with a passkey (WebAuthn) where a real dashboard domain
+  is configured; a passkey does not bypass the two-factor or required-SSO
+  rules.
+- **Panel footprint budget.** The e2e job measures the panel's resident memory
+  after a full golden path and fails over 768 MiB; measured 419–434 MiB.
+- **Surface parity.** New CLI groups and verbs (`upstream`, `logs`, `preview
+  create|redeploy|list-compose`, `domain diagnose`, `updates preflight`,
+  `compose rollback|create-from-url|export-template`, `schedule run-once`,
+  `template source-*`, `import --dump-file`) and ten new MCP tools (42 in
+  all), each with hand-declared annotations. API rows say `secretsRedacted:
+  true` when a viewer got masked values.
+
+### Changed
+
+- `update.sh` waits for Swarm to finish each roll before probing readiness;
+  previously it could report success while the old task still served during
+  its drain window.
+- The Copilot's failure explanation and service chat carry the runtime log
+  tail and the event timeline, redacted like the build log.
+- The landing site was rebuilt around a simple home page, with a page per
+  template and sourced comparison pages.
+
+### Fixed
+
+- Thirteen code-scanning findings closed; `adm-zip` moved past
+  GHSA-7q85-xj36-vmfc.
+- A module that imported the GitHub client statically on the boot path crashed
+  both roles at start in the image (never on `main` for more than a run); a
+  test now walks the static import graph from both entries.
+
 ## [0.4.0] — 2026-09-18
 
 Two roadmap releases in one tag: **v0.3 "finish the loop"** and **v0.4 "free

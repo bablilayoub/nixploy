@@ -10,6 +10,81 @@ Upgrade mechanics (rollback, pre-update dump, downgrade guard) are in
 
 ---
 
+## v0.5.0 (the v0.5 + most of the v0.6 roadmap releases)
+
+Six migrations (`0040`…`0045`), all additive: the `passkey` table, the
+`blueprints` template-source kind, `external_upstream` + `domain.external_upstream_id`,
+`preview_deployment.kind` / `.image` / `.preview_database_logical_id`, and the
+per-preview database columns on `application` and `compose`. Nothing needs an
+operator action before upgrading; everything below is what will be different
+afterwards.
+
+**Known regressions:** none known at tagging time.
+
+**The worker now harvests runtime logs.** Every 30 s it runs `docker logs
+--timestamps --since <cursor>` for every running container and writes hour
+files under `<config>/runtime-logs/<appName>/`, gzipped when the hour closes.
+Bounded: 2 000 lines per container per pass (a marker line says when more was
+dropped), `NIXPLOY_RUNTIME_LOG_RETENTION_DAYS` (default `7`) and
+`NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE` (default `256`), pruned by the hourly
+maintenance pass. Budget the config volume for it, or set `NIXPLOY_RUNTIME_LOGS=0`
+to turn the harvester off (what exists stays readable). On a split install this
+runs in `nixploy-worker`, never in the panel.
+
+**Two new throwaway containers.** The route diagnostician starts a
+`busybox:stable` on the shared overlay for its port probe; the offline importer
+starts a `postgres:17-alpine` on no network to read a dump. Both are pulled on
+first use (an air-gapped host needs them in its registry —
+`NIXPLOY_IMPORT_POSTGRES_IMAGE` overrides the second), labelled, and removed
+afterwards; leftovers are swept hourly.
+
+**The installers verify the image signature.** `install.sh` and `update.sh` run
+`cosign verify` against this repository's release / docker workflow identity
+before pulling and pin the pull to the signed digest. A host without `cosign`
+gets a pinned, checksummed download into `<config>/bin`; `NIXPLOY_SKIP_VERIFY=1`
+opts out (air-gapped installs, a private mirror).
+
+**`update.sh` waits for the roll to converge.** It used to return as soon as
+`docker service update --detach` did, while the old task kept serving through
+its 90 s drain and the health probe hit whichever task answered. It now polls
+`UpdateStatus.State` and only then probes readiness, so a failed roll is
+reported as one.
+
+**External upstreams are re-checked hourly.** An upstream whose target stops
+passing the egress policy (a name re-pointed at the overlay after it was saved)
+has its route withheld — the row shows *Route withheld* — until the target
+passes again or is edited. A name that merely stops resolving is left alone.
+
+**`nixploy.yaml` is version 2.** Version-1 files are upgraded on read (a v1
+service gets `domains: []`); the array rule is "an array is the whole desired
+set — `[]` deletes, omitted leaves alone", and env values never enter the file
+(`export-secrets` / `apply-secrets` carry them in a passphrase-sealed bundle).
+
+**Previews have a kind.** Existing rows are `pull_request`; `branch` and
+`image` previews are created by hand and take no part in the PR comment, fork
+gate or webhook teardown. Every preview build now posts a `nixploy/preview`
+commit status through the connected provider; if you would rather it did not,
+there is no switch yet — say so.
+
+**A preview can get its own database.** Off until a parent picks a database
+service under Preview settings; then each preview creates a logical database
+on it (visible on that service's page like one created by hand) and drops it
+on delete. A failed drop leaves the row for a manual delete.
+
+**The in-app updater refuses to roll with less than 1 GiB free** on the config
+filesystem unless forced; the same check shows in the Update dialog's
+preflight with the rest.
+
+**API responses say when values were masked.** Rows a viewer without
+`secrets.read` receives carry `secretsRedacted: true` next to the `null`ed
+fields, so a script can tell "no value" from "not shown".
+
+**New knobs, all optional:** `NIXPLOY_RUNTIME_LOGS`,
+`NIXPLOY_RUNTIME_LOG_RETENTION_DAYS`, `NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE`,
+`NIXPLOY_IMPORT_POSTGRES_IMAGE`, `NIXPLOY_TRAEFIK_INTERNAL_HOST` (where the
+panel reaches Traefik for the diagnostician's own request; defaults to
+`nixploy-traefik`, then `127.0.0.1`), `NIXPLOY_PANEL_RSS_BUDGET_MIB` (CI only).
+
 ## v0.4.0 (the v0.3 + v0.4 roadmap releases)
 
 Eleven migrations (`0029`…`0039`), all additive. Nothing needs an operator
