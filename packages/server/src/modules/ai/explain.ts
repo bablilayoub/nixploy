@@ -5,6 +5,7 @@ import { applications, compose, deployments, domains } from "../../db/schema";
 import { redactSensitiveText } from "../../utils/public-url";
 import { notFound, preconditionFailed } from "../errors";
 import { recentServiceEvents } from "../observability/service-events";
+import { readRuntimeLogs } from "../runtime-logs/store";
 import { completeChat } from "./client";
 import { writeCachedExplanation } from "./explanation-cache";
 import { validateComposeYaml } from "./generate-compose";
@@ -78,6 +79,39 @@ async function loadDeploymentForOrg(deploymentId: string, organizationId: string
 
 /** Recent timeline entries handed to the model as context. */
 const TIMELINE_EVENTS = 20;
+/** Runtime log lines (what the app printed) handed to the model as context. */
+const RUNTIME_LOG_LINES = 40;
+
+/**
+ * What the service printed, from the runtime log history the worker keeps
+ * (`modules/runtime-logs`): the last lines before `before` (a failed deploy's
+ * end) or right now (a chat). The build log says what the build did; this
+ * says what the application said, which for a service that converged and
+ * then crashed is the only evidence there is. Redacted like the log.
+ */
+async function renderRuntimeLogTail(
+	appName: string,
+	secrets: readonly string[],
+	options: { before?: Date | null } = {},
+): Promise<string> {
+	let page: Awaited<ReturnType<typeof readRuntimeLogs>>;
+	try {
+		page = await readRuntimeLogs({
+			appName,
+			limit: RUNTIME_LOG_LINES,
+			before: options.before ? options.before.getTime() : null,
+			budgetMs: 1_500,
+		});
+	} catch {
+		return "";
+	}
+	if (page.lines.length === 0) return "";
+	const lines = [...page.lines].reverse().map((line) => {
+		const container = line.container ? ` ${line.container}` : "";
+		return `${new Date(line.t).toISOString()}${container} [${line.level}] ${line.message}`;
+	});
+	return `\nWhat the service printed (runtime log, oldest first, last ${lines.length} lines):\n${redactSecrets(lines.join("\n"), [...secrets])}\n`;
+}
 
 /**
  * The service's recent history as a few plain lines, oldest first. Redacted
@@ -168,6 +202,10 @@ Never invent secrets.`;
 	// four minutes earlier, a config change an hour before, a rollback. Without
 	// it the model can only read the log and guess at everything else.
 	const serviceId = deployment.applicationId ?? deployment.composeId;
+	const runtimeAppName = deployment.application?.appName ?? deployment.compose?.appName ?? null;
+	const runtimeTail = runtimeAppName
+		? await renderRuntimeLogTail(runtimeAppName, secrets, { before: deployment.finishedAt })
+		: "";
 	const timeline = serviceId
 		? renderServiceTimeline(
 				await recentServiceEvents(serviceId, {
@@ -182,7 +220,7 @@ Never invent secrets.`;
 Build type: ${buildType}
 Deployment status: ${deployment.status}
 Error message: ${errorMessage ?? "(none)"}
-${timeline}
+${timeline}${runtimeTail}
 Log tail:
 \`\`\`
 ${safeLog}
@@ -308,6 +346,18 @@ export async function chatAboutService(
 			limit: 5,
 		});
 
+		// Evidence, not only configuration: the timeline says what happened to
+		// the service, the runtime log what it said — the two things "why is it
+		// 502" cannot be answered without.
+		const appSecrets = collectEnvSecrets(
+			app.env,
+			app.environment?.env,
+			app.environment?.project?.env,
+		);
+		const [appTimeline, appRuntime] = await Promise.all([
+			recentServiceEvents(target.applicationId, { limit: TIMELINE_EVENTS }).catch(() => []),
+			renderRuntimeLogTail(app.appName, appSecrets),
+		]);
 		const context = `Application "${app.name}" (${app.appName})
 Status: ${app.status}
 Source: ${app.sourceType}
@@ -315,7 +365,8 @@ Build: ${app.buildType}
 Replicas: ${app.replicas}
 Domains: ${appDomains.map((d) => d.host).join(", ") || "(none)"}
 Recent deploys: ${recent.map((d) => `${d.status}@${d.createdAt.toISOString()}`).join("; ") || "(none)"}
-CPU limit: ${app.cpuLimit ?? "unset"}, Memory limit: ${app.memoryLimit ?? "unset"}`;
+CPU limit: ${app.cpuLimit ?? "unset"}, Memory limit: ${app.memoryLimit ?? "unset"}
+${renderServiceTimeline(appTimeline, appSecrets)}${appRuntime}`;
 
 		system = `You are Nixploy Deploy Copilot helping with an application.
 Respond in JSON only:
@@ -346,6 +397,10 @@ ${context}`;
 		});
 
 		const secrets = collectEnvSecrets(row.env, row.environment?.env, row.environment?.project?.env);
+		const [composeTimeline, composeRuntime] = await Promise.all([
+			recentServiceEvents(target.composeId, { limit: TIMELINE_EVENTS }).catch(() => []),
+			renderRuntimeLogTail(row.appName, secrets),
+		]);
 		const fileSnippet =
 			redactComposeYamlForLlm(row.composeFile ?? "", secrets) ||
 			"(empty — help the operator draft one)";
@@ -363,7 +418,8 @@ Recent deploys: ${recent.map((d) => `${d.status}@${d.createdAt.toISOString()}`).
 Current compose file:
 \`\`\`yaml
 ${fileSnippet}
-\`\`\``;
+\`\`\`
+${renderServiceTimeline(composeTimeline, secrets)}${composeRuntime}`;
 
 		system = `You are Nixploy Deploy Copilot helping with a Docker Compose / Swarm stack.
 Respond in JSON only:

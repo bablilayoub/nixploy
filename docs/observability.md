@@ -435,7 +435,11 @@ Bounded on purpose:
 **Reading it.** Every service page has Runtime → **History**; the Monitoring
 page has a **Logs** section across every service the caller can see; the CLI
 has `nixploy logs search`; MCP has `get_runtime_logs`; the API is
-`observability.runtimeLogs` (`service.runtime`, like the live stream). Pages
+`observability.runtimeLogs` (`service.runtime`, like the live stream). The
+Copilot reads it too: a failure explanation gets the last lines the service
+printed before the deploy ended, and a chat about a service gets its last
+lines now, next to the event timeline — redacted with the same secret list
+as the build log. Pages
 are newest-first and keyed by timestamp (`before` = the previous page's
 `nextCursor`). The query is a small grammar:
 
