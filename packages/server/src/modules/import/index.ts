@@ -14,16 +14,35 @@ import {
 import { type ApplySecretsResult, applySecretsPayload } from "../gitops/secrets";
 import { DATABASE_KINDS, type DatabaseServiceKind } from "../services/registry";
 import { SourcePanelClient } from "./client";
+import { DumpSourceReader } from "./dump";
+import { readDumpMeta } from "./dump-store";
 import {
 	type ImportNote,
 	type NormalizedEnvironment,
 	normalizeSourceEnvironment,
 } from "./normalize";
-import type { SourceApplication, SourceCompose, SourceDatabase } from "./source-schema";
+import type { SourceReader } from "./reader";
+import type {
+	SourceApplication,
+	SourceCompose,
+	SourceDatabase,
+	SourceProjectSummary,
+} from "./source-schema";
 
 export { SourcePanelClient } from "./client";
+export { DumpSourceReader, pruneImportContainers } from "./dump";
+export {
+	MAX_DUMP_BYTES,
+	pruneImportDumps,
+	readDumpMeta,
+	removeDump,
+	type StoredDump,
+	sniffDump,
+	storeDump,
+} from "./dump-store";
 export type { ImportNote, NormalizedEnvironment } from "./normalize";
 export { normalizeSourceEnvironment } from "./normalize";
+export type { SourceReader } from "./reader";
 
 /**
  * Import one environment from another panel over its API.
@@ -42,9 +61,27 @@ export type ImportSource = (typeof IMPORT_SOURCES)[number];
 
 export interface ImportSourceOptions {
 	source: ImportSource;
-	url: string;
-	apiKey: string;
+	/** Live path: the source panel's origin and a read-capable API key. */
+	url?: string;
+	apiKey?: string;
+	/** Offline path: an uploaded database dump of the source panel (`import.uploadDump`). */
+	dumpId?: string;
 }
+
+/** Open whichever reader the options name; the caller closes it. */
+const openReader = async (
+	options: ImportSourceOptions,
+	organizationId: string,
+): Promise<SourceReader> => {
+	if (options.dumpId) {
+		const meta = await readDumpMeta(organizationId, options.dumpId);
+		return DumpSourceReader.open(meta);
+	}
+	if (!options.url || !options.apiKey) {
+		throw badRequest("Give the source panel's url and apiKey, or a dumpId of an uploaded dump");
+	}
+	return SourcePanelClient.connect({ url: options.url, apiKey: options.apiKey });
+};
 
 export interface ImportRequest extends ImportSourceOptions {
 	sourceProjectId: string;
@@ -73,9 +110,17 @@ export interface SourceInventory {
 }
 
 /** What the key can see, counted — nothing that could hold a value. */
-export const inspectSource = async (options: ImportSourceOptions): Promise<SourceInventory> => {
-	const client = await SourcePanelClient.connect(options);
-	const rows = await client.listProjects();
+export const inspectSource = async (
+	options: ImportSourceOptions,
+	organizationId: string,
+): Promise<SourceInventory> => {
+	const client = await openReader(options, organizationId);
+	let rows: SourceProjectSummary[];
+	try {
+		rows = await client.listProjects();
+	} finally {
+		await client.close();
+	}
 	return {
 		host: client.host,
 		projects: rows.map((project) => ({
@@ -93,7 +138,7 @@ export const inspectSource = async (options: ImportSourceOptions): Promise<Sourc
 };
 
 interface FetchedEnvironment {
-	client: SourcePanelClient;
+	client: SourceReader;
 	normalizedInput: Omit<
 		Parameters<typeof normalizeSourceEnvironment>[0],
 		| "knownServers"
@@ -105,8 +150,22 @@ interface FetchedEnvironment {
 }
 
 /** Read one source environment in full: the summary, then every service by id. */
-const fetchSourceEnvironment = async (request: ImportRequest): Promise<FetchedEnvironment> => {
-	const client = await SourcePanelClient.connect(request);
+const fetchSourceEnvironment = async (
+	request: ImportRequest,
+	organizationId: string,
+): Promise<FetchedEnvironment> => {
+	const client = await openReader(request, organizationId);
+	try {
+		return await readSourceEnvironment(client, request);
+	} finally {
+		await client.close();
+	}
+};
+
+const readSourceEnvironment = async (
+	client: SourceReader,
+	request: ImportRequest,
+): Promise<FetchedEnvironment> => {
 	const projectRows = await client.listProjects();
 	const project = projectRows.find((row) => row.projectId === request.sourceProjectId);
 	if (!project) {
@@ -252,7 +311,7 @@ const normalizeRequest = async (
 	normalized: NormalizedEnvironment;
 	target: ImportTarget;
 }> => {
-	const fetched = await fetchSourceEnvironment(request);
+	const fetched = await fetchSourceEnvironment(request, organizationId);
 	const names = await knownNames(organizationId);
 	const targetProjectName = request.projectId
 		? (

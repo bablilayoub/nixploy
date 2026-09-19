@@ -1,6 +1,7 @@
 import { assertSafeOutboundUrl, pinnedFetch, type SafeTarget } from "../../utils/public-url";
 import { badRequest, unauthorized } from "../errors";
 import type { DatabaseServiceKind } from "../services/registry";
+import type { SourceReader } from "./reader";
 import {
 	type SourceApplication,
 	type SourceCompose,
@@ -31,7 +32,7 @@ export interface SourceClientOptions {
 	apiKey: string;
 }
 
-export class SourcePanelClient {
+export class SourcePanelClient implements SourceReader {
 	private constructor(
 		private readonly target: SafeTarget,
 		private readonly apiKey: string,
@@ -114,6 +115,9 @@ export class SourcePanelClient {
 			kind,
 		);
 	}
+
+	/** Nothing to release: every request was its own connection. */
+	async close(): Promise<void> {}
 }
 
 const parseOne = <T>(

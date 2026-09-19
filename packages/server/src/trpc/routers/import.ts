@@ -19,11 +19,21 @@ import { protectedProcedure, router } from "../init";
  * mutations so the key never rides a GET query string into a log.
  */
 
-const sourceInput = z.object({
-	source: z.enum(IMPORT_SOURCES),
-	url: z.string().min(1).max(2048),
-	apiKey: z.string().min(1).max(4096),
-});
+const sourceInput = z
+	.object({
+		source: z.enum(IMPORT_SOURCES),
+		/** Live path: the running source panel. */
+		url: z.string().min(1).max(2048).optional(),
+		apiKey: z.string().min(1).max(4096).optional(),
+		/** Offline path: a dump uploaded to `POST /api/import/dump`. */
+		dumpId: z
+			.string()
+			.regex(/^[a-f0-9]{24}$/)
+			.optional(),
+	})
+	.refine((value) => Boolean(value.dumpId) !== Boolean(value.url && value.apiKey), {
+		message: "Give url + apiKey (live panel) or dumpId (uploaded dump), not both",
+	});
 
 const importInput = sourceInput.extend({
 	sourceProjectId: z.string().min(1),
@@ -50,7 +60,7 @@ export const importRouter = router({
 			ctx.session.session.activeOrganizationId,
 		);
 		await assertCapability(ctx.session.user.id, organizationId, "gitops.manage");
-		return inspectSource(input);
+		return inspectSource(input, organizationId);
 	}),
 
 	/** Fetch one source environment, translate it and diff it against the target. Writes nothing. */

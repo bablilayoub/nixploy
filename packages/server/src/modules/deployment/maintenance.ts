@@ -6,6 +6,7 @@ import { db } from "../../db";
 import { auditLogs, incidents, previewDeployments } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
 import { getConfigDir } from "../application/paths";
+import { pruneImportContainers, pruneImportDumps } from "../import";
 import { pruneServiceEvents } from "../observability/service-events";
 import { deletePreviewDeployment } from "../preview";
 import { pruneRuntimeLogs } from "../runtime-logs/store";
@@ -351,6 +352,8 @@ export async function runMaintenancePass(): Promise<void> {
 		["warn about expiring certificates", () => warnAboutExpiringCertificates()],
 		["recheck external upstream targets", () => recheckUpstreamTargets()],
 		["prune runtime logs", () => pruneRuntimeLogs()],
+		["prune import dumps", () => pruneImportDumps()],
+		["prune import containers", () => pruneImportContainers()],
 		["prune audit log", () => pruneAuditLogs()],
 	];
 	for (const [label, step] of steps) {

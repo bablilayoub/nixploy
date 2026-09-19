@@ -1415,13 +1415,13 @@ const docs: Record<string, ProcedureDoc> = {
 	"import.inspect": {
 		summary: "List what a source panel's API key can see",
 		description:
-			"Connects to another panel over its REST API (the URL is checked against SSRF targets) and returns its projects, environments and service counts — nothing that could hold a value. The key is used for this call and forgotten.",
+			"Connects to another panel over its REST API (the URL is checked against SSRF targets) — or, with `dumpId`, reads a database dump uploaded to `POST /api/import/dump` through a throwaway Postgres on no network — and returns its projects, environments and service counts, nothing that could hold a value. The key is used for this call and forgotten.",
 		capability: ["gitops.manage"],
 	},
 	"import.plan": {
 		summary: "Translate one source environment and diff it against the target",
 		description:
-			"Fetches every service of the chosen source environment, translates it to a version-2 nixploy.yaml (keys only) plus notes for what does not carry over, and diffs it against the target project environment (every item is a create when the target does not exist yet). Writes nothing.",
+			"Fetches every service of the chosen source environment (live API, or an uploaded dump with `dumpId`), translates it to a version-2 nixploy.yaml (keys only) plus notes for what does not carry over, and diffs it against the target project environment (every item is a create when the target does not exist yet). Writes nothing.",
 		capability: ["gitops.manage"],
 	},
 	"import.runApply": {

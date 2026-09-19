@@ -507,6 +507,8 @@ export NIXPLOY_IMPORT_API_KEY='<source api key>'     # or --api-key-file <path>
 nixploy import inspect --source dokploy --url https://old-panel.example.com
 nixploy import plan    --source dokploy --url https://old-panel.example.com --source-project prj_123 [--source-env staging] [--project-id proj_456] [--env staging]
 nixploy import apply   --source dokploy --url https://old-panel.example.com --source-project prj_123 [--no-keep-app-names]
+nixploy import inspect --source dokploy --dump-file panel.sql.gz            # offline: a pg_dump of the source panel
+nixploy import plan    --source dokploy --dump-id <id> --source-project prj_123
 ```
 
 `plan` prints the translation notes and the diff and writes nothing; `apply`

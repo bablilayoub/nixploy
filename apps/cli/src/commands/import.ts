@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { Command } from "commander";
-import { apiPost } from "../client.js";
+import { apiPost, apiUpload } from "../client.js";
 import { CliError, EXIT_ERROR, usageError } from "../errors.js";
 import { addOutputOptions, outputMode, printJson, printMessage } from "../utils/output.js";
 
@@ -13,8 +13,10 @@ import { addOutputOptions, outputMode, printJson, printMessage } from "../utils/
 
 interface SourceOptions {
 	source: string;
-	url: string;
+	url?: string;
 	apiKeyFile?: string;
+	dumpFile?: string;
+	dumpId?: string;
 }
 
 interface ImportOptions extends SourceOptions {
@@ -67,8 +69,50 @@ async function readApiKey(options: { apiKeyFile?: string }): Promise<string> {
 function addSourceOptions(command: Command): Command {
 	return command
 		.requiredOption("--source <name>", "Source panel kind (dokploy)")
-		.requiredOption("--url <url>", "Origin of the source panel, e.g. https://panel.example.com")
-		.option("--api-key-file <path>", "File holding the source API key (or NIXPLOY_IMPORT_API_KEY)");
+		.option("--url <url>", "Origin of the running source panel, e.g. https://panel.example.com")
+		.option("--api-key-file <path>", "File holding the source API key (or NIXPLOY_IMPORT_API_KEY)")
+		.option(
+			"--dump-file <path>",
+			"Offline: a pg_dump of the source panel's database (plain SQL, gzipped or custom format) instead of --url",
+		)
+		.option("--dump-id <id>", "Offline: a dump already uploaded in the last 24 hours");
+}
+
+/**
+ * The source half of every import payload: the live panel (url + key) or an
+ * uploaded dump. `--dump-file` uploads first and reuses the id for the call;
+ * print it, since plan and apply read the source twice.
+ */
+async function resolveSourcePayload(
+	options: SourceOptions,
+): Promise<{ source: string; url?: string; apiKey?: string; dumpId?: string }> {
+	if (options.dumpFile || options.dumpId) {
+		if (options.url) throw usageError("Give --url or --dump-file/--dump-id, not both");
+		let dumpId = options.dumpId;
+		if (options.dumpFile) {
+			const { readFile } = await import("node:fs/promises");
+			let body: Buffer;
+			try {
+				body = await readFile(options.dumpFile);
+			} catch {
+				throw usageError(`Cannot read ${options.dumpFile}`);
+			}
+			const uploaded = await apiUpload<{ dumpId: string; bytes: number; expiresAt: string }>(
+				"api/import/dump",
+				body,
+				{ timeoutMs: 30 * 60_000 },
+			);
+			dumpId = uploaded.dumpId;
+			if (!outputMode().json) {
+				printMessage(
+					`Uploaded ${uploaded.bytes} bytes as dump ${uploaded.dumpId} (kept until ${uploaded.expiresAt}); reuse it with --dump-id`,
+				);
+			}
+		}
+		return { source: options.source, dumpId };
+	}
+	if (!options.url) throw usageError("Provide --url (running panel) or --dump-file (offline dump)");
+	return { source: options.source, url: options.url, apiKey: await readApiKey(options) };
 }
 
 function addImportOptions(command: Command): Command {
@@ -133,7 +177,7 @@ export function importCommand(): Command {
 				.description("List the projects and environments the source API key can see"),
 		),
 	).action(async (options: SourceOptions) => {
-		const apiKey = await readApiKey(options);
+		const sourcePayload = await resolveSourcePayload(options);
 		const result = await apiPost<{
 			host: string;
 			projects: Array<{
@@ -147,7 +191,7 @@ export function importCommand(): Command {
 					unsupported: number;
 				}>;
 			}>;
-		}>("import.inspect", { source: options.source, url: options.url, apiKey });
+		}>("import.inspect", sourcePayload);
 		if (outputMode().json) {
 			printJson(result);
 			return;
@@ -172,11 +216,9 @@ export function importCommand(): Command {
 				.description("Translate one source environment and show what an import would change"),
 		),
 	).action(async (options: ImportOptions) => {
-		const apiKey = await readApiKey(options);
+		const sourcePayload = await resolveSourcePayload(options);
 		const result = await apiPost<ImportPlanResponse>("import.plan", {
-			source: options.source,
-			url: options.url,
-			apiKey,
+			...sourcePayload,
 			sourceProjectId: options.sourceProject,
 			sourceEnvironmentName: options.sourceEnv,
 			projectId: options.projectId,
@@ -199,11 +241,9 @@ export function importCommand(): Command {
 				),
 		),
 	).action(async (options: ImportOptions) => {
-		const apiKey = await readApiKey(options);
+		const sourcePayload = await resolveSourcePayload(options);
 		const result = await apiPost<ImportPlanResponse>("import.runApply", {
-			source: options.source,
-			url: options.url,
-			apiKey,
+			...sourcePayload,
 			sourceProjectId: options.sourceProject,
 			sourceEnvironmentName: options.sourceEnv,
 			projectId: options.projectId,

@@ -237,7 +237,7 @@ High-level map of the OpenAPI surface (44 routers). Full input/output schemas li
 | `volumeBackup` | Named-volume backup schedules |
 | `destination` | S3-compatible backup storage |
 | `gitops` | Export / plan / apply / sync `nixploy.yaml`, seal and apply the secrets bundle |
-| `import` | Inspect, plan and import one environment from another panel over its API |
+| `import` | Inspect, plan and import one environment from another panel — over its API, or from an uploaded database dump (`POST /api/import/dump`) |
 | `github` / `gitlab` / `gitea` / `bitbucket` | Git providers |
 | `server` | Remote servers, Swarm setup, stats |
 | `docker` | Control center — containers, images, nodes, prune |

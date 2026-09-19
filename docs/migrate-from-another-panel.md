@@ -65,6 +65,38 @@ What the notes will tell you to do by hand, because it cannot be carried:
 source's; keep them (the default) when a same-host takeover is the plan,
 because the old volumes are named after them.
 
+## Import from a database dump (the source panel is dead)
+
+The same importer, offline: `pg_dump` the source panel's own Postgres —
+`docker exec <its postgres container> pg_dump -U <user> <db> | gzip >
+panel.sql.gz` on the old host, or any dump you still have — and hand it over
+instead of a URL and a key.
+
+```bash
+nixploy import inspect --source dokploy --dump-file panel.sql.gz
+nixploy import plan    --source dokploy --dump-id <id from inspect> --source-project prj_123
+nixploy import apply   --source dokploy --dump-id <id> --source-project prj_123
+```
+
+`--dump-file` uploads the dump (`POST /api/import/dump`, up to 512 MiB,
+plain SQL, gzipped or custom format, `gitops.manage`) and prints a `dumpId`
+that is valid for 24 hours; the maintenance pass removes it after that.
+Every read restores the dump into a **throwaway Postgres container on no
+network** (`postgres:17-alpine`, 1 GiB, removed afterwards — the same
+pattern as backup restore verification), reads the source's rows with
+`row_to_json`, and never touches the panel's own database. The source's rows
+carry the same column names its API returns, so the translation, the notes
+and the plan are exactly the live path's; the child tables (`domain`,
+`mount`, `port`, `redirect`, `security`) are found by name in the restored
+schema, so a table the dump does not have is a note, not a failure.
+
+**Env values from a dump.** Recent versions of the source encrypt env at
+rest, so a dump carries ciphertext unless you also have its key; what parses
+as plain `KEY=VALUE` lines is imported, anything else arrives as keys with a
+note asking for the values. Everything else in the notes (git providers,
+basic-auth hashes, database passwords, compose mount targets) is the same
+as over the API.
+
 ## Concept map
 
 Most panels use one of two vocabularies. Both land in the same place here.
