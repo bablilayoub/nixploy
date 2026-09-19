@@ -77,10 +77,11 @@ export const previewStatus = pgEnum("preview_status", [
 
 /**
  * What a preview was made from: a provider pull request (webhook-driven,
- * PR comment, fork gate, torn down on close) or a plain git ref someone
- * picked by hand — a branch, a tag, a sha — with none of that machinery.
+ * PR comment, fork gate, torn down on close), a plain git ref someone
+ * picked by hand — a branch, a tag, a sha — with none of that machinery, or
+ * a prebuilt image (no build at all; applications only).
  */
-export const previewKind = pgEnum("preview_kind", ["pull_request", "branch"]);
+export const previewKind = pgEnum("preview_kind", ["pull_request", "branch", "image"]);
 
 export const certificateType = pgEnum("certificate_type", ["letsencrypt", "custom", "none"]);
 

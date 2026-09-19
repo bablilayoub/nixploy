@@ -853,11 +853,17 @@ export const commandRegistry: RegistryEntry[] = [
 		verb: "create",
 		procedure: "previewDeployment.create",
 		kind: "mutation",
-		summary: "Create a preview from a branch, tag or sha (--ref) or a pull request (--pr)",
+		summary:
+			"Create a preview from a branch, tag or sha (--ref), a pull request (--pr) or a prebuilt image (--image)",
 		options: [
 			{ field: "applicationId", flag: "--application-id <id>", description: "Parent application" },
 			{ field: "composeId", flag: "--compose-id <id>", description: "Parent compose service" },
 			{ field: "ref", flag: "--ref <ref>", description: "Branch, tag or sha (branch preview)" },
+			{
+				field: "image",
+				flag: "--image <ref>",
+				description: "Prebuilt image (image preview; applications only)",
+			},
 			{
 				field: "pullRequestNumber",
 				flag: "--pr <n>",

@@ -184,11 +184,22 @@ type PreviewRow = typeof previewDeployments.$inferSelect;
  */
 export function buildPreviewDeployTarget(
 	application: ApplicationRow,
-	preview: Pick<PreviewRow, "appName" | "branch">,
+	preview: Pick<PreviewRow, "appName" | "branch"> & { image?: string | null },
 ): ApplicationRow {
 	const env = application.previewEnv
 		? mergeEnv(application.env, application.previewEnv)
 		: application.env;
+	// An image preview runs a prebuilt image: the parent's source, branch and
+	// build settings are irrelevant, the job pulls instead of building.
+	if (preview.image) {
+		return {
+			...application,
+			appName: preview.appName,
+			env,
+			sourceType: "docker",
+			dockerImage: preview.image,
+		};
+	}
 	const source = parsePreviewSourceRef(preview.branch);
 	if (!source) {
 		return { ...application, appName: preview.appName, env };
@@ -277,15 +288,17 @@ async function runApplicationJob(
 	);
 	for (const [, value] of parseEnv(mergedEnv)) ctx.logger.addSecret(value);
 	for (const [, value] of parseEnv(application.buildArgs)) ctx.logger.addSecret(value);
+	// `deployTarget`, not `application`: an image preview turns a git-source
+	// parent into a docker-source job for this deployment only.
 	const registryAuth =
-		application.sourceType === "docker" ? await resolveRegistryAuth(application) : null;
+		deployTarget.sourceType === "docker" ? await resolveRegistryAuth(deployTarget) : null;
 	if (registryAuth) ctx.logger.addSecret(registryAuth.password);
 
 	let imageTag: string;
 	await ctx.step("source");
-	if (application.sourceType === "docker") {
+	if (deployTarget.sourceType === "docker") {
 		ctx.logger.line("Using docker image source");
-		imageTag = await pullDockerImage(ctx, application);
+		imageTag = await pullDockerImage(ctx, deployTarget);
 		// No commit to record: pin the registry digest so the history says
 		// which `nginx:latest` this deployment actually ran.
 		const digest = await resolveImageDigest(ctx, imageTag);

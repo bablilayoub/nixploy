@@ -9,6 +9,7 @@ import {
 	GitBranch,
 	GitPullRequest,
 	Loader2,
+	Package,
 	Plus,
 	RefreshCw,
 	Trash2,
@@ -178,7 +179,8 @@ export function PreviewDeploymentsPanel({
 	const [deleteTarget, setDeleteTarget] = useState<PreviewDeployment | null>(null);
 	// A pull-request preview follows the PR (comment, fork gate, teardown on
 	// close); a branch preview is any ref by hand and only expires or is deleted.
-	const [sourceKind, setSourceKind] = useState<"pull_request" | "branch">("pull_request");
+	const [sourceKind, setSourceKind] = useState<"pull_request" | "branch" | "image">("pull_request");
+	const [image, setImage] = useState("");
 	const [ref, setRef] = useState("");
 
 	const {
@@ -201,6 +203,7 @@ export function PreviewDeploymentsPanel({
 				setPrUrl("");
 				setExpiresInDays("");
 				setRef("");
+				setImage("");
 			},
 		}),
 		{ successMessage: "Preview deployment queued", invalidate },
@@ -251,7 +254,9 @@ export function PreviewDeploymentsPanel({
 									<Label htmlFor="preview-source">Source</Label>
 									<Select
 										value={sourceKind}
-										onValueChange={(value) => setSourceKind(value as "pull_request" | "branch")}
+										onValueChange={(value) =>
+											setSourceKind(value as "pull_request" | "branch" | "image")
+										}
 									>
 										<SelectTrigger id="preview-source" className="w-full">
 											<SelectValue />
@@ -259,15 +264,31 @@ export function PreviewDeploymentsPanel({
 										<SelectContent>
 											<SelectItem value="pull_request">Pull request</SelectItem>
 											<SelectItem value="branch">Branch, tag or commit</SelectItem>
+											{"applicationId" in target ? (
+												<SelectItem value="image">Prebuilt image</SelectItem>
+											) : null}
 										</SelectContent>
 									</Select>
 									<p className="text-xs text-muted-foreground">
 										{sourceKind === "pull_request"
 											? "Follows the pull request: a comment with the URL, the fork gate, teardown when it closes."
-											: "Any git ref, no pull request needed. It expires on the TTL or when you delete it."}
+											: sourceKind === "image"
+												? "Runs a prebuilt image — no build at all. It expires on the TTL or when you delete it."
+												: "Any git ref, no pull request needed. It expires on the TTL or when you delete it."}
 									</p>
 								</div>
-								{sourceKind === "branch" ? (
+								{sourceKind === "image" ? (
+									<div className="flex flex-col gap-2">
+										<Label htmlFor="preview-image">Image</Label>
+										<Input
+											id="preview-image"
+											placeholder="ghcr.io/acme/shop:pr-42"
+											value={image}
+											onChange={(e) => setImage(e.target.value)}
+											className="font-mono"
+										/>
+									</div>
+								) : sourceKind === "branch" ? (
 									<div className="flex flex-col gap-2">
 										<Label htmlFor="preview-ref">Ref</Label>
 										<Input
@@ -344,20 +365,26 @@ export function PreviewDeploymentsPanel({
 								<Button
 									onClick={() =>
 										create.mutate(
-											sourceKind === "branch"
-												? { ...target, ref: ref.trim(), expiresAt: parseExpiry(expiresInDays) }
-												: {
-														...target,
-														pullRequestNumber: prNumber.trim(),
-														branch: branch.trim() || null,
-														pullRequestTitle: prTitle.trim() || null,
-														pullRequestURL: prUrl.trim() || null,
-														expiresAt: parseExpiry(expiresInDays),
-													},
+											sourceKind === "image"
+												? { ...target, image: image.trim(), expiresAt: parseExpiry(expiresInDays) }
+												: sourceKind === "branch"
+													? { ...target, ref: ref.trim(), expiresAt: parseExpiry(expiresInDays) }
+													: {
+															...target,
+															pullRequestNumber: prNumber.trim(),
+															branch: branch.trim() || null,
+															pullRequestTitle: prTitle.trim() || null,
+															pullRequestURL: prUrl.trim() || null,
+															expiresAt: parseExpiry(expiresInDays),
+														},
 										)
 									}
 									disabled={
-										(sourceKind === "branch" ? !ref.trim() : !prNumber.trim()) || create.isPending
+										(sourceKind === "image"
+											? !image.trim()
+											: sourceKind === "branch"
+												? !ref.trim()
+												: !prNumber.trim()) || create.isPending
 									}
 								>
 									{create.isPending && <Loader2 className="size-4 animate-spin" />}
@@ -406,7 +433,12 @@ export function PreviewDeploymentsPanel({
 							{(previews ?? []).map((preview) => (
 								<TableRow key={preview.previewDeploymentId}>
 									<TableCell className="font-medium">
-										{preview.kind === "branch" ? (
+										{preview.kind === "image" ? (
+											<span className="inline-flex items-center gap-1 font-mono text-xs">
+												<Package className="size-3.5 text-muted-foreground" />
+												{preview.image}
+											</span>
+										) : preview.kind === "branch" ? (
 											<span className="inline-flex items-center gap-1 font-mono text-xs">
 												<GitBranch className="size-3.5 text-muted-foreground" />
 												{preview.branch}
@@ -535,7 +567,9 @@ export function PreviewDeploymentsPanel({
 								This tears down the preview{" "}
 								{deleteTarget?.kind === "branch"
 									? `of ${deleteTarget.branch}`
-									: `for PR #${deleteTarget?.pullRequestNumber}`}
+									: deleteTarget?.kind === "image"
+										? `of ${deleteTarget.image}`
+										: `for PR #${deleteTarget?.pullRequestNumber}`}
 								, removes its routes and deletes the record. This cannot be undone.
 							</AlertDialogDescription>
 						</AlertDialogHeader>

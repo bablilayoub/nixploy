@@ -132,8 +132,10 @@ export const previewDeployments = pgTable(
 		 * only expires or is deleted.
 		 */
 		kind: previewKind("kind").notNull().default("pull_request"),
-		/** The ref to build: a branch, tag or sha for `branch` rows; a branch name, a PR head ref or a fork spec for `pull_request` rows. */
+		/** The ref to build: a branch, tag or sha for `branch` rows; a branch name, a PR head ref or a fork spec for `pull_request` rows; null for `image` rows. */
 		branch: text("branch"),
+		/** `image` rows: the prebuilt image the preview runs instead of building the parent's source. */
+		image: text("image"),
 		pullRequestId: text("pull_request_id"),
 		/**
 		 * The preview's key: the PR number for `pull_request` rows, `b<6 hex>`

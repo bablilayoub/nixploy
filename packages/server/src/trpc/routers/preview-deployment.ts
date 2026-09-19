@@ -20,6 +20,7 @@ import { upsertPreviewComment } from "../../modules/preview/comment";
 import { logicalServiceModule } from "../../modules/preview/database";
 import { assertCapability } from "../../modules/projects";
 import { assertSafeGitRef } from "../../utils/public-url";
+import { assertSafeDockerImageRef } from "../../utils/validators";
 import { protectedProcedure, router } from "../init";
 
 /** A preview hangs off exactly one parent; every input names it the same way. */
@@ -155,6 +156,8 @@ export const previewDeploymentRouter = router({
 						.optional(),
 					/** A branch, tag or sha to preview without a pull request. */
 					ref: z.string().min(1).max(255).optional(),
+					/** A prebuilt image to run instead of building (applications only). */
+					image: z.string().min(1).max(512).optional(),
 					branch: z.string().nullable().optional(),
 					pullRequestId: z.string().nullable().optional(),
 					pullRequestTitle: z.string().max(500).nullable().optional(),
@@ -164,25 +167,42 @@ export const previewDeploymentRouter = router({
 				.refine((value) => Boolean(value.applicationId) !== Boolean(value.composeId), {
 					message: "Exactly one of applicationId or composeId is required",
 				})
-				.refine((value) => Boolean(value.pullRequestNumber) || Boolean(value.ref), {
-					message: "Give a pullRequestNumber (pull-request preview) or a ref (branch preview)",
-				}),
+				.refine(
+					(value) => [value.pullRequestNumber, value.ref, value.image].filter(Boolean).length === 1,
+					{
+						message:
+							"Give exactly one of pullRequestNumber (pull-request preview), ref (branch preview) or image (image preview)",
+					},
+				),
 		)
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 			const parent = await assertPreviewParentAccess(input, organizationId);
 
-			// A branch preview is keyed by a short hash of the ref, so the same
-			// ref maps to the same variant and a second create is a conflict.
-			const { ref, ...rest } = input;
+			// A branch preview is keyed by a short hash of the ref, an image
+			// preview by one of the image, so the same source maps to the same
+			// variant and a second create is a conflict.
+			const { ref, image, ...rest } = input;
+			if (image && parent.kind !== "application") {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "An image preview needs an application; a compose stack has no single image",
+				});
+			}
 			const source = input.pullRequestNumber
 				? { kind: "pull_request" as const, pullRequestNumber: input.pullRequestNumber }
-				: {
-						kind: "branch" as const,
-						pullRequestNumber: previewKeyForRef(assertSafeGitRef(ref ?? "", "ref")),
-						branch: assertSafeGitRef(ref ?? "", "ref"),
-					};
+				: image
+					? {
+							kind: "image" as const,
+							pullRequestNumber: previewKeyForRef(`image:${assertSafeDockerImageRef(image)}`),
+							image: assertSafeDockerImageRef(image),
+						}
+					: {
+							kind: "branch" as const,
+							pullRequestNumber: previewKeyForRef(assertSafeGitRef(ref ?? "", "ref")),
+							branch: assertSafeGitRef(ref ?? "", "ref"),
+						};
 
 			// Manual preview: the deployment row is attributed to this user
 			// (webhook-driven previews pass `webhook:<provider>` instead).
@@ -200,6 +220,7 @@ export const previewDeploymentRouter = router({
 					kind: source.kind,
 					pullRequestNumber: source.pullRequestNumber,
 					ref: source.kind === "branch" ? source.branch : undefined,
+					image: source.kind === "image" ? source.image : undefined,
 				},
 			});
 			return preview;

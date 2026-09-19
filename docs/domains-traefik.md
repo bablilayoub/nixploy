@@ -434,7 +434,11 @@ PR-shaped applies to it — no comment, no fork gate, no webhook teardown; it
 expires on the parent's TTL or is deleted by hand. `previewDeployment.redeploy`
 builds any preview again from its ref (a branch preview after a push, a PR
 preview whose webhook was missed); one parked behind the fork gate must be
-approved instead.
+approved instead. **Image previews** (`image` instead of `ref`, applications
+only) run a prebuilt image with no build at all — the parent's source and
+build settings are ignored for that preview, which is what makes a preview
+of a CI-built image cheap: `nixploy preview create --application-id … --image
+ghcr.io/acme/shop:pr-42 --wait`.
 
 **Commit statuses (2026-09-20).** Besides the PR comment, every preview
 posts a **commit status** named `nixploy/preview` on the commit it builds —

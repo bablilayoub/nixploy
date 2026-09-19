@@ -313,6 +313,7 @@ PR machinery, it only expires or is deleted).
 ```bash
 nixploy preview create --application-id app_abc --ref feat/cart --wait   # URL, health and log tail when it lands
 nixploy preview create --compose-id cmp_abc --ref v1.4.0
+nixploy preview create --application-id app_abc --image ghcr.io/acme/shop:pr-42 --wait   # prebuilt image, no build
 nixploy preview create --application-id app_abc --pr 123 --branch feature/x
 nixploy preview list app_abc
 nixploy preview list-compose cmp_abc

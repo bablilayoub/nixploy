@@ -412,6 +412,22 @@ describe("buildPreviewDeployTarget", () => {
 		).toMatchObject({ owner: "acme", repository: "app", branch: "refs/pull/3/head" });
 	});
 
+	it("turns an image preview into a docker-source job for that deployment only", async () => {
+		const { buildPreviewDeployTarget } = await import("./worker");
+		const target = buildPreviewDeployTarget(
+			{ ...application, sourceType: "git", dockerImage: null } as unknown as ApplicationRow,
+			{ appName: "myapp-pr-b1a2c3", branch: null, image: "ghcr.io/acme/app:pr-42" },
+		);
+		expect(target).toMatchObject({
+			appName: "myapp-pr-b1a2c3",
+			sourceType: "docker",
+			dockerImage: "ghcr.io/acme/app:pr-42",
+			// the parent's checkout settings are left alone, they are simply unused
+			owner: "acme",
+			repository: "app",
+		});
+	});
+
 	it("clones the fork repository for Bitbucket fork PRs", async () => {
 		const { buildPreviewDeployTarget } = await import("./worker");
 		expect(

@@ -62,8 +62,10 @@ export type CreatePreviewInput = PreviewParentRef & {
 	 * derived from the ref (`previewKeyForRef`), `branch` is the ref, and no
 	 * comment, fork gate or webhook ever touches the row.
 	 */
-	kind?: "pull_request" | "branch";
+	kind?: "pull_request" | "branch" | "image";
 	pullRequestNumber: string;
+	/** `image` previews: the prebuilt image to run (applications only; no build happens). */
+	image?: string | null;
 	/**
 	 * Source to build: a branch name, a provider PR ref (`refs/pull/<n>/head`)
 	 * or a Bitbucket fork spec — see `source-ref.ts`.
@@ -255,7 +257,9 @@ export async function createPreviewDeployment(
 		throw new PreviewConflictError(
 			kind === "pull_request"
 				? `A preview deployment for PR #${input.pullRequestNumber} already exists`
-				: `A preview for ref "${input.branch ?? ""}" already exists (${existing.appName})`,
+				: kind === "image"
+					? `A preview of image "${input.image ?? ""}" already exists (${existing.appName})`
+					: `A preview for ref "${input.branch ?? ""}" already exists (${existing.appName})`,
 		);
 	}
 
@@ -285,7 +289,8 @@ export async function createPreviewDeployment(
 		.values({
 			appName: variantAppName,
 			kind,
-			branch: input.branch ?? parent.defaultBranch,
+			image: kind === "image" ? (input.image ?? null) : null,
+			branch: kind === "image" ? null : (input.branch ?? parent.defaultBranch),
 			pullRequestId: input.pullRequestId ?? null,
 			pullRequestNumber: input.pullRequestNumber,
 			pullRequestTitle: input.pullRequestTitle ?? null,

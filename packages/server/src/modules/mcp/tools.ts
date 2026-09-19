@@ -730,7 +730,7 @@ export const mcpTools: McpToolDefinition[] = [
 	{
 		name: "create_preview",
 		description:
-			"Spin up an ephemeral copy of an application or compose stack from a branch, tag or sha (`ref`), or from a pull request (`pullRequestNumber`): an isolated service or project routed at its own wildcard host, with the parent's preview env. Returns the preview and the deploymentId to wait on with deploy_and_wait's sibling, list_deployments, or get_preview. Requires service.deploy.",
+			"Spin up an ephemeral copy of an application or compose stack from a branch, tag or sha (`ref`), from a pull request (`pullRequestNumber`), or — applications only — from a prebuilt `image` with no build at all: an isolated service or project routed at its own wildcard host, with the parent's preview env. Returns the preview and the deploymentId to wait on with deploy_and_wait's sibling, list_deployments, or get_preview. Requires service.deploy.",
 		inputSchema: z.object({
 			applicationId: z
 				.string()
@@ -748,6 +748,14 @@ export const mcpTools: McpToolDefinition[] = [
 				.max(255)
 				.optional()
 				.describe("Branch, tag or sha for a branch preview"),
+			image: z
+				.string()
+				.min(1)
+				.max(512)
+				.optional()
+				.describe(
+					"Prebuilt image for an image preview (applications only; exactly one of ref, pullRequestNumber, image)",
+				),
 			pullRequestNumber: z
 				.string()
 				.regex(/^\d+$/)
@@ -767,6 +775,7 @@ export const mcpTools: McpToolDefinition[] = [
 				applicationId?: string;
 				composeId?: string;
 				ref?: string;
+				image?: string;
 				pullRequestNumber?: string;
 				expiresInHours?: number;
 			},
@@ -775,6 +784,7 @@ export const mcpTools: McpToolDefinition[] = [
 				applicationId: input.applicationId,
 				composeId: input.composeId,
 				ref: input.ref,
+				image: input.image,
 				pullRequestNumber: input.pullRequestNumber,
 				expiresAt: input.expiresInHours
 					? new Date(Date.now() + input.expiresInHours * 60 * 60 * 1000)
@@ -785,6 +795,7 @@ export const mcpTools: McpToolDefinition[] = [
 				appName: preview.appName,
 				kind: preview.kind,
 				ref: preview.branch,
+				image: preview.image,
 				previewStatus: preview.previewStatus,
 				urls: preview.domains.map(
 					(domain) => `${domain.https ? "https" : "http"}://${domain.host}`,
@@ -806,6 +817,7 @@ export const mcpTools: McpToolDefinition[] = [
 				appName: preview.appName,
 				kind: preview.kind,
 				ref: preview.branch,
+				image: preview.image,
 				pullRequestNumber: preview.kind === "pull_request" ? preview.pullRequestNumber : null,
 				pullRequestURL: preview.pullRequestURL,
 				previewStatus: preview.previewStatus,
