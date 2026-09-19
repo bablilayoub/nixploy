@@ -44,6 +44,8 @@
 #                                (install.sh --split-worker); this script only rolls
 #                                whichever services are already there.
 #   NIXPLOY_BUILD_FROM_SOURCE    1 = build locally instead of pull (opt-in only)
+#   NIXPLOY_SKIP_VERIFY          1 = do not check the image's cosign signature before pulling
+#                                (the default verifies it and pins the pull to the signed digest)
 #   NIXPLOY_REPO                 GitHub org/repo               (default: bablilayoub/nixploy)
 #   NIXPLOY_BRANCH               Branch for source builds      (default: the image tag)
 #   NIXPLOY_GITHUB_TOKEN         Fine-grained PAT (Contents: Read) for private repos.
@@ -155,6 +157,119 @@ run_quiet() {
 }
 
 need_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+# ── image signature ──────────────────────────────────────────────────────────
+# Release and main images are signed keyless by the workflows of this repo
+# (docs/releases.md → "Verify what you are running"). Before an image is
+# pulled, its signature is checked against that identity and the pull is
+# pinned to the digest the signature covers, so what runs is what was signed:
+# a re-tagged manifest or a compromised registry cannot put a different image
+# under the same tag. A failed check stops the script — an unsigned panel is
+# never started because a download went wrong.
+#
+# cosign is used when it is installed; otherwise the release pinned below is
+# fetched into <config>/bin and compared with its published SHA-256 first.
+# NIXPLOY_SKIP_VERIFY=1 turns the check off (air-gapped hosts, forks).
+COSIGN_VERSION="v3.1.3"
+COSIGN_SHA256_AMD64="4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"
+COSIGN_SHA256_ARM64="c5d324e091826b0d7a78eb16fef316450b4eb9aaec045611c08ba06f5e73220a"
+SIGNED_IMAGE_REPO="${NIXPLOY_SIGNED_IMAGE_REPO:-ghcr.io/bablilayoub/nixploy}"
+SIGNING_IDENTITY_REGEXP="${NIXPLOY_SIGNING_IDENTITY_REGEXP:-^https://github\\.com/bablilayoub/nixploy/\\.github/workflows/(release|docker)\\.yml@refs/}"
+SIGNING_OIDC_ISSUER="https://token.actions.githubusercontent.com"
+COSIGN_BIN=""
+
+sha256_of() {
+	if need_cmd sha256sum; then
+		sha256sum "$1" | awk '{print $1}'
+	else
+		shasum -a 256 "$1" | awk '{print $1}'
+	fi
+}
+
+# Find or fetch cosign. Sets COSIGN_BIN; returns 1 when neither worked.
+ensure_cosign() {
+	if need_cmd cosign; then
+		COSIGN_BIN="$(command -v cosign)"
+		return 0
+	fi
+	local dir="${HOST_CONFIG_DIR}/bin" bin arch sum tmp
+	bin="${dir}/cosign"
+	if [ -x "${bin}" ] && "${bin}" version 2>/dev/null | grep -q "${COSIGN_VERSION#v}"; then
+		COSIGN_BIN="${bin}"
+		return 0
+	fi
+	if [ "$(uname -s)" != "Linux" ]; then
+		warn "No pinned cosign build for $(uname -s) — install cosign yourself"
+		return 1
+	fi
+	case "$(uname -m)" in
+		x86_64 | amd64) arch="amd64"; sum="${COSIGN_SHA256_AMD64}" ;;
+		aarch64 | arm64) arch="arm64"; sum="${COSIGN_SHA256_ARM64}" ;;
+		*) warn "No pinned cosign build for $(uname -m)"; return 1 ;;
+	esac
+	tmp="$(mktemp)"
+	if ! curl -fsSL --retry 3 -o "${tmp}" \
+		"https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-${arch}"; then
+		rm -f "${tmp}"
+		warn "Could not download cosign ${COSIGN_VERSION}"
+		return 1
+	fi
+	if [ "$(sha256_of "${tmp}")" != "${sum}" ]; then
+		rm -f "${tmp}"
+		warn "cosign ${COSIGN_VERSION} download did not match its pinned SHA-256 — not using it"
+		return 1
+	fi
+	mkdir -p "${dir}"
+	chmod 755 "${dir}"
+	mv "${tmp}" "${bin}"
+	chmod 0755 "${bin}"
+	COSIGN_BIN="${bin}"
+	ok "cosign ${COSIGN_VERSION} installed to ${bin}"
+}
+
+# Verify APP_IMAGE against the release pipeline's identity and pin it to the
+# signed digest (APP_IMAGE becomes <ref>@sha256:…). Images from another
+# repository are the operator's own build and are left alone.
+verify_app_image() {
+	case "${APP_IMAGE}" in
+		"${SIGNED_IMAGE_REPO}:"* | "${SIGNED_IMAGE_REPO}@"*) ;;
+		*)
+			info "${APP_IMAGE} is not a ${SIGNED_IMAGE_REPO} image — signature not checked"
+			return 0
+			;;
+	esac
+	if [ "${NIXPLOY_SKIP_VERIFY:-0}" = "1" ]; then
+		warn "NIXPLOY_SKIP_VERIFY=1 — the image signature is not checked"
+		return 0
+	fi
+	ensure_cosign || die "cosign is needed to verify ${APP_IMAGE}. Install it (https://docs.sigstore.dev/cosign/system_config/installation/) or, at your own risk, set NIXPLOY_SKIP_VERIFY=1"
+	info "Verifying the signature of ${APP_IMAGE}…"
+	local out digest rc=0
+	out="$("${COSIGN_BIN}" verify \
+		--certificate-identity-regexp "${SIGNING_IDENTITY_REGEXP}" \
+		--certificate-oidc-issuer "${SIGNING_OIDC_ISSUER}" \
+		"${APP_IMAGE}" 2>>"${LOG_FILE}")" || rc=$?
+	if [ "${rc}" -ge 126 ]; then
+		# 126/127: the binary itself did not run — that is not a verdict on the image.
+		die "cosign at ${COSIGN_BIN} could not run (exit ${rc}); see ${LOG_FILE}. Install a working cosign or set NIXPLOY_SKIP_VERIFY=1"
+	fi
+	if [ "${rc}" -ne 0 ]; then
+		die "Signature check FAILED for ${APP_IMAGE}: it was not signed by the ${SIGNED_IMAGE_REPO} release pipeline, so it is not run. Details: ${LOG_FILE}. NIXPLOY_SKIP_VERIFY=1 overrides this, at your own risk."
+	fi
+	digest="$(printf '%s' "${out}" | grep -o '"docker-manifest-digest":"sha256:[0-9a-f]\{64\}"' | head -n 1 | cut -d'"' -f4)"
+	if [ -z "${digest}" ]; then
+		die "cosign accepted ${APP_IMAGE} but reported no digest — refusing to guess which image was signed (log: ${LOG_FILE})"
+	fi
+	case "${APP_IMAGE}" in
+		*@sha256:*)
+			[ "${APP_IMAGE##*@}" = "${digest}" ] ||
+				die "${APP_IMAGE} names a digest the signature does not cover (signed: ${digest})"
+			;;
+		*) APP_IMAGE="${APP_IMAGE}@${digest}" ;;
+	esac
+	ok "Signature verified — pinned to ${digest}"
+}
+# ── end image signature ──────────────────────────────────────────────────────
 
 # "https://x.com/y" → "x.com"; "1.2.3.4:443" → "1.2.3.4"
 url_host() {
@@ -294,6 +409,7 @@ pull_app_image() {
 		build_app_image
 		return
 	fi
+	verify_app_image
 	if run_quiet "Pulling ${APP_IMAGE}" docker pull "${APP_IMAGE}"; then
 		return
 	fi

@@ -307,7 +307,7 @@ jobs:
           command -v shellcheck >/dev/null || sudo apt-get install -y --no-install-recommends shellcheck
           shellcheck --version
           shopt -s nullglob
-          files=(install.sh update.sh docker/entrypoint.sh tools/*.sh)
+          files=(install.sh update.sh docker/entrypoint.sh tools/*.sh tools/ci/*.sh)
           printf 'checking: %s\n' "${files[@]}"
           shellcheck --severity=warning "${files[@]}"
 
@@ -488,6 +488,58 @@ jobs:
         run: |
           docker service rm nixploy-smoke-whoami nixploy-smoke-traefik || true
           docker rm -f nixploy-smoke-static || true
+
+  # The installers verify the image's cosign signature and pin the pull to
+  # the signed digest before anything runs. This job runs that exact block
+  # (extracted from install.sh and update.sh by its markers) with a real
+  # cosign against the signed :main image, and checks that a foreign identity
+  # is refused — so the check cannot rot into a no-op unnoticed.
+  installer-signature:
+    name: Installer signature check
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: install.sh verifies and pins the signed image
+        run: |
+          set -euo pipefail
+          pinned="$(tools/ci/verify-image-signature.sh ghcr.io/bablilayoub/nixploy:main | tail -n 1)"
+          echo "pinned: ${pinned}"
+          case "${pinned}" in
+            ghcr.io/bablilayoub/nixploy:main@sha256:*) ;;
+            *) echo "::error::install.sh did not pin the image to its signed digest"; exit 1 ;;
+          esac
+
+      - name: update.sh verifies and pins the signed image
+        env:
+          NIXPLOY_INSTALLER: update.sh
+        run: |
+          set -euo pipefail
+          pinned="$(tools/ci/verify-image-signature.sh ghcr.io/bablilayoub/nixploy:main | tail -n 1)"
+          case "${pinned}" in
+            ghcr.io/bablilayoub/nixploy:main@sha256:*) ;;
+            *) echo "::error::update.sh did not pin the image to its signed digest"; exit 1 ;;
+          esac
+
+      - name: A foreign signing identity is refused
+        env:
+          # Someone else's workflow: the signature exists but was not made by ours.
+          NIXPLOY_SIGNING_IDENTITY_REGEXP: '^https://github\.com/someone-else/nixploy/'
+        run: |
+          set +e
+          tools/ci/verify-image-signature.sh ghcr.io/bablilayoub/nixploy:main
+          rc=$?
+          set -e
+          if [ "${rc}" -eq 0 ]; then
+            echo "::error::a signature from another identity was accepted"
+            exit 1
+          fi
+          echo "refused as expected (exit ${rc})"
 
   # Optional full API golden path against an *external* running Nixploy
   # (secrets required). The `e2e` job above runs the same script against the

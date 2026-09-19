@@ -249,7 +249,7 @@ Not a release; a standing commitment, because reliability is the top reason peop
 
 - **Footprint budget.** Measure panel RSS in CI and fail the build over a ceiling. Today: 427 MiB panel + 51 Postgres + 26 Traefik = ~505 MiB on the live VPS. A `NIXPLOY_LITE` profile and a published number turn that into a claim.
 - **Upgrade-integration CI.** Install the previous release → run the golden path → upgrade → assert it still passes. The most-cited failure mode in this product class has no test anywhere.
-- **Verified installs.** `install.sh` / `update.sh` run `cosign verify` and refuse unsigned images. The release pipeline already signs; the installers don't check.
+- **Verified installs.** ✅ (2026-09-19) `install.sh` / `update.sh` run `cosign verify` against the repository's workflow identity before pulling and pin the pull to the signed digest; a failed check stops the script. cosign is fetched (pinned release, SHA-256 checked) when the host has none; `NIXPLOY_SKIP_VERIFY=1` opts out. The `installer-signature` CI job runs the block with a real cosign against `:main` plus a foreign-identity negative case.
 - **Security disclosure policy** with a documented triage SLA, and security releases separated from feature releases.
 - **Known-regressions notes** in every release, and an in-panel preflight before an update.
 

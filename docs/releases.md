@@ -122,7 +122,13 @@ Both `release.yml` (tagged releases, `:vX.Y.Z` and `:latest`) and `docker.yml` (
 you only ever run releases.
 
 Installer scripts are verified against the release's `SHA256SUMS` before being run as root
-— the recipe lives in [install.md](./install.md).
+— the recipe lives in [install.md](./install.md). The scripts themselves run this same
+`cosign verify` before pulling and pin the pull to the signed digest
+(`NIXPLOY_SKIP_VERIFY=1` opts out); the `installer-signature` CI job runs that block against
+the signed `:main` image on every push, with a foreign identity as the negative case, so the
+check cannot rot into a no-op. Bumping the cosign release the scripts fall back to means
+updating `COSIGN_VERSION` and the two SHA-256 values in both scripts from that release's
+`cosign_checksums.txt`.
 
 ### Image scan (`.trivyignore`)
 

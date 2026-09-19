@@ -69,7 +69,25 @@ copies — release assets carry a `NIXPLOY_VERSION` line pinned to that tag, whi
 copies do not. If you install from `main`, there is nothing to verify against; prefer a
 tagged release.
 
-The panel image is signed with cosign (keyless, GitHub OIDC). To verify a tag:
+### The image is verified too
+
+The panel image is signed with cosign (keyless, GitHub OIDC), and **both
+`install.sh` and `update.sh` check that signature before they pull**: the
+image must have been signed by this repository's `release.yml` or
+`docker.yml` workflow, and the pull is then pinned to the digest the
+signature covers (`ghcr.io/bablilayoub/nixploy:v0.4.0@sha256:…`), so what
+runs is what was signed even if the tag is moved or the registry lies. A
+failed check stops the script; an unsigned panel is never started because a
+download went wrong.
+
+cosign is used when it is already installed. Otherwise the pinned release
+named in the script is downloaded into `<config>/bin/cosign` and compared
+with its published SHA-256 before it runs. Images from another repository
+(`NIXPLOY_IMAGE=registry.example.com/me/nixploy:x`) are your own build and
+are not checked. `NIXPLOY_SKIP_VERIFY=1` turns the check off — for an
+air-gapped host that cannot reach Rekor, or a fork — and says so loudly.
+
+To verify a tag by hand:
 
 ```bash
 cosign verify \
@@ -191,6 +209,7 @@ the panel's runtime environment (that is the next section).
 | `NIXPLOY_SKIP_DNS_CHECK` | `0` | Do not compare `NIXPLOY_DOMAIN`'s A record with the public IP |
 | `NIXPLOY_SKIP_DOCKER_INSTALL` | `0` | Require a pre-installed Docker (skip `get.docker.com`) |
 | `NIXPLOY_BUILD_FROM_SOURCE` | `0` | Always build the image locally instead of pulling |
+| `NIXPLOY_SKIP_VERIFY` | `0` | Do not check the image's cosign signature before pulling (see [The image is verified too](#the-image-is-verified-too)) |
 | `NIXPLOY_REPO` / `NIXPLOY_BRANCH` | `bablilayoub/nixploy` / the image tag | Source for local builds |
 | `NIXPLOY_GITHUB_TOKEN` | — | Fine-grained PAT (Contents: Read) for a private repo. `GITHUB_TOKEN` also works. Needed under `sudo`, which does not see your user gitconfig |
 | `NIXPLOY_RENDER_TRAEFIK_ONLY` | `0` | Print the static `traefik.yml` the script writes and exit (CI drift check — no root, no Docker) |
@@ -400,6 +419,10 @@ curl -fsSL https://github.com/bablilayoub/nixploy/releases/latest/download/updat
 Keeps secrets, Postgres data, ACME certs, and Traefik routes. Migrations run on
 boot. Or use **Settings → Platform → Updates** in the UI.
 
+Like the installer, `update.sh` verifies the new image's cosign signature and
+pins the roll to the signed digest before it touches the service
+([details](#the-image-is-verified-too)); `NIXPLOY_SKIP_VERIFY=1` skips it.
+
 On a [split install](#split-worker) both services are rolled: `nixploy-worker`
 first, because it is the half that runs the migrations, then `nixploy` — whose
 `/api/ready` keeps it out of the service VIP until the schema matches.
@@ -476,6 +499,7 @@ ceiling are documented in [`upgrade-notes.md`](./upgrade-notes.md).
 | `NIXPLOY_ALLOW_DOWNGRADE` | `0` | Allow rolling to a lower semver tag (restore a dump first — see above) |
 | `NIXPLOY_MEMORY_LIMIT` | `2g` | Memory limit of the `nixploy` service (`512m` reserved) |
 | `NIXPLOY_BUILD_FROM_SOURCE` | `0` | Build locally instead of pulling GHCR |
+| `NIXPLOY_SKIP_VERIFY` | `0` | Do not check the image's cosign signature before pulling |
 | `NIXPLOY_REPO` / `NIXPLOY_BRANCH` | `bablilayoub/nixploy` / image tag | Source for local builds |
 
 See the header comments in [`update.sh`](../update.sh).
