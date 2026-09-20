@@ -1,5 +1,7 @@
-import { site, version } from "@/lib/site";
-import { templateCount } from "@/lib/templates";
+// Relative, not `@/`: `docs/pages.ts` imports this file and is itself imported
+// by a test in `apps/web`, where `@/` means `apps/web/src`. See CLAUDE.md.
+import { site, version } from "./site";
+import { templateCount } from "./templates";
 
 /**
  * Static content for the marketing home page.

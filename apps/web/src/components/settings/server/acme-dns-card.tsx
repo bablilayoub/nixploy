@@ -1,27 +1,30 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { useSaveBar } from "@/components/services/save-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+	Command,
+	CommandEmpty,
+	CommandGroup,
+	CommandInput,
+	CommandItem,
+	CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useDraft } from "@/hooks/use-draft";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { describeError } from "@/lib/describe-error";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
+import { cn } from "@/lib/utils";
 
 const NONE = "none";
 
@@ -48,6 +51,7 @@ export function AcmeDnsCard() {
 	const recordsDraft = useDraft<boolean>(settingsQuery.data?.dnsAutoRecords ?? false);
 	// Write-only secrets: never seeded from the server, cleared after a save.
 	const [credentials, setCredentials] = useState<Record<string, string>>({});
+	const [providerOpen, setProviderOpen] = useState(false);
 	const [zoneCheck, setZoneCheck] = useState<
 		| { state: "idle" }
 		| { state: "pending" }
@@ -144,20 +148,71 @@ export function AcmeDnsCard() {
 				<div className="grid gap-4">
 					<div className="grid gap-2">
 						<Label htmlFor="acme-dns-provider">Provider</Label>
-						<Select value={provider} onValueChange={providerDraft.set}>
-							<SelectTrigger id="acme-dns-provider">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value={NONE}>None (HTTP-01 only)</SelectItem>
-								{providers.map((entry) => (
-									<SelectItem key={entry.code} value={entry.code}>
-										{entry.label}
-										{entry.records ? "" : " (certificates only)"}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
+						{/*
+						 * A searchable list rather than a plain select: there are forty
+						 * providers, and scrolling to "Spaceship" past thirty others is
+						 * worse than typing three letters.
+						 */}
+						<Popover open={providerOpen} onOpenChange={setProviderOpen}>
+							<PopoverTrigger asChild>
+								<Button
+									id="acme-dns-provider"
+									type="button"
+									variant="outline"
+									role="combobox"
+									aria-expanded={providerOpen}
+									className="justify-between font-normal"
+								>
+									{selected?.label ?? "None (HTTP-01 only)"}
+									<ChevronsUpDown className="size-4 opacity-50" />
+								</Button>
+							</PopoverTrigger>
+							<PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+								<Command>
+									<CommandInput placeholder="Search providers…" />
+									<CommandList>
+										<CommandEmpty>No provider matches.</CommandEmpty>
+										<CommandGroup>
+											<CommandItem
+												value="None HTTP-01 only"
+												onSelect={() => {
+													providerDraft.set(NONE);
+													setProviderOpen(false);
+												}}
+											>
+												<Check
+													className={cn("size-4", provider === NONE ? "opacity-100" : "opacity-0")}
+												/>
+												None (HTTP-01 only)
+											</CommandItem>
+											{providers.map((entry) => (
+												<CommandItem
+													key={entry.code}
+													value={`${entry.label} ${entry.code}`}
+													onSelect={() => {
+														providerDraft.set(entry.code);
+														setProviderOpen(false);
+													}}
+												>
+													<Check
+														className={cn(
+															"size-4",
+															provider === entry.code ? "opacity-100" : "opacity-0",
+														)}
+													/>
+													<span className="flex-1">{entry.label}</span>
+													{entry.records ? (
+														<Badge variant="secondary">records</Badge>
+													) : (
+														<span className="text-xs text-muted-foreground">certificates only</span>
+													)}
+												</CommandItem>
+											))}
+										</CommandGroup>
+									</CommandList>
+								</Command>
+							</PopoverContent>
+						</Popover>
 						<p className="text-xs text-muted-foreground">
 							Without a provider, wildcard domains can only use certificate type “None” or a custom
 							certificate. Credentials are pushed to Traefik when saved; a change restarts the proxy
