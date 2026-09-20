@@ -362,6 +362,8 @@ nixploy incident list [--project-id proj_123]
 nixploy incident alerts --application-id app_abc
 nixploy incident probes
 nixploy incident logs "connection refused" --limit 50
+nixploy incident apply inc_abc                    # run the rollback a remediation proposal suggests
+nixploy incident dismiss inc_abc                  # close the proposal without acting on it
 ```
 
 ### Waiting for a deploy (`--wait`)

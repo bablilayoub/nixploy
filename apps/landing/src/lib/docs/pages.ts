@@ -819,6 +819,7 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 					"Uptime probes with flip notifications",
 					"Expiry warnings for uploaded TLS certificates, from 21 days out",
 					"Incident timeline on the Monitoring page — acknowledge records who is looking at it and leaves the incident open; resolve closes it with an optional note",
+					"Proposed remediations: a service that fails three tasks in ten minutes gets an incident carrying a suggested rollback — to the previous pinned image, or a compose stack's earlier snapshot — that waits for a person to apply or dismiss it. Nothing runs on its own, an out-of-memory loop is told to raise its limit rather than roll back, and one proposal per service per hour keeps it quiet",
 					"Public status page at /status/<token>: chosen probes, their state, 90-day uptime and recent incident titles, on an unauthenticated link you can rotate or take offline",
 					"Fleet overview across local and remote servers",
 				],
