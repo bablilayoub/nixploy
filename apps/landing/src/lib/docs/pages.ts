@@ -444,7 +444,7 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 			},
 			{
 				type: "note",
-				text: "New Let's Encrypt domains are capped at 20 per organization per hour: the instance shares one ACME account, so hosts that do not resolve burn the whole box's budget. Wildcard rows (*.apps.example.com) are instance-admin only — Nixploy cannot prove an organization owns the parent zone, and a wildcard swallows every unclaimed subdomain of it. Traefik reads DNS-01 provider credentials from its own environment, so one docker service update --env-add on the host is needed; the settings card prints the exact command.",
+				text: "New Let's Encrypt domains are capped at 20 per organization per hour: the instance shares one ACME account, so hosts that do not resolve burn the whole box's budget. Wildcard rows (*.apps.example.com) are instance-admin only — Nixploy cannot prove an organization owns the parent zone, and a wildcard swallows every unclaimed subdomain of it. Traefik reads DNS-01 provider credentials from its own environment, and saving them pushes them to the proxy for you — the panel diffs the current environment first, because applying a change recreates the proxy's task and that is a few seconds of downtime for every routed domain.",
 			},
 			{ type: "h2", text: "HTTPS is per domain" },
 			{
@@ -493,7 +493,7 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 			{ type: "h2", text: "DNS records created for you" },
 			{
 				type: "p",
-				text: "Link a DNS provider once (Settings → Platform → DNS provider — the same link wildcard certificates use) and switch on Create DNS records automatically. From then on, attaching a domain — by hand, through the API or CLI, or with a template deploy — also creates the host's A record in the matching zone at the provider, pointing at the server's public IPv4. An existing record that points elsewhere is updated; a round-robin set is left alone; a host no zone contains is skipped and says so. Cloudflare, DigitalOcean, Hetzner DNS, Vultr and Gandi LiveDNS have a record client; Route 53, Namecheap and OVH stay certificates-only for now.",
+				text: "Link a DNS provider once (Settings → Platform → DNS provider — the same link wildcard certificates use) and switch on Create DNS records automatically. From then on, attaching a domain — by hand, through the API or CLI, or with a template deploy — also creates the host's A record in the matching zone at the provider, pointing at the server's public IPv4. An existing record that points elsewhere is updated; a round-robin set is left alone; a host no zone contains is skipped and says so. Forty providers are offered for DNS-01; eight of them — Cloudflare, DigitalOcean, Gandi LiveDNS, Hetzner DNS, Linode, Porkbun, Spaceship and Vultr — also have a record client. The rest are certificates-only, and the panel says so.",
 			},
 			{
 				type: "p",

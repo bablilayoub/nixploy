@@ -60,10 +60,21 @@ beforeEach(() => {
 
 describe("provider table", () => {
 	it("knows which DNS-01 providers have a record client", () => {
-		for (const code of ["cloudflare", "digitalocean", "hetzner", "vultr", "gandiv5"]) {
+		for (const code of [
+			"cloudflare",
+			"digitalocean",
+			"hetzner",
+			"vultr",
+			"gandiv5",
+			"spaceship",
+			"porkbun",
+			"linode",
+		]) {
 			expect(dnsRecordsSupported(code)).toBe(true);
 		}
-		for (const code of ["route53", "namecheap", "ovh", "", "constructor"]) {
+		// Offered for DNS-01, no record client: signing (Route 53, OVH), an XML
+		// API (Namecheap), a 3600 minimum TTL (deSEC).
+		for (const code of ["route53", "namecheap", "ovh", "desec", "", "constructor"]) {
 			expect(dnsRecordsSupported(code)).toBe(false);
 		}
 		expect(createDnsProviderClient("route53", { AWS_ACCESS_KEY_ID: "x" })).toBeNull();
@@ -72,6 +83,9 @@ describe("provider table", () => {
 		expect(createDnsProviderClient("cloudflare", {})).toBeNull();
 		expect(createDnsProviderClient("cloudflare", { CF_DNS_API_TOKEN: "  " })).toBeNull();
 		expect(createDnsProviderClient("hetzner", { HETZNER_API_KEY: "legacy" })).toBeNull();
+		expect(createDnsProviderClient("spaceship", { SPACESHIP_API_KEY: "k" })).toBeNull();
+		expect(createDnsProviderClient("porkbun", { PORKBUN_API_KEY: "k" })).toBeNull();
+		expect(createDnsProviderClient("linode", {})).toBeNull();
 	});
 });
 
@@ -363,5 +377,191 @@ describe("gandi livedns", () => {
 			});
 		}
 		expect(outbound.calls[3]?.headers.authorization).toBe("Bearer pat");
+	});
+});
+
+describe("spaceship", () => {
+	const client = () => {
+		const made = createDnsProviderClient("spaceship", {
+			SPACESHIP_API_KEY: "key",
+			SPACESHIP_API_SECRET: "secret",
+		});
+		if (!made) throw new Error("no client");
+		return made;
+	};
+
+	it("pages domains with the key pair in headers", async () => {
+		outbound.answers.push(
+			[200, { items: Array.from({ length: 100 }, (_, i) => ({ name: `z${i}.dev` })), total: 101 }],
+			[200, { items: [{ name: "last.dev" }], total: 101 }],
+		);
+		const zones = await client().listZones();
+		expect(zones).toHaveLength(101);
+		expect(zones[100]).toEqual({ id: "last.dev", name: "last.dev" });
+		expect(outbound.calls.map((call) => call.url)).toEqual([
+			"https://spaceship.dev/api/v1/domains?take=100&skip=0",
+			"https://spaceship.dev/api/v1/domains?take=100&skip=100",
+		]);
+		expect(outbound.calls[0]?.headers["X-API-Key"]).toBe("key");
+		expect(outbound.calls[0]?.headers["X-API-Secret"]).toBe("secret");
+	});
+
+	it("keeps only A records for the name asked for", async () => {
+		outbound.answers.push([
+			200,
+			{
+				items: [
+					{ type: "A", name: "app", address: "198.51.100.7", ttl: 3600 },
+					{ type: "A", name: "other", address: "198.51.100.8" },
+					{ type: "CNAME", name: "app", cname: "x.example.com" },
+				],
+				total: 3,
+			},
+		]);
+		const records = await client().listRecords({ id: "example.com", name: "example.com" }, "app");
+		expect(records).toEqual([{ id: "app/A", name: "app", type: "A", content: "198.51.100.7" }]);
+	});
+
+	it("creates without force and updates with it", async () => {
+		outbound.answers.push([204, null], [204, null]);
+		const zone = { id: "example.com", name: "example.com" };
+		await client().createRecord(zone, spec);
+		await client().updateRecord(zone, { id: "app/A", name: "app", type: "A", content: "x" }, spec);
+		expect(outbound.calls[0]).toMatchObject({
+			method: "PUT",
+			url: "https://spaceship.dev/api/v1/dns/records/example.com",
+			body: {
+				force: false,
+				items: [{ type: "A", name: "app", address: "203.0.113.10", ttl: 300 }],
+			},
+		});
+		expect(outbound.calls[1]?.body).toMatchObject({ force: true });
+	});
+});
+
+describe("porkbun", () => {
+	const client = () => {
+		const made = createDnsProviderClient("porkbun", {
+			PORKBUN_API_KEY: "pk",
+			PORKBUN_SECRET_API_KEY: "sk",
+		});
+		if (!made) throw new Error("no client");
+		return made;
+	};
+
+	it("asks only for the domains the key may touch", async () => {
+		outbound.answers.push([200, { status: "SUCCESS", domains: [{ domain: "example.com" }] }]);
+		const zones = await client().listZones();
+		expect(zones).toEqual([{ id: "example.com", name: "example.com" }]);
+		expect(outbound.calls[0]).toMatchObject({
+			method: "POST",
+			url: "https://api.porkbun.com/api/json/v3/domain/listAll",
+			body: { apikey: "pk", secretapikey: "sk", start: 0, apiAccess: "yes" },
+		});
+	});
+
+	it("treats a 200 with status ERROR as a failure", async () => {
+		outbound.answers.push([200, { status: "ERROR", message: "API access not enabled" }]);
+		await expect(client().listZones()).rejects.toBeInstanceOf(DnsProviderError);
+	});
+
+	it("reads records by name and type, reporting them relative to the zone", async () => {
+		outbound.answers.push([
+			200,
+			{
+				status: "SUCCESS",
+				records: [
+					{ id: "42", name: "app.example.com", type: "A", content: "198.51.100.7" },
+					{ id: "43", name: "app.example.com", type: "TXT", content: "v=spf1" },
+				],
+			},
+		]);
+		const records = await client().listRecords({ id: "example.com", name: "example.com" }, "app");
+		expect(records).toEqual([{ id: "42", name: "app", type: "A", content: "198.51.100.7" }]);
+		expect(outbound.calls[0]?.url).toBe(
+			"https://api.porkbun.com/api/json/v3/dns/retrieveByNameType/example.com/A/app",
+		);
+	});
+
+	it("addresses the apex by leaving the subdomain segment off", async () => {
+		outbound.answers.push([200, { status: "SUCCESS", records: [] }]);
+		await client().listRecords({ id: "example.com", name: "example.com" }, "@");
+		expect(outbound.calls[0]?.url).toBe(
+			"https://api.porkbun.com/api/json/v3/dns/retrieveByNameType/example.com/A",
+		);
+	});
+
+	it("creates and edits with a string ttl", async () => {
+		outbound.answers.push([200, { status: "SUCCESS", id: "42" }], [200, { status: "SUCCESS" }]);
+		const zone = { id: "example.com", name: "example.com" };
+		await client().createRecord(zone, { ...spec, name: "@" });
+		await client().updateRecord(zone, { id: "42", name: "app", type: "A", content: "x" }, spec);
+		expect(outbound.calls[0]).toMatchObject({
+			url: "https://api.porkbun.com/api/json/v3/dns/create/example.com",
+			body: { name: "", type: "A", content: "203.0.113.10", ttl: "300" },
+		});
+		expect(outbound.calls[1]).toMatchObject({
+			url: "https://api.porkbun.com/api/json/v3/dns/edit/example.com/42",
+			body: { name: "app", type: "A", content: "203.0.113.10", ttl: "300" },
+		});
+	});
+});
+
+describe("linode", () => {
+	const client = () => {
+		const made = createDnsProviderClient("linode", { LINODE_TOKEN: "lt" });
+		if (!made) throw new Error("no client");
+		return made;
+	};
+
+	it("offers master zones only", async () => {
+		outbound.answers.push([
+			200,
+			{
+				data: [
+					{ id: 1, domain: "example.com", type: "master" },
+					{ id: 2, domain: "slave.dev", type: "slave" },
+				],
+				page: 1,
+				pages: 1,
+			},
+		]);
+		const zones = await client().listZones();
+		expect(zones).toEqual([{ id: "1", name: "example.com" }]);
+		expect(outbound.calls[0]?.headers.authorization).toBe("Bearer lt");
+	});
+
+	it("filters records client-side and maps the apex", async () => {
+		outbound.answers.push([
+			200,
+			{
+				data: [
+					{ id: 7, type: "A", name: "", target: "198.51.100.7" },
+					{ id: 8, type: "A", name: "app", target: "198.51.100.8" },
+					{ id: 9, type: "AAAA", name: "", target: "2001:db8::1" },
+				],
+				page: 1,
+				pages: 1,
+			},
+		]);
+		const records = await client().listRecords({ id: "1", name: "example.com" }, "@");
+		expect(records).toEqual([{ id: "7", name: "@", type: "A", content: "198.51.100.7" }]);
+	});
+
+	it("creates with ttl_sec and updates the target only", async () => {
+		outbound.answers.push([200, { id: 7 }], [200, { id: 7 }]);
+		const zone = { id: "1", name: "example.com" };
+		await client().createRecord(zone, { ...spec, name: "@" });
+		await client().updateRecord(zone, { id: "7", name: "@", type: "A", content: "x" }, spec);
+		expect(outbound.calls[0]).toMatchObject({
+			method: "POST",
+			url: "https://api.linode.com/v4/domains/1/records",
+			body: { type: "A", name: "", target: "203.0.113.10", ttl_sec: 300 },
+		});
+		expect(outbound.calls[1]).toMatchObject({
+			method: "PUT",
+			url: "https://api.linode.com/v4/domains/1/records/7",
+			body: { target: "203.0.113.10", ttl_sec: 300 },
+		});
 	});
 });

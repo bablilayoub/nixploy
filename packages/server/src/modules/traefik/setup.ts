@@ -52,28 +52,101 @@ const runOn = (serverId: string | null | undefined, command: string): Promise<st
 	serverId ? execAsyncRemote(serverId, command) : execAsync(command);
 
 /**
- * Traefik DNS-01 providers Nixploy offers in the UI. The code is passed
- * straight to Traefik's `dnsChallenge.provider`; the provider's credentials
- * reach the proxy as environment variables (see docs/domains-traefik.md).
+ * Traefik DNS-01 providers Nixploy offers in the UI, sorted by label.
+ *
+ * The code is passed straight to Traefik's `dnsChallenge.provider` and the
+ * credentials reach the proxy as environment variables, so **both have to be
+ * exactly what lego expects** — an invented code or a misspelled variable
+ * fails at certificate time with an unhelpful message. Every entry here was
+ * read out of lego v5.4.1 (`cmd/zz_gen_cmd_dnshelp.go`), which is the version
+ * `TRAEFIK_IMAGE` embeds; re-check against the new lego when that pin moves.
+ *
+ * Only a provider's **required** credentials are listed, except where the
+ * choice is the operator's (RFC 2136's TSIG fields). A blank value is skipped
+ * by `buildAcmeDnsEnv`, so an optional key costs nothing.
+ *
+ * lego supports ~219 providers. This is the subset worth putting in a dropdown;
+ * adding one is a line here plus a line in the docs (see
+ * docs/domains-traefik.md).
  */
 export const ACME_DNS_PROVIDERS = [
+	{ code: "bunny", label: "Bunny.net", envKeys: ["BUNNY_API_KEY"] },
 	{ code: "cloudflare", label: "Cloudflare", envKeys: ["CF_DNS_API_TOKEN"] },
-	{
-		code: "route53",
-		label: "AWS Route 53",
-		envKeys: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"],
-	},
+	{ code: "cloudns", label: "ClouDNS", envKeys: ["CLOUDNS_AUTH_ID", "CLOUDNS_AUTH_PASSWORD"] },
+	{ code: "desec", label: "deSEC", envKeys: ["DESEC_TOKEN"] },
 	{ code: "digitalocean", label: "DigitalOcean", envKeys: ["DO_AUTH_TOKEN"] },
+	{ code: "dnsimple", label: "DNSimple", envKeys: ["DNSIMPLE_OAUTH_TOKEN"] },
+	{
+		code: "dnsmadeeasy",
+		label: "DNS Made Easy",
+		envKeys: ["DNSMADEEASY_API_KEY", "DNSMADEEASY_API_SECRET"],
+	},
+	// RFC 2136 dynamic update — BIND, Knot, PowerDNS, anything that speaks
+	// nsupdate. Only the nameserver is required; leave the TSIG fields empty
+	// for a server that does not authenticate updates.
+	{
+		code: "dnsupdate",
+		label: "RFC 2136 (dynamic update)",
+		envKeys: [
+			"DNSUPDATE_NAMESERVER",
+			"DNSUPDATE_TSIG_ALGORITHM",
+			"DNSUPDATE_TSIG_KEY",
+			"DNSUPDATE_TSIG_SECRET",
+		],
+	},
+	{ code: "dynu", label: "Dynu", envKeys: ["DYNU_API_KEY"] },
+	{ code: "easydns", label: "easyDNS", envKeys: ["EASYDNS_TOKEN", "EASYDNS_KEY"] },
+	{ code: "exoscale", label: "Exoscale", envKeys: ["EXOSCALE_API_KEY", "EXOSCALE_API_SECRET"] },
 	{ code: "gandiv5", label: "Gandi LiveDNS", envKeys: ["GANDIV5_PERSONAL_ACCESS_TOKEN"] },
+	{ code: "gcore", label: "Gcore", envKeys: ["GCORE_PERMANENT_API_TOKEN"] },
+	{ code: "glesys", label: "GleSYS", envKeys: ["GLESYS_API_USER", "GLESYS_API_KEY"] },
+	{ code: "godaddy", label: "GoDaddy", envKeys: ["GODADDY_API_KEY", "GODADDY_API_SECRET"] },
 	// Hetzner moved DNS into the Cloud API (2025): the legacy `dns.hetzner.com`
 	// API behind `HETZNER_API_KEY` is gone, lego ≥ 4.27 reads the Cloud token.
 	{ code: "hetzner", label: "Hetzner DNS", envKeys: ["HETZNER_API_TOKEN"] },
+	{ code: "hostinger", label: "Hostinger", envKeys: ["HOSTINGER_API_TOKEN"] },
+	// One variable holding `zone:token` pairs, comma-separated — HE.net issues
+	// a token per zone rather than per account.
+	{ code: "hurricane", label: "Hurricane Electric", envKeys: ["HURRICANE_TOKENS"] },
+	{ code: "infomaniak", label: "Infomaniak", envKeys: ["INFOMANIAK_ACCESS_TOKEN"] },
+	{ code: "inwx", label: "INWX", envKeys: ["INWX_USERNAME", "INWX_PASSWORD"] },
+	{ code: "ionos", label: "IONOS", envKeys: ["IONOS_API_KEY"] },
+	{ code: "linode", label: "Linode", envKeys: ["LINODE_TOKEN"] },
+	{ code: "luadns", label: "LuaDNS", envKeys: ["LUADNS_API_USERNAME", "LUADNS_API_TOKEN"] },
+	{ code: "mijnhost", label: "mijn.host", envKeys: ["MIJNHOST_API_KEY"] },
 	{ code: "namecheap", label: "Namecheap", envKeys: ["NAMECHEAP_API_USER", "NAMECHEAP_API_KEY"] },
+	{ code: "namedotcom", label: "Name.com", envKeys: ["NAMECOM_USERNAME", "NAMECOM_API_TOKEN"] },
+	{ code: "namesilo", label: "NameSilo", envKeys: ["NAMESILO_API_KEY"] },
+	{
+		code: "netcup",
+		label: "netcup",
+		envKeys: ["NETCUP_CUSTOMER_NUMBER", "NETCUP_API_KEY", "NETCUP_API_PASSWORD"],
+	},
+	{ code: "netlify", label: "Netlify", envKeys: ["NETLIFY_TOKEN"] },
+	{ code: "njalla", label: "Njalla", envKeys: ["NJALLA_TOKEN"] },
+	{ code: "ns1", label: "NS1", envKeys: ["NS1_API_KEY"] },
 	{
 		code: "ovh",
 		label: "OVH",
 		envKeys: ["OVH_ENDPOINT", "OVH_APPLICATION_KEY", "OVH_APPLICATION_SECRET", "OVH_CONSUMER_KEY"],
 	},
+	// PowerDNS and Technitium are servers you run: the URL points at your own
+	// API, which the proxy has to be able to reach.
+	{ code: "pdns", label: "PowerDNS", envKeys: ["PDNS_API_URL", "PDNS_API_KEY"] },
+	{ code: "porkbun", label: "Porkbun", envKeys: ["PORKBUN_API_KEY", "PORKBUN_SECRET_API_KEY"] },
+	{
+		code: "route53",
+		label: "AWS Route 53",
+		envKeys: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"],
+	},
+	{ code: "scaleway", label: "Scaleway", envKeys: ["SCW_PROJECT_ID", "SCW_SECRET_KEY"] },
+	{ code: "spaceship", label: "Spaceship", envKeys: ["SPACESHIP_API_KEY", "SPACESHIP_API_SECRET"] },
+	{
+		code: "technitium",
+		label: "Technitium",
+		envKeys: ["TECHNITIUM_SERVER_BASE_URL", "TECHNITIUM_API_TOKEN"],
+	},
+	{ code: "vercel", label: "Vercel", envKeys: ["VERCEL_API_TOKEN"] },
 	{ code: "vultr", label: "Vultr", envKeys: ["VULTR_API_KEY"] },
 ] as const;
 

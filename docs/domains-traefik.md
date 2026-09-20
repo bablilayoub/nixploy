@@ -188,6 +188,24 @@ label, the same span a wildcard certificate covers — with
   a manager, and appear briefly on the host's process list while the update
   runs. That is root-on-the-manager territory, which already holds the panel's
   encryption key; no shape of this feature avoids it.
+- **Which providers are offered** is `ACME_DNS_PROVIDERS` in
+  `packages/server/src/modules/traefik/setup.ts` — 40 of them, sorted by code,
+  shown in the dropdown by label. The `code` is handed to Traefik's
+  `dnsChallenge.provider` and the variable names are what lego reads, so both
+  are copied from lego's own list (`cmd/zz_gen_cmd_dnshelp.go`) at the version
+  `TRAEFIK_IMAGE` embeds — v5.4.1 for Traefik 3.7.13. lego supports about 219
+  providers; adding one here is a line in that table plus a line in this file,
+  but **re-read lego's list first**: an invented code or a misspelled variable
+  fails at certificate time with a message that does not say why.
+
+  Only each provider's required credentials are listed, except where the
+  choice is the operator's — RFC 2136 (`dnsupdate`) takes a nameserver and,
+  if the server authenticates updates, the TSIG algorithm, key and secret. A
+  blank value is treated as "not configured" and never reaches the proxy.
+
+  Two of them point at a server you run rather than a hosted API: **PowerDNS**
+  (`PDNS_API_URL`) and **Technitium** (`TECHNITIUM_SERVER_BASE_URL`). The
+  proxy container has to be able to reach that URL.
 - **Hetzner** moved DNS into its Cloud API in 2025: the credential is a
   Cloud API token (`HETZNER_API_TOKEN`), and the legacy `HETZNER_API_KEY`
   (dead `dns.hetzner.com` API) is swept off the proxy. lego learned the new
@@ -220,11 +238,20 @@ included: docs/templates.md § "Adding a template") — also writes the host's
    already has several A records (round-robin) is **left alone**; a host no
    zone contains is skipped with that reason.
 
-Providers with a record client: **Cloudflare, DigitalOcean, Hetzner DNS,
-Vultr, Gandi LiveDNS**. Route 53, Namecheap and OVH are certificates-only for
-now (the switch stays disabled for them) — create the record at the provider
-yourself. `*.traefik.me`, `*.sslip.io`, `*.nip.io` and IP literals resolve on
-their own and are never sent to a provider.
+Providers with a record client: **Cloudflare, DigitalOcean, Gandi LiveDNS,
+Hetzner DNS, Linode, Porkbun, Spaceship, Vultr**. Every other provider in the
+list is certificates-only — the switch stays disabled and the panel says so —
+because it needs something this feature does not do: request signing (Route
+53, OVH), an XML API (Namecheap), or a minimum TTL above the 300 s written
+here (deSEC). Create the A record at the provider yourself in that case.
+`*.traefik.me`, `*.sslip.io`, `*.nip.io` and IP literals resolve on their own
+and are never sent to a provider.
+
+Adding a record client is one factory in
+`packages/server/src/modules/dns/providers.ts` — four calls (`listZones`,
+`listRecords`, `createRecord`, `updateRecord`), A records only, every request
+through `pinnedFetch`. `dnsRecordsSupported` and the panel's switch follow
+from the table at the bottom of that file.
 
 The write is **best-effort by contract**: the domain row and the Traefik
 route exist either way, and the response carries a `dns` outcome

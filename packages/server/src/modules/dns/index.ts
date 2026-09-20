@@ -28,7 +28,7 @@ export type DnsSkipReason =
 	| "disabled"
 	/** No DNS provider is linked (Settings → Wildcard certificates). */
 	| "no-provider"
-	/** The linked provider has no record API in this build (Route 53, Namecheap, OVH). */
+	/** The linked provider is offered for DNS-01 but has no record client here. */
 	| "provider-unsupported"
 	/** IP literal, bare name, magic DNS (`*.traefik.me`) — nothing to write. */
 	| "host-not-eligible"

@@ -125,10 +125,11 @@ export const webServerRouter = router({
 
 	/**
 	 * DNS-01 providers offered for wildcard certificates, with the environment
-	 * variables Traefik needs for each. Nixploy stores the values (encrypted)
-	 * but cannot inject them into the proxy container by itself — the operator
-	 * runs the `docker service update --env-add` step from
-	 * docs/domains-traefik.md.
+	 * variables Traefik needs for each, sorted by label for the dropdown.
+	 *
+	 * The values are stored encrypted and pushed to the proxy on save
+	 * (`docker service update --env-add`, diffed first — see
+	 * `modules/traefik/setup.ts`). Nothing for the operator to apply by hand.
 	 */
 	acmeDnsProviders: protectedProcedure.query(async ({ ctx }) => {
 		await requireInstanceAdmin(ctx.session);
@@ -138,7 +139,9 @@ export const webServerRouter = router({
 			envKeys: [...provider.envKeys] as string[],
 			/** Can Nixploy also write A records there (`dnsAutoRecords`)? */
 			records: dnsRecordsSupported(provider.code),
-		}));
+			// The table is kept in code order so it reads next to lego's own
+			// list; the dropdown wants labels.
+		})).sort((a, b) => a.label.localeCompare(b.label, "en"));
 	}),
 
 	/**

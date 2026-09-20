@@ -60,6 +60,7 @@ vi.mock("./dashboard", () => ({
 }));
 
 import {
+	ACME_DNS_PROVIDERS,
 	buildAcmeDnsEnv,
 	buildAcmeDnsEnvUpdate,
 	buildTraefikStaticConfig,
@@ -212,6 +213,41 @@ describe("traefikImageOutdated", () => {
 		expect(traefikImageOutdated(TRAEFIK_IMAGE)).toBe(false);
 		expect(traefikImageOutdated("")).toBe(false);
 		expect(traefikImageOutdated("  \n")).toBe(false);
+	});
+});
+
+describe("ACME_DNS_PROVIDERS", () => {
+	it("has a unique code and at least one variable per entry", () => {
+		const codes = ACME_DNS_PROVIDERS.map((entry) => entry.code);
+		expect(new Set(codes).size).toBe(codes.length);
+		for (const entry of ACME_DNS_PROVIDERS) {
+			expect(entry.label.trim()).not.toBe("");
+			expect(entry.envKeys.length).toBeGreaterThan(0);
+			for (const key of entry.envKeys) expect(key).toMatch(/^[A-Z][A-Z0-9_]*$/);
+		}
+	});
+
+	it("is kept in code order, so it reads next to lego's own provider list", () => {
+		const codes = ACME_DNS_PROVIDERS.map((entry) => entry.code);
+		expect(codes).toEqual([...codes].sort());
+	});
+
+	it("offers DNS-01 for every provider that has a record client", () => {
+		// A record client without a DNS-01 entry is unreachable: the credentials
+		// are only ever stored through this table.
+		const codes: string[] = ACME_DNS_PROVIDERS.map((entry) => entry.code);
+		for (const code of [
+			"cloudflare",
+			"digitalocean",
+			"gandiv5",
+			"hetzner",
+			"linode",
+			"porkbun",
+			"spaceship",
+			"vultr",
+		]) {
+			expect(codes).toContain(code);
+		}
 	});
 });
 

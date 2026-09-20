@@ -1,4 +1,10 @@
-import { type DnsProviderClient, type DnsRecord, type DnsRecordSpec, providerJson } from "./client";
+import {
+	type DnsProviderClient,
+	DnsProviderError,
+	type DnsRecord,
+	type DnsRecordSpec,
+	providerJson,
+} from "./client";
 import { type DnsZone, fqdnOf, normalizeHost, relativeRecordName } from "./zones";
 
 /**
@@ -7,8 +13,11 @@ import { type DnsZone, fqdnOf, normalizeHost, relativeRecordName } from "./zones
  * OpenAPI spec) on 2026-09-20 — see docs/domains-traefik.md § "DNS records
  * created for you" for what is deliberately not done (deletes, proxying).
  *
- * Route 53 (SigV4 signing), Namecheap (XML API, IP allow-list) and OVH
- * (request signing) are certificates-only until someone needs them.
+ * The DNS-01 list in `modules/traefik/setup.ts` is longer than this one:
+ * a provider is certificates-only here until it has a record API worth
+ * driving. Route 53 (SigV4 signing), Namecheap (XML, IP allow-list) and OVH
+ * (request signing) need a signer; deSEC's default minimum TTL is 3600 and
+ * this feature writes 300.
  */
 
 const PAGE_CAP = 10;
@@ -402,7 +411,293 @@ const gandiv5: Factory = (credentials) => {
 	};
 };
 
-const FACTORIES: Record<string, Factory> = { cloudflare, digitalocean, hetzner, vultr, gandiv5 };
+/* ------------------------------------------------------------------ Spaceship */
+
+interface SpaceshipPage<T> {
+	items: T[];
+	total: number;
+}
+interface SpaceshipRecord {
+	type: string;
+	name: string;
+	address?: string;
+	ttl?: number;
+}
+
+/**
+ * Spaceship: `X-API-Key` + `X-API-Secret` headers, relative record names with
+ * `@` for the apex, and one `PUT` that both creates and replaces — `force`
+ * decides which. Create sends `force: false` so a conflicting record is an
+ * error the operator sees rather than something silently overwritten; the
+ * update path has already established there is exactly one A record to move.
+ *
+ * Records carry no id of their own (a name + type addresses them), so the id
+ * reported here is synthetic, like Gandi's.
+ */
+const spaceship: Factory = (credentials) => {
+	const key = token(credentials, "SPACESHIP_API_KEY");
+	const secret = token(credentials, "SPACESHIP_API_SECRET");
+	if (!key || !secret) return null;
+	const base = "https://spaceship.dev/api/v1";
+	const label = "Spaceship";
+	const headers = { "X-API-Key": key, "X-API-Secret": secret };
+	const save = async (zone: DnsZone, record: DnsRecordSpec, force: boolean) => {
+		await providerJson(label, `${base}/dns/records/${encodeURIComponent(zone.id)}`, {
+			method: "PUT",
+			headers,
+			body: {
+				force,
+				items: [{ type: "A", name: record.name, address: record.content, ttl: record.ttl }],
+			},
+		});
+	};
+	return {
+		code: "spaceship",
+		label,
+		async listZones() {
+			const zones: DnsZone[] = [];
+			const take = 100;
+			for (let page = 0; page < PAGE_CAP; page += 1) {
+				const body = await providerJson<SpaceshipPage<{ name: string }>>(
+					label,
+					`${base}/domains?take=${take}&skip=${page * take}`,
+					{ headers },
+				);
+				const items = body?.items ?? [];
+				for (const domain of items) zones.push(zoneOf(domain.name));
+				if (items.length < take || zones.length >= (body?.total ?? 0)) break;
+			}
+			return zones;
+		},
+		async listRecords(zone, name) {
+			const records: DnsRecord[] = [];
+			const take = 500;
+			for (let page = 0; page < PAGE_CAP; page += 1) {
+				const body = await providerJson<SpaceshipPage<SpaceshipRecord>>(
+					label,
+					`${base}/dns/records/${encodeURIComponent(zone.id)}?take=${take}&skip=${page * take}`,
+					{ headers },
+				);
+				const items = body?.items ?? [];
+				for (const record of items) {
+					if (record.type !== "A" || record.name !== name || !record.address) continue;
+					records.push({
+						id: `${record.name}/A`,
+						name: record.name,
+						type: record.type,
+						content: record.address,
+					});
+				}
+				if (items.length < take || page * take + items.length >= (body?.total ?? 0)) break;
+			}
+			return records;
+		},
+		createRecord: (zone, record) => save(zone, record, false),
+		updateRecord: (zone, _existing, record) => save(zone, record, true),
+	};
+};
+
+/* -------------------------------------------------------------------- Porkbun */
+
+interface PorkbunStatus {
+	status: string;
+	message?: string;
+}
+interface PorkbunDomains extends PorkbunStatus {
+	domains?: Array<{ domain: string }>;
+}
+interface PorkbunRecords extends PorkbunStatus {
+	records?: Array<{ id: string; name: string; type: string; content: string }>;
+}
+
+/**
+ * Porkbun: every call is a POST whose body carries the key pair, and a
+ * failure comes back as HTTP 200 with `status: "ERROR"` — so the envelope is
+ * checked here, not by the status code. Record names are FQDNs on the way
+ * out and relative (empty for the apex) on the way in. `apiAccess: "yes"`
+ * filters the zone list to the domains the key may actually touch, which is
+ * per-domain opt-in at Porkbun.
+ */
+const porkbun: Factory = (credentials) => {
+	const apikey = token(credentials, "PORKBUN_API_KEY");
+	const secretapikey = token(credentials, "PORKBUN_SECRET_API_KEY");
+	if (!apikey || !secretapikey) return null;
+	const base = "https://api.porkbun.com/api/json/v3";
+	const label = "Porkbun";
+	const auth = { apikey, secretapikey };
+	const post = async <T extends PorkbunStatus>(path: string, body: object): Promise<T | null> => {
+		const answer = await providerJson<T>(label, `${base}${path}`, {
+			method: "POST",
+			headers: {},
+			body: { ...auth, ...body },
+		});
+		if (answer && answer.status !== "SUCCESS") {
+			throw new DnsProviderError(label, 200, answer.message ?? answer.status);
+		}
+		return answer;
+	};
+	// The API takes the subdomain as a path segment and reads an absent one as
+	// the apex; `@` would be a literal label.
+	const subdomainPath = (name: string) => (name === "@" ? "" : `/${encodeURIComponent(name)}`);
+	const apiName = (name: string) => (name === "@" ? "" : name);
+	return {
+		code: "porkbun",
+		label,
+		async listZones() {
+			const zones: DnsZone[] = [];
+			const size = 1000;
+			for (let page = 0; page < PAGE_CAP; page += 1) {
+				const body = await post<PorkbunDomains>("/domain/listAll", {
+					start: page * size,
+					apiAccess: "yes",
+				});
+				const domains = body?.domains ?? [];
+				for (const entry of domains) zones.push(zoneOf(entry.domain));
+				if (domains.length < size) break;
+			}
+			return zones;
+		},
+		async listRecords(zone, name) {
+			const body = await post<PorkbunRecords>(
+				`/dns/retrieveByNameType/${encodeURIComponent(zone.id)}/A${subdomainPath(name)}`,
+				{},
+			);
+			return (body?.records ?? [])
+				.filter((record) => record.type === "A")
+				.map((record) => ({
+					id: record.id,
+					name: relativeRecordName(record.name, zone.name),
+					type: record.type,
+					content: record.content,
+				}));
+		},
+		async createRecord(zone, record) {
+			await post(`/dns/create/${encodeURIComponent(zone.id)}`, {
+				name: apiName(record.name),
+				type: "A",
+				content: record.content,
+				ttl: String(record.ttl),
+			});
+		},
+		async updateRecord(zone, existing, record) {
+			await post(`/dns/edit/${encodeURIComponent(zone.id)}/${encodeURIComponent(existing.id)}`, {
+				name: apiName(record.name),
+				type: "A",
+				content: record.content,
+				ttl: String(record.ttl),
+			});
+		},
+	};
+};
+
+/* --------------------------------------------------------------------- Linode */
+
+interface LinodePage<T> {
+	data: T[];
+	page: number;
+	pages: number;
+}
+interface LinodeDomain {
+	id: number;
+	domain: string;
+	type: string;
+}
+interface LinodeRecord {
+	id: number;
+	type: string;
+	name: string;
+	target: string;
+}
+
+/**
+ * Linode: relative record names with `""` for the apex, and no server-side
+ * filter on the record list, so it is paged and filtered here the way Vultr's
+ * is. Only `master` zones are writable — a slave zone is a copy of somebody
+ * else's, so they are not offered.
+ */
+const linode: Factory = (credentials) => {
+	const auth = token(credentials, "LINODE_TOKEN");
+	if (!auth) return null;
+	const base = "https://api.linode.com/v4";
+	const label = "Linode";
+	const toLinode = (name: string) => (name === "@" ? "" : name);
+	const fromLinode = (name: string) => (name === "" ? "@" : name);
+	return {
+		code: "linode",
+		label,
+		async listZones() {
+			const zones: DnsZone[] = [];
+			for (let page = 1; page <= PAGE_CAP; page += 1) {
+				const body = await providerJson<LinodePage<LinodeDomain>>(
+					label,
+					`${base}/domains?page=${page}&page_size=100`,
+					{ headers: bearer(auth) },
+				);
+				for (const domain of body?.data ?? []) {
+					if (domain.type === "master") zones.push({ id: String(domain.id), name: domain.domain });
+				}
+				if (!body || page >= body.pages) break;
+			}
+			return zones;
+		},
+		async listRecords(zone, name) {
+			const wanted = toLinode(name);
+			const records: DnsRecord[] = [];
+			for (let page = 1; page <= PAGE_CAP; page += 1) {
+				const body = await providerJson<LinodePage<LinodeRecord>>(
+					label,
+					`${base}/domains/${encodeURIComponent(zone.id)}/records?page=${page}&page_size=100`,
+					{ headers: bearer(auth) },
+				);
+				for (const record of body?.data ?? []) {
+					if (record.type !== "A" || record.name !== wanted) continue;
+					records.push({
+						id: String(record.id),
+						name: fromLinode(record.name),
+						type: record.type,
+						content: record.target,
+					});
+				}
+				if (!body || page >= body.pages) break;
+			}
+			return records;
+		},
+		async createRecord(zone, record) {
+			await providerJson(label, `${base}/domains/${encodeURIComponent(zone.id)}/records`, {
+				method: "POST",
+				headers: bearer(auth),
+				body: {
+					type: "A",
+					name: toLinode(record.name),
+					target: record.content,
+					ttl_sec: record.ttl,
+				},
+			});
+		},
+		async updateRecord(zone, existing, record) {
+			await providerJson(
+				label,
+				`${base}/domains/${encodeURIComponent(zone.id)}/records/${encodeURIComponent(existing.id)}`,
+				{
+					method: "PUT",
+					headers: bearer(auth),
+					body: { target: record.content, ttl_sec: record.ttl },
+				},
+			);
+		},
+	};
+};
+
+const FACTORIES: Record<string, Factory> = {
+	cloudflare,
+	digitalocean,
+	gandiv5,
+	hetzner,
+	linode,
+	porkbun,
+	spaceship,
+	vultr,
+};
 
 /** Does the DNS-01 provider also have record automation in this build? */
 export function dnsRecordsSupported(code: string | null | undefined): boolean {
