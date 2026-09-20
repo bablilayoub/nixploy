@@ -29,9 +29,10 @@ this file is the summary.
   to the DNS automation. The deploy dialog previews them; a host already
   routed is skipped with a note. OpenHole uses it for its endpoint host and
   tunnel wildcard, so its setup is the env values and nothing else.
-- **Proposed remediations.** A service that fails three tasks (or is
-  OOM-killed three times) in ten minutes gets an incident of kind
-  `remediation` with a proposed action — roll back an application to its
+- **Proposed remediations.** A deploy that dies after the image reached the
+  cluster (the rollout, converge or post-deploy step), or a service that
+  fails three tasks (or is OOM-killed three times) in ten minutes, gets an
+  incident of kind `remediation` with a proposed action — roll back an application to its
   previous pinned image, restore a compose stack's earlier snapshot — that a
   human applies or dismisses from the activity tray, Monitoring → Incidents,
   `nixploy incident apply|dismiss` or `observability.applyRemediation`.

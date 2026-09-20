@@ -187,10 +187,16 @@ Resolved incidents are dropped by the retention pass 90 days later.
 
 ### Proposed remediations (propose and approve)
 
-Incidents of kind `remediation` are filed by a deterministic rule, never by a
+Incidents of kind `remediation` are filed by deterministic rules, never by a
 model, and **nothing runs until a human says yes**
 (`modules/remediation/`, roadmap §16):
 
+- **Rollout failed.** A deploy that ended in error at the **rollout**,
+  **converge** or **post-deploy** step, within the last 30 minutes, proposes
+  going back to the image (or compose snapshot) that ran before it. A build
+  failure is deliberately not one of these: the running service never
+  changed, so there is nothing to roll back to. This rule wins when a service
+  matches both.
 - **Restart loop.** After every reconciler pass (which just wrote the task
   failures it reads), one grouped query counts `task_failed` + `oom_killed`
   timeline rows per service over the last **10 minutes**; **3 or more** cross

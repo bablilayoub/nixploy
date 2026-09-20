@@ -23,13 +23,19 @@ import { isServiceKind } from "../services/kinds";
 import { SERVICE_REGISTRY } from "../services/registry";
 import {
 	buildProposal,
+	buildRolloutProposal,
 	type FailureSignal,
 	isRemediationProposal,
+	isRolloutStep,
+	passesGuards,
 	pickPreviousPin,
 	REMEDIATION_FAILURE_THRESHOLD,
 	REMEDIATION_WINDOW_MS,
 	type RemediationProposal,
+	ROLLOUT_STEPS,
+	ROLLOUT_WINDOW_MS,
 	type RollbackCandidate,
+	type RolloutSignal,
 	shouldPropose,
 } from "./rules";
 
@@ -80,6 +86,54 @@ async function findFailureSignals(now: Date): Promise<FailureSignal[]> {
 		oomKills: Number(row.oomKills),
 		latestAt: new Date(row.latestAt),
 	}));
+}
+
+/**
+ * Deploys that died after the image reached the cluster, newest per service.
+ * A build failure never appears here: `current_step` is still `build`, the
+ * running service never changed, and there is nothing to roll back.
+ */
+async function findRolloutSignals(now: Date): Promise<RolloutSignal[]> {
+	const since = new Date(now.getTime() - ROLLOUT_WINDOW_MS);
+	const rows = await db.query.deployments.findMany({
+		where: and(
+			eq(deployments.status, "error"),
+			eq(deployments.isPreview, false),
+			gte(deployments.finishedAt, since),
+			inArray(deployments.currentStep, [...ROLLOUT_STEPS]),
+		),
+		columns: {
+			deploymentId: true,
+			applicationId: true,
+			composeId: true,
+			appName: true,
+			currentStep: true,
+			errorMessage: true,
+			finishedAt: true,
+		},
+		orderBy: desc(deployments.finishedAt),
+	});
+	const seen = new Set<string>();
+	const signals: RolloutSignal[] = [];
+	for (const row of rows) {
+		const serviceId = row.applicationId ?? row.composeId;
+		if (!serviceId || seen.has(serviceId) || !isRolloutStep(row.currentStep)) continue;
+		const serviceType = row.applicationId ? "application" : "compose";
+		const tenancy = await SERVICE_REGISTRY[serviceType].module.findTenancy(serviceId);
+		if (!tenancy) continue;
+		seen.add(serviceId);
+		signals.push({
+			serviceType,
+			serviceId,
+			appName: row.appName ?? tenancy.appName,
+			organizationId: tenancy.organizationId,
+			deploymentId: row.deploymentId,
+			step: row.currentStep,
+			errorMessage: row.errorMessage,
+			finishedAt: row.finishedAt ?? now,
+		});
+	}
+	return signals;
 }
 
 /** Per service: is a proposal open, and when was the newest one made. */
@@ -133,7 +187,10 @@ async function deployingServices(serviceIds: string[]): Promise<Set<string>> {
 }
 
 /** The last known good pin before the one running now, if there is one. */
-async function rollbackCandidate(signal: FailureSignal): Promise<RollbackCandidate | null> {
+async function rollbackCandidate(signal: {
+	serviceType: string;
+	serviceId: string;
+}): Promise<RollbackCandidate | null> {
 	if (signal.serviceType === "application") {
 		const pins = await db.query.rollbacks.findMany({
 			where: eq(rollbacks.applicationId, signal.serviceId),
@@ -170,6 +227,26 @@ export interface ProposeRemediationsResult {
 	proposed: number;
 }
 
+/** A rollout failure is the louder signal, so it wins when both fire. */
+function rulesFor(
+	failureSignals: FailureSignal[],
+	rolloutSignals: RolloutSignal[],
+): Array<{ serviceId: string; restart?: FailureSignal; rollout?: RolloutSignal }> {
+	const byService = new Map<
+		string,
+		{ serviceId: string; restart?: FailureSignal; rollout?: RolloutSignal }
+	>();
+	for (const signal of rolloutSignals) {
+		byService.set(signal.serviceId, { serviceId: signal.serviceId, rollout: signal });
+	}
+	for (const signal of failureSignals) {
+		const entry = byService.get(signal.serviceId);
+		if (entry) entry.restart = signal;
+		else byService.set(signal.serviceId, { serviceId: signal.serviceId, restart: signal });
+	}
+	return [...byService.values()];
+}
+
 /**
  * The rule pass. Runs after every reconciler pass (the pass that just wrote
  * the task failures it reads), one grouped query over the last window, then
@@ -179,26 +256,38 @@ export interface ProposeRemediationsResult {
  */
 export async function proposeRemediations(now = new Date()): Promise<ProposeRemediationsResult> {
 	if (!remediationEnabled()) return { candidates: 0, proposed: 0 };
-	const signals = await findFailureSignals(now);
-	if (signals.length === 0) return { candidates: 0, proposed: 0 };
-	const serviceIds = signals.map((signal) => signal.serviceId);
+	const [failureSignals, rolloutSignals] = await Promise.all([
+		findFailureSignals(now),
+		findRolloutSignals(now),
+	]);
+	const candidates = rulesFor(failureSignals, rolloutSignals);
+	if (candidates.length === 0) return { candidates: 0, proposed: 0 };
+	const serviceIds = candidates.map((entry) => entry.serviceId);
 	const [history, deploying] = await Promise.all([
 		proposalHistory(serviceIds),
 		deployingServices(serviceIds),
 	]);
 
 	let proposed = 0;
-	for (const signal of signals) {
-		const past = history.get(signal.serviceId) ?? { open: false, lastAt: null };
+	for (const entry of candidates) {
+		const past = history.get(entry.serviceId) ?? { open: false, lastAt: null };
 		const context = {
 			now,
 			openProposal: past.open,
 			lastProposalAt: past.lastAt,
-			deploying: deploying.has(signal.serviceId),
+			deploying: deploying.has(entry.serviceId),
 		};
-		if (!shouldPropose(signal, context)) continue;
+		const signal = entry.rollout ?? entry.restart;
+		if (!signal) continue;
+		const allowed = entry.rollout
+			? passesGuards(context)
+			: entry.restart
+				? shouldPropose(entry.restart, context)
+				: false;
+		if (!allowed) continue;
 		try {
-			await proposeFor(signal);
+			if (entry.rollout) await proposeForRollout(entry.rollout);
+			else if (entry.restart) await proposeFor(entry.restart);
 			proposed += 1;
 		} catch (error) {
 			log.warn("Could not file a remediation proposal", {
@@ -207,7 +296,15 @@ export async function proposeRemediations(now = new Date()): Promise<ProposeReme
 			});
 		}
 	}
-	return { candidates: signals.length, proposed };
+	return { candidates: candidates.length, proposed };
+}
+
+async function proposeForRollout(signal: RolloutSignal): Promise<void> {
+	if (!isServiceKind(signal.serviceType)) return;
+	const tenancy = await SERVICE_REGISTRY[signal.serviceType].module.findTenancy(signal.serviceId);
+	if (!tenancy || tenancy.organizationId !== signal.organizationId) return;
+	const proposal = buildRolloutProposal(signal, await rollbackCandidate(signal));
+	await fileProposal(signal.serviceType, signal.serviceId, signal.appName, tenancy, proposal);
 }
 
 async function proposeFor(signal: FailureSignal): Promise<void> {
@@ -217,6 +314,18 @@ async function proposeFor(signal: FailureSignal): Promise<void> {
 	// row disagrees with the service's org — either way, nothing to propose.
 	if (!tenancy || tenancy.organizationId !== signal.organizationId) return;
 	const proposal = buildProposal(signal, await rollbackCandidate(signal));
+	await fileProposal(signal.serviceType, signal.serviceId, signal.appName, tenancy, proposal);
+}
+
+/** The incident, the log line, the live frame and the notification. */
+async function fileProposal(
+	serviceType: string,
+	serviceId: string,
+	appName: string,
+	tenancy: { organizationId: string; projectId: string; name: string },
+	proposal: RemediationProposal,
+): Promise<void> {
+	const signal = { serviceType, serviceId, appName };
 	const incident = await recordIncident({
 		organizationId: tenancy.organizationId,
 		projectId: tenancy.projectId,
@@ -248,7 +357,13 @@ async function proposeFor(signal: FailureSignal): Promise<void> {
 		}`,
 		fields: [
 			{ name: "Service", value: tenancy.name },
-			{ name: "Failures", value: `${signal.failures} in ${proposal.windowMinutes} min` },
+			{
+				name: "Why",
+				value:
+					proposal.rule === "rollout_failed"
+						? "The last deploy failed after the image reached the cluster"
+						: `${proposal.failures} task failures in ${proposal.windowMinutes} min`,
+			},
 			{ name: "Proposed", value: proposal.action.type.replace(/_/g, " ") },
 		],
 	}).catch((error) => {

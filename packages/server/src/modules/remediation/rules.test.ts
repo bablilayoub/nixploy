@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
 	buildProposal,
+	buildRolloutProposal,
 	type FailureSignal,
 	isRemediationProposal,
+	isRolloutStep,
+	passesGuards,
 	pickPreviousPin,
 	REMEDIATION_COOLDOWN_MS,
 	REMEDIATION_FAILURE_THRESHOLD,
+	type RolloutSignal,
 	shouldPropose,
 } from "./rules";
 
@@ -100,6 +104,73 @@ describe("buildProposal", () => {
 		const proposal = buildProposal(signal(), null);
 		expect(proposal.action).toEqual({ type: "none" });
 		expect(proposal.reason).toMatch(/no earlier deployment/);
+	});
+});
+
+const rollout = (overrides: Partial<RolloutSignal> = {}): RolloutSignal => ({
+	serviceType: "application",
+	serviceId: "app_1",
+	appName: "shop",
+	organizationId: "org_1",
+	deploymentId: "dep_abcdef123456",
+	step: "converge",
+	errorMessage: "Service shop did not converge within 180s",
+	finishedAt: now,
+	...overrides,
+});
+
+describe("buildRolloutProposal", () => {
+	it("offers the image that ran before the failed deploy", () => {
+		const proposal = buildRolloutProposal(rollout(), {
+			kind: "application",
+			rollbackId: "rb_2",
+			image: "shop:good",
+			deploymentId: "dep_good",
+		});
+		expect(proposal.rule).toBe("rollout_failed");
+		expect(proposal.action).toMatchObject({ type: "rollback_application", image: "shop:good" });
+		expect(proposal.title).toContain("did not roll out");
+		expect(proposal.reason).toContain("converge step");
+		expect(proposal.reason).toContain("did not converge within 180s");
+		expect(isRemediationProposal(proposal)).toBe(true);
+	});
+	it("names each rollout step in words and truncates a long engine error", () => {
+		for (const step of ["rollout", "converge", "post_deploy"] as const) {
+			const proposal = buildRolloutProposal(rollout({ step, errorMessage: "x".repeat(400) }), null);
+			expect(proposal.reason).toContain(step.replace(/_/g, "-"));
+			expect(proposal.reason.length).toBeLessThan(500);
+		}
+	});
+	it("explains itself with no earlier deployment, and restores a compose snapshot", () => {
+		expect(buildRolloutProposal(rollout(), null).action).toEqual({ type: "none" });
+		expect(
+			buildRolloutProposal(rollout({ serviceType: "compose" }), {
+				kind: "compose",
+				snapshotId: "snap_1",
+				sourceDeploymentId: "dep_1",
+			}).action,
+		).toMatchObject({ type: "rollback_compose", snapshotId: "snap_1" });
+	});
+});
+
+describe("isRolloutStep", () => {
+	it("accepts only the steps that leave a service on a new version", () => {
+		for (const step of ["rollout", "converge", "post_deploy"]) {
+			expect(isRolloutStep(step)).toBe(true);
+		}
+		for (const step of ["source", "build", "push", "route", "finalize", null, 3]) {
+			expect(isRolloutStep(step)).toBe(false);
+		}
+	});
+});
+
+describe("passesGuards", () => {
+	it("is the shared half of shouldPropose, without the failure threshold", () => {
+		expect(passesGuards(quiet)).toBe(true);
+		expect(passesGuards({ ...quiet, openProposal: true })).toBe(false);
+		expect(passesGuards({ ...quiet, deploying: true })).toBe(false);
+		// A single failure passes the guards but not the restart-loop threshold.
+		expect(shouldPropose(signal({ failures: 1 }), quiet)).toBe(false);
 	});
 });
 

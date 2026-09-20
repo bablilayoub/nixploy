@@ -149,6 +149,75 @@ describe.skipIf(!testUrl)("remediation rule pass (postgres)", () => {
 		).rejects.toMatchObject({ code: "NOT_FOUND" });
 	});
 
+	it("proposes going back after a deploy that died at the converge step", async () => {
+		// Another service: the application above is inside its cooldown.
+		const [failed] = await dbModule.db
+			.insert(schema.deployments)
+			.values({
+				title: "Deploy",
+				status: "error",
+				currentStep: "converge",
+				errorMessage: "Service app-remed did not converge within 180s",
+				logPath: "/tmp/remed-failed.log",
+				applicationId: tenant.applicationId,
+				appName: "app-remed",
+				startedAt: new Date(Date.now() - 120_000),
+				finishedAt: new Date(),
+			})
+			.returning();
+		// Close the cooldown by ageing the dismissed proposal out of the window.
+		await dbModule.db
+			.update(schema.incidents)
+			.set({ createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000) })
+			.where(drizzle.eq(schema.incidents.serviceId, tenant.applicationId));
+
+		expect((await remediation.proposeRemediations()).proposed).toBeGreaterThanOrEqual(1);
+		const [incident] = await proposalsFor(tenant.applicationId);
+		const proposal = incident?.metadata?.proposal as { rule: string; action: { type: string } };
+		expect(proposal.rule).toBe("rollout_failed");
+		expect(proposal.action.type).toBe("rollback_application");
+		expect(incident?.message).toContain("converge step");
+
+		await dbModule.db
+			.delete(schema.deployments)
+			.where(drizzle.eq(schema.deployments.deploymentId, failed?.deploymentId ?? ""));
+		await remediation.dismissRemediation({
+			incidentId: incident?.incidentId ?? "",
+			organizationId: tenant.organizationId,
+			userId: tenant.userId,
+		});
+		await dbModule.db
+			.update(schema.incidents)
+			.set({ createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000) })
+			.where(drizzle.eq(schema.incidents.serviceId, tenant.applicationId));
+	});
+
+	it("ignores a build failure — the running service never changed", async () => {
+		const [built] = await dbModule.db
+			.insert(schema.deployments)
+			.values({
+				title: "Deploy",
+				status: "error",
+				currentStep: "build",
+				errorMessage: "npm ERR! missing script: build",
+				logPath: "/tmp/remed-build.log",
+				applicationId: tenant.applicationId,
+				appName: "app-remed",
+				startedAt: new Date(Date.now() - 120_000),
+				finishedAt: new Date(),
+			})
+			.returning();
+		// The task-failure rows from the earlier cases are still inside their
+		// window, so assert on the rule rather than on the count.
+		await remediation.proposeRemediations();
+		const [incident] = await proposalsFor(tenant.applicationId);
+		const proposal = incident?.metadata?.proposal as { rule: string } | undefined;
+		expect(proposal?.rule).not.toBe("rollout_failed");
+		await dbModule.db
+			.delete(schema.deployments)
+			.where(drizzle.eq(schema.deployments.deploymentId, built?.deploymentId ?? ""));
+	});
+
 	it("stays quiet while a deployment is in flight, then explains an OOM loop without a button", async () => {
 		await failures("compose", tenant.composeId, 3, "oom_killed");
 		const [queued] = await dbModule.db
