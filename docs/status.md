@@ -27,7 +27,10 @@ State:
 | `/api` | 49 routers as disclosures under a router index: 39,818px → 8,252px |
 | Docs | Heading anchors, an "On this page" rail from xl, and a previous/next pager |
 | Gates | Biome `--error-on-warnings`, landing typecheck, knip, production build — all green |
-| Audit | `node tools/screenshots/audit.mjs` against a running site: every route at 390 / 768 / 1024 / 1440, plus every internal link followed. Clean apart from its own inline-prose-link false positive |
+| Audit | `node tools/screenshots/audit.mjs` against a running site: every route at 390 / 768 / 1024 / 1440, plus every internal link followed. Clean apart from its own inline-prose-link false positive — against `next dev` **and** against the production build |
+| Measured (production build, localhost) | Home LCP 44ms / CLS 0 / 157KB, docs 32ms / 0 / 73KB, templates 36ms / 0 / 98KB of images. 73KB of that is the three font families |
+| Interaction | Copy control copies the real command, the accordion opens on Enter, the docs disclosure opens on mobile with all 25 links, the mobile menu toggles with `aria-expanded` |
+| Cross-browser | Untested: only Chromium is installed for Playwright here. The built CSS is Lightning-compiled (oklch → hex + lab) with `-webkit-` prefixes for backdrop-filter and mask |
 
 Known gaps:
 
