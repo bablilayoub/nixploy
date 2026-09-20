@@ -7,19 +7,21 @@ import { Safari } from "@/components/ui/safari";
  */
 export function ProductShot() {
 	return (
-		<section className="relative px-6 pb-24">
-			<div className="relative mx-auto max-w-6xl overflow-hidden rounded-[22px]">
-				<Safari url="panel.acme.dev" imageSrc="/screenshots/02-dashboard.png" className="w-full" />
-				<BorderBeam
-					duration={9}
-					size={340}
-					className="from-transparent via-primary to-transparent"
-				/>
+		<section className="relative pb-24">
+			<div className="container-page">
+				<div className="relative overflow-hidden rounded-[22px]">
+					<Safari
+						url="panel.acme.dev"
+						imageSrc="/screenshots/02-dashboard.png"
+						className="w-full"
+					/>
+					<BorderBeam
+						duration={9}
+						size={340}
+						className="from-transparent via-foreground/60 to-transparent"
+					/>
+				</div>
 			</div>
-			<div
-				aria-hidden
-				className="pointer-events-none mx-auto -mt-24 h-40 max-w-4xl bg-primary/20 blur-[120px]"
-			/>
 		</section>
 	);
 }

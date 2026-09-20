@@ -52,13 +52,13 @@ export function PageFrame({
 			<SiteNavbar />
 			<main id="main-content" className="relative">
 				{title ? (
-					<header className="relative overflow-hidden px-6 pt-24 pb-10 lg:pt-28">
+					<header className="relative overflow-hidden pt-24 pb-10 lg:pt-28">
 						<DotPattern
 							width={28}
 							height={28}
 							className="[mask-image:radial-gradient(520px_circle_at_50%_0%,white,transparent)] opacity-50"
 						/>
-						<div className="relative mx-auto max-w-7xl">
+						<div className="container-page relative">
 							{eyebrow ? (
 								<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
 									{eyebrow}
@@ -76,8 +76,8 @@ export function PageFrame({
 				) : null}
 				<div
 					className={cn(
-						"mx-auto px-6 pb-16",
-						width === "prose" ? "max-w-3xl" : "max-w-7xl",
+						"container-page pb-16",
+						width === "prose" && "max-w-3xl",
 						title ? "pt-8" : "pt-24 lg:pt-28",
 					)}
 				>

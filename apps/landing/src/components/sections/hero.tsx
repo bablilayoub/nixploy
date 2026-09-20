@@ -22,9 +22,15 @@ export function Hero() {
 
 	return (
 		<section className="relative overflow-hidden pt-20 pb-14 md:pt-28 lg:pb-20">
-			<Spotlight />
+			{/* The registry component's default gradients are blue; the site has no
+			    accent colour, so the light is plain white at the same opacities. */}
+			<Spotlight
+				gradientFirst="radial-gradient(68.54% 68.72% at 55.02% 31.46%, hsla(0, 0%, 100%, .08) 0, hsla(0, 0%, 100%, .02) 50%, hsla(0, 0%, 100%, 0) 80%)"
+				gradientSecond="radial-gradient(50% 50% at 50% 50%, hsla(0, 0%, 100%, .06) 0, hsla(0, 0%, 100%, .02) 80%, transparent 100%)"
+				gradientThird="radial-gradient(50% 50% at 50% 50%, hsla(0, 0%, 100%, .04) 0, hsla(0, 0%, 100%, .02) 80%, transparent 100%)"
+			/>
 
-			<div className="relative mx-auto flex w-full max-w-4xl flex-col items-center px-6 text-center">
+			<div className="container-page relative flex flex-col items-center text-center">
 				<Link
 					href={heroBadge.href}
 					target="_blank"
@@ -40,7 +46,7 @@ export function Hero() {
 					</AnimatedShinyText>
 				</Link>
 
-				<h1 className="mt-8 text-5xl leading-[1.05] font-semibold tracking-tight text-balance md:text-6xl lg:text-7xl">
+				<h1 className="mt-8 max-w-4xl text-5xl leading-[1.05] font-semibold tracking-tight text-balance md:text-6xl lg:text-7xl">
 					<span className="block">{claim}</span>
 					<span className="block bg-gradient-to-b from-foreground to-muted-foreground bg-clip-text text-transparent">
 						{promise}
@@ -50,7 +56,7 @@ export function Hero() {
 				<p className="mt-6 max-w-2xl text-lg text-balance text-muted-foreground">{heroLead}</p>
 
 				<div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-					<ShimmerButton className="shadow-2xl" background="oklch(0.22 0.01 275)">
+					<ShimmerButton className="shadow-2xl" background="oklch(0.22 0 0)">
 						<Link
 							href="/docs/install"
 							className="flex items-center gap-2 text-base font-medium whitespace-nowrap text-white"

@@ -2,7 +2,45 @@
 import { IconCheck, IconCopy } from "@tabler/icons-react";
 import React from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { atomDark } from "react-syntax-highlighter/dist/cjs/styles/prism";
+
+/*
+ * A greyscale Prism theme. The site has no accent colour, and the themes that
+ * ship with react-syntax-highlighter are all four-colour — a yellow `curl` on
+ * a blue panel was the loudest thing on the page. Tokens differ by lightness
+ * here, which is enough to read a command.
+ */
+const monochrome: Record<string, React.CSSProperties> = {
+	'code[class*="language-"]': { color: "var(--foreground)", background: "none" },
+	'pre[class*="language-"]': { color: "var(--foreground)", background: "none" },
+	comment: { color: "var(--muted-foreground)", fontStyle: "italic" },
+	prolog: { color: "var(--muted-foreground)" },
+	doctype: { color: "var(--muted-foreground)" },
+	cdata: { color: "var(--muted-foreground)" },
+	punctuation: { color: "var(--muted-foreground)" },
+	property: { color: "var(--foreground)" },
+	tag: { color: "var(--foreground)" },
+	boolean: { color: "var(--foreground)" },
+	number: { color: "var(--foreground)" },
+	constant: { color: "var(--foreground)" },
+	symbol: { color: "var(--foreground)" },
+	selector: { color: "var(--muted-foreground)" },
+	"attr-name": { color: "var(--muted-foreground)" },
+	string: { color: "var(--muted-foreground)" },
+	char: { color: "var(--muted-foreground)" },
+	builtin: { color: "var(--foreground)" },
+	operator: { color: "var(--muted-foreground)" },
+	entity: { color: "var(--foreground)" },
+	url: { color: "var(--muted-foreground)" },
+	variable: { color: "var(--foreground)" },
+	atrule: { color: "var(--foreground)" },
+	"attr-value": { color: "var(--muted-foreground)" },
+	keyword: { color: "var(--foreground)", fontWeight: "600" },
+	function: { color: "var(--foreground)", fontWeight: "600" },
+	regex: { color: "var(--muted-foreground)" },
+	important: { color: "var(--foreground)", fontWeight: "bold" },
+	bold: { fontWeight: "bold" },
+	italic: { fontStyle: "italic" },
+};
 
 type CodeBlockProps = {
 	language: string;
@@ -81,7 +119,7 @@ export const CodeBlock = ({
 			</div>
 			<SyntaxHighlighter
 				language={activeLanguage}
-				style={atomDark}
+				style={monochrome}
 				customStyle={{
 					margin: 0,
 					padding: 0,

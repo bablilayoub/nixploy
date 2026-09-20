@@ -18,8 +18,8 @@ import { openCore } from "@/lib/landing-data";
  */
 export function Platform() {
 	return (
-		<section id="open" className="px-6 py-20 lg:py-28">
-			<div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-12 lg:gap-16">
+		<section id="open" className="py-20 lg:py-28">
+			<div className="container-page grid gap-12 lg:grid-cols-12 lg:gap-16">
 				<div className="lg:col-span-5">
 					<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
 						All of it

@@ -53,7 +53,7 @@ export function DocsFrame({ children, activeHref }: { children: ReactNode; activ
 			<SiteNavbar />
 			<main
 				id="main-content"
-				className="mx-auto w-full max-w-7xl px-6 pt-20 pb-20 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-14 lg:pt-24"
+				className="container-page pt-20 pb-20 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-14 lg:pt-24"
 			>
 				<aside className="hidden lg:block">
 					<nav aria-label="Documentation" className="sticky top-24 -ml-3">

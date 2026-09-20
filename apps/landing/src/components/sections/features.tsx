@@ -25,8 +25,8 @@ const Screenshot = ({ src, alt }: { src: string; alt: string }) => (
 
 export function Features() {
 	return (
-		<section id="features" className="px-6 py-20 lg:py-28">
-			<div className="mx-auto max-w-7xl">
+		<section id="features" className="py-20 lg:py-28">
+			<div className="container-page">
 				<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
 					What it does
 				</p>
@@ -122,7 +122,7 @@ export function Features() {
 								<AnimatedSpan delay={2200} className="text-muted-foreground">
 									rollout 2/2 tasks running
 								</AnimatedSpan>
-								<AnimatedSpan delay={2800} className="text-emerald-400">
+								<AnimatedSpan delay={2800} className="text-foreground">
 									done in 48s https://api.acme.dev
 								</AnimatedSpan>
 							</Terminal>

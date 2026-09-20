@@ -36,8 +36,8 @@ export function SiteNavbar() {
 		// 80px down the viewport from the first paint and leaves a black band
 		// above it on every page. The floating state adds its own 20px offset.
 		<Navbar className="top-0">
-			<NavBody>
-				<Logo className="relative z-20 mr-4 px-2" />
+			<NavBody className="px-6">
+				<Logo className="relative z-20 mr-4" />
 				<NavItems items={navItems} />
 				<div className="relative z-20 flex items-center gap-2">
 					<NavbarButton href={site.github} variant="secondary">

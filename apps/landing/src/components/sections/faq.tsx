@@ -10,8 +10,8 @@ import { site } from "@/lib/site";
 /* The questions, in the shadcn accordion. */
 export function Faq() {
 	return (
-		<section id="faq" className="px-6 py-20 lg:py-28">
-			<div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-12 lg:gap-16">
+		<section id="faq" className="py-20 lg:py-28">
+			<div className="container-page grid gap-10 lg:grid-cols-12 lg:gap-16">
 				<div className="lg:col-span-4">
 					<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
 						Questions

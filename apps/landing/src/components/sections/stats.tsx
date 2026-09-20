@@ -5,8 +5,8 @@ import { stats } from "@/lib/landing-data";
 /* Four counted numbers; the count-up is @magicui/number-ticker. */
 export function Stats() {
 	return (
-		<section className="px-6 py-8">
-			<div className="mx-auto grid max-w-7xl grid-cols-2 gap-y-10 rounded-2xl border border-white/10 bg-card/40 p-8 backdrop-blur md:grid-cols-4 md:gap-0">
+		<section className="py-8">
+			<div className="container-page grid grid-cols-2 gap-y-10 rounded-2xl border border-white/10 bg-card/40 p-8 backdrop-blur md:grid-cols-4 md:gap-0">
 				{stats.map((stat, index) => (
 					<div key={stat.id} className="flex items-center gap-8 md:justify-center">
 						{index > 0 ? (

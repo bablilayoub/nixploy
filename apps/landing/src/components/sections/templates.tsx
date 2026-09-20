@@ -1,8 +1,9 @@
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
-import { MagicCard } from "@/components/ui/magic-card";
+import { Card } from "@/components/ui/card";
 import { Marquee } from "@/components/ui/marquee";
+import { brandIconSrc } from "@/lib/brand";
 import { featuredTemplateIds } from "@/lib/landing-data";
 import { findTemplate, type TemplateEntry, templateCount } from "@/lib/templates";
 
@@ -18,13 +19,28 @@ const rows = [featured.slice(0, half), featured.slice(half)];
 function TemplateCard({ template }: { template: TemplateEntry }) {
 	return (
 		<Link href={`/templates/${template.id}`} className="w-[320px] shrink-0">
-			<MagicCard className="h-full rounded-xl border border-white/10 p-5">
-				<p className="text-sm font-medium">{template.name}</p>
-				<p className="mt-0.5 text-xs text-muted-foreground">{template.category}</p>
+			<Card className="h-full gap-0 p-5 transition-colors hover:border-foreground/25">
+				<div className="flex items-center gap-3">
+					<span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent">
+						{/* biome-ignore lint/performance/noImgElement: remote brand marks from a CDN, no loader configured */}
+						<img
+							src={brandIconSrc(template.logo)}
+							alt=""
+							width={20}
+							height={20}
+							loading="lazy"
+							className="size-5"
+						/>
+					</span>
+					<span className="min-w-0">
+						<span className="block truncate text-sm font-medium">{template.name}</span>
+						<span className="mt-0.5 block text-xs text-muted-foreground">{template.category}</span>
+					</span>
+				</div>
 				<p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
 					{template.description.replaceAll("`", "")}
 				</p>
-			</MagicCard>
+			</Card>
 		</Link>
 	);
 }
@@ -32,7 +48,7 @@ function TemplateCard({ template }: { template: TemplateEntry }) {
 export function Templates() {
 	return (
 		<section id="templates" className="py-20 lg:py-28">
-			<div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 lg:flex-row lg:items-end lg:justify-between">
+			<div className="container-page flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
 				<div className="max-w-2xl">
 					<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
 						One click
