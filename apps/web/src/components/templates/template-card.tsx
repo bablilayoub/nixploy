@@ -49,7 +49,7 @@ export function TemplateCard({
 	);
 
 	return (
-		<article className="group relative flex h-full flex-col overflow-hidden rounded-xl border bg-popover shadow-sm transition-all hover:-translate-y-0.5 hover:border-foreground/25 hover:shadow-lg">
+		<article className="group relative flex h-full flex-col overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/25">
 			{/* The corner carries provenance: which catalog, and whether it needs the
 			    instance admin. Absolute so it never pushes the mark off centre. */}
 			<div className="absolute end-3 top-3 z-[1] flex items-center gap-1">
@@ -66,18 +66,11 @@ export function TemplateCard({
 				) : null}
 			</div>
 
-			<div className="flex flex-col items-center gap-3 px-4 pt-6 pb-4 text-center">
-				{/* A bright tile in dark mode, not a dark well. Brand marks are drawn
-				    for light backgrounds — on a near-black tile the dark half of a
-				    two-tone logo disappears and the rest reads as a smudge. Light mode
-				    already has the contrast, so it keeps the muted surface. */}
-				<div className="flex size-14 items-center justify-center rounded-2xl bg-muted ring-1 ring-inset ring-border transition-transform group-hover:scale-105 dark:bg-zinc-100 dark:ring-black/10">
-					<TemplateLogo
-						name={template.name}
-						logo={template.logo}
-						className="size-8"
-						fallbackClassName="text-lg"
-					/>
+			<div className="flex flex-col items-center gap-3 px-4 pt-6 pb-3 text-center">
+				{/* One step off the card, nothing more: `template-logo.tsx` already
+				    tints the marks that would vanish on a dark tile. */}
+				<div className="flex size-12 items-center justify-center rounded-xl bg-muted ring-1 ring-inset ring-border">
+					<TemplateLogo name={template.name} logo={template.logo} className="size-7" />
 				</div>
 				<div className="flex w-full min-w-0 flex-col gap-0.5">
 					<h3 className="truncate text-[15px] leading-tight font-semibold">{template.name}</h3>
@@ -110,16 +103,14 @@ export function TemplateCard({
 				</div>
 			</div>
 
-			<div className="flex flex-1 items-center border-y bg-muted/50 px-4 py-3 dark:bg-background/60">
-				{/* Three lines reserved, centred in the band: the reservation keeps a
-				    row of cards on one baseline, and centring keeps a six-word
-				    description from looking like a mistake. */}
-				<p className="line-clamp-3 min-h-[3.375rem] text-xs leading-[1.125rem] text-muted-foreground">
-					{template.description}
-				</p>
-			</div>
+			{/* Two lines reserved — the reservation is what keeps a row of cards on
+			    one baseline; the card is otherwise one flat surface, like every
+			    other card in the dashboard. */}
+			<p className="line-clamp-2 min-h-9 flex-1 px-4 text-center text-xs leading-[1.125rem] text-muted-foreground">
+				{template.description}
+			</p>
 
-			<div className="flex items-center justify-between gap-2 px-3 py-2.5">
+			<div className="mt-4 flex items-center justify-between gap-2 border-t px-3 py-2.5">
 				<div className="flex min-w-0 items-center gap-0.5">
 					{/* Where the project lives, for the decision made before deploying.
 					    Quiet rather than hover-revealed: a hover-only control does not
