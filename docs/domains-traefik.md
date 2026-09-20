@@ -188,12 +188,62 @@ label, the same span a wildcard certificate covers — with
   a manager, and appear briefly on the host's process list while the update
   runs. That is root-on-the-manager territory, which already holds the panel's
   encryption key; no shape of this feature avoids it.
+- **Hetzner** moved DNS into its Cloud API in 2025: the credential is a
+  Cloud API token (`HETZNER_API_TOKEN`), and the legacy `HETZNER_API_KEY`
+  (dead `dns.hetzner.com` API) is swept off the proxy. lego learned the new
+  API in 4.27, which ships in Traefik ≥ 3.6 — Nixploy still pins Traefik
+  3.5.0, so **Hetzner DNS-01 waits for the proxy bump**; the record
+  automation below uses the Cloud API directly and works today.
 - Certificate type **None** or **Custom** works for wildcards without any DNS
   provider.
 - Nixploy cannot prove that an organization owns the parent zone, and
   `*.example.com` swallows every unclaimed subdomain of it on this instance —
   so **wildcard rows are instance-admin only**. Ordinary members keep adding
   concrete hosts.
+
+## DNS records created for you
+
+The same provider link can point new hosts at the server. Settings → Platform
+→ **DNS provider** → *Create DNS records automatically*. With it on, attaching
+a domain — by hand, over the API or the CLI, or through a template deploy —
+also writes the host's **A record** at the provider:
+
+1. the host is matched to the **longest zone** the credentials can see
+   (`app.eu.example.com` lands in `eu.example.com` when both it and
+   `example.com` exist);
+2. the record name is relative to that zone (`@` for the apex, `*` or
+   `*.apps` for a wildcard host);
+3. the address is the server's public IPv4 — `NIXPLOY_PUBLIC_HOST` when it is
+   an IP literal, else the detected one;
+4. an existing record with a different address is **updated**; a name that
+   already has several A records (round-robin) is **left alone**; a host no
+   zone contains is skipped with that reason.
+
+Providers with a record client: **Cloudflare, DigitalOcean, Hetzner DNS,
+Vultr, Gandi LiveDNS**. Route 53, Namecheap and OVH are certificates-only for
+now (the switch stays disabled for them) — create the record at the provider
+yourself. `*.traefik.me`, `*.sslip.io`, `*.nip.io` and IP literals resolve on
+their own and are never sent to a provider.
+
+The write is **best-effort by contract**: the domain row and the Traefik
+route exist either way, and the response carries a `dns` outcome
+(`created` · `updated` · `unchanged` · `skipped` + reason · `failed` +
+message) — the panel toasts it, `nixploy domain add` prints it. A failure
+(provider down, token without edit rights) is retried on demand with the
+globe button on the domain row, `nixploy domain ensure-dns <domainId>` or
+`domain.ensureDnsRecord`, which also creates the record for a domain
+attached while the switch was off. **Check link** on the settings card lists
+the zones the stored credentials see, so a token scoped to the wrong zone
+shows up before the first domain does.
+
+Records are never deleted: removing a domain in Nixploy leaves the record
+in place, on purpose — a DNS name outliving a service is harmless, the
+opposite is not.
+
+Cloudflare records are created **DNS-only** (not proxied). Behind the orange
+cloud, Let's Encrypt HTTP-01 still works, but the `*.<tunnel>` wildcard some
+templates need (OpenHole) has to stay DNS-only, and a proxied A record hides
+the server's address from the route diagnostician.
 
 ## TCP and UDP routing (layer 4)
 

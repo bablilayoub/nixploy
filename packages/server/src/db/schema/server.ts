@@ -69,6 +69,13 @@ export const webServerSettings = pgTable("web_server_settings", {
 	/** Provider credentials (`{ CF_DNS_API_TOKEN: "…" }`), encrypted at rest. */
 	acmeDnsCredentials: encryptedJson("acme_dns_credentials"),
 	/**
+	 * Create the A record at the linked DNS provider when a domain is attached
+	 * (`domain.create`, template deploys). Off by default: the provider link
+	 * exists for wildcard certificates first, and writing records in someone's
+	 * zone is a bigger deal than reading a TXT challenge. `modules/dns`.
+	 */
+	dnsAutoRecords: boolean("dns_auto_records").notNull().default(false),
+	/**
 	 * Instance-wide opt-in for outbound requests to private/LAN addresses
 	 * (self-hosted MinIO, Gotify, Gitea, SMTP on the same network). Off by
 	 * default: without it every provider that used to default to

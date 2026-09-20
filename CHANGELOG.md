@@ -9,6 +9,26 @@ pin. Operator-facing detail — what to check before upgrading, what will look
 different afterwards — lives in [docs/upgrade-notes.md](docs/upgrade-notes.md);
 this file is the summary.
 
+## [Unreleased]
+
+### Added
+
+- **DNS records created for you.** The DNS provider link (Settings → Platform
+  → DNS provider) can now write the A record for every domain attached — by
+  hand, over the API/CLI, or by a template deploy — pointing it at the server's
+  public IPv4 in the matching zone. Cloudflare, DigitalOcean, Hetzner (Cloud
+  API), Vultr and Gandi LiveDNS; off by default (*Create DNS records
+  automatically*), best-effort by contract (`dns` outcome on `domain.create`
+  and `template.deploy`), retry with the globe button, `nixploy domain
+  ensure-dns` or `domain.ensureDnsRecord`; **Check link** lists the zones the
+  credentials see (`webServer.dnsZones`). Records are never deleted.
+
+### Changed
+
+- Hetzner DNS-01 credential is now the Cloud API token (`HETZNER_API_TOKEN`);
+  the legacy `HETZNER_API_KEY` API is gone upstream and the key is swept off
+  the proxy. Traefik ≥ 3.6 is needed for the challenge itself (see docs).
+
 ## [0.5.0] — 2026-09-20
 
 The roadmap's **v0.5 "the door"** and most of **v0.6 "live in it"** in one tag,

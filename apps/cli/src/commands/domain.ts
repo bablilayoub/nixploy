@@ -104,7 +104,11 @@ export function augmentDomainCommand(domain: Command): Command {
 				throw usageError("--port expects an integer between 1 and 65535");
 			}
 			const https = options.https === true;
-			const created = await apiPost<{ domainId: string; host: string }>("domain.create", {
+			const created = await apiPost<{
+				domainId: string;
+				host: string;
+				dns?: { status: string; message: string };
+			}>("domain.create", {
 				host,
 				applicationId: options.applicationId,
 				composeId: options.composeId,
@@ -117,7 +121,14 @@ export function augmentDomainCommand(domain: Command): Command {
 				certificateType: options.certificateType ?? (https ? "letsencrypt" : "none"),
 				certificateId: options.certificateId ?? null,
 			});
-			printResult(created, `Domain ${created.host} attached (${created.domainId}).`);
+			// The provider's answer matters when it did something, or could not:
+			// a domain that routes but does not resolve is the failure to shout about.
+			const dns = created.dns;
+			const dnsLine =
+				dns && (dns.status === "created" || dns.status === "updated" || dns.status === "failed")
+					? `\nDNS record ${dns.status}: ${dns.message}`
+					: "";
+			printResult(created, `Domain ${created.host} attached (${created.domainId}).${dnsLine}`);
 		},
 	);
 

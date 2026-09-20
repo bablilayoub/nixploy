@@ -630,6 +630,12 @@ export const apiCatalog: ApiRouterGroup[] = [
 				summary: "Diagnose a domain's route",
 				capability: ["service.runtime"],
 			},
+			{
+				method: "POST",
+				path: "domain.ensureDnsRecord",
+				summary: "Create the domain's DNS record",
+				capability: ["domains.manage"],
+			},
 			{ method: "GET", path: "domain.generateDomain", summary: "Generate a free traefik.me host" },
 			{
 				method: "GET",
@@ -2294,6 +2300,12 @@ export const apiCatalog: ApiRouterGroup[] = [
 				instanceAdmin: true,
 			},
 			{
+				method: "GET",
+				path: "webServer.dnsZones",
+				summary: "List the zones at the linked DNS provider",
+				instanceAdmin: true,
+			},
+			{
 				method: "POST",
 				path: "webServer.dockerCleanupNow",
 				summary: "Run Docker cleanup now",
@@ -2328,4 +2340,4 @@ export const apiCatalog: ApiRouterGroup[] = [
 ];
 
 /** Total endpoints in the catalog above. */
-export const apiEndpointCount = 434;
+export const apiEndpointCount = 436;

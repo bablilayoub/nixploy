@@ -603,7 +603,7 @@ const docs: Record<string, ProcedureDoc> = {
 	"domain.create": {
 		summary: "Attach a domain",
 		description:
-			"Creates the domain and rewrites the Traefik file-provider YAML. Hosts are unique across the whole instance, not just the organization.",
+			"Creates the domain and rewrites the Traefik file-provider YAML. Hosts are unique across the whole instance, not just the organization. With automatic DNS records on, the host's A record is created at the linked provider (`dns` in the result says what happened).",
 		capability: ["domains.manage"],
 	},
 	"domain.update": {
@@ -615,6 +615,12 @@ const docs: Record<string, ProcedureDoc> = {
 	"domain.delete": {
 		summary: "Delete a domain",
 		description: "Removes the row and the Traefik route. Issued certificates are left in place.",
+		capability: ["domains.manage"],
+	},
+	"domain.ensureDnsRecord": {
+		summary: "Create the domain's DNS record",
+		description:
+			"Creates (or fixes) the A record for the host at the linked DNS provider so it points at this server. On demand — the retry after a provider outage, or for a domain attached while automatic records were off. Needs a provider with record automation (Settings → Wildcard certificates).",
 		capability: ["domains.manage"],
 	},
 	"domain.diagnose": {
@@ -1327,7 +1333,7 @@ const docs: Record<string, ProcedureDoc> = {
 	"template.deploy": {
 		summary: "Deploy a template",
 		description:
-			"Creates a compose service from the template, fills its env schema (generating secrets where the template asks for them), attaches the requested domains and deploys.",
+			"Creates a compose service from the template, fills its env schema (generating secrets where the template asks for them), attaches the requested domains and deploys. With automatic DNS records on, each host's A record is created at the linked provider (`dns` in the result).",
 		capability: ["templates.deploy", "secrets.write", "domains.manage"],
 		instanceAdmin: true,
 	},
@@ -1522,7 +1528,14 @@ const docs: Record<string, ProcedureDoc> = {
 	},
 	"webServer.acmeDnsProviders": {
 		summary: "List supported ACME DNS providers",
-		description: "Provider ids accepted for DNS-01 challenges.",
+		description:
+			"Provider ids accepted for DNS-01 challenges, with the env keys each needs and whether Nixploy can also write A records there (`records`).",
+		instanceAdmin: true,
+	},
+	"webServer.dnsZones": {
+		summary: "List the zones at the linked DNS provider",
+		description:
+			"Asks the linked DNS provider for the zones the stored credentials can see — proves the link before automatic records are switched on, and shows which hosts the automation can reach.",
 		instanceAdmin: true,
 	},
 	"webServer.checkDashboardDomain": {

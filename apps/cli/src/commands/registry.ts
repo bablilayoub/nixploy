@@ -572,6 +572,16 @@ export const commandRegistry: RegistryEntry[] = [
 	},
 	{
 		group: "domain",
+		verb: "ensure-dns",
+		procedure: "domain.ensureDnsRecord",
+		kind: "mutation",
+		summary: "Create or fix the host's A record at the linked DNS provider",
+		argument: { field: "domainId", label: "<domainId>", description: "Domain ID" },
+		single: true,
+		columns: ["host", "status", "message"],
+	},
+	{
+		group: "domain",
 		verb: "remove",
 		procedure: "domain.delete",
 		kind: "mutation",

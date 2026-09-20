@@ -463,6 +463,15 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 				type: "p",
 				text: "A host answers 502 or 404 and the service says it is running. The stethoscope on the domain row (also nixploy domain diagnose and the get_domain_diagnosis MCP tool) walks the request path in order and names the fix at each step: DNS, the Traefik route file, a second file claiming the same host, the upstream task, the shared-network attachment, the container port (a throwaway busybox on the overlay), Traefik's own answer for the host, and the certificate. Deterministic — no model involved.",
 			},
+			{ type: "h2", text: "DNS records created for you" },
+			{
+				type: "p",
+				text: "Link a DNS provider once (Settings → Platform → DNS provider — the same link wildcard certificates use) and switch on Create DNS records automatically. From then on, attaching a domain — by hand, through the API or CLI, or with a template deploy — also creates the host's A record in the matching zone at the provider, pointing at the server's public IPv4. An existing record that points elsewhere is updated; a round-robin set is left alone; a host no zone contains is skipped and says so. Cloudflare, DigitalOcean, Hetzner DNS, Vultr and Gandi LiveDNS have a record client; Route 53, Namecheap and OVH stay certificates-only for now.",
+			},
+			{
+				type: "p",
+				text: "The write never fails the domain: the row and the route exist either way, and the response carries a dns outcome the panel toasts and nixploy domain add prints. Retry on demand with the globe button on the domain row, nixploy domain ensure-dns, or domain.ensureDnsRecord — which also creates the record for a domain attached while the switch was off. Check link on the settings card lists the zones the stored credentials see. Records are never deleted when a domain is removed.",
+			},
 			{ type: "h2", text: "External upstreams" },
 			{
 				type: "p",

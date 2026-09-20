@@ -16,6 +16,7 @@ import {
 } from "../compose/compose-file";
 import { createCompose, resyncComposeDomains, updateComposeById } from "../compose/service";
 import { queueDeployment } from "../deployment";
+import { type DnsRecordOutcome, ensureDnsRecords } from "../dns";
 import { badRequest, notFound } from "../errors";
 import { assertWithinQuota, findProjectById } from "../projects";
 import { findTemplateById, listTemplateSummaries } from "./catalog";
@@ -98,6 +99,8 @@ export interface DeployTemplateResult {
 	composeId: string;
 	appName: string;
 	deploymentId: string;
+	/** What the linked DNS provider did for each requested host (`modules/dns`). */
+	dns: DnsRecordOutcome[];
 }
 
 /**
@@ -229,9 +232,14 @@ export async function deployTemplate(
 		composeId: service.composeId,
 		type: "deploy",
 	});
+	// Point every requested host at this box at the linked DNS provider (a
+	// no-op unless the operator switched it on). Best-effort by contract:
+	// the stack is deploying either way, and each outcome says what happened.
+	const dns = await ensureDnsRecords((input.domains ?? []).map((domain) => domain.host));
 	return {
 		composeId: service.composeId,
 		appName: service.appName,
 		deploymentId,
+		dns,
 	};
 }

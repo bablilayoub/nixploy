@@ -39,6 +39,7 @@ import { Switch } from "@/components/ui/switch";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { INSTANCE_ADMIN_HINT, missingCapabilityHint } from "@/lib/capabilities";
 import { toastError } from "@/lib/describe-error";
+import { toastDnsOutcome } from "@/lib/dns-outcome";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { TemplateLogo } from "./template-logo";
@@ -225,6 +226,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 				toast.success(`Deploying ${template.name} — watch the deployment logs`, {
 					action: { label: "View", onClick: () => router.push(href) },
 				});
+				for (const outcome of result.dns) toastDnsOutcome(outcome);
 				// A new compose service now exists in the target project — refresh
 				// the project list, the project page and its compose service list.
 				await Promise.all([

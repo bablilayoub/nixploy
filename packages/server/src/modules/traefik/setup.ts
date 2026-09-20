@@ -49,7 +49,9 @@ export const ACME_DNS_PROVIDERS = [
 	},
 	{ code: "digitalocean", label: "DigitalOcean", envKeys: ["DO_AUTH_TOKEN"] },
 	{ code: "gandiv5", label: "Gandi LiveDNS", envKeys: ["GANDIV5_PERSONAL_ACCESS_TOKEN"] },
-	{ code: "hetzner", label: "Hetzner DNS", envKeys: ["HETZNER_API_KEY"] },
+	// Hetzner moved DNS into the Cloud API (2025): the legacy `dns.hetzner.com`
+	// API behind `HETZNER_API_KEY` is gone, lego ≥ 4.27 reads the Cloud token.
+	{ code: "hetzner", label: "Hetzner DNS", envKeys: ["HETZNER_API_TOKEN"] },
 	{ code: "namecheap", label: "Namecheap", envKeys: ["NAMECHEAP_API_USER", "NAMECHEAP_API_KEY"] },
 	{
 		code: "ovh",
@@ -116,9 +118,15 @@ export function buildAcmeDnsEnv(
 	return env;
 }
 
+/** Keys a previous version of this table set; still swept off the proxy. */
+const RETIRED_ACME_DNS_ENV_KEYS: readonly string[] = ["HETZNER_API_KEY"];
+
 /** Every env key any provider could have set, so switching providers cleans up. */
 const ALL_ACME_DNS_ENV_KEYS: readonly string[] = [
-	...new Set(ACME_DNS_PROVIDERS.flatMap((entry) => entry.envKeys as readonly string[])),
+	...new Set([
+		...ACME_DNS_PROVIDERS.flatMap((entry) => entry.envKeys as readonly string[]),
+		...RETIRED_ACME_DNS_ENV_KEYS,
+	]),
 ];
 
 /**

@@ -65,6 +65,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { toastError } from "@/lib/describe-error";
+import { toastDnsOutcome } from "@/lib/dns-outcome";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 
 type CertificateType = "letsencrypt" | "none" | "custom";
@@ -1011,8 +1012,17 @@ export function DomainManager({
 
 	const createMutation = useSaveMutation(
 		trpc.domain.create.mutationOptions({ onSuccess: () => setDialogOpen(false) }),
-		{ successMessage: "Domain created", invalidate, errorMessage },
+		{
+			successMessage: "Domain created",
+			invalidate,
+			errorMessage,
+			onSuccess: (created) => toastDnsOutcome(created.dns),
+		},
 	);
+	const ensureDns = useSaveMutation(trpc.domain.ensureDnsRecord.mutationOptions(), {
+		onSuccess: (outcome) => toastDnsOutcome(outcome, true),
+		errorMessage: "DNS record failed",
+	});
 	const updateMutation = useSaveMutation(
 		trpc.domain.update.mutationOptions({ onSuccess: () => setDialogOpen(false) }),
 		{ successMessage: "Domain updated", invalidate, errorMessage },
@@ -1322,6 +1332,18 @@ export function DomainManager({
 													onClick={() => setDiagnosing(domain)}
 												>
 													<Stethoscope className="size-3.5" />
+												</Button>
+												<Button
+													variant="ghost"
+													size="icon-sm"
+													aria-label={`Create DNS record for ${domain.host}`}
+													disabled={!canManage || ensureDns.isPending}
+													title={
+														manageHint ?? "Point this host at the server at the linked DNS provider"
+													}
+													onClick={() => ensureDns.mutate({ domainId: domain.domainId })}
+												>
+													<Globe className="size-3.5" />
 												</Button>
 												<Button
 													variant="ghost"

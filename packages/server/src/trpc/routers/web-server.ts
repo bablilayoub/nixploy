@@ -11,6 +11,7 @@ import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { publishAuthRebuild } from "../../modules/auth/sso-notify";
 import { detectPublicIp } from "../../modules/cluster/public-host";
 import { dockerCleanup } from "../../modules/deployment";
+import { dnsRecordsSupported, listLinkedDnsZones } from "../../modules/dns";
 import { emitDockerCleanupNotification } from "../../modules/notifications";
 import { resolveCallerOrganizationId } from "../../modules/projects";
 import {
@@ -91,6 +92,11 @@ const updateSettingsInput = z.object({
 	 * `utils/public-url.ts` and docs/hardening.md.
 	 */
 	allowPrivateEgress: z.boolean().optional(),
+	/**
+	 * Create the A record at the linked DNS provider when a domain is
+	 * attached. Needs a provider with record automation (`modules/dns`).
+	 */
+	dnsAutoRecords: z.boolean().optional(),
 });
 
 export const webServerRouter = router({
@@ -130,7 +136,19 @@ export const webServerRouter = router({
 			code: provider.code as string,
 			label: provider.label as string,
 			envKeys: [...provider.envKeys] as string[],
+			/** Can Nixploy also write A records there (`dnsAutoRecords`)? */
+			records: dnsRecordsSupported(provider.code),
 		}));
+	}),
+
+	/**
+	 * The zones the linked DNS provider shows for the stored credentials —
+	 * proves the link works before `dnsAutoRecords` is switched on, and
+	 * tells the operator which hosts the automation can reach.
+	 */
+	dnsZones: protectedProcedure.query(async ({ ctx }) => {
+		await requireInstanceAdmin(ctx.session);
+		return listLinkedDnsZones();
 	}),
 
 	/**
@@ -196,6 +214,7 @@ export const webServerRouter = router({
 			...(input.allowPrivateEgress !== undefined && {
 				allowPrivateEgress: input.allowPrivateEgress,
 			}),
+			...(input.dnsAutoRecords !== undefined && { dnsAutoRecords: input.dnsAutoRecords }),
 			metricsConfig,
 		};
 

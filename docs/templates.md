@@ -100,7 +100,10 @@ fresh. A value the operator provides at deploy is taken verbatim.
 domain. It creates a **compose** service with the template's compose file,
 env, and optional domain (subject to the org's service quota), then queues its first deployment. The server side
 is the standard compose create + deploy path — templates carry no special
-runtime logic.
+runtime logic. With *Create DNS records automatically* on (Settings →
+Platform → DNS provider), every host the dialog attaches also gets its A
+record at the linked provider; the result's `dns` array says what happened
+per host (docs/domains-traefik.md § "DNS records created for you").
 
 ## Template sources (bring your own catalog)
 

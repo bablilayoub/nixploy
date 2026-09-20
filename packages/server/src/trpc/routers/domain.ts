@@ -28,6 +28,7 @@ import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { detectPublicIp } from "../../modules/cluster/public-host";
 import { resyncComposeDomains } from "../../modules/compose/service";
+import { ensureDnsRecord } from "../../modules/dns";
 import { isUniqueViolation } from "../../modules/errors";
 import { syncPreviewTraefik } from "../../modules/preview/traefik";
 import { assertCapability } from "../../modules/projects";
@@ -699,8 +700,34 @@ export const domainRouter = router({
 				targetId: domain.domainId,
 				targetName: domain.host,
 			});
-			return domain;
+			// Point the host at this box at the linked DNS provider. Never fails
+			// the create: the row and the route exist either way, and the
+			// outcome tells the caller what happened (or why nothing did).
+			const dns = await ensureDnsRecord(domain.host);
+			return { ...domain, dns };
 		}),
+
+	/**
+	 * Create or fix the A record for one domain at the linked DNS provider,
+	 * on demand — the retry button after a provider outage, or the way to
+	 * get a record for a domain attached while `dnsAutoRecords` was off.
+	 * Bypasses the switch, not the provider requirement.
+	 */
+	ensureDnsRecord: protectedProcedure.input(domainIdInput).mutation(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		await assertCapability(ctx.session.user.id, organizationId, "domains.manage");
+		const domain = await assertDomainAccess(input.domainId, organizationId);
+		const outcome = await ensureDnsRecord(domain.host, { explicit: true });
+		if (outcome.status === "created" || outcome.status === "updated") {
+			await auditFromSession(ctx, organizationId, {
+				action: "domain.ensureDnsRecord",
+				targetType: "domain",
+				targetId: domain.domainId,
+				targetName: domain.host,
+			});
+		}
+		return outcome;
+	}),
 
 	update: protectedProcedure
 		.input(

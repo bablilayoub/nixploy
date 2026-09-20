@@ -1,0 +1,1 @@
+ALTER TABLE "web_server_settings" ADD COLUMN "dns_auto_records" boolean DEFAULT false NOT NULL;
