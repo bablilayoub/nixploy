@@ -1,3 +1,4 @@
+import NextImage from "next/image";
 import type { HTMLAttributes } from "react";
 
 const SAFARI_WIDTH = 1203;
@@ -18,12 +19,21 @@ type SafariMode = "default" | "simple";
 export interface SafariProps extends HTMLAttributes<HTMLDivElement> {
 	url?: string;
 	imageSrc?: string;
+	/** What the capture shows. Empty means decorative; this one is content. */
+	imageAlt?: string;
+	/** Set on the capture above the fold so it is not lazy-loaded. */
+	priority?: boolean;
+	/** `sizes` for the optimizer; defaults to the full viewport. */
+	imageSizes?: string;
 	videoSrc?: string;
 	mode?: SafariMode;
 }
 
 export function Safari({
 	imageSrc,
+	imageAlt = "",
+	priority = false,
+	imageSizes = "100vw",
 	videoSrc,
 	url,
 	mode = "default",
@@ -76,7 +86,17 @@ export function Safari({
 						borderRadius: "0 0 11px 11px",
 					}}
 				>
-					<img src={imageSrc} alt="" className="block size-full object-cover object-top" />
+					{/* next/image rather than a bare <img>: the optimizer serves AVIF
+					    or WebP at the width the viewport actually needs, and this is
+					    the largest element on the page it appears on. */}
+					<NextImage
+						src={imageSrc}
+						alt={imageAlt}
+						fill
+						sizes={imageSizes}
+						priority={priority}
+						className="object-cover object-top"
+					/>
 				</div>
 			)}
 

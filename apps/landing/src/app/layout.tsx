@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
+import { MotionProvider } from "@/components/motion-provider";
 import { site } from "@/lib/site";
 import "./globals.css";
 
@@ -65,7 +66,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 			lang="en"
 			className={`dark ${geist.variable} ${spaceGrotesk.variable} ${geistMono.variable}`}
 		>
-			<body className="bg-background font-sans text-foreground antialiased">{children}</body>
+			<body className="bg-background font-sans text-foreground antialiased">
+				<MotionProvider>{children}</MotionProvider>
+			</body>
 		</html>
 	);
 }

@@ -19,7 +19,16 @@ const marks = featuredTemplateIds
 
 const Screenshot = ({ src, alt }: { src: string; alt: string }) => (
 	<div className="absolute inset-x-6 top-6 bottom-24 overflow-hidden rounded-lg border border-white/10 opacity-70 transition-all duration-300 group-hover:opacity-90 [mask-image:linear-gradient(to_top,transparent_12%,#000_60%)]">
-		<Image src={src} alt={alt} width={3200} height={2000} className="h-auto w-full" />
+		{/* `sizes` matters here: without it the optimizer serves the full 3200px
+		    capture for a cell that is at most 760px wide. */}
+		<Image
+			src={src}
+			alt={alt}
+			width={3200}
+			height={2000}
+			sizes="(min-width: 1024px) 760px, 100vw"
+			className="h-auto w-full"
+		/>
 	</div>
 );
 

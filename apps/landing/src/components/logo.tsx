@@ -16,6 +16,7 @@ export function LogoMark({ className }: { className?: string }) {
 				alt=""
 				width={80}
 				height={80}
+				sizes="40px"
 				className="size-full object-cover"
 				priority
 			/>

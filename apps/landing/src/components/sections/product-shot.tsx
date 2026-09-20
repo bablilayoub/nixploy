@@ -13,6 +13,9 @@ export function ProductShot() {
 					<Safari
 						url="panel.acme.dev"
 						imageSrc="/screenshots/02-dashboard.png"
+						imageAlt="The Nixploy panel: projects, services with their state, deployments in the last 24 hours and Docker containers"
+						imageSizes="(min-width: 1360px) 1280px, 100vw"
+						priority
 						className="w-full"
 					/>
 					<BorderBeam
