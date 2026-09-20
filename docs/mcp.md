@@ -183,7 +183,7 @@ and the tools already answer "what is there" with pagination and filters.
 | `list_previews` | Pull-request previews of an application with PR metadata and expiry | `previewDeployment.byApplication` |
 | `get_env` | Variables at one scope (organization / project / environment / service) | `organization.environment`, `project.one`, `environment.byProject`, `<router>.one` |
 | `get_resolved_env` | The merged org → project → environment → service view with each key's origin | `project.getResolvedEnvironment` |
-| `list_incidents` | Alert firings, deploy-failure streaks, watchdog events, uptime flips | `observability.incidents` |
+| `list_incidents` | Alert firings, deploy-failure streaks, watchdog events, uptime flips, remediation proposals (with their `proposal.action` — applying one stays a human's click) | `observability.incidents` |
 | `list_backups` | Backup schedules of a database (or of the instance) with their last run | `backup.all` |
 | `list_backup_runs` | Run history: status, trigger, size, object key, error | `backup.runs` |
 | `get_service_metrics` | CPU/memory per replica, by `appName` — local **and** remote nodes | `monitoring.replicaStats` (+ `fleetOverview` fallback) |

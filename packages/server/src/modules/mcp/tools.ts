@@ -641,7 +641,7 @@ export const mcpTools: McpToolDefinition[] = [
 	{
 		name: "list_incidents",
 		description:
-			"List incidents (alert firings, deploy-failure streaks, watchdog events, uptime flips) newest first, optionally for one project. Read-only.",
+			"List incidents (alert firings, deploy-failure streaks, watchdog events, uptime flips, and remediation proposals waiting for a human) newest first, optionally for one project. A `remediation` incident carries `proposal.action` — the rollback Nixploy suggests; only a person applies it, from the panel or the CLI. Read-only.",
 		inputSchema: z.object({
 			projectId: z.string().min(1).optional().describe("Limit to one project"),
 			limit: z.number().int().min(1).max(100).optional().describe("Rows to return (default 20)"),
@@ -658,6 +658,10 @@ export const mcpTools: McpToolDefinition[] = [
 				createdAt: row.createdAt,
 				acknowledgedAt: row.acknowledgedAt,
 				resolvedAt: row.resolvedAt,
+				// The proposed action of a `remediation` incident (modules/remediation).
+				...(row.kind === "remediation" && row.metadata?.proposal
+					? { proposal: row.metadata.proposal }
+					: {}),
 			}));
 		},
 	},
