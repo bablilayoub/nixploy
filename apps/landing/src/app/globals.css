@@ -260,8 +260,11 @@
 	*,
 	*::before,
 	*::after {
+		/* biome-ignore lint/complexity/noImportantStyles: the point is to beat a component's own animation */
 		animation-duration: 0.01ms !important;
+		/* biome-ignore lint/complexity/noImportantStyles: the point is to beat a component's own animation */
 		animation-iteration-count: 1 !important;
+		/* biome-ignore lint/complexity/noImportantStyles: the point is to beat a component's own transition */
 		transition-duration: 0.01ms !important;
 	}
 }

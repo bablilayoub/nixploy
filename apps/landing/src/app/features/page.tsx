@@ -165,8 +165,17 @@ export default function FeaturesPage() {
 										</Card>
 									) : (
 										<ul className="grid gap-3 sm:grid-cols-2">
-											{section.details.map((detail) => (
-												<li key={detail.name}>
+											{section.details.map((detail, index) => (
+												<li
+													key={detail.name}
+													// An odd number of cells leaves the last one alone in a
+													// two-column grid; let it take the row.
+													className={
+														section.details.length % 2 === 1 && index === section.details.length - 1
+															? "sm:col-span-2"
+															: undefined
+													}
+												>
 													<Card className="h-full p-5">
 														<p className="font-medium">{detail.name}</p>
 														<p className="mt-2 text-sm text-muted-foreground">

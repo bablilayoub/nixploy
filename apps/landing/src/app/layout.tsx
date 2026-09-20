@@ -28,6 +28,14 @@ const geistMono = Geist_Mono({
 	display: "swap",
 });
 
+/*
+ * Motion writes its `initial` state as an inline style, so every reveal on the
+ * site renders at `opacity: 0` in the server HTML and stays there when scripts
+ * do not run. This is the one rule that makes the page readable without them.
+ */
+const NOSCRIPT_REVEAL =
+	"[style*='opacity:0']{opacity:1!important;transform:none!important;filter:none!important}";
+
 export const metadata: Metadata = {
 	metadataBase: new URL(site.url),
 	title: {
@@ -73,13 +81,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 				 * and stays there when scripts do not run. This is the one rule
 				 * that makes the page readable without them.
 				 */}
-				{/* biome-ignore lint/security/noDangerouslySetInnerHtml: a static stylesheet with no interpolation */}
-				<noscript
-					dangerouslySetInnerHTML={{
-						__html:
-							"<style>[style*='opacity:0']{opacity:1!important;transform:none!important;filter:none!important}</style>",
-					}}
-				/>
+				<noscript>
+					<style>{NOSCRIPT_REVEAL}</style>
+				</noscript>
 			</head>
 			<body className="bg-background font-sans text-foreground antialiased">
 				<MotionProvider>{children}</MotionProvider>
