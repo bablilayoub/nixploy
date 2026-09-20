@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { FoldBackdrop } from "@/components/fold-backdrop";
 import { Footer } from "@/components/footer";
 import { Cta } from "@/components/home/cta";
 import { Navbar } from "@/components/navbar";
@@ -63,7 +64,10 @@ export function PageShell({
 		<div className="relative flex min-h-screen flex-col">
 			<Navbar />
 			<main id="main-content" className="relative flex-1 pb-24 lg:pb-32">
-				<Container className={cn(width === "prose" && "max-w-[42rem]", className)}>
+				{/* The home fold's graph paper and glow, at an inner page's volume —
+				    without it these pages read as a different site (2026-09-20). */}
+				<FoldBackdrop />
+				<Container className={cn("relative", width === "prose" && "max-w-[42rem]", className)}>
 					{title ? (
 						<PageHeader
 							eyebrow={eyebrow}

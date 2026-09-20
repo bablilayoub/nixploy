@@ -1,9 +1,8 @@
 import { ArrowRight } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-
+import { FoldBackdrop } from "@/components/fold-backdrop";
 import { InstallCommand } from "@/components/install-command";
-import { AnimatedGridPattern } from "@/components/magicui/animated-grid-pattern";
 import { Container, Pill, TerminalFrame } from "@/components/ui";
 import { heroBadge, heroLead, heroTitle, screens } from "@/lib/landing-data";
 
@@ -19,14 +18,9 @@ export function Hero() {
 
 	return (
 		<section className="relative overflow-hidden">
-			{/*
-			 * Graph paper with a few squares lighting up at random, dying out towards
-			 * the edges, and one soft glow behind the title so the grid reads as depth.
-			 */}
-			<div className="pointer-events-none absolute inset-x-0 top-0 h-[900px]" aria-hidden>
-				<AnimatedGridPattern className="[mask-image:radial-gradient(ellipse_70%_80%_at_50%_0%,#000_25%,transparent_100%)] text-foreground" />
-				<div className="absolute top-0 left-1/2 h-[560px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.07),transparent_65%)]" />
-			</div>
+			{/* Graph paper and the glow behind the title — shared with every other
+			    page's header, at the fold's volume (components/fold-backdrop.tsx). */}
+			<FoldBackdrop variant="hero" />
 
 			<Container className="pt-20 lg:pt-28">
 				<div className="flex flex-col items-center text-center">
