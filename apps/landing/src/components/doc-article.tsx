@@ -3,6 +3,7 @@ import { Info } from "lucide-react";
 import { ProseLink } from "@/components/page-frame";
 import { Card } from "@/components/ui/card";
 import { CodeBlock } from "@/components/ui/code-block";
+import { headingId } from "@/lib/docs/headings";
 import type { DocBlock, DocPage } from "@/lib/docs/pages";
 import { site } from "@/lib/site";
 
@@ -30,20 +31,38 @@ function blockKey(block: DocBlock): string {
  * the install one-liner appears twice on several pages, which collided and
  * made React drop one of them. Duplicates take an occurrence suffix.
  */
-function withKeys(blocks: readonly DocBlock[]): { key: string; block: DocBlock }[] {
+function withKeys(
+	blocks: readonly DocBlock[],
+): { key: string; block: DocBlock; occurrence: number }[] {
 	const seen = new Map<string, number>();
+	const headings = new Map<string, number>();
 	return blocks.map((block) => {
 		const base = blockKey(block);
 		const seenBefore = seen.get(base) ?? 0;
 		seen.set(base, seenBefore + 1);
-		return { key: seenBefore === 0 ? base : `${base}#${seenBefore}`, block };
+		// Heading ids count occurrences of the heading text, which is not the
+		// same counter as the block key's (two headings can share text while
+		// their blocks differ).
+		let occurrence = 0;
+		if (block.type === "h2") {
+			occurrence = headings.get(block.text) ?? 0;
+			headings.set(block.text, occurrence + 1);
+		}
+		return { key: seenBefore === 0 ? base : `${base}#${seenBefore}`, block, occurrence };
 	});
 }
 
-function Block({ block }: { block: DocBlock }) {
+function Block({ block, occurrence }: { block: DocBlock; occurrence: number }) {
 	switch (block.type) {
 		case "h2":
-			return <h2 className="mt-12 scroll-mt-28 text-2xl font-semibold">{block.text}</h2>;
+			return (
+				<h2
+					id={headingId(block.text, occurrence)}
+					className="mt-12 scroll-mt-28 text-2xl font-semibold"
+				>
+					{block.text}
+				</h2>
+			);
 		case "p":
 			return <p className="mt-4 text-muted-foreground">{block.text}</p>;
 		case "ul":
@@ -87,8 +106,8 @@ export function DocArticle({ page }: { page: DocPage }) {
 			<h1 className="mt-4 text-4xl font-semibold tracking-tight text-balance">{page.title}</h1>
 			<p className="mt-4 text-lg text-muted-foreground">{page.description}</p>
 			<div className="mt-10">
-				{withKeys(page.blocks).map(({ key, block }) => (
-					<Block key={key} block={block} />
+				{withKeys(page.blocks).map(({ key, block, occurrence }) => (
+					<Block key={key} block={block} occurrence={occurrence} />
 				))}
 			</div>
 			<p className="mt-16 border-t pt-6 text-sm text-muted-foreground">

@@ -62,3 +62,23 @@ export const docsSlugs = docsNav
 	.flatMap((g) => g.items)
 	.filter((i) => i.href.startsWith("/docs/") && i.href !== "/docs")
 	.map((i) => i.href.replace("/docs/", ""));
+
+/** Every nav item in reading order, so a page can find its neighbours. */
+const docsFlat = docsNav.flatMap((group) =>
+	group.items.map((item) => ({ ...item, group: group.title })),
+);
+
+export type DocsPagerItem = { href: string; label: string; group: string };
+
+/**
+ * The previous and next page in the sidebar's order.
+ *
+ * Without a pager the reader has to climb back to the sidebar after every
+ * page, which is the difference between reading the docs and looking things
+ * up in them.
+ */
+export function docPager(activeHref: string): { prev?: DocsPagerItem; next?: DocsPagerItem } {
+	const index = docsFlat.findIndex((item) => item.href === activeHref);
+	if (index === -1) return {};
+	return { prev: docsFlat[index - 1], next: docsFlat[index + 1] };
+}

@@ -110,7 +110,8 @@ export const CodeBlock = ({
 						<div className="text-xs text-zinc-400">{filename}</div>
 						<button
 							onClick={copyToClipboard}
-							className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 transition-colors font-sans"
+							aria-label={copied ? "Code copied" : "Copy code"}
+						className="-mr-1 flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 						>
 							{copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
 						</button>

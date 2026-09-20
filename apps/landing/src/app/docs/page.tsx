@@ -75,12 +75,12 @@ export default function DocsIndexPage() {
 						<Card key={group.title}>
 							<CardContent>
 								<h2 className="font-medium">{group.title}</h2>
-								<ul className="mt-3 flex flex-col gap-2">
+								<ul className="mt-2 flex flex-col">
 									{group.items.map((item) => (
 										<li key={item.href}>
 											<Link
 												href={item.href}
-												className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+												className="inline-flex min-h-9 items-center text-sm text-muted-foreground transition-colors hover:text-foreground"
 											>
 												{item.label}
 											</Link>

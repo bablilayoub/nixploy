@@ -35,7 +35,7 @@ export function Logo({
 	return (
 		<Link
 			href={href}
-			className={cn("inline-flex items-center gap-2.5 text-foreground", className)}
+			className={cn("inline-flex min-h-9 items-center gap-2.5 text-foreground", className)}
 			aria-label="Nixploy"
 		>
 			<LogoMark className="size-7" />

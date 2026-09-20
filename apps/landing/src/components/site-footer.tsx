@@ -61,12 +61,12 @@ export function SiteFooter() {
 							}
 						>
 							<p className="text-sm font-medium">{column.heading}</p>
-							<ul className="mt-4 flex flex-col gap-3">
+							<ul className="mt-3 flex flex-col">
 								{column.links.map((link) => (
 									<li key={link.href}>
 										<Link
 											href={link.href}
-											className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+											className="inline-flex min-h-9 items-center text-sm text-muted-foreground transition-colors hover:text-foreground"
 										>
 											{link.label}
 										</Link>
