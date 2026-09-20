@@ -9,6 +9,28 @@ pin. Operator-facing detail — what to check before upgrading, what will look
 different afterwards — lives in [docs/upgrade-notes.md](docs/upgrade-notes.md);
 this file is the summary.
 
+## [0.7.2] — 2026-09-20
+
+### Changed
+
+- **Template categories are a vocabulary, not whatever a tag said.** A
+  blueprint declares tags and the first one used to become its category
+  verbatim, which gave the public catalog 209 categories for 436 templates,
+  125 of them holding a single entry. Tags now resolve against the fifteen
+  categories the built-in catalog uses — the first tag that maps wins, the
+  generic ones every entry carries are ignored, and anything unrecognized
+  stays visible in *Community*. On that catalog: 209 categories become 16.
+- **The category rail stays a rail.** It lists the eight busiest categories,
+  keeps a selected one on screen wherever it sorts, offers *Show N more*,
+  grows its own filter box past twelve categories, and scrolls inside itself
+  instead of making the page taller than the results.
+- **The template card was redrawn.** The mark leads at 48px with the name,
+  what the entry is and what it will ask for under it, its tags as filters,
+  two reserved lines of description, and a footer carrying links to the
+  project's source, site and documentation next to Deploy. The card itself
+  carries no fill — a border on the page's own black, like the dashboard's
+  cards.
+
 ## [0.7.1] — 2026-09-20
 
 ### Changed
