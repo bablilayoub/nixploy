@@ -277,8 +277,12 @@ export function TemplatesWorkbench({
 			/>
 
 			<div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-				{/* The rail is navigation, so it stays put while the results scroll. */}
-				<aside className="hidden w-56 shrink-0 lg:sticky lg:top-4 lg:block">{rail}</aside>
+				{/* The rail is navigation, so it stays put while the results scroll —
+				    and scrolls inside itself when a source brings more categories
+				    than fit, rather than making the page taller than the results. */}
+				<aside className="hidden w-56 shrink-0 lg:sticky lg:top-4 lg:block lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto lg:pe-1">
+					{rail}
+				</aside>
 
 				<div className="flex min-w-0 flex-1 flex-col gap-4">
 					{/* On a phone the search box gets the row to itself: sharing it with

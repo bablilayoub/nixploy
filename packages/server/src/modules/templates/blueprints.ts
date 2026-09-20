@@ -1,6 +1,7 @@
 import { randomBytes, randomInt } from "node:crypto";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { z } from "zod";
+import { categoryFromTags } from "./categories";
 import { signJwtHs256 } from "./placeholders";
 import { parseToml, type TomlTable, type TomlValue } from "./toml";
 import type { Template } from "./types";
@@ -105,9 +106,6 @@ const tableOf = (value: TomlValue | undefined): TomlTable | undefined =>
 	value && typeof value === "object" && !Array.isArray(value) ? value : undefined;
 
 const arrayOf = (value: TomlValue | undefined): TomlValue[] => (Array.isArray(value) ? value : []);
-
-const capitalize = (value: string): string =>
-	value.length > 0 ? value[0]?.toUpperCase() + value.slice(1) : value;
 
 const numberArg = (raw: string | undefined, fallback: number): number => {
 	const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
@@ -638,7 +636,10 @@ export function mapBlueprint(input: BlueprintInput): MappedBlueprint {
 				: logo && !logo.includes("/") && !logo.includes("..")
 					? input.assetUrl(logo)
 					: "",
-			category: tags[0] ? capitalize(tags[0]) : "Community",
+			// Tags, not a category: the first tag used to become one verbatim,
+			// which gave the public catalog 209 categories for 436 templates.
+			// `categoryFromTags` resolves them against the built-in vocabulary.
+			category: categoryFromTags(tags),
 			tags,
 			links: {
 				website: httpsOrUndefined(meta.data.links?.website),

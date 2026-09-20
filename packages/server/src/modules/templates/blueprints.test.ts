@@ -193,7 +193,9 @@ host = "${ref("main_domain")}"
 			template.env.map((entry) => ({ key: entry.key, value: entry.default })),
 		);
 		expect(resolved.DB_URL).toBe(`postgres://immich:${resolved.DB_PASSWORD}@db/immich`);
-		expect(template.category).toBe("Photos");
+		// `photos` resolves to the catalog's own vocabulary rather than becoming
+		// a category of its own (categories.ts).
+		expect(template.category).toBe("Media");
 	});
 
 	it("signs literal-secret JWTs now and defers generated-secret JWTs to deploy", () => {

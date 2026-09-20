@@ -1,8 +1,10 @@
 "use client";
 
+import { Search } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { CatalogView } from "./template-catalog";
 import { BUILT_IN_SOURCE } from "./template-catalog";
@@ -25,6 +27,19 @@ import { TEMPLATE_NEEDS } from "./use-template-filters";
 
 /** How many tags to print before "Show all". */
 const TAG_PREVIEW = 12;
+
+/**
+ * How many categories to print before "Show more", and the count from which
+ * the section gets its own filter box.
+ *
+ * A catalog does not promise a short list: a source brings its own categories,
+ * and the public blueprints catalog arrived with 209 of them before they were
+ * mapped onto this catalog's vocabulary. The rail has to stay a rail — the
+ * busiest categories, then a way to reach the rest, never a column you scroll
+ * past to get to the next filter.
+ */
+const CATEGORY_PREVIEW = 8;
+const CATEGORY_SEARCH_FROM = 12;
 
 function FacetRow({
 	label,
@@ -76,6 +91,30 @@ export function TemplateFilterRail({
 	sourceNames: Map<string, string>;
 }) {
 	const [allTags, setAllTags] = useState(false);
+	const [allCategories, setAllCategories] = useState(false);
+	const [categoryQuery, setCategoryQuery] = useState("");
+
+	// Busiest first: a rail that opens with "AI, Analytics, Apps" hides what the
+	// catalog is actually made of behind a scroll.
+	const categories = view.allCategories
+		.map((category) => ({ category, count: view.counts.categories.get(category) ?? 0 }))
+		.sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
+	const needle = categoryQuery.trim().toLowerCase();
+	const matchingCategories = needle
+		? categories.filter((entry) => entry.category.toLowerCase().includes(needle))
+		: categories;
+	// A selected category stays on screen wherever it sits in the order: a
+	// filter you cannot see is a filter you cannot turn off.
+	const visibleCategories =
+		allCategories || needle
+			? matchingCategories
+			: [
+					...matchingCategories.slice(0, CATEGORY_PREVIEW),
+					...matchingCategories
+						.slice(CATEGORY_PREVIEW)
+						.filter((entry) => filters.categories.includes(entry.category)),
+				];
+	const hiddenCategories = matchingCategories.length - visibleCategories.length;
 
 	const tags = [...view.counts.tags.entries()]
 		.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -91,21 +130,47 @@ export function TemplateFilterRail({
 	return (
 		<div className="flex flex-col gap-5">
 			<Section title="Categories">
-				<FacetRow
-					label="All categories"
-					count={view.total}
-					active={filters.categories.length === 0}
-					onClick={() => filters.set({ categories: [] })}
-				/>
-				{view.allCategories.map((category) => (
+				{categories.length >= CATEGORY_SEARCH_FROM ? (
+					<div className="relative px-1 pb-1">
+						<Search className="pointer-events-none absolute start-3.5 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
+						<Input
+							value={categoryQuery}
+							onChange={(event) => setCategoryQuery(event.target.value)}
+							placeholder="Filter categories…"
+							aria-label="Filter categories"
+							className="h-8 ps-7 text-xs"
+						/>
+					</div>
+				) : null}
+				{needle ? null : (
 					<FacetRow
-						key={category}
-						label={category}
-						count={view.counts.categories.get(category) ?? 0}
-						active={filters.categories.includes(category)}
-						onClick={() => filters.toggle("categories", category)}
+						label="All categories"
+						count={view.total}
+						active={filters.categories.length === 0}
+						onClick={() => filters.set({ categories: [] })}
+					/>
+				)}
+				{visibleCategories.map((entry) => (
+					<FacetRow
+						key={entry.category}
+						label={entry.category}
+						count={entry.count}
+						active={filters.categories.includes(entry.category)}
+						onClick={() => filters.toggle("categories", entry.category)}
 					/>
 				))}
+				{needle && matchingCategories.length === 0 ? (
+					<p className="px-2 py-1.5 text-xs text-muted-foreground">No category matches.</p>
+				) : null}
+				{hiddenCategories > 0 || (allCategories && !needle) ? (
+					<Button
+						variant="link"
+						className="h-auto w-fit px-2 py-1 text-xs"
+						onClick={() => setAllCategories((value) => !value)}
+					>
+						{allCategories ? "Show fewer" : `Show ${hiddenCategories} more`}
+					</Button>
+				) : null}
 			</Section>
 
 			{/* One catalog means one row that always reads the total — the facet
