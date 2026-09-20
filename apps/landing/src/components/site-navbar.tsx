@@ -1,7 +1,8 @@
 "use client";
 
 import { Menu, X } from "lucide-react";
-import { useState } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
@@ -31,8 +32,44 @@ const navItems = [
 	{ name: "Pricing", link: "/pricing" },
 ];
 
+/*
+ * The section a path belongs to: `/docs/install` and `/templates/n8n` are
+ * still Docs and Templates. `/api` is part of the docs section, which is where
+ * its sidebar entry lives.
+ */
+function currentSection(pathname: string): string | null {
+	if (pathname === "/api" || pathname.startsWith("/docs")) return "/docs";
+	const match = navItems.find(
+		(item) => pathname === item.link || pathname.startsWith(`${item.link}/`),
+	);
+	return match?.link ?? null;
+}
+
 export function SiteNavbar() {
 	const [open, setOpen] = useState(false);
+	const pathname = usePathname();
+	const navRef = useRef<HTMLDivElement>(null);
+
+	/*
+	 * `aria-current` on the link for the section you are in. The registry's
+	 * `NavItems` takes a flat list and renders the anchors itself, so there is
+	 * no per-item prop to pass — this marks the one it rendered.
+	 */
+	useEffect(() => {
+		const root = navRef.current;
+		if (!root) return;
+		const active = currentSection(pathname);
+		for (const link of root.querySelectorAll<HTMLAnchorElement>("a[href]")) {
+			const isCurrent = active !== null && link.getAttribute("href") === active;
+			if (isCurrent) {
+				link.setAttribute("aria-current", "page");
+				link.dataset.current = "true";
+			} else {
+				link.removeAttribute("aria-current");
+				delete link.dataset.current;
+			}
+		}
+	}, [pathname]);
 
 	return (
 		// `top-0`: the registry component ships `sticky top-20`, which pins the bar
@@ -50,7 +87,12 @@ export function SiteNavbar() {
 			<Navbar className="top-0">
 				<NavBody className="px-6">
 					<Logo className="relative z-20 mr-4" />
-					<NavItems items={navItems} />
+					<div ref={navRef} className="contents">
+						<NavItems
+							items={navItems}
+							className="[&_a[data-current]]:font-medium [&_a[data-current]]:text-foreground"
+						/>
+					</div>
 					<div className="relative z-20 flex items-center gap-2">
 						<NavbarButton href={site.github} variant="secondary">
 							GitHub

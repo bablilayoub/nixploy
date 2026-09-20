@@ -38,11 +38,23 @@ nixploy app list --project-id <id>`;
  * emphasis are lifted to the foreground so the eye can pick a path or a key
  * name out of a muted sentence.
  */
-function Section({ title, children }: { title: string; children: ReactNode }) {
-	const id = title
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-|-$/g, "");
+/*
+ * The page's own sections. One list, so the right-hand rail and the headings
+ * cannot drift apart — a renamed title used to leave the rail pointing at an
+ * id that no longer existed, silently.
+ */
+const SECTIONS = {
+	auth: "Authentication",
+	urls: "URL conventions",
+	swagger: "Interactive docs on your panel",
+	cli: "CLI",
+	catalog: "Endpoint catalog",
+} as const;
+
+type SectionId = keyof typeof SECTIONS;
+
+function Section({ id, children }: { id: SectionId; children: ReactNode }) {
+	const title = SECTIONS[id];
 	return (
 		<section id={id} className="mt-16 scroll-mt-28">
 			<h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
@@ -67,13 +79,7 @@ export default function ApiPage() {
 	return (
 		<DocsFrame
 			activeHref="/api"
-			headings={[
-				{ id: "authentication", text: "Authentication" },
-				{ id: "url-conventions", text: "URL conventions" },
-				{ id: "interactive-docs-on-your-panel", text: "Interactive docs" },
-				{ id: "cli", text: "CLI" },
-				{ id: "endpoint-catalog", text: "Endpoint catalog" },
-			]}
+			headings={Object.entries(SECTIONS).map(([id, text]) => ({ id, text }))}
 		>
 			<article>
 				<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">API</p>
@@ -85,7 +91,7 @@ export default function ApiPage() {
 					Swagger UI, <Code>@nixploy/cli</Code>, and MCP.
 				</p>
 
-				<Section title="Authentication">
+				<Section id="auth">
 					<P>
 						Create a key under <Strong>Settings → Profile</Strong> on your panel. Send it on every
 						request:
@@ -101,7 +107,7 @@ export default function ApiPage() {
 					</P>
 				</Section>
 
-				<Section title="URL conventions">
+				<Section id="urls">
 					<ul className="mt-4 list-disc space-y-2 pl-5 text-muted-foreground">
 						<li>
 							Queries → <Code>GET /api/&lt;router&gt;.&lt;procedure&gt;</Code>
@@ -119,7 +125,7 @@ export default function ApiPage() {
 					</div>
 				</Section>
 
-				<Section title="Interactive docs on your panel">
+				<Section id="swagger">
 					<P>Live OpenAPI lives on the installed panel (not mirrored here):</P>
 					<ul className="mt-4 list-disc space-y-2 pl-5 text-muted-foreground">
 						<li>
@@ -134,7 +140,7 @@ export default function ApiPage() {
 					</P>
 				</Section>
 
-				<Section title="CLI">
+				<Section id="cli">
 					<div className="mt-6">
 						<CodeBlock language="bash" filename="cli" code={CLI} />
 					</div>
@@ -145,7 +151,7 @@ export default function ApiPage() {
 					</p>
 				</Section>
 
-				<Section title="Endpoint catalog">
+				<Section id="catalog">
 					<P>
 						All {apiEndpointCount} endpoints across {apiCatalog.length} routers, generated from the
 						router itself. The <Strong>Requires</Strong> column lists the organization capabilities
