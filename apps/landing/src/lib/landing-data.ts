@@ -31,11 +31,11 @@ export const heroLead =
  * and update `measuredOn`; do not round a stale number up or down.
  */
 export const controlPlane = {
-	measuredOn: "19 Sep 2026",
+	measuredOn: "20 Sep 2026",
 	services: [
-		{ name: "nixploy", mib: 389 },
-		{ name: "nixploy-postgres", mib: 53 },
-		{ name: "nixploy-traefik", mib: 26 },
+		{ name: "nixploy", mib: 424 },
+		{ name: "nixploy-postgres", mib: 51 },
+		{ name: "nixploy-traefik", mib: 28 },
 	],
 } as const;
 

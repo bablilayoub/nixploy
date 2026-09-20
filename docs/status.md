@@ -24,6 +24,7 @@ State:
 | Progressive enhancement | Server HTML carries the final numbers and the typed terminal line; a `<noscript>` rule reveals everything Motion hides. Verified with scripts disabled |
 | Reduced motion | `MotionConfig reducedMotion="user"` + a CSS block for the animation-driven components |
 | Home page payload | Images 282KB → 84KB (`next/image` with real `sizes`; the panel capture is `priority`) |
+| Control plane, re-measured 2026-09-20 | `docker stats` on the production box: panel 424 MiB, Postgres 51, Traefik 28 = **503 MiB**. The page said 468 from the 19 Sep reading; the panel has grown 35 MiB since. The figure on the site is this one |
 | `/api` | 49 routers as disclosures under a router index: 39,818px → 8,252px |
 | Docs | Heading anchors, an "On this page" rail from xl, and a previous/next pager |
 | Gates | Biome `--error-on-warnings`, landing typecheck, knip, production build — all green |
