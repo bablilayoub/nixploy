@@ -43,9 +43,10 @@ Flake found while verifying (not caused by the landing work):
   afterwards; the CI job verifies that same moving tag. On this push the two
   overlapped — CI started 02:51, the Docker workflow finished 02:54 — so the
   job read a `:main` whose signature was not attached yet. Nothing in
-  `install.sh`, `update.sh` or `tools/ci/` changed. If it recurs, the job
-  should verify a digest the run itself produced rather than the shared
-  moving tag.
+  `install.sh`, `update.sh` or `tools/ci/` changed. **Confirmed a flake**: the
+  same job passed on the next run (`19ee252`) with the same code. If it
+  recurs, the job should verify a digest the run itself produced rather than
+  the shared moving tag.
 
 Known gaps:
 
