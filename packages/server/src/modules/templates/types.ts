@@ -14,6 +14,26 @@ export interface TemplateEnvVar {
 	description: string;
 }
 
+/**
+ * A hostname the stack needs, read from one of its env values at deploy
+ * time — a tunnel edge's endpoint host, the zone its tunnels are served
+ * under. Attached as a domain of the compose service (HTTPS + Let's Encrypt
+ * by default; a wildcard gets the DNS-01 resolver, or no certificate when
+ * no DNS provider is linked) and, with automatic DNS records on, resolved
+ * at the provider. Skipped while the value is still the template's
+ * placeholder default. `modules/templates/domains.ts`.
+ */
+export interface TemplateDomainHint {
+	/** Env key whose value is the hostname (the parent zone, for a wildcard). */
+	env: string;
+	serviceName: string;
+	port: number;
+	/** Attach `*.<value>` instead of `<value>`. */
+	wildcard?: boolean;
+	/** Serve over HTTPS with a Let's Encrypt certificate (default true). */
+	https?: boolean;
+}
+
 export interface Template {
 	/** Stable kebab-case identifier (e.g. "uptime-kuma"). */
 	id: string;
@@ -44,6 +64,8 @@ export interface Template {
 	 * Only for templates whose first use is not "open the URL".
 	 */
 	setup?: string[];
+	/** Hostnames read from env values and attached on deploy ({@link TemplateDomainHint}). */
+	domains?: TemplateDomainHint[];
 	/**
 	 * Needs host Docker socket and/or elevated capabilities. Deployable only by
 	 * the instance admin; the resulting compose row is marked `hostPrivileged`.

@@ -25,6 +25,14 @@ export interface TemplateEntry {
 	serviceName: string;
 	/** Post-deploy steps, one line each, in order. */
 	setup?: string[];
+	/** Hostnames attached on deploy from the named env values (`*.` for a wildcard). */
+	domains?: {
+		env: string;
+		serviceName: string;
+		port: number;
+		wildcard?: boolean;
+		https?: boolean;
+	}[];
 	/** Needs the Docker socket or elevated capabilities; instance admin only. */
 	hostPrivileged?: boolean;
 }
@@ -2649,12 +2657,12 @@ export const templateCatalog: TemplateEntry[] = [
 			{
 				key: "TUNNEL_ENDPOINT_HOST",
 				description:
-					"Hostname the CLI connects to (wss://<host>/tunnel) — add it as this service's domain",
+					"Hostname the CLI connects to (wss://<host>/tunnel) — attached as this service's domain on deploy",
 			},
 			{
 				key: "PUBLIC_TUNNEL_DOMAIN",
 				description:
-					"Domain the tunnels are served under — add *.<domain> as a second domain on this service (a wildcard needs a DNS-01 provider in Settings → Web server)",
+					"Domain the tunnels are served under — *.<domain> is attached as a wildcard domain on deploy (instance admin; its certificate needs a DNS-01 provider in Settings → Platform)",
 			},
 			{
 				key: "REGISTRATION_TOKENS",
@@ -2667,10 +2675,14 @@ export const templateCatalog: TemplateEntry[] = [
 		serviceName: "openhole",
 		setup: [
 			"Before deploying, set the two hostnames: `TUNNEL_ENDPOINT_HOST` is what the CLI connects to (for example `tunnel.example.com`) and `PUBLIC_TUNNEL_DOMAIN` is the zone tunnels are served under (for example `tunnels.example.com`). Keep the generated `REGISTRATION_TOKENS` or paste your own comma-separated list — empty means anyone can open a tunnel on your server.",
-			"DNS, all pointing at this server and DNS-only (a proxied record breaks tunnel routing): an A record for the endpoint host, and a wildcard A record `*.<tunnel domain>`. Shortcut: make the endpoint host a name under the tunnel domain (`tunnel.tunnels.example.com`) and the wildcard record covers both.",
-			"Domains tab of this service: add the endpoint host with HTTPS (Let's Encrypt), then add `*.<tunnel domain>` as a second domain. A wildcard domain is instance-admin only and its certificate needs a DNS-01 provider under Settings → Web server — HTTP-01 cannot validate a wildcard. WebSocket upgrades pass through Traefik as-is.",
+			"Both hostnames are attached to this service on deploy, straight from those values: the endpoint host with HTTPS (Let's Encrypt), and `*.<tunnel domain>` as a wildcard domain — instance-admin only, and its certificate needs a DNS-01 provider under Settings → Platform → DNS provider (HTTP-01 cannot validate a wildcard; without a provider the wildcard is attached without a certificate, switch it to Let's Encrypt once one is linked). WebSocket upgrades pass through Traefik as-is.",
+			"DNS, all pointing at this server and DNS-only (a proxied record breaks tunnel routing): an A record for the endpoint host and a wildcard A record `*.<tunnel domain>`. With *Create DNS records automatically* on for the linked provider, both are created for you at deploy; otherwise create them at your provider. Shortcut: make the endpoint host a name under the tunnel domain (`tunnel.tunnels.example.com`) and the wildcard record covers both.",
 			"Install the CLI on your machine (`curl -fsSL https://openhole.dev/install.sh | sh`) and open a tunnel: `openhole 3000 --server wss://<endpoint host>/tunnel --token <one of REGISTRATION_TOKENS>`; add `--subdomain myapp` for a stable name. The public URL is `https://<sub>.<tunnel domain>`.",
 			'Check `https://<endpoint host>/health` answers `{"status":"ok"}`. Port 8080 is never published; Traefik is the only way in, which is why `TRUST_PROXY_HEADERS` is on — never expose 8080 directly with it set.',
+		],
+		domains: [
+			{ env: "TUNNEL_ENDPOINT_HOST", serviceName: "openhole", port: 8080 },
+			{ env: "PUBLIC_TUNNEL_DOMAIN", serviceName: "openhole", port: 8080, wildcard: true },
 		],
 	},
 	{

@@ -56,6 +56,23 @@ export const remoteTemplateSchema = z.object({
 	env: z.array(envVarSchema).max(200).default([]),
 	/** Post-deploy steps, one line each, rendered as a numbered list. */
 	setup: z.array(z.string().min(1).max(600)).max(20).default([]),
+	/** Hostnames read from env values and attached on deploy (`TemplateDomainHint`). */
+	domains: z
+		.array(
+			z.object({
+				env: z.string().min(1).max(128),
+				serviceName: z
+					.string()
+					.min(1)
+					.max(64)
+					.regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/, "serviceName must be a compose service name"),
+				port: z.number().int().min(1).max(65535),
+				wildcard: z.boolean().optional(),
+				https: z.boolean().optional(),
+			}),
+		)
+		.max(8)
+		.default([]),
 	suggestedDomain: z.object({
 		serviceName: z
 			.string()

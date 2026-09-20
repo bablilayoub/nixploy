@@ -104,6 +104,18 @@ const rows = templates
 			...(template.setup && template.setup.length > 0
 				? [`\t\tsetup: [${template.setup.map(quote).join(", ")}],`]
 				: []),
+			...(template.domains && template.domains.length > 0
+				? [
+						`\t\tdomains: [${template.domains
+							.map(
+								(hint) =>
+									`{ env: ${quote(hint.env)}, serviceName: ${quote(hint.serviceName)}, port: ${hint.port}${
+										hint.wildcard ? ", wildcard: true" : ""
+									}${hint.https === false ? ", https: false" : ""} }`,
+							)
+							.join(", ")}],`,
+					]
+				: []),
 			...(template.hostPrivileged ? ["\t\thostPrivileged: true,"] : []),
 			"\t},",
 		].join("\n");
@@ -139,6 +151,8 @@ export interface TemplateEntry {
 	serviceName: string;
 	/** Post-deploy steps, one line each, in order. */
 	setup?: string[];
+	/** Hostnames attached on deploy from the named env values (\`*.\` for a wildcard). */
+	domains?: { env: string; serviceName: string; port: number; wildcard?: boolean; https?: boolean }[];
 	/** Needs the Docker socket or elevated capabilities; instance admin only. */
 	hostPrivileged?: boolean;
 }

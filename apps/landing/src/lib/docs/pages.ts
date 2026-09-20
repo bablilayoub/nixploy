@@ -605,6 +605,10 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 				text: "Pick a template → choose project / environment → fill env vars (secrets auto-generated where marked) → optional domain → Deploy. After deploy you own the compose file and can edit it freely.",
 			},
 			{
+				type: "p",
+				text: "Some templates declare the hostnames they need — a tunnel edge's endpoint host, the zone its tunnels are served under. Those are read from the env values you type and attached as domains of the stack on deploy (HTTPS with Let's Encrypt; a wildcard is instance-admin only and gets its certificate over DNS-01 when a provider is linked). The Domain step previews them, a value left at the placeholder attaches nothing, and with automatic DNS records on the A records are created at your provider too.",
+			},
+			{
 				type: "note",
 				text: "Template image tags are pinned and CI-checked so catalog tags do not 404 silently. Templates that need host privileges (a mounted Docker socket, extra capabilities) can only be deployed and later edited by the instance admin.",
 			},

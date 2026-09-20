@@ -1,5 +1,6 @@
 "use client";
 
+import { planTemplateDomains } from "@nixploy/server/modules/templates/domains";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 	ArrowLeft,
@@ -226,6 +227,13 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 				toast.success(`Deploying ${template.name} — watch the deployment logs`, {
 					action: { label: "View", onClick: () => router.push(href) },
 				});
+				for (const outcome of result.domains) {
+					if (outcome.status === "skipped") {
+						toast.warning(`${outcome.host} not attached`, { description: outcome.note });
+					} else if (outcome.note) {
+						toast.info(`${outcome.host} attached`, { description: outcome.note });
+					}
+				}
 				for (const outcome of result.dns) toastDnsOutcome(outcome);
 				// A new compose service now exists in the target project — refresh
 				// the project list, the project page and its compose service list.
@@ -273,6 +281,8 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 	};
 
 	const canContinueDestination = Boolean(projectId && environmentName);
+	// The same planner the server runs: what the env values will attach.
+	const hintedDomains = planTemplateDomains(template, envValues);
 	const withDomain = domainEnabled && Boolean(domainHost.trim());
 	const blocker = templateDeployBlocker(template, access, { withDomain });
 	const canDeploy =
@@ -430,10 +440,38 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 								<p className="mt-2 truncate font-mono text-xs text-muted-foreground">
 									{domainHost.trim()}
 								</p>
-							) : (
+							) : hintedDomains.length === 0 ? (
 								<p className="mt-2 text-xs text-muted-foreground">No public domain yet</p>
-							)}
+							) : null}
 						</div>
+
+						{hintedDomains.length > 0 && (
+							<div className="flex flex-col gap-2 rounded-lg border p-3">
+								<p className="text-xs font-medium text-muted-foreground">
+									Attached from your values
+								</p>
+								<ul className="flex flex-col gap-1">
+									{hintedDomains.map((entry) => (
+										<li key={entry.host} className="flex flex-wrap items-center gap-2 text-sm">
+											<span className="font-mono text-xs">{entry.host}</span>
+											<Badge variant="secondary" className="font-mono text-xs">
+												{entry.serviceName}:{entry.port}
+											</Badge>
+											<span className="text-xs text-muted-foreground">
+												{entry.https ? "HTTPS" : "HTTP"}
+												{entry.wildcard
+													? " · wildcard (instance admin; certificate needs a DNS provider)"
+													: ""}
+											</span>
+										</li>
+									))}
+								</ul>
+								<p className="text-xs text-muted-foreground">
+									From the values on the previous step. With automatic DNS records on, the records
+									are created at the linked provider too.
+								</p>
+							</div>
+						)}
 
 						<div className="flex flex-col gap-3 rounded-lg border p-3">
 							<div className="flex items-center justify-between gap-4">

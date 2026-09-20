@@ -251,6 +251,30 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 				</Card>
 			</div>
 
+			{template.domains && template.domains.length > 0 ? (
+				<Card className="mt-4 p-8 sm:p-10">
+					<h2 className="text-title text-foreground">Domains from your values</h2>
+					<p className="mt-2 text-small text-muted">
+						Attached to the stack on deploy, straight from the env values you enter — and, with
+						automatic DNS records on, created at your DNS provider too.
+					</p>
+					<ul className="mt-6 flex flex-col gap-2 font-mono text-small text-foreground">
+						{template.domains.map((hint) => (
+							<li key={`${hint.env}-${hint.port}`}>
+								{hint.wildcard ? "*." : ""}
+								{"{"}
+								{hint.env}
+								{"}"} → {hint.serviceName}:{hint.port}
+								<span className="text-muted">
+									{hint.https === false ? " · HTTP" : " · HTTPS"}
+									{hint.wildcard ? " · wildcard" : ""}
+								</span>
+							</li>
+						))}
+					</ul>
+				</Card>
+			) : null}
+
 			{template.setup && template.setup.length > 0 ? (
 				<Card className="mt-4 p-8 sm:p-10">
 					<h2 className="text-title text-foreground">Set it up</h2>

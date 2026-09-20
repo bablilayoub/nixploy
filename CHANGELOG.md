@@ -22,6 +22,13 @@ this file is the summary.
   and `template.deploy`), retry with the globe button, `nixploy domain
   ensure-dns` or `domain.ensureDnsRecord`; **Check link** lists the zones the
   credentials see (`webServer.dnsZones`). Records are never deleted.
+- **Templates declare the hostnames they need.** A template's `domains` hints
+  name env keys whose values are hostnames (`wildcard: true` for `*.<value>`);
+  on deploy they are attached as domains of the stack — HTTPS + Let's Encrypt,
+  the wildcard on the DNS-01 resolver when a provider is linked — and handed
+  to the DNS automation. The deploy dialog previews them; a host already
+  routed is skipped with a note. OpenHole uses it for its endpoint host and
+  tunnel wildcard, so its setup is the env values and nothing else.
 - **Per-organization runtime log retention.** Settings → Organization →
   Quotas gained *Runtime log history* (days, MB per service): an org keeps
   less than the instance's `NIXPLOY_RUNTIME_LOG_*` ceiling, never more; the

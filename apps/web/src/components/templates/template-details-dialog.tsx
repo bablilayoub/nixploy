@@ -134,6 +134,34 @@ function DetailsBody({
 				</div>
 			</div>
 
+			{template.domains && template.domains.length > 0 && (
+				<>
+					<Separator />
+					<div className="flex flex-col gap-2">
+						<h3 className="text-sm font-medium">Domains from your values</h3>
+						<p className="text-xs text-muted-foreground">
+							Attached on deploy from the env values you enter (left at the placeholder, nothing is
+							attached). With automatic DNS records on, they are created at the provider too.
+						</p>
+						<ul className="flex flex-col gap-1 text-sm text-muted-foreground">
+							{template.domains.map((hint) => (
+								<li
+									key={`${hint.env}-${hint.serviceName}-${hint.port}`}
+									className="font-mono text-xs"
+								>
+									{hint.wildcard ? "*." : ""}
+									{"{"}
+									{hint.env}
+									{"}"} → {hint.serviceName}:{hint.port}
+									{hint.https === false ? " (HTTP)" : " (HTTPS)"}
+									{hint.wildcard ? " — wildcard, instance admin" : ""}
+								</li>
+							))}
+						</ul>
+					</div>
+				</>
+			)}
+
 			{template.setup && template.setup.length > 0 && (
 				<>
 					<Separator />

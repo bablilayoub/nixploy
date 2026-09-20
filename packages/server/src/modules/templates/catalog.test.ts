@@ -65,6 +65,23 @@ describe("template catalog", () => {
 	);
 
 	it.each(templates.map((template) => [template.id, template] as const))(
+		"%s: domain hints name a declared env key and an existing service",
+		(_id, template) => {
+			const services = listComposeServices(template.compose);
+			const keys = new Set(template.env.map((envVar) => envVar.key));
+			for (const hint of template.domains ?? []) {
+				expect(keys, `domain hint env ${hint.env} is not in the env schema`).toContain(hint.env);
+				expect(
+					services,
+					`domain hint service ${hint.serviceName} is not in the compose file`,
+				).toContain(hint.serviceName);
+				expect(hint.port).toBeGreaterThan(0);
+				expect(hint.port).toBeLessThanOrEqual(65535);
+			}
+		},
+	);
+
+	it.each(templates.map((template) => [template.id, template] as const))(
 		"%s: every compose $-variable is declared in the env schema and vice versa",
 		(_id, template) => {
 			const refs = new Set(composeEnvRefs(template.compose));

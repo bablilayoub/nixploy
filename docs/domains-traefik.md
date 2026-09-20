@@ -204,8 +204,10 @@ label, the same span a wildcard certificate covers — with
 
 The same provider link can point new hosts at the server. Settings → Platform
 → **DNS provider** → *Create DNS records automatically*. With it on, attaching
-a domain — by hand, over the API or the CLI, or through a template deploy —
-also writes the host's **A record** at the provider:
+a domain — by hand, over the API or the CLI, or through a template deploy
+(including the hosts a template reads from its env values, wildcards
+included: docs/templates.md § "Adding a template") — also writes the host's
+**A record** at the provider:
 
 1. the host is matched to the **longest zone** the credentials can see
    (`app.eu.example.com` lands in `eu.example.com` when both it and

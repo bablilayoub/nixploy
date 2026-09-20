@@ -46,7 +46,18 @@ deployable as compose services. Catalog code lives in
      // nixploy.com/templates/<id>. Only for templates whose first use is not
      // "open the URL" — a tunnel edge that needs a second domain and a CLI
      // pointed at it, a service that needs a client configured.
-     setup: ["Add `*.tunnels.example.com` as a second domain …", "…"],
+     setup: ["Point the CLI at the endpoint host …", "…"],
+     // Optional: hostnames the stack needs, read from env values at deploy
+     // and attached as domains of the compose service (HTTPS + Let's
+     // Encrypt unless `https: false`; `wildcard: true` attaches `*.<value>`,
+     // which is instance-admin only and gets the DNS-01 resolver when a
+     // provider is linked, else no certificate). A value left at the
+     // template's placeholder attaches nothing. With automatic DNS records
+     // on, the A records are created at the provider too.
+     domains: [
+       { env: "TUNNEL_ENDPOINT_HOST", serviceName: "openhole", port: 8080 },
+       { env: "PUBLIC_TUNNEL_DOMAIN", serviceName: "openhole", port: 8080, wildcard: true },
+     ],
    }
    ```
 
@@ -100,9 +111,13 @@ fresh. A value the operator provides at deploy is taken verbatim.
 domain. It creates a **compose** service with the template's compose file,
 env, and optional domain (subject to the org's service quota), then queues its first deployment. The server side
 is the standard compose create + deploy path — templates carry no special
-runtime logic. With *Create DNS records automatically* on (Settings →
-Platform → DNS provider), every host the dialog attaches also gets its A
-record at the linked provider; the result's `dns` array says what happened
+runtime logic. A template's `domains` hints add hosts from the env values
+the operator typed (the dialog previews them on the Domain step; `template.deploy`
+needs `domains.manage`, and the instance admin for a wildcard): a host already
+routed on the instance is skipped with a note rather than failing the deploy.
+With *Create DNS records automatically* on (Settings → Platform → DNS
+provider), every host attached — typed or hinted — also gets its A record at
+the linked provider; the result's `domains` and `dns` arrays say what happened
 per host (docs/domains-traefik.md § "DNS records created for you").
 
 ## Template sources (bring your own catalog)

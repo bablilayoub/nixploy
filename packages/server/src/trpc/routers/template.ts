@@ -23,6 +23,7 @@ import {
 	summarizeTemplateServices,
 	syncTemplateSource,
 } from "../../modules/templates";
+import { planTemplateDomains } from "../../modules/templates/domains";
 import { protectedProcedure, router } from "../init";
 
 /**
@@ -276,8 +277,21 @@ export const templateRouter = router({
 			if (template.hostPrivileged) {
 				await assertInstanceAdmin(ctx.session);
 			}
-			if (input.domains && input.domains.length > 0) {
+			// Hint domains come from the env values; a wildcard among them is an
+			// instance-admin row, exactly as it is on domain.create.
+			const hinted = planTemplateDomains(template, input.envValues ?? {});
+			if ((input.domains && input.domains.length > 0) || hinted.length > 0) {
 				await assertCapability(ctx.session.user.id, organizationId, "domains.manage");
+			}
+			if (hinted.some((entry) => entry.wildcard)) {
+				try {
+					await assertInstanceAdmin(ctx.session);
+				} catch {
+					throw new TRPCError({
+						code: "FORBIDDEN",
+						message: `Wildcard domains can only be added by the instance administrator — leave ${hinted.find((entry) => entry.wildcard)?.env} at its placeholder and add the wildcard later`,
+					});
+				}
 			}
 			// A template becomes one compose service — same cap as compose.create.
 			await assertWithinQuota(organizationId, { services: true });
@@ -293,6 +307,7 @@ export const templateRouter = router({
 					environmentName: input.environmentName,
 					hostPrivileged: template.hostPrivileged ?? false,
 					domains: input.domains?.length ?? 0,
+					hintDomains: deployed.domains.filter((entry) => entry.status === "attached").length,
 				},
 			});
 			return deployed;
