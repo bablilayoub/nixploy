@@ -1,4 +1,4 @@
-import { site } from "@/lib/site";
+import { site, version } from "@/lib/site";
 import { templateCount } from "@/lib/templates";
 
 /**
@@ -13,7 +13,7 @@ import { templateCount } from "@/lib/templates";
 
 /** The fold's badge: the headline item of the latest release, linking to the changelog. */
 export const heroBadge = {
-	version: "v0.6.0",
+	version,
 	text: "DNS records created for you",
 	href: `${site.github}/blob/main/CHANGELOG.md`,
 } as const;

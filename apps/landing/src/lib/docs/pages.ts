@@ -1,3 +1,4 @@
+import { version } from "../site";
 import { templateCount } from "../templates";
 
 export type DocBlock =
@@ -52,7 +53,7 @@ export const docsPages: DocPage[] = [
 			},
 			{
 				type: "pre",
-				code: `VERSION=v0.2.0
+				code: `VERSION=${version}
 BASE="https://github.com/bablilayoub/nixploy/releases/download/$VERSION"
 curl -fsSLO "$BASE/install.sh"
 curl -fsSLO "$BASE/SHA256SUMS"

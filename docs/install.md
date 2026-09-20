@@ -53,7 +53,7 @@ The one-liner pipes a script straight into root's shell. Every release ships a
 `SHA256SUMS` file, so the safer form is download → verify → run:
 
 ```bash
-VERSION=v0.2.0   # the release you want
+VERSION=v0.6.0   # the release you want
 BASE="https://github.com/bablilayoub/nixploy/releases/download/$VERSION"
 curl -fsSLO "$BASE/install.sh"
 curl -fsSLO "$BASE/SHA256SUMS"

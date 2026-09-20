@@ -1,3 +1,13 @@
+import pkg from "../../package.json" with { type: "json" };
+
+/*
+ * The released version, read from this app's own package.json — `tools/release.sh`
+ * bumps root, web, landing and server together, so it is the release tag. It used
+ * to be typed into the fold's badge and into the docs' verify-before-you-run
+ * snippet, and both were left behind by the last two releases.
+ */
+export const version = `v${pkg.version}`;
+
 export const site = {
 	name: "Nixploy",
 	url: "https://nixploy.com",
