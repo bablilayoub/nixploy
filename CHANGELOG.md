@@ -9,6 +9,35 @@ pin. Operator-facing detail — what to check before upgrading, what will look
 different afterwards — lives in [docs/upgrade-notes.md](docs/upgrade-notes.md);
 this file is the summary.
 
+## [0.7.3] — 2026-09-21
+
+### Changed
+
+- **nixploy.com's chrome.** The bar no longer sits in the flow, so the flat
+  black strip it used to cut out of the top of every page is gone and the
+  fold's light runs under it; at rest it is a wide translucent pill that still
+  collapses into the floating island once the page moves, and its GitHub link
+  opens in its own tab. The footer is a panel that ends the page: the columns,
+  then the wordmark set to the panel's full width in the site's display face,
+  then the legal line and a credit to the author.
+- **One radius scale**, written down beside the tokens: `rounded-lg` for
+  controls, `rounded-xl` for cards, `rounded-2xl` for section panels,
+  `rounded-full` for badges and the nav island. The fold and the closing
+  section drop their shimmering pill for the same plain buttons the rest of
+  the site uses, and the home page's CLI tile is a still rather than a
+  terminal that retypes itself on every scroll into view.
+- **Docs, features and agents were reorganized.** The docs index opens with
+  the path in the order it is walked and then lists every page with the line
+  it introduces itself by; the features page gains a sticky section rail,
+  numbered sections and full-width detail cards; the agents page stops nesting
+  a card inside a card and opens with what decides whether to hand an agent
+  the keys — tools, auth, dispatch, audit.
+
+### Fixed
+
+- The panel screenshot in the fold ended in a sliced row with a hard border
+  under it; it fades out instead.
+
 ## [0.7.2] — 2026-09-20
 
 ### Changed
