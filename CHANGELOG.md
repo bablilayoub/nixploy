@@ -25,9 +25,15 @@ this file is the summary.
 
 ### Changed
 
+- **Traefik 3.7.13** (was 3.5.0). The panel now rolls a running proxy whose
+  image differs from the pin on boot — one task recreate, about 9 s of
+  routing outage, once per bump — so in-panel updates get the new proxy, not
+  only `update.sh`. Nothing in the file-provider YAML changed shape; user
+  `forwardAuth` middlewares now render `trustForwardHeader: false` unless
+  the row sets it (3.6.14 warns when it is unset).
 - Hetzner DNS-01 credential is now the Cloud API token (`HETZNER_API_TOKEN`);
   the legacy `HETZNER_API_KEY` API is gone upstream and the key is swept off
-  the proxy. Traefik ≥ 3.6 is needed for the challenge itself (see docs).
+  the proxy. The bundled lego (4.28 in Traefik 3.7) knows the new API.
 
 ## [0.5.0] — 2026-09-20
 

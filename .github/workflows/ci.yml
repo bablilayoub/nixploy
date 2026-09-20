@@ -473,7 +473,7 @@ jobs:
             --mount type=bind,source=/tmp/nixploy-smoke/traefik/traefik.yml,target=/etc/traefik/traefik.yml \
             --mount type=bind,source=/tmp/nixploy-smoke/traefik/dynamic,target=/etc/traefik/dynamic \
             --replicas 1 \
-            traefik:v3.5.0 \
+            traefik:v3.7.13 \
             --configFile=/etc/traefik/traefik.yml
 
       - name: Wait for Traefik → whoami HTTP 200
@@ -495,7 +495,7 @@ jobs:
           exit 1
 
       - name: Validate install.sh static config with Traefik
-        # Boots traefik:v3.5.0 on the exact traefik.yml install.sh writes to
+        # Boots traefik:v3.7.13 on the exact traefik.yml install.sh writes to
         # hosts; a heredoc typo would otherwise surface at the next install.
         run: |
           set -euo pipefail
@@ -508,7 +508,7 @@ jobs:
             -v "$dir/traefik.yml:/etc/traefik/traefik.yml:ro" \
             -v "$dir/dynamic:/etc/nixploy/traefik/dynamic" \
             -v "$dir/acme.json:/etc/nixploy/traefik/acme.json" \
-            traefik:v3.5.0 --configFile=/etc/traefik/traefik.yml
+            traefik:v3.7.13 --configFile=/etc/traefik/traefik.yml
           sleep 8
           docker logs nixploy-smoke-static 2>&1 | tee "$dir/traefik.log"
           status="$(docker inspect -f '{{.State.Status}}' nixploy-smoke-static)"

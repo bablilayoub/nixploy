@@ -45,7 +45,7 @@
 #                                (single process). A re-run keeps an existing worker.
 #   NIXPLOY_WORKER_MEMORY        Memory limit of the nixploy-worker service (default: 2g)
 #   POSTGRES_VERSION             Postgres image tag             (default: 17-alpine)
-#   TRAEFIK_VERSION              Traefik image tag              (default: v3.5.0)
+#   TRAEFIK_VERSION              Traefik image tag              (default: v3.7.13)
 #   NIXPLOY_SKIP_PORT_CHECK      1 = do not refuse to install when :80/:443 are taken
 #   NIXPLOY_SKIP_DNS_CHECK       1 = do not compare NIXPLOY_DOMAIN's A record with the
 #                                public IP (behind a proxy/CDN this mismatch is expected)
@@ -70,7 +70,7 @@ NIXPLOY_CONFIG_DIR="${NIXPLOY_CONFIG_DIR:-/etc/nixploy}"
 # installs persisted the container path (/etc/nixploy) there.
 HOST_CONFIG_DIR="${NIXPLOY_CONFIG_DIR}"
 POSTGRES_VERSION="${POSTGRES_VERSION:-17-alpine}"
-TRAEFIK_VERSION="${TRAEFIK_VERSION:-v3.5.0}"
+TRAEFIK_VERSION="${TRAEFIK_VERSION:-v3.7.13}"
 NIXPLOY_MEMORY_LIMIT="${NIXPLOY_MEMORY_LIMIT:-2g}"
 NIXPLOY_WORKER_MEMORY="${NIXPLOY_WORKER_MEMORY:-2g}"
 # Opt-in two-process layout (see --split-worker). 0 = today's single process.

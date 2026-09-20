@@ -18,7 +18,7 @@ internet ─► :80  ─► per-domain router (redirect to :443 only when HTTPS 
 ```
 
 - Traefik runs as the global swarm service `nixploy-traefik` (image
-  `traefik:v3.5.0`), publishing host ports 80 and 443, attached to the shared
+  `traefik:v3.7.13`), publishing host ports 80 and 443, attached to the shared
   tenant overlay (`NIXPLOY_NETWORK`, default `nixploy-network`) **and** to
   `nixploy-internal`, where it reaches the panel for the dashboard router.
 - **A service joins `nixploy-network` only while it has a domain.** That is
@@ -191,9 +191,8 @@ label, the same span a wildcard certificate covers — with
 - **Hetzner** moved DNS into its Cloud API in 2025: the credential is a
   Cloud API token (`HETZNER_API_TOKEN`), and the legacy `HETZNER_API_KEY`
   (dead `dns.hetzner.com` API) is swept off the proxy. lego learned the new
-  API in 4.27, which ships in Traefik ≥ 3.6 — Nixploy still pins Traefik
-  3.5.0, so **Hetzner DNS-01 waits for the proxy bump**; the record
-  automation below uses the Cloud API directly and works today.
+  API in 4.27, which ships in Traefik ≥ 3.6 — the pin is 3.7.13, and a proxy
+  still on an older image is rolled on the panel's next boot.
 - Certificate type **None** or **Custom** works for wildcards without any DNS
   provider.
 - Nixploy cannot prove that an organization owns the parent zone, and

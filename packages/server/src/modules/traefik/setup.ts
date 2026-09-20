@@ -25,8 +25,24 @@ import {
 
 /** Swarm service name of the platform reverse proxy. */
 export const TRAEFIK_SERVICE_NAME = "nixploy-traefik";
-/** Pinned Traefik image (v3, file provider). */
-export const TRAEFIK_IMAGE = "traefik:v3.5.0";
+/**
+ * Pinned Traefik image (v3, file provider). Bumping it here is enough for
+ * every install: `ensureTraefikSetup` rolls a running proxy whose image
+ * differs (one task recreate, ~9 s), and install.sh / update.sh carry the
+ * same default for hosts the panel has not booted on yet.
+ */
+export const TRAEFIK_IMAGE = "traefik:v3.7.13";
+
+/**
+ * Does the running proxy need to be rolled to the pinned image? Swarm
+ * reports the spec image with the resolved digest (`traefik:v3.5.0@sha256:…`)
+ * — only the tag is compared. An unreadable image (empty) never rolls: a
+ * failed inspect is not evidence that the proxy is behind.
+ */
+export function traefikImageOutdated(current: string, pinned: string = TRAEFIK_IMAGE): boolean {
+	const running = current.trim().split("@")[0] ?? "";
+	return running !== "" && running !== pinned;
+}
 
 /** Shell-quote a string for POSIX sh (single-quote wrapping). */
 const shq = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
@@ -277,6 +293,19 @@ const readTraefikEnv = async (serverId: string | null | undefined): Promise<stri
  * Whether the proxy service exists on the target. `service ls` filters names
  * by prefix and rejects regex anchors, so the exact match is done here.
  */
+/** The image the proxy service is currently specified with (empty when unknown). */
+const readTraefikImage = async (serverId: string | null | undefined): Promise<string> => {
+	try {
+		const out = await runOn(
+			serverId,
+			`docker service inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' ${TRAEFIK_SERVICE_NAME}`,
+		);
+		return out.trim();
+	} catch {
+		return "";
+	}
+};
+
 const traefikServiceExists = async (serverId: string | null | undefined): Promise<boolean> => {
 	const existing = await runOn(
 		serverId,
@@ -405,10 +434,17 @@ export const ensureTraefikSetup = async (serverId?: string | null): Promise<void
 		// ~9 s outage for every routed domain (measured) — far too expensive to
 		// pay on every settings save.
 		const envFlags = buildAcmeDnsEnvUpdate(await readTraefikEnv(serverId), dnsEnv);
-		if (envFlags.length > 0) {
+		// A version bump shipped by an upgrade rolls the proxy to the pinned
+		// image — the one place the pin becomes real for an install that
+		// updates from the panel rather than with update.sh. Folded into the
+		// same update as the env diff so the task is recreated once.
+		const imageFlags = traefikImageOutdated(await readTraefikImage(serverId))
+			? [`--image ${TRAEFIK_IMAGE}`]
+			: [];
+		if (envFlags.length > 0 || imageFlags.length > 0) {
 			await runOn(
 				serverId,
-				`docker service update --detach ${envFlags.join(" ")} ${TRAEFIK_SERVICE_NAME}`,
+				`docker service update --detach ${[...imageFlags, ...envFlags].join(" ")} ${TRAEFIK_SERVICE_NAME}`,
 			);
 			// That update already recreated the task, so it re-read traefik.yml too.
 			return;

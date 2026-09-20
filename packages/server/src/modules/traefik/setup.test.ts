@@ -17,6 +17,8 @@ const { state, execAsync, writeFileOnServer, readFile } = vi.hoisted(() => ({
 		/** Current traefik.yml on disk; null = missing. */
 		existingStatic: null as string | null,
 		serviceExists: true,
+		/** Image the running proxy is specified with (Swarm appends the digest). */
+		serviceImage: "",
 		commands: [] as string[],
 		/** `traefik_entrypoint` rows the setup renders into the static config. */
 		entrypoints: [] as Array<{ name: string; port: number; protocol: "tcp" | "udp" }>,
@@ -62,7 +64,9 @@ import {
 	buildAcmeDnsEnvUpdate,
 	buildTraefikStaticConfig,
 	ensureTraefikSetup,
+	TRAEFIK_IMAGE,
 	TRAEFIK_SERVICE_NAME,
+	traefikImageOutdated,
 } from "./setup";
 
 const restarts = () =>
@@ -128,6 +132,7 @@ describe("ensureTraefikSetup", () => {
 		state.serviceEnv.length = 0;
 		state.existingStatic = null;
 		state.serviceExists = true;
+		state.serviceImage = `${TRAEFIK_IMAGE}@sha256:0123456789abcdef`;
 		state.entrypoints.length = 0;
 		writeFileOnServer.mockClear();
 		readFile.mockImplementation(async () => {
@@ -138,6 +143,9 @@ describe("ensureTraefikSetup", () => {
 			state.commands.push(command);
 			if (command.includes("docker service ls")) {
 				return state.serviceExists ? `${TRAEFIK_SERVICE_NAME}\n` : "";
+			}
+			if (command.includes("ContainerSpec.Image")) {
+				return `${state.serviceImage}\n`;
 			}
 			if (command.includes("docker service inspect")) {
 				return state.serviceEnv.join("\n");
@@ -176,6 +184,34 @@ describe("ensureTraefikSetup", () => {
 		await ensureTraefikSetup();
 		expect(creates()).toHaveLength(1);
 		expect(restarts()).toEqual([]);
+	});
+
+	it("rolls a proxy running an older image to the pinned one, once", async () => {
+		state.existingStatic = buildTraefikStaticConfig(null);
+		state.serviceImage = "traefik:v3.5.0@sha256:feedface";
+		await ensureTraefikSetup();
+		const updates = state.commands.filter((command) => command.includes("docker service update"));
+		expect(updates).toHaveLength(1);
+		expect(updates[0]).toContain(`--image ${TRAEFIK_IMAGE}`);
+		expect(updates[0]).toContain(TRAEFIK_SERVICE_NAME);
+		// The image update recreated the task, so no second restart for the file.
+		expect(restarts()).toEqual([]);
+	});
+
+	it("does not touch a proxy already on the pinned image (digest suffix ignored)", async () => {
+		state.existingStatic = buildTraefikStaticConfig(null);
+		await ensureTraefikSetup();
+		expect(state.commands.some((command) => command.includes("--image"))).toBe(false);
+	});
+});
+
+describe("traefikImageOutdated", () => {
+	it("compares the tag only and never rolls on an unknown image", () => {
+		expect(traefikImageOutdated("traefik:v3.5.0@sha256:abc")).toBe(true);
+		expect(traefikImageOutdated(`${TRAEFIK_IMAGE}@sha256:abc`)).toBe(false);
+		expect(traefikImageOutdated(TRAEFIK_IMAGE)).toBe(false);
+		expect(traefikImageOutdated("")).toBe(false);
+		expect(traefikImageOutdated("  \n")).toBe(false);
 	});
 });
 
@@ -274,6 +310,7 @@ describe("ensureTraefikSetup — DNS-01 credentials", () => {
 		state.serviceEnv.length = 0;
 		state.existingStatic = null;
 		state.serviceExists = true;
+		state.serviceImage = `${TRAEFIK_IMAGE}@sha256:0123456789abcdef`;
 		state.entrypoints.length = 0;
 		writeFileOnServer.mockClear();
 	});

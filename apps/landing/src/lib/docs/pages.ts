@@ -162,7 +162,7 @@ sudo bash install.sh --no-split-worker`,
 			{
 				type: "pre",
 				code: `# on a machine with network access
-docker save ghcr.io/bablilayoub/nixploy:v0.2.0 postgres:17-alpine traefik:v3.5.0 \\
+docker save ghcr.io/bablilayoub/nixploy:v0.2.0 postgres:17-alpine traefik:v3.7.13 \\
   | gzip > nixploy-images.tar.gz
 
 # on the target host

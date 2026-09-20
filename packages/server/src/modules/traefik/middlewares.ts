@@ -393,9 +393,11 @@ export const renderMiddleware = (
 			return {
 				forwardAuth: {
 					address: target.url.toString(),
-					...(parsed.trustForwardHeader !== undefined
-						? { trustForwardHeader: parsed.trustForwardHeader }
-						: {}),
+					// Traefik ≥ 3.6.14 warns when this is unset, because the unset
+					// behaviour is inconsistent (some X-Forwarded-* headers stripped,
+					// others passed through). Off unless the row says otherwise: the
+					// proxy then rewrites every X-Forwarded-* from the real connection.
+					trustForwardHeader: parsed.trustForwardHeader ?? false,
 					...(parsed.authResponseHeaders?.length
 						? { authResponseHeaders: parsed.authResponseHeaders }
 						: {}),

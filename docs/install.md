@@ -204,7 +204,7 @@ the panel's runtime environment (that is the next section).
 | `NIXPLOY_SPLIT_WORKER` | `0` | `1` (or `--split-worker`) also creates `nixploy-worker` — see [Split worker](#split-worker) |
 | `NIXPLOY_WORKER_MEMORY` | `2g` | Memory limit of the `nixploy-worker` service (`512m` reserved), when it exists |
 | `POSTGRES_VERSION` | `17-alpine` | Postgres image tag |
-| `TRAEFIK_VERSION` | `v3.5.0` | Traefik image tag |
+| `TRAEFIK_VERSION` | `v3.7.13` | Traefik image tag |
 | `NIXPLOY_SKIP_PORT_CHECK` | `0` | Do not refuse to install when :80/:443 are taken |
 | `NIXPLOY_SKIP_DNS_CHECK` | `0` | Do not compare `NIXPLOY_DOMAIN`'s A record with the public IP |
 | `NIXPLOY_SKIP_DOCKER_INSTALL` | `0` | Require a pre-installed Docker (skip `get.docker.com`) |
@@ -346,8 +346,8 @@ On a machine **with** network access, pull and export the images:
 ```bash
 docker pull ghcr.io/bablilayoub/nixploy:v0.2.0
 docker pull postgres:17-alpine
-docker pull traefik:v3.5.0
-docker save ghcr.io/bablilayoub/nixploy:v0.2.0 postgres:17-alpine traefik:v3.5.0 \
+docker pull traefik:v3.7.13
+docker save ghcr.io/bablilayoub/nixploy:v0.2.0 postgres:17-alpine traefik:v3.7.13 \
   | gzip > nixploy-images.tar.gz
 ```
 

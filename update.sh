@@ -24,7 +24,7 @@
 #                                are moved onto `nixploy-internal` on the first run
 #                                after upgrading (idempotent, see migrate_internal_network).
 #   NIXPLOY_LETSENCRYPT_EMAIL    Replace the ACME email in traefik.yml (default: keep)
-#   TRAEFIK_VERSION              Traefik image tag             (default: v3.5.0)
+#   TRAEFIK_VERSION              Traefik image tag             (default: v3.7.13)
 #   NIXPLOY_UPDATE_TRAEFIK       1 = also pull & force Traefik  (default: 1)
 #   NIXPLOY_UPDATE_POSTGRES_SPEC 1 = apply the pg_isready healthcheck, rotated json-file
 #                                logs and the 60 s stop grace to an older nixploy-postgres
@@ -60,7 +60,7 @@ NIXPLOY_CONFIG_DIR="${NIXPLOY_CONFIG_DIR:-/etc/nixploy}"
 # Host-side directory; re-asserted after sourcing .env (older installs stored
 # the container path there).
 HOST_CONFIG_DIR="${NIXPLOY_CONFIG_DIR}"
-TRAEFIK_VERSION="${TRAEFIK_VERSION:-v3.5.0}"
+TRAEFIK_VERSION="${TRAEFIK_VERSION:-v3.7.13}"
 NIXPLOY_REPO="${NIXPLOY_REPO:-bablilayoub/nixploy}"
 # Pin source builds to the same release tag as the image unless overridden.
 NIXPLOY_BRANCH="${NIXPLOY_BRANCH:-$NIXPLOY_VERSION}"

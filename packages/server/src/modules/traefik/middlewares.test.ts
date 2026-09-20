@@ -140,7 +140,7 @@ describe("renderMiddleware", () => {
 		});
 		expect(renderMiddleware("compress", {})).toEqual({ compress: {} });
 		expect(renderMiddleware("forwardAuth", { address: "http://authelia:9091/api/verify" })).toEqual(
-			{ forwardAuth: { address: "http://authelia:9091/api/verify" } },
+			{ forwardAuth: { address: "http://authelia:9091/api/verify", trustForwardHeader: false } },
 		);
 		expect(renderMiddleware("maintenance", {})).toEqual({
 			errors: { status: ["100-599"], service: "nixploy-dashboard", query: "/__maintenance" },
