@@ -161,11 +161,11 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 			mark={<TemplateMark logo={template.logo} />}
 			actions={
 				<>
-					<Button asChild size="lg" className="rounded-xl">
+					<Button asChild size="lg" className="rounded-lg">
 						<Link href="/docs/install">Install Nixploy</Link>
 					</Button>
 					{template.links.website ? (
-						<Button asChild variant="outline" size="lg" className="rounded-xl">
+						<Button asChild variant="outline" size="lg" className="rounded-lg">
 							<a href={template.links.website} target="_blank" rel="noreferrer">
 								Website
 							</a>

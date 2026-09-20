@@ -179,10 +179,10 @@ export default function AgentsPage() {
 			description="Nixploy speaks MCP. Point Claude Code, Cursor or Codex at your panel and it can deploy, read the logs, work out why something broke and roll it back — without you opening a terminal."
 			actions={
 				<>
-					<Button asChild size="lg" className="rounded-xl">
+					<Button asChild size="lg" className="rounded-lg">
 						<Link href="/docs/mcp">Set up the MCP server</Link>
 					</Button>
-					<Button asChild variant="outline" size="lg" className="rounded-xl">
+					<Button asChild variant="outline" size="lg" className="rounded-lg">
 						<Link href="/api">REST API</Link>
 					</Button>
 				</>

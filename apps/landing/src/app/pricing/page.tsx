@@ -62,7 +62,7 @@ export default function PricingPage() {
 								asChild
 								variant={plan.highlight ? "default" : "outline"}
 								size="lg"
-								className="mt-8 w-full rounded-xl"
+								className="mt-8 w-full rounded-lg"
 							>
 								<Link href={plan.cta.href}>{plan.cta.label}</Link>
 							</Button>
@@ -75,7 +75,7 @@ export default function PricingPage() {
 				<p className="max-w-xl text-balance text-muted-foreground">
 					Apache-2.0. Install on as many servers as you like. No telemetry you cannot disable.
 				</p>
-				<Button asChild variant="outline" className="mt-6 rounded-xl">
+				<Button asChild variant="outline" className="mt-6 rounded-lg">
 					<a href={`mailto:${site.email}`}>
 						<Mail className="size-4" aria-hidden />
 						Email {site.email}

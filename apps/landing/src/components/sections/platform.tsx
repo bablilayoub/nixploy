@@ -33,10 +33,10 @@ export function Platform() {
 						it on.
 					</p>
 					<div className="mt-8 flex flex-wrap gap-3">
-						<Button asChild variant="outline" size="lg" className="rounded-xl">
+						<Button asChild variant="outline" size="lg" className="rounded-lg">
 							<Link href="/pricing">What it costs</Link>
 						</Button>
-						<Button asChild variant="ghost" size="lg" className="rounded-xl">
+						<Button asChild variant="ghost" size="lg" className="rounded-lg">
 							<Link href="/docs/teams">Roles and teams</Link>
 						</Button>
 					</div>

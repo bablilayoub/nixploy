@@ -31,7 +31,7 @@ export default function TemplatesPage() {
 			title={`Self-host ${templateCount} apps, one click each`}
 			description="Every template is a reviewed Docker Compose stack: pinned images, named volumes, sensible variables. Pick one, give it a domain, and Nixploy handles TLS, backups and monitoring."
 			actions={
-				<Button asChild size="lg" className="rounded-xl">
+				<Button asChild size="lg" className="rounded-lg">
 					<Link href="/docs/install">Install Nixploy</Link>
 				</Button>
 			}

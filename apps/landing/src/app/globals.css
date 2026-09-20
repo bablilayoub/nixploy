@@ -14,6 +14,14 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+	/*
+	 * One radius scale, used consistently:
+	 *   rounded-lg  (--radius, 12px) — buttons, inputs, chips with square ends
+	 *   rounded-xl  (16px)           — cards, code blocks, media frames
+	 *   rounded-2xl (20px)           — full-width section panels and the footer
+	 *   rounded-full                 — badges, pills and the nav island
+	 * A control and a card should never share a radius; two cards always should.
+	 */
 	--radius: 0.75rem;
 
 	--background: oklch(1 0 0);

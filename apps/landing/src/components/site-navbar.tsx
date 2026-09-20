@@ -16,6 +16,7 @@ import {
 	NavItems,
 } from "@/components/ui/resizable-navbar";
 import { site } from "@/lib/site";
+import { cn } from "@/lib/utils";
 
 /*
  * Structure only: the bar itself is @aceternity/resizable-navbar, which is
@@ -47,8 +48,23 @@ function currentSection(pathname: string): string | null {
 
 export function SiteNavbar() {
 	const [open, setOpen] = useState(false);
+	const [scrolled, setScrolled] = useState(false);
 	const pathname = usePathname();
 	const navRef = useRef<HTMLDivElement>(null);
+
+	/*
+	 * The same 100px threshold the registry collapses at, tracked here as well
+	 * because the bar needs different chrome in each state and `visible` is
+	 * internal to `<Navbar>`: at the top a wide translucent pill that separates
+	 * the nav from the page without being a black band across it, and once the
+	 * page moves the narrow island the registry animates to.
+	 */
+	useEffect(() => {
+		const onScroll = () => setScrolled(window.scrollY > 100);
+		onScroll();
+		window.addEventListener("scroll", onScroll, { passive: true });
+		return () => window.removeEventListener("scroll", onScroll);
+	}, []);
 
 	/*
 	 * `aria-current` on the link for the section you are in. The registry's
@@ -84,8 +100,15 @@ export function SiteNavbar() {
 			>
 				Skip to content
 			</a>
-			<Navbar className="top-0">
-				<NavBody className="px-6">
+			<Navbar className="top-0 pt-3">
+				<NavBody
+					className={cn(
+						"border px-6 transition-colors duration-300",
+						scrolled
+							? "border-white/10"
+							: "border-white/[0.07] bg-white/[0.03] backdrop-blur-md dark:bg-white/[0.03]",
+					)}
+				>
 					<Logo className="relative z-20 mr-4" />
 					<div ref={navRef} className="contents">
 						<NavItems
@@ -94,7 +117,9 @@ export function SiteNavbar() {
 						/>
 					</div>
 					<div className="relative z-20 flex items-center gap-2">
-						<NavbarButton href={site.github} variant="secondary">
+						{/* External: opens in its own tab, so the page you were reading
+						    is still there when you come back. */}
+						<NavbarButton href={site.github} variant="secondary" target="_blank" rel="noreferrer">
 							GitHub
 						</NavbarButton>
 						<NavbarButton href="/docs/install" variant="primary">
@@ -137,7 +162,7 @@ export function SiteNavbar() {
 							<NavbarButton
 								href="/docs"
 								variant="secondary"
-								className="w-full rounded-md border text-foreground"
+								className="w-full rounded-lg border text-foreground"
 							>
 								Read the docs
 							</NavbarButton>

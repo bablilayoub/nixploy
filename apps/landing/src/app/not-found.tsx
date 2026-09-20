@@ -38,7 +38,7 @@ export default function NotFound() {
 			title="That page is not here"
 			description="The link may be out of date, or the page may have moved. These are the ones people usually want."
 			actions={
-				<Button asChild size="lg" className="rounded-xl">
+				<Button asChild size="lg" className="rounded-lg">
 					<Link href="/">
 						Back to the home page
 						<ArrowRight className="size-4" />

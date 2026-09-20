@@ -4,7 +4,6 @@ import Link from "next/link";
 import { AnimatedShinyText } from "@/components/ui/animated-shiny-text";
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
-import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { Spotlight } from "@/components/ui/spotlight-new";
 import { heroBadge, heroLead, heroTitle } from "@/lib/landing-data";
 import { site } from "@/lib/site";
@@ -12,8 +11,7 @@ import { site } from "@/lib/site";
 /*
  * The fold: one centred column, and then the product itself in the section
  * below it. The light is @aceternity/spotlight-new, the badge is
- * @magicui/animated-shiny-text, the primary action is
- * @magicui/shimmer-button and the one-liner is @aceternity/code-block — the
+ * @magicui/animated-shiny-text and the one-liner is @aceternity/code-block — the
  * same block the docs use, so the command you copy here is the command the
  * install guide shows.
  */
@@ -55,17 +53,17 @@ export function Hero() {
 
 				<p className="mt-6 max-w-2xl text-lg text-balance text-muted-foreground">{heroLead}</p>
 
+				{/* Two plain buttons: one solid, one outlined, the same shape as every
+				    other button on the site. The shimmering pill that used to sit here
+				    was the only control of its kind anywhere. */}
 				<div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-					<ShimmerButton className="shadow-2xl" background="oklch(0.22 0 0)">
-						<Link
-							href="/docs/install"
-							className="flex items-center gap-2 text-base font-medium whitespace-nowrap text-white"
-						>
+					<Button asChild size="lg" className="h-12 rounded-lg px-6 text-base">
+						<Link href="/docs/install">
 							Install Nixploy
 							<ArrowRight className="size-4" />
 						</Link>
-					</ShimmerButton>
-					<Button asChild variant="outline" size="lg" className="h-12 rounded-xl px-6">
+					</Button>
+					<Button asChild variant="outline" size="lg" className="h-12 rounded-lg px-6 text-base">
 						<Link href="/docs">Read the docs</Link>
 					</Button>
 				</div>

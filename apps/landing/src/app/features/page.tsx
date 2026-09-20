@@ -55,13 +55,13 @@ export default function FeaturesPage() {
 			description="Nixploy covers the loop operators actually run: build, ship, expose, observe, alert, recover and automate, on Swarm and Traefik you control."
 			actions={
 				<>
-					<Button asChild size="lg" className="rounded-xl">
+					<Button asChild size="lg" className="rounded-lg">
 						<Link href="/docs/install">
 							Install Nixploy
 							<ArrowRight className="size-4" />
 						</Link>
 					</Button>
-					<Button asChild variant="outline" size="lg" className="rounded-xl">
+					<Button asChild variant="outline" size="lg" className="rounded-lg">
 						<Link href="/docs">Read the docs</Link>
 					</Button>
 				</>

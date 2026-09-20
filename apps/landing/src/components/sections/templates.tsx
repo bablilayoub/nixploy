@@ -60,7 +60,7 @@ export function Templates() {
 						Pinned images, named volumes, and only the variables the stack actually needs.
 					</p>
 				</div>
-				<Button asChild variant="outline" size="lg" className="rounded-xl">
+				<Button asChild variant="outline" size="lg" className="rounded-lg">
 					<Link href="/templates">Browse all {templateCount}</Link>
 				</Button>
 			</div>
