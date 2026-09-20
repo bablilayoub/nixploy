@@ -45,6 +45,21 @@ this file is the summary.
 
 ### Fixed
 
+- **A template that publishes host ports is indexed, not rejected.** A
+  catalogue entry is not a running stack: the per-stack *Publish host ports*
+  opt-in exists, so a template whose compose file has `ports:` is now
+  validated as a published-port stack (no privileged or platform port, no
+  host bind address, no ranges) and flagged, and deploying it creates the
+  stack with publishing on — instance admin only, because those ports bypass
+  Traefik and with it domains, TLS and the access log. Blueprint translation
+  also drops the source panel's routing labels, accepts the `./files/`
+  spelling and SELinux flags on a mount, and suggests a placeholder domain
+  for a blueprint that exposes no port instead of dropping it. On the public
+  blueprints catalog that is 436 of 532 entries deployable, up from 418; the
+  rest are host binds, the Docker socket, capabilities and namespaces.
+- A source's sync report is a dialog listing every rejected entry and
+  unverified image, one reason per line. It used to be the first two reasons
+  pasted into a table cell, clipped mid-word.
 - Four API routers (`branding`, `import`, `sso`, `upstream`) shipped without a
   human title, so the endpoint catalogue listed them as "sso / sso".
 - The landing docs and the DNS settings endpoint both still said the operator
