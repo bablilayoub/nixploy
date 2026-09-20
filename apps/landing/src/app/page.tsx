@@ -3,15 +3,21 @@ import { Cta } from "@/components/home/cta";
 import { Faq } from "@/components/home/faq";
 import { Features } from "@/components/home/features";
 import { Hero } from "@/components/home/hero";
+import { OpenCore } from "@/components/home/open-core";
+import { Rail } from "@/components/home/rail";
 import { Screens } from "@/components/home/screens";
-import { Stats } from "@/components/home/stats";
 import { Templates } from "@/components/home/templates";
 import { Navbar } from "@/components/navbar";
 
 /*
- * The home page, one column, top to bottom: a centred fold with the product
- * window under it, a hairline grid of twelve features, the panel in tabs,
- * four stat cards, the template marquee, the questions, and the close.
+ * The home page, one column, top to bottom.
+ *
+ * The order is the reader's order, not the product's: the claim beside the
+ * install actually running, the panel itself in a window whose tabs are its
+ * own chrome, the four counted numbers on a rail, three numbered chapters
+ * with the commands that do them, the half people assume is paywalled, the
+ * template strip, the questions, and the close on the same graph paper the
+ * page opened on.
  */
 export default function Home() {
 	return (
@@ -19,9 +25,10 @@ export default function Home() {
 			<Navbar />
 			<main id="main-content" className="relative">
 				<Hero />
-				<Features />
 				<Screens />
-				<Stats />
+				<Rail />
+				<Features />
+				<OpenCore />
 				<Templates />
 				<Faq />
 				<Cta />

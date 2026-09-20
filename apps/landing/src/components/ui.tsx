@@ -196,6 +196,46 @@ export function SectionTitle({
 	);
 }
 
+/*
+ * The home page's section header: a mono eyebrow, one heading, one optional
+ * line, and an optional action parked on the right at desktop width.
+ *
+ * Left-aligned on purpose. Six centred headings stacked down one column is
+ * the shape every generated marketing page has; a reader's eye has nowhere to
+ * rest and each section looks like the last. `SectionTitle` (centred) stays
+ * for the sub-pages, where a section is a single idea under a centred header.
+ */
+export function SectionHead({
+	eyebrow,
+	title,
+	lead,
+	action,
+	className,
+}: {
+	eyebrow: string;
+	title: string;
+	lead?: ReactNode;
+	/** A pill or a link, right-aligned from lg up. */
+	action?: ReactNode;
+	className?: string;
+}) {
+	return (
+		<div
+			className={cn(
+				"flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between lg:gap-12",
+				className,
+			)}
+		>
+			<div className="max-w-[44rem]">
+				<Eyebrow>{eyebrow}</Eyebrow>
+				<h2 className="mt-4 text-title text-balance text-foreground sm:text-headline">{title}</h2>
+				{lead ? <p className="mt-4 text-lead text-balance text-muted">{lead}</p> : null}
+			</div>
+			{action ? <div className="shrink-0">{action}</div> : null}
+		</div>
+	);
+}
+
 /** A rounded icon tile: the unit every illustration is drawn with. */
 export function Tile({
 	children,

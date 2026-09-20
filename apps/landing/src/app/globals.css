@@ -36,6 +36,9 @@
 	--color-accent-strong: #93b4ff; /* Lc  62 — the accent as link text */
 	--color-accent-dim: #2f5fd0;
 	--color-accent-soft: rgba(91, 140, 255, 0.12);
+	/* Terminal success only: a transcript whose ticks are the link colour
+	   reads as decoration. Nothing else on the site uses a second hue. */
+	--color-success: #6ad39a; /* Lc  70 */
 	--color-accent-line: rgba(91, 140, 255, 0.32);
 
 	/*

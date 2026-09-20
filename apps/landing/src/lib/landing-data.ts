@@ -18,11 +18,33 @@ export const heroBadge = {
 	href: `${site.github}/blob/main/CHANGELOG.md`,
 } as const;
 
-/** The fold's three lines; the middle one is the emphasised one. */
-export const heroTitle = ["Deploy applications", "and databases", "on servers you own"] as const;
+/** The fold's two lines; the second one is the quiet half of the promise. */
+export const heroTitle = ["Ship anything.", "Own everything."] as const;
 
 export const heroLead =
-	"Git deploys, Docker Compose stacks, five databases, domains with TLS, backups, monitoring, and an API for humans and agents. One install, Apache-2.0.";
+	"A platform as a service that runs on your own box. Git deploys, Compose stacks, five databases, domains with TLS, backups, monitoring and an API — installed in one command and licensed Apache-2.0.";
+
+/**
+ * The fold's right half: what `install.sh` actually prints. The step names
+ * are the eleven `step` calls in the installer, the tick lines are its `ok`
+ * output, and the last line is the `HTTPS ready at` it finishes on. Re-read
+ * install.sh before editing a line here — a fake transcript is a lie the
+ * reader can check in two minutes.
+ */
+export const heroInstall = {
+	host: "root@vps",
+	lines: [
+		{ text: "curl -fsSL nixploy.com/install.sh | sudo bash", tone: "in" },
+		{ text: "4/11  Host preflight", tone: "step" },
+		{ text: "\u2713 Public IP: 203.0.113.10 (metadata)", tone: "ok" },
+		{ text: "7/11  Network segmentation", tone: "step" },
+		{ text: "\u2713 Created nixploy-internal, nixploy-network", tone: "ok" },
+		{ text: "9/11  Traefik & Nixploy", tone: "step" },
+		{ text: "\u2713 Created nixploy", tone: "ok" },
+		{ text: "11/11 Health check", tone: "step" },
+		{ text: "\u2713 HTTPS ready at https://panel.acme.dev", tone: "ok" },
+	],
+} as const;
 
 /**
  * What `docker stats` reports for the three Swarm services on the production
@@ -102,7 +124,7 @@ export const features = [
 	},
 	{
 		title: "Teams, SSO and audit",
-		text: "Roles, per-member capabilities, project-scoped teams, OIDC single sign-on and an exportable audit log. Free.",
+		text: "Roles, per-member capabilities, project-scoped teams, OIDC single sign-on and an exportable audit log.",
 	},
 	{
 		title: "REST API and CLI",
@@ -222,35 +244,68 @@ export const featuredTemplateIds = [
 ] as const;
 
 /**
- * The four stat cards. Templates from the generated catalog, tools from
- * `modules/mcp/tools.ts`, engines from `modules/services/kinds.ts`, the
- * control plane from `docker stats` above.
+ * The four numbers on the rail under the fold. Templates from the generated
+ * catalog, tools from `modules/mcp/tools.ts`, engines from
+ * `modules/services/kinds.ts`, the control plane from `docker stats` above.
  */
 export const stats = [
 	{
 		id: "templates",
 		label: "Templates",
 		value: templateCount,
-		text: "Reviewed compose stacks, generated from the same catalog the panel installs from.",
+		note: "reviewed compose stacks",
 	},
 	{
 		id: "mcp",
 		label: "MCP tools",
 		value: mcpToolCount,
-		text: "Each one dispatches through the panel's own routers, so an agent gets exactly your permissions.",
+		note: "an agent gets your permissions",
 	},
 	{
 		id: "databases",
 		label: "Database engines",
 		value: databaseEngineCount,
-		text: "Postgres, MySQL, MariaDB, MongoDB and Redis, each a first-class service with backups.",
+		note: "each with backups and a restore",
 	},
 	{
 		id: "control-plane",
-		label: "Control plane",
+		label: "MiB control plane",
 		value: controlPlaneTotalMib,
-		unit: "MiB",
-		text: `The panel, Postgres and Traefik together, measured with docker stats on the production box on ${controlPlane.measuredOn}.`,
+		note: `panel, Postgres and Traefik, ${controlPlane.measuredOn}`,
+	},
+] as const;
+
+/**
+ * The half of the product that other panels put behind a plan. Every line is
+ * a shipped module: SSO providers and SAML (`modules/auth/sso.ts`), teams and
+ * project scope (`modules/projects`), the capability catalog, the audit log
+ * with CSV export, whitelabel (`instance_branding`) and the forward-auth
+ * middleware. Stated as what Nixploy includes — never as a comparison.
+ */
+export const openCore = [
+	{
+		title: "Single sign-on",
+		text: "OIDC and SAML providers configured in the panel, with group-to-role mapping.",
+	},
+	{
+		title: "Teams and project scope",
+		text: "Narrow a member to the projects their teams reach. A hidden project is not found.",
+	},
+	{
+		title: "Per-member capabilities",
+		text: "A catalog of capabilities on top of the role ladder, each checked on the server.",
+	},
+	{
+		title: "Audit log with export",
+		text: "Every mutation writes a row with the actor, the IP and the organization. CSV out.",
+	},
+	{
+		title: "Whitelabel",
+		text: "Your logo, name, accent and links, on the panel and on the login page.",
+	},
+	{
+		title: "Login in front of any domain",
+		text: "Put a staging host behind your own panel's sign-in, with your 2FA policy.",
 	},
 ] as const;
 
