@@ -61,7 +61,7 @@ export function PageFrame({
 							height={28}
 							className="[mask-image:radial-gradient(520px_circle_at_50%_0%,white,transparent)] opacity-50"
 						/>
-						<div className="container-page relative">
+						<div className={cn("container-page relative", width === "prose" && "max-w-3xl")}>
 							{mark ? (
 								<span className="mb-5 inline-flex size-14 items-center justify-center rounded-xl border bg-card">
 									{mark}

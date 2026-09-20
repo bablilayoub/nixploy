@@ -16,7 +16,7 @@ export default function AboutPage() {
 			title="Built for people who want their own PaaS."
 			description="An open-source, self-hosted platform for deploying applications and databases on Docker Swarm — with Traefik, Git deploys, monitoring, and a CLI that matches the UI."
 		>
-			<div className="prose prose-invert max-w-none prose-headings:font-display prose-a:text-primary">
+			<div className="prose prose-invert max-w-none prose-headings:font-display prose-a:text-primary prose-code:rounded prose-code:bg-accent prose-code:px-1 prose-code:py-0.5 prose-code:font-normal prose-code:before:content-none prose-code:after:content-none">
 				<h2>The short version</h2>
 				<p>
 					{site.inspiredBy} We learned from those projects, then focused on a sharper product:

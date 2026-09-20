@@ -16,7 +16,7 @@ export default function PrivacyPage() {
 			title="Your infrastructure. Your data."
 			description="Nixploy is designed to run on servers you control."
 		>
-			<div className="prose prose-invert max-w-none prose-headings:font-display prose-a:text-primary">
+			<div className="prose prose-invert max-w-none prose-headings:font-display prose-a:text-primary prose-code:rounded prose-code:bg-accent prose-code:px-1 prose-code:py-0.5 prose-code:font-normal prose-code:before:content-none prose-code:after:content-none">
 				<h2>Self-hosted product</h2>
 				<p>
 					When you install Nixploy, applications, databases, volumes, secrets, and logs stay on your
