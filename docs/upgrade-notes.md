@@ -10,6 +10,46 @@ Upgrade mechanics (rollback, pre-update dump, downgrade guard) are in
 
 ---
 
+## Unreleased (next tag after v0.5.0)
+
+One migration (`0046`, additive: `web_server_settings.dns_auto_records`).
+Nothing to do before upgrading; two things will be different afterwards.
+
+**Known regressions:** none known.
+
+**Traefik moves to 3.7.13, on the panel's first boot.** The proxy image is
+now enforced by the panel: when `nixploy` starts and finds `nixploy-traefik`
+on another tag, it runs one `docker service update --image traefik:v3.7.13`
+— a single task recreate, about 9 s in which routed domains do not answer,
+once. `update.sh` already rolled the proxy, so an install updated that way
+sees nothing new; an install updated from the panel pays the 9 s on the boot
+after the update instead of never getting the new proxy. Nothing in the
+generated dynamic YAML changes shape; the 3.5 → 3.7 migration notes were
+read against it (docs/status.md, 2026-09-20). One visible detail: `forwardAuth`
+middlewares now carry `trustForwardHeader: false` unless the row sets it,
+which is what Traefik did for unset rows for most headers, made explicit
+because 3.6.14 warns otherwise. To stay on the old proxy for a while, set
+`TRAEFIK_VERSION=v3.5.0` for `update.sh` **and** expect the panel to roll it
+anyway on boot — there is no panel-side opt-out on purpose.
+
+**Hetzner DNS-01 wants a Cloud API token.** Hetzner retired
+`dns.hetzner.com`; the DNS-01 provider now reads `HETZNER_API_TOKEN` (a
+Hetzner Cloud API token) and the old `HETZNER_API_KEY` is removed from the
+proxy's environment on the next settings save. A wildcard certificate that
+used the legacy key stops renewing until the token is entered under
+Settings → Platform → DNS provider. Tokens from the old DNS console do not
+work with the Cloud API (Hetzner's migration notes).
+
+**DNS records, off by default.** The new *Create DNS records automatically*
+switch does nothing until an instance admin turns it on; linked providers
+keep working for certificates exactly as before. When it is on, every
+`domain.create` and template deploy writes an A record at the provider —
+never deletes one.
+
+**Per-org runtime log retention.** Organization quotas gained two fields
+under the instance's `NIXPLOY_RUNTIME_LOG_*` ceiling; blank keeps today's
+behaviour, so nothing changes until an org admin sets them.
+
 ## v0.5.0 (the v0.5 + most of the v0.6 roadmap releases)
 
 Six migrations (`0040`…`0045`), all additive: the `passkey` table, the
