@@ -131,8 +131,19 @@ export const TypingAnimation = ({
 
 	const MotionComponent = motionElements[Component] as TerminalTypingMotionComponent;
 
+	/*
+	 * The server renders the whole line, not an empty string: a crawler, a
+	 * reader with scripts off and anyone who never scrolls it into view all saw
+	 * an empty terminal. `mounted` flips on the client, which is when the
+	 * typing takes over.
+	 */
+	const [mounted, setMounted] = useState(false);
 	const [displayedText, setDisplayedText] = useState<string>("");
 	const [started, setStarted] = useState(false);
+
+	useEffect(() => {
+		setMounted(true);
+	}, []);
 	const elementRef = useRef<HTMLElement | null>(null);
 	const isInView = useInView(elementRef as React.RefObject<Element>, {
 		amount: 0.3,
@@ -214,7 +225,7 @@ export const TypingAnimation = ({
 			className={cn("text-sm font-normal tracking-tight", className)}
 			{...props}
 		>
-			{displayedText}
+			{mounted ? displayedText : children}
 		</MotionComponent>
 	);
 };

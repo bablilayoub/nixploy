@@ -33,6 +33,13 @@ export function NumberTicker({
 	useEffect(() => {
 		let timer: ReturnType<typeof setTimeout> | null = null;
 
+		if (isInView && ref.current) {
+			ref.current.textContent = Intl.NumberFormat("en-US", {
+				minimumFractionDigits: decimalPlaces,
+				maximumFractionDigits: decimalPlaces,
+			}).format(direction === "down" ? value : startValue);
+		}
+
 		if (isInView) {
 			timer = setTimeout(() => {
 				motionValue.set(direction === "down" ? startValue : value);
@@ -44,7 +51,7 @@ export function NumberTicker({
 				clearTimeout(timer);
 			}
 		};
-	}, [motionValue, isInView, delay, value, direction, startValue]);
+	}, [motionValue, isInView, delay, value, direction, startValue, decimalPlaces]);
 
 	useEffect(
 		() =>
@@ -59,6 +66,11 @@ export function NumberTicker({
 		[springValue, decimalPlaces],
 	);
 
+	const formatted = Intl.NumberFormat("en-US", {
+		minimumFractionDigits: decimalPlaces,
+		maximumFractionDigits: decimalPlaces,
+	}).format(value);
+
 	return (
 		<span
 			ref={ref}
@@ -68,7 +80,11 @@ export function NumberTicker({
 			)}
 			{...props}
 		>
-			{startValue}
+			{/* The final figure, not `startValue`: this is the server-rendered
+			    text, and a page that says "0 templates" to a crawler or to a
+			    reader with scripts off is wrong. The effect below replaces it
+			    when the animation runs. */}
+			{formatted}
 		</span>
 	);
 }

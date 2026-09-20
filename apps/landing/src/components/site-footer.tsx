@@ -30,7 +30,7 @@ const columns = [
 		links: [
 			{ href: "/about", label: "About" },
 			{ href: `${site.github}/blob/main/CHANGELOG.md`, label: "Changelog" },
-			{ href: `${site.github}/blob/main/LICENSE`, label: "Licence" },
+			{ href: `${site.github}/blob/main/LICENSE`, label: "License" },
 			{ href: "/privacy", label: "Privacy" },
 		],
 	},

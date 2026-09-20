@@ -8,8 +8,8 @@ import { featuredTemplateIds } from "@/lib/landing-data";
 import { findTemplate, type TemplateEntry, templateCount } from "@/lib/templates";
 
 /*
- * The catalogue strip: @magicui/marquee carrying @magicui/magic-card. Names
- * and categories come from the generated catalogue, so the strip cannot
+ * The catalog strip: @magicui/marquee carrying the same card the catalog
+ * page uses. Names and categories come from the generated catalog, so it cannot
  * advertise a template we do not ship.
  */
 const featured = featuredTemplateIds.map(findTemplate).filter((entry) => entry !== undefined);

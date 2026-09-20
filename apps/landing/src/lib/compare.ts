@@ -51,7 +51,7 @@ const DOKPLOY: Comparison = {
 	slug: "dokploy",
 	name: "Dokploy",
 	stars: "37.4k",
-	license: "Apache-2.0, except a /proprietary directory under a source-available licence",
+	license: "Apache-2.0, except a /proprietary directory under a source-available license",
 	licenseSource: "https://github.com/Dokploy/dokploy/blob/canary/LICENSE.MD",
 	what: "A self-hosted PaaS built on Docker Swarm and Traefik, with Git deploys, Compose stacks, databases and backups. It moved to an open-core model: most of the repository is Apache-2.0, and a /proprietary directory is licensed separately, with production use requiring a commercial agreement.",
 	headline:

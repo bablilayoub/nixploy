@@ -9,7 +9,7 @@ import { findTemplate } from "@/lib/templates";
 
 /*
  * What the product does, in @magicui/bento-grid. Each cell's artwork is
- * another registry component or a real capture: a marquee of catalogue
+ * another registry component or a real capture: a marquee of catalog
  * entries, the CLI in @magicui/terminal, screenshots of the panel.
  */
 const marks = featuredTemplateIds
@@ -64,7 +64,7 @@ export function Features() {
 						Icon={Boxes}
 						description="Reviewed compose files with pinned images and named volumes."
 						href="/templates"
-						cta="Browse the catalogue"
+						cta="Browse the catalog"
 						background={
 							<Marquee
 								pauseOnHover

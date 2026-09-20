@@ -59,6 +59,11 @@ export function Marquee({
 				.map((_, i) => (
 					<div
 						key={i}
+						// Copies after the first exist to make the loop seamless; they
+						// are the same content again, so they are hidden from assistive
+						// technology and taken out of the tab order.
+						aria-hidden={i > 0 ? true : undefined}
+						inert={i > 0 ? true : undefined}
 						className={cn("flex shrink-0 justify-around gap-(--gap)", {
 							"animate-marquee flex-row": !vertical,
 							"animate-marquee-vertical flex-col": vertical,

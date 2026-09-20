@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 const notes = [
 	{
 		title: "Everything is sourced",
-		text: "Each claim about another project links to the pricing page, licence file or documentation it was read from — read, not remembered. Two of them contradicted what a search summary said.",
+		text: "Each claim about another project links to the pricing page, license file or documentation it was read from — read, not remembered. Two of them contradicted what a search summary said.",
 	},
 	{
 		title: "No mudslinging",
