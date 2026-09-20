@@ -50,3 +50,10 @@ apps/*/CLAUDE.md
 
 # Local dev-server launch config for the desktop app (per machine).
 .claude/launch.json
+
+# Local-only, never committed. The shadcn CLI writes a components.json where it
+# is run; the one the landing app uses is apps/landing/components.json, and a
+# copy at the root would point the CLI at the wrong paths. package-lock.json is
+# an npm artifact in a pnpm workspace — the lock is pnpm-lock.yaml.
+/components.json
+/package-lock.json

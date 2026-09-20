@@ -9,6 +9,48 @@ pin. Operator-facing detail — what to check before upgrading, what will look
 different afterwards — lives in [docs/upgrade-notes.md](docs/upgrade-notes.md);
 this file is the summary.
 
+## [0.7.0] — 2026-09-20
+
+### Added
+
+- **Forty DNS-01 providers, up from eight.** Settings → Platform → Wildcard
+  certificates now offers Spaceship, Porkbun, NameSilo, GoDaddy, Linode,
+  netcup, deSEC, DNSimple, Bunny.net, Gcore, IONOS, Hostinger, Njalla, INWX,
+  Name.com, NS1, LuaDNS, Scaleway, Exoscale, ClouDNS, Netlify, Vercel,
+  Infomaniak, GleSYS, mijn.host, DNS Made Easy, Dynu, easyDNS and Hurricane
+  Electric beside the eight that were there — plus three that point at a
+  nameserver you run yourself: **RFC 2136** dynamic update (BIND, Knot,
+  anything speaking nsupdate), **PowerDNS** and **Technitium**. Each entry's
+  provider code and credential variables were read out of lego's own list at
+  the version Traefik 3.7.13 embeds (v5.4.1) and checked back against it, because
+  both are passed through verbatim and a wrong one only fails at certificate time.
+- **A records at three more providers.** Spaceship, Porkbun and Linode join
+  Cloudflare, DigitalOcean, Hetzner, Vultr and Gandi LiveDNS in *Create DNS
+  records automatically* — eight with a record client now. The rest stay
+  certificates-only, and the panel says which is which.
+
+### Changed
+
+- The DNS provider picker is a searchable list rather than a dropdown of
+  forty, and marks the providers that also write records.
+- nixploy.com was rebuilt. Every component now comes from a component
+  registry (`@shadcn`, `@magicui`, `@aceternity`, `@kokonutui`) with this
+  repository supplying structure, copy and data; the palette is monochrome,
+  the docs have a table of contents and a previous/next pager, the API
+  reference collapses its 49 routers behind an index, and the site has a 404
+  page, a real share card, response headers and a skip link. Numbers that had
+  been typed into the copy — the release in the fold's badge, the install
+  guide's checksum snippet, the control-plane footprint, the MCP tool count —
+  are read from the data that measures them.
+
+### Fixed
+
+- Four API routers (`branding`, `import`, `sso`, `upstream`) shipped without a
+  human title, so the endpoint catalogue listed them as "sso / sso".
+- The landing docs and the DNS settings endpoint both still said the operator
+  had to run `docker service update --env-add` by hand to give Traefik its DNS
+  credentials. The panel has been doing that itself since 0.6.0.
+
 ## [0.6.0] — 2026-09-20
 
 ### Added
