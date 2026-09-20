@@ -33,6 +33,18 @@ State:
 | Interaction | Copy control copies the real command, the accordion opens on Enter, the docs disclosure opens on mobile with all 25 links, the mobile menu toggles with `aria-expanded` |
 | Cross-browser | Untested: only Chromium is installed for Playwright here. The built CSS is Lightning-compiled (oklch → hex + lab) with `-webkit-` prefixes for backdrop-filter and mask |
 
+Flake found while verifying (not caused by the landing work):
+
+- `Installer signature check → update.sh verifies and pins the signed image`
+  failed on the run for `bf15566`. The `Docker` workflow pushes
+  `ghcr.io/bablilayoub/nixploy:main` on every push to main and signs it
+  afterwards; the CI job verifies that same moving tag. On this push the two
+  overlapped — CI started 02:51, the Docker workflow finished 02:54 — so the
+  job read a `:main` whose signature was not attached yet. Nothing in
+  `install.sh`, `update.sh` or `tools/ci/` changed. If it recurs, the job
+  should verify a digest the run itself produced rather than the shared
+  moving tag.
+
 Known gaps:
 
 - Aceternity's *blocks* (footers, CTAs, FAQ, pricing, hero blocks) are paid;
