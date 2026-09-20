@@ -2,9 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
-import { ArrowDownAZ, ArrowUpAZ, LayoutGrid } from "lucide-react";
+import { LayoutGrid, Rows3, Search, SlidersHorizontal, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { PageHeader } from "@/components/shell";
@@ -18,122 +18,62 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Pagination } from "@/components/ui/table-toolbar";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
+import { cn } from "@/lib/utils";
 
 import { DeployTemplateDialog, templateDeployBlocker } from "./deploy-template-dialog";
+import { TemplateCard } from "./template-card";
+import { type CatalogView, selectTemplates } from "./template-catalog";
 import { TemplateDetailsDialog } from "./template-details-dialog";
-import { TemplateLogo } from "./template-logo";
+import { TemplateFilterRail } from "./template-filter-rail";
+import { TemplatesTable } from "./templates-table";
+import type { TemplateSort } from "./use-template-filters";
+import { TEMPLATE_NEEDS, useTemplateFilters } from "./use-template-filters";
 
 export type TemplateSummary = inferRouterOutputs<AppRouter>["template"]["all"][number];
 
-const ALL_CATEGORIES = "all";
-
 /**
- * Shared by the skeleton and both result layouts so they cannot drift apart.
  * Four columns from `xl` on purpose: most categories hold four to eight
  * templates, so a three-column grid left almost every section with one
  * stranded card on a row of its own.
  */
 const GRID_CLASS = "grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
 
+/** A page of cards, and a page of rows. Both land just under one screenful. */
+const GRID_PAGE_SIZE = 24;
+const LIST_PAGE_SIZE = 25;
+
+const SORT_LABELS: Record<TemplateSort, string> = {
+	category: "By category",
+	az: "Name A–Z",
+	za: "Name Z–A",
+	simplest: "Least setup first",
+	richest: "Most setup first",
+};
+
+const NEEDS_LABELS: Record<string, string> = {
+	[TEMPLATE_NEEDS.noSetup]: "No setup needed",
+	[TEMPLATE_NEEDS.values]: "Asks for values",
+	[TEMPLATE_NEEDS.admin]: "Instance admin",
+};
+
 /**
- * One gallery entry.
- *
- * The whole card is the "open details" target — a stretched transparent button
- * rather than a wrapper `<button>`, so the Deploy button can sit inside it
- * without nesting one interactive element in another. Deploy is raised above
- * that overlay with `z-10`; everything else is inert text.
- *
- * Deliberately NOT here: a second "Details" button (it did exactly what
- * clicking the card does) and the tag list (the tags mostly restate the
- * category heading above the grid — they stay searchable, just not printed on
- * every card). What replaced them is the one fact you want before committing:
- * how many values the deploy form will ask for.
+ * The template gallery: the query, the preselect link and the two sheets.
+ * Everything visible is {@link TemplatesWorkbench}, which takes rows and
+ * renders them — that split is what lets the layout be driven from a fixture
+ * while the panel has no headless way to sign in.
  */
-function TemplateCard({
-	template,
-	onInspect,
-	onDeploy,
-	deployBlocker,
-}: {
-	template: TemplateSummary;
-	onInspect: () => void;
-	onDeploy: () => void;
-	/** Reason the caller cannot deploy (disables the button), or null. */
-	deployBlocker: string | null;
-}) {
-	const settingsCount = template.env.length;
-	return (
-		<article className="group relative flex h-full flex-col rounded-xl border border-border bg-card p-4 transition-colors hover:border-foreground/20 hover:bg-accent/40">
-			<div className="flex items-center gap-2.5">
-				<div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-					<TemplateLogo name={template.name} logo={template.logo} />
-				</div>
-				<h3 className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-					{template.name}
-				</h3>
-				{/* Which catalog this came from: the built-ins carry no source. */}
-				{template.source ? (
-					<Badge variant="secondary" className="max-w-28 shrink-0 truncate font-normal">
-						{template.source.name}
-					</Badge>
-				) : template.hostPrivileged || template.publishPorts ? (
-					<Badge variant="outline" className="shrink-0 font-normal">
-						Instance admin
-					</Badge>
-				) : null}
-			</div>
-
-			{/* Two lines, always — reserving the height keeps every row of the grid
-			    on the same baseline whether a description is 6 words or 30. */}
-			<p className="mt-3 line-clamp-2 min-h-9 text-xs leading-[1.125rem] text-muted-foreground">
-				{template.description}
-			</p>
-
-			<div className="mt-4 flex items-end justify-between gap-2 pt-0.5">
-				<span className="text-[11px] text-muted-foreground/80">
-					{settingsCount === 0
-						? "No setup needed"
-						: `${settingsCount} ${settingsCount === 1 ? "setting" : "settings"}`}
-				</span>
-				{/* Quiet until the card is engaged, then it reads as the primary action.
-				    The stacked `group-hover:hover:` is not redundant: the button's own
-				    `hover:bg-secondary/80` would otherwise fight `group-hover:bg-primary`
-				    at the moment the pointer is actually on the button. */}
-				<Button
-					size="sm"
-					variant="secondary"
-					className="relative z-10 group-hover:bg-primary group-hover:text-primary-foreground group-hover:hover:bg-primary/90"
-					onClick={onDeploy}
-					disabled={deployBlocker !== null}
-					title={deployBlocker ?? undefined}
-				>
-					Deploy
-				</Button>
-			</div>
-
-			<button
-				type="button"
-				onClick={onInspect}
-				className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-			>
-				<span className="sr-only">{template.name} details</span>
-			</button>
-		</article>
-	);
-}
-
 export function TemplatesView() {
 	const trpc = useTRPC();
 	const router = useRouter();
 	const pathname = usePathname();
 	const access = useCapabilities();
-	const [search, setSearch] = useState("");
-	const [category, setCategory] = useState(ALL_CATEGORIES);
-	const [sort, setSort] = useState<"asc" | "desc">("asc");
 	const [selected, setSelected] = useState<TemplateSummary | null>(null);
 	const [inspecting, setInspecting] = useState<TemplateSummary | null>(null);
 
@@ -168,173 +108,412 @@ export function TemplatesView() {
 		}
 	}, [pathname, router, searchParams]);
 
-	const categories = useMemo(() => {
-		const names: string[] = [];
-		for (const template of templates ?? []) {
-			if (!names.includes(template.category)) names.push(template.category);
-		}
-		return names.sort((a, b) => a.localeCompare(b));
-	}, [templates]);
-
-	const filtered = useMemo(() => {
-		const query = search.trim().toLowerCase();
-		const rows = (templates ?? []).filter(
-			(template) =>
-				(category === ALL_CATEGORIES || template.category === category) &&
-				(template.name.toLowerCase().includes(query) ||
-					template.description.toLowerCase().includes(query) ||
-					template.tags.some((tag) => tag.toLowerCase().includes(query))),
-		);
-		return rows.sort((a, b) =>
-			sort === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name),
-		);
-	}, [templates, category, search, sort]);
-
-	const grouped = useMemo(() => {
-		if (category !== ALL_CATEGORIES) return null;
-		const map = new Map<string, TemplateSummary[]>();
-		for (const template of filtered) {
-			const list = map.get(template.category) ?? [];
-			list.push(template);
-			map.set(template.category, list);
-		}
-		return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-	}, [filtered, category]);
+	const blockerFor = useCallback(
+		(template: TemplateSummary) => templateDeployBlocker(template, access),
+		[access],
+	);
 
 	return (
-		<div className="flex flex-col gap-6">
-			<PageHeader title="Templates" description="One-click deploys for popular self-hosted apps." />
-
-			<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-				<div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-					<Input
-						placeholder="Search templates…"
-						aria-label="Search templates"
-						className="h-9 w-full sm:max-w-xs"
-						value={search}
-						onChange={(event) => setSearch(event.target.value)}
-					/>
-					<Select value={category} onValueChange={setCategory}>
-						<SelectTrigger className="h-9 w-full sm:w-44">
-							<SelectValue placeholder="Category" />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value={ALL_CATEGORIES}>All categories</SelectItem>
-							{categories.map((name) => (
-								<SelectItem key={name} value={name}>
-									{name}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-				</div>
-				<Select value={sort} onValueChange={(value) => setSort(value as "asc" | "desc")}>
-					<SelectTrigger className="h-9 w-full sm:w-40">
-						<SelectValue />
-					</SelectTrigger>
-					<SelectContent align="end">
-						<SelectItem value="asc">
-							<span className="flex items-center gap-2">
-								<ArrowUpAZ className="size-4" />
-								A–Z
-							</span>
-						</SelectItem>
-						<SelectItem value="desc">
-							<span className="flex items-center gap-2">
-								<ArrowDownAZ className="size-4" />
-								Z–A
-							</span>
-						</SelectItem>
-					</SelectContent>
-				</Select>
-			</div>
-
-			<QueryState
-				isPending={isPending}
-				isError={isError}
-				error={error}
-				onRetry={() => refetch()}
-				skeleton={
-					<ul className={GRID_CLASS}>
-						{["one", "two", "three", "four", "five", "six", "seven", "eight"].map((row) => (
-							<li key={row} className="rounded-xl border bg-card p-4">
-								<div className="flex items-center gap-2.5">
-									<Skeleton className="size-9 shrink-0 rounded-lg" />
-									<Skeleton className="h-4 w-28" />
-								</div>
-								<div className="mt-3 space-y-1.5">
-									<Skeleton className="h-3 w-full" />
-									<Skeleton className="h-3 w-2/3" />
-								</div>
-								<div className="mt-4 flex items-center justify-between">
-									<Skeleton className="h-3 w-16" />
-									<Skeleton className="h-8 w-16 rounded-md" />
-								</div>
-							</li>
-						))}
-					</ul>
-				}
-				isEmpty={filtered.length === 0}
-				empty={
-					<EmptyState
-						icon={LayoutGrid}
-						title="No templates match"
-						description="Try a different search or category."
-					/>
-				}
-			>
-				{grouped ? (
-					<div className="flex flex-col gap-8">
-						{grouped.map(([categoryName, rows]) => (
-							<section key={categoryName} className="space-y-3">
-								{/* The rule carries the eye from the label across to the row it
-								    labels, which is what separates the sections — not the gap. */}
-								<div className="flex items-center gap-3">
-									<h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-										{categoryName}
-									</h2>
-									<span className="text-[11px] tabular-nums text-muted-foreground/60">
-										{rows.length}
-									</span>
-									<span aria-hidden className="h-px flex-1 bg-border" />
-								</div>
-								<ul className={GRID_CLASS}>
-									{rows.map((template) => (
-										<li key={template.id}>
-											<TemplateCard
-												template={template}
-												deployBlocker={templateDeployBlocker(template, access)}
-												onInspect={() => setInspecting(template)}
-												onDeploy={() => setSelected(template)}
-											/>
-										</li>
-									))}
-								</ul>
-							</section>
-						))}
-					</div>
-				) : (
-					<ul className={GRID_CLASS}>
-						{filtered.map((template) => (
-							<li key={template.id}>
-								<TemplateCard
-									template={template}
-									deployBlocker={templateDeployBlocker(template, access)}
-									onInspect={() => setInspecting(template)}
-									onDeploy={() => setSelected(template)}
-								/>
-							</li>
-						))}
-					</ul>
-				)}
-			</QueryState>
-
+		<>
+			<TemplatesWorkbench
+				templates={templates}
+				state={{ isPending, isError, error, retry: () => refetch() }}
+				deployBlocker={blockerFor}
+				onInspect={setInspecting}
+				onDeploy={setSelected}
+			/>
 			<TemplateDetailsDialog
 				template={inspecting}
 				onClose={() => setInspecting(null)}
 				onDeploy={(template) => setSelected(template)}
 			/>
 			<DeployTemplateDialog template={selected} onClose={closeDeploy} />
+		</>
+	);
+}
+
+/**
+ * The gallery itself: a faceted rail (categories, catalogs, requirements,
+ * tags — each option carrying its count), a grid or a table, and every knob in
+ * the URL so a narrowed view is a link.
+ *
+ * Paging is real, not a scroll: the built-in catalog is 145 entries and a
+ * blueprints source adds four hundred more, which no single screen — and no
+ * honest "all" — can hold.
+ */
+export function TemplatesWorkbench({
+	templates,
+	state,
+	deployBlocker,
+	onInspect,
+	onDeploy,
+}: {
+	templates: TemplateSummary[] | undefined;
+	state: {
+		isPending: boolean;
+		isError: boolean;
+		error?: { message?: string } | null;
+		retry: () => void;
+	};
+	deployBlocker: (template: TemplateSummary) => string | null;
+	onInspect: (template: TemplateSummary) => void;
+	onDeploy: (template: TemplateSummary) => void;
+}) {
+	const filters = useTemplateFilters();
+	const [filtersOpen, setFiltersOpen] = useState(false);
+	const searchRef = useRef<HTMLInputElement>(null);
+
+	// The box keeps its own value so typing stays instant; the URL trails it.
+	const [draftQuery, setDraftQuery] = useState(filters.query);
+	const debouncedQuery = useDebouncedValue(draftQuery, 200);
+	const setFilters = filters.set;
+	useEffect(() => {
+		if (debouncedQuery !== filters.query) setFilters({ query: debouncedQuery });
+	}, [debouncedQuery, filters.query, setFilters]);
+	// A filter reset (or the back button) has to reach the box as well.
+	useEffect(() => {
+		setDraftQuery((current) => (current === filters.query ? current : filters.query));
+	}, [filters.query]);
+
+	// `/` focuses the search box, the way every catalog on the web does — but
+	// not while the caret is already in a field, and not over a modifier.
+	useEffect(() => {
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+			const target = event.target as HTMLElement | null;
+			if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+			event.preventDefault();
+			searchRef.current?.focus();
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, []);
+
+	const pageSize = filters.view === "list" ? LIST_PAGE_SIZE : GRID_PAGE_SIZE;
+	const view = useMemo(
+		() => selectTemplates(templates ?? [], filters, pageSize),
+		[templates, filters, pageSize],
+	);
+
+	const sourceNames = useMemo(() => {
+		const names = new Map<string, string>();
+		for (const template of templates ?? []) {
+			if (template.source) names.set(template.source.templateSourceId, template.source.name);
+		}
+		return new Map([...names.entries()].sort(([, a], [, b]) => a.localeCompare(b)));
+	}, [templates]);
+
+	const activeChips = [
+		...filters.categories.map((value) => ({
+			key: `cat:${value}`,
+			label: value,
+			clear: () => filters.toggle("categories", value),
+		})),
+		...filters.sources.map((value) => ({
+			key: `src:${value}`,
+			label: sourceNames.get(value) ?? "Built-in",
+			clear: () => filters.toggle("sources", value),
+		})),
+		...filters.needs.map((value) => ({
+			key: `needs:${value}`,
+			label: NEEDS_LABELS[value] ?? value,
+			clear: () => filters.toggle("needs", value),
+		})),
+		...filters.tags.map((value) => ({
+			key: `tag:${value}`,
+			label: `#${value}`,
+			clear: () => filters.toggle("tags", value),
+		})),
+	];
+
+	const rail = <TemplateFilterRail view={view} filters={filters} sourceNames={sourceNames} />;
+
+	return (
+		<div className="flex flex-col gap-6">
+			<PageHeader
+				title="Templates"
+				description="One-click deploys for popular self-hosted apps."
+				actions={
+					<div className="flex items-center gap-2">
+						<Select
+							value={filters.sort}
+							onValueChange={(value) => filters.set({ sort: value as TemplateSort })}
+						>
+							<SelectTrigger className="h-9 w-44" aria-label="Sort templates">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent align="end">
+								{(Object.keys(SORT_LABELS) as TemplateSort[]).map((value) => (
+									<SelectItem key={value} value={value}>
+										{SORT_LABELS[value]}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+						{/* Two layouts, one selection: the grid answers "what is there",
+						    the table answers "which one". */}
+						<div className="flex items-center rounded-md border p-0.5">
+							{(
+								[
+									["grid", LayoutGrid, "Grid view"],
+									["list", Rows3, "Table view"],
+								] as const
+							).map(([mode, Icon, label]) => (
+								<Button
+									key={mode}
+									variant="ghost"
+									size="icon-sm"
+									aria-label={label}
+									aria-pressed={filters.view === mode}
+									className={cn(filters.view === mode && "bg-secondary text-foreground")}
+									onClick={() => filters.set({ view: mode })}
+								>
+									<Icon className="size-4" />
+								</Button>
+							))}
+						</div>
+					</div>
+				}
+			/>
+
+			<div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+				{/* The rail is navigation, so it stays put while the results scroll. */}
+				<aside className="hidden w-56 shrink-0 lg:sticky lg:top-4 lg:block">{rail}</aside>
+
+				<div className="flex min-w-0 flex-1 flex-col gap-4">
+					{/* On a phone the search box gets the row to itself: sharing it with
+					    the filters button and the count squeezed it to about a hundred
+					    pixels, which is not a search box. */}
+					<div className="flex flex-wrap items-center gap-2">
+						<div className="relative order-1 w-full min-w-0 sm:order-none sm:w-auto sm:max-w-sm sm:flex-1">
+							<Search className="pointer-events-none absolute start-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+							<Input
+								ref={searchRef}
+								value={draftQuery}
+								onChange={(event) => setDraftQuery(event.target.value)}
+								placeholder="Search templates…"
+								aria-label="Search templates"
+								className="h-9 w-full ps-8 pe-8"
+							/>
+							{draftQuery ? (
+								<button
+									type="button"
+									onClick={() => setDraftQuery("")}
+									aria-label="Clear search"
+									className="absolute end-2 top-1/2 -translate-y-1/2 rounded-sm text-muted-foreground transition-colors hover:text-foreground"
+								>
+									<X className="size-3.5" />
+								</button>
+							) : null}
+						</div>
+
+						{/* Below `lg` the rail lives in a sheet; the badge is how many
+						    facets are on while it is closed. */}
+						<Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+							<SheetTrigger asChild>
+								<Button variant="outline" size="sm" className="order-2 h-9 lg:hidden">
+									<SlidersHorizontal className="size-3.5" />
+									Filters
+									{activeChips.length > 0 ? (
+										<Badge variant="secondary" className="rounded-sm px-1 tabular-nums">
+											{activeChips.length}
+										</Badge>
+									) : null}
+								</Button>
+							</SheetTrigger>
+							<SheetContent side="left" className="w-80 overflow-y-auto">
+								<SheetHeader>
+									<SheetTitle>Filters</SheetTitle>
+								</SheetHeader>
+								<div className="px-4 pb-6">{rail}</div>
+							</SheetContent>
+						</Sheet>
+
+						<span className="order-3 ms-auto text-xs tabular-nums text-muted-foreground">
+							{view.rows.length} of {view.total} templates
+						</span>
+					</div>
+
+					{activeChips.length > 0 ? (
+						<div className="flex flex-wrap items-center gap-1.5">
+							{activeChips.map((chip) => (
+								<button
+									key={chip.key}
+									type="button"
+									onClick={chip.clear}
+									className="flex items-center gap-1 rounded-md border bg-secondary/60 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+								>
+									{chip.label}
+									<X className="size-3" />
+								</button>
+							))}
+							<Button variant="ghost" size="xs" onClick={filters.clear}>
+								Clear all
+							</Button>
+						</div>
+					) : null}
+
+					<QueryState
+						isPending={state.isPending}
+						isError={state.isError}
+						error={state.error}
+						onRetry={state.retry}
+						skeleton={
+							<ul className={GRID_CLASS}>
+								{["one", "two", "three", "four", "five", "six", "seven", "eight"].map((row) => (
+									<li key={row} className="rounded-xl border bg-card p-4">
+										<div className="flex items-center gap-2.5">
+											<Skeleton className="size-9 shrink-0 rounded-lg" />
+											<Skeleton className="h-4 w-28" />
+										</div>
+										<div className="mt-3 space-y-1.5">
+											<Skeleton className="h-3 w-full" />
+											<Skeleton className="h-3 w-2/3" />
+										</div>
+										<div className="mt-4 flex items-center justify-between">
+											<Skeleton className="h-3 w-16" />
+											<Skeleton className="h-8 w-16 rounded-md" />
+										</div>
+									</li>
+								))}
+							</ul>
+						}
+						isEmpty={view.rows.length === 0}
+						empty={
+							<EmptyState
+								icon={LayoutGrid}
+								title="No templates match"
+								description="Nothing in the catalog fits every filter at once. Drop one and try again."
+								action={
+									filters.isFiltered ? (
+										<Button variant="outline" size="sm" onClick={filters.clear}>
+											Clear filters
+										</Button>
+									) : undefined
+								}
+							/>
+						}
+					>
+						{filters.view === "list" ? (
+							<div className="overflow-x-auto rounded-md border">
+								<TemplatesTable
+									templates={view.visible}
+									onInspect={onInspect}
+									onDeploy={onDeploy}
+									deployBlocker={deployBlocker}
+								/>
+							</div>
+						) : (
+							<CardGrid
+								view={view}
+								grouped={filters.sort === "category"}
+								onInspect={onInspect}
+								onDeploy={onDeploy}
+								deployBlocker={deployBlocker}
+								onTag={(tag) => filters.toggle("tags", tag)}
+							/>
+						)}
+
+						{view.pageCount > 1 ? (
+							<Pagination
+								className="pt-4"
+								page={view.page}
+								pageCount={view.pageCount}
+								from={view.from}
+								to={view.to}
+								total={view.rows.length}
+								noun="templates"
+								note={filters.isFiltered ? `(filtered from ${view.total})` : undefined}
+								onPage={(next) => {
+									filters.set({ page: next });
+									window.scrollTo({ top: 0, behavior: "smooth" });
+								}}
+							/>
+						) : null}
+					</QueryState>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/**
+ * The grid, with a category rule inserted wherever the category changes.
+ *
+ * That only happens under the category sort, where the rows are already
+ * grouped — the rule then labels a run that exists rather than inventing one,
+ * and it keeps working across pages, which a "group everything" layout cannot.
+ */
+function CardGrid({
+	view,
+	grouped,
+	onInspect,
+	onDeploy,
+	deployBlocker,
+	onTag,
+}: {
+	view: CatalogView<TemplateSummary>;
+	grouped: boolean;
+	onInspect: (template: TemplateSummary) => void;
+	onDeploy: (template: TemplateSummary) => void;
+	deployBlocker: (template: TemplateSummary) => string | null;
+	onTag: (tag: string) => void;
+}) {
+	if (!grouped) {
+		return (
+			<ul className={GRID_CLASS}>
+				{view.visible.map((template) => (
+					<li key={template.id}>
+						<TemplateCard
+							template={template}
+							deployBlocker={deployBlocker(template)}
+							onInspect={() => onInspect(template)}
+							onDeploy={() => onDeploy(template)}
+							onTag={onTag}
+						/>
+					</li>
+				))}
+			</ul>
+		);
+	}
+
+	const sections: Array<{ category: string; rows: TemplateSummary[] }> = [];
+	for (const template of view.visible) {
+		const last = sections.at(-1);
+		if (last?.category === template.category) last.rows.push(template);
+		else sections.push({ category: template.category, rows: [template] });
+	}
+
+	return (
+		<div className="flex flex-col gap-8">
+			{sections.map((section) => (
+				<section key={section.category} className="space-y-3">
+					{/* The rule carries the eye from the label across to the row it
+					    labels, which is what separates the sections — not the gap. */}
+					<div className="flex items-center gap-3">
+						<h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+							{section.category}
+						</h2>
+						<span className="text-[11px] tabular-nums text-muted-foreground/60">
+							{view.counts.categories.get(section.category) ?? section.rows.length}
+						</span>
+						<span aria-hidden className="h-px flex-1 bg-border" />
+					</div>
+					<ul className={GRID_CLASS}>
+						{section.rows.map((template) => (
+							<li key={template.id}>
+								<TemplateCard
+									template={template}
+									deployBlocker={deployBlocker(template)}
+									onInspect={() => onInspect(template)}
+									onDeploy={() => onDeploy(template)}
+									onTag={onTag}
+								/>
+							</li>
+						))}
+					</ul>
+				</section>
+			))}
 		</div>
 	);
 }

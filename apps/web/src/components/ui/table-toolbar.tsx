@@ -1,9 +1,21 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ListFilter, Search, X } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+	Command,
+	CommandEmpty,
+	CommandGroup,
+	CommandInput,
+	CommandItem,
+	CommandList,
+	CommandSeparator,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import type { TableView } from "@/hooks/use-table-view";
 import { cn } from "@/lib/utils";
 
@@ -171,5 +183,169 @@ export function TableNoMatch<T>({ view, colSpan }: { view: TableView<T>; colSpan
 				</button>
 			</td>
 		</tr>
+	);
+}
+
+/** One value a `TableFacet` can select, with how many rows carry it. */
+export interface FacetOption {
+	value: string;
+	label: string;
+	/** Rows carrying this value under the *other* facets. Omit to hide the count. */
+	count?: number;
+	/** Rendered before the label — a status dot, a kind icon. */
+	icon?: React.ReactNode;
+}
+
+/**
+ * A multi-select filter for one column, in the shape the rest of the panel
+ * already uses for pickers: a popover holding a `Command` list, searchable
+ * once it is long enough to need it.
+ *
+ * Counts come from the caller, taken over the rows the *other* facets leave —
+ * that is what makes a facet list worth reading: an option showing 0 says the
+ * combination is empty before you click it, and one showing 40 says where the
+ * rows are. Selecting nothing means "everything", so an untouched facet never
+ * hides a row.
+ */
+export function TableFacet({
+	label,
+	options,
+	selected,
+	onChange,
+	searchFrom = 8,
+	className,
+	align = "start",
+}: {
+	label: string;
+	options: FacetOption[];
+	/** Selected values; empty means no filtering by this facet. */
+	selected: readonly string[];
+	onChange: (next: string[]) => void;
+	/** Option count from which the popover gets its own search box. */
+	searchFrom?: number;
+	className?: string;
+	align?: "start" | "center" | "end";
+}) {
+	if (options.length === 0) return null;
+	const chosen = new Set(selected);
+	const toggle = (value: string) => {
+		const next = new Set(chosen);
+		if (next.has(value)) next.delete(value);
+		else next.add(value);
+		onChange([...next]);
+	};
+
+	return (
+		<Popover>
+			<PopoverTrigger asChild>
+				<Button
+					variant="outline"
+					size="sm"
+					className={cn("h-9 border-dashed", chosen.size > 0 && "border-solid", className)}
+				>
+					<ListFilter className="size-3.5" />
+					{label}
+					{chosen.size > 0 ? (
+						<>
+							<Separator orientation="vertical" className="mx-0.5 h-4" />
+							{/* The chosen values themselves up to two, then a count: reading
+							    "Category: Databases" beats reading "Category 1". */}
+							{chosen.size > 2 ? (
+								<Badge variant="secondary" className="rounded-sm px-1 font-normal tabular-nums">
+									{chosen.size} selected
+								</Badge>
+							) : (
+								options
+									.filter((option) => chosen.has(option.value))
+									.map((option) => (
+										<Badge
+											key={option.value}
+											variant="secondary"
+											className="max-w-28 truncate rounded-sm px-1 font-normal"
+										>
+											{option.label}
+										</Badge>
+									))
+							)}
+						</>
+					) : null}
+				</Button>
+			</PopoverTrigger>
+			<PopoverContent align={align} className="w-56 p-0">
+				<Command>
+					{options.length >= searchFrom ? (
+						<CommandInput placeholder={`Filter ${label.toLowerCase()}…`} className="h-9" />
+					) : null}
+					<CommandList>
+						<CommandEmpty>No matches.</CommandEmpty>
+						<CommandGroup>
+							{options.map((option) => {
+								const active = chosen.has(option.value);
+								return (
+									<CommandItem
+										key={option.value}
+										value={option.label}
+										onSelect={() => toggle(option.value)}
+									>
+										<span
+											className={cn(
+												"flex size-4 shrink-0 items-center justify-center rounded-sm border",
+												active
+													? "border-primary bg-primary text-primary-foreground"
+													: "border-input [&_svg]:invisible",
+											)}
+										>
+											<Check className="size-3" />
+										</span>
+										{option.icon}
+										<span className="truncate">{option.label}</span>
+										{option.count !== undefined ? (
+											<span className="ms-auto text-xs tabular-nums text-muted-foreground">
+												{option.count}
+											</span>
+										) : null}
+									</CommandItem>
+								);
+							})}
+						</CommandGroup>
+						{chosen.size > 0 ? (
+							<>
+								<CommandSeparator />
+								<CommandGroup>
+									<CommandItem
+										onSelect={() => onChange([])}
+										className="justify-center text-muted-foreground"
+									>
+										Clear filter
+									</CommandItem>
+								</CommandGroup>
+							</>
+						) : null}
+					</CommandList>
+				</Command>
+			</PopoverContent>
+		</Popover>
+	);
+}
+
+/**
+ * "Clear filters", shown only while something is filtered. Sits at the end of
+ * a toolbar row next to the facets it resets.
+ */
+export function TableFilterReset({
+	show,
+	onClear,
+	className,
+}: {
+	show: boolean;
+	onClear: () => void;
+	className?: string;
+}) {
+	if (!show) return null;
+	return (
+		<Button variant="ghost" size="sm" className={cn("h-9 px-2", className)} onClick={onClear}>
+			Reset
+			<X className="size-3.5" />
+		</Button>
 	);
 }

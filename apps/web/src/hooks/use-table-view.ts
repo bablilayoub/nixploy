@@ -26,6 +26,22 @@ export interface TableViewOptions<T> {
 	pageSize?: number;
 	/** Row count from which the search box appears. */
 	searchFrom?: number;
+	/**
+	 * Facet filters, applied before the search and before the facet counts are
+	 * taken. The caller owns the selection state (a `TableFacet` in the toolbar
+	 * writes it); this only needs to know how to test a row.
+	 *
+	 * Keep the function referentially stable — `useCallback`, or a module-level
+	 * function — or every render re-slices the list.
+	 */
+	filter?: (row: T) => boolean;
+	/**
+	 * A string that changes when `filter` starts meaning something different
+	 * (the serialized facet selection). The page returns to the first one then
+	 * — and only then: resetting on the row count instead would bounce someone
+	 * off page 4 of a Docker listing because one container exited.
+	 */
+	filterKey?: string;
 }
 
 export interface TableView<T> {
@@ -48,8 +64,10 @@ export interface TableView<T> {
 	from: number;
 	/** 1-based index of the last visible row. */
 	to: number;
-	/** The query is non-empty and hid at least one row. */
+	/** The query or a facet hid at least one row. */
 	isFiltered: boolean;
+	/** Rows left by the facets alone — what facet counts are taken over. */
+	matching: T[];
 	clear: () => void;
 }
 
@@ -64,6 +82,7 @@ export const DEFAULT_TABLE_SEARCH_FROM = 8;
 export function resolveTableView<T>({
 	rows,
 	search,
+	filter,
 	query,
 	page,
 	pageSize = DEFAULT_TABLE_PAGE_SIZE,
@@ -73,9 +92,10 @@ export function resolveTableView<T>({
 	"setQuery" | "setPage" | "clear" | "query"
 > {
 	const needle = query.trim().toLowerCase();
+	const matching = filter ? rows.filter(filter) : rows;
 	const filtered = needle
-		? rows.filter((row) => search(row).some((field) => field?.toLowerCase().includes(needle)))
-		: rows;
+		? matching.filter((row) => search(row).some((field) => field?.toLowerCase().includes(needle)))
+		: matching;
 
 	const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
 	// Rows vanish under the cursor — a container is removed, a filter narrows —
@@ -90,10 +110,12 @@ export function resolveTableView<T>({
 		pageCount,
 		visible,
 		filtered,
+		matching,
 		total: rows.length,
 		from: filtered.length === 0 ? 0 : safePage * pageSize + 1,
 		to: safePage * pageSize + visible.length,
-		isFiltered: needle.length > 0 && filtered.length < rows.length,
+		isFiltered:
+			filtered.length < rows.length && (needle.length > 0 || matching.length < rows.length),
 	};
 }
 
@@ -101,11 +123,19 @@ export function useTableView<T>(options: TableViewOptions<T>): TableView<T> {
 	const [query, setQueryState] = useState("");
 	const [page, setPage] = useState(0);
 
-	const { rows, search, pageSize, searchFrom } = options;
+	const { rows, search, filter, filterKey, pageSize, searchFrom } = options;
 	const derived = useMemo(
-		() => resolveTableView({ rows, search, pageSize, searchFrom, query, page }),
-		[rows, search, pageSize, searchFrom, query, page],
+		() => resolveTableView({ rows, search, filter, pageSize, searchFrom, query, page }),
+		[rows, search, filter, pageSize, searchFrom, query, page],
 	);
+
+	// Changing a facet is the same hazard as typing a query: the list narrows
+	// and page 7 of 3 would render nothing. The clamp below covers the render;
+	// this puts the reader back on the first page of the new selection.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: filterKey is the trigger, not a value the effect reads
+	useEffect(() => {
+		setPage(0);
+	}, [filterKey]);
 
 	// Keep the stored page in step with the clamped one, so paging forward from
 	// a clamped position moves by one rather than jumping back.
