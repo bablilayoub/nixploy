@@ -27,6 +27,7 @@ export const Spotlight = ({
 }: SpotlightProps = {}) => {
 	return (
 		<motion.div
+			aria-hidden="true"
 			initial={{
 				opacity: 0,
 			}}

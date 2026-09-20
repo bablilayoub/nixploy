@@ -1,4 +1,7 @@
+"use client";
+
 import type { ComponentPropsWithoutRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -42,9 +45,27 @@ export function Marquee({
 	repeat = 4,
 	...props
 }: MarqueeProps) {
+	const rootRef = useRef<HTMLDivElement>(null);
+
+	/*
+	 * Take the duplicate copies out of the tab order. They are `aria-hidden`,
+	 * and a focusable element inside an `aria-hidden` subtree is announced as
+	 * nothing at all; this is the other half of that.
+	 */
+	useEffect(() => {
+		const root = rootRef.current;
+		if (!root) return;
+		for (const copy of root.querySelectorAll<HTMLElement>('[aria-hidden="true"]')) {
+			for (const el of copy.querySelectorAll<HTMLElement>("a, button, [tabindex]")) {
+				el.tabIndex = -1;
+			}
+		}
+	}, []);
+
 	return (
 		<div
 			{...props}
+			ref={rootRef}
 			className={cn(
 				"group flex gap-(--gap) overflow-hidden p-2 [--duration:40s] [--gap:1rem]",
 				{
@@ -59,11 +80,12 @@ export function Marquee({
 				.map((_, i) => (
 					<div
 						key={i}
-						// Copies after the first exist to make the loop seamless; they
-						// are the same content again, so they are hidden from assistive
-						// technology and taken out of the tab order.
+						// Copies after the first exist to make the loop seamless: the
+						// same content again. They are hidden from assistive technology
+						// and their links are taken out of the tab order by the effect
+						// above — `inert` would do both but also swallows clicks, and a
+						// card the reader can see should stay clickable.
 						aria-hidden={i > 0 ? true : undefined}
-						inert={i > 0 ? true : undefined}
 						className={cn("flex shrink-0 justify-around gap-(--gap)", {
 							"animate-marquee flex-row": !vertical,
 							"animate-marquee-vertical flex-col": vertical,

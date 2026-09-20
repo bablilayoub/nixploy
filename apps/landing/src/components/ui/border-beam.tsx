@@ -74,6 +74,7 @@ export const BorderBeam = ({
 			}
 		>
 			<motion.div
+			aria-hidden="true"
 				className={cn(
 					"absolute aspect-square",
 					"bg-linear-to-l from-(--color-from) via-(--color-to) to-transparent",

@@ -103,6 +103,7 @@ export function Safari({
 			<svg
 				viewBox={`0 0 ${SAFARI_WIDTH} ${SAFARI_HEIGHT}`}
 				fill="none"
+				aria-hidden="true"
 				xmlns="http://www.w3.org/2000/svg"
 				className="absolute inset-0 z-10 size-full"
 				style={{ transform: "translateZ(0)" }}
