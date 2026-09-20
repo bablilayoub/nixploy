@@ -1,10 +1,11 @@
-import { and, count, desc, eq, gte, type SQL, sql } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, type SQL, sql } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, compose, deployments, environments, projects, users } from "../../db/schema";
 import { assertApplicationAccess } from "../application";
 import { findComposeForOrg } from "../compose/service";
 import { findProjectById } from "../projects";
 import { projectIdFilter } from "../projects/project-scope";
+import type { DeploymentStatus } from "./events";
 
 /**
  * Read-side deployment queries for the organization-wide deployments
@@ -131,13 +132,28 @@ function cursorCondition(cursor: string | null | undefined): SQL | undefined {
 	return sql`(${deployments.createdAt}, ${deployments.deploymentId}) < (${createdAt}, ${deploymentId})`;
 }
 
+/**
+ * Paging options every deployment feed takes. `status` filters in SQL rather
+ * than in the panel: the feed is keyset-paginated, so filtering a page after
+ * it arrives would hide rows from that page and still call it a page — "the
+ * last 20 deployments, of which you may see four".
+ */
+export interface DeploymentListOptions {
+	limit: number;
+	cursor?: string | null;
+	status?: readonly DeploymentStatus[] | null;
+}
+
 async function queryDeployments(
 	where: SQL | undefined,
-	options: { limit: number; cursor?: string | null },
+	options: DeploymentListOptions,
 ): Promise<DeploymentListResult> {
-	const conditions = [where, cursorCondition(options.cursor)].filter(
-		(condition): condition is SQL => condition !== undefined,
-	);
+	const statuses = options.status && options.status.length > 0 ? options.status : null;
+	const conditions = [
+		where,
+		cursorCondition(options.cursor),
+		statuses ? inArray(deployments.status, [...statuses]) : undefined,
+	].filter((condition): condition is SQL => condition !== undefined);
 	const rows = await baseDeploymentQuery()
 		.where(conditions.length > 0 ? and(...conditions) : undefined)
 		.orderBy(desc(deployments.createdAt), desc(deployments.deploymentId))
@@ -157,7 +173,7 @@ async function queryDeployments(
 export async function listDeploymentsByProject(
 	projectId: string,
 	organizationId: string,
-	options: { limit: number; cursor?: string | null },
+	options: DeploymentListOptions,
 ): Promise<DeploymentListResult> {
 	await findProjectById(projectId, organizationId);
 	return queryDeployments(
@@ -170,7 +186,7 @@ export async function listDeploymentsByProject(
 export async function listDeploymentsByApplication(
 	applicationId: string,
 	organizationId: string,
-	options: { limit: number; cursor?: string | null },
+	options: DeploymentListOptions,
 ): Promise<DeploymentListResult> {
 	await assertApplicationAccess(applicationId, organizationId);
 	return queryDeployments(
@@ -183,7 +199,7 @@ export async function listDeploymentsByApplication(
 export async function listDeploymentsByCompose(
 	composeId: string,
 	organizationId: string,
-	options: { limit: number; cursor?: string | null },
+	options: DeploymentListOptions,
 ): Promise<DeploymentListResult> {
 	await findComposeForOrg(composeId, organizationId);
 	return queryDeployments(

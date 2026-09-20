@@ -23,7 +23,9 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
+import { useTableView } from "@/hooks/use-table-view";
 import { useTRPC } from "@/lib/trpc";
 
 import { DockerError, type DockerTabProps } from "./docker-view";
@@ -86,6 +88,17 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 		},
 	);
 
+	const services = (servicesQuery.isError ? [] : (servicesQuery.data ?? [])) as ServiceRow[];
+	const nodes = (nodesQuery.isError ? [] : (nodesQuery.data ?? [])) as NodeRow[];
+
+	// A single-node install has a handful of services and a real cluster has
+	// hundreds; the search box and the pager appear with the rows. Declared
+	// above the early returns — hooks do not survive one.
+	const serviceView = useTableView({
+		rows: services,
+		search: (service) => [service.Name, service.Image, service.Ports, service.Mode],
+	});
+
 	if (servicesQuery.isLoading || nodesQuery.isLoading) {
 		return <Skeleton className="h-64 w-full" />;
 	}
@@ -95,9 +108,6 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 	if (nodesQuery.isError && !isSwarmInactiveError(nodesQuery.error)) {
 		return <DockerError error={nodesQuery.error} />;
 	}
-
-	const services = (servicesQuery.isError ? [] : (servicesQuery.data ?? [])) as ServiceRow[];
-	const nodes = (nodesQuery.isError ? [] : (nodesQuery.data ?? [])) as NodeRow[];
 
 	// The router answers `[]` for both lists on a worker or standalone engine.
 	if (nodes.length === 0 && services.length === 0) {
@@ -198,7 +208,10 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 
 			<div className="space-y-3">
 				<h3 className="text-sm font-medium">Services</h3>
-				<TableCard>
+				<TableCard
+					toolbar={<TableSearch view={serviceView} placeholder="Search services…" />}
+					footer={<TablePagination view={serviceView} noun="services" />}
+				>
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -210,7 +223,8 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{services.map((service) => (
+							<TableNoMatch view={serviceView} colSpan={5} />
+							{serviceView.visible.map((service) => (
 								<TableRow key={service.ID}>
 									<TableCell>
 										<span className="font-mono text-xs font-medium">{service.Name}</span>{" "}

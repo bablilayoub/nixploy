@@ -27,9 +27,11 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useFollowDeployment } from "@/hooks/use-running-deployments";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
+import { useTableView } from "@/hooks/use-table-view";
 import { useTRPC } from "@/lib/trpc";
 
 import type { ComposeService } from "./compose-detail";
@@ -69,6 +71,11 @@ export function RollbacksTab({ compose }: { compose: ComposeService }) {
 		error,
 		refetch,
 	} = useQuery(trpc.compose.rollbackTargets.queryOptions({ composeId }));
+
+	const snapshotView = useTableView({
+		rows: targets ?? [],
+		search: (entry) => [entry.deployment?.title, entry.deployment?.commitSha],
+	});
 
 	const rollback = useSaveMutation(
 		trpc.compose.rollback.mutationOptions({
@@ -122,46 +129,58 @@ export function RollbacksTab({ compose }: { compose: ComposeService }) {
 						</p>
 					</div>
 				) : (
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead>Deployment</TableHead>
-								<TableHead>Commit</TableHead>
-								<TableHead>Created</TableHead>
-								<TableHead className="text-right">Actions</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{targets.map((entry, index) => (
-								<TableRow key={entry.snapshotId}>
-									<TableCell>
-										<div className="flex items-center gap-2">
-											<span>{entry.deployment?.title ?? "Deployment"}</span>
-											{index === 0 ? <Badge variant="outline">Current</Badge> : null}
-										</div>
-									</TableCell>
-									<TableCell className="font-mono text-xs text-muted-foreground">
-										{entry.deployment?.commitSha?.slice(0, 7) ?? "—"}
-									</TableCell>
-									<TableCell className="text-muted-foreground">
-										{format(entry.createdAt, "MMM d, yyyy HH:mm")}
-									</TableCell>
-									<TableCell className="text-right">
-										<Button
-											variant="ghost"
-											size="sm"
-											disabled={!canDeploy}
-											title={deployHint}
-											onClick={() => setTarget(entry)}
-										>
-											<Undo2 className="size-4" />
-											Rollback
-										</Button>
-									</TableCell>
+					<>
+						{snapshotView.showSearch ? (
+							<div className="mb-3 flex flex-wrap items-center gap-2">
+								<TableSearch view={snapshotView} placeholder="Search snapshots…" />
+							</div>
+						) : null}
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>Deployment</TableHead>
+									<TableHead>Commit</TableHead>
+									<TableHead>Created</TableHead>
+									<TableHead className="text-right">Actions</TableHead>
 								</TableRow>
-							))}
-						</TableBody>
-					</Table>
+							</TableHeader>
+							<TableBody>
+								<TableNoMatch view={snapshotView} colSpan={4} />
+								{snapshotView.visible.map((entry) => (
+									<TableRow key={entry.snapshotId}>
+										<TableCell>
+											<div className="flex items-center gap-2">
+												<span>{entry.deployment?.title ?? "Deployment"}</span>
+												{/* The newest snapshot of the whole list, not of this page. */}
+												{entry.snapshotId === targets[0]?.snapshotId ? (
+													<Badge variant="outline">Current</Badge>
+												) : null}
+											</div>
+										</TableCell>
+										<TableCell className="font-mono text-xs text-muted-foreground">
+											{entry.deployment?.commitSha?.slice(0, 7) ?? "—"}
+										</TableCell>
+										<TableCell className="text-muted-foreground">
+											{format(entry.createdAt, "MMM d, yyyy HH:mm")}
+										</TableCell>
+										<TableCell className="text-right">
+											<Button
+												variant="ghost"
+												size="sm"
+												disabled={!canDeploy}
+												title={deployHint}
+												onClick={() => setTarget(entry)}
+											>
+												<Undo2 className="size-4" />
+												Rollback
+											</Button>
+										</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
+						<TablePagination className="mt-3" view={snapshotView} noun="snapshots" />
+					</>
 				)}
 			</SettingsSection>
 

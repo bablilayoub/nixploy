@@ -40,6 +40,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { TableFacet, TableFilterReset } from "@/components/ui/table-toolbar";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useLiveEventsConnected } from "@/hooks/use-live-events";
 import { describeTriggeredBy, firstLine, TRIGGER_LABELS } from "@/hooks/use-running-deployments";
@@ -90,6 +91,15 @@ type DeploymentRow = {
 
 /** Queued and running deployments are both "in flight" for polling and cancel. */
 const isActive = (status: DeploymentRow["status"]) => status === "running" || status === "queued";
+
+/** The statuses worth filtering by, in the order a deployment moves through them. */
+const DEPLOYMENT_STATUS_FILTERS: Array<DeploymentRow["status"]> = [
+	"queued",
+	"running",
+	"done",
+	"error",
+	"cancelled",
+];
 
 export type DeploymentHistoryProps = {
 	kind: "application" | "compose";
@@ -171,9 +181,14 @@ export function DeploymentHistory({
 		}
 	};
 
+	// Status is filtered on the server: the feed is keyset-paginated, so a page
+	// filtered here would still be counted as a page and arrive nearly empty.
+	const [statuses, setStatuses] = useState<string[]>([]);
+	const statusFilter = statuses.length > 0 ? (statuses as DeploymentRow["status"][]) : undefined;
+
 	const applicationQuery = useInfiniteQuery({
 		...trpc.deployment.byApplication.infiniteQueryOptions(
-			{ applicationId: serviceId, limit: PAGE_SIZE },
+			{ applicationId: serviceId, limit: PAGE_SIZE, status: statusFilter },
 			{
 				getNextPageParam: (lastPage) => lastPage.nextCursor,
 				// Fallback only: with `/ws/events` up, every transition of these
@@ -193,7 +208,7 @@ export function DeploymentHistory({
 
 	const composeQuery = useInfiniteQuery({
 		...trpc.deployment.byCompose.infiniteQueryOptions(
-			{ composeId: serviceId, limit: PAGE_SIZE },
+			{ composeId: serviceId, limit: PAGE_SIZE, status: statusFilter },
 			{
 				getNextPageParam: (lastPage) => lastPage.nextCursor,
 				// Fallback only: with `/ws/events` up, every transition of these
@@ -349,13 +364,41 @@ export function DeploymentHistory({
 					))}
 				</div>
 			) : deployments.length === 0 ? (
+				// A filtered-to-nothing list is not an empty history: the first says
+				// to drop the filter, the second says to deploy something.
 				<EmptyState
 					icon={Rocket}
-					title="No deployments"
-					description="Hit Deploy to ship the first one."
+					title={statuses.length > 0 ? "No deployments with that status" : "No deployments"}
+					description={
+						statuses.length > 0
+							? "This service has deployments, just none in the selected states."
+							: "Hit Deploy to ship the first one."
+					}
+					action={
+						statuses.length > 0 ? (
+							<Button variant="outline" size="sm" onClick={() => setStatuses([])}>
+								Clear filter
+							</Button>
+						) : undefined
+					}
 				/>
 			) : (
-				<TableCard>
+				<TableCard
+					toolbar={
+						<>
+							<TableFacet
+								label="Status"
+								options={DEPLOYMENT_STATUS_FILTERS.map((status) => ({
+									value: status,
+									label: deploymentStatusLabel[status] ?? status,
+								}))}
+								selected={statuses}
+								onChange={setStatuses}
+							/>
+							<TableFilterReset show={statuses.length > 0} onClear={() => setStatuses([])} />
+						</>
+					}
+				>
 					<Table>
 						<TableHeader>
 							<TableRow>

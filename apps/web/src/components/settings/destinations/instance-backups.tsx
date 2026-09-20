@@ -37,9 +37,11 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useMounted } from "@/hooks/use-mounted";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
+import { useTableView } from "@/hooks/use-table-view";
 import { INSTANCE_ADMIN_HINT, missingCapabilityHint } from "@/lib/capabilities";
 import { useTRPC } from "@/lib/trpc";
 
@@ -85,6 +87,12 @@ export function InstanceBackups() {
 	const destinationsQuery = useQuery(trpc.destination.all.queryOptions());
 
 	const backups = backupsQuery.data ?? [];
+	// One schedule per destination adds up on an instance that keeps daily,
+	// weekly and off-site copies; the chrome appears with the rows.
+	const backupView = useTableView({
+		rows: backups,
+		search: (backup) => [backup.schedule, backup.prefix, backup.appName],
+	});
 	const destinations = destinationsQuery.data ?? [];
 	const destinationName = (id: string) =>
 		destinations.find((d) => d.destinationId === id)?.name ?? "Unknown";
@@ -185,6 +193,11 @@ export function InstanceBackups() {
 						</div>
 					}
 				>
+					{backupView.showSearch ? (
+						<div className="mb-3 flex flex-wrap items-center gap-2">
+							<TableSearch view={backupView} placeholder="Search backups…" />
+						</div>
+					) : null}
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -198,7 +211,8 @@ export function InstanceBackups() {
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{backups.map((backup) => (
+							<TableNoMatch view={backupView} colSpan={7} />
+							{backupView.visible.map((backup) => (
 								<TableRow key={backup.backupId}>
 									<TableCell>
 										<code className="rounded bg-muted px-1.5 py-0.5 text-xs">
@@ -271,6 +285,7 @@ export function InstanceBackups() {
 							))}
 						</TableBody>
 					</Table>
+					<TablePagination className="mt-3" view={backupView} noun="backups" />
 				</QueryState>
 			</SettingsSection>
 

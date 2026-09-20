@@ -26,9 +26,11 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
+import { useTableView } from "@/hooks/use-table-view";
 import { useTRPC } from "@/lib/trpc";
 
 import type { RollbackEntry } from "./types";
@@ -70,6 +72,11 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 		{ successMessage: "Rollback image deleted", invalidate: [rollbacksKey] },
 	);
 
+	const rollbackView = useTableView({
+		rows: rollbacks ?? [],
+		search: (entry) => [entry.image, entry.version, entry.deployment?.title],
+	});
+
 	return (
 		<>
 			<SettingsSection
@@ -100,60 +107,69 @@ export function RollbacksManager({ applicationId }: { applicationId: string }) {
 						</p>
 					</div>
 				) : (
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead>Image</TableHead>
-								{/* It is the local tag the image is pinned under, derived from the
+					<>
+						{rollbackView.showSearch ? (
+							<div className="mb-3 flex flex-wrap items-center gap-2">
+								<TableSearch view={rollbackView} placeholder="Search images…" />
+							</div>
+						) : null}
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>Image</TableHead>
+									{/* It is the local tag the image is pinned under, derived from the
 								    deployment id — "Version" read like a release number. */}
-								<TableHead>Image tag</TableHead>
-								<TableHead>Created</TableHead>
-								<TableHead className="text-right">Actions</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{rollbacks.map((entry) => (
-								<TableRow key={entry.rollbackId}>
-									<TableCell className="max-w-72 truncate font-mono text-xs">
-										<Tooltip>
-											<TooltipTrigger asChild>
-												<span>{entry.image}</span>
-											</TooltipTrigger>
-											<TooltipContent>{entry.image}</TooltipContent>
-										</Tooltip>
-									</TableCell>
-									<TableCell className="text-muted-foreground">{entry.version ?? "—"}</TableCell>
-									<TableCell className="text-muted-foreground">
-										{format(entry.createdAt, "MMM d, yyyy HH:mm")}
-									</TableCell>
-									<TableCell className="text-right">
-										<div className="flex justify-end gap-1">
-											<Button
-												variant="ghost"
-												size="sm"
-												disabled={!canDeploy}
-												title={deployHint}
-												onClick={() => setRollbackTarget(entry)}
-											>
-												<Undo2 className="size-4" />
-												Rollback
-											</Button>
-											<Button
-												variant="ghost"
-												size="sm"
-												aria-label="Delete rollback image"
-												disabled={!canDeploy}
-												title={deployHint}
-												onClick={() => setDeleteTarget(entry)}
-											>
-												<Trash2 className="size-4 text-destructive" />
-											</Button>
-										</div>
-									</TableCell>
+									<TableHead>Image tag</TableHead>
+									<TableHead>Created</TableHead>
+									<TableHead className="text-right">Actions</TableHead>
 								</TableRow>
-							))}
-						</TableBody>
-					</Table>
+							</TableHeader>
+							<TableBody>
+								<TableNoMatch view={rollbackView} colSpan={4} />
+								{rollbackView.visible.map((entry) => (
+									<TableRow key={entry.rollbackId}>
+										<TableCell className="max-w-72 truncate font-mono text-xs">
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<span>{entry.image}</span>
+												</TooltipTrigger>
+												<TooltipContent>{entry.image}</TooltipContent>
+											</Tooltip>
+										</TableCell>
+										<TableCell className="text-muted-foreground">{entry.version ?? "—"}</TableCell>
+										<TableCell className="text-muted-foreground">
+											{format(entry.createdAt, "MMM d, yyyy HH:mm")}
+										</TableCell>
+										<TableCell className="text-right">
+											<div className="flex justify-end gap-1">
+												<Button
+													variant="ghost"
+													size="sm"
+													disabled={!canDeploy}
+													title={deployHint}
+													onClick={() => setRollbackTarget(entry)}
+												>
+													<Undo2 className="size-4" />
+													Rollback
+												</Button>
+												<Button
+													variant="ghost"
+													size="sm"
+													aria-label="Delete rollback image"
+													disabled={!canDeploy}
+													title={deployHint}
+													onClick={() => setDeleteTarget(entry)}
+												>
+													<Trash2 className="size-4 text-destructive" />
+												</Button>
+											</div>
+										</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
+						<TablePagination className="mt-3" view={rollbackView} noun="images" />
+					</>
 				)}
 			</SettingsSection>
 

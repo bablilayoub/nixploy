@@ -168,18 +168,30 @@ export function TablePagination<T>({
  * box is empty. A table with no rows at all is not a failed search, and the two
  * messages would otherwise stack on top of each other.
  */
-export function TableNoMatch<T>({ view, colSpan }: { view: TableView<T>; colSpan: number }) {
-	if (!view.query.trim()) return null;
+export function TableNoMatch<T>({
+	view,
+	colSpan,
+	onClear,
+}: {
+	view: TableView<T>;
+	colSpan: number;
+	/** Also resets the facets; defaults to clearing the search alone. */
+	onClear?: () => void;
+}) {
+	const query = view.query.trim();
+	// Nothing to say about an empty table (that is the empty state's job), and
+	// nothing to say while rows are showing.
+	if (view.total === 0 || view.filtered.length > 0) return null;
 	return (
 		<tr>
 			<td colSpan={colSpan} className="p-8 text-center text-sm text-muted-foreground">
-				Nothing matches “{view.query}”.{" "}
+				{query ? <>Nothing matches “{query}”. </> : <>No rows match these filters. </>}
 				<button
 					type="button"
-					onClick={view.clear}
+					onClick={onClear ?? view.clear}
 					className="underline underline-offset-4 hover:text-foreground"
 				>
-					Clear search
+					{onClear ? "Clear filters" : "Clear search"}
 				</button>
 			</td>
 		</tr>

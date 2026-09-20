@@ -3,7 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Loader2, Play, Square } from "lucide-react";
 import Link from "next/link";
-import { type ComponentProps, Fragment, useState } from "react";
+import { type ComponentProps, Fragment, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { capabilityHint } from "@/components/services/capability-hint";
@@ -25,8 +25,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import {
+	TableFacet,
+	TableFilterReset,
+	TableNoMatch,
+	TablePagination,
+	TableSearch,
+} from "@/components/ui/table-toolbar";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useRunningDeployments } from "@/hooks/use-running-deployments";
+import { useTableView } from "@/hooks/use-table-view";
 import { toastError } from "@/lib/describe-error";
 import type { DomainLike } from "@/lib/service-url";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
@@ -106,11 +114,69 @@ export function ServicesTable({
 	const canRuntime = can("service.runtime");
 	const runtimeHint = canRuntime ? undefined : capabilityHint("service.runtime");
 
-	const groups = TYPE_ORDER.map((type) => ({
-		type,
-		meta: SERVICE_TYPE_META[type],
-		items: services.filter((service) => service.type === type),
-	})).filter((group) => group.items.length > 0);
+	// An environment holds anything from three services to a hundred; the list
+	// is the same shape either way, so the chrome appears with the rows (the
+	// search box from eight, the pager from one page) rather than being
+	// designed for whichever size was in front of us.
+	const [types, setTypes] = useState<string[]>([]);
+	const [statuses, setStatuses] = useState<string[]>([]);
+	const rows = useMemo(
+		() =>
+			[...services].sort(
+				(a, b) =>
+					TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type) || a.name.localeCompare(b.name),
+			),
+		[services],
+	);
+	const filter = useCallback(
+		(service: ServiceEntry) =>
+			(types.length === 0 || types.includes(service.type)) &&
+			(statuses.length === 0 || statuses.includes(service.status)),
+		[types, statuses],
+	);
+	const view = useTableView({
+		rows,
+		filter,
+		filterKey: `${types.join(",")}|${statuses.join(",")}`,
+		search: (service) => [
+			service.name,
+			service.description,
+			service.domain?.host,
+			...(service.tags ?? []).map((tag) => tag.name),
+		],
+	});
+
+	/** Facet options, counted over the rows the other facet leaves. */
+	const facetCount = (predicate: (service: ServiceEntry) => boolean, ignore: "type" | "status") =>
+		services.filter(
+			(service) =>
+				predicate(service) &&
+				(ignore === "type" || types.length === 0 || types.includes(service.type)) &&
+				(ignore === "status" || statuses.length === 0 || statuses.includes(service.status)),
+		).length;
+	const typeOptions = TYPE_ORDER.filter((type) =>
+		services.some((service) => service.type === type),
+	).map((type) => ({
+		value: type,
+		label: SERVICE_TYPE_META[type].label,
+		count: facetCount((service) => service.type === type, "type"),
+	}));
+	const statusOptions = [...new Set(services.map((service) => service.status))]
+		.sort((a, b) => a.localeCompare(b))
+		.map((status) => ({
+			value: status,
+			label: status.charAt(0).toUpperCase() + status.slice(1),
+			count: facetCount((service) => service.status === status, "status"),
+		}));
+
+	// The page is what gets grouped: a run of one type inside the rows on
+	// screen, which is what the sort already produced.
+	const groups: Array<{ type: ServiceType; items: ServiceEntry[] }> = [];
+	for (const service of view.visible) {
+		const last = groups.at(-1);
+		if (last?.type === service.type) last.items.push(service);
+		else groups.push({ type: service.type, items: [service] });
+	}
 
 	const toggle = (service: ServiceEntry, checked: boolean) => {
 		setSelected((previous) => {
@@ -236,9 +302,40 @@ export function ServicesTable({
 				</div>
 			)}
 
-			<TableCard>
+			<TableCard
+				toolbar={
+					<>
+						<TableSearch view={view} placeholder="Search services…" />
+						<TableFacet label="Type" options={typeOptions} selected={types} onChange={setTypes} />
+						<TableFacet
+							label="Status"
+							options={statusOptions}
+							selected={statuses}
+							onChange={setStatuses}
+						/>
+						<TableFilterReset
+							show={types.length > 0 || statuses.length > 0 || view.query.length > 0}
+							onClear={() => {
+								setTypes([]);
+								setStatuses([]);
+								view.clear();
+							}}
+						/>
+					</>
+				}
+				footer={<TablePagination view={view} noun="services" />}
+			>
 				<Table>
 					<TableBody>
+						<TableNoMatch
+							view={view}
+							colSpan={5}
+							onClear={() => {
+								setTypes([]);
+								setStatuses([]);
+								view.clear();
+							}}
+						/>
 						{groups.map((group) => (
 							<Fragment key={group.type}>
 								<TableRow className="bg-secondary/60 hover:bg-secondary/60">
@@ -246,7 +343,7 @@ export function ServicesTable({
 										colSpan={5}
 										className="py-1.5 text-xs font-medium text-muted-foreground"
 									>
-										{group.meta.label}
+										{SERVICE_TYPE_META[group.type].label}
 									</TableCell>
 								</TableRow>
 								{group.items.map((service) => {

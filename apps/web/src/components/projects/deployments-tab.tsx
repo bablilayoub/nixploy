@@ -3,6 +3,7 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { ChevronRight, Loader2, Rocket } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
 import { QueryState } from "@/components/query-state";
 import { StatusDot, type StatusDotStatus } from "@/components/shell";
@@ -11,8 +12,9 @@ import { DateTime } from "@/components/ui/date-time";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { TableFacet, TableFilterReset } from "@/components/ui/table-toolbar";
 import { formatDuration } from "@/lib/format";
-import { deploymentStatusDot } from "@/lib/status";
+import { deploymentStatusDot, deploymentStatusLabel } from "@/lib/status";
 import { useTRPC } from "@/lib/trpc";
 
 function StatCard({
@@ -41,6 +43,10 @@ function StatCard({
 	);
 }
 
+/** The statuses worth filtering by, in the order a deployment moves through them. */
+const DEPLOYMENT_STATUS_FILTERS = ["queued", "running", "done", "error", "cancelled"] as const;
+type DeploymentStatusFilter = (typeof DEPLOYMENT_STATUS_FILTERS)[number];
+
 /**
  * Project-wide deployments feed — keyset-paginated table with a small
  * stats row (running / done / error / total).
@@ -50,9 +56,17 @@ export function DeploymentsTab({ projectId }: { projectId: string }) {
 
 	const statsQuery = useQuery(trpc.deployment.statsByProject.queryOptions({ projectId }));
 
+	// Filtered in SQL, not here: the feed is keyset-paginated, so dropping rows
+	// from a page after it arrives would leave "the last 20" showing four.
+	const [statuses, setStatuses] = useState<string[]>([]);
+
 	const deploymentsQuery = useInfiniteQuery(
 		trpc.deployment.byProject.infiniteQueryOptions(
-			{ projectId, limit: 20 },
+			{
+				projectId,
+				limit: 20,
+				status: statuses.length > 0 ? (statuses as DeploymentStatusFilter[]) : undefined,
+			},
 			{ getNextPageParam: (lastPage) => lastPage.nextCursor },
 		),
 	);
@@ -102,15 +116,40 @@ export function DeploymentsTab({ projectId }: { projectId: string }) {
 							<Rocket className="size-6 text-muted-foreground" />
 						</div>
 						<div className="flex flex-col gap-1">
-							<p className="font-medium">No deployments yet</p>
+							{/* Filtered to nothing is not an empty project. */}
+							<p className="font-medium">
+								{statuses.length > 0 ? "No deployments in those states" : "No deployments yet"}
+							</p>
 							<p className="text-sm text-muted-foreground">
-								Deploy a service in this project and it will show up here.
+								{statuses.length > 0
+									? "The project has deployments, just none matching this filter."
+									: "Deploy a service in this project and it will show up here."}
 							</p>
 						</div>
+						{statuses.length > 0 ? (
+							<Button variant="outline" size="sm" onClick={() => setStatuses([])}>
+								Clear filter
+							</Button>
+						) : null}
 					</div>
 				}
 			>
-				<TableCard>
+				<TableCard
+					toolbar={
+						<>
+							<TableFacet
+								label="Status"
+								options={DEPLOYMENT_STATUS_FILTERS.map((status) => ({
+									value: status,
+									label: deploymentStatusLabel[status] ?? status,
+								}))}
+								selected={statuses}
+								onChange={setStatuses}
+							/>
+							<TableFilterReset show={statuses.length > 0} onClear={() => setStatuses([])} />
+						</>
+					}
+				>
 					<Table>
 						<TableBody>
 							{deployments.map((deployment) => {

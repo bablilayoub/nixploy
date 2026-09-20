@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
 import { deployments } from "../../db/schema";
+import { deploymentStatus } from "../../db/schema/enums";
 import { getQueuePosition } from "../../modules/deployment";
 import {
 	buildDeploymentOutcome,
@@ -74,6 +75,12 @@ const limitInput = z.number().int().min(1).max(100);
 const pagedInput = {
 	limit: limitInput.default(20),
 	cursor: z.string().nullish(),
+	/**
+	 * Keep only these statuses. Filtering happens in SQL because the feed is
+	 * keyset-paginated: a page filtered after it arrives is still counted as a
+	 * page, so "the last 20" would arrive with four rows in it.
+	 */
+	status: z.array(z.enum(deploymentStatus.enumValues)).max(8).optional(),
 };
 
 async function assertDeploymentAccess(deploymentId: string, organizationId: string) {
@@ -129,6 +136,7 @@ export const deploymentRouter = router({
 				await listDeploymentsByProject(input.projectId, organizationId, {
 					limit: input.limit,
 					cursor: input.cursor,
+					status: input.status,
 				}),
 			);
 		}),
@@ -150,6 +158,7 @@ export const deploymentRouter = router({
 				await listDeploymentsByApplication(input.applicationId, organizationId, {
 					limit: input.limit,
 					cursor: input.cursor,
+					status: input.status,
 				}),
 			);
 		}),
@@ -171,6 +180,7 @@ export const deploymentRouter = router({
 				await listDeploymentsByCompose(input.composeId, organizationId, {
 					limit: input.limit,
 					cursor: input.cursor,
+					status: input.status,
 				}),
 			);
 		}),

@@ -58,8 +58,10 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
+import { useTableView } from "@/hooks/use-table-view";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
@@ -190,6 +192,21 @@ export function PreviewDeploymentsPanel({
 		error,
 		refetch,
 	} = useQuery(trpc.previewDeployment.list.queryOptions(target));
+
+	// A parent can hold up to `previewLimit` previews (100); the search box and
+	// the pager appear once there are enough rows to need them.
+	const previewView = useTableView({
+		rows: previews ?? [],
+		search: (preview) => [
+			preview.appName,
+			preview.branch,
+			preview.pullRequestTitle,
+			preview.commitMessage,
+			preview.image,
+			preview.previewStatus,
+			preview.pullRequestNumber ? `#${preview.pullRequestNumber}` : null,
+		],
+	});
 
 	const invalidate = [trpc.previewDeployment.list.queryKey(target)];
 
@@ -417,143 +434,154 @@ export function PreviewDeploymentsPanel({
 						</div>
 					}
 				>
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead>Pull request</TableHead>
-								<TableHead>Branch</TableHead>
-								<TableHead>Status</TableHead>
-								<TableHead>Domain</TableHead>
-								<TableHead>Created</TableHead>
-								<TableHead>Expires</TableHead>
-								<TableHead className="text-right">Actions</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{(previews ?? []).map((preview) => (
-								<TableRow key={preview.previewDeploymentId}>
-									<TableCell className="font-medium">
-										{preview.kind === "image" ? (
-											<span className="inline-flex items-center gap-1 font-mono text-xs">
-												<Package className="size-3.5 text-muted-foreground" />
-												{preview.image}
-											</span>
-										) : preview.kind === "branch" ? (
-											<span className="inline-flex items-center gap-1 font-mono text-xs">
-												<GitBranch className="size-3.5 text-muted-foreground" />
-												{preview.branch}
-											</span>
-										) : preview.pullRequestURL ? (
-											<a
-												href={preview.pullRequestURL}
-												target="_blank"
-												rel="noreferrer"
-												className="hover:underline"
-											>
-												#{preview.pullRequestNumber}
-											</a>
-										) : (
-											<>#{preview.pullRequestNumber}</>
-										)}
-										{/* The head commit's subject is the most useful line here —
+					<div className="flex flex-col gap-3">
+						{previewView.showSearch ? (
+							<div className="flex flex-wrap items-center gap-2">
+								<TableSearch view={previewView} placeholder="Search previews…" />
+							</div>
+						) : null}
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>Pull request</TableHead>
+									<TableHead>Branch</TableHead>
+									<TableHead>Status</TableHead>
+									<TableHead>Domain</TableHead>
+									<TableHead>Created</TableHead>
+									<TableHead>Expires</TableHead>
+									<TableHead className="text-right">Actions</TableHead>
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								<TableNoMatch view={previewView} colSpan={7} />
+								{previewView.visible.map((preview) => (
+									<TableRow key={preview.previewDeploymentId}>
+										<TableCell className="font-medium">
+											{preview.kind === "image" ? (
+												<span className="inline-flex items-center gap-1 font-mono text-xs">
+													<Package className="size-3.5 text-muted-foreground" />
+													{preview.image}
+												</span>
+											) : preview.kind === "branch" ? (
+												<span className="inline-flex items-center gap-1 font-mono text-xs">
+													<GitBranch className="size-3.5 text-muted-foreground" />
+													{preview.branch}
+												</span>
+											) : preview.pullRequestURL ? (
+												<a
+													href={preview.pullRequestURL}
+													target="_blank"
+													rel="noreferrer"
+													className="hover:underline"
+												>
+													#{preview.pullRequestNumber}
+												</a>
+											) : (
+												<>#{preview.pullRequestNumber}</>
+											)}
+											{/* The head commit's subject is the most useful line here —
 										    it says what the preview actually runs. GitHub, Gitea and
 										    Bitbucket do not send it on pull-request events, so the PR
 										    title stands in for them. */}
-										{(preview.commitMessage || preview.pullRequestTitle) && (
-											<span
-												className="block max-w-64 truncate text-xs text-muted-foreground"
-												title={preview.commitMessage ?? preview.pullRequestTitle ?? undefined}
-											>
-												{preview.commitMessage ?? preview.pullRequestTitle}
+											{(preview.commitMessage || preview.pullRequestTitle) && (
+												<span
+													className="block max-w-64 truncate text-xs text-muted-foreground"
+													title={preview.commitMessage ?? preview.pullRequestTitle ?? undefined}
+												>
+													{preview.commitMessage ?? preview.pullRequestTitle}
+												</span>
+											)}
+											<CommitLine preview={preview} />
+										</TableCell>
+										<TableCell className="text-muted-foreground">{preview.branch ?? "—"}</TableCell>
+										<TableCell>
+											<span className="inline-flex items-center gap-1.5 text-sm">
+												<StatusDot
+													status={
+														(STATUS_CONFIG[preview.previewStatus] ?? STATUS_CONFIG.idle).status
+													}
+												/>
+												{(STATUS_CONFIG[preview.previewStatus] ?? STATUS_CONFIG.idle).label}
 											</span>
-										)}
-										<CommitLine preview={preview} />
-									</TableCell>
-									<TableCell className="text-muted-foreground">{preview.branch ?? "—"}</TableCell>
-									<TableCell>
-										<span className="inline-flex items-center gap-1.5 text-sm">
-											<StatusDot
-												status={(STATUS_CONFIG[preview.previewStatus] ?? STATUS_CONFIG.idle).status}
-											/>
-											{(STATUS_CONFIG[preview.previewStatus] ?? STATUS_CONFIG.idle).label}
-										</span>
-									</TableCell>
-									<TableCell>
-										<PreviewHosts preview={preview} />
-									</TableCell>
-									<TableCell className="text-muted-foreground">
-										{format(preview.createdAt, "MMM d, yyyy HH:mm")}
-									</TableCell>
-									<TableCell className="text-muted-foreground">
-										{preview.expiresAt ? format(preview.expiresAt, "MMM d, yyyy HH:mm") : "Never"}
-									</TableCell>
-									<TableCell className="text-right">
-										{preview.previewStatus === "awaiting_approval" ? (
-											<div className="flex items-center justify-end gap-1">
-												<Button
-													variant="outline"
-													size="sm"
-													disabled={approve.isPending || deny.isPending || !canDeploy}
-													title={deployHint}
-													onClick={() =>
-														approve.mutate({
-															previewDeploymentId: preview.previewDeploymentId,
-														})
-													}
-												>
-													{approve.isPending ? (
-														<Loader2 className="size-4 animate-spin" />
-													) : (
-														<Check className="size-4" />
-													)}
-													Approve
-												</Button>
-												<Button
-													variant="ghost"
-													size="sm"
-													disabled={approve.isPending || deny.isPending || !canDeploy}
-													title={deployHint}
-													onClick={() =>
-														deny.mutate({
-															previewDeploymentId: preview.previewDeploymentId,
-														})
-													}
-												>
-													<X className="size-4 text-destructive" />
-													Deny
-												</Button>
-											</div>
-										) : (
-											<div className="flex items-center justify-end gap-1">
-												<Button
-													variant="ghost"
-													size="sm"
-													disabled={!canDeploy || redeploy.isPending}
-													title={deployHint ?? "Build again from its ref"}
-													onClick={() =>
-														redeploy.mutate({ previewDeploymentId: preview.previewDeploymentId })
-													}
-													aria-label={`Redeploy preview ${preview.appName}`}
-												>
-													<RefreshCw className="size-4" />
-												</Button>
-												<Button
-													variant="ghost"
-													size="sm"
-													disabled={!canDeploy}
-													title={deployHint}
-													onClick={() => setDeleteTarget(preview)}
-													aria-label={`Delete preview ${preview.appName}`}
-												>
-													<Trash2 className="size-4 text-destructive" />
-												</Button>
-											</div>
-										)}
-									</TableCell>
-								</TableRow>
-							))}
-						</TableBody>
-					</Table>
+										</TableCell>
+										<TableCell>
+											<PreviewHosts preview={preview} />
+										</TableCell>
+										<TableCell className="text-muted-foreground">
+											{format(preview.createdAt, "MMM d, yyyy HH:mm")}
+										</TableCell>
+										<TableCell className="text-muted-foreground">
+											{preview.expiresAt ? format(preview.expiresAt, "MMM d, yyyy HH:mm") : "Never"}
+										</TableCell>
+										<TableCell className="text-right">
+											{preview.previewStatus === "awaiting_approval" ? (
+												<div className="flex items-center justify-end gap-1">
+													<Button
+														variant="outline"
+														size="sm"
+														disabled={approve.isPending || deny.isPending || !canDeploy}
+														title={deployHint}
+														onClick={() =>
+															approve.mutate({
+																previewDeploymentId: preview.previewDeploymentId,
+															})
+														}
+													>
+														{approve.isPending ? (
+															<Loader2 className="size-4 animate-spin" />
+														) : (
+															<Check className="size-4" />
+														)}
+														Approve
+													</Button>
+													<Button
+														variant="ghost"
+														size="sm"
+														disabled={approve.isPending || deny.isPending || !canDeploy}
+														title={deployHint}
+														onClick={() =>
+															deny.mutate({
+																previewDeploymentId: preview.previewDeploymentId,
+															})
+														}
+													>
+														<X className="size-4 text-destructive" />
+														Deny
+													</Button>
+												</div>
+											) : (
+												<div className="flex items-center justify-end gap-1">
+													<Button
+														variant="ghost"
+														size="sm"
+														disabled={!canDeploy || redeploy.isPending}
+														title={deployHint ?? "Build again from its ref"}
+														onClick={() =>
+															redeploy.mutate({ previewDeploymentId: preview.previewDeploymentId })
+														}
+														aria-label={`Redeploy preview ${preview.appName}`}
+													>
+														<RefreshCw className="size-4" />
+													</Button>
+													<Button
+														variant="ghost"
+														size="sm"
+														disabled={!canDeploy}
+														title={deployHint}
+														onClick={() => setDeleteTarget(preview)}
+														aria-label={`Delete preview ${preview.appName}`}
+													>
+														<Trash2 className="size-4 text-destructive" />
+													</Button>
+												</div>
+											)}
+										</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
+						<TablePagination view={previewView} noun="previews" />
+					</div>
 				</QueryState>
 
 				<AlertDialog

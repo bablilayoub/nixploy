@@ -38,7 +38,9 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
+import { TableNoMatch, TablePagination, TableSearch } from "@/components/ui/table-toolbar";
 import { useCapabilities } from "@/hooks/use-capabilities";
+import { useTableView } from "@/hooks/use-table-view";
 import { useSession } from "@/lib/auth-client";
 import { missingCapabilityHint } from "@/lib/capabilities";
 import { toastError } from "@/lib/describe-error";
@@ -159,6 +161,10 @@ export function TeamsCard() {
 	});
 
 	const teams = (teamsQuery.data ?? []) as Team[];
+	const teamView = useTableView({
+		rows: teams,
+		search: (team) => [team.name, team.description],
+	});
 	const scopes = scopesQuery.data ?? [];
 	const scopedCount = scopes.filter((row) => row.projectScope === "teams").length;
 
@@ -203,7 +209,10 @@ export function TeamsCard() {
 						description="Create one, attach projects to it, then switch a member's project scope to teams."
 					/>
 				) : (
-					<TableCard>
+					<TableCard
+						toolbar={<TableSearch view={teamView} placeholder="Search teams…" />}
+						footer={<TablePagination view={teamView} noun="teams" />}
+					>
 						<Table>
 							<TableHeader>
 								<TableRow>
@@ -214,7 +223,8 @@ export function TeamsCard() {
 								</TableRow>
 							</TableHeader>
 							<TableBody>
-								{teams.map((team) => (
+								<TableNoMatch view={teamView} colSpan={4} />
+								{teamView.visible.map((team) => (
 									<TableRow key={team.teamId}>
 										<TableCell>
 											<div className="grid">
