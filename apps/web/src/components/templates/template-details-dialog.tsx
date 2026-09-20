@@ -118,6 +118,7 @@ function DetailsBody({
 					<div className="flex flex-wrap gap-1.5 pt-1">
 						<Badge variant="secondary">{template.category}</Badge>
 						{template.hostPrivileged && <Badge variant="outline">Instance admin required</Badge>}
+						{template.publishPorts && <Badge variant="outline">Publishes host ports</Badge>}
 						{template.tags.map((tag) => (
 							<Badge key={tag} variant="outline">
 								{tag}

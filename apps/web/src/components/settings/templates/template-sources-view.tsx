@@ -63,6 +63,34 @@ const KIND_LABEL: Record<SourceKind, string> = {
 };
 
 /**
+ * One line for the sync report, or null when a sync had nothing to say. The
+ * detail lives in a dialog: a catalog of 500 entries reports hundreds of
+ * lines, and pasting the first two into a table cell only clipped them.
+ */
+function reportSummary(report: SourceRow["report"]): string | null {
+	if (!report) return null;
+	const parts: string[] = [];
+	if (report.rejected.length > 0) {
+		parts.push(
+			`${report.rejected.length} entr${report.rejected.length === 1 ? "y" : "ies"} rejected`,
+		);
+	}
+	if (report.imageWarnings.length > 0) {
+		parts.push(
+			`${report.imageWarnings.length} image${report.imageWarnings.length === 1 ? "" : "s"} unverified`,
+		);
+	}
+	return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/** `<id>: <reason>` split for display; a line without an id keeps its text. */
+function splitReportLine(line: string): { id: string | null; reason: string } {
+	const index = line.indexOf(": ");
+	if (index <= 0) return { id: null, reason: line };
+	return { id: line.slice(0, index), reason: line.slice(index + 2) };
+}
+
+/**
  * Remote template catalogs (product audit, Platform row "Templates are a fixed
  * TS catalog"). Org admins point Nixploy at a JSON index or a git repository;
  * a sync validates every entry and caches it, and the gallery merges the cache
@@ -83,6 +111,7 @@ export function TemplateSourcesView() {
 	const [branch, setBranch] = useState("");
 	const [removing, setRemoving] = useState<SourceRow | null>(null);
 	const [syncingId, setSyncingId] = useState<string | null>(null);
+	const [report, setReport] = useState<SourceRow | null>(null);
 
 	const {
 		data: sources,
@@ -267,28 +296,25 @@ export function TemplateSourcesView() {
 						<TableBody>
 							{(sources ?? []).map((source) => (
 								<TableRow key={source.templateSourceId}>
-									<TableCell>
-										<div className="flex flex-col">
+									<TableCell className="max-w-96">
+										<div className="flex min-w-0 flex-col items-start gap-1">
 											<span className="font-medium">{source.name}</span>
 											{source.lastError ? (
-												<span className="flex items-center gap-1 text-xs text-destructive">
-													<AlertTriangle className="size-3" />
-													{source.lastError}
+												<span className="flex items-start gap-1 text-xs text-destructive">
+													<AlertTriangle className="mt-0.5 size-3 shrink-0" />
+													{/* Wraps. A sync error is a sentence from the source and the
+													    cell used to clip it mid-word at the card's edge. */}
+													<span className="break-words">{source.lastError}</span>
 												</span>
 											) : null}
-											{source.report && source.report.rejected.length > 0 ? (
-												<span className="text-xs text-warning">
-													{source.report.rejected.length} entr
-													{source.report.rejected.length === 1 ? "y" : "ies"} rejected:{" "}
-													{source.report.rejected.slice(0, 2).join("; ")}
-												</span>
-											) : null}
-											{source.report && source.report.imageWarnings.length > 0 ? (
-												<span className="text-xs text-muted-foreground">
-													{source.report.imageWarnings.length} image
-													{source.report.imageWarnings.length === 1 ? "" : "s"} could not be
-													verified
-												</span>
+											{reportSummary(source.report) ? (
+												<Button
+													variant="link"
+													className="h-auto w-fit p-0 text-xs font-normal text-muted-foreground"
+													onClick={() => setReport(source)}
+												>
+													{reportSummary(source.report)}
+												</Button>
 											) : null}
 										</div>
 									</TableCell>
@@ -358,6 +384,67 @@ export function TemplateSourcesView() {
 					</Table>
 				</QueryState>
 			</SettingsSection>
+
+			<Dialog open={report !== null} onOpenChange={(next) => !next && setReport(null)}>
+				<DialogContent className="sm:max-w-2xl">
+					<DialogHeader>
+						<DialogTitle>Sync report</DialogTitle>
+						<DialogDescription>
+							What the last sync of “{report?.name ?? ""}” could not carry. Everything else was
+							indexed. <HelpLink slug="templates" />
+						</DialogDescription>
+					</DialogHeader>
+					<div className="flex max-h-[60vh] flex-col gap-6 overflow-y-auto">
+						{report?.report && report.report.rejected.length > 0 ? (
+							<section className="flex flex-col gap-2">
+								<h3 className="text-sm font-medium">
+									{report.report.rejected.length} entr
+									{report.report.rejected.length === 1 ? "y" : "ies"} rejected
+								</h3>
+								<p className="text-sm text-muted-foreground">
+									Each of these would fail at deploy time — a host path, the Docker socket, a
+									capability or a compose feature Nixploy does not run. The rest of the catalog
+									synced normally.
+								</p>
+								<ul className="flex flex-col gap-1.5">
+									{report.report.rejected.map((line) => {
+										const entry = splitReportLine(line);
+										return (
+											<li key={line} className="flex flex-col gap-0.5 border-l-2 pl-3 text-xs">
+												{entry.id ? <span className="font-mono">{entry.id}</span> : null}
+												<span className="break-words text-muted-foreground">{entry.reason}</span>
+											</li>
+										);
+									})}
+								</ul>
+							</section>
+						) : null}
+						{report?.report && report.report.imageWarnings.length > 0 ? (
+							<section className="flex flex-col gap-2">
+								<h3 className="text-sm font-medium">
+									{report.report.imageWarnings.length} image
+									{report.report.imageWarnings.length === 1 ? "" : "s"} could not be verified
+								</h3>
+								<p className="text-sm text-muted-foreground">
+									A warning, not a rejection: these templates are in the gallery. A private registry
+									cannot be probed anonymously, so the tag is confirmed at deploy.
+								</p>
+								<ul className="flex flex-col gap-1.5">
+									{report.report.imageWarnings.map((line) => {
+										const entry = splitReportLine(line);
+										return (
+											<li key={line} className="flex flex-col gap-0.5 border-l-2 pl-3 text-xs">
+												{entry.id ? <span className="font-mono">{entry.id}</span> : null}
+												<span className="break-words text-muted-foreground">{entry.reason}</span>
+											</li>
+										);
+									})}
+								</ul>
+							</section>
+						) : null}
+					</div>
+				</DialogContent>
+			</Dialog>
 
 			<AlertDialog open={removing !== null} onOpenChange={(next) => !next && setRemoving(null)}>
 				<AlertDialogContent>

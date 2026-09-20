@@ -126,6 +126,12 @@ export interface CreateComposeInput {
 	serverId?: string | null;
 	/** Instance-admin privileged templates only — never expose on public create APIs. */
 	hostPrivileged?: boolean;
+	/**
+	 * The stack may publish host ports. Set only by a template deploy whose
+	 * compose file publishes them (instance-admin gated in the router, like
+	 * `hostPrivileged`) — never expose on public create APIs.
+	 */
+	publishPorts?: boolean;
 }
 
 export async function createCompose(input: CreateComposeInput): Promise<ComposeRow> {
@@ -159,6 +165,7 @@ export async function createCompose(input: CreateComposeInput): Promise<ComposeR
 			appName,
 			serverId: input.serverId ?? null,
 			hostPrivileged: input.hostPrivileged ?? false,
+			publishPorts: input.publishPorts ?? false,
 		})
 		.returning();
 	if (!created) throw new Error("Failed to create compose service");
@@ -189,7 +196,11 @@ export async function duplicateCompose(
 			appName,
 			environmentId,
 			status: "idle",
+			// Both relax a safety check on every deploy and are a decision about
+			// one row rather than a property of the file — the copy starts
+			// without them, like any fresh stack.
 			hostPrivileged: false,
+			publishPorts: false,
 		})
 		.returning();
 	if (!created) throw new Error("Failed to duplicate compose service");

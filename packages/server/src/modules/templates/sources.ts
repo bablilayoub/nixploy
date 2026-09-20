@@ -12,12 +12,12 @@ import {
 	assertSafeOutboundUrl,
 	pinnedFetch,
 } from "../../utils/public-url";
-import { assertSafeComposeSpec, parseComposeFile } from "../compose/compose-file";
 import { getConfigDir } from "../deployment/paths";
 import { gitProcessEnv, gitProtocolEnv, hardenedSimpleGit } from "../deployment/sources";
 import { badRequest, notFound } from "../errors";
 import { BlueprintError, mapBlueprint } from "./blueprints";
 import { checkCatalogImages, extractImagesFromCompose } from "./images";
+import { checkTemplateCompose } from "./safety";
 import {
 	MAX_TEMPLATES_PER_SOURCE,
 	parseTemplateIndex,
@@ -279,17 +279,7 @@ async function fetchBlueprints(
 					rejected.push(`${id}: ${issue ? `${issue.path.join(".")} ${issue.message}` : "invalid"}`);
 					continue;
 				}
-				// The same checks a deploy runs — a template the gallery offers must
-				// deploy, and a host bind mount or a privileged flag would only fail
-				// later, in front of the operator.
-				try {
-					assertSafeComposeSpec(parseComposeFile(parsed.data.compose));
-				} catch (error) {
-					rejected.push(
-						`${id}: compose safety — ${error instanceof Error ? error.message : String(error)}`,
-					);
-					continue;
-				}
+				// Compose safety runs once for every source kind, in `syncTemplateSource`.
 				templates.push(parsed.data);
 			} catch (error) {
 				const message =
@@ -319,6 +309,34 @@ export interface SyncTemplateSourceResult {
 	syncedAt: string;
 }
 
+/**
+ * The checks a deploy runs, over every entry of a parsed source — a template
+ * the gallery offers must deploy, and a host bind mount or a privileged flag
+ * would otherwise fail later, in front of the operator. A file that publishes
+ * host ports is not a failure: it is validated as a published-port stack and
+ * flagged, so the deploy marks the row `publishPorts` (`./safety.ts`).
+ */
+function applyComposeSafety(parsed: { templates: Template[]; rejected: string[] }): {
+	templates: Template[];
+	rejected: string[];
+} {
+	const templates: Template[] = [];
+	const rejected = [...parsed.rejected];
+	for (const template of parsed.templates) {
+		try {
+			const { publishPorts } = checkTemplateCompose(template.compose);
+			templates.push(publishPorts ? { ...template, publishPorts: true } : template);
+		} catch (error) {
+			rejected.push(
+				`${template.id}: compose safety — ${
+					error instanceof Error ? error.message : String(error)
+				}`,
+			);
+		}
+	}
+	return { templates, rejected };
+}
+
 export interface SyncTemplateSourceOptions {
 	/** Probe every referenced image against its registry (default true). */
 	probeImages?: boolean;
@@ -339,12 +357,13 @@ export async function syncTemplateSource(
 ): Promise<SyncTemplateSourceResult> {
 	const syncedAt = new Date();
 	try {
-		const { templates, rejected } =
+		const { templates, rejected } = applyComposeSafety(
 			row.kind === "blueprints"
 				? await fetchBlueprints(row)
 				: parseTemplateIndex(
 						row.kind === "git" ? await fetchGitIndex(row) : await fetchJsonIndex(row.url),
-					);
+					),
+		);
 
 		let imageWarnings: string[] = [];
 		if (options.probeImages !== false && templates.length > 0) {

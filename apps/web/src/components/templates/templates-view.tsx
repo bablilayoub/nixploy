@@ -80,7 +80,7 @@ function TemplateCard({
 					<Badge variant="secondary" className="max-w-28 shrink-0 truncate font-normal">
 						{template.source.name}
 					</Badge>
-				) : template.hostPrivileged ? (
+				) : template.hostPrivileged || template.publishPorts ? (
 					<Badge variant="outline" className="shrink-0 font-normal">
 						Instance admin
 					</Badge>

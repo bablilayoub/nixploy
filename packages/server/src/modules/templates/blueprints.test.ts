@@ -257,10 +257,41 @@ LEGACY_KEY = "${ref("legacy_key")}"
 		expect(directory.template.compose).toContain("tpl-uploads:/x");
 		expect(directory.template.compose).toMatch(/volumes:\n {2}tpl-uploads: \{\}/);
 		expect(directory.notes[0]).toContain("kept as the named volume tpl-uploads");
-		// No domain and nothing exposed: nothing to suggest.
-		expect(() =>
-			mapBlueprint({ ...base, toml: "[config]\nmounts = []\n", compose: "services:\n  a: {}\n" }),
-		).toThrow(/no \[\[config\.domains\]\] entry and no service exposes a port/);
+		// Routing labels of the other panel are dropped rather than rejected.
+		const labelled = mapBlueprint({
+			...base,
+			toml: `[[config.domains]]\nserviceName = "a"\nport = 1\nhost = "h"\n`,
+			compose:
+				"services:\n  a:\n    image: x\n    labels:\n      - traefik.enable=true\n      - com.example.keep=1\n",
+		});
+		expect(labelled.template.compose).not.toContain("traefik.enable");
+		expect(labelled.template.compose).toContain("com.example.keep=1");
+		expect(labelled.notes.join(" ")).toContain("dropped 1 traefik.* label");
+		// The map form, and a service whose only labels were routing ones.
+		const mapped = mapBlueprint({
+			...base,
+			toml: `[[config.domains]]\nserviceName = "a"\nport = 1\nhost = "h"\n`,
+			compose: 'services:\n  a:\n    image: x\n    labels:\n      traefik.enable: "true"\n',
+		});
+		expect(mapped.template.compose).not.toContain("labels");
+		// `./files/` as well as `../files/`, and a mode flag that means nothing
+		// once the file is an inline config or a named volume.
+		const selinux = mapBlueprint({
+			...base,
+			toml: `[[config.domains]]\nserviceName = "a"\nport = 1\nhost = "h"\n`,
+			compose: "services:\n  a:\n    image: x\n    volumes:\n      - ./files/uploads:/x:Z\n",
+		});
+		expect(selinux.template.compose).toContain("tpl-uploads:/x");
+		expect(selinux.template.compose).not.toContain(":Z");
+		// No domain and nothing exposed (a tunnel client, a cache): the first
+		// service on 80 is a placeholder, not a reason to drop the template.
+		const unexposed = mapBlueprint({
+			...base,
+			toml: "[config]\nmounts = []\n",
+			compose: "services:\n  a: {}\n",
+		});
+		expect(unexposed.template.suggestedDomain).toEqual({ serviceName: "a", port: 80 });
+		expect(unexposed.notes.join(" ")).toContain("placeholder suggestion");
 		// No domain but an exposed port: suggested from it.
 		const exposed = mapBlueprint({
 			...base,

@@ -24,6 +24,7 @@ import {
 	syncTemplateSource,
 } from "../../modules/templates";
 import { planTemplateDomains } from "../../modules/templates/domains";
+import { templateNeedsInstanceAdmin } from "../../modules/templates/safety";
 import { protectedProcedure, router } from "../init";
 
 /**
@@ -274,7 +275,12 @@ export const templateRouter = router({
 			if (!template) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Template not found" });
 			}
-			if (template.hostPrivileged) {
+			// Host access and published host ports are the two things a template
+			// can ask for that a member may not grant themselves: the first
+			// escapes the container baseline, the second escapes Traefik (and
+			// with it domains, TLS, middlewares and the access log). Read from
+			// the compose file, not the cached flag — `templateNeedsInstanceAdmin`.
+			if (templateNeedsInstanceAdmin(template)) {
 				await assertInstanceAdmin(ctx.session);
 			}
 			// Hint domains come from the env values; a wildcard among them is an
@@ -306,6 +312,7 @@ export const templateRouter = router({
 					projectId: input.projectId,
 					environmentName: input.environmentName,
 					hostPrivileged: template.hostPrivileged ?? false,
+					publishPorts: deployed.publishPorts,
 					domains: input.domains?.length ?? 0,
 					hintDomains: deployed.domains.filter((entry) => entry.status === "attached").length,
 				},

@@ -137,6 +137,41 @@ describe("syncTemplateSource", () => {
 		});
 	});
 
+	it("refuses an entry that could never deploy, whatever the source kind", async () => {
+		pinnedFetch.mockResolvedValue(
+			jsonResponse([
+				{
+					...template,
+					id: "socket",
+					compose:
+						"services:\n  app:\n    image: x\n    volumes:\n      - /var/run/docker.sock:/var/run/docker.sock\n",
+				},
+			]),
+		);
+		const result = await syncTemplateSource(row);
+		expect(result.templateCount).toBe(0);
+		expect(result.rejected[0]).toMatch(/socket: compose safety — .*Docker socket/);
+	});
+
+	it("indexes an entry that publishes host ports, and flags it", async () => {
+		// A catalogue entry is not a running stack: the stack-level opt-in is
+		// what publishing needs, so the entry is kept and marked.
+		pinnedFetch.mockResolvedValue(
+			jsonResponse([
+				{
+					...template,
+					id: "ported",
+					compose: 'services:\n  app:\n    image: x\n    ports:\n      - "8080:80"\n',
+				},
+			]),
+		);
+		const result = await syncTemplateSource(row);
+		expect(result.rejected).toEqual([]);
+		expect(result.templateCount).toBe(1);
+		const cached = JSON.parse(await readFile(getTemplateSourceCachePath("src-1"), "utf8"));
+		expect(cached.templates[0].publishPorts).toBe(true);
+	});
+
 	it("reports an unreachable image as a warning, not a rejection", async () => {
 		// A private-registry template is perfectly valid; we just cannot
 		// confirm its tag anonymously.

@@ -134,12 +134,23 @@ Three kinds:
 | --- | --- |
 | `http-json` | One JSON document: a bare array of templates, or `{ "templates": [ … ] }` so the index can carry its own metadata. |
 | `git` | A repository whose `templates/index.json` has that same shape. Cloned shallow, read, and discarded — only the cache survives. |
-| `blueprints` | A repository laid out as `blueprints/<id>/{meta.json, template.toml, docker-compose.yml}` — the format of the Dokploy templates catalog (`https://github.com/Dokploy/templates.git`, 500+ entries). Each folder is translated by `modules/templates/blueprints.ts`: `[variables]` helpers become deploy-time placeholders named after the variable (so a password used in three keys is generated once), `${domain}` becomes `{{domain}}`, `[[config.mounts]]` files become inline compose `configs:` (the volume line that referenced `../files/<file>` becomes a `configs:` attachment), an undeclared `../files/<dir>` becomes a named volume of the stack, `env_file: .env` becomes explicit `KEY: ${KEY}` entries, and a blueprint with no domain gets its first `expose:`d port suggested. Every translated entry then goes through the same compose safety checks a deploy runs, so a template that mounts the Docker socket, binds host paths, publishes host ports or asks for privileged capabilities is a rejection line, not a gallery card that fails at deploy. On the public catalog that is 417 of 532 deployable (2026-09-19); the rest are listed with their reason on the source row. |
+| `blueprints` | A repository laid out as `blueprints/<id>/{meta.json, template.toml, docker-compose.yml}` — the format of the Dokploy templates catalog (`https://github.com/Dokploy/templates.git`, 500+ entries). Each folder is translated by `modules/templates/blueprints.ts`: `[variables]` helpers become deploy-time placeholders named after the variable (so a password used in three keys is generated once), `${domain}` becomes `{{domain}}`, `[[config.mounts]]` files become inline compose `configs:` (the volume line that referenced `../files/<file>` becomes a `configs:` attachment), an undeclared `../files/<dir>` becomes a named volume of the stack, `env_file: .env` becomes explicit `KEY: ${KEY}` entries, `traefik.*` labels are dropped (routing here is a domain row, not a label), and a blueprint with no domain gets its first `expose:`d port suggested — or, when nothing is exposed at all, its first service on 80 as a placeholder, because a tunnel client or a cache is still worth having. Every translated entry then goes through the same compose safety checks a deploy runs, so a template that mounts the Docker socket, binds host paths or asks for privileged capabilities is a rejection line, not a gallery card that fails at deploy. On the public catalog that is 436 of 532 deployable (2026-09-20); the rest are listed with their reason in the source's sync report. |
 
 Entries use exactly the `Template` shape above, minus two fields: `category`
 defaults to `"Custom"` when omitted, and **`hostPrivileged` is never accepted
 from a remote source** (it relaxes the compose safety checks and is an
 instance-admin decision about the built-in catalog only).
+
+**Published host ports are indexed, not rejected.** A catalogue entry is not a
+running stack: `ports:` is refused on a compose row that has not opted in, but
+a template whose file publishes ports is a normal thing to list, so the sync
+validates it *as* a published-port stack — the same rules a stack with the
+option on gets (no privileged or platform port, no host bind address, no
+ranges) — and flags it. Deploying one creates the stack with **Publish host
+ports** already on, and needs the instance admin, because those ports bypass
+Traefik and with it domains, TLS, middlewares and the access log. The flag is
+derived from the compose body on both sides (`modules/templates/safety.ts`),
+never read from the source document, so an older cache cannot skip the gate.
 
 ### Syncing
 

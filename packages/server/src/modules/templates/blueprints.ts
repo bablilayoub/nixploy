@@ -366,7 +366,13 @@ function rewriteCompose(
 					);
 					continue;
 				}
-				const match = text ? /^\.\.\/files\/([^:]+):([^:]+)(?::(ro|rw))?$/.exec(text) : null;
+				// `../files/x:/y`, and the `./files/` spelling some blueprints use.
+				// Trailing mode flags are normalized: `ro` is kept, and the SELinux
+				// relabel flags (`z`/`Z`) and the macOS consistency hints mean
+				// nothing once the file is an inline config or a named volume.
+				const match = text
+					? /^\.{1,2}\/files\/([^:]+):([^:]+)(?::([a-zA-Z,]+))?$/.exec(text)
+					: null;
 				if (!match) {
 					if (text?.startsWith("../files/") || text?.startsWith("./files/")) {
 						throw new BlueprintError(`service "${serviceName}" mounts an unknown file: ${text}`);
@@ -384,7 +390,8 @@ function rewriteCompose(
 						.replace(/^-+|-+$/g, "")
 						.toLowerCase()}`.slice(0, 63);
 					namedVolumes.add(volume);
-					kept.push(`${volume}:${match[2] ?? ""}${match[3] ? `:${match[3]}` : ""}`);
+					const readOnly = (match[3] ?? "").split(",").includes("ro");
+					kept.push(`${volume}:${match[2] ?? ""}${readOnly ? ":ro" : ""}`);
 					notes.push(
 						`service "${serviceName}": ../files/${filePath} is a directory, kept as the named volume ${volume}`,
 					);
@@ -403,6 +410,23 @@ function rewriteCompose(
 				if (service.volumes === undefined) delete service.volumes;
 				const existing = Array.isArray(service.configs) ? service.configs : [];
 				service.configs = [...existing, ...attached];
+			}
+		}
+
+		// Routing labels of the other panel. Here routing is a domain row and a
+		// generated Traefik file (compose safety refuses the labels outright),
+		// so they are dropped the same way `env_file` is rewritten below: the
+		// stack still gets a domain, from the panel rather than from the file.
+		if (service.labels !== undefined && service.labels !== null) {
+			const kept = withoutTraefikLabels(service.labels);
+			if (kept.dropped > 0) {
+				notes.push(
+					`service "${serviceName}": dropped ${kept.dropped} traefik.* label${
+						kept.dropped === 1 ? "" : "s"
+					} (attach a domain in the panel instead)`,
+				);
+				if (kept.labels === undefined) delete service.labels;
+				else service.labels = kept.labels;
 			}
 		}
 
@@ -459,6 +483,43 @@ function rewriteCompose(
 	}
 
 	return { compose: stringifyYaml(root, { lineWidth: 0 }), notes };
+}
+
+/**
+ * A service's labels without the `traefik.*` ones, and how many went. Both
+ * compose label shapes are handled (`["k=v"]` and `{k: v}`); `undefined`
+ * means nothing is left to write back.
+ */
+function withoutTraefikLabels(labels: unknown): { labels: unknown; dropped: number } {
+	const isTraefik = (key: string) => key.trim().toLowerCase().startsWith("traefik.");
+	if (Array.isArray(labels)) {
+		const kept = labels.filter(
+			(entry) => !(typeof entry === "string" && isTraefik(entry.split("=")[0] ?? "")),
+		);
+		return { labels: kept.length > 0 ? kept : undefined, dropped: labels.length - kept.length };
+	}
+	if (labels && typeof labels === "object") {
+		const entries = Object.entries(labels as Record<string, unknown>);
+		const kept = entries.filter(([key]) => !isTraefik(key));
+		return {
+			labels: kept.length > 0 ? Object.fromEntries(kept) : undefined,
+			dropped: entries.length - kept.length,
+		};
+	}
+	return { labels, dropped: 0 };
+}
+
+/** Name of the first service defined by the file, for the domain fallback. */
+function firstServiceName(compose: string): string | null {
+	let spec: unknown;
+	try {
+		spec = parseYaml(compose);
+	} catch {
+		return null;
+	}
+	const services = (spec as { services?: Record<string, unknown> } | null)?.services;
+	if (!services || typeof services !== "object") return null;
+	return Object.keys(services)[0] ?? null;
 }
 
 /** First `expose:` (or `ports:` target) of the first service that has one. */
@@ -521,14 +582,24 @@ export function mapBlueprint(input: BlueprintInput): MappedBlueprint {
 		// No domain declared: suggest the first service that exposes a port,
 		// so the operator can still attach one from the gallery.
 		const exposed = firstExposedPort(input.compose);
-		if (!exposed) {
-			throw new BlueprintError(
-				"template.toml declares no [[config.domains]] entry and no service exposes a port",
-			);
+		if (exposed) {
+			serviceName = exposed.serviceName;
+			port = exposed.port;
+			notes.push(`declares no domain; ${serviceName}:${port} is suggested from its expose: list`);
+		} else {
+			// Nothing declares a port: a tunnel client, a cache, an agent. Those
+			// are worth having in the gallery, and the domain step of the deploy
+			// wizard is optional — so suggest the first service on 80 (what an
+			// exported stack does with the same question) rather than dropping
+			// the template over a field nobody has to use.
+			const first = firstServiceName(input.compose);
+			if (!first) {
+				throw new BlueprintError("docker-compose.yml has no services");
+			}
+			serviceName = first;
+			port = 80;
+			notes.push(`declares no domain and exposes no port; ${first}:80 is a placeholder suggestion`);
 		}
-		serviceName = exposed.serviceName;
-		port = exposed.port;
-		notes.push(`declares no domain; ${serviceName}:${port} is suggested from its expose: list`);
 	}
 
 	const mounts: MountSpec[] = arrayOf(config?.mounts)
@@ -553,7 +624,9 @@ export function mapBlueprint(input: BlueprintInput): MappedBlueprint {
 		);
 	}
 
-	const tags = meta.data.tags ?? [];
+	// The schema caps the list; a blueprint with 30 keywords is a long tag
+	// list, not a broken template.
+	const tags = (meta.data.tags ?? []).slice(0, 24);
 	const logo = meta.data.logo?.trim() ?? "";
 	return {
 		template: {

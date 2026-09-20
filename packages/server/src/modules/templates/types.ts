@@ -71,6 +71,14 @@ export interface Template {
 	 * the instance admin; the resulting compose row is marked `hostPrivileged`.
 	 */
 	hostPrivileged?: boolean;
+	/**
+	 * The compose file publishes host ports. Derived from the file at sync
+	 * time — never read from a source document — and re-derived on deploy,
+	 * which marks the stack `publishPorts` and needs the instance admin: a
+	 * published port bypasses Traefik, so it escapes domains, TLS and the
+	 * access log. `modules/templates/safety.ts`.
+	 */
+	publishPorts?: boolean;
 }
 
 /** Catalog shape exposed by `template.all` (compose bodies stripped). */

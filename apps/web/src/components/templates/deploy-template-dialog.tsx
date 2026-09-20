@@ -57,13 +57,15 @@ type StepId = "destination" | "configure" | "domain";
  * buttons up front instead of failing at the end of the wizard.
  */
 export function templateDeployBlocker(
-	template: Pick<TemplateSummary, "hostPrivileged">,
+	template: Pick<TemplateSummary, "hostPrivileged" | "publishPorts">,
 	access: { can: (capability: string) => boolean; isInstanceAdmin: boolean },
 	options: { withDomain?: boolean } = {},
 ): string | null {
 	if (!access.can("templates.deploy")) return missingCapabilityHint("templates.deploy");
 	if (!access.can("secrets.write")) return missingCapabilityHint("secrets.write");
-	if (template.hostPrivileged && !access.isInstanceAdmin) return INSTANCE_ADMIN_HINT;
+	if ((template.hostPrivileged || template.publishPorts) && !access.isInstanceAdmin) {
+		return INSTANCE_ADMIN_HINT;
+	}
 	if (options.withDomain && !access.can("domains.manage")) {
 		return missingCapabilityHint("domains.manage");
 	}
@@ -331,12 +333,26 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 						</p>
 					</div>
 				)}
-				{blocker && !(template.hostPrivileged && blocker === INSTANCE_ADMIN_HINT) && (
+				{template.publishPorts && !template.hostPrivileged && (
 					<div className="mb-5 flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/5 p-3">
 						<ShieldAlert className="mt-0.5 size-4 shrink-0 text-warning" />
-						<p className="text-sm text-muted-foreground">You cannot deploy this: {blocker}.</p>
+						<p className="text-sm text-muted-foreground">
+							This template publishes host ports, so the stack is created with port publishing on —
+							those ports bypass Traefik, and with it domains, TLS and the access log. Only the
+							instance admin can deploy it. <HelpLink slug="templates" />
+						</p>
 					</div>
 				)}
+				{blocker &&
+					!(
+						(template.hostPrivileged || template.publishPorts) &&
+						blocker === INSTANCE_ADMIN_HINT
+					) && (
+						<div className="mb-5 flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/5 p-3">
+							<ShieldAlert className="mt-0.5 size-4 shrink-0 text-warning" />
+							<p className="text-sm text-muted-foreground">You cannot deploy this: {blocker}.</p>
+						</div>
+					)}
 				{step === "destination" && (
 					<div className="flex flex-col gap-5">
 						<div className="flex items-start gap-3 rounded-lg border bg-secondary/40 p-3">

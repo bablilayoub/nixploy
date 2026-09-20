@@ -1346,7 +1346,7 @@ const docs: Record<string, ProcedureDoc> = {
 	"template.deploy": {
 		summary: "Deploy a template",
 		description:
-			"Creates a compose service from the template, fills its env schema (generating secrets where the template asks for them), attaches the requested domains and deploys. With automatic DNS records on, each host's A record is created at the linked provider (`dns` in the result).",
+			"Creates a compose service from the template, fills its env schema (generating secrets where the template asks for them), attaches the requested domains and deploys. With automatic DNS records on, each host's A record is created at the linked provider (`dns` in the result). A template whose compose file needs host access or publishes host ports needs the instance admin; publishing templates create the stack with publishPorts on.",
 		capability: ["templates.deploy", "secrets.write", "domains.manage"],
 		instanceAdmin: true,
 	},

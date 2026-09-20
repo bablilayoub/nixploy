@@ -8,12 +8,7 @@ import {
 	assertTraefikHost,
 	assertTraefikPath,
 } from "../../utils/validators";
-import {
-	assertSafeComposeSpec,
-	hostPrivilegedComposeSafety,
-	listComposeServices,
-	parseComposeFile,
-} from "../compose/compose-file";
+import { listComposeServices } from "../compose/compose-file";
 import { createCompose, resyncComposeDomains, updateComposeById } from "../compose/service";
 import { queueDeployment } from "../deployment";
 import { type DnsRecordOutcome, ensureDnsRecords } from "../dns";
@@ -22,6 +17,7 @@ import { assertWithinQuota, findProjectById } from "../projects";
 import { findTemplateById, listTemplateSummaries } from "./catalog";
 import { type PlannedTemplateDomain, planTemplateDomains } from "./domains";
 import { resolveTemplateEnv } from "./placeholders";
+import { checkTemplateCompose } from "./safety";
 import { summarizeTemplateServices } from "./services";
 import { findSourcedTemplate, listSourcedTemplates } from "./sources";
 import type { Template, TemplateSummary } from "./types";
@@ -115,6 +111,8 @@ export interface DeployTemplateResult {
 	domains: TemplateDomainOutcome[];
 	/** What the linked DNS provider did for each requested host (`modules/dns`). */
 	dns: DnsRecordOutcome[];
+	/** The stack was created with host-port publishing on (the file has `ports:`). */
+	publishPorts: boolean;
 }
 
 /**
@@ -214,11 +212,15 @@ export async function deployTemplate(
 		throw notFound(`Environment "${input.environmentName}" not found in this project`);
 	}
 
-	const safety = template.hostPrivileged ? hostPrivilegedComposeSafety() : undefined;
 	// Validate requested domains against the compose services up front so a
-	// bad serviceName never leaves a half-configured service behind.
+	// bad serviceName never leaves a half-configured service behind. The
+	// publishing flag is re-derived from the file rather than read off the
+	// cached template: a source synced by an older build carries no flag.
+	let publishPorts = false;
 	try {
-		assertSafeComposeSpec(parseComposeFile(template.compose), safety);
+		publishPorts = checkTemplateCompose(template.compose, {
+			hostPrivileged: template.hostPrivileged,
+		}).publishPorts;
 	} catch (error) {
 		throw badRequest(
 			error instanceof Error
@@ -289,6 +291,7 @@ export async function deployTemplate(
 		composeType: "docker-compose",
 		sourceType: "raw",
 		hostPrivileged: Boolean(template.hostPrivileged),
+		publishPorts,
 	});
 
 	try {
@@ -355,5 +358,6 @@ export async function deployTemplate(
 		deploymentId,
 		domains: hinted.outcomes,
 		dns,
+		publishPorts,
 	};
 }
