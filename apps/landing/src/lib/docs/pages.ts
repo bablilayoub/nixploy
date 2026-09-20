@@ -1,4 +1,4 @@
-import { controlPlane } from "../landing-data";
+import { controlPlane, mcpToolCount } from "../landing-data";
 import { version } from "../site";
 import { templateCount } from "../templates";
 
@@ -1570,7 +1570,7 @@ applications:
 			},
 			{
 				type: "note",
-				text: "Every tool call runs through the same tRPC routers as the panel, so organization scoping, key scopes and capability checks apply unchanged — an agent can never do more than the key allows. Give one the narrowest scope that does its job: read for an observer, deploy for one that ships. Deleting projects, services or databases is deliberately not exposed, and neither is restoring a backup over live data. 32 tools; full list and client config in docs/mcp.md.",
+				text: `Every tool call runs through the same tRPC routers as the panel, so organization scoping, key scopes and capability checks apply unchanged — an agent can never do more than the key allows. Give one the narrowest scope that does its job: read for an observer, deploy for one that ships. Deleting projects, services or databases is deliberately not exposed, and neither is restoring a backup over live data. ${mcpToolCount} tools; full list and client config in docs/mcp.md.`,
 			},
 		],
 	},
