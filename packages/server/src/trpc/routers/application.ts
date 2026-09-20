@@ -1,11 +1,8 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { applications, deployments, environments, registry, rollbacks } from "../../db/schema";
-import { generateId } from "../../db/schema/utils";
+import { applications, deployments, environments, registry } from "../../db/schema";
 import {
 	assertApplicationAccess,
 	assertEnvironmentAccess,
@@ -20,10 +17,10 @@ import {
 	startApplication,
 	stopApplication,
 	updateApplication,
-	updateSwarmServiceImage,
 	upsertApplicationSwarmService,
 } from "../../modules/application";
 import type { ApplicationWithTenancy } from "../../modules/application/org";
+import { performApplicationRollback } from "../../modules/application/rollback";
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { redactServerCommandLog } from "../../modules/cluster";
@@ -37,7 +34,6 @@ import {
 	SOURCE_NOT_CONFIGURED,
 } from "../../modules/deployment";
 import { parseEnv } from "../../modules/deployment/env";
-import { getDeploymentLogPath } from "../../modules/deployment/paths";
 import { badRequest, notFound, preconditionFailed } from "../../modules/errors";
 import { assertPreviewDatabaseTarget } from "../../modules/preview/database";
 import { assertCapability, assertWithinQuota, hasCapability } from "../../modules/projects";
@@ -140,16 +136,6 @@ const assertDeployable = async (application: ApplicationWithTenancy): Promise<vo
 			code: "PRECONDITION_FAILED",
 			message: readiness.reason ?? SOURCE_NOT_CONFIGURED,
 		});
-	}
-};
-
-/** Rollbacks skip the deploy worker, so their (short) log is written here. */
-const writeRollbackLog = async (logPath: string, lines: string[]): Promise<void> => {
-	try {
-		await mkdir(dirname(logPath), { recursive: true });
-		await writeFile(logPath, `${lines.join("\n")}\n`, "utf8");
-	} catch (error) {
-		console.error(`Failed to write rollback log ${logPath}:`, error);
 	}
 };
 
@@ -878,84 +864,22 @@ export const applicationRouter = router({
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
 			const application = await assertApplicationAccess(input.applicationId, organizationId);
-
-			const rollback = await db.query.rollbacks.findFirst({
-				where: and(
-					eq(rollbacks.rollbackId, input.rollbackId),
-					eq(rollbacks.applicationId, input.applicationId),
-				),
+			const { rollback, deployment } = await performApplicationRollback({
+				application,
+				rollbackId: input.rollbackId,
+				triggeredBy: ctx.session.user.id,
 			});
-			if (!rollback) {
-				throw new TRPCError({ code: "NOT_FOUND", message: "Rollback not found" });
-			}
-			if (!(await inspectSwarmService(application.appName))) {
-				throw new TRPCError({
-					code: "PRECONDITION_FAILED",
-					message: "Application has no running service to roll back — deploy it first",
-				});
-			}
-
-			const deploymentId = generateId();
-			const logPath = getDeploymentLogPath(application.appName, deploymentId);
-			const startedAt = new Date();
-			const lines = [`Rollback ${deploymentId} started`, `Rolling back to image ${rollback.image}`];
-			try {
-				await updateSwarmServiceImage(application.appName, rollback.image);
-				lines.push("Swarm service updated", "Rollback successful");
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				lines.push(`Rollback failed: ${message}`);
-				await writeRollbackLog(logPath, lines);
-				await db.insert(deployments).values({
-					deploymentId,
-					title: "Rollback",
-					description: `Rollback to ${rollback.image}`,
-					status: "error",
-					errorMessage: message,
-					logPath,
-					applicationId: application.applicationId,
-					serverId: application.serverId,
-					startedAt,
-					finishedAt: new Date(),
-					trigger: "rollback",
-					triggeredBy: ctx.session.user.id,
-					commitSha: null,
-					commitMessage: rollback.image,
-				});
-				throw new TRPCError({
-					code: "INTERNAL_SERVER_ERROR",
-					message: `Rollback failed: ${message}`,
-				});
-			}
-			await writeRollbackLog(logPath, lines);
-
-			const [deployment] = await db
-				.insert(deployments)
-				.values({
-					deploymentId,
-					title: "Rollback",
-					description: `Rolled back to ${rollback.image}`,
-					status: "done",
-					logPath,
-					applicationId: application.applicationId,
-					serverId: application.serverId,
-					startedAt,
-					finishedAt: new Date(),
-					trigger: "rollback",
-					triggeredBy: ctx.session.user.id,
-					// No commit: the pinned image reference stands in for it.
-					commitMessage: rollback.image,
-				})
-				.returning();
-			await updateApplication(application.applicationId, { status: "running" });
 			await auditFromSession(ctx, organizationId, {
 				action: "application.rollback",
 				targetType: "application",
 				targetId: application.applicationId,
 				targetName: application.name,
-				metadata: { rollbackId: rollback.rollbackId, image: rollback.image, deploymentId },
+				metadata: {
+					rollbackId: rollback.rollbackId,
+					image: rollback.image,
+					deploymentId: deployment.deploymentId,
+				},
 			});
-
 			return { rollback, deployment };
 		}),
 });

@@ -992,6 +992,18 @@ const docs: Record<string, ProcedureDoc> = {
 			"Marks the incident as being worked on: it stays open but stops re-notifying. Records who acknowledged it.",
 		capability: ["project.write"],
 	},
+	"observability.applyRemediation": {
+		summary: "Apply a proposed remediation",
+		description:
+			"A human approves a remediation proposal (an incident of kind `remediation` filed by the restart-loop rule): the proposed rollback runs through the same code the manual rollback uses, and the proposal closes with what was done. Proposals without an action cannot be applied.",
+		capability: ["service.deploy", "secrets.write"],
+	},
+	"observability.dismissRemediation": {
+		summary: "Dismiss a proposed remediation",
+		description:
+			"Closes a remediation proposal without acting on it; the rule leaves the service alone for the cooldown.",
+		capability: ["project.write"],
+	},
 	"observability.resolveIncident": {
 		summary: "Resolve an incident",
 		description:

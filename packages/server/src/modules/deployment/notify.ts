@@ -87,18 +87,32 @@ export interface ServiceEventFrame {
 	severity: string;
 }
 
+/**
+ * An incident was filed or changed (`modules/observability`, `modules/remediation`).
+ * The panel refetches the incident list — the tray shows open proposals from it.
+ */
+export interface IncidentEventFrame {
+	kind: "incident";
+	organizationId: string;
+	incidentId: string;
+	/** `remediation`, `deploy_failure`, … — a client that does not know it still refetches. */
+	incidentKind: string;
+}
+
 export type PlatformEvent =
 	| DeploymentEventFrame
 	| QueueEventFrame
 	| ServiceStatusEventFrame
-	| ServiceEventFrame;
+	| ServiceEventFrame
+	| IncidentEventFrame;
 
 /** The event minus the field a client must never see. */
 export type ClientFrame =
 	| (Omit<DeploymentEventFrame, "organizationId"> & { kind: "deployment" })
 	| (Omit<QueueEventFrame, "organizationId"> & { kind: "queue" })
 	| (Omit<ServiceStatusEventFrame, "organizationId"> & { kind: "service-status" })
-	| (Omit<ServiceEventFrame, "organizationId"> & { kind: "service-event" });
+	| (Omit<ServiceEventFrame, "organizationId"> & { kind: "service-event" })
+	| (Omit<IncidentEventFrame, "organizationId"> & { kind: "incident" });
 
 /** Strip the tenant id before a frame goes out over a socket. */
 export function toClientFrame(event: PlatformEvent): ClientFrame {
@@ -237,6 +251,17 @@ export function decodePlatformEvent(payload: string): PlatformEvent | null {
 				appName: isNonEmptyString(candidate.appName) ? candidate.appName : "",
 				eventKind: candidate.eventKind,
 				severity: isNonEmptyString(candidate.severity) ? candidate.severity : "info",
+			};
+		}
+		case "incident": {
+			if (!isNonEmptyString(candidate.incidentId) || !isNonEmptyString(candidate.incidentKind)) {
+				return null;
+			}
+			return {
+				kind: "incident",
+				organizationId: candidate.organizationId,
+				incidentId: candidate.incidentId,
+				incidentKind: candidate.incidentKind,
 			};
 		}
 		default:

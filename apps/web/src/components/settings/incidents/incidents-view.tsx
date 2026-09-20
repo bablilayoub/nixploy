@@ -45,6 +45,35 @@ function serviceHref(incident: {
 	return `/dashboard/projects/${incident.projectId}/services/${kind}/${incident.serviceId}?tab=deploy`;
 }
 
+/** The proposal a `remediation` incident carries (`modules/remediation/rules.ts`). */
+interface Proposal {
+	action:
+		| { type: "rollback_application"; image: string }
+		| { type: "rollback_compose"; sourceDeploymentId: string }
+		| { type: "none" };
+}
+
+function proposalOf(incident: {
+	kind: string;
+	metadata?: Record<string, unknown> | null;
+}): Proposal | null {
+	if (incident.kind !== "remediation") return null;
+	const proposal = incident.metadata?.proposal as Proposal | undefined;
+	if (!proposal || typeof proposal !== "object" || !proposal.action) return null;
+	return proposal;
+}
+
+function proposalActionLabel(proposal: Proposal | null): string {
+	switch (proposal?.action.type) {
+		case "rollback_application":
+			return `Roll back to ${proposal.action.image}`;
+		case "rollback_compose":
+			return `Restore deployment ${proposal.action.sourceDeploymentId}`;
+		default:
+			return "Apply";
+	}
+}
+
 export function IncidentsView({ embedded = false }: { embedded?: boolean } = {}) {
 	const trpc = useTRPC();
 	const { can } = useCapabilities();
@@ -65,12 +94,24 @@ export function IncidentsView({ embedded = false }: { embedded?: boolean } = {})
 	const resolve = useSaveMutation(trpc.observability.resolveIncident.mutationOptions(), {
 		invalidate: [incidentsKey],
 	});
+	const applyProposal = useSaveMutation(trpc.observability.applyRemediation.mutationOptions(), {
+		successMessage: "Rollback started",
+		invalidate: [incidentsKey, trpc.deployment.recent.pathKey()],
+	});
+	const dismissProposal = useSaveMutation(trpc.observability.dismissRemediation.mutationOptions(), {
+		successMessage: "Proposal dismissed",
+		invalidate: [incidentsKey],
+	});
 
 	const canManage = can("project.write");
 	const manageHint = canManage ? undefined : capabilityHint("project.write");
+	const canDeploy = can("service.deploy") && can("secrets.write");
+	const deployHint = canDeploy ? undefined : capabilityHint("service.deploy");
 	/** Which incident id each mutation is currently working on. */
 	const busyAck = acknowledge.isPending ? acknowledge.variables?.incidentId : null;
 	const busyResolve = resolve.isPending ? resolve.variables?.incidentId : null;
+	const busyApply = applyProposal.isPending ? applyProposal.variables?.incidentId : null;
+	const busyDismiss = dismissProposal.isPending ? dismissProposal.variables?.incidentId : null;
 
 	return (
 		<div className="flex flex-col gap-8">
@@ -83,7 +124,7 @@ export function IncidentsView({ embedded = false }: { embedded?: boolean } = {})
 			<SettingsStack>
 				<SettingsSection
 					title="Incident timeline"
-					description="Deploy failures, threshold trips, watchdog events, and uptime flips."
+					description="Deploy failures, threshold trips, watchdog events, uptime flips — and proposed remediations, which wait for your yes."
 					actions={
 						<Select value={projectId} onValueChange={setProjectId}>
 							<SelectTrigger className="w-48">
@@ -171,7 +212,50 @@ export function IncidentsView({ embedded = false }: { embedded?: boolean } = {})
 										<p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
 											<Check className="size-3.5" />
 											Resolved <DateTime value={incident.resolvedAt} />
+											{typeof incident.metadata?.resolutionNote === "string" ? (
+												<span className="text-muted-foreground">
+													— {incident.metadata.resolutionNote}
+												</span>
+											) : null}
 										</p>
+									) : proposalOf(incident) ? (
+										<div className="mt-3 flex flex-wrap items-center gap-2">
+											{proposalOf(incident)?.action.type === "none" ? (
+												<span className="text-xs text-muted-foreground">
+													Nothing to apply — the message says what to look at.
+												</span>
+											) : (
+												<DisabledHint hint={deployHint}>
+													<Button
+														size="sm"
+														disabled={!canDeploy || busyApply === incident.incidentId}
+														onClick={() =>
+															applyProposal.mutate({ incidentId: incident.incidentId })
+														}
+													>
+														{busyApply === incident.incidentId && (
+															<Loader2 className="size-3.5 animate-spin" />
+														)}
+														{proposalActionLabel(proposalOf(incident))}
+													</Button>
+												</DisabledHint>
+											)}
+											<DisabledHint hint={manageHint}>
+												<Button
+													size="sm"
+													variant="outline"
+													disabled={!canManage || busyDismiss === incident.incidentId}
+													onClick={() =>
+														dismissProposal.mutate({ incidentId: incident.incidentId })
+													}
+												>
+													{busyDismiss === incident.incidentId && (
+														<Loader2 className="size-3.5 animate-spin" />
+													)}
+													Dismiss
+												</Button>
+											</DisabledHint>
+										</div>
 									) : (
 										<div className="mt-3 flex flex-wrap gap-2">
 											{incident.acknowledgedAt ? null : (

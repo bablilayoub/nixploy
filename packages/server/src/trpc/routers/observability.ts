@@ -28,6 +28,7 @@ import {
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
 import { assertProjectVisible } from "../../modules/projects/project-scope";
+import { applyRemediation, dismissRemediation } from "../../modules/remediation";
 import {
 	isEmptyQuery,
 	type LogQuery,
@@ -139,6 +140,58 @@ export const observabilityRouter = router({
 				targetName: incident.title,
 			});
 			return incident;
+		}),
+
+	/**
+	 * A human approves a proposed remediation: the rollback runs through the
+	 * same code the manual one uses, then the proposal closes with what was
+	 * done. `service.deploy` because it deploys; `secrets.write` too, since a
+	 * compose rollback restores the env a snapshot captured.
+	 */
+	applyRemediation: protectedProcedure
+		.input(z.object({ incidentId: z.string().min(1) }))
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await resolveCallerOrganizationId(
+				ctx.session.user.id,
+				ctx.session.session.activeOrganizationId,
+			);
+			await assertCapability(ctx.session.user.id, organizationId, "service.deploy");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			const result = await applyRemediation({
+				incidentId: input.incidentId,
+				organizationId,
+				userId: ctx.session.user.id,
+			});
+			await auditFromSession(ctx, organizationId, {
+				action: "incident.applyRemediation",
+				targetType: "incident",
+				targetId: result.incidentId,
+				targetName: result.action,
+				metadata: { deploymentId: result.deploymentId },
+			});
+			return result;
+		}),
+
+	/** A human declines a proposed remediation; the service is left alone until the next window. */
+	dismissRemediation: protectedProcedure
+		.input(z.object({ incidentId: z.string().min(1) }))
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await resolveCallerOrganizationId(
+				ctx.session.user.id,
+				ctx.session.session.activeOrganizationId,
+			);
+			await assertCapability(ctx.session.user.id, organizationId, "project.write");
+			const result = await dismissRemediation({
+				incidentId: input.incidentId,
+				organizationId,
+				userId: ctx.session.user.id,
+			});
+			await auditFromSession(ctx, organizationId, {
+				action: "incident.dismissRemediation",
+				targetType: "incident",
+				targetId: result.incidentId,
+			});
+			return result;
 		}),
 
 	/** Close an incident, optionally recording what was done about it. */

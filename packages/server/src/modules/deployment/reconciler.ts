@@ -13,6 +13,7 @@ import {
 	redis,
 } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { bestEffort } from "../../utils/best-effort";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { forEachServerGroup } from "../../utils/fan-out";
 import { isServerUnreachable } from "../../utils/ssh-pool";
@@ -24,6 +25,7 @@ import {
 } from "../databases/engine";
 import { notifyEvent } from "../notifications";
 import type { SwarmTaskFacts } from "../observability/task-events";
+import { proposeRemediations } from "../remediation";
 import type { ServiceKind } from "../services/kinds";
 import { getDocker } from "./docker";
 import { publishServiceStatusCorrections } from "./notify";
@@ -498,6 +500,9 @@ export async function reconcileServiceStatuses(): Promise<StatusCorrection[]> {
 	await notifyWatchdog(corrections);
 	// Same pass, same snapshot: the timeline costs no extra daemon call.
 	await recordReconciledEvents({ snapshot, services: timelineServices, corrections });
+	// The rules read the failures the line above just wrote; one grouped
+	// query per pass, a proposal only for a service that crossed the line.
+	await bestEffort("propose remediations", () => proposeRemediations(), "warn");
 	return corrections;
 }
 

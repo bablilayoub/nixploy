@@ -56,6 +56,13 @@ export interface ServiceEventFrame {
 	severity: string;
 }
 
+/** An incident was filed or changed — the list (and the tray's proposals) refetch. */
+export interface IncidentFrame {
+	kind: "incident";
+	incidentId: string;
+	incidentKind: string;
+}
+
 export type ControlFrameKind = "ready" | "heartbeat" | "error";
 
 export interface ControlFrame {
@@ -78,10 +85,16 @@ export type LiveEventFrame =
 	| QueueFrame
 	| ServiceStatusFrame
 	| ServiceEventFrame
+	| IncidentFrame
 	| ControlFrame;
 
 /** Frames a consumer acts on (the control frames are handled in here). */
-export type LiveEvent = DeploymentFrame | QueueFrame | ServiceStatusFrame | ServiceEventFrame;
+export type LiveEvent =
+	| DeploymentFrame
+	| QueueFrame
+	| ServiceStatusFrame
+	| ServiceEventFrame
+	| IncidentFrame;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === "object" && value !== null;
@@ -139,6 +152,13 @@ export function parseEventFrame(data: string): LiveEventFrame | null {
 				id: raw.id,
 				status: raw.status,
 				appName: typeof raw.appName === "string" ? raw.appName : null,
+			};
+		case "incident":
+			if (typeof raw.incidentId !== "string") return null;
+			return {
+				kind: "incident",
+				incidentId: raw.incidentId,
+				incidentKind: typeof raw.incidentKind === "string" ? raw.incidentKind : "",
 			};
 		case "ready":
 		case "heartbeat":

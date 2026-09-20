@@ -47,7 +47,8 @@ export type InvalidationTarget =
 	| { path: "service.one"; serviceKind: string; id: string }
 	| { path: "service.all"; serviceKind: string }
 	| { path: "service.getStatus"; serviceKind: string; id: string }
-	| { path: "observability.serviceEvents" };
+	| { path: "observability.serviceEvents" }
+	| { path: "observability.incidents" };
 
 const TERMINAL_STATUSES = new Set(["done", "error", "cancelled"]);
 
@@ -70,6 +71,9 @@ export function frameInvalidations(event: LiveEvent): InvalidationTarget[] {
 		// this frame deliberately invalidates one query and no service listings.
 		case "service-event":
 			return [{ path: "observability.serviceEvents" }];
+		// The incidents tab and the tray's proposals read one list.
+		case "incident":
+			return [{ path: "observability.incidents" }];
 		case "service-status": {
 			const targets: InvalidationTarget[] = [{ path: "docker.containers" }];
 			if (event.serviceKind === "application") {
@@ -181,6 +185,8 @@ export function useLiveEvents(): void {
 					return trpc.docker.containers.pathKey();
 				case "observability.serviceEvents":
 					return trpc.observability.serviceEvents.pathKey();
+				case "observability.incidents":
+					return trpc.observability.incidents.pathKey();
 				case "service.one": {
 					// The five database routers share one shape: `<kind>.one({ <kind>Id })`.
 					const namespace = namespaceOf(target.serviceKind);

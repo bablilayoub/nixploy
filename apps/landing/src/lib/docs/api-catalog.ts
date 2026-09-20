@@ -1303,6 +1303,12 @@ export const apiCatalog: ApiRouterGroup[] = [
 			{ method: "GET", path: "observability.alertRules", summary: "List alert rules of a service" },
 			{
 				method: "POST",
+				path: "observability.applyRemediation",
+				summary: "Apply a proposed remediation",
+				capability: ["service.deploy", "secrets.write"],
+			},
+			{
+				method: "POST",
 				path: "observability.deleteAlertRule",
 				summary: "Delete an alert rule",
 				capability: ["project.write"],
@@ -1312,6 +1318,12 @@ export const apiCatalog: ApiRouterGroup[] = [
 				path: "observability.disableStatusPage",
 				summary: "Unpublish the status page",
 				capability: ["settings.manage"],
+			},
+			{
+				method: "POST",
+				path: "observability.dismissRemediation",
+				summary: "Dismiss a proposed remediation",
+				capability: ["project.write"],
 			},
 			{
 				method: "POST",
@@ -2340,4 +2352,4 @@ export const apiCatalog: ApiRouterGroup[] = [
 ];
 
 /** Total endpoints in the catalog above. */
-export const apiEndpointCount = 436;
+export const apiEndpointCount = 438;

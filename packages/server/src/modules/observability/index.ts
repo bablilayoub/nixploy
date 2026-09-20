@@ -104,7 +104,7 @@ export async function listIncidents(
 }
 
 /** Load one incident, scoped to the caller's organization. */
-async function findIncident(incidentId: string, organizationId: string) {
+export async function findIncident(incidentId: string, organizationId: string) {
 	const row = await db.query.incidents.findFirst({
 		where: and(eq(incidents.incidentId, incidentId), eq(incidents.organizationId, organizationId)),
 	});

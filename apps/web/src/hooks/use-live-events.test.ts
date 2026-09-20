@@ -18,6 +18,14 @@ const deployment = (overrides: Partial<Extract<LiveEvent, { kind: "deployment" }
 });
 
 describe("frameInvalidations", () => {
+	it("refetches the incident list, and nothing else, for an incident frame", () => {
+		expect(
+			paths(
+				frameInvalidations({ kind: "incident", incidentId: "inc_1", incidentKind: "remediation" }),
+			),
+		).toEqual(["observability.incidents"]);
+	});
+
 	it("only moves the deployment lists while a job is still in flight", () => {
 		for (const status of ["queued", "running"]) {
 			const targets = paths(frameInvalidations(deployment({ status, applicationId: "app_1" })));

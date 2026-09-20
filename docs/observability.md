@@ -185,6 +185,37 @@ Two actions close the loop (`observability.acknowledgeIncident` /
 
 Resolved incidents are dropped by the retention pass 90 days later.
 
+### Proposed remediations (propose and approve)
+
+Incidents of kind `remediation` are filed by a deterministic rule, never by a
+model, and **nothing runs until a human says yes**
+(`modules/remediation/`, roadmap §16):
+
+- **Restart loop.** After every reconciler pass (which just wrote the task
+  failures it reads), one grouped query counts `task_failed` + `oom_killed`
+  timeline rows per service over the last **10 minutes**; **3 or more** cross
+  the line. One proposal per service at a time, and none for a service that
+  had one in the last **hour** (applied, dismissed or still open) or that has
+  a deployment queued or running.
+- **What it proposes.** An application with an earlier pinned image gets
+  *Roll back to `<image>`* (the pin before the one running now); a compose
+  stack with an earlier snapshot gets *Restore deployment `<id>`*. A service
+  whose failures are mostly the **OOM killer** gets no button — a rollback
+  rarely fixes memory pressure, so the message names the memory limit
+  instead. A service with nothing to go back to gets the explanation and no
+  button. The org's `serviceAlert` channels are notified.
+- **Apply** (`observability.applyRemediation`, `nixploy incident apply`,
+  `service.deploy` + `secrets.write`) runs the rollback through exactly the
+  code the manual rollback uses — `performApplicationRollback` /
+  `restoreComposeSnapshot` + `queueDeployment` — then closes the incident
+  with *Applied: …* and the deployment id in its metadata. **Dismiss**
+  (`dismissRemediation`, `project.write`) closes it untouched. Both are
+  audited. Open proposals appear in the activity tray ("Needs a decision")
+  and under Monitoring → Incidents; the list is pushed over `/ws/events` on
+  every change.
+- **Kill switch:** `NIXPLOY_REMEDIATION=0` stops the rule pass on the worker;
+  proposals already filed stay until applied or dismissed.
+
 ## Service event timeline
 
 **Runtime → Events** on every service page answers the one question a Swarm
@@ -365,6 +396,9 @@ notification. Tagged images are never touched (a stopped application's
 - Plain (non-stack) compose rows still shell out to `docker ps`; those are
   grouped **by server** and the servers run side by side, so one unreachable
   host no longer stretches the pass by its row count × the SSH timeout.
+- After the timeline is written, the **remediation rules** run over it
+  (§ "Proposed remediations" above): a restart loop becomes a proposed
+  rollback a human approves, never an automatic one.
 - Transitions INTO `error` fire the **failure watchdog**: an `appBuildError`
   fan-out to the org's notification channels (Slack/Discord/Telegram/email/
   Gotify/Ntfy/Pushover/Mattermost/Lark/Teams/custom — enable the event toggle

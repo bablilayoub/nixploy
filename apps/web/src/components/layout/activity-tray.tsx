@@ -1,12 +1,15 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Loader2, Rocket, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { DeploymentStatusBadge } from "@/components/services/status-badge";
 import { Button } from "@/components/ui/button";
+import { useLiveEventsConnected } from "@/hooks/use-live-events";
 import { useRunningDeployments } from "@/hooks/use-running-deployments";
+import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
 export type ActivityKind = "backup" | "restore" | "verify" | "clone" | "template";
@@ -164,6 +167,22 @@ export function ActivityTray() {
 	useEffect(() => setMounted(true), []);
 	const { active } = useRunningDeployments();
 	const items = useActivities();
+	const trpc = useTRPC();
+	const live = useLiveEventsConnected();
+	// Proposed remediations wait for a human here (roadmap §16): the incident
+	// list is pushed on every change over `/ws/events`, so the poll only runs
+	// while the socket is down.
+	const incidents = useQuery({
+		...trpc.observability.incidents.queryOptions({ limit: 50 }),
+		refetchInterval: live ? false : 60_000,
+	});
+	const proposals = useMemo(
+		() =>
+			(incidents.data ?? []).filter(
+				(incident) => incident.kind === "remediation" && !incident.resolvedAt,
+			),
+		[incidents.data],
+	);
 
 	const deployments = useMemo(
 		() =>
@@ -184,7 +203,7 @@ export function ActivityTray() {
 		[active],
 	);
 
-	const total = deployments.length + items.length;
+	const total = deployments.length + items.length + proposals.length;
 	const running = deployments.length + items.filter((item) => item.status === "running").length;
 	const visible = mounted && total > 0;
 
@@ -239,6 +258,19 @@ export function ActivityTray() {
 								}
 							/>
 						))}
+						{proposals.map((incident) => (
+							<Row
+								key={incident.incidentId}
+								title={incident.title}
+								detail={incident.serviceName ?? "Proposed remediation"}
+								href="/dashboard/monitoring?tab=incidents"
+								badge={
+									<span className="text-xs text-amber-600 dark:text-amber-400">
+										Needs a decision
+									</span>
+								}
+							/>
+						))}
 						{items.map((item) => (
 							<Row
 								key={item.id}
@@ -275,7 +307,11 @@ export function ActivityTray() {
 					) : (
 						<Rocket className="size-4" />
 					)}
-					{running > 0 ? `${running} running` : `Activity (${total})`}
+					{running > 0
+						? `${running} running`
+						: proposals.length > 0
+							? `${proposals.length} proposed ${proposals.length === 1 ? "action" : "actions"}`
+							: `Activity (${total})`}
 				</Button>
 			)}
 		</div>
