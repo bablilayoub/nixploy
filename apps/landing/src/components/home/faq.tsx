@@ -12,7 +12,7 @@ import { site } from "@/lib/site";
  */
 export function Faq() {
 	return (
-		<section id="faq" className="py-24 lg:py-32">
+		<section id="faq" className="py-20 lg:py-28">
 			<Container>
 				<SectionTitle title="Questions people ask first">
 					If yours is not here,{" "}

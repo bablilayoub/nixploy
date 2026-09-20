@@ -6,6 +6,14 @@ import { type KeyboardEvent, useId, useRef, useState } from "react";
 
 import { Container, SectionTitle, TerminalFrame } from "@/components/ui";
 import { screens } from "@/lib/landing-data";
+
+/*
+ * The hero already shows the overview capture, so the strip opens on the
+ * next one — the same image twice on one page reads as "they only have one
+ * screen".
+ */
+const panelScreens = screens.filter((screen) => screen.id !== "overview");
+
 import { cn } from "@/lib/utils";
 
 /*
@@ -20,7 +28,9 @@ export function Screens() {
 	const reduced = useReducedMotion() === true;
 	const baseId = useId();
 	const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
-	const active = screens[index] ?? screens[0];
+	// `screens` is a const tuple, so this fallback is the one the compiler can
+	// prove exists — the filtered list cannot be typed non-empty.
+	const active = panelScreens[index] ?? screens[0];
 	const panelId = `${baseId}-panel`;
 	const tabId = (id: string) => `${baseId}-tab-${id}`;
 
@@ -29,18 +39,18 @@ export function Screens() {
 			ArrowRight: index + 1,
 			ArrowLeft: index - 1,
 			Home: 0,
-			End: screens.length - 1,
+			End: panelScreens.length - 1,
 		};
 		const target = targets[event.key];
 		if (target === undefined) return;
 		event.preventDefault();
-		const next = (target + screens.length) % screens.length;
+		const next = (target + panelScreens.length) % panelScreens.length;
 		setIndex(next);
 		tabRefs.current[next]?.focus();
 	}
 
 	return (
-		<section className="py-24 lg:py-32">
+		<section className="py-20 lg:py-28">
 			<Container>
 				<SectionTitle title="One panel for the whole box">
 					Projects, deployments, runtime, Docker and the template catalog, on one screen you host
@@ -53,7 +63,7 @@ export function Screens() {
 					onKeyDown={onKeyDown}
 					className="mt-12 flex flex-wrap justify-center gap-1"
 				>
-					{screens.map((screen, i) => {
+					{panelScreens.map((screen, i) => {
 						const selected = i === index;
 						return (
 							<button

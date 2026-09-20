@@ -24,12 +24,12 @@ const icons: Record<StatId, LucideIcon> = {
 
 export function Stats() {
 	return (
-		<section className="py-24 lg:py-32">
+		<section className="py-20 lg:py-28">
 			<Container>
 				<SectionTitle title="Numbers that are counted, not claimed">
 					Every figure on this page comes from the catalog, the code or the production box.
 				</SectionTitle>
-				<div className="mt-14 grid gap-4 sm:grid-cols-2 lg:mt-16 lg:grid-cols-4">
+				<div className="mt-12 grid gap-4 sm:grid-cols-2 lg:mt-16 lg:grid-cols-4">
 					{stats.map((stat, index) => {
 						const Icon = icons[stat.id];
 						const unit = "unit" in stat ? stat.unit : undefined;

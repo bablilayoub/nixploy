@@ -44,7 +44,7 @@ function TemplateCard({ template }: { template: TemplateEntry }) {
 
 export function Templates() {
 	return (
-		<section id="templates" className="py-24 lg:py-32">
+		<section id="templates" className="py-20 lg:py-28">
 			<Container>
 				<SectionTitle title={`${templateCount} templates, one click each`}>
 					Reviewed compose stacks: pinned images, named volumes, sensible variables. Give one a
@@ -52,7 +52,7 @@ export function Templates() {
 				</SectionTitle>
 
 				{/* Two rows in opposite directions at slightly different speeds, so the strip never lines up. */}
-				<div className="mt-14 flex flex-col gap-4 [mask-image:linear-gradient(to_right,transparent,#000_8%,#000_92%,transparent)] lg:mt-16">
+				<div className="mt-12 flex flex-col gap-4 [mask-image:linear-gradient(to_right,transparent,#000_8%,#000_92%,transparent)] lg:mt-16">
 					{rows.map((row, index) => (
 						<Marquee
 							key={index === 0 ? "forward" : "reverse"}

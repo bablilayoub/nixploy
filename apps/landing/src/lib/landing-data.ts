@@ -64,72 +64,59 @@ export const mcpToolCount = 42;
  * verified restore (`modules/backups`), previews (`modules/preview`),
  * rollback snapshots, teams/SSO/audit (`modules/projects`, `modules/auth`),
  * the REST adapter and the CLI, MCP (`modules/mcp`), the template catalog.
- * `icon` names a lucide icon; the component maps it.
+ * Three of these are shown as proof rows on the home page with the command
+ * that does them; the rest are the plain list underneath.
  */
 export const features = [
 	{
-		icon: "git",
 		title: "Git deploys",
 		text: "Push to GitHub, GitLab, Bitbucket or Gitea. nixpacks, railpack, a Dockerfile, buildpacks or static-to-nginx build it.",
 	},
 	{
-		icon: "compose",
 		title: "Docker Compose stacks",
 		text: "Deploy a compose file as a stack with per-service domains, a private network and builds from source.",
 	},
 	{
-		icon: "database",
 		title: "Five databases",
 		text: "Postgres, MySQL, MariaDB, MongoDB and Redis as one-click services, connection strings in the panel.",
 	},
 	{
-		icon: "globe",
 		title: "Domains and TLS",
 		text: "Traefik routes every domain and issues the Let's Encrypt certificate. TCP and UDP ports route the same way.",
 	},
 	{
-		icon: "activity",
 		title: "Monitoring and alerts",
 		text: "CPU, memory, network and disk per container, streamed logs, uptime probes and a per-service event timeline.",
 	},
 	{
-		icon: "backup",
 		title: "Backups that restore",
 		text: "Scheduled dumps to S3 or disk, volume backups, and a restore verified in a throwaway container.",
 	},
 	{
-		icon: "preview",
 		title: "Previews per pull request",
 		text: "Every pull request gets its own environment and domain. Fork pull requests wait for an approve gate.",
 	},
 	{
-		icon: "rollback",
 		title: "Rollbacks with config",
 		text: "Redeploy any row of the history, or roll back to a pinned image with its environment and hooks.",
 	},
 	{
-		icon: "team",
 		title: "Teams, SSO and audit",
 		text: "Roles, per-member capabilities, project-scoped teams, OIDC single sign-on and an exportable audit log. Free.",
 	},
 	{
-		icon: "api",
 		title: "REST API and CLI",
 		text: "Every procedure is a REST endpoint with OpenAPI on your panel; @nixploy/cli wraps it for the terminal.",
 	},
 	{
-		icon: "agent",
 		title: "MCP for agents",
 		text: `${mcpToolCount} tools through the same routers as the panel, so scope, capabilities and audit apply to an agent too.`,
 	},
 	{
-		icon: "templates",
 		title: "One-click templates",
 		text: "Reviewed compose stacks with pinned images and named volumes, each asking only for the variables it needs.",
 	},
 ] as const;
-
-export type FeatureIcon = (typeof features)[number]["icon"];
 
 /**
  * The tabbed product window: the full-window captures under
