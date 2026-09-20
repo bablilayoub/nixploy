@@ -343,6 +343,21 @@ async function main() {
 	});
 	ok(`domain ${host} (https, default certificate) → ${domain.domainId}`);
 
+	step("dns record automation answers honestly without a provider");
+	// No DNS provider is linked on a fresh install: the create carries a
+	// skipped outcome (never a failure), and the explicit retry names the
+	// reason so an operator knows which setting is missing.
+	if (!domain.dns || domain.dns.status !== "skipped") {
+		fail(
+			`expected domain.create to report a skipped dns outcome, got ${JSON.stringify(domain.dns)}`,
+		);
+	}
+	const ensured = await post("domain.ensureDnsRecord", { domainId: domain.domainId });
+	if (ensured.status !== "skipped" || ensured.reason !== "no-provider") {
+		fail(`expected ensureDnsRecord → skipped/no-provider, got ${JSON.stringify(ensured)}`);
+	}
+	ok(`dns: create → ${domain.dns.reason}, ensure → ${ensured.reason}`);
+
 	step("deploy");
 	const deploy = await post("application.deploy", { applicationId });
 	info(`deployment ${deploy.deploymentId}`);
