@@ -3,6 +3,7 @@ import { and, eq, isNotNull, isNull, lte } from "drizzle-orm";
 import { db } from "../../db";
 import { certificates } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { notifyEvent } from "../notifications";
 import { recordIncident } from "../observability";
 
@@ -149,7 +150,7 @@ export async function warnAboutExpiringCertificates(now = new Date()): Promise<n
 			warned += 1;
 		} catch (error) {
 			log.error(`Failed to warn about certificate ${row.name}`, {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		}
 	}

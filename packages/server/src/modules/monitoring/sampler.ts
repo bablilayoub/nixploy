@@ -5,6 +5,7 @@ import { db } from "../../db";
 import { servers } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
 import { profileDefaults } from "../../lib/profile";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { execAsyncRemote } from "../../utils/exec";
 import { fanOutConcurrency, mapWithConcurrency } from "../../utils/fan-out";
 import { isServerUnreachable } from "../../utils/ssh-pool";
@@ -231,8 +232,17 @@ async function sampleLocalTarget(
 		const stats = await container.stats({ stream: false });
 		const frame = mapDockerStats(stats);
 		await handleFrame(target, appName, frame, context, now, restarts);
-	} catch {
-		// Container racing a restart or stats hiccup — skip this pass.
+	} catch (error) {
+		// Usually a container racing a restart or a stats hiccup, and skipping
+		// the pass is right. But `evaluateRules` and `handleFrame` also write
+		// the alert-rule timestamp, insert the incident and read the
+		// notification channels — so a database outage lands here too, and
+		// swallowing it silently means the alert never fires and nothing
+		// anywhere says why. Debug, because the common case is noise.
+		log.debug("Local metrics sample failed", {
+			appName,
+			error: describeErrorWithCause(error),
+		});
 	}
 }
 
@@ -372,7 +382,7 @@ async function sampleOneRemoteServer(
 		// local sampling and the other servers are unaffected.
 		log.warn("Remote metrics sample failed", {
 			serverId,
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }
@@ -394,7 +404,7 @@ export function initMetricsHistory(): void {
 			await sampleAllServices();
 		} catch (error) {
 			log.error("Metrics history pass failed", {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		} finally {
 			inFlight = false;

@@ -2,6 +2,7 @@ import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { createLogger } from "../../lib/logger";
 import { bestEffort } from "../../utils/best-effort";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { execAsync } from "../../utils/exec";
 import { getConfigDir, shellQuote } from "../deployment/paths";
 import { badRequest, preconditionFailed } from "../errors";
@@ -131,7 +132,7 @@ export async function preUpdateDatabaseDump(image: string): Promise<string | nul
 	log.info(`Pre-update database dump written to ${file}`);
 	await prunePreUpdateDumps(dir).catch((error: unknown) => {
 		log.warn("Could not prune old pre-update dumps", {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	});
 	return file;
@@ -241,7 +242,7 @@ export async function applyUpdate(options?: {
 		}
 		const active = await countActiveDeployments().catch((error: unknown) => {
 			log.warn("Could not count active deployments before the update", {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 			return 0;
 		});

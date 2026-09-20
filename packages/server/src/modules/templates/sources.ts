@@ -5,6 +5,7 @@ import { db } from "../../db";
 import { templateSources } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
 import { bestEffort } from "../../utils/best-effort";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import {
 	assertSafeGitCloneUrl,
 	assertSafeGitRef,
@@ -354,7 +355,7 @@ export async function syncTemplateSource(
 				const results = await checkCatalogImages({ images, concurrency: 4 }).catch(
 					(error: unknown) => {
 						log.warn(`Image probe failed for template source ${row.templateSourceId}`, {
-							error: error instanceof Error ? error.message : String(error),
+							error: describeErrorWithCause(error),
 						});
 						return [];
 					},

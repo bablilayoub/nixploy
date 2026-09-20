@@ -4,6 +4,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { CHANNELS, notify, type Subscription, subscribe } from "../../db/listen";
 import { createLogger } from "../../lib/logger";
 import { isSplitRole, isWorkerRole } from "../../lib/role";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import type { ServiceKind } from "../services/kinds";
 import { SERVICE_KINDS } from "../services/kinds";
 import { deploymentEvents } from "./events";
@@ -328,7 +329,7 @@ export async function publishPlatformEvent(event: PlatformEvent): Promise<void> 
 	} catch (error) {
 		log.debug("Failed to publish platform event", {
 			kind: event.kind,
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }
@@ -409,7 +410,7 @@ export async function publishDeploymentStatus(
 	} catch (error) {
 		log.debug("Failed to publish deployment status", {
 			deploymentId,
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }
@@ -448,7 +449,7 @@ export async function publishQueueDepth(organizationId: string): Promise<void> {
 		});
 	} catch (error) {
 		log.debug("Failed to publish queue depth", {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }
@@ -495,7 +496,7 @@ export async function publishServiceStatusCorrections(
 		}
 	} catch (error) {
 		log.debug("Failed to publish service status corrections", {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }
@@ -553,7 +554,7 @@ export async function notifyDeployQueued(notice: QueuedNotice): Promise<void> {
 		// latency, never correctness.
 		log.debug("Failed to notify the worker about a queued deployment", {
 			deploymentId: notice.deploymentId,
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }
@@ -565,7 +566,7 @@ export async function notifyDeployCancel(deploymentId: string): Promise<void> {
 		(error: unknown) => {
 			log.debug("Failed to notify the worker about a cancellation", {
 				deploymentId,
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		},
 	);
@@ -591,7 +592,7 @@ export async function startEventBridge(): Promise<void> {
 
 	const onError = (error: unknown) =>
 		log.error("Platform event bridge error", {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 
 	try {
@@ -645,7 +646,7 @@ export async function startEventBridge(): Promise<void> {
 	} catch (error) {
 		bus.bridgeStarted = false;
 		log.error("Failed to start the platform event bridge", {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }

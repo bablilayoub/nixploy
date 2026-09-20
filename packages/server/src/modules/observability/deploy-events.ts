@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { deployments } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { resolveDeploymentOwner } from "../deployment/notify";
 import type { ServiceEventKind } from "./event-kinds";
 import { recordServiceEvent } from "./service-events";
@@ -85,7 +86,7 @@ export async function recordDeploymentEvent(
 		log.debug("Failed to record a deployment timeline event", {
 			deploymentId,
 			kind,
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }

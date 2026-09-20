@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { bitbucket, deployments, gitea, github, gitlab, previewDeployments } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { withPreviewDomain } from "./index";
 import { loadPreviewParentForPreview } from "./parent";
 import { providerJsonFetch } from "./provider-fetch";
@@ -215,7 +216,7 @@ export async function reportPreviewCommitStatus(
 		log.warn("Could not post the preview commit status", {
 			previewDeploymentId: input.previewDeploymentId,
 			state: input.state,
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 		return false;
 	}

@@ -1,6 +1,7 @@
 import { CHANNELS, notify, type Subscription, subscribe } from "../../db/listen";
 import { rebuildAuth } from "../../lib/auth";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { invalidateSsoProviderCache } from "./sso";
 
 const log = createLogger("sso");
@@ -41,7 +42,7 @@ export async function publishAuthRebuild(): Promise<void> {
 	} catch (error) {
 		log.warn(
 			"Saved the SSO provider but could not tell the other process to rebuild — it will pick the change up on its next restart",
-			{ error: error instanceof Error ? error.message : String(error) },
+			{ error: describeErrorWithCause(error) },
 		);
 	}
 }
@@ -61,7 +62,7 @@ export async function startAuthRebuildBridge(): Promise<void> {
 					invalidateSsoProviderCache();
 					void rebuildAuth().catch((error: unknown) => {
 						log.error("Rebuild after an SSO change failed", {
-							error: error instanceof Error ? error.message : String(error),
+							error: describeErrorWithCause(error),
 						});
 					});
 				},
@@ -73,7 +74,7 @@ export async function startAuthRebuildBridge(): Promise<void> {
 					},
 					onError: (error: unknown) =>
 						log.error("Auth rebuild channel error", {
-							error: error instanceof Error ? error.message : String(error),
+							error: describeErrorWithCause(error),
 						}),
 				},
 			),
@@ -81,7 +82,7 @@ export async function startAuthRebuildBridge(): Promise<void> {
 	} catch (error) {
 		bridge.started = false;
 		log.error("Could not start the auth rebuild bridge", {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }

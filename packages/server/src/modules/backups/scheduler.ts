@@ -3,6 +3,7 @@ import schedule from "node-schedule";
 import { db } from "../../db";
 import { backupRuns, backups, destinations, volumeBackups } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { cronCatchUpEnabled, cronIntervalMs } from "../schedules";
 import { isValidCronExpression } from "../schedules/cron";
 import {
@@ -81,7 +82,7 @@ async function markRun(
 		.where(eq(column, id))
 		.catch((error: unknown) => {
 			log.error(`Failed to stamp last_run_at for ${id}`, {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		});
 }
@@ -110,7 +111,7 @@ async function executeBackup(backupRow: BackupRow, trigger: "cron" | "manual"): 
 		}
 		if (trigger === "manual") throw error;
 		log.error(`Backup ${backupRow.appName} (${backupRow.backupId}) failed`, {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }
@@ -142,7 +143,7 @@ async function executeVolumeBackup(
 		}
 		if (trigger === "manual") throw error;
 		log.error(`Volume backup ${volumeBackup.volumeName} (${volumeBackup.volumeBackupId}) failed`, {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }
@@ -203,7 +204,7 @@ export function registerBackupSchedule(backupRow: BackupRow): void {
 	const job = schedule.scheduleJob(`backup-${backupRow.backupId}`, backupRow.schedule, () => {
 		void tickBackup(backupRow.backupId).catch((error) => {
 			log.error(`Backup tick ${backupRow.backupId} crashed`, {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		});
 	});
@@ -232,7 +233,7 @@ export function registerVolumeBackupSchedule(volumeBackup: VolumeBackupRow): voi
 		() => {
 			void tickVolumeBackup(volumeBackup.volumeBackupId).catch((error) => {
 				log.error(`Volume backup tick ${volumeBackup.volumeBackupId} crashed`, {
-					error: error instanceof Error ? error.message : String(error),
+					error: describeErrorWithCause(error),
 				});
 			});
 		},
@@ -397,7 +398,7 @@ export async function initBackupSchedules(): Promise<void> {
 			registerBackupSchedule(row);
 		} catch (error) {
 			log.error(`Failed to register backup ${row.backupId}`, {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		}
 	}
@@ -406,7 +407,7 @@ export async function initBackupSchedules(): Promise<void> {
 			registerVolumeBackupSchedule(row);
 		} catch (error) {
 			log.error(`Failed to register volume backup ${row.volumeBackupId}`, {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		}
 	}
@@ -436,7 +437,7 @@ export async function initBackupSchedules(): Promise<void> {
 		}
 	} catch (error) {
 		log.error("Could not check for overdue backups", {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }

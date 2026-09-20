@@ -1,6 +1,7 @@
 import schedule from "node-schedule";
 import { createLogger } from "../../lib/logger";
 import { bestEffort } from "../../utils/best-effort";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { applyUpdate, clearStaleUpdateFlag } from "./apply";
 import { checkForUpdates } from "./check";
 import { autoUpdateAllowed } from "./releases";
@@ -44,7 +45,7 @@ async function runUpdatePass(): Promise<void> {
 		}
 	} catch (error) {
 		log.error("Update check pass failed", {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	} finally {
 		inFlight = false;

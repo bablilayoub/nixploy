@@ -2,6 +2,7 @@ import { and, desc, eq, gte, inArray, lt, lte, or, sql } from "drizzle-orm";
 import { db } from "../../db";
 import { serviceEvents } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { publishPlatformEventDetached } from "../deployment/notify";
 import { isServiceKind, type ServiceKind } from "../services/kinds";
 import {
@@ -122,7 +123,7 @@ export async function recordServiceEvents(inputs: readonly ServiceEventInput[]):
 	} catch (error) {
 		log.error("Failed to record service events", {
 			count: inputs.length,
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 		return 0;
 	}

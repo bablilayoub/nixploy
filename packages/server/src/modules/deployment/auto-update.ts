@@ -2,6 +2,7 @@ import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { db } from "../../db";
 import { applications, deployments } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { fetchRemoteDigest, normalizeDigest } from "../updates/registry";
 import { queueDeployment } from "./index";
 
@@ -82,7 +83,7 @@ export async function runImageAutoUpdate(): Promise<AutoUpdateResult> {
 			log.info(`Queued auto-update for ${row.appName}`, { image, digest: remote });
 		} catch (error) {
 			log.error(`Auto-update check failed for ${row.appName}`, {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		}
 	}
@@ -99,7 +100,7 @@ export async function initImageAutoUpdate(): Promise<void> {
 		void runImageAutoUpdate()
 			.catch((error: unknown) => {
 				log.error("Image auto-update pass failed", {
-					error: error instanceof Error ? error.message : String(error),
+					error: describeErrorWithCause(error),
 				});
 			})
 			.finally(() => {

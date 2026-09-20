@@ -5,6 +5,7 @@ import { db } from "../../db";
 import { servers } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
 import { profileDefaults } from "../../lib/profile";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { execAsyncRemote } from "../../utils/exec";
 import { fanOutConcurrency, mapWithConcurrency } from "../../utils/fan-out";
 import { isServerUnreachable } from "../../utils/ssh-pool";
@@ -214,7 +215,7 @@ async function harvestLocal(targets: HarvestTarget[], now: number): Promise<void
 			log.debug("Local log harvest failed for a container", {
 				appName: owner.appName,
 				containerId,
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		}
 	});
@@ -345,7 +346,7 @@ async function harvestRemote(targets: HarvestTarget[], now: number): Promise<voi
 		} catch (error) {
 			log.debug("Remote log harvest failed", {
 				serverId,
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		}
 	});
@@ -388,7 +389,7 @@ export async function harvestRuntimeLogs(
 		} catch (error) {
 			log.warn("Could not write runtime logs", {
 				appName: batch.appName,
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 			continue;
 		}
@@ -418,7 +419,7 @@ export function initRuntimeLogHarvest(): void {
 			await harvestRuntimeLogs();
 		} catch (error) {
 			log.error("Runtime log harvest failed", {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		} finally {
 			inFlight = false;

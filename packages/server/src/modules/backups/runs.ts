@@ -2,6 +2,7 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
 import { type BackupRun, type BackupRunKind, backupRuns } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 
 /**
  * Backup run history (`backup_run` rows).
@@ -195,7 +196,7 @@ export async function withBackupRun<T extends { key?: string | null; bytes?: num
 			await pruneBackupRuns(input.scope);
 		} catch (error) {
 			log.error(`Failed to finalise backup run ${runId}`, {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		}
 	};

@@ -14,6 +14,7 @@ import {
 } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
 import { bestEffort } from "../../utils/best-effort";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { forEachServerGroup } from "../../utils/fan-out";
 import { isServerUnreachable } from "../../utils/ssh-pool";
@@ -193,7 +194,7 @@ export async function loadSwarmSnapshot(): Promise<SwarmSnapshot | null> {
 		return { byName, byStack, tasks: toTaskFacts(tasks, nameByServiceId) };
 	} catch (error) {
 		log.warn("Could not read swarm state — skipping swarm-backed reconciliation this pass", {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 		return null;
 	}
@@ -559,7 +560,7 @@ export function initStatusReconciler(): void {
 			}
 		} catch (error) {
 			log.error("Status reconciler pass failed", {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		} finally {
 			running = false;

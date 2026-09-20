@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { databaseLogicals, previewDeployments } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { DATABASE_CONFIGS } from "../databases/engine";
 import {
 	buildCreateLogicalCommand,
@@ -230,7 +231,7 @@ export async function dropPreviewDatabase(preview: {
 		log.warn("Could not drop the preview database; it stays listed on its service", {
 			previewDeploymentId: preview.previewDeploymentId,
 			database: logical.name,
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }

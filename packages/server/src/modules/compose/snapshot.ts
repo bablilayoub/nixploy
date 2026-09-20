@@ -2,6 +2,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
 import { compose, composeDeploymentSnapshots, deployments } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 
 /**
  * Compose rollbacks (product audit, Databases row "Rollbacks exist only for
@@ -80,7 +81,7 @@ export async function recordComposeSnapshot(input: RecordComposeSnapshotInput): 
 		await pruneComposeSnapshots(input.composeId);
 	} catch (error) {
 		log.error(`Failed to record compose snapshot for ${input.composeId}`, {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }

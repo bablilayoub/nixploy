@@ -5,6 +5,7 @@ import schedule from "node-schedule";
 import { db } from "../../db";
 import { backupRuns, deployments, notifications } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { dockerCleanup } from "../deployment/cleanup";
 import { getDocker } from "../deployment/docker";
 import { getConfigDir } from "../deployment/paths";
@@ -431,7 +432,7 @@ const soften = async <T>(label: string, probe: () => Promise<T>, fallback: T): P
 		return await probe();
 	} catch (error) {
 		log.warn(`${label} probe failed`, {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 		return fallback;
 	}
@@ -539,7 +540,7 @@ export function startPlatformAlerts(): void {
 			await runPlatformAlertPass();
 		} catch (error) {
 			log.error("Platform alert pass failed", {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		} finally {
 			inFlight = false;
@@ -554,7 +555,7 @@ export function startPlatformAlerts(): void {
 			log.info("Docker cleanup cron finished");
 		} catch (error) {
 			log.error("Docker cleanup cron failed", {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		}
 	});

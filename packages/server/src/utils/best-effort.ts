@@ -1,4 +1,5 @@
 import { createLogger, type Logger } from "../lib/logger";
+import { describeErrorWithCause } from "./error-cause";
 
 const log = createLogger("best-effort");
 
@@ -23,7 +24,10 @@ export async function bestEffort<T>(
 		return await task();
 	} catch (error) {
 		log[level](`${label} failed`, {
-			error: error instanceof Error ? error.message : String(error),
+			// With the cause: a drizzle failure's message is only the SQL, and
+			// every side effect in the codebase that must not fail its caller
+			// comes through here (`utils/error-cause.ts`).
+			error: describeErrorWithCause(error),
 		});
 		return undefined;
 	}

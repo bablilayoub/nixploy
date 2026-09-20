@@ -4,6 +4,7 @@ import path from "node:path";
 import { db } from "../../db";
 import { instanceBranding } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { getConfigDir } from "../application/paths";
 import { badRequest, payloadTooLarge } from "../errors";
 import { sanitiseCustomCss } from "./css";
@@ -105,7 +106,7 @@ export async function publicBranding(): Promise<PublicBranding> {
 		return fresh;
 	} catch (error) {
 		log.error("Could not read instance branding", {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 		return toPublicBranding(null);
 	}

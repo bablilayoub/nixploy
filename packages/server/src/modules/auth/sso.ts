@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { members, organizations, ssoProviders } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { ORG_ROLE_RANK, type OrgRole, orgRoleRank } from "../projects/roles";
 import { discoveryUrlForIssuer, isSsoPreset, SSO_PRESET_INFO, type SsoPreset } from "./sso-presets";
 
@@ -78,7 +79,7 @@ export async function loadSsoProviders(): Promise<SsoProviderConfig[]> {
 		// it: password sign-in still works, and the login page simply offers no
 		// SSO button until the database answers again.
 		log.error("Could not load SSO providers", {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 		return [];
 	}
@@ -177,7 +178,7 @@ export async function seedSsoProvidersFromEnv(): Promise<boolean> {
 		return true;
 	} catch (error) {
 		log.error("Could not seed the SSO provider from the environment", {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 		return false;
 	}

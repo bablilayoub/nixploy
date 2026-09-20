@@ -9,6 +9,7 @@ import {
 	serviceEvents,
 } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { performApplicationRollback } from "../application/rollback";
 import {
 	findComposeSnapshot,
@@ -292,7 +293,7 @@ export async function proposeRemediations(now = new Date()): Promise<ProposeReme
 		} catch (error) {
 			log.warn("Could not file a remediation proposal", {
 				service: signal.appName,
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		}
 	}
@@ -368,7 +369,7 @@ async function fileProposal(
 		],
 	}).catch((error) => {
 		log.debug("Remediation notification failed", {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	});
 }

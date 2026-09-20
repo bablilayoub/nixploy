@@ -5,6 +5,7 @@ import { db } from "../../db";
 import { deployments, rollbacks } from "../../db/schema";
 import { generateId } from "../../db/schema/utils";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { getDeploymentLogPath } from "../deployment/paths";
 import { DomainError, notFound, preconditionFailed } from "../errors";
 import { inspectSwarmService, updateSwarmServiceImage } from "./docker";
@@ -19,7 +20,7 @@ async function writeRollbackLog(logPath: string, lines: string[]): Promise<void>
 		await writeFile(logPath, `${lines.join("\n")}\n`, "utf8");
 	} catch (error) {
 		log.error(`Failed to write rollback log ${logPath}`, {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }

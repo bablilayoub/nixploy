@@ -57,6 +57,16 @@ this file is the summary.
 
 ### Fixed
 
+- **Background passes now log why a database call failed, not just which query
+  it was.** Drizzle's error message is the SQL; the reason lives on its cause,
+  and 69 catch sites across the crons, the deploy worker, the schedulers and
+  the reconciler were dropping it — including the metrics pass, whose
+  unactionable "Failed query" line on a production box turned out to be a
+  planned Postgres restart. One shared unwrapper, used everywhere a database
+  error is logged. A bare catch in the metrics sampler that silently discarded
+  every alert-rule write, incident insert and notification read for local
+  services now says so.
+
 - **Template sources backed by a git repository (including blueprints) could
   never sync.** The sync built its own simple-git client, which refuses the
   protocol hardening Nixploy passes through `GIT_CONFIG_COUNT`, so every

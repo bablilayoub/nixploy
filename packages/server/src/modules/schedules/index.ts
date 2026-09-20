@@ -6,6 +6,7 @@ import schedule from "node-schedule";
 import { db } from "../../db";
 import { applications, compose, deployments, schedules } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import { getConfigDir } from "../application/paths";
 import { badRequest, conflict } from "../errors";
 import { isValidCronExpression } from "./cron";
@@ -130,7 +131,7 @@ async function recordRun(
 		});
 	} catch (error) {
 		log.error(`Failed to record schedule run ${row.scheduleId}`, {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }
@@ -143,7 +144,7 @@ async function markScheduleRun(scheduleId: string, at: Date): Promise<void> {
 		.where(eq(schedules.scheduleId, scheduleId))
 		.catch((error: unknown) => {
 			log.error(`Failed to stamp last_run_at for schedule ${scheduleId}`, {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		});
 }
@@ -302,7 +303,7 @@ async function tickSchedule(scheduleId: string): Promise<void> {
 	}
 	await runSchedule(row, "cron").catch((error) => {
 		log.error(`Schedule ${row.name} (${scheduleId}) failed`, {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	});
 }
@@ -338,7 +339,7 @@ export function registerSchedule(row: ScheduleRow): void {
 	const job = schedule.scheduleJob(row.scheduleId, row.cronExpression, () => {
 		void tickSchedule(row.scheduleId).catch((error) => {
 			log.error(`Schedule tick ${row.scheduleId} crashed`, {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		});
 	});
@@ -497,7 +498,7 @@ export async function initSchedules(): Promise<void> {
 			registerSchedule(row);
 		} catch (error) {
 			log.error(`Failed to register schedule ${row.name} (${row.scheduleId})`, {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		}
 	}
@@ -526,7 +527,7 @@ export async function initSchedules(): Promise<void> {
 		}
 	} catch (error) {
 		log.error("Could not check for overdue schedules", {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }
@@ -548,7 +549,7 @@ async function replayOverdueSchedules(
 		});
 		await runSchedule(row, "cron").catch((error: unknown) => {
 			log.error(`Catch-up run of schedule ${row.scheduleId} failed`, {
-				error: error instanceof Error ? error.message : String(error),
+				error: describeErrorWithCause(error),
 			});
 		});
 	}

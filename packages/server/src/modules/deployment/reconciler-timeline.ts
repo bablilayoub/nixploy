@@ -2,6 +2,7 @@ import { inArray } from "drizzle-orm";
 import { db } from "../../db";
 import { environments } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { describeErrorWithCause } from "../../utils/error-cause";
 import type { ServiceEventInput } from "../observability/service-events";
 import { recordServiceEvents } from "../observability/service-events";
 import { deriveTaskEvents } from "../observability/task-events";
@@ -206,7 +207,7 @@ export async function recordReconciledEvents(input: {
 		await recordServiceEvents(inputs);
 	} catch (error) {
 		log.error("Failed to record the pass's service events", {
-			error: error instanceof Error ? error.message : String(error),
+			error: describeErrorWithCause(error),
 		});
 	}
 }
