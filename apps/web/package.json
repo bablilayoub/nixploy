@@ -1,6 +1,6 @@
 {
 	"name": "@nixploy/web",
-	"version": "0.7.1",
+	"version": "0.7.2",
 	"private": true,
 	"scripts": {
 		"dev": "NODE_OPTIONS='--max-old-space-size=8192' tsx watch server.ts",
