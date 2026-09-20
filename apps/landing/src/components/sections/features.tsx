@@ -3,14 +3,13 @@ import Image from "next/image";
 
 import { BentoCard, BentoGrid } from "@/components/ui/bento-grid";
 import { Marquee } from "@/components/ui/marquee";
-import { AnimatedSpan, Terminal, TypingAnimation } from "@/components/ui/terminal";
 import { featuredTemplateIds } from "@/lib/landing-data";
 import { findTemplate } from "@/lib/templates";
 
 /*
  * What the product does, in @magicui/bento-grid. Each cell's artwork is
  * another registry component or a real capture: a marquee of catalog
- * entries, the CLI in @magicui/terminal, screenshots of the panel.
+ * entries and screenshots of the panel.
  */
 const marks = featuredTemplateIds
 	.map(findTemplate)
@@ -29,6 +28,21 @@ const Screenshot = ({ src, alt }: { src: string; alt: string }) => (
 			sizes="(min-width: 1024px) 760px, 100vw"
 			className="h-auto w-full"
 		/>
+	</div>
+);
+
+/*
+ * The CLI tile. A still, not a typing animation: the tile sits in a grid of
+ * screenshots and a widget that replays itself every time it scrolls into
+ * view pulled the eye off the rest of them. It also renders its content in
+ * the server HTML, which the animated one could not.
+ */
+const CommandStill = () => (
+	<div className="absolute inset-x-6 top-6 overflow-hidden rounded-lg border border-white/10 bg-white/[0.02] p-4 font-mono text-xs leading-6 opacity-80 transition-opacity duration-300 group-hover:opacity-100 [mask-image:linear-gradient(to_top,transparent,#000_65%)]">
+		<p className="text-foreground">$ nixploy app deploy api --ref v1.4.0 --wait</p>
+		<p className="text-muted-foreground">building dockerfile · linux/amd64</p>
+		<p className="text-muted-foreground">rollout 2/2 tasks running</p>
+		<p className="text-foreground">done in 48s · https://api.acme.dev</p>
 	</div>
 );
 
@@ -120,22 +134,7 @@ export function Features() {
 						description="Every procedure is a REST endpoint, a CLI verb and an MCP tool."
 						href="/docs/cli"
 						cta="Read the CLI reference"
-						background={
-							<Terminal className="absolute inset-x-6 top-6 h-56 max-h-none w-auto max-w-none border-white/10 bg-transparent opacity-80 [mask-image:linear-gradient(to_top,transparent,#000_55%)]">
-								<TypingAnimation duration={30}>
-									{"> nixploy app deploy api --ref v1.4.0 --wait"}
-								</TypingAnimation>
-								<AnimatedSpan delay={1600} className="text-muted-foreground">
-									building dockerfile · linux/amd64
-								</AnimatedSpan>
-								<AnimatedSpan delay={2200} className="text-muted-foreground">
-									rollout 2/2 tasks running
-								</AnimatedSpan>
-								<AnimatedSpan delay={2800} className="text-foreground">
-									done in 48s https://api.acme.dev
-								</AnimatedSpan>
-							</Terminal>
-						}
+						background={<CommandStill />}
 					/>
 				</BentoGrid>
 			</div>
