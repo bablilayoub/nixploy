@@ -78,7 +78,11 @@ Dev database: Docker container `nixploy-dev-pg` on `127.0.0.1:54329` (user/pass/
 ## Verification loop (before declaring anything done)
 
 1. `pnpm -F @nixploy/server exec tsc --noEmit` (server) and/or `cd apps/web && pnpm exec tsc --noEmit` (web), `pnpm -F @nixploy/cli typecheck` (cli), `pnpm -F @nixploy/landing typecheck` (landing).
-2. `pnpm exec biome check --write <changed files>` from the root.
+2. `pnpm exec biome check --write <changed files>` from the root, then the
+   repo-wide gate once: `pnpm exec biome check --error-on-warnings packages/server apps/web apps/cli apps/landing`.
+   **`--write` on a file list exits 0 on warnings and prints nothing**, so a
+   `noUnsafeOptionalChaining` in a new file looks clean locally and fails CI
+   (cost a red run on 2026-09-20). `tools/` is outside that path list.
 3. `pnpm test` (add `DATABASE_URL_TEST` when touching routers or tenancy — CI runs the full suite against Postgres).
 4. Bigger UI work: `cd apps/web && pnpm build` with env loaded, then drive the real app (Playwright via `tools/screenshots`, or the in-app browser) and check light **and** dark mode, watching the console for hydration warnings.
 5. Touching the deploy path: smoke-test against the local Swarm (deploy `traefik/whoami`, attach a `*.traefik.me` domain, hit it through Traefik).

@@ -56,7 +56,7 @@ cd apps/web && pnpm dev         # dev server on :3000
 
 1. `pnpm -F @nixploy/server exec tsc --noEmit` after any server change.
 2. `cd apps/web && pnpm exec tsc --noEmit` after any web change (fast); `cd apps/web && pnpm build` before shipping bigger UI work (needs env: `set -a && . ./.env && set +a`).
-3. `pnpm exec biome check --write <changed files>` from the repo root — always, before considering a change done.
+3. `pnpm exec biome check --write <changed files>` from the repo root — always, before considering a change done — then the gate CI runs, once: `pnpm exec biome check --error-on-warnings packages/server apps/web apps/cli apps/landing`. `--write` on a file list exits 0 on warnings and prints nothing, so a new file can look clean locally and fail CI.
 4. `pnpm test` (vitest in `packages/server`) for unit coverage of builders, Traefik YAML generation, template catalog and db utils.
 5. Smoke test with Docker when touching the deploy path: boot the app against a local Postgres, deploy a docker-image application to the local Swarm, attach a domain, and confirm traffic flows through Traefik.
 6. Browser verification with Playwright (`playwright-core`, headless Chromium) for UI changes — screenshot every surface you touched, in light AND dark mode. Dev logins live in the local dev database.
