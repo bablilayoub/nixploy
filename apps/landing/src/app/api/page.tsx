@@ -1,9 +1,9 @@
+import { ChevronRight } from "lucide-react";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { DocsFrame } from "@/components/docs-frame";
 import { ProseLink } from "@/components/page-frame";
-import { Card } from "@/components/ui/card";
 import { CodeBlock } from "@/components/ui/code-block";
 import { apiCatalog, apiEndpointCount } from "@/lib/docs/api-catalog";
 import { site } from "@/lib/site";
@@ -39,8 +39,12 @@ nixploy app list --project-id <id>`;
  * name out of a muted sentence.
  */
 function Section({ title, children }: { title: string; children: ReactNode }) {
+	const id = title
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-|-$/g, "");
 	return (
-		<section className="mt-16">
+		<section id={id} className="mt-16 scroll-mt-28">
 			<h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
 			{children}
 		</section>
@@ -61,7 +65,16 @@ function Strong({ children }: { children: ReactNode }) {
 
 export default function ApiPage() {
 	return (
-		<DocsFrame activeHref="/api">
+		<DocsFrame
+			activeHref="/api"
+			headings={[
+				{ id: "authentication", text: "Authentication" },
+				{ id: "url-conventions", text: "URL conventions" },
+				{ id: "interactive-docs-on-your-panel", text: "Interactive docs" },
+				{ id: "cli", text: "CLI" },
+				{ id: "endpoint-catalog", text: "Endpoint catalog" },
+			]}
+		>
 			<article>
 				<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">API</p>
 				<h1 className="mt-4 text-4xl font-semibold tracking-tight text-balance">
@@ -140,49 +153,82 @@ export default function ApiPage() {
 						need the platform owner. Full descriptions and input/output schemas live on your own
 						panel&apos;s Swagger, which always matches the version you run.
 					</P>
-					{apiCatalog.map((group) => (
-						<Card key={group.router} className="mt-6 p-6">
-							<h3 className="font-medium">{group.title}</h3>
-							<p className="mt-1 text-sm text-muted-foreground">{group.description}</p>
-							<p className="mt-1 font-mono text-xs text-muted-foreground">router: {group.router}</p>
-							<div className="mt-4 overflow-x-auto rounded-xl border">
-								<table className="w-full min-w-[34rem] text-left">
-									<caption className="sr-only">{group.title} endpoints</caption>
-									<thead className="text-xs text-muted-foreground">
-										<tr>
-											<th scope="col" className="px-3 py-2 font-medium">
-												Method
-											</th>
-											<th scope="col" className="px-3 py-2 font-medium">
-												Path
-											</th>
-											<th scope="col" className="px-3 py-2 font-medium">
-												Summary
-											</th>
-											<th scope="col" className="px-3 py-2 font-medium">
-												Requires
-											</th>
-										</tr>
-									</thead>
-									<tbody>
-										{group.endpoints.map((ep) => (
-											<tr key={`${ep.method}-${ep.path}`} className="border-t text-sm">
-												<td className="px-3 py-2 font-mono text-xs">{ep.method}</td>
-												<td className="px-3 py-2 font-mono text-xs">/api/{ep.path}</td>
-												<td className="px-3 py-2 text-muted-foreground">{ep.summary}</td>
-												<td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-													{[
-														...(ep.capability ?? []),
-														...(ep.instanceAdmin ? ["instance admin"] : []),
-													].join(", ") || "—"}
-												</td>
+					{/* An index first: 49 routers with every table open is a page nobody
+					    can navigate, so each router is a disclosure and this is the way in. */}
+					<nav aria-label="Routers" className="mt-6 flex flex-wrap gap-2">
+						{apiCatalog.map((group) => (
+							<a
+								key={group.router}
+								href={`#router-${group.router}`}
+								className="inline-flex min-h-8 items-center gap-1.5 rounded-full border px-3 font-mono text-xs text-muted-foreground transition-colors hover:border-foreground/25 hover:text-foreground"
+							>
+								{group.router}
+								<span className="text-muted-foreground/60">{group.endpoints.length}</span>
+							</a>
+						))}
+					</nav>
+
+					<div className="mt-8 flex flex-col gap-3">
+						{apiCatalog.map((group) => (
+							<details
+								key={group.router}
+								id={`router-${group.router}`}
+								className="group scroll-mt-28 rounded-xl border bg-card/40"
+							>
+								<summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
+									<ChevronRight
+										className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+										aria-hidden
+									/>
+									<span className="min-w-0 flex-1">
+										<span className="block font-medium">{group.title}</span>
+										<span className="mt-0.5 block text-sm text-muted-foreground">
+											{group.description}
+										</span>
+									</span>
+									<span className="shrink-0 font-mono text-xs text-muted-foreground">
+										{group.router} · {group.endpoints.length}
+									</span>
+								</summary>
+								<div className="overflow-x-auto border-t">
+									<table className="w-full min-w-[34rem] text-left">
+										<caption className="sr-only">{group.title} endpoints</caption>
+										<thead className="text-xs text-muted-foreground">
+											<tr>
+												<th scope="col" className="px-4 py-2 font-medium">
+													Method
+												</th>
+												<th scope="col" className="px-4 py-2 font-medium">
+													Path
+												</th>
+												<th scope="col" className="px-4 py-2 font-medium">
+													Summary
+												</th>
+												<th scope="col" className="px-4 py-2 font-medium">
+													Requires
+												</th>
 											</tr>
-										))}
-									</tbody>
-								</table>
-							</div>
-						</Card>
-					))}
+										</thead>
+										<tbody>
+											{group.endpoints.map((ep) => (
+												<tr key={`${ep.method}-${ep.path}`} className="border-t text-sm">
+													<td className="px-4 py-2 font-mono text-xs">{ep.method}</td>
+													<td className="px-4 py-2 font-mono text-xs">/api/{ep.path}</td>
+													<td className="px-4 py-2 text-muted-foreground">{ep.summary}</td>
+													<td className="px-4 py-2 font-mono text-xs text-muted-foreground">
+														{[
+															...(ep.capability ?? []),
+															...(ep.instanceAdmin ? ["instance admin"] : []),
+														].join(", ") || "—"}
+													</td>
+												</tr>
+											))}
+										</tbody>
+									</table>
+								</div>
+							</details>
+						))}
+					</div>
 				</Section>
 
 				<p className="mt-16 border-t pt-6 text-sm text-muted-foreground">

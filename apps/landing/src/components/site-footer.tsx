@@ -84,7 +84,7 @@ export function SiteFooter() {
 						target="_blank"
 						rel="noreferrer"
 						aria-label="Nixploy on GitHub"
-						className="transition-colors hover:text-foreground"
+						className="inline-flex size-9 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-foreground"
 					>
 						<GithubIcon className="size-4" aria-hidden />
 					</a>

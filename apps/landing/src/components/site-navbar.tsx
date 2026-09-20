@@ -9,7 +9,6 @@ import {
 	MobileNav,
 	MobileNavHeader,
 	MobileNavMenu,
-	MobileNavToggle,
 	NavBody,
 	Navbar,
 	NavbarButton,
@@ -80,18 +79,24 @@ export function SiteNavbar() {
 						</Button>
 					</MobileNavHeader>
 					<MobileNavMenu isOpen={open} onClose={() => setOpen(false)} className="dark:bg-card">
-						{navItems.map((item) => (
-							<a
-								key={item.link}
-								href={item.link}
-								onClick={() => setOpen(false)}
-								className="w-full py-2 text-neutral-300"
-							>
-								{item.name}
-							</a>
-						))}
+						<div id={MENU_ID} className="flex w-full flex-col">
+							{navItems.map((item) => (
+								<a
+									key={item.link}
+									href={item.link}
+									onClick={() => setOpen(false)}
+									className="flex min-h-11 w-full items-center text-muted-foreground transition-colors hover:text-foreground"
+								>
+									{item.name}
+								</a>
+							))}
+						</div>
 						<div className="flex w-full flex-col gap-2 pt-2">
-							<NavbarButton href="/docs" variant="secondary" className="w-full">
+							<NavbarButton
+								href="/docs"
+								variant="secondary"
+								className="w-full rounded-md border text-foreground"
+							>
 								Read the docs
 							</NavbarButton>
 							<NavbarButton href="/docs/install" variant="primary" className="w-full">

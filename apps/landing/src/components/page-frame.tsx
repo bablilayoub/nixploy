@@ -36,6 +36,7 @@ export function PageFrame({
 	title,
 	description,
 	actions,
+	mark,
 	width = "full",
 	close = true,
 }: {
@@ -44,6 +45,8 @@ export function PageFrame({
 	title?: string;
 	description?: ReactNode;
 	actions?: ReactNode;
+	/** A leading mark above the eyebrow — a template's own logo, say. */
+	mark?: ReactNode;
 	width?: "full" | "prose";
 	close?: boolean;
 }) {
@@ -59,6 +62,11 @@ export function PageFrame({
 							className="[mask-image:radial-gradient(520px_circle_at_50%_0%,white,transparent)] opacity-50"
 						/>
 						<div className="container-page relative">
+							{mark ? (
+								<span className="mb-5 inline-flex size-14 items-center justify-center rounded-xl border bg-card">
+									{mark}
+								</span>
+							) : null}
 							{eyebrow ? (
 								<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
 									{eyebrow}

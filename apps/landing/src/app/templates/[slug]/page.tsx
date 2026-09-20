@@ -158,11 +158,9 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 			eyebrow={template.category}
 			title={`Self-host ${template.name}`}
 			description={<Prose text={template.description} />}
+			mark={<TemplateMark logo={template.logo} />}
 			actions={
 				<>
-					<span className="inline-flex size-12 items-center justify-center rounded-xl border bg-accent/40">
-						<TemplateMark logo={template.logo} />
-					</span>
 					<Button asChild size="lg" className="rounded-xl">
 						<Link href="/docs/install">Install Nixploy</Link>
 					</Button>

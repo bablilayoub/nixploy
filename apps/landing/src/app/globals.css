@@ -217,6 +217,22 @@
 	h3 {
 		font-family: var(--font-display);
 	}
+
+	/*
+	 * Long unbreakable tokens — a raw URL in a docs list, an env var name, a
+	 * volume path — otherwise push the page wider than the viewport, and
+	 * `overflow-x: hidden` on the body would only hide the symptom.
+	 */
+	p,
+	li,
+	dd,
+	dt,
+	h1,
+	h2,
+	h3,
+	h4 {
+		overflow-wrap: break-word;
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {

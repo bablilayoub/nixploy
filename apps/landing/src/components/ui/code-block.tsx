@@ -106,12 +106,12 @@ export const CodeBlock = ({
 					</div>
 				)}
 				{!tabsExist && filename && (
-					<div className="flex justify-between items-center py-2">
-						<div className="text-xs text-zinc-400">{filename}</div>
+					<div className="flex min-w-0 items-center justify-between gap-2 py-2">
+						<div className="min-w-0 truncate text-xs text-muted-foreground">{filename}</div>
 						<button
 							onClick={copyToClipboard}
 							aria-label={copied ? "Code copied" : "Copy code"}
-						className="-mr-1 flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+						className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 						>
 							{copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
 						</button>

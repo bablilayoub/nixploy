@@ -43,6 +43,7 @@ const ROUTER_TITLES: Record<string, string> = {
 	audit: "Audit log",
 	backup: "Database backups",
 	bitbucket: "Bitbucket",
+	branding: "Whitelabel",
 	certificate: "Certificates",
 	compose: "Compose & stacks",
 	deployment: "Deployments",
@@ -54,6 +55,7 @@ const ROUTER_TITLES: Record<string, string> = {
 	github: "GitHub",
 	gitlab: "GitLab",
 	gitops: "GitOps",
+	import: "Import from another panel",
 	mariadb: "MariaDB",
 	mongo: "MongoDB",
 	monitoring: "Monitoring",
@@ -75,9 +77,11 @@ const ROUTER_TITLES: Record<string, string> = {
 	server: "Servers",
 	setup: "Setup (public)",
 	sshKey: "SSH keys",
+	sso: "Single sign-on",
 	tag: "Tags",
 	team: "Teams",
 	template: "Templates",
+	upstream: "External upstreams",
 	traefik: "Traefik entrypoints",
 	updates: "Updates",
 	volumeBackup: "Volume backups",
@@ -90,7 +94,11 @@ const ROUTER_TITLES: Record<string, string> = {
  * cover yet. Drop an entry here once it grows one upstream.
  */
 const EXTRA_ROUTER_DESCRIPTIONS: Record<string, string> = {
+	branding: "Instance and organization whitelabel: name, logo, accent and assets",
+	import: "Read projects and services from another panel's API and map them here",
+	sso: "OIDC and SAML identity providers, shown on the login page",
 	traefik: "TCP and UDP entrypoints published on the proxy",
+	upstream: "Origins outside the Swarm that Traefik fronts with the same domains and certificates",
 	volumeFiles: "Browse, read and edit files inside a Docker volume",
 };
 

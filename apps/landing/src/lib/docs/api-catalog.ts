@@ -290,8 +290,8 @@ export const apiCatalog: ApiRouterGroup[] = [
 	},
 	{
 		router: "branding",
-		title: "branding",
-		description: "branding",
+		title: "Whitelabel",
+		description: "Instance and organization whitelabel: name, logo, accent and assets",
 		endpoints: [
 			{ method: "POST", path: "branding.clearAsset", summary: "Remove an uploaded branding asset" },
 			{ method: "GET", path: "branding.public", summary: "Read the instance branding" },
@@ -900,8 +900,8 @@ export const apiCatalog: ApiRouterGroup[] = [
 	},
 	{
 		router: "import",
-		title: "import",
-		description: "import",
+		title: "Import from another panel",
+		description: "Read projects and services from another panel's API and map them here",
 		endpoints: [
 			{
 				method: "POST",
@@ -2008,8 +2008,8 @@ export const apiCatalog: ApiRouterGroup[] = [
 	},
 	{
 		router: "sso",
-		title: "sso",
-		description: "sso",
+		title: "Single sign-on",
+		description: "OIDC and SAML identity providers, shown on the login page",
 		endpoints: [
 			{ method: "GET", path: "sso.all", summary: "List SSO providers" },
 			{ method: "POST", path: "sso.create", summary: "Add an SSO provider" },
@@ -2179,8 +2179,9 @@ export const apiCatalog: ApiRouterGroup[] = [
 	},
 	{
 		router: "upstream",
-		title: "upstream",
-		description: "upstream",
+		title: "External upstreams",
+		description:
+			"Origins outside the Swarm that Traefik fronts with the same domains and certificates",
 		endpoints: [
 			{ method: "GET", path: "upstream.all", summary: "List external upstreams" },
 			{

@@ -1,4 +1,3 @@
-import { BookOpen, KeyRound, ShieldCheck, Zap } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -154,23 +153,17 @@ function Session({
 	);
 }
 
-function Reason({
-	icon,
-	title,
-	children,
-}: {
-	icon: ReactNode;
-	title: string;
-	children: ReactNode;
-}) {
+/*
+ * A ruled row rather than a card with an icon in a rounded square: four of
+ * those in a grid is the shape that makes four different arguments look like
+ * one texture (the same reason the home page's free-tier section is a list).
+ */
+function Reason({ title, children }: { title: string; children: ReactNode }) {
 	return (
-		<Card className="p-6">
-			<span className="inline-flex size-10 items-center justify-center rounded-lg bg-accent text-primary">
-				{icon}
-			</span>
-			<h3 className="mt-4 font-medium">{title}</h3>
-			<p className="mt-2 text-sm text-muted-foreground">{children}</p>
-		</Card>
+		<div className="grid gap-x-8 gap-y-1 border-t py-5 last:border-b sm:grid-cols-[minmax(0,13rem)_minmax(0,1fr)]">
+			<h3 className="font-medium">{title}</h3>
+			<p className="text-sm text-muted-foreground">{children}</p>
+		</div>
 	);
 }
 
@@ -226,25 +219,22 @@ export default function AgentsPage() {
 					trail apply identically — an agent holding a read-only API key cannot deploy, and every
 					mutation it makes is a row in the audit log with the key that made it.
 				</p>
-				<div className="mt-8 grid gap-4 md:grid-cols-2">
-					<Reason icon={<ShieldCheck className="size-5" aria-hidden />} title="Annotated tools">
+				<div className="mt-8">
+					<Reason title="Annotated tools">
 						All {mcpToolCount} carry <Code>readOnlyHint</Code>, <Code>destructiveHint</Code> and{" "}
 						<Code>idempotentHint</Code>, declared by hand with a test that fails the build on a
 						missing entry — so an agent knows what is safe to call while it is still looking around.
 					</Reason>
-					<Reason icon={<KeyRound className="size-5" aria-hidden />} title="Scoped keys">
+					<Reason title="Scoped keys">
 						An API key is read, deploy, write or full, intersected with its owner&apos;s own
 						capabilities, bound to one organization, and expiring by default.
 					</Reason>
-					<Reason
-						icon={<Zap className="size-5" aria-hidden />}
-						title="One call, not a polling loop"
-					>
+					<Reason title="One call, not a polling loop">
 						<Code>deploy_and_wait</Code> blocks for the real outcome;{" "}
 						<Code>explain_last_failure</Code> and <Code>get_service_runtime_summary</Code> answer in
 						one round trip what would otherwise be five.
 					</Reason>
-					<Reason icon={<BookOpen className="size-5" aria-hidden />} title="It reads the docs too">
+					<Reason title="It reads the docs too">
 						<ProseLink href="/llms.txt">/llms.txt</ProseLink>,{" "}
 						<ProseLink href="/agents.md">/agents.md</ProseLink> and a <Code>.md</Code> twin of every
 						docs page, so an agent can look something up instead of guessing.
