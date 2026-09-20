@@ -22,6 +22,10 @@ this file is the summary.
   and `template.deploy`), retry with the globe button, `nixploy domain
   ensure-dns` or `domain.ensureDnsRecord`; **Check link** lists the zones the
   credentials see (`webServer.dnsZones`). Records are never deleted.
+- **Per-organization runtime log retention.** Settings → Organization →
+  Quotas gained *Runtime log history* (days, MB per service): an org keeps
+  less than the instance's `NIXPLOY_RUNTIME_LOG_*` ceiling, never more; the
+  hourly prune resolves each service's org once per pass.
 
 ### Changed
 

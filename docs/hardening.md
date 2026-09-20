@@ -104,7 +104,9 @@ spec merge.
 
 ### Quota-derived resource limits
 
-`Settings → Organization → Quotas` has `Max CPU shares` and `Max memory (MB)`.
+`Settings → Organization → Quotas` has `Max CPU shares` and `Max memory (MB)`
+(and, since 2026-09-20, the org's runtime log retention under the instance
+ceiling — docs/observability.md).
 They are now applied as **per-service `Resources.Limits` defaults** when the
 service itself sets no limit; an explicit per-service value always wins.
 `maxCpuShares` is read in Docker's own unit — **1024 shares = 1 CPU**, so

@@ -426,11 +426,16 @@ Bounded on purpose:
 - **Cursors are Docker timestamps** (`state.json` per service), so a worker
   restart resumes exactly where it stopped; a container never seen before
   starts ten minutes back, not at its birth.
-- **Retention is per service, instance-wide:** `NIXPLOY_RUNTIME_LOG_RETENTION_DAYS`
-  (default `7`) and `NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE` (default `256`),
-  enforced by the hourly maintenance pass; a deleted service's directory goes
-  with it. `NIXPLOY_RUNTIME_LOGS=0` turns the harvester off (what exists on
-  disk stays readable).
+- **Retention is per service, with an instance ceiling and a per-org
+  setting under it:** `NIXPLOY_RUNTIME_LOG_RETENTION_DAYS` (default `7`) and
+  `NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE` (default `256`) are what the
+  instance allows at most; Settings → Organization → Quotas (*Runtime log
+  history*) lets an org keep less for its own services — never more, and a
+  blank field means the instance value. Enforced by the hourly maintenance
+  pass (`modules/runtime-logs/retention.ts` resolves each service's org
+  once per pass); a deleted service's directory goes with it.
+  `NIXPLOY_RUNTIME_LOGS=0` turns the harvester off (what exists on disk
+  stays readable).
 
 **Reading it.** Every service page has Runtime → **History**; the Monitoring
 page has a **Logs** section across every service the caller can see; the CLI

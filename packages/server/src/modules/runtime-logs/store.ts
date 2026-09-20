@@ -290,17 +290,31 @@ export interface PruneRuntimeLogsResult {
  * Drop hour files past the retention window, then the oldest hours of any
  * service over its byte cap; a service directory left with no hours (and no
  * live cursor) goes too, so a deleted service does not linger on disk.
+ *
+ * Limits are per service: `limitsFor(appName)` answers the org's retention
+ * under the instance ceiling (`retention.ts`); without it, or for a service
+ * it cannot place, the instance values apply.
  */
 export async function pruneRuntimeLogs(
-	options: { retentionDays?: number; maxBytesPerService?: number; now?: number } = {},
+	options: {
+		retentionDays?: number;
+		maxBytesPerService?: number;
+		now?: number;
+		limitsFor?: (appName: string) => Promise<{ retentionDays: number; maxBytes: number }>;
+	} = {},
 ): Promise<PruneRuntimeLogsResult> {
 	const now = options.now ?? Date.now();
-	const retentionDays = options.retentionDays ?? runtimeLogRetentionDays();
-	const maxBytes = options.maxBytesPerService ?? runtimeLogMaxBytesPerService();
-	const cutoffHour = hourKey(now - retentionDays * 24 * 60 * 60 * 1000);
+	const instance = {
+		retentionDays: options.retentionDays ?? runtimeLogRetentionDays(),
+		maxBytes: options.maxBytesPerService ?? runtimeLogMaxBytesPerService(),
+	};
 	const result: PruneRuntimeLogsResult = { removedFiles: 0, removedServices: 0 };
 
 	for (const appName of await listRuntimeLogServices()) {
+		const { retentionDays, maxBytes } = options.limitsFor
+			? await options.limitsFor(appName).catch(() => instance)
+			: instance;
+		const cutoffHour = hourKey(now - retentionDays * 24 * 60 * 60 * 1000);
 		const dir = serviceLogDir(appName);
 		const files = await listHourFiles(dir);
 		const sized: Array<HourFile & { size: number }> = [];

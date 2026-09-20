@@ -13,6 +13,12 @@ export {
 } from "./harvest";
 export { isEmptyQuery, type LogQuery, LogQueryError, parseLogQuery } from "./query";
 export {
+	effectiveRuntimeLogLimits,
+	instanceRuntimeLogLimits,
+	type RuntimeLogLimits,
+	runtimeLogLimitsResolver,
+} from "./retention";
+export {
 	DEFAULT_RUNTIME_LOG_MAX_MB_PER_SERVICE,
 	DEFAULT_RUNTIME_LOG_RETENTION_DAYS,
 	listRuntimeLogServices,

@@ -23,6 +23,7 @@ import {
 	roleDefaultCapabilities,
 	serializeOrgMetadata,
 } from "../../modules/projects";
+import { instanceRuntimeLogLimits } from "../../modules/runtime-logs/retention";
 import { textBlobSchema } from "../../utils/input-limits";
 import { protectedProcedure, router } from "../init";
 
@@ -36,6 +37,10 @@ const quotaInputSchema = z.object({
 	maxServices: z.number().int().min(0).nullable().optional(),
 	maxCpuShares: z.number().int().min(0).nullable().optional(),
 	maxMemoryMb: z.number().int().min(0).nullable().optional(),
+	/** Runtime log history per service, days — under the instance ceiling. */
+	runtimeLogRetentionDays: z.number().int().min(0).max(3650).nullable().optional(),
+	/** Runtime log history per service, MB — under the instance ceiling. */
+	runtimeLogMaxMbPerService: z.number().int().min(0).max(1_000_000).nullable().optional(),
 });
 
 /**
@@ -128,7 +133,17 @@ export const organizationRouter = router({
 				maxServices: metadata.quotas?.maxServices ?? null,
 				maxCpuShares: metadata.quotas?.maxCpuShares ?? null,
 				maxMemoryMb: metadata.quotas?.maxMemoryMb ?? null,
+				runtimeLogRetentionDays: metadata.quotas?.runtimeLogRetentionDays ?? null,
+				runtimeLogMaxMbPerService: metadata.quotas?.runtimeLogMaxMbPerService ?? null,
 			},
+			/** What the instance allows at most — the org values above sit under it. */
+			runtimeLogCeiling: (() => {
+				const ceiling = instanceRuntimeLogLimits();
+				return {
+					retentionDays: ceiling.retentionDays,
+					maxMbPerService: Math.round(ceiling.maxBytes / (1024 * 1024)),
+				};
+			})(),
 			branding: {
 				displayName: metadata.branding?.displayName ?? null,
 				accentColor: metadata.branding?.accentColor ?? null,

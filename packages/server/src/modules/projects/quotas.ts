@@ -9,6 +9,14 @@ export interface OrgQuotas {
 	maxServices: number | null;
 	maxCpuShares: number | null;
 	maxMemoryMb: number | null;
+	/**
+	 * Runtime log history kept per service of this org, in days — capped by
+	 * the instance's `NIXPLOY_RUNTIME_LOG_RETENTION_DAYS`; null = the
+	 * instance value (`modules/runtime-logs/retention.ts`).
+	 */
+	runtimeLogRetentionDays: number | null;
+	/** Same, in megabytes per service (`NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE`). */
+	runtimeLogMaxMbPerService: number | null;
 }
 
 export interface OrgBranding {
@@ -26,6 +34,8 @@ const defaultQuotas = (): OrgQuotas => ({
 	maxServices: null,
 	maxCpuShares: null,
 	maxMemoryMb: null,
+	runtimeLogRetentionDays: null,
+	runtimeLogMaxMbPerService: null,
 });
 
 export function parseOrgMetadata(raw: string | null | undefined): OrgMetadata {

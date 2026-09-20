@@ -1157,7 +1157,8 @@ const docs: Record<string, ProcedureDoc> = {
 	},
 	"organization.settings": {
 		summary: "Get organization settings",
-		description: "Name, quotas, branding, 2FA enforcement and service counts.",
+		description:
+			"Name, quotas (including the org's runtime log retention and the instance ceiling it sits under), branding, 2FA enforcement and service counts.",
 	},
 	"organization.updateSettings": {
 		summary: "Update organization settings",

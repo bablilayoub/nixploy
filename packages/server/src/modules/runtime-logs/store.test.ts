@@ -108,4 +108,27 @@ describe("runtime log store", () => {
 		]);
 		expect((await readHarvestState("big")).cursors.abcdefabcdef?.seenAt).toBe(now);
 	});
+
+	it("applies per-service limits when a resolver is given", async () => {
+		const lines = [
+			{ t: now - 3 * 24 * HOUR, level: "info" as const, message: "three days ago" },
+			{ t: now, level: "info" as const, message: "now" },
+		];
+		await appendRuntimeLogLines("short", lines);
+		await appendRuntimeLogLines("long", lines);
+		const result = await pruneRuntimeLogs({
+			retentionDays: 7,
+			maxBytesPerService: 0,
+			now,
+			limitsFor: async (appName) => ({
+				retentionDays: appName === "short" ? 1 : 7,
+				maxBytes: 0,
+			}),
+		});
+		expect(result.removedFiles).toBe(1);
+		expect(await readdir(path.join(dir, "runtime-logs", "short"))).toEqual([
+			`${hourKey(now)}.jsonl`,
+		]);
+		expect((await readdir(path.join(dir, "runtime-logs", "long"))).length).toBe(2);
+	});
 });

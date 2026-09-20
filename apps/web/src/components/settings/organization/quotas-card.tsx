@@ -40,8 +40,17 @@ export function QuotasCard() {
 		maxServices: quotas?.maxServices?.toString() ?? "",
 		maxCpuShares: quotas?.maxCpuShares?.toString() ?? "",
 		maxMemoryMb: quotas?.maxMemoryMb?.toString() ?? "",
+		runtimeLogRetentionDays: quotas?.runtimeLogRetentionDays?.toString() ?? "",
+		runtimeLogMaxMbPerService: quotas?.runtimeLogMaxMbPerService?.toString() ?? "",
 	});
-	const { maxProjects, maxServices, maxCpuShares, maxMemoryMb } = draft.value;
+	const {
+		maxProjects,
+		maxServices,
+		maxCpuShares,
+		maxMemoryMb,
+		runtimeLogRetentionDays,
+		runtimeLogMaxMbPerService,
+	} = draft.value;
 
 	const save = useSaveMutation(trpc.organization.updateSettings.mutationOptions(), {
 		successMessage: "Quotas updated",
@@ -56,6 +65,8 @@ export function QuotasCard() {
 				maxServices: parseLimit(maxServices),
 				maxCpuShares: parseLimit(maxCpuShares),
 				maxMemoryMb: parseLimit(maxMemoryMb),
+				runtimeLogRetentionDays: parseLimit(runtimeLogRetentionDays),
+				runtimeLogMaxMbPerService: parseLimit(runtimeLogMaxMbPerService),
 			},
 		});
 
@@ -98,7 +109,9 @@ export function QuotasCard() {
 
 	if (!settingsQuery.data) return null;
 
-	const { usage } = settingsQuery.data;
+	const { usage, runtimeLogCeiling } = settingsQuery.data;
+	const ceilingLabel = (value: number, unit: string) =>
+		value === 0 ? "No instance limit" : `Instance limit: ${value} ${unit}`;
 
 	return (
 		<SettingsSection
@@ -152,6 +165,32 @@ export function QuotasCard() {
 							placeholder="Unlimited"
 							value={maxMemoryMb}
 							onChange={(e) => draft.patch({ maxMemoryMb: e.target.value })}
+						/>
+					</div>
+					<div className="grid gap-2">
+						<Label htmlFor="runtime-log-days">Runtime log history (days)</Label>
+						<Input
+							id="runtime-log-days"
+							type="number"
+							min={0}
+							placeholder={ceilingLabel(runtimeLogCeiling.retentionDays, "days")}
+							value={runtimeLogRetentionDays}
+							onChange={(e) => draft.patch({ runtimeLogRetentionDays: e.target.value })}
+						/>
+						<p className="text-xs text-muted-foreground">
+							How long what each service printed is kept searchable. The instance limit is the
+							ceiling; an organization can keep less, not more.
+						</p>
+					</div>
+					<div className="grid gap-2">
+						<Label htmlFor="runtime-log-mb">Runtime log history per service (MB)</Label>
+						<Input
+							id="runtime-log-mb"
+							type="number"
+							min={0}
+							placeholder={ceilingLabel(runtimeLogCeiling.maxMbPerService, "MB")}
+							value={runtimeLogMaxMbPerService}
+							onChange={(e) => draft.patch({ runtimeLogMaxMbPerService: e.target.value })}
 						/>
 					</div>
 				</fieldset>

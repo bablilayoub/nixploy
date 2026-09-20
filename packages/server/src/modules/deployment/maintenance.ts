@@ -9,6 +9,7 @@ import { getConfigDir } from "../application/paths";
 import { pruneImportContainers, pruneImportDumps } from "../import";
 import { pruneServiceEvents } from "../observability/service-events";
 import { deletePreviewDeployment } from "../preview";
+import { runtimeLogLimitsResolver } from "../runtime-logs/retention";
 import { pruneRuntimeLogs } from "../runtime-logs/store";
 import { warnAboutExpiringCertificates } from "../traefik/certificate-expiry";
 import { recheckUpstreamTargets } from "../upstreams";
@@ -351,7 +352,7 @@ export async function runMaintenancePass(): Promise<void> {
 		["prune service events", () => pruneServiceEvents()],
 		["warn about expiring certificates", () => warnAboutExpiringCertificates()],
 		["recheck external upstream targets", () => recheckUpstreamTargets()],
-		["prune runtime logs", () => pruneRuntimeLogs()],
+		["prune runtime logs", () => pruneRuntimeLogs({ limitsFor: runtimeLogLimitsResolver() })],
 		["prune import dumps", () => pruneImportDumps()],
 		["prune import containers", () => pruneImportContainers()],
 		["prune audit log", () => pruneAuditLogs()],
