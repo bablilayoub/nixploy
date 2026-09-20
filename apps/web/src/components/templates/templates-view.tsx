@@ -43,7 +43,7 @@ export type TemplateSummary = inferRouterOutputs<AppRouter>["template"]["all"][n
  * templates, so a three-column grid left almost every section with one
  * stranded card on a row of its own.
  */
-const GRID_CLASS = "grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+const GRID_CLASS = "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
 
 /** A page of cards, and a page of rows. Both land just under one screenful. */
 const GRID_PAGE_SIZE = 24;
