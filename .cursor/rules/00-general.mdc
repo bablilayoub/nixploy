@@ -8,7 +8,9 @@ alwaysApply: true
 Self-hosted PaaS. pnpm monorepo: `apps/web` (Next.js 16 +
 Tailwind v4 + shadcn/ui, custom `server.ts` with WebSockets/deploy queue/crons),
 `apps/cli`, `packages/server` (Drizzle schema, better-auth, tRPC routers, deploy
-engine). Marketing: `apps/landing` → https://nixploy.com. Full guides in `docs/`,
+engine). Marketing: `apps/landing` → https://nixploy.com, whose UI is vendored
+from component registries (`components.json`; `src/components/ui/**` is
+third-party — Biome and knip skip it). Full guides in `docs/`,
 agent rules in `AGENTS.md`.
 
 ## Non-negotiables

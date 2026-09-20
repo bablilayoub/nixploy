@@ -28,6 +28,7 @@ Org `<name>'s Org` is created during setup.
 1. `pnpm -F @nixploy/server exec tsc --noEmit` (server changes)
 2. `cd apps/web && pnpm exec tsc --noEmit` (web changes)
 3. `pnpm exec biome check --write <changed files>` from repo root, then `pnpm exec biome check --error-on-warnings packages/server apps/web apps/cli apps/landing` (the `--write` form exits 0 on warnings and prints nothing)
+   - `apps/landing/src/components/ui/**` is vendored registry source (shadcn CLI): Biome and knip skip it, and that app alone turns off `noUncheckedIndexedAccess`. Do not reformat or retype it — re-run `pnpm dlx shadcn@latest add @<registry>/<name>` instead.
 4. `pnpm test` — vitest in packages/server
 5. UI work: drive the real app with Playwright (`playwright-core`, headless),
    login via the dev DB credentials, screenshot every touched surface in

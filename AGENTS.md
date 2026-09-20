@@ -27,7 +27,7 @@ cd apps/web && pnpm dev         # dev server on :3000
 ## Monorepo layout
 
 - `apps/web` — Next.js 16 (App Router) + Tailwind v4 + shadcn/ui. Custom server (`server.ts`) hosts websockets, the in-memory deploy queue and node-schedule crons. UI + tRPC + REST/OpenAPI + Swagger in one process.
-- `apps/landing` — public marketing site at [nixploy.com](https://nixploy.com): Next.js 16 + Tailwind v4 + Motion. Runs on :3001 (`cd apps/landing && pnpm dev`).
+- `apps/landing` — public marketing site at [nixploy.com](https://nixploy.com): Next.js 16 + Tailwind v4 + Motion. Runs on :3001 (`cd apps/landing && pnpm dev`). **Its UI is vendored from component registries** (`components.json` → `@shadcn`, `@magicui`, `@aceternity`, `@cult-ui`, `@kokonutui`; add with `pnpm dlx shadcn@latest add @magicui/<name>` from `apps/landing`). `src/components/ui/**` is third-party source: Biome and knip skip it and this app alone turns off `noUncheckedIndexedAccess`. This repo owns structure, copy and data; the palette is monochrome and `container-page` is the one page gutter. See `docs/codebase-map.md` § 9.
 - `apps/cli` — `@nixploy/cli`, talks to the REST API with `x-api-key`.
 - `packages/server` — `@nixploy/server`: Drizzle schema, better-auth config, tRPC routers, deploy engine, builders, Traefik/Docker utils, backups, notifications.
 - `docker/` — production Dockerfile, Traefik static config; `install.sh` at the root is the production installer.

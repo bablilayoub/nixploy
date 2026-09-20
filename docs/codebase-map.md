@@ -248,7 +248,45 @@ Installer/updater-only knobs (`NIXPLOY_DOMAIN`, `NIXPLOY_LETSENCRYPT_EMAIL`, `NI
 
 ## 9. Landing (`apps/landing`)
 
-Next 16 App Router, Tailwind v4, Motion, magicui components. Pages: `/`, `/features`, `/docs`, `/docs/[slug]`, `/api` (endpoint catalog), `/pricing`, `/about`, `/privacy`, `robots`, `sitemap`. Content is hand-authored in `src/lib/{site,features}.ts` and `src/lib/docs/{pages,nav,api-catalog}.ts` — it duplicates parts of `docs/` and must be updated by hand.
+Next 16 App Router, Tailwind v4, Motion. Pages: `/`, `/features`, `/pricing`, `/templates`, `/templates/[slug]`, `/compare`, `/compare/[slug]` (public URL `/nixploy-vs-<slug>`, a rewrite), `/agents`, `/about`, `/privacy`, `/docs`, `/docs/[slug]`, `/api`, `not-found`, plus `robots`, `sitemap`, `llms.txt`, `llms-full.txt`, `agents.md` and `/docs/<slug>.md` (rewritten to `/api/docs-md/[slug]`).
+
+**The UI layer is vendored, not written here (2026-09-20).** Every visual
+component comes from a shadcn-style registry through the shadcn CLI, and this
+repository supplies only structure, copy and data:
+
+- `apps/landing/components.json` declares the registries (`@shadcn`,
+  `@magicui`, `@aceternity`, `@cult-ui`, `@kokonutui`) and the paths the CLI
+  writes to. Add a component with
+  `pnpm dlx shadcn@latest add @magicui/<name>` from `apps/landing`.
+- `src/components/ui/**` is that vendored source. **Biome and knip skip it**
+  (`biome.json` `files.includes`, `knip.json` `apps/landing.ignore`) because it
+  is third-party code, updated by re-running the CLI rather than by editing.
+  `apps/landing/tsconfig.json` also turns `noUncheckedIndexedAccess` off for the
+  same reason; the product code keeps it.
+- `src/app/globals.css` is the shadcn token contract (`:root` / `.dark` /
+  `@theme inline`) with our values, which is what makes registry components
+  render correctly without being re-styled. The palette is **monochrome** — no
+  accent hue anywhere; `--primary` is the foreground. `container-page` is the
+  one page gutter (1280px, 24px inline) that the bar, every page header, every
+  home section and the docs column measure from.
+- `src/components/{site-navbar,site-footer,page-frame,docs-frame,doc-article}.tsx`
+  and `src/components/sections/*` are the structure; they compose the vendored
+  parts. `src/lib/utils.ts` is the shadcn `cn` (clsx + tailwind-merge).
+
+**Edits made to vendored components, and why** (each is commented in place):
+the navbar ships `sticky top-20` (overridden to `top-0` from the composition);
+its mobile toggle is a bare SVG with an onClick, so the composition uses a real
+`Button` instead; the code block shipped `bg-slate-900` and a four-colour Prism
+theme (both replaced with theme tokens and a greyscale token map), clipped long
+lines and had an unnamed copy control; `Safari` rendered a bare `<img>` (now
+`next/image` with `alt`/`sizes`/`priority`); `NumberTicker` and the terminal's
+`TypingAnimation` rendered their *pre-animation* state into the server HTML, so
+the page said "0 templates" and showed an empty terminal to crawlers and to
+readers without scripts. Reduced motion is handled once, in
+`components/motion-provider.tsx` (`MotionConfig reducedMotion="user"`) plus a
+block in `globals.css` for the CSS-driven animations.
+
+Content is hand-authored in `src/lib/{site,landing-data,features,compare,brand}.ts` and `src/lib/docs/{pages,nav,headings,api-catalog}.ts` — it duplicates parts of `docs/` and must be updated by hand. `api-catalog.ts` and `templates.ts` are generated (`scripts/generate-{api,template}-catalog.mts`); re-run the API one after adding or renaming a procedure, and give a new router a human title in its `ROUTER_TITLES` map or the page shows "sso / sso".
 
 ## 10. CI / release / packaging
 

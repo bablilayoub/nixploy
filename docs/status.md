@@ -5,6 +5,40 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Landing rebuild — 2026-09-20
+
+The marketing site was rebuilt from scratch on component registries, by
+instruction: nothing of the previous UI layer remains, every visual component
+comes from `@shadcn` / `@magicui` / `@aceternity` / `@kokonutui` through the
+shadcn CLI, and this repo supplies structure, copy and data only. Architecture
+and the list of deliberate edits to vendored files: `docs/codebase-map.md` § 9.
+
+State:
+
+| Item | Value |
+| --- | --- |
+| Pages | 14 routes + 23 docs + 146 templates + 3 comparisons = 182 in the sitemap, all rendering with one `h1`, a title, real content and no horizontal overflow at 390 / 768 / 1024 / 1440 |
+| Palette | Monochrome by instruction — no accent hue anywhere; `--primary` is the foreground. Registry components that paint their own colour (the fold's spotlight, the code block's Prism theme) take neutral values through props or a greyscale token map |
+| Gutter | One `container-page` utility (1280px / 24px inline) for the bar, every page header, every home section and the docs column |
+| Accessibility | Skip link, real mobile toggle (`aria-expanded` + `aria-controls`), named copy controls, 36px link rows, 2px focus ring, marquee duplicates `aria-hidden`+`inert`, every in-page anchor resolves, WCAG AA on every text/background pair |
+| Progressive enhancement | Server HTML carries the final numbers and the typed terminal line; a `<noscript>` rule reveals everything Motion hides. Verified with scripts disabled |
+| Reduced motion | `MotionConfig reducedMotion="user"` + a CSS block for the animation-driven components |
+| Home page payload | Images 282KB → 84KB (`next/image` with real `sizes`; the panel capture is `priority`) |
+| `/api` | 49 routers as disclosures under a router index: 39,818px → 8,252px |
+| Docs | Heading anchors, an "On this page" rail from xl, and a previous/next pager |
+| Gates | Biome `--error-on-warnings`, landing typecheck, knip, production build — all green |
+
+Known gaps:
+
+- Aceternity's *blocks* (footers, CTAs, FAQ, pricing, hero blocks) are paid;
+  `shadcn add` answers `Unauthorized`. Those sections are composed from shadcn
+  primitives instead. `@cult-ui` rate-limited (429) on every attempt, so
+  nothing has been taken from it yet.
+- The desktop nav has no `aria-current` for the active page: the registry's
+  `NavItems` takes a flat list and renders it itself.
+- Template brand marks keep their own colour (they are content, not the
+  palette); desaturating them is a one-line change if that reads wrong.
+
 ## Snapshot — 2026-09-11 (end of the audit implementation: Sprints A–E + final wave)
 
 | Item | Value |
