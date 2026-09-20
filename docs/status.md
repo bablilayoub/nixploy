@@ -31,6 +31,8 @@ State:
 | Audit | `node tools/screenshots/audit.mjs` against a running site: every route at 390 / 768 / 1024 / 1440, plus every internal link followed. Clean apart from its own inline-prose-link false positive — against `next dev` **and** against the production build |
 | Measured (production build, localhost) | Home LCP 44ms / CLS 0 / 157KB, docs 32ms / 0 / 73KB, templates 36ms / 0 / 98KB of images. 73KB of that is the three font families |
 | Interaction | Copy control copies the real command, the accordion opens on Enter, the docs disclosure opens on mobile with all 25 links, the mobile menu toggles with `aria-expanded` |
+| Response headers | `nosniff`, referrer policy, `X-Frame-Options: DENY`, a permissions policy and COOP. No CSP: Next injects inline styles and a bootstrap script, so a useful policy needs nonces and a dynamic response |
+| Version and figures | The fold's badge and the install guide's checksum snippet read `apps/landing/package.json`, which `tools/release.sh` bumps — they were four releases behind. The control-plane figure was re-measured on the box (503 MiB) rather than carried over |
 | Cross-browser | Untested: only Chromium is installed for Playwright here. The built CSS is Lightning-compiled (oklch → hex + lab) with `-webkit-` prefixes for backdrop-filter and mask |
 
 Flake found while verifying (not caused by the landing work):
