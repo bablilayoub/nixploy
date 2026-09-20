@@ -50,7 +50,7 @@ export const CodeBlock = ({
 	const activeHighlightLines = tabsExist ? tabs[activeTab].highlightLines || [] : highlightLines;
 
 	return (
-		<div className="relative w-full rounded-lg bg-slate-900 p-4 font-mono text-sm">
+		<div className="relative w-full rounded-lg border bg-card/60 p-4 font-mono text-sm">
 			<div className="flex flex-col gap-2">
 				{tabsExist && (
 					<div className="flex  overflow-x-auto">
@@ -87,8 +87,14 @@ export const CodeBlock = ({
 					padding: 0,
 					background: "transparent",
 					fontSize: "0.875rem", // text-sm equivalent
+					whiteSpace: "pre-wrap",
+					wordBreak: "break-word",
 				}}
 				wrapLines={true}
+				wrapLongLines={true}
+				codeTagProps={{
+					style: { whiteSpace: "pre-wrap", wordBreak: "break-word" },
+				}}
 				showLineNumbers={true}
 				lineProps={(lineNumber) => ({
 					style: {

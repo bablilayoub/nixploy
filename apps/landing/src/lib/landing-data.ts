@@ -25,28 +25,6 @@ export const heroLead =
 	"A platform as a service that runs on your own box. Git deploys, Compose stacks, five databases, domains with TLS, backups, monitoring and an API — installed in one command and licensed Apache-2.0.";
 
 /**
- * The fold's right half: what `install.sh` actually prints. The step names
- * are the eleven `step` calls in the installer, the tick lines are its `ok`
- * output, and the last line is the `HTTPS ready at` it finishes on. Re-read
- * install.sh before editing a line here — a fake transcript is a lie the
- * reader can check in two minutes.
- */
-export const heroInstall = {
-	host: "root@vps",
-	lines: [
-		{ text: "curl -fsSL nixploy.com/install.sh | sudo bash", tone: "in" },
-		{ text: "4/11  Host preflight", tone: "step" },
-		{ text: "\u2713 Public IP: 203.0.113.10 (metadata)", tone: "ok" },
-		{ text: "7/11  Network segmentation", tone: "step" },
-		{ text: "\u2713 Created nixploy-internal, nixploy-network", tone: "ok" },
-		{ text: "9/11  Traefik & Nixploy", tone: "step" },
-		{ text: "\u2713 Created nixploy", tone: "ok" },
-		{ text: "11/11 Health check", tone: "step" },
-		{ text: "\u2713 HTTPS ready at https://panel.acme.dev", tone: "ok" },
-	],
-} as const;
-
-/**
  * What `docker stats` reports for the three Swarm services on the production
  * box. Re-measure with
  * `ssh nixploy docker stats --no-stream --format "{{.Name}} {{.MemUsage}}"`
