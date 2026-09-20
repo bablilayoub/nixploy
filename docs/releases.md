@@ -194,6 +194,11 @@ silently fell back to a multi-minute source build.
 - `--bump` strips a prerelease/build suffix before bumping (`0.2.0-rc.1 --bump patch` →
   `0.2.0`, like `npm version`), and a `--version` equal to the current version skips the
   empty commit instead of failing.
+- **Default to `--bump patch`.** The maintainer's instruction (2026-09-20): releases step
+  `0.7.0 → 0.7.1 → 0.7.2`, not a minor per release. Reserve `--bump minor` for a release
+  that carries a genuinely new capability (a subsystem, a new service kind, a migration
+  operators have to plan for) and say why in the changelog; everything else — features on
+  existing surfaces, UI work, fixes — is a patch.
 
 ## Install from a release
 

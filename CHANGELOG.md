@@ -9,6 +9,28 @@ pin. Operator-facing detail — what to check before upgrading, what will look
 different afterwards — lives in [docs/upgrade-notes.md](docs/upgrade-notes.md);
 this file is the summary.
 
+## [0.7.1] — 2026-09-20
+
+### Changed
+
+- **The template gallery is a faceted catalog.** A rail carries four filters —
+  categories, catalogs, requirements (no setup / asks for values / instance
+  admin) and tags — and every option prints how many templates it would leave,
+  counted over what the *other* filters leave, so an option reading 0 says the
+  combination is empty before it costs a click. Results render as a grid or a
+  table, both paged, and every knob is a query parameter, so a narrowed view is
+  a link. `/` focuses the search box; tags on a card filter by themselves; on a
+  phone the rail moves into a Filters sheet.
+- **Filters and paging on the lists that grow.** The project services table
+  gains type and status filters, and swarm services, preview deployments,
+  instance backups, both rollback lists and teams gain the search box and pager
+  the panel's other tables already had. Chrome stays hidden until a list is long
+  enough to need it, so short tables look exactly as they did.
+- **Deployment feeds filter by status on the server.** The project feed and a
+  service's deploy history are keyset-paginated, so filtering a page after it
+  arrived would leave "the last 20 deployments" showing four; `deployment.byProject`,
+  `byApplication` and `byCompose` now take a `status` array and filter in SQL.
+
 ## [0.7.0] — 2026-09-20
 
 ### Added
