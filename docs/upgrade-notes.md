@@ -10,7 +10,7 @@ Upgrade mechanics (rollback, pre-update dump, downgrade guard) are in
 
 ---
 
-## Unreleased (next tag after v0.5.0)
+## v0.6.0
 
 One migration (`0046`, additive: `web_server_settings.dns_auto_records`).
 Nothing to do before upgrading; two things will be different afterwards.

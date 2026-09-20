@@ -9,7 +9,7 @@ pin. Operator-facing detail — what to check before upgrading, what will look
 different afterwards — lives in [docs/upgrade-notes.md](docs/upgrade-notes.md);
 this file is the summary.
 
-## [Unreleased]
+## [0.6.0] — 2026-09-20
 
 ### Added
 

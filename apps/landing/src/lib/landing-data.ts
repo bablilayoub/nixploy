@@ -13,8 +13,8 @@ import { templateCount } from "@/lib/templates";
 
 /** The fold's badge: the headline item of the latest release, linking to the changelog. */
 export const heroBadge = {
-	version: "v0.4.0",
-	text: "SSO configured in the panel",
+	version: "v0.6.0",
+	text: "DNS records created for you",
 	href: `${site.github}/blob/main/CHANGELOG.md`,
 } as const;
 
