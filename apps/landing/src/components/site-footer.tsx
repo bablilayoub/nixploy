@@ -112,7 +112,10 @@ export function SiteFooter() {
 							lengthAdjust="spacingAndGlyphs"
 							fontSize="210"
 							fontWeight="600"
-							className="fill-foreground/[0.16]"
+							// The site's display face, the one the logo and every heading use.
+							// SVG text inherits the body font otherwise, which set the
+							// wordmark in Geist while the logo above it was Space Grotesk.
+							className="fill-foreground/[0.16] font-display"
 						>
 							nixploy
 						</text>
