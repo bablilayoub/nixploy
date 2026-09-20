@@ -5,6 +5,39 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Template sources — 2026-09-20
+
+Syncing the public blueprints catalog rejected 114 of 532 entries. Measured
+against the real repository (`tools/` has no script for this; it was a
+throwaway tsx harness over `mapBlueprint` + the safety check), the causes and
+what changed:
+
+| Cause | Entries | Now |
+| --- | --- | --- |
+| Publishes host ports | 5 | Indexed and flagged; deploy sets `publishPorts` (instance admin) |
+| Routing labels of the source panel | 5 | Dropped by the translator |
+| No `[[config.domains]]` and nothing exposed | 10 | First service on 80 as a placeholder suggestion |
+| `./files/` spelling, `:Z` mode flag, >24 tags | 3 | Carried |
+| Docker socket, host binds, caps, namespaces, `build:`, privileged ports | 96 | Still rejected — refusals we mean |
+
+418 → **436 of 532 deployable**. `build:` stays rejected for a reason worth
+remembering: a template is a compose body with no checkout, and every
+blueprint that builds uses a git-URL context, which `compose/build.ts`
+refuses anyway.
+
+The publishing rule is the load-bearing change: a catalogue entry is not a
+running stack, so `ports:` is validated *as* a published-port stack
+(`modules/templates/safety.ts`) instead of refused. Both the flag on the
+template and the instance-admin gate are derived from the compose body, never
+from the cached template or the source document — a cache written by an older
+build must not be able to skip the gate. `duplicateCompose` resets
+`publishPorts` alongside `hostPrivileged`.
+
+Not verified in a browser: the panel dev server was not running here and
+signing in is not something to do on the user's behalf, so the sync-report
+dialog and the gallery badges are code-reviewed, typechecked and linted only.
+Worth a look on the next run of the panel.
+
 ## Landing rebuild — 2026-09-20
 
 The marketing site was rebuilt from scratch on component registries, by
