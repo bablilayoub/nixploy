@@ -1,3 +1,4 @@
+import { controlPlane } from "../landing-data";
 import { version } from "../site";
 import { templateCount } from "../templates";
 
@@ -128,7 +129,7 @@ sudo bash install.sh`,
 			{ type: "h2", text: "Footprint, and the lite profile" },
 			{
 				type: "p",
-				text: "The control plane is three containers: the panel, Postgres and Traefik. On the production box they measure 389, 53 and 26 MiB — reproduce it with docker stats --no-stream on any install. CI measures the panel a second way: the end-to-end job runs the full golden path (setup, two deploys including a build from source, a UI walk) against the release image and reads the container's resident memory afterwards, which has landed between 419 and 434 MiB. A run over the 768 MiB budget fails the build, so a change that doubles the panel's memory is caught before it reaches anyone's 4 GB box.",
+				text: `The control plane is three containers: the panel, Postgres and Traefik. On the production box they measure ${controlPlane.services.map((service) => service.mib).join(", ")} MiB, read on ${controlPlane.measuredOn} — reproduce it with docker stats --no-stream on any install. CI measures the panel a second way: the end-to-end job runs the full golden path (setup, two deploys including a build from source, a UI walk) against the release image and reads the container's resident memory afterwards, which has landed between 419 and 434 MiB. A run over the 768 MiB budget fails the build, so a change that doubles the panel's memory is caught before it reaches anyone's 4 GB box.`,
 			},
 			{
 				type: "p",
