@@ -65,7 +65,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-	themeColor: "#08080a",
+	// Matches `--background` in globals.css (oklch(0.145 0 0)); a theme colour
+	// that is not the page colour shows as a seam in the browser chrome.
+	themeColor: "#0a0a0a",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

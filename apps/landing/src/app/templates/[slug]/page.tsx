@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Bot, DatabaseBackup, Lock, RotateCcw, ScrollText } from "lucide-react";
+import { ArrowRight, Bot, DatabaseBackup, Lock, RotateCcw, ScrollText } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -355,7 +355,10 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 						)}
 					</p>
 					<Button asChild variant="link" className="mt-6 justify-start px-0">
-						<Link href="/templates">All {templateCount} templates</Link>
+						<Link href="/templates">
+							All {templateCount} templates
+							<ArrowRight className="size-4" aria-hidden />
+						</Link>
 					</Button>
 				</Card>
 			</div>
