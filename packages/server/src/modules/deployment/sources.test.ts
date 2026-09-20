@@ -92,3 +92,35 @@ describe("shouldAttachRegistryAuth", () => {
 		expect(shouldAttachRegistryAuth(null, "ghcr.io/x/y")).toBe(false);
 	});
 });
+
+describe("simple-git clients", () => {
+	/**
+	 * Every local git client must come from `hardenedSimpleGit`: the protocol
+	 * hardening rides in `GIT_CONFIG_COUNT`, and simple-git refuses a task
+	 * whose environment carries it unless the client opted in. A plain
+	 * `simpleGit(...)` therefore fails at run time, not at build time — it
+	 * broke local clones once, and template source syncs again on 2026-09-20
+	 * ("Use of \"GIT_CONFIG_COUNT\" is not permitted"), both times only
+	 * visible to whoever tried it on a real install.
+	 */
+	it("are constructed in exactly one module", async () => {
+		const { readdir, readFile } = await import("node:fs/promises");
+		const path = await import("node:path");
+		const root = path.join(import.meta.dirname, "..", "..");
+		const offenders: string[] = [];
+		const walk = async (dir: string): Promise<void> => {
+			for (const entry of await readdir(dir, { withFileTypes: true })) {
+				const full = path.join(dir, entry.name);
+				if (entry.isDirectory()) {
+					await walk(full);
+					continue;
+				}
+				if (!entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) continue;
+				const source = await readFile(full, "utf8");
+				if (/from\s+"simple-git"/.test(source)) offenders.push(path.relative(root, full));
+			}
+		};
+		await walk(root);
+		expect(offenders).toEqual(["modules/deployment/sources.ts"]);
+	});
+});

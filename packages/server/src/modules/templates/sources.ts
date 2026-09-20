@@ -1,7 +1,6 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { and, asc, eq } from "drizzle-orm";
-import { simpleGit } from "simple-git";
 import { db } from "../../db";
 import { templateSources } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
@@ -14,7 +13,7 @@ import {
 } from "../../utils/public-url";
 import { assertSafeComposeSpec, parseComposeFile } from "../compose/compose-file";
 import { getConfigDir } from "../deployment/paths";
-import { gitProtocolEnv } from "../deployment/sources";
+import { gitProcessEnv, gitProtocolEnv, hardenedSimpleGit } from "../deployment/sources";
 import { badRequest, notFound } from "../errors";
 import { BlueprintError, mapBlueprint } from "./blueprints";
 import { checkCatalogImages, extractImagesFromCompose } from "./images";
@@ -151,9 +150,16 @@ async function withGitCheckout<T>(
 	const dir = getTemplateSourceRepoDir(row.templateSourceId);
 	await rm(dir, { recursive: true, force: true });
 	await mkdir(dir, { recursive: true, mode: 0o700 });
-	const git = simpleGit({ baseDir: dir, timeout: { block: CLONE_TIMEOUT_MS } });
-	// simple-git's env() replaces the child environment wholesale — keep PATH.
-	git.env({ ...process.env, ...gitProtocolEnv() });
+	// `hardenedSimpleGit`, not `simpleGit`: the protocol hardening below rides
+	// in `GIT_CONFIG_COUNT`, which simple-git refuses unless the client opted
+	// in. A plain client made every sync of a git source fail with
+	// `Use of "GIT_CONFIG_COUNT" is not permitted` (2026-09-20).
+	const git = hardenedSimpleGit(dir, { timeoutMs: CLONE_TIMEOUT_MS });
+	// simple-git's env() replaces the child environment wholesale, and passing
+	// the panel's own environment trips its GIT_EDITOR guard and leaks
+	// unrelated secrets into every git child — `gitProcessEnv` passes the few
+	// variables git actually needs.
+	git.env(gitProcessEnv(gitProtocolEnv()));
 	try {
 		await git.init();
 		await git.addRemote("origin", row.url);

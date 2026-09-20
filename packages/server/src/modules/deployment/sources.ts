@@ -82,11 +82,17 @@ export function gitProtocolEnv(): Record<string, string> {
  * the config IS ours — `gitProtocolEnv()` is the hardening — so the opt-in is
  * explicit and lives in one place. Without it every LOCAL clone failed with
  * `Use of "GIT_CONFIG_COUNT" is not permitted` while remote clones (a shell
- * command with an env prefix) kept working.
+ * command with an env prefix) kept working — and again, in the template
+ * source sync, on 2026-09-20: **every local git client in this repository
+ * must come from here**, never from `simpleGit(...)` directly.
  */
-export function hardenedSimpleGit(baseDir: string): SimpleGit {
+export function hardenedSimpleGit(
+	baseDir: string,
+	options: { timeoutMs?: number } = {},
+): SimpleGit {
 	return simpleGit({
 		baseDir,
+		...(options.timeoutMs ? { timeout: { block: options.timeoutMs } } : {}),
 		// `allowUnsafeProtocolOverride` guards against a caller ENABLING
 		// `ext::`-style protocols; our override only ever disables them.
 		unsafe: { allowUnsafeConfigEnvCount: true, allowUnsafeProtocolOverride: true },

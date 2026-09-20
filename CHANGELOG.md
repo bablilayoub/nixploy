@@ -55,6 +55,16 @@ this file is the summary.
   less than the instance's `NIXPLOY_RUNTIME_LOG_*` ceiling, never more; the
   hourly prune resolves each service's org once per pass.
 
+### Fixed
+
+- **Template sources backed by a git repository (including blueprints) could
+  never sync.** The sync built its own simple-git client, which refuses the
+  protocol hardening Nixploy passes through `GIT_CONFIG_COUNT`, so every
+  such source failed with `Use of "GIT_CONFIG_COUNT" is not permitted` and
+  stayed at zero templates; `http-json` sources were unaffected. It now uses
+  the same hardened client the deploy path does, and a test fails the build
+  if another module ever constructs its own.
+
 ### Changed
 
 - **Traefik 3.7.13** (was 3.5.0). The panel now rolls a running proxy whose
