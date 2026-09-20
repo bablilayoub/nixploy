@@ -492,6 +492,17 @@ async function main() {
 	// still be initialising its data directory, and the runner resolves the
 	// container by `docker ps` at call time. Retrying exactly that precondition
 	// is more honest (and works without a docker CLI) than sleeping.
+	//
+	// Two shapes mean "not ready", not "broken". The container may not be up at
+	// all; or it is up, the socket answers, and the database itself does not
+	// exist yet — the postgres image creates POSTGRES_DB at the END of initdb,
+	// so a dump that connects in that window is told the database is missing.
+	// The product deliberately treats that as a hard error for a configured
+	// backup (a renamed database must fail fast, not hang), which is pinned by
+	// a test in modules/backups/runner.test.ts — so the waiting belongs here,
+	// where the name is known to be right. This raced twice on 2026-09-20.
+	const NOT_READY =
+		/no running container|database "[^"]*" does not exist|the database system is starting up/i;
 	await waitFor(
 		"the Postgres container to accept a dump",
 		async (note) => {
@@ -499,8 +510,8 @@ async function main() {
 				await post("backup.runManually", { backupId: backup.backupId });
 				return "started";
 			} catch (error) {
-				if (/no running container/i.test(error.message)) {
-					note("database container not up yet");
+				if (NOT_READY.test(error.message)) {
+					note("database not initialised yet");
 					return null;
 				}
 				throw error;
