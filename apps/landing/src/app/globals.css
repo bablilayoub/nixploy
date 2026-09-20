@@ -207,6 +207,17 @@
 		-webkit-font-smoothing: antialiased;
 	}
 
+	/*
+	 * The browser default on a near-black page is a 1px ring at half opacity,
+	 * which is not findable. Components that draw their own ring (the shadcn
+	 * primitives) still win; this is the floor for everything else.
+	 */
+	:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 2px;
+		border-radius: 2px;
+	}
+
 	html {
 		scroll-behavior: smooth;
 		color-scheme: dark;
