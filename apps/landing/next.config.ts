@@ -8,6 +8,30 @@ const nextConfig: NextConfig = {
 	 * `/docs/[slug]` already owns that position and renders HTML, so the dotted
 	 * URL cannot be a route segment of its own.
 	 */
+	/*
+	 * Response headers for a static marketing site. No CSP: Next injects inline
+	 * styles and a bootstrap script, so a useful policy needs nonces and a
+	 * dynamic response, which this site does not have — these are the ones that
+	 * cost nothing and are worth having.
+	 */
+	async headers() {
+		return [
+			{
+				source: "/:path*",
+				headers: [
+					{ key: "X-Content-Type-Options", value: "nosniff" },
+					{ key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+					{ key: "X-Frame-Options", value: "DENY" },
+					{
+						key: "Permissions-Policy",
+						value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+					},
+					{ key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+				],
+			},
+		];
+	},
+
 	async rewrites() {
 		return [
 			{ source: "/docs/:slug.md", destination: "/api/docs-md/:slug" },
