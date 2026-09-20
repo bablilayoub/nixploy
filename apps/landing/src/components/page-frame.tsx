@@ -52,7 +52,7 @@ export function PageFrame({
 			<SiteNavbar />
 			<main id="main-content" className="relative">
 				{title ? (
-					<header className="relative overflow-hidden px-6 pt-32 pb-12 lg:pt-40">
+					<header className="relative overflow-hidden px-6 pt-24 pb-10 lg:pt-28">
 						<DotPattern
 							width={28}
 							height={28}
@@ -78,7 +78,7 @@ export function PageFrame({
 					className={cn(
 						"mx-auto px-6 pb-16",
 						width === "prose" ? "max-w-3xl" : "max-w-7xl",
-						title ? "pt-8" : "pt-32 lg:pt-40",
+						title ? "pt-8" : "pt-24 lg:pt-28",
 					)}
 				>
 					{children}

@@ -32,7 +32,10 @@ export function SiteNavbar() {
 	const [open, setOpen] = useState(false);
 
 	return (
-		<Navbar>
+		// `top-0`: the registry component ships `sticky top-20`, which pins the bar
+		// 80px down the viewport from the first paint and leaves a black band
+		// above it on every page. The floating state adds its own 20px offset.
+		<Navbar className="top-0">
 			<NavBody>
 				<Logo className="relative z-20 mr-4 px-2" />
 				<NavItems items={navItems} />

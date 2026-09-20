@@ -22,7 +22,7 @@ export function Hero() {
 	const [claim, promise] = heroTitle;
 
 	return (
-		<section className="relative overflow-hidden pt-28 pb-12 md:pt-36 lg:pb-16">
+		<section className="relative overflow-hidden pt-20 pb-12 md:pt-28 lg:pb-16">
 			<Spotlight />
 
 			<div className="mx-auto grid w-full max-w-7xl items-center gap-12 px-6 lg:grid-cols-2 lg:gap-16">

@@ -53,10 +53,10 @@ export function DocsFrame({ children, activeHref }: { children: ReactNode; activ
 			<SiteNavbar />
 			<main
 				id="main-content"
-				className="mx-auto w-full max-w-7xl px-6 pt-28 pb-20 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-14 lg:pt-36"
+				className="mx-auto w-full max-w-7xl px-6 pt-20 pb-20 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-14 lg:pt-24"
 			>
 				<aside className="hidden lg:block">
-					<nav aria-label="Documentation" className="sticky top-28 -ml-3">
+					<nav aria-label="Documentation" className="sticky top-24 -ml-3">
 						<NavList activeHref={activeHref} />
 					</nav>
 				</aside>
