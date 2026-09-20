@@ -27,6 +27,7 @@ State:
 | `/api` | 49 routers as disclosures under a router index: 39,818px → 8,252px |
 | Docs | Heading anchors, an "On this page" rail from xl, and a previous/next pager |
 | Gates | Biome `--error-on-warnings`, landing typecheck, knip, production build — all green |
+| Audit | `node tools/screenshots/audit.mjs` against a running site: every route at 390 / 768 / 1024 / 1440, plus every internal link followed. Clean apart from its own inline-prose-link false positive |
 
 Known gaps:
 
@@ -36,6 +37,10 @@ Known gaps:
   nothing has been taken from it yet.
 - The desktop nav has no `aria-current` for the active page: the registry's
   `NavItems` takes a flat list and renders it itself.
+- Only Chromium is installed for Playwright here, so WebKit and Firefox were
+  not driven. The built CSS is Lightning-compiled (oklch → hex + lab
+  fallbacks) and carries `-webkit-` prefixes for backdrop-filter and mask, so
+  the risk is low, but it is untested.
 - Template brand marks keep their own colour (they are content, not the
   palette); desaturating them is a one-line change if that reads wrong.
 
