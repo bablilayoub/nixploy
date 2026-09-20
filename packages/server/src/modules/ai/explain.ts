@@ -4,6 +4,7 @@ import { db } from "../../db";
 import { applications, compose, deployments, domains } from "../../db/schema";
 import { redactSensitiveText } from "../../utils/public-url";
 import { notFound, preconditionFailed } from "../errors";
+import { readMetricsHistory } from "../monitoring/store";
 import { recentServiceEvents } from "../observability/service-events";
 import { readRuntimeLogs } from "../runtime-logs/store";
 import { completeChat } from "./client";
@@ -111,6 +112,85 @@ async function renderRuntimeLogTail(
 		return `${new Date(line.t).toISOString()}${container} [${line.level}] ${line.message}`;
 	});
 	return `\nWhat the service printed (runtime log, oldest first, last ${lines.length} lines):\n${redactSecrets(lines.join("\n"), [...secrets])}\n`;
+}
+
+/** Hours of metrics summarized for the model. */
+const METRICS_WINDOW_HOURS = 6;
+
+/**
+ * What the charts show, in three numbers the model can reason about: the
+ * newest sample, the window's peak, and the trend between its halves. A
+ * full series would be thousands of tokens and tell it nothing more —
+ * "memory climbed from 180 to 940 MiB over six hours" is the fact that
+ * explains a restart loop, and no model needs the points to see it.
+ *
+ * Nothing here is tenant text, so there is nothing to redact. Silent on
+ * failure: a service with no history must not fail a chat.
+ */
+export function summarizeMetrics(
+	samples: ReadonlyArray<{ cpu: number; memoryUsed: number; memoryTotal: number }>,
+	windowHours = METRICS_WINDOW_HOURS,
+): string {
+	// One sample is a reading, not a trend; the model gets nothing from it
+	// that the live status line does not already say.
+	if (samples.length < 2) return "";
+	const latest = samples[samples.length - 1];
+	if (!latest) return "";
+	const mib = (bytes: number): string => `${Math.round(bytes / (1024 * 1024))} MiB`;
+	const peakCpu = Math.max(...samples.map((sample) => sample.cpu));
+	const peakMemory = Math.max(...samples.map((sample) => sample.memoryUsed));
+	const half = Math.floor(samples.length / 2);
+	const mean = (values: number[]): number =>
+		values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
+	const firstHalf = mean(samples.slice(0, half).map((sample) => sample.memoryUsed));
+	const secondHalf = mean(samples.slice(half).map((sample) => sample.memoryUsed));
+	const drift = firstHalf > 0 ? Math.round(((secondHalf - firstHalf) / firstHalf) * 100) : 0;
+	const limit = latest.memoryTotal > 0 ? ` of ${mib(latest.memoryTotal)}` : "";
+	return `\nResource use over the last ${windowHours}h (${samples.length} samples): CPU now ${latest.cpu.toFixed(1)}%, peak ${peakCpu.toFixed(1)}%; memory now ${mib(latest.memoryUsed)}${limit}, peak ${mib(peakMemory)}; memory trend ${drift >= 0 ? "+" : ""}${drift}% between the first and second half of the window.\n`;
+}
+
+async function renderMetricsSummary(appName: string): Promise<string> {
+	try {
+		return summarizeMetrics(await readMetricsHistory(appName, METRICS_WINDOW_HOURS));
+	} catch {
+		return "";
+	}
+}
+
+/**
+ * The route's own verdict for each domain of the service — the same
+ * deterministic probes the stethoscope runs (DNS, the route file, a
+ * conflicting file, the upstream task, the shared network, the container
+ * port, Traefik's answer, the certificate). Only the failing findings are
+ * passed on: a healthy route is one line, and the model does not need the
+ * eight that passed.
+ */
+async function renderRouteDiagnosis(domainIds: readonly string[]): Promise<string> {
+	if (domainIds.length === 0) return "";
+	const { diagnoseDomain } = await import("../traefik/diagnose");
+	const lines: string[] = [];
+	// Bounded: three domains is already more than a chat needs, and each
+	// diagnosis makes real network calls.
+	for (const domainId of domainIds.slice(0, 3)) {
+		try {
+			const diagnosis = await diagnoseDomain(domainId);
+			const failing = diagnosis.findings.filter((finding) => finding.status !== "ok");
+			lines.push(
+				`- ${diagnosis.host}: ${diagnosis.verdict}${
+					failing.length === 0
+						? " (every probe passed)"
+						: `\n${failing
+								.map((finding) => `  - ${finding.status} ${finding.id}: ${finding.detail}`)
+								.join("\n")}`
+				}`,
+			);
+		} catch {
+			// A domain that cannot be diagnosed (deleted mid-chat, docker down)
+			// contributes nothing rather than failing the answer.
+		}
+	}
+	if (lines.length === 0) return "";
+	return `\nRoute diagnosis (deterministic probes, request order):\n${lines.join("\n")}\n`;
 }
 
 /**
@@ -336,7 +416,7 @@ export async function chatAboutService(
 		}
 
 		const appDomains = await db
-			.select({ host: domains.host })
+			.select({ domainId: domains.domainId, host: domains.host })
 			.from(domains)
 			.where(eq(domains.applicationId, target.applicationId));
 
@@ -354,9 +434,11 @@ export async function chatAboutService(
 			app.environment?.env,
 			app.environment?.project?.env,
 		);
-		const [appTimeline, appRuntime] = await Promise.all([
+		const [appTimeline, appRuntime, appMetrics, appRoutes] = await Promise.all([
 			recentServiceEvents(target.applicationId, { limit: TIMELINE_EVENTS }).catch(() => []),
 			renderRuntimeLogTail(app.appName, appSecrets),
+			renderMetricsSummary(app.appName),
+			renderRouteDiagnosis(appDomains.map((row) => row.domainId)),
 		]);
 		const context = `Application "${app.name}" (${app.appName})
 Status: ${app.status}
@@ -366,7 +448,7 @@ Replicas: ${app.replicas}
 Domains: ${appDomains.map((d) => d.host).join(", ") || "(none)"}
 Recent deploys: ${recent.map((d) => `${d.status}@${d.createdAt.toISOString()}`).join("; ") || "(none)"}
 CPU limit: ${app.cpuLimit ?? "unset"}, Memory limit: ${app.memoryLimit ?? "unset"}
-${renderServiceTimeline(appTimeline, appSecrets)}${appRuntime}`;
+${appMetrics}${renderServiceTimeline(appTimeline, appSecrets)}${appRuntime}${appRoutes}`;
 
 		system = `You are Nixploy Deploy Copilot helping with an application.
 Respond in JSON only:
@@ -386,7 +468,11 @@ ${context}`;
 		}
 
 		const composeDomains = await db
-			.select({ host: domains.host, serviceName: domains.serviceName })
+			.select({
+				domainId: domains.domainId,
+				host: domains.host,
+				serviceName: domains.serviceName,
+			})
 			.from(domains)
 			.where(eq(domains.composeId, target.composeId));
 
@@ -397,9 +483,11 @@ ${context}`;
 		});
 
 		const secrets = collectEnvSecrets(row.env, row.environment?.env, row.environment?.project?.env);
-		const [composeTimeline, composeRuntime] = await Promise.all([
+		const [composeTimeline, composeRuntime, composeMetrics, composeRoutes] = await Promise.all([
 			recentServiceEvents(target.composeId, { limit: TIMELINE_EVENTS }).catch(() => []),
 			renderRuntimeLogTail(row.appName, secrets),
+			renderMetricsSummary(row.appName),
+			renderRouteDiagnosis(composeDomains.map((entry) => entry.domainId)),
 		]);
 		const fileSnippet =
 			redactComposeYamlForLlm(row.composeFile ?? "", secrets) ||
@@ -419,7 +507,7 @@ Current compose file:
 \`\`\`yaml
 ${fileSnippet}
 \`\`\`
-${renderServiceTimeline(composeTimeline, secrets)}${composeRuntime}`;
+${composeMetrics}${renderServiceTimeline(composeTimeline, secrets)}${composeRuntime}${composeRoutes}`;
 
 		system = `You are Nixploy Deploy Copilot helping with a Docker Compose / Swarm stack.
 Respond in JSON only:

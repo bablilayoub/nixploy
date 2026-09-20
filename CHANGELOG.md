@@ -29,6 +29,10 @@ this file is the summary.
   to the DNS automation. The deploy dialog previews them; a host already
   routed is skipped with a note. OpenHole uses it for its endpoint host and
   tunnel wildcard, so its setup is the env values and nothing else.
+- **The Copilot reads the charts and the route.** A chat about a service now
+  carries six hours of resource use summarized to three facts and the
+  deterministic route verdict for its domains (failing probes only), next to
+  the event timeline and the runtime log it already had.
 - **Proposed remediations.** A deploy that dies after the image reached the
   cluster (the rollout, converge or post-deploy step), or a service that
   fails three tasks (or is OOM-killed three times) in ten minutes, gets an
