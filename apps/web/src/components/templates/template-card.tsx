@@ -11,6 +11,10 @@ import type { TemplateSummary } from "./templates-view";
 /**
  * One gallery entry.
  *
+ * No fill: a border on the page's own black, the way the dashboard's cards are
+ * drawn. Every surface inside it is quiet for the same reason — the marks and
+ * the deploy button are the only things meant to carry colour.
+ *
  * The mark leads. A catalog is scanned by logo — nobody reads four hundred
  * names — so it gets its own row at 56px, centred, with the name and what the
  * entry asks for under it, and the description in a recessed block below. That
@@ -49,7 +53,7 @@ export function TemplateCard({
 	);
 
 	return (
-		<article className="group relative flex h-full flex-col overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/25">
+		<article className="group relative flex h-full flex-col overflow-hidden rounded-lg border border-border transition-colors hover:border-foreground/25">
 			{/* The corner carries provenance: which catalog, and whether it needs the
 			    instance admin. Absolute so it never pushes the mark off centre. */}
 			<div className="absolute end-3 top-3 z-[1] flex items-center gap-1">
