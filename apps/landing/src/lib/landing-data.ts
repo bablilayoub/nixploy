@@ -22,7 +22,7 @@ export const heroBadge = {
 export const heroTitle = ["Ship anything.", "Own everything."] as const;
 
 export const heroLead =
-	"A platform as a service that runs on your own box. Git deploys, Compose stacks, five databases, domains with TLS, backups, monitoring and an API — installed in one command and licensed Apache-2.0.";
+	"A platform as a service that runs on your own box: git deploys, Compose stacks, databases, domains with TLS, backups and monitoring. One command, Apache-2.0.";
 
 /**
  * What `docker stats` reports for the three Swarm services on the production

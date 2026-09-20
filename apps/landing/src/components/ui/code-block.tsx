@@ -134,7 +134,9 @@ export const CodeBlock = ({
 				codeTagProps={{
 					style: { whiteSpace: "pre-wrap", wordBreak: "break-word" },
 				}}
-				showLineNumbers={true}
+				// A gutter with a single "1" in it is noise; numbers earn their place
+				// once there is more than one line to point at.
+				showLineNumbers={String(activeCode).trim().includes("\n")}
 				lineProps={(lineNumber) => ({
 					style: {
 						backgroundColor: activeHighlightLines.includes(lineNumber)
