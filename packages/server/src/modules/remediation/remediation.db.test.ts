@@ -124,7 +124,8 @@ describe.skipIf(!testUrl)("remediation rule pass (postgres)", () => {
 		const [closed] = await proposalsFor(tenant.applicationId);
 		expect(closed?.resolvedAt).not.toBeNull();
 		expect(closed?.metadata?.resolutionNote).toBe("Dismissed");
-		expect((closed?.metadata?.proposal as Record<string, unknown>).dismissedBy).toBe(tenant.userId);
+		const dismissed = closed?.metadata?.proposal as Record<string, unknown> | undefined;
+		expect(dismissed?.dismissedBy).toBe(tenant.userId);
 
 		// Still failing, but inside the cooldown: quiet.
 		await failures("application", tenant.applicationId, 3);

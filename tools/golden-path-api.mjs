@@ -347,7 +347,7 @@ async function main() {
 	// No DNS provider is linked on a fresh install: the create carries a
 	// skipped outcome (never a failure), and the explicit retry names the
 	// reason so an operator knows which setting is missing.
-	if (!domain.dns || domain.dns.status !== "skipped") {
+	if (domain.dns?.status !== "skipped") {
 		fail(
 			`expected domain.create to report a skipped dns outcome, got ${JSON.stringify(domain.dns)}`,
 		);
