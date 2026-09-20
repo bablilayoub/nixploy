@@ -128,28 +128,42 @@ function Transcript({ title, lines }: { title: string; lines: Line[] }) {
 	);
 }
 
-/** Text beside the transcript: the reference's text-beside-card block, one per session. */
+/**
+ * One session: the ask on the left, the transcript on the right.
+ *
+ * Not a card around a card — the transcript already has a frame, and wrapping
+ * it in a second one made three sessions read as three boxes of boxes. The
+ * left column sticks while the transcript scrolls past it, so the question
+ * stays next to the answer on a long one.
+ */
 function Session({
+	index,
 	heading,
 	summary,
 	title,
 	lines,
 }: {
+	index: number;
 	heading: string;
 	summary: string;
 	title: string;
 	lines: Line[];
 }) {
 	return (
-		<Card className="grid gap-8 p-6 sm:p-8 lg:grid-cols-12 lg:gap-12">
+		<section className="grid gap-6 border-t pt-10 lg:grid-cols-12 lg:gap-12">
 			<div className="lg:col-span-4">
-				<h2 className="text-2xl font-semibold tracking-tight">{heading}</h2>
-				<p className="mt-4 max-w-[30ch] text-muted-foreground">{summary}</p>
+				<div className="lg:sticky lg:top-28">
+					<p className="font-mono text-xs text-muted-foreground">
+						{String(index).padStart(2, "0")}
+					</p>
+					<h2 className="mt-2 text-2xl font-semibold tracking-tight">{heading}</h2>
+					<p className="mt-3 max-w-[32ch] text-muted-foreground">{summary}</p>
+				</div>
 			</div>
 			<div className="min-w-0 lg:col-span-8">
 				<Transcript title={title} lines={lines} />
 			</div>
-		</Card>
+		</section>
 	);
 }
 
@@ -188,20 +202,41 @@ export default function AgentsPage() {
 				</>
 			}
 		>
-			<div className="flex flex-col gap-4">
+			{/* The four facts that decide whether any of this is a good idea, in the
+			    same divided panel the features page opens with. */}
+			<ul className="grid grid-cols-2 divide-border overflow-hidden rounded-2xl border bg-card/40 lg:grid-cols-4 lg:divide-x">
+				{[
+					{ label: "MCP tools", value: `${mcpToolCount} annotated` },
+					{ label: "Auth", value: "Scoped API keys" },
+					{ label: "Dispatch", value: "The panel's routers" },
+					{ label: "Trail", value: "Every mutation audited" },
+				].map((item) => (
+					<li key={item.label} className="border-b p-5 last:border-b-0 lg:border-b-0">
+						<p className="font-mono text-[11px] tracking-[0.18em] text-muted-foreground uppercase">
+							{item.label}
+						</p>
+						<p className="mt-2 font-semibold tracking-tight text-balance">{item.value}</p>
+					</li>
+				))}
+			</ul>
+
+			<div className="mt-16 flex flex-col gap-14">
 				<Session
+					index={1}
 					heading="Deploy"
 					summary="One prompt. Three tool calls. A URL with a certificate."
 					title="mcp · deploy"
 					lines={DEPLOY}
 				/>
 				<Session
+					index={2}
 					heading="Diagnose"
 					summary="The events, the logs and the resolved environment, read before anything is written — and the write waits for a yes."
 					title="mcp · diagnose"
 					lines={DIAGNOSE}
 				/>
 				<Session
+					index={3}
 					heading="Roll back"
 					summary="The failure explained in its own step, the pinned images listed, the previous build serving again."
 					title="mcp · roll back"
