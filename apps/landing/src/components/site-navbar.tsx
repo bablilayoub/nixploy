@@ -88,9 +88,12 @@ export function SiteNavbar() {
 	}, [pathname]);
 
 	return (
-		// `top-0`: the registry component ships `sticky top-20`, which pins the bar
-		// 80px down the viewport from the first paint and leaves a black band
-		// above it on every page. The floating state adds its own 20px offset.
+		// `fixed top-0`, not the registry's `sticky top-20`. Sticky keeps the bar
+		// in the flow, which took a 66px band of flat page background out of the
+		// top of every page — the hero's light then started under a hard
+		// horizontal edge, which is the "black bar" this bar kept being. Fixed
+		// lets the page run underneath it; every page's header already starts far
+		// enough down to clear the pill.
 		<>
 			{/* Outside <Navbar> on purpose: it clones a `visible` prop onto each
 			    of its children, and React warns when that lands on a DOM node. */}
@@ -100,7 +103,7 @@ export function SiteNavbar() {
 			>
 				Skip to content
 			</a>
-			<Navbar className="top-0 pt-3">
+			<Navbar className="fixed top-0 pt-3">
 				<NavBody
 					className={cn(
 						"border px-6 transition-colors duration-300",

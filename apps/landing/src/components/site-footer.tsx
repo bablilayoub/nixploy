@@ -52,7 +52,7 @@ export function SiteFooter() {
 					<div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-12">
 						<div className="col-span-2 sm:col-span-12 lg:col-span-5">
 							<Logo />
-							<p className="mt-5 max-w-xs text-sm text-muted-foreground">
+							<p className="mt-5 max-w-sm text-sm text-muted-foreground">
 								A platform as a service you host yourself. Free to run, Apache-2.0.
 							</p>
 							<div className="mt-6 flex flex-wrap items-center gap-2">
@@ -93,7 +93,32 @@ export function SiteFooter() {
 						))}
 					</div>
 
-					<div className="mt-12 flex flex-col gap-3 border-t py-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+					{/* The wordmark closes the panel: full width, nothing cropped, and
+					    space of its own above and below. `textLength` is what makes it
+					    exactly as wide as the panel at every viewport — a size in `vw`
+					    depends on the font's metrics and overshoots or leaves a gap. */}
+					<svg
+						aria-hidden
+						viewBox="0 0 1000 198"
+						preserveAspectRatio="xMidYMid meet"
+						className="mt-12 mb-8 block w-full select-none"
+						role="presentation"
+					>
+						<title>Nixploy</title>
+						<text
+							x="0"
+							y="158"
+							textLength="1000"
+							lengthAdjust="spacingAndGlyphs"
+							fontSize="210"
+							fontWeight="600"
+							className="fill-foreground/[0.16]"
+						>
+							nixploy
+						</text>
+					</svg>
+
+					<div className="flex flex-col gap-2 border-t py-5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
 						<p>© 2026 Nixploy · Apache-2.0</p>
 						<p>
 							Built by{" "}
@@ -106,14 +131,6 @@ export function SiteFooter() {
 								Ayoub Bablil
 							</a>
 						</p>
-					</div>
-
-					{/* Sits in the flow with a reserved height so the panel grows with
-					    it, then the type is pulled below the baseline and clipped. */}
-					<div aria-hidden className="relative h-[12vw] min-h-16 select-none sm:h-[11vw]">
-						<span className="pointer-events-none absolute inset-x-0 -bottom-[3.5vw] block text-center text-[19vw] leading-none font-semibold tracking-tighter text-foreground/[0.06]">
-							nixploy
-						</span>
 					</div>
 				</div>
 			</div>
