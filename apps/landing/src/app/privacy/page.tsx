@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
-import { PageShell } from "@/components/page-shell";
-import { Prose } from "@/components/ui";
+import { PageFrame } from "@/components/page-frame";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -9,18 +8,15 @@ export const metadata: Metadata = {
 	description: "How nixploy.com and the self-hosted product handle data.",
 };
 
-/* The same reading shape as /about: headline header, 42rem column, `Prose`. */
 export default function PrivacyPage() {
 	return (
-		<PageShell
+		<PageFrame
 			width="prose"
-			align="left"
-			size="headline"
 			eyebrow="Privacy"
 			title="Your infrastructure. Your data."
 			description="Nixploy is designed to run on servers you control."
 		>
-			<Prose>
+			<div className="prose prose-invert max-w-none prose-headings:font-display prose-a:text-primary">
 				<h2>Self-hosted product</h2>
 				<p>
 					When you install Nixploy, applications, databases, volumes, secrets, and logs stay on your
@@ -35,7 +31,7 @@ export default function PrivacyPage() {
 				<p>
 					Questions: <a href={`mailto:${site.email}`}>{site.email}</a>
 				</p>
-			</Prose>
-		</PageShell>
+			</div>
+		</PageFrame>
 	);
 }

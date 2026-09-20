@@ -57,11 +57,15 @@
 				"**/*.{ts,tsx,mts,mjs}"
 			],
 			"ignore": [
-				"next-env.d.ts"
+				"next-env.d.ts",
+				"src/components/ui/**",
+				"src/components/kokonutui/**"
 			],
 			"ignoreDependencies": [
+				"@tailwindcss/typography",
 				"postcss",
-				"tailwindcss"
+				"tailwindcss",
+				"tw-animate-css"
 			]
 		},
 		"apps/cli": {

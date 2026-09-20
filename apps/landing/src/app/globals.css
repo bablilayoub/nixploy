@@ -1,270 +1,213 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
 
 /*
- * Nixploy landing theme — near-black, one accent, big rounded surfaces.
+ * The shadcn token contract, so every component pulled from a registry
+ * (@shadcn, @magicui, @aceternity, @cult-ui, @kokonutui) renders correctly
+ * without being re-styled by hand. Values are ours; names are theirs.
  *
- * The home page is one 1280px column: a compact three-column fold, a strip of
- * marks, then large rounded cards (32px) that each hold one illustration and
- * one sentence, giant stat lines, a masonry of release notes and a glowing
- * closing card. Headings are 600; the accent is for links and one beam, never
- * for a button — buttons are white pills.
+ * The site is dark, and `<html>` carries `.dark` — the light block is the
+ * fallback a component's `dark:` variant needs to have something to vary
+ * from, and it keeps the registry previews honest.
  */
-@theme {
+@custom-variant dark (&:is(.dark *));
+
+:root {
+	--radius: 0.75rem;
+
+	--background: oklch(1 0 0);
+	--foreground: oklch(0.16 0.01 270);
+	--card: oklch(1 0 0);
+	--card-foreground: oklch(0.16 0.01 270);
+	--popover: oklch(1 0 0);
+	--popover-foreground: oklch(0.16 0.01 270);
+	--primary: oklch(0.58 0.19 265);
+	--primary-foreground: oklch(0.99 0 0);
+	--secondary: oklch(0.96 0.005 270);
+	--secondary-foreground: oklch(0.22 0.01 270);
+	--muted: oklch(0.96 0.005 270);
+	--muted-foreground: oklch(0.5 0.01 270);
+	--accent: oklch(0.96 0.005 270);
+	--accent-foreground: oklch(0.22 0.01 270);
+	--destructive: oklch(0.58 0.22 27);
+	--border: oklch(0.91 0.005 270);
+	--input: oklch(0.91 0.005 270);
+	--ring: oklch(0.58 0.19 265);
+
+	--chart-1: oklch(0.65 0.19 265);
+	--chart-2: oklch(0.7 0.15 190);
+	--chart-3: oklch(0.72 0.16 150);
+	--chart-4: oklch(0.75 0.16 85);
+	--chart-5: oklch(0.65 0.2 310);
+
+	--sidebar: oklch(0.99 0 0);
+	--sidebar-foreground: oklch(0.16 0.01 270);
+	--sidebar-primary: oklch(0.58 0.19 265);
+	--sidebar-primary-foreground: oklch(0.99 0 0);
+	--sidebar-accent: oklch(0.96 0.005 270);
+	--sidebar-accent-foreground: oklch(0.22 0.01 270);
+	--sidebar-border: oklch(0.91 0.005 270);
+	--sidebar-ring: oklch(0.58 0.19 265);
+}
+
+.dark {
+	--background: oklch(0.145 0.008 275);
+	--foreground: oklch(0.97 0.003 270);
+	--card: oklch(0.185 0.008 275);
+	--card-foreground: oklch(0.97 0.003 270);
+	--popover: oklch(0.185 0.008 275);
+	--popover-foreground: oklch(0.97 0.003 270);
+	--primary: oklch(0.7 0.16 265);
+	--primary-foreground: oklch(0.15 0.01 275);
+	--secondary: oklch(0.24 0.008 275);
+	--secondary-foreground: oklch(0.97 0.003 270);
+	--muted: oklch(0.24 0.008 275);
+	--muted-foreground: oklch(0.72 0.01 270);
+	--accent: oklch(0.27 0.01 275);
+	--accent-foreground: oklch(0.97 0.003 270);
+	--destructive: oklch(0.68 0.19 25);
+	--border: oklch(1 0 0 / 10%);
+	--input: oklch(1 0 0 / 14%);
+	--ring: oklch(0.7 0.16 265);
+
+	--chart-1: oklch(0.7 0.16 265);
+	--chart-2: oklch(0.72 0.13 190);
+	--chart-3: oklch(0.75 0.15 150);
+	--chart-4: oklch(0.78 0.15 85);
+	--chart-5: oklch(0.7 0.19 310);
+
+	--sidebar: oklch(0.165 0.008 275);
+	--sidebar-foreground: oklch(0.97 0.003 270);
+	--sidebar-primary: oklch(0.7 0.16 265);
+	--sidebar-primary-foreground: oklch(0.15 0.01 275);
+	--sidebar-accent: oklch(0.24 0.008 275);
+	--sidebar-accent-foreground: oklch(0.97 0.003 270);
+	--sidebar-border: oklch(1 0 0 / 10%);
+	--sidebar-ring: oklch(0.7 0.16 265);
+}
+
+@theme inline {
 	--font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-	--font-display:
-		var(--font-space-grotesk), var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+	--font-display: var(--font-space-grotesk), var(--font-geist), ui-sans-serif, sans-serif;
 	--font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
-	/*
-	 * Surfaces. Eleven units between the page and a card, so a card reads on
-	 * a real monitor without a border; tiles inside a card go one more step up.
-	 */
-	--color-background: #0a0a0c;
-	--color-surface: #151518;
-	--color-surface-2: #1c1c21;
-	--color-surface-3: #232329;
-	--color-border: #2a2a32;
-	--color-border-strong: #3a3a44;
-	--color-mark: #5c5c68;
-	--color-dim: #3f3f48;
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
 
-	/* Text ramp, APCA Lc against the page beside each. */
-	--color-foreground: #f4f4f5; /* Lc 100 */
-	--color-muted: #b8b8c2; /* Lc  64 (63 on a card) — secondary body */
-	--color-muted-2: #a3a3ad; /* Lc  53 (52 on a card) — mono captions, dates */
-	--color-accent: #5b8cff; /* Lc  43 — strokes and fills */
-	--color-accent-strong: #93b4ff; /* Lc  62 — the accent as link text */
-	--color-accent-dim: #2f5fd0;
-	--color-accent-soft: rgba(91, 140, 255, 0.12);
-	/* Terminal success only: a transcript whose ticks are the link colour
-	   reads as decoration. Nothing else on the site uses a second hue. */
-	--color-success: #6ad39a; /* Lc  70 */
-	--color-accent-line: rgba(91, 140, 255, 0.32);
+	--color-chart-1: var(--chart-1);
+	--color-chart-2: var(--chart-2);
+	--color-chart-3: var(--chart-3);
+	--color-chart-4: var(--chart-4);
+	--color-chart-5: var(--chart-5);
 
-	/*
-	 * The type ladder: display 64 / headline 48 / title 32 / subtitle 24 /
-	 * lead 18 / body 16 / small 14 / micro 13. Headings are 600 with tight
-	 * tracking that loosens as the size drops.
-	 */
-	--text-display: 4rem;
-	--text-display--line-height: 1.1;
-	--text-display--letter-spacing: -0.03em;
-	--text-display--font-weight: 600;
+	--color-sidebar: var(--sidebar);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-ring: var(--sidebar-ring);
 
-	--text-headline: 3rem;
-	--text-headline--line-height: 1.1;
-	--text-headline--letter-spacing: -0.025em;
-	--text-headline--font-weight: 600;
-
-	--text-title: 2rem;
-	--text-title--line-height: 1.1;
-	--text-title--letter-spacing: -0.015em;
-	--text-title--font-weight: 600;
-
-	--text-subtitle: 1.5rem;
-	--text-subtitle--line-height: 1.3;
-	--text-subtitle--letter-spacing: -0.01em;
-	--text-subtitle--font-weight: 600;
-
-	--text-lead: 1.125rem;
-	--text-lead--line-height: 1.55;
-
-	--text-body: 1rem;
-	--text-body--line-height: 1.5;
-
-	--text-small: 0.875rem;
-	--text-small--line-height: 1.5;
-
-	--text-micro: 0.8125rem;
-	--text-micro--line-height: 1.4;
-}
-
-/*
- * Marquee. Plain utilities rather than
- * `--animate-*` theme tokens on purpose: a theme token is computed on :root,
- * where the per-instance `--duration` is not defined, so the whole value goes
- * invalid and nothing moves (the previous strip never scrolled). Declared
- * here, `var(--duration)` resolves on the track, which inherits it from the
- * marquee root's inline style.
- */
-@utility animate-marquee {
-	animation: marquee var(--duration) linear infinite;
-}
-
-@utility animate-marquee-vertical {
-	animation: marquee-vertical var(--duration) linear infinite;
-}
-
-html {
-	scroll-behavior: smooth;
-	color-scheme: dark;
-}
-
-body {
-	background: var(--color-background);
-	color: var(--color-foreground);
-	font-family: var(--font-sans);
-	overflow-x: hidden;
-	-webkit-font-smoothing: antialiased;
-	text-rendering: optimizeLegibility;
-}
-
-::selection {
-	background: #f4f4f5;
-	color: #0a0a0c;
-}
-
-:focus-visible {
-	outline: 2px solid var(--color-accent);
-	outline-offset: 2px;
-	border-radius: 4px;
-}
-
-/* Headings and anything marked `font-display` take the display face. */
-h1,
-h2,
-h3,
-.font-display {
-	font-family: var(--font-display);
-}
-
-/*
- * The column: 1280px centred, 48px page gutters from 1024 up (so it is exactly
- * 1280 at 1440), 24px below. Everything on the home page measures from it.
- */
-:root {
-	--sheet-max: 1280px;
-	--page-gutter: 24px;
-}
-
-@media (min-width: 1024px) {
-	:root {
-		--page-gutter: 48px;
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+	--animate-marquee: marquee var(--duration) infinite linear;
+	--animate-marquee-vertical: marquee-vertical var(--duration) linear infinite;
+	--animate-shiny-text: shiny-text 8s infinite;
+	--animate-shimmer-slide: shimmer-slide var(--speed) ease-in-out infinite alternate;
+	--animate-spin-around: spin-around calc(var(--speed) * 2) infinite linear;
+	@keyframes marquee {
+		from {
+			transform: translateX(0);
+		}
+		to {
+			transform: translateX(calc(-100% - var(--gap)));
+		}
 	}
-}
-
-.sheet {
-	position: relative;
-	width: min(var(--sheet-max), 100% - 2 * var(--page-gutter));
-	margin-inline: auto;
-}
-
-/*
- * A big home-page card: one surface up, 32px corners, no border. In the
- * components layer so a utility on the element (a linked card's hover
- * colour) can still win over it.
- */
-@layer components {
-	.card {
-		position: relative;
-		background-color: var(--color-surface);
-		border-radius: 1.5rem;
-		box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.03) inset;
+	@keyframes marquee-vertical {
+		from {
+			transform: translateY(0);
+		}
+		to {
+			transform: translateY(calc(-100% - var(--gap)));
+		}
 	}
-
-	@media (min-width: 640px) {
-		.card {
-			border-radius: 2rem;
+	@keyframes shiny-text {
+		0%,
+		90%,
+		100% {
+			background-position: calc(-100% - var(--shiny-width)) 0;
+		}
+		30%,
+		60% {
+			background-position: calc(100% + var(--shiny-width)) 0;
+		}
+	}
+	@keyframes shimmer-slide {
+		to {
+			transform: translate(calc(100cqw - 100%), 0);
+		}
+	}
+	@keyframes spin-around {
+		0% {
+			transform: translateZ(0) rotate(0);
+		}
+		15%,
+		35% {
+			transform: translateZ(0) rotate(90deg);
+		}
+		65%,
+		85% {
+			transform: translateZ(0) rotate(270deg);
+		}
+		100% {
+			transform: translateZ(0) rotate(360deg);
 		}
 	}
 }
 
-/* A strip's own pause control (see components/home/strip-toggle.tsx). */
-[data-paused="true"] .animate-marquee {
-	animation-play-state: paused;
-}
-
-/* An illustration that is cut off by the bottom of its card. */
-.fade-bottom {
-	mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
-}
-
-/* Sub-page atmosphere: one very faint white wash under the page header. */
-.bg-atmosphere {
-	background-color: var(--color-background);
-	background-image: radial-gradient(
-		ellipse 75% 38% at 50% -10%,
-		rgba(255, 255, 255, 0.055),
-		transparent 62%
-	);
-}
-
-.bg-grain::before {
-	content: "";
-	pointer-events: none;
-	position: absolute;
-	inset: 0;
-	opacity: 0.03;
-	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-/* Sub-page panel. */
-.bento {
-	position: relative;
-	background: var(--color-surface);
-	border: 1px solid var(--color-border);
-	border-radius: 1.5rem;
-	box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.04) inset;
-	overflow: hidden;
-}
-
-.bento-hover {
-	transition:
-		border-color 220ms ease,
-		background-color 220ms ease;
-}
-
-.bento-hover:hover {
-	border-color: var(--color-border-strong);
-	background: var(--color-surface-2);
-}
-
-.bento-accent::after {
-	content: "";
-	position: absolute;
-	inset: 0;
-	pointer-events: none;
-	background: radial-gradient(70% 90% at 80% 0%, rgba(91, 140, 255, 0.16), transparent 68%);
-}
-
-/* The one uppercase style on the site: a 13px mono strip caption. */
-.eyebrow {
-	font-family: var(--font-mono);
-	font-size: var(--text-micro);
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: var(--color-muted-2);
-}
-
-@keyframes marquee {
-	from {
-		transform: translateX(0);
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
 	}
-	to {
-		transform: translateX(calc(-100% - var(--gap)));
+
+	body {
+		@apply bg-background text-foreground;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	html {
+		scroll-behavior: smooth;
+		color-scheme: dark;
+	}
+
+	h1,
+	h2,
+	h3 {
+		font-family: var(--font-display);
 	}
 }
 
-@keyframes marquee-vertical {
-	from {
-		transform: translateY(0);
-	}
-	to {
-		transform: translateY(calc(-100% - var(--gap)));
-	}
-}
-
-/*
- * Reduced motion. Keyframe-driven motion is disabled here; Motion writes
- * inline styles, so every animated component calls `useReducedMotion()`
- * itself and renders its final state.
- */
 @media (prefers-reduced-motion: reduce) {
-	.animate-marquee,
-	.animate-marquee-vertical {
-		animation: none;
-	}
-
 	html {
 		scroll-behavior: auto;
 	}

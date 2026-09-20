@@ -2,9 +2,9 @@ import { Check } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { InstallCommand } from "@/components/install-command";
-import { PageShell, ProseLink } from "@/components/page-shell";
-import { Card, Panel, SectionTitle } from "@/components/ui";
+import { PageFrame, ProseLink } from "@/components/page-frame";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CodeBlock } from "@/components/ui/code-block";
 import { type Comparison, comparisonSlugs, findComparison, VERIFIED_ON } from "@/lib/compare";
 import { site } from "@/lib/site";
 
@@ -34,104 +34,118 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
 	return <CompareBody entry={entry} />;
 }
 
+const Label = ({ children }: { children: React.ReactNode }) => (
+	<dt className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+		{children}
+	</dt>
+);
+
 /*
  * Every word about the other project comes from lib/compare.ts and carries a
- * source; this file only lays it out. The two columns of "Where they differ"
- * are deliberately the same size and weight — theirs is muted only so the
- * source link reads.
+ * source; this file only lays it out.
  */
 function CompareBody({ entry }: { entry: Comparison }) {
 	return (
-		<PageShell eyebrow="Compare" title={`Nixploy vs ${entry.name}`} description={entry.headline}>
-			<Panel className="mx-auto max-w-[44rem] text-center text-small text-muted">
+		<PageFrame eyebrow="Compare" title={`Nixploy vs ${entry.name}`} description={entry.headline}>
+			<Card className="mx-auto max-w-3xl p-6 text-center text-sm text-muted-foreground">
 				Every claim about {entry.name} below links to where it was read, and was read rather than
 				remembered — last checked <span className="text-foreground">{VERIFIED_ON}</span>. These
 				projects ship weekly, so if something here is out of date,{" "}
 				<ProseLink href={`${site.github}/issues`}>tell us</ProseLink> and it gets fixed. We have not
 				included opinions about anybody&apos;s reliability or security history.
-			</Panel>
+			</Card>
 
-			<div className="mt-16 grid gap-4 lg:grid-cols-12">
-				<Card className="p-8 sm:p-10 lg:col-span-7">
-					<h2 className="text-title text-foreground">What {entry.name} is</h2>
-					<p className="mt-5 text-body text-muted">{entry.what}</p>
+			<div className="mt-12 grid gap-4 lg:grid-cols-12">
+				<Card className="lg:col-span-7">
+					<CardHeader>
+						<CardTitle className="text-2xl">What {entry.name} is</CardTitle>
+					</CardHeader>
+					<CardContent>
+						<p className="text-muted-foreground">{entry.what}</p>
+					</CardContent>
 				</Card>
-				<Card className="p-8 sm:p-10 lg:col-span-5">
-					<dl className="flex flex-col gap-4">
-						<Panel tone="surface" className="p-5">
-							<dt className="eyebrow">GitHub stars</dt>
-							<dd className="mt-2 text-body text-foreground">{entry.stars} · Nixploy has 3</dd>
-						</Panel>
-						<Panel tone="surface" className="p-5">
-							<dt className="eyebrow">Licence</dt>
-							<dd className="mt-2 text-body text-foreground">
-								<ProseLink href={entry.licenseSource}>{entry.license}</ProseLink>
-							</dd>
-						</Panel>
-					</dl>
+				<Card className="lg:col-span-5">
+					<CardContent>
+						<dl className="flex flex-col gap-5">
+							<div>
+								<Label>GitHub stars</Label>
+								<dd className="mt-2">{entry.stars} · Nixploy has 3</dd>
+							</div>
+							<div>
+								<Label>Licence</Label>
+								<dd className="mt-2">
+									<ProseLink href={entry.licenseSource}>{entry.license}</ProseLink>
+								</dd>
+							</div>
+						</dl>
+					</CardContent>
 				</Card>
 			</div>
 
-			<section className="mt-32">
-				<SectionTitle title="Where they differ" />
-				<div className="mt-12 flex flex-col gap-4">
+			<section className="mt-20">
+				<h2 className="text-3xl font-semibold tracking-tight lg:text-4xl">Where they differ</h2>
+				<div className="mt-8 flex flex-col gap-4">
 					{entry.facts.map((fact) => (
-						<Panel key={fact.label}>
-							<h3 className="text-body font-medium text-foreground">{fact.label}</h3>
+						<Card key={fact.label} className="p-6">
+							<h3 className="font-medium">{fact.label}</h3>
 							<dl className="mt-4 grid gap-6 sm:grid-cols-2">
 								<div>
-									<dt className="eyebrow">{entry.name}</dt>
-									<dd className="mt-2 text-small text-muted">
+									<Label>{entry.name}</Label>
+									<dd className="mt-2 text-sm text-muted-foreground">
 										{fact.theirs} <ProseLink href={fact.source}>source</ProseLink>
 									</dd>
 								</div>
 								<div>
-									<dt className="eyebrow">Nixploy</dt>
-									<dd className="mt-2 text-small text-foreground">{fact.ours}</dd>
+									<Label>Nixploy</Label>
+									<dd className="mt-2 text-sm">{fact.ours}</dd>
 								</div>
 							</dl>
-						</Panel>
+						</Card>
 					))}
 				</div>
 			</section>
 
-			<div className="mt-16 grid gap-4 md:grid-cols-2">
-				<Card className="p-8 sm:p-10">
-					<h2 className="text-title text-foreground">Pick {entry.name} if</h2>
-					<ul className="mt-6 flex flex-col gap-3">
-						{entry.chooseThem.map((reason) => (
-							<li key={reason} className="flex items-start gap-3 text-body text-foreground">
-								<Check className="mt-1 size-4 shrink-0 text-muted-2" aria-hidden />
-								{reason}
-							</li>
-						))}
-					</ul>
-				</Card>
-				<Card className="p-8 sm:p-10">
-					<h2 className="text-title text-foreground">Pick Nixploy if</h2>
-					<ul className="mt-6 flex flex-col gap-3">
-						{entry.chooseUs.map((reason) => (
-							<li key={reason} className="flex items-start gap-3 text-body text-foreground">
-								<Check className="mt-1 size-4 shrink-0 text-muted-2" aria-hidden />
-								{reason}
-							</li>
-						))}
-					</ul>
-				</Card>
+			<div className="mt-12 grid gap-4 md:grid-cols-2">
+				{[
+					{ title: `Pick ${entry.name} if`, reasons: entry.chooseThem },
+					{ title: "Pick Nixploy if", reasons: entry.chooseUs },
+				].map((column) => (
+					<Card key={column.title}>
+						<CardHeader>
+							<CardTitle className="text-2xl">{column.title}</CardTitle>
+						</CardHeader>
+						<CardContent>
+							<ul className="flex flex-col gap-3">
+								{column.reasons.map((reason) => (
+									<li key={reason} className="flex items-start gap-3">
+										<Check className="mt-1 size-4 shrink-0 text-primary" aria-hidden />
+										{reason}
+									</li>
+								))}
+							</ul>
+						</CardContent>
+					</Card>
+				))}
 			</div>
 
-			<Card className="mt-16 p-8 sm:p-10">
-				<h2 className="text-title text-foreground">Try it on one box</h2>
-				<p className="mt-4 max-w-[46rem] text-body text-muted">
-					Nixploy installs alongside nothing and takes one command. Point it at a spare VPS before
-					you move anything real.
-				</p>
-				<InstallCommand className="mt-6 max-w-[46rem]" />
-				<p className="mt-6 text-small text-muted">
-					<ProseLink href="/compare">Compare the others</ProseLink> ·{" "}
-					<ProseLink href="/docs/migrate">Moving from another panel</ProseLink>
-				</p>
+			<Card className="mt-12">
+				<CardHeader>
+					<CardTitle className="text-2xl">Try it on one box</CardTitle>
+				</CardHeader>
+				<CardContent>
+					<p className="max-w-3xl text-muted-foreground">
+						Nixploy installs alongside nothing and takes one command. Point it at a spare VPS before
+						you move anything real.
+					</p>
+					<div className="mt-6 max-w-3xl">
+						<CodeBlock language="bash" filename="install.sh" code={site.install} />
+					</div>
+					<p className="mt-6 text-sm text-muted-foreground">
+						<ProseLink href="/compare">Compare the others</ProseLink> ·{" "}
+						<ProseLink href="/docs/migrate">Moving from another panel</ProseLink>
+					</p>
+				</CardContent>
 			</Card>
-		</PageShell>
+		</PageFrame>
 	);
 }

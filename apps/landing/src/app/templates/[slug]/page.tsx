@@ -1,12 +1,15 @@
 import type { LucideIcon } from "lucide-react";
 import { Bot, DatabaseBackup, Lock, RotateCcw, ScrollText } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { InstallCommand } from "@/components/install-command";
-import { PageShell, ProseLink } from "@/components/page-shell";
-import { brandIconSrc, Card, LearnMore, Panel, Pill, Tile } from "@/components/ui";
+import { PageFrame, ProseLink } from "@/components/page-frame";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { CodeBlock } from "@/components/ui/code-block";
+import { brandIconSrc } from "@/lib/brand";
 import { site } from "@/lib/site";
 import { findTemplate, type TemplateEntry, templateCount, templateSlugs } from "@/lib/templates";
 
@@ -47,7 +50,7 @@ function Prose({ text }: { text: string }) {
 			{text.split("`").map((part, index) =>
 				index % 2 === 1 ? (
 					// biome-ignore lint/suspicious/noArrayIndexKey: split parts of one fixed string
-					<code key={index} className="font-mono text-[0.9em] text-foreground">
+					<code key={index} className="rounded bg-accent px-1 py-0.5 font-mono text-[0.9em]">
 						{part}
 					</code>
 				) : (
@@ -74,22 +77,24 @@ function TemplateMark({ logo }: { logo: string }) {
  */
 function Fact({ label, children }: { label: string; children: ReactNode }) {
 	return (
-		<Panel tone="surface" className="px-4 py-4">
-			<dt className="eyebrow">{label}</dt>
-			<dd className="mt-2 font-mono text-micro text-foreground">{children}</dd>
-		</Panel>
+		<div className="rounded-lg border bg-accent/30 px-4 py-4">
+			<dt className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
+				{label}
+			</dt>
+			<dd className="mt-2 font-mono text-xs">{children}</dd>
+		</div>
 	);
 }
 
 function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
 	return (
 		<li className="flex gap-4">
-			<Tile size={32}>
-				<span className="font-mono text-micro text-muted-2">{n}</span>
-			</Tile>
+			<span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent font-mono text-xs text-muted-foreground">
+				{n}
+			</span>
 			<div className="min-w-0 pt-1">
-				<p className="text-body font-medium text-foreground">{title}</p>
-				<p className="mt-1 text-small text-muted">{children}</p>
+				<p className="font-medium">{title}</p>
+				<p className="mt-1 text-sm text-muted-foreground">{children}</p>
 			</div>
 		</li>
 	);
@@ -149,31 +154,39 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 	const hasUpstream = template.links.website || template.links.docs || template.links.github;
 
 	return (
-		<PageShell
-			icon={<TemplateMark logo={template.logo} />}
+		<PageFrame
 			eyebrow={template.category}
 			title={`Self-host ${template.name}`}
 			description={<Prose text={template.description} />}
 			actions={
 				<>
-					<Pill href="/docs/install" arrow>
-						Install Nixploy
-					</Pill>
+					<span className="inline-flex size-12 items-center justify-center rounded-xl border bg-accent/40">
+						<TemplateMark logo={template.logo} />
+					</span>
+					<Button asChild size="lg" className="rounded-xl">
+						<Link href="/docs/install">Install Nixploy</Link>
+					</Button>
 					{template.links.website ? (
-						<Pill href={template.links.website} variant="ghost" external>
-							Website
-						</Pill>
+						<Button asChild variant="outline" size="lg" className="rounded-xl">
+							<a href={template.links.website} target="_blank" rel="noreferrer">
+								Website
+							</a>
+						</Button>
 					) : null}
 				</>
 			}
 		>
 			<div className="grid gap-4 lg:grid-cols-12">
-				<Card className="p-8 sm:p-10 lg:col-span-7">
-					<h2 className="text-title text-foreground">Deploy {template.name} with Nixploy</h2>
-					<p className="mt-3 text-body text-muted">
+				<Card className="p-6 sm:p-8 lg:col-span-7">
+					<h2 className="text-2xl font-semibold tracking-tight">
+						Deploy {template.name} with Nixploy
+					</h2>
+					<p className="mt-3 text-muted-foreground">
 						Install Nixploy on any Docker host — a €5 VPS is enough for most of these:
 					</p>
-					<InstallCommand className="mt-6" />
+					<div className="mt-6">
+						<CodeBlock language="bash" filename="install.sh" code={site.install} />
+					</div>
 					<ol className="mt-10 flex flex-col gap-6">
 						<Step n={1} title="Open Templates in the panel">
 							Search for {template.name} and open it. The compose file, the variables and the
@@ -199,8 +212,8 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 					</ol>
 				</Card>
 
-				<Card className="p-8 sm:p-10 lg:col-span-5">
-					<h2 className="text-title text-foreground">What this deploys</h2>
+				<Card className="p-6 sm:p-8 lg:col-span-5">
+					<h2 className="text-2xl font-semibold tracking-tight">What this deploys</h2>
 					<dl className="mt-6 flex flex-col gap-3">
 						<Fact label="Images">
 							<ul className="flex flex-col gap-1">
@@ -223,7 +236,7 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 									{asked.map((variable) => (
 										<li key={variable.key}>
 											{variable.key}
-											<span className="mt-0.5 block font-sans text-muted">
+											<span className="mt-0.5 block font-sans text-muted-foreground">
 												<Prose text={variable.description} />
 											</span>
 										</li>
@@ -234,7 +247,7 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 						{generated.length > 0 ? (
 							<Fact label="Secrets Nixploy generates">
 								{generated.map((variable) => variable.key).join(", ")}
-								<span className="mt-1 block font-sans text-muted">
+								<span className="mt-1 block font-sans text-muted-foreground">
 									Created at deploy time and stored encrypted — you never invent or paste them.
 								</span>
 							</Fact>
@@ -252,20 +265,20 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 			</div>
 
 			{template.domains && template.domains.length > 0 ? (
-				<Card className="mt-4 p-8 sm:p-10">
-					<h2 className="text-title text-foreground">Domains from your values</h2>
-					<p className="mt-2 text-small text-muted">
+				<Card className="mt-4 p-6 sm:p-8">
+					<h2 className="text-2xl font-semibold tracking-tight">Domains from your values</h2>
+					<p className="mt-2 text-sm text-muted-foreground">
 						Attached to the stack on deploy, straight from the env values you enter — and, with
 						automatic DNS records on, created at your DNS provider too.
 					</p>
-					<ul className="mt-6 flex flex-col gap-2 font-mono text-small text-foreground">
+					<ul className="mt-6 flex flex-col gap-2 font-mono text-sm">
 						{template.domains.map((hint) => (
 							<li key={`${hint.env}-${hint.port}`}>
 								{hint.wildcard ? "*." : ""}
 								{"{"}
 								{hint.env}
 								{"}"} → {hint.serviceName}:{hint.port}
-								<span className="text-muted">
+								<span className="text-muted-foreground">
 									{hint.https === false ? " · HTTP" : " · HTTPS"}
 									{hint.wildcard ? " · wildcard" : ""}
 								</span>
@@ -276,13 +289,13 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 			) : null}
 
 			{template.setup && template.setup.length > 0 ? (
-				<Card className="mt-4 p-8 sm:p-10">
-					<h2 className="text-title text-foreground">Set it up</h2>
-					<p className="mt-2 text-small text-muted">
+				<Card className="mt-4 p-6 sm:p-8">
+					<h2 className="text-2xl font-semibold tracking-tight">Set it up</h2>
+					<p className="mt-2 text-sm text-muted-foreground">
 						What to do once the stack is deployed, in order. The panel shows the same steps on the
 						template's details.
 					</p>
-					<ol className="mt-6 flex list-decimal flex-col gap-3 pl-5 text-small text-foreground">
+					<ol className="mt-6 flex list-decimal flex-col gap-3 pl-5 text-sm">
 						{template.setup.map((step) => (
 							<li key={step}>
 								<Prose text={step} />
@@ -292,34 +305,34 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 				</Card>
 			) : null}
 
-			<Card className="mt-4 p-8 sm:p-10">
-				<h2 className="text-title text-foreground">What you get with it</h2>
+			<Card className="mt-4 p-6 sm:p-8">
+				<h2 className="text-2xl font-semibold tracking-tight">What you get with it</h2>
 				<ul className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-5">
 					{included.map(({ key, icon: Icon, text }) => (
 						<li key={key} className="flex flex-col gap-4">
-							<Tile size={40}>
+							<span className="inline-flex size-10 items-center justify-center rounded-lg bg-accent text-primary">
 								<Icon className="size-5" aria-hidden />
-							</Tile>
-							<p className="text-small text-muted">{text}</p>
+							</span>
+							<p className="text-sm text-muted-foreground">{text}</p>
 						</li>
 					))}
 				</ul>
 			</Card>
 
 			<div className="mt-4 grid gap-4 lg:grid-cols-2">
-				<Panel className="p-8">
-					<h2 className="text-subtitle text-foreground">Why self-host {template.name}?</h2>
-					<p className="mt-3 text-body text-muted">
+				<Card className="p-6 sm:p-8">
+					<h2 className="text-xl font-semibold tracking-tight">Why self-host {template.name}?</h2>
+					<p className="mt-3 text-muted-foreground">
 						Running it yourself means the data lives on a disk you control, there is no per-seat
 						price as the team grows, and nothing is retired or repriced by somebody else. The cost
 						is the part Nixploy takes over: a reverse proxy, certificates that renew, a volume that
 						survives a redeploy, backups you can actually restore, and a way to see the logs when it
 						misbehaves.
 					</p>
-				</Panel>
-				<Panel className="flex flex-col p-8">
-					<h2 className="text-subtitle text-foreground">{template.name} upstream</h2>
-					<p className="mt-3 flex-1 text-body text-muted">
+				</Card>
+				<Card className="flex flex-col p-6 sm:p-8">
+					<h2 className="text-xl font-semibold tracking-tight">{template.name} upstream</h2>
+					<p className="mt-3 flex-1 text-muted-foreground">
 						{hasUpstream ? (
 							<>
 								Nixploy packages the project; it is not affiliated with it.{" "}
@@ -343,11 +356,11 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 							"Nixploy packages the project; it is not affiliated with it."
 						)}
 					</p>
-					<div className="mt-6">
-						<LearnMore href="/templates">All {templateCount} templates</LearnMore>
-					</div>
-				</Panel>
+					<Button asChild variant="link" className="mt-6 justify-start px-0">
+						<Link href="/templates">All {templateCount} templates</Link>
+					</Button>
+				</Card>
 			</div>
-		</PageShell>
+		</PageFrame>
 	);
 }

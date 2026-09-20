@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-import { DocsShell } from "@/components/docs/docs-shell";
-import { ProseLink } from "@/components/page-shell";
-import { CodeBlock, Eyebrow, Panel } from "@/components/ui";
+import { DocsFrame } from "@/components/docs-frame";
+import { ProseLink } from "@/components/page-frame";
+import { Card } from "@/components/ui/card";
+import { CodeBlock } from "@/components/ui/code-block";
 import { apiCatalog, apiEndpointCount } from "@/lib/docs/api-catalog";
 import { site } from "@/lib/site";
 
@@ -40,18 +41,18 @@ nixploy app list --project-id <id>`;
 function Section({ title, children }: { title: string; children: ReactNode }) {
 	return (
 		<section className="mt-16">
-			<h2 className="text-subtitle text-foreground">{title}</h2>
+			<h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
 			{children}
 		</section>
 	);
 }
 
 function P({ children }: { children: ReactNode }) {
-	return <p className="mt-4 text-body text-muted">{children}</p>;
+	return <p className="mt-4 text-muted-foreground">{children}</p>;
 }
 
 function Code({ children }: { children: ReactNode }) {
-	return <code className="font-mono text-small text-foreground">{children}</code>;
+	return <code className="rounded bg-accent px-1 py-0.5 font-mono text-sm">{children}</code>;
 }
 
 function Strong({ children }: { children: ReactNode }) {
@@ -60,13 +61,13 @@ function Strong({ children }: { children: ReactNode }) {
 
 export default function ApiPage() {
 	return (
-		<DocsShell activeHref="/api">
+		<DocsFrame activeHref="/api">
 			<article>
-				<Eyebrow className="mb-4">API</Eyebrow>
-				<h1 className="text-title text-balance text-foreground sm:text-headline">
+				<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">API</p>
+				<h1 className="mt-4 text-4xl font-semibold tracking-tight text-balance">
 					REST API reference
 				</h1>
-				<p className="mt-5 text-lead text-muted">
+				<p className="mt-4 text-lg text-muted-foreground">
 					Every tRPC procedure is also a REST endpoint. The same surface powers the dashboard,
 					Swagger UI, <Code>@nixploy/cli</Code>, and MCP.
 				</p>
@@ -76,7 +77,9 @@ export default function ApiPage() {
 						Create a key under <Strong>Settings → Profile</Strong> on your panel. Send it on every
 						request:
 					</P>
-					<CodeBlock className="mt-6" title="x-api-key" code={AUTH_HEADER} />
+					<div className="mt-6">
+						<CodeBlock language="bash" filename="x-api-key" code={AUTH_HEADER} />
+					</div>
 					<P>
 						Keys are <Strong>scoped</Strong> (read, deploy, write or admin) and bound to one
 						organization. The effective permission set is the scope intersected with the key
@@ -86,7 +89,7 @@ export default function ApiPage() {
 				</Section>
 
 				<Section title="URL conventions">
-					<ul className="mt-4 list-disc space-y-2 pl-5 text-body text-muted marker:text-muted-2">
+					<ul className="mt-4 list-disc space-y-2 pl-5 text-muted-foreground">
 						<li>
 							Queries → <Code>GET /api/&lt;router&gt;.&lt;procedure&gt;</Code>
 						</li>
@@ -98,12 +101,14 @@ export default function ApiPage() {
 						</li>
 						<li>No /api/v1 prefix</li>
 					</ul>
-					<CodeBlock className="mt-6" title="curl" code={CURL} />
+					<div className="mt-6">
+						<CodeBlock language="bash" filename="curl" code={CURL} />
+					</div>
 				</Section>
 
 				<Section title="Interactive docs on your panel">
 					<P>Live OpenAPI lives on the installed panel (not mirrored here):</P>
-					<ul className="mt-4 list-disc space-y-2 pl-5 text-body text-muted marker:text-muted-2">
+					<ul className="mt-4 list-disc space-y-2 pl-5 text-muted-foreground">
 						<li>
 							UI: <Code>https://&lt;panel&gt;/swagger</Code>
 						</li>
@@ -117,8 +122,10 @@ export default function ApiPage() {
 				</Section>
 
 				<Section title="CLI">
-					<CodeBlock className="mt-6" title="cli" code={CLI} />
-					<p className="mt-4 text-small text-muted">
+					<div className="mt-6">
+						<CodeBlock language="bash" filename="cli" code={CLI} />
+					</div>
+					<p className="mt-4 text-sm text-muted-foreground">
 						<ProseLink href="/docs/cli">CLI guide</ProseLink>
 						{" · "}
 						<ProseLink href="/docs/mcp">MCP for agents</ProseLink>
@@ -134,14 +141,14 @@ export default function ApiPage() {
 						panel&apos;s Swagger, which always matches the version you run.
 					</P>
 					{apiCatalog.map((group) => (
-						<Panel key={group.router} className="mt-6">
-							<h3 className="text-body font-medium text-foreground">{group.title}</h3>
-							<p className="mt-1 text-small text-muted">{group.description}</p>
-							<p className="mt-1 font-mono text-micro text-muted-2">router: {group.router}</p>
-							<div className="mt-4 overflow-x-auto rounded-xl border border-border">
+						<Card key={group.router} className="mt-6 p-6">
+							<h3 className="font-medium">{group.title}</h3>
+							<p className="mt-1 text-sm text-muted-foreground">{group.description}</p>
+							<p className="mt-1 font-mono text-xs text-muted-foreground">router: {group.router}</p>
+							<div className="mt-4 overflow-x-auto rounded-xl border">
 								<table className="w-full min-w-[34rem] text-left">
 									<caption className="sr-only">{group.title} endpoints</caption>
-									<thead className="text-micro text-muted-2">
+									<thead className="text-xs text-muted-foreground">
 										<tr>
 											<th scope="col" className="px-3 py-2 font-medium">
 												Method
@@ -159,18 +166,11 @@ export default function ApiPage() {
 									</thead>
 									<tbody>
 										{group.endpoints.map((ep) => (
-											<tr
-												key={`${ep.method}-${ep.path}`}
-												className="border-t border-border text-small"
-											>
-												<td className="px-3 py-2 font-mono text-micro text-foreground">
-													{ep.method}
-												</td>
-												<td className="px-3 py-2 font-mono text-micro text-foreground">
-													/api/{ep.path}
-												</td>
-												<td className="px-3 py-2 text-muted">{ep.summary}</td>
-												<td className="px-3 py-2 font-mono text-micro text-muted-2">
+											<tr key={`${ep.method}-${ep.path}`} className="border-t text-sm">
+												<td className="px-3 py-2 font-mono text-xs">{ep.method}</td>
+												<td className="px-3 py-2 font-mono text-xs">/api/{ep.path}</td>
+												<td className="px-3 py-2 text-muted-foreground">{ep.summary}</td>
+												<td className="px-3 py-2 font-mono text-xs text-muted-foreground">
 													{[
 														...(ep.capability ?? []),
 														...(ep.instanceAdmin ? ["instance admin"] : []),
@@ -181,16 +181,16 @@ export default function ApiPage() {
 									</tbody>
 								</table>
 							</div>
-						</Panel>
+						</Card>
 					))}
 				</Section>
 
-				<p className="mt-16 border-t border-border pt-6 text-small text-muted">
+				<p className="mt-16 border-t pt-6 text-sm text-muted-foreground">
 					Repository guide: <ProseLink href={site.githubApiDocs}>docs/api.md</ProseLink>
 					{" · "}
 					<ProseLink href="/docs">All docs</ProseLink>
 				</p>
 			</article>
-		</DocsShell>
+		</DocsFrame>
 	);
 }

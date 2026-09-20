@@ -1,8 +1,9 @@
 import { ChevronRight } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 
-import { PageShell, ProseLink } from "@/components/page-shell";
-import { Card, Panel, SectionTitle } from "@/components/ui";
+import { PageFrame, ProseLink } from "@/components/page-frame";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { comparisons, VERIFIED_ON } from "@/lib/compare";
 import { site } from "@/lib/site";
 
@@ -13,79 +14,74 @@ export const metadata: Metadata = {
 	alternates: { canonical: `${site.url}/compare` },
 };
 
-/*
- * One card per comparison, the whole card a link, then how the pages are
- * written. The copy is bound by the rules at the top of lib/compare.ts:
- * nothing on this page asserts anything about another project.
- */
+const notes = [
+	{
+		title: "Everything is sourced",
+		text: "Each claim about another project links to the pricing page, licence file or documentation it was read from — read, not remembered. Two of them contradicted what a search summary said.",
+	},
+	{
+		title: "No mudslinging",
+		text: "No claims about anybody else's reliability, memory use or security history. Those age badly and are not ours to make.",
+	},
+	{
+		title: "Every page says where they win",
+		text: "One of these three does not paywall anything at all, and the page for it says so in the heading. A comparison whose author wins every row is an advertisement.",
+	},
+] as const;
+
 export default function ComparePage() {
 	return (
-		<PageShell
+		<PageFrame
 			eyebrow="Compare"
 			title="How Nixploy compares"
 			description="This category is crowded, and three of these projects are older and larger than this one. Here is where each actually differs — sourced, dated, and including the rows where they win."
 		>
 			<div className="grid gap-4 lg:grid-cols-3">
 				{comparisons.map((entry) => (
-					<Card
+					<Link
 						key={entry.slug}
 						href={`/nixploy-vs-${entry.slug}`}
-						label={`Nixploy vs ${entry.name}`}
-						className="group p-8 sm:p-10"
+						aria-label={`Nixploy vs ${entry.name}`}
+						className="group block h-full"
 					>
-						{/* The card is the link, so the trailing "Read the comparison" is text, not a nested anchor. */}
-						<div className="flex h-full flex-col">
-							<h2 className="text-title text-foreground">Nixploy vs {entry.name}</h2>
-							<p className="mt-2 font-mono text-micro text-muted-2">{entry.stars} stars</p>
-							<p className="mt-5 flex-1 text-body text-muted">{entry.headline}</p>
-							<span className="mt-8 inline-flex items-center gap-1 text-body font-medium text-accent-strong transition-colors group-hover:text-foreground">
-								Read the comparison
-								<ChevronRight
-									className="size-4 transition-transform group-hover:translate-x-0.5"
-									aria-hidden
-								/>
-							</span>
-						</div>
-					</Card>
+						<Card className="h-full transition-colors hover:border-primary/40">
+							<CardHeader>
+								<CardTitle className="text-2xl">Nixploy vs {entry.name}</CardTitle>
+								<p className="font-mono text-xs text-muted-foreground">{entry.stars} stars</p>
+							</CardHeader>
+							<CardContent className="flex h-full flex-col">
+								<p className="flex-1 text-muted-foreground">{entry.headline}</p>
+								<span className="mt-8 inline-flex items-center gap-1 text-sm font-medium text-primary">
+									Read the comparison
+									<ChevronRight
+										className="size-4 transition-transform group-hover:translate-x-0.5"
+										aria-hidden
+									/>
+								</span>
+							</CardContent>
+						</Card>
+					</Link>
 				))}
 			</div>
 
-			<section className="mt-32">
-				<SectionTitle title="How these are written" />
-				<div className="mt-12 grid gap-4 md:grid-cols-2">
-					<Panel>
-						<h3 className="text-body font-medium text-foreground">Everything is sourced</h3>
-						<p className="mt-2 text-small text-muted">
-							Each claim about another project links to the pricing page, licence file or
-							documentation it was read from — read, not remembered. Two of them contradicted what a
-							search summary said.
-						</p>
-					</Panel>
-					<Panel>
-						<h3 className="text-body font-medium text-foreground">Dated</h3>
-						<p className="mt-2 text-small text-muted">
+			<section className="mt-24">
+				<h2 className="text-3xl font-semibold tracking-tight lg:text-4xl">How these are written</h2>
+				<div className="mt-8 grid gap-4 md:grid-cols-2">
+					{notes.map((note) => (
+						<Card key={note.title} className="p-6">
+							<h3 className="font-medium">{note.title}</h3>
+							<p className="mt-2 text-sm text-muted-foreground">{note.text}</p>
+						</Card>
+					))}
+					<Card className="p-6">
+						<h3 className="font-medium">Dated</h3>
+						<p className="mt-2 text-sm text-muted-foreground">
 							Last checked {VERIFIED_ON}. These projects ship weekly; if a row is stale,{" "}
 							<ProseLink href={`${site.github}/issues`}>open an issue</ProseLink> and it gets fixed.
 						</p>
-					</Panel>
-					<Panel>
-						<h3 className="text-body font-medium text-foreground">No mudslinging</h3>
-						<p className="mt-2 text-small text-muted">
-							No claims about anybody else&apos;s reliability, memory use or security history. Those
-							age badly and are not ours to make.
-						</p>
-					</Panel>
-					<Panel>
-						<h3 className="text-body font-medium text-foreground">
-							Every page says where they win
-						</h3>
-						<p className="mt-2 text-small text-muted">
-							One of these three does not paywall anything at all, and the page for it says so in
-							the heading. A comparison whose author wins every row is an advertisement.
-						</p>
-					</Panel>
+					</Card>
 				</div>
 			</section>
-		</PageShell>
+		</PageFrame>
 	);
 }

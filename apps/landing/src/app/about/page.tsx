@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
-import { PageShell, ProseLink } from "@/components/page-shell";
-import { Prose } from "@/components/ui";
+import { PageFrame, ProseLink } from "@/components/page-frame";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -9,22 +8,15 @@ export const metadata: Metadata = {
 	description: "Why Nixploy exists, what we ship, and the projects that inspired us.",
 };
 
-/*
- * A reading page: the left-aligned headline header on the 42rem column, then
- * the copy as plain elements under `Prose`. `site.inspiredBy` is allowed here
- * and nowhere else on the site.
- */
 export default function AboutPage() {
 	return (
-		<PageShell
+		<PageFrame
 			width="prose"
-			align="left"
-			size="headline"
 			eyebrow="About"
 			title="Built for people who want their own PaaS."
-			description="Nixploy is an open-source, self-hosted platform for deploying applications and databases on Docker Swarm — with Traefik, Git deploys, monitoring, and a CLI that matches the UI."
+			description="An open-source, self-hosted platform for deploying applications and databases on Docker Swarm — with Traefik, Git deploys, monitoring, and a CLI that matches the UI."
 		>
-			<Prose>
+			<div className="prose prose-invert max-w-none prose-headings:font-display prose-a:text-primary">
 				<h2>The short version</h2>
 				<p>
 					{site.inspiredBy} We learned from those projects, then focused on a sharper product:
@@ -44,7 +36,7 @@ export default function AboutPage() {
 					<ProseLink href={site.url}>nixploy.com</ProseLink>. Reach us at{" "}
 					<a href={`mailto:${site.email}`}>{site.email}</a>.
 				</p>
-			</Prose>
-		</PageShell>
+			</div>
+		</PageFrame>
 	);
 }

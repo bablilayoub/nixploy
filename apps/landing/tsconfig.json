@@ -10,7 +10,11 @@
 		"moduleResolution": "bundler",
 		"moduleDetection": "force",
 		"strict": true,
-		"noUncheckedIndexedAccess": true,
+		// Off for this app only. Components here are vendored from shadcn-style
+		// registries (@shadcn, @magicui, @aceternity, @kokonutui) and are not
+		// written against this flag; the product code in packages/server and
+		// apps/web keeps it.
+		"noUncheckedIndexedAccess": false,
 		"esModuleInterop": true,
 		"skipLibCheck": true,
 		"forceConsistentCasingInFileNames": true,

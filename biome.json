@@ -14,7 +14,9 @@
 			"!**/build",
 			"!**/coverage",
 			"!packages/server/drizzle",
-			"!.nixploy-data"
+			"!.nixploy-data",
+			"!apps/landing/src/components/ui",
+			"!apps/landing/src/components/kokonutui"
 		]
 	},
 	"linter": {

@@ -1,10 +1,12 @@
 import { BookOpen, KeyRound, ShieldCheck, Zap } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { InstallCommand } from "@/components/install-command";
-import { PageShell, ProseLink } from "@/components/page-shell";
-import { Card, CodeBlock, Panel, Pill, SectionTitle, TerminalFrame, Tile } from "@/components/ui";
+import { PageFrame, ProseLink } from "@/components/page-frame";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { CodeBlock } from "@/components/ui/code-block";
 import { mcpToolCount } from "@/lib/landing-data";
 import { site } from "@/lib/site";
 import { cn } from "@/lib/utils";
@@ -84,21 +86,30 @@ const MCP_CONFIG = `{
  */
 function Transcript({ title, lines }: { title: string; lines: Line[] }) {
 	return (
-		<TerminalFrame title={title} tag="session" bodyClassName="p-5 leading-normal">
-			<div className="flex flex-col gap-3">
+		<Card className="overflow-hidden p-0">
+			<div className="flex h-10 items-center gap-2 border-b bg-accent/40 px-4">
+				<span className="flex gap-1.5" aria-hidden>
+					<span className="size-2.5 rounded-full bg-muted-foreground/40" />
+					<span className="size-2.5 rounded-full bg-muted-foreground/40" />
+					<span className="size-2.5 rounded-full bg-muted-foreground/40" />
+				</span>
+				<span className="flex-1 text-center font-mono text-xs text-muted-foreground">{title}</span>
+				<span className="w-[42px]" />
+			</div>
+			<div className="flex flex-col gap-3 p-5">
 				{lines.map((line, index) => {
 					if ("tool" in line) {
 						return (
 							<p
 								// biome-ignore lint/suspicious/noArrayIndexKey: a fixed, ordered transcript
 								key={index}
-								className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pl-4 font-mono text-micro"
+								className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 pl-4 font-mono text-xs"
 							>
 								<span className="text-foreground">
-									<span className="text-muted-2">› </span>
+									<span className="text-muted-foreground">› </span>
 									{line.tool}
 								</span>
-								<span className="text-muted">{line.result}</span>
+								<span className="text-muted-foreground">{line.result}</span>
 							</p>
 						);
 					}
@@ -106,15 +117,15 @@ function Transcript({ title, lines }: { title: string; lines: Line[] }) {
 						<p
 							// biome-ignore lint/suspicious/noArrayIndexKey: a fixed, ordered transcript
 							key={index}
-							className={cn("text-body", line.speaker === "you" ? "text-foreground" : "text-muted")}
+							className={cn(line.speaker === "you" ? "text-foreground" : "text-muted-foreground")}
 						>
-							<span className="mr-3 font-mono text-micro text-muted-2">{line.speaker}</span>
+							<span className="mr-3 font-mono text-xs text-muted-foreground">{line.speaker}</span>
 							{line.text}
 						</p>
 					);
 				})}
 			</div>
-		</TerminalFrame>
+		</Card>
 	);
 }
 
@@ -131,10 +142,10 @@ function Session({
 	lines: Line[];
 }) {
 	return (
-		<Card className="grid gap-8 p-8 sm:p-10 lg:grid-cols-12 lg:gap-12">
+		<Card className="grid gap-8 p-6 sm:p-8 lg:grid-cols-12 lg:gap-12">
 			<div className="lg:col-span-4">
-				<h2 className="text-title text-foreground">{heading}</h2>
-				<p className="mt-4 max-w-[30ch] text-body text-muted">{summary}</p>
+				<h2 className="text-2xl font-semibold tracking-tight">{heading}</h2>
+				<p className="mt-4 max-w-[30ch] text-muted-foreground">{summary}</p>
 			</div>
 			<div className="min-w-0 lg:col-span-8">
 				<Transcript title={title} lines={lines} />
@@ -153,32 +164,34 @@ function Reason({
 	children: ReactNode;
 }) {
 	return (
-		<Panel>
-			<Tile size={40}>{icon}</Tile>
-			<h3 className="mt-5 text-body font-medium text-foreground">{title}</h3>
-			<p className="mt-2 text-small text-muted">{children}</p>
-		</Panel>
+		<Card className="p-6">
+			<span className="inline-flex size-10 items-center justify-center rounded-lg bg-accent text-primary">
+				{icon}
+			</span>
+			<h3 className="mt-4 font-medium">{title}</h3>
+			<p className="mt-2 text-sm text-muted-foreground">{children}</p>
+		</Card>
 	);
 }
 
 function Code({ children }: { children: ReactNode }) {
-	return <code className="font-mono text-micro text-foreground">{children}</code>;
+	return <code className="rounded bg-accent px-1 py-0.5 font-mono text-xs">{children}</code>;
 }
 
 export default function AgentsPage() {
 	return (
-		<PageShell
+		<PageFrame
 			eyebrow="Agents"
 			title="Let an AI agent run your infrastructure"
 			description="Nixploy speaks MCP. Point Claude Code, Cursor or Codex at your panel and it can deploy, read the logs, work out why something broke and roll it back — without you opening a terminal."
 			actions={
 				<>
-					<Pill href="/docs/mcp" arrow>
-						Set up the MCP server
-					</Pill>
-					<Pill href="/api" variant="ghost">
-						REST API
-					</Pill>
+					<Button asChild size="lg" className="rounded-xl">
+						<Link href="/docs/mcp">Set up the MCP server</Link>
+					</Button>
+					<Button asChild variant="outline" size="lg" className="rounded-xl">
+						<Link href="/api">REST API</Link>
+					</Button>
 				</>
 			}
 		>
@@ -203,14 +216,17 @@ export default function AgentsPage() {
 				/>
 			</div>
 
-			<section className="mt-32">
-				<SectionTitle title="Why this is safe to hand an agent">
+			<section className="mt-20">
+				<h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-balance lg:text-4xl">
+					Why this is safe to hand an agent
+				</h2>
+				<p className="mt-4 max-w-3xl text-muted-foreground">
 					The MCP tools are not a second API. Every one of them dispatches through the same tRPC
 					routers the panel uses, so the organization scope, the capability checks and the audit
 					trail apply identically — an agent holding a read-only API key cannot deploy, and every
 					mutation it makes is a row in the audit log with the key that made it.
-				</SectionTitle>
-				<div className="mt-12 grid gap-4 md:grid-cols-2">
+				</p>
+				<div className="mt-8 grid gap-4 md:grid-cols-2">
 					<Reason icon={<ShieldCheck className="size-5" aria-hidden />} title="Annotated tools">
 						All {mcpToolCount} carry <Code>readOnlyHint</Code>, <Code>destructiveHint</Code> and{" "}
 						<Code>idempotentHint</Code>, declared by hand with a test that fails the build on a
@@ -236,24 +252,26 @@ export default function AgentsPage() {
 				</div>
 			</section>
 
-			<Card className="mt-32 grid gap-10 p-8 sm:p-10 lg:grid-cols-12">
+			<Card className="mt-20 grid gap-10 p-6 sm:p-8 lg:grid-cols-12">
 				<div className="lg:col-span-5">
-					<h2 className="text-title text-foreground">Connect it</h2>
-					<p className="mt-4 text-body text-muted">
+					<h2 className="text-2xl font-semibold tracking-tight">Connect it</h2>
+					<p className="mt-4 text-muted-foreground">
 						Install Nixploy, mint an API key in Settings → Profile, and copy the config the{" "}
 						<span className="text-foreground">MCP setup</span> card renders for your client — it
 						already has your instance&apos;s own address filled in.
 					</p>
-					<p className="mt-6 text-small text-muted">
+					<p className="mt-6 text-sm text-muted-foreground">
 						Full reference in <ProseLink href="/docs/mcp">the MCP guide</ProseLink>; the REST
 						surface behind it is at <ProseLink href="/api">the API catalog</ProseLink>.
 					</p>
 				</div>
-				<div className="lg:col-span-7">
-					<InstallCommand />
-					<CodeBlock className="mt-4" title="claude_desktop_config.json" code={MCP_CONFIG} />
+				<div className="min-w-0 lg:col-span-7">
+					<CodeBlock language="bash" filename="install.sh" code={site.install} />
+					<div className="mt-4">
+						<CodeBlock language="json" filename="claude_desktop_config.json" code={MCP_CONFIG} />
+					</div>
 				</div>
 			</Card>
-		</PageShell>
+		</PageFrame>
 	);
 }
