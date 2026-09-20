@@ -469,7 +469,8 @@ Bounded on purpose:
   pass (`modules/runtime-logs/retention.ts` resolves each service's org
   once per pass); a deleted service's directory goes with it.
   `NIXPLOY_RUNTIME_LOGS=0` turns the harvester off (what exists on disk
-  stays readable).
+  stays readable), and `NIXPLOY_LITE=1` makes that the default
+  ([install.md → Lite profile](./install.md#lite-profile)).
 
 **Reading it.** Every service page has Runtime → **History**; the Monitoring
 page has a **Logs** section across every service the caller can see; the CLI

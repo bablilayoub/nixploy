@@ -1,5 +1,6 @@
 import { appendFile, mkdir, open, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { NORMAL_PROFILE, profileDefaults } from "../../lib/profile";
 import { getConfigDir } from "../application/paths";
 
 /**
@@ -187,8 +188,8 @@ export function ringPoints<P extends TimePoint>(file: string): P[] {
 // server's samples live on disk, the stored point shapes and the read API the
 // monitoring router serves. Written by `./sampler.ts`.
 
-/** Default history window when `NIXPLOY_METRICS_RETENTION_HOURS` is unset. */
-export const DEFAULT_METRICS_RETENTION_HOURS = 48;
+/** Default history window when `NIXPLOY_METRICS_RETENTION_HOURS` is unset (lite: 12). */
+export const DEFAULT_METRICS_RETENTION_HOURS = NORMAL_PROFILE.metricsRetentionHours;
 /** Below this the Monitoring tab's own 1 h range would out-run the store. */
 export const MIN_METRICS_RETENTION_HOURS = 1;
 /** 30 days. Higher belongs in Prometheus (`/api/metrics`), not in JSONL files. */
@@ -209,10 +210,11 @@ export const MAX_METRICS_RETENTION_HOURS = 720;
  * file I/O it guards.
  */
 export function metricsRetentionHours(): number {
+	const fallback = profileDefaults().metricsRetentionHours;
 	const raw = process.env.NIXPLOY_METRICS_RETENTION_HOURS?.trim();
-	if (!raw) return DEFAULT_METRICS_RETENTION_HOURS;
+	if (!raw) return fallback;
 	const parsed = Number.parseInt(raw, 10);
-	if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_METRICS_RETENTION_HOURS;
+	if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
 	return Math.min(Math.max(parsed, MIN_METRICS_RETENTION_HOURS), MAX_METRICS_RETENTION_HOURS);
 }
 

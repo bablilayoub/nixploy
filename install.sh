@@ -36,7 +36,11 @@
 #   Every other runtime knob listed in docs/install.md → "Runtime environment"
 #   (NIXPLOY_DEPLOY_CONCURRENCY, NIXPLOY_WILDCARD_DOMAIN, DOCKER_SOCKET, …) is
 #   forwarded to the service when it is set in this script's environment.
-#   NIXPLOY_MEMORY_LIMIT         Memory limit of the nixploy service (default: 2g)
+#   NIXPLOY_MEMORY_LIMIT         Memory limit of the nixploy service (default: 2g, 1g with --lite)
+#   NIXPLOY_LITE                 1 = the small-box profile: no runtime log harvesting,
+#                                metrics every 2 min kept 12 h, a slower uptime pass and
+#                                fewer SSH channels. Same as passing --lite. Every knob
+#                                it changes can still be set individually and wins.
 #   NIXPLOY_SPLIT_WORKER         1 = also create a `nixploy-worker` service and run the
 #                                panel with NIXPLOY_ROLE=panel. Deploys, crons and the
 #                                status reconciler move out of the panel process, so a
@@ -71,8 +75,25 @@ NIXPLOY_CONFIG_DIR="${NIXPLOY_CONFIG_DIR:-/etc/nixploy}"
 HOST_CONFIG_DIR="${NIXPLOY_CONFIG_DIR}"
 POSTGRES_VERSION="${POSTGRES_VERSION:-17-alpine}"
 TRAEFIK_VERSION="${TRAEFIK_VERSION:-v3.7.13}"
-NIXPLOY_MEMORY_LIMIT="${NIXPLOY_MEMORY_LIMIT:-2g}"
-NIXPLOY_WORKER_MEMORY="${NIXPLOY_WORKER_MEMORY:-2g}"
+# Whether the operator set the memory limits themselves — `--lite` must not
+# override a value they chose on the command line.
+NIXPLOY_MEMORY_LIMIT_EXPLICIT="${NIXPLOY_MEMORY_LIMIT:-}"
+NIXPLOY_WORKER_MEMORY_EXPLICIT="${NIXPLOY_WORKER_MEMORY:-}"
+# Small-box profile (see --lite). Read before the memory defaults so they can
+# follow it; an explicit NIXPLOY_MEMORY_LIMIT still wins.
+NIXPLOY_LITE="${NIXPLOY_LITE:-0}"
+if [ "${NIXPLOY_LITE}" = "1" ] || [ "${NIXPLOY_LITE}" = "true" ]; then
+	NIXPLOY_LITE=1
+else
+	NIXPLOY_LITE=0
+fi
+if [ "${NIXPLOY_LITE}" = "1" ]; then
+	NIXPLOY_MEMORY_LIMIT="${NIXPLOY_MEMORY_LIMIT:-1g}"
+	NIXPLOY_WORKER_MEMORY="${NIXPLOY_WORKER_MEMORY:-1g}"
+else
+	NIXPLOY_MEMORY_LIMIT="${NIXPLOY_MEMORY_LIMIT:-2g}"
+	NIXPLOY_WORKER_MEMORY="${NIXPLOY_WORKER_MEMORY:-2g}"
+fi
 # Opt-in two-process layout (see --split-worker). 0 = today's single process.
 SPLIT_WORKER="${NIXPLOY_SPLIT_WORKER:-0}"
 # Set by --no-split-worker: the only way to go back to one process.
@@ -1013,6 +1034,12 @@ FORWARDED_APP_ENV=(
 	NIXPLOY_INSTANCE_BACKUP_ALERT_DAYS
 	NIXPLOY_DOCKER_CLEANUP_CRON
 	NIXPLOY_BASE_URL
+	NIXPLOY_LITE
+	NIXPLOY_RUNTIME_LOGS
+	NIXPLOY_RUNTIME_LOG_RETENTION_DAYS
+	NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE
+	NIXPLOY_METRICS_RETENTION_HOURS
+	NIXPLOY_REMEDIATION
 	DOCKER_SOCKET
 	LISTEN_HOST
 	TZ
@@ -1465,10 +1492,17 @@ parse_args() {
 		case "$1" in
 			--split-worker) SPLIT_WORKER=1 ;;
 			--no-split-worker) SPLIT_WORKER=0; SPLIT_WORKER_EXPLICIT_OFF=1 ;;
+			--lite)
+				NIXPLOY_LITE=1
+				# The flag is parsed after the defaults above, so re-apply them.
+				[ -n "${NIXPLOY_MEMORY_LIMIT_EXPLICIT:-}" ] || NIXPLOY_MEMORY_LIMIT=1g
+				[ -n "${NIXPLOY_WORKER_MEMORY_EXPLICIT:-}" ] || NIXPLOY_WORKER_MEMORY=1g
+				;;
 			-h|--help)
-				printf 'Usage: install.sh [--split-worker|--no-split-worker]\n'
+				printf 'Usage: install.sh [--split-worker|--no-split-worker] [--lite]\n'
 				printf '  --split-worker      run deploys and crons in a separate nixploy-worker service\n'
 				printf '  --no-split-worker   collapse an existing split install back to one process\n'
+				printf '  --lite              small-box profile: no runtime log harvesting, coarser metrics\n'
 				printf '  Every other knob is an environment variable — see the header of this file.\n'
 				exit 0
 				;;

@@ -12,6 +12,7 @@ import {
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createGzip, gunzipSync } from "node:zlib";
+import { NORMAL_PROFILE, profileDefaults } from "../../lib/profile";
 import { getConfigDir } from "../application/paths";
 import { encodeLogLine, parseLogLines, type RuntimeLogLine } from "./format";
 import { type LogQuery, matchLogLine } from "./query";
@@ -260,23 +261,27 @@ export async function runtimeLogUsage(appName: string): Promise<number> {
 
 // ── retention ───────────────────────────────────────────────────────────────
 
-export const DEFAULT_RUNTIME_LOG_RETENTION_DAYS = 7;
-export const DEFAULT_RUNTIME_LOG_MAX_MB_PER_SERVICE = 256;
+/** The normal profile's values; `NIXPLOY_LITE` lowers both (`lib/profile.ts`). */
+export const DEFAULT_RUNTIME_LOG_RETENTION_DAYS = NORMAL_PROFILE.runtimeLogRetentionDays;
+export const DEFAULT_RUNTIME_LOG_MAX_MB_PER_SERVICE = NORMAL_PROFILE.runtimeLogMaxMbPerService;
 
 const positiveInt = (raw: string | undefined, fallback: number): number => {
 	const parsed = Number.parseInt(raw ?? "", 10);
 	return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 };
 
-/** `NIXPLOY_RUNTIME_LOG_RETENTION_DAYS` (default 7). */
+/** `NIXPLOY_RUNTIME_LOG_RETENTION_DAYS`, else the profile's value (7, lite 2). */
 export const runtimeLogRetentionDays = (): number =>
-	positiveInt(process.env.NIXPLOY_RUNTIME_LOG_RETENTION_DAYS, DEFAULT_RUNTIME_LOG_RETENTION_DAYS);
+	positiveInt(
+		process.env.NIXPLOY_RUNTIME_LOG_RETENTION_DAYS,
+		profileDefaults().runtimeLogRetentionDays,
+	);
 
-/** `NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE` (default 256; 0 = no byte cap). */
+/** `NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE` (0 = no byte cap), else the profile's. */
 export const runtimeLogMaxBytesPerService = (): number =>
 	positiveInt(
 		process.env.NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE,
-		DEFAULT_RUNTIME_LOG_MAX_MB_PER_SERVICE,
+		profileDefaults().runtimeLogMaxMbPerService,
 	) *
 	1024 *
 	1024;

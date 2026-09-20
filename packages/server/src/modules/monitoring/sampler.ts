@@ -4,6 +4,7 @@ import schedule from "node-schedule";
 import { db } from "../../db";
 import { servers } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { profileDefaults } from "../../lib/profile";
 import { execAsyncRemote } from "../../utils/exec";
 import { fanOutConcurrency, mapWithConcurrency } from "../../utils/fan-out";
 import { isServerUnreachable } from "../../utils/ssh-pool";
@@ -52,7 +53,8 @@ const log = createLogger("metrics-history");
  * unreachable server is skipped without affecting local sampling.
  */
 
-const SAMPLE_CRON = "*/30 * * * * *";
+/** Sampler cron — every 30 s normally, every 2 min under `NIXPLOY_LITE`. */
+const sampleCron = (): string => profileDefaults().metricsSampleCron;
 
 /** One sampling pass over every application, compose and database service. */
 export async function sampleAllServices(): Promise<void> {
@@ -385,7 +387,7 @@ let inFlight = false;
 export function initMetricsHistory(): void {
 	if (started) return; // tsx watch / HMR re-invocations must not double-register
 	started = true;
-	schedule.scheduleJob("metrics-history", SAMPLE_CRON, async () => {
+	schedule.scheduleJob("metrics-history", sampleCron(), async () => {
 		if (inFlight) return;
 		inFlight = true;
 		try {

@@ -319,6 +319,12 @@ Stored in `<config>/.env` (mode 600) and put on the service at create time.
 | `NIXPLOY_AUDIT_RETENTION_DAYS` | `365` | `audit_log` retention. `0` keeps rows forever |
 | `NIXPLOY_INSTANCE_BACKUP_ALERT_DAYS` | `8` | Alert when no instance backup succeeded in this many days. `0` disables it |
 | `NIXPLOY_DOCKER_CLEANUP_CRON` | unset (off) | Cron expression for the weekly prune of dangling images + BuildKit cache |
+| `NIXPLOY_LITE` | `0` | The small-box profile — see [Lite profile](#lite-profile). Changes the defaults of the five knobs below; each of them still wins when set |
+| `NIXPLOY_RUNTIME_LOGS` | `1` (lite: `0`) | Harvest what containers print into searchable history ([observability.md](./observability.md#runtime-log-history)). `0` stops the 30 s pass; what is on disk stays readable |
+| `NIXPLOY_RUNTIME_LOG_RETENTION_DAYS` | `7` (lite: `2`) | Instance ceiling for runtime log history. An organization can keep less, never more |
+| `NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE` | `256` (lite: `64`) | Same, in megabytes per service. `0` = no byte cap |
+| `NIXPLOY_METRICS_RETENTION_HOURS` | `48` (lite: `12`) | Metrics history window; clamped to 1–720 |
+| `NIXPLOY_REMEDIATION` | `1` | `0` stops the restart-loop rule from proposing rollbacks ([observability.md](./observability.md#incidents)). Proposals already filed stay |
 | `NIXPLOY_SCHEDULES_LOG_PATH` | `<config>/schedules` | Where schedule run output is written |
 | `DOCKER_SOCKET` | `/var/run/docker.sock` | Docker socket the panel talks to |
 | `NIXPLOY_MIGRATIONS_DIR` | `/app/packages/server/drizzle` (image) | Migration journal directory. Set by the image; only relevant for custom layouts |
@@ -328,6 +334,30 @@ Stored in `<config>/.env` (mode 600) and put on the service at create time.
 
 `DATABASE_URL_TEST` is a development-only variable (the tenancy suite skips
 without it) and is never set in production.
+
+### Lite profile
+
+`install.sh --lite` (or `NIXPLOY_LITE=1`, which `update.sh` also forwards) is
+the profile for a 1–2 GB box. It does not turn features off behind your back:
+it changes the **defaults** of the five knobs above, and each of them still
+wins when you set it — a lite install that wants runtime logs back sets
+`NIXPLOY_RUNTIME_LOGS=1` and keeps everything else lean.
+
+| What changes | Normal | Lite |
+| --- | --- | --- |
+| Runtime log harvesting | on | **off** |
+| Metrics sample interval | 30 s | 2 min |
+| Metrics history kept | 48 h | 12 h |
+| Runtime log history (if re-enabled) | 7 days / 256 MB per service | 2 days / 64 MB |
+| Uptime probe interval | 30 s | 2 min |
+| SSH channels per managed server | 8 | 4 |
+| `NIXPLOY_MEMORY_LIMIT` / `NIXPLOY_WORKER_MEMORY` default | `2g` | `1g` |
+
+Nothing about deploys, routing, TLS, backups, previews or the queue changes —
+this is history and sampling, not capability. The panel measured **419–434
+MiB** after a full golden path in CI on the normal profile (the ceiling that
+fails the build is 768 MiB), and the live VPS idles at ~390–430 MiB with
+Postgres at ~51 MiB and Traefik at ~26 MiB.
 
 Container logs use the `json-file` driver with rotation (`max-size=10m`,
 `max-file=3`) for all three services.

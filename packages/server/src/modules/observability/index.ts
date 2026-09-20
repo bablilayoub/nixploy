@@ -1,6 +1,7 @@
 import { and, count, desc, eq, gt, ilike, isNull, or, sql } from "drizzle-orm";
 import { db } from "../../db";
 import { alertRules, deployments, incidents, serviceLogs, uptimeProbes } from "../../db/schema";
+import { profileDefaults } from "../../lib/profile";
 import { assertSafeOutboundUrl, pinnedFetch } from "../../utils/public-url";
 import { badRequest, notFound } from "../errors";
 import { notifyEvent } from "../notifications";
@@ -686,7 +687,8 @@ export async function runUptimeProbes(): Promise<void> {
 export async function initUptimeProbes(): Promise<void> {
 	const schedule = (await import("node-schedule")).default;
 	let inFlight = false;
-	schedule.scheduleJob("uptime-probes", "*/30 * * * * *", () => {
+	// Every 30 s normally, every 2 min under `NIXPLOY_LITE` (lib/profile.ts).
+	schedule.scheduleJob("uptime-probes", profileDefaults().uptimeProbeCron, () => {
 		if (inFlight) return; // never overlap passes
 		inFlight = true;
 		void runUptimeProbes()

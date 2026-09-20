@@ -5,6 +5,7 @@ import { Client } from "ssh2";
 import { db } from "../db";
 import { servers } from "../db/schema";
 import { createLogger } from "../lib/logger";
+import { NORMAL_PROFILE, profileDefaults } from "../lib/profile";
 import { getSshKeysPath } from "../modules/deployment/paths";
 import { notFound, preconditionFailed } from "../modules/errors";
 
@@ -96,7 +97,8 @@ export function clearRemoteHostKey(serverId: string): void {
 /* -------------------------------------------------------------------------- */
 
 /** OpenSSH's `MaxSessions` defaults to 10 — stay under it with headroom. */
-export const DEFAULT_SSH_MAX_CHANNELS = 8;
+/** Channels held open per server; `NIXPLOY_LITE` halves it (`lib/profile.ts`). */
+export const DEFAULT_SSH_MAX_CHANNELS = NORMAL_PROFILE.sshMaxChannels;
 export const DEFAULT_SSH_IDLE_MS = 5 * 60_000;
 export const DEFAULT_SSH_BREAKER_MS = 5 * 60_000;
 export const DEFAULT_SSH_BREAKER_FAILURES = 3;
@@ -126,7 +128,7 @@ export interface SshPoolLimits {
 /** Read the pool knobs from the environment (re-read per call, so tests can flip them). */
 export function sshPoolLimits(): SshPoolLimits {
 	return {
-		maxChannels: intFromEnv("NIXPLOY_SSH_MAX_CHANNELS", DEFAULT_SSH_MAX_CHANNELS, 1),
+		maxChannels: intFromEnv("NIXPLOY_SSH_MAX_CHANNELS", profileDefaults().sshMaxChannels, 1),
 		idleMs: intFromEnv("NIXPLOY_SSH_IDLE_MS", DEFAULT_SSH_IDLE_MS, MIN_INTERVAL_MS),
 		breakerMs: intFromEnv("NIXPLOY_SSH_BREAKER_MS", DEFAULT_SSH_BREAKER_MS, MIN_INTERVAL_MS),
 		breakerFailures: intFromEnv("NIXPLOY_SSH_BREAKER_FAILURES", DEFAULT_SSH_BREAKER_FAILURES, 1),

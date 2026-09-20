@@ -53,6 +53,11 @@ restores a compose snapshot). It never acts by itself; the org's
 `serviceAlert` notification channels get the proposal too. Set
 `NIXPLOY_REMEDIATION=0` on the worker to keep the rule quiet.
 
+**A lite profile exists now.** Nothing changes unless you ask for it:
+`NIXPLOY_LITE=1` (or `install.sh --lite`) is opt-in and only moves defaults —
+see [install.md → Lite profile](./install.md#lite-profile) for the table of
+what it gives up.
+
 **Per-org runtime log retention.** Organization quotas gained two fields
 under the instance's `NIXPLOY_RUNTIME_LOG_*` ceiling; blank keeps today's
 behaviour, so nothing changes until an org admin sets them.

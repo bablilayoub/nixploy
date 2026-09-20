@@ -4,6 +4,7 @@ import schedule from "node-schedule";
 import { db } from "../../db";
 import { servers } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { profileDefaults } from "../../lib/profile";
 import { execAsyncRemote } from "../../utils/exec";
 import { fanOutConcurrency, mapWithConcurrency } from "../../utils/fan-out";
 import { isServerUnreachable } from "../../utils/ssh-pool";
@@ -54,7 +55,17 @@ const DOCKER_TS_STRICT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z
 const LOCAL_CONCURRENCY = 4;
 
 /** `NIXPLOY_RUNTIME_LOGS=0` turns the harvester off (the read side keeps serving what exists). */
-export const runtimeLogsEnabled = (): boolean => process.env.NIXPLOY_RUNTIME_LOGS !== "0";
+/**
+ * Harvest what containers print? `NIXPLOY_RUNTIME_LOGS` decides when it is
+ * set; otherwise the profile does — on normally, off under `NIXPLOY_LITE`
+ * (`lib/profile.ts`), where the harvester's buffers and its disk are the
+ * biggest thing a small box can give up.
+ */
+export const runtimeLogsEnabled = (): boolean => {
+	const raw = process.env.NIXPLOY_RUNTIME_LOGS?.trim();
+	if (raw) return raw !== "0";
+	return profileDefaults().runtimeLogs;
+};
 
 interface HarvestTarget {
 	appName: string;

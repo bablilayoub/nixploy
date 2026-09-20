@@ -195,7 +195,8 @@ Helpers: `modules/deployment/paths.ts` (canonical `getConfigDir`, apps, logs, ss
 | `NIXPLOY_CONFIG_DIR` (`NIXPLOY_DIR` legacy alias in one helper) | paths | state root |
 | `NIXPLOY_NETWORK` | swarm, compose, traefik | overlay network (default `nixploy-network`) |
 | `NIXPLOY_WILDCARD_DOMAIN` | previews | default `traefik.me` |
-| `NIXPLOY_RUNTIME_LOGS` | runtime-logs | `0` turns the 30 s log harvester off (history on disk stays readable) |
+| `NIXPLOY_LITE` | `lib/profile.ts` | `1` swaps the default profile: no runtime log harvesting, metrics every 2 min kept 12 h, a slower uptime pass, 4 SSH channels. Every knob it moves is still read from its own variable first |
+| `NIXPLOY_RUNTIME_LOGS` | runtime-logs | `0` turns the 30 s log harvester off (history on disk stays readable); unset follows the profile |
 | `NIXPLOY_RUNTIME_LOG_RETENTION_DAYS` | runtime-logs | hour files older than this are pruned hourly (default `7`) |
 | `NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE` | runtime-logs | oldest hours of a service over this are pruned (default `256`, `0` = no byte cap) |
 | `NIXPLOY_REMEDIATION` | remediation | `0` stops the restart-loop rule from filing proposals (open ones stay) |

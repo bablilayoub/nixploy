@@ -39,6 +39,12 @@ this file is the summary.
   no button. One proposal per service per hour; `NIXPLOY_REMEDIATION=0`
   turns the rule off. The manual `application.rollback` and an applied
   proposal now share one code path.
+- **`NIXPLOY_LITE`, the small-box profile.** `install.sh --lite` (or the
+  variable, which `update.sh` forwards) changes the defaults of five knobs for
+  a 1–2 GB box: no runtime log harvesting, metrics every two minutes kept
+  twelve hours, a two-minute uptime pass, four SSH channels per server, and a
+  1g service memory limit. Each knob still wins when set individually, and
+  nothing about deploys, routing, backups or the queue changes.
 - **Per-organization runtime log retention.** Settings → Organization →
   Quotas gained *Runtime log history* (days, MB per service): an org keeps
   less than the instance's `NIXPLOY_RUNTIME_LOG_*` ceiling, never more; the
