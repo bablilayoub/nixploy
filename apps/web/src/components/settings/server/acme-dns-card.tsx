@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { useSaveBar } from "@/components/services/save-bar";
 import { Badge } from "@/components/ui/badge";
@@ -50,14 +50,26 @@ export function AcmeDnsCard() {
 	const provider = providerDraft.value;
 	const recordsDraft = useDraft<boolean>(settingsQuery.data?.dnsAutoRecords ?? false);
 	// Write-only secrets: never seeded from the server, cleared after a save.
-	const [credentials, setCredentials] = useState<Record<string, string>>({});
+	const credentialsDraft = useDraft<Record<string, string>>({});
+	const credentials = credentialsDraft.value;
 	const [providerOpen, setProviderOpen] = useState(false);
+	const zoneCheckVersion = useRef(0);
 	const [zoneCheck, setZoneCheck] = useState<
 		| { state: "idle" }
 		| { state: "pending" }
 		| { state: "ok"; zones: string[] }
 		| { state: "error"; message: string }
 	>({ state: "idle" });
+	const clearZoneCheck = () => {
+		zoneCheckVersion.current += 1;
+		setZoneCheck({ state: "idle" });
+	};
+	const selectProvider = (code: string) => {
+		providerDraft.set(code);
+		credentialsDraft.reset();
+		clearZoneCheck();
+		setProviderOpen(false);
+	};
 
 	const save = useSaveMutation(trpc.webServer.updateSettings.mutationOptions(), {
 		successMessage: "DNS provider saved",
@@ -65,14 +77,17 @@ export function AcmeDnsCard() {
 		onSuccess: () => {
 			providerDraft.markSaved();
 			recordsDraft.markSaved();
-			setCredentials({});
-			setZoneCheck({ state: "idle" });
+			credentialsDraft.reset();
+			clearZoneCheck();
 		},
 	});
 
 	const providers = providersQuery.data ?? [];
 	const selected = providers.find((entry) => entry.code === provider);
-	const savedKeys = settingsQuery.data?.acmeDnsCredentialKeys ?? [];
+	const savedKeys =
+		settingsQuery.data?.acmeDnsProvider === provider
+			? (settingsQuery.data?.acmeDnsCredentialKeys ?? [])
+			: [];
 	const recordsSupported = Boolean(selected?.records);
 
 	const onSave = () => {
@@ -93,10 +108,12 @@ export function AcmeDnsCard() {
 	};
 
 	const combinedDraft = {
-		dirty: providerDraft.dirty || recordsDraft.dirty,
+		dirty: providerDraft.dirty || recordsDraft.dirty || credentialsDraft.dirty,
 		reset: () => {
 			providerDraft.reset();
 			recordsDraft.reset();
+			credentialsDraft.reset();
+			clearZoneCheck();
 		},
 	};
 	useSaveBar(combinedDraft, {
@@ -108,11 +125,13 @@ export function AcmeDnsCard() {
 	// Asks the provider for its zones with the *stored* credentials — so it
 	// runs against what was saved, which is why it is disabled while dirty.
 	const checkLink = async () => {
+		const version = ++zoneCheckVersion.current;
 		setZoneCheck({ state: "pending" });
 		try {
 			const result = await client.webServer.dnsZones.query();
-			setZoneCheck({ state: "ok", zones: result.zones });
+			if (version === zoneCheckVersion.current) setZoneCheck({ state: "ok", zones: result.zones });
 		} catch (error) {
+			if (version !== zoneCheckVersion.current) return;
 			setZoneCheck({
 				state: "error",
 				message: describeError(error, "The provider did not answer"),
@@ -160,6 +179,7 @@ export function AcmeDnsCard() {
 									type="button"
 									variant="outline"
 									role="combobox"
+									disabled={save.isPending}
 									aria-expanded={providerOpen}
 									className="justify-between font-normal"
 								>
@@ -173,13 +193,7 @@ export function AcmeDnsCard() {
 									<CommandList>
 										<CommandEmpty>No provider matches.</CommandEmpty>
 										<CommandGroup>
-											<CommandItem
-												value="None HTTP-01 only"
-												onSelect={() => {
-													providerDraft.set(NONE);
-													setProviderOpen(false);
-												}}
-											>
+											<CommandItem value="None HTTP-01 only" onSelect={() => selectProvider(NONE)}>
 												<Check
 													className={cn("size-4", provider === NONE ? "opacity-100" : "opacity-0")}
 												/>
@@ -189,10 +203,7 @@ export function AcmeDnsCard() {
 												<CommandItem
 													key={entry.code}
 													value={`${entry.label} ${entry.code}`}
-													onSelect={() => {
-														providerDraft.set(entry.code);
-														setProviderOpen(false);
-													}}
+													onSelect={() => selectProvider(entry.code)}
 												>
 													<Check
 														className={cn(
@@ -226,12 +237,14 @@ export function AcmeDnsCard() {
 							<Input
 								id={`acme-dns-${key}`}
 								type="password"
+								disabled={save.isPending}
 								autoComplete="off"
 								placeholder={savedKeys.includes(key) ? "•••••••• (saved)" : "Enter the value"}
 								value={credentials[key] ?? ""}
-								onChange={(event) =>
-									setCredentials((current) => ({ ...current, [key]: event.target.value }))
-								}
+								onChange={(event) => {
+									credentialsDraft.patch({ [key]: event.target.value });
+									clearZoneCheck();
+								}}
 							/>
 						</div>
 					))}
@@ -251,8 +264,11 @@ export function AcmeDnsCard() {
 								<Switch
 									id="dns-auto-records"
 									checked={recordsSupported && recordsDraft.value}
-									disabled={!recordsSupported}
-									onCheckedChange={recordsDraft.set}
+									disabled={!recordsSupported || save.isPending}
+									onCheckedChange={(checked) => {
+										recordsDraft.set(checked);
+										clearZoneCheck();
+									}}
 								/>
 							</div>
 							{recordsSupported && (
@@ -261,7 +277,12 @@ export function AcmeDnsCard() {
 										type="button"
 										variant="outline"
 										size="sm"
-										disabled={!linkSaved || combinedDraft.dirty || zoneCheck.state === "pending"}
+										disabled={
+											!linkSaved ||
+											combinedDraft.dirty ||
+											save.isPending ||
+											zoneCheck.state === "pending"
+										}
 										title={
 											linkSaved && !combinedDraft.dirty
 												? undefined
@@ -272,6 +293,11 @@ export function AcmeDnsCard() {
 										{zoneCheck.state === "pending" && <Loader2 className="size-4 animate-spin" />}
 										Check link
 									</Button>
+									{(!linkSaved || combinedDraft.dirty) && (
+										<span className="text-xs text-muted-foreground">
+											Save the provider first — the check uses the stored credentials.
+										</span>
+									)}
 									{zoneCheck.state === "ok" &&
 										(zoneCheck.zones.length === 0 ? (
 											<span className="text-xs text-muted-foreground">

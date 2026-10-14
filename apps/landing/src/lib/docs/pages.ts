@@ -488,7 +488,7 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 			{ type: "h2", text: "Diagnose a route" },
 			{
 				type: "p",
-				text: "A host answers 502 or 404 and the service says it is running. The stethoscope on the domain row (also nixploy domain diagnose and the get_domain_diagnosis MCP tool) walks the request path in order and names the fix at each step: DNS, the Traefik route file, a second file claiming the same host, the upstream task, the shared-network attachment, the container port (a throwaway busybox on the overlay), Traefik's own answer for the host, and the certificate. Deterministic — no model involved.",
+				text: "A host answers 502 or 404 and the service says it is running. The stethoscope on the domain row (also nixploy domain diagnose and the get_domain_diagnosis MCP tool) walks the request path in order and names the fix at each step: DNS, the Traefik route file, a second file claiming the same host and path, the upstream task, the shared-network attachment, the container port (a throwaway busybox on the overlay), Traefik's own answer for the host, and the certificate. An application's own 404 can be a working route; the ambiguous default 404 prompts a router and application check. A same-host HTTPS redirect is followed through Traefik so it cannot hide a final 502. Checks run from the panel; a stored certificate does not prove external reachability or public TLS trust.",
 			},
 			{ type: "h2", text: "DNS records created for you" },
 			{
@@ -497,7 +497,7 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 			},
 			{
 				type: "p",
-				text: "The write never fails the domain: the row and the route exist either way, and the response carries a dns outcome the panel toasts and nixploy domain add prints. Retry on demand with the globe button on the domain row, nixploy domain ensure-dns, or domain.ensureDnsRecord — which also creates the record for a domain attached while the switch was off. Check link on the settings card lists the zones the stored credentials see. Records are never deleted when a domain is removed.",
+				text: "The write never fails the domain: the row and the route exist either way, and the response carries a dns outcome the panel toasts and nixploy domain add prints. A round-robin set is reported as skipped even if one address matches this server. Hetzner writes wait for action success; an error or no confirmation within 30 seconds is reported as failed (check the provider before retrying a timed-out action). Retry on demand with the globe button on the domain row, nixploy domain ensure-dns, or domain.ensureDnsRecord — which also creates the record for a domain attached while the switch was off. Check link lists the zones the saved credentials see; save credential edits before checking. Zone access does not prove record-edit permission or certificate issuance. Records are never deleted when a domain is removed.",
 			},
 			{ type: "h2", text: "External upstreams" },
 			{

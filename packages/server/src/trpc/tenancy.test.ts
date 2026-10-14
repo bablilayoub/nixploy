@@ -311,6 +311,29 @@ describe.skipIf(!testUrl)("teams and project scope", () => {
 		await expectNotFound(scopedCaller.compose.all({ projectId: scoped.otherProjectId }));
 	});
 
+	it("hides domain ids on an inaccessible project before DNS, diagnosis or routing mutations", async () => {
+		const { db } = await import("../db");
+		const { domains } = await import("../db/schema");
+		const [hidden] = await db
+			.insert(domains)
+			.values({
+				host: `hidden-${scoped.otherApplicationId}.example.com`,
+				applicationId: scoped.otherApplicationId,
+			})
+			.returning();
+		if (!hidden) throw new Error("Domain fixture missing");
+		const input = { domainId: hidden.domainId };
+		await expectNotFound(scopedCaller.domain.one(input));
+		await expectNotFound(scopedCaller.domain.middlewares(input));
+		await expectNotFound(scopedCaller.domain.diagnose(input));
+		await expectNotFound(scopedCaller.domain.ensureDnsRecord(input));
+		await expectNotFound(scopedCaller.domain.update({ ...input, host: "changed.example.com" }));
+		await expectNotFound(scopedCaller.domain.saveMiddlewares({ ...input, middlewares: [] }));
+		await expectNotFound(scopedCaller.domain.delete(input));
+		const ownerCaller = harness.createTestCaller(tenant.session);
+		expect((await ownerCaller.domain.one(input)).host).toBe(hidden.host);
+	});
+
 	it("does not write when it refuses", async () => {
 		// The mutation above must have been refused before the UPDATE, not after.
 		const ownerCaller = harness.createTestCaller(tenant.session);

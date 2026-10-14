@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 interface Call {
 	url: string;
@@ -56,6 +56,10 @@ const spec = { name: "app", type: "A" as const, content: "203.0.113.10", ttl: 30
 beforeEach(() => {
 	outbound.calls = [];
 	outbound.answers = [];
+});
+
+afterEach(() => {
+	vi.useRealTimers();
 });
 
 describe("provider table", () => {
@@ -244,6 +248,73 @@ describe("hetzner (Cloud API)", () => {
 		if (!made) throw new Error("no client");
 		return made;
 	};
+	it("waits for a running record action to succeed before reporting completion", async () => {
+		vi.useFakeTimers();
+		outbound.answers.push(
+			[201, { action: { id: 7, status: "running" } }],
+			[200, { action: { id: 7, status: "success" } }],
+		);
+		let finished = false;
+		const operation = client()
+			.createRecord({ id: "example.com", name: "example.com" }, spec)
+			.then(() => {
+				finished = true;
+			});
+		await vi.advanceTimersByTimeAsync(999);
+		expect(finished).toBe(false);
+		expect(outbound.calls).toHaveLength(1);
+		await vi.advanceTimersByTimeAsync(1);
+		await operation;
+		expect(outbound.calls[1]?.url).toBe("https://api.hetzner.cloud/v1/actions/7");
+	});
+
+	it("surfaces an async record action failure instead of reporting a successful update", async () => {
+		vi.useFakeTimers();
+		outbound.answers.push(
+			[201, { action: { id: 8, status: "running" } }],
+			[
+				200,
+				{
+					action: {
+						id: 8,
+						status: "error",
+						error: { code: "action_failed", message: "Zone is locked" },
+					},
+				},
+			],
+		);
+		const assertion = expect(
+			client().updateRecord(
+				{ id: "example.com", name: "example.com" },
+				{ id: "app/A", name: "app", type: "A", content: "198.51.100.7" },
+				spec,
+			),
+		).rejects.toThrow("Zone is locked");
+		await Promise.all([assertion, vi.advanceTimersByTimeAsync(1000)]);
+	});
+
+	it("does not report success when a record action remains running", async () => {
+		vi.useFakeTimers();
+		outbound.answers.push(
+			...Array.from({ length: 31 }, (): [number, unknown] => [
+				200,
+				{ action: { id: 9, status: "running" } },
+			]),
+		);
+		const assertion = expect(
+			client().createRecord({ id: "example.com", name: "example.com" }, spec),
+		).rejects.toThrow(/not confirmed.*30 seconds/);
+		await Promise.all([assertion, vi.advanceTimersByTimeAsync(30_000)]);
+		expect(outbound.calls.length).toBeLessThanOrEqual(31);
+	});
+
+	it("rejects a write response without its action", async () => {
+		outbound.answers.push([201, { rrset: {} }]);
+		await expect(
+			client().createRecord({ id: "example.com", name: "example.com" }, spec),
+		).rejects.toThrow(/action/);
+	});
+
 	it("offers primary zones only", async () => {
 		outbound.answers.push([
 			200,
@@ -275,8 +346,8 @@ describe("hetzner (Cloud API)", () => {
 					},
 				},
 			],
-			[201, { rrset: {}, action: { id: 1, status: "running" } }],
-			[201, { action: { id: 2, status: "running" } }],
+			[201, { rrset: {}, action: { id: 1, status: "success" } }],
+			[201, { action: { id: 2, status: "success" } }],
 		);
 		expect(await client().listRecords(zone, "*")).toEqual([]);
 		expect(outbound.calls[0]?.url).toBe(

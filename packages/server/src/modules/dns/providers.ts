@@ -204,10 +204,18 @@ interface HetznerRrset {
 	};
 }
 
+interface HetznerActionResponse {
+	action: {
+		id: number;
+		status: "running" | "success" | "error";
+		error?: { code: string; message: string } | null;
+	};
+}
+
 /**
  * Hetzner DNS lives in the Cloud API now (`api.hetzner.cloud`); records are
  * RRsets addressed by relative name + type, and every write is an async
- * action the API applies within seconds — not polled here. Only `primary`
+ * action; wait for its success before reporting a record as written. Only `primary`
  * zones are writable, so secondaries are not offered.
  */
 const hetzner: Factory = (credentials) => {
@@ -217,6 +225,35 @@ const hetzner: Factory = (credentials) => {
 	const label = "Hetzner DNS";
 	const rrsetPath = (zone: DnsZone, name: string) =>
 		`${base}/zones/${encodeURIComponent(zone.id)}/rrsets/${encodeURIComponent(name)}/A`;
+	const waitForAction = async (response: HetznerActionResponse | null) => {
+		const deadline = Date.now() + 30_000;
+		let action = response?.action;
+		while (action?.status === "running") {
+			const remaining = deadline - Date.now();
+			if (remaining <= 0) {
+				throw new DnsProviderError(
+					label,
+					200,
+					`DNS action ${action.id} was not confirmed after 30 seconds; check the provider before retrying`,
+				);
+			}
+			await new Promise((resolve) => setTimeout(resolve, Math.min(1000, remaining)));
+			if (Date.now() >= deadline) continue;
+			const result = await providerJson<HetznerActionResponse>(
+				label,
+				`${base}/actions/${action.id}`,
+				{ headers: bearer(auth), timeoutMs: deadline - Date.now() },
+			);
+			action = result?.action;
+		}
+		if (action?.status !== "success") {
+			throw new DnsProviderError(
+				label,
+				200,
+				action?.error?.message ?? "DNS action did not return a successful result",
+			);
+		}
+	};
 	return {
 		code: "hetzner",
 		label,
@@ -250,23 +287,33 @@ const hetzner: Factory = (credentials) => {
 			}));
 		},
 		async createRecord(zone, record) {
-			await providerJson(label, `${base}/zones/${encodeURIComponent(zone.id)}/rrsets`, {
-				method: "POST",
-				headers: bearer(auth),
-				body: {
-					name: record.name,
-					type: "A",
-					ttl: record.ttl,
-					records: [{ value: record.content }],
+			const result = await providerJson<HetznerActionResponse>(
+				label,
+				`${base}/zones/${encodeURIComponent(zone.id)}/rrsets`,
+				{
+					method: "POST",
+					headers: bearer(auth),
+					body: {
+						name: record.name,
+						type: "A",
+						ttl: record.ttl,
+						records: [{ value: record.content }],
+					},
 				},
-			});
+			);
+			await waitForAction(result);
 		},
 		async updateRecord(zone, _existing, record) {
-			await providerJson(label, `${rrsetPath(zone, record.name)}/actions/set_records`, {
-				method: "POST",
-				headers: bearer(auth),
-				body: { records: [{ value: record.content }] },
-			});
+			const result = await providerJson<HetznerActionResponse>(
+				label,
+				`${rrsetPath(zone, record.name)}/actions/set_records`,
+				{
+					method: "POST",
+					headers: bearer(auth),
+					body: { records: [{ value: record.content }] },
+				},
+			);
+			await waitForAction(result);
 		},
 	};
 };
