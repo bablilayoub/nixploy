@@ -181,12 +181,15 @@ replacement, space for both staged restored files and the previous contents.
 Volume backups do not pause application writes: coordinate application/database
 snapshots when consistency requires it.
 
-Volume and Redis replacements acquire `.nixploy-restore-lock/` at the target
-volume root before staging. Its `owner` file records a random operation token;
+Volume archives and volume/Redis replacements share `.nixploy-restore-lock/`
+at the target volume root. The archive reader mounts the data read-only and
+excludes only its own root marker; the fence remains active until that reader
+has stopped and its identity has been checked. Failed backup preparation does
+not publish or prune archives. Replacements acquire the same fence before staging. Its `owner` file records a random operation token;
 the filesystem lock fences other panel/worker processes, including restores
 through another database or managed-server connection. Existing locks or
 `.nixploy-restore-*` / `.nixploy-previous-*` recovery trees block another
-restore. They have no expiry and are never automatically treated as stale.
+backup or restore. They have no expiry and are never automatically treated as stale.
 A crash, a detached helper or a failed rollback can leave them behind. Keep
 the service stopped, prove that no restore helper or other volume writer is
 active on the exact server and volume, then inspect the matching staged and
