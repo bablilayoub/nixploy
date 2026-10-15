@@ -47,6 +47,7 @@ export interface PreflightInputs {
 	targetTag: string | null;
 	isDowngrade: boolean;
 	allowDowngrade: boolean;
+	pinnedVersion?: string | null;
 	updateInProgress: boolean;
 	disk: HostDiskStats | null;
 	activeDeployments: number | null;
@@ -82,6 +83,18 @@ const formatGib = (bytes: number): string => `${(bytes / GIB).toFixed(1)} GiB`;
 
 export function evaluatePreflight(inputs: PreflightInputs, now = Date.now()): PreflightCheck[] {
 	const checks: PreflightCheck[] = [];
+	if (
+		inputs.targetTag &&
+		inputs.pinnedVersion &&
+		compareVersions(inputs.targetTag, inputs.pinnedVersion) > 0
+	) {
+		checks.push({
+			id: "pin",
+			level: "block",
+			title: `The target is newer than the pin v${inputs.pinnedVersion.replace(/^v/, "")}`,
+			detail: "Clear or raise the version pin before updating to this release.",
+		});
+	}
 
 	checks.push(
 		inputs.updateInProgress
@@ -303,6 +316,7 @@ export async function runUpdatePreflight(options?: {
 		targetTag: targetVersion ? releaseTag(targetVersion) : null,
 		isDowngrade,
 		allowDowngrade: options?.allowDowngrade ?? false,
+		pinnedVersion: settings.pinnedVersion,
 		updateInProgress: settings.updateInProgress,
 		disk,
 		activeDeployments,

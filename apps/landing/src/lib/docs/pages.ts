@@ -212,7 +212,9 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 				items: [
 					"Settings → Platform → Updates shows the GitHub release notes for the image the instance tracks, not just a digest",
 					"Update to a specific release: only the tag changes, never the registry or repository the instance already trusts",
+					"Every update uses the preflight confirmation: checking, failed checks and changed targets disable confirmation; warnings remain visible. Re-check after correcting a block",
 					"pinnedVersion is a ceiling for automatic updates — the checker logs “held back” instead of rolling past it",
+					"An explicit target above the pin is blocked too; clear or raise the pin first. Forcing past active deployments keeps your chosen version and downgrade acknowledgment",
 					"Downgrades are refused unless you allow them explicitly: migrations are forward-only, so restore the pre-update dump first",
 				],
 			},
@@ -294,6 +296,15 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 nixploy import inspect --source dokploy --url https://old-panel.example.com
 nixploy import plan  --source dokploy --url https://old-panel.example.com --source-project prj_123
 nixploy import apply --source dokploy --url https://old-panel.example.com --source-project prj_123`,
+			},
+			{ type: "h2", text: "Import from a database dump" },
+			{
+				type: "p",
+				text: "When the old panel is unavailable, use --dump-file panel.sql.gz in place of --url and the API key. The dump is restored in a temporary Postgres container with no network, then removed. Uploaded dumps expire after 24 hours. Plain SQL, gzip and custom pg_dump formats are supported.",
+			},
+			{
+				type: "note",
+				text: "Encrypted source env cannot be decrypted by the importer: both keys and values need manual input. Ciphertext is omitted with a warning, and repeating the import preserves values you entered here. File mounts and incompatible named volumes need manual setup; existing target mounts are kept. Database passwords are replaced; update connection URLs and restore application data separately before deploying. Source volumes, data and traffic are not moved automatically.",
 			},
 			{ type: "h2", text: "Approach for everything else" },
 			{

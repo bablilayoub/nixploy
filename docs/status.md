@@ -5,6 +5,64 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Four backlog integrations — 2026-10-15
+
+Completed the installer race fix, Update browser verification, real-provider
+preview lifecycle, and real-source API/dump importer pass. All integration
+instances used disposable databases/configuration and test-owned workloads.
+Same-host takeover remains a separate product feature.
+
+| Track | Verified evidence | Defects fixed |
+| --- | --- | --- |
+| Installer signatures | Real cosign against signed index `sha256:c8475a34bfc7984b27878622d0127e0c66b01a08173e675c64ed9fddab8e30a3`: both shipping scripts accept it and reject a foreign identity and its unsigned build manifest. A temporary local registry proved Buildx's creation-metadata digest survives publication unchanged. | Docker stages a unique index, signs and verifies that digest before publishing `main`/SHA tags; PR CI pins one signed baseline for both scripts. No arbitrary delay or verification bypass. |
+| Update dialog | Actual registry, disk, platform, backup and release preflight; desktop/mobile screenshots in light/dark; **16 fixture browser scenarios per theme**, no console/page errors. Real API denies org-owner + `docker.manage` and anonymous management access; instance admin succeeds. Actual pin/cache and `0.07.3` canonicalization regressions pass. | Failed/loading/cached rechecks cannot confirm; explicit versions use the same preflight; pin ceilings block; changed targets require recheck; force retry keeps version/downgrade choices; pending actions and failure retry remain usable. |
+| Preview lifecycle | Official isolated **Gitea 1.25.4**, actual repo clone/build, Swarm app and Traefik URL; real `nixploy/preview` success/failure statuses on controlled commits. Separate logical Postgres DB **and user**, seed-only preview data, env precedence, redeploy retaining DB without reseeding, seed failure/recovery, expiry, queued/running deletion and legacy-orphan refusal. Source service/version/data preserved. | Provider status/comment requests now use guarded pinned egress, deadline and redirect refusal. Delete cancels/waits for builds; worker rejects orphan previews without touching production. Late-spawn cancellation is killed/awaited before cleanup. Preview checkout/cache cleanup preserves parent files and deployment history. |
+| Importer | Official isolated **Dokploy v0.30.8** (image `sha256:e8789a3f71a1e50d817836ad222ee0eab8ee69fc1b0451fee189a880b5602871`) seeded through its real API, nested Docker daemon, genuine `pg_dump`. Both paths inspect/plan/apply/repeat: app, compose, Postgres, two domains, inherited env, replaced password, stable IDs; plans contain none of seven secret canaries or source API key. Fresh import leaves Docker service inventory unchanged and writes no proxy config. Explicit app/compose deployments then return **HTTP 200**; Postgres accepts its regenerated credentials. | Hydrate full projects instead of incomplete list rows. Omit encrypted env with truthful warnings and preserve manual values on repeat. Report incompatible/file/compose mounts for manual recreation while preserving target collections and unsupported compose settings. Enforce hidden target-project access by ID/name. Import suppresses runtime and proxy synchronization until explicit deploy. |
+
+The post-merge [CI run for PR #13](https://github.com/bablilayoub/nixploy/actions/runs/38705878420)
+passed signature checks but failed the old-release backup smoke: its existing
+readiness regex matched raw JSON with escaped database-name quotes. The smoke
+now matches decoded REST errors; the release compatibility patch preserves
+that release's API sequence. Six regressions prove current/old-release error
+handling, successful payloads and unrelated hard failures.
+
+Reproducible checks: `tools/ci/check-installer-signatures.sh`,
+`node --test tools/ci/golden-path-retry.test.mjs`, and
+`apps/web/e2e/update-preflight.mjs` (authenticated disposable panel; update
+actions intercepted). Sanitized raw API/provider/Docker evidence, integration
+harnesses and screenshots are retained under this worktree's ignored
+`.nixploy-data/verification/`; the source dump/key material is removed.
+
+Final local gates: **209 server files, 2,885 passed, 1 skipped** with the
+Postgres-backed suites enabled; the skip is the optional template registry
+probe, which CI runs separately. **96 web**, **93 CLI**, and **6 smoke-error**
+tests passed. All four workspace TypeScript checks, changed-file formatting,
+strict repository Biome (**1,076 files**), knip 5.88.1, shell checks and
+workflow syntax validation passed. Web and landing production builds passed;
+the landing install/migration docs render without console errors or horizontal
+overflow (native dark theme and forced light-token fallback). Pushed-head
+checks are tracked on the draft PR; no merge or release is authorized here.
+
+Cleanup: the four original Swarm services retain their original IDs and 1/1
+replicas. Test services, known hook containers, providers/proxies, named data
+volumes, databases, dumps and credentials were removed. **22 unattributed
+anonymous Docker volumes and four overlays** were preserved because ownership
+could not be established safely; no broad prune was used. Exact volume
+IDs/timestamps are in the local preview report; overlays are
+`production-39aa1d05-net`, `production-779699be-net`,
+`production-dbc22950-net` and `production-70cb6aac-net`. Some were created
+during the shared test window, which alone is insufficient ownership proof.
+
+Evidence boundaries: actual in-app update actions/failures were **fixtures**
+to preserve the user's platform; install/update rollout evidence comes from
+the real-Swarm CI jobs. Gitea is a real local provider, not hosted GitHub,
+GitLab or Bitbucket. Fork approval used a real noncollaborator provider lookup
+plus protected-router checks, not a complete fork PR/webhook delivery. Expiry
+used a deliberately expired test row through actual maintenance. The importer
+exercised real PostgreSQL; the other database engines retain schema/unit
+coverage. Encrypted dump keys/values and source data/volumes require manual
+input/restoration. No public DNS/ACME, full-day VPS or takeover claim.
+
 ## PR #13 review and CI remediation — 2026-10-15
 
 The first [PR #13](https://github.com/bablilayoub/nixploy/pull/13) CI run
@@ -169,18 +227,13 @@ State:
 | Version and figures | The fold's badge and the install guide's checksum snippet read `apps/landing/package.json`, which `tools/release.sh` bumps — they were four releases behind. The control-plane figure was re-measured on the box (503 MiB) rather than carried over |
 | Cross-browser | Untested: only Chromium is installed for Playwright here. The built CSS is Lightning-compiled (oklch → hex + lab) with `-webkit-` prefixes for backdrop-filter and mask |
 
-Flake found while verifying (not caused by the landing work):
-
-- `Installer signature check → update.sh verifies and pins the signed image`
-  failed on the run for `bf15566`. The `Docker` workflow pushes
-  `ghcr.io/bablilayoub/nixploy:main` on every push to main and signs it
-  afterwards; the CI job verifies that same moving tag. On this push the two
-  overlapped — CI started 02:51, the Docker workflow finished 02:54 — so the
-  job read a `:main` whose signature was not attached yet. Nothing in
-  `install.sh`, `update.sh` or `tools/ci/` changed. **Confirmed a flake**: the
-  same job passed on the next run (`19ee252`) with the same code. If it
-  recurs, the job should verify a digest the run itself produced rather than
-  the shared moving tag.
+The installer signature flake found during landing verification (`bf15566`,
+then green with unchanged code on `19ee252`) is **fixed 2026-10-15**. Docker
+now stages a unique index, signs and verifies its exact creation digest, and
+only then publishes `main` and the commit tag. PR CI pins one signed baseline
+for both installers. Real cosign checks accept the official signed index and
+reject a foreign identity and an unsigned build manifest; neither negative
+case treats network or shell failures as proof of signature rejection.
 
 Known gaps:
 
@@ -300,10 +353,13 @@ log).
    2026-09-20 (session log) — what is left there is a **full day** of output
    (the hour-close gzip and the 2 000-line marker were not reachable in a
    23-minute window), the external upstream hourly re-check (**blocked: the
-   box has no upstreams**), and a preview with a database on a real repository
-   with a commit status arriving on the provider.
-5. **Importer against a live source panel** (roadmap §11): fixtures only so
-   far; then the offline-dump path.
+   box has no upstreams**). The preview/database/provider integration was
+   verified locally against a real isolated Gitea repository on 2026-10-15;
+   this does not claim a remote VPS or hosted-provider test.
+5. **Importer real-source verification** (roadmap §11): real isolated Dokploy
+   v0.30.8 API and its genuine dump verified 2026-10-15; details above.
+   Source data/volumes and encrypted env still require the documented manual
+   migration steps. Same-host takeover remains a separate feature.
 6. **Same-host takeover** (§12) needs a VM with the source panel installed —
    do not ship the script untested.
 7. **Roadmap leftovers:** Copilot v2's metrics/Traefik context and a
@@ -313,7 +369,9 @@ log).
    box), per-team capability overlays (§7).
 8. **Panel surfaces added this week were typechecked and unit-tested, not
    browser-driven:** the upstream page, the preview panel's source switch, the
-   Runtime → History tab and the Update dialog's preflight. **Domain diagnosis,
+   Runtime → History tab. **The Update dialog's preflight was browser-verified
+   on desktop/mobile in light/dark on 2026-10-15**, with actual registry/API
+   checks separated from fixture update actions. **Domain diagnosis,
    the DNS provider card (switch + Check link) and domain-row controls were
    browser-verified in light/dark on 2026-10-15**, with provider fixtures and
    actual local domain/diagnosis requests distinguished above.

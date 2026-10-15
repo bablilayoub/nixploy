@@ -10,7 +10,7 @@ import {
 	sourceApplicationSchema,
 	sourceComposeSchema,
 	sourceDatabaseSchema,
-	sourceProjectListSchema,
+	sourceProjectSummarySchema,
 } from "./source-schema";
 
 /**
@@ -87,13 +87,29 @@ export class SourcePanelClient implements SourceReader {
 
 	/** Every project the key can see, with environments and service ids. */
 	async listProjects(): Promise<SourceProjectSummary[]> {
-		const parsed = sourceProjectListSchema.safeParse(await this.get("project.all"));
+		// The list intentionally omits database names and environment env.
+		// Read each visible project in full so inherited env is not lost and
+		// id-only database summaries do not make the inventory fail to parse.
+		const parsed = sourceProjectSummarySchema
+			.pick({ projectId: true, name: true })
+			.array()
+			.safeParse(await this.get("project.all"));
 		if (!parsed.success) {
 			throw badRequest(
 				`The source panel's project list has an unexpected shape: ${parsed.error.issues[0]?.message ?? "invalid"}`,
 			);
 		}
-		return parsed.data;
+		const projects: SourceProjectSummary[] = [];
+		for (const row of parsed.data) {
+			projects.push(
+				parseOne(
+					sourceProjectSummarySchema,
+					await this.get("project.one", { projectId: row.projectId }),
+					"project",
+				),
+			);
+		}
+		return projects;
 	}
 
 	async getApplication(applicationId: string): Promise<SourceApplication> {

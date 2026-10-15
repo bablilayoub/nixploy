@@ -38,19 +38,19 @@ const IV_LENGTH = 12;
 const secretText = z.string().max(1_048_576).nullable();
 
 const serviceSecretsSchema = z.object({
-	env: secretText,
+	env: secretText.optional(),
 	buildArgs: secretText.optional(),
 	previewEnv: secretText.optional(),
 });
 
 export const secretsPayloadSchema = z.object({
 	version: z.literal(SECRETS_BUNDLE_VERSION),
-	project: z.object({ name: z.string(), env: secretText }),
-	environment: z.object({ name: z.string(), env: secretText }),
+	project: z.object({ name: z.string(), env: secretText.optional() }),
+	environment: z.object({ name: z.string(), env: secretText.optional() }),
 	applications: z.record(z.string(), serviceSecretsSchema),
 	compose: z.record(z.string(), serviceSecretsSchema),
 	/** Keyed by database kind; a kind with no rows may be omitted. */
-	databases: z.record(z.string(), z.record(z.string(), z.object({ env: secretText }))),
+	databases: z.record(z.string(), z.record(z.string(), z.object({ env: secretText.optional() }))),
 });
 
 export type SecretsPayload = z.infer<typeof secretsPayloadSchema>;
@@ -202,7 +202,9 @@ export interface ApplySecretsResult {
  * name — the same key the manifest uses. Rows are patched in one transaction
  * so a bundle either lands whole or not at all; the values need a deploy to
  * reach a container, which is the caller's decision (an apply with
- * `secrets` does it before its redeploy).
+ * `secrets` does it before its redeploy). Omitted fields leave existing
+ * values alone, so an importer can report an unreadable encrypted column
+ * without replacing a value the operator has already supplied.
  */
 export const applySecretsPayload = async (
 	payload: SecretsPayload,
@@ -213,14 +215,14 @@ export const applySecretsPayload = async (
 	const missing: string[] = [];
 
 	await db.transaction(async (tx) => {
-		if (payload.project.env !== null) {
+		if (payload.project.env != null) {
 			await tx
 				.update(projects)
 				.set({ env: payload.project.env })
 				.where(eq(projects.projectId, project.projectId));
 			applied.push("project");
 		}
-		if (payload.environment.env !== null) {
+		if (payload.environment.env != null) {
 			await tx
 				.update(environments)
 				.set({ env: payload.environment.env })
@@ -235,10 +237,11 @@ export const applySecretsPayload = async (
 				missing.push(`application/${name}`);
 				continue;
 			}
+			if (Object.values(entry).every((value) => value === undefined)) continue;
 			await tx
 				.update(applications)
 				.set({
-					env: entry.env,
+					...(entry.env !== undefined ? { env: entry.env } : {}),
 					...(entry.buildArgs !== undefined ? { buildArgs: entry.buildArgs } : {}),
 					...(entry.previewEnv !== undefined ? { previewEnv: entry.previewEnv } : {}),
 				})
@@ -253,10 +256,11 @@ export const applySecretsPayload = async (
 				missing.push(`compose/${name}`);
 				continue;
 			}
+			if (Object.values(entry).every((value) => value === undefined)) continue;
 			await tx
 				.update(compose)
 				.set({
-					env: entry.env,
+					...(entry.env !== undefined ? { env: entry.env } : {}),
 					...(entry.buildArgs !== undefined ? { buildArgs: entry.buildArgs } : {}),
 					...(entry.previewEnv !== undefined ? { previewEnv: entry.previewEnv } : {}),
 				})
@@ -273,6 +277,7 @@ export const applySecretsPayload = async (
 					missing.push(`${kind}/${name}`);
 					continue;
 				}
+				if (entry.env === undefined) continue;
 				await module.updateById(module.rowId(row), { env: entry.env }, tx);
 				applied.push(`${kind}/${name}`);
 			}

@@ -31,6 +31,14 @@ and prerelease tags (`v0.2.0-rc.1`) are published as GitHub prereleases
 without touching it. Installs pin `NIXPLOY_VERSION` and pass the exact image
 ref to the panel as `NIXPLOY_IMAGE`.
 
+Continuous builds stage the multi-architecture index under a unique build tag,
+take its digest from Buildx's creation metadata, sign it, and exercise both
+installers against that exact digest before publishing `main` and the commit
+tag. PR CI resolves a signed baseline once and tests the immutable reference.
+Both paths require acceptance of the official signer and rejection of a foreign
+identity and an unsigned build manifest. A signing or verification failure
+leaves the public continuous tags on the previous signed image.
+
 ## Cut a release
 
 0. Write the release down **before** tagging: move the `[Unreleased]` section

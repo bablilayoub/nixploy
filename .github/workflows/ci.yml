@@ -346,6 +346,11 @@ jobs:
           printf 'checking: %s\n' "${files[@]}"
           shellcheck --severity=warning "${files[@]}"
 
+      - name: Smoke readiness error regression
+        run: |
+          git fetch --depth 1 origin refs/tags/v0.7.3:refs/tags/v0.7.3
+          node --test tools/ci/golden-path-retry.test.mjs
+
   audit:
     name: pnpm audit
     runs-on: ubuntu-latest
@@ -604,7 +609,12 @@ jobs:
           git fetch --depth 1 origin "refs/tags/$tag:refs/tags/$tag"
           mkdir -p /tmp/release-tools
           git show "$tag:tools/bootstrap-instance.mjs" > /tmp/release-tools/bootstrap-instance.mjs
-          git show "$tag:tools/golden-path-api.mjs" > /tmp/release-tools/golden-path-api.mjs
+          # Preserve the release's API sequence, but decode the REST error
+          # before its readiness matcher runs. Raw JSON escapes the quotes in
+          # `database "smokedb" does not exist`, hiding that known precondition.
+          git show "$tag:tools/golden-path-api.mjs" | \
+            sed 's/text\.slice(0, 600)/String(data?.message ?? text).slice(0, 600)/' \
+            > /tmp/release-tools/golden-path-api.mjs
 
       - name: Install the latest release with install.sh
         # The repo's install.sh (the one under test) installing the last
@@ -754,8 +764,9 @@ jobs:
   # The installers verify the image's cosign signature and pin the pull to
   # the signed digest before anything runs. This job runs that exact block
   # (extracted from install.sh and update.sh by its markers) with a real
-  # cosign against the signed :main image, and checks that a foreign identity
-  # is refused — so the check cannot rot into a no-op unnoticed.
+  # cosign against one immutable signed main digest. Docker publishes :main
+  # only AFTER signing and these same checks; its own run also verifies its
+  # exact output, without looking at the shared tag.
   installer-signature:
     name: Installer signature check
     runs-on: ubuntu-latest
@@ -767,41 +778,26 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
-      - name: install.sh verifies and pins the signed image
+      - name: Resolve and pin the signed baseline once
+        id: image
         run: |
           set -euo pipefail
           pinned="$(tools/ci/verify-image-signature.sh ghcr.io/bablilayoub/nixploy:main | tail -n 1)"
-          echo "pinned: ${pinned}"
           case "${pinned}" in
             ghcr.io/bablilayoub/nixploy:main@sha256:*) ;;
             *) echo "::error::install.sh did not pin the image to its signed digest"; exit 1 ;;
           esac
+          echo "signed=$pinned" >> "$GITHUB_OUTPUT"
+          # Only the multi-arch index is signed; its build manifests are an
+          # actual unsigned-artifact negative case, from the same repository.
+          child="$(docker buildx imagetools inspect "$pinned" --raw | jq -er '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest')"
+          echo "unsigned=ghcr.io/bablilayoub/nixploy@$child" >> "$GITHUB_OUTPUT"
 
-      - name: update.sh verifies and pins the signed image
+      - name: Both installers accept the digest and reject missing or foreign signatures
         env:
-          NIXPLOY_INSTALLER: update.sh
-        run: |
-          set -euo pipefail
-          pinned="$(tools/ci/verify-image-signature.sh ghcr.io/bablilayoub/nixploy:main | tail -n 1)"
-          case "${pinned}" in
-            ghcr.io/bablilayoub/nixploy:main@sha256:*) ;;
-            *) echo "::error::update.sh did not pin the image to its signed digest"; exit 1 ;;
-          esac
-
-      - name: A foreign signing identity is refused
-        env:
-          # Someone else's workflow: the signature exists but was not made by ours.
-          NIXPLOY_SIGNING_IDENTITY_REGEXP: '^https://github\.com/someone-else/nixploy/'
-        run: |
-          set +e
-          tools/ci/verify-image-signature.sh ghcr.io/bablilayoub/nixploy:main
-          rc=$?
-          set -e
-          if [ "${rc}" -eq 0 ]; then
-            echo "::error::a signature from another identity was accepted"
-            exit 1
-          fi
-          echo "refused as expected (exit ${rc})"
+          SIGNED_IMAGE: ${{ steps.image.outputs.signed }}
+          UNSIGNED_IMAGE: ${{ steps.image.outputs.unsigned }}
+        run: tools/ci/check-installer-signatures.sh "$SIGNED_IMAGE" "$UNSIGNED_IMAGE"
 
   # Optional full API golden path against an *external* running Nixploy
   # (secrets required). The `e2e` job above runs the same script against the

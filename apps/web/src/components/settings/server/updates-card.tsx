@@ -26,11 +26,26 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useDraft } from "@/hooks/use-draft";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
+import { describeError } from "@/lib/describe-error";
 import { formatRelative } from "@/lib/format";
 import { useTRPC } from "@/lib/trpc";
 
 /** `1.2.3` / `v1.2.3` — the same shape the server accepts. */
 const VERSION_INPUT = /^v?\d+\.\d+\.\d+$/;
+
+type UpdateRequest = { version?: string; allowDowngrade?: boolean };
+
+/** Match the server's parseVersion/releaseTag numeric-component normalization. */
+function canonicalVersion(version: string): string {
+	return version.replace(/^v/, "").split(".").map(Number).join(".");
+}
+
+function versionImage(image: string, version: string): string {
+	const base = image.split("@")[0] ?? image;
+	const colon = base.lastIndexOf(":");
+	const repository = colon > base.lastIndexOf("/") ? base.slice(0, colon) : base;
+	return `${repository}:v${canonicalVersion(version)}`;
+}
 
 /** "Checked 3 hours ago" — one shared formatter, not `toLocaleString` (UX audit F27). */
 function formatWhen(iso: string | null | undefined): string {
@@ -51,16 +66,19 @@ export function UpdatesCard() {
 	// The Update dialog is controlled so the preflight runs while it is open
 	// and the confirm can wait for it.
 	const [updateOpen, setUpdateOpen] = useState(false);
+	const [updateRequest, setUpdateRequest] = useState<UpdateRequest>({});
 	const preflightQuery = useQuery({
-		...trpc.updates.preflight.queryOptions({}),
+		...trpc.updates.preflight.queryOptions(updateRequest),
 		enabled: updateOpen,
 		staleTime: 0,
 	});
 	// Deployments in flight when the update was requested; opens the "update anyway?" confirm.
-	const [blockedBy, setBlockedBy] = useState<number | null>(null);
-	// Version typed into "Update to…", held while the downgrade confirm is open.
+	const [blockedBy, setBlockedBy] = useState<{
+		count: number;
+		request: UpdateRequest;
+	} | null>(null);
+	// Keep the selected request separate from the freely typed version draft.
 	const [targetVersion, setTargetVersion] = useState("");
-	const [downgradeTo, setDowngradeTo] = useState<string | null>(null);
 	const [notesOpen, setNotesOpen] = useState(false);
 
 	// The switches mirror the server, but a dirty draft is not re-seeded: the
@@ -104,11 +122,14 @@ export function UpdatesCard() {
 
 	const applyMutation = useSaveMutation(
 		trpc.updates.runUpdate.mutationOptions({
-			onSuccess: (result) => {
+			onSuccess: (result, request) => {
 				if (result.started) {
 					toast.success(result.message);
+					setUpdateOpen(false);
+					if (request?.version) setTargetVersion("");
 				} else if (result.blockedByDeployments) {
-					setBlockedBy(result.activeDeployments ?? 1);
+					setUpdateOpen(false);
+					setBlockedBy({ count: result.activeDeployments ?? 1, request: request ?? {} });
 				} else {
 					toast.message(result.message);
 				}
@@ -117,38 +138,30 @@ export function UpdatesCard() {
 		{ invalidate: [statusKey] },
 	);
 
-	/**
-	 * The server refuses a downgrade unless it is acknowledged (migrations are
-	 * never reversed). Catch that one refusal and ask, instead of showing a
-	 * dead-end toast.
-	 */
-	const versionMutation = useSaveMutation(
-		trpc.updates.runUpdate.mutationOptions({
-			onSuccess: (result) => {
-				if (result.started) {
-					toast.success(result.message);
-					setTargetVersion("");
-				} else if (result.blockedByDeployments) {
-					setBlockedBy(result.activeDeployments ?? 1);
-				} else {
-					toast.message(result.message);
-				}
-			},
-			onError: (error) => {
-				if (/older than/i.test(error.message) && targetVersion) {
-					setDowngradeTo(targetVersion);
-				}
-			},
-		}),
-		{ invalidate: [statusKey], errorMessage: "Update failed" },
-	);
-
 	const data = statusQuery.data;
 	const busy =
 		settingsMutation.isPending ||
 		checkMutation.isPending ||
 		applyMutation.isPending ||
-		versionMutation.isPending;
+		data?.updateInProgress;
+	const targetImage = data
+		? updateRequest.version
+			? versionImage(data.image, updateRequest.version)
+			: (data.targetImage ?? data.image)
+		: "";
+	const targetChanged = !!preflightQuery.data && preflightQuery.data.image !== targetImage;
+	const canConfirm =
+		!busy &&
+		preflightQuery.isSuccess &&
+		!preflightQuery.isFetching &&
+		preflightQuery.data.ok &&
+		!targetChanged;
+
+	function openUpdate(request: UpdateRequest) {
+		setUpdateRequest(request);
+		applyMutation.reset();
+		setUpdateOpen(true);
+	}
 
 	const statusBadge = data?.updateInProgress ? (
 		<Badge variant="secondary" className="gap-1.5">
@@ -185,7 +198,14 @@ export function UpdatesCard() {
 								)}
 								Check
 							</Button>
-							<AlertDialog open={updateOpen} onOpenChange={setUpdateOpen}>
+							<AlertDialog
+								open={updateOpen}
+								onOpenChange={(open) => {
+									if (applyMutation.isPending) return;
+									if (open) openUpdate({});
+									else setUpdateOpen(false);
+								}}
+							>
 								<AlertDialogTrigger asChild>
 									<Button
 										type="button"
@@ -199,68 +219,66 @@ export function UpdatesCard() {
 										{data.updateAvailable ? "Update" : "Reinstall"}
 									</Button>
 								</AlertDialogTrigger>
-								<AlertDialogContent>
+								<AlertDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
 									<AlertDialogHeader>
 										<AlertDialogTitle>
-											{data.updateAvailable ? "Update Nixploy?" : "Reinstall Nixploy image?"}
+											{updateRequest.version
+												? `Update to v${canonicalVersion(updateRequest.version)}?`
+												: data.updateAvailable
+													? "Update Nixploy?"
+													: "Reinstall Nixploy image?"}
 										</AlertDialogTitle>
 										<AlertDialogDescription>
-											This pulls {data.targetImage ?? data.image} and rolls the Swarm service. The
-											dashboard will briefly disconnect while the new container starts. Your data,
-											secrets and certificates are kept. <HelpLink slug="install" />
+											This pulls {targetImage} and rolls the Swarm service. The dashboard will
+											briefly disconnect while the new container starts. Your data, secrets and
+											certificates are kept. <HelpLink slug="install" />
 										</AlertDialogDescription>
 									</AlertDialogHeader>
 									<PreflightList
-										preflight={preflightQuery.data ?? null}
+										preflight={
+											preflightQuery.isError || targetChanged ? null : (preflightQuery.data ?? null)
+										}
 										pending={preflightQuery.isPending || preflightQuery.isFetching}
-										error={preflightQuery.error?.message ?? null}
+										error={
+											preflightQuery.error
+												? describeError(preflightQuery.error)
+												: targetChanged
+													? "The update target changed. Re-check before continuing."
+													: null
+										}
 										onRecheck={() => preflightQuery.refetch()}
 									/>
-									<AlertDialogFooter>
-										<AlertDialogCancel>Cancel</AlertDialogCancel>
-										<AlertDialogAction
-											disabled={preflightQuery.isPending || preflightQuery.data?.ok === false}
-											onClick={(event) => {
-												event.preventDefault();
-												setUpdateOpen(false);
-												applyMutation.mutate({});
-											}}
-										>
-											{data.updateAvailable ? "Update now" : "Reinstall"}
-										</AlertDialogAction>
-									</AlertDialogFooter>
-								</AlertDialogContent>
-							</AlertDialog>
-							<AlertDialog
-								open={downgradeTo !== null}
-								onOpenChange={(open) => {
-									if (!open) setDowngradeTo(null);
-								}}
-							>
-								<AlertDialogContent>
-									<AlertDialogHeader>
-										<AlertDialogTitle>Downgrade to {downgradeTo}?</AlertDialogTitle>
-										<AlertDialogDescription>
-											{downgradeTo} is older than the version running here. Nixploy applies database
-											migrations on boot and never reverses them, so the older image may not be able
-											to read the current schema. A pre-update database dump is taken first —
-											restoring it is the way back. <HelpLink slug="install" />
-										</AlertDialogDescription>
-									</AlertDialogHeader>
-									<AlertDialogFooter>
-										<AlertDialogCancel>Cancel</AlertDialogCancel>
-										<AlertDialogAction
-											variant="destructive"
-											onClick={(event) => {
-												event.preventDefault();
-												const version = downgradeTo;
-												setDowngradeTo(null);
-												if (version) {
-													versionMutation.mutate({ version, allowDowngrade: true });
+									{preflightQuery.data?.checks.some((check) => check.id === "downgrade") ? (
+										<div className="flex items-center justify-between gap-4 text-sm">
+											<Label htmlFor="allow-downgrade">
+												I understand database migrations are never reversed.
+											</Label>
+											<Switch
+												id="allow-downgrade"
+												checked={updateRequest.allowDowngrade ?? false}
+												disabled={busy || preflightQuery.isFetching}
+												onCheckedChange={(allowDowngrade) =>
+													setUpdateRequest((request) => ({ ...request, allowDowngrade }))
 												}
+											/>
+										</div>
+									) : null}
+									{applyMutation.error ? (
+										<p role="alert" className="text-sm text-destructive">
+											{describeError(applyMutation.error, "Update failed")}
+										</p>
+									) : null}
+									<AlertDialogFooter>
+										<AlertDialogCancel disabled={applyMutation.isPending}>Cancel</AlertDialogCancel>
+										<AlertDialogAction
+											disabled={!canConfirm}
+											onClick={(event) => {
+												event.preventDefault();
+												if (canConfirm) applyMutation.mutate(updateRequest);
 											}}
 										>
-											Downgrade anyway
+											{applyMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+											{updateRequest.version || data.updateAvailable ? "Update now" : "Reinstall"}
 										</AlertDialogAction>
 									</AlertDialogFooter>
 								</AlertDialogContent>
@@ -275,10 +293,10 @@ export function UpdatesCard() {
 									<AlertDialogHeader>
 										<AlertDialogTitle>Deployments are running</AlertDialogTitle>
 										<AlertDialogDescription>
-											{blockedBy ?? 0} deployment{blockedBy === 1 ? " is" : "s are"} in progress.
-											Updating now restarts Nixploy and marks {blockedBy === 1 ? "it" : "them"} as
-											interrupted. Wait for {blockedBy === 1 ? "it" : "them"} to finish, or update
-											anyway.
+											{blockedBy?.count ?? 0} deployment{blockedBy?.count === 1 ? " is" : "s are"}{" "}
+											in progress. Updating now restarts Nixploy and marks{" "}
+											{blockedBy?.count === 1 ? "it" : "them"} as interrupted. Wait for{" "}
+											{blockedBy?.count === 1 ? "it" : "them"} to finish, or update anyway.
 										</AlertDialogDescription>
 									</AlertDialogHeader>
 									<AlertDialogFooter>
@@ -286,8 +304,13 @@ export function UpdatesCard() {
 										<AlertDialogAction
 											onClick={(event) => {
 												event.preventDefault();
+												const request = blockedBy?.request;
 												setBlockedBy(null);
-												applyMutation.mutate({ force: true });
+												if (request) {
+													setUpdateRequest(request);
+													setUpdateOpen(true);
+													applyMutation.mutate({ ...request, force: true });
+												}
 											}}
 										>
 											Update anyway
@@ -392,9 +415,9 @@ export function UpdatesCard() {
 								disabled={
 									busy || data.updateInProgress || !VERSION_INPUT.test(targetVersion.trim())
 								}
-								onClick={() => versionMutation.mutate({ version: targetVersion.trim() })}
+								onClick={() => openUpdate({ version: targetVersion.trim() })}
 							>
-								{versionMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+								{applyMutation.isPending && <Loader2 className="size-4 animate-spin" />}
 								Update to {targetVersion.trim() || "…"}
 							</Button>
 						</div>
@@ -528,25 +551,34 @@ function PreflightList({
 		block: "bg-destructive",
 	};
 	return (
-		<div className="flex flex-col gap-2 rounded-lg border border-border p-3 text-sm">
+		<div
+			aria-busy={pending}
+			className="flex flex-col gap-2 rounded-lg border border-border p-3 text-sm"
+		>
 			<div className="flex items-center justify-between gap-2">
-				<span className="font-medium">
-					{pending && !preflight
+				<span className="font-medium" role="status">
+					{pending
 						? "Checking the host…"
-						: preflight
-							? preflight.blocks > 0
-								? `${preflight.blocks} check${preflight.blocks === 1 ? "" : "s"} block this update`
-								: preflight.warnings > 0
-									? `Ready, ${preflight.warnings} warning${preflight.warnings === 1 ? "" : "s"}`
-									: "All checks passed"
-							: "Preflight"}
+						: error
+							? "Preflight unavailable"
+							: preflight
+								? preflight.blocks > 0
+									? `${preflight.blocks} check${preflight.blocks === 1 ? "" : "s"} block this update`
+									: preflight.warnings > 0
+										? `Ready, ${preflight.warnings} warning${preflight.warnings === 1 ? "" : "s"}`
+										: "All checks passed"
+								: "Preflight"}
 				</span>
 				<Button type="button" size="sm" variant="ghost" disabled={pending} onClick={onRecheck}>
 					{pending ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
 					Re-check
 				</Button>
 			</div>
-			{error ? <p className="text-xs text-destructive">{error}</p> : null}
+			{error ? (
+				<p role="alert" className="text-xs text-destructive">
+					{error} Re-check to try again.
+				</p>
+			) : null}
 			{preflight ? (
 				<ul className="flex flex-col gap-1.5">
 					{preflight.checks.map((check) => (

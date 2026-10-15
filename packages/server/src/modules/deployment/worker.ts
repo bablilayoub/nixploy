@@ -660,7 +660,7 @@ async function setServiceStatus(
 ): Promise<void> {
 	// Preview jobs carry the PARENT applicationId — never let a preview
 	// deploy corrupt the production service's status.
-	if (job.previewDeploymentId) return;
+	if (job.previewDeploymentId || job.isPreview) return;
 	if (job.applicationId) {
 		await db
 			.update(applications)
@@ -699,6 +699,9 @@ async function notifyDeployOutcome(
 	status: "done" | "error",
 	errorMessage: string | null,
 ): Promise<void> {
+	// An orphan preview has no live target to report; never present its
+	// failure as a failed production deployment.
+	if (job.isPreview && !job.previewDeploymentId) return;
 	const { emitDeployNotification } = await import("../notifications");
 	if (job.applicationId) {
 		const application = await db.query.applications.findFirst({
@@ -753,6 +756,7 @@ async function notifyDeployOutcome(
 
 /** Incident + log ingestion + Deploy Copilot for a failed deployment. */
 async function recordDeployFailure(job: QueueJob): Promise<void> {
+	if (job.isPreview && !job.previewDeploymentId) return;
 	const { recordIncident, ingestServiceLog } = await import("../observability");
 	const deployment = await db.query.deployments.findFirst({
 		where: eq(deployments.deploymentId, job.deploymentId),
@@ -856,6 +860,10 @@ async function processJob(job: QueueJob): Promise<void> {
 		// The claim query set this; anything else means the row was finalized
 		// underneath us (a stale in-process start) — do not re-finalize it.
 		if (deployment.status !== "running") return;
+		job.isPreview = deployment.isPreview;
+		if (deployment.isPreview && !job.previewDeploymentId) {
+			throw new Error("Preview was deleted before this deployment started");
+		}
 		started = true;
 
 		logger = new DeploymentLogger(deployment.logPath, job.deploymentId);
@@ -871,6 +879,16 @@ async function processJob(job: QueueJob): Promise<void> {
 					onData: (chunk) => log.write(chunk),
 				});
 				registerDeploymentProcess(job.deploymentId, proc);
+				try {
+					// Cancellation can settle the worker while an SSH/process spawn
+					// is pending and clear the queue's cancellation marker. The
+					// pipeline's local abandoned flag still owns that late process.
+					checkpoint();
+				} catch (error) {
+					proc.kill();
+					await proc.done.catch(() => {});
+					throw error;
+				}
 				await proc.done;
 			},
 			step: async (step) => {

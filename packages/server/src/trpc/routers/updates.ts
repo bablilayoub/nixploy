@@ -19,6 +19,7 @@ import {
 	runUpdatePreflight,
 	VERSION_PATTERN,
 } from "../../modules/updates";
+import { resolveUpdateCandidate } from "../../modules/updates/candidate";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -92,6 +93,13 @@ export const updatesRouter = router({
 		return {
 			appVersion: getAppVersion(),
 			...settings,
+			// A pin can change between registry checks. Show the candidate the
+			// preflight and updater resolve now, rather than the cached old target.
+			targetImage: resolveUpdateCandidate({
+				trackedImage: settings.image,
+				latestReleaseTag: settings.releaseTag,
+				pinnedVersion: settings.pinnedVersion,
+			}).image,
 			defaultImage: DEFAULT_UPDATE_IMAGE,
 			defaultCheckCron: DEFAULT_CHECK_CRON,
 		};

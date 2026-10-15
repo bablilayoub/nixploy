@@ -103,6 +103,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Log in to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -132,21 +135,20 @@ jobs:
           pattern: digest-*
           merge-multiple: true
 
-      - name: Create the manifest list
+      - name: Stage the manifest list
         id: manifest
-        # Assembles the two per-architecture manifests into the tags above. The
-        # signature below is taken on the resulting list digest, so it covers
-        # every tag that points at it.
+        # Keep public tags on the previous signed image until this exact list
+        # has been signed and verified. The unique staging tag also prevents
+        # concurrent main builds from reading each other's digest.
         working-directory: /tmp/digests
         run: |
           set -euo pipefail
           # shellcheck disable=SC2046
           docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<<"$DOCKER_METADATA_OUTPUT_JSON") \
+            --tag "${REGISTRY}/${IMAGE_NAME}:build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --metadata-file "$RUNNER_TEMP/manifest.json" \
             $(printf "${REGISTRY}/${IMAGE_NAME}@sha256:%s " *)
-          FIRST_TAG="$(jq -cr '.tags[0]' <<<"$DOCKER_METADATA_OUTPUT_JSON")"
-          DIGEST="$(docker buildx imagetools inspect "$FIRST_TAG" \
-            --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          DIGEST="$(jq -er '."containerimage.descriptor".digest | select(test("^sha256:[0-9a-f]{64}$"))' "$RUNNER_TEMP/manifest.json")"
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
           echo "manifest ${DIGEST}"
 
@@ -161,3 +163,23 @@ jobs:
         env:
           DIGEST: ${{ steps.manifest.outputs.digest }}
         run: cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+
+      - name: Verify both installers against this signed digest
+        env:
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: |
+          set -euo pipefail
+          children=(/tmp/digests/*)
+          tools/ci/check-installer-signatures.sh \
+            "${REGISTRY}/${IMAGE_NAME}@${DIGEST}" \
+            "${REGISTRY}/${IMAGE_NAME}@sha256:${children[0]##*/}"
+
+      - name: Publish signed tags
+        env:
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<<"$DOCKER_METADATA_OUTPUT_JSON") \
+            "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"

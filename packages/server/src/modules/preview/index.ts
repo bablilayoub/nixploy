@@ -1,9 +1,10 @@
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import { db } from "../../db";
-import { compose, domains, previewDeployments } from "../../db/schema";
+import { compose, deployments, domains, previewDeployments } from "../../db/schema";
 import { removeApplicationImages, removeSwarmService } from "../application/docker";
-import { queueDeployment } from "../deployment";
-import { DomainError } from "../errors";
+import { cancelDeployment, queueDeployment } from "../deployment";
+import { DomainError, preconditionFailed } from "../errors";
+import { removePreviewApplicationFiles } from "./application";
 import {
 	listComposeExposedServices,
 	removePreviewComposeFiles,
@@ -528,6 +529,27 @@ export async function deletePreviewDeployment(
 		throw new PreviewNotFoundError(`Preview deployment not found: ${previewDeploymentId}`);
 	}
 
+	// A deleted preview loses its deployment FK (ON DELETE SET NULL). Cancel
+	// queued jobs before that happens, and let running jobs stop before their
+	// database, service and route disappear underneath them.
+	const active = await db.query.deployments.findMany({
+		where: and(
+			eq(deployments.previewDeploymentId, previewDeploymentId),
+			inArray(deployments.status, ["queued", "running"]),
+		),
+		columns: { deploymentId: true },
+	});
+	for (const deployment of active) {
+		await cancelDeployment(deployment.deploymentId);
+		const { waitForDeployment } = await import("../deployment/outcome");
+		const settled = await waitForDeployment(deployment.deploymentId, 15_000);
+		if (settled?.status === "queued" || settled?.status === "running") {
+			throw preconditionFailed(
+				"The preview deployment is still stopping. Retry deleting it shortly.",
+			);
+		}
+	}
+
 	// The database goes before the service so a failed drop is logged while
 	// the preview still exists to retry from; the logical row stays either way.
 	await dropPreviewDatabase(preview);
@@ -552,6 +574,7 @@ export async function deletePreviewDeployment(
 		// The PR build is tagged `<app>-pr-<n>:latest` on the server that built
 		// it; nothing else references it.
 		await removeApplicationImages(preview.appName, serverId).catch(() => {});
+		await removePreviewApplicationFiles(preview.appName, serverId);
 	}
 
 	// Routing YAML always lives on the Nixploy host (where Traefik runs).

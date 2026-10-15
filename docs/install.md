@@ -507,7 +507,13 @@ paths therefore dump the platform database right before the roll:
   not `current` warns), a downgrade (**blocks** until acknowledged), and the
   target's release notes (a mention of a breaking change or manual step warns
   and links them). A block disables the confirm button; warnings are shown
-  and left to you.
+  and left to you. Specific-version updates use the same dialog; a version
+  above the configured pin blocks until you clear or raise the pin. A
+  downgrade needs an explicit acknowledgement before the checks can pass.
+  Confirmation stays disabled while checking, after a failed check, or when
+  the target has changed; use **Re-check** to try again. Failed update actions
+  keep the dialog open with a retryable error, and **Update anyway** preserves
+  the chosen version and downgrade acknowledgement.
 
 Restore a dump (stops nothing; run it before pinning an older tag):
 

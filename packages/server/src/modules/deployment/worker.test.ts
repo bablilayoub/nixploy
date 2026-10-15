@@ -23,7 +23,12 @@ const {
 } = vi.hoisted(() => ({
 	updates: [] as Array<{ table: string; values: Record<string, unknown> }>,
 	deploymentRow: {
-		value: null as null | { deploymentId: string; status: string; logPath: string },
+		value: null as null | {
+			deploymentId: string;
+			status: string;
+			logPath: string;
+			isPreview?: boolean;
+		},
 		/** Thrown once by the next deployments.findFirst call. */
 		error: null as null | Error,
 	},
@@ -173,7 +178,7 @@ const settle = async () => {
 };
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const job = (deploymentId: string, previewDeploymentId: string): QueueJob => ({
+const job = (deploymentId: string, previewDeploymentId?: string): QueueJob => ({
 	deploymentId,
 	appName: "parent-app",
 	applicationId: "parent-app-1",
@@ -244,6 +249,27 @@ describe("worker preview status bookkeeping", () => {
 
 		const terminal = terminalUpdate();
 		expect(terminal?.values.status).toBe("error");
+	});
+
+	it("refuses an orphan preview job without running or changing its production parent", async () => {
+		const queue = await import("./queue");
+		await import("./worker");
+		deploymentRow.value = {
+			deploymentId: "d-orphan",
+			status: "running",
+			logPath: "/tmp/orphan.log",
+			isPreview: true,
+		};
+		queue.startJob("__local__", job("d-orphan"));
+		await flush();
+		await flush();
+
+		expect(terminalUpdate()?.values).toMatchObject({
+			status: "error",
+			errorMessage: "Preview was deleted before this deployment started",
+		});
+		expect(updates.filter((u) => u.table === "application" || u.table === "compose")).toEqual([]);
+		expect(pipeline.upsertSwarmService).not.toHaveBeenCalled();
 	});
 
 	it("marks a cancelled preview as idle and leaves the parent app untouched", async () => {
@@ -599,6 +625,38 @@ describe("compose preview jobs", () => {
 		expect(terminal?.values.status).toBe("error");
 		expect(String(terminal?.values.errorMessage)).toContain("does not belong");
 		expect(composePipeline.prepareComposeFiles).not.toHaveBeenCalled();
+	});
+
+	it("kills a process whose spawn resolves after cancellation released the queue slot", async () => {
+		composeLookup.preview = {
+			previewDeploymentId: "prev-late",
+			appName: "shop-pr-8",
+			branch: "feature/late",
+			composeId: "cmp-1",
+			applicationId: null,
+		};
+		deploymentRow.value = { deploymentId: "d-late", status: "running", logPath: "/tmp/late.log" };
+		let resolveSpawn: (value: { done: Promise<void>; kill: () => void }) => void = () => {};
+		composePipeline.spawnTargeted.mockReturnValueOnce(
+			new Promise((resolve) => {
+				resolveSpawn = resolve;
+			}),
+		);
+		const queue = await import("./queue");
+		await import("./worker");
+		queue.startJob("__local__", composeJob("d-late", "prev-late"));
+		await flush();
+		await flush();
+		queue.requestCancellation("d-late");
+		await settle();
+		expect(queue.queueDepth(null).running).toBe(0);
+		const kill = vi.fn();
+		resolveSpawn({ done: Promise.resolve(), kill });
+		await settle();
+
+		expect(kill).toHaveBeenCalledOnce();
+		expect(terminalUpdate()?.values.status).toBe("cancelled");
+		expect(composePipeline.syncPreviewTraefik).not.toHaveBeenCalled();
 	});
 
 	it("still snapshots, hooks and resyncs production for a non-preview compose job", async () => {

@@ -24,7 +24,9 @@ nixploy import apply  --source dokploy --url https://old-panel.example.com --sou
 ```
 
 `inspect` lists what the key can see (projects, environments, service
-counts). `plan` fetches the environment, prints the translation's notes and
+counts). The importer reads project details as well as the list, because
+the source list omits database names and environment-level env. `plan`
+fetches the environment, prints the translation's notes and
 the diff against the target (every item is a create when the target project
 does not exist yet) and writes nothing. `apply` creates the project and the
 environment when missing, writes the rows, then writes the env values. The
@@ -51,10 +53,20 @@ What the notes will tell you to do by hand, because it cannot be carried:
   their passwords.
 - **Database passwords** — every imported database gets a new password;
   update the env values that carry the old one (`DATABASE_URL` and
-  friends), or adopt the old volume with the takeover tool when it lands.
+  friends), then restore database data from a backup separately.
 - **Compose mounts** — here a compose mount names the container it goes in,
   which the source does not record; add them under the stack's Advanced
   tab.
+- **File mounts** — recreate their files and contents in the target's
+  Advanced tab. Import does not write or remove backing files that a
+  running target service may already use.
+- **Named application volumes** must belong to the target application's
+  `appName`. A source volume outside that namespace, or one imported with
+  `--no-keep-app-names`, needs a new target volume and a separate data
+  restore. If any mount needs manual translation, the importer leaves the
+  entire target mount collection alone; it does not remove replacement
+  mounts on a repeat apply. Target-only compose redirects, basic auth,
+  build args and preview env are also left alone.
 - **Custom certificates, custom ACME resolvers, strip-path, uploaded
   archives, git submodules, libSQL databases** — not supported here, each
   reported with the service it belonged to.
@@ -85,17 +97,49 @@ Every read restores the dump into a **throwaway Postgres container on no
 network** (`postgres:17-alpine`, 1 GiB, removed afterwards — the same
 pattern as backup restore verification), reads the source's rows with
 `row_to_json`, and never touches the panel's own database. The source's rows
-carry the same column names its API returns, so the translation, the notes
-and the plan are exactly the live path's; the child tables (`domain`,
+carry the same column names its API returns, so both paths use the same
+translation; the child tables (`domain`,
 `mount`, `port`, `redirect`, `security`) are found by name in the restored
-schema, so a table the dump does not have is a note, not a failure.
+schema, with absent child tables read as empty collections.
 
 **Env values from a dump.** Recent versions of the source encrypt env at
-rest, so a dump carries ciphertext unless you also have its key; what parses
-as plain `KEY=VALUE` lines is imported, anything else arrives as keys with a
-note asking for the values. Everything else in the notes (git providers,
+rest. The importer does not read the source keyring: encrypted columns are
+omitted with a note asking you to paste their **keys and values** before
+deploying. An encrypted column does not reveal even its key names. Plaintext
+`KEY=VALUE` columns still import. Existing target values are preserved for
+every encrypted column, so repeating an offline import keeps values you
+already restored manually. Everything else in the notes (git providers,
 basic-auth hashes, database passwords, compose mount targets) is the same
 as over the API.
+
+### Verified source and limits
+
+On 2026-10-15, both paths were exercised against the official
+[Dokploy v0.30.8 image](https://github.com/Dokploy/dokploy/releases/tag/v0.30.8)
+(`sha256:e8789a3f71a1e50d817836ad222ee0eab8ee69fc1b0451fee189a880b5602871`).
+The source ran with a separate nested Docker daemon, and its application,
+compose stack, Postgres database, domains, inherited env and basic auth
+were created through its real API. The offline input was a `pg_dump` of
+that running source database.
+
+Inspect, plan, apply and repeat apply passed on both paths. Fresh imports
+left the Docker service inventory unchanged, wrote no proxy routes and
+created no deployment jobs. Seven encrypted dump columns produced manual
+input notes, and repeat apply kept the manually supplied values and
+replacement volume mount. After those steps, explicit application and
+compose deployments completed, both HTTP hosts answered through an
+isolated Traefik, and Postgres accepted the regenerated target password.
+Plans were checked for source credentials and controlled secret values.
+The real database deployment covered Postgres; the other engines retain
+schema and unit coverage. This does not verify source data migration,
+public DNS/TLS, or adoption of a source host's running services and volumes.
+
+The regression checks run with the existing server suite:
+
+```bash
+pnpm -F @nixploy/server exec vitest run src/modules/import src/modules/gitops/secrets.test.ts
+DATABASE_URL_TEST=<isolated-migrated-database> pnpm -F @nixploy/server exec vitest run src/modules/import/import.db.test.ts src/modules/gitops/secrets.db.test.ts
+```
 
 ## Concept map
 

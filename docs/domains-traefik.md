@@ -571,6 +571,9 @@ the repository app password — the one provider where comments are not posted
 but statuses are). Branch previews get statuses too: a status hangs off a
 commit, not a PR, and the checkout resolves the sha. Best effort: a provider
 without credentials or an API error is logged, never a failed deploy.
+Provider comments and statuses use the shared outbound guard, pin resolved
+addresses, and refuse redirects. A provider on a private address requires
+the instance's **Allow private network targets** setting, just like repository lookups.
 
 **A database per preview (2026-09-20).** Under Preview settings, pick one of
 the environment's postgres / mysql / mariadb / mongo services as the
@@ -586,6 +589,14 @@ environment shares. The database is created when the preview is first
 deployed (a fork-gated preview gets it on approval); a failed create fails
 the preview; a failed drop is logged and the row stays listed on the
 database's page for a manual delete.
+
+Deleting or expiring a preview first cancels its queued and running builds.
+If a running build has not stopped within 15 seconds, deletion asks you to
+retry and keeps the preview's resources available. Legacy queued jobs whose
+preview was already deleted fail safely without deploying their parent or
+reporting a production deployment failure. Teardown also removes the
+preview's checkout and build cache on the server that built it; deployment
+logs follow their normal retention policy.
 
 ### Fork pull requests require approval
 
