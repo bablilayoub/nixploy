@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { destinations } from "../../db/schema";
+import { backups, destinations } from "../../db/schema";
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { testDestination } from "../../modules/backups/runner";
@@ -81,6 +81,15 @@ async function findDestinationOrThrow(destinationId: string, organizationId: str
 		throw new TRPCError({ code: "NOT_FOUND", message: "Destination not found" });
 	}
 	return row;
+}
+
+/** Redirecting or deleting an instance export's destination is a platform action. */
+async function assertInstanceBackupDestinationMutation(destinationId: string, session: Session) {
+	const instanceBackup = await db.query.backups.findFirst({
+		where: and(eq(backups.destinationId, destinationId), eq(backups.databaseType, "web-server")),
+		columns: { backupId: true },
+	});
+	if (instanceBackup) await assertInstanceAdmin(session);
 }
 
 const destinationIdInput = z.object({ destinationId: z.string().min(1) });
@@ -205,6 +214,7 @@ export const destinationRouter = router({
 		await assertCapability(ctx.session.user.id, organizationId, "destinations.manage");
 		const { destinationId, ...values } = input;
 		const existing = await findDestinationOrThrow(destinationId, organizationId);
+		await assertInstanceBackupDestinationMutation(destinationId, ctx.session);
 		if (isLocalDestination(existing)) {
 			const { name: _name, ...s3Values } = values;
 			if (Object.values(s3Values).some((value) => value !== undefined)) {
@@ -245,11 +255,9 @@ export const destinationRouter = router({
 	remove: protectedProcedure.input(destinationIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "destinations.manage");
-		const row = await publicDestination(
-			await findDestinationOrThrow(input.destinationId, organizationId),
-			ctx.session.user.id,
-			organizationId,
-		);
+		const existing = await findDestinationOrThrow(input.destinationId, organizationId);
+		await assertInstanceBackupDestinationMutation(input.destinationId, ctx.session);
+		const row = await publicDestination(existing, ctx.session.user.id, organizationId);
 		await db
 			.delete(destinations)
 			.where(
