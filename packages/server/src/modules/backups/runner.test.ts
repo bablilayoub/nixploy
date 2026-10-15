@@ -1,9 +1,11 @@
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PIPELINE_EXIT_MARKER } from "./pipeline";
+import { LocalBackupStore } from "./storage";
 
 /**
  * Runner end-to-end with mocked boundaries: exec (docker), the drizzle
@@ -17,7 +19,14 @@ const state = vi.hoisted(() => ({
 	execCalls: [] as string[],
 	execImpl: (async () => "") as (command: string) => Promise<string>,
 	configDir: "",
+	streamImpl: (async () => ({})) as (...args: unknown[]) => Promise<unknown>,
 	destination: null as Record<string, unknown> | null,
+	linked: {
+		serverId: null,
+		databaseUser: "app",
+		databasePassword: "test-password",
+		dockerImage: "postgres:16-alpine",
+	},
 }));
 
 vi.mock("../../db", async (importOriginal) => {
@@ -42,6 +51,8 @@ vi.mock("../../db", async (importOriginal) => {
 			destinations: { findFirst: async () => state.destination },
 			applications: { findFirst: async () => ({ serverId: null }) },
 			compose: { findFirst: async () => null },
+			postgres: { findFirst: async () => state.linked },
+			redis: { findFirst: async () => state.linked },
 		},
 		insert: () => ({
 			values: (values: Record<string, unknown>) => {
@@ -75,13 +86,27 @@ vi.mock("../../utils/exec", () => ({
 		return state.execImpl(command);
 	},
 }));
+vi.mock("./redis-lock", () => ({
+	withRedisBackupLock: (_id: string, work: (signal: AbortSignal) => Promise<unknown>) =>
+		work(new AbortController().signal),
+}));
+vi.mock("./stream-exec", () => ({
+	spawnStreamingCommand: (_serverId: string | null, command: string, options: unknown) => {
+		state.execCalls.push(command);
+		return state.streamImpl(command, options);
+	},
+}));
 vi.mock("../notifications", () => ({ notifyEvent: vi.fn(async () => {}) }));
 vi.mock("../traefik/paths", () => ({ getConfigDir: () => state.configDir }));
 
 import {
+	type BackupRow,
 	DEFAULT_DATABASE_READY_TIMEOUT_MS,
 	databaseReadyTimeoutMs,
 	isDatabaseStartingError,
+	restoreBackup,
+	restoreVolumeBackup,
+	runBackup,
 	runVolumeBackup,
 	type VolumeBackupRow,
 } from "./runner";
@@ -102,8 +127,26 @@ const volumeBackup: VolumeBackupRow = {
 	createdAt: new Date(),
 };
 
+const backupRow: BackupRow = {
+	backupId: "b-1",
+	appName: "database",
+	schedule: "0 0 * * *",
+	enabled: true,
+	prefix: "backup",
+	database: "app",
+	databaseType: "postgres",
+	destinationId: "d1",
+	keepLatestCount: null,
+	postgresId: "pg-1",
+	mysqlId: null,
+	mariadbId: null,
+	mongoId: null,
+	redisId: null,
+	lastRunAt: null,
+	createdAt: new Date(),
+};
+
 const archive = gzipSync(Buffer.from("hello volume"));
-const encodedArchive = `${archive.toString("base64")}\n${PIPELINE_EXIT_MARKER}0\n`;
 
 beforeEach(async () => {
 	state.configDir = await mkdtemp(path.join(tmpdir(), "nixploy-runner-"));
@@ -122,9 +165,27 @@ beforeEach(async () => {
 		organizationId: "org-1",
 		createdAt: new Date(),
 	};
+	state.streamImpl = async (command, options) => ({
+		stdout: Readable.from(
+			String(command).includes("tar tvzf")
+				? ["-rw-r--r-- root/root 12 2026-10-15 20:30:00 ./file\n"]
+				: [archive],
+		),
+		done: (async () => {
+			const input = (options as { stdin?: Readable } | undefined)?.stdin;
+			if (input)
+				for await (const _chunk of input) {
+				}
+			return `${PIPELINE_EXIT_MARKER}0`;
+		})(),
+		abort: vi.fn(),
+	});
 	state.execImpl = async (command) => {
+		if (command === "docker service ls --quiet") return "";
 		if (command.startsWith("docker volume inspect")) return "app_data\n";
-		if (command.includes("tar czf")) return encodedArchive;
+		if (command.startsWith("docker ps -q --filter 'volume=")) return "";
+		if (command.startsWith("docker ps -q")) return "abcdef012345\n";
+
 		throw new Error(`unexpected command: ${command}`);
 	};
 });
@@ -164,7 +225,7 @@ describe("runVolumeBackup", () => {
 		// The volume must exist before anything is archived.
 		expect(state.execCalls[0]).toBe("docker volume inspect 'app_data' --format '{{.Name}}'");
 		expect(state.execCalls[1]).toContain(
-			"docker run --rm -v 'app_data:/volume-data' alpine sh -c 'tar czf - -C /volume-data .'",
+			"docker run --rm --network none -v 'app_data:/volume-data:ro' alpine sh -c 'tar czf - -C /volume-data .'",
 		);
 	});
 
@@ -185,13 +246,16 @@ describe("runVolumeBackup", () => {
 	});
 
 	it("fails the run when the producer exits non-zero instead of storing an empty archive", async () => {
-		state.execImpl = async (command) => {
-			if (command.startsWith("docker volume inspect")) return "app_data\n";
-			return `${gzipSync(Buffer.alloc(0)).toString("base64")}\n${PIPELINE_EXIT_MARKER}2\n`;
-		};
+		state.streamImpl = async () => ({
+			stdout: Readable.from([archive]),
+			done: Promise.resolve(`${PIPELINE_EXIT_MARKER}2`),
+			abort: vi.fn(),
+		});
 		await expect(runVolumeBackup(volumeBackup)).rejects.toThrow(/exited with status 2/);
 		expect(state.updates[0]).toMatchObject({ status: "error" });
-		await expect(readdir(path.join(state.configDir, "backups"))).rejects.toThrow();
+		expect(
+			await readdir(path.join(state.configDir, "backups", "org-1", "volume-backup", "app_data")),
+		).toEqual([]);
 	});
 
 	it("does not start a run for a missing destination or a protected volume", async () => {
@@ -201,6 +265,236 @@ describe("runVolumeBackup", () => {
 			runVolumeBackup({ ...volumeBackup, volumeName: "nixploy-postgres-data" }),
 		).rejects.toThrow(/platform volume/);
 		expect(state.inserted).toEqual([]);
+	});
+});
+
+describe("archive restore safety", () => {
+	it("validates CRC before creating any target writer", async () => {
+		const store = new LocalBackupStore(path.join(state.configDir, "backups", "org-1"));
+		const bad = Buffer.from(archive);
+		bad[bad.length - 8] = (bad[bad.length - 8] ?? 0) ^ 255;
+		await store.put("volume-backup/app_data/bad.gz", bad);
+		await expect(restoreVolumeBackup(volumeBackup)).rejects.toThrow();
+		expect(state.execCalls).toEqual([]);
+	});
+
+	it("refuses malformed tar before attaching the target volume", async () => {
+		await runVolumeBackup(volumeBackup);
+		state.execCalls = [];
+		state.streamImpl = async () => ({
+			stdout: Readable.from([]),
+			done: Promise.resolve(""),
+			abort: vi.fn(),
+		});
+		await expect(restoreVolumeBackup(volumeBackup)).rejects.toThrow(/no entries/);
+		expect(state.execCalls.every((command) => !command.includes("-v "))).toBe(true);
+	});
+
+	it("refuses active volume writers before extraction", async () => {
+		await runVolumeBackup(volumeBackup);
+		state.execCalls = [];
+		state.execImpl = async (command) =>
+			command === "docker service ls --quiet"
+				? ""
+				: command.startsWith("docker ps")
+					? "abcdef012345"
+					: "app_data";
+		const clock = vi.spyOn(Date, "now").mockReturnValueOnce(0).mockReturnValue(30_000);
+		try {
+			await expect(restoreVolumeBackup(volumeBackup)).rejects.toThrow(/Stop every container/);
+		} finally {
+			clock.mockRestore();
+		}
+		expect(state.execCalls.every((command) => !command.includes("-v "))).toBe(true);
+	});
+
+	it.each(["desired-running", "orphaned", "remove", "running"])(
+		"refuses Swarm %s even with no local container",
+		async (stateName) => {
+			await runVolumeBackup(volumeBackup);
+			state.execCalls = [];
+			state.execImpl = async (command) => {
+				if (command.startsWith("docker volume inspect")) return "app_data";
+				if (command === "docker service ls --quiet") return "abc123def456";
+				if (command.startsWith("docker service inspect"))
+					return JSON.stringify([
+						{
+							Spec: {
+								Name: "consumer",
+								Mode: { Replicated: { Replicas: stateName === "desired-running" ? 1 : 0 } },
+								TaskTemplate: {
+									ContainerSpec: { Mounts: [{ Type: "volume", Source: "app_data" }] },
+								},
+							},
+						},
+					]);
+				if (command.startsWith("docker info")) return "target-node";
+				if (command.startsWith("docker service ps")) return "task0123456789abcdefghijk";
+				if (command.startsWith("docker inspect"))
+					return JSON.stringify([{ NodeID: "unknown-node", Status: { State: stateName } }]);
+				if (command.startsWith("docker ps")) return "";
+				throw new Error("unexpected command");
+			};
+			await expect(restoreVolumeBackup(volumeBackup)).rejects.toThrow(
+				stateName === "desired-running" ? /Stop every Swarm/ : /another node/,
+			);
+			expect(state.execCalls.every((command) => !command.includes("-v "))).toBe(true);
+		},
+	);
+
+	it("refuses a running Redis before writing its data volume", async () => {
+		const store = new LocalBackupStore(path.join(state.configDir, "backups", "org-1"));
+		await store.put("backup/database/a.gz", archive);
+		state.execImpl = async () =>
+			JSON.stringify({
+				Name: "database",
+				Labels: { "nixploy.managed": "true", "nixploy.service.type": "redis" },
+				Mode: { Replicated: { Replicas: 1 } },
+				TaskTemplate: {
+					ContainerSpec: { Mounts: [{ Type: "volume", Source: "database-data", Target: "/data" }] },
+				},
+			});
+		await expect(
+			restoreBackup({ ...backupRow, databaseType: "redis", redisId: "redis-1", postgresId: null }),
+		).rejects.toThrow(/Stop the managed Redis/);
+		expect(state.execCalls.every((command) => !command.includes("-v "))).toBe(true);
+	});
+
+	it("accepts many short tar entries across 64 KiB stdout boundaries", async () => {
+		await runVolumeBackup(volumeBackup);
+		const normal = state.streamImpl;
+		state.streamImpl = async (command, options) => {
+			if (!String(command).includes("tar tvzf")) return normal(command, options);
+			const listing = Buffer.from(
+				"-rw-r--r-- root/root 12 2026-10-15 20:30:00 ./file\n".repeat(4000),
+			);
+			return {
+				stdout: Readable.from([
+					listing.subarray(0, 65536),
+					listing.subarray(65536, 131072),
+					listing.subarray(131072),
+				]),
+				done: (async () => {
+					for await (const _chunk of (options as { stdin: Readable }).stdin) {
+					}
+					return "";
+				})(),
+				abort: vi.fn(),
+			};
+		};
+		await expect(restoreVolumeBackup(volumeBackup)).resolves.toHaveProperty("key");
+	});
+
+	it("replays only validated bytes through staged replacement", async () => {
+		await runVolumeBackup(volumeBackup);
+		state.execCalls = [];
+		await restoreVolumeBackup(volumeBackup);
+		const command = state.execCalls.find((value) => value.includes("-v "));
+		expect(command).toContain(".nixploy-previous-");
+		expect(command).toContain("move_children");
+		expect(command).not.toContain("base64");
+	});
+
+	it("validates a database archive before invoking psql", async () => {
+		const store = new LocalBackupStore(path.join(state.configDir, "backups", "org-1"));
+		await store.put("backup/database/bad.gz", archive.subarray(0, -3));
+		await expect(restoreBackup(backupRow)).rejects.toThrow();
+		expect(state.execCalls.some((command) => command.includes("psql"))).toBe(false);
+	});
+});
+
+describe("shared streaming publication", () => {
+	it("publishes a complete instance pair with config before SQL, without base64", async () => {
+		const original = process.env.DATABASE_URL;
+		process.env.DATABASE_URL = "postgres://app:local-test@localhost/app";
+		state.execImpl = async () => "/usr/bin/pg_dump";
+		try {
+			const result = await runBackup({
+				...backupRow,
+				databaseType: "web-server",
+				appName: "web-server",
+			});
+			expect(result.bytes).toBe(archive.length * 2);
+			expect(state.execCalls[1]).toContain("tar czf");
+			expect(state.execCalls[2]).toContain("pg_dump");
+			expect(state.execCalls.every((command) => !command.includes("base64"))).toBe(true);
+		} finally {
+			if (original === undefined) delete process.env.DATABASE_URL;
+			else process.env.DATABASE_URL = original;
+		}
+	});
+
+	it("removes a failed instance pair and preserves previous good objects", async () => {
+		const original = process.env.DATABASE_URL;
+		process.env.DATABASE_URL = "postgres://app:local-test@localhost/app";
+		const store = new LocalBackupStore(path.join(state.configDir, "backups", "org-1"));
+		await store.put("backup/web-server/old.gz", archive);
+		await store.put("backup/web-server-config/old.gz", archive);
+		state.execImpl = async () => "/usr/bin/pg_dump";
+		state.streamImpl = async (command) => ({
+			stdout: Readable.from([archive]),
+			done: Promise.resolve(
+				`${PIPELINE_EXIT_MARKER}${String(command).includes("pg_dump") ? 1 : 0}`,
+			),
+			abort: vi.fn(),
+		});
+		try {
+			await expect(
+				runBackup({
+					...backupRow,
+					databaseType: "web-server",
+					appName: "web-server",
+					keepLatestCount: 1,
+				}),
+			).rejects.toThrow(/status 1/);
+			expect(await store.list("backup/")).toEqual(
+				expect.arrayContaining(["backup/web-server/old.gz", "backup/web-server-config/old.gz"]),
+			);
+			expect(await store.list("backup/")).toHaveLength(2);
+		} finally {
+			if (original === undefined) delete process.env.DATABASE_URL;
+			else process.env.DATABASE_URL = original;
+		}
+	});
+});
+
+describe("Redis live snapshot cleanup", () => {
+	const redisBackup: BackupRow = {
+		...backupRow,
+		databaseType: "redis",
+		redisId: "redis-1",
+		postgresId: null,
+	};
+	const prep = async (command: string) => {
+		if (command.startsWith("docker ps")) return "abcdef012345";
+		if (command.includes("CONFIG GET auto-aof-rewrite-percentage")) return "100\n/data\n";
+		return "OK";
+	};
+	it("resets automatic rewrites after a producer/upload failure", async () => {
+		state.execImpl = prep;
+		state.streamImpl = async () => ({
+			stdout: Readable.from([archive]),
+			done: Promise.resolve(`${PIPELINE_EXIT_MARKER}1`),
+			abort: vi.fn(),
+		});
+		await expect(runBackup(redisBackup)).rejects.toThrow(/status 1/);
+		expect(state.execCalls.at(-1)).toContain("CONFIG SET auto-aof-rewrite-percentage");
+		expect(state.execCalls.at(-1)).toContain("100");
+		expect(state.updates.at(-1)).toMatchObject({ status: "error" });
+	});
+	it("does not prune a good backup or claim success when restoring the setting fails", async () => {
+		const store = new LocalBackupStore(path.join(state.configDir, "backups", "org-1"));
+		await store.put("backup/database/old.gz", archive);
+		state.execImpl = async (command) => {
+			if (command.includes("CONFIG SET") && !command.includes("CONFIG GET"))
+				throw new Error("restore automatic rewrites failed");
+			return prep(command);
+		};
+		await expect(runBackup({ ...redisBackup, keepLatestCount: 1 })).rejects.toThrow(
+			/restore automatic rewrites failed/,
+		);
+		expect((await store.list("backup/database/")).includes("backup/database/old.gz")).toBe(true);
+		expect(state.updates.at(-1)).toMatchObject({ status: "error" });
 	});
 });
 

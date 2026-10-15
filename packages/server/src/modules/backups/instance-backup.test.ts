@@ -142,7 +142,7 @@ describe("buildRedisSnapshotScript", () => {
 	it("triggers BGSAVE with a blocking SAVE fallback and waits for persistence", () => {
 		const script = buildRedisSnapshotScript();
 		expect(script).toContain("BGSAVE");
-		expect(script).toContain("|| redis-cli --no-auth-warning SAVE");
+		expect(script).toContain("--raw -e SAVE");
 		expect(script).toContain("rdb_bgsave_in_progress");
 		expect(script).toContain("rdb_last_bgsave_status");
 		expect(script).toContain("CONFIG GET dir");

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildStreamPipeline } from "./pipeline";
 import {
 	buildVerifyCleanupCommand,
 	buildVerifyContainerName,
@@ -116,7 +117,7 @@ describe("redis create/start", () => {
 
 	it("restores by unpacking the data-dir tar into the container root", () => {
 		expect(buildVerifyRestoreCommand(name, redis)).toBe(
-			`base64 -d | gunzip | docker cp - '${name}':/`,
+			buildStreamPipeline("gunzip", `docker cp - '${name}':/`),
 		);
 	});
 
@@ -161,7 +162,10 @@ describe("buildVerifyWaitCommand", () => {
 describe("buildVerifyRestoreCommand", () => {
 	it("postgres streams the gunzipped dump into psql with ON_ERROR_STOP", () => {
 		expect(buildVerifyRestoreCommand(name, postgres)).toBe(
-			`base64 -d | gunzip | docker exec -i '${name}' sh -c 'psql -q -U '\\''app_user'\\'' -d '\\''app'\\'' -v ON_ERROR_STOP=1'`,
+			buildStreamPipeline(
+				"gunzip",
+				`docker exec -i '${name}' sh -c 'psql -q -U '\\''app_user'\\'' -d '\\''app'\\'' -v ON_ERROR_STOP=1 --single-transaction'`,
+			),
 		);
 	});
 
@@ -174,7 +178,10 @@ describe("buildVerifyRestoreCommand", () => {
 				user: "u",
 			}),
 		).toBe(
-			`base64 -d | gunzip | docker exec -i '${name}' sh -c 'mysql --default-character-set=utf8mb4 -u root'`,
+			buildStreamPipeline(
+				"gunzip",
+				`docker exec -i '${name}' sh -c 'mysql --default-character-set=utf8mb4 -u root'`,
+			),
 		);
 		expect(
 			buildVerifyRestoreCommand(name, {
@@ -184,7 +191,10 @@ describe("buildVerifyRestoreCommand", () => {
 				user: "u",
 			}),
 		).toBe(
-			`base64 -d | gunzip | docker exec -i '${name}' sh -c 'mariadb --default-character-set=utf8mb4 -u root'`,
+			buildStreamPipeline(
+				"gunzip",
+				`docker exec -i '${name}' sh -c 'mariadb --default-character-set=utf8mb4 -u root'`,
+			),
 		);
 	});
 
@@ -197,7 +207,10 @@ describe("buildVerifyRestoreCommand", () => {
 				user: "u",
 			}),
 		).toBe(
-			`base64 -d | gunzip | docker exec -i '${name}' sh -c 'mongorestore --quiet --archive --drop'`,
+			buildStreamPipeline(
+				"gunzip",
+				`docker exec -i '${name}' sh -c 'mongorestore --quiet --archive --drop'`,
+			),
 		);
 	});
 });

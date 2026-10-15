@@ -1,64 +1,12 @@
+import { finished } from "node:stream/promises";
+import { createGunzip } from "node:zlib";
+
 /**
- * Exit-status-safe `producer | gzip | base64` pipelines.
- *
- * A plain shell pipeline reports the LAST command's status, so a failed
- * pg_dump/mysqldump/tar still produces a valid (empty) gzip stream that
- * base64 happily encodes with exit 0. `set -o pipefail` would fix that but is
- * not available in every remote login shell (dash), so the producer's status
- * is captured in a temp file and echoed after the payload as a trailer that
- * {@link decodePipelineOutput} parses. Pure string helpers — unit-tested
- * without Docker.
+ * POSIX-shell pipelines report only their last command's exit status.
+ * Carry the producer status on stderr while stdout stays raw gzip bytes.
  */
 
-/** Trailer separating the base64 payload from the producer's exit status. */
 export const PIPELINE_EXIT_MARKER = "==NIXPLOY_EXIT==";
-
-/**
- * Wrap `producer` so the command string prints `<encoded payload>` followed by
- * `==NIXPLOY_EXIT==<producer status>`. When the encoder itself fails no
- * trailer is printed, which the decoder treats as a failure too.
- */
-export function buildEncodedPipeline(producer: string, encoder = "gzip | base64"): string {
-	return (
-		`__nx_rc=$(mktemp) && { ${producer}; echo $? >"$__nx_rc"; } | ${encoder} && ` +
-		`echo "${PIPELINE_EXIT_MARKER}$(cat "$__nx_rc")"; rm -f "$__nx_rc"`
-	);
-}
-
-/** Decode the output of {@link buildEncodedPipeline}; throws unless the producer exited 0. */
-export function decodePipelineOutput(raw: string, label: string): Buffer {
-	const index = raw.lastIndexOf(PIPELINE_EXIT_MARKER);
-	if (index === -1) {
-		throw new Error(`${label}: the dump pipeline did not report an exit status`);
-	}
-	const status = raw.slice(index + PIPELINE_EXIT_MARKER.length).trim();
-	if (status !== "0") {
-		throw new Error(`${label}: the dump command exited with status ${status || "unknown"}`);
-	}
-	return Buffer.from(raw.slice(0, index).replace(/\s+/g, ""), "base64");
-}
-
-/**
- * Reject archives that are not gzip or that gunzip to 0 bytes. The gzip
- * trailer's ISIZE field (last 4 bytes, little-endian) holds the uncompressed
- * size, so the check needs no decompression. Every archive the runner
- * produces is a single-member stream (one gzip invocation).
- */
-export function assertNonEmptyGzip(archive: Buffer, label: string): void {
-	if (archive.length < 18 || archive[0] !== 0x1f || archive[1] !== 0x8b) {
-		throw new Error(`${label} is not a gzip archive`);
-	}
-	if (archive.readUInt32LE(archive.length - 4) === 0) {
-		throw new Error(`${label} is empty (gunzips to 0 bytes)`);
-	}
-}
-
-// ── streaming variants ──────────────────────────────────────────────────────
-//
-// The base64 pipeline above buffers the whole archive in a string, which caps
-// dumps at ~37 MB (architecture audit #18). The streaming pipeline keeps
-// stdout as raw gzip bytes and moves the producer's exit status to STDERR, so
-// the trailer check survives without corrupting the archive.
 
 /**
  * Wrap `producer` so stdout is a plain gzip stream and stderr ends with
@@ -99,34 +47,50 @@ export function assertStreamExit(stderr: string, label: string): void {
 	}
 }
 
-/**
- * Streaming equivalent of {@link assertNonEmptyGzip}: watches the first two
- * bytes for the gzip magic and keeps a rolling 4-byte tail for the ISIZE
- * field, so an empty or non-gzip archive is caught without buffering it.
- */
-export class GzipShapeCheck {
-	private head = Buffer.alloc(0);
-	private tail = Buffer.alloc(0);
+/** Full streaming gzip validation before an object is finalized. */
+export class GzipArchiveCheck {
+	private readonly decoder = createGunzip();
+	private readonly completed: Promise<void>;
+	private uncompressedBytes = 0;
 	private bytes = 0;
+	private failure: Error | undefined;
+	private pendingWrite: ((error?: Error | null) => void) | undefined;
 
-	update(chunk: Buffer): void {
+	constructor() {
+		this.decoder.on("data", (chunk: Buffer) => {
+			this.uncompressedBytes += chunk.length;
+		});
+		this.decoder.on("error", (error: Error) => {
+			this.failure = error;
+			this.pendingWrite?.(error);
+		});
+		this.completed = finished(this.decoder);
+		void this.completed.catch(() => {});
+	}
+
+	async update(chunk: Buffer): Promise<void> {
 		this.bytes += chunk.length;
-		if (this.head.length < 2) {
-			this.head = Buffer.concat([this.head, chunk.subarray(0, 2)]).subarray(0, 2);
-		}
-		this.tail = Buffer.concat([this.tail, chunk]).subarray(-4);
+		if (this.failure) throw this.failure;
+		await new Promise<void>((resolve, reject) => {
+			const settle = (error?: Error | null) => {
+				if (this.pendingWrite === settle) this.pendingWrite = undefined;
+				if (error) reject(error);
+				else resolve();
+			};
+			this.pendingWrite = settle;
+			this.decoder.write(chunk, settle);
+		});
 	}
 
-	/** Throw unless the stream was a non-empty gzip member. */
-	assert(label: string): void {
-		if (this.bytes < 18 || this.head[0] !== 0x1f || this.head[1] !== 0x8b) {
-			throw new Error(`${label} is not a gzip archive`);
-		}
-		if (this.tail.length === 4 && this.tail.readUInt32LE(0) === 0) {
-			throw new Error(`${label} is empty (gunzips to 0 bytes)`);
-		}
+	async assert(label: string): Promise<void> {
+		this.decoder.end();
+		await this.completed;
+		if (this.uncompressedBytes === 0) throw new Error(`${label} is empty (gunzips to 0 bytes)`);
 	}
 
+	abort(): void {
+		this.decoder.destroy();
+	}
 	get byteLength(): number {
 		return this.bytes;
 	}

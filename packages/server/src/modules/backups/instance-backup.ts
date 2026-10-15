@@ -128,7 +128,9 @@ export const CONFIG_ARCHIVE_EXCLUDES = [
 	"applications",
 	"compose",
 	"logs",
+	"runtime-logs",
 	"metrics",
+	"backups",
 	"cache",
 	"tools",
 	"files",
@@ -138,7 +140,7 @@ export const CONFIG_ARCHIVE_EXCLUDES = [
 
 /**
  * tar.gz the config directory to stdout (minus {@link CONFIG_ARCHIVE_EXCLUDES}).
- * The runner base64-encodes the stream for transport. Patterns are anchored
+ * The runner streams the bytes directly to storage. Patterns are anchored
  * with `./` so `./.env` never matches an unrelated `<app>/.env` deeper down
  * (those subtrees are excluded wholesale anyway).
  */
@@ -158,21 +160,56 @@ export function buildConfigArchiveCommand(configDir: string): string {
  * prints the data directory path as the last stdout line so the runner can
  * `docker cp` it out.
  */
-export function buildRedisSnapshotScript(maxWaitSeconds = 120): string {
-	const r = "redis-cli --no-auth-warning";
+export function buildRedisSnapshotScript(
+	maxWaitSeconds = 120,
+	token = "manual",
+	markerDir = "/tmp/.nixploy-redis-backup",
+): string {
+	if (!/^[a-z0-9]+$/.test(token)) throw new Error("Invalid Redis backup token");
+	const r = "redis-cli --no-auth-warning --raw -e";
 	return [
+		"set -eu",
 		"IFS= read -r REDISCLI_AUTH; export REDISCLI_AUTH",
+		"umask 077",
+		`marker=${sq(markerDir)}`,
+		'mkdir "$marker" || { echo "A Redis backup is active or was interrupted. Keep concurrent backups stopped; recover the original rewrite setting from /tmp/.nixploy-redis-backup/previous before removing the marker." >&2; exit 1; }',
+		`printf '%s\\n' ${sq(token)} > "$marker/token"`,
+		`trap 'rc=$?; trap - EXIT; if [ "$rc" -ne 0 ]; then if [ -f "$marker/previous" ]; then ${r} CONFIG SET auto-aof-rewrite-percentage "$(cat "$marker/previous")" >/dev/null || { echo "Failed to restore Redis rewrites; original setting retained in $marker/previous" >&2; exit 1; }; fi; rm -rf "$marker"; fi; exit "$rc"' EXIT`,
+		`previous=$(${r} CONFIG GET auto-aof-rewrite-percentage | tail -n 1)`,
+		'case "$previous" in ""|*[!0-9]*) echo "Invalid Redis auto rewrite setting" >&2; exit 1;; esac',
+		'printf "%s\\n" "$previous" > "$marker/previous"',
+		`${r} CONFIG SET auto-aof-rewrite-percentage 0 >/dev/null`,
+		`i=0; while [ $i -lt ${maxWaitSeconds} ]; do`,
+		`rewrite=$(${r} INFO persistence | grep '^aof_rewrite_in_progress' | cut -d: -f2 | tr -d '[:space:]')`,
+		'[ "$rewrite" = "0" ] && break',
+		"sleep 1; i=$((i + 1))",
+		"done",
+		'[ "$rewrite" = "0" ] || { echo "redis AOF rewrite timed out" >&2; exit 1; }',
 		`${r} BGSAVE >/dev/null 2>&1 || ${r} SAVE >/dev/null`,
 		`i=0; while [ $i -lt ${maxWaitSeconds} ]; do`,
 		`inprog=$(${r} INFO persistence | grep '^rdb_bgsave_in_progress' | cut -d: -f2 | tr -d '[:space:]')`,
 		'[ "$inprog" = "0" ] && break',
 		"sleep 1; i=$((i + 1))",
 		"done",
-		// Fail loudly when the last save errored (e.g. disk full).
+		'[ "$inprog" = "0" ] || { echo "redis persistence timed out" >&2; exit 1; }',
 		`status=$(${r} INFO persistence | grep '^rdb_last_bgsave_status' | cut -d: -f2 | tr -d '[:space:]')`,
 		'[ "$status" = "ok" ] || { echo "redis persistence failed: $status" >&2; exit 1; }',
+		// The runner restores this setting in finally after copying bytes.
+		`printf '%s\\n' "$previous"`,
 		`${r} CONFIG GET dir | tail -n 1`,
-	].join("; ");
+		"trap - EXIT",
+	].join("\n");
+}
+
+/** Runner cleanup after every successful Redis preparation, even failed uploads. */
+export function buildRedisSnapshotCleanupScript(
+	previous: string,
+	token = "manual",
+	markerDir = "/tmp/.nixploy-redis-backup",
+): string {
+	if (!/^[0-9]+$/.test(previous) || !/^[a-z0-9]+$/.test(token))
+		throw new Error("Invalid Redis automatic rewrite setting or token");
+	return `set -eu; IFS= read -r REDISCLI_AUTH; export REDISCLI_AUTH; marker=${sq(markerDir)}; [ "$(cat "$marker/token")" = ${sq(token)} ] || { echo "Redis backup marker ownership changed" >&2; exit 1; }; redis-cli --no-auth-warning --raw -e CONFIG SET auto-aof-rewrite-percentage ${sq(previous)}; rm -rf "$marker"`;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import type { Readable } from "node:stream";
+import { Readable, type Writable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import type { ClientChannel } from "ssh2";
 import { remoteCommandTimeoutMs, terminateProcessTree } from "../../utils/exec";
 import { acquireSsh } from "../../utils/ssh-pool";
@@ -37,32 +38,31 @@ export interface StreamingOptions {
 	/** Fed to the command's stdin and closed; nothing is written when omitted. */
 	stdin?: Readable | Buffer | string;
 	timeoutMs?: number;
+	/** Local process environment; credentials stay off argv. */
+	env?: NodeJS.ProcessEnv;
+	signal?: AbortSignal;
 	/** Cap on captured stderr (default 64 KiB) — it only carries the trailer. */
 	maxStderrBytes?: number;
 }
 
 const DEFAULT_MAX_STDERR = 64 * 1024;
 
-function writeStdin(target: NodeJS.WritableStream, stdin: StreamingOptions["stdin"]): void {
-	if (stdin === undefined) {
-		target.end();
-		return;
-	}
-	if (typeof stdin === "string" || Buffer.isBuffer(stdin)) {
-		target.end(stdin);
-		return;
-	}
-	stdin.pipe(target);
+function writeStdin(target: Writable, stdin: StreamingOptions["stdin"]): Promise<void> {
+	const source =
+		stdin instanceof Readable ? stdin : Readable.from(stdin === undefined ? [] : [stdin]);
+	return pipeline(source, target);
 }
 
 function runLocalStreaming(command: string, options: StreamingOptions): StreamingCommand {
 	const child = spawn("sh", ["-c", command], {
 		stdio: ["pipe", "pipe", "pipe"],
 		detached: true,
+		env: options.env ? { ...process.env, ...options.env } : process.env,
 	});
 	const maxStderr = options.maxStderrBytes ?? DEFAULT_MAX_STDERR;
 	let stderr = "";
 	let timedOut = false;
+	let aborted = false;
 	const timeoutMs = remoteCommandTimeoutMs(options.timeoutMs);
 	const timer = setTimeout(() => {
 		timedOut = true;
@@ -71,34 +71,46 @@ function runLocalStreaming(command: string, options: StreamingOptions): Streamin
 	timer.unref?.();
 
 	child.stderr.on("data", (chunk: Buffer) => {
-		if (stderr.length < maxStderr) stderr += chunk.toString();
+		stderr = (stderr + chunk.toString()).slice(-maxStderr);
 	});
-	// EPIPE when the command exits before reading all of stdin.
-	child.stdin.on("error", () => {});
-	writeStdin(child.stdin, options.stdin);
+	const inputDone = writeStdin(child.stdin, options.stdin);
+	void inputDone.catch(() => terminateProcessTree(child));
 
-	const done = new Promise<string>((resolve, reject) => {
+	const exited = new Promise<string>((resolve, reject) => {
 		child.on("error", (error) => {
 			clearTimeout(timer);
 			reject(error);
 		});
-		child.on("close", (code) => {
+		child.on("close", (code, signal) => {
 			clearTimeout(timer);
+			if (aborted) {
+				reject(new Error("Backup command aborted"));
+				return;
+			}
 			if (timedOut) {
 				reject(new Error(`Backup command timed out after ${Math.round(timeoutMs / 1000)}s`));
 				return;
 			}
-			if (code === 0 || code === null) resolve(stderr);
+			if (code === 0) resolve(stderr);
 			else
 				reject(
 					new Error(
-						`Backup command failed (exit ${code})${stderr ? `: ${stderr.slice(0, 200)}` : ""}`,
+						`Backup command failed (exit ${code}${signal ? `, signal ${signal}` : ""})${stderr ? `: ${stderr.slice(0, 200)}` : ""}`,
 					),
 				);
 		});
 	});
+	const done = Promise.all([exited, inputDone]).then(([output]) => output);
+	void done.catch(() => {});
 
-	return { stdout: child.stdout, done, abort: () => terminateProcessTree(child) };
+	return {
+		stdout: child.stdout,
+		done,
+		abort: () => {
+			aborted = true;
+			terminateProcessTree(child);
+		},
+	};
 }
 
 async function runRemoteStreaming(
@@ -176,11 +188,18 @@ async function runRemoteStreaming(
 			// The pool slot follows the channel, whatever settles `done` first.
 			stream.once("close", () => lease.release());
 			stream.stderr.on("data", (chunk: Buffer) => {
-				if (stderr.length < maxStderr) stderr += chunk.toString();
+				stderr = (stderr + chunk.toString()).slice(-maxStderr);
+			});
+			const inputDone = writeStdin(stream, options.stdin);
+			void inputDone.catch((error: Error) => {
+				settle(() => {
+					closeChannel();
+					rejectDone(error);
+				});
 			});
 			stream.on("close", (code: number | null) => {
 				settle(() => {
-					if (code === 0 || code === null) resolveDone(stderr);
+					if (code === 0) void inputDone.then(() => resolveDone(stderr), rejectDone);
 					else
 						rejectDone(
 							new Error(
@@ -197,11 +216,14 @@ async function runRemoteStreaming(
 					rejectDone(error);
 				});
 			});
-			writeStdin(stream, options.stdin);
 			resolveCommand({
 				stdout: stream as unknown as Readable,
 				done,
-				abort: closeChannel,
+				abort: () =>
+					settle(() => {
+						closeChannel();
+						rejectDone(new Error("Backup command aborted"));
+					}),
 			});
 		});
 	});
@@ -213,7 +235,15 @@ export async function spawnStreamingCommand(
 	command: string,
 	options: StreamingOptions = {},
 ): Promise<StreamingCommand> {
-	return serverId
+	options.signal?.throwIfAborted();
+	const commandProcess = serverId
 		? await runRemoteStreaming(serverId, command, options)
 		: runLocalStreaming(command, options);
+	const abort = () => commandProcess.abort();
+	options.signal?.addEventListener("abort", abort, { once: true });
+	if (options.signal?.aborted) abort();
+	void commandProcess.done
+		.finally(() => options.signal?.removeEventListener("abort", abort))
+		.catch(() => {});
+	return commandProcess;
 }

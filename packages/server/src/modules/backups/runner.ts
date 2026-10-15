@@ -17,32 +17,30 @@ import { createLogger } from "../../lib/logger";
 import { execAsync, execAsyncRemote, execAsyncWithStdin } from "../../utils/exec";
 import { assertDockerVolumeName } from "../../utils/validators";
 import { shellQuote } from "../compose/paths";
-import { DATABASE_CONFIGS } from "../databases/engine";
+import { DATABASE_CONFIGS, isManagedDatabaseLabels } from "../databases/engine";
 import { PROTECTED_VOLUMES } from "../docker/protected";
 import { notifyEvent } from "../notifications";
 import { getConfigDir } from "../traefik/paths";
+import { type ValidatedArchive, withValidatedArchive } from "./archive";
 import { DB_DUMP_CONFIG, type DumpCommandParams } from "./dump-commands";
 import {
 	buildConfigArchiveCommand,
 	buildInstanceContainerDumpCommand,
 	buildInstanceContainerFilters,
 	buildInstancePgDumpCommand,
+	buildRedisSnapshotCleanupScript,
 	buildRedisSnapshotScript,
 	isSafeRedisDataDir,
 	parseInstanceDatabaseUrl,
 	WEB_SERVER_CONFIG_SUFFIX,
 } from "./instance-backup";
-import {
-	assertNonEmptyGzip,
-	assertStreamExit,
-	buildEncodedPipeline,
-	buildStreamPipeline,
-	decodePipelineOutput,
-	GzipShapeCheck,
-} from "./pipeline";
+import { assertStreamExit, buildStreamPipeline, GzipArchiveCheck } from "./pipeline";
+import { withRedisBackupLock } from "./redis-lock";
+import { buildVolumeReplacementScript } from "./restore-commands";
 import { type BackupRunHandle, type BackupRunTrigger, withBackupRun } from "./runs";
 import { type BackupStore, type DestinationRow, storeFor } from "./storage";
 import { type StreamingCommand, spawnStreamingCommand } from "./stream-exec";
+import { assertSafeTarEntry } from "./tar";
 import {
 	buildVerifyCleanupCommand,
 	buildVerifyContainerName,
@@ -69,12 +67,12 @@ const log = createLogger("backups");
  * pipeline (see pipeline.ts — the producer's exit status is carried along so
  * a failed dump never uploads an empty archive).
  *
- * Database dumps and their restores STREAM (architecture audit #18): stdout
+ * All backup archives stream: stdout
  * goes straight into an S3 multipart upload (8 MiB parts) or a local file,
  * and a restore streams the stored object back into the container's stdin.
- * Nothing is buffered, so the old ~37 MB ceiling (base64 through a 50 MB
- * `maxBuffer`) is gone. The exit-status trailer moved to stderr so stdout
- * stays binary. Volume/instance archives still use the base64 pipeline.
+ * Restore pins and validates each selected archive on disk before target
+ * writes. Memory is bounded; no archive passes through the buffered exec
+ * helper or base64. The producer exit-status trailer travels on stderr.
  *
  * Every run is recorded as a `backup_run` row (runs.ts): `running` while the
  * dump is in flight, then `success` with the object key and size, or
@@ -283,7 +281,7 @@ export async function runBackup(
 		async (handle) => {
 			const store = storeFor(destination);
 			if (backupRow.databaseType === "web-server") {
-				return await runWebServerBackup(backupRow, store);
+				return await runWebServerBackup(backupRow, store, handle);
 			}
 			if (backupRow.databaseType === "redis") {
 				return await runRedisBackup(backupRow, store, handle);
@@ -338,7 +336,7 @@ async function runDatabaseDump(
 	for (let attempt = 1; ; attempt++) {
 		const proc = await spawnStreamingCommand(linked.serverId, command, { stdin });
 		try {
-			const bytes = await storeStreamedDump(store, key, proc, label);
+			const bytes = await storeStreamedArchive(store, key, proc, label);
 			await pruneOldBackups(store, backupPrefix(backupRow), backupRow.keepLatestCount);
 			return { key, bytes };
 		} catch (error) {
@@ -378,28 +376,174 @@ export function isDatabaseStartingError(error: unknown): boolean {
  * store finalizes (`CompleteMultipartUpload` / `rename`), so a failed dump
  * aborts the upload instead of replacing a good archive with an empty one.
  */
-async function storeStreamedDump(
+async function storeStreamedArchive(
 	store: BackupStore,
 	key: string,
 	proc: StreamingCommand,
 	label: string,
 ): Promise<number> {
-	const shape = new GzipShapeCheck();
+	const shape = new GzipArchiveCheck();
 	async function* guarded(): AsyncGenerator<Buffer> {
-		for await (const chunk of proc.stdout) {
-			const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string);
-			shape.update(buffer);
-			yield buffer;
+		try {
+			for await (const chunk of proc.stdout) {
+				const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string);
+				await shape.update(buffer);
+				yield buffer;
+			}
+			// Throws when the pipeline (or the producer inside it) failed.
+			assertStreamExit(await proc.done, label);
+			await shape.assert(label);
+		} finally {
+			shape.abort();
 		}
-		// Throws when the pipeline (or the producer inside it) failed.
-		assertStreamExit(await proc.done, label);
-		shape.assert(label);
 	}
 	try {
 		return await store.putStream(key, guarded());
 	} catch (error) {
 		proc.abort();
 		throw error;
+	}
+}
+
+/** Replay a pinned archive; input/read/consumer errors abort the command. */
+async function replayArchive(
+	archive: ValidatedArchive,
+	serverId: string | null | undefined,
+	command: string,
+	timeoutMs?: number,
+	checkProducer = false,
+): Promise<void> {
+	const input = archive.open();
+	let proc: StreamingCommand | undefined;
+	try {
+		proc = await spawnStreamingCommand(serverId, command, { stdin: input, timeoutMs });
+		for await (const _chunk of proc.stdout) {
+			/* drain restore output */
+		}
+		const stderr = await proc.done;
+		if (checkProducer) assertStreamExit(stderr, "Restore decompression");
+	} catch (error) {
+		proc?.abort();
+		throw error;
+	} finally {
+		input.destroy();
+	}
+}
+
+/** Validate tar readability without attaching the live target volume. */
+async function preflightTar(
+	archive: ValidatedArchive,
+	serverId: string | null | undefined,
+	root?: string,
+): Promise<void> {
+	const input = archive.open();
+	let proc: StreamingCommand | undefined;
+	try {
+		proc = await spawnStreamingCommand(
+			serverId,
+			"docker run --rm -i --network none alpine tar tvzf -",
+			{ stdin: input },
+		);
+		let pending = "";
+		let entries = 0;
+		for await (const chunk of proc.stdout) {
+			pending += chunk.toString();
+			let end = pending.indexOf("\n");
+			while (end !== -1) {
+				if (end > 64 * 1024) throw new Error("Archive tar listing line is too long");
+				assertSafeTarEntry(pending.slice(0, end), root);
+				entries++;
+				pending = pending.slice(end + 1);
+				end = pending.indexOf("\n");
+			}
+			if (pending.length > 64 * 1024) throw new Error("Archive tar listing line is too long");
+		}
+		if (pending) {
+			assertSafeTarEntry(pending, root);
+			entries++;
+		}
+		await proc.done;
+		if (entries === 0) throw new Error("Archive tar has no entries");
+	} catch (error) {
+		proc?.abort();
+		throw error;
+	} finally {
+		input.destroy();
+	}
+}
+
+async function assertStoppedVolume(
+	volumeName: string,
+	serverId: string | null | undefined,
+): Promise<void> {
+	await run(serverId, `docker volume inspect ${sq(volumeName)} --format '{{.Name}}'`);
+	// A desired-running Swarm service can have no container during restart or
+	// placement. Inspect its intent and actual tasks before trusting local ps.
+	const serviceIds = (await execAsync("docker service ls --quiet"))
+		.trim()
+		.split(/\s+/)
+		.filter(Boolean);
+	if (serviceIds.some((id) => !/^[a-z0-9]{12,64}$/.test(id)))
+		throw new Error("Cannot verify volume consumer identities");
+	const services = serviceIds.length
+		? (JSON.parse(
+				await execAsync(`docker service inspect ${serviceIds.map(sq).join(" ")}`),
+			) as Array<{
+				Spec?: {
+					Name?: string;
+					Mode?: { Replicated?: { Replicas?: number } };
+					TaskTemplate?: { ContainerSpec?: { Mounts?: Array<{ Type?: string; Source?: string }> } };
+				};
+			}>)
+		: [];
+	const consumers = services.filter((service) =>
+		service.Spec?.TaskTemplate?.ContainerSpec?.Mounts?.some(
+			(mount) => mount.Type === "volume" && mount.Source === volumeName,
+		),
+	);
+	if (consumers.some((service) => service.Spec?.Mode?.Replicated?.Replicas !== 0))
+		throw new Error(`Stop every Swarm service using volume ${volumeName} before restoring it`);
+	for (const service of consumers) {
+		if (!service.Spec?.Name) throw new Error("Cannot verify a volume consumer");
+		await waitStoppedTasks(service.Spec.Name, serverId);
+	}
+	const deadline = Date.now() + 30_000;
+	while ((await run(serverId, `docker ps -q --filter ${sq(`volume=${volumeName}`)}`)).trim()) {
+		if (Date.now() >= deadline)
+			throw new Error(`Stop every container using volume ${volumeName} before restoring it`);
+		await new Promise((resolve) => setTimeout(resolve, 250));
+	}
+}
+
+async function waitStoppedTasks(
+	appName: string,
+	serverId: string | null | undefined,
+): Promise<void> {
+	const targetNode = (await run(serverId, "docker info --format '{{.Swarm.NodeID}}'")).trim();
+	if (!targetNode) throw new Error("Cannot verify the volume's target node");
+	const deadline = Date.now() + 30_000;
+	while (true) {
+		const ids = (await execAsync(`docker service ps --no-trunc -q ${sq(appName)}`))
+			.trim()
+			.split(/\s+/)
+			.filter(Boolean);
+		if (ids.some((id) => !/^[a-z0-9]{20,64}$/.test(id)))
+			throw new Error("Cannot verify volume task identities");
+		const tasks = ids.length
+			? (JSON.parse(await execAsync(`docker inspect ${ids.map(sq).join(" ")}`)) as Array<{
+					NodeID?: string;
+					Status?: { State?: string };
+				}>)
+			: [];
+		const active = tasks.filter(
+			(task) => !["complete", "shutdown", "failed", "rejected"].includes(task.Status?.State ?? ""),
+		);
+		if (active.some((task) => task.NodeID !== targetNode))
+			throw new Error("Cannot verify stopped volume tasks on another node");
+		if (active.length === 0) return;
+		if (Date.now() >= deadline)
+			throw new Error("Volume tasks did not stop within 30 seconds; retry after they stop");
+		await new Promise((resolve) => setTimeout(resolve, 250));
 	}
 }
 
@@ -450,46 +594,46 @@ export async function restoreBackup(backupRow: BackupRow, key?: string): Promise
 	const passwordEnv = engine.passwordEnv?.(params) ?? {};
 	const passwordEntries = Object.entries(passwordEnv);
 
-	// The archive STREAMS from the destination into the container's stdin:
-	// nothing is held in memory, and inlining it on argv would fail with
-	// E2BIG anyway (architecture audit #18).
-	const streamRestore = async (inner: string): Promise<void> => {
-		const archive = await store.getStream(targetKey);
-		const proc = await spawnStreamingCommand(
-			linked.serverId,
-			`gunzip | docker exec -i ${shellQuote(containerId)} sh -c ${sq(inner)}`,
-			{ stdin: archive },
-		);
-		// Nothing useful on stdout; drain it so the command can finish.
-		proc.stdout.resume();
-		await proc.done;
-	};
+	return await withValidatedArchive(store, targetKey, async (archive) => {
+		const streamRestore = async (inner: string): Promise<void> => {
+			await replayArchive(
+				archive,
+				linked.serverId,
+				buildStreamPipeline(
+					"gunzip",
+					`docker exec -i ${shellQuote(containerId)} sh -c ${sq(inner)}`,
+				),
+				undefined,
+				true,
+			);
+		};
 
-	if (passwordEntries.length > 0) {
-		const passFile = "/tmp/.nixploy-db-pass";
-		await execAsyncWithStdin(
-			`docker exec -i ${shellQuote(containerId)} tee ${passFile} >/dev/null`,
-			`${passwordEntries.map(([, value]) => value).join("\n")}\n`,
-			{ serverId: linked.serverId },
-		);
-		try {
-			const exports = passwordEntries
-				.map(([key], index) =>
-					index === 0
-						? `${key}=$(head -n 1 ${passFile})`
-						: `${key}=$(sed -n '${index + 1}p' ${passFile})`,
-				)
-				.join("; ");
-			// Preserve the restore tool's exit status past the cleanup.
-			const wrapped = `${exports}; export ${passwordEntries.map(([key]) => key).join(" ")}; ${restoreCommand}; __rc=$?; rm -f ${passFile}; exit $__rc`;
-			await streamRestore(wrapped);
-		} finally {
-			await run(linked.serverId, `docker exec ${shellQuote(containerId)} rm -f ${passFile}`);
+		if (passwordEntries.length > 0) {
+			const passFile = "/tmp/.nixploy-db-pass";
+			await execAsyncWithStdin(
+				`docker exec -i ${shellQuote(containerId)} sh -c ${sq(`umask 077; cat > ${passFile}`)}`,
+				`${passwordEntries.map(([, value]) => value).join("\n")}\n`,
+				{ serverId: linked.serverId },
+			);
+			try {
+				const exports = passwordEntries
+					.map(([key], index) =>
+						index === 0
+							? `${key}=$(head -n 1 ${passFile})`
+							: `${key}=$(sed -n '${index + 1}p' ${passFile})`,
+					)
+					.join("; ");
+				// Preserve the restore tool's exit status past the cleanup.
+				const wrapped = `${exports}; export ${passwordEntries.map(([key]) => key).join(" ")}; ${restoreCommand}; __rc=$?; rm -f ${passFile}; exit $__rc`;
+				await streamRestore(wrapped);
+			} finally {
+				await run(linked.serverId, `docker exec ${shellQuote(containerId)} rm -f ${passFile}`);
+			}
+		} else {
+			await streamRestore(restoreCommand);
 		}
-	} else {
-		await streamRestore(restoreCommand);
-	}
-	return { key: targetKey };
+		return { key: targetKey };
+	});
 }
 
 // ── restore verification ────────────────────────────────────────────────────
@@ -548,62 +692,67 @@ export async function verifyBackup(backupRow: BackupRow, key?: string): Promise<
 			secrets: [destination.accessKey, destination.secretAccessKey],
 		},
 		async () => {
-			const label = `Dump ${targetKey}`;
-			const archive = await storeFor(destination).get(targetKey);
-			assertNonEmptyGzip(archive, label);
-			const { serverId, ...target } = await resolveVerifyTarget(backupRow);
-			const name = buildVerifyContainerName(randomBytes(8).toString("hex"));
-			const deadline = Date.now() + VERIFY_TIMEOUT_MS;
-			const remaining = () => {
-				const left = deadline - Date.now();
-				if (left <= 0) {
-					throw new Error(`Restore verification exceeded ${VERIFY_TIMEOUT_MS / 60_000} minutes`);
-				}
-				return left;
-			};
-			const archiveB64 = archive.toString("base64");
-			try {
-				if (target.engine === "redis") {
-					await run(serverId, buildVerifyCreateCommand(name, target), remaining());
-					await execAsyncWithStdin(buildVerifyRestoreCommand(name, target), archiveB64, {
-						serverId,
-						timeout: remaining(),
-					});
-					await run(serverId, buildVerifyStartCommand(name), remaining());
-				} else {
-					await run(serverId, buildVerifyRunCommand(name, target), remaining());
-				}
+			return await withValidatedArchive(storeFor(destination), targetKey, async (archive) => {
+				const { serverId, ...target } = await resolveVerifyTarget(backupRow);
+				const name = buildVerifyContainerName(randomBytes(8).toString("hex"));
+				const deadline = Date.now() + VERIFY_TIMEOUT_MS;
+				const remaining = () => {
+					const left = deadline - Date.now();
+					if (left <= 0) {
+						throw new Error(`Restore verification exceeded ${VERIFY_TIMEOUT_MS / 60_000} minutes`);
+					}
+					return left;
+				};
 				try {
-					await run(serverId, buildVerifyWaitCommand(name, target), remaining());
-				} catch (error) {
-					const detail = stderrOf(error);
-					throw new Error(
-						`${target.engine} container did not become ready${detail ? `: ${detail.slice(-600)}` : ""}`,
-					);
-				}
-				if (target.engine !== "redis") {
-					try {
-						await execAsyncWithStdin(buildVerifyRestoreCommand(name, target), archiveB64, {
+					if (target.engine === "redis") {
+						await run(serverId, buildVerifyCreateCommand(name, target), remaining());
+						await preflightTar(archive, serverId);
+						await replayArchive(
+							archive,
 							serverId,
-							timeout: remaining(),
-						});
+							buildVerifyRestoreCommand(name, target),
+							remaining(),
+							true,
+						);
+						await run(serverId, buildVerifyStartCommand(name), remaining());
+					} else {
+						await run(serverId, buildVerifyRunCommand(name, target), remaining());
+					}
+					try {
+						await run(serverId, buildVerifyWaitCommand(name, target), remaining());
 					} catch (error) {
 						const detail = stderrOf(error);
 						throw new Error(
-							`Restore into the verification container failed${detail ? `: ${detail.slice(-600)}` : ""}`,
+							`${target.engine} container did not become ready${detail ? `: ${detail.slice(-600)}` : ""}`,
 						);
 					}
+					if (target.engine !== "redis") {
+						try {
+							await replayArchive(
+								archive,
+								serverId,
+								buildVerifyRestoreCommand(name, target),
+								remaining(),
+								true,
+							);
+						} catch (error) {
+							const detail = stderrOf(error);
+							throw new Error(
+								`Restore into the verification container failed${detail ? `: ${detail.slice(-600)}` : ""}`,
+							);
+						}
+					}
+					const output = await run(serverId, buildVerifyLivenessCommand(name, target), remaining());
+					if (!livenessAnswered(target.engine, output)) {
+						throw new Error(
+							`${target.engine} liveness query answered ${JSON.stringify(output.trim().slice(0, 200))}, expected ${expectedLivenessOutput(target.engine)}`,
+						);
+					}
+					return { key: targetKey, bytes: archive.bytes };
+				} finally {
+					await run(serverId, buildVerifyCleanupCommand(name)).catch(() => {});
 				}
-				const output = await run(serverId, buildVerifyLivenessCommand(name, target), remaining());
-				if (!livenessAnswered(target.engine, output)) {
-					throw new Error(
-						`${target.engine} liveness query answered ${JSON.stringify(output.trim().slice(0, 200))}, expected ${expectedLivenessOutput(target.engine)}`,
-					);
-				}
-				return { key: targetKey, bytes: archive.length };
-			} finally {
-				await run(serverId, buildVerifyCleanupCommand(name)).catch(() => {});
-			}
+			});
 		},
 	);
 }
@@ -618,13 +767,14 @@ export async function verifyBackup(backupRow: BackupRow, key?: string): Promise<
  */
 async function dumpInstanceFromContainer(
 	target: ReturnType<typeof parseInstanceDatabaseUrl>,
-): Promise<string> {
+): Promise<StreamingCommand> {
 	for (const filter of buildInstanceContainerFilters(target.host)) {
 		const output = await execAsync(`docker ps -q ${filter} | head -n 1`);
 		const containerId = output.trim().split("\n")[0]?.trim();
 		if (containerId && CONTAINER_ID_PATTERN.test(containerId)) {
-			return await execAsync(
-				buildEncodedPipeline(
+			return await spawnStreamingCommand(
+				null,
+				buildStreamPipeline(
 					`docker exec ${shellQuote(containerId)} sh -c ${sq(buildInstanceContainerDumpCommand(target))}`,
 				),
 			);
@@ -643,33 +793,16 @@ async function dumpInstanceFromContainer(
  * so retention prunes each stream independently. Restore is manual
  * (docs/instance-backup.md).
  */
-async function runWebServerBackup(backupRow: BackupRow, store: BackupStore): Promise<RunResult> {
+async function runWebServerBackup(
+	backupRow: BackupRow,
+	store: BackupStore,
+	handle: BackupRunHandle,
+): Promise<RunResult> {
 	const target = parseInstanceDatabaseUrl(process.env.DATABASE_URL);
-
-	// Prefer a local pg_dump (password via PGPASSWORD env, never argv);
-	// fall back to the instance's own Postgres container when the app
-	// image (or the dev host) has no Postgres client installed.
+	handle.redact(target.password);
 	const hasLocalPgDump = await execAsync("command -v pg_dump")
 		.then(() => true)
 		.catch(() => false);
-	const encodedDump = hasLocalPgDump
-		? await execAsync(buildEncodedPipeline(buildInstancePgDumpCommand(target)), {
-				env: { ...process.env, PGPASSWORD: target.password },
-			})
-		: await dumpInstanceFromContainer(target);
-	const dump = decodePipelineOutput(encodedDump, "Dump of the instance database");
-	assertNonEmptyGzip(dump, "Dump of the instance database");
-
-	// tar czf already compresses; only base64 for transport.
-	const encodedConfig = await execAsync(
-		buildEncodedPipeline(buildConfigArchiveCommand(getConfigDir()), "base64"),
-	);
-	const configArchive = decodePipelineOutput(
-		encodedConfig,
-		"Archive of the instance config directory",
-	);
-	assertNonEmptyGzip(configArchive, "Archive of the instance config directory");
-
 	const date = new Date();
 	const dumpKey = buildBackupKey(backupRow.prefix, backupRow.appName, date);
 	const configKey = buildBackupKey(
@@ -677,15 +810,47 @@ async function runWebServerBackup(backupRow: BackupRow, store: BackupStore): Pro
 		`${backupRow.appName}${WEB_SERVER_CONFIG_SUFFIX}`,
 		date,
 	);
-	await store.put(dumpKey, dump);
-	await store.put(configKey, configArchive);
-	await pruneOldBackups(store, backupPrefix(backupRow), backupRow.keepLatestCount);
-	await pruneOldBackups(
-		store,
-		`${backupRow.prefix}/${backupRow.appName}${WEB_SERVER_CONFIG_SUFFIX}/`,
-		backupRow.keepLatestCount,
-	);
-	return { key: dumpKey, bytes: dump.length + configArchive.length };
+	let bytes: number;
+	try {
+		// Publish config first: the SQL key is the discoverable completion marker
+		// for the pair. Neither retention stream is pruned on producer failure.
+		bytes = await storeStreamedArchive(
+			store,
+			configKey,
+			await spawnStreamingCommand(
+				null,
+				buildStreamPipeline(buildConfigArchiveCommand(getConfigDir()), "cat"),
+			),
+			"Archive of the instance config directory",
+		);
+		const proc = hasLocalPgDump
+			? await spawnStreamingCommand(null, buildStreamPipeline(buildInstancePgDumpCommand(target)), {
+					env: { ...process.env, PGPASSWORD: target.password },
+				})
+			: await dumpInstanceFromContainer(target);
+		bytes += await storeStreamedArchive(store, dumpKey, proc, "Dump of the instance database");
+	} catch (error) {
+		// A failed pair is never advertised as a successful run. Storage outages
+		// may prevent cleanup; the SQL completion marker is always written last.
+		await store.remove([configKey, dumpKey]).catch(() => {});
+		throw error;
+	}
+	if (backupRow.keepLatestCount && backupRow.keepLatestCount > 0) {
+		const keys = await store.list(backupPrefix(backupRow));
+		const excess = keys.slice(0, Math.max(0, keys.length - backupRow.keepLatestCount));
+		// Prune matching pairs: concurrent producers can finish SQL/config in
+		// different orders, so independent mtime retention could split a pair.
+		if (excess.length) {
+			await store.remove(excess);
+			await store.remove(
+				excess.map(
+					(key) =>
+						`${backupRow.prefix}/${backupRow.appName}${WEB_SERVER_CONFIG_SUFFIX}/${key.slice(backupPrefix(backupRow).length)}`,
+				),
+			);
+		}
+	}
+	return { key: dumpKey, bytes };
 }
 
 // ── redis ────────────────────────────────────────────────────────────────────
@@ -704,30 +869,44 @@ async function runRedisBackup(
 	handle.redact(linked.databasePassword);
 	const containerId = await findContainerId(backupRow.appName, linked.serverId);
 
-	// Password on stdin (first line) — never on docker/ps argv.
-	const dirOutput = await execAsyncWithStdin(
-		`docker exec -i ${shellQuote(containerId)} sh -c ${sq(buildRedisSnapshotScript())}`,
-		`${linked.databasePassword}\n`,
-		{ serverId: linked.serverId },
-	);
-	const dataDir = dirOutput.trim().split("\n").pop()?.trim() ?? "";
-	if (!isSafeRedisDataDir(dataDir)) {
-		throw new Error(`Unexpected redis data directory reported by ${backupRow.appName}`);
-	}
-
-	// `docker cp <id>:<dir> -` streams a tar of the data directory.
-	const encoded = await run(
-		linked.serverId,
-		buildEncodedPipeline(`docker cp ${shellQuote(containerId)}:${dataDir} -`),
-	);
-	const label = `Snapshot of redis ${backupRow.appName}`;
-	const archive = decodePipelineOutput(encoded, label);
-	assertNonEmptyGzip(archive, label);
-
-	const key = buildBackupKey(backupRow.prefix, backupRow.appName);
-	await store.put(key, archive);
-	await pruneOldBackups(store, backupPrefix(backupRow), backupRow.keepLatestCount);
-	return { key, bytes: archive.length };
+	if (!backupRow.redisId) throw new Error("Redis backup has no linked service");
+	return await withRedisBackupLock(backupRow.redisId, async (signal) => {
+		const token = randomBytes(12).toString("hex");
+		// The private container marker fences a second preparation after a lost
+		// lock connection and records recovery metadata if the process crashes.
+		const dirOutput = await execAsyncWithStdin(
+			`docker exec -i ${shellQuote(containerId)} sh -c ${sq(buildRedisSnapshotScript(120, token))}`,
+			`${linked.databasePassword}\n`,
+			{ serverId: linked.serverId },
+		);
+		const lines = dirOutput.trim().split("\n");
+		const dataDir = lines.pop()?.trim() ?? "";
+		const previous = lines.pop()?.trim() ?? "";
+		const cleanupScript = buildRedisSnapshotCleanupScript(previous, token);
+		const label = `Snapshot of redis ${backupRow.appName}`;
+		const key = buildBackupKey(backupRow.prefix, backupRow.appName);
+		let bytes: number;
+		try {
+			signal.throwIfAborted();
+			if (!isSafeRedisDataDir(dataDir))
+				throw new Error(`Unexpected redis data directory reported by ${backupRow.appName}`);
+			const proc = await spawnStreamingCommand(
+				linked.serverId,
+				buildStreamPipeline(`docker cp ${shellQuote(containerId)}:${dataDir} -`),
+				{ signal },
+			);
+			bytes = await storeStreamedArchive(store, key, proc, label);
+			signal.throwIfAborted();
+		} finally {
+			await execAsyncWithStdin(
+				`docker exec -i ${shellQuote(containerId)} sh -c ${sq(cleanupScript)}`,
+				`${linked.databasePassword}\n`,
+				{ serverId: linked.serverId },
+			);
+		}
+		await pruneOldBackups(store, backupPrefix(backupRow), backupRow.keepLatestCount);
+		return { key, bytes };
+	});
 }
 
 /**
@@ -735,30 +914,54 @@ async function runRedisBackup(
  * into the container, then SHUTDOWN NOSAVE — the Swarm restart policy
  * brings redis back and it loads the restored RDB/AOF from disk.
  */
+async function assertStoppedRedis(backupRow: BackupRow, serverId: string | null): Promise<string> {
+	const spec = JSON.parse(
+		await execAsync(`docker service inspect ${sq(backupRow.appName)} --format '{{json .Spec}}'`),
+	);
+	const volumeName = `${backupRow.appName}-data`;
+	const mounts = spec.TaskTemplate?.ContainerSpec?.Mounts as
+		| Array<{ Type?: string; Source?: string; Target?: string }>
+		| undefined;
+	if (
+		spec.Name !== backupRow.appName ||
+		!isManagedDatabaseLabels(spec.Labels, "redis") ||
+		spec.Mode?.Replicated?.Replicas !== 0 ||
+		!mounts?.some((m) => m.Type === "volume" && m.Source === volumeName && m.Target === "/data")
+	) {
+		throw new Error("Stop the managed Redis service before restoring its /data volume");
+	}
+	await waitStoppedTasks(backupRow.appName, serverId);
+	const volume = JSON.parse(
+		await run(serverId, `docker volume inspect ${sq(volumeName)} --format '{{json .}}'`),
+	);
+	if (volume.Name !== volumeName || volume.Labels?.["nixploy.managed"] !== "true")
+		throw new Error("Redis data volume ownership could not be verified");
+	await assertStoppedVolume(volumeName, serverId);
+	return volumeName;
+}
+
 async function restoreRedisBackup(backupRow: BackupRow, key?: string): Promise<{ key: string }> {
 	const destination = await findDestinationOrThrow(backupRow.destinationId);
 	const targetKey = await resolveStoredKey(backupRow, key);
-
-	const archive = await storeFor(destination).get(targetKey);
 	const linked = await findLinkedDatabase(backupRow);
-	const containerId = await findContainerId(backupRow.appName, linked.serverId);
-
-	// The tar holds the data dir at its original absolute path (e.g. `data/`),
-	// so extracting into the container root puts dump.rdb/AOF back in place.
-	await execAsyncWithStdin(
-		`base64 -d | gunzip | docker cp - ${shellQuote(containerId)}:/`,
-		archive.toString("base64"),
-		{ serverId: linked.serverId },
-	);
-	// SHUTDOWN drops the connection — a non-zero exit is expected here.
-	await execAsyncWithStdin(
-		`docker exec -i ${shellQuote(containerId)} sh -c ${sq(
-			"IFS= read -r REDISCLI_AUTH; export REDISCLI_AUTH; redis-cli --no-auth-warning SHUTDOWN NOSAVE",
-		)}`,
-		`${linked.databasePassword}\n`,
-		{ serverId: linked.serverId },
-	).catch(() => {});
-	return { key: targetKey };
+	const volumeName = await assertStoppedRedis(backupRow, linked.serverId);
+	return await withValidatedArchive(storeFor(destination), targetKey, async (archive) => {
+		await preflightTar(archive, linked.serverId, "data");
+		// Recheck after validation, then stage a complete replacement so stale
+		// AOF files cannot override the selected snapshot on the next start.
+		await assertStoppedRedis(backupRow, linked.serverId);
+		const script = buildVolumeReplacementScript(
+			VOLUME_MOUNT,
+			randomBytes(12).toString("hex"),
+			"data",
+		);
+		await replayArchive(
+			archive,
+			linked.serverId,
+			`docker run --rm -i --network none -v ${sq(`${volumeName}:${VOLUME_MOUNT}`)} alpine sh -c ${sq(script)}`,
+		);
+		return { key: targetKey };
+	});
 }
 
 // ── volume archives ─────────────────────────────────────────────────────────
@@ -818,17 +1021,14 @@ export async function runVolumeBackup(
 			});
 
 			const archiveCmd =
-				`docker run --rm -v ${sq(`${volumeBackup.volumeName}:${VOLUME_MOUNT}`)} alpine ` +
+				`docker run --rm --network none -v ${sq(`${volumeBackup.volumeName}:${VOLUME_MOUNT}:ro`)} alpine ` +
 				`sh -c ${sq(`tar czf - -C ${VOLUME_MOUNT} .`)}`;
-			const encoded = await run(serverId, buildEncodedPipeline(archiveCmd, "base64"));
 			const label = `Archive of volume ${volumeBackup.volumeName}`;
-			const archive = decodePipelineOutput(encoded, label);
-			assertNonEmptyGzip(archive, label);
-
 			const key = buildBackupKey(volumeBackup.prefix, volumeBackup.volumeName);
-			await store.put(key, archive);
+			const proc = await spawnStreamingCommand(serverId, buildStreamPipeline(archiveCmd, "cat"));
+			const bytes = await storeStreamedArchive(store, key, proc, label);
 			await pruneOldBackups(store, volumePrefix(volumeBackup), volumeBackup.keepLatestCount);
-			return { key, bytes: archive.length };
+			return { key, bytes };
 		},
 	);
 }
@@ -861,13 +1061,15 @@ export async function restoreVolumeBackup(
 		);
 	}
 
-	const archive = await storeFor(destination).get(targetKey);
 	const serverId = await resolveVolumeServerId(volumeBackup);
-	const restoreCmd =
-		`docker run --rm -i -v ${sq(`${volumeBackup.volumeName}:${VOLUME_MOUNT}`)} alpine ` +
-		`sh -c ${sq(`cd ${VOLUME_MOUNT} && tar xzf -`)}`;
-	await execAsyncWithStdin(`base64 -d | ${restoreCmd}`, archive.toString("base64"), { serverId });
-	return { key: targetKey };
+	return await withValidatedArchive(storeFor(destination), targetKey, async (archive) => {
+		await preflightTar(archive, serverId);
+		await assertStoppedVolume(volumeBackup.volumeName, serverId);
+		const script = buildVolumeReplacementScript(VOLUME_MOUNT, randomBytes(12).toString("hex"));
+		const restoreCmd = `docker run --rm -i --network none -v ${sq(`${volumeBackup.volumeName}:${VOLUME_MOUNT}`)} alpine sh -c ${sq(script)}`;
+		await replayArchive(archive, serverId, restoreCmd);
+		return { key: targetKey };
+	});
 }
 
 // ── notifications ───────────────────────────────────────────────────────────

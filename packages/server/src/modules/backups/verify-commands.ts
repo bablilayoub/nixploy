@@ -1,3 +1,5 @@
+import { buildStreamPipeline } from "./pipeline";
+
 /**
  * Command matrix for restore verification ("test restore").
  *
@@ -69,7 +71,7 @@ const VERIFY_ENGINES: Record<VerifyEngine, EngineVerifyConfig> = {
 		imageArgs: () => "",
 		readyProbe: ({ user, database }) => `pg_isready -U ${sq(user)} -d ${sq(database)}`,
 		restoreCommand: ({ user, database }) =>
-			`psql -q -U ${sq(user)} -d ${sq(database)} -v ON_ERROR_STOP=1`,
+			`psql -q -U ${sq(user)} -d ${sq(database)} -v ON_ERROR_STOP=1 --single-transaction`,
 		livenessCommand: ({ user, database }) =>
 			`psql -At -U ${sq(user)} -d ${sq(database)} -c 'SELECT 1'`,
 		expected: "1",
@@ -173,16 +175,16 @@ export function buildVerifyWaitCommand(
 }
 
 /**
- * Restore the base64-encoded gzip archive (fed on stdin) into the container.
+ * Restore the validated gzip archive (fed on stdin) into the container.
  * SQL/Mongo engines stream the raw dump into their restore tool; Redis
  * unpacks the data-directory tar into the (stopped) container root.
  */
 export function buildVerifyRestoreCommand(name: string, target: VerifyTarget): string {
 	if (target.engine === "redis") {
-		return `base64 -d | gunzip | docker cp - ${sq(name)}:/`;
+		return buildStreamPipeline("gunzip", `docker cp - ${sq(name)}:/`);
 	}
 	const restore = VERIFY_ENGINES[target.engine].restoreCommand(target);
-	return `base64 -d | gunzip | docker exec -i ${sq(name)} sh -c ${sq(restore)}`;
+	return buildStreamPipeline("gunzip", `docker exec -i ${sq(name)} sh -c ${sq(restore)}`);
 }
 
 /** Engine liveness query, run after the restore. */
