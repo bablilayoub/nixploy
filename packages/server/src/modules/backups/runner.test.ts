@@ -1,4 +1,5 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -24,6 +25,7 @@ const state = vi.hoisted(() => ({
 	destination: null as Record<string, unknown> | null,
 	volumeServerId: null as string | null,
 	tarListing: "",
+	readerToken: "",
 	linked: {
 		serverId: null as string | null,
 		databaseUser: "app",
@@ -161,6 +163,7 @@ beforeEach(async () => {
 	state.volumeServerId = null;
 	state.linked.serverId = null;
 	state.tarListing = "-rw-r--r-- root/root 12 2026-10-15 20:30:00 ./file\n";
+	state.readerToken = "";
 	state.destination = {
 		destinationId: "d1",
 		name: "disk",
@@ -185,6 +188,18 @@ beforeEach(async () => {
 		abort: vi.fn(),
 	});
 	state.execImpl = async (command) => {
+		if (command.startsWith("docker create --name 'nixploy-volume-backup-")) {
+			state.readerToken = command.match(/nixploy.backup.volume-reader=([a-f0-9]{24})/)?.[1] ?? "";
+			return "a".repeat(64);
+		}
+		if (command.startsWith("docker inspect --format '{{json .}}'"))
+			return JSON.stringify({
+				Id: "a".repeat(64),
+				Name: `/nixploy-volume-backup-${state.readerToken}`,
+				Config: { Labels: { "nixploy.backup.volume-reader": state.readerToken } },
+			});
+		if (command.startsWith("docker rm -f ") || command.startsWith("docker ps -a --no-trunc"))
+			return "";
 		if (command.startsWith("docker run --rm --network none --mount ")) return "";
 		if (command === "docker service ls --quiet") return "";
 		if (command.startsWith("docker volume inspect")) return "app_data\n";
@@ -196,10 +211,33 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+	vi.restoreAllMocks();
 	await rm(state.configDir, { recursive: true, force: true });
 });
 
 describe("runVolumeBackup", () => {
+	it.each(["interrupted restore marker", "staged restore tree", "previous restore tree"])(
+		"refuses %s before opening an upload or pruning good archives",
+		async (recoveryState) => {
+			const store = new LocalBackupStore(path.join(state.configDir, "backups", "org-1"));
+			await store.put("volume-backup/app_data/good.gz", archive);
+			const put = vi.spyOn(LocalBackupStore.prototype, "putStream");
+			const prune = vi.spyOn(LocalBackupStore.prototype, "remove");
+			const normal = state.execImpl;
+			state.execImpl = async (command) => {
+				if (command.includes('mkdir "$lock"')) throw new Error(recoveryState);
+				return normal(command);
+			};
+			await expect(runVolumeBackup({ ...volumeBackup, keepLatestCount: 1 })).rejects.toThrow(
+				recoveryState,
+			);
+			expect(put).not.toHaveBeenCalled();
+			expect(prune).not.toHaveBeenCalled();
+			expect(await store.get("volume-backup/app_data/good.gz")).toEqual(archive);
+			expect(state.updates[0]).toMatchObject({ status: "error" });
+		},
+	);
+
 	it("records running → success and writes the archive under <config>/backups/<org>/<key>", async () => {
 		const result = await runVolumeBackup(volumeBackup, { trigger: "schedule" });
 		expect(result.bytes).toBe(archive.length);
@@ -229,9 +267,10 @@ describe("runVolumeBackup", () => {
 		expect(await readdir(dir)).toEqual([path.basename(result.key)]);
 		// The volume must exist before anything is archived.
 		expect(state.execCalls[0]).toBe("docker volume inspect 'app_data' --format '{{.Name}}'");
-		expect(state.execCalls[1]).toContain(
-			"docker run --rm --network none -v 'app_data:/volume-data:ro' alpine sh -c 'tar cf - -C /volume-data .'",
-		);
+		const reader = state.execCalls.find((command) => command.startsWith("docker create"));
+		expect(reader).toContain("type=volume,source=app_data,target=/volume-data,readonly");
+		expect(reader).toContain("nixploy.backup.volume-reader=");
+		expect(reader).toContain("--exclude=");
 	});
 
 	it("records error (with the message) when the volume does not exist", async () => {
@@ -251,17 +290,112 @@ describe("runVolumeBackup", () => {
 	});
 
 	it("fails the run when the producer exits non-zero instead of storing an empty archive", async () => {
+		const store = new LocalBackupStore(path.join(state.configDir, "backups", "org-1"));
+		await store.put("volume-backup/app_data/good.gz", archive);
+		const prune = vi.spyOn(LocalBackupStore.prototype, "remove");
 		state.streamImpl = async () => ({
 			stdout: Readable.from([archive]),
 			done: Promise.resolve(`${PIPELINE_EXIT_MARKER}2`),
 			abort: vi.fn(),
 		});
-		await expect(runVolumeBackup(volumeBackup)).rejects.toThrow(/exited with status 2/);
+		await expect(runVolumeBackup({ ...volumeBackup, keepLatestCount: 1 })).rejects.toThrow(
+			/exited with status 2/,
+		);
 		expect(state.updates[0]).toMatchObject({ status: "error" });
+		expect(prune).not.toHaveBeenCalled();
 		expect(
 			await readdir(path.join(state.configDir, "backups", "org-1", "volume-backup", "app_data")),
-		).toEqual([]);
+		).toEqual(["good.gz"]);
+		expect(state.execCalls.some((command) => command.startsWith("docker rm -f "))).toBe(true);
+		expect(state.execCalls.some((command) => command.includes('rmdir "$lock/active"'))).toBe(true);
 	});
+
+	it("does not prune good archives after an upload fails mid-stream", async () => {
+		const store = new LocalBackupStore(path.join(state.configDir, "backups", "org-1"));
+		await store.put("volume-backup/app_data/good.gz", archive);
+		vi.spyOn(LocalBackupStore.prototype, "putStream").mockImplementationOnce(
+			async (_key, source) => {
+				for await (const _chunk of source) throw new Error("upload failed after first chunk");
+				throw new Error("missing stream bytes");
+			},
+		);
+		const prune = vi.spyOn(LocalBackupStore.prototype, "remove");
+		await expect(runVolumeBackup({ ...volumeBackup, keepLatestCount: 1 })).rejects.toThrow(
+			/upload failed after first chunk/,
+		);
+		expect(prune).not.toHaveBeenCalled();
+		expect(await store.get("volume-backup/app_data/good.gz")).toEqual(archive);
+		const removed = state.execCalls.findIndex((command) => command.startsWith("docker rm -f "));
+		const absent = state.execCalls.findIndex((command) =>
+			command.startsWith("docker ps -a --no-trunc"),
+		);
+		const finished = state.execCalls.findIndex((command) =>
+			command.includes('rmdir "$lock/active"'),
+		);
+		const release = state.execCalls.findIndex((command) => command.includes('rm "$lock/owner"'));
+		expect(removed).toBeGreaterThanOrEqual(0);
+		expect(absent).toBeGreaterThan(removed);
+		expect(finished).toBeGreaterThan(absent);
+		expect(release).toBeGreaterThan(finished);
+	});
+
+	it("checks the reader's actual exit status even if Docker attach exits zero", async () => {
+		const store = new LocalBackupStore(path.join(state.configDir, "backups", "org-1"));
+		await store.put("volume-backup/app_data/good.gz", archive);
+		const bin = path.join(state.configDir, "bin");
+		await mkdir(bin);
+		await writeFile(
+			path.join(bin, "docker"),
+			'#!/bin/sh\ncase "$1" in start) printf "nonempty producer bytes"; exit 0;; wait) echo 9; exit 0;; *) exit 2;; esac\n',
+			{ mode: 0o700 },
+		);
+		state.streamImpl = async (command) => {
+			const result = spawnSync("sh", ["-c", String(command)], {
+				env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+			});
+			expect(result.status).toBe(0);
+			return {
+				stdout: Readable.from([result.stdout]),
+				done: Promise.resolve(result.stderr.toString()),
+				abort: vi.fn(),
+			};
+		};
+		const prune = vi.spyOn(LocalBackupStore.prototype, "remove");
+		await expect(runVolumeBackup({ ...volumeBackup, keepLatestCount: 1 })).rejects.toThrow(
+			/exited with status 1/,
+		);
+		expect(prune).not.toHaveBeenCalled();
+		expect(await store.get("volume-backup/app_data/good.gz")).toEqual(archive);
+	});
+
+	it.each(["create transport lost", "foreign reader", "reader removal failed", "reader remains"])(
+		"does not clear the active fence or prune when %s",
+		async (failure) => {
+			const store = new LocalBackupStore(path.join(state.configDir, "backups", "org-1"));
+			await store.put("volume-backup/app_data/good.gz", archive);
+			const normal = state.execImpl;
+			state.execImpl = async (command) => {
+				if (failure === "create transport lost" && command.startsWith("docker create"))
+					throw new Error("create transport lost");
+				if (failure === "foreign reader" && command.startsWith("docker inspect --format"))
+					return JSON.stringify({ Id: "a".repeat(64), Name: "/foreign", Config: { Labels: {} } });
+				if (failure === "reader removal failed" && command.startsWith("docker rm -f"))
+					throw new Error("reader removal failed");
+				if (failure === "reader remains" && command.startsWith("docker ps -a --no-trunc"))
+					return "a".repeat(64);
+				return normal(command);
+			};
+			const prune = vi.spyOn(LocalBackupStore.prototype, "remove");
+			await expect(runVolumeBackup({ ...volumeBackup, keepLatestCount: 1 })).rejects.toThrow();
+			expect(prune).not.toHaveBeenCalled();
+			expect(state.execCalls.some((command) => command.includes('rmdir "$lock/active"'))).toBe(
+				false,
+			);
+			expect(await store.get("volume-backup/app_data/good.gz")).toEqual(archive);
+			if (failure === "foreign reader")
+				expect(state.execCalls.some((command) => command.startsWith("docker rm -f"))).toBe(false);
+		},
+	);
 
 	it("does not start a run for a missing destination or a protected volume", async () => {
 		state.destination = null;

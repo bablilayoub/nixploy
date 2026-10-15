@@ -23,7 +23,7 @@ function lockContext(root: string, token: string): string[] {
 export function buildVolumeRestoreLockScript(
 	root: string,
 	token: string,
-	action: "acquire" | "activate" | "release",
+	action: "acquire" | "activate" | "finish-read" | "release",
 ): string {
 	return [
 		...lockContext(root, token),
@@ -36,12 +36,28 @@ export function buildVolumeRestoreLockScript(
 				]
 			: action === "activate"
 				? ["assert_owner", 'assert_no_recovery_trees "$target"', 'mkdir "$lock/active"']
-				: [
-						"assert_owner",
-						'assert_no_recovery_trees "$target"',
-						'for entry in "$lock"/* "$lock"/.[!.]* "$lock"/..?*; do [ -e "$entry" ] || [ -L "$entry" ] || continue; [ "$entry" = "$lock/owner" ] || { echo "Restore helper may still be active or recovery is incomplete; keep the service stopped and recover manually." >&2; exit 1; }; done',
-						'rm "$lock/owner"; rmdir "$lock"',
-					]),
+				: action === "finish-read"
+					? ["assert_owner", 'assert_no_recovery_trees "$target"', 'rmdir "$lock/active"']
+					: [
+							"assert_owner",
+							'assert_no_recovery_trees "$target"',
+							'for entry in "$lock"/* "$lock"/.[!.]* "$lock"/..?*; do [ -e "$entry" ] || [ -L "$entry" ] || continue; [ "$entry" = "$lock/owner" ] || { echo "Restore helper may still be active or recovery is incomplete; keep the service stopped and recover manually." >&2; exit 1; }; done',
+							'rm "$lock/owner"; rmdir "$lock"',
+						]),
+	].join("; ");
+}
+
+/** Read-only archive helper. Exclude only this operation's owned root marker. */
+export function buildVolumeArchiveScript(root: string, token: string): string {
+	return [
+		...lockContext(root, token),
+		"assert_owner",
+		'assert_no_recovery_trees "$target"',
+		'test -d "$lock/active"; test ! -L "$lock/active"',
+		// Keep exclusion rooted: BSD/GNU otherwise match nested app names too.
+		// Production Alpine uses BusyBox's literal ./ prefix matching.
+		`case "$(tar --version 2>/dev/null || true)" in *bsdtar*) set -- ${sq(`--exclude=^./${VOLUME_RESTORE_LOCK}`)};; *GNU*) set -- --anchored ${sq(`--exclude=./${VOLUME_RESTORE_LOCK}`)};; *) set -- ${sq(`--exclude=./${VOLUME_RESTORE_LOCK}`)};; esac`,
+		'tar cf - "$@" -C "$target" .',
 	].join("; ");
 }
 

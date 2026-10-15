@@ -36,7 +36,11 @@ import {
 } from "./instance-backup";
 import { assertStreamExit, buildStreamPipeline, GzipArchiveCheck } from "./pipeline";
 import { withRedisBackupLock } from "./redis-lock";
-import { buildVolumeReplacementScript, buildVolumeRestoreLockScript } from "./restore-commands";
+import {
+	buildVolumeArchiveScript,
+	buildVolumeReplacementScript,
+	buildVolumeRestoreLockScript,
+} from "./restore-commands";
 import { type BackupRunHandle, type BackupRunTrigger, withBackupRun } from "./runs";
 import { type BackupStore, type DestinationRow, storeFor } from "./storage";
 import { type StreamingCommand, spawnStreamingCommand } from "./stream-exec";
@@ -519,19 +523,25 @@ async function assertStoppedVolume(
 async function withVolumeRestoreLock<T>(
 	volumeName: string,
 	serverId: string | null | undefined,
-	fn: (token: string, activate: () => Promise<void>) => Promise<T>,
+	fn: (token: string, activate: () => Promise<void>, finishRead: () => Promise<void>) => Promise<T>,
 ): Promise<T> {
 	assertDockerVolumeName(volumeName);
 	const token = randomBytes(12).toString("hex");
-	const command = (action: "acquire" | "activate" | "release") =>
+	const command = (action: "acquire" | "activate" | "finish-read" | "release") =>
 		`docker run --rm --network none --mount ${sq(`type=volume,source=${volumeName},target=${VOLUME_MOUNT}`)} alpine sh -c ${sq(buildVolumeRestoreLockScript(VOLUME_MOUNT, token, action))}`;
 	await run(serverId, `docker volume inspect ${sq(volumeName)} --format '{{.Name}}'`);
 	await run(serverId, command("acquire"));
 	try {
-		return await fn(token, async () => {
-			// Fence a delayed/detached helper before opening its transport.
-			await run(serverId, command("activate"));
-		});
+		return await fn(
+			token,
+			async () => {
+				// Fence a delayed/detached helper before opening its transport.
+				await run(serverId, command("activate"));
+			},
+			async () => {
+				await run(serverId, command("finish-read"));
+			},
+		);
 	} finally {
 		// Refuses mismatched ownership, an active helper or recovery remnants.
 		await run(serverId, command("release"));
@@ -1005,6 +1015,32 @@ async function resolveVolumeServerId(volumeBackup: VolumeBackupRow): Promise<str
 }
 
 const VOLUME_MOUNT = "/volume-data";
+const VOLUME_READER_LABEL = "nixploy.backup.volume-reader";
+
+/** Remove only the captured, token-owned reader before making the fence releasable. */
+async function removeVolumeReader(
+	containerId: string,
+	token: string,
+	serverId: string | null,
+): Promise<void> {
+	const reader = JSON.parse(
+		await run(serverId, `docker inspect --format '{{json .}}' ${sq(containerId)}`),
+	) as { Id?: string; Name?: string; Config?: { Labels?: Record<string, string> } };
+	if (
+		reader.Id !== containerId ||
+		reader.Name !== `/nixploy-volume-backup-${token}` ||
+		reader.Config?.Labels?.[VOLUME_READER_LABEL] !== token
+	) {
+		throw new Error("Volume backup reader ownership could not be verified; recovery lock retained");
+	}
+	await run(serverId, `docker rm -f ${sq(containerId)}`);
+	const remaining = await run(
+		serverId,
+		`docker ps -a --no-trunc -q --filter ${sq(`id=${containerId}`)}`,
+	);
+	if (remaining.trim())
+		throw new Error("Volume backup reader did not stop; recovery lock retained");
+}
 
 /**
  * Archive a named Docker volume (tar.gz via a throwaway alpine container)
@@ -1041,15 +1077,43 @@ export async function runVolumeBackup(
 				throw new Error(`Volume ${volumeBackup.volumeName} does not exist on the target server`);
 			});
 
-			const archiveCmd =
-				`docker run --rm --network none -v ${sq(`${volumeBackup.volumeName}:${VOLUME_MOUNT}:ro`)} alpine ` +
-				`sh -c ${sq(`tar cf - -C ${VOLUME_MOUNT} .`)}`;
-			const label = `Archive of volume ${volumeBackup.volumeName}`;
-			const key = buildBackupKey(volumeBackup.prefix, volumeBackup.volumeName);
-			const proc = await spawnStreamingCommand(serverId, buildStreamPipeline(archiveCmd));
-			const bytes = await storeStreamedArchive(store, key, proc, label);
-			await pruneOldBackups(store, volumePrefix(volumeBackup), volumeBackup.keepLatestCount);
-			return { key, bytes };
+			return await withVolumeRestoreLock(
+				volumeBackup.volumeName,
+				serverId,
+				async (token, activate, finishRead) => {
+					const label = `Archive of volume ${volumeBackup.volumeName}`;
+					const key = buildBackupKey(volumeBackup.prefix, volumeBackup.volumeName);
+					let containerId: string | undefined;
+					let bytes: number;
+					await activate();
+					try {
+						const created = (
+							await run(
+								serverId,
+								`docker create --name ${sq(`nixploy-volume-backup-${token}`)} --label ${sq(`${VOLUME_READER_LABEL}=${token}`)} --network none --mount ${sq(`type=volume,source=${volumeBackup.volumeName},target=${VOLUME_MOUNT},readonly`)} alpine sh -c ${sq(buildVolumeArchiveScript(VOLUME_MOUNT, token))}`,
+							)
+						).trim();
+						if (!/^[a-f0-9]{64}$/.test(created))
+							throw new Error("Volume backup reader identity could not be confirmed");
+						containerId = created;
+						const proc = await spawnStreamingCommand(
+							serverId,
+							buildStreamPipeline(
+								`(docker start -a ${sq(containerId)}; __attached=$?; __reader_status=$(docker wait ${sq(containerId)}); __wait_rc=$?; [ "$__attached" -eq 0 ] && [ "$__wait_rc" -eq 0 ] && [ "$__reader_status" = 0 ])`,
+							),
+						);
+						bytes = await storeStreamedArchive(store, key, proc, label);
+					} finally {
+						if (containerId) {
+							await removeVolumeReader(containerId, token, serverId);
+							await finishRead();
+						}
+						// Unknown create/transport state keeps the pre-activated fence.
+					}
+					await pruneOldBackups(store, volumePrefix(volumeBackup), volumeBackup.keepLatestCount);
+					return { key, bytes };
+				},
+			);
 		},
 	);
 }

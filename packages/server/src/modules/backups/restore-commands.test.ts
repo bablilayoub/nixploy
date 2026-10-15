@@ -14,8 +14,13 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildVolumeReplacementScript, buildVolumeRestoreLockScript } from "./restore-commands";
+import {
+	buildVolumeArchiveScript,
+	buildVolumeReplacementScript,
+	buildVolumeRestoreLockScript,
+} from "./restore-commands";
 
 let dir: string;
 let volume: string;
@@ -56,7 +61,7 @@ async function failMoves(after: number, repeatedly: boolean) {
 	};
 }
 
-function lock(action: "acquire" | "activate" | "release", owner = token) {
+function lock(action: "acquire" | "activate" | "finish-read" | "release", owner = token) {
 	return spawnSync("sh", ["-c", buildVolumeRestoreLockScript(volume, owner, action)]);
 }
 
@@ -74,7 +79,7 @@ function replace(input: Buffer | string, options?: { subtree?: "data"; env?: Nod
 	return result.status !== 0 ? result : released;
 }
 
-async function heldReplacement(input: Buffer) {
+async function heldReplacement(input: Buffer, archiveRead = false) {
 	const bin = path.join(dir, "bin");
 	const held = path.join(dir, "held");
 	const gate = path.join(dir, "gate");
@@ -87,7 +92,10 @@ async function heldReplacement(input: Buffer) {
 	);
 	expect(lock("acquire").status).toBe(0);
 	expect(lock("activate").status).toBe(0);
-	const child = spawn("sh", ["-c", buildVolumeReplacementScript(volume, token)], {
+	const script = archiveRead
+		? buildVolumeArchiveScript(volume, token)
+		: buildVolumeReplacementScript(volume, token);
+	const child = spawn("sh", ["-c", script], {
 		detached: true,
 		stdio: ["pipe", "ignore", "pipe"],
 		env: {
@@ -127,15 +135,20 @@ describe("stopped volume replacement", () => {
 		expect(await readFile(path.join(lock, "owner"), "utf8")).toBe("another operation");
 	});
 
-	it("refuses unrecovered previous/staged trees without moving or deleting them", async () => {
-		const previous = path.join(volume, ".nixploy-previous-deadbeef");
-		await mkdir(previous);
-		await writeFile(path.join(previous, "recover-me"), "irreplaceable marker");
-		const result = replace(await payload());
-		expect(result.status).not.toBe(0);
-		expect(await readFile(path.join(previous, "recover-me"), "utf8")).toBe("irreplaceable marker");
-		expect(await readFile(path.join(volume, "old"), "utf8")).toBe("original marker");
-	});
+	it.each([".nixploy-previous-deadbeef", ".nixploy-restore-deadbeef"])(
+		"refuses unrecovered %s without moving or deleting it",
+		async (name) => {
+			const previous = path.join(volume, name);
+			await mkdir(previous);
+			await writeFile(path.join(previous, "recover-me"), "irreplaceable marker");
+			const result = replace(await payload());
+			expect(result.status).not.toBe(0);
+			expect(await readFile(path.join(previous, "recover-me"), "utf8")).toBe(
+				"irreplaceable marker",
+			);
+			expect(await readFile(path.join(volume, "old"), "utf8")).toBe("original marker");
+		},
+	);
 
 	it("replaces all old children, including stale AOF/hidden state", async () => {
 		expect(replace(await payload()).status).toBe(0);
@@ -199,6 +212,9 @@ describe("stopped volume replacement", () => {
 			const second = lock("acquire", otherToken);
 			expect(second.status).not.toBe(0);
 			expect(second.stderr.toString()).toContain("Volume restore is locked");
+			const competingReader = spawnSync("sh", ["-c", buildVolumeArchiveScript(volume, otherToken)]);
+			expect(competingReader.status).not.toBe(0);
+			expect(competingReader.stdout).toHaveLength(0);
 			expect(await readFile(path.join(volume, "old"), "utf8")).toBe("original marker");
 			// Even the owning caller cannot release a still-active helper.
 			expect(lock("release").status).not.toBe(0);
@@ -262,5 +278,62 @@ describe("stopped volume replacement", () => {
 			await writeFile(held.gate, "continue");
 			await held.done;
 		}
+	});
+});
+
+describe("volume archive fence", () => {
+	it("excludes only its owned root marker and produces a restorable archive", async () => {
+		await mkdir(path.join(volume, "application", ".nixploy-restore-lock"), { recursive: true });
+		await writeFile(path.join(volume, "application", ".nixploy-restore-lock", "data"), "user data");
+		expect(lock("acquire").status).toBe(0);
+		expect(lock("activate").status).toBe(0);
+		const tar = execFileSync("sh", ["-c", buildVolumeArchiveScript(volume, token)]);
+		const names = execFileSync("tar", ["tf", "-"], { input: tar, encoding: "utf8" }).split("\n");
+		expect(names).not.toContain("./.nixploy-restore-lock/");
+		expect(names).not.toContain("./.nixploy-restore-lock/owner");
+		expect(names).toContain("./application/.nixploy-restore-lock/data");
+		// Upload completion is outside the reader; its fence still holds.
+		expect(lock("release").status).not.toBe(0);
+		expect(lock("finish-read").status).toBe(0);
+		expect(lock("release").status).toBe(0);
+		await writeFile(path.join(volume, "old"), "changed after backup");
+		await writeFile(path.join(volume, "stale"), "remove on restore");
+		expect(replace(gzipSync(tar)).status).toBe(0);
+		expect(await readFile(path.join(volume, "old"), "utf8")).toBe("original marker");
+		expect(
+			await readFile(path.join(volume, "application", ".nixploy-restore-lock", "data"), "utf8"),
+		).toBe("user data");
+		expect(await stat(path.join(volume, "stale")).catch(() => null)).toBeNull();
+	});
+
+	it("blocks a competing restore while a real archive reader is held", async () => {
+		const held = await heldReplacement(Buffer.alloc(0), true);
+		try {
+			expect(lock("acquire", otherToken).status).not.toBe(0);
+			const competing = spawnSync("sh", ["-c", buildVolumeReplacementScript(volume, otherToken)], {
+				input: await payload(),
+			});
+			expect(competing.status).not.toBe(0);
+			expect(await readFile(path.join(volume, "old"), "utf8")).toBe("original marker");
+			await writeFile(held.gate, "continue");
+			expect((await held.done).status).toBe(0);
+			expect(lock("finish-read").status).toBe(0);
+			expect(lock("release").status).toBe(0);
+		} finally {
+			await writeFile(held.gate, "continue");
+			await held.done;
+		}
+	});
+
+	it("rejects newly discovered recovery trees before yielding archive bytes", async () => {
+		expect(lock("acquire").status).toBe(0);
+		expect(lock("activate").status).toBe(0);
+		await mkdir(path.join(volume, ".nixploy-previous-unrecovered"));
+		const read = spawnSync("sh", ["-c", buildVolumeArchiveScript(volume, token)]);
+		expect(read.status).not.toBe(0);
+		expect(read.stdout).toHaveLength(0);
+		expect(lock("finish-read").status).not.toBe(0);
+		expect(lock("release").status).not.toBe(0);
+		expect(await readFile(path.join(volume, "old"), "utf8")).toBe("original marker");
 	});
 });
