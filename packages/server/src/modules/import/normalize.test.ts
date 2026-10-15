@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildPlan } from "../gitops/plan";
 import { nixployStackSchema } from "../gitops/schema";
 import { secretsPayloadSchema } from "../gitops/secrets";
 import { normalizeSourceEnvironment } from "./normalize";
@@ -277,23 +278,20 @@ describe("normalizeSourceEnvironment", () => {
 		expect(notes.some((note) => note.message.includes("strip path"))).toBe(true);
 	});
 
-	it("carries application mounts, skips compose mounts and says so", () => {
+	it("leaves mount collections unchanged when file or compose mounts need manual setup", () => {
 		const { manifest, notes, counts } = normalize();
-		expect(manifest.applications?.[0]?.mounts).toHaveLength(3);
-		expect(manifest.applications?.[0]?.mounts?.[1]).toEqual({
-			type: "file",
-			mountPath: "/etc/api/config.yml",
-			filePath: "config.yml",
-			content: "debug: false",
-		});
-		expect(manifest.compose?.[0]?.mounts).toEqual([]);
+		expect(manifest.applications?.[0]?.mounts).toBeUndefined();
+		expect(
+			notes.some((note) => note.message.includes("file mount /etc/api/config.yml skipped")),
+		).toBe(true);
+		expect(manifest.compose?.[0]?.mounts).toBeUndefined();
 		expect(
 			notes.find(
 				(note) =>
 					note.service === "compose/monitoring" && note.message.includes("/var/lib/grafana"),
 			),
 		).toBeDefined();
-		expect(counts.skipped).toBe(2); // the compose mount and the libsql database
+		expect(counts.skipped).toBe(5); // three app mounts, a compose mount, and libsql
 	});
 
 	it("never carries basic auth or database passwords, and explains both", () => {
@@ -342,7 +340,7 @@ describe("normalizeSourceEnvironment", () => {
 	it("skips unsupported engines and counts everything", () => {
 		const { notes, counts } = normalize();
 		expect(notes.some((note) => note.service === "libsql/edge")).toBe(true);
-		expect(counts).toEqual({ applications: 1, compose: 1, databases: 2, domains: 3, skipped: 2 });
+		expect(counts).toEqual({ applications: 1, compose: 1, databases: 2, domains: 3, skipped: 5 });
 	});
 
 	it("can drop the source appNames and rename the target", () => {
@@ -357,5 +355,136 @@ describe("normalizeSourceEnvironment", () => {
 		expect(manifest.applications?.[0]?.environment).toBe("prod");
 		expect(secrets.project.name).toBe("shop-eu");
 		expect(secrets.environment.name).toBe("prod");
+	});
+
+	it("omits encrypted dump columns with actionable notes instead of treating ciphertext as dotenv", () => {
+		const encrypted = "enc:v1:controlled-ciphertext==";
+		const { manifest, secrets, notes } = normalize({
+			project: { ...sourceProject, env: encrypted },
+			environment: { ...sourceEnvironment, env: encrypted },
+			applications: [
+				{ ...application, env: encrypted, buildArgs: encrypted, previewEnv: encrypted },
+			],
+			compose: [{ ...stack, env: encrypted }],
+			databases: {
+				postgres: [{ ...postgres, env: encrypted }],
+				mysql: [],
+				mariadb: [],
+				mongo: [],
+				redis: [],
+			},
+		});
+		expect(nixployStackSchema.safeParse(manifest).success).toBe(true);
+		expect(secretsPayloadSchema.safeParse(secrets).success).toBe(true);
+		expect(JSON.stringify({ manifest, secrets, notes })).not.toContain(encrypted);
+		expect(manifest.project.envKeys).toEqual([]);
+		expect(manifest.environment?.envKeys).toEqual([]);
+		expect(manifest.applications?.[0]?.envKeys).toEqual([]);
+		expect(secrets.project.env).toBeUndefined();
+		expect(secrets.environment.env).toBeUndefined();
+		expect(secrets.applications.api).toEqual({
+			env: undefined,
+			buildArgs: undefined,
+			previewEnv: undefined,
+		});
+		expect(secrets.compose.monitoring?.env).toBeUndefined();
+		expect(secrets.databases.postgres?.main?.env).toBeUndefined();
+		expect(notes.filter((note) => note.message.includes("is encrypted"))).toHaveLength(7);
+		expect(notes.some((note) => note.message.includes("keys and values cannot be read"))).toBe(
+			true,
+		);
+	});
+
+	it("keeps plaintext columns beside encrypted ones and preserves explicit empty service values", () => {
+		const { secrets } = normalize({
+			applications: [
+				{ ...application, env: "", buildArgs: "enc:v1:opaque", previewEnv: "PREVIEW=plain" },
+			],
+		});
+		expect(secrets.applications.api).toEqual({
+			env: null,
+			buildArgs: undefined,
+			previewEnv: "PREVIEW=plain",
+		});
+		expect(secrets.project.env).toBe("SHARED=1");
+	});
+
+	it("reports volumes that cannot belong to the target instead of failing the service apply", () => {
+		const renamed = normalize({ keepAppNames: false });
+		expect(renamed.manifest.applications?.[0]?.mounts).toBeUndefined();
+		expect(renamed.notes.some((note) => note.message.includes("volume mount /data skipped"))).toBe(
+			true,
+		);
+		const foreign = normalize({
+			applications: [
+				{
+					...application,
+					mounts: [{ type: "volume", mountPath: "/data", volumeName: "another-app-data" }],
+				},
+			],
+		});
+		expect(foreign.manifest.applications?.[0]?.mounts).toBeUndefined();
+		expect(
+			foreign.notes.some((note) => note.message.includes("restore its data before deploying")),
+		).toBe(true);
+	});
+
+	it("keeps manual replacement mounts and target-only compose auth and redirects on repeat import", () => {
+		const { manifest } = normalize({ keepAppNames: false });
+		const plan = buildPlan(manifest, {
+			projectId: "target",
+			environmentName: "production",
+			applications: [
+				{
+					name: "api",
+					appName: "target-api",
+					row: {},
+					domains: [],
+					mounts: [
+						{
+							type: "volume",
+							volumeName: "target-api-restored",
+							mountPath: "/data",
+							hostPath: null,
+							filePath: null,
+							serviceName: null,
+						},
+					],
+				},
+			],
+			compose: [
+				{
+					name: "monitoring",
+					appName: "target-stack",
+					row: {},
+					domains: [],
+					mounts: [
+						{
+							type: "volume",
+							volumeName: "target-stack-restored",
+							mountPath: "/var/lib/grafana",
+							serviceName: "grafana",
+							hostPath: null,
+							filePath: null,
+						},
+					],
+					redirects: [
+						{ regex: "^/old", replacement: "/new", permanent: true, serviceName: "grafana" },
+					],
+					basicAuth: [{ username: "operator", serviceName: "grafana" }],
+				},
+			],
+			databases: { postgres: [], mysql: [], mariadb: [], mongo: [], redis: [] },
+		});
+		expect(
+			plan.items.filter(
+				(item) =>
+					item.kind === "mount" ||
+					(item.parentKind === "compose" && ["redirect", "basicAuth"].includes(item.kind)),
+			),
+		).toEqual([]);
+		expect(normalize().secrets.compose.monitoring).toEqual({
+			env: "GF_SECURITY_ADMIN_PASSWORD=grafana",
+		});
 	});
 });

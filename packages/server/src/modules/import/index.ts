@@ -12,6 +12,7 @@ import {
 	type NixployStack,
 } from "../gitops";
 import { type ApplySecretsResult, applySecretsPayload } from "../gitops/secrets";
+import { findProjectById } from "../projects";
 import { DATABASE_KINDS, type DatabaseServiceKind } from "../services/registry";
 import { SourcePanelClient } from "./client";
 import { DumpSourceReader } from "./dump";
@@ -243,13 +244,7 @@ const resolveTarget = async (
 ): Promise<ImportTarget> => {
 	const environmentName = normalized.manifest.environment?.name ?? "production";
 	if (request.projectId) {
-		const project = await db.query.projects.findFirst({
-			where: and(
-				eq(projects.projectId, request.projectId),
-				eq(projects.organizationId, organizationId),
-			),
-		});
-		if (!project) throw notFound("Target project not found");
+		const project = await findProjectById(request.projectId, organizationId);
 		const environment = await db.query.environments.findFirst({
 			where: and(
 				eq(environments.projectId, project.projectId),
@@ -269,6 +264,9 @@ const resolveTarget = async (
 		where: and(eq(projects.organizationId, organizationId), eq(projects.name, projectName)),
 	});
 	if (existing) {
+		// A name match is still a project access: do this before returning its
+		// id or creating an environment, including when no graph exists yet.
+		await findProjectById(existing.projectId, organizationId);
 		const environment = await db.query.environments.findFirst({
 			where: and(
 				eq(environments.projectId, existing.projectId),
@@ -314,17 +312,8 @@ const normalizeRequest = async (
 	const fetched = await fetchSourceEnvironment(request, organizationId);
 	const names = await knownNames(organizationId);
 	const targetProjectName = request.projectId
-		? (
-				await db.query.projects.findFirst({
-					where: and(
-						eq(projects.projectId, request.projectId),
-						eq(projects.organizationId, organizationId),
-					),
-					columns: { name: true },
-				})
-			)?.name
+		? (await findProjectById(request.projectId, organizationId)).name
 		: undefined;
-	if (request.projectId && !targetProjectName) throw notFound("Target project not found");
 	const normalized = normalizeSourceEnvironment({
 		...fetched.normalizedInput,
 		knownServers: names.servers,
@@ -404,7 +393,10 @@ export const applyImport = async (
 		});
 	}
 
-	const result = await applyStack(normalized.manifest, organizationId, projectId, options);
+	const result = await applyStack(normalized.manifest, organizationId, projectId, {
+		...options,
+		syncRuntime: false,
+	});
 	const graph = await loadEnvironmentGraph(projectId, target.environmentName, organizationId);
 	const secrets = await applySecretsPayload(normalized.secrets, graph);
 

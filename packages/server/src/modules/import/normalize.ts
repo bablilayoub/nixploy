@@ -8,6 +8,7 @@ import type {
 } from "../gitops/schema";
 import { envKeysFromDotenv, NIXPLOY_STACK_VERSION } from "../gitops/schema";
 import { SECRETS_BUNDLE_VERSION, type SecretsPayload } from "../gitops/secrets";
+import { assertSafeVolumeName } from "../services/mounts";
 import { DATABASE_KINDS, type DatabaseServiceKind } from "../services/registry";
 import type {
 	SourceApplication,
@@ -87,6 +88,24 @@ const BUILD_TYPES = new Set([
 
 const orNull = (value: string | null | undefined): string | null =>
 	value === undefined || value === null || value === "" ? null : value;
+
+/** Ciphertext hides the key names too; never mistake its base64 padding for dotenv. */
+const readableEnv = (
+	value: string | null | undefined,
+	notes: ImportNote[],
+	label: string,
+	service?: string,
+): string | null | undefined => {
+	if (value && /^enc:v\d+:/.test(value)) {
+		notes.push({
+			level: "warn",
+			...(service ? { service } : {}),
+			message: `${label} is encrypted in the source dump; its keys and values cannot be read — paste them here before deploying. Existing target values are kept`,
+		});
+		return undefined;
+	}
+	return value === undefined ? null : orNull(value);
+};
 
 const swarmOf = (row: {
 	healthCheckSwarm?: unknown;
@@ -184,7 +203,8 @@ const mapMounts = (
 	service: string,
 	notes: ImportNote[],
 	compose: boolean,
-): { mounts: GitopsMount[]; skipped: number } => {
+	appName?: string,
+): { mounts?: GitopsMount[]; skipped: number } => {
 	const mounts: GitopsMount[] = [];
 	let skipped = 0;
 	for (const row of rows) {
@@ -199,6 +219,34 @@ const mapMounts = (
 			skipped += 1;
 			continue;
 		}
+		if (row.type === "file") {
+			notes.push({
+				level: "warn",
+				service,
+				message: `file mount ${row.mountPath} skipped: recreate the file and its contents in the target's Advanced tab before deploying; import does not write or remove backing files used by running services`,
+			});
+			skipped += 1;
+			continue;
+		}
+		if (row.type === "volume") {
+			let compatible = Boolean(appName);
+			if (appName) {
+				try {
+					assertSafeVolumeName(row.volumeName, appName);
+				} catch {
+					compatible = false;
+				}
+			}
+			if (!compatible) {
+				notes.push({
+					level: "warn",
+					service,
+					message: `volume mount ${row.mountPath} skipped: ${row.volumeName ?? "its volume"} cannot be attached under the target app name — create an application-scoped volume and restore its data before deploying`,
+				});
+				skipped += 1;
+				continue;
+			}
+		}
 		if (row.type === "bind") {
 			notes.push({
 				level: "info",
@@ -211,9 +259,19 @@ const mapMounts = (
 			mountPath: row.mountPath,
 			hostPath: row.type === "bind" ? orNull(row.hostPath) : undefined,
 			volumeName: row.type === "volume" ? orNull(row.volumeName) : undefined,
-			filePath: row.type === "file" ? orNull(row.filePath) : undefined,
-			content: row.type === "file" ? (row.content ?? "") : undefined,
 		});
+	}
+	if (skipped > 0) {
+		// A v2 collection is authoritative. Emitting only the translatable
+		// rows would delete mounts the operator supplied for the skipped ones
+		// on a repeat import, including their restored data volumes.
+		notes.push({
+			level: "warn",
+			service,
+			message:
+				"Mounts need manual setup because some source mounts cannot be translated; existing target mounts are kept and no mount rows are imported",
+		});
+		return { skipped: rows.length };
 	}
 	return { mounts, skipped };
 };
@@ -321,7 +379,13 @@ const mapApplication = (
 			message: "carries a Swarm network override; applying it needs the instance admin",
 		});
 	}
-	const { mounts, skipped } = mapMounts(row.mounts, service, notes, false);
+	const { mounts, skipped } = mapMounts(
+		row.mounts,
+		service,
+		notes,
+		false,
+		input.keepAppNames === false ? undefined : row.appName,
+	);
 
 	const application: GitopsApplication = {
 		name: row.name,
@@ -452,8 +516,6 @@ const mapCompose = (
 		envKeys: envKeysFromDotenv(row.env),
 		domains: mapDomains(row.domains, service, notes, true),
 		mounts,
-		redirects: [],
-		basicAuth: [],
 	};
 	return { compose, skippedMounts: skipped };
 };
@@ -470,7 +532,7 @@ const mapDatabase = (
 		level: "warn",
 		service,
 		message:
-			"gets a new password here; env values that carry the old one (DATABASE_URL and friends) need updating, or adopt the old volume with the takeover tool",
+			"gets a new password here; update env values that carry the old one (DATABASE_URL and friends), and restore database data from a backup separately",
 	});
 	if (kind === "mongo" && row.replicaSets) {
 		notes.push({
@@ -508,8 +570,38 @@ const mapDatabase = (
 	};
 };
 
-export function normalizeSourceEnvironment(input: NormalizeInput): NormalizedEnvironment {
+export function normalizeSourceEnvironment(source: NormalizeInput): NormalizedEnvironment {
 	const notes: ImportNote[] = [];
+	const input: NormalizeInput = {
+		...source,
+		project: {
+			...source.project,
+			env: readableEnv(source.project.env, notes, "Project env"),
+		},
+		environment: {
+			...source.environment,
+			env: readableEnv(source.environment.env, notes, "Environment env"),
+		},
+		applications: source.applications.map((row) => ({
+			...row,
+			env: readableEnv(row.env, notes, "Env", `application/${row.name}`),
+			buildArgs: readableEnv(row.buildArgs, notes, "Build args", `application/${row.name}`),
+			previewEnv: readableEnv(row.previewEnv, notes, "Preview env", `application/${row.name}`),
+		})),
+		compose: source.compose.map((row) => ({
+			...row,
+			env: readableEnv(row.env, notes, "Env", `compose/${row.name}`),
+		})),
+		databases: Object.fromEntries(
+			DATABASE_KINDS.map((kind) => [
+				kind,
+				source.databases[kind].map((row) => ({
+					...row,
+					env: readableEnv(row.env, notes, "Env", `${kind}/${row.name}`),
+				})),
+			]),
+		) as NormalizeInput["databases"],
+	};
 	const projectName = input.targetProjectName ?? input.project.name;
 	const environmentName = input.targetEnvironmentName ?? input.environment.name;
 	let skipped = 0;
@@ -555,30 +647,23 @@ export function normalizeSourceEnvironment(input: NormalizeInput): NormalizedEnv
 
 	const secrets: SecretsPayload = {
 		version: SECRETS_BUNDLE_VERSION,
-		project: { name: projectName, env: orNull(input.project.env) },
-		environment: { name: environmentName, env: orNull(input.environment.env) },
+		project: { name: projectName, env: input.project.env },
+		environment: { name: environmentName, env: input.environment.env },
 		applications: Object.fromEntries(
 			input.applications.map((row) => [
 				row.name,
 				{
-					env: orNull(row.env),
-					buildArgs: orNull(row.buildArgs),
-					previewEnv: orNull(row.previewEnv),
+					env: row.env,
+					buildArgs: row.buildArgs,
+					previewEnv: row.previewEnv,
 				},
 			]),
 		),
-		compose: Object.fromEntries(
-			input.compose.map((row) => [
-				row.name,
-				{ env: orNull(row.env), buildArgs: null, previewEnv: null },
-			]),
-		),
+		compose: Object.fromEntries(input.compose.map((row) => [row.name, { env: row.env }])),
 		databases: Object.fromEntries(
 			DATABASE_KINDS.map((kind) => [
 				kind,
-				Object.fromEntries(
-					input.databases[kind].map((row) => [row.name, { env: orNull(row.env) }]),
-				),
+				Object.fromEntries(input.databases[kind].map((row) => [row.name, { env: row.env }])),
 			]),
 		),
 	};

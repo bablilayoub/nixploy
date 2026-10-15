@@ -737,6 +737,7 @@ interface ApplyContext {
 	organizationId: string;
 	environmentId: string;
 	graph: EnvironmentGraph;
+	syncRuntime: boolean;
 }
 
 const hostsOf = (desired: GitopsDomain[] | undefined, live: Array<{ host: string }>): string[] =>
@@ -844,12 +845,13 @@ const applyApplication = async (
 		owner,
 	);
 
-	if (domainsChanged || redirectsChanged || authChanged) {
+	if (ctx.syncRuntime && (domainsChanged || redirectsChanged || authChanged)) {
 		await syncApplicationTraefik(application);
 	}
 	const specChanged = Object.keys(patch).some((column) => APPLICATION_SPEC_COLUMNS.has(column));
-	if (specChanged || mountsChanged || portsChanged) {
-		// A never-deployed application has no image yet; the upsert is a no-op then.
+	if (ctx.syncRuntime && (specChanged || mountsChanged || portsChanged)) {
+		// Ordinary GitOps applies reconcile image services immediately. Imports
+		// explicitly defer this until deploy, even when dockerImage is present.
 		await upsertApplicationSwarmService(application);
 	}
 };
@@ -937,7 +939,7 @@ const applyCompose = async (
 		ctx.graph.securityByParent.get(composeId) ?? [],
 		owner,
 	);
-	if (domainsChanged || redirectsChanged || authChanged) {
+	if (ctx.syncRuntime && (domainsChanged || redirectsChanged || authChanged)) {
 		await resyncComposeDomains(composeId);
 	}
 };
@@ -1024,6 +1026,11 @@ const applyDatabase = async (
 
 export interface PlanStackOptions extends LoadLiveStackOptions {}
 
+export interface ApplyStackOptions extends PlanStackOptions {
+	/** Import writes configuration only; runtime and proxy updates wait for an explicit deploy. */
+	syncRuntime?: boolean;
+}
+
 export const planStack = async (
 	stack: NixployStack,
 	organizationId: string,
@@ -1078,7 +1085,7 @@ export const applyStack = async (
 	stack: NixployStack,
 	organizationId: string,
 	projectId?: string,
-	options: PlanStackOptions = {},
+	options: ApplyStackOptions = {},
 ): Promise<ApplyStackResult> => {
 	const project = await resolveProjectForStack(organizationId, stack, projectId);
 	const { environmentId, environmentName } = await resolveEnvironmentId(project.projectId, stack);
@@ -1087,7 +1094,12 @@ export const applyStack = async (
 	const graph = await loadEnvironmentGraph(project.projectId, environmentName, organizationId);
 	const live = liveStateFromGraph(project.projectId, environmentName, graph, options);
 	const plan = buildPlan(stack, live);
-	const ctx: ApplyContext = { organizationId, environmentId, graph };
+	const ctx: ApplyContext = {
+		organizationId,
+		environmentId,
+		graph,
+		syncRuntime: options.syncRuntime !== false,
+	};
 	const errors: ApplyStackResult["errors"] = [];
 
 	const attempt = async (
