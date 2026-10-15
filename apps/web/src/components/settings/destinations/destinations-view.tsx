@@ -379,7 +379,7 @@ export function DestinationsView() {
 					</Table>
 				</QueryState>
 			</SettingsSection>
-			<InstanceBackups />
+			{isInstanceAdmin && <InstanceBackups />}
 			<Dialog open={editing !== null} onOpenChange={(isOpen) => !isOpen && setEditing(null)}>
 				<DialogContent>
 					<DialogHeader>

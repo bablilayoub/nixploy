@@ -89,10 +89,18 @@ Every instance run produces **two artifacts** in the destination:
 | Database dump | `<prefix>/web-server/<timestamp>.gz` | `pg_dump --clean --if-exists --no-owner --no-privileges` of the `DATABASE_URL` database (gzipped SQL) |
 | Config archive | `<prefix>/web-server-config/<timestamp>.gz` | tar.gz of the config directory (`NIXPLOY_CONFIG_DIR`, default `/etc/nixploy`) |
 
+These are separate recovery layers:
+
+| Backup | Recovers | Still needed |
+| --- | --- | --- |
+| Instance | Panel users/orgs, service definitions, credentials, domains; config archive: routing/TLS/SSH files | Separate encryption/auth keys, workload data, source/images and runtime services |
+| Managed database | One logical SQL/Mongo database, or Redis persistence snapshot | Matching database engine, credentials and service definition; application files/volumes |
+| Named volume | Files in one named Docker volume | Service definition, correct target server/volume name, coordinated database snapshot when needed |
+
 The config archive includes everything under the config dir **except**
 derived/heavy subtrees (`applications/`, `compose/`, `logs/`, `metrics/`,
-`cache/`, `tools/`, `files/`) and the panel's own secrets file (`.env`, plus
-any `.env.*` copy). What remains is the state an instance restore actually
+`runtime-logs/`, `cache/`, `backups/`, `tools/`, `files/`) and the panel's own
+secrets file (`.env`, plus any `.env.*` copy). What remains is the state an instance restore actually
 needs:
 
 - `traefik/` — static config, file-provider dynamic YAML (routes, TLS),
@@ -110,20 +118,29 @@ key in the same bucket would hand all of them to anyone who can read it
 
 Keep a copy of `.env` somewhere the bucket reader cannot reach — a password
 manager, an offline vault, a separate KMS-encrypted secret. **A restore
-without the original `ENCRYPTION_KEY` cannot decrypt anything stored**:
+without the keys used by the dump cannot decrypt its encrypted values**:
 env vars, database passwords, registry/git/SSH credentials, S3 keys and
 notification configs are unrecoverable, and every service must be
-re-configured by hand. `BETTER_AUTH_SECRET` matters less (existing sessions
-become invalid), `POSTGRES_PASSWORD`/`DATABASE_URL` only need to match the
-Postgres you restore into.
+re-configured by hand. Preserve the complete `ENCRYPTION_KEYS` chain when
+configured; it takes precedence over the single `ENCRYPTION_KEY`. A historical
+dump may still need an old key removed after a later rotation.
+
+Keep **`BETTER_AUTH_SECRET` too**: better-auth uses it to encrypt TOTP secrets
+and recovery codes, as well as to sign sessions. Replacing it invalidates
+sessions **and prevents existing TOTP/recovery-code authentication**.
+`POSTGRES_PASSWORD`/`DATABASE_URL` only need to match the Postgres you restore
+into. Passkeys also require their original relying-party hostname; moving to
+a different panel domain can require a password/TOTP sign-in and re-enrolment.
 
 > **Sensitivity:** the dump contains all tenants' data (secrets are encrypted
 > at rest, but readable with your `ENCRYPTION_KEY`), and the archive contains
 > TLS private keys and SSH private keys in plain text. Point instance backups
 > at a private bucket with tight IAM.
 
-Retention (`keepLatestCount`) prunes each artifact stream independently, same
-as database backups. Instance backups can only be created, edited or run by
+Instance retention (`keepLatestCount`) prunes matching timestamp pairs after
+both new artifacts are stored. Fetch the SQL and config archive from the same
+completed run; a SQL-only verification does not verify its config companion.
+Instance backups can only be created, edited or run by
 the **instance admin** (the first user), never by an org admin — the dump
 contains every tenant.
 
@@ -132,19 +149,23 @@ or `tar` fails the run instead of uploading an empty archive) and rejects
 gzip files that decompress to zero bytes. Restores stream the archive over
 stdin, so large dumps are not limited by the shell's argument size.
 
-> **Database dumps stream; instance archives still buffer.** A database dump
-> now goes straight from `docker exec … pg_dump | gzip` into the destination —
-> an S3 multipart upload in 8 MiB parts, or a `0600` file on disk — and a
-> restore streams the stored object back into the container's stdin. Nothing
-> is held in memory, so the old ~37 MB ceiling is gone; the exit-status trailer
-> moved to stderr so stdout stays binary, and a failed dump aborts the upload
-> (`AbortMultipartUpload`) instead of replacing a good archive.
->
-> The **instance** (`web-server`) backup and volume archives still use the
-> base64 pipeline through a 50 MB `maxBuffer`, i.e. roughly ~37 MB compressed
-> and peak memory ≈ 3× the archive. Keep an eye on run sizes in the history
-> for those two; moving them onto the same streaming path is tracked in
-> docs/status.md.
+Database, instance, volume and Redis backup producers stream binary gzip into
+the destination: S3 uses 8 MiB multipart uploads, local storage uses a `0600`
+temporary file followed by rename. Producer failure prevents finalization and
+retention. Archives no longer pass through the base64/50 MB command buffer.
+Local backup files are excluded from config archives so later instance runs
+do not recursively include earlier backups.
+
+Before a restore or verification touches the target, the selected object is
+downloaded once into a private temporary cache, its full gzip integrity is
+checked, and those same bytes are replayed. Tar archives also pass a target-side
+readability/path check without mounting the target volume. Confined relative
+links are supported; escaping links and special files require manual recovery.
+The cache is removed afterward, including on failure.
+Provision free scratch disk for the compressed archive and, for volume
+replacement, space for both staged restored files and the previous contents.
+Volume backups do not pause application writes: coordinate application/database
+snapshots when consistency requires it.
 
 ## How the dump runs
 
@@ -195,7 +216,7 @@ the database first in that case.
    # <config dir>/backups/<organizationId>/backup/web-server-config/<ts>.gz
    ```
 
-2. **Rehearse the restore before you touch the new host.** Ten minutes now,
+2. **Rehearse the SQL restore before you touch the new host.** Ten minutes now,
    on any machine with Docker, beats finding out mid-incident:
 
    ```bash
@@ -205,71 +226,223 @@ the database first in that case.
    It restores into a throwaway Postgres container, restores a **second**
    time to prove `--clean --if-exists` works over a populated database,
    asserts the core tables and prints their row counts, then removes the
-   container. `--boot` additionally starts the panel image against the
-   restored database and waits for `GET /api/ready`.
+   container. It checks SQL restoreability and table presence, not whether
+   the expected users, secrets, config or workload data survived. Zero users
+   produces a warning, not proof of recovery.
 
-3. **Provision the new host.** Install Docker, then install Nixploy per
-   [install.md](./install.md) and **stop before logging in**.
+   `--boot` additionally requires panel readiness against the scratch database:
+
+   ```bash
+   ./tools/dr-restore-test.sh --dump dump.sql.gz --boot \
+     --panel-image ghcr.io/nixploy/nixploy:<matching-release> \
+     --recovery-env /secure/recovery.keys \
+     --docker-socket /path/to/disposable/docker.sock
+   ```
+
+   Use a disposable Docker daemon/context for the drill. The explicit socket
+   path is on that daemon's host and is mounted for the real readiness Docker
+   check; **never supply the production socket**. A read-only socket mount
+   does not make the Docker API read-only. The scratch panel uses role `panel`
+   (no worker or cron jobs), a private internal network and loopback ports.
+   It does not restore config or run migrations; use an image matching the
+   dump's schema. Missing inputs, container-start failures and readiness
+   failures make `--boot` fail.
+
+   `/secure/recovery.keys` must be a separate, mode-600 **Docker-format** file
+   with only the recovered values, entered from the secret vault:
+
+   ```dotenv
+   ENCRYPTION_KEYS=<new-key>,<old-key>
+   BETTER_AUTH_SECRET=<original-auth-secret>
+   ```
+
+   Use `ENCRYPTION_KEY=<original-key>` instead when the instance never used a
+   chain. Values are **unquoted**, with no `export` or shell commands. Docker
+   `--env-file` preserves shell quotes as part of the value, so copying an
+   arbitrary shell `.env` can change a key. The script rejects quoted entries
+   and does not source the file. A green readiness result still does **not**
+   prove the keys decrypt data or that sign-in works; test those separately.
+
+3. **Provision and quiesce the new host.** Install Docker, then install Nixploy
+   per [install.md](./install.md) and **stop before logging in**. Stop the
+   target panel and any split worker before replacing their database/config:
+
+   ```bash
+   docker service scale nixploy=0
+   if docker service inspect nixploy-worker >/dev/null 2>&1; then
+     docker service scale nixploy-worker=0
+   fi
+   ```
+
+   Run these commands only on the recovery host. Neither the worker nor
+   role `all` may claim restored queued deployments or run schedules while
+   storage and keys are being recovered.
 
 4. **Put the old `.env` back** at `/etc/nixploy/.env`, mode 600. The instance
-   must run with the **same** `ENCRYPTION_KEY` (and ideally
-   `BETTER_AUTH_SECRET`) as the old one; otherwise every encrypted column
-   (env vars, credentials, S3/notification configs) is unreadable after the
-   restore and has to be re-entered. `DATABASE_URL` / `POSTGRES_PASSWORD`
+   must run with the old **complete encryption key chain** (`ENCRYPTION_KEYS`,
+   or `ENCRYPTION_KEY` for a single key) and **`BETTER_AUTH_SECRET`**; otherwise
+   encrypted values (env vars, credentials, S3/notification configs) and TOTP
+   authentication cannot be recovered. `DATABASE_URL` / `POSTGRES_PASSWORD`
    must match the Postgres you restore into — keep the installer's fresh
    values if you let it create Postgres, and change only the auth secrets.
 
    **Restoring to a new IP or domain?** Set `BETTER_AUTH_URL` in the restored
    `.env` to the address you will actually browse to, or every sign-in fails
-   with "Invalid origin". Then either re-run
-   `NIXPLOY_DOMAIN=panel.new.example sudo -E bash install.sh`, or edit the
-   file and `docker service update --env-add BETTER_AUTH_URL=… nixploy`.
+   with "Invalid origin". Edit the file before recreating the platform
+   services in step 8, retaining the new domain/IP installer options.
    Also update the dashboard domain under Settings → Platform once you are
    in, and point the DNS A record at the new host **before** Let's Encrypt
    is asked for a certificate.
 
-5. **Restore the database.** The dump is plain SQL:
+5. **Validate both artifacts, then restore the database.** Verify any
+   independently recorded checksums first. Gzip/tar validity alone does not
+   authenticate an archive; use artifacts from your trusted backup destination.
+   In Bash, require both sides of the pipeline and the SQL transaction to succeed:
 
    ```bash
-   gunzip -c dump.sql.gz | docker exec -i "$(docker ps -qf name=nixploy-postgres)" \
-     psql -U nixploy -d nixploy -v ON_ERROR_STOP=1
+   set -euo pipefail
+   gzip -t dump.sql.gz
+   gzip -t config.tar.gz
+   tar -tzf config.tar.gz > config.contents
+   tar -tvzf config.tar.gz > config.details
+   # Reject absolute/traversal paths and any attempt to replace the secrets file.
+   awk '{ while (sub(/^\.\//, "")) {}; if ($0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/ || $0 ~ /^\.env([.\/]|$)/) bad=1 } END { exit bad }' config.contents
+   # Normal config backups contain regular files/directories. Inspect any
+   # archive with links or special files manually; do not extract it as root.
+   awk 'substr($0,1,1) != "-" && substr($0,1,1) != "d" { bad=1 } END { exit bad }' config.details
+   pg_container="$(docker ps -qf label=com.docker.swarm.service.name=nixploy-postgres)"
+   test "$(printf '%s\n' "$pg_container" | wc -l)" -eq 1
+   test -n "$pg_container"
+   gunzip -c dump.sql.gz | docker exec -i "$pg_container" \
+     psql -U nixploy -d nixploy --single-transaction -v ON_ERROR_STOP=1
    ```
 
-   `ON_ERROR_STOP=1` is deliberate: a restore that logs errors and continues
-   leaves a half-populated database that looks like it worked.
+   `ON_ERROR_STOP=1` stops on the first SQL error; `--single-transaction`
+   rolls back that SQL restore on failure. Do not continue after a failed
+   validation or restore. Keep the original artifacts unchanged.
 
 6. **Restore the config directory** (default `/etc/nixploy`, or wherever
    `NIXPLOY_CONFIG_DIR` points). Keep the `.env` you placed in step 4 — the
-   archive does not contain one, so nothing overwrites it:
+   archive must not contain one. Extract into a fresh staging directory,
+   inspect it, and only then copy into the stopped target's config directory:
 
    ```bash
-   mkdir -p /etc/nixploy
-   tar xzf config.tar.gz -C /etc/nixploy
-   chmod 600 /etc/nixploy/traefik/acme.json    # tar can widen the mode
+   restore_stage="$(mktemp -d)"
+   chmod 700 "$restore_stage"
+   tar xzf config.tar.gz --no-same-owner --no-same-permissions -C "$restore_stage"
+   # Inspect "$restore_stage" before copying; never copy a .env from an archive.
+   cp -a "$restore_stage/." /etc/nixploy/
+   chmod 600 /etc/nixploy/.env
+   if [ -f /etc/nixploy/traefik/acme.json ]; then
+     chmod 600 /etc/nixploy/traefik/acme.json
+   fi
+   rm -rf "$restore_stage"
    ```
 
-7. **Recreate the platform services** — re-run `install.sh` (or
-   `docker service update --force nixploy` + `nixploy-traefik`) so the panel
-   picks up the restored `.env` and Traefik reloads the restored dynamic
-   configs and certificates.
+7. **Restore workload data separately.** The instance dump contains service
+   definitions, domains, memberships and encrypted credentials; it contains
+   neither managed database contents nor named-volume data. Restore logical
+   database dumps into the matching database engine and version, and volume
+   archives into **stopped volumes** on the correct service's server. Prefer
+   fresh volumes for a cold restore. The runner refuses active writers and
+   stages the full replacement before changing existing contents; files absent
+   from the archive are removed. It preserves the old tree during the swap
+   and attempts rollback on a replacement failure. If rollback itself fails,
+   remaining prior/staged directories are retained and the error identifies
+   their paths for manual recovery.
+   This is not a guarantee against every disk or host failure. Services remain
+   stopped; only restart after verifying the restored data.
 
-8. **Verify** before declaring the restore done:
+   Git sources must remain accessible, and images built only on the lost host
+   must be rebuilt or recovered from a registry. Uploaded source files under
+   `files/` are excluded from the config backup. A restored route alone cannot
+   recreate a missing workload or its data.
+
+8. **Apply the recovered environment to both stopped platform services.** Editing
+   `.env` and using `docker service update --force` does **not** update a
+   service's stored environment. Re-running the installer on existing services
+   also does not refresh encryption/auth secrets. Use the dedicated, unquoted
+   recovery keys file from step 2; never source an arbitrary `.env`.
+   Docker's `--env-add KEY` reads the value from the calling environment
+   ([Docker CLI validator](https://github.com/docker/cli/blob/master/opts/env.go)),
+   so secret values need not appear on its command line:
+
+   ```bash
+   (
+     set -eu
+     set +x                     # Never trace recovered values.
+     unset ENCRYPTION_KEYS ENCRYPTION_KEY BETTER_AUTH_SECRET
+     recovery_names=" "
+     recovery_args=(--env-rm ENCRYPTION_KEYS --env-rm ENCRYPTION_KEY --env-rm BETTER_AUTH_SECRET)
+     while IFS='=' read -r key value || [ -n "$key" ]; do
+       case "$key" in
+         ''|\#*) continue ;;
+         ENCRYPTION_KEYS|ENCRYPTION_KEY|BETTER_AUTH_SECRET) ;;
+         *) echo 'Unexpected recovery file entry' >&2; exit 1 ;;
+       esac
+       # Literal Docker-format values only, no surrounding shell quotes.
+       [[ -n "$value" && "$value" != \"* && "$value" != \'* && "$value" != *\" && "$value" != *\' && "$value" != *$'\r'* ]] \
+         || { echo 'Recovery values must be nonempty and unquoted' >&2; exit 1; }
+       [[ "$recovery_names" != *" $key "* ]] \
+         || { echo 'Duplicate recovery key' >&2; exit 1; }
+       recovery_names+="$key "
+       export "$key=$value"     # Assignment only: no eval or shell execution.
+       recovery_args+=(--env-add "$key")
+     done < /secure/recovery.keys
+     test -n "${BETTER_AUTH_SECRET:-}" \
+       || { echo 'Missing recovered auth secret' >&2; exit 1; }
+     test -n "${ENCRYPTION_KEYS:-}${ENCRYPTION_KEY:-}" \
+       || { echo 'Missing recovered encryption keys' >&2; exit 1; }
+     for service in nixploy nixploy-worker; do
+       if docker service inspect "$service" >/dev/null 2>&1; then
+         docker service update --detach --replicas 0 "${recovery_args[@]}" "$service"
+       elif [ "$service" = nixploy ]; then
+         echo 'Recovery panel service is missing' >&2; exit 1
+       fi
+     done
+   )
+   ```
+
+   Run the block from the `set -euo pipefail` shell above. It replaces stale
+   encryption settings, retains both services at zero replicas, and leaves
+   the recovery database connection untouched. Keep the same recovered values
+   in the separately protected `.env` for future service creation. If the panel
+   address changed, explicitly apply `BETTER_AUTH_URL` to both services too.
+   Confirm their stored environments contain the recovered chain/auth secret
+   without printing values. Do not remove `nixploy-postgres` or its data volume.
+
+   **Start the worker only after workload data is ready and queued
+   deployments/schedules have been reviewed.** A split install can start just
+   the panel with `docker service scale nixploy=1` while the worker stays at
+   zero; a single-process `nixploy` service includes the worker. Restore its
+   original replica count only when ready. Restart Traefik after its config
+   and certificates are restored.
+
+9. **Verify** before declaring the restore done:
 
    ```bash
    curl -sk https://<new-host>/api/ready | jq        # every check ok
    ```
 
-   - Sign in. If the login page rejects the origin, `BETTER_AUTH_URL` is
-     wrong (step 4).
+   - Sign in using a restored account, including TOTP/recovery code if enabled,
+     and verify organization membership and project access. If the login page
+     rejects the origin, `BETTER_AUTH_URL` is wrong (step 4).
    - Open a service's **Environment** tab. Values showing as garbage, or
      decryption errors in `docker service logs nixploy`, mean the
-     `ENCRYPTION_KEY` in `.env` is not the original one — stop and find the
-     right key rather than re-entering secrets.
+     encryption key chain is incomplete or wrong — stop and find the missing
+     keys rather than re-entering secrets.
+   - Verify decrypted env, database and backup-destination credentials match
+     known fixture values without logging them. `/api/ready` does not check
+     decryptability or the correctness of the encryption keys.
    - Check projects, domains and backup destinations are all present.
+   - Compare restored logical database rows and named-volume file hashes with
+     recorded values, then request an actual workload through its restored
+     domain. A healthy panel is not proof of workload recovery.
 
-9. **Redeploy affected services** as needed — the database knows about them,
-   and container state is reconciled automatically for services whose images
-   still exist in the registry.
+10. **Redeploy recovered services** as needed after their data is ready. The
+    status reconciler observes runtime state; it does not recreate a lost
+    Swarm service, image or volume. Point DNS to the recovery host only after
+    the restored routes serve the expected workload and data.
 
 ## Disaster-recovery checklist
 
@@ -305,16 +478,18 @@ anything you actually rely on.
 
 ### Key custody
 
-`ENCRYPTION_KEY` is the single point of failure. Without it the dump is
-useless for every stored credential.
+The keys needed by each dump are a recovery dependency. Without them its
+encrypted credentials cannot be recovered.
 
-- Store it separately from the backups, with at least two people or two
+- Store the complete `ENCRYPTION_KEYS` chain (or single `ENCRYPTION_KEY`)
+  separately from the backups, with at least two people or two
   locations able to reach it.
-- Treat a rotation as a migration, not a config change — everything encrypted
-  with the old key has to be re-encrypted first.
-- `BETTER_AUTH_SECRET` is less critical (losing it only invalidates existing
-  sessions); `POSTGRES_PASSWORD` / `DATABASE_URL` only need to match the
-  Postgres you restore into.
+- A rotation re-encrypts the live database, not historical dumps. Retain old
+  keys for as long as a retained dump needs them, even after removing those
+  keys from the live instance's chain.
+- Preserve `BETTER_AUTH_SECRET`: losing it invalidates sessions and makes
+  stored TOTP secrets and encrypted recovery codes unreadable.
+  `POSTGRES_PASSWORD` / `DATABASE_URL` only need to match the recovery Postgres.
 
 ### Rehearse
 
@@ -322,7 +497,8 @@ The first real restore should not be the first restore.
 
 ```bash
 sudo ./tools/dr-restore-test.sh                        # newest local dump
-./tools/dr-restore-test.sh --dump dump.sql.gz --boot   # a fetched artifact + panel boot
+./tools/dr-restore-test.sh --dump dump.sql.gz          # a fetched SQL artifact
+# Add --boot with the explicit recovery-env/socket inputs described above.
 ```
 
 Run it on a schedule (monthly is a reasonable floor), after any Postgres major
@@ -345,7 +521,8 @@ restores into a throwaway container, from the UI, with no shell access.
 Redis services are backed up like any other database engine (service →
 Backups tab → *Create backup*):
 
-- The runner executes `redis-cli BGSAVE` inside the container (falling back
+- The runner temporarily disables automatic AOF rewrites, waits for any rewrite
+  to finish, then executes `redis-cli BGSAVE` inside the container (falling back
   to a blocking `SAVE`), waits until `rdb_bgsave_in_progress` is `0` and
   verifies `rdb_last_bgsave_status: ok`.
 - It then `docker cp`s the whole Redis data directory (`CONFIG GET dir`,
@@ -353,8 +530,18 @@ Backups tab → *Create backup*):
   when `appendonly` is enabled — into a gzipped tar in the destination at
   `<prefix>/<appName>/<timestamp>.gz`, with the same retention semantics as
   SQL dumps.
-- **Restore** (Backups tab → restore icon, or `backup.restore`) unpacks the
-  tar back into the container and issues `SHUTDOWN NOSAVE`; the Swarm
-  restart policy brings Redis back and it loads the restored files from
-  disk. When an AOF is present Redis replays it preferentially over the RDB,
-  which is exactly what you want — both are restored from the same snapshot.
+- The original automatic-rewrite setting is restored even after a failed copy;
+  a reset failure fails the run and prevents retention. Do not run a manual
+  `BGREWRITEAOF` concurrently. With ongoing writes, this captures a recoverable
+  AOF prefix rather than one atomic latest-write instant; quiesce writes when
+  the application requires a coordinated snapshot.
+- **Restore** (Backups tab → restore icon, or `backup.restore`) requires the
+  managed Redis service to be stopped at zero replicas with no active volume
+  writers. It validates the gzip and `data/` tar subtree, stages a replacement
+  of the managed `/data` volume, and preserves the old contents during the
+  swap. Files absent from the backup are removed, so a stale AOF cannot
+  override a restored RDB. Replacement failure attempts rollback; a failed
+  rollback retains the recovery directories and reports their paths.
+- Redis stays stopped after restore. Verify the data and start it explicitly;
+  Redis loads the restored persistence files at startup. Custom data layouts,
+  escaping links and special files require manual recovery.

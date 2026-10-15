@@ -18,13 +18,18 @@ async function rehearsal(options, verify) {
 		const bin = path.join(directory, "bin");
 		await mkdir(bin);
 		const callsPath = path.join(directory, "calls.jsonl");
+		const recoveryCallsPath = path.join(directory, "recovery.jsonl");
 		await writeFile(
 			path.join(bin, "docker"),
 			`#!/usr/bin/env node
 import { appendFileSync } from 'node:fs';
 const args=process.argv.slice(2);
 appendFileSync(process.env.DR_CALLS,JSON.stringify(args)+'\\n');
-if(args[0]==='service') process.exit(1);
+if(args[0]==='service') {
+  if(process.env.DR_SCENARIO!=='apply-recovery') process.exit(1);
+  if(args[1]==='update') appendFileSync(process.env.DR_RECOVERY_CALLS,JSON.stringify({service:args.at(-1),chain:process.env.ENCRYPTION_KEYS,single:process.env.ENCRYPTION_KEY,auth:process.env.BETTER_AUTH_SECRET})+'\\n');
+  process.exit(0);
+}
 if(args[0]==='run') {
   const name=args[args.indexOf('--name')+1];
   if(name.endsWith('-panel') && process.env.DR_SCENARIO==='boot-fails') process.exit(1);
@@ -71,23 +76,47 @@ if(args[0]==='run') {
 			await writeFile(path.join(backups, "web-server-config", "newer.gz"), gzipSync("not SQL"));
 			args.splice(0, 2, "--dir", backups);
 		}
-		const result = spawnSync("bash", [script, ...args], {
+		let bashArgs = [script, ...args];
+		if (options.recoveryUpdate) {
+			const docs = await readFile(new URL("../docs/instance-backup.md", import.meta.url), "utf8");
+			const block = [...docs.matchAll(/```bash\n([\s\S]*?)```/g)].find((match) =>
+				match[1].includes("recovery_names="),
+			)?.[1];
+			assert.ok(block, "Recovery environment instructions are missing");
+			const quotedRecoveryEnv = `'${recoveryEnv.replaceAll("'", "'\\''")}'`;
+			bashArgs = [
+				"-euo",
+				"pipefail",
+				"-c",
+				block.replace("/secure/recovery.keys", quotedRecoveryEnv),
+			];
+		}
+		const result = spawnSync("bash", bashArgs, {
 			encoding: "utf8",
 			timeout: 15_000,
 			env: {
 				...process.env,
 				PATH: `${bin}${path.delimiter}${process.env.PATH}`,
 				DR_CALLS: callsPath,
+				DR_RECOVERY_CALLS: recoveryCallsPath,
 				DR_SCENARIO: options.scenario ?? "success",
+				ENCRYPTION_KEYS: "stale-inherited-chain",
+				ENCRYPTION_KEY: "stale-inherited-single-key",
 				NO_COLOR: "1",
 			},
 		});
-		const calls = (await readFile(callsPath, "utf8"))
+		const calls = (await readFile(callsPath, "utf8").catch(() => ""))
 			.trim()
 			.split("\n")
 			.filter(Boolean)
 			.map((line) => JSON.parse(line));
-		await verify({ ...result, output: `${result.stdout}${result.stderr}`, calls });
+		const recoveryCalls = await readFile(recoveryCallsPath, "utf8").catch(() => "");
+		await verify({
+			...result,
+			output: `${result.stdout}${result.stderr}`,
+			calls,
+			recoveryCalls: recoveryCalls.trim() ? recoveryCalls.trim().split("\n").map(JSON.parse) : [],
+		});
 	} finally {
 		await rm(directory, { recursive: true, force: true });
 	}
@@ -204,3 +233,55 @@ test("corrupt gzip fails before any scratch container starts", async () => {
 		);
 	});
 });
+
+for (const [label, recoveryContents, expected] of [
+	[
+		"key chain",
+		`ENCRYPTION_KEYS=${encryptionKey},${priorEncryptionKey}\nBETTER_AUTH_SECRET=${authSecret}\n`,
+		{ chain: `${encryptionKey},${priorEncryptionKey}`, auth: authSecret },
+	],
+	[
+		"single key",
+		`ENCRYPTION_KEY=${encryptionKey}\nBETTER_AUTH_SECRET=${authSecret}\n`,
+		{ single: encryptionKey, auth: authSecret },
+	],
+	[
+		"literal value without shell execution",
+		`ENCRYPTION_KEY=${encryptionKey}\nBETTER_AUTH_SECRET=$(exit 99)\n`,
+		{ single: encryptionKey, auth: "$(exit 99)" },
+	],
+]) {
+	test(`documented ${label} recovery updates both stopped service environments without secret argv`, async () => {
+		await rehearsal(
+			{ recoveryUpdate: true, scenario: "apply-recovery", recoveryContents },
+			({ status, output, calls, recoveryCalls }) => {
+				assert.equal(status, 0, output);
+				assert.deepEqual(recoveryCalls, [
+					{ service: "nixploy", ...expected },
+					{ service: "nixploy-worker", ...expected },
+				]);
+				const updates = calls.filter((args) => args[1] === "update");
+				assert.equal(updates.length, 2);
+				assert.ok(updates.every((args) => args[args.indexOf("--replicas") + 1] === "0"));
+				assert.equal(JSON.stringify(calls).includes(encryptionKey), false);
+				assert.equal(JSON.stringify(calls).includes(priorEncryptionKey), false);
+				assert.equal(JSON.stringify(calls).includes(authSecret), false);
+			},
+		);
+	});
+}
+
+for (const recoveryContents of [
+	`ENCRYPTION_KEYS="${encryptionKey}"\nBETTER_AUTH_SECRET=${authSecret}\n`,
+	`ENCRYPTION_KEY=${encryptionKey}\n`,
+]) {
+	test("documented recovery rejects invalid inputs before changing either service", async () => {
+		await rehearsal(
+			{ recoveryUpdate: true, scenario: "apply-recovery", recoveryContents },
+			({ status, recoveryCalls }) => {
+				assert.notEqual(status, 0);
+				assert.deepEqual(recoveryCalls, []);
+			},
+		);
+	});
+}
