@@ -191,8 +191,8 @@ through another database or managed-server connection. Existing locks or
 `.nixploy-restore-*` / `.nixploy-previous-*` recovery trees block another
 backup or restore. They have no expiry and are never automatically treated as stale.
 A crash, a detached helper or a failed rollback can leave them behind. Keep
-the service stopped, prove that no restore helper or other volume writer is
-active on the exact server and volume, then inspect the matching staged and
+the service stopped, prove that no backup reader, restore helper or other
+volume writer is active on the exact server and volume, then inspect the matching staged and
 previous trees and complete recovery manually. Preserve those trees until
 the intended data is safely restored; remove the lock only after recovery
 and helper shutdown are confirmed. Removing a marker alone is not recovery.
