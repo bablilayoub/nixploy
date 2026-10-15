@@ -488,7 +488,7 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 			{ type: "h2", text: "Diagnose a route" },
 			{
 				type: "p",
-				text: "A host answers 502 or 404 and the service says it is running. The stethoscope on the domain row (also nixploy domain diagnose and the get_domain_diagnosis MCP tool) walks the request path in order and names the fix at each step: DNS, the Traefik route file, a second file claiming the same host and path, the upstream task, the shared-network attachment, the container port (a throwaway busybox on the overlay), Traefik's own answer for the host, and the certificate. An application's own 404 can be a working route; the ambiguous default 404 prompts a router and application check. A same-host HTTPS redirect is followed through Traefik so it cannot hide a final 502. Checks run from the panel; a stored certificate does not prove external reachability or public TLS trust.",
+				text: "A host answers 502 or 404 and the service says it is running. The stethoscope on the domain row (also nixploy domain diagnose and the get_domain_diagnosis MCP tool) walks the request path in order and names the fix at each step: DNS, the Traefik route file, a second file claiming the same host and path, the upstream task, the shared-network attachment, the container port (a throwaway busybox on the overlay), Traefik's own answer for the host, and the certificate. An application's own 404 can be a working route; the ambiguous default 404 prompts a router and application check. A same-host HTTPS redirect is followed through Traefik so it cannot hide a final 502. The HTTPS probe verifies signatures and dates using system roots plus the explicitly installed default or selected custom certificate. Only the exact default leaf may use its generic hostname; other certificates must match the host. TLS failures produce a warning while upstream checks still run. These panel-side checks do not prove external reachability or public TLS trust.",
 			},
 			{ type: "h2", text: "DNS records created for you" },
 			{
@@ -637,7 +637,11 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 			},
 			{
 				type: "note",
-				text: "Template image tags are pinned and CI-checked so catalog tags do not 404 silently. Templates that need host privileges (a mounted Docker socket, extra capabilities) can only be deployed and later edited by the instance admin.",
+				text: "Template images are checked in CI for registry availability. Templates that need host privileges (a mounted Docker socket, extra capabilities) can only be deployed and later edited by the instance admin.",
+			},
+			{
+				type: "p",
+				text: "MinIO compiles its pinned official source release on first start using the official Go image. Allow several minutes, memory headroom and about 2.3 GB of extra disk for the persistent build cache; a local 2 CPU / 1 GiB test took 73 seconds with modules downloaded and used the full memory limit. The first start needs internet access for Go modules and checksum verification. Objects remain in minio-data; minio-build caches the compiler output for later starts. Authentik uses the pinned 2026.8.4 server and worker, PostgreSQL without Redis, and /data for media. Existing saved compose files are not changed by a template update; check upstream upgrade notes before updating an older stack.",
 			},
 			{ type: "h2", text: "Bring your own catalog" },
 			{

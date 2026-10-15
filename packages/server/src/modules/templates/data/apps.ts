@@ -50,7 +50,7 @@ volumes:
 		id: "minio",
 		name: "MinIO",
 		description:
-			"High-performance, S3-compatible object storage — buckets, versioning and IAM policies on your own hardware.",
+			"S3-compatible object storage, built from the official source release on first start. Initial compilation takes several minutes; the build cache and data persist across restarts.",
 		logo: "minio",
 		tags: ["storage", "s3"],
 		links: {
@@ -73,16 +73,30 @@ volumes:
 		],
 		compose: `services:
   minio:
-    image: quay.io/minio/minio:latest
+    image: golang:1.27.2-alpine
     restart: always
-    command: server /data --console-address ":9001"
+    command:
+      - /bin/sh
+      - -ec
+      - go install github.com/minio/minio@v0.0.0-20251015172955-9e49d5e7a648 && exec /go/bin/minio server /data --console-address :9001
     environment:
       MINIO_ROOT_USER: \${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: \${MINIO_ROOT_PASSWORD}
+      CGO_ENABLED: "0"
+      GOTOOLCHAIN: local
+      GOCACHE: /go/cache/build
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9000/minio/health/live"]
+      start_period: 10m
+      interval: 10s
+      timeout: 5s
+      retries: 3
     volumes:
       - minio-data:/data
+      - minio-build:/go
 volumes:
   minio-data:
+  minio-build:
 `,
 	},
 	{

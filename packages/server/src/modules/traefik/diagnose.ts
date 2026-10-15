@@ -1,8 +1,10 @@
+import { X509Certificate } from "node:crypto";
 import { resolve4, resolve6 } from "node:dns/promises";
 import { readdir, readFile } from "node:fs/promises";
 import http from "node:http";
 import https from "node:https";
 import path from "node:path";
+import { checkServerIdentity, rootCertificates } from "node:tls";
 import { eq } from "drizzle-orm";
 import { parse as parseYaml } from "yaml";
 import { db } from "../../db";
@@ -16,6 +18,7 @@ import { shellQuote } from "../deployment/paths";
 import { notFound } from "../errors";
 import { readAcmeCertificates } from "../monitoring/platform-alerts";
 import { composePreviewTraefikKey } from "../preview/traefik";
+import { wildcardHostRule } from "./config-writer";
 import { getDynamicDir } from "./paths";
 
 /**
@@ -69,7 +72,7 @@ export function fileRoutesHost(
 	// appears in its rule. Match the same known shape without evaluating an
 	// arbitrary regexp from another file.
 	const wildcardMatcher = normalized.startsWith("*.")
-		? `HostRegexp(\`^[a-zA-Z0-9_-]+\\.${normalized.slice(2).replace(/[.]/g, "\\.")}$\`)`.toLowerCase()
+		? wildcardHostRule(normalized.slice(2)).toLowerCase()
 		: null;
 	return Object.values(routers).some((router) => {
 		if (typeof router?.rule !== "string") return false;
@@ -105,6 +108,14 @@ export function interpretProxyAnswer(
 	body?: string,
 ): Pick<DomainFinding, "status" | "title" | "detail" | "fix"> {
 	if (status === null) {
+		if (error && /certificate|self.signed|ERR_TLS_CERT/i.test(error)) {
+			return {
+				status: "warn",
+				title: "TLS verification prevented the routing probe",
+				detail: error,
+				fix: "Check the certificate's hostname, expiry and chain. The upstream and port findings still check the workload independently.",
+			};
+		}
 		return {
 			status: "skip",
 			title: "Traefik could not be reached from the panel",
@@ -158,12 +169,18 @@ interface RouteTarget {
 }
 
 async function loadTarget(domainId: string): Promise<{
-	domain: typeof domains.$inferSelect;
+	domain: typeof domains.$inferSelect & { certificate?: { certificateData: string } | null };
 	target: RouteTarget;
 }> {
 	const domain = await db.query.domains.findFirst({
 		where: eq(domains.domainId, domainId),
-		with: { application: true, compose: true, externalUpstream: true, previewDeployment: true },
+		with: {
+			application: true,
+			compose: true,
+			externalUpstream: true,
+			previewDeployment: true,
+			certificate: { columns: { certificateData: true } },
+		},
 	});
 	if (!domain) throw notFound("Domain not found");
 	const port = domain.port ?? 80;
@@ -564,12 +581,39 @@ interface ProxyAnswer {
 	location?: string;
 }
 
-const proxyRequest = (options: {
+/**
+ * Verify TLS normally, also trusting certificates explicitly installed on this
+ * proxy. Only the exact default leaf may have the generic "nixploy" hostname;
+ * uploaded/public certificates still undergo the normal hostname check.
+ * Chain signatures and validity dates are always verified by Node's TLS layer.
+ */
+export function proxyTlsOptions(
+	defaultCertificate?: string,
+	customCertificate?: string,
+): Pick<https.RequestOptions, "ca" | "checkServerIdentity" | "rejectUnauthorized"> {
+	const localCertificates = [defaultCertificate, customCertificate].filter(
+		(value): value is string => Boolean(value),
+	);
+	const defaultFingerprint = defaultCertificate
+		? new X509Certificate(defaultCertificate).fingerprint256
+		: undefined;
+	return {
+		rejectUnauthorized: true,
+		...(localCertificates.length > 0 ? { ca: [...rootCertificates, ...localCertificates] } : {}),
+		checkServerIdentity: (hostname, peer) => {
+			if (defaultFingerprint && peer.fingerprint256 === defaultFingerprint) return undefined;
+			return checkServerIdentity(hostname, peer);
+		},
+	};
+}
+
+export const proxyRequest = (options: {
 	hostname: string;
 	port: number;
 	tls: boolean;
 	hostHeader: string;
 	path: string;
+	tlsOptions?: ReturnType<typeof proxyTlsOptions>;
 }): Promise<ProxyAnswer> =>
 	new Promise((resolve, reject) => {
 		const lib = options.tls ? https : http;
@@ -597,7 +641,9 @@ const proxyRequest = (options: {
 					method: "GET",
 					headers: { Host: options.hostHeader, "User-Agent": "nixploy-diagnose" },
 					timeout: 8_000,
-					...(options.tls ? { servername: options.hostHeader, rejectUnauthorized: false } : {}),
+					...(options.tls
+						? { servername: options.hostHeader, ...options.tlsOptions, rejectUnauthorized: true }
+						: {}),
 				},
 				(stream) => {
 					response = stream;
@@ -637,14 +683,20 @@ async function probeProxy(
 	host: string,
 	https: boolean,
 	pathPrefix: string | null,
+	customCertificate?: string,
 ): Promise<DomainFinding> {
 	const candidates = process.env.NIXPLOY_TRAEFIK_INTERNAL_HOST
 		? [process.env.NIXPLOY_TRAEFIK_INTERNAL_HOST]
 		: ["nixploy-traefik", "127.0.0.1"];
 	const requestPath = pathPrefix && pathPrefix !== "/" ? pathPrefix : "/";
 	let lastError: string | null = null;
+	const defaultCertificate = await readFile(
+		path.join(getDynamicDir(), "default.crt"),
+		"utf8",
+	).catch(() => undefined);
 	for (const hostname of candidates) {
 		try {
+			const tlsOptions = proxyTlsOptions(defaultCertificate, customCertificate);
 			const hostHeader = host.startsWith("*.") ? `probe.${host.slice(2)}` : host;
 			let answer = await proxyRequest({
 				hostname,
@@ -652,6 +704,7 @@ async function probeProxy(
 				tls: https,
 				hostHeader,
 				path: requestPath,
+				tlsOptions,
 			});
 			// The platform may redirect every :80 request to :443, even for
 			// HTTPS-off rows. Inspect the final route instead of declaring a
@@ -671,6 +724,7 @@ async function probeProxy(
 						tls: true,
 						hostHeader,
 						path: `${redirect.pathname}${redirect.search}`,
+						tlsOptions,
 					});
 				}
 			}
@@ -766,7 +820,9 @@ export async function diagnoseDomain(domainId: string): Promise<DomainDiagnosis>
 		findings.push({ id: "proxy", status: "skip", title: "Layer-4 route", detail: "" });
 	} else {
 		findings.push(await probePort(target));
-		findings.push(await probeProxy(host, domain.https, domain.path));
+		findings.push(
+			await probeProxy(host, domain.https, domain.path, domain.certificate?.certificateData),
+		);
 	}
 	findings.push(await probeCertificate(domain));
 	return { host, verdict: verdictOf(findings), findings, checkedAt: new Date().toISOString() };

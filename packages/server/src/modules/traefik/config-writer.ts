@@ -275,8 +275,8 @@ export const assertEntrypointName = (name: string): string => {
  * becomes a plain Go regexp matching exactly one label — the same span a
  * wildcard certificate covers (`a.example.com` yes, `a.b.example.com` no).
  */
-const wildcardHostRule = (baseHost: string): string =>
-	`HostRegexp(\`^[a-zA-Z0-9_-]+\\.${baseHost.replace(/[.]/g, "\\.")}$\`)`;
+export const wildcardHostRule = (baseHost: string): string =>
+	`HostRegexp(\`^[a-zA-Z0-9_-]+\\.${baseHost.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$\`)`;
 
 /**
  * Reject Traefik rule metacharacters in Host/Path values. A backtick closes

@@ -26,4 +26,22 @@ describe("hardened git environment", () => {
 		expect("ENCRYPTION_KEY" in env).toBe(false);
 		expect("DATABASE_URL" in env).toBe(false);
 	});
+
+	it("still refuses local-file transport with the v4 environment allowlist", async () => {
+		const git = hardenedSimpleGit(dir);
+		git.env(gitProcessEnv(gitProtocolEnv()));
+		await expect(git.clone(`file://${dir}`, join(dir, "refused-clone"))).rejects.toThrow(
+			/transport 'file' not allowed/,
+		);
+	});
+
+	it("permits the platform SSH command without allowing editor execution", async () => {
+		const git = hardenedSimpleGit(dir);
+		git.env(gitProcessEnv({ ...gitProtocolEnv(), GIT_SSH_COMMAND: "ssh -o BatchMode=yes" }));
+		await git.init();
+		git.env(gitProcessEnv({ ...gitProtocolEnv(), VISUAL: "untrusted-editor" }));
+		await expect(git.raw(["config", "--list"])).rejects.toThrow(
+			/VISUAL.*(?:blocked|not permitted)/,
+		);
+	});
 });

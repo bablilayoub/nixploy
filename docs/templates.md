@@ -120,6 +120,36 @@ provider), every host attached — typed or hinted — also gets its A record at
 the linked provider; the result's `domains` and `dns` arrays say what happened
 per host (docs/domains-traefik.md § "DNS records created for you").
 
+## MinIO and Authentik startup notes
+
+MinIO's community release is distributed as source. The template uses the
+official `golang:1.27.2-alpine` image and compiles the pinned upstream version
+`v0.0.0-20251015172955-9e49d5e7a648` (release
+[`RELEASE.2025-10-15T17-29-55Z`](https://github.com/minio/minio/releases/tag/RELEASE.2025-10-15T17-29-55Z)).
+The first start needs outbound access to the Go module proxy and checksum
+database. Go verifies module checksums; `GOTOOLCHAIN=local` prevents a separate
+toolchain download. A ten-minute health-check grace period covers compilation.
+The API stays on port 9000 and console on 9001; root credentials retain the
+same env names. `minio-data:/data` preserves objects and `minio-build:/go`
+preserves the binary, modules and build cache. Deleting the build volume
+requires another download and compilation; deleting the data volume deletes
+objects.
+
+On the verification host (native Linux arm64), a cold compile with modules
+already downloaded took 73 seconds at 2 CPUs / 1 GiB and reached the full
+1 GiB memory limit. The cached build volume used about 2.3 GB; a warm restart
+took 1.5 seconds. Allow several minutes, memory headroom and this extra disk
+space on a small VPS. These measurements are observations, not minimum
+requirements or startup guarantees. Authenticated S3 writes, reads and data
+survival across recreation were checked.
+
+The Authentik template pins both server and worker to `2026.8.4`, uses
+PostgreSQL without Redis, and mounts the existing `authentik-media` volume at
+the current `/data` path. The database and templates volumes keep their names.
+Template updates apply to new deployments; saved compose files are not
+rewritten. Review the upstream upgrade notes before changing an existing
+Authentik deployment, especially one running a much older release.
+
 ## Template sources (bring your own catalog)
 
 The built-in catalog is compiled into the image, so it only changes with a

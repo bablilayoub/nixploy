@@ -77,42 +77,35 @@ volumes:
       POSTGRES_PASSWORD: \${PG_PASSWORD}
     volumes:
       - authentik-db:/var/lib/postgresql/data
-  redis:
-    image: redis:8-alpine
-    restart: always
   server:
-    image: ghcr.io/goauthentik/server:latest
+    image: ghcr.io/goauthentik/server:2026.8.4
     restart: always
     command: server
     depends_on:
       - postgresql
-      - redis
     environment:
       AUTHENTIK_SECRET_KEY: \${AUTHENTIK_SECRET_KEY}
       AUTHENTIK_POSTGRESQL__HOST: postgresql
       AUTHENTIK_POSTGRESQL__USER: authentik
       AUTHENTIK_POSTGRESQL__NAME: authentik
       AUTHENTIK_POSTGRESQL__PASSWORD: \${PG_PASSWORD}
-      AUTHENTIK_REDIS__HOST: redis
     volumes:
-      - authentik-media:/media
+      - authentik-media:/data
       - authentik-templates:/templates
   worker:
-    image: ghcr.io/goauthentik/server:latest
+    image: ghcr.io/goauthentik/server:2026.8.4
     restart: always
     command: worker
     depends_on:
       - postgresql
-      - redis
     environment:
       AUTHENTIK_SECRET_KEY: \${AUTHENTIK_SECRET_KEY}
       AUTHENTIK_POSTGRESQL__HOST: postgresql
       AUTHENTIK_POSTGRESQL__USER: authentik
       AUTHENTIK_POSTGRESQL__NAME: authentik
       AUTHENTIK_POSTGRESQL__PASSWORD: \${PG_PASSWORD}
-      AUTHENTIK_REDIS__HOST: redis
     volumes:
-      - authentik-media:/media
+      - authentik-media:/data
       - authentik-templates:/templates
 volumes:
   authentik-db:

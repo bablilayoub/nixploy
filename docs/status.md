@@ -5,6 +5,56 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## PR #13 review and CI remediation — 2026-10-15
+
+The first [PR #13](https://github.com/bablilayoub/nixploy/pull/13) CI run
+completed with three failures: the production dependency audit, two unavailable
+template image references, and two CodeQL findings. The remaining checks
+passed (the manual API job was intentionally skipped). The remediation keeps
+the original domain authorization and diagnostics fixes:
+
+- Wildcard diagnosis and route generation share complete regex escaping.
+- HTTPS routing probes keep TLS verification enabled. They trust Node's roots
+  and the explicitly installed default/selected custom PEM. Only the exact
+  default leaf bypasses hostname matching; other certificates must match the
+  requested host. TLS failure is a warning with separate upstream/port checks.
+  The custom PEM comes from the certificate row, avoiding container/host path
+  confusion. Real TLS tests reject an unrelated self-signed peer and a wrong
+  hostname; an actual local Swarm route returns a healthy HTTP 200 diagnosis.
+- Web and landing use Next 16.3.8; MCP SDK, simple-git and vulnerable transitive
+  packages are upgraded. The production audit reports **0 high, 0 critical,
+  9 moderate** findings. simple-git 4 uses the closed generated Git env list
+  and explicit SSH/protocol opt-ins; file transport and `VISUAL` remain blocked.
+  A real public source checkout, Dockerfile build and deployment passed.
+- Authentik server/worker pin the official `2026.8.4` image and use its current
+  PostgreSQL-only configuration and `/data` media mount. Actual server and
+  worker startup passed with the initial setup page returning HTTP 200.
+- MinIO's retired community image/binary endpoints could not be used. Its
+  template builds the exact upstream release from source using the official
+  Go image, with Go checksum verification and persistent build/data volumes.
+  Native arm64 startup, authenticated S3 put/get, persisted objects across
+  recreation, and an amd64 cross-build plus runtime checks under emulation
+  all passed.
+  At 2 CPUs / 1 GiB a cold compile with downloaded modules took **73.24 s**
+  and reached the memory limit; the arm64 build cache used **~2.3 GB** and a
+  warm restart took **1.52 s**. The template and operator docs disclose this
+  startup/resource cost. No catalogue entry was dropped and no gate relaxed.
+
+Local final gates: **203 server files, 2,865 passed, 1 skipped** including
+Postgres-backed tenancy; **96 web** and **93 CLI** tests; all four workspaces'
+TypeScript and production builds; strict repository Biome, knip 5.88.1, and all
+template registry probes passed. The REST golden path passed with a real source
+build (17 steps); the production panel's browser path passed in light/dark
+(9 steps, no page/console errors). The generated landing catalogue is updated.
+The pushed revision's CI results are tracked in the PR. Code review threads
+and alerts were not dismissed, and audit/CodeQL/template checks remain enabled.
+Temporary test stacks, databases, credentials and extra test networks were
+removed. All nine original Traefik files are unchanged and the four existing
+Swarm services still have their expected replicas.
+
+Live DNS writes and public ACME issuance still need the credentials and public
+test host described below. Local certificate trust is not public TLS proof.
+
 ## Domain / DNS → HTTPS verification — 2026-10-15
 
 **Local flow verified; live provider writes and public ACME remain unverified.**

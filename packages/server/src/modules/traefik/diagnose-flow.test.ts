@@ -105,6 +105,14 @@ beforeEach(async () => {
 });
 
 describe("domain diagnosis pipeline with external boundaries mocked", () => {
+	it("trusts the stored public custom chain independently of Traefik's container path", async () => {
+		boundary.domain.certificate = {
+			certificateData: "installed-public-chain",
+			certificatePath: "/etc/nixploy/traefik/dynamic/certificates/custom.crt",
+		};
+		await diagnoseDomain("domain-test");
+		expect(boundary.request.mock.calls.at(-1)?.[0].ca).toContain("installed-public-chain");
+	});
 	it("keeps an application 404 healthy and treats the ambiguous default body as advisory", async () => {
 		proxyAnswer(404, "<h1>Product not found</h1>");
 		expect((await diagnoseDomain("domain-test")).verdict).toBe("healthy");

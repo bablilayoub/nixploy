@@ -416,11 +416,18 @@ Wildcard checks resolve a child hostname and recognize the generated wildcard
 router. Distinct paths on the same host are allowed. HTTP-only checks for
 TCP/UDP routes are explicitly skipped.
 
-These are checks from the panel, not an external reachability or TLS-trust
-test. A stored ACME certificate is checked for expiry, but does not prove the
-certificate currently served to an internet client is trusted. A local
-`*.traefik.me` route using **None** exercises TLS with the self-signed default;
-public Let's Encrypt still needs a real hostname and reachable challenge ports.
+The HTTPS probe verifies certificate signatures and dates against Node's roots
+plus the explicitly installed default and selected custom certificate. Only
+the exact installed default leaf can use its generic `nixploy` hostname;
+other certificates must match the requested host. A different self-signed,
+expired or wrong-host certificate produces a TLS warning; upstream and port
+checks still run independently.
+
+These panel-side checks do not prove external reachability or public TLS
+trust. A local `*.traefik.me` route using **None** can pass the routing probe
+with its explicitly trusted self-signed default. Public Let's Encrypt still
+needs a real hostname and reachable challenge ports; confirm it from an
+external client without a local trust override.
 
 ## Real internet domains
 
