@@ -535,6 +535,17 @@ Backups tab → *Create backup*):
   `BGREWRITEAOF` concurrently. With ongoing writes, this captures a recoverable
   AOF prefix rather than one atomic latest-write instant; quiesce writes when
   the application requires a coordinated snapshot.
+- Backups of the same Redis service share a PostgreSQL session lock. Inside
+  its task container, `/tmp/.nixploy-redis-backup/` privately records the run
+  token and original rewrite setting (`previous`). Cleanup removes this marker
+  only after restoring that setting; a crash or failed reset can leave it
+  behind, and another backup refuses to proceed. For manual recovery, first
+  stop overlapping backup jobs and prove no copy is active. Inspect `previous`
+  privately on the exact Redis task, restore and verify that recorded value
+  with authenticated `CONFIG SET auto-aof-rewrite-percentage`, then remove
+  only that marker and retry. Never delete the marker first or assume the old
+  value was `100`. A container restart can discard `/tmp`; verify the actual
+  rewrite setting afterward even when the marker is gone.
 - **Restore** (Backups tab → restore icon, or `backup.restore`) requires the
   managed Redis service to be stopped at zero replicas with no active volume
   writers. It validates the gzip and `data/` tar subtree, stages a replacement
