@@ -26,9 +26,17 @@ import {
 	buildTraefikFileConfig,
 	type TraefikDomainEntry,
 	toTraefikDomainEntry,
+	wildcardHostRule,
 	writeAppTraefikConfig,
 	writeLocalFileAtomic,
 } from "./config-writer";
+
+it("escapes wildcard base metacharacters as literal host text", () => {
+	const rule = wildcardHostRule("a\\b+c.example.com");
+	const pattern = new RegExp(rule.slice("HostRegexp(`".length, -2));
+	expect(pattern.test("child.a\\b+c.example.com")).toBe(true);
+	expect(pattern.test("child.abbbc.example.com")).toBe(false);
+});
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

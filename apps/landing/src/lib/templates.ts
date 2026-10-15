@@ -68,7 +68,7 @@ export const templateCatalog: TemplateEntry[] = [
 		id: "minio",
 		name: "MinIO",
 		description:
-			"High-performance, S3-compatible object storage — buckets, versioning and IAM policies on your own hardware.",
+			"S3-compatible object storage, built from the official source release on first start. Initial compilation takes several minutes; the build cache and data persist across restarts.",
 		logo: "minio",
 		category: "Apps",
 		tags: ["storage", "s3"],
@@ -77,8 +77,8 @@ export const templateCatalog: TemplateEntry[] = [
 			docs: "https://min.io/docs/minio/linux/index.html",
 			github: "https://github.com/minio/minio",
 		},
-		images: ["quay.io/minio/minio:latest"],
-		volumes: ["minio-data"],
+		images: ["golang:1.27.2-alpine"],
+		volumes: ["minio-data", "minio-build"],
 		env: [
 			{ key: "MINIO_ROOT_USER", description: "Root (admin) username" },
 			{ key: "MINIO_ROOT_PASSWORD", description: "Root (admin) password", generated: true },
@@ -3199,7 +3199,7 @@ export const templateCatalog: TemplateEntry[] = [
 			docs: "https://docs.goauthentik.io",
 			github: "https://github.com/goauthentik/authentik",
 		},
-		images: ["postgres:17-alpine", "redis:8-alpine", "ghcr.io/goauthentik/server:latest"],
+		images: ["postgres:17-alpine", "ghcr.io/goauthentik/server:2026.8.4"],
 		volumes: ["authentik-db", "authentik-media", "authentik-templates"],
 		env: [
 			{

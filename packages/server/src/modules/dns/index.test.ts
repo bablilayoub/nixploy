@@ -133,6 +133,18 @@ describe("ensureDnsRecords", () => {
 		expect(outcome).toMatchObject({ status: "skipped", reason: "multiple-records" });
 	});
 
+	it("does not report a mixed round-robin set as already pointing here", async () => {
+		fake.records["example.com/app"] = [
+			{ id: "r1", name: "app", type: "A", content: "203.0.113.10" },
+			{ id: "r2", name: "app", type: "A", content: "198.51.100.8" },
+		];
+		const outcome = await ensureDnsRecord("app.example.com", { explicit: true });
+		expect(outcome).toMatchObject({ status: "skipped", reason: "multiple-records" });
+		expect(fake.calls.some((call) => call.startsWith("create") || call.startsWith("update"))).toBe(
+			false,
+		);
+	});
+
 	it("asks the provider for its zones once per batch", async () => {
 		await ensureDnsRecords(["a.example.com", "b.example.com", "a.example.com"]);
 		expect(fake.calls.filter((call) => call === "listZones")).toHaveLength(1);

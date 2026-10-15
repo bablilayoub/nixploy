@@ -5,6 +5,107 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## PR #13 review and CI remediation — 2026-10-15
+
+The first [PR #13](https://github.com/bablilayoub/nixploy/pull/13) CI run
+completed with three failures: the production dependency audit, two unavailable
+template image references, and two CodeQL findings. The remaining checks
+passed (the manual API job was intentionally skipped). The remediation keeps
+the original domain authorization and diagnostics fixes:
+
+- Wildcard diagnosis and route generation share complete regex escaping.
+- HTTPS routing probes keep TLS verification enabled. They trust Node's roots
+  and the explicitly installed default/selected custom PEM. Only the exact
+  default leaf bypasses hostname matching; other certificates must match the
+  requested host. TLS failure is a warning with separate upstream/port checks.
+  The custom PEM comes from the certificate row, avoiding container/host path
+  confusion. Real TLS tests reject an unrelated self-signed peer and a wrong
+  hostname; an actual local Swarm route returns a healthy HTTP 200 diagnosis.
+- Web and landing use Next 16.3.8; MCP SDK, simple-git and vulnerable transitive
+  packages are upgraded. The production audit reports **0 high, 0 critical,
+  9 moderate** findings. simple-git 4 uses the closed generated Git env list
+  and explicit SSH/protocol opt-ins; file transport and `VISUAL` remain blocked.
+  A real public source checkout, Dockerfile build and deployment passed.
+- Authentik server/worker pin the official `2026.8.4` image and use its current
+  PostgreSQL-only configuration and `/data` media mount. Actual server and
+  worker startup passed with the initial setup page returning HTTP 200.
+- MinIO's retired community image/binary endpoints could not be used. Its
+  template builds the exact upstream release from source using the official
+  Go image, with Go checksum verification and persistent build/data volumes.
+  Native arm64 startup, authenticated S3 put/get, persisted objects across
+  recreation, and an amd64 cross-build plus runtime checks under emulation
+  all passed.
+  At 2 CPUs / 1 GiB a cold compile with downloaded modules took **73.24 s**
+  and reached the memory limit; the arm64 build cache used **~2.3 GB** and a
+  warm restart took **1.52 s**. The template and operator docs disclose this
+  startup/resource cost. No catalogue entry was dropped and no gate relaxed.
+
+Local final gates: **203 server files, 2,865 passed, 1 skipped** including
+Postgres-backed tenancy; **96 web** and **93 CLI** tests; all four workspaces'
+TypeScript and production builds; strict repository Biome, knip 5.88.1, and all
+template registry probes passed. The REST golden path passed with a real source
+build (17 steps); the production panel's browser path passed in light/dark
+(9 steps, no page/console errors). The generated landing catalogue is updated.
+The pushed revision's CI results are tracked in the PR. Code review threads
+and alerts were not dismissed, and audit/CodeQL/template checks remain enabled.
+Temporary test stacks, databases, credentials and extra test networks were
+removed. All nine original Traefik files are unchanged and the four existing
+Swarm services still have their expected replicas.
+
+Live DNS writes and public ACME issuance still need the credentials and public
+test host described below. Local certificate trust is not public TLS proof.
+
+## Domain / DNS → HTTPS verification — 2026-10-15
+
+**Local flow verified; live provider writes and public ACME remain unverified.**
+The existing local database and Traefik environment contain no provider link or
+credentials. No disposable public hostname or externally reachable test host
+was supplied. Do not treat the local TLS result as a public certificate check.
+
+| Check | Result and evidence |
+| --- | --- |
+| Deploy and attach a domain | Fresh migrated database, actual API and panel on :3100; deployed `traefik/whoami:v1.10.1` to Swarm before attaching a temporary `*.traefik.me` host in the browser. Attaching added `nixploy-network`; removing the last domain detached it. |
+| DNS → route → HTTPS | Actual DNS A lookup returned `127.0.0.1`; generated YAML hot-loaded by existing Traefik; HTTP **301** → HTTPS **200**, expected workload and `X-Forwarded-Proto: https`. Browser navigation followed the same chain in both themes. |
+| Certificate trust | Default certificate subject/issuer `CN=nixploy`; strict TLS verification rejected it with `DEPTH_ZERO_SELF_SIGNED_CERT`. Insecure local probes and the workload browser explicitly accepted this certificate. No ACME request was made. |
+| Diagnosis and failure recovery | Healthy findings at port 80. Changing only the temporary domain to port 81 produced real HTTPS **502**, `broken`, port/network remediation and proxy failure in both themes. Restoring port 80 restored **200**. |
+| DNS controls in browser | Light/dark screenshots of provider linked/edited/error/empty-zone/certificates-only states, domain add/edit, row, explicit DNS retry and healthy/broken diagnosis; no page errors or console errors. Provider settings and zone responses were **mocked** to preserve the existing proxy; domain operations, no-provider retry and diagnosis used the actual API. |
+| Regression and gates | Server suite with `DATABASE_URL_TEST`: **202 files, 2,857 passed, 1 skipped**; web suite: **14 files, 96 passed**. Server, web and landing TypeScript passed. Changed-file Biome and repository-wide strict Biome passed. Independent diff review found no remaining actionable issues. Production build not run for this focused form fix. |
+
+Fixed during verification:
+
+- Mixed round-robin A records now always return `skipped / multiple-records`,
+  including a set containing this server's address. Previously it could claim
+  the record was correct while other addresses still routed elsewhere.
+- Hetzner record writes await action success; action failure, a missing result
+  and an unconfirmed 30-second deadline cannot report `created`/`updated`.
+  Provider clients remain covered by fixtures, not live-account requests.
+- Unsaved provider credentials now participate in Save/Discard and navigation
+  guards, disable Check link, clear stale zone results and ignore late replies.
+  Provider changes clear typed secrets and do not reuse another provider's
+  saved-field hints.
+- Diagnosis distinguishes application 404s from the ambiguous default response,
+  follows only same-host HTTPS redirects through its fixed internal proxy,
+  recognizes wildcard rules and resolves wildcard children, allows distinct
+  same-host paths, uses compose-preview service keys, reports unknown public IP
+  and inactive/expired ACME truthfully, and skips unsupported HTTP checks for
+  layer-4 routes. Proxy response sampling has an absolute eight-second limit.
+- Domain-by-ID operations now enforce the parent project's team visibility
+  before read/DNS/diagnosis/routing side effects; all seven hidden-domain
+  operations have a real Postgres regression case.
+
+Local screenshots, harnesses and raw results live in the ignored
+`.nixploy-data/verification/` directory of the verification worktree on branch
+`codex/domain-dns-https-verification`. Temporary workload/domain/project,
+verification databases and local credentials were removed; original Traefik
+files and existing services were preserved. No production deployment, release,
+push, live DNS write or certificate issuance was performed.
+
+**Remaining acceptance:** one scoped provider token and disposable public zone/
+hostname on an externally reachable test server. Run real Check link, attach,
+authoritative/public resolution, ensure-DNS against a disposable record pointing
+elsewhere, and a trusted HTTPS request after ACME issuance. One real provider
+completes the first live flow; the other seven record clients remain fixture-only.
+
 ## Template sources — 2026-09-20
 
 Syncing the public blueprints catalog rejected 114 of 532 entries. Measured
@@ -175,7 +276,8 @@ Landed in `apps/web` (uncommitted at the time of writing): UX audit F8/F9/F10/F1
 
 ## Next steps
 
-Refreshed 2026-09-20 (the v0.2-era list that stood here — sprint merges, the
+Domain/DNS items refreshed 2026-10-15; other entries retain the 2026-09-20
+snapshot (the v0.2-era list that stood here — sprint merges, the
 `v0.2.0` release, the multi-node test — is done or superseded; see the session
 log).
 
@@ -187,11 +289,13 @@ log).
    rolls an older proxy on boot (session log). Left: switch wildcard routers
    from `HostRegexp` to the native `Host(`*.example.com`)` matcher 3.7 added
    (it also lets TLS options apply to wildcards) — no functional need yet.
-3. **DNS record automation against a real provider.** Every request shape is
-   unit-tested against the providers' references (2026-09-20), none has been
-   sent to a live account: one Cloudflare zone and one DigitalOcean zone with
-   a scoped token, `Check link`, attach a domain, `dig`, then
-   `domain.ensureDnsRecord` on a record that points elsewhere.
+3. **DNS automation and public ACME against one real provider — blocked by
+   missing credentials/public test hostname.** Local DNS → Swarm → Traefik →
+   self-signed HTTPS, browser controls and failure recovery verified 2026-10-15
+   (results above). Still needed: scoped token + disposable zone/hostname on a
+   reachable host; real `Check link`, attach, public resolution, then
+   `domain.ensureDnsRecord` on a disposable record pointing elsewhere and a
+   trusted HTTPS request after ACME. Other provider APIs remain fixture-only.
 4. **Verify on the live VPS what CI cannot:** the harvester was checked on
    2026-09-20 (session log) — what is left there is a **full day** of output
    (the hour-close gzip and the 2 000-line marker were not reachable in a
@@ -209,12 +313,18 @@ log).
    box), per-team capability overlays (§7).
 8. **Panel surfaces added this week were typechecked and unit-tested, not
    browser-driven:** the upstream page, the preview panel's source switch, the
-   Runtime → History tab, the Update dialog's preflight, the diagnosis dialog,
-   the DNS provider card (switch + Check link) and the globe button on domain
-   rows. One pass in light and dark with the console open.
+   Runtime → History tab and the Update dialog's preflight. **Domain diagnosis,
+   the DNS provider card (switch + Check link) and domain-row controls were
+   browser-verified in light/dark on 2026-10-15**, with provider fixtures and
+   actual local domain/diagnosis requests distinguished above.
 
 ## Session log
 
+- **2026-10-15 (domain / DNS → HTTPS verification)** — completed the isolated
+  local Swarm/Traefik and light/dark browser pass, wrong-port failure/recovery,
+  DNS outcome and diagnosis fixes, and domain project-visibility regression
+  coverage. Full evidence, validation counts, cleanup and the remaining
+  live-provider/public-ACME requirement are recorded at the top of this file.
 - **2026-09-20 (v0.6.0 released; the two CI failures explained)** — the run before the tag was red on two jobs, neither ours. **Template image health**: `lscr.io/linuxserver/qbittorrent:latest` did not answer a manifest to the runner; the same probe passes locally in 14 s and the job was green on the four runs before it, so it is that registry, not the catalogue. **Upgrade from the latest release**: the golden path against the **v0.5.0 image** failed at `backup.runManually` with `pg_dump: … FATAL: database "smokedb" does not exist` — the second time today. Root cause: the smoke waits for the Swarm replica to be 1/1, but the postgres image creates `POSTGRES_DB` at the **end** of initdb, so a dump that connects in that window is told the database is missing. The smoke already retried this precondition, but only for `no running container`; its matcher now also covers the missing database and "system is starting up". **The product was deliberately left alone**: `isDatabaseStartingError` classifies a missing database as a hard error, with a test pinning it, because a renamed database must fail fast rather than hang for 90 s — so the waiting belongs in the smoke, where the name is known to be right. Then `tools/release.sh paas --bump minor` cut **v0.6.0** (2809 tests, biome, four typechecks) — the first release carrying the DNS record automation, template domain hints, remediation proposals, the lite profile, Traefik 3.7.13 and, for the maintainer's own box, the fix that makes git-backed template sources sync at all.
 - **2026-09-20 (every background pass now logs why, not just what)** — the production metrics failure (session log above) was a formatting bug, not a query bug: drizzle wraps a driver failure in an error whose message is only the SQL and the parameter list, and puts the reason on `cause`. `maintenance.ts` learned that in September and kept the fix to itself in a private helper, so every other pass still threw the reason away. `utils/error-cause.ts` `describeErrorWithCause` is that helper, shared and tested (chain-following, bounded, skips a cause that restates its wrapper, survives a cycle). A sweep — six readers over the server, every finding adversarially verified by a second agent, 77 agents — confirmed **69 sites in 29 files**; 58 of them were the same literal `error instanceof Error ? error.message : String(error)` inside a log call, and those were rewritten mechanically. Two needed hands: `bestEffort` (it logs through a computed level, so the pattern missed it — and every side effect that must not fail its caller comes through there), and `sampleLocalTarget`'s bare `catch {}`, which swallowed the alert-rule write, the incident insert and the notification read for every local service, so a database outage meant the alert silently never fired and nothing anywhere said why. **Deliberately not changed:** the 50 occurrences that build a message which is stored on a row or returned to a caller — adding the driver's text to `deployment.error_message` or a tRPC error is a different decision, and a user-facing string is not a log line.
 - **2026-09-20 (live VPS: what CI cannot check)** — read-only pass over the production box, now on v0.5.0 (46 migrations applied, `/api/ready` green on every check). **The runtime log harvester works on a real install**: three service directories under `/etc/nixploy/runtime-logs`, cursors advancing every pass (`state.json` `seenAt` within 30 s), one hour file per service per UTC hour. Nothing is gzipped yet and that is correct — the panel restarted 23 minutes earlier and no hour has closed since. Real disk rate, which no test could give us: an nginx-style access log at ~2 requests/minute writes ~300 bytes/line, 11.9 KB in 20 minutes, ≈ 860 KB/day; the whole store was 44 KB. Config dir 12 MB total on this install (metrics 2.0 MB, tools 9.4 MB, runtime logs 44 KB), database 11 MB. `docker stats` 23 minutes after boot: panel 380 MiB / 2 GiB, Postgres 54, Traefik 25 — 459 MiB, consistent with the 468 published from the 19 Sep measurement, so the landing figure stands. **The external upstream re-check still cannot be verified live: there are zero upstreams on the box.** Two things the log turned up. The template-source sync failure is here, five retries of it, which is how the bug was found. And `[metrics-history] Metrics history pass failed {"error":"Failed query: select distinct \"metric\" from \"alert_rule\" …"}` at 00:13:21 — **17 seconds before Postgres logged "terminating connection due to administrator command" and shut down for the update**. So the pass caught a planned restart and the incident is benign; the problem is that the log could not say so, because the handler drops drizzle's `cause` the way `maintenance.ts` used to. That is the next fix.

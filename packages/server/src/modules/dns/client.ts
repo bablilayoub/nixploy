@@ -62,6 +62,8 @@ export async function providerJson<T>(
 		body?: unknown;
 		/** Statuses to treat as "no such thing" and answer `null` for. */
 		notFound?: readonly number[];
+		/** Cap an individual request to a shorter remaining action deadline. */
+		timeoutMs?: number;
 	},
 ): Promise<T | null> {
 	const target = await assertPublicHttpsUrl(url);
@@ -73,7 +75,7 @@ export async function providerJson<T>(
 			...init.headers,
 		},
 		...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
-		timeoutMs: REQUEST_TIMEOUT_MS,
+		timeoutMs: Math.min(REQUEST_TIMEOUT_MS, init.timeoutMs ?? REQUEST_TIMEOUT_MS),
 	};
 	const response = await pinnedFetch(target, request);
 	if (init.notFound?.includes(response.status)) return null;

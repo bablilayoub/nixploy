@@ -93,9 +93,18 @@ export function hardenedSimpleGit(
 	return simpleGit({
 		baseDir,
 		...(options.timeoutMs ? { timeout: { block: options.timeoutMs } } : {}),
+		// v4 requires both the unsafe-operation opt-in below and an exact
+		// environment allowlist. These keys come from our closed hardening
+		// config and the platform-generated SSH command, never a tenant map.
+		allowEnvironment: [...Object.keys(gitProtocolEnv()), "GIT_SSH_COMMAND"],
 		// `allowUnsafeProtocolOverride` guards against a caller ENABLING
 		// `ext::`-style protocols; our override only ever disables them.
-		unsafe: { allowUnsafeConfigEnvCount: true, allowUnsafeProtocolOverride: true },
+		unsafe: {
+			allowUnsafeConfigEnvCount: true,
+			allowUnsafeProtocolOverride: true,
+			// buildGitSshCommand quotes our key path and fixes the SSH options.
+			allowUnsafeSshCommand: true,
+		},
 	});
 }
 

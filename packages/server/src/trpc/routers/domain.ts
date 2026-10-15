@@ -32,6 +32,7 @@ import { ensureDnsRecord } from "../../modules/dns";
 import { isUniqueViolation } from "../../modules/errors";
 import { syncPreviewTraefik } from "../../modules/preview/traefik";
 import { assertCapability } from "../../modules/projects";
+import { assertProjectVisible } from "../../modules/projects/project-scope";
 import {
 	diagnoseDomain,
 	domainMiddlewareKindSchema,
@@ -269,6 +270,13 @@ const assertDomainAccess = async (domainId: string, organizationId: string) => {
 	if (!domain || owner !== organizationId) {
 		throw new TRPCError({ code: "NOT_FOUND", message: "Domain not found" });
 	}
+	const project =
+		domain.application?.environment.project ??
+		domain.compose?.environment.project ??
+		domain.externalUpstream?.environment.project;
+	// A row id must respect the same team/project boundary as its parent's
+	// list and create procedures, including diagnosis and DNS retries.
+	if (project) assertProjectVisible(project.projectId, "Domain");
 	return domain;
 };
 

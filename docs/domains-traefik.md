@@ -235,8 +235,9 @@ included: docs/templates.md § "Adding a template") — also writes the host's
 3. the address is the server's public IPv4 — `NIXPLOY_PUBLIC_HOST` when it is
    an IP literal, else the detected one;
 4. an existing record with a different address is **updated**; a name that
-   already has several A records (round-robin) is **left alone**; a host no
-   zone contains is skipped with that reason.
+   already has several A records (round-robin) is **left alone** and reported
+   as skipped, even if one address matches this server; a host no zone
+   contains is skipped with that reason.
 
 Providers with a record client: **Cloudflare, DigitalOcean, Gandi LiveDNS,
 Hetzner DNS, Linode, Porkbun, Spaceship, Vultr**. Every other provider in the
@@ -263,6 +264,18 @@ globe button on the domain row, `nixploy domain ensure-dns <domainId>` or
 attached while the switch was off. **Check link** on the settings card lists
 the zones the stored credentials see, so a token scoped to the wrong zone
 shows up before the first domain does.
+
+Check link uses the **saved** credentials. Editing a credential, the provider
+or the automation switch disables the check until saved; stale results are
+cleared, including a check that finishes after an edit. Discard clears unsaved
+credential values. A successful zone list proves read access, not record-edit
+permission or certificate issuance.
+
+Hetzner applies record writes asynchronously. Nixploy waits for the returned
+action to succeed before reporting `created` or `updated`; an action error,
+missing result or lack of confirmation after 30 seconds is reported as
+`failed`. After a timeout, inspect the provider before retrying: the action
+may still finish there.
 
 Records are never deleted: removing a domain in Nixploy leaves the record
 in place, on purpose — a DNS name outliving a service is harmless, the
@@ -385,6 +398,36 @@ host:port in `servers[].url` → container running and listening on that port
 (`docker ps`) → service attached to `nixploy-network`
 (`docker service inspect <appName> --format '{{json .Spec.TaskTemplate.Networks}}'`;
 a service with no domain row is deliberately not on it).
+
+### Diagnose a route
+
+Use the stethoscope on the domain row, `nixploy domain diagnose`, or
+`domain.diagnose`. The checks follow DNS → route file → competing host/path
+rules → running upstream → shared network → container port → Traefik's answer
+→ certificate. Domain IDs obey the same organization and team/project
+visibility as their parent service, including DNS retries and diagnosis.
+
+An application's own 404 can mean the route works; the ambiguous default
+`404 page not found` response is a warning to inspect both router and app.
+Same-host HTTPS redirects are checked through Traefik's internal address,
+so a redirect cannot hide a final 502. Each proxy attempt has an eight-second
+absolute deadline and samples at most 1,024 characters from a 404 response.
+Wildcard checks resolve a child hostname and recognize the generated wildcard
+router. Distinct paths on the same host are allowed. HTTP-only checks for
+TCP/UDP routes are explicitly skipped.
+
+The HTTPS probe verifies certificate signatures and dates against Node's roots
+plus the explicitly installed default and selected custom certificate. Only
+the exact installed default leaf can use its generic `nixploy` hostname;
+other certificates must match the requested host. A different self-signed,
+expired or wrong-host certificate produces a TLS warning; upstream and port
+checks still run independently.
+
+These panel-side checks do not prove external reachability or public TLS
+trust. A local `*.traefik.me` route using **None** can pass the routing probe
+with its explicitly trusted self-signed default. Public Let's Encrypt still
+needs a real hostname and reachable challenge ports; confirm it from an
+external client without a local trust override.
 
 ## Real internet domains
 

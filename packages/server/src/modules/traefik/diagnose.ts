@@ -1,8 +1,10 @@
+import { X509Certificate } from "node:crypto";
 import { resolve4, resolve6 } from "node:dns/promises";
 import { readdir, readFile } from "node:fs/promises";
 import http from "node:http";
 import https from "node:https";
 import path from "node:path";
+import { checkServerIdentity, rootCertificates } from "node:tls";
 import { eq } from "drizzle-orm";
 import { parse as parseYaml } from "yaml";
 import { db } from "../../db";
@@ -16,6 +18,7 @@ import { shellQuote } from "../deployment/paths";
 import { notFound } from "../errors";
 import { readAcmeCertificates } from "../monitoring/platform-alerts";
 import { composePreviewTraefikKey } from "../preview/traefik";
+import { wildcardHostRule } from "./config-writer";
 import { getDynamicDir } from "./paths";
 
 /**
@@ -55,14 +58,36 @@ export interface DomainDiagnosis {
 // ── pure helpers (tested) ───────────────────────────────────────────────────
 
 /** Does this dynamic-config document carry an HTTP router for the host? */
-export function fileRoutesHost(document: unknown, host: string): boolean {
+export function fileRoutesHost(
+	document: unknown,
+	host: string,
+	pathPrefix?: string | null,
+): boolean {
 	const routers = (document as { http?: { routers?: Record<string, { rule?: unknown }> } })?.http
 		?.routers;
 	if (!routers || typeof routers !== "object") return false;
-	const needle = `\`${host.toLowerCase()}\``;
-	return Object.values(routers).some(
-		(router) => typeof router?.rule === "string" && router.rule.toLowerCase().includes(needle),
-	);
+	const normalized = host.toLowerCase();
+	const hostMatcher = `host(\`${normalized}\`)`;
+	// The writer emits HostRegexp for wildcards: the literal "*." never
+	// appears in its rule. Match the same known shape without evaluating an
+	// arbitrary regexp from another file.
+	const wildcardMatcher = normalized.startsWith("*.")
+		? wildcardHostRule(normalized.slice(2)).toLowerCase()
+		: null;
+	return Object.values(routers).some((router) => {
+		if (typeof router?.rule !== "string") return false;
+		const rule = router.rule.toLowerCase();
+		const matchesHost =
+			rule.includes(hostMatcher) || (wildcardMatcher !== null && rule.includes(wildcardMatcher));
+		// Several services in one org may deliberately share a host by path.
+		// Only identical public paths compete nondeterministically.
+		const matchesPath =
+			pathPrefix === undefined ||
+			(pathPrefix && pathPrefix !== "/"
+				? router.rule.includes(`PathPrefix(\`${pathPrefix}\`)`)
+				: !/\bPath(?:Prefix)?\(/i.test(router.rule));
+		return matchesHost && matchesPath;
+	});
 }
 
 /** One verdict from the findings: any failure is broken, any warning degraded. */
@@ -73,28 +98,37 @@ export function verdictOf(findings: readonly DomainFinding[]): DomainVerdict {
 }
 
 /**
- * What Traefik's own answer means. 404 with the default "404 page not found"
- * body is Traefik saying it has no router for the host; 502/503 is a router
- * that found no healthy server; anything else reached the application.
+ * An application-specific 404 is still a working route. The default Go 404
+ * body is ambiguous (Traefik and an application can both return it), so it
+ * calls for checking the router rather than declaring it missing.
  */
 export function interpretProxyAnswer(
 	status: number | null,
 	error: string | null,
+	body?: string,
 ): Pick<DomainFinding, "status" | "title" | "detail" | "fix"> {
 	if (status === null) {
+		if (error && /certificate|self.signed|ERR_TLS_CERT/i.test(error)) {
+			return {
+				status: "warn",
+				title: "TLS verification prevented the routing probe",
+				detail: error,
+				fix: "Check the certificate's hostname, expiry and chain. The upstream and port findings still check the workload independently.",
+			};
+		}
 		return {
 			status: "skip",
 			title: "Traefik could not be reached from the panel",
 			detail: error ?? "No answer.",
 		};
 	}
-	if (status === 404) {
+	if (status === 404 && (body === undefined || body.trim() === "404 page not found")) {
 		return {
-			status: "fail",
-			title: "Traefik answers 404 for this host",
+			status: "warn",
+			title: "The host answers 404; check the router and application",
 			detail:
-				"Traefik has no router for the host: the dynamic file is missing, not loaded yet, or its rule does not match.",
-			fix: "Save the domain again to rewrite the file; check the Traefik logs for a YAML the file provider refused.",
+				"This can be Traefik's default response when no router matches, or the application's own not-found response.",
+			fix: "Check the application's expected path and the route-file findings; if the file is correct, inspect Traefik logs for a file-provider error.",
 		};
 	}
 	if (status === 502 || status === 503) {
@@ -135,12 +169,18 @@ interface RouteTarget {
 }
 
 async function loadTarget(domainId: string): Promise<{
-	domain: typeof domains.$inferSelect;
+	domain: typeof domains.$inferSelect & { certificate?: { certificateData: string } | null };
 	target: RouteTarget;
 }> {
 	const domain = await db.query.domains.findFirst({
 		where: eq(domains.domainId, domainId),
-		with: { application: true, compose: true, externalUpstream: true, previewDeployment: true },
+		with: {
+			application: true,
+			compose: true,
+			externalUpstream: true,
+			previewDeployment: true,
+			certificate: { columns: { certificateData: true } },
+		},
 	});
 	if (!domain) throw notFound("Domain not found");
 	const port = domain.port ?? 80;
@@ -167,12 +207,15 @@ async function loadTarget(domainId: string): Promise<{
 			return {
 				domain,
 				target: {
-					key: preview.appName,
-					swarmService: null,
-					composeLabels: [
-						`com.docker.compose.project=${preview.appName}`,
-						`com.docker.compose.service=${domain.serviceName}`,
-					],
+					key,
+					swarmService: domain.compose.composeType === "stack" ? key : null,
+					composeLabels:
+						domain.compose.composeType === "stack"
+							? [`com.docker.swarm.service.name=${key}`]
+							: [
+									`com.docker.compose.project=${preview.appName}`,
+									`com.docker.compose.service=${domain.serviceName}`,
+								],
 					upstream: { host: key, port },
 					external: false,
 				},
@@ -233,9 +276,12 @@ async function probeDns(host: string): Promise<DomainFinding> {
 			detail: "Only reachable from this machine.",
 		};
 	}
+	// An apex need not have an A record when *.zone does. Resolve an actual
+	// child of the wildcard, just as the proxy probe does.
+	const queried = host.startsWith("*.") ? `nixploy-dns-check.${bare}` : bare;
 	const [v4, v6, serverIp] = await Promise.all([
-		resolve4(bare).catch(() => [] as string[]),
-		resolve6(bare).catch(() => [] as string[]),
+		resolve4(queried).catch(() => [] as string[]),
+		resolve6(queried).catch(() => [] as string[]),
 		detectPublicIp().catch(() => null),
 	]);
 	const resolved = [...v4, ...v6];
@@ -243,9 +289,18 @@ async function probeDns(host: string): Promise<DomainFinding> {
 		return {
 			id: "dns",
 			status: "fail",
-			title: `${bare} does not resolve`,
+			title: `${host} does not resolve`,
 			detail: "No A or AAAA record.",
-			fix: `Create an A record for ${bare} pointing at ${serverIp ?? "this server's public IP"}.`,
+			fix: `Create an A record for ${host} pointing at ${serverIp ?? "this server's public IP"}.`,
+		};
+	}
+	if (!serverIp) {
+		return {
+			id: "dns",
+			status: "warn",
+			title: `${host} resolves; the server's public IP could not be checked`,
+			detail: resolved.join(", "),
+			fix: "Compare these addresses with this server's public IP.",
 		};
 	}
 	if (serverIp && !v4.includes(serverIp)) {
@@ -265,7 +320,11 @@ async function probeDns(host: string): Promise<DomainFinding> {
 	};
 }
 
-async function probeRouteFile(key: string, host: string): Promise<DomainFinding> {
+async function probeRouteFile(
+	key: string,
+	host: string,
+	pathPrefix: string | null,
+): Promise<DomainFinding> {
 	const file = path.join(getDynamicDir(), `${key}.yml`);
 	let raw: string;
 	try {
@@ -291,7 +350,7 @@ async function probeRouteFile(key: string, host: string): Promise<DomainFinding>
 			fix: "Save the domain again to rewrite it.",
 		};
 	}
-	if (!fileRoutesHost(document, host)) {
+	if (!fileRoutesHost(document, host, pathPrefix)) {
 		return {
 			id: "file",
 			status: "fail",
@@ -303,7 +362,11 @@ async function probeRouteFile(key: string, host: string): Promise<DomainFinding>
 	return { id: "file", status: "ok", title: `Route file ${key}.yml routes ${host}`, detail: "" };
 }
 
-async function probeConflicts(key: string, host: string): Promise<DomainFinding> {
+async function probeConflicts(
+	key: string,
+	host: string,
+	pathPrefix: string | null,
+): Promise<DomainFinding> {
 	const dir = getDynamicDir();
 	let names: string[];
 	try {
@@ -319,9 +382,8 @@ async function probeConflicts(key: string, host: string): Promise<DomainFinding>
 	const others: string[] = [];
 	for (const name of names) {
 		const raw = await readFile(path.join(dir, name), "utf8").catch(() => "");
-		if (!raw.toLowerCase().includes(`\`${host.toLowerCase()}\``)) continue;
 		try {
-			if (fileRoutesHost(parseYaml(raw), host)) others.push(name);
+			if (fileRoutesHost(parseYaml(raw), host, pathPrefix)) others.push(name);
 		} catch {
 			// a broken file is someone else's finding
 		}
@@ -330,7 +392,7 @@ async function probeConflicts(key: string, host: string): Promise<DomainFinding>
 		return {
 			id: "conflicts",
 			status: "warn",
-			title: `${others.length} other file${others.length === 1 ? "" : "s"} also route${others.length === 1 ? "s" : ""} ${host}`,
+			title: `${others.length} other file${others.length === 1 ? "" : "s"} also route${others.length === 1 ? "s" : ""} ${host}${pathPrefix && pathPrefix !== "/" ? pathPrefix : "/"}`,
 			detail: others.join(", "),
 			fix: "Traefik picks one nondeterministically. Remove the stale domain (or the stale file) so exactly one remains.",
 		};
@@ -513,33 +575,107 @@ async function probePort(target: RouteTarget): Promise<DomainFinding> {
 	}
 }
 
-const proxyRequest = (options: {
+interface ProxyAnswer {
+	status: number;
+	body: string;
+	location?: string;
+}
+
+/**
+ * Verify TLS normally, also trusting certificates explicitly installed on this
+ * proxy. Only the exact default leaf may have the generic "nixploy" hostname;
+ * uploaded/public certificates still undergo the normal hostname check.
+ * Chain signatures and validity dates are always verified by Node's TLS layer.
+ */
+export function proxyTlsOptions(
+	defaultCertificate?: string,
+	customCertificate?: string,
+): Pick<https.RequestOptions, "ca" | "checkServerIdentity" | "rejectUnauthorized"> {
+	const localCertificates = [defaultCertificate, customCertificate].filter(
+		(value): value is string => Boolean(value),
+	);
+	const defaultFingerprint = defaultCertificate
+		? new X509Certificate(defaultCertificate).fingerprint256
+		: undefined;
+	return {
+		rejectUnauthorized: true,
+		...(localCertificates.length > 0 ? { ca: [...rootCertificates, ...localCertificates] } : {}),
+		checkServerIdentity: (hostname, peer) => {
+			if (defaultFingerprint && peer.fingerprint256 === defaultFingerprint) return undefined;
+			return checkServerIdentity(hostname, peer);
+		},
+	};
+}
+
+export const proxyRequest = (options: {
 	hostname: string;
 	port: number;
 	tls: boolean;
 	hostHeader: string;
 	path: string;
-}): Promise<number> =>
+	tlsOptions?: ReturnType<typeof proxyTlsOptions>;
+}): Promise<ProxyAnswer> =>
 	new Promise((resolve, reject) => {
 		const lib = options.tls ? https : http;
-		const request = lib.request(
-			{
-				hostname: options.hostname,
-				port: options.port,
-				path: options.path,
-				method: "GET",
-				headers: { Host: options.hostHeader, "User-Agent": "nixploy-diagnose" },
-				timeout: 8_000,
-				...(options.tls ? { servername: options.hostHeader, rejectUnauthorized: false } : {}),
-			},
-			(response) => {
-				response.resume();
-				resolve(response.statusCode ?? 0);
-			},
-		);
-		request.on("timeout", () => request.destroy(new Error("timed out")));
-		request.on("error", reject);
-		request.end();
+		let request: http.ClientRequest | undefined;
+		let response: http.IncomingMessage | undefined;
+		let settled = false;
+		const finish = (result: ProxyAnswer | Error) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(deadline);
+			response?.destroy();
+			request?.destroy();
+			if (result instanceof Error) reject(result);
+			else resolve(result);
+		};
+		// Socket timeouts measure inactivity: a response trickling bytes could
+		// otherwise hold this probe open indefinitely below the sample limit.
+		const deadline = setTimeout(() => finish(new Error("timed out after 8 seconds")), 8_000);
+		try {
+			request = lib.request(
+				{
+					hostname: options.hostname,
+					port: options.port,
+					path: options.path,
+					method: "GET",
+					headers: { Host: options.hostHeader, "User-Agent": "nixploy-diagnose" },
+					timeout: 8_000,
+					...(options.tls
+						? { servername: options.hostHeader, ...options.tlsOptions, rejectUnauthorized: true }
+						: {}),
+				},
+				(stream) => {
+					response = stream;
+					response.on("error", finish);
+					response.on("close", () => finish(new Error("response closed before completion")));
+					// Only the 404 distinction needs a body. Keep the sample bounded
+					// even when an application streams an arbitrarily large response.
+					if (response.statusCode !== 404) {
+						finish({
+							status: response.statusCode ?? 0,
+							body: "",
+							location: response.headers.location,
+						});
+						return;
+					}
+					let body = "";
+					response.setEncoding("utf8");
+					response.on("data", (chunk: string) => {
+						body += chunk.slice(0, 1024 - body.length);
+						if (body.length >= 1024) {
+							finish({ status: 404, body });
+						}
+					});
+					response.on("end", () => finish({ status: 404, body }));
+				},
+			);
+			request.on("timeout", () => finish(new Error("timed out")));
+			request.on("error", finish);
+			request.end();
+		} catch (error) {
+			finish(error instanceof Error ? error : new Error(String(error)));
+		}
 	});
 
 /** Traefik's own answer for the host, as a request from the panel with the Host header set. */
@@ -547,22 +683,52 @@ async function probeProxy(
 	host: string,
 	https: boolean,
 	pathPrefix: string | null,
+	customCertificate?: string,
 ): Promise<DomainFinding> {
 	const candidates = process.env.NIXPLOY_TRAEFIK_INTERNAL_HOST
 		? [process.env.NIXPLOY_TRAEFIK_INTERNAL_HOST]
 		: ["nixploy-traefik", "127.0.0.1"];
 	const requestPath = pathPrefix && pathPrefix !== "/" ? pathPrefix : "/";
 	let lastError: string | null = null;
+	const defaultCertificate = await readFile(
+		path.join(getDynamicDir(), "default.crt"),
+		"utf8",
+	).catch(() => undefined);
 	for (const hostname of candidates) {
 		try {
-			const status = await proxyRequest({
+			const tlsOptions = proxyTlsOptions(defaultCertificate, customCertificate);
+			const hostHeader = host.startsWith("*.") ? `probe.${host.slice(2)}` : host;
+			let answer = await proxyRequest({
 				hostname,
 				port: https ? 443 : 80,
 				tls: https,
-				hostHeader: host.startsWith("*.") ? `probe.${host.slice(2)}` : host,
+				hostHeader,
 				path: requestPath,
+				tlsOptions,
 			});
-			return { id: "proxy", ...interpretProxyAnswer(status, null) };
+			// The platform may redirect every :80 request to :443, even for
+			// HTTPS-off rows. Inspect the final route instead of declaring a
+			// healthy application from the redirect alone. The dial target
+			// stays on Traefik; a tenant-controlled Location is never dialed.
+			if (!https && answer.status >= 300 && answer.status < 400 && answer.location) {
+				let redirect: URL | null = null;
+				try {
+					redirect = new URL(answer.location);
+				} catch {
+					// A relative/application redirect already proves routing.
+				}
+				if (redirect?.protocol === "https:" && redirect.hostname === hostHeader && !redirect.port) {
+					answer = await proxyRequest({
+						hostname,
+						port: 443,
+						tls: true,
+						hostHeader,
+						path: `${redirect.pathname}${redirect.search}`,
+						tlsOptions,
+					});
+				}
+			}
+			return { id: "proxy", ...interpretProxyAnswer(answer.status, null, answer.body) };
 		} catch (error) {
 			lastError = error instanceof Error ? error.message : String(error);
 		}
@@ -571,6 +737,14 @@ async function probeProxy(
 }
 
 async function probeCertificate(domain: typeof domains.$inferSelect): Promise<DomainFinding> {
+	if (domain.protocol === "udp" || (domain.protocol === "tcp" && domain.tlsMode !== "terminate")) {
+		return {
+			id: "certificate",
+			status: "skip",
+			title: "Traefik does not terminate TLS for this route",
+			detail: domain.tlsMode === "passthrough" ? "The backend owns the certificate." : "",
+		};
+	}
 	if (domain.certificateType !== "letsencrypt") {
 		return {
 			id: "certificate",
@@ -582,9 +756,27 @@ async function probeCertificate(domain: typeof domains.$inferSelect): Promise<Do
 			detail: "",
 		};
 	}
-	const certificates = await readAcmeCertificates().catch(() => [] as Array<{ domain: string }>);
+	if ((domain.protocol ?? "http") === "http" && !domain.https) {
+		return {
+			id: "certificate",
+			status: "warn",
+			title: "Let's Encrypt is not enabled for this route",
+			detail: "HTTPS is off, so this route does not request a Let's Encrypt certificate.",
+			fix: "Enable HTTPS on the domain to request and serve its Let's Encrypt certificate.",
+		};
+	}
+	const certificates = await readAcmeCertificates().catch(() => []);
 	const wanted = domain.host.toLowerCase();
-	const found = certificates.some((entry) => entry.domain.toLowerCase() === wanted);
+	const found = certificates.find((entry) => entry.domain.toLowerCase() === wanted);
+	if (found?.notAfter != null && found.notAfter <= Date.now()) {
+		return {
+			id: "certificate",
+			status: "fail",
+			title: "The stored Let's Encrypt certificate has expired",
+			detail: `Expired ${new Date(found.notAfter).toISOString()}.`,
+			fix: "Check DNS, challenge reachability and the ACME renewal errors in Traefik logs.",
+		};
+	}
 	return found
 		? { id: "certificate", status: "ok", title: "Let's Encrypt certificate issued", detail: "" }
 		: {
@@ -604,8 +796,18 @@ export async function diagnoseDomain(domainId: string): Promise<DomainDiagnosis>
 	const layer4 = (domain.protocol ?? "http") !== "http";
 	const findings: DomainFinding[] = [];
 	findings.push(await probeDns(host));
-	findings.push(await probeRouteFile(target.key, host));
-	findings.push(await probeConflicts(target.key, host));
+	if (layer4) {
+		findings.push({
+			id: "file",
+			status: "skip",
+			title: "Layer-4 route",
+			detail: "TCP/UDP router rules are not checked by the HTTP diagnostician.",
+		});
+		findings.push({ id: "conflicts", status: "skip", title: "Layer-4 route", detail: "" });
+	} else {
+		findings.push(await probeRouteFile(target.key, host, domain.path));
+		findings.push(await probeConflicts(target.key, host, domain.path));
+	}
 	findings.push(await probeUpstreamTask(target));
 	findings.push(await probeSharedNetwork(target));
 	if (layer4) {
@@ -618,7 +820,9 @@ export async function diagnoseDomain(domainId: string): Promise<DomainDiagnosis>
 		findings.push({ id: "proxy", status: "skip", title: "Layer-4 route", detail: "" });
 	} else {
 		findings.push(await probePort(target));
-		findings.push(await probeProxy(host, domain.https, domain.path));
+		findings.push(
+			await probeProxy(host, domain.https, domain.path, domain.certificate?.certificateData),
+		);
 	}
 	findings.push(await probeCertificate(domain));
 	return { host, verdict: verdictOf(findings), findings, checkedAt: new Date().toISOString() };

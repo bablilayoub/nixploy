@@ -144,10 +144,10 @@ export async function ensureRecordWithClient(
 	const spec: DnsRecordSpec = { name, type: "A", content: ip, ttl: RECORD_TTL_SECONDS };
 
 	const existing = await client.listRecords(zone, name);
+	if (existing.length > 1) return skipped(host, "multiple-records", where);
 	if (existing.some((record) => record.content === ip)) {
 		return { host, status: "unchanged", message: `${fqdn} already points at ${ip}`, ...where };
 	}
-	if (existing.length > 1) return skipped(host, "multiple-records", where);
 	const [current] = existing;
 	if (current) {
 		await client.updateRecord(zone, current, spec);
