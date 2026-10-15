@@ -36,6 +36,8 @@ if(args[0]==='run') {
   console.log('fixture-container');
 } else if(args[0]==='inspect') {
   console.log('false');
+} else if(args[0]==='exec' && args.includes('curl')) {
+  process.stdout.write(process.env.DR_SCENARIO==='not-ready'?'503':'200');
 } else if(args[0]==='exec' && args.includes('psql')) {
   if(args.includes('-c')) {
     const query=args[args.indexOf('-c')+1];
@@ -50,7 +52,7 @@ if(args[0]==='run') {
 		);
 		await writeFile(
 			path.join(bin, "curl"),
-			"#!/usr/bin/env node\nprocess.stdout.write(process.env.DR_SCENARIO==='not-ready'?'503':'200');\n",
+			"#!/usr/bin/env node\nprocess.stderr.write('Readiness must run inside the isolated panel container');\nprocess.exit(99);\n",
 			{ mode: 0o700 },
 		);
 		const dump = path.join(directory, "instance.sql.gz");
@@ -122,6 +124,21 @@ if(args[0]==='run') {
 	}
 }
 
+function assertScratchCleanup(calls) {
+	const postgres = calls.find((args) => args[0] === "run" && !args.includes("NIXPLOY_ROLE=panel"));
+	assert.ok(postgres, "Scratch Postgres was not created");
+	const name = postgres[postgres.indexOf("--name") + 1];
+	assert.match(name, /^nixploy-dr-[a-f0-9]{8}$/);
+	assert.deepEqual(
+		calls.filter((args) => args[0] === "rm"),
+		[
+			["rm", "-fv", `${name}-panel`],
+			["rm", "-fv", name],
+		],
+		"Cleanup must remove only both owned containers and their anonymous volumes",
+	);
+}
+
 test("requested boot fails when an image cannot be resolved", async () => {
 	await rehearsal({ boot: true, omitImage: true }, ({ status, output, calls }) => {
 		assert.notEqual(status, 0);
@@ -144,7 +161,7 @@ for (const [scenario, diagnostic] of [
 			assert.notEqual(status, 0);
 			assert.match(output, diagnostic);
 			assert.doesNotMatch(output, /DR restore test passed/);
-			assert.ok(calls.some((args) => args[0] === "rm"));
+			assertScratchCleanup(calls);
 			assert.ok(calls.some((args) => args[0] === "network" && args[1] === "rm"));
 		});
 	});
@@ -178,6 +195,7 @@ for (const options of [
 test("successful readiness uses supplied keys off argv and cannot claim worker jobs", async () => {
 	await rehearsal({ boot: true }, ({ status, output, calls }) => {
 		assert.equal(status, 0, output);
+		assertScratchCleanup(calls);
 		assert.match(output, /Readiness only: authenticate, check decrypted secrets/);
 		const panel = calls.find((args) => args[0] === "run" && args.includes("NIXPLOY_ROLE=panel"));
 		assert.ok(panel);
@@ -188,7 +206,27 @@ test("successful readiness uses supplied keys off argv and cannot claim worker j
 			),
 		);
 		assert.ok(panel.includes("fixture/panel@sha256:pinned"));
-		assert.ok(panel.some((value) => /^127\.0\.0\.1:\d+:3000$/.test(value)));
+		assert.equal(panel.includes("-p"), false, "The isolated panel must not publish a host port");
+		assert.ok(panel.includes("BETTER_AUTH_URL=http://127.0.0.1:3000"));
+		const panelName = panel[panel.indexOf("--name") + 1];
+		assert.deepEqual(
+			calls.filter((args) => args[0] === "exec" && args.includes("curl")),
+			[
+				[
+					"exec",
+					panelName,
+					"curl",
+					"-s",
+					"-o",
+					"/dev/null",
+					"-w",
+					"%{http_code}",
+					"--max-time",
+					"5",
+					"http://127.0.0.1:3000/api/ready",
+				],
+			],
+		);
 		assert.ok(calls.some((args) => args[0] === "network" && args.includes("--internal")));
 		assert.equal(JSON.stringify(calls).includes(encryptionKey), false);
 		assert.equal(JSON.stringify(calls).includes(priorEncryptionKey), false);

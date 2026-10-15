@@ -36,6 +36,16 @@ Two things to know before pointing production at `local`:
 both providers; only the `provider` column differs. The provider cannot be
 changed after creation (a local row has no bucket settings to update).
 
+S3 endpoints must resolve to public addresses unless the instance admin enables
+**Settings → Platform → Outbound requests → Allow private network targets**
+(`allowPrivateEgress`). Self-hosted S3 on a LAN or loopback address needs that
+setting, including destinations created before this guard was added. The Swarm
+overlay (`10.0.0.0/8`), platform service names and cloud metadata endpoints stay
+blocked even when the setting is on, including through DNS aliases. Endpoint
+checks apply when connecting, so a saved destination can fail after the setting
+is disabled or its DNS answers change. Use **Test connection** before the next
+backup after changing the endpoint, DNS or egress setting.
+
 ## Run history
 
 Every execution of a database dump, volume archive, instance export or restore
@@ -171,6 +181,19 @@ replacement, space for both staged restored files and the previous contents.
 Volume backups do not pause application writes: coordinate application/database
 snapshots when consistency requires it.
 
+Volume and Redis replacements acquire `.nixploy-restore-lock/` at the target
+volume root before staging. Its `owner` file records a random operation token;
+the filesystem lock fences other panel/worker processes, including restores
+through another database or managed-server connection. Existing locks or
+`.nixploy-restore-*` / `.nixploy-previous-*` recovery trees block another
+restore. They have no expiry and are never automatically treated as stale.
+A crash, a detached helper or a failed rollback can leave them behind. Keep
+the service stopped, prove that no restore helper or other volume writer is
+active on the exact server and volume, then inspect the matching staged and
+previous trees and complete recovery manually. Preserve those trees until
+the intended data is safely restored; remove the lock only after recovery
+and helper shutdown are confirmed. Removing a marker alone is not recovery.
+
 ## How the dump runs
 
 The runner parses `DATABASE_URL` from the environment. It prefers a local
@@ -247,7 +270,11 @@ the database first in that case.
    path is on that daemon's host and is mounted for the real readiness Docker
    check; **never supply the production socket**. A read-only socket mount
    does not make the Docker API read-only. The scratch panel uses role `panel`
-   (no worker or cron jobs), a private internal network and loopback ports.
+   (no worker or cron jobs) and a private internal network. It probes
+   `http://127.0.0.1:3000/api/ready` with `docker exec` inside the panel
+   container; the panel has no published host port. Internal Docker networks
+   may also prevent host access to the scratch Postgres port. With `--keep`,
+   inspect either container through `docker exec` rather than a host URL.
    It does not restore config or run migrations; use an image matching the
    dump's schema. Missing inputs, container-start failures and readiness
    failures make `--boot` fail.

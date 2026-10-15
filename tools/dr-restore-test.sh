@@ -10,27 +10,28 @@
 #
 # What it does:
 #   1. finds the newest instance dump (or takes the one you pass);
-#   2. starts a THROWAWAY Postgres container on a free high port;
+#   2. starts a THROWAWAY Postgres container on a private internal network;
 #   3. restores the dump into it with `psql -v ON_ERROR_STOP=1` — the exact
 #      command docs/instance-backup.md tells operators to run;
 #   4. asserts the core tables exist and prints their row counts;
 #   5. with --boot, starts the panel image against the restored database and
 #      waits for `GET /api/ready` to answer 200 (readiness only, not full DR);
-#   6. removes the container (and the booted panel) in a trap, always.
+#   6. removes the containers and their anonymous volumes in a trap, always.
 #
 # Nothing is written to the live database, the config directory or the Swarm.
-# --boot uses a private internal network, loopback ports and role=panel (no jobs).
+# --boot uses a private internal network and role=panel (no jobs).
+# Readiness is checked inside the panel container; no panel port is published.
 #
 # Flags:
 #   --dump <file>     gzipped SQL dump to restore (default: newest found)
 #   --dir <dir>       where to look for dumps (default: <config>/backups)
-#   --port <port>     host port for the scratch Postgres (default: a free one)
+#   --port <port>     requested scratch Postgres host port (internal-network access varies)
 #   --image <ref>     Postgres image        (default: postgres:17-alpine)
 #   --boot            require panel readiness against the restored database
 #   --panel-image <ref>  panel image for --boot (default: the running service's)
 #   --recovery-env <file>  Docker-format recovery keys; see docs/instance-backup.md
 #   --docker-socket <path>  explicit DISPOSABLE daemon socket for --boot readiness
-#   --keep            leave the scratch container running for inspection
+#   --keep            leave scratch resources for inspection with docker exec
 #
 # Environment:
 #   NIXPLOY_CONFIG_DIR   config directory (default: /etc/nixploy)
@@ -79,7 +80,6 @@ command -v docker >/dev/null 2>&1 || die "docker is required"
 docker info >/dev/null 2>&1 || die "the Docker daemon is not reachable"
 
 if [ "${BOOT}" = "1" ]; then
-	command -v curl >/dev/null 2>&1 || die "curl is required for --boot"
 	[ -n "${RECOVERY_ENV}" ] && [ -f "${RECOVERY_ENV}" ] \
 		|| die "--boot requires --recovery-env <file>; keys are not in the instance archive"
 	# A dedicated Docker env file, not a sourced shell .env. Docker preserves
@@ -112,9 +112,9 @@ PANEL_CONTAINER="${SCRATCH}-panel"
 SCRATCH_NETWORK="${SCRATCH}-network"
 
 cleanup() {
-	[ "${KEEP}" = "1" ] && { warn "Leaving scratch resources (--keep). Cleanup: docker rm -f ${PANEL_CONTAINER} ${SCRATCH}; docker network rm ${SCRATCH_NETWORK}"; return; }
-	docker rm -f "${PANEL_CONTAINER}" >/dev/null 2>&1 || true
-	docker rm -f "${SCRATCH}" >/dev/null 2>&1 || true
+	[ "${KEEP}" = "1" ] && { warn "Leaving scratch resources (--keep). Cleanup: docker rm -fv ${PANEL_CONTAINER} ${SCRATCH}; docker network rm ${SCRATCH_NETWORK}"; return; }
+	docker rm -fv "${PANEL_CONTAINER}" >/dev/null 2>&1 || true
+	docker rm -fv "${SCRATCH}" >/dev/null 2>&1 || true
 	docker network rm "${SCRATCH_NETWORK}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -153,7 +153,7 @@ free_port() {
 
 docker network create --internal "${SCRATCH_NETWORK}" >/dev/null \
 	|| die "Could not create the isolated scratch network"
-info "scratch postgres: ${SCRATCH} on 127.0.0.1:${PG_PORT} (${PG_IMAGE})"
+info "scratch postgres: ${SCRATCH} (${PG_IMAGE}; inspect with docker exec)"
 docker run -d --name "${SCRATCH}" \
 	--network "${SCRATCH_NETWORK}" \
 	-e POSTGRES_USER=nixploy \
@@ -234,20 +234,17 @@ users="$(psql_scalar 'select count(*) from "user"')"
 # ── 5. optional: boot the panel against the restored database ────────────────
 boot_panel() {
 	[ "${BOOT}" = "1" ] || return 0
-	local port
-	port="$(free_port)"
 	printf '\n   %sBooting %s against the restored database%s\n' "${C_BOLD}" "${PANEL_IMAGE}" "${C_RESET}"
 	# Restore keys without placing them on argv. No worker/crons, no external
 	# network: recovered notification destinations must not receive drill events.
 	# The explicit socket must belong to a disposable daemon, never production.
 	docker run -d --name "${PANEL_CONTAINER}" \
 		--network "${SCRATCH_NETWORK}" \
-		-p "127.0.0.1:${port}:3000" \
 		--env-file "${RECOVERY_ENV}" \
 		--mount "type=bind,source=${DOCKER_SOCKET},target=/var/run/docker.sock,readonly" \
 		-e "DATABASE_URL=postgres://nixploy:nixploy@${SCRATCH}:5432/nixploy" \
 		-e PORT=3000 \
-		-e "BETTER_AUTH_URL=http://127.0.0.1:${port}" \
+		-e BETTER_AUTH_URL=http://127.0.0.1:3000 \
 		-e NIXPLOY_ROLE=panel \
 		-e DOCKER_SOCKET=/var/run/docker.sock \
 		-e NIXPLOY_DISABLE_TRAEFIK_BOOT=1 \
@@ -255,7 +252,8 @@ boot_panel() {
 		"${PANEL_IMAGE}" >/dev/null || die "Could not start the requested panel container"
 	local code="" tries=0
 	while [ "${tries}" -lt 90 ]; do
-		code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:${port}/api/ready" 2>/dev/null || true)"
+		code="$(docker exec "${PANEL_CONTAINER}" curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+			"http://127.0.0.1:3000/api/ready" 2>/dev/null || true)"
 		[ "${code}" = "200" ] && break
 		docker inspect -f '{{.State.Running}}' "${PANEL_CONTAINER}" 2>/dev/null | grep -qx true || break
 		sleep 2
