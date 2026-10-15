@@ -13,6 +13,8 @@ const boundary = vi.hoisted(() => ({
 	readFile: vi.fn(),
 	listTasks: vi.fn(),
 	listContainers: vi.fn(),
+	inspectService: vi.fn(),
+	exec: vi.fn(),
 }));
 
 vi.mock("../../db", () => ({
@@ -28,17 +30,13 @@ vi.mock("node:fs/promises", () => ({
 }));
 vi.mock("node:http", () => ({ default: { request: boundary.request } }));
 vi.mock("node:https", () => ({ default: { request: boundary.request } }));
-vi.mock("../../utils/exec", () => ({ execAsync: vi.fn(async () => ({ stdout: "", stderr: "" })) }));
+vi.mock("../../utils/exec", () => ({ execAsync: boundary.exec }));
 vi.mock("../cluster/public-host", () => ({ detectPublicIp: boundary.publicIp }));
 vi.mock("../monitoring/platform-alerts", () => ({ readAcmeCertificates: boundary.readAcme }));
 vi.mock("../deployment/docker", () => ({
 	getDocker: async () => ({
 		listTasks: boundary.listTasks,
-		getService: () => ({
-			inspect: async () => ({
-				Spec: { TaskTemplate: { Networks: [{ Target: "nixploy-network" }] } },
-			}),
-		}),
+		getService: (name: string) => ({ inspect: () => boundary.inspectService(name) }),
 		getNetwork: () => ({ inspect: async () => ({ Id: "nixploy-network" }) }),
 		listContainers: boundary.listContainers,
 	}),
@@ -100,7 +98,19 @@ beforeEach(async () => {
 	boundary.resolve4.mockResolvedValue(["203.0.113.20"]);
 	boundary.publicIp.mockResolvedValue("203.0.113.20");
 	boundary.readAcme.mockResolvedValue([]);
+	boundary.exec.mockResolvedValue("");
 	boundary.listTasks.mockResolvedValue([{ Status: { State: "running" } }]);
+	boundary.inspectService.mockImplementation(async (name: string) => ({
+		Spec: {
+			Name: name,
+			Labels: {
+				"com.docker.stack.namespace":
+					(boundary.domain.previewDeployment as { appName?: string } | undefined)?.appName ??
+					(boundary.domain.compose as { appName?: string } | undefined)?.appName,
+			},
+			TaskTemplate: { Networks: [{ Target: "nixploy-network" }] },
+		},
+	}));
 	boundary.listContainers.mockResolvedValue([
 		{ NetworkSettings: { Networks: { "nixploy-network": {} } } },
 	]);
@@ -209,18 +219,139 @@ describe("domain diagnosis pipeline with external boundaries mocked", () => {
 		expect(result.findings.find((finding) => finding.id === "conflicts")?.status).toBe("warn");
 	});
 
-	it("uses the compose preview's per-service route key and swarm service", async () => {
+	it.each(["shop-pr-7_shop-pr-7-web", "shop-pr-7_web"])(
+		"keeps the preview route alias while inspecting physical Swarm service %s",
+		async (physical) => {
+			delete boundary.domain.application;
+			boundary.domain.compose = {
+				appName: "shop",
+				composeType: "stack",
+				isolatedDeployment: true,
+				suffix: "production-only",
+			};
+			boundary.domain.serviceName = "web";
+			boundary.domain.previewDeployment = { appName: "shop-pr-7" };
+			await routeFile("shop-pr-7_web");
+			boundary.inspectService.mockImplementation(async (name: string) => {
+				if (name !== physical)
+					throw Object.assign(new Error("No such service"), { statusCode: 404 });
+				return {
+					Spec: {
+						Labels: { "com.docker.stack.namespace": "shop-pr-7" },
+						TaskTemplate: { Networks: [{ Target: "nixploy-network" }] },
+					},
+				};
+			});
+			const result = await diagnoseDomain("domain-test");
+			expect(result.findings.find((finding) => finding.id === "file")?.status).toBe("ok");
+			expect(boundary.listTasks).toHaveBeenCalledWith({
+				filters: { service: [physical], "desired-state": ["running"] },
+			});
+			expect(boundary.exec).toHaveBeenCalledWith(
+				expect.stringContaining("shop-pr-7_web"),
+				expect.any(Object),
+			);
+			expect(boundary.inspectService.mock.calls.flat().join(" ")).not.toContain("production-only");
+		},
+	);
+
+	it.each([
+		{ label: "qualified", suffix: "", physical: "shop_shop-web" },
+		{ label: "qualified isolated", suffix: "release1", physical: "shop_shop-web-release1" },
+		{ label: "legacy", suffix: "", physical: "shop_web" },
+		{ label: "legacy isolated", suffix: "release1", physical: "shop_web-release1" },
+	])(
+		"diagnoses the $label Stack service without changing its route alias",
+		async ({ suffix, physical }) => {
+			delete boundary.domain.application;
+			boundary.domain.compose = {
+				appName: "shop",
+				composeType: "stack",
+				isolatedDeployment: Boolean(suffix),
+				suffix,
+			};
+			boundary.domain.serviceName = "web";
+			await routeFile(`shop_web${suffix ? `-${suffix}` : ""}`);
+			boundary.inspectService.mockImplementation(async (name: string) => {
+				if (name !== physical)
+					throw Object.assign(new Error("No such service"), { statusCode: 404 });
+				return {
+					Spec: {
+						Name: name,
+						Labels: { "com.docker.stack.namespace": "shop" },
+						TaskTemplate: { Networks: [{ Target: "nixploy-network" }] },
+					},
+				};
+			});
+			const result = await diagnoseDomain("domain-test");
+			for (const id of ["file", "upstream", "network"])
+				expect(result.findings.find((finding) => finding.id === id)?.status).toBe("ok");
+			expect(boundary.exec).toHaveBeenCalledWith(
+				expect.stringContaining(`shop_web${suffix ? `-${suffix}` : ""}`),
+				expect.any(Object),
+			);
+			expect(boundary.listTasks).toHaveBeenCalledWith({
+				filters: { service: [physical], "desired-state": ["running"] },
+			});
+			expect(boundary.listContainers).not.toHaveBeenCalled();
+		},
+	);
+
+	it("reports a missing Stack instead of trusting stale task records", async () => {
 		delete boundary.domain.application;
 		boundary.domain.compose = { appName: "shop", composeType: "stack" };
 		boundary.domain.serviceName = "web";
-		boundary.domain.previewDeployment = { appName: "shop-pr-7" };
-		await routeFile("shop-pr-7_web");
+		await routeFile("shop_web");
+		boundary.inspectService.mockRejectedValue(
+			Object.assign(new Error("No such service"), { statusCode: 404 }),
+		);
 		const result = await diagnoseDomain("domain-test");
-		expect(result.findings.find((finding) => finding.id === "file")?.status).toBe("ok");
-		expect(boundary.listTasks).toHaveBeenCalledWith({
-			filters: { service: ["shop-pr-7_web"], "desired-state": ["running"] },
-		});
+		expect(result.findings.find((finding) => finding.id === "upstream")?.status).toBe("fail");
+		expect(result.findings.find((finding) => finding.id === "network")?.status).toBe("skip");
+		expect(boundary.listTasks).not.toHaveBeenCalled();
 	});
+
+	it("does not mask an unhealthy qualified Stack with a healthy legacy service", async () => {
+		delete boundary.domain.application;
+		boundary.domain.compose = { appName: "shop", composeType: "stack" };
+		boundary.domain.serviceName = "web";
+		await routeFile("shop_web");
+		boundary.listTasks.mockImplementation(
+			async ({ filters }: { filters: { service: string[] } }) =>
+				filters.service[0] === "shop_shop-web" ? [] : [{ Status: { State: "running" } }],
+		);
+		boundary.inspectService.mockImplementation(async (name: string) => ({
+			Spec: {
+				Name: name,
+				Labels: { "com.docker.stack.namespace": "shop" },
+				TaskTemplate: { Networks: name === "shop_shop-web" ? [] : [{ Target: "nixploy-network" }] },
+			},
+		}));
+		const result = await diagnoseDomain("domain-test");
+		for (const id of ["upstream", "network"])
+			expect(result.findings.find((finding) => finding.id === id)?.status).toBe("fail");
+		expect(boundary.inspectService.mock.calls.flat()).not.toContain("shop_web");
+	});
+
+	it.each(["transport", "foreign namespace"])(
+		"does not fall back from a %s error inspecting the qualified Stack",
+		async (reason) => {
+			delete boundary.domain.application;
+			boundary.domain.compose = { appName: "shop", composeType: "stack" };
+			boundary.domain.serviceName = "web";
+			await routeFile("shop_web");
+			boundary.inspectService.mockImplementation(async () => {
+				if (reason === "transport")
+					throw Object.assign(new Error("Docker unavailable"), { statusCode: 503 });
+				return { Spec: { Labels: { "com.docker.stack.namespace": "other-project" } } };
+			});
+			const result = await diagnoseDomain("domain-test");
+			for (const id of ["upstream", "network"])
+				expect(result.findings.find((finding) => finding.id === id)?.status).toBe("skip");
+			expect(boundary.inspectService.mock.calls.flat()).not.toContain("shop_web");
+			expect(boundary.listTasks).not.toHaveBeenCalled();
+		},
+	);
 
 	it.each([
 		{ label: "qualified", suffix: "", deployed: "shop-web" },

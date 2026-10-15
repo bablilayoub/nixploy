@@ -207,6 +207,30 @@ describe("loadSwarmSnapshot", () => {
 		docker.fail = true;
 		expect(await loadSwarmSnapshot()).toBeNull();
 	});
+
+	it("captures qualified Stack source labels without extra Docker calls or guessing legacy keys", async () => {
+		const qualified = service("s1", "blog_blog-db-release1", {
+			"com.docker.stack.namespace": "blog",
+		});
+		docker.services = [
+			{
+				...qualified,
+				Spec: {
+					...qualified.Spec,
+					TaskTemplate: {
+						ContainerSpec: { Labels: { "io.nixploy.compose.source-service": "db" } },
+					},
+				},
+			},
+			service("s2", "blog_blog-db", { "com.docker.stack.namespace": "blog" }),
+		];
+		const snapshot = await loadSwarmSnapshot();
+		expect(snapshot?.sourceServiceNames?.get("blog_blog-db-release1")).toBe("db");
+		expect(snapshot?.sourceServiceNames?.has("blog_blog-db")).toBe(false);
+		expect(snapshot?.byStack.get("blog")).toEqual(["blog_blog-db-release1", "blog_blog-db"]);
+		expect(docker.listServicesCalls).toBe(1);
+		expect(docker.listTasksCalls).toBe(1);
+	});
 });
 
 describe("reconcileServiceStatuses batching", () => {

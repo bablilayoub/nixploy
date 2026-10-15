@@ -15,6 +15,7 @@ import { detectPublicIp } from "../cluster/public-host";
 import {
 	type ComposeCommandRow,
 	deployedServiceCandidates,
+	stackServiceCandidates,
 	traefikAppName,
 } from "../compose/commands";
 import { getDocker } from "../deployment/docker";
@@ -165,6 +166,8 @@ interface RouteTarget {
 	key: string;
 	/** Swarm service to inspect, or null for an external upstream / a compose container lookup. */
 	swarmService: string | null;
+	/** Stack runtime identities differ from the stable routing alias after qualification. */
+	stack?: { namespace: string; services: string[] };
 	/** Compose: ordered alternatives of project + service labels, new keys before legacy keys. */
 	composeLabels: string[][] | null;
 	/** Upstream name Traefik dials (a Swarm/compose DNS name) and port; null for external origins. */
@@ -173,10 +176,48 @@ interface RouteTarget {
 }
 
 function composeContainerLabels(row: ComposeCommandRow, serviceName: string): string[][] {
+	if (row.composeType === "stack") {
+		return stackServiceCandidates(row, serviceName).map((name) => [
+			`com.docker.stack.namespace=${row.appName}`,
+			`com.docker.swarm.service.name=${name}`,
+		]);
+	}
 	return deployedServiceCandidates(row, serviceName).map((name) => [
 		`com.docker.compose.project=${row.appName}`,
 		`com.docker.compose.service=${name}`,
 	]);
+}
+
+function composeRuntimeTarget(row: ComposeCommandRow, serviceName: string) {
+	const stack =
+		row.composeType === "stack"
+			? { namespace: row.appName, services: stackServiceCandidates(row, serviceName) }
+			: undefined;
+	return {
+		swarmService: stack?.services[0] ?? null,
+		stack,
+		composeLabels: composeContainerLabels(row, serviceName),
+	};
+}
+
+/** A present qualified service stays authoritative even when it has no running tasks. */
+async function routedStackService(
+	docker: Awaited<ReturnType<typeof getDocker>>,
+	stack: NonNullable<RouteTarget["stack"]>,
+) {
+	for (const name of stack.services) {
+		try {
+			const service = await docker.getService(name).inspect();
+			if (service.Spec?.Labels?.["com.docker.stack.namespace"] !== stack.namespace)
+				throw new Error("The routed Swarm service does not belong to this stack");
+			return { name, service };
+		} catch (error) {
+			if (error && typeof error === "object" && "statusCode" in error && error.statusCode === 404)
+				continue;
+			throw error;
+		}
+	}
+	return null;
 }
 
 /** A legacy label is considered only when the current deployment has no running container. */
@@ -237,11 +278,7 @@ async function loadTarget(domainId: string): Promise<{
 				domain,
 				target: {
 					key,
-					swarmService: domain.compose.composeType === "stack" ? key : null,
-					composeLabels:
-						domain.compose.composeType === "stack"
-							? [[`com.docker.swarm.service.name=${key}`]]
-							: composeContainerLabels(previewRow, domain.serviceName),
+					...composeRuntimeTarget(previewRow, domain.serviceName),
 					upstream: { host: key, port },
 					external: false,
 				},
@@ -264,11 +301,7 @@ async function loadTarget(domainId: string): Promise<{
 			domain,
 			target: {
 				key,
-				swarmService: domain.compose.composeType === "stack" ? key : null,
-				composeLabels:
-					domain.compose.composeType === "stack"
-						? [[`com.docker.swarm.service.name=${key}`]]
-						: composeContainerLabels(domain.compose, domain.serviceName),
+				...composeRuntimeTarget(domain.compose, domain.serviceName),
 				upstream: { host: key, port },
 				external: false,
 			},
@@ -435,15 +468,21 @@ async function probeUpstreamTask(target: RouteTarget): Promise<DomainFinding> {
 	try {
 		const docker = await getDocker();
 		if (target.swarmService) {
-			const tasks = (await docker.listTasks({
-				filters: { service: [target.swarmService], "desired-state": ["running"] },
-			})) as Array<{ Status?: { State?: string; Err?: string } }>;
+			const selected = target.stack ? await routedStackService(docker, target.stack) : null;
+			const serviceName = selected?.name ?? target.swarmService;
+			const tasks = (
+				target.stack && !selected
+					? []
+					: await docker.listTasks({
+							filters: { service: [serviceName], "desired-state": ["running"] },
+						})
+			) as Array<{ Status?: { State?: string; Err?: string } }>;
 			const running = tasks.filter((task) => task.Status?.State === "running").length;
 			if (tasks.length === 0) {
 				return {
 					id: "upstream",
 					status: "fail",
-					title: `Swarm service ${target.swarmService} has no task`,
+					title: `Swarm service ${serviceName} has no task`,
 					detail: "The service is stopped, scaled to 0, or was never deployed.",
 					fix: "Deploy or start the service.",
 				};
@@ -453,7 +492,7 @@ async function probeUpstreamTask(target: RouteTarget): Promise<DomainFinding> {
 				return {
 					id: "upstream",
 					status: "fail",
-					title: `Swarm service ${target.swarmService}: ${tasks.length} task${tasks.length === 1 ? "" : "s"}, none running`,
+					title: `Swarm service ${serviceName}: ${tasks.length} task${tasks.length === 1 ? "" : "s"}, none running`,
 					detail: err ? `Last task error: ${err}` : "Tasks are starting, failing or pending.",
 					fix: "Check the service's Events and Logs tabs.",
 				};
@@ -461,7 +500,7 @@ async function probeUpstreamTask(target: RouteTarget): Promise<DomainFinding> {
 			return {
 				id: "upstream",
 				status: "ok",
-				title: `${running} task${running === 1 ? "" : "s"} running for ${target.swarmService}`,
+				title: `${running} task${running === 1 ? "" : "s"} running for ${serviceName}`,
 				detail: "",
 			};
 		}
@@ -502,10 +541,14 @@ async function probeSharedNetwork(target: RouteTarget): Promise<DomainFinding> {
 	try {
 		const docker = await getDocker();
 		if (target.swarmService) {
-			const service = (await docker
-				.getService(target.swarmService)
-				.inspect()
-				.catch(() => null)) as {
+			const service = (
+				target.stack
+					? (await routedStackService(docker, target.stack))?.service
+					: await docker
+							.getService(target.swarmService)
+							.inspect()
+							.catch(() => null)
+			) as {
 				Spec?: { TaskTemplate?: { Networks?: Array<{ Target?: string }> } };
 			} | null;
 			if (!service) {

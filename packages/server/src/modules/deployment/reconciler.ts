@@ -18,6 +18,7 @@ import { describeErrorWithCause } from "../../utils/error-cause";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { forEachServerGroup } from "../../utils/fan-out";
 import { isServerUnreachable } from "../../utils/ssh-pool";
+import { COMPOSE_SOURCE_SERVICE_LABEL } from "../compose/commands";
 import { shellQuote } from "../compose/paths";
 import {
 	type ServiceState,
@@ -153,6 +154,8 @@ export interface SwarmSnapshot {
 	byName: Map<string, ServiceState>;
 	/** `com.docker.stack.namespace` label → the stack's service names. */
 	byStack: Map<string, string[]>;
+	/** Original YAML keys from managed Stack task labels; legacy services have no entry. */
+	sourceServiceNames?: Map<string, string>;
 	/**
 	 * Every task the pass saw, flattened with its service name resolved. The
 	 * status probe only needs the states, but the same two API calls also carry
@@ -176,6 +179,7 @@ export async function loadSwarmSnapshot(): Promise<SwarmSnapshot | null> {
 		}
 		const byName = new Map<string, ServiceState>();
 		const byStack = new Map<string, string[]>();
+		const sourceServiceNames = new Map<string, string>();
 		const nameByServiceId = new Map<string, string>();
 		for (const service of services) {
 			const name = service.Spec?.Name;
@@ -189,9 +193,17 @@ export async function loadSwarmSnapshot(): Promise<SwarmSnapshot | null> {
 			const stack = (service.Spec?.Labels as Record<string, string> | undefined)?.[
 				"com.docker.stack.namespace"
 			];
-			if (stack) byStack.set(stack, [...(byStack.get(stack) ?? []), name]);
+			if (stack) {
+				byStack.set(stack, [...(byStack.get(stack) ?? []), name]);
+				const taskTemplate = service.Spec?.TaskTemplate;
+				const source =
+					taskTemplate && "ContainerSpec" in taskTemplate
+						? taskTemplate.ContainerSpec?.Labels?.[COMPOSE_SOURCE_SERVICE_LABEL]
+						: undefined;
+				if (source) sourceServiceNames.set(name, source);
+			}
 		}
-		return { byName, byStack, tasks: toTaskFacts(tasks, nameByServiceId) };
+		return { byName, byStack, sourceServiceNames, tasks: toTaskFacts(tasks, nameByServiceId) };
 	} catch (error) {
 		log.warn("Could not read swarm state — skipping swarm-backed reconciliation this pass", {
 			error: describeErrorWithCause(error),
