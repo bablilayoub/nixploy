@@ -33,4 +33,17 @@ describe("restore tar policy", () => {
 			/data\/ data subtree/,
 		);
 	});
+	it.each([
+		".nixploy-restore-lock/owner",
+		".nixploy-restore-deadbeef/file",
+		".nixploy-previous-old/file",
+		".//.nixploy-restore-lock/owner",
+	])("rejects reserved restore path %s at the effective volume root", (name) => {
+		expect(() => assertSafeTarEntry(row(`./${name}`))).toThrow(/reserved restore/);
+		expect(() => assertSafeTarEntry(row(`./data/${name}`), "data")).toThrow(/reserved restore/);
+	});
+	it("allows non-reserved nested application data", () => {
+		expect(() => assertSafeTarEntry(row("./app/.nixploy-restore-old"))).not.toThrow();
+		expect(() => assertSafeTarEntry(row("./.nixploy-restored-file"))).not.toThrow();
+	});
 });

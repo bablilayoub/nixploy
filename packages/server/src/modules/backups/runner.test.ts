@@ -17,12 +17,15 @@ const state = vi.hoisted(() => ({
 	inserted: [] as Array<Record<string, unknown>>,
 	updates: [] as Array<Record<string, unknown>>,
 	execCalls: [] as string[],
+	remoteExecCalls: [] as Array<{ serverId: string; command: string }>,
 	execImpl: (async () => "") as (command: string) => Promise<string>,
 	configDir: "",
 	streamImpl: (async () => ({})) as (...args: unknown[]) => Promise<unknown>,
 	destination: null as Record<string, unknown> | null,
+	volumeServerId: null as string | null,
+	tarListing: "",
 	linked: {
-		serverId: null,
+		serverId: null as string | null,
 		databaseUser: "app",
 		databasePassword: "test-password",
 		dockerImage: "postgres:16-alpine",
@@ -49,7 +52,7 @@ vi.mock("../../db", async (importOriginal) => {
 	const db = {
 		query: {
 			destinations: { findFirst: async () => state.destination },
-			applications: { findFirst: async () => ({ serverId: null }) },
+			applications: { findFirst: async () => ({ serverId: state.volumeServerId }) },
 			compose: { findFirst: async () => null },
 			postgres: { findFirst: async () => state.linked },
 			redis: { findFirst: async () => state.linked },
@@ -77,8 +80,9 @@ vi.mock("../../utils/exec", () => ({
 		state.execCalls.push(command);
 		return state.execImpl(command);
 	},
-	execAsyncRemote: (_serverId: string, command: string) => {
+	execAsyncRemote: (serverId: string, command: string) => {
 		state.execCalls.push(command);
+		state.remoteExecCalls.push({ serverId, command });
 		return state.execImpl(command);
 	},
 	execAsyncWithStdin: (command: string) => {
@@ -153,6 +157,10 @@ beforeEach(async () => {
 	state.inserted = [];
 	state.updates = [];
 	state.execCalls = [];
+	state.remoteExecCalls = [];
+	state.volumeServerId = null;
+	state.linked.serverId = null;
+	state.tarListing = "-rw-r--r-- root/root 12 2026-10-15 20:30:00 ./file\n";
 	state.destination = {
 		destinationId: "d1",
 		name: "disk",
@@ -166,11 +174,7 @@ beforeEach(async () => {
 		createdAt: new Date(),
 	};
 	state.streamImpl = async (command, options) => ({
-		stdout: Readable.from(
-			String(command).includes("tar tvzf")
-				? ["-rw-r--r-- root/root 12 2026-10-15 20:30:00 ./file\n"]
-				: [archive],
-		),
+		stdout: Readable.from(String(command).includes("tar tvzf") ? [state.tarListing] : [archive]),
 		done: (async () => {
 			const input = (options as { stdin?: Readable } | undefined)?.stdin;
 			if (input)
@@ -181,6 +185,7 @@ beforeEach(async () => {
 		abort: vi.fn(),
 	});
 	state.execImpl = async (command) => {
+		if (command.startsWith("docker run --rm --network none --mount ")) return "";
 		if (command === "docker service ls --quiet") return "";
 		if (command.startsWith("docker volume inspect")) return "app_data\n";
 		if (command.startsWith("docker ps -q --filter 'volume=")) return "";
@@ -314,6 +319,7 @@ describe("archive restore safety", () => {
 			await runVolumeBackup(volumeBackup);
 			state.execCalls = [];
 			state.execImpl = async (command) => {
+				if (command.startsWith("docker run --rm --network none --mount ")) return "";
 				if (command.startsWith("docker volume inspect")) return "app_data";
 				if (command === "docker service ls --quiet") return "abc123def456";
 				if (command.startsWith("docker service inspect"))
@@ -345,6 +351,7 @@ describe("archive restore safety", () => {
 	it("refuses a running Redis before writing its data volume", async () => {
 		const store = new LocalBackupStore(path.join(state.configDir, "backups", "org-1"));
 		await store.put("backup/database/a.gz", archive);
+		state.tarListing = "-rw-r--r-- root/root 12 2026-10-15 20:30:00 ./data/dump.rdb\n";
 		state.execImpl = async () =>
 			JSON.stringify({
 				Name: "database",
@@ -393,6 +400,93 @@ describe("archive restore safety", () => {
 		expect(command).toContain(".nixploy-previous-");
 		expect(command).toContain("move_children");
 		expect(command).not.toContain("base64");
+	});
+
+	it.each([null, "remote-node"])(
+		"holds the target-volume fence through consumer checks, replacement and cleanup on %s",
+		async (serverId) => {
+			state.volumeServerId = serverId;
+			await runVolumeBackup(volumeBackup);
+			state.execCalls = [];
+			state.remoteExecCalls = [];
+			await restoreVolumeBackup(volumeBackup);
+			const index = (text: string) =>
+				state.execCalls.findIndex((command) => command.includes(text));
+			const acquire = index('mkdir "$lock"');
+			const check = index("docker service ls --quiet");
+			const activate = index('mkdir "$lock/active"');
+			const replace = index("-v ");
+			const release = index('rm "$lock/owner"');
+			expect(acquire).toBeGreaterThanOrEqual(0);
+			expect(check).toBeGreaterThan(acquire);
+			expect(activate).toBeGreaterThan(check);
+			expect(replace).toBeGreaterThan(activate);
+			expect(release).toBeGreaterThan(replace);
+			const fenceCalls = state.execCalls.filter((command) => command.includes("--mount "));
+			expect(fenceCalls).toHaveLength(3);
+			const token = fenceCalls[0]?.match(/[a-f0-9]{24}/)?.[0];
+			expect(token).toHaveLength(24);
+			expect(fenceCalls.every((command) => command.includes(token ?? "missing"))).toBe(true);
+			if (serverId)
+				expect(state.remoteExecCalls.filter((call) => fenceCalls.includes(call.command))).toEqual(
+					fenceCalls.map((command) => ({ serverId, command })),
+				);
+		},
+	);
+
+	it("does not inspect consumers or start a replacement when another restore holds the fence", async () => {
+		await runVolumeBackup(volumeBackup);
+		state.execCalls = [];
+		const normal = state.execImpl;
+		state.execImpl = async (command) => {
+			if (command.includes('mkdir "$lock"')) throw new Error("Volume restore is locked");
+			return normal(command);
+		};
+		await expect(restoreVolumeBackup(volumeBackup)).rejects.toThrow(/Volume restore is locked/);
+		expect(state.execCalls.some((command) => command.includes("docker service ls"))).toBe(false);
+		expect(state.execCalls.some((command) => command.includes("-v "))).toBe(false);
+		expect(state.execCalls.some((command) => command.includes('rm "$lock/owner"'))).toBe(false);
+	});
+
+	it("uses the same fence around the stopped Redis consumer check and replacement", async () => {
+		const store = new LocalBackupStore(path.join(state.configDir, "backups", "org-1"));
+		await store.put("backup/database/a.gz", archive);
+		state.tarListing = "-rw-r--r-- root/root 12 2026-10-15 20:30:00 ./data/dump.rdb\n";
+		const normal = state.execImpl;
+		state.execImpl = async (command) => {
+			if (command.startsWith("docker service inspect"))
+				return JSON.stringify({
+					Name: "database",
+					Labels: { "nixploy.managed": "true", "nixploy.service.type": "redis" },
+					Mode: { Replicated: { Replicas: 0 } },
+					TaskTemplate: {
+						ContainerSpec: {
+							Mounts: [{ Type: "volume", Source: "database-data", Target: "/data" }],
+						},
+					},
+				});
+			if (command.startsWith("docker info")) return "target-node";
+			if (command.startsWith("docker service ps")) return "";
+			if (command.startsWith("docker volume inspect") && command.includes("{{json .}}"))
+				return JSON.stringify({ Name: "database-data", Labels: { "nixploy.managed": "true" } });
+			return normal(command);
+		};
+		await restoreBackup({
+			...backupRow,
+			databaseType: "redis",
+			redisId: "redis-1",
+			postgresId: null,
+		});
+		const acquire = state.execCalls.findIndex((command) => command.includes('mkdir "$lock"'));
+		const check = state.execCalls.findIndex((command) =>
+			command.startsWith("docker service inspect"),
+		);
+		const replace = state.execCalls.findIndex((command) => command.includes("-v "));
+		const release = state.execCalls.findIndex((command) => command.includes('rm "$lock/owner"'));
+		expect(acquire).toBeGreaterThanOrEqual(0);
+		expect(check).toBeGreaterThan(acquire);
+		expect(replace).toBeGreaterThan(check);
+		expect(release).toBeGreaterThan(replace);
 	});
 
 	it("validates a database archive before invoking psql", async () => {

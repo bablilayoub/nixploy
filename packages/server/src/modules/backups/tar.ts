@@ -23,10 +23,16 @@ export function assertSafeTarEntry(line: string, root?: string): void {
 	) {
 		throw new Error("Archive contains an unsafe path");
 	}
-	const normalized = name.replace(/^(\.\/)+/, "").replace(/\/+$/, "");
+	const normalized = name
+		.split("/")
+		.filter((part) => part && part !== ".")
+		.join("/");
 	if (root && normalized !== root && !normalized.startsWith(`${root}/`)) {
 		throw new Error(`Archive must contain only the ${root}/ data subtree`);
 	}
+	const volumePath = root ? normalized.slice(root.length + 1) : normalized;
+	if (/^\.nixploy-(?:restore|previous)(?:-|\/|$)/.test(volumePath))
+		throw new Error("Archive contains a reserved restore path; restore it manually");
 	if (parts.length === 2) {
 		const target = parts[1] ?? "";
 		if (

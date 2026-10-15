@@ -36,7 +36,7 @@ import {
 } from "./instance-backup";
 import { assertStreamExit, buildStreamPipeline, GzipArchiveCheck } from "./pipeline";
 import { withRedisBackupLock } from "./redis-lock";
-import { buildVolumeReplacementScript } from "./restore-commands";
+import { buildVolumeReplacementScript, buildVolumeRestoreLockScript } from "./restore-commands";
 import { type BackupRunHandle, type BackupRunTrigger, withBackupRun } from "./runs";
 import { type BackupStore, type DestinationRow, storeFor } from "./storage";
 import { type StreamingCommand, spawnStreamingCommand } from "./stream-exec";
@@ -515,6 +515,29 @@ async function assertStoppedVolume(
 	}
 }
 
+/** The on-volume fence also coordinates separate panels and remote helpers. */
+async function withVolumeRestoreLock<T>(
+	volumeName: string,
+	serverId: string | null | undefined,
+	fn: (token: string, activate: () => Promise<void>) => Promise<T>,
+): Promise<T> {
+	assertDockerVolumeName(volumeName);
+	const token = randomBytes(12).toString("hex");
+	const command = (action: "acquire" | "activate" | "release") =>
+		`docker run --rm --network none --mount ${sq(`type=volume,source=${volumeName},target=${VOLUME_MOUNT}`)} alpine sh -c ${sq(buildVolumeRestoreLockScript(VOLUME_MOUNT, token, action))}`;
+	await run(serverId, `docker volume inspect ${sq(volumeName)} --format '{{.Name}}'`);
+	await run(serverId, command("acquire"));
+	try {
+		return await fn(token, async () => {
+			// Fence a delayed/detached helper before opening its transport.
+			await run(serverId, command("activate"));
+		});
+	} finally {
+		// Refuses mismatched ownership, an active helper or recovery remnants.
+		await run(serverId, command("release"));
+	}
+}
+
 async function waitStoppedTasks(
 	appName: string,
 	serverId: string | null | undefined,
@@ -944,23 +967,21 @@ async function restoreRedisBackup(backupRow: BackupRow, key?: string): Promise<{
 	const destination = await findDestinationOrThrow(backupRow.destinationId);
 	const targetKey = await resolveStoredKey(backupRow, key);
 	const linked = await findLinkedDatabase(backupRow);
-	const volumeName = await assertStoppedRedis(backupRow, linked.serverId);
+	const volumeName = `${backupRow.appName}-data`;
 	return await withValidatedArchive(storeFor(destination), targetKey, async (archive) => {
 		await preflightTar(archive, linked.serverId, "data");
-		// Recheck after validation, then stage a complete replacement so stale
-		// AOF files cannot override the selected snapshot on the next start.
-		await assertStoppedRedis(backupRow, linked.serverId);
-		const script = buildVolumeReplacementScript(
-			VOLUME_MOUNT,
-			randomBytes(12).toString("hex"),
-			"data",
-		);
-		await replayArchive(
-			archive,
-			linked.serverId,
-			`docker run --rm -i --network none -v ${sq(`${volumeName}:${VOLUME_MOUNT}`)} alpine sh -c ${sq(script)}`,
-		);
-		return { key: targetKey };
+		return await withVolumeRestoreLock(volumeName, linked.serverId, async (token, activate) => {
+			// Hold the fence through consumer checks and replacement/cleanup.
+			await assertStoppedRedis(backupRow, linked.serverId);
+			await activate();
+			const script = buildVolumeReplacementScript(VOLUME_MOUNT, token, "data");
+			await replayArchive(
+				archive,
+				linked.serverId,
+				`docker run --rm -i --network none -v ${sq(`${volumeName}:${VOLUME_MOUNT}`)} alpine sh -c ${sq(script)}`,
+			);
+			return { key: targetKey };
+		});
 	});
 }
 
@@ -1064,11 +1085,18 @@ export async function restoreVolumeBackup(
 	const serverId = await resolveVolumeServerId(volumeBackup);
 	return await withValidatedArchive(storeFor(destination), targetKey, async (archive) => {
 		await preflightTar(archive, serverId);
-		await assertStoppedVolume(volumeBackup.volumeName, serverId);
-		const script = buildVolumeReplacementScript(VOLUME_MOUNT, randomBytes(12).toString("hex"));
-		const restoreCmd = `docker run --rm -i --network none -v ${sq(`${volumeBackup.volumeName}:${VOLUME_MOUNT}`)} alpine sh -c ${sq(script)}`;
-		await replayArchive(archive, serverId, restoreCmd);
-		return { key: targetKey };
+		return await withVolumeRestoreLock(
+			volumeBackup.volumeName,
+			serverId,
+			async (token, activate) => {
+				await assertStoppedVolume(volumeBackup.volumeName, serverId);
+				await activate();
+				const script = buildVolumeReplacementScript(VOLUME_MOUNT, token);
+				const restoreCmd = `docker run --rm -i --network none -v ${sq(`${volumeBackup.volumeName}:${VOLUME_MOUNT}`)} alpine sh -c ${sq(script)}`;
+				await replayArchive(archive, serverId, restoreCmd);
+				return { key: targetKey };
+			},
+		);
 	});
 }
 
