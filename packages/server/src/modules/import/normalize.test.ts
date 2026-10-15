@@ -316,7 +316,58 @@ describe("normalizeSourceEnvironment", () => {
 			isolatedDeployment: true,
 			domains: [{ host: "grafana.example.com", serviceName: "grafana", https: true }],
 		});
-		expect(notes.some((note) => note.message.includes("custom compose command"))).toBe(true);
+		expect(notes.some((note) => note.message.includes("custom Compose command"))).toBe(true);
+	});
+
+	it("never includes a custom Compose command's contents in notes", () => {
+		const { notes } = normalize({
+			compose: [{ ...stack, command: "TOKEN=COMMAND_SECRET_CANARY docker compose up" }],
+		});
+		expect(notes.some((note) => note.message.includes("custom Compose command"))).toBe(true);
+		expect(JSON.stringify(notes)).not.toContain("COMMAND_SECRET_CANARY");
+	});
+
+	it("omits adapter-declared unavailable secrets and settings so repeat imports preserve the target", () => {
+		const { manifest, secrets } = normalize({
+			project: { ...sourceProject, unavailableFields: ["env"] },
+			environment: { ...sourceEnvironment, unavailableFields: ["env"] },
+			applications: [
+				{
+					...application,
+					unavailableFields: [
+						"env",
+						"buildArgs",
+						"previewEnv",
+						"mounts",
+						"ports",
+						"redirects",
+						"command",
+						"server",
+					],
+				},
+			],
+			compose: [{ ...stack, unavailableFields: ["env", "mounts", "isolatedDeployment", "server"] }],
+			databases: {
+				postgres: [{ ...postgres, unavailableFields: ["env", "externalPort", "server"] }],
+				mysql: [],
+				mariadb: [],
+				mongo: [],
+				redis: [],
+			},
+		});
+		expect(secrets.project?.env).toBeUndefined();
+		expect(secrets.environment?.env).toBeUndefined();
+		expect(secrets.applications?.api).toEqual({
+			env: undefined,
+			buildArgs: undefined,
+			previewEnv: undefined,
+		});
+		expect(secrets.compose?.monitoring?.env).toBeUndefined();
+		expect(secrets.databases?.postgres?.main?.env).toBeUndefined();
+		for (const key of ["mounts", "ports", "redirects", "command", "server"] as const)
+			expect(manifest.applications?.[0]).not.toHaveProperty(key);
+		expect(manifest.compose?.[0]).not.toHaveProperty("isolatedDeployment");
+		expect(manifest.databases?.postgres?.[0]).not.toHaveProperty("externalPort");
 	});
 
 	it("maps databases with their engine-specific columns and by-name servers", () => {

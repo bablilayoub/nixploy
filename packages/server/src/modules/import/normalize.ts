@@ -89,6 +89,31 @@ const BUILD_TYPES = new Set([
 const orNull = (value: string | null | undefined): string | null =>
 	value === undefined || value === null || value === "" ? null : value;
 
+/** Adapters explicitly mark unreadable secrets and unsupported settings for preservation. */
+const preserveUnavailable = <T extends object>(
+	value: T,
+	row: { unavailableFields?: string[] },
+): T => {
+	for (const field of row.unavailableFields ?? []) delete (value as Record<string, unknown>)[field];
+	return value;
+};
+
+const sourceEnv = (
+	row: {
+		unavailableFields?: string[];
+		env?: string | null;
+		buildArgs?: string | null;
+		previewEnv?: string | null;
+	},
+	field: "env" | "buildArgs" | "previewEnv",
+	notes: ImportNote[],
+	label: string,
+	service?: string,
+) =>
+	row.unavailableFields?.includes(field)
+		? undefined
+		: readableEnv(row[field], notes, label, service);
+
 /** Ciphertext hides the key names too; never mistake its base64 padding for dotenv. */
 const readableEnv = (
 	value: string | null | undefined,
@@ -457,7 +482,7 @@ const mapApplication = (
 				"preview deployments were on; the preview domain, port and path settings are not carried — check the Previews tab",
 		});
 	}
-	return { application, skippedMounts: skipped };
+	return { application: preserveUnavailable(application, row), skippedMounts: skipped };
 };
 
 const mapCompose = (
@@ -486,7 +511,8 @@ const mapCompose = (
 		notes.push({
 			level: "warn",
 			service,
-			message: `ran a custom compose command ("${row.command.slice(0, 60)}"); Nixploy renders and runs the file itself — check the stack's Advanced tab`,
+			message:
+				"A custom Compose command was not carried; configure it manually in the stack's Advanced tab",
 		});
 	}
 	if (row.enableSubmodules) {
@@ -517,7 +543,7 @@ const mapCompose = (
 		domains: mapDomains(row.domains, service, notes, true),
 		mounts,
 	};
-	return { compose, skippedMounts: skipped };
+	return { compose: preserveUnavailable(compose, row), skippedMounts: skipped };
 };
 
 const mapDatabase = (
@@ -549,25 +575,28 @@ const mapDatabase = (
 			message: "Swarm overrides on databases are not part of the manifest and were not carried",
 		});
 	}
-	return {
-		name: row.name,
-		environment: environmentName,
-		...(input.keepAppNames === false ? {} : { appName: row.appName }),
-		description: orNull(row.description),
-		...(row.dockerImage ? { dockerImage: row.dockerImage } : {}),
-		externalPort: row.externalPort ?? null,
-		command: orNull(row.command),
-		memoryReservation: orNull(row.memoryReservation),
-		memoryLimit: orNull(row.memoryLimit),
-		cpuReservation: orNull(row.cpuReservation),
-		cpuLimit: orNull(row.cpuLimit),
-		server: referenceByName(row.server?.name, input.knownServers, notes, service, "Server"),
-		envKeys: envKeysFromDotenv(row.env),
-		...(kind !== "redis" && kind !== "mongo" && row.databaseName
-			? { databaseName: row.databaseName }
-			: {}),
-		...(kind !== "redis" && row.databaseUser ? { databaseUser: row.databaseUser } : {}),
-	};
+	return preserveUnavailable(
+		{
+			name: row.name,
+			environment: environmentName,
+			...(input.keepAppNames === false ? {} : { appName: row.appName }),
+			description: orNull(row.description),
+			...(row.dockerImage ? { dockerImage: row.dockerImage } : {}),
+			externalPort: row.externalPort ?? null,
+			command: orNull(row.command),
+			memoryReservation: orNull(row.memoryReservation),
+			memoryLimit: orNull(row.memoryLimit),
+			cpuReservation: orNull(row.cpuReservation),
+			cpuLimit: orNull(row.cpuLimit),
+			server: referenceByName(row.server?.name, input.knownServers, notes, service, "Server"),
+			envKeys: envKeysFromDotenv(row.env),
+			...(kind !== "redis" && kind !== "mongo" && row.databaseName
+				? { databaseName: row.databaseName }
+				: {}),
+			...(kind !== "redis" && row.databaseUser ? { databaseUser: row.databaseUser } : {}),
+		},
+		row,
+	);
 };
 
 export function normalizeSourceEnvironment(source: NormalizeInput): NormalizedEnvironment {
@@ -576,28 +605,28 @@ export function normalizeSourceEnvironment(source: NormalizeInput): NormalizedEn
 		...source,
 		project: {
 			...source.project,
-			env: readableEnv(source.project.env, notes, "Project env"),
+			env: sourceEnv(source.project, "env", notes, "Project env"),
 		},
 		environment: {
 			...source.environment,
-			env: readableEnv(source.environment.env, notes, "Environment env"),
+			env: sourceEnv(source.environment, "env", notes, "Environment env"),
 		},
 		applications: source.applications.map((row) => ({
 			...row,
-			env: readableEnv(row.env, notes, "Env", `application/${row.name}`),
-			buildArgs: readableEnv(row.buildArgs, notes, "Build args", `application/${row.name}`),
-			previewEnv: readableEnv(row.previewEnv, notes, "Preview env", `application/${row.name}`),
+			env: sourceEnv(row, "env", notes, "Env", `application/${row.name}`),
+			buildArgs: sourceEnv(row, "buildArgs", notes, "Build args", `application/${row.name}`),
+			previewEnv: sourceEnv(row, "previewEnv", notes, "Preview env", `application/${row.name}`),
 		})),
 		compose: source.compose.map((row) => ({
 			...row,
-			env: readableEnv(row.env, notes, "Env", `compose/${row.name}`),
+			env: sourceEnv(row, "env", notes, "Env", `compose/${row.name}`),
 		})),
 		databases: Object.fromEntries(
 			DATABASE_KINDS.map((kind) => [
 				kind,
 				source.databases[kind].map((row) => ({
 					...row,
-					env: readableEnv(row.env, notes, "Env", `${kind}/${row.name}`),
+					env: sourceEnv(row, "env", notes, "Env", `${kind}/${row.name}`),
 				})),
 			]),
 		) as NormalizeInput["databases"],
@@ -605,6 +634,14 @@ export function normalizeSourceEnvironment(source: NormalizeInput): NormalizedEn
 	const projectName = input.targetProjectName ?? input.project.name;
 	const environmentName = input.targetEnvironmentName ?? input.environment.name;
 	let skipped = 0;
+	for (const row of input.environment.unsupportedResources) {
+		notes.push({
+			level: "warn",
+			service: `${row.kind}/${row.name}`,
+			message: `${row.kind} is not supported by this import and was skipped; recreate it and restore its data separately`,
+		});
+		skipped += 1;
+	}
 
 	for (const row of input.environment.libsql) {
 		notes.push({
