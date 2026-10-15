@@ -22,6 +22,39 @@ export const importReviewToken = (value: unknown): string =>
 		.update(JSON.stringify(canonical(value)))
 		.digest("hex");
 
+interface ReviewServiceCollections {
+	applications?: readonly { name: string }[];
+	compose?: readonly { name: string }[];
+	databases?: Readonly<Record<string, readonly { name: string }[]>>;
+}
+
+/** Database row order is not configuration; nested service lists keep their semantics. */
+export function orderImportReviewServices<T extends ReviewServiceCollections>(snapshot: T): T {
+	const byName = (a: { name: string }, b: { name: string }) => {
+		const nameOrder = a.name.localeCompare(b.name);
+		if (nameOrder) return nameOrder;
+		// Unrelated target services can have duplicate display names.
+		const left = JSON.stringify(canonical(a));
+		const right = JSON.stringify(canonical(b));
+		return left < right ? -1 : left > right ? 1 : 0;
+	};
+	return {
+		...snapshot,
+		...(snapshot.applications ? { applications: [...snapshot.applications].sort(byName) } : {}),
+		...(snapshot.compose ? { compose: [...snapshot.compose].sort(byName) } : {}),
+		...(snapshot.databases
+			? {
+					databases: Object.fromEntries(
+						Object.entries(snapshot.databases).map(([kind, rows]) => [
+							kind,
+							[...rows].sort(byName),
+						]),
+					),
+				}
+			: {}),
+	} as T;
+}
+
 const OMIT = new Set([
 	"composeFile",
 	"dockerfile",

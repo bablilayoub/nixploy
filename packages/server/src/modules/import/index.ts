@@ -29,7 +29,7 @@ import {
 	normalizeSourceEnvironment,
 } from "./normalize";
 import type { SourceReader } from "./reader";
-import { importReviewToken, summarizeImportValues } from "./review";
+import { importReviewToken, orderImportReviewServices, summarizeImportValues } from "./review";
 import type {
 	SourceApplication,
 	SourceCompose,
@@ -410,7 +410,7 @@ export const prepareImport = async (
 		);
 		live = liveStateFromGraph(target.projectId, target.environmentName, graph, options);
 		// Bind values apply may overwrite too; public plans expose only key names.
-		targetValues = {
+		targetValues = orderImportReviewServices({
 			project: graph.project.env,
 			environment: graph.environment.env,
 			applications: graph.services.applications.map((row) => ({
@@ -431,7 +431,7 @@ export const prepareImport = async (
 					graph.services[kind].map((row) => ({ name: row.name, env: row.env })),
 				]),
 			),
-		};
+		});
 		plan = buildPlan(normalized.manifest, live);
 	}
 	const reviewToken = importReviewToken({
@@ -447,7 +447,7 @@ export const prepareImport = async (
 		},
 		normalized,
 		target,
-		live,
+		live: live ? orderImportReviewServices(live) : null,
 		targetValues,
 		plan,
 	});
