@@ -44,7 +44,7 @@ describe("DB_DUMP_CONFIG", () => {
 		expect(config.passwordEnv?.(params)).toEqual({ MYSQL_PWD: "s3cret" });
 		expect(config.dumpCommand(params)).toContain("mysqldump");
 		expect(config.dumpCommand(params)).not.toContain("s3cret");
-		expect(config.dumpCommand(params)).not.toMatch(/-p/);
+		expect(config.dumpCommand(params)).not.toMatch(/(?:^|\s)(?:-p\S*|--password(?:=\S*)?)(?:\s|$)/);
 		expect(config.dumpCommand(params)).toContain("--databases 'app_db'");
 		expect(config.restoreCommand(params)).toContain("mysql");
 		expect(config.restoreCommand(params)).not.toContain("s3cret");
