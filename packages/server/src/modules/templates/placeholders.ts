@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomInt, randomUUID } from "node:crypto";
 
 /**
  * Deploy-time placeholders in template env defaults.
@@ -30,6 +30,8 @@ export interface PlaceholderContext {
 }
 
 const PASSWORD_CHARSET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const LOWERCASE_CHARSET = "abcdefghijklmnopqrstuvwxyz0123456789";
+const SYMBOL_CHARSET = `${PASSWORD_CHARSET}!@#$%^&*()-_=+`;
 const MAX_LENGTH = 512;
 
 const clampLength = (raw: string | undefined, fallback: number): number => {
@@ -38,14 +40,16 @@ const clampLength = (raw: string | undefined, fallback: number): number => {
 	return Math.min(parsed, MAX_LENGTH);
 };
 
-export const generatePassword = (length: number): string => {
-	const bytes = randomBytes(length);
+const generateCharacters = (length: number, alphabet: string): string => {
 	let out = "";
 	for (let index = 0; index < length; index += 1) {
-		out += PASSWORD_CHARSET[(bytes[index] ?? 0) % PASSWORD_CHARSET.length];
+		out += alphabet[randomInt(alphabet.length)];
 	}
 	return out;
 };
+
+export const generatePassword = (length: number): string =>
+	generateCharacters(length, PASSWORD_CHARSET);
 
 const base64url = (value: Buffer | string): string =>
 	(typeof value === "string" ? Buffer.from(value, "utf8") : value).toString("base64url");
@@ -89,6 +93,10 @@ export function resolveTemplateEnv(
 				return memo(args[0], () => randomBytes(24).toString("hex"));
 			case "generatePassword":
 				return memo(args[1], () => generatePassword(clampLength(args[0], 16)));
+			case "generateLowercase":
+				return memo(args[1], () => generateCharacters(clampLength(args[0], 16), LOWERCASE_CHARSET));
+			case "generateSymbols":
+				return memo(args[1], () => generateCharacters(clampLength(args[0], 32), SYMBOL_CHARSET));
 			case "generateBase64":
 				return memo(args[1], () => randomBytes(clampLength(args[0], 32)).toString("base64"));
 			case "generateHash":

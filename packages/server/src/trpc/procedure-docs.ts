@@ -1326,7 +1326,7 @@ const docs: Record<string, ProcedureDoc> = {
 	"template.sourcesCreate": {
 		summary: "Add a template source",
 		description:
-			"A JSON index URL (`http-json`) or a git repository carrying `templates/index.json`. The URL is checked against the egress policy here and again on every sync. Nothing is fetched until `template.sourcesSync`.",
+			"A native JSON index (`http-json`), git repository with `templates/index.json` (`git`), Dokploy blueprints repository (`blueprints`), or Coolify generated `templates/service-templates.json` URL (`coolify`). Checked against the egress policy on save and sync. Nothing is fetched until `template.sourcesSync`.",
 	},
 	"template.sourcesUpdate": {
 		summary: "Update a template source",

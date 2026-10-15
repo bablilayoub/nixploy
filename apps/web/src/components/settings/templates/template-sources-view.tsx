@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { AlertTriangle, LayoutGrid, Loader2, Plus, RefreshCw } from "lucide-react";
 import { useState } from "react";
+import { useTrackedActivity } from "@/components/layout/activity-tray";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { PageHeader } from "@/components/shell";
@@ -54,12 +55,16 @@ import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
 
 type SourceRow = inferRouterOutputs<AppRouter>["template"]["sourcesList"][number];
-type SourceKind = "git" | "http-json" | "blueprints";
+type SourceKind = SourceRow["kind"];
+
+const COOLIFY_CATALOG_URL =
+	"https://raw.githubusercontent.com/coollabsio/coolify/main/templates/service-templates.json";
 
 const KIND_LABEL: Record<SourceKind, string> = {
 	"http-json": "JSON index",
 	git: "Git repository",
 	blueprints: "Blueprints repository",
+	coolify: "Coolify catalog",
 };
 
 /**
@@ -153,6 +158,14 @@ export function TemplateSourcesView() {
 		onSuccess: () => setSyncingId(null),
 		errorMessage: "Sync failed",
 	});
+	useTrackedActivity({
+		id: `template-source-sync:${syncingId ?? "none"}`,
+		kind: "template",
+		label: "Syncing template catalog",
+		detail: sources?.find((source) => source.templateSourceId === syncingId)?.name,
+		href: "/dashboard/settings/templates",
+		active: syncMutation.isPending,
+	});
 
 	return (
 		<div className="flex flex-col gap-6">
@@ -168,7 +181,7 @@ export function TemplateSourcesView() {
 						Template sources
 					</span>
 				}
-				description="A JSON index or a git repository of templates. Entries are validated and their images probed on every sync. Nothing is fetched while browsing the gallery."
+				description="Add your own index, Dokploy blueprints, or a Coolify catalog. Every sync validates Compose and checks image availability."
 				actions={
 					<Dialog open={open} onOpenChange={setOpen}>
 						<DialogTrigger asChild>
@@ -178,90 +191,116 @@ export function TemplateSourcesView() {
 							</Button>
 						</DialogTrigger>
 						<DialogContent>
-							<DialogHeader>
-								<DialogTitle>Add template source</DialogTitle>
-								<DialogDescription>
-									Templates use the same shape as the built-in catalog.{" "}
-									<HelpLink slug="templates" />
-								</DialogDescription>
-							</DialogHeader>
-							<div className="grid gap-4">
-								<div className="grid gap-2">
-									<Label htmlFor="source-name">Name</Label>
-									<Input
-										id="source-name"
-										placeholder="e.g. Platform team catalog"
-										value={name}
-										onChange={(event) => setName(event.target.value)}
-									/>
-								</div>
-								<div className="grid gap-2">
-									<Label htmlFor="source-kind">Kind</Label>
-									<Select value={kind} onValueChange={(value) => setKind(value as SourceKind)}>
-										<SelectTrigger id="source-kind">
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="http-json">JSON index</SelectItem>
-											<SelectItem value="git">Git repository</SelectItem>
-											<SelectItem value="blueprints">Blueprints repository</SelectItem>
-										</SelectContent>
-									</Select>
-								</div>
-								<div className="grid gap-2">
-									<Label htmlFor="source-url">URL</Label>
-									<Input
-										id="source-url"
-										placeholder={
-											kind === "git"
-												? "https://github.com/acme/templates.git"
-												: kind === "blueprints"
-													? "https://github.com/Dokploy/templates.git"
-													: "https://templates.example.com/index.json"
-										}
-										value={url}
-										onChange={(event) => setUrl(event.target.value)}
-									/>
-									<p className="text-xs text-muted-foreground">
-										{kind === "git"
-											? "The repository must carry templates/index.json."
-											: kind === "blueprints"
-												? "A repository laid out as blueprints/<id>/{meta.json, template.toml, docker-compose.yml} — the Dokploy templates catalog format. File mounts become inline configs and every secret is generated at deploy."
-												: "A JSON array of templates, or an object with a templates array."}
-									</p>
-								</div>
-								{kind === "git" || kind === "blueprints" ? (
+							<form
+								className="grid gap-4"
+								onSubmit={(event) => {
+									event.preventDefault();
+									if (!canManage || createMutation.isPending) return;
+									createMutation.mutate({
+										name: name.trim(),
+										url: url.trim(),
+										kind,
+										branch:
+											(kind === "git" || kind === "blueprints") && branch.trim()
+												? branch.trim()
+												: null,
+									});
+								}}
+							>
+								<DialogHeader>
+									<DialogTitle>Add template source</DialogTitle>
+									<DialogDescription>
+										Choose the source format, then sync it to review accepted and rejected entries.{" "}
+										<HelpLink slug="templates" />
+									</DialogDescription>
+								</DialogHeader>
+								<div className="grid gap-4">
 									<div className="grid gap-2">
-										<Label htmlFor="source-branch">Branch (optional)</Label>
+										<Label htmlFor="source-name">Name</Label>
 										<Input
-											id="source-branch"
-											placeholder="Default branch"
-											value={branch}
-											onChange={(event) => setBranch(event.target.value)}
+											id="source-name"
+											name="name"
+											required
+											maxLength={120}
+											placeholder="e.g. Platform team catalog"
+											value={name}
+											onChange={(event) => setName(event.target.value)}
 										/>
 									</div>
-								) : null}
-							</div>
-							<DialogFooter>
-								<Button
-									type="button"
-									disabled={!name.trim() || !url.trim() || createMutation.isPending}
-									onClick={() =>
-										createMutation.mutate({
-											name: name.trim(),
-											url: url.trim(),
-											kind,
-											branch:
-												(kind === "git" || kind === "blueprints") && branch.trim()
-													? branch.trim()
-													: null,
-										})
-									}
-								>
-									{createMutation.isPending && <Loader2 className="size-4 animate-spin" />}
-									Add source
-								</Button>
-							</DialogFooter>
+									<div className="grid gap-2">
+										<Label htmlFor="source-kind">Kind</Label>
+										<Select
+											value={kind}
+											onValueChange={(value) => {
+												setKind(value as SourceKind);
+												if (value === "coolify" && !url.trim()) {
+													setUrl(COOLIFY_CATALOG_URL);
+													if (!name.trim()) setName("Coolify catalog");
+												} else if (url === COOLIFY_CATALOG_URL) {
+													setUrl("");
+												}
+											}}
+										>
+											<SelectTrigger id="source-kind">
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="http-json">JSON index</SelectItem>
+												<SelectItem value="git">Git repository</SelectItem>
+												<SelectItem value="blueprints">Blueprints repository</SelectItem>
+												<SelectItem value="coolify">Coolify catalog</SelectItem>
+											</SelectContent>
+										</Select>
+									</div>
+									<div className="grid gap-2">
+										<Label htmlFor="source-url">URL</Label>
+										<Input
+											id="source-url"
+											name="url"
+											required
+											maxLength={2048}
+											aria-describedby="source-url-hint"
+											placeholder={
+												kind === "git"
+													? "https://github.com/acme/templates.git"
+													: kind === "blueprints"
+														? "https://github.com/Dokploy/templates.git"
+														: kind === "coolify"
+															? COOLIFY_CATALOG_URL
+															: "https://templates.example.com/index.json"
+											}
+											value={url}
+											onChange={(event) => setUrl(event.target.value)}
+										/>
+										<p id="source-url-hint" className="text-xs text-muted-foreground">
+											{kind === "git"
+												? "The repository must carry templates/index.json."
+												: kind === "blueprints"
+													? "A repository laid out as blueprints/<id>/{meta.json, template.toml, docker-compose.yml} — the Dokploy templates catalog format. File mounts become inline configs and every secret is generated at deploy."
+													: kind === "coolify"
+														? "Coolify's generated templates/service-templates.json format. Supports one public service target, ordinary named volumes and documented random generators. Secrets are created separately for each installation. Unsupported entries appear in the sync report."
+														: "A JSON array of templates, or an object with a templates array."}
+										</p>
+									</div>
+									{kind === "git" || kind === "blueprints" ? (
+										<div className="grid gap-2">
+											<Label htmlFor="source-branch">Branch (optional)</Label>
+											<Input
+												id="source-branch"
+												placeholder="Default branch"
+												value={branch}
+												onChange={(event) => setBranch(event.target.value)}
+											/>
+										</div>
+									) : null}
+								</div>
+								<DialogFooter>
+									<Button type="submit" disabled={createMutation.isPending}>
+										{createMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+										Add source
+									</Button>
+								</DialogFooter>
+							</form>
 						</DialogContent>
 					</Dialog>
 				}
@@ -402,9 +441,9 @@ export function TemplateSourcesView() {
 									{report.report.rejected.length === 1 ? "y" : "ies"} rejected
 								</h3>
 								<p className="text-sm text-muted-foreground">
-									Each of these would fail at deploy time — a host path, the Docker socket, a
-									capability or a compose feature Nixploy does not run. The rest of the catalog
-									synced normally.
+									These entries need manual setup or failed validation. Reasons include unsupported
+									platform variables, multiple public targets, host paths and elevated capabilities.
+									Accepted entries are indexed; review their settings before deploying.
 								</p>
 								<ul className="flex flex-col gap-1.5">
 									{report.report.rejected.map((line) => {

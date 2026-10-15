@@ -285,6 +285,12 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 		description:
 			"Import one environment over the source panel's API where the importer speaks it, recreate the rest, cut DNS when green.",
 		blocks: [
+			{ type: "h2", text: "Import in the panel" },
+			{
+				type: "p",
+				text: "Open Migrations in the navigation or command palette. Connect a Dokploy live API or upload a PostgreSQL dump, select an environment and services, choose an accessible target and generate a redacted plan. Review changes and manual work, then explicitly import configuration. Source/selection/target changes invalidate the review; changes discovered at apply require a fresh plan. The API key stays in page memory and is cleared on source changes, completion or leaving. Imports deploy nothing. Results link to the target and list the secret, database, persistent storage, server, registry and domain work needed before cutover.",
+			},
+
 			{ type: "h2", text: "Import over the source's API" },
 			{
 				type: "p",
@@ -664,10 +670,12 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 				items: [
 					"http-json — one JSON document: a bare array of templates, or { templates: [ … ] }",
 					"git — a repository whose templates/index.json has the same shape, cloned shallow and discarded",
+					"coolify — a generated templates/service-templates.json URL with Base64 Compose entries; the official URL is prefilled in Settings → Templates. Supports one public service target, named volumes, documented random generators and required inputs. Each installation gets fresh credentials; redeploys keep saved values. Unsupported entries appear with a reason in the sync report.",
 					"blueprints — a repository laid out as blueprints/<id>/{meta.json, template.toml, docker-compose.yml}, the Dokploy templates catalog format; each blueprint is translated (helpers become deploy-time placeholders, file mounts become inline configs, env_file becomes environment entries, routing labels are dropped, tags are resolved to the catalog's own categories instead of becoming 209 one-off ones) and run through the compose safety checks, so 436 of the 532 public entries deploy as-is and the rest are listed with their reason",
 					"Nothing is fetched while browsing: Sync now does the work and caches the result on disk with mode 0600",
 					"A bad entry is dropped with a reason rather than taking the whole catalog offline; an image tag that cannot be confirmed anonymously is a warning, not a rejection; a template that publishes host ports is indexed and flagged, and deploying it creates the stack with port publishing on (instance admin only)",
 					"Remote ids are namespaced by their source, so a source can never shadow a built-in template, and hostPrivileged is never accepted from a remote catalog",
+					"Coolify FQDN values are hostnames and URL values initially use HTTP. Domain-dependent templates need a domain at installation. After enabling HTTPS, update saved URL values; legacy upstream templates may need their FQDN references changed to full URLs. Multiple public targets, domain paths, inline file mounts, health exclusions and unsupported magic variables require manual setup. Indexed entries still need application-level testing; existing data is not imported.",
 				],
 			},
 			{ type: "h2", text: "Deploy from a compose URL" },

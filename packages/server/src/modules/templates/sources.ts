@@ -16,6 +16,7 @@ import { getConfigDir } from "../deployment/paths";
 import { gitProcessEnv, gitProtocolEnv, hardenedSimpleGit } from "../deployment/sources";
 import { badRequest, notFound } from "../errors";
 import { BlueprintError, mapBlueprint } from "./blueprints";
+import { parseCoolifyCatalog } from "./coolify";
 import { checkCatalogImages, extractImagesFromCompose } from "./images";
 import { checkTemplateCompose } from "./safety";
 import {
@@ -37,7 +38,7 @@ import type { Template } from "./types";
  * into the built-in catalog for that organization only — nothing is fetched
  * on the read path, so a dead source never slows the gallery down.
  *
- * Egress: `http-json` URLs go through `assertSafeOutboundUrl` + `pinnedFetch`
+ * Egress: `http-json` / `coolify` URLs go through `assertSafeOutboundUrl` + `pinnedFetch`
  * (no redirects followed, body capped, only vetted addresses dialled); `git`
  * URLs go through `assertSafeGitCloneUrl` and are cloned with the hardened
  * git environment (`gitProtocolEnv` — https/ssh only, no credential helpers,
@@ -360,9 +361,11 @@ export async function syncTemplateSource(
 		const { templates, rejected } = applyComposeSafety(
 			row.kind === "blueprints"
 				? await fetchBlueprints(row)
-				: parseTemplateIndex(
-						row.kind === "git" ? await fetchGitIndex(row) : await fetchJsonIndex(row.url),
-					),
+				: row.kind === "coolify"
+					? parseCoolifyCatalog(await fetchJsonIndex(row.url))
+					: parseTemplateIndex(
+							row.kind === "git" ? await fetchGitIndex(row) : await fetchJsonIndex(row.url),
+						),
 		);
 
 		let imageWarnings: string[] = [];
@@ -496,7 +499,7 @@ export async function findTemplateSource(
  * change must not stay trusted forever.
  */
 export async function assertTemplateSourceUrl(
-	kind: "git" | "http-json" | "blueprints",
+	kind: "git" | "http-json" | "blueprints" | "coolify",
 	url: string,
 ): Promise<void> {
 	if (kind === "git" || kind === "blueprints") {

@@ -250,10 +250,25 @@ export async function deployTemplate(
 	// suggested service, else the first one, so a `BASE_URL={{domain}}`
 	// default is right on the first deploy.
 	const attachedDomain =
-		input.domains?.find((domain) => domain.serviceName === template.suggestedDomain.serviceName)
-			?.host ??
+		input.domains?.find(
+			(domain) =>
+				domain.serviceName === template.suggestedDomain.serviceName &&
+				domain.port === template.suggestedDomain.port,
+		)?.host ??
 		input.domains?.[0]?.host ??
 		null;
+	if (
+		template.requiresDomain &&
+		!input.domains?.some(
+			(domain) =>
+				domain.serviceName === template.suggestedDomain.serviceName &&
+				domain.port === template.suggestedDomain.port,
+		)
+	) {
+		throw badRequest(
+			`Template "${template.name}" needs a domain for ${template.suggestedDomain.serviceName}:${template.suggestedDomain.port}`,
+		);
+	}
 	const resolved = resolveTemplateEnv(
 		template.env.map((entry) => ({
 			key: entry.key,
@@ -261,6 +276,11 @@ export async function deployTemplate(
 		})),
 		{ domain: attachedDomain },
 	);
+	for (const entry of template.env) {
+		if (entry.required && !resolved[entry.key]?.trim()) {
+			throw badRequest(`Required template variable ${entry.key} is missing a value`);
+		}
+	}
 	const env = template.env
 		.map((entry) => {
 			const raw = resolved[entry.key] ?? "";

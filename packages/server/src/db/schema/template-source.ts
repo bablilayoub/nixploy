@@ -9,6 +9,8 @@ import { createdAt, idColumn } from "./utils";
  * - `http-json`: one JSON document — either an array of `Template` objects or
  *   `{ templates: [...] }` — fetched through the egress guard.
  * - `git`: a shallow clone whose `templates/index.json` has that same shape.
+ * - `blueprints`: a Dokploy-format blueprint repository.
+ * - `coolify`: a generated Coolify service-templates.json URL.
  *
  * Declared next to its table rather than in `enums.ts` so the whole feature
  * lands in files this change owns; move it over when `enums.ts` is next
@@ -18,6 +20,7 @@ export const templateSourceKind = pgEnum("template_source_kind", [
 	"git",
 	"http-json",
 	"blueprints",
+	"coolify",
 ]);
 
 /**

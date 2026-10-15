@@ -1599,7 +1599,7 @@ export const commandRegistry: RegistryEntry[] = [
 			{
 				field: "kind",
 				flag: "--kind <kind>",
-				description: "git | http-json",
+				description: "git | http-json | blueprints | coolify",
 				fallback: "http-json",
 			},
 			{ field: "branch", flag: "--branch <name>", description: "Branch (git sources)" },
@@ -1622,7 +1622,11 @@ export const commandRegistry: RegistryEntry[] = [
 		options: [
 			{ field: "name", flag: "--name <name>", description: "Catalog name" },
 			{ field: "url", flag: "--url <url>", description: "Repository URL or JSON index URL" },
-			{ field: "kind", flag: "--kind <kind>", description: "git | http-json" },
+			{
+				field: "kind",
+				flag: "--kind <kind>",
+				description: "git | http-json | blueprints | coolify",
+			},
 			{ field: "branch", flag: "--branch <name>", description: "Branch (git sources)" },
 			{
 				field: "enabled",

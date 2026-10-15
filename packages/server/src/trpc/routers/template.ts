@@ -47,7 +47,7 @@ async function catalogOrganizationId(session: {
 	).catch(() => null);
 }
 
-const sourceKindSchema = z.enum(["git", "http-json", "blueprints"]);
+const sourceKindSchema = z.enum(["git", "http-json", "blueprints", "coolify"]);
 const sourceUrlSchema = z.string().min(1).max(2048);
 
 /**
