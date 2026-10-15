@@ -61,7 +61,7 @@ describe("parseCoolifyCatalog", () => {
 				expect.objectContaining({ key: "SERVICE_NAME_MY_API", default: "my-api" }),
 				expect.objectContaining({ key: "DB_NAME", default: "app" }),
 				expect.objectContaining({ key: "API_KEY", default: "", required: true }),
-				expect.objectContaining({ key: "PORT", default: "8080", required: true }),
+				expect.objectContaining({ key: "PORT", default: "", required: true }),
 			]),
 		);
 		expect(template?.env.some((item) => item.key === "POSTGRES_USER")).toBe(false);
@@ -89,6 +89,71 @@ describe("parseCoolifyCatalog", () => {
 		// The compose body refers to the same two env keys in both components;
 		// ordinary redeploys use these stored values without resolving again.
 		expect(first?.compose.match(/SERVICE_PASSWORD_64_DB/g)).toHaveLength(2);
+	});
+
+	it.each([false, true])(
+		"keeps required diagnostic text out of defaults regardless of reference order (%s)",
+		(requiredFirst) => {
+			const references = [
+				`REQUIRED: ${ref("DB_PASSWORD:?Supply a strong password")}`,
+				`PLAIN: ${ref("DB_PASSWORD")}`,
+				`OPTIONAL: ${ref("DB_PASSWORD:-optional-fallback")}`,
+			];
+			if (!requiredFirst) references.reverse();
+			const result = parseCoolifyCatalog({
+				required: entry(
+					`services:\n  app:\n    image: example/app:1\n    environment:\n${references.map((line) => `      ${line}`).join("\n")}\n`,
+				),
+			});
+			expect(result.rejected).toEqual([]);
+			const template = result.templates[0];
+			expect(template?.env).toEqual([
+				{
+					key: "DB_PASSWORD",
+					default: "",
+					description: "Supply a strong password",
+					required: true,
+				},
+			]);
+			const spec = parseComposeFile(template?.compose ?? "");
+			expect(spec.services?.app?.environment).toMatchObject({
+				REQUIRED: ref("DB_PASSWORD:?Supply a strong password"),
+			});
+			const missingValues: Record<string, string>[] = [{}, { DB_PASSWORD: "" }];
+			for (const values of missingValues) {
+				expect(() => renderComposeSpec(spec, values)).toThrow(
+					/Required compose variable DB_PASSWORD.*Supply a strong password/,
+				);
+			}
+			expect(
+				renderComposeSpec(spec, { DB_PASSWORD: "chosen-password" }).services?.app?.environment,
+			).toEqual({
+				REQUIRED: "chosen-password",
+				PLAIN: "chosen-password",
+				OPTIONAL: "chosen-password",
+			});
+		},
+	);
+
+	it("keeps automatic generation for repeated required magic references", () => {
+		const key = "SERVICE_PASSWORD_DB";
+		const result = parseCoolifyCatalog({
+			required: entry(
+				`services:\n  app:\n    image: example/app:1\n    environment:\n      REQUIRED: ${ref(`${key}:?Supply a strong password`)}\n      PLAIN: ${ref(key)}\n`,
+			),
+		});
+		expect(result.rejected).toEqual([]);
+		const template = result.templates[0];
+		expect(template?.env).toHaveLength(1);
+		expect(template?.env[0]).toMatchObject({ key, required: true });
+		const values = resolveTemplateEnv(
+			template?.env.map((item) => ({ key: item.key, value: item.default })) ?? [],
+		);
+		expect(values[key]).toMatch(/^[A-Za-z0-9]{32}$/);
+		expect(
+			renderComposeSpec(parseComposeFile(template?.compose ?? ""), values).services?.app
+				?.environment,
+		).toEqual({ REQUIRED: values[key], PLAIN: values[key] });
 	});
 
 	it.each<{ input: Record<string, string>; expected: Record<string, string> }>([

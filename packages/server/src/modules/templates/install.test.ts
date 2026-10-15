@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { parseCoolifyCatalog } from "./coolify";
 import type { Template } from "./types";
 
 const { createCompose, updateComposeById, findTemplateById } = vi.hoisted(() => ({
@@ -38,6 +39,13 @@ const template: Template = {
 	suggestedDomain: { serviceName: "app", port: 3000 },
 };
 const input = { templateId: "example", projectId: "project", environmentName: "production" };
+const requiredCompose = `services:
+  app:
+    image: example/app:1
+    environment:
+      PASSWORD: \${DB_PASSWORD:?Supply a strong password}
+      REPEATED: \${DB_PASSWORD}
+`;
 
 beforeEach(() => {
 	createCompose.mockClear();
@@ -72,6 +80,39 @@ describe("template installation preflight", () => {
 			/Required template variable API_KEY/,
 		);
 		expect(createCompose).not.toHaveBeenCalled();
+	});
+
+	it.each([undefined, "", "   "])(
+		"rejects translated required input %j before creating any service",
+		async (value) => {
+			const translated = parseCoolifyCatalog({
+				example: { compose: Buffer.from(requiredCompose).toString("base64") },
+			}).templates[0];
+			expect(translated).toBeDefined();
+			findTemplateById.mockReturnValue(translated);
+			await expect(
+				deployTemplate("org", {
+					...input,
+					...(value === undefined ? {} : { envValues: { DB_PASSWORD: value } }),
+				}),
+			).rejects.toThrow(/Required template variable DB_PASSWORD/);
+			expect(createCompose).not.toHaveBeenCalled();
+			expect(updateComposeById).not.toHaveBeenCalled();
+		},
+	);
+
+	it("installs a translated required value only when supplied explicitly", async () => {
+		const translated = parseCoolifyCatalog({
+			example: { compose: Buffer.from(requiredCompose).toString("base64") },
+		}).templates[0];
+		expect(translated).toBeDefined();
+		findTemplateById.mockReturnValue(translated);
+		await deployTemplate("org", { ...input, envValues: { DB_PASSWORD: "chosen-password" } });
+		expect(createCompose).toHaveBeenCalledOnce();
+		expect(updateComposeById).toHaveBeenCalledWith(
+			"created",
+			expect.objectContaining({ env: "DB_PASSWORD=chosen-password" }),
+		);
 	});
 
 	it("writes generated values once at installation, uses explicit overrides, and creates fresh values for another install", async () => {

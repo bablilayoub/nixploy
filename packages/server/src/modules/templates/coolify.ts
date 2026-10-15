@@ -179,7 +179,7 @@ function translateEntry(id: string, input: unknown): Template {
 		return next;
 	};
 
-	const addEnv = (key: string, fallback?: string, required = false): void => {
+	const addEnv = (key: string, fallback?: string, requiredMessage?: string): void => {
 		if (!key.startsWith("SERVICE_") && fallback !== undefined) {
 			const declared = declaredDefaults.get(key);
 			if (declared !== undefined && declared !== fallback) {
@@ -187,8 +187,13 @@ function translateEntry(id: string, input: unknown): Template {
 			}
 			declaredDefaults.set(key, fallback);
 		}
+		const previous = env.get(key);
+		const required = requiredMessage !== undefined || previous?.required;
 		let value = fallback ?? "";
-		let description = required ? "Required before deployment." : "Optional Compose variable.";
+		let description = required
+			? requiredMessage?.trim() ||
+				(previous?.required ? previous.description : "Required before deployment.")
+			: "Optional Compose variable.";
 		if (key.startsWith("SERVICE_")) {
 			const domain = /^SERVICE_(URL|FQDN)_(.+)$/.exec(key);
 			if (domain) {
@@ -210,12 +215,13 @@ function translateEntry(id: string, input: unknown): Template {
 		} else if (value.includes("${") || /\$[A-Za-z_]/.test(value)) {
 			throw new CoolifyTemplateError(`nested default for ${key} requires manual Compose setup`);
 		}
-		const previous = env.get(key);
 		env.set(key, {
 			key,
-			default: previous?.default || value,
+			// A required ordinary input must be supplied explicitly, even when
+			// another reference to it has an optional fallback.
+			default: required && !key.startsWith("SERVICE_") ? "" : previous?.default || value,
 			description,
-			...(required || previous?.required ? { required: true } : {}),
+			...(required ? { required: true } : {}),
 		});
 	};
 
@@ -295,7 +301,11 @@ function translateEntry(id: string, input: unknown): Template {
 					throw new CoolifyTemplateError("unsupported Compose interpolation requires manual setup");
 				}
 				const [, key, operator, fallback] = variable;
-				addEnv(key ?? "", operator ? fallback : undefined, operator === ":?");
+				addEnv(
+					key ?? "",
+					operator === "-" || operator === ":-" ? fallback : undefined,
+					operator === ":?" ? (fallback ?? "") : undefined,
+				);
 				// Keep Compose's unset-versus-empty behavior after extracting form defaults.
 				return match;
 			},
