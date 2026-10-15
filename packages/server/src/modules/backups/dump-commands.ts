@@ -64,7 +64,9 @@ export const DB_DUMP_CONFIG: Record<BackupDatabaseType, DumpEngineConfig> = {
 		extension: "sql",
 		passwordEnv: ({ databasePassword }) => ({ MYSQL_PWD: databasePassword }),
 		dumpCommand: ({ database, databaseUser }) =>
-			`mysqldump --default-character-set=utf8mb4 -u ${sq(databaseUser)} --databases ${sq(database)}`,
+			// These are database-scoped logical backups: the app user neither
+			// reads global tablespaces nor restores server-wide GTID/binlog state.
+			`mysqldump --default-character-set=utf8mb4 --no-tablespaces --set-gtid-purged=OFF -u ${sq(databaseUser)} --databases ${sq(database)}`,
 		restoreCommand: ({ database, databaseUser }) =>
 			`mysql --default-character-set=utf8mb4 -u ${sq(databaseUser)} ${sq(database)}`,
 	},

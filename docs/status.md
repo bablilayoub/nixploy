@@ -89,10 +89,57 @@ stated evidence boundaries:
 | PR #16 second public catalog | Coolify source add/sync/report and deployment UI passed; pinned revision `2db26e88abd670b41848cde663f8130fd0d62743` gives 226 accepted / 133 rejected from 359 entries, with 16 advisory image warnings. Two real Umami/Postgres installs passed distinct credentials, isolated DNS/data, redeploy and rollback; catalog acceptance is not a guarantee for every entry. |
 | PR #16 populated dashboard | Recent deployments populated, three soft-navigation cycles and 12 idle seconds passed without hydration/browser errors or deployment requests. The historical hydration/idle-dashboard tasks below are closed. |
 | PR #16 Coolify API reader | Official v4.4.6 image/public-Git applications, raw Compose services and all five supported database configuration kinds passed inspect/plan/apply/repeat. A fresh selected image/Postgres import then explicitly started with HTTP 200 and generated-password TCP authentication; repository Compose applications/other database engines are skipped and secrets/data remain manual. |
+| PR #18 cold backup/recovery | Removed disposable source panel/database/config and workload volumes before fresh PostgreSQL/Redis/volume recovery; keys, original TOTP, large payload hashes and routed HTTP passed. Real MinIO separately passed an eight-part 64 MiB transfer and egress revocation. |
+
+## Managed database recovery — 2026-10-15
+
+Verified on `codex/backup-engine-recovery` with fresh disposable managed services
+and a separate metadata database/config. These are local scheduled-backup and
+restore proofs, including the actual HTTP run/list/history/verify/restore paths.
+They do not establish importer runtime behavior, remote placement or replica-set
+and replication recovery.
+
+| Engine image observed | Backed-up data | Recovery evidence |
+| --- | --- | --- |
+| MySQL 9.7.2 (`mysql:9`) | 64 MiB / 64 binary rows | Fresh target after source service/volume removal; ordered hash, schema/constraints/indexes, view/trigger behavior and distinct target credentials |
+| MariaDB 11.8.9 (`mariadb:11.8`) | 64 MiB / 256 binary rows | Fresh target after source removal; ordered hash, schema/FK/unique/index/view/trigger, Unicode/null/empty/binary values, credentials and restart persistence |
+| MongoDB 8.3.13 (`mongo:8`) | 64 MiB / 512 binary documents | Fresh target after source service and all captured volumes were removed; per-document/ordered hashes, BSON types, compound unique index, validator and distinct credentials |
+
+- MySQL's original dump exited successfully despite a `PROCESS`/tablespace
+  diagnostic, then failed restoration as the managed user on
+  `SET @@SESSION.SQL_LOG_BIN=0`. The MySQL-only fix omits global tablespace and
+  GTID/binlog state; it adds no grants or root fallback. Fixed 64 MiB source
+  backup/restore and a post-restart HTTP target backup passed, with no global
+  GTID/binlog statements in either archive. Trigger coverage used an explicit
+  operator setting of `log_bin_trust_function_creators=1` on source and target;
+  default app-user trigger creation/restoration is not claimed.
+- Failed producers recorded errors, published no partial object and did not
+  prune the good archives. Full-CRC/truncation failures and wrong credentials
+  preserved the good target before application. Invalid SQL/BSON returned
+  errors; MySQL committed a valid prefix and MongoDB partially applied one
+  malformed archive before failing. Explicit good replay recovered the target.
+  These engines have no general rollback guarantee.
+- Target-only tables/collections intentionally remained; sibling databases were
+  preserved. Database users/accounts and server-wide state remain separate from
+  these logical dumps. Application writers were quiescent throughout.
+- The restore confirmation explains backup/quiescence, target-only objects and
+  partial-failure risk. It also returns keyboard focus to the initiating button
+  when closed. The existing Verify action proves restore completion/liveness;
+  these drills additionally checked contents and actual target credentials.
+
+Evidence: `backup-engines/{mysql-report,mysql-final-http,mariadb-report,mongo-summary,mongo-result}.json`,
+with immutable image digests, source-removal/target-volume identities, negative
+results, browser reports and gate output. The sanitized handoff manifest records
+file checksums after fixture cleanup. Twelve browser cases passed across all three
+engines, both themes and desktop/mobile, including keyboard focus return. Local
+gates passed 3,202 server tests (one optional registry probe skipped), 102 web,
+94 CLI and 20 rehearsal tests, workspace types, strict Biome, knip and the
+production web build. No production host, public DNS, remote server, dependency
+or schema changes are part of this slice.
 
 ## Backup and cold recovery — 2026-10-15
 
-Implemented on `codex/backup-restore`; this is a verified recovery slice, not a
+Implemented in [PR #18](https://github.com/bablilayoub/nixploy/pull/18); this is a verified recovery slice, not a
 release or a production-host deployment. The new rehearsal contract also runs
 in the shared CI gate.
 
@@ -136,8 +183,8 @@ production web build.
 
 This was an isolated local drill on one manager with fresh databases and
 volumes. It does not close fresh-host/split-worker or remote/multi-node recovery,
-public DNS/ACME, repository/image recovery, live filesystem snapshot consistency,
-or runtime restore proof for MySQL/MariaDB/MongoDB. Instance metadata/config,
+public DNS/ACME, repository/image recovery or live filesystem snapshot consistency.
+The separate local SQL/MongoDB engine proofs are recorded above. Instance metadata/config,
 logical database dumps and persistent-volume archives remain separate recovery
 layers; the instance archive contains neither workload data nor source/images.
 

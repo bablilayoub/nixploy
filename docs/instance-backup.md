@@ -89,6 +89,9 @@ The whole thing is time-boxed to 10 minutes and recorded as a `backup_run` with
 `trigger: "verify"`, so a verification that fails is visible in the history
 next to the dump it rejected. Instance (`web-server`) dumps are verified
 against the stock Postgres image, since the instance dump is plain SQL.
+Verification checks restore completion and liveness; it does not compare rows,
+file hashes or application behavior. A recovery drill must also validate those
+contents and the credentials used by the recovered application.
 
 ## What gets backed up (instance)
 
@@ -549,6 +552,37 @@ restores into a throwaway container, from the UI, with no shell access.
 - [ ] A scratch host restored end to end at least once, with a real sign-in
 - [ ] DNS TTLs low enough to repoint quickly (≤ 300 s before a planned move)
 - [ ] The checklist itself stored off-box
+
+## Managed SQL and MongoDB recovery
+
+Restore a logical dump into a compatible engine and database name. Preserve the
+managed service definition and provision its credentials separately: these
+dumps do not replace instance metadata or server-wide user accounts and grants.
+Quiesce application writers while restoring and keep an independent backup of
+the target before applying the archive. A fresh disposable target is preferable
+for a recovery drill.
+
+Full gzip/CRC validation happens before applying any bytes. PostgreSQL applies
+its SQL in a single transaction. MySQL and MariaDB DDL can commit before a later
+statement fails; MongoDB can replace collections before a later archive error.
+Those engines do not provide a general rollback guarantee. A failed restore is
+an error even when it has already changed the target; recover that target from
+its independent backup or recreate it before retrying.
+
+SQL dumps replace the tables they contain, and MongoDB `--drop` replaces the
+collections present in the archive. Target-only tables or collections can
+remain. Compare the expected backed-up objects and contents explicitly; do not
+assume the target database becomes an exact filesystem-style replacement.
+Custom SQL routines/events, cross-database objects, replication/GTID state and
+MongoDB replica-set recovery need a separate engine-specific plan.
+
+MySQL logical backups omit server-wide tablespace and GTID metadata, so the
+dump does not require global `PROCESS` or attempt to change GTID/binlog session
+state during restore ([MySQL dump options](https://dev.mysql.com/doc/refman/9.7/en/mysqldump.html#option_mysqldump_set-gtid-purged)). With binary logging enabled, restoring triggers can still
+require an operator-configured `log_bin_trust_function_creators=1` or the
+appropriate engine-admin privileges. Match that prerequisite on the recovery
+target; the backup runner does not grant global privileges to the managed user
+([MySQL binary logging prerequisites](https://dev.mysql.com/doc/refman/9.7/en/stored-programs-logging.html)).
 
 ## Redis backups
 
