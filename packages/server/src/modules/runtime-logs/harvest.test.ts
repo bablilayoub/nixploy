@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { COMPOSE_SOURCE_SERVICE_LABEL } from "../compose/commands";
 import type { DockerLogLine } from "./format";
 import {
 	buildRemoteHarvestCommand,
@@ -31,6 +32,32 @@ describe("runtime log harvest", () => {
 			),
 		).toEqual({ appName: "stack-9f9f9f", container: "api" });
 		expect(resolveContainerOwner({ "com.docker.swarm.service.name": "other" }, wanted)).toBeNull();
+	});
+
+	it("uses source-service metadata for qualified local and remote labels without guessing legacy prefixes", () => {
+		expect(
+			resolveContainerOwner(
+				{
+					"com.docker.compose.project": "shop-a1b2c3",
+					"com.docker.compose.service": "shop-a1b2c3-db",
+					[COMPOSE_SOURCE_SERVICE_LABEL]: "db",
+				},
+				wanted,
+			),
+		).toEqual({ appName: "shop-a1b2c3", container: "db" });
+		expect(
+			resolveContainerOwner(
+				{
+					"com.docker.compose.project": "shop-a1b2c3",
+					"com.docker.compose.service": "shop-a1b2c3-db",
+				},
+				wanted,
+			),
+		).toEqual({ appName: "shop-a1b2c3", container: "shop-a1b2c3-db" });
+		const remote = parseRemoteHarvestOutput(
+			"==APP==shop-a1b2c3\n==CID==abcdefabcdef|shop-a1b2c3-db||db\n2026-09-19T21:29:30.000000000Z ready\n",
+		);
+		expect(remote[0]?.containers[0]?.name).toBe("db");
 	});
 
 	it("keeps only lines newer than the cursor, marks a capped pass and advances the cursor", () => {

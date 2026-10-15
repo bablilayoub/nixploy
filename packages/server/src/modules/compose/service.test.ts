@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 	returning: vi.fn(),
 	environmentFindFirst: vi.fn(),
 	insert: vi.fn(),
+	run: vi.fn(),
 }));
 
 vi.mock("../../db", () => ({
@@ -35,7 +36,7 @@ vi.mock("../../db", () => ({
 		}),
 	},
 }));
-vi.mock("./source", () => ({}));
+vi.mock("./source", () => ({ runComposeCommand: mocks.run }));
 vi.mock("./containers", () => ({
 	listComposeContainers: vi.fn(async () => []),
 	invalidateComposeContainers: vi.fn(),
@@ -58,6 +59,7 @@ import {
 	composeSourceChanged,
 	createCompose,
 	saveComposeFile,
+	stopCompose,
 	updateComposeById,
 } from "./service";
 
@@ -117,6 +119,24 @@ beforeEach(() => {
 	mocks.findFirst.mockResolvedValue(privilegedRow);
 	mocks.returning.mockResolvedValue([privilegedRow]);
 	mocks.environmentFindFirst.mockResolvedValue({ environmentId: "env-1" });
+	mocks.run.mockResolvedValue("");
+});
+
+describe("stopCompose across naming upgrades", () => {
+	it("stops legacy containers by exact project ownership without re-rendering source or volumes", async () => {
+		mocks.run.mockResolvedValueOnce("abcdef123456\n").mockResolvedValueOnce("");
+		await stopCompose(privilegedRow);
+		expect(mocks.run.mock.calls.map((call) => call[1])).toEqual([
+			"docker ps -q --filter label=com.docker.compose.project='portainer-abc123'",
+			"docker stop 'abcdef123456'",
+		]);
+	});
+
+	it("refuses unexpected container identifiers before any stop command", async () => {
+		mocks.run.mockResolvedValueOnce("invalid-output");
+		await expect(stopCompose(privilegedRow)).rejects.toThrow(/Could not verify Compose containers/);
+		expect(mocks.run).toHaveBeenCalledTimes(1);
+	});
 });
 
 describe("createCompose with an initial file", () => {

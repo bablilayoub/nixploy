@@ -9,6 +9,7 @@ import { describeErrorWithCause } from "../../utils/error-cause";
 import { execAsyncRemote } from "../../utils/exec";
 import { fanOutConcurrency, mapWithConcurrency } from "../../utils/fan-out";
 import { isServerUnreachable } from "../../utils/ssh-pool";
+import { COMPOSE_SOURCE_SERVICE_LABEL, sourceComposeServiceName } from "../compose/commands";
 import { getDocker } from "../deployment/docker";
 import { shellQuote } from "../deployment/paths";
 import {
@@ -110,7 +111,9 @@ export function resolveContainerOwner(
 		if (!value || !wanted.has(value)) continue;
 		const composeService = labels?.["com.docker.compose.service"];
 		const swarmService = labels?.["com.docker.swarm.service.name"];
-		let container: string | null = composeService ?? null;
+		let container: string | null = composeService
+			? sourceComposeServiceName(composeService, labels?.[COMPOSE_SOURCE_SERVICE_LABEL])
+			: null;
 		if (
 			!container &&
 			swarmService &&
@@ -237,7 +240,7 @@ export function buildRemoteHarvestCommand(
 		if (!SAFE_APP_NAME.test(app.appName) || !DOCKER_TS_STRICT_RE.test(app.defaultSince)) continue;
 		const quoted = shellQuote(app.appName);
 		const format = shellQuote(
-			'{{.ID}}|{{.Label "com.docker.compose.service"}}|{{.Label "com.docker.swarm.service.name"}}',
+			`{{.ID}}|{{.Label "com.docker.compose.service"}}|{{.Label "com.docker.swarm.service.name"}}|{{.Label "${COMPOSE_SOURCE_SERVICE_LABEL}"}}`,
 		);
 		const cases = Object.entries(app.cursors)
 			.filter(([id, ts]) => CONTAINER_ID_RE.test(id) && DOCKER_TS_STRICT_RE.test(ts))
@@ -284,12 +287,17 @@ export function parseRemoteHarvestOutput(raw: string): Array<{
 		}
 		if (line.startsWith("==CID==")) {
 			flush();
-			const [id = "", composeService = "", swarmService = ""] = line.slice(7).trim().split("|");
+			const [id = "", composeService = "", swarmService = "", sourceService = ""] = line
+				.slice(7)
+				.trim()
+				.split("|");
 			if (!app || !CONTAINER_ID_RE.test(id)) {
 				container = null;
 				continue;
 			}
-			let name: string | null = composeService || null;
+			let name: string | null = composeService
+				? sourceComposeServiceName(composeService, sourceService)
+				: null;
 			if (!name && swarmService && swarmService.startsWith(`${app.appName}_`)) {
 				name = swarmService.slice(app.appName.length + 1);
 			}

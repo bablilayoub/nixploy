@@ -729,11 +729,11 @@ describe("buildDeployComposeFile", () => {
 			external: true,
 			name: "nixploy-network",
 		});
-		expect(spec.services?.web?.networks).toEqual({
-			"myapp-net": {},
+		expect(spec.services?.["myapp-web"]?.networks).toEqual({
+			"myapp-net": { aliases: ["web"] },
 			"nixploy-network": { aliases: ["myapp-web"] },
 		});
-		expect(spec.services?.db?.networks).toEqual({ "myapp-net": {} });
+		expect(spec.services?.["myapp-db"]?.networks).toEqual({ "myapp-net": { aliases: ["db"] } });
 	});
 
 	it("applies the suffix before network injection and to the exposed set / alias", () => {
@@ -743,10 +743,10 @@ describe("buildDeployComposeFile", () => {
 			suffix: "pr-1",
 			exposedServices: ["web"],
 		});
-		expect(listComposeServices(output)).toEqual(["web-pr-1"]);
+		expect(listComposeServices(output)).toEqual(["myapp-web-pr-1"]);
 		const spec = parseComposeFile(output);
-		expect(spec.services?.["web-pr-1"]?.networks).toEqual({
-			"myapp-net": {},
+		expect(spec.services?.["myapp-web-pr-1"]?.networks).toEqual({
+			"myapp-net": { aliases: ["web-pr-1", "web"] },
 			"nixploy-network": { aliases: ["myapp-web-pr-1"] },
 		});
 	});
@@ -790,7 +790,61 @@ describe("buildDeployComposeFile", () => {
 				swarmNodeId: "node123",
 			}),
 		);
-		expect(plain.services?.web?.deploy).toBeUndefined();
+		expect(plain.services?.["myapp-web"]?.deploy).toBeUndefined();
+	});
+
+	it("qualifies automatic DNS keys on shared networks while retaining bare names only privately", () => {
+		const content = `services:
+  web:
+    image: nginx
+    container_name: public-web
+    depends_on:
+      db:
+        condition: service_healthy
+    links: [db:database]
+  db:
+    image: postgres:16-alpine
+    volumes: [data:/var/lib/postgresql/data]
+volumes:
+  data:
+`;
+		const a = parseComposeFile(
+			buildDeployComposeFile(content, {
+				appName: "stack-a",
+				composeType: "docker-compose",
+				environmentNetwork: "env-net",
+				exposedServices: ["web"],
+			}),
+		);
+		const b = parseComposeFile(
+			buildDeployComposeFile(content, {
+				appName: "stack-b",
+				composeType: "docker-compose",
+				environmentNetwork: "env-net",
+				exposedServices: ["web"],
+			}),
+		);
+		expect(Object.keys(a.services ?? {})).toEqual(["stack-a-web", "stack-a-db"]);
+		expect(Object.keys(b.services ?? {})).toEqual(["stack-b-web", "stack-b-db"]);
+		expect(a.services?.["stack-a-web"]?.depends_on).toEqual({
+			"stack-a-db": { condition: "service_healthy" },
+		});
+		expect(a.services?.["stack-a-web"]?.links).toEqual(["stack-a-db:database"]);
+		expect(a.services?.["stack-a-web"]?.container_name).toBe("stack-a-public-web");
+		expect(a.services?.["stack-a-web"]?.labels).toMatchObject({
+			"io.nixploy.compose.source-service": "web",
+		});
+		expect(a.services?.["stack-a-web"]?.networks).toEqual({
+			"stack-a-net": { aliases: ["web", "public-web"] },
+			"env-net": { aliases: ["stack-a-web"] },
+			"nixploy-network": { aliases: ["stack-a-web"] },
+		});
+		expect(a.services?.["stack-a-db"]?.networks).toEqual({
+			"stack-a-net": { aliases: ["db"] },
+			"env-net": { aliases: ["stack-a-db"] },
+		});
+		expect(a.services?.["stack-a-db"]?.volumes).toEqual(["data:/var/lib/postgresql/data"]);
+		expect(a.volumes).toEqual({ data: null });
 	});
 
 	it("normalizes stack files: drops top-level name and flattens long-form depends_on", () => {

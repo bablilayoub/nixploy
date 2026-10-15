@@ -6,9 +6,12 @@ import {
 	buildComposeStopCommand,
 	cleanEnvPrefix,
 	composeSuffix,
+	deployedServiceCandidates,
+	deployedServiceName,
 	sharedNetworkAlias,
 	sharedNetworkConnectCommand,
 	sharedNetworkServiceUpdateCommand,
+	sourceComposeServiceName,
 	stackServiceName,
 	traefikAppName,
 } from "./commands";
@@ -96,6 +99,17 @@ describe("isolation suffix naming", () => {
 			"shop-web",
 		);
 		expect(traefikAppName({ appName: "shop", composeType: "stack" }, null)).toBe("shop_");
+	});
+
+	it("qualifies Compose keys without changing established route aliases or Swarm names", () => {
+		expect(deployedServiceName(composeRow, "db")).toBe("my-app-db");
+		expect(deployedServiceName(isolated, "db")).toBe("shop-db-a1b2c3");
+		expect(deployedServiceName(stackRow, "db")).toBe("db");
+		expect(deployedServiceCandidates(isolated, "db")).toEqual(["shop-db-a1b2c3", "db-a1b2c3"]);
+		expect(deployedServiceCandidates(stackRow, "db")).toEqual(["db"]);
+		expect(sourceComposeServiceName("shop-web", "web")).toBe("web");
+		// A legacy raw source key may already start with its project name.
+		expect(sourceComposeServiceName("shop-web")).toBe("shop-web");
 	});
 });
 

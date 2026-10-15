@@ -19,10 +19,35 @@ export function composeSuffix(row: ComposeCommandRow): string {
 	return row.isolatedDeployment && row.suffix ? row.suffix : "";
 }
 
-/** Service name as written to the deployed file (isolation suffix applied). */
-export function deployedServiceName(row: ComposeCommandRow, serviceName: string): string {
+/** Source service name with the optional isolation suffix. */
+function suffixedServiceName(row: ComposeCommandRow, serviceName: string): string {
 	const suffix = composeSuffix(row);
 	return suffix ? `${serviceName}-${suffix}` : serviceName;
+}
+
+/**
+ * Compose automatically advertises its service keys on EVERY attached network.
+ * Qualify those keys so two stacks never advertise the same bare database name
+ * on the environment overlay. Swarm already namespaces its deployed services.
+ */
+export function deployedServiceName(row: ComposeCommandRow, serviceName: string): string {
+	const name = suffixedServiceName(row, serviceName);
+	return row.composeType === "docker-compose" ? `${row.appName}-${name}` : name;
+}
+
+/** Old running containers and rollback snapshots keep their pre-qualification labels. */
+export function deployedServiceCandidates(row: ComposeCommandRow, serviceName: string): string[] {
+	return [
+		...new Set([deployedServiceName(row, serviceName), suffixedServiceName(row, serviceName)]),
+	];
+}
+
+/** Original source key, injected after validation and never trusted from the input. */
+export const COMPOSE_SOURCE_SERVICE_LABEL = "io.nixploy.compose.source-service";
+
+/** Legacy labels are kept verbatim; source metadata removes prefix ambiguity. */
+export function sourceComposeServiceName(deployedName: string, sourceName?: string): string {
+	return sourceName || deployedName;
 }
 
 /**
@@ -34,18 +59,18 @@ export function deployedServiceName(row: ComposeCommandRow, serviceName: string)
  * The isolation suffix is part of the service name in both cases.
  */
 export function traefikAppName(row: ComposeCommandRow, serviceName: string | null): string {
-	const name = deployedServiceName(row, serviceName ?? "");
+	const name = suffixedServiceName(row, serviceName ?? "");
 	return row.composeType === "stack" ? `${row.appName}_${name}` : `${row.appName}-${name}`;
 }
 
 /** DNS alias an exposed service carries on the shared overlay (both modes). */
 export function sharedNetworkAlias(row: ComposeCommandRow, serviceName: string): string {
-	return `${row.appName}-${deployedServiceName(row, serviceName)}`;
+	return `${row.appName}-${suffixedServiceName(row, serviceName)}`;
 }
 
 /** Swarm service name of one compose-file service in stack mode. */
 export function stackServiceName(row: ComposeCommandRow, serviceName: string): string {
-	return `${row.appName}_${deployedServiceName(row, serviceName)}`;
+	return `${row.appName}_${suffixedServiceName(row, serviceName)}`;
 }
 
 /**

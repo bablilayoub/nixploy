@@ -495,9 +495,32 @@ interpreted). `buildComposeDeployCommand` then runs `docker stack deploy`
 under `env -i` so tenant variables never reach the docker CLI's process
 environment. Every service is attached to a private `<appName>-net`; only
 services that have a domain also join `nixploy-network` with the alias
-`<appName>-<service>` (added at runtime when a domain is created later). Service discovery for
-domains uses `<appName>-<service>-1` container names. `resyncComposeDomains`
-writes Traefik config per exposed service.
+`<appName>-<service>` (added at runtime when a domain is created later).
+Docker Compose's deployed service keys are also qualified with `<appName>-`,
+because Docker otherwise adds a bare service alias on every attached network
+even when explicit aliases were supplied. Bare source names and custom
+container names are retained only on the stack's private network; explicit
+`container_name` values are qualified too. A source-service label keeps the
+runtime table and harvested logs using the names from the source file.
+Service discovery uses project-scoped labels and accepts legacy labels until
+redeploy. `resyncComposeDomains` keeps the established route aliases.
+
+Upgrading a legacy render recreates its containers, keeping the same project
+and declared named-volume identities. A legacy anonymous/image volume blocks
+the upgrade with backup/copy guidance before containers are replaced. Copy
+the data into a declared named volume, then remove the stopped legacy
+containers while retaining their old volumes before deploying again. Stop
+still works against the existing project without requiring that upgrade.
+Redeploy every legacy Compose stack in an environment to remove their old
+bare aliases from the environment overlay. Rollbacks restore source inputs
+and re-render once using the current naming rules. Native Swarm stack naming
+is unchanged.
+
+`docker compose up -d` success records command completion. It is not a
+health-readiness guarantee: a process can exit after the command returns.
+Check container health and the domain before cutover. A blanket `--wait`
+would reject existing one-shot init services without
+`service_completed_successfully` dependencies, so it is not added implicitly.
 
 Compose services carry the same `preDeployCommand` / `postDeployCommand`
 columns, but with different semantics: there is no image Nixploy built, so

@@ -35,7 +35,7 @@ import {
 	buildComposeFallbackDownCommand,
 	buildComposeStopCommand,
 	composeSuffix,
-	deployedServiceName,
+	deployedServiceCandidates,
 	sharedNetworkConnectCommand,
 	sharedNetworkServiceUpdateCommand,
 	stackServiceName,
@@ -69,6 +69,7 @@ import {
 	runComposeCommand,
 	writeComposeFile,
 } from "./source";
+import { assertSafeComposeNamingTransition } from "./transition";
 
 export type { ComposeRow };
 export { buildComposeDeployCommand, traefikAppName };
@@ -440,6 +441,10 @@ export async function prepareComposeFiles(
 		);
 	}
 
+	await assertSafeComposeNamingTransition(composeRow, (command) =>
+		runComposeCommand(composeRow, command),
+	);
+
 	// Env inheritance: project → environment → service (service wins).
 	const full = await findComposeById(composeRow.composeId);
 	const mergedEnv = mergeEnvVars(
@@ -587,12 +592,31 @@ export async function startCompose(composeRow: ComposeRow): Promise<void> {
 /** Stop without removing: `docker compose stop`, or `docker stack rm` for stacks. */
 export async function stopCompose(composeRow: ComposeRow): Promise<void> {
 	try {
-		// Not a deployment: never snapshot, never displace the worker's own row.
-		const files = await prepareComposeFiles(composeRow, { deploymentId: null });
-		await runComposeCommand(composeRow, buildComposeStopCommand(composeRow, files), {
-			cwd: files.workDir,
-			onPrimary: runsOnPrimary(composeRow),
-		});
+		// Stop the running identities, including legacy renders, without
+		// rewriting the file or triggering a service-name/data transition.
+		if (composeRow.composeType === "stack") {
+			await runComposeCommand(
+				composeRow,
+				buildComposeStopCommand(composeRow, {
+					composeFilePath: getComposeDeployFilePath(composeRow.appName),
+				}),
+				{ onPrimary: true },
+			);
+		} else {
+			const output = await runComposeCommand(
+				composeRow,
+				`docker ps -q --filter label=com.docker.compose.project=${shellQuote(composeRow.appName)}`,
+			);
+			const ids = output
+				.split("\n")
+				.map((line) => line.trim())
+				.filter(Boolean);
+			if (ids.some((id) => !/^[a-f0-9]{12,64}$/.test(id))) {
+				throw preconditionFailed("Could not verify Compose containers before stopping");
+			}
+			if (ids.length)
+				await runComposeCommand(composeRow, `docker stop ${ids.map(shellQuote).join(" ")}`);
+		}
 	} finally {
 		await updateStatus(composeRow.composeId, "idle");
 		invalidateComposeContainers(composeRow.appName, composeRow.serverId);
@@ -752,15 +776,16 @@ async function ensureSharedNetworkAttached(row: ComposeRow, serviceName: string)
 		return;
 	}
 
-	const containerIds = (
-		await runComposeCommand(
+	const containerIds = new Set<string>();
+	for (const candidate of deployedServiceCandidates(row, serviceName)) {
+		const output = await runComposeCommand(
 			row,
-			`docker ps -q --filter label=com.docker.compose.project=${shellQuote(row.appName)} --filter label=com.docker.compose.service=${shellQuote(deployedServiceName(row, serviceName))}`,
-		)
-	)
-		.split("\n")
-		.map((line) => line.trim())
-		.filter(Boolean);
+			`docker ps -q --filter label=com.docker.compose.project=${shellQuote(row.appName)} --filter label=com.docker.compose.service=${shellQuote(candidate)}`,
+		);
+		for (const line of output.split("\n")) {
+			if (line.trim()) containerIds.add(line.trim());
+		}
+	}
 	for (const containerId of containerIds) {
 		const raw = await runComposeCommand(
 			row,
