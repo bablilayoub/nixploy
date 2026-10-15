@@ -291,7 +291,7 @@ Content is hand-authored in `src/lib/{site,landing-data,features,compare,brand}.
 ## 10. CI / release / packaging
 
 - `.github/workflows/ci.yml` — PR + main: Biome, `pnpm typecheck`, migrate a Postgres service, `pnpm test` (full suite), template image manifest probe, Swarm+Traefik whoami smoke; manual `api-golden-path` job with secrets.
-- `.github/workflows/docker.yml` — main pushes (not `[release]`/`[ci skip]`): GHCR `main` + sha images, built per architecture on native runners (`ubuntu-latest`, `ubuntu-24.04-arm`) and merged into one manifest list. It never touches `latest`.
+- `.github/workflows/docker.yml` — main pushes (not `[release]`/`[ci skip]`): GHCR images built per architecture on native runners (`ubuntu-latest`, `ubuntu-24.04-arm`), staged under a unique build tag, signed and verified by both installers at the exact index digest before publishing `main` + sha. PR CI uses one pinned signed baseline; both paths reject foreign/missing signatures (`tools/ci/check-installer-signatures.sh`). It never touches `latest`.
 - `.github/workflows/release.yml` — tag `v[0-9]*`: assert tag = root `package.json` version, push `ghcr.io/bablilayoub/nixploy:vX.Y.Z` + `latest`, pin `install.sh`/`update.sh`, GitHub Release with notes.
 - `.github/workflows/publish-cli.yml` — tag `cli-v*`: npm publish `@nixploy/cli` (needs `NPM_TOKEN`).
 - `tools/release.sh paas|cli|both [--bump patch|minor|major] [--dry-run]` — bumps versions (root, web, landing, server), pins install defaults, commits `[release]` (never `[skip ci]` — GitHub applies that to tag pushes too), tags, pushes the commits then the tag.

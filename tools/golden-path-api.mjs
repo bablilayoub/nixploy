@@ -151,7 +151,10 @@ async function request(method, path, { body, input } = {}) {
 		data = { raw: text };
 	}
 	if (!res.ok) {
-		fail(`${method} ${path} → ${res.status}: ${text.slice(0, 600)}`);
+		// Match known readiness errors against the decoded message. The raw JSON
+		// escapes database-name quotes, so /database "..." does not exist/ misses it.
+		const reason = typeof data?.message === "string" ? data.message : text;
+		fail(`${method} ${path} → ${res.status}: ${reason.slice(0, 600)}`);
 	}
 	return unwrap(data);
 }
