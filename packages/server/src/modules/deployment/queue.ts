@@ -55,6 +55,8 @@ export interface QueueJob {
 	applicationId?: string;
 	composeId?: string;
 	previewDeploymentId?: string;
+	/** Retained even when deleting the preview clears its foreign key. */
+	isPreview?: boolean;
 	type: "deploy" | "redeploy";
 	serverId: string | null;
 	/** Branch/tag/sha the caller asked for; null = the configured branch. */
