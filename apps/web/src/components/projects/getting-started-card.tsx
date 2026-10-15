@@ -32,7 +32,7 @@ interface Step {
  */
 export function GettingStartedCard({ firstProjectId }: { firstProjectId?: string | null }) {
 	const trpc = useTRPC();
-	const { isInstanceAdmin } = useCapabilities();
+	const { can, isInstanceAdmin } = useCapabilities({ strict: true });
 	const [dismissed, setDismissed] = useState(true);
 	const { data } = useQuery(trpc.project.onboarding.queryOptions());
 
@@ -123,7 +123,15 @@ export function GettingStartedCard({ firstProjectId }: { firstProjectId?: string
 					<X className="size-4" />
 				</Button>
 			</CardHeader>
-			<CardContent className="pt-0">
+			<CardContent className="space-y-4 pt-0">
+				{can("gitops.manage") && !data.service && (
+					<div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/30 p-3">
+						<p className="text-sm text-muted-foreground">Already running services on Dokploy?</p>
+						<Button asChild variant="outline" size="sm">
+							<Link href="/dashboard/migrations">Review an import</Link>
+						</Button>
+					</div>
+				)}
 				<ol className="divide-y">
 					{steps.map((step) => (
 						<li key={step.key} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">

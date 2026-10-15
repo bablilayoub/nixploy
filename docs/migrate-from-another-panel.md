@@ -8,6 +8,39 @@ Traefik, templates, API keys). For a panel whose API the importer speaks
 way you point traffic when the new instance is green. This guide covers the
 importer first, then the concept map and the cutover.
 
+## Import in the panel
+
+Open **Migrations** in the navigation or command palette. Access requires
+`gitops.manage`; the source key's permissions determine the inventory you can
+read. Choose **Live API** for Dokploy or **Upload dump** for a PostgreSQL dump.
+Keys are sent in mutation bodies and held only in page memory; changing the
+source, completing an import, starting over or leaving clears them. Uploaded
+dumps belong to the current organization and expire after 24 hours.
+
+1. Inspect the source, then choose its project and environment.
+2. Select the services to copy and an accessible target project and environment.
+   Leaving the target project at its default matches the source name or creates
+   it. Generated runtime names are the safer default for a separate target;
+   keeping source names is an explicit option.
+3. Generate a plan. Review the counts, create/update/no-op actions, changed
+   field names and compatibility notes. Download the redacted report if useful.
+   Executable Compose/Dockerfile/command text and credential-bearing fields
+   are omitted from reports, while they remain available to the internal apply.
+4. Acknowledge the plan and choose **Import configuration**. Changing a source,
+   selection or target invalidates the review. Source-value or target-diff
+   changes discovered at apply require a fresh plan. Permission checks and
+   writes use one source snapshot.
+5. Review applied/failed changes and unmatched value sets. Open the target
+   project to restore secrets, database data and persistent files, check server
+   and registry access, explicitly deploy, and diagnose domains before cutover.
+   A partial import is retryable through a new plan; existing mappings keep ids
+   stable and unreadable encrypted values preserve manual replacements.
+
+Capabilities are checked again by the server: `secrets.write` for values,
+`project.write` for project/environment creation, and service create/write
+capabilities based on the plan. Instance-admin-only settings retain their gate.
+Only projects allowed by the caller's organization and teams can be targeted.
+
 ## Import over the source's API
 
 The importer reads one project environment from the source panel through
@@ -24,7 +57,11 @@ nixploy import apply  --source dokploy --url https://old-panel.example.com --sou
 ```
 
 `inspect` lists what the key can see (projects, environments, service
-counts). The importer reads project details as well as the list, because
+counts); `--json` also includes namespaced service ids for `--service <kind/id>`
+selection. Repeat `--service` on plan and apply to select a subset. Plan output
+includes a review token: pass it to apply with `--review-token <token>` to reject
+source-value or target-setting changes since review. Omit the token only when
+you deliberately want to apply a freshly fetched configuration. The importer reads project details as well as the list, because
 the source list omits database names and environment-level env. `plan`
 fetches the environment, prints the translation's notes and
 the diff against the target (every item is a create when the target project

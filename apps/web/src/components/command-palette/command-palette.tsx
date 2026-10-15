@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 	Activity,
 	AppWindow,
+	ArrowRightLeft,
 	BookOpen,
 	Bot,
 	Boxes,
@@ -508,6 +509,16 @@ export function CommandPalette({ className }: { className?: string }) {
 				run: go("/dashboard/settings/organization"),
 			},
 		);
+		if (can("gitops.manage")) {
+			list.push({
+				id: "page:migrations",
+				label: "Migrations",
+				group: "Pages",
+				icon: ArrowRightLeft,
+				keywords: ["import", "dokploy", "move", "dump", "migration"],
+				run: go("/dashboard/migrations"),
+			});
+		}
 		if (isInstanceAdmin) {
 			list.push({
 				id: "page:ai-settings",

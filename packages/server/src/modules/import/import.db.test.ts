@@ -9,6 +9,7 @@ const source = vi.hoisted(() => ({
 	listProjects: vi.fn(),
 	getApplication: vi.fn(),
 	getCompose: vi.fn(),
+	getDatabase: vi.fn(),
 }));
 vi.mock("./client", () => ({
 	SourcePanelClient: {
@@ -17,6 +18,7 @@ vi.mock("./client", () => ({
 			listProjects: source.listProjects,
 			getApplication: source.getApplication,
 			getCompose: source.getCompose,
+			getDatabase: source.getDatabase,
 			close: async () => {},
 		}),
 	},
@@ -142,6 +144,105 @@ describe.skipIf(!testUrl)("import project access (postgres)", () => {
 			if (previousConfigDir === undefined) delete process.env.NIXPLOY_CONFIG_DIR;
 			else process.env.NIXPLOY_CONFIG_DIR = previousConfigDir;
 			await rm(configDir, { recursive: true, force: true });
+		}
+	});
+
+	it("binds a reviewed selection to stable source values and target changes before writes", async () => {
+		process.env.DATABASE_URL = testUrl;
+		const { db } = await import("../../db");
+		const { applications } = await import("../../db/schema");
+		const { createTestCaller, seedOneTenant, wipeTenant } = await import(
+			"../../trpc/tenancy.harness"
+		);
+		const { sourceApplicationSchema, sourceDatabaseSchema, sourceProjectListSchema } = await import(
+			"./source-schema"
+		);
+		const tenant = await seedOneTenant("import-review");
+		try {
+			source.listProjects.mockResolvedValue(
+				sourceProjectListSchema.parse([
+					{
+						projectId: "source",
+						name: "Source",
+						environments: [
+							{
+								environmentId: "env",
+								name: "production",
+								applications: [
+									{ applicationId: "web", name: "review-web" },
+									{ applicationId: "excluded", name: "excluded" },
+								],
+								postgres: [{ postgresId: "db", name: "review-db" }],
+							},
+						],
+					},
+				]),
+			);
+			const sourceApp = {
+				applicationId: "web",
+				name: "review-web",
+				appName: "source-review-web",
+				sourceType: "docker",
+				dockerImage: "traefik/whoami:v1.10.1",
+				env: "TOKEN=source-only-secret-canary",
+				memoryLimit: "256M",
+			};
+			source.getApplication.mockResolvedValue(sourceApplicationSchema.parse(sourceApp));
+			source.getDatabase.mockResolvedValue(
+				sourceDatabaseSchema.parse({
+					name: "review-db",
+					appName: "review-db",
+					databasePassword: "enc:v1:unreadable",
+					dockerImage: "postgres:17-alpine",
+				}),
+			);
+			const caller = createTestCaller(tenant.session);
+			const input = {
+				source: "dokploy" as const,
+				url: "https://source.example.com",
+				apiKey: "source-api-key-canary",
+				sourceProjectId: "source",
+				projectId: tenant.projectId,
+				keepAppNames: false,
+				serviceIds: ["application/web", "postgres/db"],
+			};
+			const inventory = await caller.import.inspect(input);
+			expect(inventory.projects[0]?.environments[0]?.services).toHaveLength(3);
+			const first = await caller.import.plan(input);
+			expect(first.counts).toMatchObject({ applications: 1, databases: 1 });
+			expect(JSON.stringify(first)).not.toContain("canary");
+			const reads = source.listProjects.mock.calls.length;
+			const imported = await caller.import.runApply({ ...input, reviewToken: first.reviewToken });
+			expect(imported.result.errors).toEqual([]);
+			expect(source.listProjects.mock.calls.length - reads).toBe(1);
+			const next = await caller.import.plan(input);
+			source.getApplication.mockResolvedValue(
+				sourceApplicationSchema.parse({ ...sourceApp, env: "TOKEN=changed-source-secret" }),
+			);
+			await expect(
+				caller.import.runApply({ ...input, reviewToken: next.reviewToken }),
+			).rejects.toMatchObject({ code: "CONFLICT" });
+			source.getApplication.mockResolvedValue(sourceApplicationSchema.parse(sourceApp));
+			const beforeTargetChange = await caller.import.plan(input);
+			const targetApp = await db.query.applications.findFirst({
+				where: and(
+					eq(applications.environmentId, tenant.environmentId),
+					eq(applications.name, "review-web"),
+				),
+			});
+			if (!targetApp) throw new Error("Missing imported app");
+			await db
+				.update(applications)
+				.set({ memoryLimit: "512M" })
+				.where(eq(applications.applicationId, targetApp.applicationId));
+			await expect(
+				caller.import.runApply({ ...input, reviewToken: beforeTargetChange.reviewToken }),
+			).rejects.toMatchObject({ code: "CONFLICT" });
+			await expect(
+				caller.import.plan({ ...input, serviceIds: ["application/missing"] }),
+			).rejects.toMatchObject({ code: "BAD_REQUEST" });
+		} finally {
+			await wipeTenant(tenant);
 		}
 	});
 

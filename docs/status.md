@@ -5,6 +5,41 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Operator workflow and migration workspace — 2026-10-15
+
+In progress on `codex/migration-workspace`, based on merged PR #14
+(`3b39c8e`); the primary checkout remains unchanged. Completed checkpoints:
+
+- `a223ab1`: Compose creation accepts pasted/uploaded YAML and raw URLs, validates
+  before inserting, preserves drafts on failure, and saves idle for explicit
+  deployment. Parser failures report safe locations rather than echoing source.
+  Server TypeScript, 100 focused tests and 141 Compose tests pass (DB snapshot
+  suite separately pending at that checkpoint). Real panel: 10 browser scenarios,
+  9 desktop/mobile light/dark screenshots, zero page/console errors; unsafe,
+  malformed, HTML, redirects, metadata and private-egress failures create no row.
+- `2b35776`: Consistent page/service headings, mobile project health and service
+  context, separated environment/actions/filters, useful partial errors/retry,
+  keyboard focus and bulk selection. Fixed duplicate new-project deep-link
+  dialogs, URL history selection, unauthorized Docker health and missing health
+  invalidations. Web TypeScript and 96 tests pass; 28 screenshots, zero browser
+  errors. Idle dashboard sends no deployment requests over 12 seconds; populated
+  deployment-history navigation still pending a real deployment in this phase.
+- Migration center: real isolated Dokploy v0.30.8 API inspect/review/apply using
+  application, Compose, Postgres and domain configuration; 9 desktop/mobile
+  light/dark screenshots, zero browser errors, body-only mutation requests and
+  redacted report canary checks. Target Docker inventory remains the original
+  four services and imports write no runtime/proxy configuration. Selection,
+  prepared-snapshot permission checks and HMAC review binding are covered by
+  real-Postgres regressions, including source secret drift and target settings.
+  Dump/browser edge-state checks, final gates and PR verification remain open.
+
+Coolify catalog translation and live API source work are underway. Catalog
+parse/safety counts are provisional until the real template deployment proof;
+no new live importer support is advertised yet. Design decisions live in
+`.ui-craft/brief.md` and `tokens.md`. Evidence is under ignored
+`.nixploy-data/verification/`. All source instances/databases use test-owned
+resources; original services, Traefik files and unattributed storage are preserved.
+
 ## Four backlog integrations — 2026-10-15
 
 Completed the installer race fix, Update browser verification, real-provider

@@ -75,7 +75,7 @@ export class SourcePanelClient implements SourceReader {
 		}
 		if (!response.ok) {
 			throw badRequest(
-				`The source panel answered ${response.status} for ${procedure}: ${response.body.slice(0, 200)}`,
+				`The source panel answered ${response.status} for ${procedure}; check source availability and API permissions`,
 			);
 		}
 		try {

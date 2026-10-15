@@ -1,5 +1,6 @@
 import {
 	Activity,
+	ArrowRightLeft,
 	CalendarClock,
 	Container,
 	FolderGit2,
@@ -12,6 +13,7 @@ export type SidebarNavItem = {
 	title: string;
 	url: string;
 	icon: LucideIcon;
+	capability?: string;
 };
 
 export type SidebarNavGroup = {
@@ -24,6 +26,12 @@ export const sidebarNavGroups: SidebarNavGroup[] = [
 		title: "Platform",
 		items: [
 			{ title: "Projects", url: "/dashboard", icon: FolderGit2 },
+			{
+				title: "Migrations",
+				url: "/dashboard/migrations",
+				icon: ArrowRightLeft,
+				capability: "gitops.manage",
+			},
 			{ title: "Templates", url: "/dashboard/templates", icon: LayoutTemplate },
 			{ title: "Docker", url: "/dashboard/docker", icon: Container },
 			{ title: "Monitoring", url: "/dashboard/monitoring", icon: Activity },

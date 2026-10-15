@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { environments, projects, registry, servers } from "../../db/schema";
-import { badRequest, notFound } from "../errors";
+import { badRequest, conflict, notFound } from "../errors";
 import {
 	type ApplyStackResult,
 	applyStack,
@@ -23,6 +23,7 @@ import {
 	normalizeSourceEnvironment,
 } from "./normalize";
 import type { SourceReader } from "./reader";
+import { importReviewToken } from "./review";
 import type {
 	SourceApplication,
 	SourceCompose,
@@ -93,6 +94,8 @@ export interface ImportRequest extends ImportSourceOptions {
 	/** Target environment name; the source environment's name when omitted. */
 	environmentName?: string;
 	keepAppNames?: boolean;
+	/** Optional kind/source-id inventory selection; omitted imports the whole environment. */
+	serviceIds?: string[];
 }
 
 export interface SourceInventory {
@@ -106,9 +109,31 @@ export interface SourceInventory {
 			compose: number;
 			databases: number;
 			unsupported: number;
+			services: Array<{ id: string; name: string; kind: string }>;
 		}>;
 	}>;
 }
+
+/** Source ids are namespaced by kind, since providers may reuse ids across tables. */
+const inventoryServices = (environment: SourceProjectSummary["environments"][number]) => [
+	...environment.applications.map((row) => ({
+		id: `application/${row.applicationId}`,
+		name: row.name,
+		kind: "application",
+	})),
+	...environment.compose.map((row) => ({
+		id: `compose/${row.composeId}`,
+		name: row.name,
+		kind: "compose",
+	})),
+	...DATABASE_KINDS.flatMap((kind) =>
+		environment[kind].map((row) => ({
+			id: `${kind}/${String((row as Record<string, unknown>)[`${kind}Id`])}`,
+			name: row.name,
+			kind,
+		})),
+	),
+];
 
 /** What the key can see, counted — nothing that could hold a value. */
 export const inspectSource = async (
@@ -133,6 +158,7 @@ export const inspectSource = async (
 				compose: environment.compose.length,
 				databases: DATABASE_KINDS.reduce((sum, kind) => sum + environment[kind].length, 0),
 				unsupported: environment.libsql.length,
+				services: inventoryServices(environment),
 			})),
 		})),
 	};
@@ -185,14 +211,26 @@ const readSourceEnvironment = async (
 		);
 	}
 
+	const selected = request.serviceIds ? new Set(request.serviceIds) : null;
+	if (selected) {
+		const available = new Set(inventoryServices(environment).map((row) => row.id));
+		if (selected.size === 0 || [...selected].some((id) => !available.has(id))) {
+			throw badRequest(
+				"Select at least one service from the current source environment; inspect again if it changed",
+			);
+		}
+	}
+
 	// Sequential on purpose: a panel on a small box answers one `one` at a
 	// time comfortably and ten in parallel with 502s.
 	const applications: SourceApplication[] = [];
 	for (const row of environment.applications) {
+		if (selected && !selected.has(`application/${row.applicationId}`)) continue;
 		applications.push(await client.getApplication(row.applicationId));
 	}
 	const compose: SourceCompose[] = [];
 	for (const row of environment.compose) {
+		if (selected && !selected.has(`compose/${row.composeId}`)) continue;
 		compose.push(await client.getCompose(row.composeId));
 	}
 	const databases = {} as Record<DatabaseServiceKind, SourceDatabase[]>;
@@ -200,7 +238,7 @@ const readSourceEnvironment = async (
 		databases[kind] = [];
 		for (const row of environment[kind]) {
 			const id = (row as Record<string, unknown>)[`${kind}Id`];
-			if (typeof id !== "string") continue;
+			if (typeof id !== "string" || (selected && !selected.has(`${kind}/${id}`))) continue;
 			databases[kind].push(await client.getDatabase(kind, id));
 		}
 	}
@@ -299,6 +337,8 @@ export interface ImportPlan {
 	counts: NormalizedEnvironment["counts"];
 	/** Diff against the target, or null when the target does not exist yet (everything is a create). */
 	plan: GitopsPlanResult | null;
+	/** Opaque digest binding the review to source values, target and current diff. */
+	reviewToken: string;
 }
 
 const normalizeRequest = async (
@@ -326,25 +366,66 @@ const normalizeRequest = async (
 	return { fetched, normalized, target };
 };
 
-export const planImport = async (
+export const prepareImport = async (
 	request: ImportRequest,
 	organizationId: string,
 	options: { includeSensitive?: boolean } = {},
-): Promise<ImportPlan> => {
+) => {
 	const { fetched, normalized, target } = await normalizeRequest(request, organizationId);
 	let plan: GitopsPlanResult | null = null;
+	let live: ReturnType<typeof liveStateFromGraph> | null = null;
+	let targetValues: unknown = null;
 	if (target.projectId && !target.createsEnvironment) {
 		const graph = await loadEnvironmentGraph(
 			target.projectId,
 			target.environmentName,
 			organizationId,
 		);
-		plan = buildPlan(
-			normalized.manifest,
-			liveStateFromGraph(target.projectId, target.environmentName, graph, options),
-		);
+		live = liveStateFromGraph(target.projectId, target.environmentName, graph, options);
+		// Bind values apply may overwrite too; public plans expose only key names.
+		targetValues = {
+			project: graph.project.env,
+			environment: graph.environment.env,
+			applications: graph.services.applications.map((row) => ({
+				name: row.name,
+				env: row.env,
+				buildArgs: row.buildArgs,
+				previewEnv: row.previewEnv,
+			})),
+			compose: graph.services.compose.map((row) => ({
+				name: row.name,
+				env: row.env,
+				buildArgs: row.buildArgs,
+				previewEnv: row.previewEnv,
+			})),
+			databases: Object.fromEntries(
+				DATABASE_KINDS.map((kind) => [
+					kind,
+					graph.services[kind].map((row) => ({ name: row.name, env: row.env })),
+				]),
+			),
+		};
+		plan = buildPlan(normalized.manifest, live);
 	}
-	return {
+	const reviewToken = importReviewToken({
+		organizationId,
+		source: {
+			provider: request.source,
+			url: request.url,
+			dumpId: request.dumpId,
+			project: request.sourceProjectId,
+			environment: request.sourceEnvironmentName,
+			keepAppNames: request.keepAppNames ?? false,
+			serviceIds: request.serviceIds ? [...request.serviceIds].sort() : undefined,
+		},
+		normalized,
+		target,
+		live,
+		targetValues,
+		plan,
+	});
+	const review: ImportPlan = {
+		reviewToken,
 		source: {
 			host: fetched.client.host,
 			project: fetched.normalizedInput.project.name,
@@ -356,7 +437,14 @@ export const planImport = async (
 		counts: normalized.counts,
 		plan,
 	};
+	return { fetched, normalized, target, review };
 };
+
+export const planImport = async (
+	request: ImportRequest,
+	organizationId: string,
+	options: { includeSensitive?: boolean } = {},
+): Promise<ImportPlan> => (await prepareImport(request, organizationId, options)).review;
 
 export interface ImportResult extends ImportPlan {
 	target: ImportTarget & { projectId: string };
@@ -365,33 +453,41 @@ export interface ImportResult extends ImportPlan {
 }
 
 /** Create what is missing, apply the manifest, write the values. Deploys nothing. */
-export const applyImport = async (
-	request: ImportRequest,
+export const applyPreparedImport = async (
+	prepared: Awaited<ReturnType<typeof prepareImport>>,
 	organizationId: string,
-	options: { includeSensitive?: boolean } = {},
+	options: { includeSensitive?: boolean; reviewToken?: string } = {},
 ): Promise<ImportResult> => {
-	const { fetched, normalized, target } = await normalizeRequest(request, organizationId);
+	const { fetched, normalized, target, review } = prepared;
+	if (options.reviewToken && options.reviewToken !== review.reviewToken) {
+		throw conflict(
+			"The source or target changed after review. Generate a fresh plan before importing.",
+		);
+	}
 
-	let projectId = target.projectId;
-	if (!projectId) {
-		const [created] = await db
-			.insert(projects)
-			.values({
-				name: target.projectName,
-				description: fetched.normalizedInput.project.description ?? null,
-				organizationId,
-			})
-			.returning();
-		if (!created) throw badRequest("Could not create the target project");
-		projectId = created.projectId;
-	}
-	if (target.createsEnvironment) {
-		await db.insert(environments).values({
-			name: target.environmentName,
-			description: fetched.normalizedInput.environment.description ?? null,
-			projectId,
-		});
-	}
+	const projectId = await db.transaction(async (tx) => {
+		let id = target.projectId;
+		if (!id) {
+			const [created] = await tx
+				.insert(projects)
+				.values({
+					name: target.projectName,
+					description: fetched.normalizedInput.project.description ?? null,
+					organizationId,
+				})
+				.returning();
+			if (!created) throw badRequest("Could not create the target project");
+			id = created.projectId;
+		}
+		if (target.createsEnvironment) {
+			await tx.insert(environments).values({
+				name: target.environmentName,
+				description: fetched.normalizedInput.environment.description ?? null,
+				projectId: id,
+			});
+		}
+		return id;
+	});
 
 	const result = await applyStack(normalized.manifest, organizationId, projectId, {
 		...options,
@@ -401,6 +497,7 @@ export const applyImport = async (
 	const secrets = await applySecretsPayload(normalized.secrets, graph);
 
 	return {
+		reviewToken: review.reviewToken,
 		source: {
 			host: fetched.client.host,
 			project: fetched.normalizedInput.project.name,
@@ -415,3 +512,15 @@ export const applyImport = async (
 		secrets,
 	};
 };
+
+/** Programmatic/CLI compatibility; routers reuse the exact prepared input checked for permissions. */
+export const applyImport = async (
+	request: ImportRequest,
+	organizationId: string,
+	options: { includeSensitive?: boolean; reviewToken?: string } = {},
+): Promise<ImportResult> =>
+	applyPreparedImport(
+		await prepareImport(request, organizationId, options),
+		organizationId,
+		options,
+	);

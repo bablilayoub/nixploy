@@ -25,6 +25,8 @@ interface ImportOptions extends SourceOptions {
 	projectId?: string;
 	env?: string;
 	keepAppNames: boolean;
+	service?: string[];
+	reviewToken?: string;
 }
 
 interface ImportNote {
@@ -34,6 +36,7 @@ interface ImportNote {
 }
 
 interface ImportPlanResponse {
+	reviewToken?: string;
 	source: { host: string; project: string; environment: string };
 	target: {
 		projectId: string | null;
@@ -122,12 +125,19 @@ function addImportOptions(command: Command): Command {
 		.option("--project-id <id>", "Target project ID (created with the source's name when omitted)")
 		.option("--env <name>", "Target environment name (the source's by default)")
 		.option(
+			"--service <kind/id>",
+			"Select a source service (repeat; see inspect --json)",
+			(value: string, previous: string[]) => [...previous, value],
+			[],
+		)
+		.option(
 			"--no-keep-app-names",
 			"Generate new appNames instead of keeping the source's (needed when a name is taken here)",
 		);
 }
 
 function printPlan(result: ImportPlanResponse): void {
+	if (result.reviewToken) printMessage(`Review token: ${result.reviewToken}`);
 	printMessage(
 		`Source: ${result.source.project} / ${result.source.environment} on ${result.source.host}`,
 	);
@@ -224,6 +234,7 @@ export function importCommand(): Command {
 			projectId: options.projectId,
 			environmentName: options.env,
 			keepAppNames: options.keepAppNames,
+			serviceIds: options.service?.length ? options.service : undefined,
 		});
 		if (outputMode().json) {
 			printJson(result);
@@ -236,6 +247,7 @@ export function importCommand(): Command {
 		addImportOptions(
 			importGroup
 				.command("apply")
+				.option("--review-token <token>", "Require the source and target to match a reviewed plan")
 				.description(
 					"Import one source environment: create what is missing, write rows and env values, deploy nothing",
 				),
@@ -244,11 +256,13 @@ export function importCommand(): Command {
 		const sourcePayload = await resolveSourcePayload(options);
 		const result = await apiPost<ImportPlanResponse>("import.runApply", {
 			...sourcePayload,
+			reviewToken: options.reviewToken,
 			sourceProjectId: options.sourceProject,
 			sourceEnvironmentName: options.sourceEnv,
 			projectId: options.projectId,
 			environmentName: options.env,
 			keepAppNames: options.keepAppNames,
+			serviceIds: options.service?.length ? options.service : undefined,
 		});
 		if (outputMode().json) {
 			printJson(result);

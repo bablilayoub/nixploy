@@ -15,10 +15,11 @@ import { Logo, LogoMark } from "@/components/shell/logo";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
-const navItems = sidebarNavGroups.flatMap((group) => group.items);
+const allNavItems = sidebarNavGroups.flatMap((group) => group.items);
 
 function useUpdateAvailable() {
 	const trpc = useTRPC();
@@ -46,9 +47,10 @@ function NavLink({
 	return (
 		<Link
 			href={href}
+			aria-current={active ? "page" : undefined}
 			onClick={onNavigate}
 			className={cn(
-				"relative inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors",
+				"relative inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 				active
 					? "bg-muted font-medium text-foreground"
 					: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
@@ -68,6 +70,8 @@ function NavLink({
 /** Vercel-style sticky top navigation — brand, links, search, account. */
 export function TopNav() {
 	const pathname = usePathname();
+	const { can } = useCapabilities({ strict: true });
+	const navItems = allNavItems.filter((item) => !item.capability || can(item.capability));
 	const branding = useBranding();
 	const [mobileOpen, setMobileOpen] = useState(false);
 	const updateAvailable = useUpdateAvailable();
@@ -90,7 +94,7 @@ export function TopNav() {
 					<OrgSwitcher />
 				</div>
 
-				<nav className="ms-1 hidden items-center gap-0.5 md:flex">
+				<nav className="ms-1 hidden items-center gap-0.5 xl:flex">
 					{navItems.map((item) => (
 						<NavLink
 							key={item.url}
@@ -122,7 +126,7 @@ export function TopNav() {
 
 					<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
 						<SheetTrigger asChild>
-							<Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
+							<Button variant="ghost" size="icon" className="xl:hidden" aria-label="Open menu">
 								<Menu className="size-5" />
 							</Button>
 						</SheetTrigger>
@@ -141,9 +145,10 @@ export function TopNav() {
 										<Link
 											key={item.url}
 											href={item.url}
+											aria-current={active ? "page" : undefined}
 											onClick={() => setMobileOpen(false)}
 											className={cn(
-												"flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+												"flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 												active
 													? "bg-muted font-medium text-foreground"
 													: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
