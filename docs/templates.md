@@ -249,11 +249,24 @@ verbatim, because only the key is inspected.
 
 ## Deploy from a compose URL
 
+In a project environment, choose **Add service → Compose**. Paste YAML or
+upload a `.yml` / `.yaml` file (up to 1 MiB), choose **Raw file URL** to fetch
+one (up to 256 KiB), or choose **Set up later** for an empty service. Choose
+Docker Compose for a single server or Docker Stack for Swarm. Creating opens
+the Compose file tab for review; no containers start until you choose Deploy.
+Add environment variables and domains before that first deployment.
+
 `compose.createFromUrl({ url, environmentId, name })` creates a raw compose
 service from a compose file at an http(s) URL. The URL goes through the same
 egress guard, the body through the same safety checks `saveComposeFile` runs,
-and nothing is deployed until `compose.deploy`.
+and nothing is deployed until `compose.deploy`. `compose.create` also accepts
+an optional `composeFile` when `sourceType` is `raw`. Validation happens
+before the service row is inserted, so a refused file leaves no empty service.
 
 Give it the **raw** file URL: redirects are not followed, and an HTML response
 (the usual mistake — a repository page instead of the raw file) is rejected
-with that message.
+with that message. Private addresses require private egress to be enabled
+by the instance admin. Host binds, host port publishing and `build:` blocks
+are refused on initial creation; use images and named volumes, route through
+domains, or create an empty service and configure the supported options
+before saving an adjusted file. No external files or data volumes are copied.

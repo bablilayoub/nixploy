@@ -58,6 +58,27 @@ describe("parseComposeFile / listComposeServices", () => {
 			"Invalid compose file: no services defined",
 		);
 	});
+
+	it.each([
+		"services: web",
+		"services: [web]",
+		"services:\n  web:",
+		"services:\n  web: nginx",
+		"services:\n  web: [nginx]",
+	])("refuses malformed service mappings: %s", (content) => {
+		expect(() => parseComposeFile(content)).toThrow(/must be a YAML mapping/);
+	});
+
+	it("returns a safe input error with a location for malformed YAML", () => {
+		try {
+			parseComposeFile("services:\n  web:\n    environment: [SECRET_CANARY: not: valid]\n");
+			expect.fail("Malformed YAML was accepted");
+		} catch (error) {
+			expect(error).toMatchObject({ code: "BAD_REQUEST" });
+			expect((error as Error).message).toMatch(/Invalid compose YAML at line 3/);
+			expect((error as Error).message).not.toContain("SECRET_CANARY");
+		}
+	});
 });
 
 describe("interpolateComposeString", () => {

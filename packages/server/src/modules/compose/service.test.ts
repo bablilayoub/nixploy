@@ -11,11 +11,22 @@ const mocks = vi.hoisted(() => ({
 	findFirst: vi.fn(),
 	set: vi.fn(),
 	returning: vi.fn(),
+	environmentFindFirst: vi.fn(),
+	insert: vi.fn(),
 }));
 
 vi.mock("../../db", () => ({
 	db: {
-		query: { compose: { findFirst: mocks.findFirst } },
+		query: {
+			compose: { findFirst: mocks.findFirst },
+			environments: { findFirst: mocks.environmentFindFirst },
+		},
+		insert: () => ({
+			values: (values: unknown) => {
+				mocks.insert(values);
+				return { returning: mocks.returning };
+			},
+		}),
 		update: () => ({
 			set: (values: unknown) => {
 				mocks.set(values);
@@ -45,6 +56,7 @@ import {
 	COMPOSE_SOURCE_FIELDS,
 	type ComposeRow,
 	composeSourceChanged,
+	createCompose,
 	saveComposeFile,
 	updateComposeById,
 } from "./service";
@@ -104,6 +116,58 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	mocks.findFirst.mockResolvedValue(privilegedRow);
 	mocks.returning.mockResolvedValue([privilegedRow]);
+	mocks.environmentFindFirst.mockResolvedValue({ environmentId: "env-1" });
+});
+
+describe("createCompose with an initial file", () => {
+	const input = {
+		name: "stack",
+		environmentId: "env-1",
+		composeType: "docker-compose",
+		sourceType: "raw",
+	} as const;
+
+	it.each([
+		"services: {}",
+		"services:\n  web: [not-a-service]",
+		"services:\n  web:\n    image: nginx\n    ports: ['8080:80']",
+		"services:\n  web:\n    build: .",
+		DOCKER_SOCK_COMPOSE,
+	])("refuses invalid or unsafe input before inserting a row: %s", async (composeFile) => {
+		await expect(createCompose({ ...input, composeFile })).rejects.toMatchObject({
+			code: "BAD_REQUEST",
+		});
+		expect(mocks.insert).not.toHaveBeenCalled();
+		expect(mocks.environmentFindFirst).not.toHaveBeenCalled();
+	});
+
+	it("saves the validated source with the row in one insert and leaves runtime untouched", async () => {
+		const composeFile = "services:\n  web:\n    image: nginx:alpine\n";
+		await createCompose({ ...input, composeFile });
+		expect(mocks.insert).toHaveBeenCalledWith(
+			expect.objectContaining({
+				composeFile,
+				sourceType: "raw",
+				hostPrivileged: false,
+				publishPorts: false,
+			}),
+		);
+		expect(mocks.set).not.toHaveBeenCalled();
+	});
+
+	it("keeps the existing empty draft path and refuses a file for a git source", async () => {
+		await createCompose(input);
+		expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ composeFile: "" }));
+		mocks.insert.mockClear();
+		await expect(
+			createCompose({
+				...input,
+				sourceType: "git",
+				composeFile: "services:\n  web:\n    image: nginx\n",
+			}),
+		).rejects.toMatchObject({ code: "BAD_REQUEST" });
+		expect(mocks.insert).not.toHaveBeenCalled();
+	});
 });
 
 describe("composeSourceChanged", () => {

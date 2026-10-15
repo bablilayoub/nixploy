@@ -9,7 +9,7 @@ import { badRequest } from "../errors";
  * vetted addresses (`pinnedFetch`, no redirects followed).
  *
  * The body is NOT validated here: the caller runs it through
- * `saveComposeFile`, which is the single place compose safety is enforced.
+ * `createCompose`, which validates the initial file before inserting a row.
  */
 
 /** Hard cap on a fetched compose file — the same order as `textBlobSchema`. */

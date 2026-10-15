@@ -122,6 +122,8 @@ export interface CreateComposeInput {
 	environmentId: string;
 	composeType: "docker-compose" | "stack";
 	sourceType: "raw" | "git" | "github" | "gitlab" | "bitbucket" | "gitea";
+	/** Optional initial raw source; validated before a service row is inserted. */
+	composeFile?: string;
 	appName?: string;
 	serverId?: string | null;
 	/** Instance-admin privileged templates only — never expose on public create APIs. */
@@ -135,6 +137,15 @@ export interface CreateComposeInput {
 }
 
 export async function createCompose(input: CreateComposeInput): Promise<ComposeRow> {
+	if (input.composeFile !== undefined) {
+		if (input.sourceType !== "raw") {
+			throw badRequest("An initial compose file requires a raw source");
+		}
+		assertSafeComposeSpec(parseComposeFile(input.composeFile), {
+			...(input.hostPrivileged ? hostPrivilegedComposeSafety() : {}),
+			allowPorts: input.publishPorts ?? false,
+		});
+	}
 	const environment = await db.query.environments.findFirst({
 		where: eq(environments.environmentId, input.environmentId),
 		with: { project: true },
@@ -162,6 +173,7 @@ export async function createCompose(input: CreateComposeInput): Promise<ComposeR
 			environmentId: input.environmentId,
 			composeType: input.composeType,
 			sourceType: input.sourceType,
+			composeFile: input.composeFile ?? "",
 			appName,
 			serverId: input.serverId ?? null,
 			hostPrivileged: input.hostPrivileged ?? false,

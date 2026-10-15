@@ -12,6 +12,12 @@ const mocks = vi.hoisted(() => ({
 	findComposeForOrg: vi.fn(),
 	updateComposeById: vi.fn(),
 	saveComposeFile: vi.fn(),
+	createCompose: vi.fn(),
+	deleteCompose: vi.fn(),
+	fetchComposeFromUrl: vi.fn(),
+	assertEnvironmentAccess: vi.fn(),
+	assertCapability: vi.fn(),
+	auditFromSession: vi.fn(),
 }));
 
 // `trpc/init` builds better-auth at import time from the schema barrel, so
@@ -25,7 +31,7 @@ vi.mock("../../modules/projects", async (importOriginal) => {
 	return {
 		...actual,
 		resolveCallerOrganizationId: vi.fn(async () => "org-1"),
-		assertCapability: vi.fn(async () => {}),
+		assertCapability: mocks.assertCapability,
 		hasCapability: vi.fn(async () => true),
 		assertWithinQuota: vi.fn(async () => {}),
 	};
@@ -38,8 +44,8 @@ vi.mock("../../modules/compose/service", () => ({
 	findComposeForOrg: mocks.findComposeForOrg,
 	updateComposeById: mocks.updateComposeById,
 	saveComposeFile: mocks.saveComposeFile,
-	createCompose: vi.fn(),
-	deleteCompose: vi.fn(),
+	createCompose: mocks.createCompose,
+	deleteCompose: mocks.deleteCompose,
 	duplicateCompose: vi.fn(),
 	loadServices: vi.fn(),
 	saveEnvironment: vi.fn(),
@@ -51,7 +57,12 @@ vi.mock("../../modules/compose/containers", () => ({
 	invalidateComposeContainers: vi.fn(),
 }));
 vi.mock("../../modules/deployment", () => ({ queueDeployment: vi.fn() }));
-vi.mock("../../modules/audit", () => ({ auditFromSession: vi.fn(async () => {}) }));
+vi.mock("../../modules/audit", () => ({ auditFromSession: mocks.auditFromSession }));
+vi.mock("../../modules/compose/remote", () => ({ fetchComposeFromUrl: mocks.fetchComposeFromUrl }));
+vi.mock("../../modules/application", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../../modules/application")>();
+	return { ...actual, assertEnvironmentAccess: mocks.assertEnvironmentAccess };
+});
 
 import { composeRouter } from "./compose";
 
@@ -84,6 +95,82 @@ beforeEach(() => {
 		...values,
 	}));
 	mocks.saveComposeFile.mockResolvedValue(undefined);
+	mocks.createCompose.mockResolvedValue({ ...row, hostPrivileged: false });
+	mocks.assertCapability.mockResolvedValue(undefined);
+	mocks.assertEnvironmentAccess.mockResolvedValue(undefined);
+	mocks.auditFromSession.mockResolvedValue(undefined);
+	mocks.fetchComposeFromUrl.mockResolvedValue("services:\n  web:\n    image: nginx:alpine\n");
+});
+
+describe("compose creation with a file", () => {
+	const input = {
+		name: "web",
+		environmentId: "env-1",
+		composeType: "docker-compose",
+		sourceType: "raw",
+	} as const;
+	it("passes a pasted file to the atomic create seam", async () => {
+		const composeFile = "services:\n  web:\n    image: nginx:alpine\n";
+		await composeRouter.createCaller(ctxFor("user")).create({ ...input, composeFile });
+		expect(mocks.createCompose).toHaveBeenCalledWith(
+			expect.objectContaining({ composeFile, sourceType: "raw" }),
+		);
+		expect(mocks.saveComposeFile).not.toHaveBeenCalled();
+	});
+
+	it("refuses an oversized initial file before checking access or inserting", async () => {
+		await expect(
+			composeRouter
+				.createCaller(ctxFor("user"))
+				.create({ ...input, composeFile: "x".repeat(1_048_577) }),
+		).rejects.toMatchObject({ code: "BAD_REQUEST" });
+		expect(mocks.createCompose).not.toHaveBeenCalled();
+	});
+
+	it("fetches a URL once and creates with its file without saving or deleting runtime state", async () => {
+		const url = "https://example.com/compose.yaml?token=SIGNED_URL_CANARY";
+		await composeRouter
+			.createCaller(ctxFor("user"))
+			.createFromUrl({ name: "web", environmentId: "env-1", url });
+		expect(mocks.fetchComposeFromUrl).toHaveBeenCalledExactlyOnceWith(url);
+		expect(mocks.createCompose).toHaveBeenCalledWith(
+			expect.objectContaining({
+				composeFile: "services:\n  web:\n    image: nginx:alpine\n",
+				sourceType: "raw",
+			}),
+		);
+		expect(mocks.saveComposeFile).not.toHaveBeenCalled();
+		expect(mocks.deleteCompose).not.toHaveBeenCalled();
+		expect(JSON.stringify(mocks.auditFromSession.mock.calls)).not.toContain("SIGNED_URL_CANARY");
+	});
+
+	it("does not create anything on a failed URL fetch", async () => {
+		mocks.fetchComposeFromUrl.mockRejectedValue(new Error("The URL returned an HTML page"));
+		await expect(
+			composeRouter.createCaller(ctxFor("user")).createFromUrl({
+				name: "web",
+				environmentId: "env-1",
+				url: "https://example.com/blob/compose.yaml",
+			}),
+		).rejects.toThrow(/HTML page/);
+		expect(mocks.createCompose).not.toHaveBeenCalled();
+		expect(mocks.auditFromSession).not.toHaveBeenCalled();
+	});
+
+	it("checks capability and target project access before fetching a URL", async () => {
+		const { notFound } = await import("../../modules/errors");
+		mocks.assertEnvironmentAccess.mockRejectedValue(notFound("Environment not found"));
+		await expect(
+			composeRouter.createCaller(ctxFor("user")).createFromUrl({
+				name: "web",
+				environmentId: "env-hidden",
+				url: "https://example.com/compose.yaml",
+			}),
+		).rejects.toMatchObject({ code: "NOT_FOUND" });
+		expect(mocks.assertCapability).toHaveBeenCalledWith("user-1", "org-1", "service.create");
+		expect(mocks.fetchComposeFromUrl).not.toHaveBeenCalled();
+		expect(mocks.createCompose).not.toHaveBeenCalled();
+	});
 });
 
 describe("compose.update on a host-privileged row", () => {
