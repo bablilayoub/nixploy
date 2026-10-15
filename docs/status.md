@@ -5,6 +5,32 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Production dependency advisory follow-up — 2026-10-15
+
+`pnpm audit --prod --json` moves from **9 moderate / 0 high / 0 critical**
+to **1 moderate / 0 high / 0 critical** (797 → 785 production graph entries).
+The existing audit gate stays blocking at `--audit-level high`; no advisory
+is ignored and no peer, install-script or security setting is weakened.
+
+| Dependency path | Compatible resolution | Advisory / runtime evidence |
+| --- | --- | --- |
+| Web → `@hookform/resolvers` → `ajv` → `fast-uri` | 4.1.4 → **4.1.5**; existing override now stays on the 4.1 patch line | [Host normalization](https://github.com/advisories/GHSA-hrr3-gc8f-f4qj) and [encoded mailto fields](https://github.com/advisories/GHSA-jvvf-x445-j334). App forms import the Zod resolver, not the AJV resolver; the installed AJV reference-validation path still passes. |
+| Server → MCP SDK → `express-rate-limit` → `ip-address` | 10.3.1 → **10.7.4** via a major-10 override on the patched 10.7 line; the existing SOCKS development path also deduplicates from 10.7.0 | [Link-local range](https://github.com/advisories/GHSA-rpw4-54j3-4h4q), [NAT64 classification](https://github.com/advisories/GHSA-2vr4-cq9g-pvrc), [cross-family containment](https://github.com/advisories/GHSA-j6r3-76f7-8jcv), [oversized IPv6 diagnostics](https://github.com/advisories/GHSA-h3mg-xc3c-68pw). Nixploy uses MCP's web-standard transport, not its Express OAuth handlers that import the limiter. IPv6 subnet and IPv4-mapped limiter keys retain their behavior. |
+| Web → `better-auth` → optional `vitest` → `@vitest/mocker` | A normal pnpm lockfile refresh removes the unused **4.1.10** optional peer subtree; the existing **5.0.0** development runner is unchanged | [Redirect mock file read](https://github.com/advisories/GHSA-82fw-gwwq-j7x9), counted once for each package. Only Better Auth's unused `better-auth/test` export imports this peer. No peer override or change to automatic peer installation is needed. |
+| Landing → `@tailwindcss/typography` → `postcss-selector-parser` | **6.0.10 remains**; no compatible maintained parent release is available | [GHSA-rj75-hqrm-r3gf](https://github.com/advisories/GHSA-rj75-hqrm-r3gf) fixes flat-selector CPU exhaustion in **7.1.6**. The latest published Typography **0.5.20** [pins 6.0.10](https://github.com/tailwindlabs/tailwindcss-typography/blob/v0.5.20/package.json). Nixploy invokes the plugin on trusted repository CSS during the landing build; it does not accept selectors in a request handler. Revisit when upstream ships a compatible release; forcing major 7 is outside this maintenance change. |
+
+Nine targeted installed-dependency checks pass: the six IP/URI regression
+cases, absence of the vulnerable optional Vitest peer, limiter key grouping,
+and AJV local-reference validation. Frozen installation, all four TypeScript
+checks, changed-file formatting and strict Biome (**1,076 files**) pass.
+The full server suite passes **2,885 tests in 209 files**, with a private
+temporary Postgres database and only the optional template-image registry
+probe skipped. Web **96** and CLI **93** tests, all three production builds
+and knip **5.88.1** pass. The temporary test database was removed. CI workflow
+changes are comments only; its parsed configuration is unchanged. The pre-existing
+Better Auth optional-peer warning about the Vitest 5 test runner remains;
+the runner and Better Auth versions are unchanged.
+
 ## Four backlog integrations — 2026-10-15
 
 Completed the installer race fix, Update browser verification, real-provider
