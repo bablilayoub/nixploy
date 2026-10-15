@@ -904,6 +904,32 @@ volumes:
 		);
 	});
 
+	it("renders overflow preview keys through the shared mapping and preserves rollback inputs", () => {
+		const appName = "swarm-proof-a-1015-pr-be39ad4";
+		const input = {
+			appName,
+			composeType: "stack" as const,
+			exposedServices: ["umami"],
+			environmentNetwork: "env-net",
+		};
+		const source =
+			"services:\n  umami:\n    image: nginx\n    depends_on: [db]\n  db:\n    image: postgres:16-alpine\n    volumes: [data:/var/lib/postgresql/data]\nvolumes:\n  data: {}\n";
+		const rendered = buildDeployComposeFile(source, input);
+		const spec = parseComposeFile(rendered);
+		const entries = Object.entries(spec.services ?? {});
+		expect(entries).toHaveLength(2);
+		for (const [key, service] of entries) {
+			expect(`${appName}_${key}`.length).toBeLessThanOrEqual(63);
+			const labels = service.labels as Record<string, string>;
+			if (labels["io.nixploy.compose.source-service"] === "umami")
+				expect(key).toMatch(/^umami-n[a-z0-9]{13}$/);
+			else expect(key).toBe(`${appName}-db`);
+			expect(["umami", "db"]).toContain(labels["io.nixploy.compose.source-service"]);
+		}
+		expect(buildDeployComposeFile(source, input)).toBe(rendered);
+		expect(spec.volumes).toEqual({ data: {} });
+	});
+
 	it("normalizes stack files: drops top-level name and flattens long-form depends_on", () => {
 		const output = buildDeployComposeFile(
 			`name: tenant-project

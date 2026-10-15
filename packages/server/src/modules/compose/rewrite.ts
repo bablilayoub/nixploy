@@ -68,7 +68,7 @@ function qualifyComposeServices(
 	const names = new Map(
 		Object.keys(spec.services ?? {}).map((name) => [
 			name,
-			deployedServiceName({ appName, composeType: "docker-compose" }, name),
+			deployedServiceName({ appName, composeType }, name),
 		]),
 	);
 	const services: Record<string, ComposeServiceSpec> = {};

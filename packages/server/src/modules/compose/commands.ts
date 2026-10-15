@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { getSwarmNetwork } from "../application/paths";
+import { badRequest } from "../errors";
 import { shellQuote } from "./paths";
 
 /** The compose-row fields the command builders need (a full row satisfies it). */
@@ -30,9 +32,34 @@ function suffixedServiceName(row: ComposeCommandRow, serviceName: string): strin
  * Qualify those keys so two stacks never advertise the same bare database name
  * on the environment overlay. Swarm adds its native prefix to these keys too.
  */
+function qualifiedStackKey(appName: string, name: string): string | null {
+	const full = `${appName}-${name}`;
+	const budget = 63 - appName.length - 1;
+	if (full.length <= budget) return full;
+	// Docker's physical <stack>_<key> has a 63-character ceiling. Hash the
+	// complete identity only on overflow; truncating names alone can collide.
+	const digest = createHash("sha256")
+		.update(JSON.stringify([appName, name]))
+		.digest("hex");
+	// Fixed 64-bit digest encoded in 13 lowercase base36 characters, plus
+	// an alphabetic prefix: fits a normal generated 47-character namespace.
+	const token = `n${BigInt(`0x${digest.slice(0, 16)}`)
+		.toString(36)
+		.padStart(13, "0")}`;
+	if (budget < token.length) return null;
+	const prefix = name.slice(0, Math.max(0, budget - token.length - 1));
+	return prefix ? `${prefix}-${token}` : token;
+}
+
 export function deployedServiceName(row: ComposeCommandRow, serviceName: string): string {
 	const name = suffixedServiceName(row, serviceName);
-	return `${row.appName}-${name}`;
+	if (row.composeType !== "stack") return `${row.appName}-${name}`;
+	const key = qualifiedStackKey(row.appName, name);
+	if (!key)
+		throw badRequest(
+			"Swarm stack name leaves too little space for an isolated service key; use an app name of at most 48 characters",
+		);
+	return key;
 }
 
 /** Old running containers and rollback snapshots keep their pre-qualification labels. */
@@ -75,12 +102,11 @@ export function stackServiceName(row: ComposeCommandRow, serviceName: string): s
 
 /** Physical Swarm names, current qualified key first, then the legacy raw key. */
 export function stackServiceCandidates(row: ComposeCommandRow, serviceName: string): string[] {
-	return [
-		...new Set([
-			stackServiceName(row, serviceName),
-			`${row.appName}_${suffixedServiceName(row, serviceName)}`,
-		]),
-	];
+	const name = suffixedServiceName(row, serviceName);
+	const key = qualifiedStackKey(row.appName, name);
+	// A long legacy namespace must remain addressable even when the new key
+	// cannot fit. Deployment itself refuses that unsupported transition.
+	return [...new Set([...(key ? [`${row.appName}_${key}`] : []), `${row.appName}_${name}`])];
 }
 
 /**

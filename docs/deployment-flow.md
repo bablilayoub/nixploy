@@ -506,6 +506,13 @@ keeps runtime tables, logs and timeline events using the source-file names.
 Docker itself prefixes a Stack key once, so its physical Swarm service is
 `<appName>_<appName>-<sourceService[-suffix]>`. The repeated app name is
 intentional: the key must already be unique before Docker adds its namespace.
+When that full physical name exceeds Docker's 63-character limit, only the
+YAML key switches to a readable source prefix plus a deterministic 64-bit
+SHA-256 digest encoded in lowercase base36. The hash covers the complete
+app name and source service with its suffix. Ordinary names remain unchanged;
+rollback/redeploy and lookup share the same mapping. Namespaces too long to
+leave 14 key characters fail explicitly (use a stack/preview app name of at
+most 48 characters); plain Docker Compose identities are unchanged.
 Helpers distinguish this physical identity from the existing routing and
 cross-service contracts: `<appName>_<sourceService[-suffix]>` and
 `<appName>-<sourceService[-suffix]>` are explicit aliases on the environment

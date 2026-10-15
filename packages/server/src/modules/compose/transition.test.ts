@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { COMPOSE_SOURCE_SERVICE_LABEL } from "./commands";
+import { COMPOSE_SOURCE_SERVICE_LABEL, stackServiceName } from "./commands";
 import { assertSafeComposeNamingTransition } from "./transition";
 
 const row = { appName: "stack-a", composeType: "docker-compose" as const };
@@ -123,4 +123,15 @@ it("refuses lingering Swarm task containers after service objects disappeared", 
 	expect(nodes).toHaveBeenCalledWith(
 		"docker ps -aq --filter label=com.docker.stack.namespace='stack-a'",
 	);
+});
+
+it("recognizes the deterministic compact identity on qualified preview redeploys", async () => {
+	const row = { appName: "swarm-proof-a-1015-pr-be39ad4", composeType: "stack" as const };
+	const service = swarmService(stackServiceName(row, "umami"), "umami");
+	service.Spec.Labels["com.docker.stack.namespace"] = row.appName;
+	const run = vi
+		.fn()
+		.mockResolvedValueOnce("a".repeat(12))
+		.mockResolvedValueOnce(JSON.stringify([service]));
+	await expect(assertSafeComposeNamingTransition(row, run)).resolves.toBeUndefined();
 });

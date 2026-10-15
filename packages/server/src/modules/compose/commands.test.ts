@@ -139,3 +139,48 @@ describe("runtime shared-network attach commands", () => {
 		);
 	});
 });
+
+describe("bounded Swarm physical names", () => {
+	it("keeps the exact 63-character boundary unchanged and compacts only overflow", () => {
+		const exact = { appName: "a".repeat(28), composeType: "stack" as const };
+		expect(stackServiceName(exact, "umami")).toHaveLength(63);
+		expect(deployedServiceName(exact, "umami")).toBe(`${exact.appName}-umami`);
+		const overflow = { ...exact, appName: "a".repeat(29) };
+		const key = deployedServiceName(overflow, "umami");
+		expect(key).toMatch(/^umami-n[a-z0-9]{13}$/);
+		expect(stackServiceName(overflow, "umami")).toBe(`${overflow.appName}_${key}`);
+		expect(stackServiceName(overflow, "umami").length).toBeLessThanOrEqual(63);
+		expect(stackServiceName(exact, "umamix").length).toBeLessThanOrEqual(63);
+		expect(deployedServiceName(exact, "umamix")).not.toBe(`${exact.appName}-umamix`);
+		expect(
+			stackServiceName({ ...exact, appName: "a".repeat(47) }, "umami").length,
+		).toBeLessThanOrEqual(63);
+		expect(deployedServiceName(overflow, "umami")).toBe(key);
+		expect(traefikAppName(overflow, "umami")).toBe(`${overflow.appName}_umami`);
+		expect(deployedServiceName({ ...overflow, composeType: "docker-compose" }, "umami")).toBe(
+			`${overflow.appName}-umami`,
+		);
+	});
+	it("includes full namespace, source and suffix identity without prefix-truncation collisions", () => {
+		const base = {
+			appName: "a".repeat(29),
+			composeType: "stack" as const,
+			isolatedDeployment: true,
+			suffix: "release-a",
+		};
+		const names = [
+			deployedServiceName(base, "database-long-name-a"),
+			deployedServiceName(base, "database-long-name-b"),
+			deployedServiceName({ ...base, appName: `${"a".repeat(28)}b` }, "database-long-name-a"),
+			deployedServiceName({ ...base, suffix: "release-b" }, "database-long-name-a"),
+		];
+		expect(new Set(names).size).toBe(4);
+		for (const name of names) expect(`${base.appName}_${name}`.length).toBeLessThanOrEqual(63);
+	});
+	it("refuses an insufficient namespace budget while keeping legacy lookup available", () => {
+		const row = { appName: "a".repeat(49), composeType: "stack" as const };
+		expect(() => stackServiceName(row, "db")).toThrow(/at most 48 characters/);
+		expect(stackServiceCandidates(row, "db")).toEqual([`${row.appName}_db`]);
+		expect(stackServiceName({ ...row, appName: "a".repeat(48) }, "db")).toHaveLength(63);
+	});
+});

@@ -58,7 +58,7 @@ describe("runtime log harvest", () => {
 			resolveContainerOwner(
 				{
 					"com.docker.stack.namespace": "stack-9f9f9f",
-					"com.docker.swarm.service.name": "stack-9f9f9f_stack-9f9f9f-db",
+					"com.docker.swarm.service.name": "stack-9f9f9f_db-n0123456789abc",
 					[COMPOSE_SOURCE_SERVICE_LABEL]: "db",
 				},
 				wanted,
