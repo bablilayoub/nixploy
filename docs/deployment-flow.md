@@ -606,9 +606,15 @@ through `modules/backups` to S3 destinations on schedules.
 
 ## Start / stop / status semantics
 
-- **Stop**: scale the swarm service to 0 (apps) / `docker compose stop` /
-  `docker stop` (databases). Nothing is deleted; state persists.
-- **Start**: scale back up / start containers; a previous deploy must exist.
+- **Stop**: applications scale their Swarm service to 0; plain Compose and
+  database containers stop in place. A Swarm Stack instead removes its service
+  and task objects with `docker stack rm`, verifies known task-node coverage
+  and waits for actual container removal before marking idle. Declared named
+  volumes persist; anonymous/image-volume data needs migration before a legacy
+  Stack stop/rename. See the transition guidance above.
+- **Start**: applications scale back up and database containers start; Compose
+  re-renders and runs `compose up` / `stack deploy`. A previous source/deploy
+  configuration must exist, and the same legacy naming/storage guard applies.
 - **Status** on the row is written by lifecycle actions and deploys; the
   reconciler cron corrects drift against real container state (e.g. after
   host reboots or external `docker` commands).
