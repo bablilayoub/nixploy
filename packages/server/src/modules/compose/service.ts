@@ -627,7 +627,7 @@ async function stopStackAndWait(row: ComposeRow): Promise<void> {
 		) as Array<{ NodeID?: string; Status?: { State?: string } }>;
 		if (inspected.length !== tasks.length)
 			throw preconditionFailed("Could not verify every Swarm task before stopping");
-		const terminal = new Set(["complete", "shutdown", "failed", "rejected", "remove", "orphaned"]);
+		const terminal = new Set(["complete", "shutdown", "failed", "rejected"]);
 		if (
 			inspected.some(
 				(task) =>
