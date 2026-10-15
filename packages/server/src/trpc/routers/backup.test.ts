@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { forbidden, notFound } from "../../modules/errors";
+import { DATABASE_KINDS, serviceIdField } from "../../modules/services/kinds";
 import type { TRPCContext } from "../init";
 
 /**
@@ -13,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 	findMany: vi.fn(),
 	assertCapability: vi.fn(async () => {}),
 	assertInstanceAdmin: vi.fn(async () => {}),
+	getServiceContext: vi.fn(),
 	audit: vi.fn(async () => {}),
 	verifyBackup: vi.fn(),
 	restoreBackup: vi.fn(),
@@ -42,11 +45,15 @@ vi.mock("../../modules/auth/two-factor-gate", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../modules/auth/two-factor-gate")>();
 	return { ...actual, isTwoFactorGateBlocked: vi.fn(async () => false) };
 });
+vi.mock("../../modules/projects/project-scope", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../../modules/projects/project-scope")>();
+	return { ...actual, resolveProjectFilterForSession: vi.fn(async () => actual.ALL_PROJECTS) };
+});
 vi.mock("../../modules/auth/instance-admin", () => ({
 	assertInstanceAdmin: mocks.assertInstanceAdmin,
 }));
 vi.mock("../../modules/audit", () => ({ auditFromSession: mocks.audit }));
-vi.mock("../../modules/application", () => ({ getServiceContext: vi.fn() }));
+vi.mock("../../modules/application", () => ({ getServiceContext: mocks.getServiceContext }));
 vi.mock("../../modules/backups/runner", () => ({
 	verifyBackup: mocks.verifyBackup,
 	restoreBackup: mocks.restoreBackup,
@@ -111,10 +118,113 @@ const runRow = {
 beforeEach(() => {
 	vi.clearAllMocks();
 	mocks.findFirst.mockResolvedValue(backupRow);
+	mocks.getServiceContext.mockResolvedValue({ organizationId: "org-1", appName: "shop-db" });
 	mocks.listBackupRuns.mockResolvedValue([runRow]);
 	mocks.latestBackupRuns.mockResolvedValue(new Map([["b-1", runRow]]));
 	mocks.verifyBackup.mockResolvedValue({ key: runRow.objectKey, bytes: 1024 });
 	mocks.restoreBackup.mockResolvedValue({ key: runRow.objectKey });
+});
+
+type Caller = ReturnType<typeof backupRouter.createCaller>;
+const idOperations = [
+	{ name: "one", call: (caller: Caller) => caller.one({ backupId: "b-1" }) },
+	{ name: "runs", call: (caller: Caller) => caller.runs({ backupId: "b-1" }) },
+	{ name: "listBackups", call: (caller: Caller) => caller.listBackups({ backupId: "b-1" }) },
+	{ name: "runManually", call: (caller: Caller) => caller.runManually({ backupId: "b-1" }) },
+	{ name: "restore", call: (caller: Caller) => caller.restore({ backupId: "b-1" }) },
+	{ name: "verify", call: (caller: Caller) => caller.verify({ backupId: "b-1" }) },
+	{ name: "update", call: (caller: Caller) => caller.update({ backupId: "b-1", enabled: false }) },
+	{ name: "remove", call: (caller: Caller) => caller.remove({ backupId: "b-1" }) },
+];
+
+function expectNoBackupWork() {
+	expect(mocks.listBackupRuns).not.toHaveBeenCalled();
+	expect(mocks.listBackupKeys).not.toHaveBeenCalled();
+	expect(mocks.runBackupNow).not.toHaveBeenCalled();
+	expect(mocks.restoreBackup).not.toHaveBeenCalled();
+	expect(mocks.verifyBackup).not.toHaveBeenCalled();
+	expect(mocks.audit).not.toHaveBeenCalled();
+}
+
+describe("backup ID access", () => {
+	it.each(idOperations)(
+		"$name hides a known backup ID in an inaccessible project",
+		async ({ call }) => {
+			mocks.getServiceContext.mockRejectedValueOnce(notFound("Service not found"));
+			await expect(call(backupRouter.createCaller(ctx))).rejects.toMatchObject({
+				code: "NOT_FOUND",
+			});
+			expect(mocks.getServiceContext).toHaveBeenCalledWith("postgres", "pg-1");
+			expectNoBackupWork();
+		},
+	);
+
+	it.each(DATABASE_KINDS)(
+		"resolves the linked %s service before returning its backup",
+		async (kind) => {
+			mocks.findFirst.mockResolvedValue({
+				...backupRow,
+				postgresId: null,
+				databaseType: kind,
+				[serviceIdField(kind)]: "linked-service",
+			});
+			await backupRouter.createCaller(ctx).one({ backupId: "b-1" });
+			expect(mocks.getServiceContext).toHaveBeenCalledWith(kind, "linked-service");
+		},
+	);
+
+	it("hides a linked service from another organization even if the destination matches", async () => {
+		mocks.getServiceContext.mockResolvedValueOnce({ organizationId: "org-2" });
+		await expect(backupRouter.createCaller(ctx).one({ backupId: "b-1" })).rejects.toMatchObject({
+			code: "NOT_FOUND",
+		});
+	});
+
+	it("refuses a database backup without its matching service link", async () => {
+		mocks.findFirst.mockResolvedValue({ ...backupRow, postgresId: null });
+		await expect(backupRouter.createCaller(ctx).one({ backupId: "b-1" })).rejects.toMatchObject({
+			code: "NOT_FOUND",
+		});
+		expect(mocks.getServiceContext).not.toHaveBeenCalled();
+	});
+
+	it.each(idOperations)(
+		"$name requires the instance admin for an instance backup",
+		async ({ call }) => {
+			mocks.findFirst.mockResolvedValue({
+				...backupRow,
+				databaseType: "web-server",
+				postgresId: null,
+			});
+			mocks.assertInstanceAdmin.mockRejectedValueOnce(forbidden("Instance admin required"));
+			await expect(call(backupRouter.createCaller(ctx))).rejects.toMatchObject({
+				code: "FORBIDDEN",
+			});
+			expect(mocks.getServiceContext).not.toHaveBeenCalled();
+			expectNoBackupWork();
+		},
+	);
+
+	it("allows the instance admin to read an instance backup without a service link", async () => {
+		mocks.findFirst.mockResolvedValue({
+			...backupRow,
+			databaseType: "web-server",
+			postgresId: null,
+		});
+		await backupRouter.createCaller(ctx).one({ backupId: "b-1" });
+		expect(mocks.assertInstanceAdmin).toHaveBeenCalledTimes(1);
+		expect(mocks.getServiceContext).not.toHaveBeenCalled();
+	});
+
+	it("requires the instance admin before listing instance backups", async () => {
+		mocks.assertInstanceAdmin.mockRejectedValueOnce(forbidden("Instance admin required"));
+		await expect(
+			backupRouter.createCaller(ctx).all({ databaseType: "web-server" }),
+		).rejects.toMatchObject({
+			code: "FORBIDDEN",
+		});
+		expect(mocks.findMany).not.toHaveBeenCalled();
+	});
 });
 
 describe("backup.runs", () => {
@@ -163,6 +273,7 @@ describe("backup.runManually / restore", () => {
 		await caller.runManually({ backupId: "b-1" });
 		expect(mocks.assertCapability).toHaveBeenCalledWith("user-1", "org-1", "backups.manage");
 		expect(mocks.runBackupNow).toHaveBeenCalledWith(backupRow);
+		expect(mocks.audit).toHaveBeenCalledTimes(1);
 		expect(mocks.audit).toHaveBeenCalledWith(
 			expect.anything(),
 			"org-1",
@@ -174,6 +285,7 @@ describe("backup.runManually / restore", () => {
 		const caller = backupRouter.createCaller(ctx);
 		await caller.restore({ backupId: "b-1", key: runRow.objectKey });
 		expect(mocks.restoreBackup).toHaveBeenCalledWith(backupRow, runRow.objectKey);
+		expect(mocks.audit).toHaveBeenCalledTimes(1);
 		expect(mocks.audit).toHaveBeenCalledWith(
 			expect.anything(),
 			"org-1",
@@ -200,6 +312,7 @@ describe("backup.verify", () => {
 		expect(mocks.assertCapability).toHaveBeenCalledWith("user-1", "org-1", "backups.manage");
 		expect(mocks.verifyBackup).toHaveBeenCalledWith(backupRow, runRow.objectKey);
 		expect(mocks.assertInstanceAdmin).not.toHaveBeenCalled();
+		expect(mocks.audit).toHaveBeenCalledTimes(1);
 		expect(mocks.audit).toHaveBeenCalledWith(
 			expect.anything(),
 			"org-1",

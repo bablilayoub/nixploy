@@ -34,14 +34,23 @@ async function getOrganizationId(session: Session): Promise<string> {
 /** Database services that map to a linked service row (instance backups excluded). */
 const backupDatabaseTypeSchema = databaseKindSchema;
 
-/** Org scope travels through the destination (and the linked DB service). */
-async function findBackupOrThrow(backupId: string, organizationId: string) {
+/** Destination ownership and the linked service's project scope apply to every ID lookup. */
+async function findBackupOrThrow(backupId: string, organizationId: string, session: Session) {
 	const row = await db.query.backups.findFirst({
 		where: eq(backups.backupId, backupId),
 		with: { destination: true },
 	});
 	if (!row || row.destination.organizationId !== organizationId) {
 		throw new TRPCError({ code: "NOT_FOUND", message: "Backup not found" });
+	}
+	if (row.databaseType === "web-server") {
+		await assertInstanceAdmin(session);
+	} else {
+		const serviceId = row[SERVICE_REGISTRY[row.databaseType].idField];
+		if (!serviceId) {
+			throw new TRPCError({ code: "NOT_FOUND", message: "Backup not found" });
+		}
+		await assertDatabaseServiceAccess(row.databaseType, serviceId, organizationId);
 	}
 	return row;
 }
@@ -131,6 +140,7 @@ export const backupRouter = router({
 	all: protectedProcedure.input(allInputSchema).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		if (input.databaseType === "web-server") {
+			await assertInstanceAdmin(ctx.session);
 			// Instance backups have no service FK — org scope travels through
 			// the destination alone.
 			const rows = await db.query.backups.findMany({
@@ -157,14 +167,14 @@ export const backupRouter = router({
 		.input(backupIdInput.extend({ limit: z.number().int().min(1).max(200).optional() }))
 		.query(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
-			const row = await findBackupOrThrow(input.backupId, organizationId);
+			const row = await findBackupOrThrow(input.backupId, organizationId, ctx.session);
 			return await listBackupRuns({ backupId: row.backupId }, input.limit ?? 20);
 		}),
 
 	/** A single backup by id. */
 	one: protectedProcedure.input(backupIdInput).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		const row = await findBackupOrThrow(input.backupId, organizationId);
+		const row = await findBackupOrThrow(input.backupId, organizationId, ctx.session);
 		return {
 			...row,
 			destination: redactDestinationSecrets(row.destination),
@@ -245,10 +255,7 @@ export const backupRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
-			const existing = await findBackupOrThrow(input.backupId, organizationId);
-			if (existing.databaseType === "web-server") {
-				await assertInstanceAdmin(ctx.session);
-			}
+			await findBackupOrThrow(input.backupId, organizationId, ctx.session);
 			if (input.schedule && !isValidBackupCron(input.schedule)) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
@@ -287,10 +294,7 @@ export const backupRouter = router({
 	remove: protectedProcedure.input(backupIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
-		const row = await findBackupOrThrow(input.backupId, organizationId);
-		if (row.databaseType === "web-server") {
-			await assertInstanceAdmin(ctx.session);
-		}
+		const row = await findBackupOrThrow(input.backupId, organizationId, ctx.session);
 		unregisterBackupSchedule(row.backupId);
 		await db.delete(backups).where(eq(backups.backupId, row.backupId));
 		void auditFromSession(ctx, organizationId, {
@@ -306,10 +310,7 @@ export const backupRouter = router({
 	runManually: protectedProcedure.input(backupIdInput).mutation(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
 		await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
-		const row = await findBackupOrThrow(input.backupId, organizationId);
-		if (row.databaseType === "web-server") {
-			await assertInstanceAdmin(ctx.session);
-		}
+		const row = await findBackupOrThrow(input.backupId, organizationId, ctx.session);
 		void auditFromSession(ctx, organizationId, {
 			action: "backup.run",
 			targetType: "backup",
@@ -330,7 +331,7 @@ export const backupRouter = router({
 	/** Stored dump keys (newest first) for the restore picker. */
 	listBackups: protectedProcedure.input(backupIdInput).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);
-		const row = await findBackupOrThrow(input.backupId, organizationId);
+		const row = await findBackupOrThrow(input.backupId, organizationId, ctx.session);
 		return await listBackupKeys(row);
 	}),
 
@@ -340,7 +341,7 @@ export const backupRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
-			const row = await findBackupOrThrow(input.backupId, organizationId);
+			const row = await findBackupOrThrow(input.backupId, organizationId, ctx.session);
 			const result = await restoreBackup(row, input.key);
 			void auditFromSession(ctx, organizationId, {
 				action: "backup.restore",
@@ -363,10 +364,7 @@ export const backupRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const organizationId = await getOrganizationId(ctx.session);
 			await assertCapability(ctx.session.user.id, organizationId, "backups.manage");
-			const row = await findBackupOrThrow(input.backupId, organizationId);
-			if (row.databaseType === "web-server") {
-				await assertInstanceAdmin(ctx.session);
-			}
+			const row = await findBackupOrThrow(input.backupId, organizationId, ctx.session);
 			let result: Awaited<ReturnType<typeof verifyBackup>>;
 			try {
 				result = await verifyBackup(row, input.key);

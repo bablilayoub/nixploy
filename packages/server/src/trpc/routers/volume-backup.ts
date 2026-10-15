@@ -37,7 +37,7 @@ async function getOrganizationId(session: Session): Promise<string> {
 
 const volumeServiceTypeSchema = z.enum(["application", "compose"]);
 
-/** Org scope travels through the destination (and the linked service). */
+/** Destination ownership and the linked service's project scope apply to every ID lookup. */
 async function findVolumeBackupOrThrow(volumeBackupId: string, organizationId: string) {
 	const row = await db.query.volumeBackups.findFirst({
 		where: eq(volumeBackups.volumeBackupId, volumeBackupId),
@@ -46,6 +46,14 @@ async function findVolumeBackupOrThrow(volumeBackupId: string, organizationId: s
 	if (!row || row.destination.organizationId !== organizationId) {
 		throw new TRPCError({ code: "NOT_FOUND", message: "Volume backup not found" });
 	}
+	if (row.serviceType !== "application" && row.serviceType !== "compose") {
+		throw new TRPCError({ code: "NOT_FOUND", message: "Volume backup not found" });
+	}
+	const serviceId = row.serviceType === "application" ? row.applicationId : row.composeId;
+	if (!serviceId) {
+		throw new TRPCError({ code: "NOT_FOUND", message: "Volume backup not found" });
+	}
+	await assertServiceAccess(row.serviceType, serviceId, organizationId);
 	return row;
 }
 
