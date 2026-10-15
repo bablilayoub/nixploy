@@ -43,14 +43,13 @@ import { toastError } from "@/lib/describe-error";
 import { toastDnsOutcome } from "@/lib/dns-outcome";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
+import { automaticDefault, templateEnvInputs } from "./template-env-inputs";
 import { TemplateLogo } from "./template-logo";
 import type { TemplateSummary } from "./templates-view";
 
 /** All supported named generators are resolved on the server at installation. */
 const generatedDefault = (value: string): boolean =>
 	/\{\{generate[A-Za-z0-9]+(?::|\}\})/.test(value);
-const automaticDefault = (value: string): boolean =>
-	/\{\{(?:generate[A-Za-z0-9]+|domain|env)(?::|\}\})/.test(value);
 
 type StepId = "destination" | "configure" | "domain";
 
@@ -263,10 +262,9 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 		}),
 	);
 
+	const { provided, missingRequired } = templateEnvInputs(template.env, envValues);
 	const submit = () => {
-		const provided = Object.fromEntries(
-			Object.entries(envValues).filter(([, value]) => value !== ""),
-		);
+		if (missingRequired.length > 0) return;
 		deploy.mutate({
 			templateId: template.id,
 			projectId,
@@ -290,9 +288,6 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 	const hintedDomains = planTemplateDomains(template, envValues);
 	const withDomain = domainEnabled && Boolean(domainHost.trim());
 	const blocker = templateDeployBlocker(template, access, { withDomain });
-	const missingRequired = template.env.filter(
-		(entry) => entry.required && !(envValues[entry.key]?.trim() || entry.default.trim()),
-	);
 	const canDeploy =
 		canContinueDestination &&
 		missingRequired.length === 0 &&
