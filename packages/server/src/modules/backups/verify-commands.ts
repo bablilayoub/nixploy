@@ -195,7 +195,7 @@ export function buildVerifyLivenessCommand(name: string, target: VerifyTarget): 
 
 /** Remove the container whatever state it is in; never fails. */
 export function buildVerifyCleanupCommand(name: string): string {
-	return `docker rm -f ${sq(name)} >/dev/null 2>&1 || true`;
+	return `docker rm -fv ${sq(name)} >/dev/null 2>&1 || true`;
 }
 
 /** Whether the liveness output carries the expected answer on its own line. */

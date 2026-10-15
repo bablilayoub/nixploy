@@ -257,6 +257,6 @@ describe("livenessAnswered", () => {
 
 describe("buildVerifyCleanupCommand", () => {
 	it("force-removes and never fails", () => {
-		expect(buildVerifyCleanupCommand(name)).toBe(`docker rm -f '${name}' >/dev/null 2>&1 || true`);
+		expect(buildVerifyCleanupCommand(name)).toBe(`docker rm -fv '${name}' >/dev/null 2>&1 || true`);
 	});
 });
