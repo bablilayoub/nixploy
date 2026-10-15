@@ -12,6 +12,7 @@ const boundary = vi.hoisted(() => ({
 	readAcme: vi.fn(),
 	readFile: vi.fn(),
 	listTasks: vi.fn(),
+	listContainers: vi.fn(),
 }));
 
 vi.mock("../../db", () => ({
@@ -39,7 +40,7 @@ vi.mock("../deployment/docker", () => ({
 			}),
 		}),
 		getNetwork: () => ({ inspect: async () => ({ Id: "nixploy-network" }) }),
-		listContainers: async () => [{ NetworkSettings: { Networks: { "nixploy-network": {} } } }],
+		listContainers: boundary.listContainers,
 	}),
 }));
 vi.mock("./paths", () => ({ getDynamicDir: () => "/test/dynamic" }));
@@ -100,6 +101,9 @@ beforeEach(async () => {
 	boundary.publicIp.mockResolvedValue("203.0.113.20");
 	boundary.readAcme.mockResolvedValue([]);
 	boundary.listTasks.mockResolvedValue([{ Status: { State: "running" } }]);
+	boundary.listContainers.mockResolvedValue([
+		{ NetworkSettings: { Networks: { "nixploy-network": {} } } },
+	]);
 	proxyAnswer(200, "shop");
 	await routeFile();
 });
@@ -216,6 +220,90 @@ describe("domain diagnosis pipeline with external boundaries mocked", () => {
 		expect(boundary.listTasks).toHaveBeenCalledWith({
 			filters: { service: ["shop-pr-7_web"], "desired-state": ["running"] },
 		});
+	});
+
+	it.each([
+		{ label: "qualified", suffix: "", deployed: "shop-web" },
+		{ label: "qualified isolated", suffix: "release1", deployed: "shop-web-release1" },
+		{ label: "legacy", suffix: "", deployed: "web" },
+		{ label: "legacy isolated", suffix: "release1", deployed: "web-release1" },
+	])(
+		"finds $label production Compose containers without broadening project scope",
+		async ({ suffix, deployed }) => {
+			delete boundary.domain.application;
+			boundary.domain.compose = {
+				appName: "shop",
+				composeType: "docker-compose",
+				isolatedDeployment: Boolean(suffix),
+				suffix,
+			};
+			boundary.domain.serviceName = "web";
+			const key = `shop-web${suffix ? `-${suffix}` : ""}`;
+			await routeFile(key);
+			boundary.listContainers.mockImplementation(
+				async ({ filters }: { filters: { label: string[] } }) =>
+					filters.label.includes(`com.docker.compose.service=${deployed}`)
+						? [{ NetworkSettings: { Networks: { "nixploy-network": {} } } }]
+						: [],
+			);
+			const result = await diagnoseDomain("domain-test");
+			for (const id of ["file", "upstream", "network"]) {
+				expect(result.findings.find((finding) => finding.id === id)?.status).toBe("ok");
+			}
+			for (const [options] of boundary.listContainers.mock.calls) {
+				expect(options.filters.label).toContain("com.docker.compose.project=shop");
+				expect(options.filters.label).toHaveLength(2);
+			}
+		},
+	);
+
+	it.each(["shop-pr-7-web", "web"])(
+		"finds preview Compose label %s using the preview project without its parent's suffix",
+		async (deployed) => {
+			delete boundary.domain.application;
+			boundary.domain.compose = {
+				appName: "shop",
+				composeType: "docker-compose",
+				isolatedDeployment: true,
+				suffix: "production-only",
+			};
+			boundary.domain.serviceName = "web";
+			boundary.domain.previewDeployment = { appName: "shop-pr-7" };
+			await routeFile("shop-pr-7-web");
+			boundary.listContainers.mockImplementation(
+				async ({ filters }: { filters: { label: string[] } }) =>
+					filters.label.includes(`com.docker.compose.service=${deployed}`)
+						? [{ NetworkSettings: { Networks: { "nixploy-network": {} } } }]
+						: [],
+			);
+			const result = await diagnoseDomain("domain-test");
+			for (const id of ["file", "upstream", "network"]) {
+				expect(result.findings.find((finding) => finding.id === id)?.status).toBe("ok");
+			}
+			for (const [options] of boundary.listContainers.mock.calls) {
+				expect(options.filters.label).toContain("com.docker.compose.project=shop-pr-7");
+				expect(options.filters.label.join(" ")).not.toContain("production-only");
+			}
+		},
+	);
+
+	it("keeps inspecting the qualified deployment when legacy containers also exist", async () => {
+		delete boundary.domain.application;
+		boundary.domain.compose = { appName: "shop", composeType: "docker-compose" };
+		boundary.domain.serviceName = "web";
+		await routeFile("shop-web");
+		boundary.listContainers.mockImplementation(
+			async ({ filters }: { filters: { label: string[] } }) =>
+				filters.label.includes("com.docker.compose.service=shop-web")
+					? [{ NetworkSettings: { Networks: {} } }]
+					: [{ NetworkSettings: { Networks: { "nixploy-network": {} } } }],
+		);
+		const result = await diagnoseDomain("domain-test");
+		expect(result.findings.find((finding) => finding.id === "upstream")?.status).toBe("ok");
+		expect(result.findings.find((finding) => finding.id === "network")?.status).toBe("fail");
+		for (const [options] of boundary.listContainers.mock.calls) {
+			expect(options.filters.label).toContain("com.docker.compose.service=shop-web");
+		}
 	});
 
 	it("does not claim DNS points here when the public IP is unavailable", async () => {

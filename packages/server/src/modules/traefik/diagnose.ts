@@ -12,7 +12,11 @@ import { domains } from "../../db/schema";
 import { execAsync } from "../../utils/exec";
 import { getSwarmNetwork } from "../application/paths";
 import { detectPublicIp } from "../cluster/public-host";
-import { traefikAppName } from "../compose/commands";
+import {
+	type ComposeCommandRow,
+	deployedServiceCandidates,
+	traefikAppName,
+} from "../compose/commands";
 import { getDocker } from "../deployment/docker";
 import { shellQuote } from "../deployment/paths";
 import { notFound } from "../errors";
@@ -161,11 +165,30 @@ interface RouteTarget {
 	key: string;
 	/** Swarm service to inspect, or null for an external upstream / a compose container lookup. */
 	swarmService: string | null;
-	/** Compose: labels identifying the routed container. */
-	composeLabels: string[] | null;
+	/** Compose: ordered alternatives of project + service labels, new keys before legacy keys. */
+	composeLabels: string[][] | null;
 	/** Upstream name Traefik dials (a Swarm/compose DNS name) and port; null for external origins. */
 	upstream: { host: string; port: number } | null;
 	external: boolean;
+}
+
+function composeContainerLabels(row: ComposeCommandRow, serviceName: string): string[][] {
+	return deployedServiceCandidates(row, serviceName).map((name) => [
+		`com.docker.compose.project=${row.appName}`,
+		`com.docker.compose.service=${name}`,
+	]);
+}
+
+/** A legacy label is considered only when the current deployment has no running container. */
+async function routedComposeContainers(
+	docker: Awaited<ReturnType<typeof getDocker>>,
+	labelCandidates: string[][],
+) {
+	for (const label of labelCandidates) {
+		const containers = await docker.listContainers({ filters: { label } });
+		if (containers.length > 0) return containers;
+	}
+	return [];
 }
 
 async function loadTarget(domainId: string): Promise<{
@@ -199,6 +222,12 @@ async function loadTarget(domainId: string): Promise<{
 	if (domain.previewDeployment) {
 		const preview = domain.previewDeployment;
 		if (domain.compose && domain.serviceName) {
+			const previewRow = {
+				...domain.compose,
+				appName: preview.appName,
+				isolatedDeployment: false,
+				suffix: "",
+			};
 			const key = composePreviewTraefikKey(
 				domain.compose.composeType,
 				preview.appName,
@@ -211,11 +240,8 @@ async function loadTarget(domainId: string): Promise<{
 					swarmService: domain.compose.composeType === "stack" ? key : null,
 					composeLabels:
 						domain.compose.composeType === "stack"
-							? [`com.docker.swarm.service.name=${key}`]
-							: [
-									`com.docker.compose.project=${preview.appName}`,
-									`com.docker.compose.service=${domain.serviceName}`,
-								],
+							? [[`com.docker.swarm.service.name=${key}`]]
+							: composeContainerLabels(previewRow, domain.serviceName),
 					upstream: { host: key, port },
 					external: false,
 				},
@@ -241,11 +267,8 @@ async function loadTarget(domainId: string): Promise<{
 				swarmService: domain.compose.composeType === "stack" ? key : null,
 				composeLabels:
 					domain.compose.composeType === "stack"
-						? [`com.docker.swarm.service.name=${key}`]
-						: [
-								`com.docker.compose.project=${domain.compose.appName}`,
-								`com.docker.compose.service=${domain.serviceName}`,
-							],
+						? [[`com.docker.swarm.service.name=${key}`]]
+						: composeContainerLabels(domain.compose, domain.serviceName),
 				upstream: { host: key, port },
 				external: false,
 			},
@@ -443,13 +466,13 @@ async function probeUpstreamTask(target: RouteTarget): Promise<DomainFinding> {
 			};
 		}
 		if (target.composeLabels) {
-			const containers = await docker.listContainers({ filters: { label: target.composeLabels } });
+			const containers = await routedComposeContainers(docker, target.composeLabels);
 			if (containers.length === 0) {
 				return {
 					id: "upstream",
 					status: "fail",
 					title: "No running container for the routed compose service",
-					detail: `Looked for ${target.composeLabels.join(" + ")}.`,
+					detail: `Looked for ${target.composeLabels.map((labels) => labels.join(" + ")).join(" or ")}.`,
 					fix: "Deploy the stack, or check that the service name on the domain matches the compose file.",
 				};
 			}
@@ -508,7 +531,7 @@ async function probeSharedNetwork(target: RouteTarget): Promise<DomainFinding> {
 					};
 		}
 		if (target.composeLabels) {
-			const containers = await docker.listContainers({ filters: { label: target.composeLabels } });
+			const containers = await routedComposeContainers(docker, target.composeLabels);
 			const first = containers[0];
 			if (!first)
 				return { id: "network", status: "skip", title: "No container to inspect", detail: "" };
