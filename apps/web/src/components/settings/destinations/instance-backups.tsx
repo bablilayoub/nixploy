@@ -83,8 +83,14 @@ export function InstanceBackups() {
 			: undefined;
 
 	const listInput = { databaseType: "web-server" as const };
-	const backupsQuery = useQuery(trpc.backup.all.queryOptions(listInput));
-	const destinationsQuery = useQuery(trpc.destination.all.queryOptions());
+	const backupsQuery = useQuery({
+		...trpc.backup.all.queryOptions(listInput),
+		enabled: isInstanceAdmin,
+	});
+	const destinationsQuery = useQuery({
+		...trpc.destination.all.queryOptions(),
+		enabled: isInstanceAdmin,
+	});
 
 	const backups = backupsQuery.data ?? [];
 	// One schedule per destination adds up on an instance that keeps daily,
@@ -144,6 +150,8 @@ export function InstanceBackups() {
 		});
 		setDialogOpen(true);
 	};
+
+	if (!isInstanceAdmin) return null;
 
 	return (
 		<>

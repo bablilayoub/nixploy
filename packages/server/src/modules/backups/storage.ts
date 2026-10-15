@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -8,11 +9,12 @@ import {
 	GetObjectCommand,
 	ListObjectsV2Command,
 	PutObjectCommand,
-	S3Client,
+	type S3Client,
 } from "@aws-sdk/client-s3";
 import type { destinations } from "../../db/schema";
 import { getConfigDir } from "../traefik/paths";
 import { uploadStream } from "./s3";
+import { createSafeS3Client } from "./s3-transport";
 
 /**
  * Where backup archives live. Two providers share one key space
@@ -101,21 +103,20 @@ export class LocalBackupStore implements BackupStore {
 	}
 
 	async put(key: string, body: Buffer): Promise<void> {
-		const file = this.fileOf(key);
-		await mkdir(path.dirname(file), { recursive: true });
-		// Write-then-rename so a crash mid-write never leaves a truncated
-		// archive that retention would count as a valid backup.
-		const tmp = `${file}.part`;
-		await writeFile(tmp, body, { mode: 0o600 });
-		await rename(tmp, file);
+		await this.putStream(
+			key,
+			(async function* () {
+				yield body;
+			})(),
+		);
 	}
 
 	async putStream(key: string, source: AsyncIterable<Buffer>): Promise<number> {
 		const file = this.fileOf(key);
 		await mkdir(path.dirname(file), { recursive: true });
-		const tmp = `${file}.part`;
+		const tmp = `${file}.${randomUUID()}.part`;
 		let bytes = 0;
-		const sink = createWriteStream(tmp, { mode: 0o600 });
+		const sink = createWriteStream(tmp, { flags: "wx", mode: 0o600 });
 		// `createWriteStream` opens lazily: unlinking while an `open(2)` is
 		// still in flight re-creates the file behind us, so wait for the sink
 		// to be closed before cleaning up a failed write.
@@ -133,12 +134,12 @@ export class LocalBackupStore implements BackupStore {
 				})(),
 				sink,
 			);
+			await rename(tmp, file);
 		} catch (error) {
 			await closed;
 			await rm(tmp, { force: true }).catch(() => {});
 			throw error;
 		}
-		await rename(tmp, file);
 		return bytes;
 	}
 
@@ -200,7 +201,7 @@ export class LocalBackupStore implements BackupStore {
 // ── S3 ──────────────────────────────────────────────────────────────────────
 
 export function getS3Client(destination: DestinationRow): S3Client {
-	return new S3Client({
+	return createSafeS3Client({
 		region: destination.region,
 		endpoint: destination.endpoint,
 		forcePathStyle: true,

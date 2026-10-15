@@ -1,65 +1,12 @@
-import { execFileSync } from "node:child_process";
-import { gzipSync } from "node:zlib";
+import { spawnSync } from "node:child_process";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import {
-	assertNonEmptyGzip,
 	assertStreamExit,
-	buildEncodedPipeline,
 	buildStreamPipeline,
-	decodePipelineOutput,
-	GzipShapeCheck,
+	GzipArchiveCheck,
 	PIPELINE_EXIT_MARKER,
 } from "./pipeline";
-
-const runSh = (command: string) => execFileSync("sh", ["-c", command], { encoding: "utf8" });
-
-describe("buildEncodedPipeline", () => {
-	it("prints the encoded payload followed by the producer's exit status", () => {
-		const out = runSh(buildEncodedPipeline("printf hello"));
-		expect(out).toContain(`${PIPELINE_EXIT_MARKER}0`);
-		const archive = decodePipelineOutput(out, "test");
-		expect(archive[0]).toBe(0x1f);
-		expect(archive[1]).toBe(0x8b);
-	});
-
-	it("surfaces a failed producer even though gzip and base64 succeed", () => {
-		const out = runSh(buildEncodedPipeline("false"));
-		expect(out).toContain(`${PIPELINE_EXIT_MARKER}1`);
-		expect(() => decodePipelineOutput(out, "Dump of db")).toThrow(/exited with status 1/);
-	});
-
-	it("supports a custom encoder for producers that already compress", () => {
-		const command = buildEncodedPipeline("printf hi | gzip", "base64");
-		const archive = decodePipelineOutput(runSh(command), "test");
-		expect(() => assertNonEmptyGzip(archive, "test")).not.toThrow();
-	});
-});
-
-describe("decodePipelineOutput", () => {
-	it("rejects output without the exit trailer (encoder failed)", () => {
-		expect(() => decodePipelineOutput("aGVsbG8=\n", "Dump")).toThrow(/did not report/);
-	});
-
-	it("ignores whitespace inside the base64 payload", () => {
-		const raw = `aGVs\nbG8=\n${PIPELINE_EXIT_MARKER}0\n`;
-		expect(decodePipelineOutput(raw, "Dump").toString("utf8")).toBe("hello");
-	});
-});
-
-describe("assertNonEmptyGzip", () => {
-	it("accepts a gzip archive with content", () => {
-		expect(() => assertNonEmptyGzip(gzipSync(Buffer.from("CREATE TABLE t();")), "x")).not.toThrow();
-	});
-
-	it("rejects an archive that gunzips to 0 bytes", () => {
-		expect(() => assertNonEmptyGzip(gzipSync(Buffer.alloc(0)), "Dump of db")).toThrow(/empty/);
-	});
-
-	it("rejects non-gzip and truncated buffers", () => {
-		expect(() => assertNonEmptyGzip(Buffer.from("plain sql"), "x")).toThrow(/not a gzip/);
-		expect(() => assertNonEmptyGzip(Buffer.alloc(0), "x")).toThrow(/not a gzip/);
-	});
-});
 
 describe("buildStreamPipeline / assertStreamExit", () => {
 	it("keeps stdout binary and moves the trailer to stderr", () => {
@@ -67,6 +14,21 @@ describe("buildStreamPipeline / assertStreamExit", () => {
 		expect(command).toContain("| gzip");
 		expect(command).toContain(`echo "${PIPELINE_EXIT_MARKER}$(cat "$__nx_rc")" >&2`);
 		expect(command).not.toContain("base64");
+	});
+
+	it("reports failed producers even when compression succeeds", () => {
+		const result = spawnSync("sh", ["-c", buildStreamPipeline("printf partial; false")]);
+		expect(result.status).toBe(0);
+		expect(gunzipSync(result.stdout).toString()).toBe("partial");
+		expect(() => assertStreamExit(result.stderr.toString(), "Dump")).toThrow(/status 1/);
+	});
+
+	it("preserves the encoder exit status", () => {
+		const result = spawnSync("sh", [
+			"-c",
+			buildStreamPipeline("printf partial", "cat >/dev/null; exit 9"),
+		]);
+		expect(result.status).toBe(9);
 	});
 
 	it("accepts a zero producer status and refuses anything else", () => {
@@ -82,26 +44,42 @@ describe("buildStreamPipeline / assertStreamExit", () => {
 	});
 });
 
-describe("GzipShapeCheck", () => {
-	const gzipOf = (payload: string): Buffer => gzipSync(Buffer.from(payload));
+describe("GzipArchiveCheck", () => {
+	it.each(["normal", "padding", "members"])(
+		"accepts valid gzip %s without relying on its final ISIZE",
+		async (kind) => {
+			const data = gzipSync("hello world");
+			const archive =
+				kind === "padding"
+					? Buffer.concat([data, Buffer.alloc(1024)])
+					: kind === "members"
+						? Buffer.concat([data, gzipSync("second member")])
+						: data;
+			const check = new GzipArchiveCheck();
+			for (let i = 0; i < archive.length; i += 3) await check.update(archive.subarray(i, i + 3));
+			await expect(check.assert("Dump")).resolves.toBeUndefined();
+			expect(check.byteLength).toBe(archive.length);
+		},
+	);
 
-	it("accepts a real gzip stream fed in small chunks", () => {
-		const archive = gzipOf("hello world, this is a dump");
-		const check = new GzipShapeCheck();
-		for (let i = 0; i < archive.length; i += 3) {
-			check.update(archive.subarray(i, i + 3));
-		}
-		expect(() => check.assert("Dump")).not.toThrow();
-		expect(check.byteLength).toBe(archive.length);
-	});
-
-	it("refuses a non-gzip stream and an empty member", () => {
-		const plain = new GzipShapeCheck();
-		plain.update(Buffer.from("not gzip at all, really not gzip"));
-		expect(() => plain.assert("Dump")).toThrow(/not a gzip archive/);
-
-		const empty = new GzipShapeCheck();
-		empty.update(gzipOf(""));
-		expect(() => empty.assert("Dump")).toThrow(/empty/);
+	it.each(["empty", "plain", "crc", "truncated"])("refuses %s before publication", async (kind) => {
+		const good = gzipSync("nonempty");
+		if (kind === "crc") good[good.length - 8] = (good[good.length - 8] ?? 0) ^ 255;
+		const archive =
+			kind === "empty"
+				? gzipSync("")
+				: kind === "plain"
+					? Buffer.from("plain data")
+					: kind === "truncated"
+						? good.subarray(0, -3)
+						: good;
+		const check = new GzipArchiveCheck();
+		await expect(
+			(async () => {
+				await check.update(archive);
+				await check.assert("Dump");
+			})(),
+		).rejects.toThrow();
+		check.abort();
 	});
 });

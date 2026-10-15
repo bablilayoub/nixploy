@@ -60,9 +60,9 @@ an implementation checkpoint, not a new release claim.
   encrypted secrets, storage/data restoration and unsupported settings retain
   explicit manual steps. Other engines and repository-backed Coolify Compose
   applications remain unsupported by that reader.
-- [ ] Full volume backup/restore and terminal WebSocket reconnect are not proved
-  by the two-stack Compose exercise. Named-volume persistence, rollback,
-  exact-container exec and raw per-service lookup passed.
+- [ ] Terminal WebSocket reconnect remains unproved. Named-volume persistence,
+  rollback, exact-container exec and raw per-service lookup passed in PR #16;
+  the separate cold backup/restore proof is recorded below.
 
 ### Maintenance
 
@@ -89,6 +89,57 @@ stated evidence boundaries:
 | PR #16 second public catalog | Coolify source add/sync/report and deployment UI passed; pinned revision `2db26e88abd670b41848cde663f8130fd0d62743` gives 226 accepted / 133 rejected from 359 entries, with 16 advisory image warnings. Two real Umami/Postgres installs passed distinct credentials, isolated DNS/data, redeploy and rollback; catalog acceptance is not a guarantee for every entry. |
 | PR #16 populated dashboard | Recent deployments populated, three soft-navigation cycles and 12 idle seconds passed without hydration/browser errors or deployment requests. The historical hydration/idle-dashboard tasks below are closed. |
 | PR #16 Coolify API reader | Official v4.4.6 image/public-Git applications, raw Compose services and all five supported database configuration kinds passed inspect/plan/apply/repeat. A fresh selected image/Postgres import then explicitly started with HTTP 200 and generated-password TCP authentication; repository Compose applications/other database engines are skipped and secrets/data remain manual. |
+
+## Backup and cold recovery — 2026-10-15
+
+Implemented on `codex/backup-restore`; this is a verified recovery slice, not a
+release or a production-host deployment. The new rehearsal contract also runs
+in the shared CI gate.
+
+- Every archive kind streams with full gzip/CRC checks before publication.
+  Instance config excludes local backups and derived runtime data; config is
+  published before its matching SQL completion marker. Producer, upload,
+  download and consumer errors remain failures. Instance-backup reads and
+  referenced destination mutations require an instance admin; all backup IDs
+  inherit the linked service's project restrictions.
+- Volume operations share a cross-process, on-volume fence. Incomplete recovery
+  blocks new archives and retention. Restore requires stopped consumers,
+  validates confined tar paths and stages replacement with rollback; unknown
+  helper state or failed rollback retains recovery material for manual action.
+  Redis snapshots coordinate rewrite preparation, and replacement removes stale
+  AOF files. S3 operations use the instance private-egress policy and freshly
+  pinned connections, including downloads, probes and multipart requests.
+- **Cold drill passed:** the disposable source panel/database/config and all
+  three workload volumes were removed before recovery. Fresh PostgreSQL 17
+  metadata and workload services/volumes recovered a 64 MiB instance binary,
+  64 MiB config file, 16 MiB PostgreSQL dataset, 8 MiB Redis value and 64 MiB
+  persistent file. Checksums, database password authentication, the original
+  user/password/TOTP seed, both encryption-key generations, symlink/file mode,
+  stale-file/AOF removal and routed HTTP payload checksum passed. The separately
+  recovered full key chain and `BETTER_AUTH_SECRET` were required; readiness
+  with a wrong auth secret did not establish successful TOTP recovery.
+- Corrupt/truncated gzip, invalid SQL, invalid/unsafe tar, reserved recovery
+  paths, running writers and a desired-running service with zero current
+  containers were rejected without changing the good target. The strict boot
+  rehearsal passed inside a disposable daemon using an internal readiness
+  probe; exact scratch containers and anonymous volumes were removed. Real
+  MinIO passed a signed eight-part 64 MiB upload, streamed checksum recovery
+  and private-egress revocation across every store operation.
+
+Evidence is retained as `backup-restore/{cold-recovery-result,sealed-artifacts,
+instance-restore,key-proof,negative-restores,volume-negative,final-volume-proof,
+minio-proof,rehearsal-actual}.json`, plus the operator/browser and gate reports. The local
+handoff manifest records their checksums after cleanup. Final local gates passed
+3,202 server tests (one optional registry probe skipped), 102 web tests, 94 CLI
+tests and 20 rehearsal tests, plus workspace types, strict Biome, knip and the
+production web build.
+
+This was an isolated local drill on one manager with fresh databases and
+volumes. It does not close fresh-host/split-worker or remote/multi-node recovery,
+public DNS/ACME, repository/image recovery, live filesystem snapshot consistency,
+or runtime restore proof for MySQL/MariaDB/MongoDB. Instance metadata/config,
+logical database dumps and persistent-volume archives remain separate recovery
+layers; the instance archive contains neither workload data nor source/images.
 
 ## Operator workflow and migration workspace — 2026-10-15
 

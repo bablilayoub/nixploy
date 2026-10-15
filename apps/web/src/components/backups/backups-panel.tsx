@@ -985,9 +985,14 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 						<DialogDescription>
 							{isVolume ? (
 								<>
-									Volume <code className="rounded bg-muted px-1">{restoreTarget?.volumeName}</code>{" "}
-									will be overwritten with the selected archive. This cannot be undone.
+									Stop services using volume{" "}
+									<code className="rounded bg-muted px-1">{restoreTarget?.volumeName}</code> before
+									restoring. The archive replaces its contents, including removing files absent from
+									the backup. If replacement fails, rollback is attempted; retained data may need
+									manual recovery. Services stay stopped.
 								</>
+							) : target.kind === "database" && target.databaseType === "redis" ? (
+								"Stop Redis before restoring. The archive replaces its data volume, removing files absent from the backup. If replacement fails, rollback is attempted; retained data may need manual recovery. Redis stays stopped until you start it."
 							) : (
 								"Restore the database from a stored dump. The current data will be overwritten."
 							)}

@@ -105,7 +105,7 @@ describe("instance container fallback", () => {
 describe("buildConfigArchiveCommand", () => {
 	it("tars the config dir to stdout, excluding derived/heavy subtrees", () => {
 		const command = buildConfigArchiveCommand("/etc/nixploy");
-		expect(command).toMatch(/^tar czf - -C '\/etc\/nixploy' /);
+		expect(command).toMatch(/^tar cf - -C '\/etc\/nixploy' /);
 		expect(command).toContain(" .");
 		for (const dir of CONFIG_ARCHIVE_EXCLUDES) {
 			expect(command).toContain(`--exclude='./${dir}'`);
@@ -142,7 +142,7 @@ describe("buildRedisSnapshotScript", () => {
 	it("triggers BGSAVE with a blocking SAVE fallback and waits for persistence", () => {
 		const script = buildRedisSnapshotScript();
 		expect(script).toContain("BGSAVE");
-		expect(script).toContain("|| redis-cli --no-auth-warning SAVE");
+		expect(script).toContain("--raw -e SAVE");
 		expect(script).toContain("rdb_bgsave_in_progress");
 		expect(script).toContain("rdb_last_bgsave_status");
 		expect(script).toContain("CONFIG GET dir");

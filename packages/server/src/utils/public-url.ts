@@ -557,7 +557,7 @@ export interface PinnedResponse {
 }
 
 /** `dns.lookup`-shaped hook that only ever answers with the vetted addresses. */
-function pinnedLookup(addresses: readonly string[]): LookupFunction {
+export function pinnedLookup(addresses: readonly string[]): LookupFunction {
 	return ((
 		_hostname: string,
 		options: LookupOptions,

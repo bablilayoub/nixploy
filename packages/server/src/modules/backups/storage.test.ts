@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -153,6 +153,34 @@ describe("LocalBackupStore streaming", () => {
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}
+	});
+
+	it("a failed concurrent write cannot delete another writer's good object", async () => {
+		const store = new LocalBackupStore(root);
+		let finish: () => void = () => {};
+		const gate = new Promise<void>((resolve) => {
+			finish = resolve;
+		});
+		let started: () => void = () => {};
+		const active = new Promise<void>((resolve) => {
+			started = resolve;
+		});
+		const failed = store.putStream(
+			"same.gz",
+			(async function* () {
+				yield Buffer.from("partial");
+				started();
+				await gate;
+				throw new Error("producer failed");
+			})(),
+		);
+		void failed.catch(() => {});
+		await active;
+		await store.put("same.gz", Buffer.from("complete good backup"));
+		finish();
+		await expect(failed).rejects.toThrow("producer failed");
+		expect((await store.get("same.gz")).toString()).toBe("complete good backup");
+		expect(await readdir(root)).toEqual(["same.gz"]);
 	});
 
 	it("streams a stored archive back for restores", async () => {

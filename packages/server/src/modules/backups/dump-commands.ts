@@ -58,7 +58,7 @@ export const DB_DUMP_CONFIG: Record<BackupDatabaseType, DumpEngineConfig> = {
 		dumpCommand: ({ database, databaseUser }) =>
 			`pg_dump -U ${sq(databaseUser)} -d ${sq(database)} --no-owner --no-privileges --clean --if-exists`,
 		restoreCommand: ({ database, databaseUser }) =>
-			`psql -U ${sq(databaseUser)} -d ${sq(database)} -v ON_ERROR_STOP=1`,
+			`psql -U ${sq(databaseUser)} -d ${sq(database)} -v ON_ERROR_STOP=1 --single-transaction`,
 	},
 	mysql: {
 		extension: "sql",

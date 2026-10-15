@@ -33,7 +33,9 @@ describe("DB_DUMP_CONFIG", () => {
 		expect(config.dumpCommand(params)).toBe(
 			"pg_dump -U 'app_user' -d 'app_db' --no-owner --no-privileges --clean --if-exists",
 		);
-		expect(config.restoreCommand(params)).toBe("psql -U 'app_user' -d 'app_db' -v ON_ERROR_STOP=1");
+		expect(config.restoreCommand(params)).toBe(
+			"psql -U 'app_user' -d 'app_db' -v ON_ERROR_STOP=1 --single-transaction",
+		);
 	});
 
 	it("mysql never puts the password on argv", () => {
