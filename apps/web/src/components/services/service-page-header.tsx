@@ -191,13 +191,16 @@ export function ServicePageHeader({
 		<PageHeader
 			breadcrumb={
 				<nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5">
-					<Link href="/dashboard" className="transition-colors hover:text-foreground">
+					<Link
+						href="/dashboard"
+						className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					>
 						Projects
 					</Link>
 					<span aria-hidden>/</span>
 					<Link
 						href={`/dashboard/projects/${projectId}`}
-						className="transition-colors hover:text-foreground"
+						className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					>
 						{crumbs.project ?? "Project"}
 					</Link>
@@ -206,7 +209,7 @@ export function ServicePageHeader({
 							<span aria-hidden>/</span>
 							<Link
 								href={`/dashboard/projects/${projectId}?env=${encodeURIComponent(crumbs.environment)}`}
-								className="transition-colors hover:text-foreground"
+								className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 							>
 								{crumbs.environment}
 							</Link>
@@ -217,8 +220,8 @@ export function ServicePageHeader({
 				</nav>
 			}
 			title={
-				<span className="flex items-center gap-2.5">
-					<span className="truncate">{name}</span>
+				<span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+					<span className="min-w-0 wrap-anywhere">{name}</span>
 					{inFlight ? (
 						<DeploymentStatusBadge
 							status={inFlight.status as "queued" | "running"}
@@ -244,16 +247,16 @@ export function ServicePageHeader({
 					{notice && !lastError ? (
 						<span className="flex items-center gap-1.5">
 							<Info className="size-3.5 shrink-0" />
-							<span className="truncate">{notice}</span>
+							<span className="min-w-0">{notice}</span>
 						</span>
 					) : null}
 					{lastError ? (
-						<span className="flex items-center gap-1.5 text-destructive">
-							<span className="truncate">Last deployment failed: {lastError}</span>
+						<span className="flex flex-wrap items-center gap-1.5 text-destructive">
+							<span className="min-w-0 wrap-anywhere">Last deployment failed: {lastError}</span>
 							{onViewLogs ? (
 								<button
 									type="button"
-									className="inline-flex shrink-0 items-center gap-1 underline-offset-2 hover:underline"
+									className="inline-flex shrink-0 items-center gap-1 rounded-sm underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 									onClick={onViewLogs}
 								>
 									<ScrollText className="size-3.5" />

@@ -23,14 +23,20 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DisabledHint } from "@/components/ui/disabled-hint";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import {
 	TableFacet,
 	TableFilterReset,
 	TableNoMatch,
 	TablePagination,
-	TableSearch,
 } from "@/components/ui/table-toolbar";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useRunningDeployments } from "@/hooks/use-running-deployments";
@@ -199,6 +205,8 @@ export function ServicesTable({
 			queryClient.invalidateQueries({
 				queryKey: trpc.environment.byProject.queryKey({ projectId }),
 			}),
+			queryClient.invalidateQueries({ queryKey: trpc.project.all.queryKey() }),
+			queryClient.invalidateQueries({ queryKey: trpc.project.overview.queryKey() }),
 		]);
 	};
 
@@ -265,9 +273,9 @@ export function ServicesTable({
 				</AlertDialogContent>
 			</AlertDialog>
 
-			{selected.size > 0 && (
-				<div className="flex items-center justify-between rounded-lg border border-border bg-secondary/40 px-3 py-2">
-					<span className="text-sm text-muted-foreground">{selected.size} selected</span>
+			{selectedServices.length > 0 && (
+				<div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-secondary/40 px-3 py-2">
+					<span className="text-sm text-muted-foreground">{selectedServices.length} selected</span>
 					<div className="flex items-center gap-2">
 						<DisabledHint hint={runtimeHint}>
 							<Button
@@ -305,7 +313,6 @@ export function ServicesTable({
 			<TableCard
 				toolbar={
 					<>
-						<TableSearch view={view} placeholder="Search services…" />
 						<TableFacet label="Type" options={typeOptions} selected={types} onChange={setTypes} />
 						<TableFacet
 							label="Status"
@@ -314,7 +321,7 @@ export function ServicesTable({
 							onChange={setStatuses}
 						/>
 						<TableFilterReset
-							show={types.length > 0 || statuses.length > 0 || view.query.length > 0}
+							show={types.length > 0 || statuses.length > 0}
 							onClear={() => {
 								setTypes([]);
 								setStatuses([]);
@@ -326,6 +333,43 @@ export function ServicesTable({
 				footer={<TablePagination view={view} noun="services" />}
 			>
 				<Table>
+					<TableHeader>
+						<TableRow className="bg-muted/30 hover:bg-muted/30">
+							<TableHead className="w-10 ps-3">
+								<Checkbox
+									aria-label="Select all services on this page"
+									checked={
+										view.visible.length > 0 &&
+										view.visible.every((service) => selected.has(serviceKey(service)))
+											? true
+											: view.visible.some((service) => selected.has(serviceKey(service)))
+												? "indeterminate"
+												: false
+									}
+									onCheckedChange={(checked) =>
+										setSelected((previous) => {
+											const next = new Set(previous);
+											for (const service of view.visible) {
+												if (checked === true) next.add(serviceKey(service));
+												else next.delete(serviceKey(service));
+											}
+											return next;
+										})
+									}
+								/>
+							</TableHead>
+							<TableHead className="hidden w-32 text-xs text-muted-foreground sm:table-cell">
+								Status
+							</TableHead>
+							<TableHead className="text-xs text-muted-foreground">Service</TableHead>
+							<TableHead className="hidden text-xs text-muted-foreground md:table-cell">
+								Address or description
+							</TableHead>
+							<TableHead>
+								<span className="sr-only">Actions</span>
+							</TableHead>
+						</TableRow>
+					</TableHeader>
 					<TableBody>
 						<TableNoMatch
 							view={view}
@@ -338,20 +382,27 @@ export function ServicesTable({
 						/>
 						{groups.map((group) => (
 							<Fragment key={group.type}>
-								<TableRow className="bg-secondary/60 hover:bg-secondary/60">
+								<TableRow className="bg-muted/30 hover:bg-muted/30">
 									<TableCell
 										colSpan={5}
 										className="py-1.5 text-xs font-medium text-muted-foreground"
 									>
 										{SERVICE_TYPE_META[group.type].label}
+										<span className="ms-2 tabular-nums text-muted-foreground/70">
+											{group.items.length}
+										</span>
 									</TableCell>
 								</TableRow>
 								{group.items.map((service) => {
 									const href = `/dashboard/projects/${projectId}/services/${service.type}/${service.id}`;
 									const key = serviceKey(service);
 									return (
-										<TableRow key={key} className="relative">
-											<TableCell className="w-8">
+										<TableRow
+											key={key}
+											className="relative focus-within:bg-muted/50"
+											data-state={selected.has(key) ? "selected" : undefined}
+										>
+											<TableCell className="w-10 ps-3">
 												<Checkbox
 													checked={selected.has(key)}
 													onCheckedChange={(checked) => toggle(service, checked === true)}
@@ -359,7 +410,7 @@ export function ServicesTable({
 													className="relative z-10"
 												/>
 											</TableCell>
-											<TableCell className="w-36">
+											<TableCell className="hidden w-32 sm:table-cell">
 												{/* Same vocabulary as the service headers; only the header dot pulses, not every row. */}
 												<span className="[&_.animate-pulse]:animate-none">
 													{deployingBadge(service) ?? (
@@ -367,15 +418,29 @@ export function ServicesTable({
 													)}
 												</span>
 											</TableCell>
-											<TableCell className="max-w-64">
+											<TableCell className="w-full min-w-0 max-w-48 py-3 sm:max-w-64">
 												<div className="flex min-w-0 flex-col gap-1">
 													<Link
 														href={href}
-														className="truncate text-sm font-medium after:absolute after:inset-0 hover:underline"
+														className="truncate text-sm font-medium after:absolute after:inset-0 hover:underline focus-visible:outline-none focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring"
 														title={service.name}
 													>
 														{service.name}
 													</Link>
+													<span className="sm:hidden [&_.animate-pulse]:animate-none">
+														{deployingBadge(service) ?? (
+															<ServiceStatusBadge status={service.status as BadgeStatus} />
+														)}
+													</span>
+													{service.domain ? (
+														<span className="relative z-10 flex min-w-0 md:hidden">
+															<ServiceUrl domain={service.domain} compact />
+														</span>
+													) : service.description ? (
+														<span className="block truncate text-xs text-muted-foreground md:hidden">
+															{service.description}
+														</span>
+													) : null}
 													{(service.tags?.length ?? 0) > 0 && (
 														<div className="relative z-10 flex flex-wrap gap-1">
 															{service.tags?.map((tag) => (
@@ -394,7 +459,7 @@ export function ServicesTable({
 													)}
 												</div>
 											</TableCell>
-											<TableCell className="max-w-72 text-sm text-muted-foreground">
+											<TableCell className="hidden max-w-72 text-sm text-muted-foreground md:table-cell">
 												{service.domain ? (
 													<span className="relative z-10 flex min-w-0">
 														<ServiceUrl domain={service.domain} compact />
@@ -414,7 +479,7 @@ export function ServicesTable({
 													<Link
 														href={href}
 														aria-label={`Open ${service.name}`}
-														className="relative z-10 inline-flex"
+														className="relative z-10 hidden size-8 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex"
 													>
 														<ChevronRight className="size-4 text-muted-foreground" />
 													</Link>

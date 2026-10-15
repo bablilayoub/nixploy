@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, FolderGit2, Plus, Search } from "lucide-react";
+import { ChevronRight, FolderGit2, Plus, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -24,10 +24,11 @@ import { OverviewCards, RecentDeployments } from "./overview-section";
 
 export function DashboardView() {
 	const trpc = useTRPC();
-	const { can } = useCapabilities();
+	const { can, isLoading: capabilitiesLoading } = useCapabilities();
 	const canCreate = can("project.write");
 	const createHint = canCreate ? undefined : capabilityHint("project.write");
 	const [search, setSearch] = useState("");
+	const [needsAttention, setNeedsAttention] = useState(false);
 	const {
 		data: projects,
 		isPending,
@@ -37,47 +38,51 @@ export function DashboardView() {
 	} = useQuery(trpc.project.all.queryOptions());
 
 	const query = search.trim().toLowerCase();
-	const filtered = projects?.filter((project) => project.name.toLowerCase().includes(query));
+	const attentionCount =
+		projects?.filter((project) =>
+			project.environments.some((environment) => environment.services.byStatus.error > 0),
+		).length ?? 0;
+	const filtered = projects?.filter((project) => {
+		const matchesSearch = [
+			project.name,
+			project.description,
+			...project.environments.map((environment) => environment.name),
+		].some((field) => field?.toLowerCase().includes(query));
+		return (
+			matchesSearch &&
+			(!needsAttention ||
+				project.environments.some((environment) => environment.services.byStatus.error > 0))
+		);
+	});
+	const resetFilters = () => {
+		setSearch("");
+		setNeedsAttention(false);
+	};
 
 	return (
-		<div className="space-y-4">
+		<div className="space-y-6">
 			<PageHeader
 				title="Projects"
 				description="Projects, environments, and services."
 				actions={
-					<>
-						<div className="relative">
-							<Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-							<Input
-								placeholder="Search projects..."
-								aria-label="Search projects"
-								value={search}
-								onChange={(event) => setSearch(event.target.value)}
-								className="h-8 w-full pl-8 sm:w-56"
-							/>
-						</div>
-						<DisabledHint hint={createHint}>
-							<CreateProjectDialog>
-								<Button size="sm" disabled={!canCreate}>
-									<Plus className="size-4" />
-									New project
-								</Button>
-							</CreateProjectDialog>
-						</DisabledHint>
-					</>
+					<DisabledHint hint={createHint}>
+						<CreateProjectDialog handleDeepLink={!capabilitiesLoading && canCreate}>
+							<Button disabled={!canCreate}>
+								<Plus className="size-4" />
+								New project
+							</Button>
+						</CreateProjectDialog>
+					</DisabledHint>
 				}
 			/>
-
-			{/* Phones: project list first, then the compact 2×2 stats and the charts. */}
-			<div className="flex flex-col gap-4">
+			{/* Phones keep the project directory ahead of the trend panels. */}
+			<div className="flex flex-col gap-6">
 				<div className="order-1 sm:order-none">
 					<GettingStartedCard firstProjectId={projects?.[0]?.projectId} />
 				</div>
-
 				<div className="order-3 sm:order-none">
 					<OverviewCards />
 				</div>
-
 				<div className="order-4 grid grid-cols-1 gap-4 sm:order-none lg:grid-cols-7">
 					<div className="col-span-1 lg:col-span-4">
 						<DeploymentsChart />
@@ -86,31 +91,90 @@ export function DashboardView() {
 						<RecentDeployments />
 					</div>
 				</div>
-
-				<div className="order-2 sm:order-none">
+				<section className="order-2 space-y-4 sm:order-none" aria-labelledby="project-list-heading">
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+						<div className="flex items-center gap-2">
+							<h2 id="project-list-heading" className="text-sm font-semibold">
+								All projects
+							</h2>
+							{projects ? (
+								<span className="rounded-md bg-muted px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
+									{projects.length}
+								</span>
+							) : null}
+						</div>
+						<div className="flex flex-wrap items-center gap-2">
+							<div className="relative min-w-0 flex-1 sm:flex-none">
+								<Search
+									aria-hidden
+									className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+								/>
+								<Input
+									placeholder="Search projects…"
+									aria-label="Search projects"
+									value={search}
+									onChange={(event) => setSearch(event.target.value)}
+									className="h-9 w-full ps-9 pe-9 sm:w-64"
+								/>
+								{search ? (
+									<Button
+										type="button"
+										size="icon-sm"
+										variant="ghost"
+										aria-label="Clear project search"
+										className="absolute end-0.5 top-0.5"
+										onClick={() => setSearch("")}
+									>
+										<X className="size-3.5" />
+									</Button>
+								) : null}
+							</div>
+							{attentionCount > 0 || needsAttention ? (
+								<Button
+									type="button"
+									variant={needsAttention ? "secondary" : "outline"}
+									aria-pressed={needsAttention}
+									onClick={() => setNeedsAttention((current) => !current)}
+									className="gap-2"
+								>
+									<StatusDot status="error" />
+									Needs attention
+									<span className="tabular-nums text-muted-foreground">{attentionCount}</span>
+								</Button>
+							) : null}
+						</div>
+					</div>
 					<QueryState
 						isPending={isPending}
 						isError={isError}
 						error={error}
 						onRetry={() => refetch()}
-						isEmpty={!filtered || filtered.length === 0}
+						isEmpty={!filtered?.length}
 						skeleton={
-							<div className="divide-y rounded-lg border border-border">
+							<div className="divide-y rounded-lg border">
 								{Array.from({ length: 4 }).map((_, index) => (
 									// biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders
-									<div key={index} className="flex items-center gap-4 px-4 py-3.5">
-										<Skeleton className="h-5 w-40" />
-										<Skeleton className="h-4 w-24" />
+									<div key={index} className="flex items-center gap-4 px-4 py-4">
+										<Skeleton className="size-9 shrink-0" />
+										<div className="space-y-2">
+											<Skeleton className="h-4 w-40" />
+											<Skeleton className="h-3 w-24" />
+										</div>
 									</div>
 								))}
 							</div>
 						}
 						empty={
-							query ? (
+							query || needsAttention ? (
 								<EmptyState
 									icon={Search}
 									title="No projects match"
-									description="Try a different search term."
+									description="Try a different search or clear the filters to see all projects."
+									action={
+										<Button variant="outline" onClick={resetFilters}>
+											Clear filters
+										</Button>
+									}
 								/>
 							) : (
 								<EmptyState
@@ -120,7 +184,7 @@ export function DashboardView() {
 									action={
 										<DisabledHint hint={createHint}>
 											<CreateProjectDialog>
-												<Button size="sm" disabled={!canCreate}>
+												<Button disabled={!canCreate}>
 													<Plus className="size-4" />
 													New project
 												</Button>
@@ -131,40 +195,45 @@ export function DashboardView() {
 							)
 						}
 					>
-						<div className="divide-y rounded-lg border border-border">
+						<div className="divide-y overflow-hidden rounded-lg border border-border bg-card">
 							{(filtered ?? []).map((project) => (
 								<Link
 									key={project.projectId}
 									href={`/dashboard/projects/${project.projectId}`}
-									className="flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-muted/50"
+									className="group flex min-w-0 items-center gap-3 px-4 py-4 transition-colors hover:bg-muted/50 focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:gap-4"
 								>
-									<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-										<span className="truncate text-sm font-medium">{project.name}</span>
-										<span className="truncate text-sm text-muted-foreground">
-											{project.description || "No description"}
-										</span>
+									<span className="hidden size-9 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground sm:flex">
+										<FolderGit2 className="size-4" />
+									</span>
+									<div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+										<div className="min-w-0 flex-1 space-y-1">
+											<span className="block truncate text-sm font-medium">{project.name}</span>
+											<span className="block truncate text-xs text-muted-foreground sm:text-sm">
+												{project.description ||
+													`${project.environments.length} ${project.environments.length === 1 ? "environment" : "environments"}`}
+											</span>
+										</div>
+										<ProjectHealth environments={project.environments} />
 									</div>
-									<ProjectHealth environments={project.environments} />
 									<DateTime
 										value={project.createdAt}
-										className="hidden w-28 shrink-0 text-right text-sm text-muted-foreground md:block"
+										className="hidden w-28 shrink-0 text-right text-xs text-muted-foreground lg:block"
 									/>
-									<ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+									<ChevronRight
+										aria-hidden
+										className="size-4 shrink-0 text-muted-foreground group-hover:text-foreground"
+									/>
 								</Link>
 							))}
 						</div>
 					</QueryState>
-				</div>
+				</section>
 			</div>
 		</div>
 	);
 }
 
-/**
- * Health of a project at a glance: how many of its services are failing or
- * running, and the total. Scanning the list for a red dot is the reason the
- * dashboard exists, so the counts come before the service total.
- */
+/** Service health stays readable on phones as well as in the desktop directory. */
 function ProjectHealth({
 	environments,
 }: {
@@ -180,13 +249,10 @@ function ProjectHealth({
 		}),
 		{ running: 0, error: 0, total: 0 },
 	);
-	if (counts.total === 0) {
-		return (
-			<span className="hidden shrink-0 text-sm text-muted-foreground sm:block">No services</span>
-		);
-	}
+	if (counts.total === 0)
+		return <span className="shrink-0 text-xs text-muted-foreground">No services</span>;
 	return (
-		<span className="hidden shrink-0 items-center gap-3 text-sm text-muted-foreground sm:flex">
+		<span className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
 			{counts.error > 0 ? (
 				<span className="flex items-center gap-1.5 text-destructive">
 					<StatusDot status="error" />

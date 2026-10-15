@@ -1,8 +1,9 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
+import { FolderGit2, Loader2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
+import { describeError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 /**
@@ -44,12 +46,20 @@ function NewProjectDeepLink({ onOpen }: { onOpen: () => void }) {
 	return null;
 }
 
-export function CreateProjectDialog({ children }: { children: React.ReactNode }) {
+export function CreateProjectDialog({
+	children,
+	handleDeepLink = false,
+}: {
+	children: React.ReactNode;
+	/** Only one instance on a page may consume ?new=project. */
+	handleDeepLink?: boolean;
+}) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const [open, setOpen] = useState(false);
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
+	const id = useId();
 	const projectsKey = trpc.project.all.queryKey();
 
 	const createProject = useSaveMutation(
@@ -74,7 +84,11 @@ export function CreateProjectDialog({ children }: { children: React.ReactNode })
 				// project" is still in flight while the user creates a project from
 				// that same screen.
 				const hadData = queryClient.getQueryData(projectsKey) !== undefined;
-				await queryClient.invalidateQueries({ queryKey: projectsKey });
+				await Promise.all([
+					queryClient.invalidateQueries({ queryKey: projectsKey }),
+					queryClient.invalidateQueries({ queryKey: trpc.project.overview.queryKey() }),
+					queryClient.invalidateQueries({ queryKey: trpc.project.onboarding.queryKey() }),
+				]);
 				// query-core only honours `cancelRefetch` once a query holds data
 				// (`Query#fetch`: `state.data !== undefined && cancelRefetch`).
 				// Without data it returns the promise of the request already in
@@ -92,53 +106,89 @@ export function CreateProjectDialog({ children }: { children: React.ReactNode })
 	);
 
 	return (
-		<Dialog open={open} onOpenChange={setOpen}>
-			<Suspense fallback={null}>
-				<NewProjectDeepLink onOpen={() => setOpen(true)} />
-			</Suspense>
+		<Dialog
+			open={open}
+			onOpenChange={(next) => {
+				if (createProject.isPending) return;
+				setOpen(next);
+				if (next) createProject.reset();
+			}}
+		>
+			{handleDeepLink ? (
+				<Suspense fallback={null}>
+					<NewProjectDeepLink onOpen={() => setOpen(true)} />
+				</Suspense>
+			) : null}
 			<DialogTrigger asChild>{children}</DialogTrigger>
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>
 					<DialogTitle>Create project</DialogTitle>
 					<DialogDescription>
-						A project groups environments and services. A{" "}
-						<code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">production</code>{" "}
-						environment is created automatically.
+						Keep related applications, Compose stacks, and databases together.
 					</DialogDescription>
 				</DialogHeader>
 				<form
 					onSubmit={(event) => {
 						event.preventDefault();
+						if (!name.trim() || createProject.isPending) return;
 						createProject.mutate({
 							name: name.trim(),
 							description: description.trim() || undefined,
 						});
 					}}
-					className="flex flex-col gap-4"
+					className="flex flex-col gap-5"
 				>
+					<div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3 text-sm">
+						<FolderGit2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+						<p className="leading-relaxed text-muted-foreground">
+							Includes a <span className="font-medium text-foreground">production</span>{" "}
+							environment. You can add staging or preview environments later.
+						</p>
+					</div>
 					<div className="flex flex-col gap-2">
-						<Label htmlFor="project-name">Name</Label>
+						<Label htmlFor={`${id}-name`}>Project name</Label>
 						<Input
-							id="project-name"
-							placeholder="my-saas"
+							id={`${id}-name`}
+							placeholder="e.g. Customer portal"
 							value={name}
 							onChange={(event) => setName(event.target.value)}
 							autoFocus
+							autoComplete="off"
+							maxLength={255}
+							required
+							disabled={createProject.isPending}
 						/>
 					</div>
 					<div className="flex flex-col gap-2">
-						<Label htmlFor="project-description">Description</Label>
+						<Label htmlFor={`${id}-description`}>
+							Description <span className="font-normal text-muted-foreground">(optional)</span>
+						</Label>
 						<Textarea
-							id="project-description"
-							placeholder="Optional description"
+							id={`${id}-description`}
+							placeholder="What does this project run?"
 							value={description}
 							onChange={(event) => setDescription(event.target.value)}
 							rows={3}
+							disabled={createProject.isPending}
 						/>
 					</div>
+					{createProject.isError ? (
+						<p role="alert" className="text-sm text-destructive">
+							{describeError(createProject.error, "Could not create the project. Try again.")}
+						</p>
+					) : null}
 					<DialogFooter>
+						<Button
+							type="button"
+							variant="outline"
+							disabled={createProject.isPending}
+							onClick={() => setOpen(false)}
+						>
+							Cancel
+						</Button>
 						<Button type="submit" disabled={!name.trim() || createProject.isPending}>
-							{createProject.isPending ? "Creating..." : "Create"}
+							{createProject.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+							{createProject.isPending ? "Creating project…" : "Create project"}
 						</Button>
 					</DialogFooter>
 				</form>

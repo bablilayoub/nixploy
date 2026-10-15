@@ -34,6 +34,8 @@ describe("frameInvalidations", () => {
 			// A running job has not changed the service's status yet.
 			expect(targets).not.toContain("application.one");
 			expect(targets).not.toContain("docker.containers");
+			expect(targets).not.toContain("project.all");
+			expect(targets).not.toContain("project.overview");
 		}
 	});
 
@@ -49,6 +51,8 @@ describe("frameInvalidations", () => {
 					"application.all",
 					"environment.byProject",
 					"docker.containers",
+					"project.all",
+					"project.overview",
 				]),
 			);
 		}
@@ -99,6 +103,7 @@ describe("frameInvalidations", () => {
 		});
 		expect(database).toContainEqual({ path: "service.one", serviceKind: "postgres", id: "pg_1" });
 		expect(database).toContainEqual({ path: "service.all", serviceKind: "postgres" });
+		expect(paths(database)).toEqual(expect.arrayContaining(["project.all", "project.overview"]));
 	});
 
 	it("ignores a service kind it does not know, but still refreshes the shared views", () => {
@@ -110,7 +115,12 @@ describe("frameInvalidations", () => {
 				status: "running",
 			}),
 		);
-		expect(targets).toEqual(["docker.containers", "environment.byProject"]);
+		expect(targets).toEqual([
+			"docker.containers",
+			"environment.byProject",
+			"project.all",
+			"project.overview",
+		]);
 	});
 
 	it("treats a queue-depth frame as a cheap badge refresh", () => {

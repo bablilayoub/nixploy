@@ -1,21 +1,31 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, FolderGit2, Plus, Search } from "lucide-react";
+import { AlertTriangle, FolderGit2, Plus, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { UnderlineTabsList, UnderlineTabsTrigger } from "@/components/application/underline-tabs";
+import { LoadError } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
+import { EmptyState } from "@/components/services/empty-state";
 import { PageHeader } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { confirmDiscardUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { describeError } from "@/lib/describe-error";
 import { primaryDomain } from "@/lib/service-url";
 import { useTRPC } from "@/lib/trpc";
 
@@ -26,7 +36,7 @@ import { EnvironmentActions } from "./environment-actions";
 import { EnvironmentVariablesTab } from "./environment-variables-tab";
 import { ManageTagsDialog } from "./manage-tags-dialog";
 import { ProjectActions } from "./project-actions";
-import { DATABASE_TYPES, type DatabaseType } from "./service-types";
+import { DATABASE_TYPES, type DatabaseType, SERVICE_TYPE_META } from "./service-types";
 import { type ServiceEntry, ServicesTable } from "./services-table";
 import { UpstreamsTable } from "./upstreams-table";
 
@@ -67,7 +77,8 @@ export function ProjectDetail({
 	const trpc = useTRPC();
 	const router = useRouter();
 	const searchParams = useSearchParams();
-	const { can } = useCapabilities();
+	const { can, isLoading: capabilitiesLoading } = useCapabilities();
+	const mayOpenServiceDialog = !capabilitiesLoading && can("service.create");
 	const [search, setSearch] = useState("");
 	const [tagFilter, setTagFilter] = useState<string | null>(null);
 	const [environmentName, setEnvironmentName] = useState(initialEnvironment || "production");
@@ -79,7 +90,10 @@ export function ProjectDetail({
 
 	useEffect(() => {
 		const requested = parseNewParam(searchParams.get("new"));
-		if (!requested) {
+		setEnvironmentName(searchParams.get("env") || "production");
+		const requestedTab = searchParams.get("tab") ?? undefined;
+		setTab(requested ? "services" : isProjectTab(requestedTab) ? requestedTab : "services");
+		if (!requested || !mayOpenServiceDialog) {
 			return;
 		}
 		setPendingDialog(requested);
@@ -87,11 +101,12 @@ export function ProjectDetail({
 		// Strip the param so a refresh doesn't reopen the dialog.
 		const params = new URLSearchParams(searchParams.toString());
 		params.delete("new");
+		params.delete("tab");
 		const query = params.toString();
 		router.replace(`/dashboard/projects/${projectId}${query ? `?${query}` : ""}`, {
 			scroll: false,
 		});
-	}, [projectId, router, searchParams]);
+	}, [mayOpenServiceDialog, projectId, router, searchParams]);
 
 	const projectQuery = useQuery(trpc.project.one.queryOptions({ projectId }));
 	const environmentsQuery = useQuery(trpc.environment.byProject.queryOptions({ projectId }));
@@ -108,43 +123,43 @@ export function ProjectDetail({
 
 	const applicationsQuery = useQuery({
 		...trpc.application.all.queryOptions(serviceInput),
-		enabled: tab === "services",
+		enabled: tab === "services" && Boolean(activeEnvironment),
 	});
 	const composeQuery = useQuery({
 		...trpc.compose.all.queryOptions(serviceInput),
-		enabled: tab === "services",
+		enabled: tab === "services" && Boolean(activeEnvironment),
 	});
 	const postgresQuery = useQuery({
 		...trpc.postgres.all.queryOptions(serviceInput),
-		enabled: tab === "services",
+		enabled: tab === "services" && Boolean(activeEnvironment),
 	});
 	const mysqlQuery = useQuery({
 		...trpc.mysql.all.queryOptions(serviceInput),
-		enabled: tab === "services",
+		enabled: tab === "services" && Boolean(activeEnvironment),
 	});
 	const mariadbQuery = useQuery({
 		...trpc.mariadb.all.queryOptions(serviceInput),
-		enabled: tab === "services",
+		enabled: tab === "services" && Boolean(activeEnvironment),
 	});
 	const mongoQuery = useQuery({
 		...trpc.mongo.all.queryOptions(serviceInput),
-		enabled: tab === "services",
+		enabled: tab === "services" && Boolean(activeEnvironment),
 	});
 	const redisQuery = useQuery({
 		...trpc.redis.all.queryOptions(serviceInput),
-		enabled: tab === "services",
+		enabled: tab === "services" && Boolean(activeEnvironment),
 	});
 
 	const tagsCatalogQuery = useQuery({
 		...trpc.tag.all.queryOptions(),
-		enabled: tab === "services",
+		enabled: tab === "services" && Boolean(activeEnvironment),
 	});
 
 	// One project-wide domain query feeds the address column; per-row queries
 	// would be one request per service.
 	const domainsQuery = useQuery({
 		...trpc.domain.all.queryOptions({ projectId }),
-		enabled: tab === "services",
+		enabled: tab === "services" && Boolean(activeEnvironment),
 	});
 	// External upstreams are routing rows, not services: listed under the
 	// services table rather than mixed into it.
@@ -271,14 +286,27 @@ export function ProjectDetail({
 		})),
 	];
 
+	const serviceQueries = [
+		{ label: "Applications", query: applicationsQuery },
+		{ label: "Compose stacks", query: composeQuery },
+		{ label: "PostgreSQL", query: postgresQuery },
+		{ label: "MySQL", query: mysqlQuery },
+		{ label: "MariaDB", query: mariadbQuery },
+		{ label: "MongoDB", query: mongoQuery },
+		{ label: "Redis", query: redisQuery },
+	];
+	const failedServiceQueries = serviceQueries.filter(({ query }) => query.isError);
 	const isLoadingServices =
-		applicationsQuery.isPending ||
-		composeQuery.isPending ||
-		postgresQuery.isPending ||
-		mysqlQuery.isPending ||
-		mariadbQuery.isPending ||
-		mongoQuery.isPending ||
-		redisQuery.isPending;
+		environmentsQuery.isPending ||
+		(Boolean(activeEnvironment) &&
+			(serviceQueries.some(({ query }) => query.isPending) ||
+				upstreamsQuery.isPending ||
+				(serviceRefs.length > 0 && serviceTagsQuery.isPending)));
+	const hasFilters = Boolean(search.trim() || tagFilter);
+	const resetFilters = () => {
+		setSearch("");
+		setTagFilter(null);
+	};
 
 	const filteredServices = services.filter((service) => {
 		// Name, description and kind: typing "postgres" should find the database
@@ -287,12 +315,25 @@ export function ProjectDetail({
 		const needle = search.trim().toLowerCase();
 		const matchesSearch =
 			!needle ||
-			[service.name, service.description, service.type].some((field) =>
-				field?.toLowerCase().includes(needle),
-			);
+			[
+				service.name,
+				service.description,
+				service.type,
+				SERVICE_TYPE_META[service.type].label,
+				service.domain?.host,
+				...(service.tags ?? []).map((tag) => tag.name),
+			].some((field) => field?.toLowerCase().includes(needle));
 		const matchesTag = !tagFilter || service.tags?.some((tag) => tag.tagId === tagFilter);
 		return matchesSearch && matchesTag;
 	});
+
+	const hasMatchingUpstreams =
+		!tagFilter &&
+		(upstreamsQuery.data ?? []).some((row) =>
+			[row.name, row.description, row.targetUrl].some((field) =>
+				field?.toLowerCase().includes(search.trim().toLowerCase()),
+			),
+		);
 
 	const syncUrl = (env: string, nextTab: ProjectTab) => {
 		const params = new URLSearchParams({ env });
@@ -305,6 +346,7 @@ export function ProjectDetail({
 	};
 
 	const selectEnvironment = (name: string) => {
+		resetFilters();
 		setEnvironmentName(name);
 		syncUrl(name, tab);
 	};
@@ -330,14 +372,22 @@ export function ProjectDetail({
 
 	if (projectQuery.isError || (!projectQuery.isPending && !project)) {
 		return (
-			<div className="flex flex-1 flex-col items-center justify-center gap-2 p-10 text-center">
-				<AlertTriangle className="size-8 text-muted-foreground" />
-				<h2 className="text-lg font-semibold">Project not found</h2>
-				<p className="text-sm text-muted-foreground">
-					{projectQuery.error?.message ?? "This project does not exist or you don't have access."}
-				</p>
-				<Button variant="outline" onClick={() => router.push("/dashboard")}>
-					Back to projects
+			<div className="space-y-4">
+				<LoadError
+					title={
+						projectQuery.error?.data?.code === "NOT_FOUND"
+							? "Project not found"
+							: "Could not load project"
+					}
+					message={
+						projectQuery.error
+							? describeError(projectQuery.error)
+							: "This project does not exist or you don't have access."
+					}
+					onRetry={() => void projectQuery.refetch()}
+				/>
+				<Button variant="outline" asChild>
+					<Link href="/dashboard">Back to projects</Link>
 				</Button>
 			</div>
 		);
@@ -347,7 +397,10 @@ export function ProjectDetail({
 		<div className="flex flex-col gap-6">
 			<PageHeader
 				breadcrumb={
-					<Link href="/dashboard" className="transition-colors hover:text-foreground">
+					<Link
+						href="/dashboard"
+						className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					>
 						Projects
 					</Link>
 				}
@@ -374,100 +427,53 @@ export function ProjectDetail({
 			</Tabs>
 
 			{tab !== "deployments" && (
-				<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-					{environmentsQuery.isPending ? (
-						<Skeleton className="h-9 w-64" />
-					) : (
-						<div className="flex min-w-0 items-center gap-1">
-							<Tabs
-								value={activeEnvironmentName}
-								onValueChange={switchEnvironment}
-								className="min-w-0"
-							>
-								<UnderlineTabsList aria-label="Environments" className="w-auto border-0">
-									{(environments ?? []).map((environment) => (
-										<UnderlineTabsTrigger key={environment.environmentId} value={environment.name}>
-											{environment.name}
-										</UnderlineTabsTrigger>
-									))}
-								</UnderlineTabsList>
-							</Tabs>
-							{activeEnvironment && (
-								<EnvironmentActions
-									projectId={projectId}
-									environment={activeEnvironment}
-									isOnlyEnvironment={(environments ?? []).length <= 1}
-									onRenamed={selectEnvironment}
-									onDuplicated={selectEnvironment}
-									onDeleted={() => {
-										const remaining = (environments ?? []).find(
-											(environment) =>
-												environment.environmentId !== activeEnvironment.environmentId,
-										);
-										if (remaining) {
-											selectEnvironment(remaining.name);
-										}
-									}}
-								/>
-							)}
-						</div>
-					)}
-					{tab === "services" && (
-						// Wraps on phones — the row used to push "Add service" off the
-						// right edge, where nothing hinted it was there.
-						<div className="flex flex-wrap items-center gap-2">
-							<DisabledHint hint={canWriteProject ? undefined : capabilityHint("project.write")}>
-								<CreateEnvironmentDialog projectId={projectId} onCreated={selectEnvironment}>
-									<Button variant="outline" size="sm" disabled={!canWriteProject}>
-										<Plus className="size-4" />
-										Environment
-									</Button>
-								</CreateEnvironmentDialog>
-							</DisabledHint>
-							<div className="relative">
-								<Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-								<Input
-									placeholder="Search services..."
-									aria-label="Search services"
-									value={search}
-									onChange={(event) => setSearch(event.target.value)}
-									className="h-8 w-full pl-8 sm:w-56"
-								/>
-							</div>
-							{(tagsCatalogQuery.data?.length ?? 0) > 0 && (
-								<div className="flex flex-wrap items-center gap-1">
-									<Button
-										type="button"
-										size="sm"
-										variant={tagFilter === null ? "secondary" : "ghost"}
-										className="h-8"
-										onClick={() => setTagFilter(null)}
-									>
-										All tags
-									</Button>
-									{tagsCatalogQuery.data?.map((tag) => (
-										<Button
-											key={tag.tagId}
-											type="button"
-											size="sm"
-											variant={tagFilter === tag.tagId ? "secondary" : "ghost"}
-											className="h-8"
-											onClick={() =>
-												setTagFilter((current) => (current === tag.tagId ? null : tag.tagId))
-											}
-										>
-											<span
-												className="mr-1.5 size-2 rounded-full"
-												style={{ backgroundColor: tag.color }}
-											/>
-											{tag.name}
-										</Button>
-									))}
-								</div>
-							)}
-							{activeEnvironment && (
+				<div className="space-y-4">
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+						<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+							<span className="text-xs text-muted-foreground">Environment</span>
+							{environmentsQuery.isPending ? (
+								<Skeleton className="h-9 w-40" />
+							) : activeEnvironment ? (
 								<>
-									<ManageTagsDialog />
+									<Select value={activeEnvironmentName} onValueChange={switchEnvironment}>
+										<SelectTrigger aria-label="Select environment" className="max-w-56 min-w-32">
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											{(environments ?? []).map((environment) => (
+												<SelectItem key={environment.environmentId} value={environment.name}>
+													{environment.name}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+									<EnvironmentActions
+										projectId={projectId}
+										environment={activeEnvironment}
+										isOnlyEnvironment={(environments ?? []).length <= 1}
+										onRenamed={selectEnvironment}
+										onDuplicated={selectEnvironment}
+										onDeleted={() => {
+											const remaining = (environments ?? []).find(
+												(environment) =>
+													environment.environmentId !== activeEnvironment.environmentId,
+											);
+											if (remaining) selectEnvironment(remaining.name);
+										}}
+									/>
+								</>
+							) : null}
+						</div>
+						{tab === "services" ? (
+							<div className="flex flex-wrap items-center gap-2">
+								<DisabledHint hint={canWriteProject ? undefined : capabilityHint("project.write")}>
+									<CreateEnvironmentDialog projectId={projectId} onCreated={selectEnvironment}>
+										<Button variant="outline" disabled={!canWriteProject}>
+											<Plus className="size-4" /> New environment
+										</Button>
+									</CreateEnvironmentDialog>
+								</DisabledHint>
+								{activeEnvironment ? (
 									<AddServiceMenu
 										projectId={projectId}
 										environmentId={activeEnvironment.environmentId}
@@ -477,14 +483,134 @@ export function ProjectDetail({
 										openDialog={pendingDialog}
 										onOpenDialogConsumed={() => setPendingDialog(null)}
 									/>
-								</>
-							)}
+								) : null}
+							</div>
+						) : null}
+					</div>
+					{tab === "services" ? (
+						<div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-start sm:justify-between">
+							<div className="relative w-full sm:w-72">
+								<Search
+									aria-hidden
+									className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+								/>
+								<Input
+									placeholder="Search services and upstreams…"
+									aria-label="Search services and upstreams"
+									value={search}
+									onChange={(event) => setSearch(event.target.value)}
+									className="h-9 ps-9 pe-9"
+								/>
+								{search ? (
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-sm"
+										aria-label="Clear service search"
+										className="absolute end-0.5 top-0.5"
+										onClick={() => setSearch("")}
+									>
+										<X className="size-3.5" />
+									</Button>
+								) : null}
+							</div>
+							<div className="flex min-w-0 flex-wrap items-center gap-2">
+								{(tagsCatalogQuery.data?.length ?? 0) > 0 ? (
+									<Select
+										value={tagFilter ?? "all"}
+										onValueChange={(value) => setTagFilter(value === "all" ? null : value)}
+									>
+										<SelectTrigger aria-label="Filter services by tag" className="max-w-56">
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="all">All tags</SelectItem>
+											{tagsCatalogQuery.data?.map((tag) => (
+												<SelectItem key={tag.tagId} value={tag.tagId}>
+													<span
+														aria-hidden
+														className="size-2 shrink-0 rounded-full"
+														style={{ backgroundColor: tag.color }}
+													/>
+													{tag.name}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								) : null}
+								{activeEnvironment ? <ManageTagsDialog /> : null}
+							</div>
 						</div>
-					)}
+					) : null}
 				</div>
 			)}
 
+			{tab !== "deployments" && environmentsQuery.isError ? (
+				<LoadError
+					title="Could not load environments"
+					message={describeError(environmentsQuery.error)}
+					onRetry={() => void environmentsQuery.refetch()}
+				/>
+			) : null}
+
+			{tab === "services" && failedServiceQueries.length > 0 ? (
+				<div
+					role="alert"
+					className="flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/5 p-4 sm:flex-row sm:items-center sm:justify-between"
+				>
+					<div className="flex items-start gap-3">
+						<AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+						<div className="space-y-1 text-sm">
+							<p className="font-medium">Some services could not be loaded</p>
+							<p className="text-muted-foreground">
+								{failedServiceQueries.map(({ label }) => label).join(", ")}. The list may be
+								incomplete.
+							</p>
+						</div>
+					</div>
+					<Button
+						variant="outline"
+						onClick={() => {
+							for (const { query } of failedServiceQueries) void query.refetch();
+						}}
+					>
+						Retry
+					</Button>
+				</div>
+			) : null}
+
 			{tab === "services" &&
+			(domainsQuery.isError || upstreamsQuery.isError || serviceTagsQuery.isError) ? (
+				<div
+					role="alert"
+					className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 text-sm text-muted-foreground"
+				>
+					<p>
+						{[
+							domainsQuery.isError ? "Addresses" : null,
+							upstreamsQuery.isError ? "External upstreams" : null,
+							serviceTagsQuery.isError ? "Service tags" : null,
+						]
+							.filter(Boolean)
+							.join(", ")}{" "}
+						could not be loaded.
+					</p>
+					<Button
+						size="sm"
+						variant="outline"
+						onClick={() => {
+							if (domainsQuery.isError) void domainsQuery.refetch();
+							if (upstreamsQuery.isError) void upstreamsQuery.refetch();
+							if (serviceTagsQuery.isError) void serviceTagsQuery.refetch();
+						}}
+					>
+						Retry
+					</Button>
+				</div>
+			) : null}
+
+			{tab === "services" &&
+				!environmentsQuery.isError &&
 				(isLoadingServices ? (
 					<div className="divide-y rounded-lg border">
 						{Array.from({ length: 4 }).map((_, index) => (
@@ -498,6 +624,7 @@ export function ProjectDetail({
 				) : filteredServices.length > 0 ? (
 					<>
 						<ServicesTable
+							key={activeEnvironment?.environmentId}
 							projectId={projectId}
 							environmentName={activeEnvironmentName}
 							services={filteredServices}
@@ -505,54 +632,53 @@ export function ProjectDetail({
 						/>
 						<UpstreamsTable
 							projectId={projectId}
-							upstreams={upstreamsQuery.data ?? []}
+							upstreams={tagFilter ? [] : (upstreamsQuery.data ?? [])}
 							primaryDomains={primaryDomains}
 							search={search}
 						/>
 					</>
-				) : (upstreamsQuery.data?.length ?? 0) > 0 && !search ? (
+				) : hasMatchingUpstreams ? (
 					<UpstreamsTable
 						projectId={projectId}
-						upstreams={upstreamsQuery.data ?? []}
+						upstreams={tagFilter ? [] : (upstreamsQuery.data ?? [])}
 						primaryDomains={primaryDomains}
 						search={search}
 					/>
-				) : (
-					<div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed py-16 text-center">
-						<div className="flex size-12 items-center justify-center rounded-full bg-secondary">
-							<FolderGit2 className="size-6 text-muted-foreground" />
-						</div>
-						<div className="flex flex-col gap-1">
-							<p className="font-medium">
-								{search ? "No services match your search" : "No services in this environment"}
-							</p>
-							<p className="text-sm text-muted-foreground">
-								{search
-									? "Try a different search term."
-									: `Add an application, compose stack or database to "${activeEnvironmentName}".`}
-							</p>
-						</div>
-						{/* The toolbar instance owns the ?new= deep link — never seed both. */}
-						{!search && activeEnvironment && (
-							<div className="flex flex-wrap items-center justify-center gap-2">
-								<AddServiceMenu
-									projectId={projectId}
-									environmentId={activeEnvironment.environmentId}
-									environmentName={activeEnvironment.name}
-									disabled={!canCreateService}
-									disabledReason={capabilityHint("service.create")}
-								/>
-								{/* The shortest path to a first running service, and the one
-								    a new operator is least likely to find on their own. */}
-								<Button asChild variant="outline">
-									<Link href="/dashboard/templates">Browse templates</Link>
+				) : failedServiceQueries.length > 0 ||
+					upstreamsQuery.isError ||
+					(tagFilter && serviceTagsQuery.isError) ? null : (
+					<EmptyState
+						icon={hasFilters ? Search : FolderGit2}
+						title={hasFilters ? "No services match" : "No services in this environment"}
+						description={
+							hasFilters
+								? "Search by name, type, address, or tag. Clear the filters to see everything."
+								: `Add an application, Compose stack, or database to ${activeEnvironmentName}.`
+						}
+						action={
+							hasFilters ? (
+								<Button variant="outline" onClick={resetFilters}>
+									Clear filters
 								</Button>
-							</div>
-						)}
-					</div>
+							) : activeEnvironment ? (
+								<div className="flex flex-wrap items-center justify-center gap-2">
+									<AddServiceMenu
+										projectId={projectId}
+										environmentId={activeEnvironment.environmentId}
+										environmentName={activeEnvironment.name}
+										disabled={!canCreateService}
+										disabledReason={capabilityHint("service.create")}
+									/>
+									<Button asChild variant="outline">
+										<Link href="/dashboard/templates">Browse templates</Link>
+									</Button>
+								</div>
+							) : undefined
+						}
+					/>
 				))}
 
-			{tab === "environment" && (
+			{tab === "environment" && !environmentsQuery.isError && (
 				<EnvironmentVariablesTab
 					projectId={projectId}
 					projectEnv={project?.env}

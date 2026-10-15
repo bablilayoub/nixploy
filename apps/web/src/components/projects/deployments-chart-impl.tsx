@@ -40,9 +40,9 @@ export function DeploymentsChart() {
 	const hasDeployments = rows.some((row) => row.done > 0 || row.error > 0);
 
 	return (
-		<section className="flex h-full flex-col rounded-lg border border-border p-4 sm:p-5">
+		<section className="flex h-full min-w-0 flex-col rounded-lg border border-border bg-card p-4 sm:p-5">
 			<div className="mb-4 space-y-1">
-				<h3 className="text-sm font-medium">Overview</h3>
+				<h2 className="text-sm font-semibold">Deployment activity</h2>
 				<p className="text-sm text-muted-foreground">Deployments over the last 14 days</p>
 			</div>
 			<div className="ps-2">
