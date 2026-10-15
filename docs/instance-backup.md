@@ -138,7 +138,10 @@ a different panel domain can require a password/TOTP sign-in and re-enrolment.
 > at a private bucket with tight IAM.
 
 Instance retention (`keepLatestCount`) prunes matching timestamp pairs after
-both new artifacts are stored. Fetch the SQL and config archive from the same
+both new artifacts are stored. Config is published first and its SQL sibling
+last; a published SQL key advertises a complete pair. Failed publication
+attempts cleanup, but storage failure can prevent removal: there is no atomic
+two-object transaction. Fetch the SQL and config archive from the same
 completed run; a SQL-only verification does not verify its config companion.
 Instance backups can only be created, edited or run by
 the **instance admin** (the first user), never by an org admin — the dump
@@ -152,7 +155,8 @@ stdin, so large dumps are not limited by the shell's argument size.
 Database, instance, volume and Redis backup producers stream binary gzip into
 the destination: S3 uses 8 MiB multipart uploads, local storage uses a `0600`
 temporary file followed by rename. Producer failure prevents finalization and
-retention. Archives no longer pass through the base64/50 MB command buffer.
+retention, and full gzip integrity is checked before publication. Archives no
+longer pass through the base64/50 MB command buffer.
 Local backup files are excluded from config archives so later instance runs
 do not recursively include earlier backups.
 
