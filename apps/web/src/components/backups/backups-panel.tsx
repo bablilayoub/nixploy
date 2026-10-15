@@ -15,7 +15,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -252,6 +252,7 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 	const [deleteTarget, setDeleteTarget] = useState<BackupEntry | null>(null);
 	const [restoreTarget, setRestoreTarget] = useState<BackupEntry | null>(null);
 	const [restoreKey, setRestoreKey] = useState("");
+	const restoreTriggerRef = useRef<HTMLButtonElement | null>(null);
 
 	useEffect(() => {
 		if (!dialogOpen) setEditing(null);
@@ -699,7 +700,8 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 										aria-label={isVolume ? "Restore volume backup" : "Restore backup"}
 										title={manageHint ?? "Restore"}
 										disabled={!canManage}
-										onClick={() => {
+										onClick={(event) => {
+											restoreTriggerRef.current = event.currentTarget;
 											setRestoreKey("");
 											setRestoreTarget(entry);
 										}}
@@ -979,7 +981,14 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 				open={restoreTarget !== null}
 				onOpenChange={(open) => !open && setRestoreTarget(null)}
 			>
-				<DialogContent>
+				<DialogContent
+					onCloseAutoFocus={(event) => {
+						if (restoreTriggerRef.current?.isConnected) {
+							event.preventDefault();
+							restoreTriggerRef.current.focus();
+						}
+					}}
+				>
 					<DialogHeader>
 						<DialogTitle>{isVolume ? "Restore volume" : "Restore backup"}</DialogTitle>
 						<DialogDescription>
@@ -993,6 +1002,8 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 								</>
 							) : target.kind === "database" && target.databaseType === "redis" ? (
 								"Stop Redis before restoring. The archive replaces its data volume, removing files absent from the backup. If replacement fails, rollback is attempted; retained data may need manual recovery. Redis stays stopped until you start it."
+							) : target.kind === "database" && target.databaseType !== "postgres" ? (
+								"Back up the database and pause application writes first. Restoring replaces the tables or collections in this dump; others may remain. A failed restore can leave partial changes."
 							) : (
 								"Restore the database from a stored dump. The current data will be overwritten."
 							)}
