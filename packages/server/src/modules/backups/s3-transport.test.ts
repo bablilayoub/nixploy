@@ -99,7 +99,7 @@ describe("S3 request and socket egress", () => {
 		).rejects.toThrow(/not allowed/);
 		expect(requests).toBe(0);
 	});
-	it("rechecks an existing client's pooled connection after the toggle changes", async () => {
+	it("does not reuse a private socket when DNS becomes public after private egress is disabled", async () => {
 		let requests = 0;
 		const { port } = await listen((_request, response) => {
 			requests++;
@@ -108,8 +108,21 @@ describe("S3 request and socket egress", () => {
 		const s3 = client(port);
 		await s3.send(new ListObjectsV2Command({ Bucket: "fixture" }));
 		setPrivateEgressAllowedForTests(false);
-		await expect(s3.send(new ListObjectsV2Command({ Bucket: "fixture" }))).rejects.toThrow();
-		expect(requests).toBe(1);
+		// The per-request policy now accepts public DNS. Fail the next socket's
+		// DNS lookup deliberately, avoiding any external connection in this test.
+		// A reused private socket skips that lookup and reaches the server again.
+		vi.mocked(lookup)
+			.mockResolvedValueOnce([{ address: "93.184.216.34", family: 4 }] as never)
+			.mockRejectedValue(new Error("Fixture stopped a fresh socket DNS lookup"));
+		const outcome = await s3.send(new ListObjectsV2Command({ Bucket: "fixture" })).then(
+			() => "unexpected success",
+			(error: Error) => error.message,
+		);
+		expect({ requests, outcome }).toEqual({
+			requests: 1,
+			outcome: "URL host could not be resolved",
+		});
+		expect(lookup).toHaveBeenCalledTimes(4);
 	});
 	it("revalidates the actual target inside SDK retries", async () => {
 		let requests = 0;

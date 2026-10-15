@@ -36,10 +36,17 @@ function guardedLookup(protocol: string): LookupFunction {
 	};
 }
 
+function withoutSocketReuse<T extends HttpAgent>(agent: T): T {
+	agent.maxFreeSockets = 0;
+	agent.keepSocketAlive = () => false;
+	return agent;
+}
+
 /**
  * Keep SDK signing, serialization, multipart and body streams intact. The
- * request middleware also guards IP literals and pooled sockets on retries;
- * each fresh socket resolves/vets/pins its own addresses without a DNS gap.
+ * request middleware guards IP literals and retries. Every request uses a
+ * fresh socket that resolves/vets/pins its addresses without a DNS gap; an
+ * old private socket must not bypass a later DNS or private-egress change.
  */
 export function createSafeS3Client(config: S3ClientConfig): S3Client {
 	const client = new S3Client({
@@ -47,12 +54,18 @@ export function createSafeS3Client(config: S3ClientConfig): S3Client {
 		requestHandler: {
 			// Actual agents prevent NodeHttpHandler's Expect:100-continue path
 			// from substituting its own unpinned one-shot agent.
-			httpAgent: new HttpAgent({ keepAlive: true, maxSockets: 50, lookup: guardedLookup("http:") }),
-			httpsAgent: new HttpsAgent({
-				keepAlive: true,
-				maxSockets: 50,
-				lookup: guardedLookup("https:"),
-			}),
+			// Unlimited active sockets also prevent queued request handoff from
+			// reusing a connection without running the guarded lookup again.
+			httpAgent: withoutSocketReuse(
+				new HttpAgent({ keepAlive: false, maxSockets: Infinity, lookup: guardedLookup("http:") }),
+			),
+			httpsAgent: withoutSocketReuse(
+				new HttpsAgent({
+					keepAlive: false,
+					maxSockets: Infinity,
+					lookup: guardedLookup("https:"),
+				}),
+			),
 		},
 	});
 	client.middlewareStack.add(
