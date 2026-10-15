@@ -47,6 +47,15 @@ const byId = (inputs: PreflightInputs) =>
 	Object.fromEntries(evaluatePreflight(inputs, now).map((check) => [check.id, check]));
 
 describe("update preflight", () => {
+	it("blocks a target above the pin even after acknowledging a downgrade", () => {
+		expect(byId({ ...healthy(), pinnedVersion: "0.4.0" }).pin?.level).toBe("block");
+		expect(byId({ ...healthy(), pinnedVersion: "0.4.0", allowDowngrade: true }).pin?.level).toBe(
+			"block",
+		);
+		expect(byId({ ...healthy(), pinnedVersion: "v0.4.1" }).pin).toBeUndefined();
+		expect(byId({ ...healthy(), pinnedVersion: "0.5.0" }).pin).toBeUndefined();
+	});
+
 	it("is all clear on a healthy host with a resolvable, newer target", () => {
 		const checks = evaluatePreflight(healthy(), now);
 		expect(checks.every((check) => check.level === "ok")).toBe(true);
