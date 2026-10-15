@@ -5,7 +5,8 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { admin, genericOAuth, organization, twoFactor } from "better-auth/plugins";
-import { client, db, schema } from "../db";
+import { sql } from "drizzle-orm";
+import { db, schema } from "../db";
 import type { invitations, members } from "../db/schema";
 import { recordAudit } from "../modules/audit";
 import {
@@ -47,6 +48,7 @@ import {
 import { readStoredIdTokenClaims } from "../modules/auth/sso-claims";
 import { deleteOrganizationCascade, hasCapability } from "../modules/projects";
 import { trustedProxyCidrsForAuth } from "../utils/rate-limit";
+import { authDatabase, currentAuthTransaction } from "./auth-database";
 import { createLogger } from "./logger";
 import { orgAc, orgPluginRoles } from "./org-roles";
 
@@ -158,8 +160,9 @@ function buildAuth(
 		appName: "Nixploy",
 		baseURL: process.env.BETTER_AUTH_URL,
 		secret: process.env.BETTER_AUTH_SECRET,
-		database: drizzleAdapter(db, {
+		database: drizzleAdapter(authDatabase, {
 			provider: "pg",
+			transaction: true,
 			// The drizzle adapter looks tables up by better-auth model name
 			// (singular), while the schema barrel exports them plural.
 			schema: {
@@ -438,46 +441,45 @@ function buildAuth(
 						// Users provisioned by the IdP are not "public registration":
 						// the OIDC callback already authenticated them.
 						const viaSso = ssoProviders.length > 0 && isSsoRequestPath(ctx?.path);
-						// Session-level advisory locks are per connection, so lock and
-						// unlock must run on the same one: reserve it from the pool
-						// instead of issuing both through the pooled `db`.
-						const reserved = await client.reserve();
-						try {
-							await reserved`SELECT pg_advisory_lock(${FIRST_USER_LOCK_KEY})`;
-							try {
-								const isFirst = !(await hasAnyUsers());
-								if (isFirst) {
-									// "First visitor wins" is a race a scanner can win on a
-									// fresh host; when the installer wrote a setup token the
-									// first admin must present it.
-									if (requiresSetupToken() && !setupTokenMatches(header(SETUP_TOKEN_HEADER))) {
-										throw new APIError("FORBIDDEN", {
-											message:
-												"A setup token is required to create the first admin. It is printed by the installer and stored in /etc/nixploy/.env as NIXPLOY_SETUP_TOKEN.",
-										});
-									}
-								} else if (!viaSso) {
-									const invitationId = header(INVITATION_ID_HEADER);
-									if (!(await canSignUpWithInvitation(email, invitationId))) {
-										throw new APIError("FORBIDDEN", {
-											message: invitationId
-												? "This invitation is for a different email address."
-												: "Registration is disabled. Ask an admin to invite you, or sign in.",
-										});
-									}
-								}
-								return {
-									data: {
-										...user,
-										...(isFirst ? { role: "admin" } : {}),
-									},
-								};
-							} finally {
-								await reserved`SELECT pg_advisory_unlock(${FIRST_USER_LOCK_KEY})`;
-							}
-						} finally {
-							reserved.release();
+						const transaction = currentAuthTransaction();
+						if (transaction) {
+							// Signup/OAuth keep this lock through the actual INSERT and
+							// credential writes. Use the SAME connection for the count:
+							// reserving another one can exhaust a small pool under load.
+							await transaction.execute(sql`SELECT pg_advisory_xact_lock(${FIRST_USER_LOCK_KEY})`);
 						}
+						const isFirst = !(await hasAnyUsers(transaction));
+						if (isFirst && !transaction) {
+							throw new APIError("INTERNAL_SERVER_ERROR", {
+								message: "First-admin creation requires an auth transaction.",
+							});
+						}
+						if (isFirst) {
+							// "First visitor wins" is a race a scanner can win on a
+							// fresh host; when the installer wrote a setup token the
+							// first admin must present it.
+							if (requiresSetupToken() && !setupTokenMatches(header(SETUP_TOKEN_HEADER))) {
+								throw new APIError("FORBIDDEN", {
+									message:
+										"A setup token is required to create the first admin. It is printed by the installer and stored in /etc/nixploy/.env as NIXPLOY_SETUP_TOKEN.",
+								});
+							}
+						} else if (!viaSso) {
+							const invitationId = header(INVITATION_ID_HEADER);
+							if (!(await canSignUpWithInvitation(email, invitationId, transaction))) {
+								throw new APIError("FORBIDDEN", {
+									message: invitationId
+										? "This invitation is for a different email address."
+										: "Registration is disabled. Ask an admin to invite you, or sign in.",
+								});
+							}
+						}
+						return {
+							data: {
+								...user,
+								...(isFirst ? { role: "admin" } : {}),
+							},
+						};
 					},
 				},
 			},

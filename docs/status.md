@@ -5,6 +5,33 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Atomic first-admin setup — 2026-10-15
+
+Confirmed the remaining race through actual HTTP signup against a private
+fresh Postgres database: two requests created two admins. The advisory lock
+only covered the old before-create hook; Better Auth inserted afterward.
+The Drizzle auth adapter now enables its existing transaction support. Its
+transaction is shared with hooks and their database helpers, and the first
+user count takes a transaction-level advisory lock held through the user,
+credential and session writes. No schema change, backfill or new dependency
+is needed: the committed user row remains the durable setup claim.
+
+Seven HTTP/Postgres regressions cover concurrent setup on a one-connection
+pool, missing/wrong setup tokens, failed credential/session writes followed
+by a successful retry, invitation signup/acceptance, auth rebuild and sign-in,
+organization-step retry, and a controlled OAuth token/userinfo callback with
+ordinary member provisioning. A separate two-process HTTP probe submits six
+signups against the same private database: exactly one succeeds, five are
+refused, and one admin remains. After both processes exit, a new process
+still reports setup closed, refuses public signup and signs the owner in.
+The optional template registry probe is the
+only skip in the full server suite: **2,892 passed in 210 files**. Other local
+gates pass: **96 web / 93 CLI** tests, all four TypeScript checks, changed-file
+formatting, strict Biome (**1,078 files**), knip **5.88.1**, and web/landing/CLI
+production builds. The setup tests create and remove their own database;
+the separate probe database was also removed, preserving other suites'
+fixtures and dev data. Pushed-head gates are tracked on the ready auth PR.
+
 ## Production dependency advisory follow-up — 2026-10-15
 
 `pnpm audit --prod --json` moves from **9 moderate / 0 high / 0 critical**
@@ -327,7 +354,7 @@ Image pins to review periodically: `traefik:v3.7.13`, `postgres:17-alpine`, `nod
 - [x] **Local Swarm VIP reset (2026-09-11)** — cleared by the Docker Desktop restart on 2026-09-12; the golden path routes through Traefik again. Kept for the record:: service VIPs on `nixploy-network` are unreachable from every container (task IPs work) — see the part-2 session line; recreate the overlay or restart Docker Desktop, then re-run the REST e2e.
 - [ ] **Final-wave leftovers (2026-09-11)**: browser confirmation that an idle dashboard stops polling `deployment.recent` (push path verified through the WS layer only); a real `install.sh --split-worker` run on a throwaway host; the SSH breaker is in-memory (a persistent version needs `last_seen_at`/`last_error` columns + an `unreachable` enum value); `git` template sources are unit-tested only (`http-json` verified live); `compose.createFromUrl` has no UI (CLI: `compose create-from-url`, 2026-09-19); CLI verbs for `compose.rollback`, `template.sources*` and `schedule.runOnce` landed 2026-09-19 (`compose rollback`, `template sources|source-add|source-update|source-remove|source-sync`, `schedule run-once`); MCP could expose `list_template_sources`; (done 2026-09-11: server terminal on the pool, the two polls gated, landing docs synced); landing docs previously lagged `docs/install.md` (split worker, `NIXPLOY_ROLE`), the egress toggle + key-rotation runbook + audit export (`private-egress` help slug wanted), and `api-catalog.ts` misses the new procedures; `apps/cli`/`apps/web` still borrow vitest from `packages/server` (add the devDependency at the next `pnpm install`).
 - [ ] **Remote servers**: stack-type compose on a remote must use registry-pullable images (`docker stack deploy` runs on the primary, no build); `docker.swarmServices` with a `serverId` returns the cluster-wide list (filter by `node.id` if per-server views are wanted); real multi-node smoke still pending (unit-tested only — no second host here).
-- [ ] First-admin claim is serialized but the INSERT still happens after the hook; a fully atomic claim needs an `instance_setup` singleton row (migration).
+- [x] First-admin admission and the actual user/credential/session inserts share Better Auth's Drizzle transaction (2026-10-15). The advisory lock and count use that connection until commit; concurrent HTTP signup creates one admin, failures roll back and retry, and committed users keep setup closed after restarts. No separate claim row or migration is needed.
 - [x] Redacted rows carry `secretsRedacted: true` since 2026-09-19 (every helper in `trpc/redact-secrets.ts` plus the ad hoc `env: null` / `content: null` spots in the environment, project and mount routers); the UI still keys the read-only state on `can("secrets.read")`, which is fine — the flag is for the CLI and agents.
 - [x] `lib/safe-next-path.ts` rejects any `?query` — fixed 2026-09-11 (`aaa7cef`), deep links survive login.
 - [x] `schedule.create/remove` write audit rows since the hardening pass (`7cb67ee`: every mutation in 20 routers is script-verified to write exactly one row). (`settings/incidents/page.tsx` is now a `redirect()` stub into Monitoring, so the missing `<title>` is moot.)

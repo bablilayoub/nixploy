@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
@@ -14,7 +15,20 @@ type Db = ReturnType<typeof drizzle<typeof schema>>;
 const globalForDb = globalThis as typeof globalThis & {
 	__nixploySql?: SqlClient;
 	__nixployDb?: Db;
+	__nixployDbTransactions?: AsyncLocalStorage<DbExecutor>;
 };
+
+const transactions = globalForDb.__nixployDbTransactions ?? new AsyncLocalStorage<DbExecutor>();
+globalForDb.__nixployDbTransactions = transactions;
+
+/** Auth hooks and their helpers must query through the adapter's transaction. */
+export function currentDatabaseTransaction(): DbExecutor | undefined {
+	return transactions.getStore();
+}
+
+export function runWithDatabaseTransaction<T>(transaction: DbExecutor, callback: () => T): T {
+	return transactions.run(transaction, callback);
+}
 
 function getDatabaseUrl(): string {
 	const databaseUrl = process.env.DATABASE_URL;
@@ -76,7 +90,7 @@ export const db: Db = new Proxy({} as Db, {
 		if (prop === "_" && !process.env.DATABASE_URL) {
 			return undefined;
 		}
-		const instance = ensureDb();
+		const instance = currentDatabaseTransaction() ?? ensureDb();
 		const value = Reflect.get(instance, prop);
 		return typeof value === "function" ? value.bind(instance) : value;
 	},
