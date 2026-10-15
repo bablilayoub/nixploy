@@ -28,11 +28,11 @@ function suffixedServiceName(row: ComposeCommandRow, serviceName: string): strin
 /**
  * Compose automatically advertises its service keys on EVERY attached network.
  * Qualify those keys so two stacks never advertise the same bare database name
- * on the environment overlay. Swarm already namespaces its deployed services.
+ * on the environment overlay. Swarm adds its native prefix to these keys too.
  */
 export function deployedServiceName(row: ComposeCommandRow, serviceName: string): string {
 	const name = suffixedServiceName(row, serviceName);
-	return row.composeType === "docker-compose" ? `${row.appName}-${name}` : name;
+	return `${row.appName}-${name}`;
 }
 
 /** Old running containers and rollback snapshots keep their pre-qualification labels. */
@@ -55,7 +55,7 @@ export function sourceComposeServiceName(deployedName: string, sourceName?: stri
  * service is reachable at on `nixploy-network` (exposed services) and on the
  * environment overlay (every service):
  * - docker-compose: `<appName>-<serviceName>` (network alias injected at deploy)
- * - stack: `<appName>_<serviceName>` (native swarm DNS)
+ * - stack: `<appName>_<serviceName>` (explicit compatibility DNS alias)
  * The isolation suffix is part of the service name in both cases.
  */
 export function traefikAppName(row: ComposeCommandRow, serviceName: string | null): string {
@@ -70,7 +70,17 @@ export function sharedNetworkAlias(row: ComposeCommandRow, serviceName: string):
 
 /** Swarm service name of one compose-file service in stack mode. */
 export function stackServiceName(row: ComposeCommandRow, serviceName: string): string {
-	return `${row.appName}_${suffixedServiceName(row, serviceName)}`;
+	return `${row.appName}_${deployedServiceName(row, serviceName)}`;
+}
+
+/** Physical Swarm names, current qualified key first, then the legacy raw key. */
+export function stackServiceCandidates(row: ComposeCommandRow, serviceName: string): string[] {
+	return [
+		...new Set([
+			stackServiceName(row, serviceName),
+			`${row.appName}_${suffixedServiceName(row, serviceName)}`,
+		]),
+	];
 }
 
 /**
@@ -166,7 +176,9 @@ export function sharedNetworkConnectCommand(
 export function sharedNetworkServiceUpdateCommand(
 	row: ComposeCommandRow,
 	serviceName: string,
+	physicalService = stackServiceName(row, serviceName),
 ): string {
-	const spec = `name=${getSwarmNetwork()},alias=${sharedNetworkAlias(row, serviceName)}`;
-	return `docker service update --network-add ${shellQuote(spec)} ${shellQuote(stackServiceName(row, serviceName))}`;
+	const aliases = [sharedNetworkAlias(row, serviceName), traefikAppName(row, serviceName)];
+	const spec = `name=${getSwarmNetwork()},${[...new Set(aliases)].map((alias) => `alias=${alias}`).join(",")}`;
+	return `docker service update --network-add ${shellQuote(spec)} ${shellQuote(physicalService)}`;
 }

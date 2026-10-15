@@ -38,7 +38,7 @@ import {
 	deployedServiceCandidates,
 	sharedNetworkConnectCommand,
 	sharedNetworkServiceUpdateCommand,
-	stackServiceName,
+	stackServiceCandidates,
 	traefikAppName,
 } from "./commands";
 import {
@@ -421,6 +421,12 @@ export async function prepareComposeFiles(
 	let rawContent: string;
 	let secrets: string[] = [];
 
+	// Guard identity/storage transitions before raw/rendered writes, clones,
+	// environment network creation or any runtime mutation.
+	await assertSafeComposeNamingTransition(composeRow, (command) =>
+		runComposeCommand(composeRow, command, { onPrimary: runsOnPrimary(composeRow) }),
+	);
+
 	if (composeRow.sourceType === "raw") {
 		rawContent = composeRow.composeFile;
 		if (!rawContent.trim()) {
@@ -440,10 +446,6 @@ export async function prepareComposeFiles(
 			resolveComposeFilePath(appName, composeRow.sourceType, composeRow.composePath),
 		);
 	}
-
-	await assertSafeComposeNamingTransition(composeRow, (command) =>
-		runComposeCommand(composeRow, command),
-	);
 
 	// Env inheritance: project → environment → service (service wins).
 	const full = await findComposeById(composeRow.composeId);
@@ -756,24 +758,34 @@ async function ensureSharedNetworkAttached(row: ComposeRow, serviceName: string)
 	if (row.composeType === "stack") {
 		// Service-level: the primary manager owns the service object.
 		const onPrimary = true;
-		const [networkId, attached] = await Promise.all([
-			runComposeCommand(row, `docker network inspect --format '{{.Id}}' ${shellQuote(network)}`, {
-				onPrimary,
-			}),
-			runComposeCommand(
-				row,
-				`docker service inspect --format '{{json .Spec.TaskTemplate.Networks}}' ${shellQuote(stackServiceName(row, serviceName))}`,
-				{ onPrimary },
-			),
-		]);
-		const targets = (JSON.parse(attached.trim() || "[]") as Array<{ Target?: string }>).map(
-			(entry) => entry.Target,
+		const networkId = await runComposeCommand(
+			row,
+			`docker network inspect --format '{{.Id}}' ${shellQuote(network)}`,
+			{ onPrimary },
 		);
-		if (targets.includes(networkId.trim())) return;
-		await runComposeCommand(row, sharedNetworkServiceUpdateCommand(row, serviceName), {
-			onPrimary,
-		});
-		return;
+		for (const physicalService of stackServiceCandidates(row, serviceName)) {
+			let attached: string;
+			try {
+				attached = await runComposeCommand(
+					row,
+					`docker service inspect --format '{{json .Spec.TaskTemplate.Networks}}' ${shellQuote(physicalService)}`,
+					{ onPrimary },
+				);
+			} catch {
+				continue;
+			}
+			const targets = (JSON.parse(attached.trim() || "[]") as Array<{ Target?: string }>).map(
+				(entry) => entry.Target,
+			);
+			if (targets.includes(networkId.trim())) return;
+			await runComposeCommand(
+				row,
+				sharedNetworkServiceUpdateCommand(row, serviceName, physicalService),
+				{ onPrimary },
+			);
+			return;
+		}
+		throw preconditionFailed(`Could not find running Swarm service ${serviceName}`);
 	}
 
 	const containerIds = new Set<string>();

@@ -12,6 +12,7 @@ import {
 	sharedNetworkConnectCommand,
 	sharedNetworkServiceUpdateCommand,
 	sourceComposeServiceName,
+	stackServiceCandidates,
 	stackServiceName,
 	traefikAppName,
 } from "./commands";
@@ -94,19 +95,22 @@ describe("isolation suffix naming", () => {
 		expect(traefikAppName(isolated, "web")).toBe("shop-web-a1b2c3");
 		expect(sharedNetworkAlias(isolated, "web")).toBe("shop-web-a1b2c3");
 		expect(traefikAppName({ ...isolated, composeType: "stack" }, "web")).toBe("shop_web-a1b2c3");
-		expect(stackServiceName({ ...isolated, composeType: "stack" }, "web")).toBe("shop_web-a1b2c3");
+		expect(stackServiceName({ ...isolated, composeType: "stack" }, "web")).toBe(
+			"shop_shop-web-a1b2c3",
+		);
 		expect(traefikAppName({ appName: "shop", composeType: "docker-compose" }, "web")).toBe(
 			"shop-web",
 		);
 		expect(traefikAppName({ appName: "shop", composeType: "stack" }, null)).toBe("shop_");
 	});
 
-	it("qualifies Compose keys without changing established route aliases or Swarm names", () => {
+	it("qualifies both engines while separating route aliases from physical Swarm identities", () => {
 		expect(deployedServiceName(composeRow, "db")).toBe("my-app-db");
 		expect(deployedServiceName(isolated, "db")).toBe("shop-db-a1b2c3");
-		expect(deployedServiceName(stackRow, "db")).toBe("db");
+		expect(deployedServiceName(stackRow, "db")).toBe("my-app-db");
 		expect(deployedServiceCandidates(isolated, "db")).toEqual(["shop-db-a1b2c3", "db-a1b2c3"]);
-		expect(deployedServiceCandidates(stackRow, "db")).toEqual(["db"]);
+		expect(deployedServiceCandidates(stackRow, "db")).toEqual(["my-app-db", "db"]);
+		expect(stackServiceCandidates(stackRow, "db")).toEqual(["my-app_my-app-db", "my-app_db"]);
 		expect(sourceComposeServiceName("shop-web", "web")).toBe("web");
 		// A legacy raw source key may already start with its project name.
 		expect(sourceComposeServiceName("shop-web")).toBe("shop-web");
@@ -122,7 +126,10 @@ describe("runtime shared-network attach commands", () => {
 
 	it("adds the network with alias to a swarm service", () => {
 		expect(sharedNetworkServiceUpdateCommand(stackRow, "web")).toBe(
-			"docker service update --network-add 'name=nixploy-network,alias=my-app-web' 'my-app_web'",
+			"docker service update --network-add 'name=nixploy-network,alias=my-app-web,alias=my-app_web' 'my-app_my-app-web'",
+		);
+		expect(sharedNetworkServiceUpdateCommand(stackRow, "web", "my-app_web")).toContain(
+			"'my-app_web'",
 		);
 	});
 });

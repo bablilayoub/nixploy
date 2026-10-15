@@ -51,12 +51,11 @@ function serviceFromLabels(labels: string | undefined): string | null {
 function displayService(appName: string, labels: string | undefined, names: string): string | null {
 	const fromLabels = serviceFromLabels(labels);
 	if (fromLabels) {
-		if (fromLabels.startsWith(`${appName}_`)) return fromLabels.slice(appName.length + 1);
 		const sourceLabel = labels
 			?.split(",")
 			.find((part) => part.startsWith(`${COMPOSE_SOURCE_SERVICE_LABEL}=`));
 		return sourceComposeServiceName(
-			fromLabels,
+			fromLabels.startsWith(`${appName}_`) ? fromLabels.slice(appName.length + 1) : fromLabels,
 			sourceLabel?.slice(COMPOSE_SOURCE_SERVICE_LABEL.length + 1),
 		);
 	}

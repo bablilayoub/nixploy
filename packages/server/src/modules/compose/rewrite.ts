@@ -2,7 +2,7 @@ import { stringify } from "yaml";
 import { getSwarmNetwork } from "../application/paths";
 import { mergeNodeConstraint } from "../cluster/placement";
 import { applyBuiltImages } from "./build";
-import { COMPOSE_SOURCE_SERVICE_LABEL, deployedServiceName } from "./commands";
+import { COMPOSE_SOURCE_SERVICE_LABEL, deployedServiceName, traefikAppName } from "./commands";
 import { escapeComposeInterpolation, renderComposeSpec } from "./interpolate";
 import { type ComposeMount, injectComposeMounts } from "./mounts";
 import {
@@ -54,7 +54,7 @@ export function randomizeServiceNames(spec: ComposeFileSpec, suffix: string): Co
 }
 
 /**
- * Docker Compose adds the service key as a DNS alias on every network, even
+ * Both Compose and the Stack converter add the key as a DNS alias on every network, even
  * when an explicit aliases list was supplied. Use globally qualified keys,
  * retaining short source names ONLY on the stack's private network. Volume
  * declarations and the Compose project name stay unchanged on upgrade.
@@ -63,6 +63,7 @@ function qualifyComposeServices(
 	spec: ComposeFileSpec,
 	appName: string,
 	suffix: string,
+	composeType: "docker-compose" | "stack",
 ): ComposeFileSpec {
 	const names = new Map(
 		Object.keys(spec.services ?? {}).map((name) => [
@@ -109,6 +110,18 @@ function qualifyComposeServices(
 			next.container_name = `${appName}-${next.container_name}`;
 		}
 		networks[privateNetworkName(appName)] = { aliases: [...privateAliases] };
+		if (composeType === "stack") {
+			// The route/cross-service contract is independent of the physical
+			// Swarm name (<stack>_<qualifiedKey>). Retain its old scoped alias.
+			for (const [network, config] of Object.entries(networks)) {
+				if (network === privateNetworkName(appName)) continue;
+				if (config.aliases?.includes(`${appName}-${name}`)) {
+					config.aliases = [
+						...new Set([...config.aliases, traefikAppName({ appName, composeType }, name)]),
+					];
+				}
+			}
+		}
 		next.networks = networks;
 		services[names.get(name) ?? name] = next;
 	}
@@ -330,9 +343,7 @@ export function buildDeployComposeFile(
 		exposedServices,
 		environmentNetwork: input.environmentNetwork,
 	});
-	if (input.composeType === "docker-compose") {
-		spec = qualifyComposeServices(spec, input.appName, suffix);
-	}
+	spec = qualifyComposeServices(spec, input.appName, suffix, input.composeType);
 	if (input.composeType === "stack") {
 		spec = injectNodeConstraint(normalizeForStack(spec), input.swarmNodeId);
 	}

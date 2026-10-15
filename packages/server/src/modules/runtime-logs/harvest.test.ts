@@ -54,6 +54,20 @@ describe("runtime log harvest", () => {
 				wanted,
 			),
 		).toEqual({ appName: "shop-a1b2c3", container: "shop-a1b2c3-db" });
+		expect(
+			resolveContainerOwner(
+				{
+					"com.docker.stack.namespace": "stack-9f9f9f",
+					"com.docker.swarm.service.name": "stack-9f9f9f_stack-9f9f9f-db",
+					[COMPOSE_SOURCE_SERVICE_LABEL]: "db",
+				},
+				wanted,
+			),
+		).toEqual({ appName: "stack-9f9f9f", container: "db" });
+		const swarmRemote = parseRemoteHarvestOutput(
+			"==APP==stack-9f9f9f\n==CID==abcdefabcdef||stack-9f9f9f_stack-9f9f9f-db|db\n2026-09-19T21:29:30.000000000Z ready\n",
+		);
+		expect(swarmRemote[0]?.containers[0]?.name).toBe("db");
 		const remote = parseRemoteHarvestOutput(
 			"==APP==shop-a1b2c3\n==CID==abcdefabcdef|shop-a1b2c3-db||db\n2026-09-19T21:29:30.000000000Z ready\n",
 		);

@@ -120,7 +120,10 @@ export function resolveContainerOwner(
 			swarmService !== value &&
 			swarmService.startsWith(`${value}_`)
 		) {
-			container = swarmService.slice(value.length + 1);
+			container = sourceComposeServiceName(
+				swarmService.slice(value.length + 1),
+				labels?.[COMPOSE_SOURCE_SERVICE_LABEL],
+			);
 		}
 		return { appName: value, container };
 	}
@@ -299,7 +302,7 @@ export function parseRemoteHarvestOutput(raw: string): Array<{
 				? sourceComposeServiceName(composeService, sourceService)
 				: null;
 			if (!name && swarmService && swarmService.startsWith(`${app.appName}_`)) {
-				name = swarmService.slice(app.appName.length + 1);
+				name = sourceComposeServiceName(swarmService.slice(app.appName.length + 1), sourceService);
 			}
 			container = { id, name, lines: [] };
 			app.containers.push(container);

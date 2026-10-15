@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
 	environmentFindFirst: vi.fn(),
 	insert: vi.fn(),
 	run: vi.fn(),
+	writeComposeFile: vi.fn(),
+	cloneComposeSource: vi.fn(),
 }));
 
 vi.mock("../../db", () => ({
@@ -36,7 +38,11 @@ vi.mock("../../db", () => ({
 		}),
 	},
 }));
-vi.mock("./source", () => ({ runComposeCommand: mocks.run }));
+vi.mock("./source", () => ({
+	runComposeCommand: mocks.run,
+	writeComposeFile: mocks.writeComposeFile,
+	cloneComposeSource: mocks.cloneComposeSource,
+}));
 vi.mock("./containers", () => ({
 	listComposeContainers: vi.fn(async () => []),
 	invalidateComposeContainers: vi.fn(),
@@ -58,6 +64,7 @@ import {
 	type ComposeRow,
 	composeSourceChanged,
 	createCompose,
+	prepareComposeFiles,
 	saveComposeFile,
 	stopCompose,
 	updateComposeById,
@@ -120,6 +127,34 @@ beforeEach(() => {
 	mocks.returning.mockResolvedValue([privilegedRow]);
 	mocks.environmentFindFirst.mockResolvedValue({ environmentId: "env-1" });
 	mocks.run.mockResolvedValue("");
+});
+
+describe("prepareComposeFiles legacy Stack refusal", () => {
+	it("queries the primary and refuses before any source/rendered writes or clone", async () => {
+		mocks.run.mockResolvedValueOnce("a".repeat(25)).mockResolvedValueOnce(
+			JSON.stringify([
+				{
+					Spec: {
+						Name: "portainer-abc123_db",
+						Labels: { "com.docker.stack.namespace": "portainer-abc123" },
+						TaskTemplate: { ContainerSpec: {} },
+					},
+				},
+			]),
+		);
+		await expect(
+			prepareComposeFiles({ ...privilegedRow, composeType: "stack", serverId: "remote-1" }),
+		).rejects.toThrow(/legacy service names/);
+		expect(mocks.run).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({ serverId: "remote-1" }),
+			expect.stringContaining("docker service ls"),
+			{ onPrimary: true },
+		);
+		expect(mocks.writeComposeFile).not.toHaveBeenCalled();
+		expect(mocks.cloneComposeSource).not.toHaveBeenCalled();
+		expect(mocks.findFirst).not.toHaveBeenCalled();
+	});
 });
 
 describe("stopCompose across naming upgrades", () => {

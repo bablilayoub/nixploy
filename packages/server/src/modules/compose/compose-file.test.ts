@@ -768,11 +768,11 @@ describe("buildDeployComposeFile", () => {
 			{ appName: "myapp", composeType: "stack", swarmNodeId: "node123" },
 		);
 		const spec = parseComposeFile(output);
-		expect(spec.services?.web?.deploy).toEqual({
+		expect(spec.services?.["myapp-web"]?.deploy).toEqual({
 			replicas: 2,
 			placement: { constraints: ["node.role==worker", "node.id==node123"] },
 		});
-		expect(spec.services?.db?.deploy).toEqual({
+		expect(spec.services?.["myapp-db"]?.deploy).toEqual({
 			placement: { constraints: ["node.id==node123"] },
 		});
 	});
@@ -782,7 +782,7 @@ describe("buildDeployComposeFile", () => {
 		const stack = parseComposeFile(
 			buildDeployComposeFile(content, { appName: "myapp", composeType: "stack" }),
 		);
-		expect(stack.services?.web?.deploy).toBeUndefined();
+		expect(stack.services?.["myapp-web"]?.deploy).toBeUndefined();
 		const plain = parseComposeFile(
 			buildDeployComposeFile(content, {
 				appName: "myapp",
@@ -847,6 +847,63 @@ volumes:
 		expect(a.volumes).toEqual({ data: null });
 	});
 
+	it("keeps converter-added Swarm aliases globally qualified and compatibility aliases scoped", () => {
+		const content =
+			"services:\n  web:\n    image: nginx\n    depends_on: [db]\n  db:\n    image: postgres:16-alpine\n    volumes: [data:/var/lib/postgresql/data]\nvolumes:\n  data: {}\n";
+		const sharedAliases: Set<string>[] = [];
+		for (const appName of ["stack-a", "stack-b"]) {
+			const spec = parseComposeFile(
+				buildDeployComposeFile(content, {
+					appName,
+					composeType: "stack",
+					suffix: "release",
+					environmentNetwork: "env-net",
+					exposedServices: ["web"],
+				}),
+			);
+			expect(Object.keys(spec.services ?? {})).toEqual([
+				`${appName}-web-release`,
+				`${appName}-db-release`,
+			]);
+			expect(spec.services?.[`${appName}-web-release`]?.depends_on).toEqual([
+				`${appName}-db-release`,
+			]);
+			const aliases = new Set<string>();
+			for (const [key, service] of Object.entries(spec.services ?? {})) {
+				const raw = key.includes("-web-") ? "web" : "db";
+				expect(service.labels).toMatchObject({ "io.nixploy.compose.source-service": raw });
+				const nets = service.networks as Record<string, { aliases: string[] }>;
+				expect(nets[`${appName}-net`]?.aliases).toEqual([`${raw}-release`, raw]);
+				expect(nets["env-net"]?.aliases).toEqual([
+					`${appName}-${raw}-release`,
+					`${appName}_${raw}-release`,
+				]);
+				for (const [network, config] of Object.entries(nets)) {
+					if (network === `${appName}-net`) continue;
+					// Docker's Stack converter appends the YAML key on every network.
+					for (const alias of [...config.aliases, key]) {
+						expect(["web", "db", "web-release", "db-release"]).not.toContain(alias);
+						aliases.add(alias);
+					}
+				}
+				if (raw === "db") expect(nets["nixploy-network"]).toBeUndefined();
+				else
+					expect(nets["nixploy-network"]?.aliases).toEqual([
+						`${appName}-web-release`,
+						`${appName}_web-release`,
+					]);
+			}
+			expect(spec.services?.[`${appName}-db-release`]?.volumes).toEqual([
+				"data:/var/lib/postgresql/data",
+			]);
+			expect(spec.volumes).toEqual({ data: {} });
+			sharedAliases.push(aliases);
+		}
+		expect([...(sharedAliases[0] ?? [])].filter((alias) => sharedAliases[1]?.has(alias))).toEqual(
+			[],
+		);
+	});
+
 	it("normalizes stack files: drops top-level name and flattens long-form depends_on", () => {
 		const output = buildDeployComposeFile(
 			`name: tenant-project
@@ -863,7 +920,7 @@ services:
 		);
 		const spec = parseComposeFile(output);
 		expect(spec.name).toBeUndefined();
-		expect(spec.services?.web?.depends_on).toEqual(["db"]);
+		expect(spec.services?.["myapp-web"]?.depends_on).toEqual(["myapp-db"]);
 		expect(spec.networks?.["myapp-net"]).toEqual({
 			name: "myapp-net",
 			driver: "overlay",

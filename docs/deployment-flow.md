@@ -496,25 +496,47 @@ under `env -i` so tenant variables never reach the docker CLI's process
 environment. Every service is attached to a private `<appName>-net`; only
 services that have a domain also join `nixploy-network` with the alias
 `<appName>-<service>` (added at runtime when a domain is created later).
-Docker Compose's deployed service keys are also qualified with `<appName>-`,
-because Docker otherwise adds a bare service alias on every attached network
-even when explicit aliases were supplied. Bare source names and custom
-container names are retained only on the stack's private network; explicit
-`container_name` values are qualified too. A source-service label keeps the
-runtime table and harvested logs using the names from the source file.
-Service discovery uses project-scoped labels and accepts legacy labels until
-redeploy. `resyncComposeDomains` keeps the established route aliases.
+Both Docker Compose and Swarm Stack YAML service keys are qualified as
+`<appName>-<sourceService[-suffix]>`: both loaders automatically advertise the
+key on every network, even when explicit aliases are supplied. Bare source
+names and custom container names remain aliases only on the private network;
+explicit `container_name` values are qualified too. A source-service label
+keeps runtime tables, logs and timeline events using the source-file names.
 
-Upgrading a legacy render recreates its containers, keeping the same project
-and declared named-volume identities. A legacy anonymous/image volume blocks
-the upgrade with backup/copy guidance before containers are replaced. Copy
-the data into a declared named volume, then remove the stopped legacy
-containers while retaining their old volumes before deploying again. Stop
-still works against the existing project without requiring that upgrade.
-Redeploy every legacy Compose stack in an environment to remove their old
-bare aliases from the environment overlay. Rollbacks restore source inputs
-and re-render once using the current naming rules. Native Swarm stack naming
-is unchanged.
+Docker itself prefixes a Stack key once, so its physical Swarm service is
+`<appName>_<appName>-<sourceService[-suffix]>`. The repeated app name is
+intentional: the key must already be unique before Docker adds its namespace.
+Helpers distinguish this physical identity from the existing routing and
+cross-service contracts: `<appName>_<sourceService[-suffix]>` and
+`<appName>-<sourceService[-suffix]>` are explicit aliases on the environment
+network and, only for exposed services, the proxy network. Domain routing,
+lookup and previews retain those scoped contracts; bare database aliases are
+never added there. Legacy physical identities remain discoverable until the
+operator upgrades them. Top-level volume declarations and project names stay
+unchanged; backup/terminal ownership still uses the exact project/container.
+
+A plain Docker Compose naming upgrade recreates containers while retaining
+project-scoped named volumes. Anonymous/image volumes block this upgrade
+before source/rendered writes or replacement: back up/copy their data to
+declared named volumes, then remove the stopped legacy containers while
+retaining old volumes before deploying again. Stop still targets the existing
+project without requiring an upgrade.
+
+**A running legacy Swarm Stack cannot be renamed automatically.** Every
+legacy service blocks deployment before source/rendered writes, network or
+runtime changes. Starting a renamed database while the old task still holds
+the same volume can corrupt data; a new service identity can also be placed
+on another node with an empty local volume. Before stopping, back up or copy
+anonymous/image volumes to declared named volumes, verify target-node
+placement and access to the existing named data, then explicitly stop the
+stack and wait for all old tasks to stop. Only then deploy with the new naming.
+The panel does not automatically prove remote-node storage placement during
+this manual transition. A local single-node preservation check does not prove
+multi-node migration safety.
+
+Upgrade every legacy Compose/Stack workload sharing an environment to remove
+old bare aliases there. Rollbacks restore source inputs and re-render once
+with the current naming rules; old rendered names are not replayed.
 
 `docker compose up -d` success records command completion. It is not a
 health-readiness guarantee: a process can exit after the command returns.

@@ -35,15 +35,17 @@ describe("Compose service naming upgrade", () => {
 		await expect(
 			assertSafeComposeNamingTransition(
 				row,
-				runner([container("b".repeat(64), { [COMPOSE_SOURCE_SERVICE_LABEL]: "db" })]),
+				runner([
+					container("b".repeat(64), {
+						[COMPOSE_SOURCE_SERVICE_LABEL]: "db",
+						"com.docker.compose.service": "stack-a-db",
+					}),
+				]),
 			),
 		).resolves.toBeUndefined();
 	});
 
-	it("leaves Swarm naming unchanged and does not inspect another project's data", async () => {
-		const run = vi.fn();
-		await assertSafeComposeNamingTransition({ ...row, composeType: "stack" }, run);
-		expect(run).not.toHaveBeenCalled();
+	it("does not inspect another Compose project's data", async () => {
 		await expect(
 			assertSafeComposeNamingTransition(
 				row,
@@ -55,6 +57,59 @@ describe("Compose service naming upgrade", () => {
 	it("does not interpolate unexpected Docker output into an inspect command", async () => {
 		const run = vi.fn().mockResolvedValue("not-a-container-id");
 		await expect(assertSafeComposeNamingTransition(row, run)).rejects.toThrow(/Could not verify/);
+		expect(run).toHaveBeenCalledTimes(1);
+	});
+});
+
+const swarmRow = { appName: "stack-a", composeType: "stack" as const };
+const swarmService = (name: string, source?: string) => ({
+	Spec: {
+		Name: name,
+		Labels: { "com.docker.stack.namespace": "stack-a" },
+		TaskTemplate: {
+			ContainerSpec: { Labels: source ? { [COMPOSE_SOURCE_SERVICE_LABEL]: source } : {} },
+		},
+	},
+});
+
+describe("Swarm naming transition", () => {
+	it.each(["stack-a_db", "stack-a_app"])(
+		"refuses every legacy service %s without inspecting only local tasks",
+		async (name) => {
+			const run = vi
+				.fn()
+				.mockResolvedValueOnce("a".repeat(25))
+				.mockResolvedValueOnce(JSON.stringify([swarmService(name)]));
+			await expect(assertSafeComposeNamingTransition(swarmRow, run)).rejects.toThrow(
+				/Before stopping.*anonymous\/image volumes.*target node placement.*wait for every old task/,
+			);
+			expect(run.mock.calls.map(([command]) => command)).toEqual([
+				"docker service ls -q --no-trunc --filter label=com.docker.stack.namespace='stack-a'",
+				`docker service inspect '${"a".repeat(25)}'`,
+			]);
+		},
+	);
+	it("requires physical identity as well as source metadata, and permits qualified redeploys", async () => {
+		const run = (service: unknown) =>
+			vi
+				.fn()
+				.mockResolvedValueOnce("a".repeat(25))
+				.mockResolvedValueOnce(JSON.stringify([service]));
+		await expect(
+			assertSafeComposeNamingTransition(swarmRow, run(swarmService("stack-a_db", "db"))),
+		).rejects.toThrow(/legacy service names/);
+		await expect(
+			assertSafeComposeNamingTransition(swarmRow, run(swarmService("stack-a_stack-a-db", "db"))),
+		).resolves.toBeUndefined();
+	});
+	it("permits a stopped/new stack and rejects unexpected service IDs before inspect", async () => {
+		await expect(
+			assertSafeComposeNamingTransition(swarmRow, vi.fn().mockResolvedValue("")),
+		).resolves.toBeUndefined();
+		const run = vi.fn().mockResolvedValue("bad; command");
+		await expect(assertSafeComposeNamingTransition(swarmRow, run)).rejects.toThrow(
+			/Could not verify/,
+		);
 		expect(run).toHaveBeenCalledTimes(1);
 	});
 });
