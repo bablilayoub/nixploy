@@ -354,16 +354,13 @@ jobs:
   audit:
     name: pnpm audit
     runs-on: ubuntu-latest
-    # Blocking since 2026-09-11: the advisories listed in
-    # docs/audits/2026-09/security.md §2.8 (nodemailer, fast-uri/hono/qs via
-    # @modelcontextprotocol/sdk, sharp) are fixed or overridden in the root
-    # package.json, and `pnpm audit --prod --audit-level high` exits 0 against
-    # this lockfile. Three *moderate* advisories remain and are deliberately
-    # below the gate: vitest / @vitest/mocker (dev-only, pulled in through
-    # better-auth and flagged by workspace hoisting) and adm-zip (not
-    # reachable — modules/deployment/sources.ts writes entries itself and never
-    # calls extractAllTo). Do not re-add continue-on-error to get a red run
-    # green; fix or override the advisory instead.
+    # Blocking since 2026-09-11. Compatible transitive fixes are recorded in
+    # root package.json. One moderate advisory remains in the production graph:
+    # @tailwindcss/typography pins postcss-selector-parser 6.0.10, while the fix
+    # requires major 7. Nixploy only parses trusted landing CSS at build time.
+    # See docs/status.md for the advisory and upstream release boundary.
+    # Do not re-add continue-on-error to get a red run green; fix or override
+    # the advisory instead.
     continue-on-error: false
     steps:
       - name: Checkout
