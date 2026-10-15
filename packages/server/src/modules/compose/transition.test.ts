@@ -113,3 +113,14 @@ describe("Swarm naming transition", () => {
 		expect(run).toHaveBeenCalledTimes(1);
 	});
 });
+
+it("refuses lingering Swarm task containers after service objects disappeared", async () => {
+	const run = vi.fn().mockResolvedValueOnce("");
+	const nodes = vi.fn().mockResolvedValue("abc123456789\n");
+	await expect(assertSafeComposeNamingTransition(swarmRow, run, nodes)).rejects.toThrow(
+		/task containers are still stopping/,
+	);
+	expect(nodes).toHaveBeenCalledWith(
+		"docker ps -aq --filter label=com.docker.stack.namespace='stack-a'",
+	);
+});

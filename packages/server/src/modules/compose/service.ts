@@ -423,8 +423,10 @@ export async function prepareComposeFiles(
 
 	// Guard identity/storage transitions before raw/rendered writes, clones,
 	// environment network creation or any runtime mutation.
-	await assertSafeComposeNamingTransition(composeRow, (command) =>
-		runComposeCommand(composeRow, command, { onPrimary: runsOnPrimary(composeRow) }),
+	await assertSafeComposeNamingTransition(
+		composeRow,
+		(command) => runComposeCommand(composeRow, command, { onPrimary: runsOnPrimary(composeRow) }),
+		(command) => stackTaskNodeOutput(composeRow, command),
 	);
 
 	if (composeRow.sourceType === "raw") {
@@ -591,19 +593,74 @@ export async function startCompose(composeRow: ComposeRow): Promise<void> {
 	}
 }
 
+/** Run the same read-only task-container probe on every known execution node. */
+async function stackTaskNodeOutput(row: ComposeRow, command: string): Promise<string> {
+	const local = await runComposeCommand(row, command, { onPrimary: true });
+	const remote = row.serverId ? await runComposeCommand(row, command) : "";
+	return `${local}\n${remote}`;
+}
+
+/** Verify task-node coverage before removal, then wait for actual containers to leave. */
+async function stopStackAndWait(row: ComposeRow): Promise<void> {
+	const primaryNode = (
+		await runComposeCommand(row, "docker info --format '{{.Swarm.NodeID}}'", { onPrimary: true })
+	).trim();
+	const knownNodes = new Set([primaryNode]);
+	if (row.serverId) knownNodes.add(await getServerSwarmNodeId(row.serverId));
+	const tasks = (
+		await runComposeCommand(row, `docker stack ps --no-trunc -q ${shellQuote(row.appName)}`, {
+			onPrimary: true,
+		})
+	)
+		.split("\n")
+		.map((id) => id.trim())
+		.filter(Boolean);
+	if (tasks.some((id) => !/^[a-z0-9]{25}$/.test(id)))
+		throw preconditionFailed("Could not verify Swarm task identities before stopping");
+	if (tasks.length) {
+		const inspected = JSON.parse(
+			await runComposeCommand(
+				row,
+				`docker inspect --type task ${tasks.map(shellQuote).join(" ")}`,
+				{ onPrimary: true },
+			),
+		) as Array<{ NodeID?: string; Status?: { State?: string } }>;
+		if (inspected.length !== tasks.length)
+			throw preconditionFailed("Could not verify every Swarm task before stopping");
+		const terminal = new Set(["complete", "shutdown", "failed", "rejected", "remove", "orphaned"]);
+		if (
+			inspected.some(
+				(task) =>
+					!terminal.has(task.Status?.State ?? "") && task.NodeID && !knownNodes.has(task.NodeID),
+			)
+		)
+			throw preconditionFailed(
+				"Cannot verify every Swarm task node before stopping this stack. Verify backups, storage placement and stop task containers on the unknown nodes explicitly before deploying renamed services.",
+			);
+	}
+	await runComposeCommand(
+		row,
+		buildComposeStopCommand(row, { composeFilePath: getComposeDeployFilePath(row.appName) }),
+		{ onPrimary: true },
+	);
+	const command = `docker ps -aq --filter label=com.docker.stack.namespace=${shellQuote(row.appName)}`;
+	const deadline = Date.now() + 30_000;
+	do {
+		if (!(await stackTaskNodeOutput(row, command)).trim()) return;
+		await new Promise((resolve) => setTimeout(resolve, 1_000));
+	} while (Date.now() < deadline);
+	throw preconditionFailed(
+		"Swarm stack task containers are still stopping. Wait for them to leave before deploying; stop has not been marked idle.",
+	);
+}
+
 /** Stop without removing: `docker compose stop`, or `docker stack rm` for stacks. */
 export async function stopCompose(composeRow: ComposeRow): Promise<void> {
 	try {
 		// Stop the running identities, including legacy renders, without
 		// rewriting the file or triggering a service-name/data transition.
 		if (composeRow.composeType === "stack") {
-			await runComposeCommand(
-				composeRow,
-				buildComposeStopCommand(composeRow, {
-					composeFilePath: getComposeDeployFilePath(composeRow.appName),
-				}),
-				{ onPrimary: true },
-			);
+			await stopStackAndWait(composeRow);
 		} else {
 			const output = await runComposeCommand(
 				composeRow,
@@ -619,8 +676,8 @@ export async function stopCompose(composeRow: ComposeRow): Promise<void> {
 			if (ids.length)
 				await runComposeCommand(composeRow, `docker stop ${ids.map(shellQuote).join(" ")}`);
 		}
-	} finally {
 		await updateStatus(composeRow.composeId, "idle");
+	} finally {
 		invalidateComposeContainers(composeRow.appName, composeRow.serverId);
 	}
 }
@@ -758,34 +815,54 @@ async function ensureSharedNetworkAttached(row: ComposeRow, serviceName: string)
 	if (row.composeType === "stack") {
 		// Service-level: the primary manager owns the service object.
 		const onPrimary = true;
+		const inventory = await runComposeCommand(
+			row,
+			`docker service ls --filter label=com.docker.stack.namespace=${shellQuote(row.appName)} --format '{{.Name}}'`,
+			{ onPrimary },
+		);
+		const names = new Set(
+			inventory
+				.split("\n")
+				.map((name) => name.trim())
+				.filter(Boolean),
+		);
+		const physicalService = stackServiceCandidates(row, serviceName).find((name) =>
+			names.has(name),
+		);
+		if (!physicalService)
+			throw preconditionFailed(`Could not find running Swarm service ${serviceName}`);
+		// Inventory/inspect errors propagate. A transport failure must never
+		// select a different legacy service, and namespace ownership is exact.
+		const spec = JSON.parse(
+			await runComposeCommand(
+				row,
+				`docker service inspect --format '{{json .Spec}}' ${shellQuote(physicalService)}`,
+				{ onPrimary },
+			),
+		) as {
+			Name?: string;
+			Labels?: Record<string, string>;
+			TaskTemplate?: { Networks?: Array<{ Target?: string }> };
+		};
+		if (
+			spec.Name !== physicalService ||
+			spec.Labels?.["com.docker.stack.namespace"] !== row.appName
+		)
+			throw preconditionFailed(
+				"Could not verify Swarm service ownership before attaching its domain",
+			);
 		const networkId = await runComposeCommand(
 			row,
 			`docker network inspect --format '{{.Id}}' ${shellQuote(network)}`,
 			{ onPrimary },
 		);
-		for (const physicalService of stackServiceCandidates(row, serviceName)) {
-			let attached: string;
-			try {
-				attached = await runComposeCommand(
-					row,
-					`docker service inspect --format '{{json .Spec.TaskTemplate.Networks}}' ${shellQuote(physicalService)}`,
-					{ onPrimary },
-				);
-			} catch {
-				continue;
-			}
-			const targets = (JSON.parse(attached.trim() || "[]") as Array<{ Target?: string }>).map(
-				(entry) => entry.Target,
-			);
-			if (targets.includes(networkId.trim())) return;
-			await runComposeCommand(
-				row,
-				sharedNetworkServiceUpdateCommand(row, serviceName, physicalService),
-				{ onPrimary },
-			);
-			return;
-		}
-		throw preconditionFailed(`Could not find running Swarm service ${serviceName}`);
+		if (spec.TaskTemplate?.Networks?.some((entry) => entry.Target === networkId.trim())) return;
+		await runComposeCommand(
+			row,
+			sharedNetworkServiceUpdateCommand(row, serviceName, physicalService),
+			{ onPrimary },
+		);
+		return;
 	}
 
 	const containerIds = new Set<string>();

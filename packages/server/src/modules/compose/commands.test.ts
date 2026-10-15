@@ -62,18 +62,24 @@ describe("buildComposeDeployCommand", () => {
 describe("stop / down commands", () => {
 	it("uses the rendered file for compose and stack rm for stacks", () => {
 		expect(buildComposeStopCommand(composeRow, files)).toContain("--env-file /dev/null stop");
-		expect(buildComposeStopCommand(stackRow, files)).toBe("docker stack rm 'my-app'");
+		expect(buildComposeStopCommand(stackRow, files)).toBe(
+			"docker stack rm --detach=false 'my-app'",
+		);
 		expect(buildComposeDownCommand(composeRow, files)).toContain(
 			"--env-file /dev/null down --remove-orphans",
 		);
-		expect(buildComposeDownCommand(stackRow, files)).toBe("docker stack rm 'my-app'");
+		expect(buildComposeDownCommand(stackRow, files)).toBe(
+			"docker stack rm --detach=false 'my-app'",
+		);
 	});
 
 	it("falls back to a name-only teardown for both types", () => {
 		expect(buildComposeFallbackDownCommand(composeRow)).toBe(
 			"docker compose -p 'my-app' down --remove-orphans",
 		);
-		expect(buildComposeFallbackDownCommand(stackRow)).toBe("docker stack rm 'my-app'");
+		expect(buildComposeFallbackDownCommand(stackRow)).toBe(
+			"docker stack rm --detach=false 'my-app'",
+		);
 	});
 });
 

@@ -22,6 +22,7 @@ interface InspectedContainer {
 export async function assertSafeComposeNamingTransition(
 	row: ComposeCommandRow,
 	run: (command: string) => Promise<string>,
+	runTaskNodes: (command: string) => Promise<string> = run,
 ): Promise<void> {
 	if (row.composeType === "stack") {
 		// Service renaming is not a rolling update: a new database could start
@@ -35,7 +36,16 @@ export async function assertSafeComposeNamingTransition(
 			.split("\n")
 			.map((id) => id.trim())
 			.filter(Boolean);
-		if (ids.length === 0) return;
+		if (ids.length === 0) {
+			const remaining = await runTaskNodes(
+				`docker ps -aq --filter label=com.docker.stack.namespace=${shellQuote(row.appName)}`,
+			);
+			if (remaining.trim())
+				throw preconditionFailed(
+					"Previous Swarm stack task containers are still stopping. Wait for all old tasks to leave before deploying; existing data was left intact.",
+				);
+			return;
+		}
 		if (ids.some((id) => !/^[a-z0-9]{25}$/.test(id)))
 			throw preconditionFailed(
 				"Could not verify existing Swarm services before the naming upgrade",

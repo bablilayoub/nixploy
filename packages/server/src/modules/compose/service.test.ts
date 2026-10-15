@@ -158,6 +158,39 @@ describe("prepareComposeFiles legacy Stack refusal", () => {
 });
 
 describe("stopCompose across naming upgrades", () => {
+	it("waits for actual Stack containers after service removal, and only then marks idle", async () => {
+		mocks.run
+			.mockResolvedValueOnce("primary-node")
+			.mockResolvedValueOnce("a".repeat(25))
+			.mockResolvedValueOnce(
+				JSON.stringify([{ NodeID: "primary-node", Status: { State: "running" } }]),
+			)
+			.mockResolvedValueOnce("")
+			.mockResolvedValueOnce("");
+		await stopCompose({ ...privilegedRow, composeType: "stack" });
+		expect(mocks.run.mock.calls.map((call) => call[1])).toEqual([
+			"docker info --format '{{.Swarm.NodeID}}'",
+			"docker stack ps --no-trunc -q 'portainer-abc123'",
+			`docker inspect --type task '${"a".repeat(25)}'`,
+			"docker stack rm --detach=false 'portainer-abc123'",
+			"docker ps -aq --filter label=com.docker.stack.namespace='portainer-abc123'",
+		]);
+		expect(mocks.set).toHaveBeenCalledWith({ status: "idle" });
+	});
+	it("refuses an unverifiable task node before removal and does not mark the stack idle", async () => {
+		mocks.run
+			.mockResolvedValueOnce("primary-node")
+			.mockResolvedValueOnce("a".repeat(25))
+			.mockResolvedValueOnce(
+				JSON.stringify([{ NodeID: "unknown-remote", Status: { State: "running" } }]),
+			);
+		await expect(stopCompose({ ...privilegedRow, composeType: "stack" })).rejects.toThrow(
+			/Cannot verify every Swarm task node/,
+		);
+		expect(mocks.run).toHaveBeenCalledTimes(3);
+		expect(mocks.set).not.toHaveBeenCalled();
+	});
+
 	it("stops legacy containers by exact project ownership without re-rendering source or volumes", async () => {
 		mocks.run.mockResolvedValueOnce("abcdef123456\n").mockResolvedValueOnce("");
 		await stopCompose(privilegedRow);

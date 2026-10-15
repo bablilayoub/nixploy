@@ -530,6 +530,12 @@ on another node with an empty local volume. Before stopping, back up or copy
 anonymous/image volumes to declared named volumes, verify target-node
 placement and access to the existing named data, then explicitly stop the
 stack and wait for all old tasks to stop. Only then deploy with the new naming.
+Panel Stop captures the current task nodes before removal and refuses an
+unknown execution node before changing the stack. It then checks actual task
+container disappearance on the primary and the known pinned server, with a
+30-second drain budget; a timeout/error does not mark the stack idle. Deploy
+also refuses remaining task containers after service objects have disappeared.
+The native Stack removal wait is additional, not the container-exit proof.
 The panel does not automatically prove remote-node storage placement during
 this manual transition. A local single-node preservation check does not prove
 multi-node migration safety.

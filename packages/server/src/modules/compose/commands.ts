@@ -133,7 +133,7 @@ export function buildComposeStopCommand(
 ): string {
 	const app = shellQuote(row.appName);
 	if (row.composeType === "stack") {
-		return `docker stack rm ${app}`;
+		return `docker stack rm --detach=false ${app}`;
 	}
 	return `${cleanEnvPrefix()} docker compose -p ${app} -f ${shellQuote(files.composeFilePath)} --env-file /dev/null stop`;
 }
@@ -145,7 +145,7 @@ export function buildComposeDownCommand(
 ): string {
 	const app = shellQuote(row.appName);
 	if (row.composeType === "stack") {
-		return `docker stack rm ${app}`;
+		return `docker stack rm --detach=false ${app}`;
 	}
 	return `${cleanEnvPrefix()} docker compose -p ${app} -f ${shellQuote(files.composeFilePath)} --env-file /dev/null down --remove-orphans`;
 }
@@ -158,7 +158,7 @@ export function buildComposeDownCommand(
 export function buildComposeFallbackDownCommand(row: ComposeCommandRow): string {
 	const app = shellQuote(row.appName);
 	if (row.composeType === "stack") {
-		return `docker stack rm ${app}`;
+		return `docker stack rm --detach=false ${app}`;
 	}
 	return `docker compose -p ${app} down --remove-orphans`;
 }
