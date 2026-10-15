@@ -139,7 +139,7 @@ export const CONFIG_ARCHIVE_EXCLUDES = [
 ] as const;
 
 /**
- * tar.gz the config directory to stdout (minus {@link CONFIG_ARCHIVE_EXCLUDES}).
+ * Tar the config directory to stdout (the runner applies gzip) (minus {@link CONFIG_ARCHIVE_EXCLUDES}).
  * The runner streams the bytes directly to storage. Patterns are anchored
  * with `./` so `./.env` never matches an unrelated `<app>/.env` deeper down
  * (those subtrees are excluded wholesale anyway).
@@ -148,7 +148,7 @@ export function buildConfigArchiveCommand(configDir: string): string {
 	const excludes = CONFIG_ARCHIVE_EXCLUDES.map((entry) => `--exclude=${sq(`./${entry}`)}`).join(
 		" ",
 	);
-	return `tar czf - -C ${sq(configDir)} ${excludes} .`;
+	return `tar cf - -C ${sq(configDir)} ${excludes} .`;
 }
 
 // ── redis ────────────────────────────────────────────────────────────────────

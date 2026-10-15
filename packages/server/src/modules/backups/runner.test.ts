@@ -225,7 +225,7 @@ describe("runVolumeBackup", () => {
 		// The volume must exist before anything is archived.
 		expect(state.execCalls[0]).toBe("docker volume inspect 'app_data' --format '{{.Name}}'");
 		expect(state.execCalls[1]).toContain(
-			"docker run --rm --network none -v 'app_data:/volume-data:ro' alpine sh -c 'tar czf - -C /volume-data .'",
+			"docker run --rm --network none -v 'app_data:/volume-data:ro' alpine sh -c 'tar cf - -C /volume-data .'",
 		);
 	});
 
@@ -415,7 +415,7 @@ describe("shared streaming publication", () => {
 				appName: "web-server",
 			});
 			expect(result.bytes).toBe(archive.length * 2);
-			expect(state.execCalls[1]).toContain("tar czf");
+			expect(state.execCalls[1]).toContain("tar cf");
 			expect(state.execCalls[2]).toContain("pg_dump");
 			expect(state.execCalls.every((command) => !command.includes("base64"))).toBe(true);
 		} finally {

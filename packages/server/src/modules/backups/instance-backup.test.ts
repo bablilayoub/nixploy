@@ -105,7 +105,7 @@ describe("instance container fallback", () => {
 describe("buildConfigArchiveCommand", () => {
 	it("tars the config dir to stdout, excluding derived/heavy subtrees", () => {
 		const command = buildConfigArchiveCommand("/etc/nixploy");
-		expect(command).toMatch(/^tar czf - -C '\/etc\/nixploy' /);
+		expect(command).toMatch(/^tar cf - -C '\/etc\/nixploy' /);
 		expect(command).toContain(" .");
 		for (const dir of CONFIG_ARCHIVE_EXCLUDES) {
 			expect(command).toContain(`--exclude='./${dir}'`);

@@ -819,7 +819,7 @@ async function runWebServerBackup(
 			configKey,
 			await spawnStreamingCommand(
 				null,
-				buildStreamPipeline(buildConfigArchiveCommand(getConfigDir()), "cat"),
+				buildStreamPipeline(buildConfigArchiveCommand(getConfigDir())),
 			),
 			"Archive of the instance config directory",
 		);
@@ -1022,10 +1022,10 @@ export async function runVolumeBackup(
 
 			const archiveCmd =
 				`docker run --rm --network none -v ${sq(`${volumeBackup.volumeName}:${VOLUME_MOUNT}:ro`)} alpine ` +
-				`sh -c ${sq(`tar czf - -C ${VOLUME_MOUNT} .`)}`;
+				`sh -c ${sq(`tar cf - -C ${VOLUME_MOUNT} .`)}`;
 			const label = `Archive of volume ${volumeBackup.volumeName}`;
 			const key = buildBackupKey(volumeBackup.prefix, volumeBackup.volumeName);
-			const proc = await spawnStreamingCommand(serverId, buildStreamPipeline(archiveCmd, "cat"));
+			const proc = await spawnStreamingCommand(serverId, buildStreamPipeline(archiveCmd));
 			const bytes = await storeStreamedArchive(store, key, proc, label);
 			await pruneOldBackups(store, volumePrefix(volumeBackup), volumeBackup.keepLatestCount);
 			return { key, bytes };

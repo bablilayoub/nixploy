@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 import { buildConfigArchiveCommand } from "./instance-backup";
-import { GzipArchiveCheck } from "./pipeline";
+import { buildStreamPipeline, GzipArchiveCheck } from "./pipeline";
 
 it("archives required config without recursive backups, logs or keychain env copies", async () => {
 	const dir = await mkdtemp(path.join(tmpdir(), "nixploy-config-archive-"));
@@ -22,7 +22,13 @@ it("archives required config without recursive backups, logs or keychain env cop
 			await mkdir(path.dirname(target), { recursive: true });
 			await writeFile(target, "test fixture");
 		}
-		const archive = execFileSync("sh", ["-c", buildConfigArchiveCommand(dir)]);
+		const archive = execFileSync(
+			"sh",
+			["-c", buildStreamPipeline(buildConfigArchiveCommand(dir))],
+			{ stdio: ["pipe", "pipe", "pipe"] },
+		);
+		// BSD tar's internal gzip pads with zeros, which Apple gzip rejects.
+		execFileSync("gzip", ["-t"], { input: archive });
 		const check = new GzipArchiveCheck();
 		await check.update(archive);
 		await check.assert("Config");
