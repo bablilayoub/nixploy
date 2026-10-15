@@ -41,6 +41,7 @@ import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
+import { CreateComposeDialog } from "./create-compose-dialog";
 import { DATABASE_TYPES, type DatabaseType, SERVICE_TYPE_META } from "./service-types";
 
 const SECRET_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -149,7 +150,6 @@ export function AddServiceMenu({
 	}, [openDialog, onOpenDialogConsumed]);
 	const [name, setName] = useState("");
 	const [description, setDescription] = useState("");
-	const [composeType, setComposeType] = useState<"docker-compose" | "stack">("docker-compose");
 	const [sourceKind, setSourceKind] = useState<SourceKind>("docker");
 	const [dockerImage, setDockerImage] = useState("");
 	const [gitUrl, setGitUrl] = useState("");
@@ -162,7 +162,6 @@ export function AddServiceMenu({
 	const resetForm = () => {
 		setName("");
 		setDescription("");
-		setComposeType("docker-compose");
 		setSourceKind("docker");
 		setDockerImage("");
 		setGitUrl("");
@@ -206,14 +205,6 @@ export function AddServiceMenu({
 		trpc.application.saveSource.mutationOptions({ onError: onMutationError }),
 	);
 
-	const createCompose = useSaveMutation(
-		trpc.compose.create.mutationOptions({
-			// Dynamic text, so it stays here instead of `successMessage`.
-			onSuccess: (service) => toast.success(`Compose service "${service.name}" created`),
-		}),
-		{ invalidate: serviceKeys("compose"), onSuccess: closeDialog },
-	);
-
 	const createUpstream = useSaveMutation(
 		trpc.upstream.create.mutationOptions({
 			onSuccess: (row) => toast.success(`External upstream "${row.name}" created`),
@@ -252,7 +243,6 @@ export function AddServiceMenu({
 	const isPending =
 		createApplication.isPending ||
 		saveSource.isPending ||
-		createCompose.isPending ||
 		createUpstream.isPending ||
 		createPostgres.isPending ||
 		createMysql.isPending ||
@@ -306,19 +296,6 @@ export function AddServiceMenu({
 			return;
 		}
 		if (dialog === "compose") {
-			createCompose.mutate(
-				{
-					name: trimmed,
-					description: description.trim() || undefined,
-					environmentId,
-					composeType,
-					sourceType: "raw",
-				},
-				{
-					onSuccess: (service) =>
-						router.push(`/dashboard/projects/${projectId}/services/compose/${service.composeId}`),
-				},
-			);
 			return;
 		}
 		if (dialog === "upstream") {
@@ -421,8 +398,19 @@ export function AddServiceMenu({
 				</DropdownMenuContent>
 			</DropdownMenu>
 
+			{dialog === "compose" && (
+				<CreateComposeDialog
+					projectId={projectId}
+					environmentId={environmentId}
+					environmentName={environmentName}
+					onClose={closeDialog}
+					disabled={disabled}
+					disabledReason={disabledReason}
+				/>
+			)}
+
 			<Dialog
-				open={dialog !== null}
+				open={dialog !== null && dialog !== "compose"}
 				onOpenChange={(open) => {
 					if (!open) {
 						setDialog(null);
@@ -458,27 +446,6 @@ export function AddServiceMenu({
 								autoFocus
 							/>
 						</div>
-						{dialog === "compose" && (
-							<div className="flex flex-col gap-2">
-								<Label>Type</Label>
-								<Select
-									value={composeType}
-									onValueChange={(value) => setComposeType(value as "docker-compose" | "stack")}
-								>
-									<SelectTrigger className="w-full">
-										<SelectValue />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="docker-compose">Docker Compose</SelectItem>
-										<SelectItem value="stack">Docker Stack (Swarm)</SelectItem>
-									</SelectContent>
-								</Select>
-								<p className="text-sm text-muted-foreground">
-									Compose runs <code>docker compose up</code>; Stack deploys through Swarm.{" "}
-									<HelpLink slug="deploy" />
-								</p>
-							</div>
-						)}
 						{dialog === "application" && (
 							<>
 								<div className="flex flex-col gap-2">

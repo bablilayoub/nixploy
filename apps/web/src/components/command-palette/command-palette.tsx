@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 	Activity,
 	AppWindow,
+	ArrowRightLeft,
 	BookOpen,
 	Bot,
 	Boxes,
@@ -125,7 +126,7 @@ export function CommandPalette({ className }: { className?: string }) {
 	const queryClient = useQueryClient();
 	const pathname = usePathname();
 	const { resolvedTheme, setTheme } = useTheme();
-	const { can, isInstanceAdmin } = useCapabilities();
+	const { can, isInstanceAdmin, isLoading: capabilitiesPending } = useCapabilities();
 
 	const [open, setOpen] = useState(false);
 	const [recentIds, setRecentIds] = useState<string[]>([]);
@@ -508,6 +509,16 @@ export function CommandPalette({ className }: { className?: string }) {
 				run: go("/dashboard/settings/organization"),
 			},
 		);
+		if (!capabilitiesPending && can("gitops.manage")) {
+			list.push({
+				id: "page:migrations",
+				label: "Migrations",
+				group: "Pages",
+				icon: ArrowRightLeft,
+				keywords: ["import", "dokploy", "coolify", "move", "dump", "migration"],
+				run: go("/dashboard/migrations"),
+			});
+		}
 		if (isInstanceAdmin) {
 			list.push({
 				id: "page:ai-settings",
@@ -610,6 +621,7 @@ export function CommandPalette({ className }: { className?: string }) {
 		servicePath,
 		can,
 		isInstanceAdmin,
+		capabilitiesPending,
 	]);
 
 	// Live org-wide service matches while typing (debounced server search).

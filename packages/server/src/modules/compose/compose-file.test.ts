@@ -58,6 +58,27 @@ describe("parseComposeFile / listComposeServices", () => {
 			"Invalid compose file: no services defined",
 		);
 	});
+
+	it.each([
+		"services: web",
+		"services: [web]",
+		"services:\n  web:",
+		"services:\n  web: nginx",
+		"services:\n  web: [nginx]",
+	])("refuses malformed service mappings: %s", (content) => {
+		expect(() => parseComposeFile(content)).toThrow(/must be a YAML mapping/);
+	});
+
+	it("returns a safe input error with a location for malformed YAML", () => {
+		try {
+			parseComposeFile("services:\n  web:\n    environment: [SECRET_CANARY: not: valid]\n");
+			expect.fail("Malformed YAML was accepted");
+		} catch (error) {
+			expect(error).toMatchObject({ code: "BAD_REQUEST" });
+			expect((error as Error).message).toMatch(/Invalid compose YAML at line 3/);
+			expect((error as Error).message).not.toContain("SECRET_CANARY");
+		}
+	});
 });
 
 describe("interpolateComposeString", () => {
@@ -708,11 +729,11 @@ describe("buildDeployComposeFile", () => {
 			external: true,
 			name: "nixploy-network",
 		});
-		expect(spec.services?.web?.networks).toEqual({
-			"myapp-net": {},
+		expect(spec.services?.["myapp-web"]?.networks).toEqual({
+			"myapp-net": { aliases: ["web"] },
 			"nixploy-network": { aliases: ["myapp-web"] },
 		});
-		expect(spec.services?.db?.networks).toEqual({ "myapp-net": {} });
+		expect(spec.services?.["myapp-db"]?.networks).toEqual({ "myapp-net": { aliases: ["db"] } });
 	});
 
 	it("applies the suffix before network injection and to the exposed set / alias", () => {
@@ -722,10 +743,10 @@ describe("buildDeployComposeFile", () => {
 			suffix: "pr-1",
 			exposedServices: ["web"],
 		});
-		expect(listComposeServices(output)).toEqual(["web-pr-1"]);
+		expect(listComposeServices(output)).toEqual(["myapp-web-pr-1"]);
 		const spec = parseComposeFile(output);
-		expect(spec.services?.["web-pr-1"]?.networks).toEqual({
-			"myapp-net": {},
+		expect(spec.services?.["myapp-web-pr-1"]?.networks).toEqual({
+			"myapp-net": { aliases: ["web-pr-1", "web"] },
 			"nixploy-network": { aliases: ["myapp-web-pr-1"] },
 		});
 	});
@@ -747,11 +768,11 @@ describe("buildDeployComposeFile", () => {
 			{ appName: "myapp", composeType: "stack", swarmNodeId: "node123" },
 		);
 		const spec = parseComposeFile(output);
-		expect(spec.services?.web?.deploy).toEqual({
+		expect(spec.services?.["myapp-web"]?.deploy).toEqual({
 			replicas: 2,
 			placement: { constraints: ["node.role==worker", "node.id==node123"] },
 		});
-		expect(spec.services?.db?.deploy).toEqual({
+		expect(spec.services?.["myapp-db"]?.deploy).toEqual({
 			placement: { constraints: ["node.id==node123"] },
 		});
 	});
@@ -761,7 +782,7 @@ describe("buildDeployComposeFile", () => {
 		const stack = parseComposeFile(
 			buildDeployComposeFile(content, { appName: "myapp", composeType: "stack" }),
 		);
-		expect(stack.services?.web?.deploy).toBeUndefined();
+		expect(stack.services?.["myapp-web"]?.deploy).toBeUndefined();
 		const plain = parseComposeFile(
 			buildDeployComposeFile(content, {
 				appName: "myapp",
@@ -769,7 +790,144 @@ describe("buildDeployComposeFile", () => {
 				swarmNodeId: "node123",
 			}),
 		);
-		expect(plain.services?.web?.deploy).toBeUndefined();
+		expect(plain.services?.["myapp-web"]?.deploy).toBeUndefined();
+	});
+
+	it("qualifies automatic DNS keys on shared networks while retaining bare names only privately", () => {
+		const content = `services:
+  web:
+    image: nginx
+    container_name: public-web
+    depends_on:
+      db:
+        condition: service_healthy
+    links: [db:database]
+  db:
+    image: postgres:16-alpine
+    volumes: [data:/var/lib/postgresql/data]
+volumes:
+  data:
+`;
+		const a = parseComposeFile(
+			buildDeployComposeFile(content, {
+				appName: "stack-a",
+				composeType: "docker-compose",
+				environmentNetwork: "env-net",
+				exposedServices: ["web"],
+			}),
+		);
+		const b = parseComposeFile(
+			buildDeployComposeFile(content, {
+				appName: "stack-b",
+				composeType: "docker-compose",
+				environmentNetwork: "env-net",
+				exposedServices: ["web"],
+			}),
+		);
+		expect(Object.keys(a.services ?? {})).toEqual(["stack-a-web", "stack-a-db"]);
+		expect(Object.keys(b.services ?? {})).toEqual(["stack-b-web", "stack-b-db"]);
+		expect(a.services?.["stack-a-web"]?.depends_on).toEqual({
+			"stack-a-db": { condition: "service_healthy" },
+		});
+		expect(a.services?.["stack-a-web"]?.links).toEqual(["stack-a-db:database"]);
+		expect(a.services?.["stack-a-web"]?.container_name).toBe("stack-a-public-web");
+		expect(a.services?.["stack-a-web"]?.labels).toMatchObject({
+			"io.nixploy.compose.source-service": "web",
+		});
+		expect(a.services?.["stack-a-web"]?.networks).toEqual({
+			"stack-a-net": { aliases: ["web", "public-web"] },
+			"env-net": { aliases: ["stack-a-web"] },
+			"nixploy-network": { aliases: ["stack-a-web"] },
+		});
+		expect(a.services?.["stack-a-db"]?.networks).toEqual({
+			"stack-a-net": { aliases: ["db"] },
+			"env-net": { aliases: ["stack-a-db"] },
+		});
+		expect(a.services?.["stack-a-db"]?.volumes).toEqual(["data:/var/lib/postgresql/data"]);
+		expect(a.volumes).toEqual({ data: null });
+	});
+
+	it("keeps converter-added Swarm aliases globally qualified and compatibility aliases scoped", () => {
+		const content =
+			"services:\n  web:\n    image: nginx\n    depends_on: [db]\n  db:\n    image: postgres:16-alpine\n    volumes: [data:/var/lib/postgresql/data]\nvolumes:\n  data: {}\n";
+		const sharedAliases: Set<string>[] = [];
+		for (const appName of ["stack-a", "stack-b"]) {
+			const spec = parseComposeFile(
+				buildDeployComposeFile(content, {
+					appName,
+					composeType: "stack",
+					suffix: "release",
+					environmentNetwork: "env-net",
+					exposedServices: ["web"],
+				}),
+			);
+			expect(Object.keys(spec.services ?? {})).toEqual([
+				`${appName}-web-release`,
+				`${appName}-db-release`,
+			]);
+			expect(spec.services?.[`${appName}-web-release`]?.depends_on).toEqual([
+				`${appName}-db-release`,
+			]);
+			const aliases = new Set<string>();
+			for (const [key, service] of Object.entries(spec.services ?? {})) {
+				const raw = key.includes("-web-") ? "web" : "db";
+				expect(service.labels).toMatchObject({ "io.nixploy.compose.source-service": raw });
+				const nets = service.networks as Record<string, { aliases: string[] }>;
+				expect(nets[`${appName}-net`]?.aliases).toEqual([`${raw}-release`, raw]);
+				expect(nets["env-net"]?.aliases).toEqual([
+					`${appName}-${raw}-release`,
+					`${appName}_${raw}-release`,
+				]);
+				for (const [network, config] of Object.entries(nets)) {
+					if (network === `${appName}-net`) continue;
+					// Docker's Stack converter appends the YAML key on every network.
+					for (const alias of [...config.aliases, key]) {
+						expect(["web", "db", "web-release", "db-release"]).not.toContain(alias);
+						aliases.add(alias);
+					}
+				}
+				if (raw === "db") expect(nets["nixploy-network"]).toBeUndefined();
+				else
+					expect(nets["nixploy-network"]?.aliases).toEqual([
+						`${appName}-web-release`,
+						`${appName}_web-release`,
+					]);
+			}
+			expect(spec.services?.[`${appName}-db-release`]?.volumes).toEqual([
+				"data:/var/lib/postgresql/data",
+			]);
+			expect(spec.volumes).toEqual({ data: {} });
+			sharedAliases.push(aliases);
+		}
+		expect([...(sharedAliases[0] ?? [])].filter((alias) => sharedAliases[1]?.has(alias))).toEqual(
+			[],
+		);
+	});
+
+	it("renders overflow preview keys through the shared mapping and preserves rollback inputs", () => {
+		const appName = "swarm-proof-a-1015-pr-be39ad4";
+		const input = {
+			appName,
+			composeType: "stack" as const,
+			exposedServices: ["umami"],
+			environmentNetwork: "env-net",
+		};
+		const source =
+			"services:\n  umami:\n    image: nginx\n    depends_on: [db]\n  db:\n    image: postgres:16-alpine\n    volumes: [data:/var/lib/postgresql/data]\nvolumes:\n  data: {}\n";
+		const rendered = buildDeployComposeFile(source, input);
+		const spec = parseComposeFile(rendered);
+		const entries = Object.entries(spec.services ?? {});
+		expect(entries).toHaveLength(2);
+		for (const [key, service] of entries) {
+			expect(`${appName}_${key}`.length).toBeLessThanOrEqual(63);
+			const labels = service.labels as Record<string, string>;
+			if (labels["io.nixploy.compose.source-service"] === "umami")
+				expect(key).toMatch(/^umami-n[a-z0-9]{13}$/);
+			else expect(key).toBe(`${appName}-db`);
+			expect(["umami", "db"]).toContain(labels["io.nixploy.compose.source-service"]);
+		}
+		expect(buildDeployComposeFile(source, input)).toBe(rendered);
+		expect(spec.volumes).toEqual({ data: {} });
 	});
 
 	it("normalizes stack files: drops top-level name and flattens long-form depends_on", () => {
@@ -788,7 +946,7 @@ services:
 		);
 		const spec = parseComposeFile(output);
 		expect(spec.name).toBeUndefined();
-		expect(spec.services?.web?.depends_on).toEqual(["db"]);
+		expect(spec.services?.["myapp-web"]?.depends_on).toEqual(["myapp-db"]);
 		expect(spec.networks?.["myapp-net"]).toEqual({
 			name: "myapp-net",
 			driver: "overlay",

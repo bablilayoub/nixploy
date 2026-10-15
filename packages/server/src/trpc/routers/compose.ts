@@ -37,7 +37,6 @@ import {
 	resolveCallerOrganizationId,
 } from "../../modules/projects";
 import { exportComposeAsTemplate } from "../../modules/templates/export";
-import { bestEffort } from "../../utils/best-effort";
 import { textBlobSchema, watchPathsSchema } from "../../utils/input-limits";
 import { assertSafeGitCloneUrl } from "../../utils/public-url";
 import { appNameSchema } from "../../utils/validators";
@@ -125,6 +124,7 @@ export const composeRouter = router({
 				environmentId: z.string().min(1),
 				composeType: z.enum(["docker-compose", "stack"]),
 				sourceType: z.enum(["raw", "git", "github", "gitlab", "bitbucket", "gitea"]),
+				composeFile: textBlobSchema.optional(),
 				appName: appNameSchema.optional(),
 				serverId: z.string().nullish(),
 			}),
@@ -141,6 +141,7 @@ export const composeRouter = router({
 				environmentId: input.environmentId,
 				composeType: input.composeType,
 				sourceType: input.sourceType,
+				composeFile: input.composeFile,
 				appName: input.appName,
 				serverId: input.serverId ?? null,
 			});
@@ -571,12 +572,6 @@ export const composeRouter = router({
 		}),
 
 	/**
-	 * Create a compose service from a compose file at a URL ("deploy from
-	 * compose URL", product audit Platform row). The URL goes through the
-	 * egress guard and the body through the same safety checks
-	 * `saveComposeFile` runs — nothing is deployed until `compose.deploy`.
-	 */
-	/**
 	 * The stack as a `Template` another instance can serve from a template
 	 * source (docs/templates.md → "Export a running stack as a template").
 	 * Secret-shaped env values leave as `{{generateSecret}}`; the rest are
@@ -597,6 +592,7 @@ export const composeRouter = router({
 		);
 	}),
 
+	/** Fetch and validate before inserting; deployment is always a separate action. */
 	createFromUrl: protectedProcedure
 		.input(
 			z.object({
@@ -623,24 +619,17 @@ export const composeRouter = router({
 				environmentId: input.environmentId,
 				composeType: input.composeType ?? "docker-compose",
 				sourceType: "raw",
+				composeFile,
 				appName: input.appName,
 				serverId: input.serverId ?? null,
 			});
-			try {
-				await saveComposeFile(created, composeFile, { callerIsInstanceAdmin: false });
-			} catch (error) {
-				// Never leave a half-built row behind when the file is refused.
-				await bestEffort(`roll back compose row ${created.composeId}`, () =>
-					deleteCompose(created),
-				);
-				throw error;
-			}
 			await auditFromSession(ctx, organizationId, {
 				action: "compose.createFromUrl",
 				targetType: "compose",
 				targetId: created.composeId,
 				targetName: created.name,
-				metadata: { url: input.url },
+				// Raw URLs can contain signed query strings; never retain those in the audit log.
+				metadata: { source: "url" },
 			});
 			return created;
 		}),

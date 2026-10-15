@@ -330,6 +330,13 @@
       "when": 1789862002077,
       "tag": "0046_windy_gunslinger",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1792071202626,
+      "tag": "0047_ordinary_thunderbolt_ross",
+      "breakpoints": true
     }
   ]
 }

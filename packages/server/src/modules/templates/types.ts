@@ -12,6 +12,8 @@ export interface TemplateEnvVar {
 	 */
 	default: string;
 	description: string;
+	/** A missing value must be corrected before creating the service. */
+	required?: boolean;
 }
 
 /**
@@ -57,6 +59,8 @@ export interface Template {
 		serviceName: string;
 		port: number;
 	};
+	/** The template references its public hostname and needs a domain at installation. */
+	requiresDomain?: boolean;
 	/**
 	 * What to do after deploying, in order, one short step each — the second
 	 * domain to add, the client to point at it, the token to hand out. Shown

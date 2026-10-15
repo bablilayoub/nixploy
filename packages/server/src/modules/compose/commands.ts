@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { getSwarmNetwork } from "../application/paths";
+import { badRequest } from "../errors";
 import { shellQuote } from "./paths";
 
 /** The compose-row fields the command builders need (a full row satisfies it). */
@@ -19,10 +21,60 @@ export function composeSuffix(row: ComposeCommandRow): string {
 	return row.isolatedDeployment && row.suffix ? row.suffix : "";
 }
 
-/** Service name as written to the deployed file (isolation suffix applied). */
-export function deployedServiceName(row: ComposeCommandRow, serviceName: string): string {
+/** Source service name with the optional isolation suffix. */
+function suffixedServiceName(row: ComposeCommandRow, serviceName: string): string {
 	const suffix = composeSuffix(row);
 	return suffix ? `${serviceName}-${suffix}` : serviceName;
+}
+
+/**
+ * Compose automatically advertises its service keys on EVERY attached network.
+ * Qualify those keys so two stacks never advertise the same bare database name
+ * on the environment overlay. Swarm adds its native prefix to these keys too.
+ */
+function qualifiedStackKey(appName: string, name: string): string | null {
+	const full = `${appName}-${name}`;
+	const budget = 63 - appName.length - 1;
+	if (full.length <= budget) return full;
+	// Docker's physical <stack>_<key> has a 63-character ceiling. Hash the
+	// complete identity only on overflow; truncating names alone can collide.
+	const digest = createHash("sha256")
+		.update(JSON.stringify([appName, name]))
+		.digest("hex");
+	// Fixed 64-bit digest encoded in 13 lowercase base36 characters, plus
+	// an alphabetic prefix: fits a normal generated 47-character namespace.
+	const token = `n${BigInt(`0x${digest.slice(0, 16)}`)
+		.toString(36)
+		.padStart(13, "0")}`;
+	if (budget < token.length) return null;
+	const prefix = name.slice(0, Math.max(0, budget - token.length - 1));
+	return prefix ? `${prefix}-${token}` : token;
+}
+
+export function deployedServiceName(row: ComposeCommandRow, serviceName: string): string {
+	const name = suffixedServiceName(row, serviceName);
+	if (row.composeType !== "stack") return `${row.appName}-${name}`;
+	const key = qualifiedStackKey(row.appName, name);
+	if (!key)
+		throw badRequest(
+			"Swarm stack name leaves too little space for an isolated service key; use an app name of at most 48 characters",
+		);
+	return key;
+}
+
+/** Old running containers and rollback snapshots keep their pre-qualification labels. */
+export function deployedServiceCandidates(row: ComposeCommandRow, serviceName: string): string[] {
+	return [
+		...new Set([deployedServiceName(row, serviceName), suffixedServiceName(row, serviceName)]),
+	];
+}
+
+/** Original source key, injected after validation and never trusted from the input. */
+export const COMPOSE_SOURCE_SERVICE_LABEL = "io.nixploy.compose.source-service";
+
+/** Legacy labels are kept verbatim; source metadata removes prefix ambiguity. */
+export function sourceComposeServiceName(deployedName: string, sourceName?: string): string {
+	return sourceName || deployedName;
 }
 
 /**
@@ -30,22 +82,31 @@ export function deployedServiceName(row: ComposeCommandRow, serviceName: string)
  * service is reachable at on `nixploy-network` (exposed services) and on the
  * environment overlay (every service):
  * - docker-compose: `<appName>-<serviceName>` (network alias injected at deploy)
- * - stack: `<appName>_<serviceName>` (native swarm DNS)
+ * - stack: `<appName>_<serviceName>` (explicit compatibility DNS alias)
  * The isolation suffix is part of the service name in both cases.
  */
 export function traefikAppName(row: ComposeCommandRow, serviceName: string | null): string {
-	const name = deployedServiceName(row, serviceName ?? "");
+	const name = suffixedServiceName(row, serviceName ?? "");
 	return row.composeType === "stack" ? `${row.appName}_${name}` : `${row.appName}-${name}`;
 }
 
 /** DNS alias an exposed service carries on the shared overlay (both modes). */
 export function sharedNetworkAlias(row: ComposeCommandRow, serviceName: string): string {
-	return `${row.appName}-${deployedServiceName(row, serviceName)}`;
+	return `${row.appName}-${suffixedServiceName(row, serviceName)}`;
 }
 
 /** Swarm service name of one compose-file service in stack mode. */
 export function stackServiceName(row: ComposeCommandRow, serviceName: string): string {
 	return `${row.appName}_${deployedServiceName(row, serviceName)}`;
+}
+
+/** Physical Swarm names, current qualified key first, then the legacy raw key. */
+export function stackServiceCandidates(row: ComposeCommandRow, serviceName: string): string[] {
+	const name = suffixedServiceName(row, serviceName);
+	const key = qualifiedStackKey(row.appName, name);
+	// A long legacy namespace must remain addressable even when the new key
+	// cannot fit. Deployment itself refuses that unsupported transition.
+	return [...new Set([...(key ? [`${row.appName}_${key}`] : []), `${row.appName}_${name}`])];
 }
 
 /**
@@ -98,7 +159,7 @@ export function buildComposeStopCommand(
 ): string {
 	const app = shellQuote(row.appName);
 	if (row.composeType === "stack") {
-		return `docker stack rm ${app}`;
+		return `docker stack rm --detach=false ${app}`;
 	}
 	return `${cleanEnvPrefix()} docker compose -p ${app} -f ${shellQuote(files.composeFilePath)} --env-file /dev/null stop`;
 }
@@ -110,7 +171,7 @@ export function buildComposeDownCommand(
 ): string {
 	const app = shellQuote(row.appName);
 	if (row.composeType === "stack") {
-		return `docker stack rm ${app}`;
+		return `docker stack rm --detach=false ${app}`;
 	}
 	return `${cleanEnvPrefix()} docker compose -p ${app} -f ${shellQuote(files.composeFilePath)} --env-file /dev/null down --remove-orphans`;
 }
@@ -123,7 +184,7 @@ export function buildComposeDownCommand(
 export function buildComposeFallbackDownCommand(row: ComposeCommandRow): string {
 	const app = shellQuote(row.appName);
 	if (row.composeType === "stack") {
-		return `docker stack rm ${app}`;
+		return `docker stack rm --detach=false ${app}`;
 	}
 	return `docker compose -p ${app} down --remove-orphans`;
 }
@@ -141,7 +202,9 @@ export function sharedNetworkConnectCommand(
 export function sharedNetworkServiceUpdateCommand(
 	row: ComposeCommandRow,
 	serviceName: string,
+	physicalService = stackServiceName(row, serviceName),
 ): string {
-	const spec = `name=${getSwarmNetwork()},alias=${sharedNetworkAlias(row, serviceName)}`;
-	return `docker service update --network-add ${shellQuote(spec)} ${shellQuote(stackServiceName(row, serviceName))}`;
+	const aliases = [sharedNetworkAlias(row, serviceName), traefikAppName(row, serviceName)];
+	const spec = `name=${getSwarmNetwork()},${[...new Set(aliases)].map((alias) => `alias=${alias}`).join(",")}`;
+	return `docker service update --network-add ${shellQuote(spec)} ${shellQuote(physicalService)}`;
 }

@@ -4,6 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { describeError } from "@/lib/describe-error";
 
 /**
  * The "could not load this" block, on its own so surfaces that do their own
@@ -21,7 +22,10 @@ export function LoadError({
 	onRetry?: () => void;
 }) {
 	return (
-		<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-6 py-12 text-center">
+		<div
+			role="alert"
+			className="flex flex-col items-center gap-2 rounded-lg border border-dashed bg-card px-6 py-12 text-center"
+		>
 			<AlertTriangle className="mb-1 size-8 text-muted-foreground" />
 			<p className="text-sm font-medium">{title}</p>
 			{message ? <p className="max-w-sm text-sm text-muted-foreground">{message}</p> : null}
@@ -66,7 +70,7 @@ export function QueryState({
 	}
 
 	if (isError) {
-		return <LoadError message={error?.message} onRetry={onRetry} />;
+		return <LoadError message={error ? describeError(error) : undefined} onRetry={onRetry} />;
 	}
 
 	if (isEmpty) {

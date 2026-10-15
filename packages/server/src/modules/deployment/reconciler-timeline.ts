@@ -3,6 +3,7 @@ import { db } from "../../db";
 import { environments } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
 import { describeErrorWithCause } from "../../utils/error-cause";
+import { sourceComposeServiceName } from "../compose/commands";
 import type { ServiceEventInput } from "../observability/service-events";
 import { recordServiceEvents } from "../observability/service-events";
 import { deriveTaskEvents } from "../observability/task-events";
@@ -66,10 +67,16 @@ export function buildServiceNameIndex(
  * `docker stack deploy` names services `<stack>_<service>`; anything else
  * (an application, a database) is the service itself and needs no suffix.
  */
-export function composeServiceSuffix(swarmServiceName: string, appName: string): string | null {
+export function composeServiceSuffix(
+	swarmServiceName: string,
+	appName: string,
+	sourceName?: string,
+): string | null {
 	if (swarmServiceName === appName) return null;
 	const prefix = `${appName}_`;
-	return swarmServiceName.startsWith(prefix) ? swarmServiceName.slice(prefix.length) : null;
+	return swarmServiceName.startsWith(prefix)
+		? sourceComposeServiceName(swarmServiceName.slice(prefix.length), sourceName)
+		: null;
 }
 
 /**
@@ -92,7 +99,11 @@ export function buildTaskEventInputs(
 	for (const draft of drafts) {
 		const owner = index.get(draft.serviceName);
 		if (!owner) continue;
-		const suffix = composeServiceSuffix(draft.serviceName, owner.appName);
+		const suffix = composeServiceSuffix(
+			draft.serviceName,
+			owner.appName,
+			snapshot.sourceServiceNames?.get(draft.serviceName),
+		);
 		inputs.push({
 			organizationId: owner.organizationId,
 			serviceType: owner.serviceType,

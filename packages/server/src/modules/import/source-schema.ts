@@ -16,6 +16,8 @@ import { z } from "zod";
 const text = z.string().nullable().optional();
 const flag = z.boolean().nullable().optional();
 const jsonish = z.unknown().nullable().optional();
+/** Adapter-owned omissions: a missing source value must not clear restored target settings. */
+const migrationMetadata = { unavailableFields: z.array(z.string()).optional() };
 const named = <K extends string>(idKey: K) =>
 	z
 		.object({ [idKey]: z.string(), name: z.string() } as Record<K | "name", z.ZodString>)
@@ -23,10 +25,14 @@ const named = <K extends string>(idKey: K) =>
 
 export const sourceEnvironmentSummarySchema = z
 	.object({
+		...migrationMetadata,
 		environmentId: z.string(),
 		name: z.string(),
 		description: text,
 		env: text,
+		unsupportedResources: z
+			.array(z.object({ id: z.string(), name: z.string(), kind: z.string() }))
+			.default([]),
 		applications: z.array(named("applicationId")).default([]),
 		compose: z.array(named("composeId")).default([]),
 		postgres: z.array(named("postgresId")).default([]),
@@ -40,6 +46,7 @@ export const sourceEnvironmentSummarySchema = z
 
 export const sourceProjectSummarySchema = z
 	.object({
+		...migrationMetadata,
 		projectId: z.string(),
 		name: z.string(),
 		description: text,
@@ -124,6 +131,7 @@ const swarm = {
 
 export const sourceApplicationSchema = z
 	.object({
+		...migrationMetadata,
 		applicationId: z.string(),
 		name: z.string(),
 		appName: z.string(),
@@ -183,6 +191,7 @@ export const sourceApplicationSchema = z
 
 export const sourceComposeSchema = z
 	.object({
+		...migrationMetadata,
 		composeId: z.string(),
 		name: z.string(),
 		appName: z.string(),
@@ -221,6 +230,7 @@ export const sourceComposeSchema = z
 
 export const sourceDatabaseSchema = z
 	.object({
+		...migrationMetadata,
 		name: z.string(),
 		appName: z.string(),
 		description: text,

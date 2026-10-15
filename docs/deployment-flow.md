@@ -495,9 +495,67 @@ interpreted). `buildComposeDeployCommand` then runs `docker stack deploy`
 under `env -i` so tenant variables never reach the docker CLI's process
 environment. Every service is attached to a private `<appName>-net`; only
 services that have a domain also join `nixploy-network` with the alias
-`<appName>-<service>` (added at runtime when a domain is created later). Service discovery for
-domains uses `<appName>-<service>-1` container names. `resyncComposeDomains`
-writes Traefik config per exposed service.
+`<appName>-<service>` (added at runtime when a domain is created later).
+Both Docker Compose and Swarm Stack YAML service keys are qualified as
+`<appName>-<sourceService[-suffix]>`: both loaders automatically advertise the
+key on every network, even when explicit aliases are supplied. Bare source
+names and custom container names remain aliases only on the private network;
+explicit `container_name` values are qualified too. A source-service label
+keeps runtime tables, logs and timeline events using the source-file names.
+
+Docker itself prefixes a Stack key once, so its physical Swarm service is
+`<appName>_<appName>-<sourceService[-suffix]>`. The repeated app name is
+intentional: the key must already be unique before Docker adds its namespace.
+When that full physical name exceeds Docker's 63-character limit, only the
+YAML key switches to an optional readable source prefix plus a deterministic 64-bit
+SHA-256 digest encoded in lowercase base36. The hash covers the complete
+app name and source service with its suffix. Ordinary names remain unchanged;
+rollback/redeploy and lookup share the same mapping. Namespaces too long to
+leave 14 key characters fail explicitly (use a stack/preview app name of at
+most 48 characters); plain Docker Compose identities are unchanged.
+Helpers distinguish this physical identity from the existing routing and
+cross-service contracts: `<appName>_<sourceService[-suffix]>` and
+`<appName>-<sourceService[-suffix]>` are explicit aliases on the environment
+network and, only for exposed services, the proxy network. Domain routing,
+lookup and previews retain those scoped contracts; bare database aliases are
+never added there. Legacy physical identities remain discoverable until the
+operator upgrades them. Top-level volume declarations and project names stay
+unchanged; backup/terminal ownership still uses the exact project/container.
+
+A plain Docker Compose naming upgrade recreates containers while retaining
+project-scoped named volumes. Anonymous/image volumes block this upgrade
+before source/rendered writes or replacement: back up/copy their data to
+declared named volumes, then remove the stopped legacy containers while
+retaining old volumes before deploying again. Stop still targets the existing
+project without requiring an upgrade.
+
+**A running legacy Swarm Stack cannot be renamed automatically.** Every
+legacy service blocks deployment before source/rendered writes, network or
+runtime changes. Starting a renamed database while the old task still holds
+the same volume can corrupt data; a new service identity can also be placed
+on another node with an empty local volume. Before stopping, back up or copy
+anonymous/image volumes to declared named volumes, verify target-node
+placement and access to the existing named data, then explicitly stop the
+stack and wait for all old tasks to stop. Only then deploy with the new naming.
+Panel Stop captures the current task nodes before removal and refuses an
+unknown execution node before changing the stack. It then checks actual task
+container disappearance on the primary and the known pinned server, with a
+30-second drain budget; a timeout/error does not mark the stack idle. Deploy
+also refuses remaining task containers after service objects have disappeared.
+The native Stack removal wait is additional, not the container-exit proof.
+The panel does not automatically prove remote-node storage placement during
+this manual transition. A local single-node preservation check does not prove
+multi-node migration safety.
+
+Upgrade every legacy Compose/Stack workload sharing an environment to remove
+old bare aliases there. Rollbacks restore source inputs and re-render once
+with the current naming rules; old rendered names are not replayed.
+
+`docker compose up -d` success records command completion. It is not a
+health-readiness guarantee: a process can exit after the command returns.
+Check container health and the domain before cutover. A blanket `--wait`
+would reject existing one-shot init services without
+`service_completed_successfully` dependencies, so it is not added implicitly.
 
 Compose services carry the same `preDeployCommand` / `postDeployCommand`
 columns, but with different semantics: there is no image Nixploy built, so
@@ -555,9 +613,15 @@ through `modules/backups` to S3 destinations on schedules.
 
 ## Start / stop / status semantics
 
-- **Stop**: scale the swarm service to 0 (apps) / `docker compose stop` /
-  `docker stop` (databases). Nothing is deleted; state persists.
-- **Start**: scale back up / start containers; a previous deploy must exist.
+- **Stop**: applications scale their Swarm service to 0; plain Compose and
+  database containers stop in place. A Swarm Stack instead removes its service
+  and task objects with `docker stack rm`, verifies known task-node coverage
+  and waits for actual container removal before marking idle. Declared named
+  volumes persist; anonymous/image-volume data needs migration before a legacy
+  Stack stop/rename. See the transition guidance above.
+- **Start**: applications scale back up and database containers start; Compose
+  re-renders and runs `compose up` / `stack deploy`. A previous source/deploy
+  configuration must exist, and the same legacy naming/storage guard applies.
 - **Status** on the row is written by lifecycle actions and deploys; the
   reconciler cron corrects drift against real container state (e.g. after
   host reboots or external `docker` commands).

@@ -1,5 +1,5 @@
 import { assertSafeOutboundUrl, pinnedFetch, type SafeTarget } from "../../utils/public-url";
-import { badRequest, unauthorized } from "../errors";
+import { badRequest } from "../errors";
 import type { DatabaseServiceKind } from "../services/registry";
 import type { SourceReader } from "./reader";
 import {
@@ -69,13 +69,13 @@ export class SourcePanelClient implements SourceReader {
 			},
 		);
 		if (response.status === 401 || response.status === 403) {
-			throw unauthorized(
+			throw badRequest(
 				`The source panel rejected the API key (${response.status} on ${procedure})`,
 			);
 		}
 		if (!response.ok) {
 			throw badRequest(
-				`The source panel answered ${response.status} for ${procedure}: ${response.body.slice(0, 200)}`,
+				`The source panel answered ${response.status} for ${procedure}; check source availability and API permissions`,
 			);
 		}
 		try {

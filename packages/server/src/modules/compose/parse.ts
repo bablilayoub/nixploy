@@ -1,4 +1,4 @@
-import { parse } from "yaml";
+import { parse, YAMLParseError } from "yaml";
 import { badRequest, DomainError } from "../errors";
 
 /**
@@ -39,12 +39,30 @@ export interface ComposeFileSpec {
 export type ComposeEnv = Readonly<Record<string, string>>;
 
 export function parseComposeFile(content: string): ComposeFileSpec {
-	const spec = parse(content) as ComposeFileSpec | null;
+	let spec: ComposeFileSpec | null;
+	try {
+		spec = parse(content) as ComposeFileSpec | null;
+	} catch (error) {
+		if (!(error instanceof YAMLParseError)) throw error;
+		const position = error.linePos?.[0];
+		// YAML's full message includes the source line, which may contain a secret.
+		throw badRequest(
+			`Invalid compose YAML${position ? ` at line ${position.line}, column ${position.col}` : ""}: ${error.code.toLowerCase().replaceAll("_", " ")}`,
+		);
+	}
 	if (!spec || typeof spec !== "object") {
 		throw badRequest("Invalid compose file: not a YAML mapping");
 	}
 	if (!spec.services || Object.keys(spec.services).length === 0) {
 		throw badRequest("Invalid compose file: no services defined");
+	}
+	if (typeof spec.services !== "object" || Array.isArray(spec.services)) {
+		throw badRequest("Invalid compose file: services must be a YAML mapping");
+	}
+	for (const [name, service] of Object.entries(spec.services)) {
+		if (!service || typeof service !== "object" || Array.isArray(service)) {
+			throw badRequest(`Invalid compose file: service "${name}" must be a YAML mapping`);
+		}
 	}
 	return spec;
 }

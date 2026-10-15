@@ -285,10 +285,16 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 		description:
 			"Import one environment over the source panel's API where the importer speaks it, recreate the rest, cut DNS when green.",
 		blocks: [
+			{ type: "h2", text: "Import in the panel" },
+			{
+				type: "p",
+				text: "Open Migrations in the navigation or command palette. Connect a Dokploy or Coolify live API, or upload a Dokploy PostgreSQL dump, select an environment and services, choose an accessible target and generate a redacted plan. Review changes and manual work, then explicitly import configuration. Source/selection/target changes invalidate the review; changes discovered at apply require a fresh plan. The API key stays in page memory and is cleared on source changes, completion or leaving. Imports deploy nothing. Results link to the target and list the secret, database, persistent storage, server, registry and domain work needed before cutover.",
+			},
+
 			{ type: "h2", text: "Import over the source's API" },
 			{
 				type: "p",
-				text: "For a source panel the importer speaks (Dokploy today), nixploy import inspect / plan / apply reads one project environment through its REST API with a read-capable key, translates it to a version-2 nixploy.yaml plus the env values, and applies both. Nothing is deployed: services land idle with a list of notes for what did not carry over (git provider connections, basic-auth passwords, database passwords, compose mounts, custom certificates), and you deploy each one when the notes are handled.",
+				text: "For a supported source panel (Dokploy or Coolify), nixploy import inspect / plan / apply reads one project environment through its REST API with a read-capable key, translates it to a version-2 nixploy.yaml plus the env values, and applies both. Nothing is deployed: services land idle with a list of notes for what did not carry over (git provider connections, basic-auth passwords, database passwords, compose mounts, custom certificates), and you deploy each one when the notes are handled.",
 			},
 			{
 				type: "pre",
@@ -297,6 +303,12 @@ nixploy import inspect --source dokploy --url https://old-panel.example.com
 nixploy import plan  --source dokploy --url https://old-panel.example.com --source-project prj_123
 nixploy import apply --source dokploy --url https://old-panel.example.com --source-project prj_123`,
 			},
+			{ type: "h2", text: "Coolify live API support" },
+			{
+				type: "p",
+				text: "Select Coolify in Migrations or use --source coolify. Enable its API and use a team-scoped read token, adding read:sensitive for readable environment values and raw Compose content. The verified v4.4.6 slice covers image/public-Git applications, raw or one-click Compose services, PostgreSQL/MySQL/MariaDB/MongoDB/Redis configuration and HTTP domains. Repository Compose applications and other database engines are reported as unsupported. Runtime names are fresh; source data, server/provider keys, registries, shared-variable libraries, custom commands, ports and proxy middleware need manual setup. Hidden/null/once-only/shared-reference or unrepresentable value groups preserve target values with notes. Imports deploy nothing; only PostgreSQL has separate real database runtime proof.",
+			},
+
 			{ type: "h2", text: "Import from a database dump" },
 			{
 				type: "p",
@@ -664,10 +676,12 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 				items: [
 					"http-json — one JSON document: a bare array of templates, or { templates: [ … ] }",
 					"git — a repository whose templates/index.json has the same shape, cloned shallow and discarded",
+					"coolify — a generated templates/service-templates.json URL with Base64 Compose entries; the official URL is prefilled in Settings → Templates. Supports one public service target, named volumes, documented random generators and required inputs. Each installation gets fresh credentials; redeploys keep saved values. Unsupported entries appear with a reason in the sync report.",
 					"blueprints — a repository laid out as blueprints/<id>/{meta.json, template.toml, docker-compose.yml}, the Dokploy templates catalog format; each blueprint is translated (helpers become deploy-time placeholders, file mounts become inline configs, env_file becomes environment entries, routing labels are dropped, tags are resolved to the catalog's own categories instead of becoming 209 one-off ones) and run through the compose safety checks, so 436 of the 532 public entries deploy as-is and the rest are listed with their reason",
 					"Nothing is fetched while browsing: Sync now does the work and caches the result on disk with mode 0600",
 					"A bad entry is dropped with a reason rather than taking the whole catalog offline; an image tag that cannot be confirmed anonymously is a warning, not a rejection; a template that publishes host ports is indexed and flagged, and deploying it creates the stack with port publishing on (instance admin only)",
 					"Remote ids are namespaced by their source, so a source can never shadow a built-in template, and hostPrivileged is never accepted from a remote catalog",
+					"Coolify FQDN values are hostnames and URL values initially use HTTP. Domain-dependent templates need a domain at installation. After enabling HTTPS, update saved URL values; legacy upstream templates may need their FQDN references changed to full URLs. Multiple public targets, domain paths, inline file mounts, health exclusions and unsupported magic variables require manual setup. Indexed entries still need application-level testing; existing data is not imported.",
 				],
 			},
 			{ type: "h2", text: "Deploy from a compose URL" },

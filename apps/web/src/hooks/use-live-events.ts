@@ -38,6 +38,8 @@ export type InvalidationTarget =
 	| { path: "deployment.byProject" }
 	| { path: "deployment.statsByProject" }
 	| { path: "environment.byProject" }
+	| { path: "project.all" }
+	| { path: "project.overview" }
 	| { path: "application.one"; applicationId: string }
 	| { path: "application.all" }
 	| { path: "compose.one"; composeId: string }
@@ -94,7 +96,11 @@ export function frameInvalidations(event: LiveEvent): InvalidationTarget[] {
 					{ path: "service.getStatus", serviceKind: event.serviceKind, id: event.id },
 				);
 			}
-			targets.push({ path: "environment.byProject" });
+			targets.push(
+				{ path: "environment.byProject" },
+				{ path: "project.all" },
+				{ path: "project.overview" },
+			);
 			return targets;
 		}
 		case "deployment": {
@@ -106,7 +112,12 @@ export function frameInvalidations(event: LiveEvent): InvalidationTarget[] {
 			if (event.composeId) targets.push({ path: "deployment.byCompose" });
 			if (!TERMINAL_STATUSES.has(event.status)) return targets;
 
-			targets.push({ path: "deployment.statsByProject" }, { path: "environment.byProject" });
+			targets.push(
+				{ path: "deployment.statsByProject" },
+				{ path: "environment.byProject" },
+				{ path: "project.all" },
+				{ path: "project.overview" },
+			);
 			// A preview deploy never changes the parent application's status.
 			if (event.applicationId && !event.isPreview) {
 				targets.push(
@@ -171,6 +182,10 @@ export function useLiveEvents(): void {
 					return trpc.deployment.statsByProject.pathKey();
 				case "environment.byProject":
 					return trpc.environment.byProject.pathKey();
+				case "project.all":
+					return trpc.project.all.pathKey();
+				case "project.overview":
+					return trpc.project.overview.pathKey();
 				case "application.one":
 					return trpc.application.one.queryKey({ applicationId: target.applicationId });
 				case "application.all":

@@ -3,13 +3,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { Container, FolderGit2, Rocket, Server } from "lucide-react";
 import Link from "next/link";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { StatusDot } from "@/components/shell";
 import { DateTime } from "@/components/ui/date-time";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCapabilities } from "@/hooks/use-capabilities";
 import { useRunningDeployments } from "@/hooks/use-running-deployments";
 import { deploymentStatusDot, deploymentStatusLabel } from "@/lib/status";
 import { useTRPC } from "@/lib/trpc";
@@ -31,16 +32,16 @@ function StatPanel({
 	className?: string;
 }) {
 	return (
-		<div className={cn("rounded-lg border border-border p-3 sm:p-4", className)}>
+		<div className={cn("rounded-lg border border-border bg-card p-4", className)}>
 			<div className="flex items-center justify-between gap-2">
-				<p className="truncate text-xs font-medium text-foreground sm:text-sm">{label}</p>
+				<p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
 				{icon}
 			</div>
 			<div className="mt-1 text-xl font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-2xl">
 				{isPending ? <Skeleton className="h-7 w-14 sm:h-8 sm:w-16" /> : (value ?? 0)}
 			</div>
 			{!isPending && detail ? (
-				<p className="mt-1 hidden text-xs text-muted-foreground sm:block">{detail}</p>
+				<p className="mt-2 text-xs leading-relaxed text-muted-foreground">{detail}</p>
 			) : null}
 		</div>
 	);
@@ -49,6 +50,8 @@ function StatPanel({
 /** Organization-wide stats: projects, services by status, deployments of the last day. */
 export function OverviewCards() {
 	const trpc = useTRPC();
+	const { can, isInstanceAdmin } = useCapabilities({ strict: true });
+	const showDocker = isInstanceAdmin && can("docker.manage");
 	const { data, isPending, isError, error, refetch } = useQuery(
 		trpc.project.overview.queryOptions(),
 	);
@@ -72,7 +75,7 @@ export function OverviewCards() {
 	const deployments = data?.deploymentsLastDay;
 
 	return (
-		<div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+		<div className={cn("grid grid-cols-2 gap-3", showDocker ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
 			<StatPanel
 				label="Projects"
 				value={data?.projectCount}
@@ -81,6 +84,7 @@ export function OverviewCards() {
 			/>
 			<StatPanel
 				label="Services"
+				className="bg-muted/30"
 				value={services?.total}
 				isPending={isPending}
 				icon={<Server className="size-4 text-muted-foreground" />}
@@ -93,7 +97,7 @@ export function OverviewCards() {
 									{" · "}
 									<Link
 										href="/dashboard/monitoring"
-										className="text-destructive underline-offset-4 hover:underline"
+										className="rounded-sm text-destructive underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 									>
 										{services.error} error
 									</Link>
@@ -105,6 +109,7 @@ export function OverviewCards() {
 			/>
 			<StatPanel
 				label="Deployments (24h)"
+				className={!showDocker ? "col-span-2 lg:col-span-1" : undefined}
 				value={deployments?.total}
 				isPending={isPending}
 				icon={<Rocket className="size-4 text-muted-foreground" />}
@@ -117,7 +122,7 @@ export function OverviewCards() {
 									{" · "}
 									<Link
 										href="/dashboard/monitoring?tab=incidents"
-										className="text-destructive underline-offset-4 hover:underline"
+										className="rounded-sm text-destructive underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 									>
 										{deployments.error} failed
 									</Link>
@@ -127,7 +132,7 @@ export function OverviewCards() {
 					)
 				}
 			/>
-			<DockerStatPanel />
+			{showDocker ? <DockerStatPanel /> : null}
 		</div>
 	);
 }
@@ -141,23 +146,23 @@ function DockerStatPanel() {
 	return (
 		<Link
 			href="/dashboard/docker"
-			className="block rounded-lg border border-border p-3 transition-colors hover:border-foreground/20 sm:p-4"
+			className="block rounded-lg border border-border bg-card p-4 transition-colors hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 		>
 			<div className="flex items-center justify-between gap-2">
-				<p className="truncate text-xs font-medium text-foreground sm:text-sm">Docker</p>
+				<p className="truncate text-xs font-medium text-muted-foreground">Docker</p>
 				<Container className="size-4 text-muted-foreground" />
 			</div>
 			<div className="mt-1 text-xl font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-2xl">
 				{containersQuery.isPending ? (
 					<Skeleton className="h-7 w-14 sm:h-8 sm:w-16" />
 				) : containersQuery.isError ? (
-					<span className="text-sm font-normal text-muted-foreground">Offline</span>
+					<span className="text-sm font-normal text-muted-foreground">Unavailable</span>
 				) : (
 					running
 				)}
 			</div>
 			{!containersQuery.isPending && !containersQuery.isError ? (
-				<p className="mt-1 text-xs text-muted-foreground">
+				<p className="mt-2 text-xs text-muted-foreground">
 					{running} / {containers.length} containers running
 				</p>
 			) : null}
@@ -173,46 +178,10 @@ export function RecentDeployments() {
 	const { deployments: all, isPending, isError, error, refetch } = useRunningDeployments();
 	const deployments = all.slice(0, 8);
 
-	// Flash a row once when its status flips between polls (running → done/error).
-	const previousStatuses = useRef(new Map<string, string>());
-	const [flashed, setFlashed] = useState<ReadonlySet<string>>(new Set());
-	useEffect(() => {
-		const next = new Set<string>();
-		for (const deployment of deployments) {
-			const previous = previousStatuses.current.get(deployment.deploymentId);
-			if (previous && previous !== deployment.status) {
-				next.add(deployment.deploymentId);
-			}
-		}
-		previousStatuses.current = new Map(
-			deployments.map((deployment) => [deployment.deploymentId, deployment.status]),
-		);
-		if (next.size > 0) {
-			setFlashed((current) => new Set([...current, ...next]));
-		}
-	}, [deployments]);
-
-	const clearFlash = (deploymentId: string) => {
-		setFlashed((current) => {
-			if (!current.has(deploymentId)) {
-				return current;
-			}
-			const next = new Set(current);
-			next.delete(deploymentId);
-			return next;
-		});
-	};
-
 	return (
-		<section className="flex h-full flex-col rounded-lg border border-border p-4 sm:p-5">
-			<style>
-				{`@keyframes nixploy-row-flash {
-	from { background-color: var(--secondary); }
-	to { background-color: transparent; }
-}`}
-			</style>
+		<section className="flex h-full min-w-0 flex-col rounded-lg border border-border bg-card p-4 sm:p-5">
 			<div className="mb-4 space-y-1">
-				<h3 className="text-sm font-medium">Recent deployments</h3>
+				<h2 className="text-sm font-semibold">Recent deployments</h2>
 				{/* Static text: branching this on `isPending` made the server (which
 				    renders with the prefetched data) and the client's first paint
 				    disagree, which cost a hydration error on every dashboard load.
@@ -258,7 +227,7 @@ export function RecentDeployments() {
 						const name = deployment.service.name ?? deployment.service.appName ?? "Service";
 						const inner = (
 							<>
-								<span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-border">
+								<span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/50">
 									<StatusDot status={deploymentStatusDot[deployment.status] ?? "neutral"} />
 								</span>
 								<div className="min-w-0 flex-1 space-y-0.5">
@@ -278,27 +247,12 @@ export function RecentDeployments() {
 							<Link
 								key={deployment.deploymentId}
 								href={href}
-								className="flex items-center gap-3 rounded-md px-1 py-2 transition-colors hover:bg-muted/40"
-								style={
-									flashed.has(deployment.deploymentId)
-										? { animation: "nixploy-row-flash 900ms ease-out" }
-										: undefined
-								}
-								onAnimationEnd={() => clearFlash(deployment.deploymentId)}
+								className="flex items-center gap-3 rounded-md px-2 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 							>
 								{inner}
 							</Link>
 						) : (
-							<div
-								key={deployment.deploymentId}
-								className="flex items-center gap-3 px-1 py-2"
-								style={
-									flashed.has(deployment.deploymentId)
-										? { animation: "nixploy-row-flash 900ms ease-out" }
-										: undefined
-								}
-								onAnimationEnd={() => clearFlash(deployment.deploymentId)}
-							>
+							<div key={deployment.deploymentId} className="flex items-center gap-3 px-1 py-2">
 								{inner}
 							</div>
 						);

@@ -3,10 +3,43 @@
 Nixploy is intentionally familiar if you have run a self-hosted PaaS before:
 the same shape (org → project → environment → services, Docker Swarm +
 Traefik, templates, API keys). For a panel whose API the importer speaks
-(currently Dokploy), one environment at a time comes over with
+(Dokploy and Coolify), one environment at a time comes over with
 `nixploy import`; for everything else, recreate the services by hand. Either
 way you point traffic when the new instance is green. This guide covers the
 importer first, then the concept map and the cutover.
+
+## Import in the panel
+
+Open **Migrations** in the navigation or command palette. Access requires
+`gitops.manage`; the source key's permissions determine the inventory you can
+read. Choose **Live API** for Dokploy or Coolify, or **Upload dump** for a Dokploy PostgreSQL dump.
+Keys are sent in mutation bodies and held only in page memory; changing the
+source, completing an import, starting over or leaving clears them. Uploaded
+dumps belong to the current organization and expire after 24 hours.
+
+1. Inspect the source, then choose its project and environment.
+2. Select the services to copy and an accessible target project and environment.
+   Leaving the target project at its default matches the source name or creates
+   it. Generated runtime names are the safer default for a separate target;
+   keeping source names is an explicit option.
+3. Generate a plan. Review the counts, create/update/no-op actions, changed
+   field names and compatibility notes. Download the redacted report if useful.
+   Executable Compose/Dockerfile/command text and credential-bearing fields
+   are omitted from reports, while they remain available to the internal apply.
+4. Acknowledge the plan and choose **Import configuration**. Changing a source,
+   selection or target invalidates the review. Source-value or target-diff
+   changes discovered at apply require a fresh plan. Permission checks and
+   writes use one source snapshot.
+5. Review applied/failed changes and unmatched value sets. Open the target
+   project to restore secrets, database data and persistent files, check server
+   and registry access, explicitly deploy, and diagnose domains before cutover.
+   A partial import is retryable through a new plan; existing mappings keep ids
+   stable and unreadable encrypted values preserve manual replacements.
+
+Capabilities are checked again by the server: `secrets.write` for values,
+`project.write` for project/environment creation, and service create/write
+capabilities based on the plan. Instance-admin-only settings retain their gate.
+Only projects allowed by the caller's organization and teams can be targeted.
 
 ## Import over the source's API
 
@@ -24,7 +57,11 @@ nixploy import apply  --source dokploy --url https://old-panel.example.com --sou
 ```
 
 `inspect` lists what the key can see (projects, environments, service
-counts). The importer reads project details as well as the list, because
+counts); `--json` also includes namespaced service ids for `--service <kind/id>`
+selection. Repeat `--service` on plan and apply to select a subset. Plan output
+includes a review token: pass it to apply with `--review-token <token>` to reject
+source-value or target-setting changes since review. Omit the token only when
+you deliberately want to apply a freshly fetched configuration. The importer reads project details as well as the list, because
 the source list omits database names and environment-level env. `plan`
 fetches the environment, prints the translation's notes and
 the diff against the target (every item is a create when the target project
@@ -76,6 +113,43 @@ What the notes will tell you to do by hand, because it cannot be carried:
 `--no-keep-app-names` generates fresh `appName`s instead of keeping the
 source's; keep them (the default) when a same-host takeover is the plan,
 because the old volumes are named after them.
+
+## Coolify live API support
+
+Select **Coolify** in Migrations, or pass `--source coolify` to the CLI. Use the
+panel origin; Nixploy calls `/api/v1` with a transient Bearer token. On the
+source, enable API access and allow the target's address. A read token lists
+configuration; `read:sensitive` is required to copy readable env values and raw
+Compose content. See the [official API setup](https://coolify.io/docs/api/overview).
+
+The supported configuration slice is projects/environments, Docker-image and
+public credential-free Git applications (Dockerfile, Nixpacks, Railpack and
+static settings), raw/one-click Compose **services**, standalone PostgreSQL,
+MySQL, MariaDB, MongoDB and Redis configuration, and HTTP domain URLs. Source
+Compose services become a raw snapshot here; repository tracking, source proxy
+settings and external files require manual setup. Repository-backed Compose
+**applications** and other database engines are counted as unsupported with
+notes. This is not a Coolify database-dump or same-host adoption path.
+
+Coolify runtime names are not reused. Server keys, private provider and registry
+connections, shared-variable libraries/references, custom commands, source
+published ports, mounts, schedules, backups and proxy middleware need manual
+review. A domain whose backend port is unavailable leaves the target collection
+alone; an exposed-port fallback explicitly asks you to confirm overrides.
+Hidden/null/once-only, shared-reference or unrepresentable variable groups are
+omitted, with notes, rather than replacing existing target values or copying
+ciphertext. Database passwords are generated for new targets and retained on
+repeat imports; source credentials/data are not migrated.
+
+Verified against an isolated official **Coolify v4.4.6** API: image/public-Git
+applications, a raw Compose service, all five database configuration kinds,
+two domains, plus explicit KeyDB/repository-Compose rejections. Read-token
+repeat preserves manually restored values/settings, IDs and database passwords.
+Import alone leaves Docker inventory and proxy configuration unchanged. A fresh
+image/PostgreSQL import was then explicitly started: the image served HTTP 200
+and PostgreSQL accepted its new target password over TCP while rejecting the
+source password. Other database engines retain configuration/schema coverage;
+their runtime and data restoration need separate verification.
 
 ## Import from a database dump (the source panel is dead)
 

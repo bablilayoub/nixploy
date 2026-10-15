@@ -1326,7 +1326,7 @@ const docs: Record<string, ProcedureDoc> = {
 	"template.sourcesCreate": {
 		summary: "Add a template source",
 		description:
-			"A JSON index URL (`http-json`) or a git repository carrying `templates/index.json`. The URL is checked against the egress policy here and again on every sync. Nothing is fetched until `template.sourcesSync`.",
+			"A native JSON index (`http-json`), git repository with `templates/index.json` (`git`), Dokploy blueprints repository (`blueprints`), or Coolify generated `templates/service-templates.json` URL (`coolify`). Checked against the egress policy on save and sync. Nothing is fetched until `template.sourcesSync`.",
 	},
 	"template.sourcesUpdate": {
 		summary: "Update a template source",
@@ -1432,21 +1432,21 @@ const docs: Record<string, ProcedureDoc> = {
 		capability: ["gitops.manage"],
 	},
 	"import.inspect": {
-		summary: "List what a source panel's API key can see",
+		summary: "Inspect Dokploy or Coolify migration inventory",
 		description:
-			"Connects to another panel over its REST API (the URL is checked against SSRF targets) — or, with `dumpId`, reads a database dump uploaded to `POST /api/import/dump` through a throwaway Postgres on no network — and returns its projects, environments and service counts, nothing that could hold a value. The key is used for this call and forgotten.",
+			"Reads a Dokploy or Coolify live API with transient credentials and address-pinned guarded requests. Dokploy also supports dumpId uploads restored in a throwaway Postgres on no network. Returns visible projects, environments, supported service ids/names/kinds and unsupported counts. Source values and credentials are not returned.",
 		capability: ["gitops.manage"],
 	},
 	"import.plan": {
 		summary: "Translate one source environment and diff it against the target",
 		description:
-			"Fetches every service of the chosen source environment (live API, or an uploaded dump with `dumpId`), translates it to a version-2 nixploy.yaml (keys only) plus notes for what does not carry over, and diffs it against the target project environment (every item is a create when the target does not exist yet). Writes nothing.",
+			"Reads the chosen environment, optionally narrowed by serviceIds, and returns redacted configuration, changed field names, copy/clear/preserve value-group metadata and manual-action notes. Executable text and embedded credentials are omitted. reviewToken binds source values and target settings for a later apply; changed inputs or evidence require a fresh plan. Writes nothing. Ambiguous names require an explicit target, and project-restricted callers must use an existing reachable project.",
 		capability: ["gitops.manage"],
 	},
 	"import.runApply": {
 		summary: "Import one source environment: rows, then env values, no deploy",
 		description:
-			"Creates the target project and environment when missing (project.write, project quota), applies the translated manifest with the same gates as gitops.runApply, then writes the source's env values, build args and preview env onto the rows (secrets.write). Nothing is deployed; services land idle. Returns the plan, the notes and what could not be applied.",
+			"Prepares one source snapshot, checks GitOps/service/project/quota permissions, optionally verifies reviewToken, then saves configuration and readable value groups (secrets.write). Omitted groups preserve manually restored target values. New services are idle; import performs no deployment or proxy synchronization. Returns redacted results, partial failures and links' resource ids. serviceIds selects a subset. Coolify supports live API configuration only; dumpId is Dokploy-only.",
 		capability: ["gitops.manage", "secrets.write"],
 	},
 	"gitops.syncFromGit": {

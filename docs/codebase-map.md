@@ -52,7 +52,7 @@ The request proxy `apps/web/src/proxy.ts` (Next 16 `proxy` convention, Node runt
 ### Pages (App Router)
 
 - `(auth)/`: `login`, `setup` (first owner + org; public register removed), `two-factor`, `accept-invitation/[invitationId]`, legacy `register` (redirects).
-- `(dashboard)/dashboard/`: `page.tsx` (projects overview), `projects/[projectId]` (project detail, environments, services table, GitOps card, tags), `projects/[projectId]/services/<type>/[id]` for `application | compose | postgres | mysql | mariadb | mongo | redis`, `templates`, `docker`, `monitoring` (tabs `?tab=fleet|incidents|audit` — Incidents and the audit log live here now), `schedules`, `settings/{profile,organization,notifications,servers,ssh-keys,server(platform),certificates,git-providers,registries,destinations}` (`settings/activity` and `settings/incidents` are `redirect()` stubs into Monitoring).
+- `(dashboard)/dashboard/`: `page.tsx` (projects overview), `projects/[projectId]` (project detail, environments, services table, GitOps card, tags), `projects/[projectId]/services/<type>/[id]` for `application | compose | postgres | mysql | mariadb | mongo | redis`, `templates`, `migrations` (source inventory → redacted review → explicit apply → cutover tasks), `docker`, `monitoring` (tabs `?tab=fleet|incidents|audit` — Incidents and the audit log live here now), `schedules`, `settings/{profile,organization,notifications,servers,ssh-keys,server(platform),certificates,git-providers,registries,destinations}` (`settings/activity` and `settings/incidents` are `redirect()` stubs into Monitoring).
 - Error boundaries: `app/error.tsx`, `global-error.tsx`, `not-found.tsx`, `(dashboard)/error.tsx`, `(dashboard)/loading.tsx`.
 - Providers: `app/providers.tsx` (TanStack Query with 4xx no-retry, tRPC `httpBatchLink` + superjson, next-themes, sonner, tooltip). Browser tRPC URL is always relative `/api/trpc`.
 
@@ -382,3 +382,38 @@ so the code exchange runs on the tenant's hostname and the cookie it sets is
 host-only.
 
 See `docs/auth.md` § "Put an app behind the panel login".
+
+
+## Migration review and catalog compatibility (2026-10-15)
+
+`modules/import/` supplies `SourceReader`, source adapters, normalizer, inventory,
+planning and apply. `prepareImport` fetches once so the router's permission checks
+and writes use one snapshot. `review.ts` binds normalized source values and live
+target configuration/value evidence with a domain-separated HMAC; public plans
+omit executable text and embedded credential fields. `serviceIds` narrows an
+import to inventory ids; optional `reviewToken` makes API/CLI apply reject drift.
+The panel always sends the token and clears obsolete plans and credential-bearing
+mutation state. Restricted project filters require an existing reachable target.
+
+`modules/templates/coolify.ts` translates the official Base64/metadata index to
+the existing template contract. Sync creates no random credentials; generators
+are resolved once per new installation and stored for ordinary redeployment.
+Validated Compose expressions retain their `-`, `:-` and `:?` operators through
+translation, so unset and explicit empty values keep Compose's own semantics.
+Only `-` and `:-` supply defaults: `:?` diagnostics remain descriptions and
+ordinary required inputs start empty. Missing or empty required values fail
+installation before service creation; unsupported interpolation is reported.
+The form preserves ordinary empty values while omitting blank automatic fields
+so the server can generate them, using the same payload for required checks.
+`template_source.kind=coolify` uses the same public-URL, address-pinned fetch,
+cache, Compose-safety and report machinery as the other source kinds. The
+settings source form presets the official URL and reports individual rejections.
+
+`modules/compose/transition.ts` checks the live identities before preparation
+writes or runtime changes. Both engines qualify YAML service keys to prevent
+automatic bare aliases on shared networks; `commands.ts` separates those keys
+from stable route aliases and legacy physical candidates. Stack naming changes
+require an explicit stop first. `service.ts` verifies task-node coverage before
+removal and actual container disappearance before marking idle; preparation
+also refuses lingering tasks after the service objects have gone. Source-service
+metadata keeps runtime/log/timeline labels in the operator's source vocabulary.

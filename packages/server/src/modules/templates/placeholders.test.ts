@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { webcrypto } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { hasPlaceholders, resolveTemplateEnv, signJwtHs256 } from "./placeholders";
 
@@ -48,7 +48,7 @@ describe("resolveTemplateEnv", () => {
 		);
 	});
 
-	it("signs a JWT with a named secret and the encoded payload", () => {
+	it("signs a JWT with a named secret and the encoded payload", async () => {
 		const payload = Buffer.from(JSON.stringify({ role: "anon", exp: 1893456000 })).toString(
 			"base64url",
 		);
@@ -65,10 +65,22 @@ describe("resolveTemplateEnv", () => {
 			role: "anon",
 			exp: 1893456000,
 		});
-		const expected = createHmac("sha256", out.JWT_SECRET ?? "")
-			.update(`${header}.${body}`)
-			.digest("base64url");
-		expect(signature).toBe(expected);
+		// Verify the JWT MAC independently; this secret is a signing key, not a stored password hash.
+		const key = await webcrypto.subtle.importKey(
+			"raw",
+			Buffer.from(out.JWT_SECRET ?? ""),
+			{ name: "HMAC", hash: "SHA-256" },
+			false,
+			["verify"],
+		);
+		expect(
+			await webcrypto.subtle.verify(
+				"HMAC",
+				key,
+				Buffer.from(signature ?? "", "base64url"),
+				Buffer.from(`${header}.${body}`),
+			),
+		).toBe(true);
 		expect(signJwtHs256("s", { a: 1 }).split(".")).toHaveLength(3);
 	});
 

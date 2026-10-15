@@ -43,11 +43,13 @@ import { toastError } from "@/lib/describe-error";
 import { toastDnsOutcome } from "@/lib/dns-outcome";
 import { useTRPC, useTRPCClient } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
+import { automaticDefault, templateEnvInputs } from "./template-env-inputs";
 import { TemplateLogo } from "./template-logo";
 import type { TemplateSummary } from "./templates-view";
 
-/** Env defaults containing this placeholder are generated server-side. */
-const GENERATE_SECRET = "{{generateSecret}}";
+/** All supported named generators are resolved on the server at installation. */
+const generatedDefault = (value: string): boolean =>
+	/\{\{generate[A-Za-z0-9]+(?::|\}\})/.test(value);
 
 type StepId = "destination" | "configure" | "domain";
 
@@ -176,11 +178,11 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 		Object.fromEntries(
 			template.env.map((entry) => [
 				entry.key,
-				entry.default.includes(GENERATE_SECRET) ? "" : entry.default,
+				automaticDefault(entry.default) ? "" : entry.default,
 			]),
 		),
 	);
-	const [domainEnabled, setDomainEnabled] = useState(false);
+	const [domainEnabled, setDomainEnabled] = useState(Boolean(template.requiresDomain));
 	const [domainHost, setDomainHost] = useState("");
 	const [generatingHost, setGeneratingHost] = useState(false);
 
@@ -260,10 +262,9 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 		}),
 	);
 
+	const { provided, missingRequired } = templateEnvInputs(template.env, envValues);
 	const submit = () => {
-		const provided = Object.fromEntries(
-			Object.entries(envValues).filter(([, value]) => value !== ""),
-		);
+		if (missingRequired.length > 0) return;
 		deploy.mutate({
 			templateId: template.id,
 			projectId,
@@ -289,6 +290,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 	const blocker = templateDeployBlocker(template, access, { withDomain });
 	const canDeploy =
 		canContinueDestination &&
+		missingRequired.length === 0 &&
 		!(domainEnabled && !domainHost.trim()) &&
 		!generatingHost &&
 		blocker === null;
@@ -411,13 +413,20 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 							Leave generated secrets blank to create them automatically on deploy. Override any
 							value you want to control yourself.
 						</p>
+						{missingRequired.length > 0 ? (
+							<p className="text-sm text-muted-foreground" role="status">
+								Set {missingRequired.map((entry) => entry.key).join(", ")} to continue.
+							</p>
+						) : null}
 						{template.env.map((entry) => {
-							const generated = entry.default.includes(GENERATE_SECRET);
+							const generated = generatedDefault(entry.default);
+							const automatic = automaticDefault(entry.default);
 							return (
 								<div key={entry.key} className="flex flex-col gap-1.5">
 									<div className="flex items-center justify-between gap-2">
 										<Label htmlFor={`env-${entry.key}`} className="font-mono text-xs">
 											{entry.key}
+											{entry.required ? " (required)" : ""}
 										</Label>
 										{generated && (
 											<Badge variant="outline" className="text-[10px]">
@@ -428,7 +437,15 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 									<Input
 										id={`env-${entry.key}`}
 										value={envValues[entry.key] ?? ""}
-										placeholder={generated ? "Randomly generated on deploy" : entry.default}
+										placeholder={
+											generated
+												? "Randomly generated on deploy"
+												: automatic
+													? "Uses the attached domain or another generated value"
+													: entry.default
+										}
+										aria-required={entry.required}
+										aria-describedby={`env-${entry.key}-hint`}
 										onChange={(event) =>
 											setEnvValues((current) => ({
 												...current,
@@ -436,7 +453,9 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 											}))
 										}
 									/>
-									<p className="text-xs text-muted-foreground">{entry.description}</p>
+									<p id={`env-${entry.key}-hint`} className="text-xs text-muted-foreground">
+										{entry.description}
+									</p>
 								</div>
 							);
 						})}
@@ -445,6 +464,12 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 
 				{step === "domain" && (
 					<div className="flex flex-col gap-5">
+						{template.requiresDomain ? (
+							<p className="text-sm text-muted-foreground">
+								This template uses its public hostname in configuration. Add a domain before
+								deploying.
+							</p>
+						) : null}
 						<div className="rounded-lg border p-3">
 							<p className="text-xs font-medium text-muted-foreground">Deploying to</p>
 							<p className="mt-1 text-sm font-medium">
@@ -507,7 +532,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 									id="template-domain-toggle"
 									checked={domainEnabled}
 									onCheckedChange={onDomainToggle}
-									disabled={!access.can("domains.manage")}
+									disabled={Boolean(template.requiresDomain) || !access.can("domains.manage")}
 									title={
 										access.can("domains.manage")
 											? undefined
@@ -585,7 +610,10 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 					<Button
 						type="button"
 						onClick={goNext}
-						disabled={step === "destination" && !canContinueDestination}
+						disabled={
+							(step === "destination" && !canContinueDestination) ||
+							(step === "configure" && missingRequired.length > 0)
+						}
 					>
 						Continue
 						<ArrowRight className="size-4" />

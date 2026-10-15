@@ -137,6 +137,39 @@ describe("syncTemplateSource", () => {
 		});
 	});
 
+	it("fetches a Coolify catalog through the same bounded pinned path and reports translation and safety failures", async () => {
+		const coolifyEntry = (compose: string) => ({
+			compose: Buffer.from(compose).toString("base64"),
+			port: "80",
+		});
+		pinnedFetch.mockResolvedValue(
+			jsonResponse({
+				hello: coolifyEntry(
+					"services:\n  app:\n    image: traefik/whoami:v1.10\n    environment: [SERVICE_URL_APP_80]\n",
+				),
+				unsupported: coolifyEntry(
+					`services:\n  app:\n    image: x\n    environment:\n      - VALUE=$${"{"}SERVICE_UNSUPPORTED_KEY}\n`,
+				),
+				socket: coolifyEntry(
+					"services:\n  app:\n    image: x\n    volumes: [/var/run/docker.sock:/var/run/docker.sock]\n",
+				),
+			}),
+		);
+		const result = await syncTemplateSource({ ...row, kind: "coolify" });
+		expect(result.templateCount).toBe(1);
+		expect(result.rejected).toEqual([
+			expect.stringMatching(/unsupported: unsupported magic variable/),
+			expect.stringMatching(/socket: compose safety — .*Docker socket/),
+		]);
+		expect(pinnedFetch).toHaveBeenCalledWith(
+			expect.objectContaining({ url: expect.any(URL) }),
+			expect.objectContaining({ maxBytes: 4 * 1024 * 1024, timeoutMs: 20_000 }),
+		);
+		const cached = JSON.parse(await readFile(getTemplateSourceCachePath("src-1"), "utf8"));
+		expect(cached.templates[0]).toMatchObject({ id: "hello", requiresDomain: true });
+		expect(await readTemplateSourceReport("src-1")).toMatchObject({ rejected: result.rejected });
+	});
+
 	it("refuses an entry that could never deploy, whatever the source kind", async () => {
 		pinnedFetch.mockResolvedValue(
 			jsonResponse([

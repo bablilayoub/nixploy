@@ -2,6 +2,7 @@ import { stringify } from "yaml";
 import { getSwarmNetwork } from "../application/paths";
 import { mergeNodeConstraint } from "../cluster/placement";
 import { applyBuiltImages } from "./build";
+import { COMPOSE_SOURCE_SERVICE_LABEL, deployedServiceName, traefikAppName } from "./commands";
 import { escapeComposeInterpolation, renderComposeSpec } from "./interpolate";
 import { type ComposeMount, injectComposeMounts } from "./mounts";
 import {
@@ -50,6 +51,81 @@ export function randomizeServiceNames(spec: ComposeFileSpec, suffix: string): Co
 		}
 	}
 	return { ...spec, services: renamed };
+}
+
+/**
+ * Both Compose and the Stack converter add the key as a DNS alias on every network, even
+ * when an explicit aliases list was supplied. Use globally qualified keys,
+ * retaining short source names ONLY on the stack's private network. Volume
+ * declarations and the Compose project name stay unchanged on upgrade.
+ */
+function qualifyComposeServices(
+	spec: ComposeFileSpec,
+	appName: string,
+	suffix: string,
+	composeType: "docker-compose" | "stack",
+): ComposeFileSpec {
+	const names = new Map(
+		Object.keys(spec.services ?? {}).map((name) => [
+			name,
+			deployedServiceName({ appName, composeType }, name),
+		]),
+	);
+	const services: Record<string, ComposeServiceSpec> = {};
+	for (const [name, service] of Object.entries(spec.services ?? {})) {
+		const next = { ...service };
+		if (Array.isArray(next.depends_on)) {
+			next.depends_on = next.depends_on.map((dependency) => names.get(dependency) ?? dependency);
+		} else if (next.depends_on && typeof next.depends_on === "object") {
+			next.depends_on = Object.fromEntries(
+				Object.entries(next.depends_on).map(([dependency, condition]) => [
+					names.get(dependency) ?? dependency,
+					condition,
+				]),
+			);
+		}
+		if (Array.isArray(next.links)) {
+			next.links = next.links.map((link) => {
+				const [target, ...rest] = link.split(":");
+				return [names.get(target ?? "") ?? target, ...rest].join(":");
+			});
+		}
+		const networks = toNetworkMap(next.networks);
+		const sourceName = suffix ? name.slice(0, -(suffix.length + 1)) : name;
+		const labels = Array.isArray(next.labels)
+			? Object.fromEntries(
+					next.labels.map((value) => {
+						const line = String(value);
+						const equals = line.indexOf("=");
+						return equals < 0 ? [line, ""] : [line.slice(0, equals), line.slice(equals + 1)];
+					}),
+				)
+			: next.labels && typeof next.labels === "object"
+				? next.labels
+				: {};
+		next.labels = { ...labels, [COMPOSE_SOURCE_SERVICE_LABEL]: sourceName };
+		const privateAliases = new Set([name, sourceName]);
+		if (typeof next.container_name === "string" && next.container_name) {
+			privateAliases.add(next.container_name);
+			next.container_name = `${appName}-${next.container_name}`;
+		}
+		networks[privateNetworkName(appName)] = { aliases: [...privateAliases] };
+		if (composeType === "stack") {
+			// The route/cross-service contract is independent of the physical
+			// Swarm name (<stack>_<qualifiedKey>). Retain its old scoped alias.
+			for (const [network, config] of Object.entries(networks)) {
+				if (network === privateNetworkName(appName)) continue;
+				if (config.aliases?.includes(`${appName}-${name}`)) {
+					config.aliases = [
+						...new Set([...config.aliases, traefikAppName({ appName, composeType }, name)]),
+					];
+				}
+			}
+		}
+		next.networks = networks;
+		services[names.get(name) ?? name] = next;
+	}
+	return { ...spec, services };
 }
 
 /** Name of the private per-app network every service of `appName` joins. */
@@ -267,6 +343,7 @@ export function buildDeployComposeFile(
 		exposedServices,
 		environmentNetwork: input.environmentNetwork,
 	});
+	spec = qualifyComposeServices(spec, input.appName, suffix, input.composeType);
 	if (input.composeType === "stack") {
 		spec = injectNodeConstraint(normalizeForStack(spec), input.swarmNodeId);
 	}

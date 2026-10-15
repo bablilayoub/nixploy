@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db";
 import { environments, projects, registry, servers } from "../../db/schema";
-import { badRequest, notFound } from "../errors";
+import { badRequest, conflict, notFound, preconditionFailed } from "../errors";
 import {
 	type ApplyStackResult,
 	applyStack,
@@ -13,8 +13,14 @@ import {
 } from "../gitops";
 import { type ApplySecretsResult, applySecretsPayload } from "../gitops/secrets";
 import { findProjectById } from "../projects";
+import { currentProjectFilter } from "../projects/project-scope";
 import { DATABASE_KINDS, type DatabaseServiceKind } from "../services/registry";
 import { SourcePanelClient } from "./client";
+import { CoolifySourceReader } from "./coolify-reader";
+import type { ImportSource } from "./kinds";
+
+export { IMPORT_SOURCES, type ImportSource } from "./kinds";
+
 import { DumpSourceReader } from "./dump";
 import { readDumpMeta } from "./dump-store";
 import {
@@ -23,6 +29,7 @@ import {
 	normalizeSourceEnvironment,
 } from "./normalize";
 import type { SourceReader } from "./reader";
+import { importReviewToken, orderImportReviewServices, summarizeImportValues } from "./review";
 import type {
 	SourceApplication,
 	SourceCompose,
@@ -57,9 +64,6 @@ export type { SourceReader } from "./reader";
  * The source API key exists for the duration of one call.
  */
 
-export const IMPORT_SOURCES = ["dokploy"] as const;
-export type ImportSource = (typeof IMPORT_SOURCES)[number];
-
 export interface ImportSourceOptions {
 	source: ImportSource;
 	/** Live path: the source panel's origin and a read-capable API key. */
@@ -75,13 +79,19 @@ const openReader = async (
 	organizationId: string,
 ): Promise<SourceReader> => {
 	if (options.dumpId) {
+		if (options.source !== "dokploy")
+			throw badRequest(
+				"Database dump import currently supports Dokploy only; use the Coolify live API",
+			);
 		const meta = await readDumpMeta(organizationId, options.dumpId);
 		return DumpSourceReader.open(meta);
 	}
 	if (!options.url || !options.apiKey) {
 		throw badRequest("Give the source panel's url and apiKey, or a dumpId of an uploaded dump");
 	}
-	return SourcePanelClient.connect({ url: options.url, apiKey: options.apiKey });
+	return options.source === "coolify"
+		? CoolifySourceReader.connect({ url: options.url, apiKey: options.apiKey })
+		: SourcePanelClient.connect({ url: options.url, apiKey: options.apiKey });
 };
 
 export interface ImportRequest extends ImportSourceOptions {
@@ -93,6 +103,8 @@ export interface ImportRequest extends ImportSourceOptions {
 	/** Target environment name; the source environment's name when omitted. */
 	environmentName?: string;
 	keepAppNames?: boolean;
+	/** Optional kind/source-id inventory selection; omitted imports the whole environment. */
+	serviceIds?: string[];
 }
 
 export interface SourceInventory {
@@ -106,9 +118,31 @@ export interface SourceInventory {
 			compose: number;
 			databases: number;
 			unsupported: number;
+			services: Array<{ id: string; name: string; kind: string }>;
 		}>;
 	}>;
 }
+
+/** Source ids are namespaced by kind, since providers may reuse ids across tables. */
+const inventoryServices = (environment: SourceProjectSummary["environments"][number]) => [
+	...environment.applications.map((row) => ({
+		id: `application/${row.applicationId}`,
+		name: row.name,
+		kind: "application",
+	})),
+	...environment.compose.map((row) => ({
+		id: `compose/${row.composeId}`,
+		name: row.name,
+		kind: "compose",
+	})),
+	...DATABASE_KINDS.flatMap((kind) =>
+		environment[kind].map((row) => ({
+			id: `${kind}/${String((row as Record<string, unknown>)[`${kind}Id`])}`,
+			name: row.name,
+			kind,
+		})),
+	),
+];
 
 /** What the key can see, counted — nothing that could hold a value. */
 export const inspectSource = async (
@@ -132,7 +166,8 @@ export const inspectSource = async (
 				applications: environment.applications.length,
 				compose: environment.compose.length,
 				databases: DATABASE_KINDS.reduce((sum, kind) => sum + environment[kind].length, 0),
-				unsupported: environment.libsql.length,
+				unsupported: environment.libsql.length + (environment.unsupportedResources?.length ?? 0),
+				services: inventoryServices(environment),
 			})),
 		})),
 	};
@@ -185,14 +220,26 @@ const readSourceEnvironment = async (
 		);
 	}
 
+	const selected = request.serviceIds ? new Set(request.serviceIds) : null;
+	if (selected) {
+		const available = new Set(inventoryServices(environment).map((row) => row.id));
+		if (selected.size === 0 || [...selected].some((id) => !available.has(id))) {
+			throw badRequest(
+				"Select at least one service from the current source environment; inspect again if it changed",
+			);
+		}
+	}
+
 	// Sequential on purpose: a panel on a small box answers one `one` at a
 	// time comfortably and ten in parallel with 502s.
 	const applications: SourceApplication[] = [];
 	for (const row of environment.applications) {
+		if (selected && !selected.has(`application/${row.applicationId}`)) continue;
 		applications.push(await client.getApplication(row.applicationId));
 	}
 	const compose: SourceCompose[] = [];
 	for (const row of environment.compose) {
+		if (selected && !selected.has(`compose/${row.composeId}`)) continue;
 		compose.push(await client.getCompose(row.composeId));
 	}
 	const databases = {} as Record<DatabaseServiceKind, SourceDatabase[]>;
@@ -200,7 +247,7 @@ const readSourceEnvironment = async (
 		databases[kind] = [];
 		for (const row of environment[kind]) {
 			const id = (row as Record<string, unknown>)[`${kind}Id`];
-			if (typeof id !== "string") continue;
+			if (typeof id !== "string" || (selected && !selected.has(`${kind}/${id}`))) continue;
 			databases[kind].push(await client.getDatabase(kind, id));
 		}
 	}
@@ -236,6 +283,18 @@ export interface ImportTarget {
 	createsEnvironment: boolean;
 }
 
+const targetEnvironment = async (projectId: string, name: string) => {
+	const rows = await db.query.environments.findMany({
+		where: and(eq(environments.projectId, projectId), eq(environments.name, name)),
+		limit: 2,
+	});
+	if (rows.length > 1)
+		throw conflict(
+			"The target project has multiple environments with this name. Rename the duplicates before importing.",
+		);
+	return rows[0];
+};
+
 /** Resolve where the import lands, without writing anything. */
 const resolveTarget = async (
 	request: ImportRequest,
@@ -245,12 +304,7 @@ const resolveTarget = async (
 	const environmentName = normalized.manifest.environment?.name ?? "production";
 	if (request.projectId) {
 		const project = await findProjectById(request.projectId, organizationId);
-		const environment = await db.query.environments.findFirst({
-			where: and(
-				eq(environments.projectId, project.projectId),
-				eq(environments.name, environmentName),
-			),
-		});
+		const environment = await targetEnvironment(project.projectId, environmentName);
 		return {
 			projectId: project.projectId,
 			projectName: project.name,
@@ -260,19 +314,21 @@ const resolveTarget = async (
 		};
 	}
 	const projectName = normalized.manifest.project.name;
-	const existing = await db.query.projects.findFirst({
+	const matches = await db.query.projects.findMany({
 		where: and(eq(projects.organizationId, organizationId), eq(projects.name, projectName)),
+		limit: 2,
 	});
+	for (const row of matches) await findProjectById(row.projectId, organizationId);
+	if (matches.length > 1)
+		throw conflict(
+			"More than one target project has the source name. Choose an existing target project explicitly.",
+		);
+	const existing = matches[0];
 	if (existing) {
 		// A name match is still a project access: do this before returning its
 		// id or creating an environment, including when no graph exists yet.
 		await findProjectById(existing.projectId, organizationId);
-		const environment = await db.query.environments.findFirst({
-			where: and(
-				eq(environments.projectId, existing.projectId),
-				eq(environments.name, environmentName),
-			),
-		});
+		const environment = await targetEnvironment(existing.projectId, environmentName);
 		return {
 			projectId: existing.projectId,
 			projectName,
@@ -280,6 +336,11 @@ const resolveTarget = async (
 			createsProject: false,
 			createsEnvironment: !environment,
 		};
+	}
+	if (currentProjectFilter()?.kind === "projects") {
+		throw preconditionFailed(
+			"Your project access is restricted. Choose an existing accessible target project before importing.",
+		);
 	}
 	return {
 		projectId: null,
@@ -291,7 +352,7 @@ const resolveTarget = async (
 };
 
 export interface ImportPlan {
-	source: { host: string; project: string; environment: string };
+	source: { provider: ImportSource; host: string; project: string; environment: string };
 	target: ImportTarget;
 	/** The manifest that would be applied: keys only, no values. */
 	manifest: NixployStack;
@@ -299,6 +360,9 @@ export interface ImportPlan {
 	counts: NormalizedEnvironment["counts"];
 	/** Diff against the target, or null when the target does not exist yet (everything is a create). */
 	plan: GitopsPlanResult | null;
+	/** Opaque digest binding the review to source values, target and current diff. */
+	reviewToken: string;
+	valueGroups: ReturnType<typeof summarizeImportValues>;
 }
 
 const normalizeRequest = async (
@@ -320,32 +384,78 @@ const normalizeRequest = async (
 		knownRegistries: names.registries,
 		targetProjectName,
 		targetEnvironmentName: request.environmentName,
-		keepAppNames: request.keepAppNames,
+		keepAppNames: request.source === "coolify" ? false : request.keepAppNames,
 	});
+	normalized.notes.push(...(fetched.client.getNotes?.() ?? []));
 	const target = await resolveTarget(request, organizationId, normalized);
 	return { fetched, normalized, target };
 };
 
-export const planImport = async (
+export const prepareImport = async (
 	request: ImportRequest,
 	organizationId: string,
 	options: { includeSensitive?: boolean } = {},
-): Promise<ImportPlan> => {
+) => {
 	const { fetched, normalized, target } = await normalizeRequest(request, organizationId);
 	let plan: GitopsPlanResult | null = null;
+	let live: ReturnType<typeof liveStateFromGraph> | null = null;
+	let targetValues: unknown = target.projectId
+		? { project: (await findProjectById(target.projectId, organizationId)).env }
+		: null;
 	if (target.projectId && !target.createsEnvironment) {
 		const graph = await loadEnvironmentGraph(
 			target.projectId,
 			target.environmentName,
 			organizationId,
 		);
-		plan = buildPlan(
-			normalized.manifest,
-			liveStateFromGraph(target.projectId, target.environmentName, graph, options),
-		);
+		live = liveStateFromGraph(target.projectId, target.environmentName, graph, options);
+		// Bind values apply may overwrite too; public plans expose only key names.
+		targetValues = orderImportReviewServices({
+			project: graph.project.env,
+			environment: graph.environment.env,
+			applications: graph.services.applications.map((row) => ({
+				name: row.name,
+				env: row.env,
+				buildArgs: row.buildArgs,
+				previewEnv: row.previewEnv,
+			})),
+			compose: graph.services.compose.map((row) => ({
+				name: row.name,
+				env: row.env,
+				buildArgs: row.buildArgs,
+				previewEnv: row.previewEnv,
+			})),
+			databases: Object.fromEntries(
+				DATABASE_KINDS.map((kind) => [
+					kind,
+					graph.services[kind].map((row) => ({ name: row.name, env: row.env })),
+				]),
+			),
+		});
+		plan = buildPlan(normalized.manifest, live);
 	}
-	return {
+	const reviewToken = importReviewToken({
+		organizationId,
 		source: {
+			provider: request.source,
+			url: request.url,
+			dumpId: request.dumpId,
+			project: request.sourceProjectId,
+			environment: request.sourceEnvironmentName,
+			keepAppNames: request.keepAppNames ?? false,
+			serviceIds: request.serviceIds ? [...request.serviceIds].sort() : undefined,
+		},
+		normalized,
+		target,
+		live: live ? orderImportReviewServices(live) : null,
+		targetValues,
+		plan,
+	});
+	const review: ImportPlan = {
+		reviewToken,
+		valueGroups: summarizeImportValues(normalized.secrets),
+		source: {
+			provider: request.source,
 			host: fetched.client.host,
 			project: fetched.normalizedInput.project.name,
 			environment: fetched.normalizedInput.environment.name,
@@ -356,42 +466,58 @@ export const planImport = async (
 		counts: normalized.counts,
 		plan,
 	};
+	return { fetched, normalized, target, review };
 };
+
+export const planImport = async (
+	request: ImportRequest,
+	organizationId: string,
+	options: { includeSensitive?: boolean } = {},
+): Promise<ImportPlan> => (await prepareImport(request, organizationId, options)).review;
 
 export interface ImportResult extends ImportPlan {
 	target: ImportTarget & { projectId: string };
 	result: ApplyStackResult;
 	secrets: ApplySecretsResult;
+	resources: Array<{ id: string; name: string; kind: string }>;
 }
 
 /** Create what is missing, apply the manifest, write the values. Deploys nothing. */
-export const applyImport = async (
-	request: ImportRequest,
+export const applyPreparedImport = async (
+	prepared: Awaited<ReturnType<typeof prepareImport>>,
 	organizationId: string,
-	options: { includeSensitive?: boolean } = {},
+	options: { includeSensitive?: boolean; reviewToken?: string } = {},
 ): Promise<ImportResult> => {
-	const { fetched, normalized, target } = await normalizeRequest(request, organizationId);
+	const { fetched, normalized, target, review } = prepared;
+	if (options.reviewToken && options.reviewToken !== review.reviewToken) {
+		throw conflict(
+			"The source or target changed after review. Generate a fresh plan before importing.",
+		);
+	}
 
-	let projectId = target.projectId;
-	if (!projectId) {
-		const [created] = await db
-			.insert(projects)
-			.values({
-				name: target.projectName,
-				description: fetched.normalizedInput.project.description ?? null,
-				organizationId,
-			})
-			.returning();
-		if (!created) throw badRequest("Could not create the target project");
-		projectId = created.projectId;
-	}
-	if (target.createsEnvironment) {
-		await db.insert(environments).values({
-			name: target.environmentName,
-			description: fetched.normalizedInput.environment.description ?? null,
-			projectId,
-		});
-	}
+	const projectId = await db.transaction(async (tx) => {
+		let id = target.projectId;
+		if (!id) {
+			const [created] = await tx
+				.insert(projects)
+				.values({
+					name: target.projectName,
+					description: fetched.normalizedInput.project.description ?? null,
+					organizationId,
+				})
+				.returning();
+			if (!created) throw badRequest("Could not create the target project");
+			id = created.projectId;
+		}
+		if (target.createsEnvironment) {
+			await tx.insert(environments).values({
+				name: target.environmentName,
+				description: fetched.normalizedInput.environment.description ?? null,
+				projectId: id,
+			});
+		}
+		return id;
+	});
 
 	const result = await applyStack(normalized.manifest, organizationId, projectId, {
 		...options,
@@ -401,7 +527,10 @@ export const applyImport = async (
 	const secrets = await applySecretsPayload(normalized.secrets, graph);
 
 	return {
+		reviewToken: review.reviewToken,
+		valueGroups: review.valueGroups,
 		source: {
+			provider: review.source.provider,
 			host: fetched.client.host,
 			project: fetched.normalizedInput.project.name,
 			environment: fetched.normalizedInput.environment.name,
@@ -413,5 +542,36 @@ export const applyImport = async (
 		plan: result,
 		result,
 		secrets,
+		resources: [
+			...graph.services.applications
+				.filter((row) => normalized.manifest.applications?.some((entry) => entry.name === row.name))
+				.map((row) => ({ id: row.applicationId, name: row.name, kind: "application" })),
+			...graph.services.compose
+				.filter((row) => normalized.manifest.compose?.some((entry) => entry.name === row.name))
+				.map((row) => ({ id: row.composeId, name: row.name, kind: "compose" })),
+			...DATABASE_KINDS.flatMap((kind) =>
+				graph.services[kind]
+					.filter((row) =>
+						normalized.manifest.databases?.[kind]?.some((entry) => entry.name === row.name),
+					)
+					.map((row) => ({
+						id: String((row as Record<string, unknown>)[`${kind}Id`]),
+						name: row.name,
+						kind,
+					})),
+			),
+		],
 	};
 };
+
+/** Programmatic/CLI compatibility; routers reuse the exact prepared input checked for permissions. */
+export const applyImport = async (
+	request: ImportRequest,
+	organizationId: string,
+	options: { includeSensitive?: boolean; reviewToken?: string } = {},
+): Promise<ImportResult> =>
+	applyPreparedImport(
+		await prepareImport(request, organizationId, options),
+		organizationId,
+		options,
+	);

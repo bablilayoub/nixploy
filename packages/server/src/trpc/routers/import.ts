@@ -1,7 +1,14 @@
 import { z } from "zod";
 import { auditFromSession } from "../../modules/audit";
 import { NIXPLOY_STACK_VERSION } from "../../modules/gitops";
-import { applyImport, IMPORT_SOURCES, inspectSource, planImport } from "../../modules/import";
+import {
+	applyPreparedImport,
+	IMPORT_SOURCES,
+	inspectSource,
+	planImport,
+	prepareImport,
+} from "../../modules/import";
+import { redactImportReview } from "../../modules/import/review";
 import {
 	assertCapability,
 	assertWithinQuota,
@@ -31,8 +38,14 @@ const sourceInput = z
 			.regex(/^[a-f0-9]{24}$/)
 			.optional(),
 	})
-	.refine((value) => Boolean(value.dumpId) !== Boolean(value.url && value.apiKey), {
-		message: "Give url + apiKey (live panel) or dumpId (uploaded dump), not both",
+	.refine(
+		(value) => (value.dumpId ? !value.url && !value.apiKey : Boolean(value.url && value.apiKey)),
+		{
+			message: "Give url + apiKey (live panel) or dumpId (uploaded dump), not both",
+		},
+	)
+	.refine((value) => !value.dumpId || value.source === "dokploy", {
+		message: "Database dump import supports Dokploy only; use the Coolify live API",
 	});
 
 const importInput = sourceInput.extend({
@@ -41,6 +54,7 @@ const importInput = sourceInput.extend({
 	projectId: z.string().min(1).optional(),
 	environmentName: z.string().min(1).max(255).optional(),
 	keepAppNames: z.boolean().optional(),
+	serviceIds: z.array(z.string().min(1).max(255)).min(1).max(1000).optional(),
 });
 
 const countServices = (manifest: {
@@ -76,7 +90,7 @@ export const importRouter = router({
 			organizationId,
 			"secrets.read",
 		);
-		return planImport(input, organizationId, { includeSensitive });
+		return redactImportReview(await planImport(input, organizationId, { includeSensitive }));
 	}),
 
 	/**
@@ -85,57 +99,69 @@ export const importRouter = router({
 	 * handled. Same gates as a GitOps apply plus `secrets.write` (values are
 	 * written) and `project.write` when the project is created.
 	 */
-	runApply: protectedProcedure.input(importInput).mutation(async ({ ctx, input }) => {
-		const organizationId = await resolveCallerOrganizationId(
-			ctx.session.user.id,
-			ctx.session.session.activeOrganizationId,
-		);
-		await assertCapability(ctx.session.user.id, organizationId, "gitops.manage");
-		await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
-		if (input.projectId) await findProjectById(input.projectId, organizationId);
-		const includeSensitive = await hasCapability(
-			ctx.session.user.id,
-			organizationId,
-			"secrets.read",
-		);
+	runApply: protectedProcedure
+		.input(
+			importInput.extend({
+				reviewToken: z
+					.string()
+					.regex(/^[a-f0-9]{64}$/)
+					.optional(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await resolveCallerOrganizationId(
+				ctx.session.user.id,
+				ctx.session.session.activeOrganizationId,
+			);
+			await assertCapability(ctx.session.user.id, organizationId, "gitops.manage");
+			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
+			if (input.projectId) await findProjectById(input.projectId, organizationId);
+			const includeSensitive = await hasCapability(
+				ctx.session.user.id,
+				organizationId,
+				"secrets.read",
+			);
 
-		// The plan is what decides the gates; the source is read twice (plan,
-		// then apply) so the apply writes exactly what was checked.
-		const plan = await planImport(input, organizationId, { includeSensitive });
-		if (plan.target.createsProject || plan.target.createsEnvironment) {
-			await assertCapability(ctx.session.user.id, organizationId, "project.write");
-			if (plan.target.createsProject) {
-				await assertWithinQuota(organizationId, { projects: true });
+			// Prepare once: permission checks and writes use the same source snapshot.
+			const prepared = await prepareImport(input, organizationId, { includeSensitive });
+			const plan = prepared.review;
+			if (plan.target.createsProject || plan.target.createsEnvironment) {
+				await assertCapability(ctx.session.user.id, organizationId, "project.write");
+				if (plan.target.createsProject) {
+					await assertWithinQuota(organizationId, { projects: true });
+				}
 			}
-		}
-		await assertApplyPermissions(
-			ctx.session,
-			organizationId,
-			plan.manifest,
-			plan.target.projectId ?? undefined,
-			false,
-			includeSensitive,
-			plan.plan ? undefined : countServices(plan.manifest),
-		);
+			await assertApplyPermissions(
+				ctx.session,
+				organizationId,
+				plan.manifest,
+				plan.target.projectId ?? undefined,
+				false,
+				includeSensitive,
+				plan.plan ? undefined : countServices(plan.manifest),
+			);
 
-		const result = await applyImport(input, organizationId, { includeSensitive });
-		await auditFromSession(ctx, organizationId, {
-			action: "import.runApply",
-			targetType: "project",
-			targetId: result.target.projectId,
-			targetName: result.target.projectName,
-			metadata: {
-				source: input.source,
-				host: result.source.host,
-				manifestVersion: NIXPLOY_STACK_VERSION,
-				environment: result.target.environmentName,
-				counts: result.counts,
-				applied: result.result.applied,
-				failed: result.result.errors.length,
-				secretsApplied: result.secrets.applied.length,
-				notes: result.notes.length,
-			},
-		});
-		return result;
-	}),
+			const result = await applyPreparedImport(prepared, organizationId, {
+				includeSensitive,
+				reviewToken: input.reviewToken,
+			});
+			await auditFromSession(ctx, organizationId, {
+				action: "import.runApply",
+				targetType: "project",
+				targetId: result.target.projectId,
+				targetName: result.target.projectName,
+				metadata: {
+					source: input.source,
+					host: result.source.host,
+					manifestVersion: NIXPLOY_STACK_VERSION,
+					environment: result.target.environmentName,
+					counts: result.counts,
+					applied: result.result.applied,
+					failed: result.result.errors.length,
+					secretsApplied: result.secrets.applied.length,
+					notes: result.notes.length,
+				},
+			});
+			return redactImportReview(result);
+		}),
 });

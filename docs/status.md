@@ -5,7 +5,208 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Active backlog — 2026-10-15
+
+This is the authoritative current work list. The dated verification records and
+historical checklists below retain their original context; an unchecked item
+there does not by itself describe an open task today. PR #14 is merged; the
+operator/migration/catalog work is implemented and verified in PR #16. That is
+an implementation checkpoint, not a new release claim.
+
+### Access required: public DNS, provider writes and ACME
+
+- [ ] Supply a scoped provider token, disposable zone/hostname and publicly
+  reachable test host. Verify a real provider link, record creation/retry,
+  public DNS resolution and trusted HTTPS after public ACME issuance. Local
+  DNS, controlled certificates and provider fixtures do not close this work.
+- [ ] Exercise hosted GitHub/GitLab/Bitbucket status/comment writes and a full
+  fork PR/webhook/approval delivery when the required repositories and accounts
+  are available. Real local Gitea status writes are already verified.
+
+### Unimplemented product work
+
+- [ ] Same-host takeover/adoption, proxy cutover and rollback remain a design
+  sketch. Implement them against a disposable VM running the source panel,
+  then prove original volume identity, certificates, traffic and rollback.
+  Configuration import does not perform takeover or copy source data.
+- [ ] External-upstream manifest support, per-team capability overlays and a
+  persistent SSH breaker remain separate feature work; current roles still
+  define what a member may do and teams define which projects they can reach.
+
+### Infrastructure and duration verification
+
+- [ ] Run a real multi-node/remote-server smoke and a fresh split-worker install
+  on disposable hosts/VMs. Existing unit coverage and split-worker upgrade CI
+  do not establish fresh-host placement, remote connectivity or recovery.
+- [ ] Run the runtime-log store for 24 hours on a real host, including hour-close
+  gzip, the truncation marker, retention/search under load and worker/panel
+  resource use. Short local/VPS harvest checks already passed.
+- [ ] Exercise the external-upstream hourly safety re-check against a controlled
+  upstream/DNS change; the previously inspected VPS had no upstreams.
+- [ ] Measure the lite profile and comparative footprint on a reproducible host.
+  Normal-profile observations do not establish either result.
+
+### Implemented behavior with limited end-to-end coverage
+
+- [ ] In-app update rollout/failure actions remain browser fixtures; actual
+  registry/platform/preflight APIs and permission gates passed, and real
+  rollout evidence comes from Swarm install/upgrade CI.
+- [ ] Verify the external-upstream page, preview source switch and Runtime →
+  History interactions in the browser where no current evidence is recorded.
+  A raw Compose branch-preview fixture passed real deploy/delete; a git-backed
+  Compose provider preview and its complete webhook lifecycle remain distinct.
+- [ ] Imported database configuration covers PostgreSQL, MySQL, MariaDB, MongoDB
+  and Redis; imported runtime/authentication proof is PostgreSQL only. Source
+  encrypted secrets, storage/data restoration and unsupported settings retain
+  explicit manual steps. Other engines and repository-backed Coolify Compose
+  applications remain unsupported by that reader.
+- [ ] Full volume backup/restore and terminal WebSocket reconnect are not proved
+  by the two-stack Compose exercise. Named-volume persistence, rollback,
+  exact-container exec and raw per-service lookup passed.
+
+### Maintenance
+
+- [ ] Revisit the remaining moderate `postcss-selector-parser` advisory when
+  `@tailwindcss/typography` publishes a compatible resolution; keep the blocking
+  high/critical audit gate. The PR #15 evidence table below records the current
+  dependency decision.
+- [ ] Keep release/upgrade notes explicit about legacy Compose stacks sharing
+  an environment needing redeploy. Legacy Swarm Stack naming upgrades require
+  an explicit Stop and verified target-node storage placement; anonymous/image
+  volumes need a backed-up transition to declared named volumes. Command
+  completion does not establish generic application health.
+
+The following previously open integration items are complete within these
+stated evidence boundaries:
+
+| Completed work | Current evidence and boundary |
+| --- | --- |
+| PR #17 atomic first-admin setup | Merged as `973acda`: transaction-level admission/user/credential/session writes, seven HTTP/Postgres regressions and six concurrent signups across two processes producing exactly one admin. Restart, failure/retry, invite and controlled OAuth proof is recorded below. |
+| PR #14 preview database/provider integration | Real isolated Gitea 1.25.4 clone/build, Swarm/Traefik route and success/failure commit statuses; separate seeded PostgreSQL database/user, redeploy without reseeding, failure recovery, expiry and deletion. Hosted providers and complete fork delivery remain above. |
+| PR #14 Dokploy importer | Official v0.30.8 API and genuine `pg_dump` inspect/plan/apply/repeat; explicit application/Compose deployment and PostgreSQL authentication passed. Import alone remains idle and changes no runtime/proxy; source secrets/data still require the reported manual work. |
+| PR #14 Update preflight | Desktop/mobile light/dark browser pass, 16 fixture scenarios per theme, actual registry/disk/platform/backup/release APIs and role checks. Update actions were intercepted; live platform rollout is not a browser claim. |
+| PR #16 Compose URL UI | Paste/upload/raw URL creation is browser-verified, including validation failures that retain the draft and insert no row. Saving does not deploy. |
+| PR #16 second public catalog | Coolify source add/sync/report and deployment UI passed; pinned revision `2db26e88abd670b41848cde663f8130fd0d62743` gives 226 accepted / 133 rejected from 359 entries, with 16 advisory image warnings. Two real Umami/Postgres installs passed distinct credentials, isolated DNS/data, redeploy and rollback; catalog acceptance is not a guarantee for every entry. |
+| PR #16 populated dashboard | Recent deployments populated, three soft-navigation cycles and 12 idle seconds passed without hydration/browser errors or deployment requests. The historical hydration/idle-dashboard tasks below are closed. |
+| PR #16 Coolify API reader | Official v4.4.6 image/public-Git applications, raw Compose services and all five supported database configuration kinds passed inspect/plan/apply/repeat. A fresh selected image/Postgres import then explicitly started with HTTP 200 and generated-password TCP authentication; repository Compose applications/other database engines are skipped and secrets/data remain manual. |
+
+## Operator workflow and migration workspace — 2026-10-15
+
+Implemented in [PR #16](https://github.com/bablilayoub/nixploy/pull/16) on
+`codex/migration-workspace`, integrating the merged PR #15 dependency baseline
+(`401e042`). The primary checkout and existing workloads remain untouched.
+
+- **Panel:** consistent page/service headings, mobile project health, separated
+  environment/actions/filters, useful partial errors/retry, keyboard focus and
+  page selection. Fixed duplicate project dialogs, URL history selection,
+  unauthorized Docker health and missing live health invalidations. Production
+  browser checks include populated recent deployments, three soft-navigation
+  cycles and zero deployment requests over 12 idle seconds.
+- **Compose creation:** paste/upload/raw URL validation happens before insertion;
+  failures retain the draft and create no orphan. Saved services remain idle
+  until an explicit deployment. Ten real browser scenarios cover unsafe YAML,
+  safe parser locations, oversized files, HTML, redirects, metadata and private
+  egress, with desktop/mobile light/dark evidence.
+- **Migration center:** Dokploy API/dump and live Coolify API inventory, selected
+  services, target review, explicit apply, partial results, resource links and
+  concrete secrets/data/storage/server/routing/deployment tasks. Source keys
+  leave page/query mutation memory after completion or source changes. Prepared
+  snapshots, HMAC review binding, source/target drift, hidden-project access,
+  restricted creation, ambiguous targets and CLI partial failures are covered.
+  Review fingerprints ignore unordered target service rows while retaining
+  secret values and nested ordered settings. Reports omit executable and
+  credential-bearing content; shared value groups show copy/clear/preserve.
+- **Real sources:** isolated official Dokploy v0.30.8 API plus genuine pg_dump,
+  and official Coolify v4.4.6 API. Coolify proof covers image/public-Git apps,
+  raw Compose, all five database configuration kinds and domains; KeyDB and
+  repository Compose applications are explicitly skipped. Repeat/read-token
+  imports retain IDs, manual replacements and database passwords, and imports
+  alone change no runtime/proxy configuration. A fresh selected image/Postgres
+  import stays idle, then explicitly starts: HTTP **200**, target-password TCP
+  authentication, and rejection of source/wrong passwords.
+- **Coolify catalog:** official revision
+  `2db26e88abd670b41848cde663f8130fd0d62743`, all **359** entries inspected:
+  **226 accepted / 133 rejected**, **16 advisory image warnings**. Compatibility
+  counts are not runtime guarantees. Two actual Umami/Postgres installations
+  have distinct generated credentials and marker data; each app repeatedly
+  resolves and queries only its own database. Data/credentials survive upgrade,
+  redeploy, stop/start and rollback, with HTTP and controlled trusted TLS **200**.
+- **Template inputs:** translated Compose default operators remain intact.
+  Ordinary cleared form values stay empty; blank automatic inputs still resolve
+  fresh installation defaults. `:?` error text stays descriptive and never
+  becomes a credential. Missing/empty required inputs fail before creating a
+  service. Docker Compose config-only checks cover absent, empty and supplied
+  values; eight targeted desktop/mobile light/dark screenshots verify the
+  actual form with intercepted deployment payloads and zero browser errors.
+- **Compose isolation:** deployed service keys/shared names are qualified, bare
+  aliases stay private, named-volume/project identity remains stable, and old
+  container labels remain discoverable. A real legacy image-VOLUME upgrade is
+  refused before replacing the container; its volume/marker stays intact.
+  A raw branch-preview fixture deploys/deletes through the API/worker while
+  preserving the parent's runtime/data; preview row, network and files are
+  removed. Raw per-service lookup and exact-container exec pass for both stacks.
+- **Swarm counterpart:** two real Umami/Postgres Stacks in one environment pass
+  repeated app-side database queries and private DNS checks with distinct
+  credentials/markers. Forced application/database task replacement through
+  redeploy and rollback preserves exact named-volume identity and data. Live
+  legacy Deploy **and** rollback refuse before mutation: service/container IDs,
+  source/rendered files and Traefik hashes stay unchanged, and HTTP/marker checks
+  still pass. Configuration save, domain resync, diagnosis, status, exec and
+  backup/volume lookup still address that live legacy runtime. Explicit Stop
+  returns only after task containers leave; immediate Deploy then preserves the
+  same named volume, credentials and marker. A real anonymous image-volume
+  fixture is also refused with its exact container/volume/data intact. Scoped
+  cross-service aliases and actual domain diagnosis pass. A real raw Stack
+  branch preview passes compact-name deployment, HTTP/domain diagnosis and
+  deletion convergence without changing parent container IDs, volume identity
+  or marker data. Captured test resources are removed; the original four Swarm
+  service IDs remain at 1/1 and all five original proxy hashes match. This is
+  single-node proof; remote placement and full backup/restore remain separate.
+
+Final local gates on the integrated dependency/auth baseline: **216 server files,
+3,032 passed, 1 optional image-probe test skipped** with isolated Postgres;
+**94 CLI / 102 web** tests; all workspace TypeScript checks; strict Biome
+(**1,098 files**), knip **5.88.1**, separate registry image probes, and all three
+production builds. Production browser checks have **60** desktop/mobile
+light/dark surface/inventory/review screenshots and seven edge cases, including
+a genuine dump upload/inspect/plan/apply, partial retry reconnection, late
+responses and credential-cache clearing, with zero browser errors. Two further
+edge screenshots bring that production total to **62**. The final template-form
+production replay adds **8** more (**70** total), with catalog/project fixtures
+and intercepted deployment requests evaluated by the real resolver/renderer;
+it creates no jobs or database fixtures and records zero errors or overflow.
+
+Landing production `/docs/migrate` and `/api#router-import` passed eight more
+screenshots with zero browser errors or horizontal overflow. The shipped site
+is fixed dark: both OS preferences retain that theme; any light-token previews
+are explicitly labelled. Evidence: `.nixploy-data/verification/landing-final/report.json`.
+
+Initial CI's new CodeQL finding classified a JWT test's expected HMAC as a
+password hash; independent WebCrypto signature verification replaces that test
+calculation. Security gates remain enabled; exact-head CI is tracked on PR #16.
+
+Material upgrade guidance is in `deployment-flow.md`: **all legacy Compose
+stacks sharing an environment must be redeployed** to remove their old bare
+shared aliases. Anonymous/image volumes need a backed-up migration to declared
+named volumes before this naming transition. Legacy Swarm Stack upgrades also
+require an explicit Stop and verified target-node storage placement. Namespaces
+above 48 characters cannot fit an isolated Stack key and are rejected; legacy
+runtime lookup remains available. A completed Compose command does
+not promise generic application health. Preview proof used a real fixture
+lifecycle, not a new provider webhook; terminal-equivalent exec is not WebSocket
+reconnect proof. Full volume backup/restore, the other imported database
+engines' runtime, public DNS/ACME and same-host takeover remain separate.
+
+Design decisions live in `.ui-craft/{brief,tokens,implementation-plan}.md`.
+Sanitized proof reports, harnesses and screenshots are retained under ignored
+`.nixploy-data/verification/` and copied to the local handoff artifact directory
+before cleanup. Only test-owned resources and source credential/dump material
+are removed; original services, Traefik files and unattributed storage remain.
+
 ## Atomic first-admin setup — 2026-10-15
+
+Merged in [PR #17](https://github.com/bablilayoub/nixploy/pull/17) as `973acda`;
+its exact-head CI and CodeQL passed before integration here.
 
 Confirmed the remaining race through actual HTTP signup against a private
 fresh Postgres database: two requests created two admins. The advisory lock
@@ -30,7 +231,7 @@ gates pass: **96 web / 93 CLI** tests, all four TypeScript checks, changed-file
 formatting, strict Biome (**1,078 files**), knip **5.88.1**, and web/landing/CLI
 production builds. The setup tests create and remove their own database;
 the separate probe database was also removed, preserving other suites'
-fixtures and dev data. Pushed-head gates are tracked on the ready auth PR.
+fixtures and dev data. The auth PR's exact-head CI and CodeQL passed; the migration workspace now includes that base.
 
 ## Production dependency advisory follow-up — 2026-10-15
 
@@ -303,7 +504,7 @@ Known gaps:
 - Template brand marks keep their own colour (they are content, not the
   palette); desaturating them is a one-line change if that reads wrong.
 
-## Snapshot — 2026-09-11 (end of the audit implementation: Sprints A–E + final wave)
+## Historical snapshot — 2026-09-11 (end of the audit implementation: Sprints A–E + final wave)
 
 | Item | Value |
 | --- | --- |
@@ -321,7 +522,7 @@ Known gaps:
 | Schema | 29 migrations (`0000`…`0028_ancient_shatterstar` = compose previews); 0026 layer-4 routing + engine versions + logical DBs, 0027 compose snapshots + template sources + image schedules + preview commit columns |
 | Product | Phases 1–10 of `PLAN.md` shipped plus the 2026-09 audit plan; 44 routers / 390 procedures; 145 templates + org template sources; 11 notification providers; MCP with 32 tools; CLI 194+ registry commands |
 
-## What the stability sweep did (2026-09-10/11)
+## Historical stability sweep (2026-09-10/11)
 
 Seven read-only audits (deploy engine, compose/DB/templates, Traefik/domains/previews, auth/tenancy/API, integrations/jobs, ops scripts, web UI ×4 partitions) produced ~120 confirmed findings; six fix passes plus a remote-server redesign landed them. Each commit body on `work/stability-and-landing` lists exactly what changed. Highlights, most important first:
 
@@ -330,7 +531,7 @@ Seven read-only audits (deploy engine, compose/DB/templates, Traefik/domains/pre
 - **UI**: capability gating everywhere (viewers stop seeing controls that 403), error states instead of misleading empty copy, correct invalidations, better-auth `{ error }` handling, setup-wizard retry, status polling after deploy, log viewer reconnect stop, hydration fixes.
 - **Landing**: rebuilt (`apps/landing`) and then redesigned to a strict monochrome layout (centered hero + framed dashboard shot, stack marquee, stats, statement, code-to-production accordion, 2×3 features, security, plan cards shared with `/pricing`, two-column FAQ, CTA). Theme tokens in `globals.css` are greys/white only; `components/ui.tsx` holds the shared `Button`/`WindowFrame`/`SectionHeading` primitives.
 
-## Dependency upgrade candidates (remaining majors)
+## Historical dependency upgrade candidates — 2026-09-11
 
 | Package | Current → Latest | Risk | Notes |
 | --- | --- | --- | --- |
@@ -343,7 +544,12 @@ Seven read-only audits (deploy engine, compose/DB/templates, Traefik/domains/pre
 
 Image pins to review periodically: `traefik:v3.7.13`, `postgres:17-alpine`, `node:22-alpine`, `traefik/whoami:v1.10.1`, template images (CI checks tags exist, not freshness).
 
-## Known debt / follow-ups (from the sweep, not yet done)
+## Historical debt / follow-ups — 2026-09-11
+
+This is the sweep's dated checklist, not the active backlog. Some unchecked
+items were subsequently completed; current gaps and evidence are reconciled
+in **Active backlog** above. Package, UI and local-resource observations here
+are historical and require revalidation before becoming new work.
 
 - [x] Sprint B leftovers, all landed 2026-09-11: `CommandError` on `DomainError` + 18 router re-wraps deleted (`aaa7cef`), preview commit metadata + self-hosted commit links (`9415096`), streaming DB dumps (`7cb67ee`; instance/volume/redis archives still use the ~37 MB base64 pipeline).
 - [x] Web toast sweep (2026-09-11): 127 → 44 `toast.error(` sites. The 44 left are deliberate — static validation, clipboard failures, the raw-fetch auth forms (already on `describeError`), template literals that embed `describeError(...)`, and 10 in `services/domain-manager.tsx` (owned by another branch at the time).
@@ -380,12 +586,13 @@ Landed in `apps/web` (uncommitted at the time of writing): UX audit F8/F9/F10/F1
 - **Vocabulary.** Deployment `done` reads **Succeeded** everywhere (`status-badge.tsx`, `lib/status.ts#deploymentStatusLabel`, preview deployments, the dashboard list); `error` reads **Failed** in the dashboard list. Dates go through `<DateTime>` / `formatRelative` in deployment history, the update card, the backups lists and the dashboard.
 - **Org accent (F34).** `OrgBrandingProvider` sets `--primary` **and** a luminance-derived `--primary-foreground` (a pale accent used to render white-on-white), plus `--brand`, which `UnderlineTabsTrigger` uses for the active-tab underline. `--brand` defaults to `--primary` in `globals.css`, so the panel stays monochrome until an accent is saved. The scope is spelled out in the branding card's helper text.
 
-## Next steps
+## Historical next steps — 2026-09-20, partly annotated 2026-10-15
 
-Domain/DNS items refreshed 2026-10-15; other entries retain the 2026-09-20
-snapshot (the v0.2-era list that stood here — sprint merges, the
-`v0.2.0` release, the multi-node test — is done or superseded; see the session
-log).
+Retained as a planning record, not the current work list. **Active backlog**
+above supersedes it, including completed preview/import/update integration,
+Compose URL/catalog work and dashboard browser verification. Multi-node and
+fresh split-worker VM evidence remain open; local or CI proof is not a claim
+that those host checks were completed.
 
 1. ~~**Cut a release.**~~ **v0.5.0 is out (2026-09-20)** — everything from
    the roadmap's v0.3, v0.4, v0.5 (minus the takeover) and most of v0.6; the
@@ -429,7 +636,7 @@ log).
    browser-verified in light/dark on 2026-10-15**, with provider fixtures and
    actual local domain/diagnosis requests distinguished above.
 
-## Session log
+## Historical session log
 
 - **2026-10-15 (domain / DNS → HTTPS verification)** — completed the isolated
   local Swarm/Traefik and light/dark browser pass, wrong-port failure/recovery,

@@ -158,18 +158,51 @@ release. An organization can add its own catalogs under
 TS catalog"). Sources are **org-scoped**: a source belongs to one organization
 and only ever appears in that organization's gallery.
 
-Three kinds:
+Four kinds:
 
 | Kind | What it points at |
 | --- | --- |
 | `http-json` | One JSON document: a bare array of templates, or `{ "templates": [ … ] }` so the index can carry its own metadata. |
 | `git` | A repository whose `templates/index.json` has that same shape. Cloned shallow, read, and discarded — only the cache survives. |
+| `coolify` | Coolify's generated `templates/service-templates.json` index, keyed by template id with Base64-encoded Compose. Select **Coolify catalog** in Settings → Templates to prefill the official source, or provide a compatible fork's URL. Each entry is translated explicitly, validated and checked by the existing Compose safety rules. |
 | `blueprints` | A repository laid out as `blueprints/<id>/{meta.json, template.toml, docker-compose.yml}` — the format of the Dokploy templates catalog (`https://github.com/Dokploy/templates.git`, 500+ entries). Each folder is translated by `modules/templates/blueprints.ts`: `[variables]` helpers become deploy-time placeholders named after the variable (so a password used in three keys is generated once), `${domain}` becomes `{{domain}}`, `[[config.mounts]]` files become inline compose `configs:` (the volume line that referenced `../files/<file>` becomes a `configs:` attachment), an undeclared `../files/<dir>` becomes a named volume of the stack, `env_file: .env` becomes explicit `KEY: ${KEY}` entries, `traefik.*` labels are dropped (routing here is a domain row, not a label), the blueprint's tags are resolved to one of this catalog's own categories (`modules/templates/categories.ts` — the first tag that maps wins, generic tags like `self-hosted` are deliberately unmapped, and anything unrecognized lands in `Community`; taking the first tag verbatim gave **209 categories for 436 templates**, 125 of them holding one entry), and a blueprint with no domain gets its first `expose:`d port suggested — or, when nothing is exposed at all, its first service on 80 as a placeholder, because a tunnel client or a cache is still worth having. Every translated entry then goes through the same compose safety checks a deploy runs, so a template that mounts the Docker socket, binds host paths or asks for privileged capabilities is a rejection line, not a gallery card that fails at deploy. On the public catalog that is 436 of 532 deployable (2026-09-20); the rest are listed with their reason in the source's sync report. |
 
-Entries use exactly the `Template` shape above, minus two fields: `category`
+JSON and Git index entries use the `Template` shape above: `category`
 defaults to `"Custom"` when omitted, and **`hostPrivileged` is never accepted
 from a remote source** (it relaxes the compose safety checks and is an
 instance-admin decision about the built-in catalog only).
+
+### Coolify compatibility
+
+The source format and generated-variable meanings follow the official
+[template contribution guide](https://coolify.io/docs/contribute/service) and
+[Compose variable reference](https://coolify.io/docs/services/configuration/docker-compose).
+The translator supports one public Compose service target, optional internal
+port suffixes, ordinary named volumes (including omitted top-level declarations),
+`SERVICE_NAME`, `SERVICE_USER`, `SERVICE_LOWERCASEUSER`, `SERVICE_PASSWORD`,
+`SERVICE_PASSWORDWITHSYMBOLS`, `SERVICE_BASE64`, `SERVICE_REALBASE64`, and `SERVICE_HEX`
+with their documented sizes. The same complete variable name always resolves to
+one value within an installation. A new installation generates fresh values;
+ordinary redeploys keep the values saved in the Compose service's encrypted env.
+`BASE64` produces alphanumeric text; `REALBASE64` encodes random bytes.
+
+`SERVICE_FQDN` produces a hostname and `SERVICE_URL` produces an HTTP URL for the
+domain attached at installation. Domain-dependent templates require that domain.
+The initial domain uses HTTP; after enabling HTTPS in Domains, update the saved
+`SERVICE_URL` values accordingly. Some legacy upstream templates use FQDN values
+where their application expects a full URL: review the upstream application docs
+and adjust those environment expressions before deploying. Bare environment keys
+become explicit references. `${KEY:-value}` / `${KEY-value}` initialize defaults;
+`${KEY:?value}` initializes a required field, matching the source's convention.
+Missing required fields fail before a service row is created.
+
+Multiple public targets, domain path suffixes or overrides, ambiguous magic
+names, Supabase-specific JWT generation, nested interpolation, Coolify-only inline
+file mounts and health-check exclusions are rejected with a per-entry reason.
+Host mounts, sockets, capabilities, networking and port publishing still use the
+same safety and instance-admin gates as every other source. A successful sync
+means accepted definitions were indexed; it does not prove every application
+starts or imports existing data. Read the sync report and test the selected stack.
 
 **Published host ports are indexed, not rejected.** A catalogue entry is not a
 running stack: `ports:` is refused on a compose row that has not opted in, but
@@ -192,7 +225,7 @@ routinely carry example credentials.
 A sync:
 
 1. fetches the index through the egress guard — `assertSafeOutboundUrl` +
-   `pinnedFetch` for `http-json` (https only unless the instance allows
+   `pinnedFetch` for `http-json` and `coolify` (https only unless the instance allows
    private egress, only vetted addresses dialled, **redirects are never
    followed**, body capped at 4 MiB), `assertSafeGitCloneUrl` plus the
    hardened git environment for `git`;
@@ -249,11 +282,24 @@ verbatim, because only the key is inspected.
 
 ## Deploy from a compose URL
 
+In a project environment, choose **Add service → Compose**. Paste YAML or
+upload a `.yml` / `.yaml` file (up to 1 MiB), choose **Raw file URL** to fetch
+one (up to 256 KiB), or choose **Set up later** for an empty service. Choose
+Docker Compose for a single server or Docker Stack for Swarm. Creating opens
+the Compose file tab for review; no containers start until you choose Deploy.
+Add environment variables and domains before that first deployment.
+
 `compose.createFromUrl({ url, environmentId, name })` creates a raw compose
 service from a compose file at an http(s) URL. The URL goes through the same
 egress guard, the body through the same safety checks `saveComposeFile` runs,
-and nothing is deployed until `compose.deploy`.
+and nothing is deployed until `compose.deploy`. `compose.create` also accepts
+an optional `composeFile` when `sourceType` is `raw`. Validation happens
+before the service row is inserted, so a refused file leaves no empty service.
 
 Give it the **raw** file URL: redirects are not followed, and an HTML response
 (the usual mistake — a repository page instead of the raw file) is rejected
-with that message.
+with that message. Private addresses require private egress to be enabled
+by the instance admin. Host binds, host port publishing and `build:` blocks
+are refused on initial creation; use images and named volumes, route through
+domains, or create an empty service and configure the supported options
+before saving an adjusted file. No external files or data volumes are copied.

@@ -36,8 +36,8 @@
  */
 
 import { existsSync } from "node:fs";
-import { createRequire } from "node:module";
 import { mkdir } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { delimiter, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -97,10 +97,7 @@ async function loadChromium() {
 	// CommonJS way first (NODE_PATH entries, then the repo) and imported by
 	// file URL — that is how the CI scratch install becomes visible.
 	const require = createRequire(import.meta.url);
-	const searchPaths = [
-		...(process.env.NODE_PATH ?? "").split(delimiter).filter(Boolean),
-		repoRoot,
-	];
+	const searchPaths = [...(process.env.NODE_PATH ?? "").split(delimiter).filter(Boolean), repoRoot];
 	for (const candidate of candidates) {
 		if (candidate.startsWith("/") && !existsSync(candidate)) continue;
 		try {
@@ -208,10 +205,10 @@ async function main() {
 		// list — so each step opens the new row by its link afterwards.
 		step("create a project");
 		const projectName = `ui-${STAMP}`;
-		await page.getByRole("button", { name: "New project" }).click();
+		await page.getByRole("button", { name: "New project" }).first().click();
 		const projectDialog = page.getByRole("dialog");
-		await projectDialog.getByLabel("Name", { exact: true }).fill(projectName);
-		await projectDialog.getByRole("button", { name: "Create", exact: true }).click();
+		await projectDialog.getByLabel("Project name", { exact: true }).fill(projectName);
+		await projectDialog.getByRole("button", { name: "Create project", exact: true }).click();
 		await page.getByText(`Project "${projectName}" created`).waitFor({ timeout: 30_000 });
 		// No reload on purpose: on an instance whose project list was empty the
 		// row used to appear only on the next load (query-core de-duplicated the

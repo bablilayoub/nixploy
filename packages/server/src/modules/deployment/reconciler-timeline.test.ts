@@ -69,6 +69,16 @@ describe("composeServiceSuffix", () => {
 		expect(composeServiceSuffix("web-abc123", "web-abc123")).toBeNull();
 		expect(composeServiceSuffix("something-else", "web-abc123")).toBeNull();
 	});
+
+	it("uses source metadata for qualified keys and keeps ambiguous legacy prefixes verbatim", () => {
+		expect(composeServiceSuffix("shop-def456_shop-def456-api-release1", "shop-def456", "api")).toBe(
+			"api",
+		);
+		expect(composeServiceSuffix("shop-def456_shop-def456-api", "shop-def456")).toBe(
+			"shop-def456-api",
+		);
+		expect(composeServiceSuffix("other-stack_api", "shop-def456", "api")).toBeNull();
+	});
 });
 
 describe("buildTaskEventInputs", () => {
@@ -113,6 +123,21 @@ describe("buildTaskEventInputs", () => {
 			NOW,
 		);
 		expect(inputs).toEqual([]);
+	});
+
+	it("shows the YAML key in qualified Stack events while retaining the physical name for dedupe", () => {
+		const physical = "shop-def456_shop-def456-api-release1";
+		const current = {
+			...snapshot([task({ serviceName: physical })]),
+			byStack: new Map([[stack.appName, [physical]]]),
+			sourceServiceNames: new Map([[physical, "api"]]),
+		};
+		const index = buildServiceNameIndex([stack], current.byStack);
+		const { inputs } = buildTaskEventInputs(current, index, NOW);
+		expect(inputs[0]?.title).toContain("— api");
+		expect(inputs[0]?.title).not.toContain("release1");
+		expect(inputs[0]?.metadata).toMatchObject({ service: "api" });
+		expect(inputs[0]?.dedupeKey).toBe(`${physical}:task:task-1:failed`);
 	});
 });
 

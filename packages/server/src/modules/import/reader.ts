@@ -1,4 +1,5 @@
 import type { DatabaseServiceKind } from "../services/registry";
+import type { ImportNote } from "./normalize";
 import type {
 	SourceApplication,
 	SourceCompose,
@@ -19,6 +20,8 @@ export interface SourceReader {
 	getApplication(applicationId: string): Promise<SourceApplication>;
 	getCompose(composeId: string): Promise<SourceCompose>;
 	getDatabase(kind: DatabaseServiceKind, id: string): Promise<SourceDatabase>;
+	/** Truthful provider-specific manual work collected while hydrating resources. */
+	getNotes?(): ImportNote[];
 	/** Release whatever the reader holds (a throwaway container); never throws. */
 	close(): Promise<void>;
 }

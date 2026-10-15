@@ -11,11 +11,25 @@ const mocks = vi.hoisted(() => ({
 	findFirst: vi.fn(),
 	set: vi.fn(),
 	returning: vi.fn(),
+	environmentFindFirst: vi.fn(),
+	insert: vi.fn(),
+	run: vi.fn(),
+	writeComposeFile: vi.fn(),
+	cloneComposeSource: vi.fn(),
 }));
 
 vi.mock("../../db", () => ({
 	db: {
-		query: { compose: { findFirst: mocks.findFirst } },
+		query: {
+			compose: { findFirst: mocks.findFirst },
+			environments: { findFirst: mocks.environmentFindFirst },
+		},
+		insert: () => ({
+			values: (values: unknown) => {
+				mocks.insert(values);
+				return { returning: mocks.returning };
+			},
+		}),
 		update: () => ({
 			set: (values: unknown) => {
 				mocks.set(values);
@@ -24,7 +38,11 @@ vi.mock("../../db", () => ({
 		}),
 	},
 }));
-vi.mock("./source", () => ({}));
+vi.mock("./source", () => ({
+	runComposeCommand: mocks.run,
+	writeComposeFile: mocks.writeComposeFile,
+	cloneComposeSource: mocks.cloneComposeSource,
+}));
 vi.mock("./containers", () => ({
 	listComposeContainers: vi.fn(async () => []),
 	invalidateComposeContainers: vi.fn(),
@@ -45,7 +63,10 @@ import {
 	COMPOSE_SOURCE_FIELDS,
 	type ComposeRow,
 	composeSourceChanged,
+	createCompose,
+	prepareComposeFiles,
 	saveComposeFile,
+	stopCompose,
 	updateComposeById,
 } from "./service";
 
@@ -104,6 +125,140 @@ beforeEach(() => {
 	vi.clearAllMocks();
 	mocks.findFirst.mockResolvedValue(privilegedRow);
 	mocks.returning.mockResolvedValue([privilegedRow]);
+	mocks.environmentFindFirst.mockResolvedValue({ environmentId: "env-1" });
+	mocks.run.mockResolvedValue("");
+});
+
+describe("prepareComposeFiles legacy Stack refusal", () => {
+	it("queries the primary and refuses before any source/rendered writes or clone", async () => {
+		mocks.run.mockResolvedValueOnce("a".repeat(25)).mockResolvedValueOnce(
+			JSON.stringify([
+				{
+					Spec: {
+						Name: "portainer-abc123_db",
+						Labels: { "com.docker.stack.namespace": "portainer-abc123" },
+						TaskTemplate: { ContainerSpec: {} },
+					},
+				},
+			]),
+		);
+		await expect(
+			prepareComposeFiles({ ...privilegedRow, composeType: "stack", serverId: "remote-1" }),
+		).rejects.toThrow(/legacy service names/);
+		expect(mocks.run).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({ serverId: "remote-1" }),
+			expect.stringContaining("docker service ls"),
+			{ onPrimary: true },
+		);
+		expect(mocks.writeComposeFile).not.toHaveBeenCalled();
+		expect(mocks.cloneComposeSource).not.toHaveBeenCalled();
+		expect(mocks.findFirst).not.toHaveBeenCalled();
+	});
+});
+
+describe("stopCompose across naming upgrades", () => {
+	it("waits for actual Stack containers after service removal, and only then marks idle", async () => {
+		mocks.run
+			.mockResolvedValueOnce("primary-node")
+			.mockResolvedValueOnce("a".repeat(25))
+			.mockResolvedValueOnce(
+				JSON.stringify([{ NodeID: "primary-node", Status: { State: "running" } }]),
+			)
+			.mockResolvedValueOnce("")
+			.mockResolvedValueOnce("");
+		await stopCompose({ ...privilegedRow, composeType: "stack" });
+		expect(mocks.run.mock.calls.map((call) => call[1])).toEqual([
+			"docker info --format '{{.Swarm.NodeID}}'",
+			"docker stack ps --no-trunc -q 'portainer-abc123'",
+			`docker inspect --type task '${"a".repeat(25)}'`,
+			"docker stack rm --detach=false 'portainer-abc123'",
+			"docker ps -aq --filter label=com.docker.stack.namespace='portainer-abc123'",
+		]);
+		expect(mocks.set).toHaveBeenCalledWith({ status: "idle" });
+	});
+	it.each(["running", "remove", "orphaned"])(
+		"refuses an unverifiable task node in %s before removal and does not mark idle",
+		async (state) => {
+			mocks.run
+				.mockResolvedValueOnce("primary-node")
+				.mockResolvedValueOnce("a".repeat(25))
+				.mockResolvedValueOnce(
+					JSON.stringify([{ NodeID: "unknown-remote", Status: { State: state } }]),
+				);
+			await expect(stopCompose({ ...privilegedRow, composeType: "stack" })).rejects.toThrow(
+				/Cannot verify every Swarm task node/,
+			);
+			expect(mocks.run).toHaveBeenCalledTimes(3);
+			expect(mocks.set).not.toHaveBeenCalled();
+		},
+	);
+
+	it("stops legacy containers by exact project ownership without re-rendering source or volumes", async () => {
+		mocks.run.mockResolvedValueOnce("abcdef123456\n").mockResolvedValueOnce("");
+		await stopCompose(privilegedRow);
+		expect(mocks.run.mock.calls.map((call) => call[1])).toEqual([
+			"docker ps -q --filter label=com.docker.compose.project='portainer-abc123'",
+			"docker stop 'abcdef123456'",
+		]);
+	});
+
+	it("refuses unexpected container identifiers before any stop command", async () => {
+		mocks.run.mockResolvedValueOnce("invalid-output");
+		await expect(stopCompose(privilegedRow)).rejects.toThrow(/Could not verify Compose containers/);
+		expect(mocks.run).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("createCompose with an initial file", () => {
+	const input = {
+		name: "stack",
+		environmentId: "env-1",
+		composeType: "docker-compose",
+		sourceType: "raw",
+	} as const;
+
+	it.each([
+		"services: {}",
+		"services:\n  web: [not-a-service]",
+		"services:\n  web:\n    image: nginx\n    ports: ['8080:80']",
+		"services:\n  web:\n    build: .",
+		DOCKER_SOCK_COMPOSE,
+	])("refuses invalid or unsafe input before inserting a row: %s", async (composeFile) => {
+		await expect(createCompose({ ...input, composeFile })).rejects.toMatchObject({
+			code: "BAD_REQUEST",
+		});
+		expect(mocks.insert).not.toHaveBeenCalled();
+		expect(mocks.environmentFindFirst).not.toHaveBeenCalled();
+	});
+
+	it("saves the validated source with the row in one insert and leaves runtime untouched", async () => {
+		const composeFile = "services:\n  web:\n    image: nginx:alpine\n";
+		await createCompose({ ...input, composeFile });
+		expect(mocks.insert).toHaveBeenCalledWith(
+			expect.objectContaining({
+				composeFile,
+				sourceType: "raw",
+				hostPrivileged: false,
+				publishPorts: false,
+			}),
+		);
+		expect(mocks.set).not.toHaveBeenCalled();
+	});
+
+	it("keeps the existing empty draft path and refuses a file for a git source", async () => {
+		await createCompose(input);
+		expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ composeFile: "" }));
+		mocks.insert.mockClear();
+		await expect(
+			createCompose({
+				...input,
+				sourceType: "git",
+				composeFile: "services:\n  web:\n    image: nginx\n",
+			}),
+		).rejects.toMatchObject({ code: "BAD_REQUEST" });
+		expect(mocks.insert).not.toHaveBeenCalled();
+	});
 });
 
 describe("composeSourceChanged", () => {

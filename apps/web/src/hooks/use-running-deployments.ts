@@ -149,6 +149,8 @@ export function useRunningDeployments(scope: RunningDeploymentScope = {}) {
 			invalidate(trpc.deployment.byCompose.pathKey());
 		}
 		invalidate(trpc.environment.byProject.pathKey());
+		invalidate(trpc.project.all.pathKey());
+		invalidate(trpc.project.overview.pathKey());
 		invalidate(trpc.deployment.byProject.pathKey());
 		invalidate(trpc.deployment.statsByProject.pathKey());
 	}, [data]);

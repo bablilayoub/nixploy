@@ -2,6 +2,7 @@ import { execAsync, execAsyncRemote } from "../../utils/exec";
 import { createTtlCache, DOCKER_LISTING_TTL_MS } from "../../utils/ttl-cache";
 import { invalidateDockerListings } from "../docker/containers";
 import { notFound } from "../errors";
+import { COMPOSE_SOURCE_SERVICE_LABEL, sourceComposeServiceName } from "./commands";
 
 export type ComposeContainerRow = {
 	id: string;
@@ -50,8 +51,13 @@ function serviceFromLabels(labels: string | undefined): string | null {
 function displayService(appName: string, labels: string | undefined, names: string): string | null {
 	const fromLabels = serviceFromLabels(labels);
 	if (fromLabels) {
-		if (fromLabels.startsWith(`${appName}_`)) return fromLabels.slice(appName.length + 1);
-		return fromLabels;
+		const sourceLabel = labels
+			?.split(",")
+			.find((part) => part.startsWith(`${COMPOSE_SOURCE_SERVICE_LABEL}=`));
+		return sourceComposeServiceName(
+			fromLabels.startsWith(`${appName}_`) ? fromLabels.slice(appName.length + 1) : fromLabels,
+			sourceLabel?.slice(COMPOSE_SOURCE_SERVICE_LABEL.length + 1),
+		);
 	}
 	// Fallback: <appName>-<service>-<n> or <appName>_<service>.…
 	const name = names.split(",")[0]?.replace(/^\//, "") ?? "";

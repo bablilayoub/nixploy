@@ -28,6 +28,7 @@ const envVarSchema = z.object({
 		.regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "env keys must be shell-safe (A-Z, 0-9, _)"),
 	default: z.string().max(4096).default(""),
 	description: z.string().max(512).default(""),
+	required: z.boolean().optional(),
 });
 
 export const remoteTemplateSchema = z.object({
@@ -81,6 +82,7 @@ export const remoteTemplateSchema = z.object({
 			.regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/, "serviceName must be a compose service name"),
 		port: z.number().int().min(1).max(65535),
 	}),
+	requiresDomain: z.boolean().optional(),
 	// `hostPrivileged` is deliberately NOT accepted from a remote source: it
 	// relaxes the compose safety checks and is an instance-admin decision
 	// about the built-in catalog only.
