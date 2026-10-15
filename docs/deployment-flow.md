@@ -507,7 +507,7 @@ Docker itself prefixes a Stack key once, so its physical Swarm service is
 `<appName>_<appName>-<sourceService[-suffix]>`. The repeated app name is
 intentional: the key must already be unique before Docker adds its namespace.
 When that full physical name exceeds Docker's 63-character limit, only the
-YAML key switches to a readable source prefix plus a deterministic 64-bit
+YAML key switches to an optional readable source prefix plus a deterministic 64-bit
 SHA-256 digest encoded in lowercase base36. The hash covers the complete
 app name and source service with its suffix. Ordinary names remain unchanged;
 rollback/redeploy and lookup share the same mapping. Namespaces too long to
