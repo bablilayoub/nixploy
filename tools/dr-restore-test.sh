@@ -5,7 +5,8 @@
 #
 #   sudo ./tools/dr-restore-test.sh                       # newest local dump
 #   ./tools/dr-restore-test.sh --dump path/to/dump.sql.gz # a dump you fetched
-#   ./tools/dr-restore-test.sh --dump … --boot            # also boot a panel against it
+#   ./tools/dr-restore-test.sh --dump … --boot --panel-image <ref> \
+#     --recovery-env <file> --docker-socket <disposable-daemon-socket>
 #
 # What it does:
 #   1. finds the newest instance dump (or takes the one you pass);
@@ -14,18 +15,21 @@
 #      command docs/instance-backup.md tells operators to run;
 #   4. asserts the core tables exist and prints their row counts;
 #   5. with --boot, starts the panel image against the restored database and
-#      waits for `GET /api/ready` to answer 200;
+#      waits for `GET /api/ready` to answer 200 (readiness only, not full DR);
 #   6. removes the container (and the booted panel) in a trap, always.
 #
 # Nothing is written to the live database, the config directory or the Swarm.
+# --boot uses a private internal network, loopback ports and role=panel (no jobs).
 #
 # Flags:
 #   --dump <file>     gzipped SQL dump to restore (default: newest found)
 #   --dir <dir>       where to look for dumps (default: <config>/backups)
 #   --port <port>     host port for the scratch Postgres (default: a free one)
 #   --image <ref>     Postgres image        (default: postgres:17-alpine)
-#   --boot            also boot the panel image against the restored database
+#   --boot            require panel readiness against the restored database
 #   --panel-image <ref>  panel image for --boot (default: the running service's)
+#   --recovery-env <file>  Docker-format recovery keys; see docs/instance-backup.md
+#   --docker-socket <path>  explicit DISPOSABLE daemon socket for --boot readiness
 #   --keep            leave the scratch container running for inspection
 #
 # Environment:
@@ -39,6 +43,8 @@ SEARCH_DIR=""
 PG_PORT=""
 PG_IMAGE="postgres:17-alpine"
 PANEL_IMAGE=""
+RECOVERY_ENV=""
+DOCKER_SOCKET=""
 BOOT=0
 KEEP=0
 
@@ -49,9 +55,11 @@ while [ $# -gt 0 ]; do
 		--port) PG_PORT="${2:-}"; shift 2 ;;
 		--image) PG_IMAGE="${2:-}"; shift 2 ;;
 		--panel-image) PANEL_IMAGE="${2:-}"; shift 2 ;;
+		--recovery-env) RECOVERY_ENV="${2:-}"; shift 2 ;;
+		--docker-socket) DOCKER_SOCKET="${2:-}"; shift 2 ;;
 		--boot) BOOT=1; shift ;;
 		--keep) KEEP=1; shift ;;
-		-h|--help) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		-h|--help) sed -n '2,/^set -euo pipefail/{ /^set -euo pipefail/d; s/^# \{0,1\}//; p; }' "$0"; exit 0 ;;
 		*) printf 'Unknown flag: %s (try --help)\n' "$1" >&2; exit 2 ;;
 	esac
 done
@@ -70,13 +78,44 @@ die()  { printf '\n   %s✗ %s%s\n\n' "${C_RED}${C_BOLD}" "$*" "${C_RESET}" >&2;
 command -v docker >/dev/null 2>&1 || die "docker is required"
 docker info >/dev/null 2>&1 || die "the Docker daemon is not reachable"
 
+if [ "${BOOT}" = "1" ]; then
+	command -v curl >/dev/null 2>&1 || die "curl is required for --boot"
+	[ -n "${RECOVERY_ENV}" ] && [ -f "${RECOVERY_ENV}" ] \
+		|| die "--boot requires --recovery-env <file>; keys are not in the instance archive"
+	# A dedicated Docker env file, not a sourced shell .env. Docker preserves
+	# quotes literally, which would silently change the recovered keys.
+	awk '
+		/^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+		{
+			separator = index($0, "="); key = substr($0, 1, separator - 1)
+			value = substr($0, separator + 1)
+			if (!separator || key !~ /^(ENCRYPTION_KEYS|ENCRYPTION_KEY|BETTER_AUTH_SECRET)$/ ||
+				value ~ /^[[:space:]]*["\047]/ || value ~ /["\047][[:space:]]*$/ ||
+				value ~ /\r/ || value ~ /^[[:space:]]*$/ || seen[key]++) invalid = 1
+		}
+		END { exit invalid || !seen["BETTER_AUTH_SECRET"] || !(seen["ENCRYPTION_KEYS"] || seen["ENCRYPTION_KEY"]) }
+	' "${RECOVERY_ENV}" || die "Recovery file must contain only unquoted KEY=value entries: BETTER_AUTH_SECRET and ENCRYPTION_KEYS or ENCRYPTION_KEY (no export or shell syntax)"
+	case "${DOCKER_SOCKET}" in
+		/*) ;;
+		*) die "--boot requires --docker-socket <absolute disposable daemon socket path>" ;;
+	esac
+	[[ "${DOCKER_SOCKET}" != *","* && "${DOCKER_SOCKET}" != *$'\n'* && "${DOCKER_SOCKET}" != *$'\r'* ]] \
+		|| die "Invalid Docker socket path"
+	if [ -z "${PANEL_IMAGE}" ]; then
+		PANEL_IMAGE="$(docker service inspect nixploy --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null || true)"
+	fi
+	[ -n "${PANEL_IMAGE}" ] || die "--boot could not resolve a panel image; pass --panel-image <ref>"
+fi
+
 SCRATCH="nixploy-dr-$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
 PANEL_CONTAINER="${SCRATCH}-panel"
+SCRATCH_NETWORK="${SCRATCH}-network"
 
 cleanup() {
-	[ "${KEEP}" = "1" ] && { warn "Leaving ${SCRATCH} running (--keep). Remove it with: docker rm -f ${SCRATCH}"; return; }
+	[ "${KEEP}" = "1" ] && { warn "Leaving scratch resources (--keep). Cleanup: docker rm -f ${PANEL_CONTAINER} ${SCRATCH}; docker network rm ${SCRATCH_NETWORK}"; return; }
 	docker rm -f "${PANEL_CONTAINER}" >/dev/null 2>&1 || true
 	docker rm -f "${SCRATCH}" >/dev/null 2>&1 || true
+	docker network rm "${SCRATCH_NETWORK}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -84,10 +123,9 @@ trap cleanup EXIT
 find_dump() {
 	local dir="${SEARCH_DIR:-${CONFIG_DIR}/backups}"
 	[ -d "${dir}" ] || die "No dump given and ${dir} does not exist — pass --dump <file.sql.gz>"
-	# Newest *.sql.gz / *.gz below the backups tree: update.sh's pre-update
-	# dumps and the local-destination instance backups both live there.
+	# Select instance SQL or pre-update SQL, never a newer config/volume archive.
 	local found
-	found="$(find "${dir}" -type f \( -name '*.sql.gz' -o -name '*.gz' \) -print0 2>/dev/null \
+	found="$(find "${dir}" -type f \( -name '*.sql.gz' -o -path '*/web-server/*.gz' \) -print0 2>/dev/null \
 		| xargs -0 ls -1t 2>/dev/null | head -n 1 || true)"
 	[ -n "${found}" ] || die "No .gz dump found under ${dir} — pass --dump <file.sql.gz>"
 	printf '%s' "${found}"
@@ -113,8 +151,11 @@ free_port() {
 }
 [ -n "${PG_PORT}" ] || PG_PORT="$(free_port)"
 
+docker network create --internal "${SCRATCH_NETWORK}" >/dev/null \
+	|| die "Could not create the isolated scratch network"
 info "scratch postgres: ${SCRATCH} on 127.0.0.1:${PG_PORT} (${PG_IMAGE})"
 docker run -d --name "${SCRATCH}" \
+	--network "${SCRATCH_NETWORK}" \
 	-e POSTGRES_USER=nixploy \
 	-e POSTGRES_PASSWORD=nixploy \
 	-e POSTGRES_DB=nixploy \
@@ -139,7 +180,7 @@ restore_once() {
 	local label="$1" log
 	log="$(mktemp)"
 	if gunzip -c "${DUMP}" | docker exec -i "${SCRATCH}" \
-		psql -q -U nixploy -d nixploy -v ON_ERROR_STOP=1 >"${log}" 2>&1; then
+		psql -q -U nixploy -d nixploy --single-transaction -v ON_ERROR_STOP=1 >"${log}" 2>&1; then
 		ok "${label}"
 		rm -f "${log}"
 		return 0
@@ -193,27 +234,25 @@ users="$(psql_scalar 'select count(*) from "user"')"
 # ── 5. optional: boot the panel against the restored database ────────────────
 boot_panel() {
 	[ "${BOOT}" = "1" ] || return 0
-	if [ -z "${PANEL_IMAGE}" ]; then
-		PANEL_IMAGE="$(docker service inspect nixploy --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null || true)"
-		PANEL_IMAGE="${PANEL_IMAGE%%@*}"
-	fi
-	[ -n "${PANEL_IMAGE}" ] || { warn "No panel image found — pass --panel-image <ref> to boot one"; return 0; }
 	local port
 	port="$(free_port)"
 	printf '\n   %sBooting %s against the restored database%s\n' "${C_BOLD}" "${PANEL_IMAGE}" "${C_RESET}"
-	# Throwaway secrets: this panel never serves traffic and is destroyed
-	# below, so it must NOT get the real ENCRYPTION_KEY. Encrypted columns
-	# stay unreadable — that is expected and not what this step checks.
+	# Restore keys without placing them on argv. No worker/crons, no external
+	# network: recovered notification destinations must not receive drill events.
+	# The explicit socket must belong to a disposable daemon, never production.
 	docker run -d --name "${PANEL_CONTAINER}" \
-		--network host \
-		-e "DATABASE_URL=postgres://nixploy:nixploy@127.0.0.1:${PG_PORT}/nixploy" \
-		-e "PORT=${port}" \
+		--network "${SCRATCH_NETWORK}" \
+		-p "127.0.0.1:${port}:3000" \
+		--env-file "${RECOVERY_ENV}" \
+		--mount "type=bind,source=${DOCKER_SOCKET},target=/var/run/docker.sock,readonly" \
+		-e "DATABASE_URL=postgres://nixploy:nixploy@${SCRATCH}:5432/nixploy" \
+		-e PORT=3000 \
 		-e "BETTER_AUTH_URL=http://127.0.0.1:${port}" \
-		-e "BETTER_AUTH_SECRET=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
-		-e "ENCRYPTION_KEY=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" \
+		-e NIXPLOY_ROLE=panel \
+		-e DOCKER_SOCKET=/var/run/docker.sock \
 		-e NIXPLOY_DISABLE_TRAEFIK_BOOT=1 \
 		-e NIXPLOY_CONFIG_DIR=/tmp/nixploy-dr \
-		"${PANEL_IMAGE}" >/dev/null || { warn "Could not start the panel container"; return 0; }
+		"${PANEL_IMAGE}" >/dev/null || die "Could not start the requested panel container"
 	local code="" tries=0
 	while [ "${tries}" -lt 90 ]; do
 		code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:${port}/api/ready" 2>/dev/null || true)"
@@ -224,6 +263,7 @@ boot_panel() {
 	done
 	if [ "${code}" = "200" ]; then
 		ok "Panel booted and /api/ready answered 200 against the restored database"
+		info "Readiness only: authenticate, check decrypted secrets, restore config/data and verify workload traffic separately"
 	else
 		docker logs --tail 30 "${PANEL_CONTAINER}" 2>&1 | sed 's/^/     /' >&2 || true
 		die "Panel did not become ready against the restored database (last status: ${code:-none})"
