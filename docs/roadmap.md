@@ -27,7 +27,8 @@ with a fresh image app reaching HTTP 200. Reader/runtime proof is complete for
 that scope; same-host adoption/proxy cutover is still unimplemented and needs
 a disposable source-panel VM. Public DNS/provider writes/ACME, fresh
 multi-node/split-worker VM checks and 24-hour log/upstream checks remain in the
-active backlog. The separate first-admin atomic-claim fix is not shipped here.
+active backlog. The separate first-admin atomic-claim fix merged in PR #17 (`973acda`) and
+is included in this branch's integration base; its proof is recorded in status.
 
 ## Historical research context — 2026-09-17
 

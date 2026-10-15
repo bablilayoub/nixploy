@@ -30,11 +30,8 @@ an implementation checkpoint, not a new release claim.
   then prove original volume identity, certificates, traffic and rollback.
   Configuration import does not perform takeover or copy source data.
 - [ ] External-upstream manifest support, per-team capability overlays and a
-  persistent SSH breaker remain separate feature work; current roles still define what a member may do and teams
-  define which projects they can reach.
-- [ ] The fully atomic first-admin claim is being handled in a separate PR.
-  It is not shipped by PR #16; the historical serialized-hook limitation below
-  must not be read as resolved here.
+  persistent SSH breaker remain separate feature work; current roles still
+  define what a member may do and teams define which projects they can reach.
 
 ### Infrastructure and duration verification
 
@@ -83,6 +80,7 @@ stated evidence boundaries:
 
 | Completed work | Current evidence and boundary |
 | --- | --- |
+| PR #17 atomic first-admin setup | Merged as `973acda`: transaction-level admission/user/credential/session writes, seven HTTP/Postgres regressions and six concurrent signups across two processes producing exactly one admin. Restart, failure/retry, invite and controlled OAuth proof is recorded below. |
 | PR #14 preview database/provider integration | Real isolated Gitea 1.25.4 clone/build, Swarm/Traefik route and success/failure commit statuses; separate seeded PostgreSQL database/user, redeploy without reseeding, failure recovery, expiry and deletion. Hosted providers and complete fork delivery remain above. |
 | PR #14 Dokploy importer | Official v0.30.8 API and genuine `pg_dump` inspect/plan/apply/repeat; explicit application/Compose deployment and PostgreSQL authentication passed. Import alone remains idle and changes no runtime/proxy; source secrets/data still require the reported manual work. |
 | PR #14 Update preflight | Desktop/mobile light/dark browser pass, 16 fixture scenarios per theme, actual registry/disk/platform/backup/release APIs and role checks. Update actions were intercepted; live platform rollout is not a browser claim. |
@@ -173,6 +171,36 @@ Sanitized proof reports, harnesses and screenshots are retained under ignored
 `.nixploy-data/verification/` and copied to the local handoff artifact directory
 before cleanup. Only test-owned resources and source credential/dump material
 are removed; original services, Traefik files and unattributed storage remain.
+
+## Atomic first-admin setup — 2026-10-15
+
+Merged in [PR #17](https://github.com/bablilayoub/nixploy/pull/17) as `973acda`;
+its exact-head CI and CodeQL passed before integration here.
+
+Confirmed the remaining race through actual HTTP signup against a private
+fresh Postgres database: two requests created two admins. The advisory lock
+only covered the old before-create hook; Better Auth inserted afterward.
+The Drizzle auth adapter now enables its existing transaction support. Its
+transaction is shared with hooks and their database helpers, and the first
+user count takes a transaction-level advisory lock held through the user,
+credential and session writes. No schema change, backfill or new dependency
+is needed: the committed user row remains the durable setup claim.
+
+Seven HTTP/Postgres regressions cover concurrent setup on a one-connection
+pool, missing/wrong setup tokens, failed credential/session writes followed
+by a successful retry, invitation signup/acceptance, auth rebuild and sign-in,
+organization-step retry, and a controlled OAuth token/userinfo callback with
+ordinary member provisioning. A separate two-process HTTP probe submits six
+signups against the same private database: exactly one succeeds, five are
+refused, and one admin remains. After both processes exit, a new process
+still reports setup closed, refuses public signup and signs the owner in.
+The optional template registry probe is the
+only skip in the full server suite: **2,892 passed in 210 files**. Other local
+gates pass: **96 web / 93 CLI** tests, all four TypeScript checks, changed-file
+formatting, strict Biome (**1,078 files**), knip **5.88.1**, and web/landing/CLI
+production builds. The setup tests create and remove their own database;
+the separate probe database was also removed, preserving other suites'
+fixtures and dev data. The auth PR's exact-head CI and CodeQL passed; the migration workspace now includes that base.
 
 ## Production dependency advisory follow-up — 2026-10-15
 
@@ -501,7 +529,7 @@ are historical and require revalidation before becoming new work.
 - [x] **Local Swarm VIP reset (2026-09-11)** — cleared by the Docker Desktop restart on 2026-09-12; the golden path routes through Traefik again. Kept for the record:: service VIPs on `nixploy-network` are unreachable from every container (task IPs work) — see the part-2 session line; recreate the overlay or restart Docker Desktop, then re-run the REST e2e.
 - [ ] **Final-wave leftovers (2026-09-11)**: browser confirmation that an idle dashboard stops polling `deployment.recent` (push path verified through the WS layer only); a real `install.sh --split-worker` run on a throwaway host; the SSH breaker is in-memory (a persistent version needs `last_seen_at`/`last_error` columns + an `unreachable` enum value); `git` template sources are unit-tested only (`http-json` verified live); `compose.createFromUrl` has no UI (CLI: `compose create-from-url`, 2026-09-19); CLI verbs for `compose.rollback`, `template.sources*` and `schedule.runOnce` landed 2026-09-19 (`compose rollback`, `template sources|source-add|source-update|source-remove|source-sync`, `schedule run-once`); MCP could expose `list_template_sources`; (done 2026-09-11: server terminal on the pool, the two polls gated, landing docs synced); landing docs previously lagged `docs/install.md` (split worker, `NIXPLOY_ROLE`), the egress toggle + key-rotation runbook + audit export (`private-egress` help slug wanted), and `api-catalog.ts` misses the new procedures; `apps/cli`/`apps/web` still borrow vitest from `packages/server` (add the devDependency at the next `pnpm install`).
 - [ ] **Remote servers**: stack-type compose on a remote must use registry-pullable images (`docker stack deploy` runs on the primary, no build); `docker.swarmServices` with a `serverId` returns the cluster-wide list (filter by `node.id` if per-server views are wanted); real multi-node smoke still pending (unit-tested only — no second host here).
-- [ ] First-admin claim is serialized but the INSERT still happens after the hook; a fully atomic claim needs an `instance_setup` singleton row (migration).
+- [x] First-admin admission and the actual user/credential/session inserts share Better Auth's Drizzle transaction (2026-10-15). The advisory lock and count use that connection until commit; concurrent HTTP signup creates one admin, failures roll back and retry, and committed users keep setup closed after restarts. No separate claim row or migration is needed.
 - [x] Redacted rows carry `secretsRedacted: true` since 2026-09-19 (every helper in `trpc/redact-secrets.ts` plus the ad hoc `env: null` / `content: null` spots in the environment, project and mount routers); the UI still keys the read-only state on `can("secrets.read")`, which is fine — the flag is for the CLI and agents.
 - [x] `lib/safe-next-path.ts` rejects any `?query` — fixed 2026-09-11 (`aaa7cef`), deep links survive login.
 - [x] `schedule.create/remove` write audit rows since the hardening pass (`7cb67ee`: every mutation in 20 routers is script-verified to write exactly one row). (`settings/incidents/page.tsx` is now a `redirect()` stub into Monitoring, so the missing `<title>` is moot.)
