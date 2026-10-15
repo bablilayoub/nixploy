@@ -1,11 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
 import { and, count, eq, gt, sql } from "drizzle-orm";
-import { db } from "../../db";
+import { type DbExecutor, db } from "../../db";
 import { invitations, organizations, users } from "../../db/schema";
 
 /** True when the instance has at least one user row. */
-export async function hasAnyUsers(): Promise<boolean> {
-	const [row] = await db.select({ value: count() }).from(users);
+export async function hasAnyUsers(executor: DbExecutor = db): Promise<boolean> {
+	const [row] = await executor.select({ value: count() }).from(users);
 	return Number(row?.value ?? 0) > 0;
 }
 
@@ -75,11 +75,12 @@ export function maskEmail(email: string): string {
 export async function canSignUpWithInvitation(
 	email: string,
 	invitationId: string | null | undefined,
+	executor: DbExecutor = db,
 ): Promise<boolean> {
 	const normalized = email.trim().toLowerCase();
 	const id = invitationId?.trim();
 	if (!normalized || !id) return false;
-	const [invite] = await db
+	const [invite] = await executor
 		.select({ id: invitations.id })
 		.from(invitations)
 		.where(

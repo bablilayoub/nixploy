@@ -25,6 +25,23 @@ the first admin instead:
 Probe: `setup.needsSetup`, `setup.authConfig` and `setup.invitationPreview`
 (public tRPC). Helpers live in `packages/server/src/modules/auth/setup.ts`.
 
+First-admin admission and the user, credential and session writes share a
+PostgreSQL transaction. A transaction-level advisory lock covers the user
+count and stays held until those writes commit, including across panel
+processes. Hooks and their database helpers use that same connection, so a
+small connection pool cannot deadlock while checking the first user.
+If a credential or session write fails, the user insert rolls back and setup
+can be retried. If the later organization step fails, the committed owner can
+sign in and retry it. Existing user rows keep setup closed after restarts;
+no new claim table, migration, backfill or dependency is needed.
+
+Regression coverage: `DATABASE_URL_TEST=… pnpm test:db` runs real HTTP auth
+requests, concurrent signup, controlled write failures, invitation acceptance
+and an OAuth token/userinfo callback. The setup suite creates and removes its
+own temporary database; the **test** database role needs `CREATEDB`. This is
+not required by the production database role. The OAuth provider is a local
+test fixture, not a hosted-provider compatibility certification.
+
 The invitation preview returns the org name, the role and a **masked** email
 (`ad••••••••••@example.com`): a leaked invite link must not disclose the
 invitee's address. The accept page asks the invitee to type it, and the sign-up
