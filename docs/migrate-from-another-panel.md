@@ -3,7 +3,7 @@
 Nixploy is intentionally familiar if you have run a self-hosted PaaS before:
 the same shape (org → project → environment → services, Docker Swarm +
 Traefik, templates, API keys). For a panel whose API the importer speaks
-(currently Dokploy), one environment at a time comes over with
+(Dokploy and Coolify), one environment at a time comes over with
 `nixploy import`; for everything else, recreate the services by hand. Either
 way you point traffic when the new instance is green. This guide covers the
 importer first, then the concept map and the cutover.
@@ -12,7 +12,7 @@ importer first, then the concept map and the cutover.
 
 Open **Migrations** in the navigation or command palette. Access requires
 `gitops.manage`; the source key's permissions determine the inventory you can
-read. Choose **Live API** for Dokploy or **Upload dump** for a PostgreSQL dump.
+read. Choose **Live API** for Dokploy or Coolify, or **Upload dump** for a Dokploy PostgreSQL dump.
 Keys are sent in mutation bodies and held only in page memory; changing the
 source, completing an import, starting over or leaving clears them. Uploaded
 dumps belong to the current organization and expire after 24 hours.
@@ -113,6 +113,41 @@ What the notes will tell you to do by hand, because it cannot be carried:
 `--no-keep-app-names` generates fresh `appName`s instead of keeping the
 source's; keep them (the default) when a same-host takeover is the plan,
 because the old volumes are named after them.
+
+## Coolify live API support
+
+Select **Coolify** in Migrations, or pass `--source coolify` to the CLI. Use the
+panel origin; Nixploy calls `/api/v1` with a transient Bearer token. On the
+source, enable API access and allow the target's address. A read token lists
+configuration; `read:sensitive` is required to copy readable env values and raw
+Compose content. See the [official API setup](https://coolify.io/docs/api/overview).
+
+The supported configuration slice is projects/environments, Docker-image and
+public credential-free Git applications (Dockerfile, Nixpacks, Railpack and
+static settings), raw/one-click Compose **services**, standalone PostgreSQL,
+MySQL, MariaDB, MongoDB and Redis configuration, and HTTP domain URLs. Source
+Compose services become a raw snapshot here; repository tracking, source proxy
+settings and external files require manual setup. Repository-backed Compose
+**applications** and other database engines are counted as unsupported with
+notes. This is not a Coolify database-dump or same-host adoption path.
+
+Coolify runtime names are not reused. Server keys, private provider and registry
+connections, shared-variable libraries/references, custom commands, source
+published ports, mounts, schedules, backups and proxy middleware need manual
+review. A domain whose backend port is unavailable leaves the target collection
+alone; an exposed-port fallback explicitly asks you to confirm overrides.
+Hidden/null/once-only, shared-reference or unrepresentable variable groups are
+omitted, with notes, rather than replacing existing target values or copying
+ciphertext. Database passwords are generated for new targets and retained on
+repeat imports; source credentials/data are not migrated.
+
+Verified against an isolated official **Coolify v4.4.6** API: image/public-Git
+applications, a raw Compose service, all five database configuration kinds,
+two domains, plus explicit KeyDB/repository-Compose rejections. Read-token
+repeat preserves manually restored values/settings, IDs and database passwords.
+Import alone leaves Docker inventory and proxy configuration unchanged. Runtime
+proof for imported database engines other than PostgreSQL is still separate
+from configuration/schema coverage.
 
 ## Import from a database dump (the source panel is dead)
 

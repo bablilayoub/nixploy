@@ -38,8 +38,14 @@ const sourceInput = z
 			.regex(/^[a-f0-9]{24}$/)
 			.optional(),
 	})
-	.refine((value) => Boolean(value.dumpId) !== Boolean(value.url && value.apiKey), {
-		message: "Give url + apiKey (live panel) or dumpId (uploaded dump), not both",
+	.refine(
+		(value) => (value.dumpId ? !value.url && !value.apiKey : Boolean(value.url && value.apiKey)),
+		{
+			message: "Give url + apiKey (live panel) or dumpId (uploaded dump), not both",
+		},
+	)
+	.refine((value) => !value.dumpId || value.source === "dokploy", {
+		message: "Database dump import supports Dokploy only; use the Coolify live API",
 	});
 
 const importInput = sourceInput.extend({

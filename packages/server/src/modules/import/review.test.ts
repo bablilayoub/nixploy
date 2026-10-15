@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { importReviewToken, redactImportReview } from "./review";
+import { importReviewToken, redactImportReview, summarizeImportValues } from "./review";
 
 const review = {
 	manifest: {
@@ -56,4 +56,23 @@ describe("import review", () => {
 		expect(result.manifest.applications?.[0]?.name).toBe("api");
 		expect(JSON.stringify(review)).toContain("canary");
 	});
+});
+
+it("previews shared value replacement, clearing and preservation without values", () => {
+	const groups = summarizeImportValues({
+		version: 1,
+		project: { name: "shop", env: "TOKEN=value-canary" },
+		environment: { name: "prod" },
+		applications: { web: { env: "", buildArgs: undefined, previewEnv: null } },
+		compose: {},
+		databases: {},
+	});
+	expect(groups).toEqual(
+		expect.arrayContaining([
+			{ target: "project", field: "env", action: "copy", keys: ["TOKEN"] },
+			{ target: "environment", field: "env", action: "preserve", keys: [] },
+			{ target: "application/web", field: "env", action: "clear", keys: [] },
+		]),
+	);
+	expect(JSON.stringify(groups)).not.toContain("value-canary");
 });

@@ -9,6 +9,9 @@ export function migrationTasks(plan: ImportPlan) {
 		...(plan.manifest.environment?.envKeys ?? []),
 		...(plan.manifest.applications ?? []).flatMap((row) => row.envKeys ?? []),
 		...(plan.manifest.compose ?? []).flatMap((row) => row.envKeys ?? []),
+		...Object.values(plan.manifest.databases ?? {}).flatMap(
+			(rows) => rows?.flatMap((row) => row.envKeys ?? []) ?? [],
+		),
 	];
 	if (envKeys.length || /env|credential|password|secret|encrypted/i.test(notes)) {
 		tasks.push({

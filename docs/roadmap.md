@@ -1,5 +1,13 @@
 # Roadmap — winning switchers (drafted 2026-09-17)
 
+Current implementation checkpoint (2026-10-15): version **0.7.3**, merged PR #14
+at `3b39c8e`. The market/release sketches below are historical planning context;
+use `docs/status.md` for current verified behavior and remaining work. The
+operator panel refresh, migration center and Compose paste/upload/URL creation
+are implemented in the migration workspace. Coolify catalog compatibility is
+implemented (226 accepted /133 rejected at the pinned 359-entry upstream
+revision); runtime proof and the live API reader are tracked in status.
+
 ## Context
 
 Nixploy is at v0.2.9: at parity with the free tier of the leading self-hosted panels and ahead of them in several places. But parity does not move anyone. Someone running 20 services on a €10 VPS needs a *reason* to migrate and a *way* to do it without losing a weekend. This plan supplies both.
@@ -223,7 +231,7 @@ New template-source kinds that read the large public compose catalogues maintain
 
 *Also landed 2026-09-20, outside the original list:* **DNS records created for you** — the DNS-01 provider link writes the A record for every attached domain (Cloudflare, DigitalOcean, Hetzner Cloud, Vultr, Gandi; off by default, best-effort by contract, `domain.ensureDnsRecord` to retry) — and **template domain hints**, so a template declares the hostnames it reads from its env values (OpenHole's endpoint host and `*.<tunnel domain>`) and they are attached, certificated and resolved on deploy.
 
-*What shipped:* the `blueprints` template-source kind (migration 0041) reads the Dokploy templates repository layout — `blueprints/<id>/{meta.json, template.toml, docker-compose.yml}` — with a small TOML reader written for that subset (the dependency set is fixed), a pure mapper, and a deploy-time placeholder grammar the built-in catalog can use too (named generators memoised per deploy, `{{domain}}`, `{{env:KEY}}`, HS256 JWTs). File mounts become inline compose configs, undeclared `../files/<dir>` mounts become named volumes, `env_file` becomes explicit environment entries, and every entry passes the deploy's own compose safety check at sync. Measured on the public catalog: 417 of 532 deploy as-is; the 115 rejections are the Docker socket, host bind mounts, host ports, privileged capabilities and ten entries with nothing to route to, each listed with its reason on the source row. Not yet: the second catalogue (its compose files are plain, but its variable syntax is different), and export-a-running-stack-as-template.
+*What shipped:* the `blueprints` template-source kind (migration 0041) reads the Dokploy templates repository layout — `blueprints/<id>/{meta.json, template.toml, docker-compose.yml}` — with a small TOML reader written for that subset (the dependency set is fixed), a pure mapper, and a deploy-time placeholder grammar the built-in catalog can use too (named generators memoised per deploy, `{{domain}}`, `{{env:KEY}}`, HS256 JWTs). File mounts become inline compose configs, undeclared `../files/<dir>` mounts become named volumes, `env_file` becomes explicit environment entries, and every entry passes the deploy's own compose safety check at sync. Measured on the public catalog: 417 of 532 deploy as-is; the 115 rejections are the Docker socket, host bind mounts, host ports, privileged capabilities and ten entries with nothing to route to, each listed with its reason on the source row. The Coolify catalogue source was added on 2026-10-15 (migration 0047): an explicit translator covers generated credentials, repeated references, domain/URL semantics and required inputs, then applies the same safety checks. The pinned 359-entry catalogue yields 226 accepted and 133 rejected with per-entry reasons; acceptance is a compatibility result, not a runtime claim for every entry. Export-a-running-stack-as-template already exists through template export; same-host takeover remains separate.
 
 **External upstream targets** (M) deserve their own line because they change migration order: a domain that points at an external URL with LE, middlewares and uptime probes means **DNS flips to Nixploy once**, then services move behind it one at a time instead of in a big-bang cutover.
 

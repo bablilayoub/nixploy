@@ -906,7 +906,7 @@ export const apiCatalog: ApiRouterGroup[] = [
 			{
 				method: "POST",
 				path: "import.inspect",
-				summary: "List what a source panel's API key can see",
+				summary: "Inspect Dokploy or Coolify migration inventory",
 				capability: ["gitops.manage"],
 			},
 			{

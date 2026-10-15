@@ -1,5 +1,7 @@
 import { createHmac } from "node:crypto";
 import { signingKeys } from "../../lib/encryption";
+import { envKeysFromDotenv } from "../gitops/schema";
+import type { SecretsPayload } from "../gitops/secrets";
 import type { ImportPlan } from "./index";
 
 const canonical = (value: unknown): unknown => {
@@ -45,4 +47,45 @@ export function redactImportReview<T extends ImportPlan>(review: T): T {
 		return value;
 	};
 	return { ...review, manifest: redact(review.manifest) as T["manifest"] };
+}
+
+/** Describe exactly which dotenv groups apply can replace, without retaining values. */
+export function summarizeImportValues(payload: SecretsPayload) {
+	const groups: Array<{
+		target: string;
+		field: string;
+		action: "copy" | "clear" | "preserve";
+		keys: string[];
+	}> = [];
+	const add = (
+		target: string,
+		field: string,
+		value: string | null | undefined,
+		nullPreserves = false,
+	) => {
+		const keys = envKeysFromDotenv(value);
+		groups.push({
+			target,
+			field,
+			action:
+				value === undefined || (nullPreserves && value === null)
+					? "preserve"
+					: keys.length
+						? "copy"
+						: "clear",
+			keys,
+		});
+	};
+	add("project", "env", payload.project.env, true);
+	add("environment", "env", payload.environment.env, true);
+	for (const kind of ["applications", "compose"] as const) {
+		for (const [name, entry] of Object.entries(payload[kind])) {
+			for (const field of ["env", "buildArgs", "previewEnv"] as const)
+				add(`${kind === "applications" ? "application" : kind}/${name}`, field, entry[field]);
+		}
+	}
+	for (const [kind, entries] of Object.entries(payload.databases)) {
+		for (const [name, entry] of Object.entries(entries)) add(`${kind}/${name}`, "env", entry.env);
+	}
+	return groups;
 }

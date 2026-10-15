@@ -150,7 +150,7 @@ describe.skipIf(!testUrl)("import project access (postgres)", () => {
 	it("binds a reviewed selection to stable source values and target changes before writes", async () => {
 		process.env.DATABASE_URL = testUrl;
 		const { db } = await import("../../db");
-		const { applications } = await import("../../db/schema");
+		const { applications, projects } = await import("../../db/schema");
 		const { createTestCaller, seedOneTenant, wipeTenant } = await import(
 			"../../trpc/tenancy.harness"
 		);
@@ -238,6 +238,27 @@ describe.skipIf(!testUrl)("import project access (postgres)", () => {
 			await expect(
 				caller.import.runApply({ ...input, reviewToken: beforeTargetChange.reviewToken }),
 			).rejects.toMatchObject({ code: "CONFLICT" });
+			const newEnvironmentInput = { ...input, environmentName: "new-reviewed-environment" };
+			const newEnvironmentPlan = await caller.import.plan(newEnvironmentInput);
+			await db
+				.update(projects)
+				.set({ env: "OPERATOR_SECRET=manual-target-canary" })
+				.where(eq(projects.projectId, tenant.projectId));
+			await expect(
+				caller.import.runApply({
+					...newEnvironmentInput,
+					reviewToken: newEnvironmentPlan.reviewToken,
+				}),
+			).rejects.toMatchObject({ code: "CONFLICT" });
+
+			await db.insert(projects).values([
+				{ name: "Source", organizationId: tenant.organizationId },
+				{ name: "Source", organizationId: tenant.organizationId },
+			]);
+			await expect(caller.import.plan({ ...input, projectId: undefined })).rejects.toMatchObject({
+				code: "CONFLICT",
+			});
+
 			await expect(
 				caller.import.plan({ ...input, serviceIds: ["application/missing"] }),
 			).rejects.toMatchObject({ code: "BAD_REQUEST" });
@@ -294,6 +315,31 @@ describe.skipIf(!testUrl)("import project access (postgres)", () => {
 			await expect(
 				caller.import.plan({ ...input, projectId: scoped.otherProjectId }),
 			).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+			const newName = `Unassigned import ${randomUUID()}`;
+			source.listProjects.mockResolvedValue(
+				sourceProjectListSchema.parse([
+					{
+						projectId: "source-project",
+						name: newName,
+						environments: [{ environmentId: "source-env", name: "production" }],
+					},
+				]),
+			);
+			await expect(caller.import.plan(input)).rejects.toMatchObject({
+				code: "PRECONDITION_FAILED",
+			});
+			await expect(caller.import.runApply(input)).rejects.toMatchObject({
+				code: "PRECONDITION_FAILED",
+			});
+			expect(
+				await db.query.projects.findFirst({
+					where: and(
+						eq(projects.organizationId, tenant.organizationId),
+						eq(projects.name, newName),
+					),
+				}),
+			).toBeUndefined();
 
 			// The same source name is usable when the team can reach the target.
 			const visible = await db.query.projects.findFirst({

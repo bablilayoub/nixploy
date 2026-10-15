@@ -5,6 +5,11 @@ import type {
 	ImportResult,
 	SourceInventory,
 } from "@nixploy/server/modules/import/index";
+import {
+	IMPORT_SOURCE_LABELS,
+	IMPORT_SOURCES,
+	type ImportSource,
+} from "@nixploy/server/modules/import/kinds";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, FileUp, Loader2, LockKeyhole, PlugZap, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -31,6 +36,7 @@ export function MigrationsView() {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
 	const { can, isLoading, isError } = useCapabilities({ strict: true });
+	const [provider, setProvider] = useState<ImportSource>("dokploy");
 	const [mode, setMode] = useState<"live" | "dump">("live");
 	const [url, setUrl] = useState("");
 	const [apiKey, setApiKey] = useState("");
@@ -51,7 +57,10 @@ export function MigrationsView() {
 	const [error, setError] = useState<string | null>(null);
 	// Revision changes synchronously with inputs; a late reply can never become a current plan.
 	const revision = useRef(0);
+	const inspectRun = useRef(0);
+	const planRun = useRef(0);
 	const alive = useRef(true);
+	const uploadInput = useRef<HTMLInputElement>(null);
 	useEffect(() => {
 		alive.current = true;
 		return () => {
@@ -76,6 +85,7 @@ export function MigrationsView() {
 	);
 	const clearReview = () => {
 		revision.current += 1;
+		planRun.current += 1;
 		setPlan(null);
 		setResult(null);
 		setError(null);
@@ -84,9 +94,11 @@ export function MigrationsView() {
 	};
 	const clearSource = () => {
 		clearReview();
+		inspectRun.current += 1;
 		setUploading(false);
 		setInventory(null);
 		setDump(null);
+		setFile(null);
 		setSourceProjectId("");
 		setSourceEnvironment("");
 		setServiceIds([]);
@@ -95,6 +107,7 @@ export function MigrationsView() {
 	};
 	const reset = () => {
 		clearSource();
+		if (uploadInput.current) uploadInput.current.value = "";
 		setUrl("");
 		setFile(null);
 		setProjectId("");
@@ -110,7 +123,7 @@ export function MigrationsView() {
 		setServiceIds(env?.services.map((row) => row.id) ?? []);
 	};
 	const source = () => ({
-		source: "dokploy" as const,
+		source: provider,
 		...(mode === "dump" ? { dumpId: dump?.dumpId } : { url: url.trim(), apiKey: apiKey.trim() }),
 	});
 	const request = () => ({
@@ -119,7 +132,7 @@ export function MigrationsView() {
 		sourceEnvironmentName: sourceEnvironment,
 		projectId: projectId || undefined,
 		environmentName: environmentName.trim() || sourceEnvironment,
-		keepAppNames,
+		keepAppNames: provider === "dokploy" && keepAppNames,
 		serviceIds,
 	});
 	const reportError = (caught: unknown, version: number) => {
@@ -131,6 +144,7 @@ export function MigrationsView() {
 		clearReview();
 		setInventory(null);
 		const version = revision.current;
+		const run = ++inspectRun.current;
 		try {
 			let input = source();
 			if (mode === "dump" && !dump) {
@@ -146,7 +160,7 @@ export function MigrationsView() {
 				if (!alive.current || version !== revision.current) return;
 				setDump(body);
 				setUploading(false);
-				input = { source: "dokploy", dumpId: body.dumpId };
+				input = { source: provider, dumpId: body.dumpId };
 			}
 			const next = await inspect.mutateAsync(input);
 			if (!alive.current || version !== revision.current) return;
@@ -156,7 +170,7 @@ export function MigrationsView() {
 		} catch (caught) {
 			reportError(caught, version);
 		} finally {
-			if (alive.current && version === revision.current) {
+			if (alive.current && run === inspectRun.current) {
 				setUploading(false);
 				inspect.reset();
 			}
@@ -165,13 +179,14 @@ export function MigrationsView() {
 	const review = async () => {
 		clearReview();
 		const version = revision.current;
+		const run = ++planRun.current;
 		try {
 			const next = await makePlan.mutateAsync(request());
 			if (alive.current && version === revision.current) setPlan(next);
 		} catch (caught) {
 			reportError(caught, version);
 		} finally {
-			if (alive.current && version === revision.current) makePlan.reset();
+			if (alive.current && run === planRun.current) makePlan.reset();
 		}
 	};
 	const runApply = async () => {
@@ -183,6 +198,8 @@ export function MigrationsView() {
 			// Changes must be reflected even if the operator has navigated away.
 			await Promise.all([
 				queryClient.invalidateQueries({ queryKey: trpc.project.pathKey() }),
+				queryClient.invalidateQueries({ queryKey: trpc.environment.pathKey() }),
+				queryClient.invalidateQueries({ queryKey: trpc.domain.pathKey() }),
 				queryClient.invalidateQueries({ queryKey: trpc.application.pathKey() }),
 				queryClient.invalidateQueries({ queryKey: trpc.compose.pathKey() }),
 				queryClient.invalidateQueries({ queryKey: trpc.postgres.pathKey() }),
@@ -193,8 +210,11 @@ export function MigrationsView() {
 			]);
 			if (alive.current && version === revision.current) {
 				setResult(next);
+				inspect.reset();
+				makePlan.reset();
 				setApiKey("");
 				setFile(null);
+				if (uploadInput.current) uploadInput.current.value = "";
 			}
 		} catch (caught) {
 			reportError(caught, version);
@@ -253,20 +273,42 @@ export function MigrationsView() {
 			<div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4 text-sm">
 				<LockKeyhole className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
 				<p className="text-muted-foreground">
-					Dokploy live API and database dumps are supported. Imports copy configuration and readable
-					environment values. Database data, persistent files and encrypted source secrets need
-					separate restoration. Source API keys stay in this page's memory and are cleared when you
-					change the source, finish or leave.
+					Dokploy and Coolify live APIs are supported; database dumps are supported for Dokploy.
+					Imports copy configuration and readable environment values. Database data, persistent
+					files and encrypted source secrets need separate restoration. Source API keys stay in this
+					page's memory and are cleared when you change the source, finish or leave.
 				</p>
 			</div>
 			<Card>
 				<CardHeader>
 					<CardTitle>1. Connect your source</CardTitle>
 					<CardDescription>
-						Use a read-capable source API key, or upload a Dokploy PostgreSQL dump.
+						Use a source API key with read access. Coolify also needs API access enabled and
+						read:sensitive to copy environment values and raw Compose content. Dokploy supports
+						PostgreSQL dump uploads.
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="space-y-5">
+					<div className="max-w-sm space-y-2">
+						<Label htmlFor="migration-provider">Source panel</Label>
+						<select
+							id="migration-provider"
+							className={selectClass}
+							value={provider}
+							disabled={apply.isPending}
+							onChange={(event) => {
+								clearSource();
+								setProvider(event.target.value as ImportSource);
+								setMode("live");
+							}}
+						>
+							{IMPORT_SOURCES.map((value) => (
+								<option key={value} value={value}>
+									{IMPORT_SOURCE_LABELS[value]}
+								</option>
+							))}
+						</select>
+					</div>
 					<fieldset disabled={busy} className="flex flex-wrap gap-2">
 						<legend className="sr-only">Source connection</legend>
 						<Button
@@ -284,6 +326,7 @@ export function MigrationsView() {
 						<Button
 							type="button"
 							variant={mode === "dump" ? "default" : "outline"}
+							disabled={provider !== "dokploy"}
 							aria-pressed={mode === "dump"}
 							onClick={() => {
 								clearSource();
@@ -322,8 +365,7 @@ export function MigrationsView() {
 									value={apiKey}
 									disabled={apply.isPending}
 									onChange={(event) => {
-										clearReview();
-										setInventory(null);
+										clearSource();
 										setApiKey(event.target.value);
 									}}
 									autoComplete="off"
@@ -338,6 +380,7 @@ export function MigrationsView() {
 							<Label htmlFor="migration-file">PostgreSQL dump</Label>
 							<Input
 								id="migration-file"
+								ref={uploadInput}
 								type="file"
 								accept=".sql,.dump,.backup,.gz"
 								disabled={busy}
@@ -356,7 +399,8 @@ export function MigrationsView() {
 							</p>
 							{dump && (
 								<p className="text-xs text-muted-foreground">
-									Uploaded {dump.filename}. Reupload after expiry.
+									Uploaded {dump.filename}. Expires {new Date(dump.expiresAt).toLocaleString()}.
+									reupload after expiry.
 								</p>
 							)}
 						</div>
@@ -566,25 +610,27 @@ export function MigrationsView() {
 										</div>
 									</div>
 								)}
-								<label htmlFor="migration-keep-names" className="flex items-start gap-3 text-sm">
-									<Checkbox
-										id="migration-keep-names"
-										checked={keepAppNames}
-										disabled={apply.isPending}
-										onCheckedChange={(checked) => {
-											clearReview();
-											setKeepAppNames(checked === true);
-										}}
-										className="mt-0.5"
-									/>
-									<span>
-										Keep source runtime names
-										<span className="mt-1 block text-xs text-muted-foreground">
-											Use only when you intend to reuse those names. Collisions are reported. This
-											does not move containers or volumes.
+								{provider === "dokploy" && (
+									<label htmlFor="migration-keep-names" className="flex items-start gap-3 text-sm">
+										<Checkbox
+											id="migration-keep-names"
+											checked={keepAppNames}
+											disabled={apply.isPending}
+											onCheckedChange={(checked) => {
+												clearReview();
+												setKeepAppNames(checked === true);
+											}}
+											className="mt-0.5"
+										/>
+										<span>
+											Keep source runtime names
+											<span className="mt-1 block text-xs text-muted-foreground">
+												Use only when you intend to reuse those names. Collisions are reported. This
+												does not move containers or volumes.
+											</span>
 										</span>
-									</span>
-								</label>
+									</label>
+								)}
 								<Button
 									disabled={
 										busy ||

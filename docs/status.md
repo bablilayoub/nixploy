@@ -24,18 +24,20 @@ In progress on `codex/migration-workspace`, based on merged PR #14
   invalidations. Web TypeScript and 96 tests pass; 28 screenshots, zero browser
   errors. Idle dashboard sends no deployment requests over 12 seconds; populated
   deployment-history navigation still pending a real deployment in this phase.
-- Migration center: real isolated Dokploy v0.30.8 API inspect/review/apply using
+- `d2e7386` migration center: real isolated Dokploy v0.30.8 API inspect/review/apply using
   application, Compose, Postgres and domain configuration; 9 desktop/mobile
   light/dark screenshots, zero browser errors, body-only mutation requests and
   redacted report canary checks. Target Docker inventory remains the original
   four services and imports write no runtime/proxy configuration. Selection,
   prepared-snapshot permission checks and HMAC review binding are covered by
   real-Postgres regressions, including source secret drift and target settings.
-  Dump/browser edge-state checks, final gates and PR verification remain open.
+  Actual pg_dump upload/inspect/plan/apply and six browser edge cases now pass: late source/plan replies, cleared mutation credentials, partial failures and dump-mode reset. The independent review also closed restricted-project orphan creation and CLI JSON false-success. Latest full server run: **215 files, 2,977 passed, 1 optional probe skipped** with the isolated Postgres suites enabled. CLI **94** and web **96** tests pass. Later isolation/provider edits still require the final gate/build/PR pass.
 
-Coolify catalog translation and live API source work are underway. Catalog
-parse/safety counts are provisional until the real template deployment proof;
-no new live importer support is advertised yet. Design decisions live in
+`5c3bd80` adds the Coolify catalog source. At official revision
+`2db26e88abd670b41848cde663f8130fd0d62743`, all 359 entries were inspected:
+226 accepted by translation and unchanged Compose safety, 133 rejected with
+reasons, 16 advisory image warnings. These counts are compatibility checks;
+the first real Umami/Postgres installation and redeploy preserve data. A second installation exposed a pre-existing automatic Compose hostname collision on the environment overlay. Qualified shared names/private bare aliases are implemented with legacy lookup/anonymous-volume safeguards; two-stack runtime verification is underway. The live Coolify API reader is now verified against an isolated official v4.4.6 source: two applications, a raw Compose service, five database configurations and two domains; KeyDB/repository Compose applications are explicitly skipped. Repeat apply preserves IDs, manually restored secrets/settings and database credentials, with unchanged Docker inventory/proxy hashes. Nine additional desktop/mobile light/dark migration screenshots pass with zero browser errors. Design decisions live in
 `.ui-craft/brief.md` and `tokens.md`. Evidence is under ignored
 `.nixploy-data/verification/`. All source instances/databases use test-owned
 resources; original services, Traefik files and unattributed storage are preserved.

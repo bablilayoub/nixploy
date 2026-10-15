@@ -71,7 +71,7 @@ async function readApiKey(options: { apiKeyFile?: string }): Promise<string> {
 
 function addSourceOptions(command: Command): Command {
 	return command
-		.requiredOption("--source <name>", "Source panel kind (dokploy)")
+		.requiredOption("--source <name>", "Source panel kind (dokploy, coolify)")
 		.option("--url <url>", "Origin of the running source panel, e.g. https://panel.example.com")
 		.option("--api-key-file <path>", "File holding the source API key (or NIXPLOY_IMPORT_API_KEY)")
 		.option(
@@ -264,21 +264,21 @@ export function importCommand(): Command {
 			keepAppNames: options.keepAppNames,
 			serviceIds: options.service?.length ? options.service : undefined,
 		});
+		const errors = result.result?.errors ?? [];
 		if (outputMode().json) {
 			printJson(result);
-			return;
+		} else {
+			printPlan(result);
+			const applied = result.result?.applied ?? 0;
+			printMessage("");
+			printMessage(
+				`Applied ${applied} change(s); ${result.secrets?.applied.length ?? 0} env entries written.`,
+			);
+			for (const error of errors) {
+				printMessage(`  ! ${error.kind}/${error.name}: ${error.message}`);
+			}
+			printMessage("Nothing was deployed. Review the notes, then deploy each service.");
 		}
-		printPlan(result);
-		const applied = result.result?.applied ?? 0;
-		const errors = result.result?.errors ?? [];
-		printMessage("");
-		printMessage(
-			`Applied ${applied} change(s); ${result.secrets?.applied.length ?? 0} env entries written.`,
-		);
-		for (const error of errors) {
-			printMessage(`  ! ${error.kind}/${error.name}: ${error.message}`);
-		}
-		printMessage("Nothing was deployed. Review the notes, then deploy each service.");
 		if (errors.length > 0) {
 			throw new CliError(`${errors.length} service(s) could not be imported`, EXIT_ERROR);
 		}

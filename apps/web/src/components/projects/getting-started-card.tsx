@@ -126,7 +126,9 @@ export function GettingStartedCard({ firstProjectId }: { firstProjectId?: string
 			<CardContent className="space-y-4 pt-0">
 				{can("gitops.manage") && !data.service && (
 					<div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/30 p-3">
-						<p className="text-sm text-muted-foreground">Already running services on Dokploy?</p>
+						<p className="text-sm text-muted-foreground">
+							Already running services on Dokploy or Coolify?
+						</p>
 						<Button asChild variant="outline" size="sm">
 							<Link href="/dashboard/migrations">Review an import</Link>
 						</Button>

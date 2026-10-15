@@ -288,13 +288,13 @@ NIXPLOY_IMAGE=ghcr.io/bablilayoub/nixploy:v0.2.0 NIXPLOY_SKIP_DNS_CHECK=1 \\
 			{ type: "h2", text: "Import in the panel" },
 			{
 				type: "p",
-				text: "Open Migrations in the navigation or command palette. Connect a Dokploy live API or upload a PostgreSQL dump, select an environment and services, choose an accessible target and generate a redacted plan. Review changes and manual work, then explicitly import configuration. Source/selection/target changes invalidate the review; changes discovered at apply require a fresh plan. The API key stays in page memory and is cleared on source changes, completion or leaving. Imports deploy nothing. Results link to the target and list the secret, database, persistent storage, server, registry and domain work needed before cutover.",
+				text: "Open Migrations in the navigation or command palette. Connect a Dokploy or Coolify live API, or upload a Dokploy PostgreSQL dump, select an environment and services, choose an accessible target and generate a redacted plan. Review changes and manual work, then explicitly import configuration. Source/selection/target changes invalidate the review; changes discovered at apply require a fresh plan. The API key stays in page memory and is cleared on source changes, completion or leaving. Imports deploy nothing. Results link to the target and list the secret, database, persistent storage, server, registry and domain work needed before cutover.",
 			},
 
 			{ type: "h2", text: "Import over the source's API" },
 			{
 				type: "p",
-				text: "For a source panel the importer speaks (Dokploy today), nixploy import inspect / plan / apply reads one project environment through its REST API with a read-capable key, translates it to a version-2 nixploy.yaml plus the env values, and applies both. Nothing is deployed: services land idle with a list of notes for what did not carry over (git provider connections, basic-auth passwords, database passwords, compose mounts, custom certificates), and you deploy each one when the notes are handled.",
+				text: "For a supported source panel (Dokploy or Coolify), nixploy import inspect / plan / apply reads one project environment through its REST API with a read-capable key, translates it to a version-2 nixploy.yaml plus the env values, and applies both. Nothing is deployed: services land idle with a list of notes for what did not carry over (git provider connections, basic-auth passwords, database passwords, compose mounts, custom certificates), and you deploy each one when the notes are handled.",
 			},
 			{
 				type: "pre",
@@ -303,6 +303,12 @@ nixploy import inspect --source dokploy --url https://old-panel.example.com
 nixploy import plan  --source dokploy --url https://old-panel.example.com --source-project prj_123
 nixploy import apply --source dokploy --url https://old-panel.example.com --source-project prj_123`,
 			},
+			{ type: "h2", text: "Coolify live API support" },
+			{
+				type: "p",
+				text: "Select Coolify in Migrations or use --source coolify. Enable its API and use a team-scoped read token, adding read:sensitive for readable environment values and raw Compose content. The verified v4.4.6 slice covers image/public-Git applications, raw or one-click Compose services, PostgreSQL/MySQL/MariaDB/MongoDB/Redis configuration and HTTP domains. Repository Compose applications and other database engines are reported as unsupported. Runtime names are fresh; source data, server/provider keys, registries, shared-variable libraries, custom commands, ports and proxy middleware need manual setup. Hidden/null/once-only/shared-reference or unrepresentable value groups preserve target values with notes. Imports deploy nothing; only PostgreSQL has separate real database runtime proof.",
+			},
+
 			{ type: "h2", text: "Import from a database dump" },
 			{
 				type: "p",

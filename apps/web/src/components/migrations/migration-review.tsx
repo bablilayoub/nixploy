@@ -102,6 +102,40 @@ export function MigrationReview({
 							</table>
 						</div>
 					)}
+					{plan.valueGroups?.length > 0 && (
+						<section className="space-y-2">
+							<h3 className="text-sm font-medium">Environment values</h3>
+							<p className="text-sm text-muted-foreground">
+								Copy replaces the listed value group. Clear removes its existing variables.
+								Preserved groups stay unchanged. Project and environment values are shared with
+								other services in the target; values are hidden here.
+							</p>
+							<ul className="divide-y rounded-md border">
+								{plan.valueGroups.map((group) => (
+									<li key={`${group.target}:${group.field}`} className="space-y-1 px-3 py-2.5">
+										<div className="flex flex-wrap justify-between gap-2 text-sm">
+											<span className="break-words font-medium">
+												{group.target} · {group.field}
+											</span>
+											<span className="text-muted-foreground">
+												{group.action === "preserve"
+													? "Preserve target values"
+													: group.action === "clear"
+														? "Clear target values"
+														: `Copy ${group.keys.length} keys`}
+											</span>
+										</div>
+										{group.keys.length > 0 && (
+											<p className="break-all font-mono text-xs text-muted-foreground">
+												{group.keys.join(", ")}
+											</p>
+										)}
+									</li>
+								))}
+							</ul>
+						</section>
+					)}
+
 					{plan.notes.length > 0 && (
 						<section className="space-y-2">
 							<h3 className="text-sm font-medium">Manual work and compatibility notes</h3>
@@ -125,7 +159,7 @@ export function MigrationReview({
 						<div className="space-y-3 rounded-md border p-4">
 							<p className="flex items-center gap-2 font-medium">
 								<CheckCircle2 className="size-4" />
-								{result.result.applied} changes applied; {result.result.errors.length} failed
+								{result.result.applied} resources applied; {result.result.errors.length} failed
 							</p>
 							{result.result.errors.map((error) => (
 								<p
