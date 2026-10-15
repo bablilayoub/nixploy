@@ -145,9 +145,11 @@ Verified against an isolated official **Coolify v4.4.6** API: image/public-Git
 applications, a raw Compose service, all five database configuration kinds,
 two domains, plus explicit KeyDB/repository-Compose rejections. Read-token
 repeat preserves manually restored values/settings, IDs and database passwords.
-Import alone leaves Docker inventory and proxy configuration unchanged. Runtime
-proof for imported database engines other than PostgreSQL is still separate
-from configuration/schema coverage.
+Import alone leaves Docker inventory and proxy configuration unchanged. A fresh
+image/PostgreSQL import was then explicitly started: the image served HTTP 200
+and PostgreSQL accepted its new target password over TCP while rejecting the
+source password. Other database engines retain configuration/schema coverage;
+their runtime and data restoration need separate verification.
 
 ## Import from a database dump (the source panel is dead)
 

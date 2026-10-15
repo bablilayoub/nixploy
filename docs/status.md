@@ -7,40 +7,80 @@ file is for **state** and **tasks**.
 
 ## Operator workflow and migration workspace — 2026-10-15
 
-In progress on `codex/migration-workspace`, based on merged PR #14
-(`3b39c8e`); the primary checkout remains unchanged. Completed checkpoints:
+Implemented in [PR #16](https://github.com/bablilayoub/nixploy/pull/16) on
+`codex/migration-workspace`, integrating the merged PR #15 dependency baseline
+(`401e042`). The primary checkout and existing workloads remain untouched.
 
-- `a223ab1`: Compose creation accepts pasted/uploaded YAML and raw URLs, validates
-  before inserting, preserves drafts on failure, and saves idle for explicit
-  deployment. Parser failures report safe locations rather than echoing source.
-  Server TypeScript, 100 focused tests and 141 Compose tests pass (DB snapshot
-  suite separately pending at that checkpoint). Real panel: 10 browser scenarios,
-  9 desktop/mobile light/dark screenshots, zero page/console errors; unsafe,
-  malformed, HTML, redirects, metadata and private-egress failures create no row.
-- `2b35776`: Consistent page/service headings, mobile project health and service
-  context, separated environment/actions/filters, useful partial errors/retry,
-  keyboard focus and bulk selection. Fixed duplicate new-project deep-link
-  dialogs, URL history selection, unauthorized Docker health and missing health
-  invalidations. Web TypeScript and 96 tests pass; 28 screenshots, zero browser
-  errors. Idle dashboard sends no deployment requests over 12 seconds; populated
-  deployment-history navigation still pending a real deployment in this phase.
-- `d2e7386` migration center: real isolated Dokploy v0.30.8 API inspect/review/apply using
-  application, Compose, Postgres and domain configuration; 9 desktop/mobile
-  light/dark screenshots, zero browser errors, body-only mutation requests and
-  redacted report canary checks. Target Docker inventory remains the original
-  four services and imports write no runtime/proxy configuration. Selection,
-  prepared-snapshot permission checks and HMAC review binding are covered by
-  real-Postgres regressions, including source secret drift and target settings.
-  Actual pg_dump upload/inspect/plan/apply and six browser edge cases now pass: late source/plan replies, cleared mutation credentials, partial failures and dump-mode reset. The independent review also closed restricted-project orphan creation and CLI JSON false-success. Latest full server run: **215 files, 2,977 passed, 1 optional probe skipped** with the isolated Postgres suites enabled. CLI **94** and web **96** tests pass. Later isolation/provider edits still require the final gate/build/PR pass.
+- **Panel:** consistent page/service headings, mobile project health, separated
+  environment/actions/filters, useful partial errors/retry, keyboard focus and
+  page selection. Fixed duplicate project dialogs, URL history selection,
+  unauthorized Docker health and missing live health invalidations. Production
+  browser checks include populated recent deployments, three soft-navigation
+  cycles and zero deployment requests over 12 idle seconds.
+- **Compose creation:** paste/upload/raw URL validation happens before insertion;
+  failures retain the draft and create no orphan. Saved services remain idle
+  until an explicit deployment. Ten real browser scenarios cover unsafe YAML,
+  safe parser locations, oversized files, HTML, redirects, metadata and private
+  egress, with desktop/mobile light/dark evidence.
+- **Migration center:** Dokploy API/dump and live Coolify API inventory, selected
+  services, target review, explicit apply, partial results, resource links and
+  concrete secrets/data/storage/server/routing/deployment tasks. Source keys
+  leave page/query mutation memory after completion or source changes. Prepared
+  snapshots, HMAC review binding, source/target drift, hidden-project access,
+  restricted creation, ambiguous targets and CLI partial failures are covered.
+  Review fingerprints ignore unordered target service rows while retaining
+  secret values and nested ordered settings. Reports omit executable and
+  credential-bearing content; shared value groups show copy/clear/preserve.
+- **Real sources:** isolated official Dokploy v0.30.8 API plus genuine pg_dump,
+  and official Coolify v4.4.6 API. Coolify proof covers image/public-Git apps,
+  raw Compose, all five database configuration kinds and domains; KeyDB and
+  repository Compose applications are explicitly skipped. Repeat/read-token
+  imports retain IDs, manual replacements and database passwords, and imports
+  alone change no runtime/proxy configuration. A fresh selected image/Postgres
+  import stays idle, then explicitly starts: HTTP **200**, target-password TCP
+  authentication, and rejection of source/wrong passwords.
+- **Coolify catalog:** official revision
+  `2db26e88abd670b41848cde663f8130fd0d62743`, all **359** entries inspected:
+  **226 accepted / 133 rejected**, **16 advisory image warnings**. Compatibility
+  counts are not runtime guarantees. Two actual Umami/Postgres installations
+  have distinct generated credentials and marker data; each app repeatedly
+  resolves and queries only its own database. Data/credentials survive upgrade,
+  redeploy, stop/start and rollback, with HTTP and controlled trusted TLS **200**.
+- **Compose isolation:** deployed service keys/shared names are qualified, bare
+  aliases stay private, named-volume/project identity remains stable, and old
+  container labels remain discoverable. A real legacy image-VOLUME upgrade is
+  refused before replacing the container; its volume/marker stays intact.
+  A raw branch-preview fixture deploys/deletes through the API/worker while
+  preserving the parent's runtime/data; preview row, network and files are
+  removed. Raw per-service lookup and exact-container exec pass for both stacks.
 
-`5c3bd80` adds the Coolify catalog source. At official revision
-`2db26e88abd670b41848cde663f8130fd0d62743`, all 359 entries were inspected:
-226 accepted by translation and unchanged Compose safety, 133 rejected with
-reasons, 16 advisory image warnings. These counts are compatibility checks;
-the first real Umami/Postgres installation and redeploy preserve data. A second installation exposed a pre-existing automatic Compose hostname collision on the environment overlay. Qualified shared names/private bare aliases are implemented with legacy lookup/anonymous-volume safeguards; two-stack runtime verification is underway. The live Coolify API reader is now verified against an isolated official v4.4.6 source: two applications, a raw Compose service, five database configurations and two domains; KeyDB/repository Compose applications are explicitly skipped. Repeat apply preserves IDs, manually restored secrets/settings and database credentials, with unchanged Docker inventory/proxy hashes. Nine additional desktop/mobile light/dark migration screenshots pass with zero browser errors. Design decisions live in
-`.ui-craft/brief.md` and `tokens.md`. Evidence is under ignored
-`.nixploy-data/verification/`. All source instances/databases use test-owned
-resources; original services, Traefik files and unattributed storage are preserved.
+Final local gates on the integrated dependency baseline: **215 server files,
+2,983 passed, 1 optional image-probe test skipped** with isolated Postgres;
+**94 CLI / 96 web** tests; all workspace TypeScript checks; strict Biome
+(**1,094 files**), knip **5.88.1**, separate registry image probes, and all three
+production builds. Production browser checks have **60** desktop/mobile
+light/dark surface/inventory/review screenshots and seven edge cases, including
+a genuine dump upload/inspect/plan/apply, partial retry reconnection, late
+responses and credential-cache clearing, with zero browser errors. Two further
+edge screenshots bring the production total to **62**.
+Initial CI's new CodeQL finding classified a JWT test's expected HMAC as a
+password hash; independent WebCrypto signature verification replaces that test
+calculation. Security gates remain enabled; exact-head CI is tracked on PR #16.
+
+Material upgrade guidance is in `deployment-flow.md`: **all legacy Compose
+stacks sharing an environment must be redeployed** to remove their old bare
+shared aliases. Anonymous/image volumes need a backed-up migration to declared
+named volumes before this naming transition. A completed Compose command does
+not promise generic application health. Preview proof used a real fixture
+lifecycle, not a new provider webhook; terminal-equivalent exec is not WebSocket
+reconnect proof. Full volume backup/restore, the other imported database
+engines' runtime, public DNS/ACME and same-host takeover remain separate.
+
+Design decisions live in `.ui-craft/{brief,tokens,implementation-plan}.md`.
+Sanitized proof reports, harnesses and screenshots are retained under ignored
+`.nixploy-data/verification/` and copied to the local handoff artifact directory
+before cleanup. Only test-owned resources and source credential/dump material
+are removed; original services, Traefik files and unattributed storage remain.
 
 ## Production dependency advisory follow-up — 2026-10-15
 
