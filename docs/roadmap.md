@@ -1,14 +1,35 @@
 # Roadmap — winning switchers (drafted 2026-09-17)
 
 Current implementation checkpoint (2026-10-15): version **0.7.3**, merged PR #14
-at `3b39c8e`. The market/release sketches below are historical planning context;
-use `docs/status.md` for current verified behavior and remaining work. The
-operator panel refresh, migration center and Compose paste/upload/URL creation
-are implemented in the migration workspace. Coolify catalog compatibility is
-implemented (226 accepted /133 rejected at the pinned 359-entry upstream
-revision); runtime proof and the live API reader are tracked in status.
+and PR #15 dependency maintenance, with the operator/migration/catalog work
+implemented and verified in PR #16. The market/release sketches below are
+historical planning context; the **Active backlog** in [`status.md`](./status.md)
+is authoritative for remaining work.
 
-## Context
+PR #14 completed real isolated Gitea preview/database/provider-status proof,
+Dokploy v0.30.8 API and genuine-dump import proof, and Update-preflight browser
+verification. Update actions remain browser fixtures; actual preflight APIs,
+role gates and Swarm install/upgrade CI provide their separate evidence.
+PR #16 verifies Compose paste/upload/URL creation, the populated dashboard's
+hydration/soft-navigation/idle behavior, and the second public template source.
+The pinned Coolify catalog has **226 accepted / 133 rejected** entries out of
+359, with per-entry reasons and 16 advisory image warnings. Two real
+Umami/Postgres installations prove distinct credentials, isolated DNS/data,
+redeploy and rollback; compatibility counts do not promise every entry runs.
+
+The live Coolify **v4.4.6** API reader supports image and public-Git
+applications, raw Compose **services**, and PostgreSQL/MySQL/MariaDB/MongoDB/
+Redis configuration. Repository-backed Compose applications and other database
+engines are skipped. Encrypted secrets, source data/storage and unsupported
+settings require the reported manual steps; imports remain idle until an
+explicit deploy. Imported runtime/authentication proof is **PostgreSQL only**,
+with a fresh image app reaching HTTP 200. Reader/runtime proof is complete for
+that scope; same-host adoption/proxy cutover is still unimplemented and needs
+a disposable source-panel VM. Public DNS/provider writes/ACME, fresh
+multi-node/split-worker VM checks and 24-hour log/upstream checks remain in the
+active backlog. The separate first-admin atomic-claim fix is not shipped here.
+
+## Historical research context — 2026-09-17
 
 Nixploy is at v0.2.9: at parity with the free tier of the leading self-hosted panels and ahead of them in several places. But parity does not move anyone. Someone running 20 services on a €10 VPS needs a *reason* to migrate and a *way* to do it without losing a weekend. This plan supplies both.
 
@@ -24,7 +45,8 @@ It was built from: a research pass over the competing panels' current feature se
 
 **Why people choose it.** UI polish, lighter than the other big panel, integrated proxy + Let's Encrypt, compose-native, remote-server model, no upsells in the UI, one-click templates, fast release cadence. **This is what Nixploy must not lose to.**
 
-**Nixploy's real, verified gaps** (checked in code today):
+**Nixploy's gaps at the research checkpoint** (checked in code on 2026-09-17;
+subsequent implementation notes and the current status supersede this table):
 
 | Claim | Evidence |
 | --- | --- |
@@ -43,7 +65,7 @@ It was built from: a research pass over the competing panels' current feature se
 
 ---
 
-## Strategy
+## Historical strategy
 
 ### The thesis
 
@@ -70,7 +92,7 @@ Listing these so the backlog stays honest:
 
 ---
 
-## Release plan
+## Historical release plan and implementation notes
 
 Four releases plus a continuous trust track. Order chosen because **compose parity is a hard prerequisite for the importer**: real-world compose stacks routinely use `build:` and published `ports:`, which Nixploy refused. Both landed 2026-09-17.
 
@@ -204,11 +226,23 @@ Then a pure normalizer to manifest v2 + an in-memory secret bundle, a plan step 
 
 Gated by a new `import.manage` capability; source credentials live only in `encryptedText` and are wiped at terminal status; plan and report JSON never contain values.
 
-*What shipped (live API, one source):* `modules/import` — `SourcePanelClient` (the URL through `assertSafeOutboundUrl`, every request through `pinnedFetch`), lenient `.passthrough()` schemas for the source rows, a pure normaliser to manifest v2 + a secrets payload + notes, and `inspect` / `plan` / `apply` over `gitops.manage` (+ `secrets.write`, `project.write` and the quota when creating). No `import_job` / `import_mapping` tables and no stored credentials: the key is passed per call and forgotten, `plan` is repeatable and `apply` is a GitOps apply (idempotent by name) followed by `applySecretsPayload`, so a job table would have recorded what the audit row already does. No new capability: an import *is* a GitOps apply from another panel, and `gitops.manage` already means "may write this environment from a file". Initially verified on fixtures; real isolated Dokploy v0.30.8 API inspection, planning and repeated apply passed on 2026-10-15, including inherited env, application/compose/database settings, domains and secret-free plans. The client hydrates full projects because the actual list omits environment env and database names.
+*Initial live API reader (Dokploy):* `modules/import` — `SourcePanelClient` (the URL through `assertSafeOutboundUrl`, every request through `pinnedFetch`), lenient `.passthrough()` schemas for the source rows, a pure normaliser to manifest v2 + a secrets payload + notes, and `inspect` / `plan` / `apply` over `gitops.manage` (+ `secrets.write`, `project.write` and the quota when creating). No `import_job` / `import_mapping` tables and no stored credentials: the key is passed per call and forgotten, `plan` is repeatable and `apply` is a GitOps apply (idempotent by name) followed by `applySecretsPayload`, so a job table would have recorded what the audit row already does. No new capability: an import *is* a GitOps apply from another panel, and `gitops.manage` already means "may write this environment from a file". Initially verified on fixtures; real isolated Dokploy v0.30.8 API inspection, planning and repeated apply passed on 2026-10-15, including inherited env, application/compose/database settings, domains and secret-free plans. The client hydrates full projects because the actual list omits environment env and database names.
 
 *The offline-dump path landed 2026-09-20:* `POST /api/import/dump` stores a `pg_dump` (plain, gzipped or custom) under the organisation for 24 hours; `DumpSourceReader` restores it into a throwaway `postgres:17-alpine` on `--network none`, reads the rows with `row_to_json`, discovers the child tables by name, and removes the container. One `SourceReader` interface sits behind `inspect` / `plan` / `apply`. Initially verified against a synthetic dump; a genuine dump from the API-seeded Dokploy v0.30.8 instance passed inspection, planning and repeated apply on 2026-10-15. The source keyring is not read: recognized ciphertext is omitted with an explicit warning, both keys and values need manual input, and repeated apply preserves those manually restored values. Database passwords are replaced, and source data/volumes are not migrated. Incompatible named volumes are reported for manual recreation and restore; unsupported target settings are preserved on repeat import. No automatic deployment or same-host adoption is part of either path.
 
+*Second live reader added in PR #16 (2026-10-15):* the official Coolify
+v4.4.6 API passed inspection, planning, repeated apply and explicit runtime
+checks within the scope at the top of this document: image/public-Git apps,
+raw Compose services and all five supported database configuration kinds.
+Repository Compose applications and other database engines are explicitly
+skipped. Secrets/data restoration remains manual, and actual imported runtime
+proof covers PostgreSQL plus a selected image application, not every engine.
+
 ### 12. Same-host takeover *(L — the demo that ends arguments)*
+
+**Unimplemented historical sketch.** No adoption, proxy cutover or rollback
+script is shipped. The timing and demo below are proposed acceptance targets,
+not measured results; implementation needs a disposable source-panel VM.
 
 A `tools/takeover.sh`, shipped as a checksum-verified release asset:
 
@@ -231,13 +265,13 @@ New template-source kinds that read the large public compose catalogues maintain
 
 *Also landed 2026-09-20, outside the original list:* **DNS records created for you** — the DNS-01 provider link writes the A record for every attached domain (Cloudflare, DigitalOcean, Hetzner Cloud, Vultr, Gandi; off by default, best-effort by contract, `domain.ensureDnsRecord` to retry) — and **template domain hints**, so a template declares the hostnames it reads from its env values (OpenHole's endpoint host and `*.<tunnel domain>`) and they are attached, certificated and resolved on deploy.
 
-*What shipped:* the `blueprints` template-source kind (migration 0041) reads the Dokploy templates repository layout — `blueprints/<id>/{meta.json, template.toml, docker-compose.yml}` — with a small TOML reader written for that subset (the dependency set is fixed), a pure mapper, and a deploy-time placeholder grammar the built-in catalog can use too (named generators memoised per deploy, `{{domain}}`, `{{env:KEY}}`, HS256 JWTs). File mounts become inline compose configs, undeclared `../files/<dir>` mounts become named volumes, `env_file` becomes explicit environment entries, and every entry passes the deploy's own compose safety check at sync. Measured on the public catalog: 417 of 532 deploy as-is; the 115 rejections are the Docker socket, host bind mounts, host ports, privileged capabilities and ten entries with nothing to route to, each listed with its reason on the source row. The Coolify catalogue source was added on 2026-10-15 (migration 0047): an explicit translator covers generated credentials, repeated references, domain/URL semantics and required inputs, then applies the same safety checks. The pinned 359-entry catalogue yields 226 accepted and 133 rejected with per-entry reasons; acceptance is a compatibility result, not a runtime claim for every entry. Export-a-running-stack-as-template already exists through template export; same-host takeover remains separate.
+*What shipped:* the `blueprints` template-source kind (migration 0041) reads the Dokploy templates repository layout — `blueprints/<id>/{meta.json, template.toml, docker-compose.yml}` — with a small TOML reader written for that subset (the dependency set is fixed), a pure mapper, and a deploy-time placeholder grammar the built-in catalog can use too (named generators memoised per deploy, `{{domain}}`, `{{env:KEY}}`, HS256 JWTs). File mounts become inline compose configs, undeclared `../files/<dir>` mounts become named volumes, `env_file` becomes explicit environment entries, and every entry passes the deploy's own compose safety check at sync. The September public-catalog sync accepted 417 of 532 entries for compatibility, without a runtime guarantee for each; the 115 rejections are the Docker socket, host bind mounts, host ports, privileged capabilities and ten entries with nothing to route to, each listed with its reason on the source row. The Coolify catalogue source was added on 2026-10-15 (migration 0047): an explicit translator covers generated credentials, repeated references, domain/URL semantics and required inputs, then applies the same safety checks. The pinned 359-entry catalogue yields 226 accepted and 133 rejected with per-entry reasons; acceptance is a compatibility result, not a runtime claim for every entry. Export-a-running-stack-as-template already exists through template export; same-host takeover remains separate.
 
 **External upstream targets** (M) deserve their own line because they change migration order: a domain that points at an external URL with LE, middlewares and uptime probes means **DNS flips to Nixploy once**, then services move behind it one at a time instead of in a big-bang cutover.
 
 *What shipped (external upstreams, migration 0042):* an `external_upstream` row per environment (name, `appName` in the shared service namespace, target origin, host-header mode, TLS-verification switch) that a domain row can hang off as its third possible parent (`domain_type = external`); the Traefik writer takes `TraefikDomainEntry.upstream` and emits the origin as the load-balancer server, `passHostHeader` from the switch and one `serversTransports` entry when verification is off, so certificates, middlewares (the panel sign-in included), the HTTPS redirect and uptime probes need no change. Two things the sketch did not name. **The target policy is the feature's security boundary**: Traefik dials from inside the proxy container, on both platform overlays, so the origin goes through the egress guard plus three rules of its own — bare names refused (they resolve to a Swarm service, i.e. some other tenant's container behind its own auth middleware), the dashboard host and the server's public address refused (both route the domain back into Traefik), and an hourly re-check that withholds the route when a vetted name is re-pointed at the overlay, while leaving a name that merely stopped resolving alone. And the panel surface is deliberately not a service page: no deploy, status or env, so it is a card under the services table and a single page (target, domains, delete) rather than a row of empty tabs. `nixploy upstream create|list|get|update|resync|remove` and `domain add --upstream-id`. Not in the manifest yet.
 
-*Export-a-running-stack-as-template* also landed the same day: `compose.exportTemplate` (Settings → Export as template, `nixploy compose export-template`) writes the stack in the remote `Template` shape, validated with `remoteTemplateSchema` before it leaves so a sync can never reject it, with secret-shaped env keys replaced by `{{generateSecret}}`, the stack's own hostnames by `{{domain}}`, and the rest kept as defaults. Still open in this section: the second public catalogue (its variable syntax differs).
+*Export-a-running-stack-as-template* also landed the same day: `compose.exportTemplate` (Settings → Export as template, `nixploy compose export-template`) writes the stack in the remote `Template` shape, validated with `remoteTemplateSchema` before it leaves so a sync can never reject it, with secret-shaped env keys replaced by `{{generateSecret}}`, the stack's own hostnames by `{{domain}}`, and the rest kept as defaults. The second public catalogue is complete in PR #16: Coolify translation, source add/sync/report UI and the two-install Umami/Postgres runtime proof are described above. Same-host takeover remains separate.
 
 ---
 
@@ -251,7 +285,7 @@ Search is a small server-side grammar — free terms, `-term`, `"phrase"`, `leve
 
 Harvest and gzip run in the **worker** role only — this must not land on the panel's RSS.
 
-*What shipped:* `modules/runtime-logs` — hour files under `<config>/runtime-logs/<appName>/`, gzipped when the hour closes, a 30 s harvest cron registered with the other worker crons (local containers through dockerode with the multiplexed stream demuxed, managed servers as one SSH script per server with per-container `--since` cursors embedded), 2 000 lines per container per pass with an explicit marker line, cursors as Docker timestamps in a per-service `state.json`, retention by days and by bytes per service in the hourly maintenance pass. Two things landed differently. **No `runtime_log_segment` table**: the directory is the index — a read lists one service's hour files and walks them newest-first, retention is a `stat` per file, and the per-org caps became instance-wide env knobs (`NIXPLOY_RUNTIME_LOG_RETENTION_DAYS`, `NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE`) because nothing else in the metrics/log stores is per-org either. And **paging is by timestamp, not by segment offset**: `before` is the previous page's `nextCursor`, which for an org-wide read is the newest per-service cursor — the page is cut there so no line is skipped or repeated across services. The level classifier moved to the server (`observability/log-levels.ts`, import-free, the panel imports it) so stored levels and the viewer's badges are one implementation. Surfaces: Runtime → History on every service page, a Logs section on the Monitoring page, `nixploy logs search`, MCP `get_runtime_logs`, `observability.runtimeLogs`. Not done: per-org retention, and the harvester has been exercised on the local Swarm only.
+*What shipped:* `modules/runtime-logs` — hour files under `<config>/runtime-logs/<appName>/`, gzipped when the hour closes, a 30 s harvest cron registered with the other worker crons (local containers through dockerode with the multiplexed stream demuxed, managed servers as one SSH script per server with per-container `--since` cursors embedded), 2 000 lines per container per pass with an explicit marker line, cursors as Docker timestamps in a per-service `state.json`, retention by days and by bytes per service in the hourly maintenance pass. Two things landed differently. **No `runtime_log_segment` table**: the directory is the index — a read lists one service's hour files and walks them newest-first, retention is a `stat` per file, and the per-org caps became instance-wide env knobs (`NIXPLOY_RUNTIME_LOG_RETENTION_DAYS`, `NIXPLOY_RUNTIME_LOG_MAX_MB_PER_SERVICE`) because nothing else in the metrics/log stores is per-org either. And **paging is by timestamp, not by segment offset**: `before` is the previous page's `nextCursor`, which for an org-wide read is the newest per-service cursor — the page is cut there so no line is skipped or repeated across services. The level classifier moved to the server (`observability/log-levels.ts`, import-free, the panel imports it) so stored levels and the viewer's badges are one implementation. Surfaces: Runtime → History on every service page, a Logs section on the Monitoring page, `nixploy logs search`, MCP `get_runtime_logs`, `observability.runtimeLogs`. That initial snapshot predates the current per-org retention caps under the instance ceiling (`modules/runtime-logs/retention.ts`). Local and short live-VPS harvest checks have since passed; the 24-hour/load verification remains in the active backlog.
 
 ### 15. Ephemeral environments ✅ *(L — landed 2026-09-20)*
 
