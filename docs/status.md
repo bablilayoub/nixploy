@@ -71,9 +71,10 @@ an implementation checkpoint, not a new release claim.
   high/critical audit gate. The PR #15 evidence table below records the current
   dependency decision.
 - [ ] Keep release/upgrade notes explicit about legacy Compose stacks sharing
-  an environment needing redeploy, and anonymous/image volumes needing a
-  backed-up transition to declared named volumes. Command completion does not
-  establish generic application health.
+  an environment needing redeploy. Legacy Swarm Stack naming upgrades require
+  an explicit Stop and verified target-node storage placement; anonymous/image
+  volumes need a backed-up transition to declared named volumes. Command
+  completion does not establish generic application health.
 
 The following previously open integration items are complete within these
 stated evidence boundaries:
@@ -130,6 +131,13 @@ Implemented in [PR #16](https://github.com/bablilayoub/nixploy/pull/16) on
   have distinct generated credentials and marker data; each app repeatedly
   resolves and queries only its own database. Data/credentials survive upgrade,
   redeploy, stop/start and rollback, with HTTP and controlled trusted TLS **200**.
+- **Template inputs:** translated Compose default operators remain intact.
+  Ordinary cleared form values stay empty; blank automatic inputs still resolve
+  fresh installation defaults. `:?` error text stays descriptive and never
+  becomes a credential. Missing/empty required inputs fail before creating a
+  service. Docker Compose config-only checks cover absent, empty and supplied
+  values; eight targeted desktop/mobile light/dark screenshots verify the
+  actual form with intercepted deployment payloads and zero browser errors.
 - **Compose isolation:** deployed service keys/shared names are qualified, bare
   aliases stay private, named-volume/project identity remains stable, and old
   container labels remain discoverable. A real legacy image-VOLUME upgrade is
@@ -137,16 +145,36 @@ Implemented in [PR #16](https://github.com/bablilayoub/nixploy/pull/16) on
   A raw branch-preview fixture deploys/deletes through the API/worker while
   preserving the parent's runtime/data; preview row, network and files are
   removed. Raw per-service lookup and exact-container exec pass for both stacks.
+- **Swarm counterpart:** two real Umami/Postgres Stacks in one environment pass
+  repeated app-side database queries and private DNS checks with distinct
+  credentials/markers. Forced application/database task replacement through
+  redeploy and rollback preserves exact named-volume identity and data. Live
+  legacy Deploy **and** rollback refuse before mutation: service/container IDs,
+  source/rendered files and Traefik hashes stay unchanged, and HTTP/marker checks
+  still pass. Configuration save, domain resync, diagnosis, status, exec and
+  backup/volume lookup still address that live legacy runtime. Explicit Stop
+  returns only after task containers leave; immediate Deploy then preserves the
+  same named volume, credentials and marker. A real anonymous image-volume
+  fixture is also refused with its exact container/volume/data intact. Scoped
+  cross-service aliases and actual domain diagnosis pass. A real raw Stack
+  branch preview passes compact-name deployment, HTTP/domain diagnosis and
+  deletion convergence without changing parent container IDs, volume identity
+  or marker data. Captured test resources are removed; the original four Swarm
+  service IDs remain at 1/1 and all five original proxy hashes match. This is
+  single-node proof; remote placement and full backup/restore remain separate.
 
-Final local gates on the integrated dependency baseline: **215 server files,
-2,983 passed, 1 optional image-probe test skipped** with isolated Postgres;
-**94 CLI / 96 web** tests; all workspace TypeScript checks; strict Biome
-(**1,094 files**), knip **5.88.1**, separate registry image probes, and all three
+Final local gates on the integrated dependency/auth baseline: **216 server files,
+3,032 passed, 1 optional image-probe test skipped** with isolated Postgres;
+**94 CLI / 102 web** tests; all workspace TypeScript checks; strict Biome
+(**1,098 files**), knip **5.88.1**, separate registry image probes, and all three
 production builds. Production browser checks have **60** desktop/mobile
 light/dark surface/inventory/review screenshots and seven edge cases, including
 a genuine dump upload/inspect/plan/apply, partial retry reconnection, late
 responses and credential-cache clearing, with zero browser errors. Two further
-edge screenshots bring the production total to **62**.
+edge screenshots bring that production total to **62**. The final template-form
+production replay adds **8** more (**70** total), with catalog/project fixtures
+and intercepted deployment requests evaluated by the real resolver/renderer;
+it creates no jobs or database fixtures and records zero errors or overflow.
 
 Landing production `/docs/migrate` and `/api#router-import` passed eight more
 screenshots with zero browser errors or horizontal overflow. The shipped site
@@ -160,7 +188,10 @@ calculation. Security gates remain enabled; exact-head CI is tracked on PR #16.
 Material upgrade guidance is in `deployment-flow.md`: **all legacy Compose
 stacks sharing an environment must be redeployed** to remove their old bare
 shared aliases. Anonymous/image volumes need a backed-up migration to declared
-named volumes before this naming transition. A completed Compose command does
+named volumes before this naming transition. Legacy Swarm Stack upgrades also
+require an explicit Stop and verified target-node storage placement. Namespaces
+above 48 characters cannot fit an isolated Stack key and are rejected; legacy
+runtime lookup remains available. A completed Compose command does
 not promise generic application health. Preview proof used a real fixture
 lifecycle, not a new provider webhook; terminal-equivalent exec is not WebSocket
 reconnect proof. Full volume backup/restore, the other imported database

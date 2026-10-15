@@ -398,6 +398,22 @@ mutation state. Restricted project filters require an existing reachable target.
 `modules/templates/coolify.ts` translates the official Base64/metadata index to
 the existing template contract. Sync creates no random credentials; generators
 are resolved once per new installation and stored for ordinary redeployment.
+Validated Compose expressions retain their `-`, `:-` and `:?` operators through
+translation, so unset and explicit empty values keep Compose's own semantics.
+Only `-` and `:-` supply defaults: `:?` diagnostics remain descriptions and
+ordinary required inputs start empty. Missing or empty required values fail
+installation before service creation; unsupported interpolation is reported.
+The form preserves ordinary empty values while omitting blank automatic fields
+so the server can generate them, using the same payload for required checks.
 `template_source.kind=coolify` uses the same public-URL, address-pinned fetch,
 cache, Compose-safety and report machinery as the other source kinds. The
 settings source form presets the official URL and reports individual rejections.
+
+`modules/compose/transition.ts` checks the live identities before preparation
+writes or runtime changes. Both engines qualify YAML service keys to prevent
+automatic bare aliases on shared networks; `commands.ts` separates those keys
+from stable route aliases and legacy physical candidates. Stack naming changes
+require an explicit stop first. `service.ts` verifies task-node coverage before
+removal and actual container disappearance before marking idle; preparation
+also refuses lingering tasks after the service objects have gone. Source-service
+metadata keeps runtime/log/timeline labels in the operator's source vocabulary.

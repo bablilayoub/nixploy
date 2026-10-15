@@ -16,6 +16,12 @@ The pinned Coolify catalog has **226 accepted / 133 rejected** entries out of
 359, with per-entry reasons and 16 advisory image warnings. Two real
 Umami/Postgres installations prove distinct credentials, isolated DNS/data,
 redeploy and rollback; compatibility counts do not promise every entry runs.
+The same isolation proof now covers native Swarm Stacks, including live legacy
+Deploy/rollback refusal without mutation and explicit Stop followed by a
+data-preserving naming upgrade. Overflowing physical service names use stable
+compact keys; Stack namespaces above 48 characters are rejected. Required
+template diagnostics remain descriptions, and cleared ordinary inputs preserve
+Compose's empty-value semantics.
 
 The live Coolify **v4.4.6** API reader supports image and public-Git
 applications, raw Compose **services**, and PostgreSQL/MySQL/MariaDB/MongoDB/
