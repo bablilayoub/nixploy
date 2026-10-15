@@ -84,16 +84,16 @@ describe("Swarm naming transition", () => {
 				/Before stopping.*anonymous\/image volumes.*target node placement.*wait for every old task/,
 			);
 			expect(run.mock.calls.map(([command]) => command)).toEqual([
-				"docker service ls -q --no-trunc --filter label=com.docker.stack.namespace='stack-a'",
+				"docker service ls -q --filter label=com.docker.stack.namespace='stack-a'",
 				`docker service inspect '${"a".repeat(25)}'`,
 			]);
 		},
 	);
-	it("requires physical identity as well as source metadata, and permits qualified redeploys", async () => {
+	it("supports actual CLI short IDs and requires physical identity as well as metadata", async () => {
 		const run = (service: unknown) =>
 			vi
 				.fn()
-				.mockResolvedValueOnce("a".repeat(25))
+				.mockResolvedValueOnce("a".repeat(12))
 				.mockResolvedValueOnce(JSON.stringify([service]));
 		await expect(
 			assertSafeComposeNamingTransition(swarmRow, run(swarmService("stack-a_db", "db"))),

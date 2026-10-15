@@ -30,7 +30,7 @@ export async function assertSafeComposeNamingTransition(
 		// service, even when its tasks are remote or no local container exists.
 		const ids = (
 			await run(
-				`docker service ls -q --no-trunc --filter label=com.docker.stack.namespace=${shellQuote(row.appName)}`,
+				`docker service ls -q --filter label=com.docker.stack.namespace=${shellQuote(row.appName)}`,
 			)
 		)
 			.split("\n")
@@ -46,7 +46,7 @@ export async function assertSafeComposeNamingTransition(
 				);
 			return;
 		}
-		if (ids.some((id) => !/^[a-z0-9]{25}$/.test(id)))
+		if (ids.some((id) => !/^[a-z0-9]{12,25}$/.test(id)))
 			throw preconditionFailed(
 				"Could not verify existing Swarm services before the naming upgrade",
 			);
