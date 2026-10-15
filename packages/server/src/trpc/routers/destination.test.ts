@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { forbidden } from "../../modules/errors";
+import { setPrivateEgressAllowedForTests } from "../../utils/public-url";
 import type { TRPCContext } from "../init";
 
 const mocks = vi.hoisted(() => ({
@@ -78,6 +79,42 @@ beforeEach(() => {
 		set: () => ({ where: () => ({ returning: async () => [destination] }) }),
 	});
 	mocks.remove.mockReturnValue({ where: async () => {} });
+});
+
+afterEach(() => {
+	setPrivateEgressAllowedForTests(null);
+});
+
+describe("S3 endpoint policy on destination mutations", () => {
+	it.each(["http://127.0.0.1:9000", "http://192.168.1.20:9000"])(
+		"denies creating private endpoint %s without the instance toggle",
+		async (endpoint) => {
+			setPrivateEgressAllowedForTests(false);
+			await expect(
+				destinationRouter.createCaller(context()).create({
+					provider: "s3",
+					name: "Private backups",
+					endpoint,
+					bucket: "backups",
+					region: "us-east-1",
+					accessKey: "test-access",
+					secretAccessKey: "test-secret",
+				}),
+			).rejects.toMatchObject({ code: "BAD_REQUEST" });
+		},
+	);
+	it.each([
+		"http://127.0.0.1:9000",
+		"http://10.0.0.4:9000",
+		"http://nixploy-postgres:5432",
+		"http://169.254.169.254",
+	])("cannot redirect an existing destination to %s", async (endpoint) => {
+		setPrivateEgressAllowedForTests(!endpoint.includes("127.0.0.1"));
+		await expect(
+			destinationRouter.createCaller(context()).update({ destinationId: "d-1", endpoint }),
+		).rejects.toMatchObject({ code: "BAD_REQUEST" });
+		expect(mocks.update).not.toHaveBeenCalled();
+	});
 });
 
 type Caller = ReturnType<typeof destinationRouter.createCaller>;

@@ -9,11 +9,12 @@ import {
 	GetObjectCommand,
 	ListObjectsV2Command,
 	PutObjectCommand,
-	S3Client,
+	type S3Client,
 } from "@aws-sdk/client-s3";
 import type { destinations } from "../../db/schema";
 import { getConfigDir } from "../traefik/paths";
 import { uploadStream } from "./s3";
+import { createSafeS3Client } from "./s3-transport";
 
 /**
  * Where backup archives live. Two providers share one key space
@@ -200,7 +201,7 @@ export class LocalBackupStore implements BackupStore {
 // ── S3 ──────────────────────────────────────────────────────────────────────
 
 export function getS3Client(destination: DestinationRow): S3Client {
-	return new S3Client({
+	return createSafeS3Client({
 		region: destination.region,
 		endpoint: destination.endpoint,
 		forcePathStyle: true,
