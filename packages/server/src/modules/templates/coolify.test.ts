@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parse as parseYaml } from "yaml";
+import { renderComposeSpec } from "../compose/interpolate";
+import { parseComposeFile } from "../compose/parse";
 import { parseCoolifyCatalog } from "./coolify";
 import { resolveTemplateEnv } from "./placeholders";
 import { checkTemplateCompose, templateNeedsInstanceAdmin } from "./safety";
@@ -88,6 +90,70 @@ describe("parseCoolifyCatalog", () => {
 		// ordinary redeploys use these stored values without resolving again.
 		expect(first?.compose.match(/SERVICE_PASSWORD_64_DB/g)).toHaveLength(2);
 	});
+
+	it.each<{ input: Record<string, string>; expected: Record<string, string> }>([
+		{ input: {}, expected: { UNSET_ONLY: "fallback", EMPTY_TOO: "fallback" } },
+		{ input: { EXAMPLE: "" }, expected: { UNSET_ONLY: "", EMPTY_TOO: "fallback" } },
+		{ input: { EXAMPLE: "chosen" }, expected: { UNSET_ONLY: "chosen", EMPTY_TOO: "chosen" } },
+	])("retains default-operator behavior for input $input", ({ input, expected }) => {
+		const raw = `services:\n  app:\n    image: example/app:1\n    environment:\n      UNSET_ONLY: ${ref("EXAMPLE-fallback")}\n      EMPTY_TOO: ${ref("EXAMPLE:-fallback")}\n`;
+		const result = parseCoolifyCatalog({ defaults: entry(raw) });
+		expect(result.rejected).toEqual([]);
+		const translated = parseComposeFile(result.templates[0]?.compose ?? "");
+		expect(translated.services?.app?.environment).toEqual({
+			UNSET_ONLY: ref("EXAMPLE-fallback"),
+			EMPTY_TOO: ref("EXAMPLE:-fallback"),
+		});
+		expect(renderComposeSpec(translated, input).services?.app?.environment).toEqual(expected);
+		expect(renderComposeSpec(parseComposeFile(raw), input).services?.app?.environment).toEqual(
+			expected,
+		);
+	});
+
+	it("retains default operators around repeated generated references", () => {
+		const key = "SERVICE_PASSWORD_64_DB";
+		const result = parseCoolifyCatalog({
+			generated: entry(
+				`services:\n  app:\n    image: example/app:1\n    environment:\n      UNSET_ONLY: ${ref(`${key}-fallback`)}\n      EMPTY_TOO: ${ref(`${key}:-fallback`)}\n      DIRECT: ${ref(key)}\n`,
+			),
+		});
+		expect(result.rejected).toEqual([]);
+		const template = result.templates[0];
+		expect(template?.env.filter((item) => item.key === key)).toHaveLength(1);
+		const spec = parseComposeFile(template?.compose ?? "");
+		const values = resolveTemplateEnv(
+			template?.env.map((item) => ({ key: item.key, value: item.default })) ?? [],
+		);
+		expect(values[key]).toMatch(/^[A-Za-z0-9]{64}$/);
+		expect(renderComposeSpec(spec, values).services?.app?.environment).toEqual({
+			UNSET_ONLY: values[key],
+			EMPTY_TOO: values[key],
+			DIRECT: values[key],
+		});
+		expect(renderComposeSpec(spec, {}).services?.app?.environment).toEqual({
+			UNSET_ONLY: "fallback",
+			EMPTY_TOO: "fallback",
+			DIRECT: "",
+		});
+		expect(renderComposeSpec(spec, { [key]: "" }).services?.app?.environment).toEqual({
+			UNSET_ONLY: "",
+			EMPTY_TOO: "fallback",
+			DIRECT: "",
+		});
+	});
+
+	it.each(["EXAMPLE:+alternate", "EXAMPLE+alternate", "EXAMPLE?message"])(
+		"keeps unsupported interpolation %s rejected",
+		(expression) => {
+			const result = parseCoolifyCatalog({
+				unsupported: entry(
+					`services:\n  app:\n    image: example/app:1\n    environment:\n      VALUE: ${ref(expression)}\n`,
+				),
+			});
+			expect(result.templates).toEqual([]);
+			expect(result.rejected[0]).toMatch(/unsupported Compose interpolation/);
+		},
+	);
 
 	it("supports documented random types without confusing BASE64 with REALBASE64", () => {
 		const keys = [

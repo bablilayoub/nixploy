@@ -296,7 +296,8 @@ function translateEntry(id: string, input: unknown): Template {
 				}
 				const [, key, operator, fallback] = variable;
 				addEnv(key ?? "", operator ? fallback : undefined, operator === ":?");
-				return `\${${key}}`;
+				// Keep Compose's unset-versus-empty behavior after extracting form defaults.
+				return match;
 			},
 		);
 	};
