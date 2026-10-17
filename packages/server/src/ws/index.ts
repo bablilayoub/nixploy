@@ -2,6 +2,11 @@ import type { Server as HttpServer, IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { type WebSocket, WebSocketServer } from "ws";
 import { trustedOriginsWithDashboardDomain } from "../lib/auth";
+import {
+	type ProjectFilter,
+	resolveProjectFilter,
+	runWithProjectFilter,
+} from "../modules/projects/project-scope";
 import { getSessionFromUpgrade, type WsSession } from "./auth";
 import { handleDeploymentLogs } from "./deployment-logs";
 import { handleDockerLogs } from "./docker-logs";
@@ -9,6 +14,7 @@ import { handleDockerStats } from "./docker-stats";
 import { handleDockerTerminal } from "./docker-terminal";
 import { handlePlatformEvents } from "./events";
 import { handleServerTerminal } from "./server-terminal";
+import { drainTerminalExecs, trackTerminalAttachment } from "./terminal-exec";
 
 export type WsConnectionHandler = (
 	ws: WebSocket,
@@ -39,8 +45,20 @@ const routes: Record<string, WsConnectionHandler> = {
 	"/ws/server-terminal": handleServerTerminal,
 };
 
-let heartbeat: NodeJS.Timeout | null = null;
-const servers = new Set<WebSocketServer>();
+const globalForWs = globalThis as typeof globalThis & {
+	__nixployWebSockets?: {
+		heartbeat: NodeJS.Timeout | null;
+		servers: Set<WebSocketServer>;
+		closing: boolean;
+	};
+};
+const state = globalForWs.__nixployWebSockets ?? {
+	heartbeat: null,
+	servers: new Set(),
+	closing: false,
+};
+globalForWs.__nixployWebSockets = state;
+const servers = state.servers;
 
 /**
  * Attach all Nixploy websocket endpoints to the shared HTTP server:
@@ -58,11 +76,13 @@ const servers = new Set<WebSocketServer>();
  * cookie into a terminal even if cookie SameSite defaults change.
  */
 export function setupWebSocketServer(httpServer: HttpServer): void {
+	state.closing = false;
 	httpServer.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
 		void handleUpgrade(httpServer, req, socket, head);
 	});
 
-	heartbeat = setInterval(() => {
+	if (state.heartbeat) clearInterval(state.heartbeat);
+	state.heartbeat = setInterval(() => {
 		for (const wss of servers) {
 			for (const ws of wss.clients as Set<TrackedSocket>) {
 				if (ws.isAlive === false) {
@@ -74,7 +94,7 @@ export function setupWebSocketServer(httpServer: HttpServer): void {
 			}
 		}
 	}, HEARTBEAT_INTERVAL_MS);
-	heartbeat.unref();
+	state.heartbeat.unref();
 }
 
 async function handleUpgrade(
@@ -95,6 +115,11 @@ async function handleUpgrade(
 		}
 		return;
 	}
+	if (state.closing) {
+		socket.write("HTTP/1.1 503 Service Unavailable\r\n\r\n");
+		socket.destroy();
+		return;
+	}
 
 	if (!(await isAllowedUpgradeOrigin(req))) {
 		socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
@@ -105,6 +130,24 @@ async function handleUpgrade(
 	const session = await getSessionFromUpgrade(req);
 	if (!session) {
 		socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+		socket.destroy();
+		return;
+	}
+
+	// Upgrades bypass protectedProcedure, so install the same caller scope
+	// before a handler reaches a service. Resolve it afresh on every connection.
+	let projectFilter: ProjectFilter;
+	try {
+		projectFilter = await resolveProjectFilter(session.user.id);
+	} catch {
+		// A failed visibility lookup must never open an unrestricted shell.
+		socket.write("HTTP/1.1 503 Service Unavailable\r\n\r\n");
+		socket.destroy();
+		return;
+	}
+	if (socket.destroyed) return;
+	if (state.closing) {
+		socket.write("HTTP/1.1 503 Service Unavailable\r\n\r\n");
 		socket.destroy();
 		return;
 	}
@@ -120,9 +163,21 @@ async function handleUpgrade(
 		ws.on("pong", () => {
 			ws.isAlive = true;
 		});
+		// Protocol/receiver failures belong to this connection. In particular,
+		// ws has already begun a 1009 close when its payload limit is exceeded.
+		ws.on("error", () => {
+			if (ws.readyState === ws.OPEN) ws.close(1011);
+		});
 		wss.emit("connection", ws, req);
-		Promise.resolve(handler(ws, req, session)).catch(() => {
-			ws.close(1011);
+		runWithProjectFilter(projectFilter, () => {
+			const attachment = Promise.resolve()
+				.then(() => handler(ws, req, session))
+				.catch(() => {
+					ws.close(1011);
+				});
+			if (pathname === "/ws/terminal" || pathname === "/ws/server-terminal") {
+				trackTerminalAttachment(attachment);
+			}
 		});
 	});
 }
@@ -161,9 +216,10 @@ export async function isAllowedUpgradeOrigin(req: IncomingMessage): Promise<bool
  * Resolves with the number of connections that were open.
  */
 export async function closeWebSocketServer(): Promise<number> {
-	if (heartbeat) {
-		clearInterval(heartbeat);
-		heartbeat = null;
+	state.closing = true;
+	if (state.heartbeat) {
+		clearInterval(state.heartbeat);
+		state.heartbeat = null;
 	}
 	const open = [...servers].flatMap((wss) => [...wss.clients]);
 	for (const ws of open) {
@@ -173,6 +229,7 @@ export async function closeWebSocketServer(): Promise<number> {
 			ws.terminate();
 		}
 	}
+	const terminalCleanup = drainTerminalExecs();
 	if (open.length > 0) {
 		await new Promise<void>((resolve) => {
 			setTimeout(resolve, CLOSE_GRACE_MS);
@@ -185,6 +242,7 @@ export async function closeWebSocketServer(): Promise<number> {
 		wss.close();
 	}
 	servers.clear();
+	await terminalCleanup;
 	return open.length;
 }
 

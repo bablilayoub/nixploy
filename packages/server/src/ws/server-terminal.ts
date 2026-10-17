@@ -9,7 +9,8 @@ import { clientIpFromHeaders, userAgentFromHeaders } from "../utils/rate-limit";
 import { resolveWsOrganizationId } from "./access";
 import type { WsSession } from "./auth";
 import { acquireServerSsh } from "./docker";
-import { closeWithError, requestHeaders, safeSend, upgradeSearchParams } from "./utils";
+import { trackTerminalAttachment } from "./terminal-exec";
+import { closeWithError, requestHeaders, safeSend, sendJson, upgradeSearchParams } from "./utils";
 
 /**
  * `/ws/server-terminal?serverId=<id>` — an interactive **host** shell on a
@@ -154,8 +155,8 @@ export async function handleServerTerminal(
  * the browser goes away, the remote shell exits or the idle timer fires.
  */
 async function attachServerShell(ws: WebSocket, serverId: string): Promise<void> {
-	const lease = await acquireServerSsh(serverId);
-
+	if (ws.readyState !== ws.OPEN) return;
+	let lease: Awaited<ReturnType<typeof acquireServerSsh>> | null = null;
 	let closed = false;
 	let channel: ClientChannel | null = null;
 	let idleTimer: NodeJS.Timeout | null = null;
@@ -169,8 +170,15 @@ async function attachServerShell(ws: WebSocket, serverId: string): Promise<void>
 		} catch {
 			// channel already gone
 		}
-		lease.release();
+		lease?.release();
 	};
+	ws.once("close", shutdown);
+	const acquired = await acquireServerSsh(serverId);
+	if (closed || ws.readyState !== ws.OPEN) {
+		acquired.release();
+		return;
+	}
+	lease = acquired;
 
 	const touch = () => {
 		if (idleTimer) clearTimeout(idleTimer);
@@ -183,48 +191,74 @@ async function attachServerShell(ws: WebSocket, serverId: string): Promise<void>
 	};
 	touch();
 
-	ws.on("close", shutdown);
 	// The shared connection died under us (network drop, sshd restart): the
 	// lease is already gone, so only the socket needs telling.
 	lease.onConnectionLost((error) => {
 		if (closed) return;
-		closed = true;
-		if (idleTimer) clearTimeout(idleTimer);
+		shutdown();
 		closeWithError(ws, `SSH connection lost: ${error.message}`);
 	});
 
-	lease.client.shell(
-		{ term: "xterm-256color", cols: DEFAULT_COLS, rows: DEFAULT_ROWS },
-		(err, stream) => {
-			if (err) {
-				shutdown();
-				closeWithError(ws, err.message);
-				return;
-			}
-			channel = stream;
-			stream
-				.on("data", (data: Buffer) => safeSend(ws, data))
-				.on("close", () => {
-					shutdown();
-					ws.close(1000);
-				});
-			stream.stderr.on("data", (data: Buffer) => safeSend(ws, data));
+	const client = lease.client;
+	const attaching = new Promise<void>((resolve, reject) => {
+		client.shell(
+			{ term: "xterm-256color", cols: DEFAULT_COLS, rows: DEFAULT_ROWS },
+			(err, stream) => {
+				try {
+					if (err) {
+						shutdown();
+						closeWithError(ws, err.message);
+						return;
+					}
+					stream.on("error", () => {
+						shutdown();
+						ws.close(1011);
+					});
+					if (closed || ws.readyState !== ws.OPEN) {
+						try {
+							stream.close();
+						} catch {
+							// A late channel may already have been closed by the transport.
+						}
+						shutdown();
+						return;
+					}
+					channel = stream;
+					stream
+						.on("data", (data: Buffer) => safeSend(ws, data))
+						.on("close", () => {
+							shutdown();
+							ws.close(1000);
+						});
+					stream.stderr.on("data", (data: Buffer) => safeSend(ws, data));
 
-			ws.on("message", (raw: Buffer) => {
-				const input = parseTerminalInput(raw);
-				if (!input) return;
-				touch();
-				if (input.type === "stdin") {
-					stream.write(input.data);
-				} else {
-					stream.setWindow(
-						clampDimension(input.rows, DEFAULT_ROWS),
-						clampDimension(input.cols, DEFAULT_COLS),
-						0,
-						0,
-					);
+					ws.on("message", (raw: Buffer) => {
+						if (closed) return;
+						const input = parseTerminalInput(raw);
+						if (!input) return;
+						touch();
+						if (input.type === "stdin") {
+							stream.write(input.data);
+						} else {
+							stream.setWindow(
+								clampDimension(input.rows, DEFAULT_ROWS),
+								clampDimension(input.cols, DEFAULT_COLS),
+								0,
+								0,
+							);
+						}
+					});
+					sendJson(ws, { type: "ready" });
+				} catch (error) {
+					reject(error);
+				} finally {
+					resolve();
 				}
-			});
-		},
-	);
+			},
+		);
+	});
+	void trackTerminalAttachment(attaching).catch((error: unknown) => {
+		shutdown();
+		closeWithError(ws, error instanceof Error ? error.message : "Failed to attach server shell");
+	});
 }

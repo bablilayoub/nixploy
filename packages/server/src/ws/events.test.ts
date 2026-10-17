@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { IncomingMessage } from "node:http";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlatformEvent } from "../modules/deployment/notify";
 
 /**
@@ -10,6 +10,15 @@ import type { PlatformEvent } from "../modules/deployment/notify";
  */
 
 const bus = new EventEmitter();
+const scope = vi.hoisted(() => ({ resolveFilter: vi.fn(), findTenancy: vi.fn() }));
+
+vi.mock("../modules/projects/project-scope", () => ({
+	ALL_PROJECTS: { kind: "all" },
+	resolveProjectFilter: scope.resolveFilter,
+}));
+vi.mock("../modules/services/registry", () => ({
+	SERVICE_REGISTRY: { application: { module: { findTenancy: scope.findTenancy } } },
+}));
 
 vi.mock("../modules/deployment", () => ({
 	onPlatformEvent: (listener: (event: PlatformEvent) => void) => {
@@ -89,8 +98,18 @@ const deployment = (organizationId: string, deploymentId = "d1"): PlatformEvent 
 });
 
 beforeEach(() => {
+	vi.useFakeTimers();
 	bus.removeAllListeners();
 	resolveOrg.mockReset();
+	scope.resolveFilter.mockReset();
+	scope.resolveFilter.mockResolvedValue({ kind: "all" });
+	scope.findTenancy.mockReset();
+	scope.findTenancy.mockResolvedValue({ projectId: "visible-project" });
+});
+
+afterEach(() => {
+	vi.clearAllTimers();
+	vi.useRealTimers();
 });
 
 describe("shouldDeliver", () => {
@@ -101,6 +120,101 @@ describe("shouldDeliver", () => {
 });
 
 describe("handlePlatformEvents", () => {
+	it.each(["organization", "project"] as const)(
+		"does not subscribe after disconnecting during the initial %s lookup",
+		async (phase) => {
+			let resume!: () => void;
+			let entered!: () => void;
+			const pending = new Promise<void>((resolve) => {
+				resume = resolve;
+			});
+			const started = new Promise<void>((resolve) => {
+				entered = resolve;
+			});
+			resolveOrg.mockResolvedValue("org_a");
+			if (phase === "organization") {
+				resolveOrg.mockImplementation(async () => {
+					entered();
+					await pending;
+					return "org_a";
+				});
+			} else {
+				scope.resolveFilter.mockImplementation(async () => {
+					entered();
+					await pending;
+					return { kind: "all" };
+				});
+			}
+			const ws = fakeSocket();
+			const opening = handlePlatformEvents(ws as never, req, session);
+			await started;
+			ws.close(1000);
+			for (const handler of ws.handlers.close ?? []) handler();
+			resume();
+			await opening;
+			bus.emit("platform", deployment("org_a", "after-startup-disconnect"));
+			expect(bus.listenerCount("platform")).toBe(0);
+			expect(ws.sent).toEqual([]);
+			expect(ws.handlers).toEqual({});
+			expect(vi.getTimerCount()).toBe(0);
+		},
+	);
+
+	it("closes before subscribing or sending ready when initial project visibility fails", async () => {
+		resolveOrg.mockResolvedValue("org_a");
+		scope.resolveFilter.mockRejectedValue(new Error("Visibility lookup unavailable"));
+		const ws = fakeSocket();
+		await handlePlatformEvents(ws as never, req, session);
+		bus.emit("platform", deployment("org_a", "must-not-deliver"));
+		expect(ws.closedWith?.code).toBe(1008);
+		expect(frames(ws)).toEqual([{ type: "error", message: "Visibility lookup unavailable" }]);
+		expect(bus.listenerCount("platform")).toBe(0);
+		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	it("closes only the affected caller and unsubscribes when a fresh visibility lookup fails", async () => {
+		resolveOrg.mockResolvedValue("org_a");
+		let failFirst = false;
+		scope.resolveFilter.mockImplementation(async (userId: string) => {
+			if (userId === "u1" && failFirst) throw new Error("Visibility refresh unavailable");
+			return { kind: "all" };
+		});
+		const first = fakeSocket();
+		const second = fakeSocket();
+		await handlePlatformEvents(first as never, req, session);
+		await handlePlatformEvents(second as never, req, {
+			user: { id: "u2" },
+			session: { activeOrganizationId: "org_a" },
+		} as never);
+		failFirst = true;
+		await vi.advanceTimersByTimeAsync(60_000);
+		expect(first.closedWith?.code).toBe(1008);
+		expect(second.closedWith).toBeNull();
+		expect(bus.listenerCount("platform")).toBe(1);
+		const sentBefore = first.sent.length;
+		bus.emit("platform", deployment("org_a", "after-refresh-failure"));
+		expect(first.sent).toHaveLength(sentBefore);
+		expect(second.sent.join("")).toContain("after-refresh-failure");
+		expect(scope.resolveFilter.mock.calls.filter(([userId]) => userId === "u1")).toHaveLength(2);
+	});
+
+	it("applies a successfully refreshed project allow-list before subsequent frames", async () => {
+		resolveOrg.mockResolvedValue("org_a");
+		scope.resolveFilter
+			.mockResolvedValueOnce({ kind: "projects", projectIds: new Set(["visible-project"]) })
+			.mockResolvedValue({ kind: "projects", projectIds: new Set() });
+		const ws = fakeSocket();
+		await handlePlatformEvents(ws as never, req, session);
+		bus.emit("platform", deployment("org_a", "before-refresh"));
+		await vi.advanceTimersByTimeAsync(0);
+		expect(ws.sent.join("")).toContain("before-refresh");
+		await vi.advanceTimersByTimeAsync(60_000);
+		bus.emit("platform", deployment("org_a", "hidden-after-refresh"));
+		await vi.advanceTimersByTimeAsync(0);
+		expect(ws.closedWith).toBeNull();
+		expect(ws.sent.join("")).not.toContain("hidden-after-refresh");
+	});
+
 	it("sends a ready frame once the organization resolved", async () => {
 		resolveOrg.mockResolvedValue("org_a");
 		const ws = fakeSocket();

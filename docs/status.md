@@ -5,7 +5,7 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
-## Active backlog — 2026-10-15
+## Active backlog — 2026-10-17
 
 This is the authoritative current work list. The dated verification records and
 historical checklists below retain their original context; an unchecked item
@@ -60,9 +60,6 @@ an implementation checkpoint, not a new release claim.
   encrypted secrets, storage/data restoration and unsupported settings retain
   explicit manual steps. Other engines and repository-backed Coolify Compose
   applications remain unsupported by that reader.
-- [ ] Terminal WebSocket reconnect remains unproved. Named-volume persistence,
-  rollback, exact-container exec and raw per-service lookup passed in PR #16;
-  the separate cold backup/restore proof is recorded below.
 
 ### Maintenance
 
@@ -90,6 +87,62 @@ stated evidence boundaries:
 | PR #16 populated dashboard | Recent deployments populated, three soft-navigation cycles and 12 idle seconds passed without hydration/browser errors or deployment requests. The historical hydration/idle-dashboard tasks below are closed. |
 | PR #16 Coolify API reader | Official v4.4.6 image/public-Git applications, raw Compose services and all five supported database configuration kinds passed inspect/plan/apply/repeat. A fresh selected image/Postgres import then explicitly started with HTTP 200 and generated-password TCP authentication; repository Compose applications/other database engines are skipped and secrets/data remain manual. |
 | PR #18 cold backup/recovery | Removed disposable source panel/database/config and workload volumes before fresh PostgreSQL/Redis/volume recovery; keys, original TOTP, large payload hashes and routed HTTP passed. Real MinIO separately passed an eight-part 64 MiB transfer and egress revocation. |
+| Terminal reconnect | Real local managed Redis terminal, exact-container dialog, fresh sessions after drops/restart/task replacement, authorization changes and guarded process cleanup passed. Remote SSH transport is covered by regressions; real remote placement remains above. |
+
+## Terminal sessions — 2026-10-16/17
+
+The isolated local drill found and fixed three lifecycle failures: input and
+initial sizing could arrive before the shell attached; Docker stream closure
+left an exec running; and a late attachment could outlive its browser socket.
+The terminal now waits for shell readiness, offers an explicit fresh session
+after a bounded startup failure, fences disposed callbacks and splits large
+pastes into bounded frames. Reconnect never replays input or restores shell
+state. Graceful panel shutdown drains pending attachment and cleanup work
+before the SSH pool closes, within a bounded deadline. The combined panel/worker
+role keeps queue shutdown concurrent but closes the shared SSH pool only after
+both drains; the standalone worker retains its own pool cleanup.
+
+WebSocket dispatch also lacked the API's project-filter async scope. Upgrades
+now resolve and apply it afresh, deployment log access checks project
+visibility, and event subscriptions fail closed when visibility resolution
+fails. Oversized protocol messages close only the offending connection.
+
+- Real browser lifecycle proof passed 30 checks: input/output, actual kernel
+  PTY sizing, repeated fresh sessions, offline recovery, normal exit,
+  navigation/dialog closure, graceful panel restart and replacement of the
+  exact disposable Swarm task. Closed sessions returned to zero running execs.
+- Five additional real checks covered foreground sleep, unsubmitted input,
+  a HUP-ignoring shell, a 65,537-byte message rejected with code 1009 and a
+  subsequent usable shell. Foreground sleep left no active child; an exited
+  child was briefly a zombie pending the container init's reaping.
+- Thirteen real authorization cases covered team grant/removal, viewer and
+  capability rejection, organization changes, invalid/expired/revoked
+  sessions, API-key-only rejection, Origin and fresh-login recovery. These
+  establish authorization on each new terminal connection; they do not claim
+  continuous authorization sweeping of an already open shell.
+- Eight real screenshots cover both terminal surfaces on desktop/mobile in
+  light/dark mode, with no overflow or browser errors. Separately, 32
+  controlled browser cases cover startup timeout/setup failure, disposed
+  callbacks, missing-container retry, error classification and large paste.
+- 113 focused transport/shutdown regressions cover delayed attachments and
+  identity bytes, slow or failed signaling, bounded readers and the overall
+  deadline. Three process-shutdown integration cases cover the combined and
+  panel roles plus standalone-worker pool cleanup.
+
+Cleanup identifies the shell inside the container namespace and checks its
+recorded start time before hangup and the kill fallback. Docker/SSH outages
+and abrupt panel/daemon failure still make teardown best effort. Detached jobs
+and zombie reaping belong to the container; no general child-process or
+remote-host recovery guarantee is claimed. No dependency, schema, production
+host or public DNS changes are part of this slice.
+
+Evidence: `terminal-reconnect/{final-browser-report,actual-extra-report,
+actual-screens-report,security-after}.json`, `frontend/paste-summary.json`,
+`shutdown-drain-{summary,actual}.json`, `worker-shutdown-summary.json`,
+source snapshots, focused regressions and final gate/build output. The
+sanitized handoff manifest records checksums after fixture cleanup. The
+normal primary panel remains available for manual testing; verification
+metadata and workload resources are separate disposable fixtures.
 
 ## Managed database recovery — 2026-10-15
 
