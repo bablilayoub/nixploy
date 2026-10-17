@@ -1,7 +1,11 @@
+import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type Docker from "dockerode";
+import type { ClientChannel } from "ssh2";
 import type { WebSocket } from "ws";
 import { assertComposeContainerOwnership } from "../modules/compose/containers";
+import { shellQuote } from "../modules/deployment/paths";
+import { execAsyncRemote } from "../utils/exec";
 import { assertWsDockerContainerAccess, assertWsTerminalAccess } from "./access";
 import type { WsSession } from "./auth";
 import {
@@ -12,6 +16,12 @@ import {
 	resolveRemoteContainerId,
 	SHELL_FALLBACK_COMMAND,
 } from "./docker";
+import {
+	attachTerminalExec,
+	terminalExecCommand,
+	terminalSignalCommand,
+	trackTerminalAttachment,
+} from "./terminal-exec";
 import {
 	closeWithError,
 	isValidAppName,
@@ -66,7 +76,7 @@ export async function handleDockerTerminal(
 				await assertWsTerminalAccess(session, appName, serverId);
 				await assertComposeContainerOwnership(appName, containerId, serverId);
 				if (serverId) {
-					await attachRemoteTerminalById(ws, serverId, containerId);
+					await attachRemoteTerminal(ws, serverId, { containerId });
 				} else {
 					await attachLocalTerminalById(ws, containerId);
 				}
@@ -80,7 +90,7 @@ export async function handleDockerTerminal(
 			await assertWsDockerContainerAccess(session, containerId, serverId);
 			await assertContainerNotProtected(containerId, serverId);
 			if (serverId) {
-				await attachRemoteTerminalById(ws, serverId, containerId);
+				await attachRemoteTerminal(ws, serverId, { containerId });
 			} else {
 				await attachLocalTerminalById(ws, containerId);
 			}
@@ -98,7 +108,7 @@ export async function handleDockerTerminal(
 	try {
 		await assertWsTerminalAccess(session, appName, serverId);
 		if (serverId) {
-			await attachRemoteTerminal(ws, serverId, appName);
+			await attachRemoteTerminal(ws, serverId, { appName });
 		} else {
 			await attachLocalTerminal(ws, appName);
 		}
@@ -125,7 +135,9 @@ function parseInput(raw: Buffer | string): TerminalInput | null {
 }
 
 async function attachLocalTerminal(ws: WebSocket, appName: string): Promise<void> {
+	if (ws.readyState !== ws.OPEN) return;
 	const container = await resolveLocalContainer(appName);
+	if (ws.readyState !== ws.OPEN) return;
 	if (!container) {
 		closeWithError(ws, `No running container found for "${appName}" — deploy the service first`);
 		return;
@@ -134,7 +146,9 @@ async function attachLocalTerminal(ws: WebSocket, appName: string): Promise<void
 }
 
 async function attachLocalTerminalById(ws: WebSocket, containerId: string): Promise<void> {
+	if (ws.readyState !== ws.OPEN) return;
 	const container = await resolveLocalContainerById(containerId);
+	if (ws.readyState !== ws.OPEN) return;
 	if (!container) {
 		closeWithError(ws, `No running container found for id "${containerId}"`);
 		return;
@@ -143,113 +157,182 @@ async function attachLocalTerminalById(ws: WebSocket, containerId: string): Prom
 }
 
 async function pipeLocalExec(ws: WebSocket, container: Docker.Container): Promise<void> {
+	if (ws.readyState !== ws.OPEN) return;
+	const nonce = randomUUID();
 	const exec = await container.exec({
-		Cmd: ["sh", "-c", SHELL_FALLBACK_COMMAND],
+		Cmd: ["sh", "-c", terminalExecCommand(nonce, SHELL_FALLBACK_COMMAND)],
 		AttachStdin: true,
 		AttachStdout: true,
 		AttachStderr: true,
 		Tty: true,
-		Env: ["TERM=xterm-256color", `COLUMNS=${DEFAULT_COLS}`, `LINES=${DEFAULT_ROWS}`],
+		Env: ["TERM=xterm-256color"],
 	});
-	// TTY is on, so the hijacked stream carries raw terminal output (no multiplex headers).
+	if (ws.readyState !== ws.OPEN) return;
 	const stream = await exec.start({ hijack: true, stdin: true, Tty: true });
-
-	stream.on("data", (chunk: Buffer) => safeSend(ws, chunk));
-	stream.on("error", () => ws.close(1011));
-	stream.on("end", () => ws.close(1000));
-
+	const lifecycle = attachTerminalExec({
+		ws,
+		stream,
+		nonce,
+		closeTransport: () => {
+			stream.end();
+			stream.destroy();
+		},
+		signal: async (identity, signal) => {
+			const abortSignal = AbortSignal.timeout(2_000);
+			const cleanup = await container.exec({
+				Cmd: terminalSignalCommand(identity, signal),
+				AttachStdin: false,
+				AttachStdout: false,
+				AttachStderr: false,
+				Tty: false,
+				abortSignal,
+			});
+			await cleanup.start({ Detach: true, abortSignal });
+		},
+	});
 	ws.on("message", (raw: Buffer) => {
+		if (!lifecycle.isReady()) return;
 		const input = parseInput(raw);
 		if (!input) return;
-		if (input.type === "stdin") {
-			stream.write(input.data);
-		} else {
+		if (input.type === "stdin") stream.write(input.data);
+		else
 			exec
 				.resize({
 					h: clampDimension(input.rows, DEFAULT_ROWS),
 					w: clampDimension(input.cols, DEFAULT_COLS),
 				})
 				.catch(() => {});
-		}
-	});
-	ws.on("close", () => {
-		stream.end();
-		stream.destroy();
 	});
 }
 
 async function attachRemoteTerminal(
 	ws: WebSocket,
 	serverId: string,
-	appName: string,
+	target: { appName: string } | { containerId: string },
 ): Promise<void> {
-	const lease = await acquireServerSsh(serverId);
-	ws.on("close", () => lease.release());
-
-	const containerId = await resolveRemoteContainerId(lease.client, appName);
+	if (ws.readyState !== ws.OPEN) return;
+	let closed = false;
+	let lease: Awaited<ReturnType<typeof acquireServerSsh>> | null = null;
+	let channel: ClientChannel | null = null;
+	const shutdown = () => {
+		if (closed) return;
+		closed = true;
+		try {
+			channel?.close();
+		} catch {
+			// The channel may already have closed with the shared connection.
+		} finally {
+			lease?.release();
+		}
+	};
+	ws.once("close", shutdown);
+	const acquired = await acquireServerSsh(serverId);
+	if (closed || ws.readyState !== ws.OPEN) {
+		acquired.release();
+		return;
+	}
+	lease = acquired;
+	lease.onConnectionLost((error) => {
+		if (closed) return;
+		shutdown();
+		closeWithError(ws, `SSH connection lost: ${error.message}`);
+	});
+	let containerId: string | null;
+	try {
+		containerId =
+			"containerId" in target
+				? target.containerId
+				: await resolveRemoteContainerId(lease.client, target.appName);
+	} catch (error) {
+		shutdown();
+		throw error;
+	}
+	if (closed || ws.readyState !== ws.OPEN) {
+		shutdown();
+		return;
+	}
 	if (!containerId) {
-		lease.release();
+		shutdown();
 		closeWithError(
 			ws,
-			`No running container found for "${appName}" on the remote server — deploy first`,
+			`No running container found for "${"appName" in target ? target.appName : target.containerId}" on the remote server — deploy first`,
 		);
 		return;
 	}
-
-	pipeRemoteExec(ws, lease, containerId);
-}
-
-async function attachRemoteTerminalById(
-	ws: WebSocket,
-	serverId: string,
-	containerId: string,
-): Promise<void> {
-	const lease = await acquireServerSsh(serverId);
-	ws.on("close", () => lease.release());
-	pipeRemoteExec(ws, lease, containerId);
-}
-
-function pipeRemoteExec(
-	ws: WebSocket,
-	lease: Awaited<ReturnType<typeof acquireServerSsh>>,
-	containerId: string,
-): void {
-	const id = `'${containerId.replace(/'/g, `'\\''`)}'`;
-	lease.client.exec(
-		`docker exec -it ${id} sh -c '${SHELL_FALLBACK_COMMAND}'`,
-		{ pty: { cols: DEFAULT_COLS, rows: DEFAULT_ROWS, term: "xterm-256color" } },
-		(err, stream) => {
-			if (err) {
-				lease.release();
-				closeWithError(ws, err.message);
-				return;
-			}
-			// Free the PTY channel (and the pool slot) when the browser goes away.
-			ws.on("close", () => stream.close());
-			stream
-				.on("data", (data: Buffer) => safeSend(ws, data))
-				.on("close", () => {
-					lease.release();
-					ws.close(1000);
-				});
-			stream.stderr.on("data", (data: Buffer) => safeSend(ws, data));
-
-			ws.on("message", (raw: Buffer) => {
-				const input = parseInput(raw);
-				if (!input) return;
-				if (input.type === "stdin") {
-					stream.write(input.data);
-				} else {
-					stream.setWindow(
-						clampDimension(input.rows, DEFAULT_ROWS),
-						clampDimension(input.cols, DEFAULT_COLS),
-						0,
-						0,
-					);
+	const nonce = randomUUID();
+	const command = [
+		"docker",
+		"exec",
+		"-it",
+		containerId,
+		"sh",
+		"-c",
+		terminalExecCommand(nonce, SHELL_FALLBACK_COMMAND),
+	]
+		.map(shellQuote)
+		.join(" ");
+	const client = lease.client;
+	const attaching = new Promise<void>((resolve, reject) => {
+		client.exec(
+			command,
+			{ pty: { cols: DEFAULT_COLS, rows: DEFAULT_ROWS, term: "xterm-256color" } },
+			(err, stream) => {
+				try {
+					if (err) {
+						shutdown();
+						closeWithError(ws, err.message);
+						return;
+					}
+					// The exec identity reader now owns cancellation, including a close
+					// before its first bytes arrive. Do not detach that reader early.
+					ws.off("close", shutdown);
+					channel = stream;
+					const lifecycle = attachTerminalExec({
+						ws,
+						stream,
+						nonce,
+						closeTransport: () => {
+							if (closed) stream.close();
+							else shutdown();
+						},
+						signal: async (identity, signal) => {
+							const cleanup = [
+								"docker",
+								"exec",
+								containerId,
+								...terminalSignalCommand(identity, signal),
+							]
+								.map(shellQuote)
+								.join(" ");
+							await execAsyncRemote(serverId, cleanup, { timeoutMs: 2_000 });
+						},
+					});
+					stream.stderr.on("data", (data: Buffer) => safeSend(ws, data));
+					ws.on("message", (raw: Buffer) => {
+						if (!lifecycle.isReady()) return;
+						const input = parseInput(raw);
+						if (!input) return;
+						if (input.type === "stdin") stream.write(input.data);
+						else
+							stream.setWindow(
+								clampDimension(input.rows, DEFAULT_ROWS),
+								clampDimension(input.cols, DEFAULT_COLS),
+								0,
+								0,
+							);
+					});
+				} catch (error) {
+					reject(error);
+				} finally {
+					resolve();
 				}
-			});
-		},
-	);
+			},
+		);
+	});
+	void trackTerminalAttachment(attaching).catch((error: unknown) => {
+		shutdown();
+		closeWithError(ws, error instanceof Error ? error.message : "Failed to attach terminal");
+	});
 }
 
 function clampDimension(value: number | undefined, fallback: number): number {

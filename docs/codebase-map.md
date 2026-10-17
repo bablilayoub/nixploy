@@ -117,7 +117,7 @@ Router → module map:
 
 ### `ws/`
 
-`index.ts` (routes, heartbeat 30 s, Origin check against the trusted origins, leaves non-Nixploy upgrades to Next HMR), `auth.ts`, `access.ts` (org resolution incl. the 2FA gate, capability checks, container-label ownership for control-center streams), `events.ts` (`/ws/events` — one org-scoped push stream per tab: deployment, queue and service-status frames), `deployment-logs.ts` (replay file + follow `deploymentEvents`; in role `panel` woken by a 500 ms `fs.stat` of the log file instead), `docker-logs.ts`, `docker-stats.ts`, `docker-terminal.ts` (exec into container), `docker.ts`, `utils.ts`.
+`index.ts` (routes, heartbeat 30 s, Origin check, fresh project-filter async scope and per-socket protocol errors; leaves non-Nixploy upgrades to Next HMR), `auth.ts`, `access.ts` (org resolution incl. the 2FA gate, capability checks, container-label ownership for control-center streams), `events.ts` (`/ws/events` — one org-scoped push stream per tab: deployment, queue and service-status frames), `deployment-logs.ts` (replay file + follow `deploymentEvents`; in role `panel` woken by a 500 ms `fs.stat` of the log file instead), `docker-logs.ts`, `docker-stats.ts`, `docker-terminal.ts` (exec into container), `terminal-exec.ts` (startup identity, readiness and exact-process teardown), `server-terminal.ts` (pooled remote host shell), `docker.ts`, `utils.ts`.
 
 ### Previews (2026-09-11, branch previews 2026-09-20)
 

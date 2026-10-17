@@ -117,12 +117,11 @@ export async function assertWsDeploymentAccess(
 			compose: { with: { environment: { with: { project: true } } } },
 		},
 	});
-	const owner =
-		deployment?.application?.environment.project.organizationId ??
-		deployment?.compose?.environment.project.organizationId;
-	if (!deployment || owner !== organizationId) {
+	const environment = deployment?.application?.environment ?? deployment?.compose?.environment;
+	if (!deployment || !environment || environment.project.organizationId !== organizationId) {
 		throw new Error(`Deployment not found: ${deploymentId}`);
 	}
+	assertProjectVisible(environment.projectId, "Deployment");
 	return deployment;
 }
 

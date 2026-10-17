@@ -243,6 +243,7 @@ export interface BackgroundShutdownResult {
  */
 export async function stopBackgroundWork(
 	graceMs = shutdownGraceMs(),
+	{ closeSshConnections = true }: { closeSshConnections?: boolean } = {},
 ): Promise<BackgroundShutdownResult> {
 	// Flip the queue to draining first (synchronous) so nothing new starts
 	// while the crons wind down; the wait happens below.
@@ -250,9 +251,10 @@ export async function stopBackgroundWork(
 	const crons = await stopScheduledJobs();
 	const queue = await drained;
 	await stopEventBridge();
-	// Pooled SSH connections to managed servers are process-wide; close them
-	// so a Swarm restart does not leave half-open TCP sessions on the hosts.
-	closeAllSshConnections();
+	// The combined panel/worker process also owns terminal cleanup. Its caller
+	// closes this process-wide pool after both drains; a standalone worker can
+	// close it immediately after its own background work finishes.
+	if (closeSshConnections) closeAllSshConnections();
 	return { crons, queue };
 }
 

@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { NotRunningState, type RuntimeEmptyProps } from "@/components/services/not-running-state";
 import { Button } from "@/components/ui/button";
 import { nixployTerminalTheme } from "@/lib/codemirror-theme";
+import { terminalInputFrames } from "@/lib/terminal-input";
 import { cn } from "@/lib/utils";
 
 /** Websocket endpoints this component can drive; both speak the same frames. */
@@ -24,6 +25,7 @@ function wsUrl(endpoint: TerminalEndpoint, params: Record<string, string | null 
 }
 
 type TerminalStatus = "connecting" | "connected" | "disconnected";
+const STARTUP_TIMEOUT_MS = 30_000;
 
 /**
  * Interactive shell into a Nixploy service (`appName`), a raw Docker
@@ -79,6 +81,10 @@ export function ServiceTerminal({
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container) return;
+		setStatus("connecting");
+		setLastError(null);
+		setNoShell(false);
+		tailRef.current = "";
 		if (endpoint === "server-terminal" ? !serverId : !appName && !containerId) {
 			setStatus("disconnected");
 			setLastError(
@@ -94,6 +100,34 @@ export function ServiceTerminal({
 		let fitAddon: FitAddon | null = null;
 		let ws: WebSocket | null = null;
 		let resizeObserver: ResizeObserver | null = null;
+		let ready = false;
+		let sentInput = false;
+		let ended = false;
+		let startupTimer: ReturnType<typeof setTimeout> | null = null;
+
+		const clearStartupTimer = () => {
+			if (startupTimer) clearTimeout(startupTimer);
+			startupTimer = null;
+		};
+		const closeSocket = () => {
+			if (!ws) return;
+			ws.onopen = null;
+			ws.onmessage = null;
+			ws.onerror = null;
+			ws.onclose = null;
+			ws.close();
+		};
+		const failStartup = (message: string) => {
+			if (disposed || ended) return;
+			ended = true;
+			ready = false;
+			clearStartupTimer();
+			if (terminal) terminal.options.disableStdin = true;
+			resizeObserver?.disconnect();
+			closeSocket();
+			setLastError(message);
+			setStatus("disconnected");
+		};
 
 		const setup = async () => {
 			const [{ Terminal: XTerm }, { FitAddon: Fit }] = await Promise.all([
@@ -101,10 +135,11 @@ export function ServiceTerminal({
 				import("@xterm/addon-fit"),
 				import("@xterm/xterm/css/xterm.css"),
 			]);
-			if (disposed) return;
+			if (disposed || ended) return;
 
 			terminal = new XTerm({
 				cursorBlink: true,
+				disableStdin: true,
 				fontSize: 13,
 				fontFamily: "var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace",
 				convertEol: true,
@@ -117,7 +152,7 @@ export function ServiceTerminal({
 			fitAddon.fit();
 
 			const sendResize = () => {
-				if (ws?.readyState === WebSocket.OPEN && terminal) {
+				if (!disposed && !ended && ready && ws?.readyState === WebSocket.OPEN && terminal) {
 					ws.send(
 						JSON.stringify({
 							type: "resize",
@@ -129,6 +164,7 @@ export function ServiceTerminal({
 			};
 
 			resizeObserver = new ResizeObserver(() => {
+				if (disposed || ended) return;
 				try {
 					fitAddon?.fit();
 					sendResize();
@@ -139,12 +175,15 @@ export function ServiceTerminal({
 			resizeObserver.observe(container);
 
 			terminal.onData((data) => {
-				if (ws?.readyState === WebSocket.OPEN) {
-					ws.send(JSON.stringify({ type: "stdin", data }));
+				if (!disposed && !ended && ready && ws?.readyState === WebSocket.OPEN) {
+					sentInput = true;
+					for (const frame of terminalInputFrames(data)) {
+						if (disposed || ended || !ready || ws.readyState !== WebSocket.OPEN) break;
+						ws.send(frame);
+					}
 				}
 			});
 
-			setLastError(null);
 			ws = new WebSocket(
 				wsUrl(endpoint, {
 					appName,
@@ -159,21 +198,27 @@ export function ServiceTerminal({
 				tailRef.current = (tailRef.current + chunk).slice(-2048);
 			};
 
-			ws.onopen = () => {
-				if (disposed) return;
-				setStatus("connected");
-				terminal?.focus();
-				sendResize();
-			};
 			ws.onmessage = (event: MessageEvent<ArrayBuffer | string>) => {
+				if (disposed || ended) return;
 				if (typeof event.data === "string") {
 					if (event.data.startsWith("{")) {
 						try {
 							const frame = JSON.parse(event.data) as { type?: string; message?: string };
+							if (frame.type === "ready") {
+								if (!ready) {
+									ready = true;
+									clearStartupTimer();
+									if (terminal) terminal.options.disableStdin = false;
+									setStatus("connected");
+									terminal?.focus();
+									sendResize();
+								}
+								return;
+							}
 							if (frame.type === "error") {
 								// The overlay prints it once the socket closes — no red xterm
 								// line as well.
-								setLastError(frame.message ?? "Unknown error");
+								failStartup(frame.message ?? "Unknown error");
 								return;
 							}
 						} catch {
@@ -189,26 +234,48 @@ export function ServiceTerminal({
 				}
 			};
 			ws.onclose = () => {
-				if (disposed) return;
+				if (disposed || ended) return;
+				ended = true;
+				ready = false;
+				clearStartupTimer();
+				if (terminal) terminal.options.disableStdin = true;
 				setStatus("disconnected");
 				// `exec: "sh": executable file not found in $PATH` — a scratch or
 				// distroless image. Worth naming, because the generic advice
 				// ("deploy it first") sends you to fix something that is not broken.
-				setNoShell(/executable file not found|no such file or directory/i.test(tailRef.current));
+				setNoShell(
+					!sentInput &&
+						/exec:\s*["']?(?:\/bin\/)?(?:ba)?sh["']?:[^\r\n]*(?:executable file not found|no such file or directory)/i.test(
+							tailRef.current,
+						),
+				);
 				terminal?.writeln("\r\n\x1b[90m--- Connection closed ---\x1b[0m");
 			};
 			ws.onerror = () => {
+				if (disposed || ended) return;
+				ended = true;
+				ready = false;
+				clearStartupTimer();
+				if (terminal) terminal.options.disableStdin = true;
 				setLastError((current) => current ?? "WebSocket connection failed");
-				ws?.close();
+				setStatus("disconnected");
+				closeSocket();
 			};
 		};
 
-		void setup();
+		startupTimer = setTimeout(() => {
+			if (disposed || ended || ready) return;
+			failStartup("The terminal did not become ready. Start a new session to retry.");
+		}, STARTUP_TIMEOUT_MS);
+		void setup().catch(() => {
+			failStartup("Could not start the terminal. Start a new session to retry.");
+		});
 
 		return () => {
 			disposed = true;
+			clearStartupTimer();
 			resizeObserver?.disconnect();
-			ws?.close();
+			closeSocket();
 			terminal?.dispose();
 			if (terminalRef.current === terminal) terminalRef.current = null;
 		};
@@ -227,56 +294,62 @@ export function ServiceTerminal({
 		status === "disconnected" &&
 		(serviceStatus === "idle" || /no running container/i.test(lastError ?? ""));
 
-	if (notRunning) {
-		return (
-			<NotRunningState
-				action={notRunningAction}
-				onRetry={serviceStatus === "idle" ? undefined : startNewSession}
-				className="min-h-[26rem]"
-			/>
-		);
-	}
-
 	return (
-		<div className="relative overflow-hidden rounded-lg border border-border bg-card">
-			{status !== "connected" && (
-				<div
-					className={cn(
-						"absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-card/80 px-6 text-center",
-						"text-sm text-muted-foreground",
-					)}
-				>
-					{status === "connecting" ? (
-						<span className="flex items-center gap-2">
-							<Loader2 className="size-4 animate-spin" /> {connectingLabel}
-						</span>
-					) : (
-						<>
-							<span className="font-medium text-foreground">Connection closed</span>
-							{lastError ? (
-								<p className="max-w-md text-xs text-destructive">{lastError}</p>
-							) : noShell ? (
-								<p className="max-w-md text-xs">
-									This image has no shell, so there is nothing to attach to. A terminal needs
-									<code className="mx-1 font-mono">/bin/sh</code>
-									in the image — scratch and distroless images ship without one.
-								</p>
-							) : serviceStatus === "idle" ? (
-								<p className="max-w-md text-xs">
-									Deploy the service first, then start a new session.
-								</p>
-							) : (
-								<p className="max-w-md text-xs">The session ended. Start a new one to reconnect.</p>
-							)}
-							<Button size="sm" variant="secondary" onClick={startNewSession}>
-								<RotateCcw className="size-4" />
-								Start new session
-							</Button>
-						</>
-					)}
-				</div>
+		<>
+			{notRunning && (
+				<NotRunningState
+					action={notRunningAction}
+					onRetry={serviceStatus === "idle" ? undefined : startNewSession}
+					className="min-h-[26rem]"
+				/>
 			)}
-			<div ref={containerRef} className="h-[26rem] p-2" />
-		</div>
+			<div
+				className={cn(
+					"relative overflow-hidden rounded-lg border border-border bg-card",
+					notRunning && "hidden",
+				)}
+			>
+				{status !== "connected" && !notRunning && (
+					<div
+						className={cn(
+							"absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-card/80 px-6 text-center",
+							"text-sm text-muted-foreground",
+						)}
+					>
+						{status === "connecting" ? (
+							<span className="flex items-center gap-2">
+								<Loader2 className="size-4 animate-spin" /> {connectingLabel}
+							</span>
+						) : (
+							<>
+								<span className="font-medium text-foreground">Connection closed</span>
+								{lastError ? (
+									<p className="max-w-md text-xs text-destructive">{lastError}</p>
+								) : noShell ? (
+									<p className="max-w-md text-xs">
+										This image has no shell, so there is nothing to attach to. A terminal needs
+										<code className="mx-1 font-mono">/bin/sh</code>
+										in the image — scratch and distroless images ship without one.
+									</p>
+								) : serviceStatus === "idle" ? (
+									<p className="max-w-md text-xs">
+										Deploy the service first, then start a new session.
+									</p>
+								) : (
+									<p className="max-w-md text-xs">
+										The session ended. Start a new one to reconnect.
+									</p>
+								)}
+								<Button size="sm" variant="secondary" onClick={startNewSession}>
+									<RotateCcw className="size-4" />
+									Start new session
+								</Button>
+							</>
+						)}
+					</div>
+				)}
+				<div ref={containerRef} className="h-[26rem] p-2" />
+			</div>
+		</>
 	);
 }

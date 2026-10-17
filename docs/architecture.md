@@ -114,7 +114,15 @@ stay outside the transaction, where they remain best-effort.
     `refetchInterval` of their own — only a fallback while the socket is down.
   - `/ws/stats` — per-second container stats frames
     (`{cpu, memory:{used,total,percent}, network:{rx,tx}}`).
-  - `/ws/terminal` — interactive exec into a container.
+  - `/ws/terminal` — interactive exec into a container. A private startup
+    identity precedes the `ready` control frame; input is enabled only after
+    attachment. Closing the connection requests guarded cleanup of that exec,
+    and an explicit reconnect starts a fresh shell without replaying input.
+  - `/ws/server-terminal` — a managed remote host shell on one pooled SSH
+    channel, gated by instance-admin and `servers.manage`.
+- WebSocket upgrades resolve the caller's project filter afresh and enter its
+  async scope before dispatch, matching the service visibility funnels used by
+  protected API procedures. A failed visibility lookup rejects the upgrade.
 - Deployments run through a **durable queue**: the `deployment` table is the
   queue and the claim loop takes rows with `FOR UPDATE SKIP LOCKED`. Statuses
   transition `queued → running → done|error|cancelled`, stream over

@@ -57,8 +57,7 @@ const SHUTDOWN_BACKSTOP_EXTRA_MS = 30_000;
  *
  * In role `panel` steps 1, 2 and 4 belong to `nixploy-worker` instead
  * (`stopBackgroundWork` is a no-op there — this process owns no queue and no
- * cron), so a panel restart closes sockets and exits in milliseconds while
- * builds keep running. That is the whole point of the split.
+ * cron), so a panel restart drains socket cleanup while builds keep running.
  */
 function registerShutdownHandlers(server: Server) {
 	let shuttingDown = false;
@@ -80,7 +79,9 @@ function registerShutdownHandlers(server: Server) {
 		try {
 			// Flip the queue to draining first (synchronous) so nothing new
 			// starts while the rest winds down; the wait happens below.
-			const background = isWorkerRole() ? stopBackgroundWork(graceMs) : null;
+			const background = isWorkerRole()
+				? stopBackgroundWork(graceMs, { closeSshConnections: false })
+				: null;
 			server.close();
 			server.closeIdleConnections();
 			log.info("HTTP server stopped accepting connections");
@@ -97,11 +98,11 @@ function registerShutdownHandlers(server: Server) {
 					"../../packages/server/src/modules/deployment/notify"
 				);
 				await stopEventBridge();
-				// Role `panel` still talks to managed servers (log/stats/terminal
-				// streams) over the pooled SSH connections; close them too.
-				const { closeAllSshConnections } = await import("../../packages/server/src/utils/ssh-pool");
-				closeAllSshConnections();
 			}
+			// Both roles own terminal/log/stats streams. Keep their shared SSH
+			// transport alive until terminal and background cleanup have finished.
+			const { closeAllSshConnections } = await import("../../packages/server/src/utils/ssh-pool");
+			closeAllSshConnections();
 
 			log.info("Shutdown complete");
 			process.exit(0);

@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import type { WebSocket } from "ws";
 import type { PlatformEvent } from "../modules/deployment";
 import { onPlatformEvent, toClientFrame } from "../modules/deployment";
-import { ALL_PROJECTS, resolveProjectFilter } from "../modules/projects/project-scope";
+import { type ProjectFilter, resolveProjectFilter } from "../modules/projects/project-scope";
 import { SERVICE_REGISTRY, type ServiceKind } from "../modules/services/registry";
 import { resolveWsOrganizationId } from "./access";
 import type { WsSession } from "./auth";
@@ -67,12 +67,15 @@ export async function handlePlatformEvents(
 	session: WsSession,
 ): Promise<void> {
 	let organizationId: string;
+	let projectFilter: ProjectFilter;
 	try {
 		organizationId = await resolveWsOrganizationId(session);
+		projectFilter = await resolveProjectFilter(session.user.id);
 	} catch (error) {
 		closeWithError(ws, error instanceof Error ? error.message : "Not authorized");
 		return;
 	}
+	if (ws.readyState !== ws.OPEN) return;
 
 	let closed = false;
 	let heartbeat: ReturnType<typeof setInterval> | null = null;
@@ -98,7 +101,6 @@ export async function handlePlatformEvents(
 	 * cached per socket, so a busy deploy costs one query per service rather
 	 * than one per frame.
 	 */
-	let projectFilter = await resolveProjectFilter(session.user.id).catch(() => ALL_PROJECTS);
 	const projectByService = new Map<string, string | null>();
 
 	const visible = async (event: PlatformEvent): Promise<boolean> => {
@@ -153,7 +155,7 @@ export async function handlePlatformEvents(
 			try {
 				const current = await resolveWsOrganizationId(session);
 				// Team membership can change under a long-lived socket too.
-				projectFilter = await resolveProjectFilter(session.user.id).catch(() => projectFilter);
+				projectFilter = await resolveProjectFilter(session.user.id);
 				projectByService.clear();
 				if (current === organizationId) return;
 				// The caller switched organizations (or lost access to this one):

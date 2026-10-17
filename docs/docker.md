@@ -99,8 +99,38 @@ Per-command timeouts are unchanged: `NIXPLOY_REMOTE_COMMAND_TIMEOUT_MS` (30 min
 default) still bounds each remote command, and a timeout now closes only that
 channel — the other commands on the server keep running.
 
-The interactive terminal (`/ws/terminal`) still opens a dedicated connection
-for the session; everything else shares the pool.
+Remote container terminals (`/ws/terminal`) reserve a channel on the same
+pooled SSH connection. Closing one terminal releases its channel, leaving
+other commands and terminals on that server connected.
+
+## Interactive terminal sessions
+
+The Runtime terminal and Docker container terminal open a fresh interactive
+shell. The panel waits for the shell's readiness frame before accepting input
+or sending its fitted dimensions. A connection that cannot become ready within
+30 seconds offers an explicit retry.
+
+After a connection drops, choose **Start new session**. This rechecks the login
+session, organization, team project visibility and runtime capability. It starts
+a new shell; it does not resume the previous process, restore shell variables,
+or replay keystrokes. Commands that already ran are not rolled back.
+
+Closing a Docker attachment alone can leave its exec running
+([Docker's exec disconnect behavior](https://github.com/moby/moby/issues/9098)).
+Nixploy therefore captures the shell's container-namespace PID and process
+start time before it becomes ready. Closing the terminal requests hangup, with
+a guarded kill fallback for that same process. It refuses container PID 1
+and checks the recorded start time before each signal. This requires the
+container's normal Linux `/proc` mount and an image containing `sh`.
+Cleanup is best effort if Docker or SSH is unavailable;
+an abrupt panel/daemon failure is not a process-continuity guarantee. Detached
+jobs and reaping exited child processes remain the container's responsibility.
+Graceful panel shutdown gives pending attachments and cleanup one six-second
+drain deadline before closing the SSH pool. A timeout or cleanup failure is
+logged; an unresponsive transport does not block shutdown indefinitely.
+
+Terminal input is split into bounded frames for large pastes. There is one
+connection attempt per explicit session; background retries never replay input.
 
 ## Server terminal
 
@@ -127,10 +157,11 @@ of a managed server, over SSH, as its configured user
   recorded.
 - The session closes after **30 minutes of inactivity** (any keystroke or
   resize resets the clock; output alone does not, so a forgotten `tail -f`
-  still times out). Closing the dialog ends the SSH connection.
-- The shell holds a **dedicated** SSH connection rather than a lease on the
-  pooled one — an operator typing for an hour must not occupy one of the
-  server's eight shared channels.
+  still times out). Closing the dialog ends that shell's channel.
+- The shell holds one channel lease on the pooled connection. It is released
+  when the dialog closes, the shell exits or the transport fails; the shared
+  connection remains available to other commands. Reconnect uses the same
+  explicit fresh-session behavior as container terminals.
 
 ## Volume file browser
 

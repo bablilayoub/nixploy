@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { runWithProjectFilter } from "../modules/projects/project-scope";
 import { fakeWsSession } from "../test-utils/fake-session";
 
 /**
@@ -19,13 +20,16 @@ const state = vi.hoisted(() => ({
 	/** containerId → appName resolved from Swarm/compose labels. */
 	containerApps: new Map<string, string | null>(),
 	/** deploymentId → owning organization, via application or compose. */
-	deployments: new Map<string, { organizationId: string; via: "application" | "compose" }>(),
+	deployments: new Map<
+		string,
+		{ organizationId: string; via: "application" | "compose"; projectId?: string }
+	>(),
 	capabilities: new Set<string>(),
 	twoFactorBlocked: false,
 }));
 
-const TENANCY = (organizationId: string) => ({
-	environment: { project: { organizationId } },
+const TENANCY = (organizationId: string, projectId = `project-${organizationId}`) => ({
+	environment: { projectId, project: { projectId, organizationId } },
 });
 
 vi.mock("../db", async () => {
@@ -56,7 +60,7 @@ vi.mock("../db", async () => {
 					if (!found || !deploymentId) return undefined;
 					return {
 						deploymentId,
-						[found.via]: TENANCY(found.organizationId),
+						[found.via]: TENANCY(found.organizationId, found.projectId),
 					};
 				},
 			},
@@ -227,6 +231,33 @@ describe("assertWsDockerContainerAccess", () => {
 });
 
 describe("assertWsDeploymentAccess", () => {
+	it.each(["application", "compose"] as const)(
+		"hides another project's %s deployment within the caller's own organization",
+		async (via) => {
+			state.deployments.set("visible-deployment", {
+				organizationId: "org-a",
+				via,
+				projectId: "visible-project",
+			});
+			state.deployments.set("hidden-deployment", {
+				organizationId: "org-a",
+				via,
+				projectId: "hidden-project",
+			});
+			await runWithProjectFilter(
+				{ kind: "projects", projectIds: new Set(["visible-project"]) },
+				async () => {
+					await expect(
+						assertWsDeploymentAccess("visible-deployment", "org-a"),
+					).resolves.toMatchObject({ deploymentId: "visible-deployment" });
+					await expect(assertWsDeploymentAccess("hidden-deployment", "org-a")).rejects.toThrow(
+						"Deployment not found",
+					);
+				},
+			);
+		},
+	);
+
 	it("returns deployments of the caller's org, via application or compose", async () => {
 		state.deployments.set("dep-app", { organizationId: "org-a", via: "application" });
 		await expect(assertWsDeploymentAccess("dep-app", "org-a")).resolves.toMatchObject({
