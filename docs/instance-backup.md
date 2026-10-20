@@ -123,6 +123,13 @@ service. The history (`backup.copies`) shows the latest 100 reachable copies.
 and refuses active recovery work. This initial workflow supports PostgreSQL only;
 it does not upgrade database versions or copy to another server.
 
+Each new copy records its original server and volume identity. Deletion refuses
+a target whose server or app name changed; restore its original placement or
+inspect and remove its resources manually. Missing/unreachable original servers
+and volumes that survive teardown retain the recovery record. Copies created
+without recorded origins require manual inspection; a missing managed-service
+row alone is never proof that its data volume was removed.
+
 ## What gets backed up (instance)
 
 Every instance run produces **two artifacts** in the destination:

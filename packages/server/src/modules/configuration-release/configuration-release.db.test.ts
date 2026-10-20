@@ -329,6 +329,50 @@ describe.skipIf(!testUrl)("configuration releases (postgres)", () => {
 			.from(schema.organizationEnvironments)
 			.where(eq(schema.organizationEnvironments.organizationId, other.organizationId));
 		expect(stillEncrypted?.env).toBe(legacy);
+		const [stillLegacy] = await store.db
+			.select({ metadata: schema.organizations.metadata })
+			.from(schema.organizations)
+			.where(eq(schema.organizations.id, other.organizationId));
+		expect(JSON.parse(stillLegacy?.metadata ?? "{}")).toEqual({
+			env: "LEGACY=conflicting-writer",
+			quotas: { maxProjects: 7 },
+		});
+	});
+	it("rejects invalid legacy variables without removing the source or replacing encrypted values", async () => {
+		const metadata = JSON.stringify({
+			env: { INVALID: "legacy object" },
+			quotas: { maxProjects: 7 },
+		});
+		const [before] = await store.db
+			.select()
+			.from(schema.organizationEnvironments)
+			.where(eq(schema.organizationEnvironments.organizationId, other.organizationId));
+		await store.db.transaction(async (tx) => {
+			await tx.execute(
+				sql`alter table organization disable trigger organization_environment_storage`,
+			);
+			await tx
+				.update(schema.organizations)
+				.set({ metadata })
+				.where(eq(schema.organizations.id, other.organizationId));
+			await tx.execute(
+				sql`alter table organization enable trigger organization_environment_storage`,
+			);
+		});
+		await expect(organizationEnv.migrateOrganizationEnvironments()).rejects.toThrow(/invalid/);
+		await expect(organizationEnv.loadOrganizationEnvironment(other.organizationId)).rejects.toThrow(
+			/invalid/,
+		);
+		const [unchangedSource] = await store.db
+			.select({ metadata: schema.organizations.metadata })
+			.from(schema.organizations)
+			.where(eq(schema.organizations.id, other.organizationId));
+		const [unchangedEncrypted] = await store.db
+			.select()
+			.from(schema.organizationEnvironments)
+			.where(eq(schema.organizationEnvironments.organizationId, other.organizationId));
+		expect(unchangedSource?.metadata).toBe(metadata);
+		expect(unchangedEncrypted).toEqual(before);
 	});
 	it("manual Compose rollback queues historical merged variables instead of current shared drafts", async () => {
 		const [job] = await store.db

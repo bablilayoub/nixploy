@@ -30,7 +30,10 @@ this file is the summary.
   directory/deployment hierarchy. Saved branding remains authoritative.
 - Organization variables move from plaintext metadata to encrypted storage.
   Migration `0048` requires a coordinated stop/drain and a backup; old binaries
-  cannot use the upgraded storage/worker protocol. Read the upgrade notes.
+  cannot use the upgraded storage/worker protocol. The current host updater
+  verifies both old roles stopped, migrates separately and pauses failures;
+  unsupported GUI/split and incompatible-image paths fail before rolling.
+  Read the upgrade notes, including the empty-database restore boundary.
 
 ### Fixed
 
@@ -40,6 +43,8 @@ this file is the summary.
   application hooks preserve literal environment values through Docker's API.
 - Runtime-log pagination preserves equal-time lines and keeps continuation
   available after an empty scan-budget page.
+- Recovery-copy deletion uses its immutable original server/volume identity
+  (`0049`) and retains tracking if placement changes or cleanup is unverifiable.
 
 ## [0.7.3] — 2026-09-21
 

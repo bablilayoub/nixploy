@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, notInArray } from "drizzle-orm";
+import { and, desc, eq, isNull, notInArray } from "drizzle-orm";
 import { db } from "../../db";
-import { destinations, postgres, recoveryCopies } from "../../db/schema";
+import { destinations, postgres, recoveryCopies, servers } from "../../db/schema";
 import { execAsync, execAsyncRemote, execAsyncWithStdin } from "../../utils/exec";
-import { assertSafeDockerImageRef } from "../../utils/validators";
+import { assertSafeAppName, assertSafeDockerImageRef } from "../../utils/validators";
 import { shellQuote } from "../compose/paths";
 import {
 	databaseServiceExists,
@@ -214,7 +214,13 @@ export async function createRecoveryCopy(input: {
 				if (!created) throw conflict("Recovery database could not be created");
 				await tx
 					.update(recoveryCopies)
-					.set({ targetPostgresId: created.postgresId, status: "provisioning" })
+					.set({
+						targetPostgresId: created.postgresId,
+						originServerId: created.serverId,
+						originAppName: created.appName,
+						originVolumeName: `${created.appName}-data`,
+						status: "provisioning",
+					})
 					.where(eq(recoveryCopies.recoveryCopyId, copy.recoveryCopyId));
 				return created;
 			});
@@ -310,6 +316,38 @@ export async function deleteRecoveryCopy(
 	const state = recoveryCopyState(row);
 	if (!["ready", "error", "interrupted", "deleted"].includes(state))
 		throw conflict("Wait for the recovery operation to finish before deleting its copy");
+	const { originAppName, originServerId, originVolumeName } = row;
+	if (
+		!originAppName ||
+		!originVolumeName ||
+		originVolumeName !== `${originAppName}-data` ||
+		originServerId === "" ||
+		assertSafeAppName(originAppName) !== originAppName
+	) {
+		throw preconditionFailed(
+			"The original recovery storage location is unknown. Inspect its service and volume before removing this legacy copy manually.",
+		);
+	}
+	if (target && (target.appName !== originAppName || target.serverId !== originServerId)) {
+		throw preconditionFailed(
+			"The recovery database moved from its recorded storage location. Restore its original placement before deleting the copy, or inspect and remove its resources manually.",
+		);
+	}
+	// The authorized router read can precede a placement edit. Do not use its
+	// stale object as evidence that the managed row still matches the origin.
+	const currentTarget = target
+		? ((await db.query.postgres.findFirst({
+				where: eq(postgres.postgresId, target.postgresId),
+			})) ?? null)
+		: null;
+	if (
+		currentTarget &&
+		(currentTarget.appName !== originAppName || currentTarget.serverId !== originServerId)
+	) {
+		throw preconditionFailed(
+			"The recovery database moved from its recorded storage location. Restore its original placement before deleting the copy, or inspect and remove its resources manually.",
+		);
+	}
 	const [claimed] = await db
 		.update(recoveryCopies)
 		.set({ status: "deleting", deadline: new Date(Date.now() + RECOVERY_COPY_TIMEOUT_MS) })
@@ -323,19 +361,50 @@ export async function deleteRecoveryCopy(
 	if (!claimed)
 		throw conflict("Another operation changed this recovery copy; refresh and try again");
 	try {
-		if (target) {
-			await removeDatabase(target.appName, target.serverId, "postgres", target.environmentId);
-			if (await databaseServiceExists(target.appName)) {
-				throw conflict("The recovery database service still exists");
-			}
-			// Remote teardown can return after exhausted best-effort volume retries.
-			// Keep durable tracking until the actual target-node volume is absent.
-			const command = `docker volume ls --filter ${shellQuote(`name=^${target.appName}-data$`)} --format '{{.Name}}'`;
-			const volumes = target.serverId
-				? await execAsyncRemote(target.serverId, command, { timeoutMs: 30_000 })
+		if (originServerId !== null) {
+			const server = await db.query.servers.findFirst({
+				where: and(
+					eq(servers.serverId, originServerId),
+					eq(servers.organizationId, row.organizationId),
+				),
+				columns: { serverId: true },
+			});
+			if (!server) throw preconditionFailed("The original recovery server is unavailable");
+		}
+		if (currentTarget) {
+			await removeDatabase(originAppName, originServerId, "postgres", currentTarget.environmentId);
+		}
+		// A missing managed row does not prove that its Swarm service or old volume left.
+		// Without the row, only verify absence: a reused service name must not be removed.
+		if (await databaseServiceExists(originAppName)) {
+			throw conflict("The original recovery database service still exists");
+		}
+		const command = `docker volume ls --filter ${shellQuote(`name=^${originVolumeName}$`)} --format '{{.Name}}'`;
+		const volumes =
+			originServerId !== null
+				? await execAsyncRemote(originServerId, command, { timeoutMs: 30_000 })
 				: await execAsync(command, { timeout: 30_000 });
-			if (volumes.trim()) throw conflict("The recovery database data volume still exists");
-			await db.delete(postgres).where(eq(postgres.postgresId, target.postgresId));
+		if (volumes.trim()) throw conflict("The original recovery database data volume still exists");
+		if (currentTarget) {
+			const [deleted] = await db
+				.delete(postgres)
+				.where(
+					and(
+						eq(postgres.postgresId, currentTarget.postgresId),
+						eq(postgres.appName, originAppName),
+						originServerId === null
+							? isNull(postgres.serverId)
+							: eq(postgres.serverId, originServerId),
+					),
+				)
+				.returning({ postgresId: postgres.postgresId });
+			if (!deleted) {
+				const current = await db.query.postgres.findFirst({
+					where: eq(postgres.postgresId, currentTarget.postgresId),
+					columns: { postgresId: true },
+				});
+				if (current) throw conflict("The recovery database changed during deletion");
+			}
 		}
 		await db
 			.update(recoveryCopies)

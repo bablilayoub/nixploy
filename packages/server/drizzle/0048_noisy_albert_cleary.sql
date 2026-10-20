@@ -3,6 +3,9 @@
 LOCK TABLE "deployment" IN SHARE ROW EXCLUSIVE MODE;
 --> statement-breakpoint
 DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM "organization") AND current_setting('nixploy.upgrade_0048_drained', true) IS DISTINCT FROM '1' THEN
+    RAISE EXCEPTION 'Use the current host updater to drain all old panels and workers before migration 0048';
+  END IF;
   IF EXISTS (SELECT 1 FROM "deployment" WHERE "status"::text = 'running') THEN
     RAISE EXCEPTION 'Drain running deployments before the encrypted organization-variable upgrade';
   END IF;

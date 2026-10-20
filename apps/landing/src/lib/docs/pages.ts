@@ -384,7 +384,7 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 			},
 			{
 				type: "note",
-				text: "Regular deployments capture encrypted environment and build-argument inputs when queued, so later draft edits cannot replace them. This does not freeze all settings, repository commits or mutable image tags. The encrypted organization-storage upgrade requires a backup and a coordinated stop/drain of old panels and workers; see docs/upgrade-notes.md before upgrading. Older queued jobs without snapshots must be reviewed and queued again.",
+				text: "Regular deployments capture encrypted environment and build-argument inputs when queued, so later draft edits cannot replace them. This does not freeze all settings, repository commits or mutable image tags. The encrypted organization-storage upgrade requires the current host update.sh: it backs up recovery assets, verifies both old roles stopped, and migrates separately before starting the new worker and panel. Failures pause for recovery; an older image needs its matching database/config/keys restored first. See docs/upgrade-notes.md before upgrading. Older queued jobs without snapshots must be reviewed and queued again.",
 			},
 			{ type: "h2", text: "The queue" },
 			{
@@ -797,7 +797,7 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 			},
 			{
 				type: "note",
-				text: "Copies retain unsanitized data and consume normal service/storage resources until explicitly deleted. An admin needs backup, service creation/deployment and secret-write permissions. A failed restore keeps its incomplete target for inspection or deletion; an interrupted operation never shows success. This initial workflow does not upgrade versions or copy to another server. Verify application compatibility yourself.",
+				text: "Copies retain unsanitized data and consume normal service/storage resources until explicitly deleted. An admin needs backup, service creation/deployment and secret-write permissions. A failed restore keeps its incomplete target for inspection or deletion; an interrupted operation never shows success. Deletion checks the recorded original server and volume, refuses placement changes, and retains tracking when cleanup cannot be verified. This initial workflow does not upgrade versions or copy to another server. Verify application compatibility yourself.",
 			},
 			{ type: "h2", text: "Volume backups" },
 			{

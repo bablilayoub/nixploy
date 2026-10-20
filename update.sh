@@ -5,10 +5,10 @@
 #   curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/update.sh | sudo bash
 #
 # Safe: keeps /etc/nixploy/.env, Postgres data, Traefik ACME certs and
-# dynamic routes. Migrations run automatically when the new container starts.
-# A new image that fails its health check is rolled back by Swarm
-# (--update-failure-action rollback); `docker service rollback nixploy` does
-# the same by hand.
+# dynamic routes. Most migrations run when the new container starts. The 0048
+# storage boundary instead drains every panel/worker before a one-off migration.
+# Image rollback never restores a migrated database: recovery requires its
+# matching pre-update database, config and original service encryption keys.
 #
 # Environment overrides:
 #   NIXPLOY_VERSION              App image tag                 (default: v0.1.0)
@@ -35,7 +35,7 @@
 #   NIXPLOY_REFRESH_TRAEFIK_YML  1 = re-render static traefik.yml, keeping the ACME email (default: 1)
 #   NIXPLOY_PRUNE                1 = prune dangling images     (default: 1)
 #   NIXPLOY_PRE_UPDATE_BACKUP    1 = pg_dump the platform DB to <config>/backups before
-#                                rolling (default: 1; the last 3 dumps are kept)
+#                                rolling (default: 1; mandatory for boundary 0048)
 #   NIXPLOY_ALLOW_DOWNGRADE      1 = allow rolling to a LOWER semver tag (default: refuse —
 #                                migrations are forward-only; restore a dump first)
 #   NIXPLOY_MEMORY_LIMIT         Memory limit of the nixploy service (default: 2g)
@@ -54,6 +54,8 @@
 #   NIXPLOY_RENDER_TRAEFIK_ONLY  1 = print the static traefik.yml this script writes, then exit
 #
 set -euo pipefail
+# Service snapshots contain literal credentials; never trace their decoding.
+set +x
 
 NIXPLOY_VERSION="${NIXPLOY_VERSION:-v0.7.3}"
 NIXPLOY_CONFIG_DIR="${NIXPLOY_CONFIG_DIR:-/etc/nixploy}"
@@ -523,12 +525,24 @@ refresh_traefik_yml() {
 }
 
 # ── pre-update backup ────────────────────────────────────────────────────────
-# Swarm's rollback restores the previous IMAGE, not the previous database:
-# a migration that partially applied stays applied. A pg_dump right before
-# the roll makes "roll back" mean the previous state too.
+# Swarm rollback restores the IMAGE, not the database. A pre-update dump
+# protects database state; matching config and runtime keys are also required.
 BACKUP_DIR="${HOST_CONFIG_DIR}/backups"
 BACKUP_FILE=""
 BACKUP_KEEP=3
+UPGRADE_BOUNDARY=0
+BOUNDARY_DRAIN_STARTED=0
+BOUNDARY_COMPLETE=0
+BOUNDARY_RECOVERY_DIR=""
+BOUNDARY_LOCK="${BACKUP_DIR}/.upgrade-0048.lock"
+BOUNDARY_PANEL_ID=""
+BOUNDARY_WORKER_ID=""
+BOUNDARY_PANEL_REPLICAS=1
+BOUNDARY_WORKER_REPLICAS=1
+BOUNDARY_DOCKER_SOCKET=""
+BOUNDARY_CONTAINER=""
+BOUNDARY_ENV_VALUES=()
+BOUNDARY_ENV_ARGS=()
 
 postgres_container() {
 	docker ps --filter label=com.docker.swarm.service.name=nixploy-postgres --format '{{.ID}}' 2>/dev/null | head -n 1 || true
@@ -536,12 +550,13 @@ postgres_container() {
 
 backup_database() {
 	if [ "${NIXPLOY_PRE_UPDATE_BACKUP}" != "1" ]; then
+		[ "${UPGRADE_BOUNDARY}" != "1" ] || die "The 0048 recovery backup cannot be skipped"
 		warn "Pre-update database backup skipped (NIXPLOY_PRE_UPDATE_BACKUP=0)"
 		return 0
 	fi
 	local container tag stamp size
 	container="$(postgres_container)"
-	[ -n "${container}" ] || die "nixploy-postgres container not found on this node — cannot take the pre-update backup (NIXPLOY_PRE_UPDATE_BACKUP=0 skips it)"
+	[ -n "${container}" ] || die "nixploy-postgres container not found on this node — cannot take the pre-update backup"
 	tag="$(image_tag "${APP_IMAGE}")"
 	tag="$(printf '%s' "${tag:-image}" | tr -c 'A-Za-z0-9._-' '-')"
 	stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -553,16 +568,16 @@ backup_database() {
 	if ! docker exec "${container}" sh -c 'pg_dump --clean --if-exists -U "$POSTGRES_USER" "$POSTGRES_DB"' \
 		| gzip > "${BACKUP_FILE}"; then
 		rm -f "${BACKUP_FILE}"
-		die "pg_dump failed — not rolling. Check: docker service logs nixploy-postgres (NIXPLOY_PRE_UPDATE_BACKUP=0 skips the backup)"
+		die "pg_dump failed — not rolling. Check: docker service logs nixploy-postgres"
 	fi
 	size="$(wc -c < "${BACKUP_FILE}" | tr -d ' ')"
 	if [ "${size:-0}" -lt 200 ]; then
 		rm -f "${BACKUP_FILE}"
-		die "pg_dump produced an empty dump — not rolling (NIXPLOY_PRE_UPDATE_BACKUP=0 skips the backup)"
+		die "pg_dump produced an empty dump — not rolling"
 	fi
 	chmod 600 "${BACKUP_FILE}"
 	ok "Database dumped to ${BACKUP_FILE} ($((size / 1024)) KiB)"
-	info "Restore: gunzip -c ${BACKUP_FILE} | docker exec -i \$(docker ps -q -f label=com.docker.swarm.service.name=nixploy-postgres) psql -q -U ${POSTGRES_USER:-nixploy} -d ${POSTGRES_DB:-nixploy}"
+	info "Restore through canonical Postgres using that container's POSTGRES_USER/POSTGRES_DB. Stop all panel/worker tasks and restore matching config/keys before using an older image."
 	# Keep the newest BACKUP_KEEP dumps. The names are generated above from
 	# [A-Za-z0-9._-] plus a UTC stamp, so sorting ls output by mtime is safe.
 	local old
@@ -570,6 +585,285 @@ backup_database() {
 	ls -1t "${BACKUP_DIR}"/pre-update-*.sql.gz 2>/dev/null | tail -n +"$((BACKUP_KEEP + 1))" | while IFS= read -r old; do
 		rm -f "${old}"
 	done
+}
+
+# The target image supplies Node; the updater does not require Node on the host.
+# Helpers receive private JSON on stdin and never print service environment data.
+boundary_node() {
+	docker run --rm -i --network none --entrypoint node "${APP_IMAGE}" -e "$1"
+}
+
+detect_upgrade_boundary() {
+	local target contract container postgres_id
+	[ ! -e "${BOUNDARY_LOCK}" ] || die "An unfinished 0048 upgrade is fenced by ${BOUNDARY_LOCK}. Inspect its private recovery directory and keep both services stopped until recovery is complete; do not remove the fence to bypass recovery."
+	if ! target="$(boundary_node 'const fs=require("node:fs"); const has=fs.readdirSync("/app/packages/server/drizzle").some(n=>/^0048_.*\.sql$/.test(n)); if(has&&!fs.existsSync("/app/packages/server/src/scripts/migrate-organization-env.ts"))process.exit(2); process.stdout.write(has?"0048":"legacy");' < /dev/null)"; then
+		die "Cannot inspect the target image migration contract (0048 images must include the organization-variable backfill script)"
+	fi
+	case "${target}" in 0048|legacy) ;; *) die "Unknown target migration contract" ;; esac
+	container="$(docker ps --no-trunc --filter label=com.docker.swarm.service.name=nixploy-postgres --format '{{.ID}}')" || die "Cannot inspect the canonical Postgres task"
+	[ -n "${container}" ] || die "The canonical nixploy-postgres task must be running on this manager to inspect the database storage contract"
+	[[ "${container}" != *$'\n'* ]] || die "Multiple local canonical Postgres tasks are running; wait for Postgres to converge before updating"
+	postgres_id="$(docker service inspect nixploy-postgres --format '{{.ID}}')"
+	[ "$(docker inspect --format '{{index .Config.Labels "com.docker.swarm.service.id"}} {{.State.Running}}' "${container}")" = "${postgres_id} true" ] || die "The local Postgres container does not match the canonical live service"
+	if ! contract="$(docker exec -i "${container}" sh -ec 'psql -X -qAt -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+SELECT CASE
+ WHEN count(*) FILTER (WHERE column_name = 'metadata') = 1
+  AND count(*) FILTER (WHERE column_name = 'metadata_v2') = 0 THEN 'legacy'
+ WHEN count(*) FILTER (WHERE column_name = 'metadata_v2') = 1
+  AND count(*) FILTER (WHERE column_name = 'metadata') = 0 THEN '0048'
+ ELSE 'unknown' END
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'organization';
+SQL
+)"; then
+		die "Cannot read the organization storage contract from nixploy-postgres"
+	fi
+	case "${contract}" in legacy|0048) ;; *) die "Organization storage contract is unknown; no services were stopped or updated" ;; esac
+	if [ "${contract}" = "0048" ] && [ "${target}" != "0048" ]; then
+		die "This database has organization.metadata_v2. A target without 0048 is incompatible even with NIXPLOY_ALLOW_DOWNGRADE=1; restore the matching database/config/keys before using an older image."
+	fi
+	if [ "${target}" = "0048" ] && [ "${contract}" = "legacy" ]; then
+		[ "${NIXPLOY_PRE_UPDATE_BACKUP}" = "1" ] || die "Boundary 0048 requires a post-drain database/config/key backup; NIXPLOY_PRE_UPDATE_BACKUP=0 is not supported"
+		UPGRADE_BOUNDARY=1
+		info "0048 storage boundary detected — coordinated drain and private recovery backup required"
+	fi
+}
+
+boundary_service_matches() {
+	local service="$1" expected="$2" actual
+	actual="$(docker service inspect "${service}" --format '{{.ID}}' 2>/dev/null)" || return 1
+	[ "${actual}" = "${expected}" ]
+}
+
+# Desired replicas=0 is insufficient: actual old tasks must be terminal too.
+# Orphaned/unknown tasks are never evidence that an old writer has stopped.
+boundary_tasks_stopped() {
+	local service="$1" expected="$2" ids task details owner state
+	boundary_service_matches "${service}" "${expected}" || return 2
+	[ "$(docker service inspect "${service}" --format '{{.Spec.Mode.Replicated.Replicas}}')" = "0" ] || return 1
+	ids="$(docker service ps --no-trunc --quiet "${service}")" || return 2
+	while IFS= read -r task; do
+		[ -n "${task}" ] || continue
+		details="$(docker inspect --type task --format '{{.ServiceID}} {{.Status.State}}' "${task}")" || return 2
+		read -r owner state <<<"${details}"
+		[ "${owner}" = "${expected}" ] || return 2
+		case "${state}" in
+			complete|shutdown|failed|rejected|remove) ;;
+			new|allocated|pending|assigned|accepted|preparing|ready|starting|running) return 1 ;;
+			*) return 2 ;;
+		esac
+	done <<<"${ids}"
+	return 0
+}
+
+boundary_assert_drained() {
+	boundary_tasks_stopped nixploy "${BOUNDARY_PANEL_ID}" || return 1
+	if [ -n "${BOUNDARY_WORKER_ID}" ]; then
+		boundary_tasks_stopped "${WORKER_SERVICE}" "${BOUNDARY_WORKER_ID}" || return 1
+	else
+		# A worker created after the snapshot invalidates the single-process drain.
+		local services
+		services="$(docker service ls --format '{{.Name}}')" || return 1
+		! grep -qx "${WORKER_SERVICE}" <<<"${services}" || return 1
+	fi
+}
+
+boundary_recovery_notice() {
+	warn "0048 upgrade did not complete. Both canonical services must remain stopped/paused. Private recovery material: ${BOUNDARY_RECOVERY_DIR}"
+	warn "Do not use image-only rollback. Restore the matching database AND config with every panel/worker stopped, then restore the original full ENCRYPTION_KEYS/ENCRYPTION_KEY and BETTER_AUTH_SECRET from the saved service specs on BOTH services before starting the old image. See RECOVERY.txt in that directory."
+}
+
+boundary_exit() {
+	local code="$1" service expected
+	trap - EXIT INT TERM
+	if [ "${BOUNDARY_COMPLETE}" = "1" ]; then return; fi
+	if [ "${BOUNDARY_DRAIN_STARTED}" = "1" ]; then
+		if [ -n "${BOUNDARY_CONTAINER}" ]; then
+			if [ "$(docker inspect --format '{{index .Config.Labels "nixploy.upgrade.recovery"}}' "${BOUNDARY_CONTAINER}" 2>/dev/null || true)" = "${BOUNDARY_RECOVERY_DIR##*/}" ]; then
+				docker rm -f "${BOUNDARY_CONTAINER}" >/dev/null 2>&1 || warn "Could not stop the named one-off migrator; inspect it before recovery"
+			fi
+		fi
+		for service in nixploy "${WORKER_SERVICE}"; do
+			if [ "${service}" = "nixploy" ]; then expected="${BOUNDARY_PANEL_ID}"; else expected="${BOUNDARY_WORKER_ID}"; fi
+			[ -n "${expected}" ] || continue
+			if boundary_service_matches "${service}" "${expected}"; then
+				docker service update --detach --replicas 0 --stop-grace-period 90s --update-failure-action pause "${service}" >/dev/null 2>&1 || warn "Could not keep ${service} stopped; stop it before any recovery"
+			else
+				warn "${service} identity changed; refusing to mutate an unrecognized service. Stop all writers manually."
+			fi
+		done
+		boundary_recovery_notice
+	else
+		rm -f "${BOUNDARY_LOCK}/recovery-directory"
+		rmdir "${BOUNDARY_LOCK}" 2>/dev/null || true
+	fi
+	[ "${code}" -ne 0 ] || code=1
+	exit "${code}"
+}
+
+prepare_boundary_upgrade() {
+	[ "$(docker info --format '{{.Swarm.ControlAvailable}}')" = "true" ] || die "0048 upgrades must run on a Swarm manager"
+	[ "$(docker ps --filter label=com.docker.swarm.service.name=nixploy-postgres --format '{{.ID}}' | wc -l | tr -d ' ')" = "1" ] || die "0048 requires exactly one local canonical Postgres task"
+	# No network/spec migration is allowed to hide an unsupported old layout.
+	[ "$(docker network inspect nixploy-internal --format '{{.Driver}} {{.Attachable}}')" = "overlay true" ] || die "0048 requires the attachable nixploy-internal overlay; reconcile the network before retrying"
+	service_on_network nixploy-postgres nixploy-internal || die "nixploy-postgres must already be attached to nixploy-internal"
+	umask 077
+	mkdir -p "${BACKUP_DIR}"
+	chmod 700 "${BACKUP_DIR}"
+	mkdir "${BOUNDARY_LOCK}" || die "Another 0048 upgrade owns the host recovery fence"
+	trap 'boundary_exit "$?"' EXIT
+	trap 'exit 130' INT
+	trap 'exit 143' TERM
+	BOUNDARY_RECOVERY_DIR="$(mktemp -d "${BACKUP_DIR}/upgrade-0048-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX")"
+	printf '%s\n' "${BOUNDARY_RECOVERY_DIR}" > "${BOUNDARY_LOCK}/recovery-directory"
+	local services record
+	services="$(docker service ls --format '{{.Name}}')"
+	if grep -qx "${WORKER_SERVICE}" <<<"${services}"; then
+		docker service inspect nixploy nixploy-postgres "${WORKER_SERVICE}" > "${BOUNDARY_RECOVERY_DIR}/services.json"
+	else
+		docker service inspect nixploy nixploy-postgres > "${BOUNDARY_RECOVERY_DIR}/services.json"
+	fi
+	# Metadata and literal environment values use separate tagged NUL records.
+	# JSON is parsed, never sourced/eval'd; Docker receives only --env NAME on argv.
+	if ! boundary_node 'let raw="";process.stdin.setEncoding("utf8");process.stdin.on("data",c=>raw+=c);process.stdin.on("end",()=>{try{const specs=JSON.parse(raw);const panel=specs.find(s=>s.Spec.Name==="nixploy"),worker=specs.find(s=>s.Spec.Name==="nixploy-worker"),pg=specs.find(s=>s.Spec.Name==="nixploy-postgres");if(!panel||!pg||specs.length!==(worker?3:2))throw 0;const env=s=>{const out=new Map;for(const item of s.Spec.TaskTemplate.ContainerSpec.Env??[]){const i=item.indexOf("="),name=item.slice(0,i);if(i<1||!/^[_a-zA-Z][_a-zA-Z0-9]*$/.test(name)||item.includes("\0")||out.has(name))throw 0;out.set(name,item.slice(i+1));}return out};const pe=env(panel),we=worker?env(worker):pe,pge=env(pg);const url=new URL(pe.get("DATABASE_URL"));if(!["postgres:","postgresql:"].includes(url.protocol)||url.hostname!=="nixploy-postgres"||(url.port&&url.port!=="5432")||decodeURIComponent(url.pathname.slice(1))!==pge.get("POSTGRES_DB")||decodeURIComponent(url.username)!==pge.get("POSTGRES_USER"))throw 0;for(const key of ["DATABASE_URL","BETTER_AUTH_SECRET","ENCRYPTION_KEYS","ENCRYPTION_KEY"]){if(pe.get(key)!==we.get(key))throw 0;}if(!pe.get("DATABASE_URL")||!pe.get("BETTER_AUTH_SECRET")||!(pe.get("ENCRYPTION_KEYS")||pe.get("ENCRYPTION_KEY")))throw 0;const records=[];let socket;for(const [name,s] of [["panel",panel],["worker",worker]]){if(!s)continue;const replicas=s.Spec.Mode?.Replicated?.Replicas;if(!Number.isSafeInteger(replicas)||replicas<0)throw 0;const mounts=s.Spec.TaskTemplate.ContainerSpec.Mounts??[],config=mounts.find(m=>m.Target==="/etc/nixploy"),docker=mounts.find(m=>m.Target==="/var/run/docker.sock");if(config?.Type!=="bind"||docker?.Type!=="bind"||!docker.Source?.startsWith("/")||config.ReadOnly||docker.ReadOnly)throw 0;if(socket&&socket!==docker.Source)throw 0;socket=docker.Source;records.push(name+"-id="+s.ID,name+"-replicas="+Math.max(1,replicas),name+"-config="+config.Source);}records.push("socket="+socket);for(const key of ["DATABASE_URL","ENCRYPTION_KEYS","ENCRYPTION_KEY","BETTER_AUTH_SECRET","NIXPLOY_DB_WAIT_SECONDS"]){if(we.has(key))records.push("env="+key+"="+we.get(key));}process.stdout.write(records.join("\0")+"\0");}catch{console.error("Saved services have unsupported replicas, mounts, canonical database URL or inconsistent required runtime secrets");process.exitCode=1;}});' \
+		< "${BOUNDARY_RECOVERY_DIR}/services.json" > "${BOUNDARY_RECOVERY_DIR}/runtime.nul"; then
+		die "Cannot safely derive migration environment from the saved live service specs"
+	fi
+	while IFS= read -r -d '' record; do
+		case "${record}" in
+			panel-id=*) BOUNDARY_PANEL_ID="${record#panel-id=}" ;;
+			worker-id=*) BOUNDARY_WORKER_ID="${record#worker-id=}" ;;
+			panel-replicas=*) BOUNDARY_PANEL_REPLICAS="${record#panel-replicas=}" ;;
+			worker-replicas=*) BOUNDARY_WORKER_REPLICAS="${record#worker-replicas=}" ;;
+			panel-config=*|worker-config=*) [ "${record#*=}" = "${HOST_CONFIG_DIR}" ] || die "Live config bind differs from NIXPLOY_CONFIG_DIR; retry with its actual host path" ;;
+			socket=*) BOUNDARY_DOCKER_SOCKET="${record#socket=}" ;;
+			env=*) BOUNDARY_ENV_VALUES+=("${record#env=}"); record="${record#env=}"; BOUNDARY_ENV_ARGS+=(--env "${record%%=*}") ;;
+			*) die "Invalid private service snapshot record" ;;
+		esac
+	done < "${BOUNDARY_RECOVERY_DIR}/runtime.nul"
+	[ -n "${BOUNDARY_PANEL_ID}" ] && [ -n "${BOUNDARY_DOCKER_SOCKET}" ] || die "Incomplete live service snapshot"
+	cat > "${BOUNDARY_RECOVERY_DIR}/RECOVERY.txt" <<EOF
+0048 upgrade recovery — PRIVATE: services.json and runtime.nul contain credentials.
+Keep nixploy and nixploy-worker stopped (replicas 0), and prove every old task
+has terminated before restoring or restarting anything. Never image-rollback alone.
+
+Recovery directory: ${BOUNDARY_RECOVERY_DIR}
+services.json: exact original full service specs, replicas, image, mounts and Env.
+config.tar.gz: matching host config, including .env/keys, excluding backups/.
+pre-update-*.sql.gz: database dump captured only after both services drained.
+Incomplete/missing artifacts mean no complete recovery set; do not assume otherwise.
+
+Validate gzip/tar archives before extraction. With BOTH services still stopped,
+restore the dump into an EMPTY replacement database through the canonical
+Postgres container, then point the restored service specs at that database.
+Use the original database owner and psql -X -v ON_ERROR_STOP=1. Replaying the
+old --clean dump over the upgraded database is insufficient: new foreign keys
+and tables can prevent or invalidate the restore. Verify the old schema and
+resolved variables before starting any old binary.
+Restore config to the original host config bind while both services stay stopped.
+Preserve literal original Env from services.json: restore the FULL ENCRYPTION_KEYS
+chain, legacy ENCRYPTION_KEY and BETTER_AUTH_SECRET on BOTH actual Swarm services;
+do not source JSON or reconstruct secrets from a stale .env. Restore their original
+images and supported replica counts only after matching database/config/key recovery.
+Keep the host fence ${BOUNDARY_LOCK} until recovery is verified; remove it manually
+only after confirming no updater/migrator is active and deciding how to resume.
+Review interrupted/older queued deployments before enabling background work.
+EOF
+	ok "Private service recovery snapshots saved in ${BOUNDARY_RECOVERY_DIR}"
+}
+
+drain_boundary_services() {
+	local service expected status i all_stopped
+	BOUNDARY_DRAIN_STARTED=1
+	for service in nixploy "${WORKER_SERVICE}"; do
+		if [ "${service}" = "nixploy" ]; then expected="${BOUNDARY_PANEL_ID}"; else expected="${BOUNDARY_WORKER_ID}"; fi
+		[ -n "${expected}" ] || continue
+		boundary_service_matches "${service}" "${expected}" || die "${service} changed after its recovery snapshot"
+		docker service update --detach --replicas 0 --stop-grace-period 90s --update-failure-action pause "${service}" >/dev/null
+	done
+	for i in $(seq 1 60); do
+		all_stopped=1
+		for service in nixploy "${WORKER_SERVICE}"; do
+			if [ "${service}" = "nixploy" ]; then expected="${BOUNDARY_PANEL_ID}"; else expected="${BOUNDARY_WORKER_ID}"; fi
+			[ -n "${expected}" ] || continue
+			if boundary_tasks_stopped "${service}" "${expected}"; then :; else
+				status=$?
+				[ "${status}" != "2" ] || die "${service} has an orphaned/unknown task, changed identity or unreadable state; refusing migration"
+				all_stopped=0
+			fi
+		done
+		if [ "${all_stopped}" = "1" ]; then boundary_assert_drained || die "Canonical service set changed while draining"; ok "All old panel/worker tasks are terminal"; return; fi
+		sleep 2
+	done
+	die "Old panel/worker tasks did not stop within 120 seconds (90-second stop grace); refusing migration"
+}
+
+backup_boundary_state() {
+	local old_dir="${BACKUP_DIR}"
+	boundary_assert_drained || die "A canonical writer appeared before backup"
+	BACKUP_DIR="${BOUNDARY_RECOVERY_DIR}"
+	backup_database
+	BACKUP_DIR="${old_dir}"
+	if ! tar --exclude='./backups' -C "${HOST_CONFIG_DIR}" -czf "${BOUNDARY_RECOVERY_DIR}/config.tar.gz.part" . \
+		2> "${BOUNDARY_RECOVERY_DIR}/config-backup.log"; then
+		die "Host config/key snapshot failed; both services remain stopped"
+	fi
+	gzip -t "${BOUNDARY_RECOVERY_DIR}/config.tar.gz.part" || die "Host config snapshot failed gzip validation"
+	mv "${BOUNDARY_RECOVERY_DIR}/config.tar.gz.part" "${BOUNDARY_RECOVERY_DIR}/config.tar.gz"
+	chmod 600 "${BOUNDARY_RECOVERY_DIR}"/*
+}
+
+run_boundary_migration() {
+	boundary_assert_drained || die "A canonical writer appeared before migration"
+	BOUNDARY_CONTAINER="nixploy-upgrade-0048-${BOUNDARY_RECOVERY_DIR##*/}"
+	info "Applying 0048 and encrypting legacy organization variables with both services stopped"
+	if ! (
+		local entry
+		for entry in "${BOUNDARY_ENV_VALUES[@]}"; do export "${entry?}"; done
+		docker run --rm --name "${BOUNDARY_CONTAINER}" --label "nixploy.upgrade.recovery=${BOUNDARY_RECOVERY_DIR##*/}" \
+			--network nixploy-internal \
+			--mount "type=bind,source=${HOST_CONFIG_DIR},target=/etc/nixploy" \
+			--mount "type=bind,source=${BOUNDARY_DOCKER_SOCKET},target=/var/run/docker.sock" \
+			"${BOUNDARY_ENV_ARGS[@]}" --env NIXPLOY_UPGRADE_DRAINED=0048 \
+			--env NIXPLOY_CONFIG_DIR=/etc/nixploy --env NIXPLOY_MIGRATIONS_DIR=/app/packages/server/drizzle \
+			--env DOCKER_SOCKET=/var/run/docker.sock --env DOCKER_HOST=unix:///var/run/docker.sock \
+			--entrypoint /bin/sh "${APP_IMAGE}" -ec \
+			'node /app/migrate-deps/migrate.mjs && /app/apps/web/node_modules/.bin/tsx /app/packages/server/src/scripts/migrate-organization-env.ts'
+	) > "${BOUNDARY_RECOVERY_DIR}/migration.log" 2>&1; then
+		die "0048 migration/backfill failed; inspect the private migration.log and RECOVERY.txt. Neither old service will restart."
+	fi
+	BOUNDARY_CONTAINER=""
+	boundary_assert_drained || die "A canonical writer appeared during migration"
+	ok "0048 migration and organization-variable backfill completed"
+}
+
+roll_boundary_service() {
+	local service="$1" expected="$2" role="$3" replicas="$4" i state ids task details desired actual image count valid
+	boundary_service_matches "${service}" "${expected}" || die "${service} identity changed before restart"
+	docker service update --detach --force --no-resolve-image --image "${APP_IMAGE}" \
+		--replicas "${replicas}" --update-order stop-first --update-failure-action pause --update-monitor 60s \
+		--stop-grace-period 90s --env-add "NIXPLOY_IMAGE=${APP_IMAGE}" --env-add "NIXPLOY_ROLE=${role}" \
+		--env-add NIXPLOY_DISABLE_TRAEFIK_BOOT=1 "${LOG_ARGS[@]}" "${service}" >/dev/null
+	for i in $(seq 1 150); do
+		boundary_service_matches "${service}" "${expected}" || die "${service} identity changed while restarting"
+		state="$(service_update_state "${service}")"
+		case "${state}" in paused|rollback_*) die "${service} restart failed (${state}); the boundary cannot use image-only rollback" ;; esac
+		if [ "${state}" = "completed" ]; then
+			ids="$(docker service ps --no-trunc --quiet --filter desired-state=running "${service}")"
+			count=0; valid=1
+			while IFS= read -r task; do
+				[ -n "${task}" ] || continue
+				details="$(docker inspect --type task --format '{{.DesiredState}} {{.Status.State}} {{.Spec.ContainerSpec.Image}}' "${task}")"
+				read -r desired actual image <<<"${details}"
+				case "${image}" in "${APP_IMAGE}"|"${APP_IMAGE}@"*) ;; *) valid=0 ;; esac
+				[ "${desired}" = "running" ] && [ "${actual}" = "running" ] || valid=0
+				count=$((count + 1))
+			done <<<"${ids}"
+			if [ "${valid}" = "1" ] && [ "${count}" = "${replicas}" ]; then ok "${service} converged on the new image (${replicas} replicas)"; return; fi
+		fi
+		sleep 2
+	done
+	die "${service} did not converge; leaving the boundary stopped for recovery"
 }
 
 # ── network segmentation ─────────────────────────────────────────────────────
@@ -991,7 +1285,7 @@ wait_for_app() {
 		warn "App not responding after ~4 minutes"
 		docker service ps nixploy --no-trunc 2>/dev/null | head -n 6 >&2 || true
 		docker service logs --tail 50 nixploy >&2 2>/dev/null || true
-		die "Update failed — debug: docker service logs -f nixploy · roll back: docker service rollback nixploy"
+			die "Update failed — inspect docker service logs -f nixploy. Before using an older image, restore its matching database/config/encryption keys; image rollback alone does not reverse migrations."
 	fi
 	if probe_ready probe_via_traefik "${host}"; then
 		ok "App is up (via Traefik on this host)"
@@ -1040,11 +1334,16 @@ print_summary() {
 	printf '   %sLog%s        %s\n' "${C_DIM}" "${C_RESET}" "${LOG_FILE}"
 	printf '\n'
 	printf '   %sYour data, secrets and certificates were kept.%s\n' "${C_DIM}" "${C_RESET}"
-	printf '   %sDB migrations (if any) ran on container start.%s\n' "${C_DIM}" "${C_RESET}"
-	printf '   %sRoll back by hand: docker service rollback nixploy%s\n' "${C_DIM}" "${C_RESET}"
+	if [ "${UPGRADE_BOUNDARY}" = "1" ]; then
+		printf '   %s0048 migration and backfill ran while every old panel/worker was stopped.%s\n' "${C_DIM}" "${C_RESET}"
+		printf '   %sPrivate matching recovery set: %s%s\n' "${C_DIM}" "${BOUNDARY_RECOVERY_DIR}" "${C_RESET}"
+	else
+		printf '   %sDB migrations (if any) ran on container start.%s\n' "${C_DIM}" "${C_RESET}"
+	fi
+	printf '   %sUsing an older image requires its matching database/config/keys; image rollback does not restore them.%s\n' "${C_DIM}" "${C_RESET}"
 	if docker service inspect "${WORKER_SERVICE}" >/dev/null 2>&1; then
-		printf '   %sSplit install: %s was rolled too (docker service rollback %s)%s\n' \
-			"${C_DIM}" "${WORKER_SERVICE}" "${WORKER_SERVICE}" "${C_RESET}"
+		printf '   %sSplit install: %s was rolled too.%s\n' \
+			"${C_DIM}" "${WORKER_SERVICE}" "${C_RESET}"
 	fi
 	if [ -n "${BACKUP_FILE}" ]; then
 		printf '   %sPre-update DB dump: %s (restore + pin the old tag to downgrade)%s\n' "${C_DIM}" "${BACKUP_FILE}" "${C_RESET}"
@@ -1067,9 +1366,17 @@ main() {
 
 	step "App image"
 	pull_app_image
+	detect_upgrade_boundary
 
 	step "Database backup"
-	backup_database
+	if [ "${UPGRADE_BOUNDARY}" = "1" ]; then
+		prepare_boundary_upgrade
+		drain_boundary_services
+		backup_boundary_state
+		run_boundary_migration
+	else
+		backup_database
+	fi
 
 	step "Config"
 	refresh_traefik_yml
@@ -1081,12 +1388,26 @@ main() {
 	update_postgres_spec
 	# Worker first: it runs the migrations in a split install, and the panel's
 	# /api/ready keeps it out of the VIP until the schema matches.
-	update_worker
-	update_app
+	if [ "${UPGRADE_BOUNDARY}" = "1" ]; then
+		if [ -n "${BOUNDARY_WORKER_ID}" ]; then
+			roll_boundary_service "${WORKER_SERVICE}" "${BOUNDARY_WORKER_ID}" worker "${BOUNDARY_WORKER_REPLICAS}"
+			roll_boundary_service nixploy "${BOUNDARY_PANEL_ID}" panel "${BOUNDARY_PANEL_REPLICAS}"
+		else
+			roll_boundary_service nixploy "${BOUNDARY_PANEL_ID}" all "${BOUNDARY_PANEL_REPLICAS}"
+		fi
+	else
+		update_worker
+		update_app
+	fi
 	update_traefik
 
 	step "Health check"
 	wait_for_app
+	if [ "${UPGRADE_BOUNDARY}" = "1" ]; then
+		BOUNDARY_COMPLETE=1
+		rm -f "${BOUNDARY_LOCK}/recovery-directory"
+		rmdir "${BOUNDARY_LOCK}"
+	fi
 	prune_images
 	print_summary
 }

@@ -21,6 +21,11 @@ export const recoveryCopies = pgTable(
 		targetPostgresId: text("target_postgres_id").references(() => postgres.postgresId, {
 			onDelete: "set null",
 		}),
+		/** Immutable placement; null is local. Deliberately survives server deletion. */
+		originServerId: text("origin_server_id"),
+		originAppName: text("origin_app_name"),
+		/** Presence records a known origin; legacy rows must not guess a location. */
+		originVolumeName: text("origin_volume_name"),
 		environmentId: text("environment_id")
 			.notNull()
 			.references(() => environments.environmentId, { onDelete: "cascade" }),

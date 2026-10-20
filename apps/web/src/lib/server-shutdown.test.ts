@@ -5,6 +5,7 @@ const state = vi.hoisted(() => ({
 	resolveSockets: () => {},
 	sockets: Promise.resolve(0),
 	closeSsh: vi.fn(),
+	migrateEnv: vi.fn(async () => ({ migrated: 0 })),
 	drainQueue: vi.fn(async () => ({ completed: 0, interrupted: 0 })),
 	stopBridge: vi.fn(async () => {}),
 	http: { close: vi.fn(), closeIdleConnections: vi.fn(), listen: vi.fn() },
@@ -42,6 +43,9 @@ vi.mock("../../../../packages/server/src/modules/deployment/notify", () => ({
 }));
 vi.mock("../../../../packages/server/src/modules/deployment/queue", () => ({
 	drainQueue: state.drainQueue,
+}));
+vi.mock("../../../../packages/server/src/modules/projects/organization-env", () => ({
+	migrateOrganizationEnvironments: state.migrateEnv,
 }));
 vi.mock("../../../../packages/server/src/utils/ssh-pool", () => ({
 	closeAllSshConnections: state.closeSsh,
@@ -81,6 +85,21 @@ afterEach(async () => {
 });
 
 describe("process shutdown keeps SSH available for terminal cleanup", () => {
+	it("does not accept HTTP work until encrypted-variable backfill finishes", async () => {
+		let finish = () => {};
+		state.migrateEnv.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finish = () => resolve({ migrated: 1 });
+				}),
+		);
+		await import("../../server");
+		expect(state.migrateEnv).toHaveBeenCalledOnce();
+		expect(state.http.listen).not.toHaveBeenCalled();
+		finish();
+		await vi.waitFor(() => expect(state.http.listen).toHaveBeenCalledOnce());
+	});
+
 	it.each(["all", "panel"])(
 		"fences pool closure in role %s even with an idle queue",
 		async (role) => {

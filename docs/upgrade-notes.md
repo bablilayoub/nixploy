@@ -17,15 +17,19 @@ an upgrade boundary, including installations with a separate worker:
 
 1. Back up the database and config directory, and preserve the encryption-key
    chain and authentication secret outside the database backup.
-2. Stop all older panels and workers after their running deployments have
-   drained. The migration locks the deployment table and refuses to proceed
-   while a deployment remains `running`; inspect an interrupted job before
-   explicitly finalizing it. Do not force the migration around that check.
-3. Apply migrations with the new build and the original encryption keys, then
-   start the new worker and panels. Startup encrypts legacy organization
+2. Use the current host `update.sh`. It stops the canonical panel and worker,
+   waits for their actual tasks to stop, and saves private database/config and
+   actual service-environment recovery assets. The boundary requires this
+   backup even when ordinary backup skipping was requested. Stop any custom
+   or non-Swarm panel/worker processes yourself before proceeding.
+3. The updater runs a separate new-image migrator while both services stay
+   stopped, then encrypts legacy organization
    variables and removes only `metadata.env` in one transaction. Other metadata,
    such as quotas and branding, is preserved. A conflicting or invalid legacy
-   value blocks startup for reconciliation.
+   value blocks the backfill. Only after success does it start the new worker
+   and panel. Missing drain acknowledgement, active/unknown tasks or an
+   unreachable node block migration. A deployment still recorded as `running`
+   also blocks migration; inspect it before explicitly finalizing it.
 4. Check readiness, organization variables and a reviewed deployment. Queued
    jobs created by an older build have no immutable environment snapshot and
    fail before Docker work; review and deploy them again with the new build.
@@ -38,6 +42,31 @@ before starting the older build. Swarm image rollback alone does not reverse
 the schema or recover removed plaintext variables. Keep all old processes
 stopped during migration: a database guard cannot undo external commands that
 an already running process issued before shutdown.
+
+An older GUI updater cannot cross this boundary: the new migrator rejects it
+before changing the database. The new GUI directs split installations to the
+host updater, rechecks standalone topology after pulling, verifies target-image
+storage compatibility and pauses failed rolls. Boundary host failures keep
+roles stopped or paused; never restart the older binaries against the changed
+schema. Restore the pre-upgrade dump into an empty replacement database and
+restore the matching config/key assets before starting those binaries. An
+acknowledged image downgrade does not waive that requirement.
+
+For a development installation running Node processes instead of platform
+Swarm services, stop every panel and worker and make the same backups first.
+With the original database URL, key chain and auth secret loaded, run from
+`packages/server`:
+
+```bash
+NIXPLOY_OFFLINE_UPGRADE=stopped-all-roles-and-backed-up-0048 \
+  pnpm exec tsx src/scripts/migrate-organization-env.ts
+```
+
+This explicit operator assertion covers processes outside Swarm; it does not
+automatically stop them. The script refuses canonical platform services or any
+other connected database client, migrates on one acknowledged connection, and
+runs the backfill. Ordinary `pnpm db:migrate` cannot silently cross a populated
+legacy database boundary.
 
 The backfill transaction preserves its legacy source if validation, encryption
 or a database write fails; resolve the startup error before accepting work.
@@ -72,7 +101,10 @@ PostgreSQL image is required. The source database and archive are preserved.
 Copies contain unsanitized data, consume normal service/storage resources and
 remain until explicitly deleted. A failed restore retains its incomplete
 target for inspection or deletion; an interrupted operation never reports
-success. A successful restore/catalog check does not establish application
+success. Migration `0049` records the original server and data-volume identity.
+Deletion refuses moved targets or unknown legacy origins and retains tracking
+when that original location cannot be verified. A successful restore/catalog
+check does not establish application
 compatibility, data sanitization or production readiness. Other database
 engines are outside this initial workflow.
 

@@ -27,7 +27,7 @@ review are still in progress. This is not a release/publication claim.
   application/Compose releases queue encrypted immutable environment/build-arg
   snapshots. Canonical precedence includes the organization layer. Migration
   `0048` removes plaintext organization variables at startup, fences old
-  metadata readers/writers and worker claims, and requires a coordinated drain.
+  metadata readers/writers and worker claims, and requires a coordinated drain through the current host updater.
 - Incidents have scoped evidence, project/state filters and older pages.
   Recovery remains open through queued/running/failed/completed states and
   requires explicit verification. Runtime logs retain equal-time entries and
@@ -54,8 +54,21 @@ volume; another retained copy and the source remain intact.
 Independent review caught and corrected historical-environment rollback,
 moved-service authorization, remote-volume deletion truth and hook dotenv
 transport issues. Hook creation uses Engine `Env`, bounded owned cleanup and
-signed ownership for abandoned-container recovery. Final literal-value and
-cleanup runtime checks and the integrated rerun remain required.
+signed ownership for abandoned-container recovery. Actual app/Compose literal
+hooks, nonzero failure, cancellation and exact owned late-helper cleanup passed.
+The final combined server run passed 3,386 tests (one optional registry probe
+skipped), with 119 web and 94 CLI tests passing. Five earlier intermittent
+queue claims failed and later passed unchanged; their cause remains unresolved.
+
+The normal `0048` host path stops/verifies both old roles, requires private
+recovery assets, migrates/backfills separately, and pauses on failure. Old GUI
+rolls fail before schema changes; new GUI split updates require the host path.
+Native PostgreSQL proof preserves legacy values/metadata on a rejected gate
+and restores the old schema/values from a pre-upgrade dump into an empty DB.
+Actual seeded old-release split-worker upgrade proof remains a required CI gate.
+Migration `0049` records immutable recovery origins. A real moved-target deletion
+was rejected with its original volume/service intact, then ordinary deletion
+succeeded after restoring placement, preserving the source and unrelated copies.
 
 The original four Swarm service IDs/specs, 74 pre-existing volumes, original
 network IDs and seven primary proxy-file hashes remain preserved at the

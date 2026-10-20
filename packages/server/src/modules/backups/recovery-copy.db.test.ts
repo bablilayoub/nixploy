@@ -15,6 +15,7 @@ const transport = vi.hoisted(() => ({
 		input.startsWith("SELECT 1") ? "1\n" : "2\n",
 	),
 	volume: vi.fn(async () => ""),
+	remoteVolume: vi.fn(async (_serverId: string, _command: string) => ""),
 	root: "",
 }));
 vi.mock("../databases/engine", async (original) => ({
@@ -31,7 +32,7 @@ vi.mock("../../utils/exec", async (original) => ({
 	...(await original<typeof import("../../utils/exec")>()),
 	execAsyncWithStdin: transport.query,
 	execAsync: transport.volume,
-	execAsyncRemote: transport.volume,
+	execAsyncRemote: transport.remoteVolume,
 }));
 vi.mock("./runner", async (original) => ({
 	...(await original<typeof import("./runner")>()),
@@ -112,8 +113,10 @@ describe.skipIf(!testUrl)("retained PostgreSQL recovery copies (postgres)", () =
 	beforeEach(() => {
 		vi.clearAllMocks();
 		transport.replay.mockResolvedValue(undefined);
+		transport.remove.mockReset().mockResolvedValue(undefined);
 		transport.exists.mockResolvedValue(false);
 		transport.volume.mockResolvedValue("");
+		transport.remoteVolume.mockResolvedValue("");
 	});
 	afterAll(async () => {
 		if (a) await harness.wipeTenant(a);
@@ -152,6 +155,11 @@ describe.skipIf(!testUrl)("retained PostgreSQL recovery copies (postgres)", () =
 		});
 		expect(target?.databasePassword).not.toBe(source.databasePassword);
 		expect(target?.databaseUser).not.toBe(source.databaseUser);
+		expect(final).toMatchObject({
+			originServerId: null,
+			originAppName: target?.appName,
+			originVolumeName: `${target?.appName}-data`,
+		});
 		expect(transport.deploy).toHaveBeenCalledTimes(1);
 		expect(transport.replay).toHaveBeenCalledTimes(1);
 		expect(
@@ -252,22 +260,24 @@ describe.skipIf(!testUrl)("retained PostgreSQL recovery copies (postgres)", () =
 	});
 
 	it("keeps tracking a remote copy when its data volume survives service deletion", async () => {
-		const result = await recovery.createRecoveryCopy(input());
-		const [target] = await db
-			.update(schema.postgres)
-			.set({ serverId: a.serverId })
-			.where(orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""))
-			.returning();
+		const result = await recovery.createRecoveryCopy({
+			...input(),
+			source: { ...source, serverId: a.serverId },
+		});
+		const target = await db.query.postgres.findFirst({
+			where: orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""),
+		});
 		if (!target) throw new Error("Target missing");
-		transport.volume.mockResolvedValueOnce(`${target.appName}-data\n`);
+		transport.remoteVolume.mockResolvedValueOnce(`${target.appName}-data\n`);
 		await expect(recovery.deleteRecoveryCopy(result, target)).rejects.toMatchObject({
 			code: "PRECONDITION_FAILED",
 		});
-		expect(transport.volume).toHaveBeenCalledWith(
+		expect(transport.remoteVolume).toHaveBeenCalledWith(
 			a.serverId,
 			expect.stringContaining(`${target.appName}-data`),
 			{ timeoutMs: 30_000 },
 		);
+		expect(transport.volume).not.toHaveBeenCalled();
 		expect(
 			await db.query.postgres.findFirst({
 				where: orm.eq(schema.postgres.postgresId, target.postgresId),
@@ -278,6 +288,205 @@ describe.skipIf(!testUrl)("retained PostgreSQL recovery copies (postgres)", () =
 				where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
 			}),
 		).toMatchObject({ status: "error", targetPostgresId: target.postgresId });
+	});
+
+	it.each(["server", "name"] as const)(
+		"rejects a changed target %s before touching its original volume or any service",
+		async (field) => {
+			const result = await recovery.createRecoveryCopy(input());
+			const originalTarget = await db.query.postgres.findFirst({
+				where: orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""),
+			});
+			if (!originalTarget) throw new Error("Target missing");
+			const [target] = await db
+				.update(schema.postgres)
+				.set(
+					field === "server"
+						? { serverId: a.serverId }
+						: { appName: `moved-copy-${randomUUID().slice(0, 8)}` },
+				)
+				.where(orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""))
+				.returning();
+			if (!target || !result.originVolumeName) throw new Error("Target origin missing");
+			const volumes = new Set([result.originVolumeName]);
+			transport.remove.mockImplementation(async () => {
+				volumes.delete(result.originVolumeName as string);
+			});
+			await expect(recovery.deleteRecoveryCopy(result, originalTarget)).rejects.toMatchObject({
+				code: "PRECONDITION_FAILED",
+				message: expect.stringContaining("moved from its recorded storage location"),
+			});
+			expect(transport.remove).not.toHaveBeenCalled();
+			expect(transport.exists).not.toHaveBeenCalled();
+			expect(transport.volume).not.toHaveBeenCalled();
+			expect(transport.remoteVolume).not.toHaveBeenCalled();
+			expect(volumes.has(result.originVolumeName)).toBe(true);
+			expect(
+				await db.query.recoveryCopies.findFirst({
+					where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
+				}),
+			).toMatchObject({
+				targetPostgresId: target.postgresId,
+				originAppName: result.originAppName,
+				originServerId: null,
+				originVolumeName: result.originVolumeName,
+			});
+		},
+	);
+
+	it.each([true, false])(
+		"refuses legacy cleanup without recorded origins when target row exists: %s",
+		async (targetExists) => {
+			const result = await recovery.createRecoveryCopy(input());
+			const target = await db.query.postgres.findFirst({
+				where: orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""),
+			});
+			if (!target) throw new Error("Target missing");
+			await db
+				.update(schema.recoveryCopies)
+				.set({ originAppName: null, originServerId: null, originVolumeName: null })
+				.where(orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId));
+			if (!targetExists)
+				await db
+					.delete(schema.postgres)
+					.where(orm.eq(schema.postgres.postgresId, target.postgresId));
+			const legacy = await db.query.recoveryCopies.findFirst({
+				where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
+			});
+			if (!legacy) throw new Error("Copy missing");
+			await expect(
+				recovery.deleteRecoveryCopy(legacy, targetExists ? target : null),
+			).rejects.toMatchObject({
+				code: "PRECONDITION_FAILED",
+				message: expect.stringContaining("original recovery storage location is unknown"),
+			});
+			expect(transport.remove).not.toHaveBeenCalled();
+			expect(transport.exists).not.toHaveBeenCalled();
+			expect(transport.volume).not.toHaveBeenCalled();
+			expect(transport.remoteVolume).not.toHaveBeenCalled();
+			expect(
+				await db.query.recoveryCopies.findFirst({
+					where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
+				}),
+			).toMatchObject({ status: "ready", originVolumeName: null });
+		},
+	);
+
+	it("verifies the original service and volume after its managed target row disappears", async () => {
+		const result = await recovery.createRecoveryCopy(input());
+		await db
+			.delete(schema.postgres)
+			.where(orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""));
+		const missing = await db.query.recoveryCopies.findFirst({
+			where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
+		});
+		if (!missing) throw new Error("Copy missing");
+		expect(missing.targetPostgresId).toBeNull();
+		transport.exists.mockResolvedValueOnce(true);
+		await expect(recovery.deleteRecoveryCopy(missing, null)).rejects.toMatchObject({
+			code: "PRECONDITION_FAILED",
+		});
+		expect(transport.exists).toHaveBeenCalledWith(result.originAppName);
+		expect(transport.remove).not.toHaveBeenCalled();
+		let retry = await db.query.recoveryCopies.findFirst({
+			where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
+		});
+		if (!retry) throw new Error("Copy missing");
+		transport.volume.mockResolvedValueOnce(`${result.originVolumeName}\n`);
+		await expect(recovery.deleteRecoveryCopy(retry, null)).rejects.toMatchObject({
+			code: "PRECONDITION_FAILED",
+		});
+		expect(transport.volume).toHaveBeenCalledWith(
+			expect.stringContaining(`name=^${result.originVolumeName}$`),
+			{ timeout: 30_000 },
+		);
+		retry = await db.query.recoveryCopies.findFirst({
+			where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
+		});
+		if (!retry) throw new Error("Copy missing");
+		await recovery.deleteRecoveryCopy(retry, null);
+		expect(transport.remove).not.toHaveBeenCalled();
+		expect(
+			await db.query.recoveryCopies.findFirst({
+				where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
+			}),
+		).toMatchObject({
+			status: "deleted",
+			originAppName: result.originAppName,
+			originServerId: null,
+			originVolumeName: result.originVolumeName,
+		});
+	});
+
+	it("retains the remote origin when its server and managed target rows were removed", async () => {
+		const [server] = await db
+			.insert(schema.servers)
+			.values({
+				name: "Removed recovery host",
+				ipAddress: "127.0.0.1",
+				organizationId: a.organizationId,
+			})
+			.returning();
+		if (!server) throw new Error("Server missing");
+		const result = await recovery.createRecoveryCopy({
+			...input(),
+			source: { ...source, serverId: server.serverId },
+		});
+		await db
+			.delete(schema.postgres)
+			.where(orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""));
+		await db.delete(schema.servers).where(orm.eq(schema.servers.serverId, server.serverId));
+		const missing = await db.query.recoveryCopies.findFirst({
+			where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
+		});
+		if (!missing) throw new Error("Copy missing");
+		expect(missing.originServerId).toBe(server.serverId);
+		await expect(recovery.deleteRecoveryCopy(missing, null)).rejects.toMatchObject({
+			code: "PRECONDITION_FAILED",
+		});
+		expect(transport.remove).not.toHaveBeenCalled();
+		expect(transport.exists).not.toHaveBeenCalled();
+		expect(transport.volume).not.toHaveBeenCalled();
+		expect(transport.remoteVolume).not.toHaveBeenCalled();
+		expect(
+			await db.query.recoveryCopies.findFirst({
+				where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
+			}),
+		).toMatchObject({
+			status: "error",
+			originServerId: server.serverId,
+			originVolumeName: result.originVolumeName,
+		});
+	});
+
+	it("keeps an unreachable origin remote instead of verifying the local daemon", async () => {
+		const result = await recovery.createRecoveryCopy({
+			...input(),
+			source: { ...source, serverId: a.serverId },
+		});
+		const target = await db.query.postgres.findFirst({
+			where: orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""),
+		});
+		if (!target) throw new Error("Target missing");
+		transport.remoteVolume.mockRejectedValueOnce(new Error("Original host unreachable"));
+		await expect(recovery.deleteRecoveryCopy(result, target)).rejects.toMatchObject({
+			code: "PRECONDITION_FAILED",
+		});
+		expect(transport.remoteVolume).toHaveBeenCalledWith(
+			a.serverId,
+			expect.stringContaining(`name=^${result.originVolumeName}$`),
+			{ timeoutMs: 30_000 },
+		);
+		expect(transport.volume).not.toHaveBeenCalled();
+		expect(
+			await db.query.recoveryCopies.findFirst({
+				where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
+			}),
+		).toMatchObject({
+			status: "error",
+			targetPostgresId: target.postgresId,
+			originServerId: a.serverId,
+		});
 	});
 
 	it("shows interrupted work honestly and only deletes its target", async () => {
