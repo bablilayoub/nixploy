@@ -104,8 +104,8 @@ test("Reusable checks run workflow contracts when the selected product tag preda
 		);
 		const result = execute(path.resolve(workspace, contract.cwd ?? "."));
 		assert.ifError(result.error);
+		// Node's default reporter differs across supported versions.
 		assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
-		assert.match(result.stdout, /# fail 0/);
 	}
 });
 
