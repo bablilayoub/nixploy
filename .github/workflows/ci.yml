@@ -568,14 +568,16 @@ jobs:
           docker rm -f nixploy-smoke-static || true
 
   # The failure mode operators fear most — an update that bricks a working
-  # install — had no test anywhere. This job installs the latest GitHub
-  # release with install.sh (split worker, signed image verified for real,
-  # Traefik on :80/:443), creates an admin and runs the API golden path,
+  # install — had no test anywhere. Both legs use install.sh (split worker,
+  # signed image verified for real): the latest GitHub release keeps ordinary
+  # upgrades covered; the immutable pre-0048 release keeps the populated
+  # organization-storage boundary covered after newer releases are published.
+  # Each install has Traefik on :80/:443, creates an admin and runs the API golden path,
   # then rolls that install to this commit's image with update.sh through a
   # local registry and runs the golden path again with the SAME API key: the
   # data survived, the migrations applied, and the new image deploys.
   upgrade:
-    name: Upgrade from the latest release
+    name: ${{ matrix.check_name }}
     needs: image
     if: >-
       github.event_name != 'push' ||
@@ -584,6 +586,14 @@ jobs:
        !contains(github.event.head_commit.message, '[ci skip]'))
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - baseline: latest
+            check_name: Upgrade from the latest release
+          - baseline: legacy-0048
+            check_name: Populated organization storage upgrade
     env:
       # The panel's origin is what the installer wrote to BETTER_AUTH_URL —
       # better-auth refuses a sign-up whose Host does not match it
@@ -596,6 +606,13 @@ jobs:
       E2E_EMAIL: upgrade@nixploy.test
       E2E_PASSWORD: Upgrade-ci-password!1
       LOCAL_IMAGE: localhost:5000/nixploy:ci
+      # Verified release source and signed multi-architecture image. The tag's
+      # journal ends at 0046 and organization still stores plaintext metadata.
+      # The exact Fulcio release identity and GitHub workflow SHA are checked
+      # below; install.sh also performs its normal signed-digest verification.
+      LEGACY_RELEASE_TAG: v0.7.3
+      LEGACY_RELEASE_SHA: c4aa992ecf7f2bd7667fd84413b43c977d467fd1
+      LEGACY_RELEASE_IMAGE: ghcr.io/bablilayoub/nixploy@sha256:a0c0ec2abbf45f90193026951f59eee722a68016d485274ddb114fa77fc0ee2e
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -632,40 +649,82 @@ jobs:
             exit 1
           fi
 
-      - name: Latest release
+      - name: Resolve upgrade baseline
         id: release
+        env:
+          UPGRADE_BASELINE: ${{ matrix.baseline }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="$(curl -fsSL -H "Authorization: Bearer ${{ github.token }}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/latest" | jq -r .tag_name)"
-          [ -n "$tag" ] && [ "$tag" != "null" ] || { echo "::error::no latest release"; exit 1; }
+          case "$UPGRADE_BASELINE" in
+            latest)
+              tag="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" | jq -r .tag_name)"
+              ;;
+            legacy-0048)
+              tag="$LEGACY_RELEASE_TAG"
+              echo "image=$LEGACY_RELEASE_IMAGE" >> "$GITHUB_OUTPUT"
+              ;;
+            *) echo "::error::unknown upgrade baseline"; exit 1 ;;
+          esac
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || { echo "::error::invalid release tag"; exit 1; }
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "latest release: $tag"
+          git fetch --depth 1 origin "refs/tags/$tag:refs/tags/$tag"
+          source="$(git rev-parse "refs/tags/$tag^{commit}")"
+          if [ "$UPGRADE_BASELINE" = legacy-0048 ]; then
+            [ "$source" = "$LEGACY_RELEASE_SHA" ] || { echo "::error::legacy release tag moved from its pinned source"; exit 1; }
+            git show "$source:packages/server/drizzle/meta/_journal.json" | node --input-type=module -e '
+              let text=""; for await (const chunk of process.stdin) text+=chunk;
+              const entries=JSON.parse(text).entries;
+              if (!entries.length || entries.some(entry=>Number(entry.idx)>=48)) throw new Error("Legacy release is not before migration 0048");
+            '
+          fi
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          echo "upgrade baseline: $UPGRADE_BASELINE; release: $tag; source: $source"
           # The release's own bootstrap and smoke scripts drive the release's
           # panel: the copies on this branch may already use a procedure the
-          # old version does not have.
-          git fetch --depth 1 origin "refs/tags/$tag:refs/tags/$tag"
+          # old version does not have. Read the resolved commit, never a tag
+          # that could move between resolving the release and extracting it.
           mkdir -p /tmp/release-tools
-          git show "$tag:tools/bootstrap-instance.mjs" > /tmp/release-tools/bootstrap-instance.mjs
+          git show "$source:tools/bootstrap-instance.mjs" > /tmp/release-tools/bootstrap-instance.mjs
           # Preserve the release's API sequence, but decode the REST error
           # before its readiness matcher runs. Raw JSON escapes the quotes in
           # `database "smokedb" does not exist`, hiding that known precondition.
-          git show "$tag:tools/golden-path-api.mjs" | \
+          git show "$source:tools/golden-path-api.mjs" | \
             sed 's/text\.slice(0, 600)/String(data?.message ?? text).slice(0, 600)/' \
             > /tmp/release-tools/golden-path-api.mjs
 
-      - name: Install the latest release with install.sh
-        # The repo's install.sh (the one under test) installing the last
+      - name: Install cosign for pinned legacy provenance
+        if: matrix.baseline == 'legacy-0048'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+
+      - name: Verify the immutable legacy release identity and source
+        if: matrix.baseline == 'legacy-0048'
+        run: |
+          set -euo pipefail
+          cosign verify \
+            --certificate-identity "https://github.com/bablilayoub/nixploy/.github/workflows/release.yml@refs/tags/$LEGACY_RELEASE_TAG" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-github-workflow-sha "$LEGACY_RELEASE_SHA" \
+            "$LEGACY_RELEASE_IMAGE" >/dev/null
+          echo "legacy release signature verified: $LEGACY_RELEASE_IMAGE; source: $LEGACY_RELEASE_SHA"
+
+      - name: Install the baseline release with install.sh
+        # The repo's install.sh (the one under test) installs the selected
         # published image: NIXPLOY_PORT also publishes :3000 so the bootstrap
         # and the smoke can talk to the panel without a domain; the split
         # worker is the shape production runs; the signed image goes through
-        # the real cosign check, which fetches cosign into /etc/nixploy/bin.
+        # the real cosign check using the installed or SHA-verified binary.
         env:
           NIXPLOY_VERSION: ${{ steps.release.outputs.tag }}
+          NIXPLOY_IMAGE: ${{ steps.release.outputs.image }}
         run: |
           set -euo pipefail
           sudo env \
             NIXPLOY_VERSION="$NIXPLOY_VERSION" \
+            NIXPLOY_IMAGE="$NIXPLOY_IMAGE" \
             NIXPLOY_SKIP_DOCKER_INSTALL=1 \
             NIXPLOY_PUBLIC_IP=127.0.0.1 \
             NIXPLOY_PORT=3000 \
@@ -720,6 +779,16 @@ jobs:
           SMOKE_INSECURE_TLS: "1"
         run: node /tmp/release-tools/golden-path-api.mjs
 
+      - name: Seed legacy variables and reject unsafe candidate boots
+        if: matrix.baseline == 'legacy-0048'
+        env:
+          NIXPLOY_API_KEY: ${{ steps.bootstrap.outputs.api-key }}
+          NODE_TLS_REJECT_UNAUTHORIZED: "0"
+          UPGRADE_PROOF_DISPOSABLE: "1"
+          UPGRADE_PROOF_TARGET_IMAGE: ${{ env.LOCAL_IMAGE }}
+          UPGRADE_PROOF_FILE: ${{ runner.temp }}/organization-upgrade-proof.private.json
+        run: node tools/ci/organization-upgrade-proof.mjs before
+
       - name: Update to this commit's image with update.sh
         run: |
           set -euo pipefail
@@ -752,6 +821,16 @@ jobs:
           [ -n "$body" ] || { echo "::error::/api/ready never answered 200 through Traefik after the update"; docker service ls; exit 1; }
           curl -ksS https://127.0.0.1/api/version
 
+      - name: Verify encrypted storage and inherited variables on the updated worker
+        if: matrix.baseline == 'legacy-0048'
+        env:
+          NIXPLOY_API_KEY: ${{ steps.bootstrap.outputs.api-key }}
+          NODE_TLS_REJECT_UNAUTHORIZED: "0"
+          UPGRADE_PROOF_DISPOSABLE: "1"
+          UPGRADE_PROOF_TARGET_IMAGE: ${{ env.LOCAL_IMAGE }}
+          UPGRADE_PROOF_FILE: ${{ runner.temp }}/organization-upgrade-proof.private.json
+        run: node tools/ci/organization-upgrade-proof.mjs after
+
       - name: API golden path after the update, same key
         # The key was created on the old version; a working run here means
         # the data and the schema migration both survived the roll, and the
@@ -769,33 +848,31 @@ jobs:
         if: failure()
         run: |
           mkdir -p "$RUNNER_TEMP/upgrade-logs"
-          sudo cp /var/log/nixploy-install.log /var/log/nixploy-update.log /tmp/nixploy-install.log /tmp/nixploy-update.log \
-            "$RUNNER_TEMP/upgrade-logs/" 2>/dev/null || true
-          docker service ls > "$RUNNER_TEMP/upgrade-logs/services.txt" 2>&1 || true
-          docker service ps --no-trunc $(docker service ls -q) \
-            > "$RUNNER_TEMP/upgrade-logs/service-tasks.txt" 2>&1 || true
-          for svc in $(docker service ls --format '{{.Name}}'); do
-            docker service logs --timestamps "$svc" \
-              > "$RUNNER_TEMP/upgrade-logs/service-$svc.log" 2>&1 || true
+          # Allowlist state fields. Raw installer/update/task/health output can
+          # carry tokens, SQL or restored data and stays private on the runner.
+          docker service ls --format '{{.ID}} {{.Name}} {{.Replicas}} {{.Image}}' \
+            > "$RUNNER_TEMP/upgrade-logs/services.txt" 2>/dev/null || true
+          for svc in $(docker service ls -q); do
+            docker service ps --no-trunc --format '{{.ID}} {{.Name}} {{.Node}} {{.DesiredState}} {{.CurrentState}}' "$svc" \
+              >> "$RUNNER_TEMP/upgrade-logs/service-tasks.txt" 2>/dev/null || true
           done
-          # The health check's own output: why Swarm kept a task out of the VIP.
           for cid in $(docker ps -aq --filter label=com.docker.swarm.service.name); do
-            {
-              docker inspect --format '{{.Name}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' "$cid"
-              docker inspect --format '{{json .State.Health}}' "$cid"
-            } >> "$RUNNER_TEMP/upgrade-logs/container-health.txt" 2>&1 || true
+            docker inspect --format '{{.Id}} {{.Name}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' "$cid" \
+              >> "$RUNNER_TEMP/upgrade-logs/container-health.txt" 2>/dev/null || true
           done
-          sudo cp -r /etc/nixploy "$RUNNER_TEMP/upgrade-logs/config-root" 2>/dev/null || true
-          sudo rm -f "$RUNNER_TEMP/upgrade-logs/config-root/.env" || true
-          # +X: the config root has 700 directories the upload cannot enter otherwise.
-          sudo chmod -R a+rX "$RUNNER_TEMP/upgrade-logs" || true
+          # Config/backups include full service Env, keys, SQL dumps and matching
+          # recovery archives. Keep them private on the runner, along with the
+          # proof state and candidate boot logs; never upload the config tree.
 
       - name: Upload diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: upgrade-diagnostics
-          path: ${{ runner.temp }}/upgrade-logs
+          name: upgrade-diagnostics-${{ matrix.baseline }}
+          path: |
+            ${{ runner.temp }}/upgrade-logs/services.txt
+            ${{ runner.temp }}/upgrade-logs/service-tasks.txt
+            ${{ runner.temp }}/upgrade-logs/container-health.txt
           retention-days: 7
           if-no-files-found: ignore
 
