@@ -28,7 +28,15 @@ esbuild peer to the existing allowed 0.28.2: 83 package versions are removed,
 none added. Fresh full (776 entries) and production (756 entries) audits both
 report zero advisories at all severities; no override or ignore was added.
 
-All 94 CLI tests, four workspace type checks, knip and strict Biome pass.
+Independent review caught the TypeScript JS launcher's native watch child
+surviving shutdown on its Windows/older-Node fallback. The builder now starts
+the installed platform executable directly from TypeScript's dependency scope,
+including Windows `.exe`/long paths. The committed lifecycle regression disables
+`execve`, checks the official resolver's executable, rebuilds, recovers and stops.
+A separate before/after probe records the old orphan rebuilding after shutdown
+and the corrected native process stopping; its owned processes were cleaned.
+
+All 95 CLI tests, four workspace type checks, knip and strict Biome pass.
 Ordinary npm pack/install in an isolated prefix verifies 34 shipped files
 (31 JavaScript modules), the real executable and export, version/help/usage
 exits, and UserAgent/HTTP status exits. The installed tarball also passes
