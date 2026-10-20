@@ -4,6 +4,9 @@
  * `after` on the candidate with the SAME private state file and bootstrap key.
  * Requires UPGRADE_PROOF_DISPOSABLE=1, a loopback NIXPLOY_URL and the canonical
  * installer services. Never run against an operator's installation.
+ * UPGRADE_PROOF_TARGET_IMAGE must name the already-loaded candidate in a
+ * loopback registry. Before upgrading, both candidate roles must reject the
+ * populated legacy database through their actual default entrypoint.
  *
  * UPGRADE_PROOF_FILE defaults to $RUNNER_TEMP/organization-upgrade-proof.private.json.
  * The file contains synthetic variables and original metadata: do not upload it.
@@ -18,6 +21,7 @@ import { fileURLToPath } from "node:url";
 const SERVICE_NAMES = ["nixploy", "nixploy-worker", "nixploy-postgres"];
 const MARKER = "organizationUpgradeProof";
 const IMAGE = "traefik/whoami:v1.10.1";
+const BOOT_PROBE_LABEL = "io.nixploy.organization-upgrade-boot-proof";
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 const ensure = (condition, message) => {
 	if (!condition) throw new Error(message);
@@ -45,6 +49,24 @@ const parse = (text, label) => {
 		throw new Error(`${label} returned invalid JSON`);
 	}
 };
+
+export function targetImageReference(value) {
+	ensure(
+		typeof value === "string" && value.length > 0 && value.length <= 512 && !/\s/.test(value),
+		"UPGRADE_PROOF_TARGET_IMAGE is required",
+	);
+	const match =
+		/^(localhost|127\.0\.0\.1|\[::1\])(?::(\d{1,5}))?\/([a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*(?:\/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*)(?::([A-Za-z0-9_][A-Za-z0-9_.-]{0,127}))?(?:@(sha256:[a-f0-9]{64}))?$/.exec(
+			value,
+		);
+	ensure(
+		match &&
+			(!match[2] || (Number(match[2]) > 0 && Number(match[2]) <= 65535)) &&
+			(match[4] || match[5]),
+		"Candidate image must be a tagged or digest-pinned loopback registry reference",
+	);
+	return value;
+}
 
 export function configuration(env) {
 	ensure(env.UPGRADE_PROOF_DISPOSABLE === "1", "UPGRADE_PROOF_DISPOSABLE=1 is required");
@@ -76,7 +98,13 @@ export function configuration(env) {
 		!env.DOCKER_HOST || env.DOCKER_HOST.startsWith("unix://"),
 		"A local Docker socket is required",
 	);
-	return { origin: url.origin, apiKey: env.NIXPLOY_API_KEY, stateFile, timeout };
+	return {
+		origin: url.origin,
+		apiKey: env.NIXPLOY_API_KEY,
+		stateFile,
+		timeout,
+		targetImage: targetImageReference(env.UPGRADE_PROOF_TARGET_IMAGE),
+	};
 }
 
 export function canaries(nonce) {
@@ -97,12 +125,13 @@ export function canaries(nonce) {
 	};
 }
 
-function docker(args, { input, allowFailure = false } = {}) {
+function docker(args, { input, allowFailure = false, timeoutMs = 30_000, env } = {}) {
 	const result = spawnSync("docker", args, {
 		input,
+		env,
 		encoding: "utf8",
 		maxBuffer: 8 * 1024 * 1024,
-		timeout: 30_000,
+		timeout: timeoutMs,
 	});
 	if (!allowFailure) ensure(result.status === 0, "Docker verification command failed");
 	return result;
@@ -331,8 +360,390 @@ function preserveSources(state) {
 	);
 }
 
+function candidateImage(config) {
+	const rows = parse(
+		docker(["image", "inspect", config.targetImage]).stdout,
+		"Already-loaded candidate image",
+	);
+	ensure(
+		rows.length === 1 && /^sha256:[a-f0-9]{64}$/.test(rows[0].Id),
+		"An already-loaded candidate image is required",
+	);
+	ensure(
+		rows[0].Config.Entrypoint?.length && rows[0].Config.Cmd?.length,
+		"Candidate default entrypoint and command are required",
+	);
+	return rows[0];
+}
+
+function requireCandidateImage(actual, expected) {
+	ensure(
+		/^sha256:[a-f0-9]{64}$/.test(expected) && actual === expected,
+		"Running candidate image differs from the immutable boot-probed image",
+	);
+}
+
+function runningCandidateRoles(expectedImageId) {
+	return ["nixploy", "nixploy-worker"].map((name) => {
+		const service = inspectService(name);
+		const [image] = parse(
+			docker(["image", "inspect", service.Spec.TaskTemplate.ContainerSpec.Image]).stdout,
+			"Running role image",
+		);
+		requireCandidateImage(image.Id, expectedImageId);
+		const desired = docker([
+			"service",
+			"ps",
+			"--no-trunc",
+			"--filter",
+			"desired-state=running",
+			"--format",
+			"{{.ID}}",
+			service.ID,
+		])
+			.stdout.trim()
+			.split("\n")
+			.filter(Boolean);
+		const ids = docker([
+			"ps",
+			"-q",
+			"--no-trunc",
+			"--filter",
+			`label=com.docker.swarm.service.id=${service.ID}`,
+		])
+			.stdout.trim()
+			.split("\n")
+			.filter(Boolean);
+		ensure(
+			ids.every((id) => /^[a-f0-9]{64}$/.test(id)),
+			"Running role container identity is invalid",
+		);
+		const tasks = ids.length
+			? parse(docker(["inspect", ...ids]).stdout, "Running role tasks").filter(
+					(task) =>
+						task.Config.Labels["com.docker.swarm.service.id"] === service.ID &&
+						desired.includes(task.Config.Labels["com.docker.swarm.task.id"]),
+				)
+			: [];
+		ensure(
+			desired.length === 1 && tasks.length === 1 && tasks[0].State.Running,
+			"One current candidate task per canonical role is required",
+		);
+		requireCandidateImage(tasks[0].Image, expectedImageId);
+		return {
+			serviceId: service.ID,
+			name,
+			imageId: tasks[0].Image,
+			containerId: tasks[0].Id,
+			createdAt: tasks[0].Created,
+		};
+	});
+}
+
+function legacyDatabaseSnapshot(state) {
+	const schema = docker([
+		"exec",
+		state.platform.postgres.id,
+		"pg_dump",
+		"--schema-only",
+		"--no-owner",
+		"--no-privileges",
+		"-U",
+		state.platform.postgres.user,
+		"-d",
+		state.platform.postgres.database,
+	]).stdout;
+	// Recent pg_dump versions randomize their psql restrict key on each call.
+	const stableSchema = schema.replace(/^\\(?:un)?restrict\s+.*(?:\r?\n|$)/gm, "");
+	return {
+		schema: digest(stableSchema),
+		journal: parse(
+			sql(
+				state.platform,
+				`SELECT coalesce(json_agg(row_to_json(m) ORDER BY id), '[]') FROM drizzle.__drizzle_migrations m;`,
+			),
+			"Legacy migration journal",
+		),
+		organization: parse(
+			sql(
+				state.platform,
+				`SELECT coalesce(json_agg(row_to_json(o)), '[]') FROM
+				(SELECT id,metadata FROM organization WHERE id=${literal(state.organizationId)}) o;`,
+			),
+			"Legacy organization snapshot",
+		),
+	};
+}
+
+function oldRoleSnapshot() {
+	return SERVICE_NAMES.map((name) => {
+		const service = inspectService(name);
+		const ids = docker(["service", "ps", "--no-trunc", "--quiet", service.ID])
+			.stdout.trim()
+			.split("\n")
+			.filter(Boolean);
+		const tasks = ids.length
+			? parse(docker(["inspect", "--type", "task", ...ids]).stdout, "Old platform tasks")
+			: [];
+		ensure(tasks.length === ids.length, "Every old platform task must be inspectable");
+		return {
+			id: service.ID,
+			createdAt: service.CreatedAt,
+			image: service.Spec.TaskTemplate.ContainerSpec.Image,
+			spec: digest(service.Spec),
+			tasks: tasks
+				.map((task) => ({
+					id: task.ID,
+					serviceId: task.ServiceID,
+					nodeId: task.NodeID,
+					desired: task.DesiredState,
+					actual: task.Status?.State,
+					containerId: task.Status?.ContainerStatus?.ContainerID,
+				}))
+				.sort((a, b) => a.id.localeCompare(b.id)),
+		};
+	});
+}
+
+export function runtimeEnvironment(entries = []) {
+	const values = Object.create(null);
+	for (const entry of entries) {
+		ensure(typeof entry === "string", "Canonical runtime environment is invalid");
+		const split = entry.indexOf("=");
+		const name = entry.slice(0, split),
+			value = entry.slice(split + 1);
+		ensure(
+			split > 0 &&
+				/^[_a-zA-Z][_a-zA-Z0-9]*$/.test(name) &&
+				!entry.includes("\0") &&
+				(!Object.hasOwn(values, name) || values[name] === value),
+			"Canonical runtime environment contains conflicting duplicates or invalid entries",
+		);
+		values[name] = value;
+	}
+	return values;
+}
+
+function requiredBootEnvironment() {
+	const panel = runtimeEnvironment(inspectService("nixploy").Spec.TaskTemplate.ContainerSpec.Env);
+	const worker = runtimeEnvironment(
+		inspectService("nixploy-worker").Spec.TaskTemplate.ContainerSpec.Env,
+	);
+	const keys = [
+		"DATABASE_URL",
+		"ENCRYPTION_KEYS",
+		"ENCRYPTION_KEY",
+		"BETTER_AUTH_SECRET",
+		"BETTER_AUTH_URL",
+	];
+	for (const key of keys)
+		ensure(panel[key] === worker[key], "Canonical role database/key/auth environments differ");
+	ensure(
+		worker.DATABASE_URL &&
+			worker.BETTER_AUTH_SECRET &&
+			worker.BETTER_AUTH_URL &&
+			(worker.ENCRYPTION_KEYS || worker.ENCRYPTION_KEY),
+		"Canonical worker database/key/auth environment is incomplete",
+	);
+	return Object.fromEntries(
+		keys.filter((key) => Object.hasOwn(worker, key)).map((key) => [key, worker[key]]),
+	);
+}
+
+function ownedBootContainer(container, record, image) {
+	ensure(
+		/^[a-f0-9]{64}$/.test(container.Id) &&
+			(!record.id || container.Id === record.id) &&
+			container.Name === `/${record.name}` &&
+			container.Image === record.imageId &&
+			container.Config.Labels?.[BOOT_PROBE_LABEL] === record.label &&
+			container.HostConfig.AutoRemove === true &&
+			container.HostConfig.NetworkMode === "nixploy-internal" &&
+			!container.HostConfig.Privileged &&
+			Object.keys(container.HostConfig.PortBindings ?? {}).length === 0 &&
+			!container.Mounts?.some((mount) => mount.Type === "bind") &&
+			equal(container.Config.Entrypoint, image.Config.Entrypoint) &&
+			equal(container.Config.Cmd, image.Config.Cmd) &&
+			!container.Config.Env.some((entry) => entry.startsWith("NIXPLOY_UPGRADE_DRAINED=")),
+		"Candidate boot container identity changed; cleanup refused",
+	);
+}
+
+async function findUncertainBootContainer(record, image, inspect = docker, pause = sleep) {
+	for (let attempt = 0; attempt < 10; attempt++) {
+		const found = inspect(["inspect", record.name], { allowFailure: true, timeoutMs: 3000 });
+		if (found.status === 0) {
+			const [container] = parse(found.stdout, "Uncertain candidate create ownership");
+			ownedBootContainer(container, record, image);
+			return container;
+		}
+		ensure(
+			/no such object|no such container/i.test(found.stderr),
+			"Uncertain candidate create lookup failed",
+		);
+		if (attempt < 9) await pause(250);
+	}
+	throw new Error(
+		"Candidate create outcome remains uncertain; exact owned container was not found",
+	);
+}
+
+async function rejectedCandidateBoot(config, state, image, required, role) {
+	const record = {
+		role,
+		name: `upgrade-reject-${state.nonce}-${role}`,
+		label: `${state.nonce}:${role}`,
+		imageId: image.Id,
+		log: `${config.stateFile}.candidate-${role}.private.log`,
+	};
+	const log = await open(record.log, "wx", 0o600);
+	let id,
+		createAttempted = false;
+	try {
+		state.candidateBoots ??= [];
+		state.candidateBoots.push(record);
+		await save(config, state);
+		const env = { ...process.env, ...required, NIXPLOY_ROLE: role, NIXPLOY_DB_WAIT_SECONDS: "5" };
+		delete env.NIXPLOY_UPGRADE_DRAINED;
+		const keys = [...Object.keys(required), "NIXPLOY_ROLE", "NIXPLOY_DB_WAIT_SECONDS"];
+		createAttempted = true;
+		const created = docker(
+			[
+				"create",
+				"--rm",
+				"--name",
+				record.name,
+				"--label",
+				`${BOOT_PROBE_LABEL}=${record.label}`,
+				"--network",
+				"nixploy-internal",
+				...keys.flatMap((key) => ["--env", key]),
+				image.Id,
+			],
+			{ env, allowFailure: true },
+		);
+		ensure(
+			!created.error &&
+				created.signal === null &&
+				created.status === 0 &&
+				/^[a-f0-9]{64}$/.test(created.stdout.trim()),
+			"Candidate create response is uncertain; it will not be started",
+		);
+		id = created.stdout.trim();
+		record.id = id;
+		await save(config, state);
+		const [container] = parse(docker(["inspect", id]).stdout, "Candidate boot ownership");
+		ownedBootContainer(container, record, image);
+		record.createdAt = container.Created;
+		await save(config, state); // Record full ownership before the container can execute.
+		const result = docker(["start", "--attach", id], {
+			allowFailure: true,
+			timeoutMs: 60_000,
+			env,
+		});
+		await log.writeFile(`${result.stdout ?? ""}\n${result.stderr ?? ""}`);
+		await log.sync();
+		ensure(
+			!result.error &&
+				result.signal === null &&
+				typeof result.status === "number" &&
+				result.status !== 0,
+			"Candidate boot must fail itself within 60 seconds; timeout or successful startup is not proof",
+		);
+		const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+		ensure(
+			role === "all"
+				? /current host update\.sh/.test(output) && /drains all old roles/.test(output)
+				: /column[^\n]*metadata_v2[^\n]*does not exist/i.test(output),
+			"Candidate did not reject legacy startup through the expected boundary failure",
+		);
+		ensure(
+			!/Nixploy ready on/.test(output),
+			"Candidate listened before rejecting the legacy database",
+		);
+		record.expectedRejection = true;
+	} finally {
+		try {
+			await log.close();
+		} finally {
+			if (!id && createAttempted) {
+				record.cleanupUncertain = true;
+				await save(config, state);
+				const container = await findUncertainBootContainer(record, image);
+				id = container.Id;
+				record.id = id;
+				record.createdAt = container.Created;
+				record.cleanupUncertain = false;
+				await save(config, state); // Adopt full verified identity before removal.
+			}
+			if (id) {
+				const inspected = docker(["inspect", id], { allowFailure: true });
+				if (inspected.status === 0) {
+					const [container] = parse(inspected.stdout, "Candidate cleanup ownership");
+					ownedBootContainer(container, record, image);
+					const removed = docker(["rm", "--force", "--volumes", id], { allowFailure: true });
+					if (removed.status !== 0)
+						ensure(
+							/no such container/i.test(removed.stderr),
+							"Owned candidate container cleanup failed",
+						);
+				} else
+					ensure(
+						/no such object|no such container/i.test(inspected.stderr),
+						"Candidate cleanup identity is uncertain",
+					);
+				const remaining = docker(["inspect", id], { allowFailure: true });
+				ensure(
+					remaining.status !== 0 && /no such object|no such container/i.test(remaining.stderr),
+					"Owned candidate boot container remains or cannot be verified",
+				);
+				record.cleaned = true;
+				await save(config, state);
+			}
+		}
+	}
+}
+
+async function verifyCandidateBootRejections(config, state, image) {
+	const [network] = parse(
+		docker(["network", "inspect", "nixploy-internal"]).stdout,
+		"Canonical private overlay",
+	);
+	ensure(
+		network.Name === "nixploy-internal" &&
+			network.Driver === "overlay" &&
+			network.Attachable === true,
+		"Candidate boot probes require the canonical attachable private overlay",
+	);
+	const required = requiredBootEnvironment();
+	const database = legacyDatabaseSnapshot(state);
+	const roles = oldRoleSnapshot();
+	state.candidateRejectionBaseline = { database, roles };
+	await save(config, state);
+	for (const role of ["all", "panel"]) {
+		await rejectedCandidateBoot(config, state, image, required, role);
+		ensure(
+			equal(legacyDatabaseSnapshot(state), database),
+			"Candidate boot changed legacy schema, migration journal or organization values",
+		);
+		ensure(
+			equal(oldRoleSnapshot(), roles),
+			"Candidate boot changed old canonical service images or actual tasks",
+		);
+		const loaded = await request(config, "GET", "organization.environment");
+		ensure(
+			loaded.organizationId === state.organizationId && loaded.env === state.expectedEnv,
+			"Old API no longer returns the exact same organization canary after candidate rejection",
+		);
+		preserveSources(state);
+	}
+	state.candidateBootRejectionsVerified = true;
+	await save(config, state);
+}
+
 async function before(config) {
 	const current = platform();
+	const image = candidateImage(config);
 	const organization = await request(config, "GET", "organization.environment");
 	ensure(
 		typeof organization.organizationId === "string" && typeof organization.env === "string",
@@ -366,6 +777,8 @@ async function before(config) {
 		version: 1,
 		status: "prepared",
 		origin: config.origin,
+		candidateTargetImage: config.targetImage,
+		candidateImageId: image.Id,
 		nonce,
 		platform: current,
 		organizationId: organization.organizationId,
@@ -392,14 +805,15 @@ async function before(config) {
 	await save(config, state);
 	const loaded = await request(config, "GET", "organization.environment");
 	ensure(loaded.env === expectedEnv, "Old API did not preserve seeded legacy variables");
+	await verifyCandidateBootRejections(config, state, image);
 	console.log(
 		JSON.stringify({
 			mode: "before",
 			seeded: true,
 			canaryVariables: Object.keys(generated.values).length,
-			users: state.identities.users.length,
-			sessions: state.identities.sessions.length,
-			apiKeys: state.identities.apiKeys.length,
+			candidateAllBootRejectedBeforeDDL: true,
+			candidatePanelBootRejectedBeforeListen: true,
+			oldCanonicalRolesAndLegacyDatabasePreserved: true,
 		}),
 	);
 }
@@ -495,11 +909,17 @@ async function cleanup(config, state) {
 async function after(config) {
 	const state = await load(config);
 	ensure(
-		state.version === 1 && state.status === "seeded" && state.origin === config.origin,
+		state.version === 1 &&
+			state.status === "seeded" &&
+			state.origin === config.origin &&
+			state.candidateBootRejectionsVerified === true &&
+			state.candidateTargetImage === config.targetImage,
 		"Private before-state does not match this upgrade",
 	);
 	const current = platform();
 	ensure(equal(current, state.platform), "Canonical services/PostgreSQL task identity changed");
+	requireCandidateImage(candidateImage(config).Id, state.candidateImageId);
+	state.runningCandidateRoles = runningCandidateRoles(state.candidateImageId);
 	let failed = null;
 	try {
 		const loaded = await request(config, "GET", "organization.environment");
@@ -689,29 +1109,43 @@ async function after(config) {
 	);
 }
 
-function selfTest() {
+async function selfTest() {
+	let pureChecks = 0;
+	const check = (condition, message) => {
+		ensure(condition, message);
+		pureChecks++;
+	};
 	const generated = canaries("abcd1234");
-	ensure(Object.keys(generated.values).length === 5, "Canary coverage changed");
+	check(Object.keys(generated.values).length === 5, "Canary coverage changed");
 	for (const line of generated.env.split("\n")) {
 		const split = line.indexOf("=");
-		ensure(
+		check(
 			JSON.parse(line.slice(split + 1)) === generated.values[line.slice(0, split)],
 			"Canary quoting changed",
 		);
 	}
-	ensure(literal("a'b$`\n") === "'a''b$`\n'", "SQL string quoting changed");
+	check(literal("a'b$`\n") === "'a''b$`\n'", "SQL string quoting changed");
 	const base = {
 		UPGRADE_PROOF_DISPOSABLE: "1",
 		NIXPLOY_URL: "https://127.0.0.1",
 		NIXPLOY_API_KEY: "test",
+		UPGRADE_PROOF_TARGET_IMAGE: "localhost:5000/nixploy:ci",
 		RUNNER_TEMP: "/tmp",
 	};
-	ensure(configuration(base).origin === "https://127.0.0.1", "Loopback configuration rejected");
+	check(configuration(base).origin === "https://127.0.0.1", "Loopback configuration rejected");
 	for (const patch of [
 		{ UPGRADE_PROOF_DISPOSABLE: "0" },
 		{ NIXPLOY_URL: "https://example.com" },
 		{ NIXPLOY_URL: "http://user:password@127.0.0.1" },
 		{ DOCKER_HOST: "ssh://production" },
+		{ UPGRADE_PROOF_TARGET_IMAGE: undefined },
+		{ UPGRADE_PROOF_TARGET_IMAGE: "ghcr.io/example/nixploy:candidate" },
+		{ UPGRADE_PROOF_TARGET_IMAGE: "--privileged" },
+		{ UPGRADE_PROOF_TARGET_IMAGE: "localhost:5000/nixploy:ci --privileged" },
+		{ UPGRADE_PROOF_TARGET_IMAGE: "localhost:5000/$(unsafe):ci" },
+		{ UPGRADE_PROOF_TARGET_IMAGE: "localhost:5000/nixploy:ci\n" },
+		{ UPGRADE_PROOF_TARGET_IMAGE: "localhost:99999/nixploy:ci" },
+		{ UPGRADE_PROOF_TARGET_IMAGE: "localhost:5000/nixploy" },
 	]) {
 		let rejected = false;
 		try {
@@ -719,15 +1153,135 @@ function selfTest() {
 		} catch {
 			rejected = true;
 		}
-		ensure(rejected, "Unsafe upgrade configuration accepted");
+		check(rejected, "Unsafe upgrade configuration accepted");
 	}
-	console.log(JSON.stringify({ selfTest: true, pureChecks: 12, dockerCalls: 0, httpCalls: 0 }));
+	check(
+		targetImageReference(`127.0.0.1:5000/nixploy@sha256:${"a".repeat(64)}`).includes("@sha256:"),
+		"Digest-pinned loopback candidate rejected",
+	);
+	check(
+		equal(runtimeEnvironment(["DATABASE_URL=fixture", "DATABASE_URL=fixture", "VALUE=a=b"]), {
+			DATABASE_URL: "fixture",
+			VALUE: "a=b",
+		}),
+		"Identical installer environment duplicates rejected",
+	);
+	for (const entries of [
+		["DATABASE_URL=one", "DATABASE_URL=two"],
+		["INVALID-NAME=value"],
+		["DATABASE_URL=before\0after"],
+		["MISSING_SEPARATOR"],
+	]) {
+		let rejected = false;
+		try {
+			runtimeEnvironment(entries);
+		} catch {
+			rejected = true;
+		}
+		check(rejected, "Ambiguous or invalid runtime environment accepted");
+	}
+	const image = {
+		Id: `sha256:${"a".repeat(64)}`,
+		Config: { Entrypoint: ["/app/entrypoint.sh"], Cmd: ["tsx", "server.ts"] },
+	};
+	requireCandidateImage(image.Id, image.Id);
+	check(true, "Immutable candidate image rejected");
+	let mismatchedImageRejected = false;
+	try {
+		requireCandidateImage(`sha256:${"b".repeat(64)}`, image.Id);
+	} catch {
+		mismatchedImageRejected = true;
+	}
+	check(mismatchedImageRejected, "A different image under the same candidate tag was accepted");
+	const record = {
+		name: "upgrade-reject-fixture-panel",
+		label: "fixture:panel",
+		imageId: image.Id,
+	};
+	const container = {
+		Id: "c".repeat(64),
+		Name: `/${record.name}`,
+		Image: image.Id,
+		Config: {
+			...image.Config,
+			Labels: { [BOOT_PROBE_LABEL]: record.label },
+			Env: ["NIXPLOY_ROLE=panel"],
+		},
+		HostConfig: {
+			AutoRemove: true,
+			NetworkMode: "nixploy-internal",
+			Privileged: false,
+			PortBindings: {},
+		},
+		Mounts: [],
+	};
+	ownedBootContainer(container, record, image);
+	check(true, "Exact uncertain-create ownership was rejected");
+	for (const changed of [
+		{ ...container, Name: "/unowned" },
+		{ ...container, Image: `sha256:${"b".repeat(64)}` },
+		{
+			...container,
+			Config: { ...container.Config, Labels: { [BOOT_PROBE_LABEL]: "other:panel" } },
+		},
+		{ ...container, Config: { ...container.Config, Cmd: ["custom-command"] } },
+		{ ...container, HostConfig: { ...container.HostConfig, NetworkMode: "host" } },
+		{ ...container, Config: { ...container.Config, Env: ["NIXPLOY_UPGRADE_DRAINED=0048"] } },
+	]) {
+		let rejected = false;
+		try {
+			ownedBootContainer(changed, record, image);
+		} catch {
+			rejected = true;
+		}
+		check(rejected, "Unowned or non-default boot container accepted for adoption");
+	}
+	const lookups = [];
+	const adopted = await findUncertainBootContainer(
+		record,
+		image,
+		(args) => {
+			lookups.push(args);
+			return lookups.length === 1
+				? { status: 1, stderr: "No such object" }
+				: { status: 0, stdout: JSON.stringify([container]) };
+		},
+		async () => {},
+	);
+	check(
+		adopted.Id === container.Id && lookups.length === 2,
+		"Late create was not recovered after an initial missing result",
+	);
+	check(
+		lookups.every((args) => equal(args, ["inspect", record.name])),
+		"Uncertain create used a broad lookup",
+	);
+	let missingRejected = false,
+		missingLookups = 0;
+	try {
+		await findUncertainBootContainer(
+			record,
+			image,
+			() => {
+				missingLookups++;
+				return { status: 1, stderr: "No such container" };
+			},
+			async () => {},
+		);
+	} catch {
+		missingRejected = true;
+	}
+	check(
+		missingRejected && missingLookups === 10,
+		"Unresolved create did not fail after the bounded lookup window",
+	);
+	console.log(JSON.stringify({ selfTest: true, pureChecks, dockerCalls: 0, httpCalls: 0 }));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 	try {
 		const mode = process.argv[2];
-		if (mode === "--self-test") selfTest();
+		if (mode === "--self-test") await selfTest();
 		else {
 			ensure(mode === "before" || mode === "after", "Expected before, after, or --self-test");
 			const config = configuration(process.env);
