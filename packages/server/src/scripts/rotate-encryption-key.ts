@@ -5,11 +5,13 @@
  *   ENCRYPTION_KEYS="<new>,<old>" DATABASE_URL=… pnpm nixploy:rotate-key
  *
  * The rotation window is `ENCRYPTION_KEYS`: the first entry encrypts, every
- * entry decrypts (see `lib/encryption.ts`). So the runbook is
+ * entry decrypts (see `lib/encryption.ts`). Safe operational sequence:
  *
- *   1. put the new key FIRST and the current key second, restart the panel,
- *   2. run this script (it rewrites every row with the new key),
- *   3. drop the old key from `ENCRYPTION_KEYS`, restart again.
+ * Stop all writers, apply the complete new-first chain to the stored Env of
+ * both platform roles, then run this script from the matching installed image.
+ * Verify with the new key alone before restoring original roles/replica counts.
+ * Retain keys required by historical backups. Follow docs/auth.md's full runbook;
+ * editing a host .env and forcing a restart does not update Swarm's stored Env.
  *
  * Columns are discovered from the Drizzle schema rather than listed by hand:
  * `encryptedText` / `encryptedJson` are the only `customType` columns whose
@@ -221,7 +223,9 @@ async function main(): Promise<void> {
 		);
 	}
 	if (!options.dryRun) {
-		console.log("Now drop the old key from ENCRYPTION_KEYS and restart the panel.");
+		console.log(
+			"Verify with the new key alone before resuming writers; follow docs/auth.md. Retain keys needed by historical backups.",
+		);
 	}
 }
 

@@ -557,39 +557,208 @@ Deleting an organization no longer erases its trail: the FK is
 ## Encryption key rotation
 
 `ENCRYPTION_KEYS` is a comma-separated list: **the first entry encrypts, every
-entry can decrypt**. `ENCRYPTION_KEY` remains the single-key form and is used
-when `ENCRYPTION_KEYS` is unset. That is what makes a rotation possible without
-downtime:
+entry can decrypt**. `ENCRYPTION_KEY` is the single-key fallback. Rotation
+rewrites the live database, including `organization_environment.env`; it does
+not rewrite historical database dumps or config backups.
 
-```sh
-# 1. generate the new key
-openssl rand -hex 32
+Use a maintenance window. The script reads batches before rewriting them, so
+**all writers must remain stopped until rotation and verification finish**.
+Include every panel, split worker, extra replica and external database writer.
+The commands below cover the standard `nixploy` and optional `nixploy-worker`
+Swarm services; adapt both names and the internal network for a custom install.
+Run them on a manager with Bash, in the **same root shell** with tracing off.
+Do not run this alongside an upgrade, deploy, installer or another rotation.
 
-# 2. /etc/nixploy/.env — NEW key first, current key second
-ENCRYPTION_KEYS=<new>,<current>
+1. Take and verify a recoverable database/config backup. Save the complete
+   current key chain and `BETTER_AUTH_SECRET` in the separate recovery vault.
+   Generate a new key with `openssl rand -hex 32`, writing it directly into
+   the vault rather than a terminal or log. Create `/secure/rotation.keys`,
+   mode 600, containing exactly one **unquoted Docker-format** line:
 
-# 3. restart the panel so it reads both
-docker service update --force nixploy
+   ```dotenv
+   ENCRYPTION_KEYS=<new-key>,<all-current-keys-in-their-existing-order>
+   ```
 
-# 4. rewrite every secret column with the new key
-# On the node running the panel (the production image does not use pnpm):
-panel_container="$(docker ps -q -f label=com.docker.swarm.service.name=nixploy | head -n 1)"
-docker exec "$panel_container" /app/apps/web/node_modules/.bin/tsx \
-  /app/packages/server/src/scripts/rotate-encryption-key.ts
-#   --dry-run             report what would change, write nothing
-#   --batch-size=500      rows per transaction (default 500)
-#   --table=notification  one table only
-#   --skip-undecryptable  leave rows no configured key can read (a lost key)
+   Do not source this file. Keep all keys that can decrypt existing values;
+   replacing a chain with only its former primary can strand older values.
+   Put the same chain in the protected host `.env` for future service creation.
+   Keep `BETTER_AUTH_SECRET` unchanged. Editing `.env` followed by
+   `docker service update --force` does **not** change Swarm's stored Env.
 
-# 5. /etc/nixploy/.env — drop the old key, restart again
-ENCRYPTION_KEYS=<new>
-```
+2. Capture the original service identities, roles and replica counts (including
+   zero), then stop both services. The private working directory contains
+   secrets; retain it on failure and never paste its files into logs.
 
-The script discovers the columns from the Drizzle schema (every
-`encryptedText` / `encryptedJson` column — 47 of them across 20 tables today),
-so a new secret column needs no change to it. Each batch is one transaction; a
-row that no configured key can authenticate aborts the run and names the table,
-column and row id.
+   ```bash
+   # rotation: prepare
+   set -euo pipefail
+   set +x
+   umask 077
+   rotation_panel=nixploy
+   rotation_worker=nixploy-worker
+   rotation_network=nixploy-internal
+   rotation_keys=/secure/rotation.keys
+   rotation_dir="$(mktemp -d)"
+   printf 'Private rotation state: %s\n' "$rotation_dir"
+   unset ENCRYPTION_KEY ENCRYPTION_KEYS
+   rotation_entries=0
+   while IFS='=' read -r key value || [ -n "$key" ]; do
+     case "$key" in
+       ''|\#*) continue ;;
+       ENCRYPTION_KEYS) ;;
+       *) echo 'Expected only ENCRYPTION_KEYS' >&2; exit 1 ;;
+     esac
+     [[ -n "$value" && "$value" != \"* && "$value" != \'* && "$value" != *\" && "$value" != *\' && "$value" != *$'\r'* ]] \
+       || { echo 'Keys must be nonempty and unquoted' >&2; exit 1; }
+     rotation_entries=$((rotation_entries + 1))
+     export ENCRYPTION_KEYS="$value"
+   done < "$rotation_keys"
+   test "$rotation_entries" -eq 1
+   [[ "$ENCRYPTION_KEYS" == *,* && "$ENCRYPTION_KEYS" != ,* && "$ENCRYPTION_KEYS" != *, && "$ENCRYPTION_KEYS" != *,,* ]] \
+     || { echo 'Keep the complete old chain after the new primary' >&2; exit 1; }
+   test "$(docker network inspect --format '{{.Attachable}}' "$rotation_network")" = true
+   rotation_names="$(docker service ls --format '{{.Name}}')"
+   rotation_services=("$rotation_panel")
+   if [[ $'\n'"$rotation_names"$'\n' == *$'\n'"$rotation_worker"$'\n'* ]]; then
+     rotation_services+=("$rotation_worker")
+   fi
+   rotation_image="$(docker service inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' "$rotation_panel")"
+   case "$rotation_image" in
+     *@sha256:*|sha256:*) ;;
+     *) echo 'Use the installed image pinned by digest, not a mutable tag' >&2; exit 1 ;;
+   esac
+   : > "$rotation_dir/state.tsv"
+   : > "$rotation_dir/nodes"
+   for service in "${rotation_services[@]}"; do
+     replicas="$(docker service inspect --format '{{.Spec.Mode.Replicated.Replicas}}' "$service")"
+     [[ "$replicas" =~ ^[0-9]+$ ]] \
+       || { echo 'Global/job services require a separate drain' >&2; exit 1; }
+     identity="$(docker service inspect --format '{{.ID}}' "$service")"
+     docker service inspect --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' \
+       "$service" > "$rotation_dir/$service.before.env"
+     printf '%s\t%s\t%s\n' "$service" "$identity" "$replicas" >> "$rotation_dir/state.tsv"
+     for task in $(docker service ps --no-trunc --filter desired-state=running --format '{{.ID}}' "$service"); do
+       node="$(docker inspect --type task --format '{{.NodeID}}' "$task")"
+       if [ -n "$node" ]; then printf '%s\n' "$node" >> "$rotation_dir/nodes"; fi
+     done
+   done
+   rotation_nodes_ready() {
+     while IFS= read -r node; do
+       test "$(docker node inspect --format '{{.Status.State}}' "$node")" = ready \
+         || { echo 'A writer node is unreachable; verify it manually before proceeding' >&2; return 1; }
+     done < "$rotation_dir/nodes"
+   }
+   rotation_nodes_ready
+   rotation_scale=()
+   for service in "${rotation_services[@]}"; do rotation_scale+=("$service=0"); done
+   docker service scale --detach "${rotation_scale[@]}"
+   # Verify actual task shutdown, not just the desired replica count.
+   rotation_stopped=false
+   for ((attempt=0; attempt<120; attempt++)); do
+     rotation_stopped=true
+     for service in "${rotation_services[@]}"; do
+       states="$(docker service ps --no-trunc --format '{{.CurrentState}}' "$service")"
+       if ! awk 'NF && $1 !~ /^(Shutdown|Complete|Failed|Rejected)$/ { active=1 } END { exit active }' <<< "$states"; then
+         rotation_stopped=false
+       fi
+     done
+     if "$rotation_stopped"; then break; fi
+     sleep 1
+   done
+   "$rotation_stopped" || { echo 'Writers have not stopped; leave services stopped and investigate' >&2; exit 1; }
+   rotation_nodes_ready
+   ```
+
+   Confirm all nodes that hosted these tasks are reachable and no old writer
+   remains on a disconnected node. A desired count of zero, an orphaned task,
+   or an unreachable node is insufficient proof. Stop any additional writers
+   before proceeding. A failure leaves services stopped; do not automatically
+   restore old replicas or roll back a pre-rotation service spec. Keep the
+   original `state.tsv` and `*.before.env` when recovering an interrupted
+   shell; do not recapture replica counts after draining, which would replace
+   the original counts with zero.
+
+3. Apply the chain to **both stopped services**, preserving their roles. Docker
+   `--env-add KEY` reads the value from the calling environment, so keys do not
+   appear in argv. Verify the stored values without printing them. Run the
+   matching installed image directly on the attachable internal network; the
+   one-off process needs no Docker socket, published port or config mount.
+
+   ```bash
+   # rotation: rewrite
+   while IFS=$'\t' read -r service identity replicas; do
+     test "$(docker service inspect --format '{{.ID}}' "$service")" = "$identity"
+     test "$(docker service inspect --format '{{.Spec.Mode.Replicated.Replicas}}' "$service")" -eq 0
+     docker service update --detach --replicas 0 \
+       --env-rm ENCRYPTION_KEY --env-rm ENCRYPTION_KEYS --env-add ENCRYPTION_KEYS "$service"
+     docker service inspect --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' \
+       "$service" > "$rotation_dir/$service.after.env"
+     stored_chain="$(sed -n 's/^ENCRYPTION_KEYS=//p' "$rotation_dir/$service.after.env")"
+     test "$stored_chain" = "$ENCRYPTION_KEYS"
+     if sed -n '/^ENCRYPTION_KEY=/p' "$rotation_dir/$service.after.env" | read -r _; then
+       echo 'Stale single-key fallback remains in stored Env' >&2; exit 1
+     fi
+     test "$(sed -n 's/^NIXPLOY_ROLE=//p' "$rotation_dir/$service.before.env")" \
+       = "$(sed -n 's/^NIXPLOY_ROLE=//p' "$rotation_dir/$service.after.env")"
+   done < "$rotation_dir/state.tsv"
+   sed -n '/^DATABASE_URL=/p' "$rotation_dir/$rotation_panel.before.env" > "$rotation_dir/rotate.env"
+   test "$(wc -l < "$rotation_dir/rotate.env")" -eq 1
+   printf 'ENCRYPTION_KEYS=%s\n' "$ENCRYPTION_KEYS" >> "$rotation_dir/rotate.env"
+   rotation_run() {
+     docker run --rm --network "$rotation_network" \
+       --label "nixploy.key-rotation=$(basename "$rotation_dir")" \
+       --env-file "$1" --entrypoint /app/apps/web/node_modules/.bin/tsx \
+       "$rotation_image" /app/packages/server/src/scripts/rotate-encryption-key.ts "${@:2}"
+   }
+   rotation_run "$rotation_dir/rotate.env" --dry-run
+   rotation_run "$rotation_dir/rotate.env"
+   # Independently prove all live ciphertext is readable with the NEW key alone.
+   sed -n '/^DATABASE_URL=/p' "$rotation_dir/rotate.env" > "$rotation_dir/primary.env"
+   printf 'ENCRYPTION_KEYS=%s\n' "${ENCRYPTION_KEYS%%,*}" >> "$rotation_dir/primary.env"
+   rotation_run "$rotation_dir/primary.env" --dry-run
+   ```
+
+   Require every command to succeed, zero undecryptable/skipped values and no
+   unexplained plaintext before continuing. `--dry-run` checks decryptability
+   without writing; `--batch-size=500` controls transaction size. `--table`
+   limits coverage and `--skip-undecryptable` leaves values behind, so neither
+   establishes a complete rotation. Resolve failures with the complete key
+   chain while writers remain stopped. Batches already committed stay rotated.
+
+4. Restore exactly the recorded replica counts. This never changes
+   `NIXPLOY_ROLE` and never wakes a service that originally had zero replicas.
+
+   ```bash
+   # rotation: resume
+   while IFS=$'\t' read -r service identity replicas; do
+     test "$(docker service inspect --format '{{.ID}}' "$service")" = "$identity"
+     docker service inspect --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' \
+       "$service" > "$rotation_dir/$service.resume.env"
+     cmp -s "$rotation_dir/$service.after.env" "$rotation_dir/$service.resume.env"
+     docker service scale "$service=$replicas"
+   done < "$rotation_dir/state.tsv"
+   unset ENCRYPTION_KEYS stored_chain value
+   ```
+
+   Sign in, verify organization variables and representative stored credentials
+   against known values, and check worker readiness/deployment behavior. Readiness
+   alone does not verify decrypted values. Keep the full chain in both services
+   and the host `.env` until this succeeds. Remove the private working directory
+   once recovery state is no longer needed, using its exact recorded path.
+
+Only consider removing old entries from the **live** chain after this complete
+rotation and verification. Repeat the stopped-service Env update and replica
+restoration with the reduced chain; changing only `.env` or restarting one role
+is insufficient. **Retain old keys in the recovery vault for every historical
+backup that still needs them**, even if removed from the live chain. Destroy
+those keys only after backup retention permits it or verified replacement
+backups and an isolated restore prove recovery without them. See
+[instance recovery](./instance-backup.md#restoring-manual) for recovery limits.
+
+The script discovers every `encryptedText` / `encryptedJson` column from the
+Drizzle schema, so adding a secret column needs no hard-coded rotation list.
+Each batch is one transaction; a row that no configured key can authenticate
+aborts the run and names the table, column and row id without printing its value.
 
 Keys may also be passphrases of 32+ characters. Those are stretched with
 **scrypt** and written with a `v2:` prefix; 64-char hex keys keep writing `v1:`

@@ -48,6 +48,28 @@ env and CLI credential profile were preserved. This proof used Node 22.21 on
 macOS arm64; other OS/architecture execution and feature upgrade convergence
 are separate gates. Nothing was published by this follow-up.
 
+## Key rotation runbook — 2026-10-21 (local proof)
+
+The rotation runbook now drains every standard panel/worker writer, updates the
+actual stored Swarm environment without secret argv, verifies the new primary
+before resuming, and restores original roles and replica counts, including zero.
+Historical backup keys remain in the recovery vault until retention or verified
+replacement recovery permits removal. Crypto behavior is unchanged; stale
+comments and the script's premature key-removal message are corrected.
+
+The 36 recovery/rotation contract cases pass, including unreachable nodes and
+rotation failures that must not resume writers. Server types, strict workspace
+Biome and 3,353 backend tests pass (137 optional tests skipped). An isolated
+native e658 image performed two real rotations of encrypted
+`organization_environment.env`, checking all 59 discovered secret columns and
+exact API decryptability. The split fixture preserved two panel/one worker
+replicas, then one panel/zero workers; old ciphertext still needed its retained
+old key. All owned fixture resources were removed. Primary service specs,
+readiness, existing volumes/networks and ten proxy/config/env file hashes were
+preserved. The immutable shared fixture image is retained. Independent review
+and retargeting after the operator branch merges remain pending; this is not a
+publication claim.
+
 ## Operator workspace — 2026-10-21 (integration in progress)
 
 Three product workflows and functional/accessibility corrections are implemented on
