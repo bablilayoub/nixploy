@@ -9,6 +9,10 @@ executable and the built image are distinct inventories.
 - Protected requests fail closed if project visibility cannot be resolved.
   One failed authorization query does not imply later data queries will fail.
   Trusted workers/crons outside a caller scope retain unrestricted access.
+- Membership, 2FA and SSO query errors also reject the request. Confirmed
+  absence of an organization still permits account/setup procedures; a failed
+  membership query is not treated as absent membership. Seven regressions
+  cover these failures, normal policy denials, recovery and API-key callers.
 - ZIP source-upload and generic deploy-webhook lookups now resolve current
   project visibility in addition to organization membership. Existing API-key
   organization bindings and capability ceilings remain. Both direct routes
@@ -87,7 +91,7 @@ service identities, 74 volume names, current networks and seven proxy-file
 hashes. Tests use isolated data. No primary environment, account, workload,
 proxy file or source checkout is rewritten by these fixes.
 
-Local gates passed 3,299 server tests (the optional image-registry probe is the
+Local gates passed 3,306 server tests (the optional image-registry probe is the
 sole skip), 118 web tests, 94 CLI tests and six smoke-error tests. All four
 workspace TypeScript checks, strict Biome, knip and all three production builds
 passed. The temporary Postgres databases were removed. Final primary counts

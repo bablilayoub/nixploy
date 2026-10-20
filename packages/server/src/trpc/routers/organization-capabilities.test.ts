@@ -16,6 +16,11 @@ const mocks = vi.hoisted(() => ({
 	audit: vi.fn(async () => {}),
 }));
 
+vi.mock("../../modules/auth/sso-gate", async (original) => ({
+	...(await original<typeof import("../../modules/auth/sso-gate")>()),
+	isSsoGateBlocked: async () => false,
+}));
+
 // The database boundary below is stubbed; this fixture has an unrestricted caller.
 // Project denial and resolution failures are exercised with real scopes separately.
 vi.mock("../../modules/projects/project-scope", async (original) => ({

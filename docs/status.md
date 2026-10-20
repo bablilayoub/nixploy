@@ -96,7 +96,9 @@ stated evidence boundaries:
 ## Authorization and dependency follow-up — 2026-10-20
 
 Project-filter lookup failures now fail the protected request instead of
-falling back to unrestricted access. Direct ZIP source uploads and API-key
+falling back to unrestricted access. Membership, 2FA and SSO lookup errors
+also fail closed; confirmed absence of organization membership still permits
+account/setup procedures. Direct ZIP source uploads and API-key
 deploy hooks resolve current project visibility, retain organization/key-scope
 checks and enforce the organization SSO gate. Copilot checks project visibility
 before cached explanations, service context and environment changes. Hidden
@@ -104,10 +106,10 @@ projects answer `NOT_FOUND`; trusted workers outside a caller scope remain
 unrestricted.
 
 The regressions reproduced the missing project checks and middleware failure
-fallback before the fixes. Focused coverage passes **25 server and 8 web
+fallback before the fixes. Focused coverage passes **32 server and 8 web
 cases**, including visible requests, revoked team access, failed visibility
 followed by a healthy request, application/Compose context and patches,
-cookie/API-key SSO and the existing 2FA gate.
+cookie/API-key SSO, gate-query errors/recovery and the existing 2FA policy.
 
 Fresh registry audits move production from **2 moderate** to **1 moderate**
 and the whole graph from **8 high / 9 moderate / 4 low** to
@@ -118,12 +120,12 @@ shadcn; that package also supplies an imported stylesheet, so deleting it as
 unused would break the panel build. The [security follow-up](audits/2026-10/security-follow-up.md)
 records versions, primary advisories, runtime limits and operator actions.
 
-Final local gates: **3,299 server tests passed / 1 optional registry probe
+Final local gates: **3,306 server tests passed / 1 optional registry probe
 skipped**, with real Postgres-backed suites enabled in an isolated database;
 **118 web**, **94 CLI** and **6 smoke-error** tests passed. All four workspace
-TypeScript checks, strict Biome (1,125 files), knip and web/landing/CLI
-production builds passed. Seven unrelated router fixtures now explicitly
-declare their unrestricted mock caller instead of relying on the removed
+TypeScript checks, strict Biome (1,126 files), knip and web/landing/CLI
+production builds passed. Unrelated unit fixtures now explicitly
+declare their mock caller and policy gates instead of relying on the removed
 failure fallback; the schedule arithmetic test freezes its clock away from a
 DST transition. Neither change relaxes the production authorization guard.
 

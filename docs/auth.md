@@ -16,6 +16,10 @@ Copilot checks visibility before cached explanations, service context and
 environment changes. See the [October security follow-up](audits/2026-10/security-follow-up.md)
 for verification and dependency/runtime limits.
 
+Membership, 2FA and SSO lookup errors also reject the request. A confirmed
+absence of organization membership still leaves account/setup procedures
+available; an unavailable authorization query is not treated as that absence.
+
 ## First-boot setup (no public register)
 
 Self-hosted instances must not leave an open `/register` page. Nixploy claims

@@ -218,14 +218,18 @@ export const protectedProcedure = t.procedure.use(errorBoundary).use(async ({ ct
 	// the IdP is blocked until they do. Instance admins are exempt inside the
 	// gate itself — they are the way back in when the IdP is down.
 	let ssoGated = false;
+	let gateOrganizationId: string | undefined;
 	try {
-		const orgId = await organizationId();
-		twoFactorGated = await isTwoFactorGateBlocked(session.user.id, orgId);
-		ssoGated = await isSsoGateBlocked(session.user.id, orgId);
-	} catch {
-		// No organization (FORBIDDEN) or an unreachable database: org-scoped
-		// procedures reject or fail on their own queries — the gate must not
-		// take down procedures that never touch tenant data.
+		gateOrganizationId = await organizationId();
+	} catch (error) {
+		// No organization: org-scoped procedures reject through the same cached
+		// resolver. Keep account/setup procedures available to callers without one.
+		if (!isDomainError(error) || error.code !== "FORBIDDEN") throw error;
+	}
+	if (gateOrganizationId) {
+		// Gate lookup failures must reject too: later data queries may succeed.
+		twoFactorGated = await isTwoFactorGateBlocked(session.user.id, gateOrganizationId);
+		ssoGated = await isSsoGateBlocked(session.user.id, gateOrganizationId);
 	}
 	if (twoFactorGated) {
 		throw new TRPCError({

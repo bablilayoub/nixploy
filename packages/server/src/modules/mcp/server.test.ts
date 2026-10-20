@@ -1,19 +1,27 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { TRPCContext } from "../../trpc/init";
 import { handleMcpRequest } from "./server";
 import { mcpTools } from "./tools";
 
 /**
  * Protocol-level test of the Streamable HTTP adapter: real SDK transport,
- * real JSON-RPC frames, fake authenticated context. `list_templates` never
- * touches the database, so no db mock is needed (db connects lazily).
+ * real JSON-RPC frames, fake authenticated context. The catalog is static;
+ * authorization queries still resolve this fixture's empty memberships.
  */
+
+vi.mock("../../db", async (original) => ({
+	...(await original<typeof import("../../db")>()),
+	db: {
+		query: { members: { findFirst: async () => undefined } },
+		select: () => ({ from: () => ({ where: async () => [] }) }),
+	},
+}));
 
 const fakeCtx = {
 	headers: new Headers(),
 	session: {
 		user: { id: "user-1" },
-		session: { activeOrganizationId: "org-1" },
+		session: { activeOrganizationId: null },
 	},
 } as unknown as TRPCContext;
 
