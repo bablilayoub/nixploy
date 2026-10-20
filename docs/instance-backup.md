@@ -118,6 +118,9 @@ The source database and stored archive are preserved throughout.
 The create API (`backup.createCopy`) blocks through completion and accepts an
 idempotent UUID `requestId`; repeating that same request cannot create another
 service. The history (`backup.copies`) shows the latest 100 reachable copies.
+The returned `deadline` is the creation-operation timeout (ten minutes), not
+an expiry for the data. Ready copies have no automatic expiry and remain until
+explicitly deleted.
 **Delete copy** (`backup.deleteCopy`, admin plus `backups.manage` and
 `service.delete`) confirms removal of only that target service and data volume,
 and refuses active recovery work. This initial workflow supports PostgreSQL only;

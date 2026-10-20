@@ -694,12 +694,12 @@ const docs: Record<string, ProcedureDoc> = {
 	"backup.copies": {
 		summary: "List retained recovery copies",
 		description:
-			"Latest 100 PostgreSQL recovery copies for an accessible backup. Both source and target projects are scoped; expired operations report an unavailable result, never success.",
+			"Latest 100 PostgreSQL recovery copies for an accessible backup. Both source and target projects are scoped. The deadline is an operation timeout, not data expiry; an interrupted operation reports an unavailable result. Ready copies remain until explicit deletion.",
 	},
 	"backup.createCopy": {
 		summary: "Restore a PostgreSQL dump into a private copy",
 		description:
-			"Organization admin required. Validates the archive before creating a new managed PostgreSQL service in another accessible environment, with fresh credentials, the source image/server and no published port. Blocks through restore and verification; requestId is idempotent. The source is preserved. Copies retain unsanitized data until explicit deletion.",
+			"Organization admin required. Validates the archive before creating a new managed PostgreSQL service in another accessible environment, with fresh credentials, the source image/server and no published port. Blocks through restore and verification with a ten-minute creation timeout; requestId is idempotent. The source is preserved. Ready copies have no automatic expiry and retain unsanitized data until explicit deletion.",
 		capability: ["backups.manage", "service.create", "service.deploy", "secrets.write"],
 	},
 	"backup.deleteCopy": {

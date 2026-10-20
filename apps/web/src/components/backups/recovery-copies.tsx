@@ -303,7 +303,8 @@ export function RecoveryCopies({
 						<DialogTitle>Create recovery copy</DialogTitle>
 						<DialogDescription>
 							A new PostgreSQL service uses the source image and server, with fresh credentials and
-							no published port. The copied data is not sanitized. The source is preserved.
+							no published port. The copied data is not sanitized. The source is preserved. Creation
+							has a 10 minute timeout. Verified copies stay until you delete them.
 						</DialogDescription>
 					</DialogHeader>
 					<form
