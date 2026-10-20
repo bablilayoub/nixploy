@@ -1,6 +1,7 @@
 import { buildApiKeyContext } from "@nixploy/server/lib/api-key-context";
 import { findApplicationForUser } from "@nixploy/server/modules/application/org";
 import { recordAudit } from "@nixploy/server/modules/audit/index";
+import { isSsoGateBlocked, SSO_REQUIRED_MESSAGE } from "@nixploy/server/modules/auth/sso-gate";
 import {
 	isTwoFactorGateBlocked,
 	TWO_FACTOR_REQUIRED_MESSAGE,
@@ -86,6 +87,9 @@ export async function POST(req: Request, { params }: RouteParams) {
 	}
 	if (await isTwoFactorGateBlocked(userId, organizationId)) {
 		return Response.json({ message: TWO_FACTOR_REQUIRED_MESSAGE }, { status: 403 });
+	}
+	if (await isSsoGateBlocked(userId, organizationId)) {
+		return Response.json({ message: SSO_REQUIRED_MESSAGE }, { status: 403 });
 	}
 	const canWrite = capabilityScope
 		? await runWithCapabilityScope(capabilityScope, () =>

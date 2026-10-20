@@ -18,6 +18,7 @@ import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { isDomainError } from "../../modules/errors";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
+import { assertProjectVisible } from "../../modules/projects/project-scope";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 
@@ -98,6 +99,11 @@ export const aiRouter = router({
 						deployment?.application?.environment.project.organizationId ??
 						deployment?.compose?.environment.project.organizationId;
 					if (deployment?.logPath && orgId === organizationId) {
+						const environment =
+							deployment.application?.environment ?? deployment.compose?.environment;
+						if (!environment)
+							throw new TRPCError({ code: "NOT_FOUND", message: "Deployment not found" });
+						assertProjectVisible(environment.projectId, "Deployment");
 						const cached = await readCachedExplanation(deployment.logPath);
 						if (cached) return cached;
 					}
@@ -133,6 +139,9 @@ export const aiRouter = router({
 			if (!deployment || orgId !== organizationId) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Deployment not found" });
 			}
+			const environment = deployment.application?.environment ?? deployment.compose?.environment;
+			if (!environment) throw new TRPCError({ code: "NOT_FOUND", message: "Deployment not found" });
+			assertProjectVisible(environment.projectId, "Deployment");
 			if (!deployment.logPath) return null;
 			return readCachedExplanation(deployment.logPath);
 		}),

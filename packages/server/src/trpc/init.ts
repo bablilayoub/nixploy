@@ -15,7 +15,6 @@ import {
 import { type DomainErrorCode, isDomainError } from "../modules/errors";
 import { type CapabilityScope, runWithCapabilityScope } from "../modules/projects/capabilities";
 import {
-	ALL_PROJECTS,
 	type ProjectFilter,
 	resolveProjectFilterForSession,
 	runWithProjectFilter,
@@ -247,14 +246,13 @@ export const protectedProcedure = t.procedure.use(errorBoundary).use(async ({ ct
 	 * A user with no teams-scoped membership anywhere — which is everyone until
 	 * somebody changes it — resolves to "all" after one indexed read.
 	 */
-	let projectFilter: ProjectFilter = ALL_PROJECTS;
+	let projectFilter: ProjectFilter;
 	try {
 		projectFilter = await resolveProjectFilterForSession(session, session.user.id);
 	} catch (error) {
-		// The database is unreachable; the procedure itself is about to fail on
-		// the same database. Leaving the filter at "all" changes nothing — every
-		// path this could have narrowed also checks the organization.
-		log.warn(`could not resolve the caller's project filter: ${String(error)}`);
+		// A failed visibility query does not imply every later query will fail.
+		// Never turn a transient authorization failure into unrestricted access.
+		throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", cause: error });
 	}
 
 	const run = () =>

@@ -6,6 +6,16 @@ lives in `packages/server/src/lib/auth.ts`; the handler is mounted at
 `/api/auth/*` in the Next.js app. The web client is
 `apps/web/src/lib/auth-client.ts`.
 
+Protected API requests resolve team project visibility before dispatch. A
+failed visibility lookup rejects the request; a later healthy request can
+retry. Hidden projects answer `NOT_FOUND`. Trusted crons and workers still
+run without a caller scope. Direct ZIP source uploads and generic API-key
+deploy webhooks also resolve current project visibility and enforce both
+organization 2FA and SSO, alongside key organization/capability restrictions.
+Copilot checks visibility before cached explanations, service context and
+environment changes. See the [October security follow-up](audits/2026-10/security-follow-up.md)
+for verification and dependency/runtime limits.
+
 ## First-boot setup (no public register)
 
 Self-hosted instances must not leave an open `/register` page. Nixploy claims
