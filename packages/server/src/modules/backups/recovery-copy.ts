@@ -1,24 +1,50 @@
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, isNull, notInArray } from "drizzle-orm";
+import {
+	and,
+	desc,
+	eq,
+	getTableColumns,
+	inArray,
+	isNull,
+	lt,
+	notInArray,
+	or,
+	sql,
+} from "drizzle-orm";
 import { db } from "../../db";
-import { destinations, postgres, recoveryCopies, servers } from "../../db/schema";
-import { execAsync, execAsyncRemote, execAsyncWithStdin } from "../../utils/exec";
+import {
+	backups,
+	destinations,
+	environments,
+	postgres,
+	projects,
+	recoveryCopies,
+	servers,
+} from "../../db/schema";
+import { execAsyncWithStdin } from "../../utils/exec";
 import { assertSafeAppName, assertSafeDockerImageRef } from "../../utils/validators";
 import { shellQuote } from "../compose/paths";
 import {
-	databaseServiceExists,
 	deployDatabase,
 	type PostgresRow,
 	postgresMajorVersion,
 	removeDatabase,
 } from "../databases/engine";
 import { findDatabaseContainerId, generateLogicalPassword } from "../databases/logical";
+import { databaseSwarmNodeId } from "../databases/placement";
 import { conflict, notFound, preconditionFailed } from "../errors";
+import { projectIdFilter } from "../projects/project-scope";
 import { assertWithinQuota } from "../projects/quotas";
 import { generateAppName } from "../services/app-name";
 import { withValidatedArchive } from "./archive";
 import { DB_DUMP_CONFIG } from "./dump-commands";
 import { buildStreamPipeline } from "./pipeline";
+import {
+	inspectRecoveryRuntime,
+	provisionRecoveryVolume,
+	type RecoveryOrigin,
+	removeOriginalRecoveryVolume,
+} from "./recovery-copy-identity";
 import { type BackupRow, listBackupKeys, replayArchive } from "./runner";
 import { storeFor } from "./storage";
 
@@ -179,6 +205,14 @@ export async function createRecoveryCopy(input: {
 			archiveValidated = true;
 			remaining(deadline);
 			const appName = await generateAppName(input.name, "db");
+			const origin: RecoveryOrigin = {
+				recoveryCopyId: copy.recoveryCopyId,
+				originServerId: source.serverId,
+				originSwarmNodeId: await databaseSwarmNodeId(source.serverId),
+				originAppName: appName,
+				originVolumeName: `${appName}-data`,
+				originVolumeCreatedAt: null,
+			};
 			const createdTarget = await db.transaction(async (tx) => {
 				const [current] = await tx
 					.select()
@@ -216,17 +250,25 @@ export async function createRecoveryCopy(input: {
 					.update(recoveryCopies)
 					.set({
 						targetPostgresId: created.postgresId,
-						originServerId: created.serverId,
-						originAppName: created.appName,
-						originVolumeName: `${created.appName}-data`,
+						...origin,
 						status: "provisioning",
 					})
 					.where(eq(recoveryCopies.recoveryCopyId, copy.recoveryCopyId));
 				return created;
 			});
 			target = createdTarget;
+			origin.originVolumeCreatedAt = await provisionRecoveryVolume(origin);
+			await db
+				.update(recoveryCopies)
+				.set({ originVolumeCreatedAt: origin.originVolumeCreatedAt })
+				.where(eq(recoveryCopies.recoveryCopyId, copy.recoveryCopyId));
 			await deployDatabase("postgres", createdTarget);
-			const container = await waitForTarget(createdTarget, deadline);
+			const candidate = await waitForTarget(createdTarget, deadline);
+			const runtime = await inspectRecoveryRuntime(origin, candidate);
+			const container = runtime.containerId;
+			if (!container) throw preconditionFailed("The recovery container identity is unknown");
+			if (!runtime.volumeCreatedAt)
+				throw preconditionFailed("The recovery volume identity is unknown");
 			await phase(copy.recoveryCopyId, "restoring", deadline);
 			const command = DB_DUMP_CONFIG.postgres.restoreCommand({
 				database: target.databaseName,
@@ -244,6 +286,7 @@ export async function createRecoveryCopy(input: {
 				true,
 			);
 			await phase(copy.recoveryCopyId, "verifying", deadline);
+			await inspectRecoveryRuntime(origin, container);
 			const count = (
 				await queryTarget(
 					target,
@@ -254,6 +297,7 @@ export async function createRecoveryCopy(input: {
 			).trim();
 			if (!/^\d+$/.test(count))
 				throw preconditionFailed("The restored database did not return a table count");
+			await inspectRecoveryRuntime(origin, container);
 			await db.transaction(async (tx) => {
 				remaining(deadline);
 				await tx
@@ -293,13 +337,92 @@ export async function createRecoveryCopy(input: {
 	return result;
 }
 
-export async function listRecoveryCopies(backupId: string) {
+export async function listRecoveryCopies(
+	filter: { backupId: string } | { postgresId: string } | { projectId: string },
+	organizationId: string,
+	options: { cursor?: { createdAt: string; id: string }; limit?: 100 | 101 } = {},
+) {
+	// Scope every existing relationship before LIMIT, so hidden history cannot
+	// crowd an older retained copy out of the caller's inventory page.
+	const visibleEnvironments = db
+		.select({ id: environments.environmentId })
+		.from(environments)
+		.innerJoin(projects, eq(environments.projectId, projects.projectId))
+		.where(and(eq(projects.organizationId, organizationId), projectIdFilter(projects.projectId)));
+	const visiblePostgres = db
+		.select({ id: postgres.postgresId })
+		.from(postgres)
+		.where(inArray(postgres.environmentId, visibleEnvironments));
+	const visibleBackups = db
+		.select({ id: backups.backupId })
+		.from(backups)
+		.innerJoin(destinations, eq(backups.destinationId, destinations.destinationId))
+		.where(
+			and(
+				eq(destinations.organizationId, organizationId),
+				eq(backups.databaseType, "postgres"),
+				inArray(backups.postgresId, visiblePostgres),
+			),
+		);
+	const matches =
+		"backupId" in filter
+			? eq(recoveryCopies.backupId, filter.backupId)
+			: "postgresId" in filter
+				? or(
+						eq(recoveryCopies.sourcePostgresId, filter.postgresId),
+						eq(recoveryCopies.targetPostgresId, filter.postgresId),
+					)
+				: or(
+						inArray(
+							recoveryCopies.environmentId,
+							db
+								.select({ id: environments.environmentId })
+								.from(environments)
+								.where(eq(environments.projectId, filter.projectId)),
+						),
+						inArray(
+							recoveryCopies.targetPostgresId,
+							db
+								.select({ id: postgres.postgresId })
+								.from(postgres)
+								.innerJoin(environments, eq(postgres.environmentId, environments.environmentId))
+								.where(eq(environments.projectId, filter.projectId)),
+						),
+					);
 	return await db
-		.select()
+		.select({
+			...getTableColumns(recoveryCopies),
+			// JS Date loses microseconds. Only this exact DB value may form the
+			// next cursor; it is stripped from the public item shape by the router.
+			cursorCreatedAt: sql<string>`to_char(${recoveryCopies.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+		})
 		.from(recoveryCopies)
-		.where(eq(recoveryCopies.backupId, backupId))
-		.orderBy(desc(recoveryCopies.createdAt))
-		.limit(100);
+		.where(
+			and(
+				eq(recoveryCopies.organizationId, organizationId),
+				matches,
+				inArray(recoveryCopies.environmentId, visibleEnvironments),
+				or(
+					isNull(recoveryCopies.sourcePostgresId),
+					inArray(recoveryCopies.sourcePostgresId, visiblePostgres),
+				),
+				or(
+					isNull(recoveryCopies.targetPostgresId),
+					inArray(recoveryCopies.targetPostgresId, visiblePostgres),
+				),
+				or(isNull(recoveryCopies.backupId), inArray(recoveryCopies.backupId, visibleBackups)),
+				options.cursor &&
+					or(
+						lt(recoveryCopies.createdAt, sql`${options.cursor.createdAt}::timestamptz`),
+						and(
+							eq(recoveryCopies.createdAt, sql`${options.cursor.createdAt}::timestamptz`),
+							lt(recoveryCopies.recoveryCopyId, options.cursor.id),
+						),
+					),
+			),
+		)
+		.orderBy(desc(recoveryCopies.createdAt), desc(recoveryCopies.recoveryCopyId))
+		.limit(options.limit ?? 100);
 }
 
 /** Caller checks both source and target authorization before entering here. */
@@ -316,10 +439,17 @@ export async function deleteRecoveryCopy(
 	const state = recoveryCopyState(row);
 	if (!["ready", "error", "interrupted", "deleted"].includes(state))
 		throw conflict("Wait for the recovery operation to finish before deleting its copy");
-	const { originAppName, originServerId, originVolumeName } = row;
+	const {
+		originAppName,
+		originServerId,
+		originVolumeName,
+		originSwarmNodeId,
+		originVolumeCreatedAt,
+	} = row;
 	if (
 		!originAppName ||
 		!originVolumeName ||
+		!originSwarmNodeId ||
 		originVolumeName !== `${originAppName}-data` ||
 		originServerId === "" ||
 		assertSafeAppName(originAppName) !== originAppName
@@ -371,45 +501,65 @@ export async function deleteRecoveryCopy(
 			});
 			if (!server) throw preconditionFailed("The original recovery server is unavailable");
 		}
-		if (currentTarget) {
-			await removeDatabase(originAppName, originServerId, "postgres", currentTarget.environmentId);
+		const origin: RecoveryOrigin = {
+			recoveryCopyId: row.recoveryCopyId,
+			originServerId,
+			originSwarmNodeId,
+			originAppName,
+			originVolumeName,
+			originVolumeCreatedAt,
+		};
+		const runtime = await inspectRecoveryRuntime(origin);
+		if (currentTarget && runtime.serviceExists) {
+			await removeDatabase(originAppName, originServerId, "postgres", currentTarget.environmentId, {
+				recoveryCopyId: row.recoveryCopyId,
+			});
+		} else if (runtime.serviceExists) {
+			throw conflict("Original recovery resources remain without a verifiable managed service");
+		} else if (runtime.volumeExists) {
+			await removeOriginalRecoveryVolume(origin);
 		}
 		// A missing managed row does not prove that its Swarm service or old volume left.
 		// Without the row, only verify absence: a reused service name must not be removed.
-		if (await databaseServiceExists(originAppName)) {
+		const after = await inspectRecoveryRuntime(origin);
+		if (after.serviceExists) {
 			throw conflict("The original recovery database service still exists");
 		}
-		const command = `docker volume ls --filter ${shellQuote(`name=^${originVolumeName}$`)} --format '{{.Name}}'`;
-		const volumes =
-			originServerId !== null
-				? await execAsyncRemote(originServerId, command, { timeoutMs: 30_000 })
-				: await execAsync(command, { timeout: 30_000 });
-		if (volumes.trim()) throw conflict("The original recovery database data volume still exists");
-		if (currentTarget) {
-			const [deleted] = await db
-				.delete(postgres)
-				.where(
-					and(
-						eq(postgres.postgresId, currentTarget.postgresId),
-						eq(postgres.appName, originAppName),
-						originServerId === null
-							? isNull(postgres.serverId)
-							: eq(postgres.serverId, originServerId),
-					),
-				)
-				.returning({ postgresId: postgres.postgresId });
-			if (!deleted) {
-				const current = await db.query.postgres.findFirst({
-					where: eq(postgres.postgresId, currentTarget.postgresId),
-					columns: { postgresId: true },
-				});
-				if (current) throw conflict("The recovery database changed during deletion");
+		if (after.volumeExists)
+			throw conflict("The original recovery database data volume still exists");
+		await db.transaction(async (tx) => {
+			// Release the restrictive target FK only in the same transaction that
+			// conditionally removes the original target and finalizes tracking.
+			await tx
+				.update(recoveryCopies)
+				.set({ targetPostgresId: null })
+				.where(eq(recoveryCopies.recoveryCopyId, row.recoveryCopyId));
+			if (currentTarget) {
+				const [deleted] = await tx
+					.delete(postgres)
+					.where(
+						and(
+							eq(postgres.postgresId, currentTarget.postgresId),
+							eq(postgres.appName, originAppName),
+							originServerId === null
+								? isNull(postgres.serverId)
+								: eq(postgres.serverId, originServerId),
+						),
+					)
+					.returning({ postgresId: postgres.postgresId });
+				if (!deleted) {
+					const current = await tx.query.postgres.findFirst({
+						where: eq(postgres.postgresId, currentTarget.postgresId),
+						columns: { postgresId: true },
+					});
+					if (current) throw conflict("The recovery database changed during deletion");
+				}
 			}
-		}
-		await db
-			.update(recoveryCopies)
-			.set({ status: "deleted", targetPostgresId: null, finishedAt: new Date(), error: null })
-			.where(eq(recoveryCopies.recoveryCopyId, row.recoveryCopyId));
+			await tx
+				.update(recoveryCopies)
+				.set({ status: "deleted", targetPostgresId: null, finishedAt: new Date(), error: null })
+				.where(eq(recoveryCopies.recoveryCopyId, row.recoveryCopyId));
+		});
 	} catch {
 		await db
 			.update(recoveryCopies)

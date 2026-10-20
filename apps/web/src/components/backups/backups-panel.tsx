@@ -782,7 +782,15 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 				)}
 			</SettingsSection>
 			{target.kind === "database" && target.databaseType === "postgres" && (
-				<RecoveryCopies serviceId={target.serviceId} backups={backups} />
+				<RecoveryCopies
+					key={target.serviceId}
+					scope={{ postgresId: target.serviceId }}
+					backups={backups}
+					backupsStatus={
+						databaseQuery.isPending ? "pending" : databaseQuery.isError ? "error" : "ready"
+					}
+					onRetryBackups={() => void databaseQuery.refetch()}
+				/>
 			)}
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

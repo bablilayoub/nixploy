@@ -694,7 +694,12 @@ const docs: Record<string, ProcedureDoc> = {
 	"backup.copies": {
 		summary: "List retained recovery copies",
 		description:
-			"Latest 100 PostgreSQL recovery copies for an accessible backup. Both source and target projects are scoped. The deadline is an operation timeout, not data expiry; an interrupted operation reports an unavailable result. Ready copies remain until explicit deletion.",
+			"Latest 100 PostgreSQL recovery copies filtered by exactly one backupId, postgresId (source or target), or projectId (recorded origin or current target). Service/project inventory remains available after schedule deletion, and project inventory retains copies whose service metadata is gone. Every row checks the originating environment, existing source and target projects, and the backup source when present. Missing target metadata reports an unavailable result, never verified data deletion. The deadline is an operation timeout, not data expiry; retained data remains until explicit verified deletion.",
+	},
+	"backup.copyInventory": {
+		summary: "Page retained recovery copies",
+		description:
+			"Organization- and project-scoped PostgreSQL copy inventory by postgresId (source or target) or projectId (recorded origin or current target), independent of schedules. Returns up to 100 items with the same shape as backup.copies plus nextCursor. Pass the returned createdAt/id cursor unchanged to reach older retained copies and deletion history; timestamp precision is preserved at the database boundary. All existing source, target and backup-source access axes are filtered before the page limit. Missing target metadata is unavailable, not verified deletion.",
 	},
 	"backup.createCopy": {
 		summary: "Restore a PostgreSQL dump into a private copy",

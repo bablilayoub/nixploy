@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { UnderlineTabsList, UnderlineTabsTrigger } from "@/components/application/underline-tabs";
+import { RecoveryCopies } from "@/components/backups/recovery-copies";
 import { LoadError } from "@/components/query-state";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { EmptyState } from "@/components/services/empty-state";
@@ -22,7 +23,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { confirmDiscardUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { describeError } from "@/lib/describe-error";
@@ -53,12 +54,13 @@ function parseNewParam(value: string | null): NewServiceDialog | null {
 	return null;
 }
 
-type ProjectTab = "services" | "environment" | "deployments";
+type ProjectTab = "services" | "environment" | "deployments" | "recovery-copies";
 
 const PROJECT_TABS: { value: ProjectTab; label: string }[] = [
 	{ value: "services", label: "Services" },
 	{ value: "environment", label: "Environment variables" },
 	{ value: "deployments", label: "Deployments" },
+	{ value: "recovery-copies", label: "Recovery copies" },
 ];
 
 function isProjectTab(value: string | undefined): value is ProjectTab {
@@ -109,7 +111,10 @@ export function ProjectDetail({
 	}, [mayOpenServiceDialog, projectId, router, searchParams]);
 
 	const projectQuery = useQuery(trpc.project.one.queryOptions({ projectId }));
-	const environmentsQuery = useQuery(trpc.environment.byProject.queryOptions({ projectId }));
+	const environmentsQuery = useQuery({
+		...trpc.environment.byProject.queryOptions({ projectId }),
+		enabled: tab !== "recovery-copies",
+	});
 
 	const environments = environmentsQuery.data;
 	const activeEnvironment =
@@ -424,9 +429,16 @@ export function ProjectDetail({
 						</UnderlineTabsTrigger>
 					))}
 				</UnderlineTabsList>
+				<TabsContent value="recovery-copies" className="mt-4">
+					{projectQuery.isPending ? (
+						<Skeleton className="h-48 w-full" />
+					) : project ? (
+						<RecoveryCopies key={projectId} scope={{ projectId }} />
+					) : null}
+				</TabsContent>
 			</Tabs>
 
-			{tab !== "deployments" && (
+			{(tab === "services" || tab === "environment") && (
 				<div className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -548,7 +560,7 @@ export function ProjectDetail({
 				</div>
 			)}
 
-			{tab !== "deployments" && environmentsQuery.isError ? (
+			{(tab === "services" || tab === "environment") && environmentsQuery.isError ? (
 				<LoadError
 					title="Could not load environments"
 					message={describeError(environmentsQuery.error)}

@@ -3,10 +3,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpRight, Copy, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 import { settleActivity, trackActivity } from "@/components/layout/activity-tray";
 import { SettingsSection } from "@/components/layout/settings-section";
+import { LoadError } from "@/components/query-state";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -39,7 +41,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { toastError } from "@/lib/describe-error";
+import { describeError, toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 const ACTIVE = new Set(["validating", "provisioning", "restoring", "verifying", "deleting"]);
@@ -57,39 +59,66 @@ const STATUS: Record<string, string> = {
 
 /** Retained copies are separate managed databases, with their own credentials and lifecycle. */
 export function RecoveryCopies({
-	serviceId,
-	backups,
+	scope,
+	backups = [],
+	backupsStatus = "ready",
+	onRetryBackups,
 }: {
-	serviceId: string;
-	backups: { id: string; database: string; cron: string }[];
+	scope: { postgresId: string } | { projectId: string };
+	backups?: { id: string; database: string; cron: string }[];
+	backupsStatus?: "pending" | "error" | "ready";
+	onRetryBackups?: () => void;
 }) {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
-	const { role, canAll } = useCapabilities({ strict: true });
+	const pathname = usePathname();
+	const serviceId = "postgresId" in scope ? scope.postgresId : undefined;
+	const href =
+		"projectId" in scope
+			? `/dashboard/projects/${scope.projectId}?tab=recovery-copies`
+			: `${pathname}?tab=backups`;
+	const {
+		role,
+		canAll,
+		isLoading: permissionsLoading,
+		isError: permissionsError,
+	} = useCapabilities({ strict: true });
 	const canCreate =
 		(role === "owner" || role === "admin") &&
 		canAll("backups.manage", "service.create", "service.deploy", "secrets.write");
 	const canDelete =
 		(role === "owner" || role === "admin") && canAll("backups.manage", "service.delete");
 	const [selectedBackup, setSelectedBackup] = useState("");
-	const backupId = selectedBackup || backups[0]?.id || "";
+	const backupId = backups.some((backup) => backup.id === selectedBackup)
+		? selectedBackup
+		: backups[0]?.id || "";
 	const [open, setOpen] = useState(false);
 	const [key, setKey] = useState("");
 	const [name, setName] = useState("");
 	const [environmentId, setEnvironmentId] = useState("");
 	const [requestId, setRequestId] = useState("");
+	const [createError, setCreateError] = useState<string | null>(null);
 	const [deleteId, setDeleteId] = useState<string | null>(null);
+	const [deleteError, setDeleteError] = useState<string | null>(null);
+	const [cursors, setCursors] = useState<({ createdAt: string; id: string } | undefined)[]>([
+		undefined,
+	]);
+	const cursor = cursors[cursors.length - 1];
 	const fieldId = useId();
-	const source = useQuery(trpc.postgres.one.queryOptions({ postgresId: serviceId }));
+	const source = useQuery({
+		...trpc.postgres.one.queryOptions({ postgresId: serviceId ?? "" }),
+		enabled: !!serviceId,
+	});
 	const projects = useQuery({ ...trpc.project.all.queryOptions(), enabled: open });
 	const keys = useQuery({
 		...trpc.backup.listBackups.queryOptions({ backupId }),
 		enabled: open && !!backupId,
 	});
-	const copies = useQuery({
-		...trpc.backup.copies.queryOptions({ backupId }),
-		enabled: !!backupId,
-	});
+	const copies = useQuery(
+		trpc.backup.copyInventory.queryOptions({ ...scope, ...(cursor ? { cursor } : {}) }),
+	);
+	const copyRows = copies.data?.items;
+	const nextCursor = copies.data?.nextCursor;
 	const create = useMutation(trpc.backup.createCopy.mutationOptions());
 	const remove = useMutation(trpc.backup.deleteCopy.mutationOptions());
 	const targets = (projects.data ?? []).flatMap((project) =>
@@ -100,118 +129,207 @@ export function RecoveryCopies({
 				label: `${project.name} / ${environment.name}`,
 			})),
 	);
-	const deletion = copies.data?.find((row) => row.recoveryCopyId === deleteId);
+	const deletion = copyRows?.find((row) => row.recoveryCopyId === deleteId);
 	const refresh = () =>
-		queryClient.invalidateQueries({ queryKey: trpc.backup.copies.queryKey({ backupId }) });
+		Promise.all([
+			queryClient.invalidateQueries({ queryKey: trpc.backup.copies.queryKey() }),
+			queryClient.invalidateQueries({ queryKey: trpc.backup.copyInventory.queryKey() }),
+			queryClient.invalidateQueries({ queryKey: trpc.project.all.queryKey() }),
+			queryClient.invalidateQueries({ queryKey: trpc.project.one.queryKey() }),
+			queryClient.invalidateQueries({ queryKey: trpc.postgres.all.queryKey() }),
+		]);
+	const canSubmit =
+		!!backupId &&
+		!!name.trim() &&
+		canCreate &&
+		keys.isSuccess &&
+		keys.data.includes(key) &&
+		projects.isSuccess &&
+		!source.isPending &&
+		!source.isError &&
+		targets.some((target) => target.id === environmentId) &&
+		!create.isPending;
 	const openForm = () => {
+		setCreateError(null);
 		setKey("");
 		setName("Recovery copy");
 		setEnvironmentId("");
 		setRequestId(crypto.randomUUID());
 		setOpen(true);
 	};
-	const submit = () => {
+	// Await the mutation so tray completion still runs after navigating away.
+	const submit = async () => {
+		if (!canSubmit) return;
+		setCreateError(null);
 		const activity = trackActivity({
 			id: `recovery-copy:${requestId}`,
 			kind: "clone",
 			label: `Create ${name.trim()}`,
 			detail: "Validate archive → restore → verify",
+			href,
 		});
-		create.mutate(
-			{ backupId, key, name: name.trim(), environmentId, requestId },
-			{
-				onSuccess: (result) => {
-					settleActivity(
-						activity,
-						result.status === "ready" ? "done" : "error",
-						result.status === "ready" ? "Private copy verified" : "Review recovery history",
-					);
-					void refresh();
-					void queryClient.invalidateQueries({ queryKey: trpc.project.all.queryKey() });
-					if (result.status === "ready") {
-						toast.success("Recovery copy ready");
-						setOpen(false);
-					} else {
-						// A definite failure is a finished attempt. A corrected dump or
-						// target must be a new request; network errors retain the old ID.
-						if (result.status === "error") setRequestId(crypto.randomUUID());
-						toastError(
-							new Error(
-								result.error ??
-									"The copy is still running. Refresh its history to check the result.",
-							),
-							"Recovery copy needs attention",
-						);
-					}
-				},
-				onError: (error) => {
-					settleActivity(activity, "error", "Refresh recovery history before retrying");
-					void refresh();
-					toastError(error, "Recovery request failed");
-				},
-			},
-		);
+		try {
+			const result = await create.mutateAsync({
+				backupId,
+				key,
+				name: name.trim(),
+				environmentId,
+				requestId,
+			});
+			setCursors([undefined]);
+			settleActivity(
+				activity,
+				result.status === "ready" ? "done" : "error",
+				result.status === "ready" ? "Private copy verified" : "Review recovery history",
+			);
+			void refresh();
+			if (result.status === "ready") {
+				toast.success("Recovery copy ready");
+				setOpen(false);
+			} else {
+				// A definite failure is a finished attempt. Network errors retain the old request ID.
+				if (result.status === "error") setRequestId(crypto.randomUUID());
+				const message =
+					result.error ??
+					"The copy is still running. Refresh its history to check the result before retrying.";
+				setCreateError(message);
+				toastError(new Error(message), "Recovery copy needs attention");
+			}
+		} catch (error) {
+			setCursors([undefined]);
+			setCreateError(describeError(error));
+			settleActivity(activity, "error", "Refresh recovery history before retrying");
+			void refresh();
+			toastError(error, "Recovery request failed");
+		}
+	};
+	const confirmDelete = async () => {
+		if (
+			!deleteId ||
+			!canDelete ||
+			!deletion ||
+			ACTIVE.has(deletion.status) ||
+			deletion.status === "deleted"
+		)
+			return;
+		setDeleteError(null);
+		const activity = trackActivity({
+			id: `delete-copy:${deleteId}`,
+			kind: "clone",
+			label: `Delete ${deletion.name}`,
+			href,
+		});
+		try {
+			await remove.mutateAsync({ recoveryCopyId: deleteId });
+			settleActivity(activity, "done");
+			setDeleteId(null);
+			void refresh();
+			toast.success("Recovery copy deleted");
+		} catch (error) {
+			settleActivity(activity, "error");
+			void refresh();
+			setDeleteError(describeError(error));
+			toastError(error, "Deletion failed");
+		}
 	};
 	return (
 		<SettingsSection
 			wide
 			title="Recovery copies"
-			description="Restore a PostgreSQL dump into a separate private environment for investigation or development. Copies keep the original data and stay until you delete them."
+			description={
+				serviceId
+					? "Restore a PostgreSQL dump into a separate private environment for investigation or development. Copies keep the original data and stay until you delete them."
+					: "Retained PostgreSQL recovery databases across this project. Copies stay until you delete them, even after their backup schedule is removed."
+			}
 			actions={
-				<Button
-					size="sm"
-					variant="outline"
-					disabled={
-						!backupId || !canCreate || source.isPending || source.isError || create.isPending
-					}
-					title={
-						!canCreate
-							? "An organization admin with backup, deployment and secret permissions is required"
-							: undefined
-					}
-					onClick={openForm}
-				>
-					<Copy className="size-4" />
-					Create copy
-				</Button>
+				serviceId ? (
+					<Button
+						size="sm"
+						variant="outline"
+						disabled={
+							backupsStatus !== "ready" ||
+							!backupId ||
+							!canCreate ||
+							source.isPending ||
+							source.isError ||
+							create.isPending
+						}
+						title={
+							!canCreate
+								? "An organization admin with backup, deployment and secret permissions is required"
+								: undefined
+						}
+						onClick={openForm}
+					>
+						<Copy className="size-4" />
+						Create copy
+					</Button>
+				) : undefined
 			}
 		>
-			{backups.length > 1 && (
-				<div className="mb-4 max-w-sm">
-					<Label htmlFor={`${fieldId}-backup`}>Backup schedule</Label>
-					<Select value={backupId} onValueChange={setSelectedBackup} disabled={create.isPending}>
-						<SelectTrigger id={`${fieldId}-backup`} className="mt-1 w-full">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							{backups.map((backup) => (
-								<SelectItem key={backup.id} value={backup.id}>
-									{backup.database} · {backup.cron}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-				</div>
-			)}
-			{!backupId ? (
-				<p className="text-sm text-muted-foreground">
-					Create a backup schedule and run a dump to make your first recovery copy.
-				</p>
-			) : copies.isPending ? (
-				<Skeleton className="h-20 w-full" />
-			) : copies.isError ? (
-				<div role="alert" className="space-y-2">
-					<p className="text-sm">Recovery history could not be loaded.</p>
-					<Button size="sm" variant="outline" onClick={() => copies.refetch()}>
-						Try again
+			{permissionsError ? (
+				<div role="alert" className="flex flex-wrap items-center justify-between gap-2 text-sm">
+					<p>Copy permissions could not be checked.</p>
+					<Button
+						size="sm"
+						variant="outline"
+						onClick={() =>
+							queryClient.refetchQueries({ queryKey: trpc.organization.myCapabilities.queryKey() })
+						}
+					>
+						Retry permissions
 					</Button>
 				</div>
-			) : (
+			) : !permissionsLoading && !canDelete ? (
+				<p className="text-sm text-muted-foreground">
+					Deleting copies requires an organization admin with backup and service deletion
+					permissions.
+				</p>
+			) : null}
+			{serviceId &&
+				(backupsStatus === "pending" ? (
+					<p role="status" className="text-sm text-muted-foreground">
+						Loading backup schedules…
+					</p>
+				) : backupsStatus === "error" ? (
+					<div role="alert" className="flex flex-wrap items-center justify-between gap-2 text-sm">
+						<p>Backup schedules could not be loaded. Retained copies are listed below.</p>
+						{onRetryBackups && (
+							<Button size="sm" variant="outline" onClick={onRetryBackups}>
+								Retry schedules
+							</Button>
+						)}
+					</div>
+				) : !backupId ? (
+					<p className="text-sm text-muted-foreground">
+						Create a backup schedule and run a dump to make a new recovery copy. Retained copies are
+						listed below.
+					</p>
+				) : source.isError ? (
+					<div role="alert" className="flex flex-wrap items-center justify-between gap-2 text-sm">
+						<p>The source database could not be loaded for a new copy.</p>
+						<Button size="sm" variant="outline" onClick={() => source.refetch()}>
+							Retry source
+						</Button>
+					</div>
+				) : !permissionsLoading && !canCreate ? (
+					<p className="text-sm text-muted-foreground">
+						Creating copies requires an organization admin with backup, deployment and secret
+						permissions.
+					</p>
+				) : null)}
+			{copies.isPending ? <Skeleton className="h-20 w-full" /> : null}
+			{copies.isError && (
+				<LoadError
+					title="Could not load recovery copies"
+					message={describeError(copies.error)}
+					onRetry={() => void copies.refetch()}
+				/>
+			)}
+			{copyRows && (
 				<div className="space-y-3">
 					<div className="flex items-center justify-between gap-2">
-						<p className="text-xs text-muted-foreground">
-							Latest 100 copies · Private network · Fresh credentials
-						</p>
+						<p className="text-xs text-muted-foreground">Private network · Fresh credentials</p>
 						<Button
 							size="sm"
 							variant="ghost"
@@ -222,18 +340,21 @@ export function RecoveryCopies({
 							Refresh
 						</Button>
 					</div>
-					{copies.data?.length === 0 ? (
+					{copyRows.length === 0 && !copies.isError ? (
 						<p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
-							No recovery copies yet. Your source database and stored dumps are preserved when you
-							create one.
+							{cursors.length > 1
+								? "No copies remain on this page. Go to newer copies to continue."
+								: serviceId
+									? "No recovery copies for this database. Create one from a stored PostgreSQL dump."
+									: "No recovery copies in this project. Open a PostgreSQL service’s Backups tab to create one from a stored dump."}
 						</p>
-					) : (
+					) : copyRows.length > 0 ? (
 						<ul className="divide-y rounded-lg border">
-							{copies.data?.map((row) => (
+							{copyRows.map((row) => (
 								<li key={row.recoveryCopyId} className="flex flex-wrap items-start gap-3 p-4">
 									<div className="min-w-0 flex-1 basis-52">
 										<div className="flex flex-wrap items-center gap-2">
-											<p className="text-sm font-medium">{row.name}</p>
+											<p className="break-words text-sm font-medium">{row.name}</p>
 											<Badge
 												variant={
 													row.status === "error" || row.status === "interrupted"
@@ -256,10 +377,14 @@ export function RecoveryCopies({
 											{row.objectKey}
 										</p>
 										{row.error && <p className="mt-2 text-sm text-destructive">{row.error}</p>}
+										{!row.backupId && (
+											<p className="mt-1 text-xs text-muted-foreground">Backup schedule removed</p>
+										)}
 										{row.status === "interrupted" && (
 											<p className="mt-2 text-sm text-muted-foreground">
-												The operation did not report a result. Inspect the retained database or
-												delete this copy.
+												{row.targetPostgresId
+													? "The operation did not report a result. Inspect the retained database or delete this copy."
+													: "The database record is unavailable. Delete this copy to verify cleanup at its recorded origin."}
 											</p>
 										)}
 									</div>
@@ -279,8 +404,18 @@ export function RecoveryCopies({
 												size="icon-sm"
 												variant="ghost"
 												aria-label={`Delete ${row.name}`}
+												title={
+													!canDelete
+														? "An organization admin with backup and service deletion permissions is required"
+														: ACTIVE.has(row.status)
+															? "Wait for the current copy operation to finish"
+															: `Delete ${row.name}`
+												}
 												disabled={!canDelete || ACTIVE.has(row.status) || remove.isPending}
-												onClick={() => setDeleteId(row.recoveryCopyId)}
+												onClick={() => {
+													setDeleteError(null);
+													setDeleteId(row.recoveryCopyId);
+												}}
 											>
 												<Trash2 className="size-4" />
 											</Button>
@@ -289,138 +424,197 @@ export function RecoveryCopies({
 								</li>
 							))}
 						</ul>
-					)}
+					) : null}
 				</div>
 			)}
-			<Dialog
-				open={open}
-				onOpenChange={(value) => {
-					if (!create.isPending) setOpen(value);
-				}}
-			>
-				<DialogContent>
-					<DialogHeader>
-						<DialogTitle>Create recovery copy</DialogTitle>
-						<DialogDescription>
-							A new PostgreSQL service uses the source image and server, with fresh credentials and
-							no published port. The copied data is not sanitized. The source is preserved. Creation
-							has a 10 minute timeout. Verified copies stay until you delete them.
-						</DialogDescription>
-					</DialogHeader>
-					<form
-						className="space-y-4"
-						onSubmit={(event) => {
-							event.preventDefault();
-							submit();
-						}}
-					>
-						<div className="space-y-2">
-							<Label htmlFor={`${fieldId}-key`}>Stored dump</Label>
-							{keys.isError ? (
-								<Button type="button" variant="outline" onClick={() => keys.refetch()}>
-									Retry dump list
-								</Button>
-							) : keys.isPending ? (
-								<Skeleton className="h-9" />
-							) : (
-								<>
-									<Select value={key} onValueChange={setKey} disabled={create.isPending}>
-										<SelectTrigger id={`${fieldId}-key`} className="w-full">
-											<SelectValue placeholder="Choose a dump" />
+			{(cursors.length > 1 || nextCursor) && (
+				<nav
+					aria-label="Recovery copy pages"
+					className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"
+				>
+					<p className="text-sm text-muted-foreground">
+						Page <span className="font-mono tabular-nums">{cursors.length}</span>
+					</p>
+					<div className="flex gap-2">
+						<Button
+							size="sm"
+							variant="outline"
+							disabled={cursors.length === 1 || copies.isFetching || remove.isPending}
+							onClick={() => setCursors((current) => current.slice(0, -1))}
+						>
+							Newer copies
+						</Button>
+						<Button
+							size="sm"
+							variant="outline"
+							disabled={!nextCursor || copies.isFetching || remove.isPending}
+							onClick={() => {
+								if (nextCursor) setCursors((current) => [...current, nextCursor]);
+							}}
+						>
+							Older copies
+						</Button>
+					</div>
+				</nav>
+			)}
+			{serviceId && (
+				<Dialog
+					open={open}
+					onOpenChange={(value) => {
+						if (!create.isPending) setOpen(value);
+					}}
+				>
+					<DialogContent>
+						<DialogHeader>
+							<DialogTitle>Create recovery copy</DialogTitle>
+							<DialogDescription>
+								A new PostgreSQL service uses the source image and server, with fresh credentials
+								and no published port. The copied data is not sanitized. The source is preserved.
+								Creation has a 10 minute timeout. Verified copies stay until you delete them.
+							</DialogDescription>
+						</DialogHeader>
+						<form
+							className="space-y-4"
+							onSubmit={(event) => {
+								event.preventDefault();
+								void submit();
+							}}
+						>
+							{backups.length > 1 && (
+								<div className="space-y-2">
+									<Label htmlFor={`${fieldId}-backup`}>Backup schedule</Label>
+									<Select
+										value={backupId}
+										onValueChange={(value) => {
+											setSelectedBackup(value);
+											setKey("");
+										}}
+										disabled={create.isPending}
+									>
+										<SelectTrigger id={`${fieldId}-backup`} className="w-full">
+											<SelectValue />
 										</SelectTrigger>
 										<SelectContent>
-											{keys.data?.map((dump) => (
-												<SelectItem key={dump} value={dump}>
-													{dump}
+											{backups.map((backup) => (
+												<SelectItem key={backup.id} value={backup.id}>
+													{backup.database} · {backup.cron}
 												</SelectItem>
 											))}
 										</SelectContent>
 									</Select>
-									{keys.data?.length === 0 && (
-										<p className="text-sm text-muted-foreground">
-											Run this backup schedule first. There are no stored dumps.
-										</p>
-									)}
-								</>
+								</div>
 							)}
-						</div>
-						<div className="space-y-2">
-							<Label htmlFor={`${fieldId}-name`}>Copy name</Label>
-							<Input
-								id={`${fieldId}-name`}
-								value={name}
-								onChange={(event) => setName(event.target.value)}
-								maxLength={200}
-								required
-								disabled={create.isPending}
-							/>
-						</div>
-						<div className="space-y-2">
-							<Label htmlFor={`${fieldId}-environment`}>Target environment</Label>
-							{projects.isError || source.isError ? (
+							<div className="space-y-2">
+								<Label htmlFor={`${fieldId}-key`}>Stored dump</Label>
+								{keys.isError ? (
+									<Button type="button" variant="outline" onClick={() => keys.refetch()}>
+										Retry dump list
+									</Button>
+								) : keys.isPending ? (
+									<Skeleton className="h-9" />
+								) : (
+									<>
+										<Select value={key} onValueChange={setKey} disabled={create.isPending}>
+											<SelectTrigger id={`${fieldId}-key`} className="w-full">
+												<SelectValue placeholder="Choose a dump" />
+											</SelectTrigger>
+											<SelectContent>
+												{keys.data?.map((dump) => (
+													<SelectItem key={dump} value={dump}>
+														{dump}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+										{keys.data?.length === 0 && (
+											<p className="text-sm text-muted-foreground">
+												Run this backup schedule first. There are no stored dumps.
+											</p>
+										)}
+									</>
+								)}
+							</div>
+							<div className="space-y-2">
+								<Label htmlFor={`${fieldId}-name`}>Copy name</Label>
+								<Input
+									id={`${fieldId}-name`}
+									value={name}
+									onChange={(event) => setName(event.target.value)}
+									maxLength={200}
+									required
+									disabled={create.isPending}
+								/>
+							</div>
+							<div className="space-y-2">
+								<Label htmlFor={`${fieldId}-environment`}>Target environment</Label>
+								{projects.isError || source.isError ? (
+									<Button
+										type="button"
+										variant="outline"
+										onClick={() => {
+											void projects.refetch();
+											void source.refetch();
+										}}
+									>
+										Retry environments
+									</Button>
+								) : projects.isPending ? (
+									<Skeleton className="h-9" />
+								) : (
+									<>
+										<Select
+											value={environmentId}
+											onValueChange={setEnvironmentId}
+											disabled={create.isPending}
+										>
+											<SelectTrigger id={`${fieldId}-environment`} className="w-full">
+												<SelectValue placeholder="Choose another environment" />
+											</SelectTrigger>
+											<SelectContent>
+												{targets.map((target) => (
+													<SelectItem key={target.id} value={target.id}>
+														{target.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+										{targets.length === 0 && (
+											<p className="text-sm text-muted-foreground">
+												Add another environment in your project before creating a copy.
+											</p>
+										)}
+									</>
+								)}
+							</div>
+							{create.isPending && (
+								<p role="status" className="status-spine text-sm">
+									Validating, restoring and verifying the new database. This can take up to ten
+									minutes.
+								</p>
+							)}
+							{createError && (
+								<p role="alert" className="text-sm text-destructive">
+									{createError}
+								</p>
+							)}
+							<DialogFooter>
 								<Button
 									type="button"
 									variant="outline"
-									onClick={() => {
-										void projects.refetch();
-										void source.refetch();
-									}}
+									disabled={create.isPending}
+									onClick={() => setOpen(false)}
 								>
-									Retry environments
+									Cancel
 								</Button>
-							) : projects.isPending ? (
-								<Skeleton className="h-9" />
-							) : (
-								<>
-									<Select
-										value={environmentId}
-										onValueChange={setEnvironmentId}
-										disabled={create.isPending}
-									>
-										<SelectTrigger id={`${fieldId}-environment`} className="w-full">
-											<SelectValue placeholder="Choose another environment" />
-										</SelectTrigger>
-										<SelectContent>
-											{targets.map((target) => (
-												<SelectItem key={target.id} value={target.id}>
-													{target.label}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-									{targets.length === 0 && (
-										<p className="text-sm text-muted-foreground">
-											Add another environment in your project before creating a copy.
-										</p>
-									)}
-								</>
-							)}
-						</div>
-						{create.isPending && (
-							<p role="status" className="status-spine text-sm">
-								Validating, restoring and verifying the new database. This can take up to ten
-								minutes.
-							</p>
-						)}
-						<DialogFooter>
-							<Button
-								type="button"
-								variant="outline"
-								disabled={create.isPending}
-								onClick={() => setOpen(false)}
-							>
-								Cancel
-							</Button>
-							<Button
-								type="submit"
-								disabled={!key || !name.trim() || !environmentId || !canCreate || create.isPending}
-							>
-								{create.isPending && <Loader2 className="size-4 animate-spin" />}Create private copy
-							</Button>
-						</DialogFooter>
-					</form>
-				</DialogContent>
-			</Dialog>
+								<Button type="submit" disabled={!canSubmit}>
+									{create.isPending && <Loader2 className="size-4 animate-spin" />}Create private
+									copy
+								</Button>
+							</DialogFooter>
+						</form>
+					</DialogContent>
+				</Dialog>
+			)}
 			<AlertDialog
 				open={deleteId !== null}
 				onOpenChange={(value) => {
@@ -435,35 +629,25 @@ export function RecoveryCopies({
 							volume. The source database and stored dump are preserved.
 						</AlertDialogDescription>
 					</AlertDialogHeader>
+					{deleteError && (
+						<p role="alert" className="text-sm text-destructive">
+							{deleteError}
+						</p>
+					)}
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={remove.isPending}>Cancel</AlertDialogCancel>
 						<AlertDialogAction
-							disabled={remove.isPending || !deleteId}
+							disabled={
+								remove.isPending ||
+								!deleteId ||
+								!canDelete ||
+								!deletion ||
+								ACTIVE.has(deletion.status) ||
+								deletion.status === "deleted"
+							}
 							onClick={(event) => {
 								event.preventDefault();
-								if (!deleteId) return;
-								const activity = trackActivity({
-									id: `delete-copy:${deleteId}`,
-									kind: "clone",
-									label: "Delete recovery copy",
-								});
-								remove.mutate(
-									{ recoveryCopyId: deleteId },
-									{
-										onSuccess: () => {
-											settleActivity(activity, "done");
-											setDeleteId(null);
-											void refresh();
-											void queryClient.invalidateQueries({ queryKey: trpc.project.all.queryKey() });
-											toast.success("Recovery copy deleted");
-										},
-										onError: (error) => {
-											settleActivity(activity, "error");
-											void refresh();
-											toastError(error, "Deletion failed");
-										},
-									},
-								);
+								void confirmDelete();
 							}}
 						>
 							{remove.isPending && <Loader2 className="size-4 animate-spin" />}Delete copy

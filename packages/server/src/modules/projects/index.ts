@@ -1,8 +1,9 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "../../db";
-import { certificates, environments, members, projects } from "../../db/schema";
+import { certificates, environments, members, projects, recoveryCopies } from "../../db/schema";
 import { bestEffort } from "../../utils/best-effort";
 import { deleteApplication } from "../application/service";
+import { assertRecoveryCopiesDeleted } from "../backups/recovery-copy-teardown";
 import { unregisterBackupsForService } from "../backups/scheduler";
 import { deleteCompose } from "../compose/service";
 import { removeDatabase } from "../databases/engine";
@@ -300,6 +301,7 @@ const tearDown = (label: string, task: () => Promise<unknown>) =>
  * remote server or missing config dir must not prevent the delete).
  */
 export async function deleteEnvironmentCascade(environmentId: string): Promise<void> {
+	await assertRecoveryCopiesDeleted({ environmentId });
 	const services = await getEnvironmentServices(environmentId);
 
 	// Schedules and backups are in-memory node-schedule jobs the DB cascade
@@ -361,6 +363,12 @@ export async function deleteEnvironmentCascade(environmentId: string): Promise<v
 	// Row deletions only — the Swarm/Traefik/volume teardown above is
 	// best-effort and stays outside, so a DB failure here cannot roll it back.
 	await db.transaction(async (tx) => {
+		await assertRecoveryCopiesDeleted({ environmentId }, tx);
+		await tx
+			.delete(recoveryCopies)
+			.where(
+				and(eq(recoveryCopies.environmentId, environmentId), eq(recoveryCopies.status, "deleted")),
+			);
 		for (const [kind, ids] of databaseIds) {
 			await SERVICE_REGISTRY[kind].module.deleteByIds(ids, tx);
 		}
@@ -374,6 +382,7 @@ export async function deleteEnvironmentCascade(environmentId: string): Promise<v
  * with {@link deleteEnvironmentCascade}), then the project row itself.
  */
 export async function deleteProjectCascade(projectId: string): Promise<void> {
+	await assertRecoveryCopiesDeleted({ projectId });
 	const environmentList = await db.query.environments.findMany({
 		where: eq(environments.projectId, projectId),
 	});
@@ -394,6 +403,7 @@ export async function deleteProjectCascade(projectId: string): Promise<void> {
  * containers, volumes or files on disk.
  */
 export async function deleteOrganizationCascade(organizationId: string): Promise<void> {
+	await assertRecoveryCopiesDeleted({ organizationId });
 	const certRows = await db.query.certificates.findMany({
 		where: eq(certificates.organizationId, organizationId),
 	});
@@ -413,6 +423,11 @@ export async function deleteOrganizationCascade(organizationId: string): Promise
 	for (const project of projectList) {
 		await deleteProjectCascade(project.projectId);
 	}
+	await db
+		.delete(recoveryCopies)
+		.where(
+			and(eq(recoveryCopies.organizationId, organizationId), eq(recoveryCopies.status, "deleted")),
+		);
 }
 
 export * from "./quotas";

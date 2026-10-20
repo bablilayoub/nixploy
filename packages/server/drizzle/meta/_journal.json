@@ -351,6 +351,20 @@
       "when": 1792532339154,
       "tag": "0049_curvy_whirlwind",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1792533923539,
+      "tag": "0050_familiar_azazel",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1792534400191,
+      "tag": "0051_dry_talos",
+      "breakpoints": true
     }
   ]
 }

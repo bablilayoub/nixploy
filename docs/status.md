@@ -17,7 +17,7 @@ unsigned child. Required contracts use immutable workflow tooling while product
 checks retain the selected tag. Draft PR CI and final review remain required;
 no Release execution, signing or Git tag creation was performed for this patch.
 
-## Operator workspace — 2026-10-20 (integration in progress)
+## Operator workspace — 2026-10-21 (integration in progress)
 
 Three product workflows and a shared panel design system are implemented on
 `codex/operator-workspace`; final integrated gates, production builds and PR
@@ -57,8 +57,16 @@ transport issues. Hook creation uses Engine `Env`, bounded owned cleanup and
 signed ownership for abandoned-container recovery. Actual app/Compose literal
 hooks, nonzero failure, cancellation and exact owned late-helper cleanup passed.
 The final combined server run passed 3,386 tests (one optional registry probe
-skipped), with 119 web and 94 CLI tests passing. Five earlier intermittent
-queue claims failed and later passed unchanged; their cause remains unresolved.
+skipped), with 119 web and 94 CLI tests passing. A subsequent focused queue
+run captured two rows becoming running in one claim while the caller received
+one. A transaction-local PostgreSQL reproduction confirms a repeated candidate
+subquery under stale one-row statistics. A separate held-transaction probe also
+reproduces concurrent claims of sibling jobs for one app. The corrected claim
+locks one candidate, tries the enqueue app lock and rechecks a guarded primary-key
+update under explicit READ COMMITTED isolation. The stale-plan, held-claim and
+precise commit-window regressions fail before correction; corrected 18 DB/23
+unit cases pass. Peer source review is clear; a new integrated gate remains
+required before merge.
 
 The normal `0048` host path stops/verifies both old roles, requires private
 recovery assets, migrates/backfills separately, and pauses on failure. Old GUI
@@ -69,6 +77,14 @@ Actual seeded old-release split-worker upgrade proof remains a required CI gate.
 Migration `0049` records immutable recovery origins. A real moved-target deletion
 was rejected with its original volume/service intact, then ordinary deletion
 succeeded after restoring placement, preserving the source and unrelated copies.
+`0050` records the concrete daemon node; `0051` retains the exact labeled volume
+creation identity and restricts environment/organization/target cascades. Bulk
+teardown refuses retained copies before side effects. A fresh 3,200-row direct
+module drill verifies precreated storage, task locality, redeploy and successful
+cleanup after the service was already removed. Source/unrelated resources remain
+unchanged. Schedule-independent service/project inventory now has exact
+timestamp/ID pagination and preserves missing-target cleanup actions; 78 focused
+backend cases pass. Final production browser verification remains pending.
 
 The original four Swarm service IDs/specs, 74 pre-existing volumes, original
 network IDs and seven primary proxy-file hashes remain preserved at the
@@ -96,6 +112,9 @@ an implementation checkpoint, not a new release claim.
 
 ### Unimplemented product work
 
+- [ ] Optional, opt-in expiry for completed recovery copies. Current verified
+  copies are retained until manual deletion; the creation deadline never
+  expires ready data.
 - [ ] Same-host takeover/adoption, proxy cutover and rollback remain a design
   sketch. Implement them against a disposable VM running the source panel,
   then prove original volume identity, certificates, traffic and rollback.

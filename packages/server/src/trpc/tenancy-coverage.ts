@@ -138,6 +138,7 @@ export type ProjectAxis = "filtered" | "inherited" | "exempt";
 export const PROJECT_AXIS: Record<string, ProjectAxis> = {
 	"observability.incidentPage": "filtered",
 	"backup.copies": "filtered",
+	"backup.copyInventory": "filtered",
 	"configurationRelease.review": "filtered",
 	"observability.incident": "inherited",
 	// Narrows by the caller's filter directly.

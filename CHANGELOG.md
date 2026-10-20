@@ -37,14 +37,17 @@ this file is the summary.
 
 ### Fixed
 
+- A deployment claim changes exactly one job, including under stale database
+  statistics. Concurrent workers cannot claim sibling jobs for the same app.
 - Saving application variables no longer changes a running Swarm service.
   Runtime/review use one organization → project → environment → service parser.
 - Deployment convergence requires the new revision on all desired replicas;
   application hooks preserve literal environment values through Docker's API.
 - Runtime-log pagination preserves equal-time lines and keeps continuation
   available after an empty scan-budget page.
-- Recovery-copy deletion uses its immutable original server/volume identity
-  (`0049`) and retains tracking if placement changes or cleanup is unverifiable.
+- Recovery copies pin their task and private volume to a concrete Swarm node.
+  Immutable original server/node/volume identity (`0049`/`0050`) protects
+  deletion and redeploy; changed or unverifiable placement retains tracking.
 
 ## [0.7.3] — 2026-09-21
 

@@ -117,7 +117,12 @@ The source database and stored archive are preserved throughout.
 
 The create API (`backup.createCopy`) blocks through completion and accepts an
 idempotent UUID `requestId`; repeating that same request cannot create another
-service. The history (`backup.copies`) shows the latest 100 reachable copies.
+service. Recovery copies remain reachable from the source or target service's
+Backups tab and the project's Recovery copies tab after their original schedule
+is deleted. The project inventory also retains copies whose database metadata
+is missing. `backup.copyInventory` accepts a `postgresId` or `projectId` and
+returns up to 100 items plus `nextCursor`; pass that cursor unchanged for older
+copies. The legacy `backup.copies` array remains available.
 The returned `deadline` is the creation-operation timeout (ten minutes), not
 an expiry for the data. Ready copies have no automatic expiry and remain until
 explicitly deleted.

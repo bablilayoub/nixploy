@@ -11,6 +11,7 @@ import { createTtlCache, DOCKER_LISTING_TTL_MS } from "../../utils/ttl-cache";
 import { appNameSchema, assertSafeDockerImageRef } from "../../utils/validators";
 import { assertProjectAccess } from "../application";
 import { auditFromSession } from "../audit";
+import { assertUntrackedRecoveryTarget } from "../backups/recovery-copy-teardown";
 import { unregisterBackupsForService } from "../backups/scheduler";
 import { invalidateDockerListings } from "../docker/containers";
 import {
@@ -525,6 +526,7 @@ export function buildDatabaseRouter<K extends DatabaseKind>(options: DatabaseRou
 			const id = input[idField] as string;
 			const row = await findRowOrThrow(id, organizationId);
 			// Cancel the row's backup crons first so they cannot fire mid-teardown.
+			await assertUntrackedRecoveryTarget(row.appName, kind === "postgres" ? id : undefined);
 			unregisterBackupsForService({ appName: row.appName });
 			await removeDatabase(row.appName, row.serverId, kind, row.environmentId);
 			invalidateDatabaseStatus(row.appName, row.serverId);

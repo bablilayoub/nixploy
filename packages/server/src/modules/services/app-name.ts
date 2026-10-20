@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { db } from "../../db";
 import {
 	applications,
@@ -11,6 +11,7 @@ import {
 	mysql,
 	postgres,
 	previewDeployments,
+	recoveryCopies,
 	redis,
 } from "../../db/schema";
 import { conflict } from "../errors";
@@ -44,6 +45,10 @@ export const slugifyName = (name: string, fallback = "app"): string =>
  */
 export const isAppNameTaken = async (appName: string): Promise<boolean> => {
 	const checks = await Promise.all([
+		db.query.recoveryCopies.findFirst({
+			where: and(eq(recoveryCopies.originAppName, appName), ne(recoveryCopies.status, "deleted")),
+			columns: { recoveryCopyId: true },
+		}),
 		db.query.applications.findFirst({
 			where: eq(applications.appName, appName),
 			columns: { applicationId: true },

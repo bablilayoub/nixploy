@@ -2,7 +2,14 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { backups, destinations, environments, postgres, recoveryCopies } from "../../db/schema";
+import {
+	backups,
+	destinations,
+	environments,
+	postgres,
+	projects,
+	recoveryCopies,
+} from "../../db/schema";
 import { getServiceContext } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
@@ -22,7 +29,7 @@ import {
 	runBackupNow,
 	unregisterBackupSchedule,
 } from "../../modules/backups/scheduler";
-import { notFound, preconditionFailed } from "../../modules/errors";
+import { isDomainError, notFound, preconditionFailed } from "../../modules/errors";
 import {
 	assertCapability,
 	assertOrgRole,
@@ -133,6 +140,19 @@ const createInputSchema = z.discriminatedUnion("databaseType", [
 ]);
 
 const backupIdInput = z.object({ backupId: z.string().min(1) });
+const copiesInput = z.union([
+	backupIdInput.strict(),
+	z.object({ postgresId: z.string().min(1) }).strict(),
+	z.object({ projectId: z.string().min(1) }).strict(),
+]);
+
+const copyCursorInput = z
+	.object({ createdAt: z.iso.datetime({ offset: true }), id: z.string().min(1) })
+	.strict();
+const copyInventoryInput = z.union([
+	z.object({ postgresId: z.string().min(1), cursor: copyCursorInput.optional() }).strict(),
+	z.object({ projectId: z.string().min(1), cursor: copyCursorInput.optional() }).strict(),
+]);
 
 /** Attach each row's newest `backup_run` (status badge in the lists). */
 async function withLastRun<T extends { backupId: string }>(rows: T[]) {
@@ -167,55 +187,121 @@ async function recoveryTarget(postgresId: string, organizationId: string) {
 	return row;
 }
 
-export const backupRouter = router({
-	/** Latest retained PostgreSQL copies; both source and target project scope apply. */
-	copies: protectedProcedure.input(backupIdInput).query(async ({ ctx, input }) => {
-		const organizationId = await getOrganizationId(ctx.session);
-		await findBackupOrThrow(input.backupId, organizationId, ctx.session);
-		const rows = await listRecoveryCopies(input.backupId);
-		const result: (Omit<RecoveryCopy, "status"> & {
-			status: string;
-			projectId: string;
-			targetEnvironmentName: string;
-		})[] = [];
-		for (const row of rows) {
-			if (row.organizationId !== organizationId) continue;
-			const environment = await db.query.environments.findFirst({
-				where: eq(environments.environmentId, row.environmentId),
-				with: { project: true },
-			});
-			if (
-				!environment ||
-				environment.project.organizationId !== organizationId ||
-				!isProjectVisible(environment.projectId)
-			)
-				continue;
-			if (row.targetPostgresId) {
-				const target = await db.query.postgres.findFirst({
+async function assertRecoveryInventoryAccess(
+	input: z.infer<typeof copiesInput>,
+	organizationId: string,
+	session: Session,
+) {
+	if ("backupId" in input) {
+		await findBackupOrThrow(input.backupId, organizationId, session);
+	} else if ("postgresId" in input) {
+		await recoveryTarget(input.postgresId, organizationId);
+	} else {
+		const project = await db.query.projects.findFirst({
+			where: and(
+				eq(projects.projectId, input.projectId),
+				eq(projects.organizationId, organizationId),
+			),
+		});
+		if (!project) throw notFound("Project not found");
+		assertProjectVisible(project.projectId);
+	}
+}
+
+async function recoveryInventoryRows(
+	rows: Awaited<ReturnType<typeof listRecoveryCopies>>,
+	organizationId: string,
+	session: Session,
+) {
+	const result: (Omit<RecoveryCopy, "status"> & {
+		status: string;
+		projectId: string;
+		targetEnvironmentName: string;
+	})[] = [];
+	for (const { cursorCreatedAt: _cursorCreatedAt, ...row } of rows) {
+		if (row.organizationId !== organizationId) continue;
+		const environment = await db.query.environments.findFirst({
+			where: eq(environments.environmentId, row.environmentId),
+			with: { project: true },
+		});
+		if (
+			!environment ||
+			environment.project.organizationId !== organizationId ||
+			!isProjectVisible(environment.projectId)
+		)
+			continue;
+		// The source or target may have moved since this copy was created.
+		// Null/deleted service metadata leaves the recorded environment as
+		// the inventory anchor; an existing service must still be reachable.
+		const source = row.sourcePostgresId
+			? await db.query.postgres.findFirst({
+					where: eq(postgres.postgresId, row.sourcePostgresId),
+					with: { environment: { with: { project: true } } },
+				})
+			: null;
+		const target = row.targetPostgresId
+			? await db.query.postgres.findFirst({
 					where: eq(postgres.postgresId, row.targetPostgresId),
 					with: { environment: { with: { project: true } } },
-				});
-				if (
-					!target ||
-					target.environment.project.organizationId !== organizationId ||
-					!isProjectVisible(target.environment.projectId)
-				)
+				})
+			: null;
+		if (
+			[source, target].some(
+				(service) =>
+					service &&
+					(service.environment.project.organizationId !== organizationId ||
+						!isProjectVisible(service.environment.projectId)),
+			)
+		)
+			continue;
+		if (row.backupId) {
+			try {
+				await findBackupOrThrow(row.backupId, organizationId, session);
+			} catch (error) {
+				if ((error instanceof TRPCError || isDomainError(error)) && error.code === "NOT_FOUND")
 					continue;
-				result.push({
-					...row,
-					status: recoveryCopyState(row),
-					projectId: target.environment.projectId,
-					targetEnvironmentName: target.environment.name,
-				});
-			} else
-				result.push({
-					...row,
-					status: row.status === "ready" ? "deleted" : recoveryCopyState(row),
-					projectId: environment.projectId,
-					targetEnvironmentName: environment.name,
-				});
+				throw error;
+			}
 		}
-		return result;
+		result.push({
+			...row,
+			status: !target && row.status === "ready" ? "interrupted" : recoveryCopyState(row),
+			projectId: target?.environment.projectId ?? environment.projectId,
+			targetEnvironmentName: target?.environment.name ?? environment.name,
+		});
+	}
+	return result;
+}
+
+export const backupRouter = router({
+	/** Legacy latest-100 array; service/project inventory also survives schedule deletion. */
+	copies: protectedProcedure.input(copiesInput).query(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		await assertRecoveryInventoryAccess(input, organizationId, ctx.session);
+		return await recoveryInventoryRows(
+			await listRecoveryCopies(input, organizationId),
+			organizationId,
+			ctx.session,
+		);
+	}),
+
+	/** Exact timestamp+ID cursor keeps older retained data reachable after long history. */
+	copyInventory: protectedProcedure.input(copyInventoryInput).query(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		await assertRecoveryInventoryAccess(input, organizationId, ctx.session);
+		const rows = await listRecoveryCopies(input, organizationId, {
+			cursor: input.cursor,
+			limit: 101,
+		});
+		const page = rows.slice(0, 100);
+		const last = page.at(-1);
+		return {
+			items: await recoveryInventoryRows(page, organizationId, ctx.session),
+			nextCursor:
+				rows.length > 100 && last
+					? { createdAt: last.cursorCreatedAt, id: last.recoveryCopyId }
+					: null,
+		};
 	}),
 
 	/** Blocks until validation/restore finishes. Replaying requestId never creates another service. */
@@ -291,7 +377,7 @@ export const backupRouter = router({
 			});
 			if (!row || row.organizationId !== organizationId) throw notFound("Recovery copy not found");
 			if (row.backupId) await findBackupOrThrow(row.backupId, organizationId, ctx.session);
-			else if (row.sourcePostgresId) await recoveryTarget(row.sourcePostgresId, organizationId);
+			if (row.sourcePostgresId) await recoveryTarget(row.sourcePostgresId, organizationId);
 			await recoveryEnvironment(row.environmentId, organizationId);
 			const target = row.targetPostgresId
 				? await recoveryTarget(row.targetPostgresId, organizationId)

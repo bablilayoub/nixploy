@@ -8,14 +8,20 @@ import type { TenantFixture } from "../../trpc/tenancy.harness";
 
 const transport = vi.hoisted(() => ({
 	deploy: vi.fn(async () => ({ created: true })),
+	node: vi.fn(async () => "a".repeat(25)),
+	identity: vi.fn(),
+	provision: vi.fn(async (_origin: unknown) => "2026-10-20T12:00:00Z"),
+	orphanRemove: vi.fn(async (_origin: unknown) => {}),
 	replay: vi.fn(async () => {}),
 	remove: vi.fn(async () => {}),
-	exists: vi.fn(async () => false),
+	exists: vi.fn(async (_appName: string) => false),
 	query: vi.fn(async (_command: string, input: string) =>
 		input.startsWith("SELECT 1") ? "1\n" : "2\n",
 	),
-	volume: vi.fn(async () => ""),
-	remoteVolume: vi.fn(async (_serverId: string, _command: string) => ""),
+	volume: vi.fn(async (_command: string, _options?: { timeout: number }) => ""),
+	remoteVolume: vi.fn(
+		async (_serverId: string, _command: string, _options?: { timeoutMs: number }) => "",
+	),
 	root: "",
 }));
 vi.mock("../databases/engine", async (original) => ({
@@ -23,6 +29,12 @@ vi.mock("../databases/engine", async (original) => ({
 	deployDatabase: transport.deploy,
 	removeDatabase: transport.remove,
 	databaseServiceExists: transport.exists,
+}));
+vi.mock("../databases/placement", () => ({ databaseSwarmNodeId: transport.node }));
+vi.mock("./recovery-copy-identity", () => ({
+	inspectRecoveryRuntime: transport.identity,
+	provisionRecoveryVolume: transport.provision,
+	removeOriginalRecoveryVolume: transport.orphanRemove,
 }));
 vi.mock("../databases/logical", async (original) => ({
 	...(await original<typeof import("../databases/logical")>()),
@@ -113,12 +125,44 @@ describe.skipIf(!testUrl)("retained PostgreSQL recovery copies (postgres)", () =
 	beforeEach(() => {
 		vi.clearAllMocks();
 		transport.replay.mockResolvedValue(undefined);
-		transport.remove.mockReset().mockResolvedValue(undefined);
-		transport.exists.mockResolvedValue(false);
+		transport.remove.mockReset().mockImplementation(async () => {
+			transport.exists.mockResolvedValue(false);
+		});
+		transport.exists.mockReset().mockResolvedValue(true);
+		transport.node.mockReset().mockResolvedValue("a".repeat(25));
+		transport.provision.mockReset().mockResolvedValue("2026-10-20T12:00:00Z");
+		transport.orphanRemove.mockReset().mockImplementation(async () => {
+			transport.volume.mockResolvedValue("");
+			transport.remoteVolume.mockResolvedValue("");
+		});
+		transport.identity.mockReset().mockImplementation(async (origin, containerId) => {
+			if (containerId)
+				return {
+					serviceExists: true,
+					volumeExists: true,
+					containerId,
+					volumeCreatedAt: "2026-10-20T12:00:00Z",
+				};
+			const serviceExists = await transport.exists(origin.originAppName);
+			const command = `docker volume ls --filter name=^${origin.originVolumeName}$`;
+			const volume =
+				origin.originServerId === null
+					? await transport.volume(command, { timeout: 30_000 })
+					: await transport.remoteVolume(origin.originServerId, command, { timeoutMs: 30_000 });
+			return { serviceExists, volumeExists: Boolean(volume.trim()) };
+		});
 		transport.volume.mockResolvedValue("");
 		transport.remoteVolume.mockResolvedValue("");
 	});
 	afterAll(async () => {
+		// Infrastructure is mocked in this suite. Remove only its nonce-owned
+		// tracking fixtures explicitly before the production RESTRICT backstop.
+		for (const fixture of [a, b]) {
+			if (fixture)
+				await db
+					.delete(schema.recoveryCopies)
+					.where(orm.eq(schema.recoveryCopies.organizationId, fixture.organizationId));
+		}
 		if (a) await harness.wipeTenant(a);
 		if (b) await harness.wipeTenant(b);
 		if (transport.root) await rm(transport.root, { recursive: true, force: true });
@@ -132,6 +176,17 @@ describe.skipIf(!testUrl)("retained PostgreSQL recovery copies (postgres)", () =
 		key,
 		requestId: randomUUID(),
 	});
+	async function forgetMockTarget(copyId: string, targetId: string) {
+		// Simulate already-missing metadata explicitly; production RESTRICT
+		// prevents silent tracking loss through an ordinary target cascade.
+		await db.transaction(async (tx) => {
+			await tx
+				.update(schema.recoveryCopies)
+				.set({ targetPostgresId: null })
+				.where(orm.eq(schema.recoveryCopies.recoveryCopyId, copyId));
+			await tx.delete(schema.postgres).where(orm.eq(schema.postgres.postgresId, targetId));
+		});
+	}
 
 	it("creates one fresh private target, preserves source, and replays one request idempotently", async () => {
 		const request = input();
@@ -157,6 +212,7 @@ describe.skipIf(!testUrl)("retained PostgreSQL recovery copies (postgres)", () =
 		expect(target?.databaseUser).not.toBe(source.databaseUser);
 		expect(final).toMatchObject({
 			originServerId: null,
+			originSwarmNodeId: "a".repeat(25),
 			originAppName: target?.appName,
 			originVolumeName: `${target?.appName}-data`,
 		});
@@ -186,6 +242,148 @@ describe.skipIf(!testUrl)("retained PostgreSQL recovery copies (postgres)", () =
 		expect(result.targetPostgresId).toBeNull();
 		expect(transport.deploy).not.toHaveBeenCalled();
 		expect(transport.replay).not.toHaveBeenCalled();
+	});
+
+	it("retains the immutable node and incomplete target when runtime identity fails before SQL replay", async () => {
+		transport.identity.mockRejectedValueOnce(new Error("daemon changed or named volume mismatch"));
+		const result = await recovery.createRecoveryCopy(input());
+		expect(result).toMatchObject({ status: "error", originSwarmNodeId: "a".repeat(25) });
+		expect(result.targetPostgresId).not.toBeNull();
+		expect(transport.replay).not.toHaveBeenCalled();
+		expect(
+			await db.query.postgres.findFirst({
+				where: orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""),
+			}),
+		).toMatchObject({ status: "error" });
+	});
+	it("does not start a workload or replay SQL when a foreign preexisting volume blocks fresh storage", async () => {
+		transport.provision.mockRejectedValueOnce(new Error("Fresh storage already exists"));
+		const result = await recovery.createRecoveryCopy(input());
+		expect(result.status).toBe("error");
+		expect(result.targetPostgresId).not.toBeNull();
+		expect(result.originVolumeCreatedAt).toBeNull();
+		expect(transport.deploy).not.toHaveBeenCalled();
+		expect(transport.replay).not.toHaveBeenCalled();
+	});
+
+	it("keeps deletion tracking and original resources when the recorded daemon identity changes", async () => {
+		const result = await recovery.createRecoveryCopy(input());
+		const target = await db.query.postgres.findFirst({
+			where: orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""),
+		});
+		if (!target) throw new Error("Target missing");
+		transport.identity.mockRejectedValueOnce(new Error("different manager or rejoined daemon"));
+		await expect(recovery.deleteRecoveryCopy(result, target)).rejects.toMatchObject({
+			code: "PRECONDITION_FAILED",
+		});
+		expect(transport.remove).not.toHaveBeenCalled();
+		expect(
+			await db.query.recoveryCopies.findFirst({
+				where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
+			}),
+		).toMatchObject({
+			status: "error",
+			targetPostgresId: target.postgresId,
+			originSwarmNodeId: result.originSwarmNodeId,
+			originVolumeName: result.originVolumeName,
+		});
+		expect(
+			await db.query.postgres.findFirst({
+				where: orm.eq(schema.postgres.postgresId, target.postgresId),
+			}),
+		).toBeDefined();
+	});
+
+	it("retries a partial teardown with its exact recorded volume and only clears tracking after absence", async () => {
+		const result = await recovery.createRecoveryCopy(input());
+		const target = await db.query.postgres.findFirst({
+			where: orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""),
+		});
+		if (!target) throw new Error("Target missing");
+		transport.volume.mockResolvedValue(`${result.originVolumeName}\n`);
+		await expect(recovery.deleteRecoveryCopy(result, target)).rejects.toMatchObject({
+			code: "PRECONDITION_FAILED",
+		});
+		const retry = await db.query.recoveryCopies.findFirst({
+			where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
+		});
+		if (!retry) throw new Error("Copy missing");
+		expect(retry).toMatchObject({
+			status: "error",
+			targetPostgresId: target.postgresId,
+			originVolumeCreatedAt: result.originVolumeCreatedAt,
+		});
+		await recovery.deleteRecoveryCopy(retry, target);
+		expect(transport.remove).toHaveBeenCalledTimes(1);
+		expect(transport.orphanRemove).toHaveBeenCalledWith(
+			expect.objectContaining({
+				recoveryCopyId: result.recoveryCopyId,
+				originVolumeName: result.originVolumeName,
+				originVolumeCreatedAt: result.originVolumeCreatedAt,
+			}),
+		);
+		expect(
+			await db.query.postgres.findFirst({
+				where: orm.eq(schema.postgres.postgresId, target.postgresId),
+			}),
+		).toBeUndefined();
+		expect(
+			await db.query.recoveryCopies.findFirst({
+				where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
+			}),
+		).toMatchObject({ status: "deleted", targetPostgresId: null });
+	});
+
+	it("rolls back target-FK clearing when the final target placement CAS fails", async () => {
+		const result = await recovery.createRecoveryCopy(input());
+		const target = await db.query.postgres.findFirst({
+			where: orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""),
+		});
+		if (!target) throw new Error("Target missing");
+		transport.remove.mockImplementationOnce(async () => {
+			await db
+				.update(schema.postgres)
+				.set({ appName: `changed-during-removal-${randomUUID().slice(0, 8)}` })
+				.where(orm.eq(schema.postgres.postgresId, target.postgresId));
+			transport.exists.mockResolvedValue(false);
+		});
+		await expect(recovery.deleteRecoveryCopy(result, target)).rejects.toMatchObject({
+			code: "PRECONDITION_FAILED",
+		});
+		expect(
+			await db.query.recoveryCopies.findFirst({
+				where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
+			}),
+		).toMatchObject({
+			status: "error",
+			targetPostgresId: target.postgresId,
+			originAppName: result.originAppName,
+		});
+		expect(
+			await db.query.postgres.findFirst({
+				where: orm.eq(schema.postgres.postgresId, target.postgresId),
+			}),
+		).toBeDefined();
+	});
+
+	it("does not guess an origin node for an older copy that recorded only its volume name", async () => {
+		const result = await recovery.createRecoveryCopy(input());
+		const target = await db.query.postgres.findFirst({
+			where: orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""),
+		});
+		if (!target) throw new Error("Target missing");
+		const [legacy] = await db
+			.update(schema.recoveryCopies)
+			.set({ originSwarmNodeId: null })
+			.where(orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId))
+			.returning();
+		if (!legacy) throw new Error("Copy missing");
+		transport.identity.mockClear();
+		await expect(recovery.deleteRecoveryCopy(legacy, target)).rejects.toThrow(
+			"original recovery storage location is unknown",
+		);
+		expect(transport.identity).not.toHaveBeenCalled();
+		expect(transport.remove).not.toHaveBeenCalled();
 	});
 
 	it("keeps a failed new target visible and never stores SQL output as an error", async () => {
@@ -268,7 +466,7 @@ describe.skipIf(!testUrl)("retained PostgreSQL recovery copies (postgres)", () =
 			where: orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""),
 		});
 		if (!target) throw new Error("Target missing");
-		transport.remoteVolume.mockResolvedValueOnce(`${target.appName}-data\n`);
+		transport.remoteVolume.mockResolvedValue(`${target.appName}-data\n`);
 		await expect(recovery.deleteRecoveryCopy(result, target)).rejects.toMatchObject({
 			code: "PRECONDITION_FAILED",
 		});
@@ -344,12 +542,14 @@ describe.skipIf(!testUrl)("retained PostgreSQL recovery copies (postgres)", () =
 			if (!target) throw new Error("Target missing");
 			await db
 				.update(schema.recoveryCopies)
-				.set({ originAppName: null, originServerId: null, originVolumeName: null })
+				.set({
+					originAppName: null,
+					originServerId: null,
+					originVolumeName: null,
+					originSwarmNodeId: null,
+				})
 				.where(orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId));
-			if (!targetExists)
-				await db
-					.delete(schema.postgres)
-					.where(orm.eq(schema.postgres.postgresId, target.postgresId));
+			if (!targetExists) await forgetMockTarget(result.recoveryCopyId, target.postgresId);
 			const legacy = await db.query.recoveryCopies.findFirst({
 				where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
 			});
@@ -374,9 +574,7 @@ describe.skipIf(!testUrl)("retained PostgreSQL recovery copies (postgres)", () =
 
 	it("verifies the original service and volume after its managed target row disappears", async () => {
 		const result = await recovery.createRecoveryCopy(input());
-		await db
-			.delete(schema.postgres)
-			.where(orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""));
+		await forgetMockTarget(result.recoveryCopyId, result.targetPostgresId ?? "");
 		const missing = await db.query.recoveryCopies.findFirst({
 			where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
 		});
@@ -388,23 +586,24 @@ describe.skipIf(!testUrl)("retained PostgreSQL recovery copies (postgres)", () =
 		});
 		expect(transport.exists).toHaveBeenCalledWith(result.originAppName);
 		expect(transport.remove).not.toHaveBeenCalled();
-		let retry = await db.query.recoveryCopies.findFirst({
+		const retry = await db.query.recoveryCopies.findFirst({
 			where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
 		});
 		if (!retry) throw new Error("Copy missing");
+		transport.exists.mockResolvedValue(false);
 		transport.volume.mockResolvedValueOnce(`${result.originVolumeName}\n`);
-		await expect(recovery.deleteRecoveryCopy(retry, null)).rejects.toMatchObject({
-			code: "PRECONDITION_FAILED",
-		});
+		await recovery.deleteRecoveryCopy(retry, null);
+		expect(transport.orphanRemove).toHaveBeenCalledWith(
+			expect.objectContaining({
+				recoveryCopyId: result.recoveryCopyId,
+				originSwarmNodeId: result.originSwarmNodeId,
+				originVolumeCreatedAt: result.originVolumeCreatedAt,
+			}),
+		);
 		expect(transport.volume).toHaveBeenCalledWith(
 			expect.stringContaining(`name=^${result.originVolumeName}$`),
 			{ timeout: 30_000 },
 		);
-		retry = await db.query.recoveryCopies.findFirst({
-			where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
-		});
-		if (!retry) throw new Error("Copy missing");
-		await recovery.deleteRecoveryCopy(retry, null);
 		expect(transport.remove).not.toHaveBeenCalled();
 		expect(
 			await db.query.recoveryCopies.findFirst({
@@ -432,9 +631,7 @@ describe.skipIf(!testUrl)("retained PostgreSQL recovery copies (postgres)", () =
 			...input(),
 			source: { ...source, serverId: server.serverId },
 		});
-		await db
-			.delete(schema.postgres)
-			.where(orm.eq(schema.postgres.postgresId, result.targetPostgresId ?? ""));
+		await forgetMockTarget(result.recoveryCopyId, result.targetPostgresId ?? "");
 		await db.delete(schema.servers).where(orm.eq(schema.servers.serverId, server.serverId));
 		const missing = await db.query.recoveryCopies.findFirst({
 			where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
@@ -502,7 +699,8 @@ describe.skipIf(!testUrl)("retained PostgreSQL recovery copies (postgres)", () =
 		expect(
 			recovery.recoveryCopyState({ status: "restoring", deadline: new Date(Date.now() - 120_000) }),
 		).toBe("interrupted");
-		transport.exists.mockResolvedValueOnce(true);
+		transport.exists.mockResolvedValue(true);
+		transport.remove.mockResolvedValue(undefined);
 		await expect(recovery.deleteRecoveryCopy(result, target)).rejects.toMatchObject({
 			code: "PRECONDITION_FAILED",
 		});
@@ -515,12 +713,16 @@ describe.skipIf(!testUrl)("retained PostgreSQL recovery copies (postgres)", () =
 			where: orm.eq(schema.recoveryCopies.recoveryCopyId, result.recoveryCopyId),
 		});
 		if (!retry) throw new Error("Copy missing");
+		transport.remove.mockImplementation(async () => {
+			transport.exists.mockResolvedValue(false);
+		});
 		await recovery.deleteRecoveryCopy(retry, target);
 		expect(transport.remove).toHaveBeenCalledWith(
 			target.appName,
 			null,
 			"postgres",
 			target.environmentId,
+			{ recoveryCopyId: result.recoveryCopyId },
 		);
 		expect(
 			await db.query.postgres.findFirst({
