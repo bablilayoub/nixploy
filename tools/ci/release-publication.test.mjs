@@ -26,22 +26,26 @@ function mapping(text, name) {
 	);
 }
 
-const starts = [...release.matchAll(/^ {6}- name: (.+)$/gm)];
-assert.ok(starts.length, "Release job has no steps");
-const steps = starts.map((match, index) => {
-	const text = release.slice(match.index, starts[index + 1]?.index ?? release.length);
-	const run = text.match(/^ {8}run: (.*)\n((?: {10}.*\n|\n)*)/m);
-	return {
-		name: match[1],
-		id: text.match(/^ {8}id: (.+)$/m)?.[1],
-		condition: text.match(/^ {8}if: (.+)$/m)?.[1],
-		cwd: text.match(/^ {8}working-directory: (.+)$/m)?.[1],
-		env: mapping(text, "env"),
-		with: mapping(text, "with"),
-		text,
-		run: run ? (run[1] === "|" ? run[2].replace(/^ {10}/gm, "") : run[1]) : null,
-	};
-});
+function workflowSteps(workflow) {
+	const starts = [...workflow.matchAll(/^ {6}- name: (.+)$/gm)];
+	assert.ok(starts.length, "Workflow job has no steps");
+	return starts.map((match, index) => {
+		const text = workflow.slice(match.index, starts[index + 1]?.index ?? workflow.length);
+		const run = text.match(/^ {8}run: (.*)\n((?: {10}.*\n|\n)*)/m);
+		return {
+			name: match[1],
+			id: text.match(/^ {8}id: (.+)$/m)?.[1],
+			condition: text.match(/^ {8}if: (.+)$/m)?.[1],
+			cwd: text.match(/^ {8}working-directory: (.+)$/m)?.[1],
+			env: mapping(text, "env"),
+			with: mapping(text, "with"),
+			text,
+			run: run ? (run[1] === "|" ? run[2].replace(/^ {10}/gm, "") : run[1]) : null,
+		};
+	});
+}
+
+const steps = workflowSteps(release);
 
 const step = (name) => {
 	const found = steps.find((entry) => entry.name === name);
@@ -49,6 +53,61 @@ const step = (name) => {
 	return found;
 };
 const quote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
+
+test("Reusable checks run workflow contracts when the selected product tag predates them", async (t) => {
+	const checks = workflowSteps(
+		await readFile(path.join(root, ".github/workflows/checks.yml"), "utf8"),
+	);
+	const product = checks.find((entry) => entry.name === "Checkout");
+	const tooling = checks.find((entry) => entry.name === "Checkout workflow contract tooling");
+	assert.equal(product?.with.ref, `\${{ inputs.ref }}`);
+	assert.equal(tooling?.with.ref, `\${{ github.workflow_sha }}`);
+	assert.equal(tooling.with["persist-credentials"], "false");
+	assert.ok(checks.indexOf(tooling) > checks.findIndex((entry) => entry.name === "Web tests"));
+
+	const directory = await mkdtemp(path.join(tmpdir(), "nixploy-workflow-contracts-"));
+	t.after(() => rm(directory, { recursive: true, force: true }));
+	const workspace = path.join(directory, "historical product tag");
+	await mkdir(workspace);
+	const checkout = path.join(workspace, tooling.with.path);
+	const files = [
+		"tools/dr-restore-test.test.mjs",
+		"tools/ci/image-signature.test.mjs",
+		"tools/ci/release-publication.test.mjs",
+	];
+	for (const file of files) {
+		assert.equal(existsSync(path.join(workspace, file)), false);
+		await mkdir(path.dirname(path.join(checkout, file)), { recursive: true });
+		await writeFile(
+			path.join(checkout, file),
+			`import test from "node:test";\ntest(${JSON.stringify(file)}, () => {});\n`,
+		);
+	}
+	for (const name of ["Disaster recovery rehearsal contract", "Release publication contracts"]) {
+		const contract = checks.find((entry) => entry.name === name);
+		assert.ok(contract?.run, `Missing required contract: ${name}`);
+		assert.ok(checks.indexOf(contract) > checks.indexOf(tooling));
+		assert.equal(contract.condition, undefined);
+		const execute = (cwd) =>
+			spawnSync("bash", ["--noprofile", "--norc", "-e", "-o", "pipefail", "-c", contract.run], {
+				cwd,
+				env: { PATH: [path.dirname(process.execPath), "/usr/bin", "/bin"].join(path.delimiter) },
+				encoding: "utf8",
+				timeout: 10_000,
+			});
+		const legacy = execute(workspace);
+		assert.ifError(legacy.error);
+		assert.notEqual(
+			legacy.status,
+			0,
+			"Fixture product tag unexpectedly contains workflow contracts",
+		);
+		const result = execute(path.resolve(workspace, contract.cwd ?? "."));
+		assert.ifError(result.error);
+		assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+		assert.match(result.stdout, /# fail 0/);
+	}
+});
 
 const stub = String.raw`
 const { appendFileSync, existsSync, readFileSync, writeFileSync } = require("node:fs");
