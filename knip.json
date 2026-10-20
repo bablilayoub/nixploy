@@ -1,23 +1,12 @@
 {
 	"$schema": "https://unpkg.com/knip@5/schema.json",
-	"exclude": [
-		"duplicates"
-	],
+	"exclude": ["duplicates"],
 	"ignoreExportsUsedInFile": true,
 	"workspaces": {
 		".": {
-			"entry": [
-				"tools/*.mjs",
-				"docker/migrate.mjs"
-			],
-			"project": [
-				"tools/*.mjs",
-				"docker/migrate.mjs"
-			],
-			"ignoreDependencies": [
-				"drizzle-orm",
-				"postgres"
-			]
+			"entry": ["tools/*.mjs", "docker/migrate.mjs"],
+			"project": ["tools/*.mjs", "docker/migrate.mjs"],
+			"ignoreDependencies": ["drizzle-orm", "postgres"]
 		},
 		"apps/web": {
 			"entry": [
@@ -30,55 +19,26 @@
 				"scripts/*.mjs",
 				"src/**/*.test.ts"
 			],
-			"project": [
-				"**/*.{ts,tsx,mjs}"
-			],
-			"ignore": [
-				"next-env.d.ts",
-				"src/components/ui/**"
-			],
+			"project": ["**/*.{ts,tsx,mjs}"],
+			"ignore": ["next-env.d.ts", "src/components/ui/**"],
 			"ignoreDependencies": [
 				"bcryptjs",
 				"playwright-core",
 				"postgres",
-				"shadcn",
 				"tailwindcss",
 				"tw-animate-css",
 				"vitest"
 			]
 		},
 		"apps/landing": {
-			"entry": [
-				"next.config.ts",
-				"postcss.config.mjs",
-				"scripts/*.mts"
-			],
-			"project": [
-				"**/*.{ts,tsx,mts,mjs}"
-			],
-			"ignore": [
-				"next-env.d.ts",
-				"src/components/ui/**",
-				"src/components/kokonutui/**"
-			],
-			"ignoreDependencies": [
-				"@tailwindcss/typography",
-				"postcss",
-				"tailwindcss",
-				"tw-animate-css"
-			]
+			"entry": ["next.config.ts", "postcss.config.mjs", "scripts/*.mts"],
+			"project": ["**/*.{ts,tsx,mts,mjs}"],
+			"ignore": ["next-env.d.ts", "src/components/ui/**", "src/components/kokonutui/**"],
+			"ignoreDependencies": ["postcss", "tailwindcss", "tw-animate-css"]
 		},
 		"apps/cli": {
-			"entry": [
-				"src/index.ts",
-				"tsup.config.ts",
-				"vitest.config.ts",
-				"src/**/*.test.ts"
-			],
-			"project": [
-				"src/**/*.ts",
-				"*.ts"
-			]
+			"entry": ["src/index.ts", "tsup.config.ts", "vitest.config.ts", "src/**/*.test.ts"],
+			"project": ["src/**/*.ts", "*.ts"]
 		},
 		"packages/server": {
 			"entry": [
@@ -88,16 +48,9 @@
 				"vitest.config.ts",
 				"src/**/*.test.ts"
 			],
-			"project": [
-				"src/**/*.ts",
-				"*.ts"
-			],
-			"ignoreBinaries": [
-				"tsx"
-			],
-			"ignoreDependencies": [
-				"@types/adm-zip",
-			]
+			"project": ["src/**/*.ts", "*.ts"],
+			"ignoreBinaries": ["tsx"],
+			"ignoreDependencies": ["@types/adm-zip"]
 		}
 	}
 }
