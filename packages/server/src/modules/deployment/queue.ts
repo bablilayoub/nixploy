@@ -218,14 +218,28 @@ interface ClaimedRow {
  * preview from before migration 0023). Boot recovery finalizes those.
  */
 export async function claimNextDeployment(serverId: string | null): Promise<QueueJob | null> {
-	const rows = (await db.transaction(async (tx) => {
-		// The database fence rejects claims from workers predating immutable environments.
-		await tx.execute(sql`set local nixploy.environment_snapshot_protocol = '1'`);
-		const busyApps: string[] = [];
-		for (;;) {
-			// Select separately from UPDATE: an UPDATE FROM LIMIT subquery can
-			// be rescanned once per target row under a nested-loop plan.
-			const candidates = (await tx.execute(sql`
+	const rows = (await db.transaction(
+		async (tx) => {
+			// A fresh statement snapshot is required for the mutex recheck below.
+			// Drizzle ignores transaction options for a nested SAVEPOINT, so reject
+			// an incompatible outer transaction before setting the protocol or
+			// selecting/locking any deployment row.
+			const [isolation] = (await tx.execute(sql`show transaction_isolation`)) as unknown as {
+				transaction_isolation: string;
+			}[];
+			if (isolation?.transaction_isolation !== "read committed") {
+				throw new DomainError(
+					"PRECONDITION_FAILED",
+					"Deployment claims require a READ COMMITTED transaction",
+				);
+			}
+			// The database fence rejects claims from workers predating immutable environments.
+			await tx.execute(sql`set local nixploy.environment_snapshot_protocol = '1'`);
+			const busyApps: string[] = [];
+			for (;;) {
+				// Select separately from UPDATE: an UPDATE FROM LIMIT subquery can
+				// be rescanned once per target row under a nested-loop plan.
+				const candidates = (await tx.execute(sql`
 			select q."deployment_id", q."app_name"
 			from "deployment" q
 			where q."status" = 'queued'
@@ -241,25 +255,25 @@ export async function claimNextDeployment(serverId: string | null): Promise<Queu
 			for update of q skip locked
 			limit 1
 		`)) as unknown as { deployment_id: string; app_name: string }[];
-			if (candidates.length > 1) {
-				throw new DomainError("INTERNAL_SERVER_ERROR", "Deployment claim selected multiple rows");
-			}
-			const candidate = candidates[0];
-			if (!candidate) return [];
+				if (candidates.length > 1) {
+					throw new DomainError("INTERNAL_SERVER_ERROR", "Deployment claim selected multiple rows");
+				}
+				const candidate = candidates[0];
+				if (!candidate) return [];
 
-			// Enqueue locks app-before-row, so never wait for its app lock while
-			// holding our row lock. Try another app instead of stalling the line.
-			const [lock] = (await tx.execute(sql`
+				// Enqueue locks app-before-row, so never wait for its app lock while
+				// holding our row lock. Try another app instead of stalling the line.
+				const [lock] = (await tx.execute(sql`
 				select pg_try_advisory_xact_lock(hashtext(${candidate.app_name})) as acquired
 			`)) as unknown as { acquired: boolean }[];
-			if (!lock?.acquired) {
-				busyApps.push(candidate.app_name);
-				continue;
-			}
+				if (!lock?.acquired) {
+					busyApps.push(candidate.app_name);
+					continue;
+				}
 
-			// This new statement sees a claim that committed while we were
-			// selecting/locking. A second queued sibling can never bypass it.
-			const claimed = (await tx.execute(sql`
+				// This new statement sees a claim that committed while we were
+				// selecting/locking. A second queued sibling can never bypass it.
+				const claimed = (await tx.execute(sql`
 		update "deployment" d
 		set "status" = 'running', "started_at" = now()
 		where d."deployment_id" = ${candidate.deployment_id}
@@ -274,15 +288,17 @@ export async function claimNextDeployment(serverId: string | null): Promise<Queu
 			d."title", d."server_id", d."app_name", d."preview_deployment_id",
 			d."requested_ref"
 	`)) as unknown as ClaimedRow[];
-			// Keep this inside the transaction: unexpected cardinality must roll
-			// back rather than leave running rows without corresponding jobs.
-			if (claimed.length > 1) {
-				throw new DomainError("INTERNAL_SERVER_ERROR", "Deployment claim changed multiple rows");
+				// Keep this inside the transaction: unexpected cardinality must roll
+				// back rather than leave running rows without corresponding jobs.
+				if (claimed.length > 1) {
+					throw new DomainError("INTERNAL_SERVER_ERROR", "Deployment claim changed multiple rows");
+				}
+				if (claimed.length) return claimed;
+				busyApps.push(candidate.app_name);
 			}
-			if (claimed.length) return claimed;
-			busyApps.push(candidate.app_name);
-		}
-	})) as unknown as ClaimedRow[];
+		},
+		{ isolationLevel: "read committed" },
+	)) as unknown as ClaimedRow[];
 
 	const row = rows[0];
 	if (!row?.app_name) return null;

@@ -24,7 +24,14 @@ interface FakeRow {
 }
 
 const { table } = vi.hoisted(() => ({
-	table: { rows: [] as FakeRow[], busyApps: new Set<string>(), duplicateClaimRows: false },
+	table: {
+		rows: [] as FakeRow[],
+		busyApps: new Set<string>(),
+		duplicateClaimRows: false,
+		isolationLevel: "read committed",
+		transactionConfigs: [] as ({ isolationLevel?: string } | undefined)[],
+		statements: [] as string[],
+	},
 }));
 
 /** Flatten a drizzle `SQL` into its literal text and its bound parameters. */
@@ -66,9 +73,11 @@ vi.mock("../../db", () => {
 		execute: (query: unknown) => Promise<unknown[]>;
 		transaction: <T>(
 			callback: (tx: { execute: (query: unknown) => Promise<unknown[]> }) => Promise<T>,
+			config?: { isolationLevel?: string },
 		) => Promise<T>;
 	} = {
-		transaction: async (callback) => {
+		transaction: async (callback, config) => {
+			table.transactionConfigs.push(config);
 			const before = table.rows.map((row) => ({ ...row }));
 			try {
 				return await callback(database);
@@ -79,6 +88,10 @@ vi.mock("../../db", () => {
 		},
 		execute: async (query: unknown) => {
 			const { text, params } = readSql(query);
+			table.statements.push(text);
+			if (text.includes("show transaction_isolation")) {
+				return [{ transaction_isolation: table.isolationLevel }];
+			}
 			if (text.includes("row_number()")) {
 				const queued = table.rows
 					.filter((row) => row.status === "queued")
@@ -213,11 +226,33 @@ beforeEach(async () => {
 	table.rows = [];
 	table.busyApps.clear();
 	table.duplicateClaimRows = false;
+	table.isolationLevel = "read committed";
+	table.transactionConfigs = [];
+	table.statements = [];
 	clock = 0;
 	queue = await import("./queue");
 });
 
 describe("durable queue: claiming", () => {
+	it("requests READ COMMITTED and checks it before protocol or claim statements", async () => {
+		enqueueRow("j1", "app-a");
+		expect(await queue.claimNextDeployment(null)).toMatchObject({ deploymentId: "j1" });
+		expect(table.transactionConfigs).toEqual([{ isolationLevel: "read committed" }]);
+		expect(table.statements[0]).toBe("show transaction_isolation");
+		expect(table.statements[1]).toContain("set local nixploy.environment_snapshot_protocol");
+	});
+
+	it.each(["repeatable read", "serializable", "unknown"])(
+		"rejects an incompatible inherited isolation (%s) before row mutation",
+		async (isolation) => {
+			table.isolationLevel = isolation;
+			enqueueRow("j1", "app-a");
+			await expect(queue.claimNextDeployment(null)).rejects.toThrow("READ COMMITTED");
+			expect(table.rows[0]?.status).toBe("queued");
+			expect(table.statements).toEqual(["show transaction_isolation"]);
+		},
+	);
+
 	it("rolls back rather than dropping unexpected extra claimed rows", async () => {
 		enqueueRow("j1", "app-1");
 		table.duplicateClaimRows = true;
