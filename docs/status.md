@@ -18,6 +18,28 @@ checks retain the selected tag. PR #28 merged after independent review and all
 required CI passed; no Release execution, signing or Git tag creation was
 performed for this patch.
 
+## CLI compiler follow-up — 2026-10-21
+
+The CLI build uses the existing TypeScript compiler in NodeNext mode, with
+the same executable, package exports, license and version/UserAgent contract.
+Watch mode rebuilds, rejects invalid output, recovers after a type error and
+stops its owned compiler. Removing tsup naturally resolves Vite's optional
+esbuild peer to the existing allowed 0.28.2: 83 package versions are removed,
+none added. Fresh full (776 entries) and production (756 entries) audits both
+report zero advisories at all severities; no override or ignore was added.
+
+All 94 CLI tests, four workspace type checks, knip and strict Biome pass.
+Ordinary npm pack/install in an isolated prefix verifies 34 shipped files
+(31 JavaScript modules), the real executable and export, version/help/usage
+exits, and UserAgent/HTTP status exits. The installed tarball also passes
+authentication, project CRUD and encrypted environment replace/merge/read
+against a separately migrated disposable panel built from `e658d489`.
+All fixture containers, volumes, network and private env files were removed;
+existing service specs, volumes, networks, seven primary proxy files, primary
+env and CLI credential profile were preserved. This proof used Node 22.21 on
+macOS arm64; other OS/architecture execution and feature upgrade convergence
+are separate gates. Nothing was published by this follow-up.
+
 ## Operator workspace — 2026-10-21 (integration in progress)
 
 Three product workflows and functional/accessibility corrections are implemented on
@@ -198,11 +220,10 @@ an implementation checkpoint, not a new release claim.
   native image scans and real Swarm probes pass; the source review is clear.
   Publication and the separate Release ordering follow-up remain distinct
   gates; see the [runtime audit](audits/2026-10/runtime-image.md).
-- [ ] Recheck tsup's development-only esbuild 0.27.7 when a supported update
-  resolves [GHSA-g7r4-m6w7-qqqr](https://github.com/advisories/GHSA-g7r4-m6w7-qqqr),
-  a low Windows development-server advisory. Removing unused shadcn and
-  typography packages removes the earlier braces/selector-parser findings.
-  Fresh production audit is zero; the full graph has this one low finding.
+- [x] Remove the CLI's unused bundling layer and its development-only esbuild
+  0.27.7 advisory through the compiler follow-up above. Removing unused shadcn
+  and typography packages resolved the earlier braces/selector-parser findings.
+  Fresh production and full audits now both report zero findings.
 - [ ] Keep release/upgrade notes explicit about legacy Compose stacks sharing
   an environment needing redeploy. Legacy Swarm Stack naming upgrades require
   an explicit Stop and verified target-node storage placement; anonymous/image
