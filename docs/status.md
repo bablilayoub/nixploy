@@ -63,6 +63,11 @@ an implementation checkpoint, not a new release claim.
 
 ### Maintenance
 
+- [ ] Runtime image hardening follow-up: independent production dependency
+  tree, patched libexpat/tsx/esbuild and native-architecture blocking scans are
+  implemented locally. ARM64 all-severity scan and real auth/migration/worker/source-build/operator
+  probes passed. Exact-head CI, amd64 runtime/scan evidence and independent
+  review remain pending; see the [runtime audit](audits/2026-10/runtime-image.md).
 - [ ] Revisit the remaining moderate `postcss-selector-parser` advisory when
   `@tailwindcss/typography` publishes a compatible resolution; keep the blocking
   high/critical audit gate. The PR #15 evidence table below records the current
