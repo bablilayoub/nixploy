@@ -71,6 +71,7 @@ export function UnderlineTabsList({ className, id, ...props }: ComponentProps<ty
 		});
 		const resize = new ResizeObserver(schedule);
 		resize.observe(list);
+		window.addEventListener("resize", schedule);
 		void document.fonts.ready.then(schedule);
 		document.fonts.addEventListener("loadingdone", schedule);
 		schedule();
@@ -79,6 +80,7 @@ export function UnderlineTabsList({ className, id, ...props }: ComponentProps<ty
 			cancelAnimationFrame(frame);
 			selection.disconnect();
 			resize.disconnect();
+			window.removeEventListener("resize", schedule);
 			document.fonts.removeEventListener("loadingdone", schedule);
 		};
 	}, [listId]);
@@ -91,7 +93,7 @@ export function UnderlineTabsList({ className, id, ...props }: ComponentProps<ty
 				// Narrow screens scroll the strip; `scroll-shadow-x` is the only hint
 				// that there are more tabs off the edge (the scrollbar itself is
 				// hidden — it sat on top of the active underline).
-				"no-scrollbar scroll-shadow-x h-auto w-full justify-start gap-0 overflow-x-auto rounded-none border-0 border-b bg-transparent p-0 group-data-[orientation=horizontal]/tabs:h-auto",
+				"no-scrollbar scroll-shadow-x h-auto w-full justify-start gap-1 overflow-x-auto rounded-none border-b bg-transparent p-0",
 				className,
 			)}
 			{...props}
@@ -103,7 +105,7 @@ export function UnderlineTabsTrigger({ className, ...props }: ComponentProps<typ
 	return (
 		<TabsTrigger
 			className={cn(
-				"-mb-px min-h-11 flex-none rounded-none border-0 border-b-2 border-transparent bg-transparent px-4 py-2.5 text-sm font-normal text-muted-foreground shadow-none transition-colors after:hidden hover:bg-panel-inset hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-[state=active]:border-b-brand data-[state=active]:bg-selection data-[state=active]:font-medium data-[state=active]:text-foreground data-[state=active]:shadow-none",
+				"-mb-px h-auto flex-none rounded-none border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-sm font-normal text-muted-foreground shadow-none transition-colors after:hidden hover:text-foreground data-[state=active]:border-b-brand data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-foreground data-[state=active]:shadow-none",
 				className,
 			)}
 			{...props}

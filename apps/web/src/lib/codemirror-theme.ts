@@ -4,27 +4,45 @@ import { EditorView } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 
 /**
- * CSS is the palette authority for editors and terminals. CodeMirror accepts
- * custom properties directly; xterm needs their concrete values at creation
- * and on theme changes. Keep the fallback usable before a document exists.
+ * CodeMirror chrome + syntax colors aligned with `apps/web/src/app/globals.css`
+ * (light: warm stone, dark: zinc). Keep hex values in sync when the design tokens change.
  */
-const palette = {
-	background: "var(--code-background)",
-	foreground: "var(--code-foreground)",
-	muted: "var(--code-muted)",
-	mutedForeground: "var(--code-muted-foreground)",
-	border: "var(--code-border)",
-	accent: "var(--code-active)",
-	selection: "var(--code-selection)",
-	cursor: "var(--code-foreground)",
-	keyword: "var(--code-keyword)",
-	string: "var(--code-string)",
-	number: "var(--code-number)",
-	comment: "var(--code-comment)",
-	tag: "var(--code-tag)",
-	property: "var(--code-property)",
-	operator: "var(--code-muted-foreground)",
-	invalid: "var(--code-invalid)",
+const light = {
+	background: "#ffffff",
+	foreground: "#1c1917",
+	muted: "#f5f5f4",
+	mutedForeground: "#78716c",
+	border: "#e7e5e4",
+	accent: "#f5f5f4",
+	selection: "#e7e5e4",
+	cursor: "#1c1917",
+	keyword: "#1c1917",
+	string: "#15803d",
+	number: "#b45309",
+	comment: "#a8a29e",
+	tag: "#2563eb",
+	property: "#57534e",
+	operator: "#78716c",
+	invalid: "#dc2626",
+} as const;
+
+const dark = {
+	background: "#121214",
+	foreground: "#fafafa",
+	muted: "#1c1c1f",
+	mutedForeground: "#a1a1aa",
+	border: "#27272a",
+	accent: "#1c1c1f",
+	selection: "#27272a",
+	cursor: "#fafafa",
+	keyword: "#fafafa",
+	string: "#4ade80",
+	number: "#fbbf24",
+	comment: "#71717a",
+	tag: "#60a5fa",
+	property: "#d4d4d8",
+	operator: "#a1a1aa",
+	invalid: "#f87171",
 } as const;
 
 type Palette = {
@@ -54,7 +72,7 @@ function editorChrome(palette: Palette, isDark: boolean): Extension {
 				backgroundColor: palette.background,
 				fontSize: "13px",
 				fontFamily:
-					"var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+					"var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
 			},
 			".cm-content": {
 				caretColor: palette.cursor,
@@ -78,20 +96,19 @@ function editorChrome(palette: Palette, isDark: boolean): Extension {
 				borderTop: `1px solid ${palette.border}`,
 			},
 			".cm-searchMatch": {
-				backgroundColor: "var(--code-active)",
+				backgroundColor: isDark ? "#3b2f1a" : "#fef3c7",
 			},
 			".cm-searchMatch.cm-searchMatch-selected": {
-				backgroundColor: "var(--code-selection)",
-				outline: "1px solid var(--code-keyword)",
+				backgroundColor: isDark ? "#854d0e" : "#fde68a",
 			},
 			".cm-activeLine": {
 				backgroundColor: palette.accent,
 			},
 			".cm-selectionMatch": {
-				backgroundColor: palette.selection,
+				backgroundColor: isDark ? "#27272a" : "#e7e5e4",
 			},
 			"&.cm-focused .cm-matchingBracket, &.cm-focused .cm-nonmatchingBracket": {
-				backgroundColor: palette.selection,
+				backgroundColor: isDark ? "#27272a" : "#e7e5e4",
 				outline: `1px solid ${palette.border}`,
 			},
 			".cm-gutters": {
@@ -172,52 +189,55 @@ function highlight(palette: Palette): Extension {
 	);
 }
 
-export const nixployCodeMirrorLight: Extension = [editorChrome(palette, false), highlight(palette)];
-export const nixployCodeMirrorDark: Extension = [editorChrome(palette, true), highlight(palette)];
+export const nixployCodeMirrorLight: Extension = [editorChrome(light, false), highlight(light)];
+export const nixployCodeMirrorDark: Extension = [editorChrome(dark, true), highlight(dark)];
 
 /** xterm / log surfaces — same palette as the editors. */
-function terminalTheme(isDark: boolean) {
-	const css = typeof document === "undefined" ? null : getComputedStyle(document.documentElement);
-	const color = (name: string, light: string, dark: string) =>
-		css?.getPropertyValue(name).trim() || (isDark ? dark : light);
-	const background = color("--code-background", "#ffffff", "#25212c");
-	const foreground = color("--code-foreground", "#28232d", "#f0eaf4");
-	const red = color("--code-invalid", "#b42f4b", "#ff98aa");
-	const green = color("--code-string", "#28725c", "#8bd5b7");
-	const yellow = color("--code-number", "#855e17", "#e7c083");
-	const blue = color("--code-tag", "#366a94", "#9ac8e6");
-	const magenta = color("--code-keyword", "#81375d", "#f5a9cc");
-	const cyan = color("--info", "#366a94", "#8fbddf");
-	return {
-		background,
-		foreground,
-		cursor: foreground,
-		cursorAccent: background,
-		selectionBackground: color("--code-selection", "#e8ddea", "#4d3a50"),
-		black: isDark ? "#17131c" : foreground,
-		red,
-		green,
-		yellow,
-		blue,
-		magenta,
-		cyan,
-		white: isDark ? foreground : color("--code-muted", "#f3f0f6", "#f0eaf4"),
-		brightBlack: color("--code-muted-foreground", "#73667e", "#b8adc1"),
-		brightRed: red,
-		brightGreen: green,
-		brightYellow: yellow,
-		brightBlue: blue,
-		brightMagenta: magenta,
-		brightCyan: cyan,
-		brightWhite: foreground,
-	};
-}
-
 export const nixployTerminalTheme = {
-	get light() {
-		return terminalTheme(false);
+	light: {
+		background: light.background,
+		foreground: light.foreground,
+		cursor: light.cursor,
+		cursorAccent: light.background,
+		selectionBackground: light.selection,
+		black: "#1c1917",
+		red: "#dc2626",
+		green: "#16a34a",
+		yellow: "#d97706",
+		blue: "#2563eb",
+		magenta: "#7c3aed",
+		cyan: "#0891b2",
+		white: "#f5f5f4",
+		brightBlack: "#78716c",
+		brightRed: "#ef4444",
+		brightGreen: "#22c55e",
+		brightYellow: "#f59e0b",
+		brightBlue: "#3b82f6",
+		brightMagenta: "#8b5cf6",
+		brightCyan: "#06b6d4",
+		brightWhite: "#fafaf9",
 	},
-	get dark() {
-		return terminalTheme(true);
+	dark: {
+		background: dark.background,
+		foreground: dark.foreground,
+		cursor: dark.cursor,
+		cursorAccent: dark.background,
+		selectionBackground: dark.selection,
+		black: "#0c0c0b",
+		red: "#f87171",
+		green: "#4ade80",
+		yellow: "#fbbf24",
+		blue: "#60a5fa",
+		magenta: "#c084fc",
+		cyan: "#22d3ee",
+		white: "#f5f5f4",
+		brightBlack: "#a8a29e",
+		brightRed: "#fca5a5",
+		brightGreen: "#86efac",
+		brightYellow: "#fde68a",
+		brightBlue: "#93c5fd",
+		brightMagenta: "#d8b4fe",
+		brightCyan: "#67e8f9",
+		brightWhite: "#fafaf9",
 	},
-};
+} as const;

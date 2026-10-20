@@ -1,17 +1,16 @@
 import { brandingAccentCss, publicBranding } from "@nixploy/server/modules/branding/index";
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 
 import { BrandingProvider } from "@/components/branding-provider";
 
 import { Providers } from "./providers";
 import "./globals.css";
 
-const plexSans = IBM_Plex_Sans({ subsets: ["latin"], variable: "--font-plex-sans" });
-const plexMono = IBM_Plex_Mono({
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const jetbrainsMono = JetBrains_Mono({
 	subsets: ["latin"],
-	weight: ["400", "500", "600"],
-	variable: "--font-plex-mono",
+	variable: "--font-jetbrains-mono",
 });
 
 /**
@@ -65,7 +64,7 @@ export default async function RootLayout({
 					<style dangerouslySetInnerHTML={{ __html: branding.customCss }} />
 				) : null}
 			</head>
-			<body className={`${plexSans.variable} ${plexMono.variable} font-sans antialiased`}>
+			<body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
 				<BrandingProvider branding={branding}>
 					<Providers>{children}</Providers>
 				</BrandingProvider>

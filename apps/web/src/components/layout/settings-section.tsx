@@ -41,17 +41,12 @@ export function SettingsSection({
 	id?: string;
 }) {
 	const heading = (
-		<div className="min-w-0 space-y-1.5">
-			<h3
-				className={cn(
-					"text-lg leading-6 font-semibold tracking-tight",
-					danger ? "text-destructive" : "text-foreground",
-				)}
-			>
+		<div className="min-w-0 space-y-1">
+			<h3 className={cn("text-sm font-medium", danger ? "text-destructive" : "text-foreground")}>
 				{title}
 			</h3>
 			{description ? (
-				<p className="text-sm leading-relaxed text-muted-foreground text-pretty">{description}</p>
+				<p className="text-sm text-muted-foreground text-pretty">{description}</p>
 			) : null}
 		</div>
 	);
@@ -60,10 +55,7 @@ export function SettingsSection({
 		return (
 			<section
 				id={id}
-				className={cn(
-					"scroll-mt-24 rounded-lg border border-destructive/40 bg-card p-5 sm:p-6",
-					className,
-				)}
+				className={cn("scroll-mt-24 rounded-lg border border-destructive/40 p-4 sm:p-5", className)}
 			>
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
 					{heading}
@@ -84,7 +76,7 @@ export function SettingsSection({
 				id={id}
 				className={cn(
 					"w-full scroll-mt-24",
-					bare ? "py-1" : "rounded-lg border border-border bg-card p-5 sm:p-6",
+					bare ? "py-1" : "rounded-lg border border-border p-4 sm:p-5",
 					className,
 				)}
 			>
@@ -105,17 +97,17 @@ export function SettingsSection({
 		<section
 			id={id}
 			className={cn(
-				"w-full scroll-mt-24 rounded-lg border border-border bg-card p-5 sm:p-6",
+				"w-full scroll-mt-24 rounded-lg border border-border p-4 sm:p-5",
 				// The heading column is fixed so headings line up down the page; the
 				// body takes whatever is left and never drops below its own minimum.
-				"xl:grid xl:grid-cols-[minmax(0,13rem)_minmax(0,1fr)] xl:gap-8",
+				"lg:grid lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:gap-8",
 				className,
 			)}
 		>
 			{heading}
-			<div className={cn("min-w-0 w-full", children || actions ? "mt-5 xl:mt-0" : null)}>
+			<div className={cn("w-full", children || actions ? "mt-5 lg:mt-0" : null)}>
 				{actions ? (
-					<div className="flex flex-wrap items-center gap-2 xl:justify-end">{actions}</div>
+					<div className="flex flex-wrap items-center gap-2 lg:justify-end">{actions}</div>
 				) : null}
 				{children ? (
 					<div className={cn("w-full space-y-4", actions ? "mt-4" : null)}>{children}</div>

@@ -1,3 +1,7 @@
+# Deprecated proposal — 2026-10-21
+
+The user rejected this mineral/plum/IBM Plex redesign. This document is historical context, not an approved implementation target. The familiar app design and the latest learned constraint in brief.md govern the real app. Prepare three to five standalone concepts for user selection before any future aesthetic rollout.
+
 # Operator workspace — 2026-10-20
 
 Scope: reskin plus approved shell/directory layout changes. Preserve all URLs, navigation destinations, service tab order, organization choice, capability filtering, keyboard interactions, unsaved-change guards and infrastructure confirmation flows. No dependency changes.

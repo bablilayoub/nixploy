@@ -439,19 +439,16 @@ export function ProjectDetail({
 			</Tabs>
 
 			{(tab === "services" || tab === "environment") && (
-				<div className="space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+				<div className="space-y-4">
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-							<span className="text-xs font-medium text-muted-foreground">Environment</span>
+							<span className="text-xs text-muted-foreground">Environment</span>
 							{environmentsQuery.isPending ? (
 								<Skeleton className="h-9 w-40" />
 							) : activeEnvironment ? (
 								<>
 									<Select value={activeEnvironmentName} onValueChange={switchEnvironment}>
-										<SelectTrigger
-											aria-label="Select environment"
-											className="max-w-56 min-w-32 font-mono text-xs"
-										>
+										<SelectTrigger aria-label="Select environment" className="max-w-56 min-w-32">
 											<SelectValue />
 										</SelectTrigger>
 										<SelectContent>
@@ -483,7 +480,7 @@ export function ProjectDetail({
 							<div className="flex flex-wrap items-center gap-2">
 								<DisabledHint hint={canWriteProject ? undefined : capabilityHint("project.write")}>
 									<CreateEnvironmentDialog projectId={projectId} onCreated={selectEnvironment}>
-										<Button variant="ghost" disabled={!canWriteProject}>
+										<Button variant="outline" disabled={!canWriteProject}>
 											<Plus className="size-4" /> New environment
 										</Button>
 									</CreateEnvironmentDialog>
@@ -503,7 +500,7 @@ export function ProjectDetail({
 						) : null}
 					</div>
 					{tab === "services" ? (
-						<div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+						<div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-start sm:justify-between">
 							<div className="relative w-full sm:w-72">
 								<Search
 									aria-hidden

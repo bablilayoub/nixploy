@@ -587,7 +587,7 @@ export function RecoveryCopies({
 								)}
 							</div>
 							{create.isPending && (
-								<p role="status" className="status-spine text-sm">
+								<p role="status" className="text-sm">
 									Validating, restoring and verifying the new database. This can take up to ten
 									minutes.
 								</p>
