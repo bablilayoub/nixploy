@@ -725,7 +725,9 @@ prepare_boundary_upgrade() {
 	fi
 	# Metadata and literal environment values use separate tagged NUL records.
 	# JSON is parsed, never sourced/eval'd; Docker receives only --env NAME on argv.
-	if ! boundary_node 'let raw="";process.stdin.setEncoding("utf8");process.stdin.on("data",c=>raw+=c);process.stdin.on("end",()=>{try{const specs=JSON.parse(raw);const panel=specs.find(s=>s.Spec.Name==="nixploy"),worker=specs.find(s=>s.Spec.Name==="nixploy-worker"),pg=specs.find(s=>s.Spec.Name==="nixploy-postgres");if(!panel||!pg||specs.length!==(worker?3:2))throw 0;const env=s=>{const out=new Map;for(const item of s.Spec.TaskTemplate.ContainerSpec.Env??[]){const i=item.indexOf("="),name=item.slice(0,i);if(i<1||!/^[_a-zA-Z][_a-zA-Z0-9]*$/.test(name)||item.includes("\0")||out.has(name))throw 0;out.set(name,item.slice(i+1));}return out};const pe=env(panel),we=worker?env(worker):pe,pge=env(pg);const url=new URL(pe.get("DATABASE_URL"));if(!["postgres:","postgresql:"].includes(url.protocol)||url.hostname!=="nixploy-postgres"||(url.port&&url.port!=="5432")||decodeURIComponent(url.pathname.slice(1))!==pge.get("POSTGRES_DB")||decodeURIComponent(url.username)!==pge.get("POSTGRES_USER"))throw 0;for(const key of ["DATABASE_URL","BETTER_AUTH_SECRET","ENCRYPTION_KEYS","ENCRYPTION_KEY"]){if(pe.get(key)!==we.get(key))throw 0;}if(!pe.get("DATABASE_URL")||!pe.get("BETTER_AUTH_SECRET")||!(pe.get("ENCRYPTION_KEYS")||pe.get("ENCRYPTION_KEY")))throw 0;const records=[];let socket;for(const [name,s] of [["panel",panel],["worker",worker]]){if(!s)continue;const replicas=s.Spec.Mode?.Replicated?.Replicas;if(!Number.isSafeInteger(replicas)||replicas<0)throw 0;const mounts=s.Spec.TaskTemplate.ContainerSpec.Mounts??[],config=mounts.find(m=>m.Target==="/etc/nixploy"),docker=mounts.find(m=>m.Target==="/var/run/docker.sock");if(config?.Type!=="bind"||docker?.Type!=="bind"||!docker.Source?.startsWith("/")||config.ReadOnly||docker.ReadOnly)throw 0;if(socket&&socket!==docker.Source)throw 0;socket=docker.Source;records.push(name+"-id="+s.ID,name+"-replicas="+Math.max(1,replicas),name+"-config="+config.Source);}records.push("socket="+socket);for(const key of ["DATABASE_URL","ENCRYPTION_KEYS","ENCRYPTION_KEY","BETTER_AUTH_SECRET","NIXPLOY_DB_WAIT_SECONDS"]){if(we.has(key))records.push("env="+key+"="+we.get(key));}process.stdout.write(records.join("\0")+"\0");}catch{console.error("Saved services have unsupported replicas, mounts, canonical database URL or inconsistent required runtime secrets");process.exitCode=1;}});' \
+	# Docker CLI 28 can retain identical --env-file/--env entries. Accept those
+	# without changing the raw snapshot; conflicting duplicates still fail closed.
+	if ! boundary_node 'let raw="";process.stdin.setEncoding("utf8");process.stdin.on("data",c=>raw+=c);process.stdin.on("end",()=>{try{const specs=JSON.parse(raw);const panel=specs.find(s=>s.Spec.Name==="nixploy"),worker=specs.find(s=>s.Spec.Name==="nixploy-worker"),pg=specs.find(s=>s.Spec.Name==="nixploy-postgres");if(!panel||!pg||specs.length!==(worker?3:2))throw 0;const env=s=>{const out=new Map;for(const item of s.Spec.TaskTemplate.ContainerSpec.Env??[]){const i=item.indexOf("="),name=item.slice(0,i);if(i<1||!/^[_a-zA-Z][_a-zA-Z0-9]*$/.test(name)||item.includes("\0")||(out.has(name)&&out.get(name)!==item.slice(i+1)))throw 0;out.set(name,item.slice(i+1));}return out};const pe=env(panel),we=worker?env(worker):pe,pge=env(pg);const url=new URL(pe.get("DATABASE_URL"));if(!["postgres:","postgresql:"].includes(url.protocol)||url.hostname!=="nixploy-postgres"||(url.port&&url.port!=="5432")||decodeURIComponent(url.pathname.slice(1))!==pge.get("POSTGRES_DB")||decodeURIComponent(url.username)!==pge.get("POSTGRES_USER"))throw 0;for(const key of ["DATABASE_URL","BETTER_AUTH_SECRET","ENCRYPTION_KEYS","ENCRYPTION_KEY"]){if(pe.get(key)!==we.get(key))throw 0;}if(!pe.get("DATABASE_URL")||!pe.get("BETTER_AUTH_SECRET")||!(pe.get("ENCRYPTION_KEYS")||pe.get("ENCRYPTION_KEY")))throw 0;const records=[];let socket;for(const [name,s] of [["panel",panel],["worker",worker]]){if(!s)continue;const replicas=s.Spec.Mode?.Replicated?.Replicas;if(!Number.isSafeInteger(replicas)||replicas<0)throw 0;const mounts=s.Spec.TaskTemplate.ContainerSpec.Mounts??[],config=mounts.find(m=>m.Target==="/etc/nixploy"),docker=mounts.find(m=>m.Target==="/var/run/docker.sock");if(config?.Type!=="bind"||docker?.Type!=="bind"||!docker.Source?.startsWith("/")||config.ReadOnly||docker.ReadOnly)throw 0;if(socket&&socket!==docker.Source)throw 0;socket=docker.Source;records.push(name+"-id="+s.ID,name+"-replicas="+replicas,name+"-config="+config.Source);}records.push("socket="+socket);for(const key of ["DATABASE_URL","ENCRYPTION_KEYS","ENCRYPTION_KEY","BETTER_AUTH_SECRET","NIXPLOY_DB_WAIT_SECONDS"]){if(we.has(key))records.push("env="+key+"="+we.get(key));}process.stdout.write(records.join("\0")+"\0");}catch{console.error("Saved services have unsupported replicas, mounts, canonical database URL or inconsistent required runtime secrets");process.exitCode=1;}});' \
 		< "${BOUNDARY_RECOVERY_DIR}/services.json" > "${BOUNDARY_RECOVERY_DIR}/runtime.nul"; then
 		die "Cannot safely derive migration environment from the saved live service specs"
 	fi
@@ -764,7 +766,8 @@ Restore config to the original host config bind while both services stay stopped
 Preserve literal original Env from services.json: restore the FULL ENCRYPTION_KEYS
 chain, legacy ENCRYPTION_KEY and BETTER_AUTH_SECRET on BOTH actual Swarm services;
 do not source JSON or reconstruct secrets from a stale .env. Restore their original
-images and supported replica counts only after matching database/config/key recovery.
+images and exact original replica counts (including zero) only after matching
+database/config/key recovery.
 Keep the host fence ${BOUNDARY_LOCK} until recovery is verified; remove it manually
 only after confirming no updater/migrator is active and deciding how to resume.
 Review interrupted/older queued deployments before enabling background work.
@@ -844,6 +847,13 @@ roll_boundary_service() {
 		--replicas "${replicas}" --update-order stop-first --update-failure-action pause --update-monitor 60s \
 		--stop-grace-period 90s --env-add "NIXPLOY_IMAGE=${APP_IMAGE}" --env-add "NIXPLOY_ROLE=${role}" \
 		--env-add NIXPLOY_DISABLE_TRAEFIK_BOOT=1 "${LOG_ARGS[@]}" "${service}" >/dev/null
+	if [ "${replicas}" = "0" ]; then
+		boundary_tasks_stopped "${service}" "${expected}" || die "${service} was paused, but its actual tasks are no longer verifiably stopped"
+		image="$(docker service inspect "${service}" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')"
+		case "${image}" in "${APP_IMAGE}"|"${APP_IMAGE}@"*) ;; *) die "${service} paused image update could not be verified" ;; esac
+		ok "${service} updated and remains paused (0 replicas)"
+		return
+	fi
 	for i in $(seq 1 150); do
 		boundary_service_matches "${service}" "${expected}" || die "${service} identity changed while restarting"
 		state="$(service_update_state "${service}")"
@@ -1325,7 +1335,11 @@ print_summary() {
 	image="$(docker service inspect nixploy --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' 2>/dev/null || echo "${APP_IMAGE}")"
 	printf '\n'
 	printf '  %s╭──────────────────────────────────────────────╮%s\n' "${C_GREEN}" "${C_RESET}"
-	printf '  %s│%s        %s✓ Nixploy is up to date%s               %s│%s\n' "${C_GREEN}" "${C_RESET}" "${C_BOLD}" "${C_RESET}" "${C_GREEN}" "${C_RESET}"
+	if [ "${UPGRADE_BOUNDARY}" = "1" ] && [ "${BOUNDARY_PANEL_REPLICAS}" = "0" ]; then
+		printf '  %s│%s    %s✓ Upgraded; panel remains paused%s           %s│%s\n' "${C_GREEN}" "${C_RESET}" "${C_BOLD}" "${C_RESET}" "${C_GREEN}" "${C_RESET}"
+	else
+		printf '  %s│%s        %s✓ Nixploy is up to date%s               %s│%s\n' "${C_GREEN}" "${C_RESET}" "${C_BOLD}" "${C_RESET}" "${C_GREEN}" "${C_RESET}"
+	fi
 	printf '  %s╰──────────────────────────────────────────────╯%s\n' "${C_GREEN}" "${C_RESET}"
 	printf '\n'
 	printf '   %sDashboard%s  %s\n' "${C_BOLD}" "${C_RESET}" "${url}"
@@ -1337,13 +1351,19 @@ print_summary() {
 	if [ "${UPGRADE_BOUNDARY}" = "1" ]; then
 		printf '   %s0048 migration and backfill ran while every old panel/worker was stopped.%s\n' "${C_DIM}" "${C_RESET}"
 		printf '   %sPrivate matching recovery set: %s%s\n' "${C_DIM}" "${BOUNDARY_RECOVERY_DIR}" "${C_RESET}"
+		printf '   %sOriginal replica counts preserved: panel=%s' "${C_DIM}" "${BOUNDARY_PANEL_REPLICAS}"
+		if [ -n "${BOUNDARY_WORKER_ID}" ]; then printf ', worker=%s' "${BOUNDARY_WORKER_REPLICAS}"; fi
+		printf '.%s\n' "${C_RESET}"
 	else
 		printf '   %sDB migrations (if any) ran on container start.%s\n' "${C_DIM}" "${C_RESET}"
 	fi
 	printf '   %sUsing an older image requires its matching database/config/keys; image rollback does not restore them.%s\n' "${C_DIM}" "${C_RESET}"
 	if docker service inspect "${WORKER_SERVICE}" >/dev/null 2>&1; then
-		printf '   %sSplit install: %s was rolled too.%s\n' \
-			"${C_DIM}" "${WORKER_SERVICE}" "${C_RESET}"
+		if [ "${UPGRADE_BOUNDARY}" = "1" ] && [ "${BOUNDARY_WORKER_REPLICAS}" = "0" ]; then
+			printf '   %sSplit install: %s updated and remains paused (0 replicas).%s\n' "${C_DIM}" "${WORKER_SERVICE}" "${C_RESET}"
+		else
+			printf '   %sSplit install: %s was rolled too.%s\n' "${C_DIM}" "${WORKER_SERVICE}" "${C_RESET}"
+		fi
 	fi
 	if [ -n "${BACKUP_FILE}" ]; then
 		printf '   %sPre-update DB dump: %s (restore + pin the old tag to downgrade)%s\n' "${C_DIM}" "${BACKUP_FILE}" "${C_RESET}"
@@ -1401,9 +1421,18 @@ main() {
 	fi
 	update_traefik
 
-	step "Health check"
-	wait_for_app
+	if [ "${UPGRADE_BOUNDARY}" = "1" ] && [ "${BOUNDARY_PANEL_REPLICAS}" = "0" ]; then
+		step "Paused panel verification"
+		boundary_tasks_stopped nixploy "${BOUNDARY_PANEL_ID}" || die "The originally paused panel is no longer verifiably stopped"
+		info "Panel remains paused (0 replicas). Readiness was not checked."
+	else
+		step "Health check"
+		wait_for_app
+	fi
 	if [ "${UPGRADE_BOUNDARY}" = "1" ]; then
+		if [ -n "${BOUNDARY_WORKER_ID}" ] && [ "${BOUNDARY_WORKER_REPLICAS}" = "0" ]; then
+			boundary_tasks_stopped "${WORKER_SERVICE}" "${BOUNDARY_WORKER_ID}" || die "The originally paused worker is no longer verifiably stopped"
+		fi
 		BOUNDARY_COMPLETE=1
 		rm -f "${BOUNDARY_LOCK}/recovery-directory"
 		rmdir "${BOUNDARY_LOCK}"
