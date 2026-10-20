@@ -674,7 +674,7 @@ boundary_recovery_notice() {
 }
 
 boundary_exit() {
-	local code="$1" service expected
+	local code="$1" service expected i stopped=0
 	trap - EXIT INT TERM
 	if [ "${BOUNDARY_COMPLETE}" = "1" ]; then return; fi
 	if [ "${BOUNDARY_DRAIN_STARTED}" = "1" ]; then
@@ -692,6 +692,17 @@ boundary_exit() {
 				warn "${service} identity changed; refusing to mutate an unrecognized service. Stop all writers manually."
 			fi
 		done
+		# Detached scale-down requests do not prove that a task has exited.
+		# Both roles use a 90-second graceful stop; allow 120 seconds to verify it.
+		for i in $(seq 1 60); do
+			if boundary_assert_drained; then stopped=1; break; fi
+			sleep 2
+		done
+		if [ "${stopped}" = "1" ]; then
+			ok "All canonical panel/worker tasks are confirmed terminal after the failed upgrade"
+		else
+			warn "Scale-down was requested, but actual panel/worker task shutdown could not be confirmed. Keep the recovery fence and stop every writer before recovery."
+		fi
 		boundary_recovery_notice
 	else
 		rm -f "${BOUNDARY_LOCK}/recovery-directory"
@@ -841,7 +852,8 @@ run_boundary_migration() {
 }
 
 roll_boundary_service() {
-	local service="$1" expected="$2" role="$3" replicas="$4" i state ids task details desired actual image count valid
+	local service="$1" expected="$2" role="$3" replicas="$4" i state ids task details owner desired actual image count valid spec_replicas
+	local stable_ids="" stable_polls=0
 	boundary_service_matches "${service}" "${expected}" || die "${service} identity changed before restart"
 	docker service update --detach --force --no-resolve-image --image "${APP_IMAGE}" \
 		--replicas "${replicas}" --update-order stop-first --update-failure-action pause --update-monitor 60s \
@@ -855,21 +867,45 @@ roll_boundary_service() {
 		return
 	fi
 	for i in $(seq 1 150); do
-		boundary_service_matches "${service}" "${expected}" || die "${service} identity changed while restarting"
-		state="$(service_update_state "${service}")"
-		case "${state}" in paused|rollback_*) die "${service} restart failed (${state}); the boundary cannot use image-only rollback" ;; esac
-		if [ "${state}" = "completed" ]; then
-			ids="$(docker service ps --no-trunc --quiet --filter desired-state=running "${service}")"
+		# Scaling a drained service from zero can leave UpdateStatus absent.
+		# Keep absence distinct from an unreadable service or an unknown state.
+		details="$(docker service inspect "${service}" --format '{{.ID}} {{.Spec.Mode.Replicated.Replicas}} {{.Spec.TaskTemplate.ContainerSpec.Image}} {{if .UpdateStatus}}{{.UpdateStatus.State}}{{else}}absent{{end}}')" \
+			|| die "Could not inspect ${service} while restarting; refusing to assume convergence"
+		read -r owner spec_replicas image state <<<"${details}"
+		[ "${owner}" = "${expected}" ] || die "${service} identity changed while restarting"
+		[ "${spec_replicas}" = "${replicas}" ] || die "${service} replica count changed while restarting"
+		case "${image}" in "${APP_IMAGE}"|"${APP_IMAGE}@"*) ;; *) die "${service} image changed while restarting" ;; esac
+		case "${state}" in
+			completed|absent|updating) ;;
+			paused|rollback_*) die "${service} restart failed (${state}); the boundary cannot use image-only rollback" ;;
+			*) die "${service} has an unknown update state; refusing to assume convergence" ;;
+		esac
+		if [ "${state}" = "completed" ] || [ "${state}" = "absent" ]; then
+			ids="$(docker service ps --no-trunc --quiet --filter desired-state=running "${service}")" \
+				|| die "Could not inspect ${service} tasks while restarting"
+			ids="$(printf '%s\n' "${ids}" | LC_ALL=C sort)"
 			count=0; valid=1
 			while IFS= read -r task; do
 				[ -n "${task}" ] || continue
-				details="$(docker inspect --type task --format '{{.DesiredState}} {{.Status.State}} {{.Spec.ContainerSpec.Image}}' "${task}")"
-				read -r desired actual image <<<"${details}"
+				details="$(docker inspect --type task --format '{{.ServiceID}} {{.DesiredState}} {{.Status.State}} {{.Spec.ContainerSpec.Image}}' "${task}")" \
+					|| die "Could not inspect a ${service} task while restarting"
+				read -r owner desired actual image <<<"${details}"
+				[ "${owner}" = "${expected}" ] || die "${service} task ownership changed while restarting"
 				case "${image}" in "${APP_IMAGE}"|"${APP_IMAGE}@"*) ;; *) valid=0 ;; esac
 				[ "${desired}" = "running" ] && [ "${actual}" = "running" ] || valid=0
 				count=$((count + 1))
 			done <<<"${ids}"
-			if [ "${valid}" = "1" ] && [ "${count}" = "${replicas}" ]; then ok "${service} converged on the new image (${replicas} replicas)"; return; fi
+			if [ "${valid}" = "1" ] && [ "${count}" = "${replicas}" ]; then
+				if [ "${state}" = "completed" ]; then ok "${service} converged on the new image (${replicas} replicas)"; return; fi
+				# With no Swarm update monitor, retain the same 60-second window
+				# ourselves: 31 matching observations separated by 30 two-second waits.
+				if [ "${ids}" = "${stable_ids}" ]; then stable_polls=$((stable_polls + 1)); else stable_ids="${ids}"; stable_polls=1; fi
+				if [ "${stable_polls}" -ge 31 ]; then ok "${service} converged on the new image (${replicas} replicas)"; return; fi
+			else
+				stable_ids=""; stable_polls=0
+			fi
+		else
+			stable_ids=""; stable_polls=0
 		fi
 		sleep 2
 	done
