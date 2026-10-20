@@ -68,6 +68,7 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile
+          pull: true
           platforms: ${{ matrix.platform }}
           # No tag here: the image is addressed by digest until both
           # architectures are in, so :main never points at a half-built list.
@@ -78,10 +79,44 @@ jobs:
           sbom: true
           build-args: |
             NIXPLOY_APP_VERSION=${{ steps.version.outputs.version }}
+            NIXPLOY_GIT_COMMIT=${{ github.sha }}
+            NIXPLOY_APK_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
           # Per-architecture cache scope: a shared one would have the two
           # runners overwrite each other's cache manifest.
           cache-from: type=gha,scope=main-${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=main-${{ matrix.platform }}
+
+      - name: Trivy report (all severities, native architecture)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          scan-type: image
+          scanners: vuln
+          format: json
+          output: trivy.json
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "0"
+
+      - name: Upload complete vulnerability report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-docker-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+          path: trivy.json
+          if-no-files-found: error
+
+      - name: Trivy gate (HIGH and CRITICAL are fatal)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          scan-type: image
+          scanners: vuln
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "1"
+          skip-setup-trivy: true
+          cache: false
 
       - name: Export the digest
         env:

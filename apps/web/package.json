@@ -48,7 +48,7 @@
 		"superjson": "^2.2.6",
 		"swagger-ui-dist": "^5.32.15",
 		"tailwind-merge": "^3.5.0",
-		"tsx": "^4.23.13",
+		"tsx": "^4.23.15",
 		"zod": "^4.6.2"
 	},
 	"devDependencies": {

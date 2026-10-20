@@ -448,7 +448,7 @@ json-file logs (10 MB × 3).
   Settings → Server → "Outbound requests" (`NIXPLOY_ALLOW_PRIVATE_EGRESS=1`
   forces it). The Swarm overlay and cloud metadata stay blocked either way.
 - **`ENCRYPTION_KEYS`** (optional) replaces the single `ENCRYPTION_KEY` for
-  rotation: `"new,old"`, then `pnpm -F @nixploy/server nixploy:rotate-key`
+  rotation: `"new,old"`, then the image's direct `tsx` rotation command
   — see `docs/auth.md`.
 - **Split worker** is opt-in: `NIXPLOY_SPLIT_WORKER=1 … update.sh` (or
   `install.sh --split-worker`) adds the `nixploy-worker` service and runs the

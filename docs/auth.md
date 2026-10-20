@@ -572,7 +572,10 @@ ENCRYPTION_KEYS=<new>,<current>
 docker service update --force nixploy
 
 # 4. rewrite every secret column with the new key
-docker exec nixploy pnpm -F @nixploy/server nixploy:rotate-key
+# On the node running the panel (the production image does not use pnpm):
+panel_container="$(docker ps -q -f label=com.docker.swarm.service.name=nixploy | head -n 1)"
+docker exec "$panel_container" /app/apps/web/node_modules/.bin/tsx \
+  /app/packages/server/src/scripts/rotate-encryption-key.ts
 #   --dry-run             report what would change, write nothing
 #   --batch-size=500      rows per transaction (default 500)
 #   --table=notification  one table only

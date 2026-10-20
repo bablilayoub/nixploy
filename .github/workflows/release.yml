@@ -7,8 +7,9 @@ name: Release
 # Traefik drift — .github/workflows/checks.yml, shared with CI) must pass on
 # the tagged ref before anything is built. CI then builds/pushes GHCR
 # :vX.Y.Z for linux/amd64 and linux/arm64 with provenance + SBOM attestations,
-# scans it with Trivy (CRITICAL is fatal), signs the digest with cosign, and
-# only then moves :latest — so a critical CVE cannot reach the channel every
+# scans each architecture with Trivy (HIGH/CRITICAL are fatal, even unfixed),
+# signs the digest with cosign, and
+# only then moves :latest — so a high/critical finding cannot reach the channel every
 # install auto-updates to. Finally it creates a GitHub Release with
 # auto-generated notes and attaches version-pinned install.sh / update.sh /
 # uninstall.sh plus SHA256SUMS. workflow_dispatch re-runs rebuild an existing
@@ -110,12 +111,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Read checkout revision
+        id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: docker/Dockerfile
+          pull: true
           platforms: ${{ matrix.platform }}
           # No tag: the image is addressed by digest until the manifest list is
           # assembled, so a half-built release never occupies :vX.Y.Z.
@@ -126,10 +132,44 @@ jobs:
           sbom: true
           build-args: |
             NIXPLOY_APP_VERSION=${{ steps.tag.outputs.version }}
+            NIXPLOY_GIT_COMMIT=${{ steps.revision.outputs.sha }}
+            NIXPLOY_APK_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
           # Per-architecture cache scope: a shared one would have the two
           # runners overwrite each other's cache manifest.
           cache-from: type=gha,scope=release-${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=release-${{ matrix.platform }}
+
+      - name: Trivy report (all severities, native architecture)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          scan-type: image
+          scanners: vuln
+          format: json
+          output: trivy.json
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "0"
+
+      - name: Upload complete vulnerability report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-release-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+          path: trivy.json
+          if-no-files-found: error
+
+      - name: Trivy gate (HIGH and CRITICAL are fatal)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          scan-type: image
+          scanners: vuln
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "1"
+          skip-setup-trivy: true
+          cache: false
 
       - name: Export the digest
         env:
@@ -223,7 +263,7 @@ jobs:
       - name: Create the manifest list
         id: build
         # Assembles the two per-architecture manifests into the tag. Everything
-        # below (Trivy, cosign, :latest) works on the resulting list digest, so
+        # below (cosign, :latest) works on the resulting list digest, so
         # the scanned and signed artefact is exactly what :vX.Y.Z resolves to.
         working-directory: /tmp/digests
         run: |
@@ -237,20 +277,6 @@ jobs:
             --format '{{json .Manifest.Digest}}' | tr -d '"')"
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
           echo "manifest ${DIGEST}"
-
-      - name: Trivy scan (CRITICAL is fatal on a release)
-        # Stricter than the PR scan (advisory, CRITICAL+HIGH): a release is the
-        # artefact operators run as root with the Docker socket mounted, so a
-        # fixable CRITICAL must stop it. `ignore-unfixed` keeps Alpine base
-        # CVEs with no upstream patch from blocking a release nobody can fix.
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
-          scan-type: image
-          format: table
-          severity: CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
 
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2

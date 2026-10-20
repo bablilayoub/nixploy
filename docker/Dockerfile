@@ -9,8 +9,8 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable && corepack prepare pnpm@10 --activate
 
-# ---- Dependencies ----
-FROM base AS deps
+# ---- Dependency manifests ----
+FROM base AS manifests
 WORKDIR /app
 
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
@@ -18,8 +18,19 @@ COPY apps/web/package.json apps/web/package.json
 COPY apps/cli/package.json apps/cli/package.json
 COPY packages/server/package.json packages/server/package.json
 
+# ---- Build dependencies ----
+FROM manifests AS deps
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 	pnpm install --frozen-lockfile
+
+# ---- Production dependencies ----
+# Install independently: copying the build store also ships dev compilers,
+# test runners and the component generator. Preserve pnpm's workspace layout.
+FROM manifests AS production-deps
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+	pnpm install --prod --frozen-lockfile
+COPY docker/prune-runtime-deps.mjs /tmp/prune-runtime-deps.mjs
+RUN node /tmp/prune-runtime-deps.mjs /app
 
 # ---- Build ----
 FROM deps AS build
@@ -33,7 +44,8 @@ ENV NODE_ENV=production
 #   .next/standalone  unused (the custom server runs from the full tree)
 #   .next/dev         dev-server artefacts
 RUN pnpm --filter @nixploy/web build \
-	&& rm -rf /app/apps/web/.next/cache /app/apps/web/.next/standalone /app/apps/web/.next/dev
+	&& rm -rf /app/apps/web/.next/cache /app/apps/web/.next/standalone /app/apps/web/.next/dev \
+		/app/apps/web/node_modules /app/packages/server/node_modules
 
 # ---- Runtime ----
 # Plain node image: nothing at runtime goes through pnpm/corepack, so the panel
@@ -47,13 +59,6 @@ ENV LISTEN_HOST=0.0.0.0
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NIXPLOY_MIGRATIONS_DIR=/app/packages/server/drizzle
 ENV NIXPLOY_DISABLE_TRAEFIK_BOOT=1
-# Surfaced in Settings → Updates. install.sh / update.sh / CI pass --build-arg.
-ARG NIXPLOY_APP_VERSION=0.1.0
-ENV NIXPLOY_APP_VERSION=$NIXPLOY_APP_VERSION
-# Optional git SHA for /api/version (`--build-arg NIXPLOY_GIT_COMMIT=$(git rev-parse HEAD)`).
-ARG NIXPLOY_GIT_COMMIT=""
-ENV NIXPLOY_GIT_COMMIT=$NIXPLOY_GIT_COMMIT
-
 # Docker CLI talks to the host socket (Swarm, builds, logs).
 # git/openssh used when cloning app sources during deploys.
 # curl: HEALTHCHECK below. postgresql-client: instance backups prefer local pg_dump.
@@ -61,7 +66,12 @@ ENV NIXPLOY_GIT_COMMIT=$NIXPLOY_GIT_COMMIT
 # secrets — without it EVERY source build fails ("the buildx component is missing").
 # tzdata: without the zoneinfo database Alpine ignores TZ and every cron
 # (backups, schedules, platform alerts) silently runs in UTC.
-RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose git openssh-client openssl curl postgresql-client tzdata
+# CI changes this per run so a cached RUN cannot retain an already patched
+# Alpine package. Local rebuilds can pass the same argument; --pull alone
+# only refreshes the base manifest, not an unchanged apk layer.
+ARG NIXPLOY_APK_REFRESH=local
+RUN echo "Alpine package refresh: ${NIXPLOY_APK_REFRESH}" \
+	&& apk add --no-cache --upgrade docker-cli docker-cli-buildx docker-cli-compose git openssh-client openssl curl postgresql-client tzdata 'libexpat>=2.9.0-r0'
 
 # Migration runner with its own small node_modules (does not share the app tree).
 # The manifest and lockfile are vendored in docker/migrate-deps/ so the whole
@@ -87,9 +97,18 @@ RUN chmod +x /app/entrypoint.sh \
 # /app/node_modules/.pnpm, so the layout must stay /app-rooted. apps/landing,
 # apps/cli and tools/ are not shipped.
 COPY --from=build /app/package.json /app/pnpm-workspace.yaml /app/
-COPY --from=build /app/node_modules /app/node_modules
+COPY --from=build /app/tsconfig.base.json /app/
+COPY --from=production-deps /app/node_modules /app/node_modules
 COPY --from=build /app/packages/server /app/packages/server
 COPY --from=build /app/apps/web /app/apps/web
+COPY --from=production-deps /app/packages/server/node_modules /app/packages/server/node_modules
+COPY --from=production-deps /app/apps/web/node_modules /app/apps/web/node_modules
+
+# Version metadata does not invalidate the dependency/build/package layers.
+ARG NIXPLOY_APP_VERSION=0.1.0
+ENV NIXPLOY_APP_VERSION=$NIXPLOY_APP_VERSION
+ARG NIXPLOY_GIT_COMMIT=""
+ENV NIXPLOY_GIT_COMMIT=$NIXPLOY_GIT_COMMIT
 
 WORKDIR /app/apps/web
 EXPOSE 3000
