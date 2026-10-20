@@ -2,6 +2,36 @@
 
 How a service goes from "click Deploy" to a running container behind Traefik.
 
+## Reviewed configuration releases
+
+Saving organization, project, environment or application/Compose variables
+persists a draft and performs no Docker operation. Runtime precedence is
+organization → project → environment → service, parsed by the same canonical
+dotenv parser used by preview/review. Database-generated credentials retain
+their own database lifecycle.
+
+Use **Review saved changes** (or the project/environment/shared review button) on an environment editor to inspect affected
+applications and Compose stacks. The review lists redacted added/changed/removed
+variable names and their winning source layer (names are also hidden without
+`secrets.read`). It compares against the last successful deployment snapshot;
+older services without a snapshot show an unknown baseline. Select the intended
+services and explicitly deploy. Managed databases and previews are excluded.
+
+`configurationRelease.review` returns a purpose-separated HMAC token.
+`configurationRelease.deployReviewed` rechecks capabilities, organization/team
+visibility and configuration drift under the database locks, then inserts queue
+rows and encrypted environment/build-argument snapshots in the same transaction.
+Notifications are emitted after commit. A draft edit made while a job is queued
+cannot replace those captured inputs. This freezes environment inputs, not all
+service settings, repository revisions or mutable image tags.
+
+The normal Deploy button also captures those inputs when queueing. Workers fail
+before Docker when an older queued row has no snapshot; review and requeue that
+work. Application convergence requires the new deployment revision on all desired
+replicas, rather than accepting a still-running task from the previous release.
+See [upgrade-notes.md](./upgrade-notes.md#next-operator-workspace-upgrade) for the
+organization-storage migration and the old-worker protocol fence.
+
 ## The queue
 
 The `deployment` **table is the queue**. `queueDeployment(...)`
@@ -333,14 +363,16 @@ by contrast, no longer owns anything stateful beyond its websockets.
    - docker-image source skips the build entirely.
 4. **Pre-deploy hook** (`hooks.ts`), when `preDeployCommand` is set: the
    command runs in a throwaway container from the image this job just
-   produced — `docker run --rm --network <environment overlay> --env-file
-   <0600 temp file> <hardening flags> <image> sh -c '<command>'` — with the
-   merged runtime env in the file (never on argv, where `ps` would show it)
-   and the same capability drop / `no-new-privileges` / pids ceiling the
-   Swarm spec applies. A non-zero exit **aborts the deployment before the
+   produced. The local or SSH Docker Engine API receives the parsed `Env`
+   array directly; `docker start -a <created container id>` streams its
+   output. Quotes, backslashes and newlines keep their literal values,
+   without an env file or values on argv. The container uses the environment
+   overlay and the same capability drop / `no-new-privileges` / pids ceiling
+   the Swarm spec applies. A non-zero exit **aborts the deployment before the
    rollout**, so the previous version keeps serving. Time-boxed by
    `NIXPLOY_HOOK_TIMEOUT_MS` (default 10 minutes); the container is force
-   removed and the env file deleted whatever happens. Previews never run it:
+   removed with ownership checks after completion/cancellation. Labelled
+   cleanup handles a lost create response. Previews never run it:
    a pull request's migration must not touch the environment production
    shares. **The image must contain a shell**: the hook overrides the image's
    ENTRYPOINT with `sh` (otherwise an image like `traefik/whoami` would take
@@ -713,7 +745,10 @@ through `modules/backups` to S3 destinations on schedules.
   it. Rolling back restores the compose row's file and **service-level** env
   from the snapshot — not the merged env, or every inherited project/
   environment variable would be absorbed into the service row — and enqueues
-  a normal `rollback`-triggered deployment through `queueDeployment`.
+  a normal `rollback`-triggered deployment through `queueDeployment`. The
+  queued environment snapshot uses the historical merged runtime variables
+  and, when available, historical build arguments, so newer shared drafts
+  cannot replace the rollback's inputs. Incident recovery uses the same helper.
   Git-backed compose rows restore env only (the repository stays the authority
   for the file); the procedure reports `restoredComposeFile: false`.
 - **Docker-image auto-update** (`modules/deployment/auto-update.ts`, hourly
@@ -753,6 +788,12 @@ through `modules/backups` to S3 destinations on schedules.
   than 30 days. Deleting an application or compose service also removes its
   log files, which live outside the app dir and have no FK to cascade through.
 
-## Convergence gate (2026-09-11)
+## Application convergence gate
 
-After `upsertSwarmService` the worker waits for one task of the service to reach `running` (Swarm reports it only after the image's HEALTHCHECK passed) before running the post-deploy hook and logging `Deployment successful`. Three consecutive failed/rejected tasks fail the deployment with the engine's reason; the budget is `NIXPLOY_CONVERGENCE_TIMEOUT_MS` (default 180 s). With start-first updates the previous version keeps serving in the meantime.
+After `upsertSwarmService`, the worker waits for the desired tasks of the new
+deployment revision to reach `running`. Every desired replica must belong to
+that revision; an old task retained during a rolling update cannot satisfy it.
+The post-deploy hook also targets the new revision. Failed/rejected tasks and
+the `NIXPLOY_CONVERGENCE_TIMEOUT_MS` budget (default 180 seconds) retain their
+failure behavior. This verifies the Swarm rollout, not arbitrary HTTP or
+application readiness; configure and verify the service's health policy too.

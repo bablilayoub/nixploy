@@ -14,6 +14,7 @@ import {
 import { shutdownGraceMs } from "../../packages/server/src/lib/shutdown";
 import { startAuthRebuildBridge } from "../../packages/server/src/modules/auth/sso-notify";
 import { startEventBridge } from "../../packages/server/src/modules/deployment/notify";
+import { migrateOrganizationEnvironments } from "../../packages/server/src/modules/projects/organization-env";
 import { PEER_IP_HEADER } from "../../packages/server/src/utils/rate-limit";
 // Importing worker.ts starts nothing — it only exports the background half
 // (claim loop, crons, boot recovery, Traefik) that role `all` runs in-process
@@ -127,6 +128,8 @@ const app = next({ dev, hostname: listenHost, port });
 const handle = app.getRequestHandler();
 
 async function main() {
+	// Complete the encrypted-storage backfill before HTTP or queue work can use variables.
+	await migrateOrganizationEnvironments();
 	if (isUnknownProcessRole(process.env.NIXPLOY_ROLE)) {
 		console.warn(
 			`▲ Unknown NIXPLOY_ROLE "${process.env.NIXPLOY_ROLE}" — falling back to "all" (valid: all, panel, worker)`,

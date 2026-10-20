@@ -233,25 +233,27 @@ export function ServicePageHeader({
 				</span>
 			}
 			description={
-				<span className="flex flex-col gap-1">
-					{subtitle ? <span className="truncate">{subtitle}</span> : null}
+				<span className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+					{subtitle ? (
+						<span className="max-w-full truncate font-mono text-xs">{subtitle}</span>
+					) : null}
 					{(domainsQuery.data?.length ?? 0) > 0 ? (
 						<ServiceUrlBar domains={domainsQuery.data ?? []} onShowAll={showDomainsTab} />
 					) : null}
 					{lastDeploy?.finishedAt && !lastError ? (
-						<span className="flex items-center gap-1.5">
+						<span className="flex flex-wrap items-center gap-1.5 text-xs">
 							Deployed <DateTime value={lastDeploy.finishedAt} />
 							{describeTriggeredBy(lastDeploy) ? ` ${describeTriggeredBy(lastDeploy)}` : null}
 						</span>
 					) : null}
 					{notice && !lastError ? (
-						<span className="flex items-center gap-1.5">
+						<span className="flex basis-full items-start gap-2 text-xs leading-5">
 							<Info className="size-3.5 shrink-0" />
 							<span className="min-w-0">{notice}</span>
 						</span>
 					) : null}
 					{lastError ? (
-						<span className="flex flex-wrap items-center gap-1.5 text-destructive">
+						<span className="flex basis-full flex-wrap items-center gap-2 text-sm text-destructive">
 							<span className="min-w-0 wrap-anywhere">Last deployment failed: {lastError}</span>
 							{onViewLogs ? (
 								<button

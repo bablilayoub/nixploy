@@ -7,6 +7,7 @@ import { bitbucketRouter } from "./routers/bitbucket";
 import { brandingRouter } from "./routers/branding";
 import { certificateRouter } from "./routers/certificate";
 import { composeRouter } from "./routers/compose";
+import { configurationReleaseRouter } from "./routers/configuration-release";
 import { deploymentRouter } from "./routers/deployment";
 import { destinationRouter } from "./routers/destination";
 import { dockerRouter } from "./routers/docker";
@@ -58,6 +59,7 @@ export const appRouter = router({
 	bitbucket: bitbucketRouter,
 	certificate: certificateRouter,
 	compose: composeRouter,
+	configurationRelease: configurationReleaseRouter,
 	deployment: deploymentRouter,
 	docker: dockerRouter,
 	destination: destinationRouter,

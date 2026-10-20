@@ -9,6 +9,38 @@ pin. Operator-facing detail — what to check before upgrading, what will look
 different afterwards — lives in [docs/upgrade-notes.md](docs/upgrade-notes.md);
 this file is the summary.
 
+## Unreleased
+
+### Added
+
+- Reviewed configuration releases: save drafts, inspect redacted changes and
+  their source layers, then deploy selected applications or Compose stacks.
+  Queued environment/build-argument inputs are encrypted and immutable.
+- Incident investigation workspace with project/state filters, older pages,
+  scoped evidence links and actual recovery progress. Recovery remains open
+  until an operator verifies it; duplicate approvals are blocked.
+- Retained PostgreSQL recovery copies in a separate private environment, with
+  fresh credentials, validated archives, restore/catalog checks and explicit
+  target-only deletion. Source data and stored dumps are preserved.
+
+### Changed
+
+- Panel design system: mineral surfaces, plum actions, IBM Plex typography,
+  persistent desktop navigation, shared status markers and clearer mobile
+  directory/deployment hierarchy. Saved branding remains authoritative.
+- Organization variables move from plaintext metadata to encrypted storage.
+  Migration `0048` requires a coordinated stop/drain and a backup; old binaries
+  cannot use the upgraded storage/worker protocol. Read the upgrade notes.
+
+### Fixed
+
+- Saving application variables no longer changes a running Swarm service.
+  Runtime/review use one organization → project → environment → service parser.
+- Deployment convergence requires the new revision on all desired replicas;
+  application hooks preserve literal environment values through Docker's API.
+- Runtime-log pagination preserves equal-time lines and keeps continuation
+  available after an empty scan-budget page.
+
 ## [0.7.3] — 2026-09-21
 
 ### Changed

@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { SettingsSection } from "@/components/layout/settings-section";
+import { ConfigurationRelease } from "@/components/services/configuration-release";
 import { EnvEditor } from "@/components/services/env-editor";
 import { Button } from "@/components/ui/button";
 import { HelpLink } from "@/components/ui/help-link";
@@ -16,8 +17,8 @@ import { useTRPC } from "@/lib/trpc";
 const TITLE = "Shared variables";
 const DESCRIPTION = (
 	<>
-		Inherited by every project, environment and service; lower levels override on key conflicts.{" "}
-		<HelpLink slug="deploy" />
+		Inherited by applications and Compose stacks across projects and environments; lower levels
+		override on key conflicts. <HelpLink slug="deploy" />
 	</>
 );
 
@@ -38,6 +39,7 @@ export function SharedVariablesCard() {
 		successMessage: "Shared variables saved",
 		invalidate: [
 			trpc.organization.environment.queryKey(),
+			trpc.configurationRelease.review.queryKey(),
 			// Every resolved preview merges the org level in.
 			trpc.project.getResolvedEnvironment.queryKey(),
 		],
@@ -87,6 +89,7 @@ export function SharedVariablesCard() {
 				downloadName="organization.env"
 				onSave={(env) => save.mutateAsync({ env })}
 			/>
+			<ConfigurationRelease scope={{ kind: "organization" }} />
 		</SettingsSection>
 	);
 }

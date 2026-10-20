@@ -5,21 +5,23 @@ import { Download, Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+
 import { useBranding } from "@/components/branding-provider";
 import { CommandPalette } from "@/components/command-palette";
 import { ProfileDropdown } from "@/components/layout/profile-dropdown";
-import { isSidebarNavActive, sidebarNavGroups } from "@/components/layout/sidebar-data";
+import {
+	isSidebarNavActive,
+	type SidebarNavGroup,
+	sidebarNavGroups,
+} from "@/components/layout/sidebar-data";
 import { ModeToggle } from "@/components/mode-toggle";
 import { OrgSwitcher } from "@/components/org-switcher";
 import { Logo, LogoMark } from "@/components/shell/logo";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
-
-const allNavItems = sidebarNavGroups.flatMap((group) => group.items);
 
 function useUpdateAvailable() {
 	const trpc = useTRPC();
@@ -31,142 +33,133 @@ function useUpdateAvailable() {
 	return Boolean(bannerQuery.data?.updateAvailable) && Boolean(bannerQuery.data?.canManageUpdate);
 }
 
-function NavLink({
-	href,
-	label,
-	active,
+function WorkspaceNavigation({
+	groups,
+	pathname,
+	updateAvailable,
 	onNavigate,
-	badge,
 }: {
-	href: string;
-	label: string;
-	active: boolean;
+	groups: SidebarNavGroup[];
+	pathname: string;
+	updateAvailable: boolean;
 	onNavigate?: () => void;
-	badge?: boolean;
 }) {
 	return (
-		<Link
-			href={href}
-			aria-current={active ? "page" : undefined}
-			onClick={onNavigate}
-			className={cn(
-				"relative inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-				active
-					? "bg-muted font-medium text-foreground"
-					: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-			)}
-		>
-			{label}
-			{badge ? (
-				<span className="relative flex size-1.5">
-					<span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-75" />
-					<span className="relative inline-flex size-1.5 rounded-full bg-success" />
-				</span>
-			) : null}
-		</Link>
+		<nav aria-label="Main navigation" className="flex flex-col gap-7 px-3 py-6">
+			{groups.map((group) => (
+				<div key={group.title} className="space-y-2">
+					<p className="px-3 text-xs font-medium text-muted-foreground">{group.title}</p>
+					<div className="space-y-1">
+						{group.items.map((item) => {
+							const active = isSidebarNavActive(pathname, item.url);
+							const Icon = item.icon;
+							return (
+								<Link
+									key={item.url}
+									href={item.url}
+									aria-current={active ? "page" : undefined}
+									onClick={onNavigate}
+									className={cn(
+										"flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+										active
+											? "status-spine bg-selection font-semibold text-foreground"
+											: "text-shell-foreground hover:bg-card/70 hover:text-foreground",
+									)}
+								>
+									<Icon aria-hidden className="size-4 shrink-0" />
+									{item.title}
+									{item.url === "/dashboard/settings" && updateAvailable ? (
+										<span className="ms-auto size-1.5 rounded-full bg-success" />
+									) : null}
+								</Link>
+							);
+						})}
+					</div>
+				</div>
+			))}
+		</nav>
 	);
 }
 
-/** Vercel-style sticky top navigation — brand, links, search, account. */
+/** Persistent desktop context and the same navigation in a mobile sheet. */
 export function TopNav() {
 	const pathname = usePathname();
 	const { can } = useCapabilities({ strict: true });
-	const navItems = allNavItems.filter((item) => !item.capability || can(item.capability));
+	const navGroups = sidebarNavGroups
+		.map((group) => ({
+			...group,
+			items: group.items.filter((item) => !item.capability || can(item.capability)),
+		}))
+		.filter((group) => group.items.length > 0);
 	const branding = useBranding();
 	const [mobileOpen, setMobileOpen] = useState(false);
 	const updateAvailable = useUpdateAvailable();
 
 	return (
-		<header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-md">
-			<div className="mx-auto flex h-14 w-full max-w-[1400px] items-center gap-3 px-4 sm:px-6">
-				<div className="flex min-w-0 items-center gap-2">
-					<Link href="/dashboard" className="hidden shrink-0 sm:inline-flex">
-						<Logo />
-					</Link>
-					<Link
-						href="/dashboard"
-						className="inline-flex shrink-0 sm:hidden"
-						aria-label={branding.productName}
-					>
-						<LogoMark className="size-7" />
-					</Link>
-					<Separator orientation="vertical" className="hidden h-4 sm:block" />
-					<OrgSwitcher />
+		<>
+			<aside className="fixed inset-y-0 start-0 z-40 hidden w-52 flex-col border-e border-border bg-shell lg:flex">
+				<Link
+					href="/dashboard"
+					className="flex h-14 shrink-0 items-center border-b border-border px-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+				>
+					<Logo className="[&>span:last-child]:text-base" />
+				</Link>
+				<div className="min-h-0 flex-1 overflow-y-auto">
+					<WorkspaceNavigation
+						groups={navGroups}
+						pathname={pathname}
+						updateAvailable={updateAvailable}
+					/>
 				</div>
+			</aside>
 
-				<nav className="ms-1 hidden items-center gap-0.5 xl:flex">
-					{navItems.map((item) => (
-						<NavLink
-							key={item.url}
-							href={item.url}
-							label={item.title}
-							active={isSidebarNavActive(pathname, item.url)}
-							badge={item.url === "/dashboard/settings" ? updateAvailable : false}
-						/>
-					))}
-				</nav>
-
-				<div className="ms-auto flex items-center gap-1.5">
-					{updateAvailable ? (
-						<Button
-							asChild
-							variant="outline"
-							size="sm"
-							className="hidden h-8 gap-1.5 lg:inline-flex"
-						>
-							<Link href="/dashboard/settings/server">
-								<Download className="size-3.5" />
-								Update
-							</Link>
-						</Button>
-					) : null}
-					<CommandPalette />
-					<ModeToggle />
-					<ProfileDropdown />
-
+			<header className="sticky top-0 z-40 border-b border-border bg-card">
+				<div className="flex h-14 min-w-0 items-center gap-2 px-3 sm:gap-3 sm:px-6">
 					<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
 						<SheetTrigger asChild>
-							<Button variant="ghost" size="icon" className="xl:hidden" aria-label="Open menu">
+							<Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open menu">
 								<Menu className="size-5" />
 							</Button>
 						</SheetTrigger>
-						<SheetContent side="left" className="w-72 p-0">
-							<SheetHeader className="border-b px-4 py-3 text-start">
-								<SheetTitle className="flex items-center gap-2">
-									<LogoMark className="size-5" />
-									Nixploy
+						<SheetContent side="left" className="w-72 bg-shell p-0">
+							<SheetHeader className="border-b px-5 py-4 text-start">
+								<SheetTitle>
+									<Logo />
 								</SheetTitle>
 							</SheetHeader>
-							<nav className="flex flex-col gap-1 p-3">
-								{navItems.map((item) => {
-									const Icon = item.icon;
-									const active = isSidebarNavActive(pathname, item.url);
-									return (
-										<Link
-											key={item.url}
-											href={item.url}
-											aria-current={active ? "page" : undefined}
-											onClick={() => setMobileOpen(false)}
-											className={cn(
-												"flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-												active
-													? "bg-muted font-medium text-foreground"
-													: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-											)}
-										>
-											<Icon className="size-4 shrink-0" />
-											{item.title}
-											{item.url === "/dashboard/settings" && updateAvailable ? (
-												<span className="ms-auto size-1.5 rounded-full bg-success" />
-											) : null}
-										</Link>
-									);
-								})}
-							</nav>
+							<WorkspaceNavigation
+								groups={navGroups}
+								pathname={pathname}
+								updateAvailable={updateAvailable}
+								onNavigate={() => setMobileOpen(false)}
+							/>
 						</SheetContent>
 					</Sheet>
+					<Link
+						href="/dashboard"
+						className="hidden shrink-0 sm:inline-flex lg:hidden"
+						aria-label={branding.productName}
+					>
+						<LogoMark className="size-6" />
+					</Link>
+					<div className="min-w-0 flex-1">
+						<OrgSwitcher className="max-w-full" />
+					</div>
+					<div className="ms-auto flex shrink-0 items-center gap-1 sm:gap-2">
+						{updateAvailable ? (
+							<Button asChild variant="outline" size="sm" className="hidden gap-1.5 xl:inline-flex">
+								<Link href="/dashboard/settings/server">
+									<Download className="size-3.5" />
+									Update
+								</Link>
+							</Button>
+						) : null}
+						<CommandPalette className="min-h-9 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+						<ModeToggle />
+						<ProfileDropdown />
+					</div>
 				</div>
-			</div>
-		</header>
+			</header>
+		</>
 	);
 }

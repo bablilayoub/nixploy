@@ -1,0 +1,41 @@
+import { index, integer, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { organizations } from "./auth";
+import { backups } from "./backup";
+import { postgres } from "./database";
+import { environments } from "./project";
+import { createdAt, idColumn } from "./utils";
+
+/** A retained, private PostgreSQL restore. Credentials live only on its managed service. */
+export const recoveryCopies = pgTable(
+	"recovery_copy",
+	{
+		recoveryCopyId: idColumn("recovery_copy_id"),
+		organizationId: text("organization_id")
+			.notNull()
+			.references(() => organizations.id, { onDelete: "cascade" }),
+		requestId: text("request_id").notNull(),
+		backupId: text("backup_id").references(() => backups.backupId, { onDelete: "set null" }),
+		sourcePostgresId: text("source_postgres_id").references(() => postgres.postgresId, {
+			onDelete: "set null",
+		}),
+		targetPostgresId: text("target_postgres_id").references(() => postgres.postgresId, {
+			onDelete: "set null",
+		}),
+		environmentId: text("environment_id")
+			.notNull()
+			.references(() => environments.environmentId, { onDelete: "cascade" }),
+		name: text("name").notNull(),
+		objectKey: text("object_key").notNull(),
+		status: text("status").notNull().default("validating"),
+		/** Fixed operation budget; expired work is shown as interrupted, never ready. */
+		deadline: timestamp("deadline", { withTimezone: true }).notNull(),
+		tableCount: integer("table_count"),
+		error: text("error"),
+		createdAt: createdAt(),
+		finishedAt: timestamp("finished_at", { withTimezone: true }),
+	},
+	(table) => [
+		uniqueIndex("recovery_copy_request_idx").on(table.organizationId, table.requestId),
+		index("recovery_copy_backup_idx").on(table.backupId, table.createdAt),
+	],
+);

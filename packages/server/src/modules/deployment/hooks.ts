@@ -1,16 +1,33 @@
+import type Docker from "dockerode";
+import { bestEffort } from "../../utils/best-effort";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
 import type { DeploymentContext } from "./context";
-import { CommandError, writeFileTargeted } from "./docker";
-import { getAppBasePath, shellQuote } from "./paths";
-import { DEFAULT_CAPABILITY_ADD, DEFAULT_CAPABILITY_DROP, DEFAULT_PIDS_LIMIT } from "./swarm";
+import { CommandError, getDocker } from "./docker";
+import { envToArray } from "./env";
+import {
+	DEPLOYMENT_HOOK_LABEL,
+	DEPLOYMENT_HOOK_OWNER_LABEL,
+	hookOwnershipToken,
+	ownedDeploymentHook,
+} from "./hook-ownership";
+
+export { DEPLOYMENT_HOOK_LABEL } from "./hook-ownership";
+
+import { shellQuote } from "./paths";
+import {
+	DEFAULT_CAPABILITY_ADD,
+	DEFAULT_CAPABILITY_DROP,
+	DEFAULT_PIDS_LIMIT,
+	DEPLOYMENT_REVISION_LABEL,
+} from "./swarm";
 
 /**
  * Pre/post-deploy hooks (product audit, Deploy #5).
  *
  * - **pre**: a throwaway container from the image this deployment just built,
  *   on the service's own environment overlay, with the merged runtime env
- *   handed over an `--env-file` written 0600 (never on argv, where `ps`
- *   shows it). It runs BEFORE the rollout, so a non-zero exit aborts the
+ *   handed to the Engine API as an Env array (never on argv or in an
+ *   env file whose raw Docker syntax would change quotes/newlines). It runs BEFORE the rollout, so a non-zero exit aborts the
  *   deployment and the previous version keeps serving traffic. Typical use:
  *   `npm run migrate`.
  * - **post**: `docker exec` inside one already-running task, after the
@@ -40,39 +57,41 @@ export function hardeningFlags(): string {
 	].join(" ");
 }
 
-export interface PreDeployCommandInput {
-	/** Image reference the hook runs (the tag this deployment built/pulled). */
-	image: string;
-	/** Environment overlay the container joins, so it can reach its database. */
-	network: string;
-	/** Absolute path of the 0600 env file on the target server. */
-	envFilePath: string;
-	/** Container name, so a timed-out run can still be force-removed. */
-	containerName: string;
-	/** Tenant-supplied shell command. */
-	command: string;
+/** Engine configuration preserves every parsed value byte, including newlines. */
+export function buildPreDeployContainerOptions(
+	input: RunPreDeployHookInput,
+	serverId: string | null = null,
+): Docker.ContainerCreateOptions {
+	return {
+		name: hookContainerName(input.appName, input.deploymentId),
+		Image: input.image,
+		Entrypoint: ["sh"],
+		Cmd: ["-c", input.command],
+		Env: envToArray(input.env),
+		Labels: {
+			[DEPLOYMENT_HOOK_LABEL]: input.deploymentId,
+			[DEPLOYMENT_HOOK_OWNER_LABEL]: hookOwnershipToken(
+				input.deploymentId,
+				hookContainerName(input.appName, input.deploymentId),
+				serverId,
+			),
+		},
+		AttachStdout: true,
+		AttachStderr: true,
+		HostConfig: {
+			NetworkMode: input.network,
+			AutoRemove: true,
+			CapDrop: [...DEFAULT_CAPABILITY_DROP],
+			CapAdd: [...DEFAULT_CAPABILITY_ADD],
+			SecurityOpt: ["no-new-privileges"],
+			PidsLimit: DEFAULT_PIDS_LIMIT,
+		},
+	};
 }
 
-/**
- * Exact `docker run` line for a pre-deploy hook.
- *
- * `--entrypoint sh` is load-bearing: without it the image's own ENTRYPOINT
- * receives `sh -c '<command>'` as *arguments*. An image like `traefik/whoami`
- * (`ENTRYPOINT ["/whoami"]`) then ignores them and starts its server instead,
- * so the hook never runs and the container sits there until the hook deadline
- * kills it. Overriding the entrypoint makes the command the command.
- */
-export function buildPreDeployCommand(input: PreDeployCommandInput): string {
-	return [
-		"docker run --rm",
-		`--name ${shellQuote(input.containerName)}`,
-		`--network ${shellQuote(input.network)}`,
-		`--env-file ${shellQuote(input.envFilePath)}`,
-		hardeningFlags(),
-		"--entrypoint sh",
-		shellQuote(input.image),
-		`-c ${shellQuote(input.command)}`,
-	].join(" ");
+/** The only CLI argument is an opaque created-container identity. */
+export function buildPreDeployCommand(containerId: string): string {
+	return `docker start -a ${shellQuote(containerId)}`;
 }
 
 /** Exact `docker exec` line for a post-deploy hook. */
@@ -81,8 +100,11 @@ export function buildPostDeployCommand(containerId: string, command: string): st
 }
 
 /** Newest running container carrying `label`, one id per line (first wins). */
-export function buildFindContainerCommand(label: string): string {
-	return `docker ps --filter ${shellQuote(`label=${label}`)} --filter status=running --format '{{.ID}}'`;
+export function buildFindContainerCommand(label: string, requiredLabels: string[] = []): string {
+	const filters = [label, ...requiredLabels]
+		.map((value) => `--filter ${shellQuote(`label=${value}`)}`)
+		.join(" ");
+	return `docker ps ${filters} --filter status=running --format '{{.ID}}'`;
 }
 
 /** Swarm task containers of a service carry this label. */
@@ -96,10 +118,6 @@ export const composeProjectLabel = (appName: string): string =>
 /** `docker stack deploy` containers carry this label instead. */
 export const composeStackLabel = (appName: string): string =>
 	`com.docker.stack.namespace=${appName}`;
-
-/** `<config>/applications/<appName>/hook-<deploymentId>.env` — 0600, removed after the run. */
-export const hookEnvFilePath = (appName: string, deploymentId: string): string =>
-	`${getAppBasePath(appName)}/hook-${deploymentId}.env`;
 
 /** `<appName>-hook-<short id>` — docker container names allow `[a-zA-Z0-9_.-]`. */
 export function hookContainerName(appName: string, deploymentId: string): string {
@@ -141,38 +159,43 @@ export interface RunPreDeployHookInput {
 /**
  * Run the pre-deploy hook. Throws on a non-zero exit so the worker aborts
  * before `upsertSwarmService` — the running version is never touched. The
- * env file and a container that outlived its deadline are always cleaned up.
+ * owned container is removed even after cancellation or a late create.
  */
 export async function runPreDeployHook(
 	ctx: DeploymentContext,
 	input: RunPreDeployHookInput,
 ): Promise<void> {
-	const envFilePath = hookEnvFilePath(input.appName, input.deploymentId);
+	const docker = await getDocker(ctx.serverId);
 	const containerName = hookContainerName(input.appName, input.deploymentId);
+	let container: Docker.Container | null = null;
 	ctx.logger.line("Running pre-deploy command...");
-	// Secrets reach the container through a 0600 file on the target server,
-	// never through argv (`ps`) or the docker CLI's own environment.
-	await writeFileTargeted(ctx.serverId, envFilePath, `${input.env}\n`, "600");
 	try {
-		await ctx.run(
-			buildPreDeployCommand({
-				image: input.image,
-				network: input.network,
-				envFilePath,
-				containerName,
-				command: input.command,
-			}),
-			{ timeoutMs: hookTimeoutMs() },
-		);
+		container = await docker.createContainer(buildPreDeployContainerOptions(input, ctx.serverId));
+		// ctx.run checks cancellation before spawn and after a late process start.
+		// A late create can only yield an unstarted container, removed in finally.
+		await ctx.run(buildPreDeployCommand(container.id), { timeoutMs: hookTimeoutMs() });
 		ctx.logger.line("Pre-deploy command succeeded");
 	} catch (error) {
 		throw describeHookFailure("Pre-deploy command", error);
 	} finally {
-		await run(
-			ctx.serverId,
-			`docker rm -f ${shellQuote(containerName)} >/dev/null 2>&1 || true; rm -f ${shellQuote(envFilePath)}`,
-		).catch(() => {
-			// Best effort: `--rm` already removes the container on a clean exit.
+		await bestEffort("Remove pre-deploy hook container", async () => {
+			// A lost response may race the daemon's actual create. Retry a small
+			// bounded window; startup/hourly cleanup owns anything arriving later.
+			for (let attempt = 0; attempt < (container ? 1 : 10); attempt++) {
+				try {
+					const owned = container ?? docker.getContainer(containerName);
+					if (!container) {
+						const identity = ownedDeploymentHook(await owned.inspect(), ctx.serverId);
+						if (identity?.deploymentId !== input.deploymentId) return;
+					}
+					await owned.remove({ force: true, v: true });
+					return;
+				} catch (error) {
+					if ((error as { statusCode?: number })?.statusCode !== 404) throw error;
+					if (container || attempt === 9) return;
+					await new Promise((resolve) => setTimeout(resolve, 100));
+				}
+			}
 		});
 	}
 }
@@ -180,6 +203,8 @@ export async function runPreDeployHook(
 export interface RunExecHookInput {
 	/** Container labels to look through, in order (swarm service, compose project, stack). */
 	labels: string[];
+	/** ANDed with each lookup alternative; never execute a post-hook on old replicas. */
+	requiredLabels?: string[];
 	command: string;
 	/** Shown in the log when no running container matches. */
 	appName: string;
@@ -209,7 +234,10 @@ export async function runExecHook(ctx: DeploymentContext, input: RunExecHookInpu
 	let containerId: string | null = null;
 	do {
 		for (const label of input.labels) {
-			const out = await run(ctx.serverId, buildFindContainerCommand(label)).catch(() => "");
+			const out = await run(
+				ctx.serverId,
+				buildFindContainerCommand(label, input.requiredLabels),
+			).catch(() => "");
 			const first = out
 				.split("\n")
 				.map((line) => line.trim())
@@ -242,13 +270,16 @@ export async function runExecHook(ctx: DeploymentContext, input: RunExecHookInpu
 /** Post-deploy hook of an application: exec into one converged swarm task. */
 export function runPostDeployHook(
 	ctx: DeploymentContext,
-	input: { appName: string; command: string },
+	input: { appName: string; command: string; deploymentId?: string },
 ): Promise<void> {
 	return runExecHook(ctx, {
 		appName: input.appName,
 		command: input.command,
 		label: "Post-deploy command",
 		labels: [swarmServiceLabel(input.appName)],
+		requiredLabels: input.deploymentId
+			? [`${DEPLOYMENT_REVISION_LABEL}=${input.deploymentId}`]
+			: [],
 		waitMs: DEFAULT_HOOK_CONVERGENCE_MS,
 	});
 }

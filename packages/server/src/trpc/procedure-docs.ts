@@ -48,7 +48,7 @@ function databaseDocs(router: string, label: string): Record<string, ProcedureDo
 		},
 		[`${router}.create`]: {
 			summary: `Create a ${label} service`,
-			description: `Creates the row and its volume, then starts the container. Credentials are stored encrypted at rest (AES-256-GCM).`,
+			description: `Creates an idle service row with encrypted credentials. Call start explicitly to provision its private network, volume and container.`,
 			capability: ["service.create", "secrets.write"],
 		},
 		[`${router}.update`]: {
@@ -691,6 +691,23 @@ const docs: Record<string, ProcedureDoc> = {
 		description:
 			"Schedules of one database service, or of the instance itself (`databaseType: web-server`), each with its most recent run.",
 	},
+	"backup.copies": {
+		summary: "List retained recovery copies",
+		description:
+			"Latest 100 PostgreSQL recovery copies for an accessible backup. Both source and target projects are scoped; expired operations report an unavailable result, never success.",
+	},
+	"backup.createCopy": {
+		summary: "Restore a PostgreSQL dump into a private copy",
+		description:
+			"Organization admin required. Validates the archive before creating a new managed PostgreSQL service in another accessible environment, with fresh credentials, the source image/server and no published port. Blocks through restore and verification; requestId is idempotent. The source is preserved. Copies retain unsanitized data until explicit deletion.",
+		capability: ["backups.manage", "service.create", "service.deploy", "secrets.write"],
+	},
+	"backup.deleteCopy": {
+		summary: "Delete a retained recovery database",
+		description:
+			"Organization admin required. Checks source and target access, refuses active work, and deletes only the copy's managed service and data volume. Stored dumps and the source database are preserved.",
+		capability: ["backups.manage", "service.delete"],
+	},
 	"backup.one": {
 		summary: "Get one backup schedule",
 		description: "Cron expression, destination, retention and last run of a schedule.",
@@ -952,10 +969,31 @@ const docs: Record<string, ProcedureDoc> = {
 	},
 
 	// ──────────────────────────────────────────────────────── observability
+	"configurationRelease.review": {
+		summary: "Review saved configuration before deployment",
+		description:
+			"Lists reachable application and Compose targets with redacted variable changes, winning layer provenance and a keyed review token. Organization, project, environment and service variables share the runtime parser. No infrastructure changes occur.",
+	},
+	"configurationRelease.deployReviewed": {
+		summary: "Deploy selected reviewed configuration",
+		description:
+			"Rechecks project access, secret/deployment permissions and review drift in a transaction. Queues only selected applications and Compose stacks with encrypted immutable environment/build-argument snapshots; later draft edits do not change those inputs. Other service configuration and source code are not frozen by this review.",
+		capability: ["secrets.write", "service.deploy"],
+	},
 	"observability.incidents": {
 		summary: "List incidents",
 		description:
 			"Alert firings, deploy-failure streaks, watchdog events and uptime flips, newest first.",
+	},
+	"observability.incidentPage": {
+		summary: "Page incidents by state and project",
+		description:
+			"Keyset-paginated open, resolved or all incidents, with a separately scoped open count. Older active incidents remain discoverable beyond the legacy recent list.",
+	},
+	"observability.incident": {
+		summary: "Get a scoped incident investigation workspace",
+		description:
+			"Returns verified service/domain/deployment references and the actual recovery deployment state. Queueing recovery does not resolve an incident; explicit resolution records a verification note.",
 	},
 	"observability.serviceEvents": {
 		summary: "List a service's event timeline",
@@ -1007,7 +1045,7 @@ const docs: Record<string, ProcedureDoc> = {
 	"observability.resolveIncident": {
 		summary: "Resolve an incident",
 		description:
-			"Closes the incident with an optional note. Resolving does not fix the underlying condition — an alert rule that still breaches will raise a new incident after its cooldown.",
+			"Closes the incident. An applied recovery requires a verification note and cannot be resolved while its deployment is queued/running. An alert that still breaches can raise another incident after cooldown.",
 		capability: ["project.write"],
 	},
 	"observability.statusPage": {
@@ -1038,7 +1076,7 @@ const docs: Record<string, ProcedureDoc> = {
 	"observability.runtimeLogs": {
 		summary: "Search runtime log history",
 		description:
-			"What a service printed, kept beyond the container's lifetime: the worker collects `docker logs` every 30 s into hour files. One service by `appName`, or every visible service merged newest-first. `query` is a small grammar: terms, \"phrases\", -excludes, level:error, container:web, /regex/. Page with `before` (the previous page's `nextCursor`); `truncated` means the read stopped on its scan budget.",
+			'What a service printed, kept beyond the container\'s lifetime: the worker collects `docker logs` every 30 s into hour files. One service by `appName`, or every visible service merged newest-first. `query` is a small grammar: terms, "phrases", -excludes, level:error, container:web, /regex/. Page losslessly with `cursor` from `nextPageCursor`, including equal-time entries. Numeric `before`/`nextCursor` remains available for legacy clients. `truncated` means the read stopped on its scan budget; an empty page may still have a continuation.',
 		capability: ["service.runtime"],
 	},
 

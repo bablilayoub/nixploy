@@ -3,9 +3,11 @@ import {
 	buildFindContainerCommand,
 	buildPostDeployCommand,
 	buildPreDeployCommand,
+	buildPreDeployContainerOptions,
 	composeProjectLabel,
 	composeStackLabel,
 	DEFAULT_HOOK_TIMEOUT_MS,
+	DEPLOYMENT_HOOK_LABEL,
 	hardeningFlags,
 	hookContainerName,
 	hookTimeoutMs,
@@ -19,45 +21,36 @@ afterEach(() => {
 	else process.env.NIXPLOY_HOOK_TIMEOUT_MS = ORIGINAL;
 });
 
-describe("buildPreDeployCommand", () => {
-	it("runs a throwaway hardened container on the environment overlay", () => {
-		expect(
-			buildPreDeployCommand({
-				image: "echo-4a4487:latest",
-				network: "production-1a2b3c4d-net",
-				envFilePath: "/etc/nixploy/applications/echo-4a4487/hook-dep1.env",
-				containerName: "echo-4a4487-hook-dep1",
-				command: "npm run migrate",
-			}),
-		).toBe(
-			"docker run --rm " +
-				"--name 'echo-4a4487-hook-dep1' " +
-				"--network 'production-1a2b3c4d-net' " +
-				"--env-file '/etc/nixploy/applications/echo-4a4487/hook-dep1.env' " +
-				"--cap-drop ALL --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER " +
-				"--cap-add KILL --cap-add NET_BIND_SERVICE --cap-add SETGID --cap-add SETUID " +
-				"--security-opt no-new-privileges --pids-limit 1024 " +
-				// Without --entrypoint the image's ENTRYPOINT swallows the command
-				// (traefik/whoami starts its server and the hook never runs).
-				"--entrypoint sh " +
-				"'echo-4a4487:latest' " +
-				"-c 'npm run migrate'",
-		);
-	});
-
-	it("quotes a command that tries to break out of the shell argument", () => {
-		const command = buildPreDeployCommand({
+describe("pre-deploy transport", () => {
+	it("creates a hardened shell container through Engine configuration with exact env bytes", () => {
+		const options = buildPreDeployContainerOptions({
+			appName: "app",
+			deploymentId: "job",
 			image: "app:latest",
-			network: "net",
-			envFilePath: "/tmp/a.env",
-			containerName: "app-hook",
-			command: "echo 'x'; rm -rf /",
+			network: "env-net",
+			env: 'GREETING="hello world"\nMULTI="one\\ntwo"\nLITERAL=\'"quotes"\'\nEMPTY=',
+			command: "npm run migrate",
 		});
-		// The whole payload stays inside ONE quoted argument to `sh -c`.
-		expect(command.endsWith(`-c 'echo '\\''x'\\''; rm -rf /'`)).toBe(true);
-		expect(command).toContain("--entrypoint sh");
+		expect(options.Env).toEqual([
+			"GREETING=hello world",
+			"MULTI=one\ntwo",
+			'LITERAL="quotes"',
+			"EMPTY=",
+		]);
+		expect(options.Entrypoint).toEqual(["sh"]);
+		expect(options.Cmd).toEqual(["-c", "npm run migrate"]);
+		expect(options.Labels).toMatchObject({ [DEPLOYMENT_HOOK_LABEL]: "job" });
+		expect(options.HostConfig).toMatchObject({
+			NetworkMode: "env-net",
+			AutoRemove: true,
+			CapDrop: ["ALL"],
+			SecurityOpt: ["no-new-privileges"],
+			PidsLimit: 1024,
+		});
 	});
-
+	it("puts neither variable values nor hook commands on the CLI command line", () => {
+		expect(buildPreDeployCommand("a".repeat(64))).toBe(`docker start -a '${"a".repeat(64)}'`);
+	});
 	it("carries the same hardening the swarm spec applies", () => {
 		expect(hardeningFlags()).toContain("--cap-drop ALL");
 		expect(hardeningFlags()).toContain("--security-opt no-new-privileges");

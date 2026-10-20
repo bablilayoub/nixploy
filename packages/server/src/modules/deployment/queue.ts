@@ -216,7 +216,10 @@ interface ClaimedRow {
  * preview from before migration 0023). Boot recovery finalizes those.
  */
 export async function claimNextDeployment(serverId: string | null): Promise<QueueJob | null> {
-	const rows = (await db.execute(sql`
+	const rows = (await db.transaction(async (tx) => {
+		// The database fence rejects claims from workers predating immutable environments.
+		await tx.execute(sql`set local nixploy.environment_snapshot_protocol = '1'`);
+		return await tx.execute(sql`
 		update "deployment" d
 		set "status" = 'running', "started_at" = now()
 		from (
@@ -238,7 +241,8 @@ export async function claimNextDeployment(serverId: string | null): Promise<Queu
 		returning d."deployment_id", d."application_id", d."compose_id",
 			d."title", d."server_id", d."app_name", d."preview_deployment_id",
 			d."requested_ref"
-	`)) as unknown as ClaimedRow[];
+	`);
+	})) as unknown as ClaimedRow[];
 
 	const row = rows[0];
 	if (!row?.app_name) return null;

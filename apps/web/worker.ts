@@ -226,6 +226,13 @@ export async function startBackgroundWork(): Promise<void> {
 	// not lost between the claim loop starting and the bridge coming up.
 	await startEventBridge();
 	await recoverDeployments();
+	const { bestEffort } = await import("../../packages/server/src/utils/best-effort");
+	await bestEffort("Prune abandoned deployment hooks", async () => {
+		const { pruneDeploymentHookContainers } = await import(
+			"../../packages/server/src/modules/deployment/hooks-cleanup"
+		);
+		await pruneDeploymentHookContainers();
+	});
 	await initBackgroundSchedules();
 	await initTraefik();
 }
@@ -363,6 +370,10 @@ function registerShutdownHandlers(server: Server): void {
 
 /** Run this process as `nixploy-worker`. */
 export async function runWorkerProcess(): Promise<void> {
+	const { migrateOrganizationEnvironments } = await import(
+		"../../packages/server/src/modules/projects/organization-env"
+	);
+	await migrateOrganizationEnvironments();
 	registerProcessGuards();
 	const listenHost = process.env.LISTEN_HOST ?? "0.0.0.0";
 	const port = Number.parseInt(process.env.PORT ?? String(DEFAULT_WORKER_PORT), 10);

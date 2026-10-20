@@ -77,6 +77,7 @@ import { useCapabilities } from "@/hooks/use-capabilities";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
+import { RecoveryCopies } from "./recovery-copies";
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type DatabaseBackupEntry = RouterOutputs["backup"]["all"][number];
@@ -780,6 +781,9 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 					table
 				)}
 			</SettingsSection>
+			{target.kind === "database" && target.databaseType === "postgres" && (
+				<RecoveryCopies serviceId={target.serviceId} backups={backups} />
+			)}
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>

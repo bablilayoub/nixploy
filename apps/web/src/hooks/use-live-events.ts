@@ -50,7 +50,9 @@ export type InvalidationTarget =
 	| { path: "service.all"; serviceKind: string }
 	| { path: "service.getStatus"; serviceKind: string; id: string }
 	| { path: "observability.serviceEvents" }
-	| { path: "observability.incidents" };
+	| { path: "observability.incidents" }
+	| { path: "observability.incidentPage" }
+	| { path: "observability.incident" };
 
 const TERMINAL_STATUSES = new Set(["done", "error", "cancelled"]);
 
@@ -75,7 +77,11 @@ export function frameInvalidations(event: LiveEvent): InvalidationTarget[] {
 			return [{ path: "observability.serviceEvents" }];
 		// The incidents tab and the tray's proposals read one list.
 		case "incident":
-			return [{ path: "observability.incidents" }];
+			return [
+				{ path: "observability.incidents" },
+				{ path: "observability.incidentPage" },
+				{ path: "observability.incident" },
+			];
 		case "service-status": {
 			const targets: InvalidationTarget[] = [{ path: "docker.containers" }];
 			if (event.serviceKind === "application") {
@@ -107,6 +113,7 @@ export function frameInvalidations(event: LiveEvent): InvalidationTarget[] {
 			const targets: InvalidationTarget[] = [
 				{ path: "deployment.recent" },
 				{ path: "deployment.byProject" },
+				{ path: "observability.incident" },
 			];
 			if (event.applicationId) targets.push({ path: "deployment.byApplication" });
 			if (event.composeId) targets.push({ path: "deployment.byCompose" });
@@ -114,6 +121,8 @@ export function frameInvalidations(event: LiveEvent): InvalidationTarget[] {
 
 			targets.push(
 				{ path: "deployment.statsByProject" },
+				{ path: "observability.incidentPage" },
+				{ path: "observability.incidents" },
 				{ path: "environment.byProject" },
 				{ path: "project.all" },
 				{ path: "project.overview" },
@@ -202,6 +211,10 @@ export function useLiveEvents(): void {
 					return trpc.observability.serviceEvents.pathKey();
 				case "observability.incidents":
 					return trpc.observability.incidents.pathKey();
+				case "observability.incidentPage":
+					return trpc.observability.incidentPage.pathKey();
+				case "observability.incident":
+					return trpc.observability.incident.pathKey();
 				case "service.one": {
 					// The five database routers share one shape: `<kind>.one({ <kind>Id })`.
 					const namespace = namespaceOf(target.serviceKind);

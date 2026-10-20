@@ -5,12 +5,14 @@ import type { TRPCContext } from "../init";
  * Shared organization env (`organization.environment` / `saveEnvironment`):
  * the writer needs `settings.manage` + `secrets.write`, the reader redacts
  * the dotenv string for members without `secrets.read`, and the value lands
- * in the same `metadata.env` slot `resolveEnvironmentVariables` reads.
+ * in encrypted storage outside organization metadata.
  */
 
 const mocks = vi.hoisted(() => ({
 	findFirst: vi.fn(),
 	set: vi.fn(),
+	loadEnv: vi.fn(async () => "SHARED=1\nTOKEN=abc"),
+	saveEnv: vi.fn(async () => {}),
 	where: vi.fn(),
 	assertCapability: vi.fn(async (_user: string, _org: string, _capability: string) => {}),
 	hasCapability: vi.fn(async (_user: string, _org: string, _capability: string) => true),
@@ -51,6 +53,10 @@ vi.mock("../../modules/auth/two-factor-gate", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../modules/auth/two-factor-gate")>();
 	return { ...actual, isTwoFactorGateBlocked: vi.fn(async () => false) };
 });
+vi.mock("../../modules/projects/organization-env", () => ({
+	loadOrganizationEnvironment: mocks.loadEnv,
+	saveOrganizationEnvironment: mocks.saveEnv,
+}));
 vi.mock("../../modules/audit", () => ({ auditFromSession: mocks.audit }));
 
 import { TRPCError } from "@trpc/server";
@@ -76,6 +82,7 @@ beforeEach(() => {
 	mocks.where.mockResolvedValue([]);
 	mocks.set.mockReturnValue({ where: mocks.where });
 	mocks.hasCapability.mockResolvedValue(true);
+	mocks.loadEnv.mockResolvedValue("SHARED=1\nTOKEN=abc");
 	mocks.assertCapability.mockResolvedValue(undefined);
 });
 
@@ -99,7 +106,8 @@ describe("organization.environment", () => {
 		});
 	});
 
-	it("treats missing or malformed metadata as no variables", async () => {
+	it("reads encrypted storage rather than legacy metadata", async () => {
+		mocks.loadEnv.mockResolvedValue("");
 		mocks.findFirst.mockResolvedValue({ ...orgRow, metadata: "{not json" });
 		const caller = organizationRouter.createCaller(ctx);
 		await expect(caller.environment()).resolves.toMatchObject({ env: "" });
@@ -122,19 +130,13 @@ describe("organization.saveEnvironment", () => {
 		expect(mocks.set).not.toHaveBeenCalled();
 	});
 
-	it("writes metadata.env and keeps the other metadata keys", async () => {
+	it("writes encrypted organization storage without returning secrets or changing metadata", async () => {
 		const caller = organizationRouter.createCaller(ctx);
 		await expect(caller.saveEnvironment({ env: "A=1\nB=two words" })).resolves.toEqual({
 			organizationId: "org-1",
-			env: "A=1\nB=two words",
 		});
-		expect(mocks.set).toHaveBeenCalledTimes(1);
-		const [values] = mocks.set.mock.calls[0] as [{ metadata: string }];
-		expect(JSON.parse(values.metadata)).toEqual({
-			quotas: { maxProjects: 3 },
-			env: "A=1\nB=two words",
-		});
-		// protectedProcedure augments the context (organizationId(), …) — match loosely.
+		expect(mocks.saveEnv).toHaveBeenCalledWith("org-1", "A=1\nB=two words");
+		expect(mocks.set).not.toHaveBeenCalled();
 		expect(mocks.audit).toHaveBeenCalledWith(
 			expect.anything(),
 			"org-1",

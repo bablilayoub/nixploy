@@ -1,18 +1,16 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { Check, Loader2 } from "lucide-react";
-import Link from "next/link";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { ArrowRight, Loader2 } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { StatusPageCard } from "@/components/monitoring/status-page-card";
 import { QueryState } from "@/components/query-state";
-import { capabilityHint } from "@/components/services/capability-hint";
 import { PageHeader } from "@/components/shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DateTime } from "@/components/ui/date-time";
-import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -22,279 +20,160 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCapabilities } from "@/hooks/use-capabilities";
-import { useSaveMutation } from "@/hooks/use-save-mutation";
 import { useTRPC } from "@/lib/trpc";
-
-/**
- * Incident timeline. Rendered as the Monitoring page's "Incidents" tab (UX
- * audit F11); `embedded` drops the page title that tab already carries.
- */
-/**
- * Deploy-failure incidents record the service kind in their metadata (older
- * rows do not), which is what makes a linkable service page out of the ids the
- * row already carries.
- */
-function serviceHref(incident: {
-	projectId?: string | null;
-	serviceId?: string | null;
-	metadata?: Record<string, unknown> | null;
-}): string | null {
-	const kind = incident.metadata?.serviceKind;
-	if (!incident.projectId || !incident.serviceId || typeof kind !== "string") return null;
-	return `/dashboard/projects/${incident.projectId}/services/${kind}/${incident.serviceId}?tab=deploy`;
-}
-
-/** The proposal a `remediation` incident carries (`modules/remediation/rules.ts`). */
-interface Proposal {
-	action:
-		| { type: "rollback_application"; image: string }
-		| { type: "rollback_compose"; sourceDeploymentId: string }
-		| { type: "none" };
-}
-
-function proposalOf(incident: {
-	kind: string;
-	metadata?: Record<string, unknown> | null;
-}): Proposal | null {
-	if (incident.kind !== "remediation") return null;
-	const proposal = incident.metadata?.proposal as Proposal | undefined;
-	if (!proposal || typeof proposal !== "object" || !proposal.action) return null;
-	return proposal;
-}
-
-function proposalActionLabel(proposal: Proposal | null): string {
-	switch (proposal?.action.type) {
-		case "rollback_application":
-			return `Roll back to ${proposal.action.image}`;
-		case "rollback_compose":
-			return `Restore deployment ${proposal.action.sourceDeploymentId}`;
-		default:
-			return "Apply";
-	}
-}
+import { cn } from "@/lib/utils";
+import { IncidentWorkbench } from "./incident-workbench";
 
 export function IncidentsView({ embedded = false }: { embedded?: boolean } = {}) {
 	const trpc = useTRPC();
-	const { can } = useCapabilities();
-	const [projectId, setProjectId] = useState<string>("all");
+	const router = useRouter();
+	const pathname = usePathname();
+	const params = useSearchParams();
+	const projectId = params.get("incidentProject") ?? "all";
+	const rawState = params.get("incidentState");
+	const state = rawState === "resolved" || rawState === "all" ? rawState : "open";
+	const selectedId = params.get("incident");
+	const update = (key: string, value: string | null) => {
+		const next = new URLSearchParams(params.toString());
+		if (value) next.set(key, value);
+		else next.delete(key);
+		router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+	};
 	const projects = useQuery(trpc.project.all.queryOptions());
-	const incidents = useQuery(
-		trpc.observability.incidents.queryOptions({
-			projectId: projectId === "all" ? undefined : projectId,
-			limit: 100,
-		}),
+	const incidents = useInfiniteQuery(
+		trpc.observability.incidentPage.infiniteQueryOptions(
+			{
+				projectId: projectId === "all" ? undefined : projectId,
+				state,
+				limit: 30,
+			},
+			{ getNextPageParam: (page) => page.nextCursor },
+		),
 	);
-
-	const incidentsKey = trpc.observability.incidents.queryKey();
-
-	const acknowledge = useSaveMutation(trpc.observability.acknowledgeIncident.mutationOptions(), {
-		invalidate: [incidentsKey],
-	});
-	const resolve = useSaveMutation(trpc.observability.resolveIncident.mutationOptions(), {
-		invalidate: [incidentsKey],
-	});
-	const applyProposal = useSaveMutation(trpc.observability.applyRemediation.mutationOptions(), {
-		successMessage: "Rollback started",
-		invalidate: [incidentsKey, trpc.deployment.recent.pathKey()],
-	});
-	const dismissProposal = useSaveMutation(trpc.observability.dismissRemediation.mutationOptions(), {
-		successMessage: "Proposal dismissed",
-		invalidate: [incidentsKey],
-	});
-
-	const canManage = can("project.write");
-	const manageHint = canManage ? undefined : capabilityHint("project.write");
-	const canDeploy = can("service.deploy") && can("secrets.write");
-	const deployHint = canDeploy ? undefined : capabilityHint("service.deploy");
-	/** Which incident id each mutation is currently working on. */
-	const busyAck = acknowledge.isPending ? acknowledge.variables?.incidentId : null;
-	const busyResolve = resolve.isPending ? resolve.variables?.incidentId : null;
-	const busyApply = applyProposal.isPending ? applyProposal.variables?.incidentId : null;
-	const busyDismiss = dismissProposal.isPending ? dismissProposal.variables?.incidentId : null;
-
+	const rows = incidents.data?.pages.flatMap((page) => page.incidents) ?? [];
 	return (
 		<div className="flex flex-col gap-8">
-			{embedded ? null : (
+			{!embedded && (
 				<PageHeader
 					title="Incidents"
-					description="Failed deploys, alert-rule trips, watchdog events and uptime flips across your projects."
+					description="Investigate failures, follow recovery and record what you verified."
 				/>
 			)}
 			<SettingsStack>
 				<SettingsSection
-					title="Incident timeline"
-					description="Deploy failures, threshold trips, watchdog events, uptime flips — and proposed remediations, which wait for your yes."
+					title="Incident workspace"
+					description="Starting a recovery leaves the incident open until you verify the result."
+					bare
 					actions={
-						<Select value={projectId} onValueChange={setProjectId}>
-							<SelectTrigger className="w-48">
-								<SelectValue placeholder="All projects" />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="all">All projects</SelectItem>
-								{(projects.data ?? []).map((project) => (
-									<SelectItem key={project.projectId} value={project.projectId}>
-										{project.name}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
+						<div className="flex flex-wrap gap-2">
+							<Select value={state} onValueChange={(value) => update("incidentState", value)}>
+								<SelectTrigger className="w-40" aria-label="Incident state">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="open">Open</SelectItem>
+									<SelectItem value="resolved">Resolved</SelectItem>
+									<SelectItem value="all">All incidents</SelectItem>
+								</SelectContent>
+							</Select>
+							<Select value={projectId} onValueChange={(value) => update("incidentProject", value)}>
+								<SelectTrigger className="w-44" aria-label="Incident project">
+									<SelectValue placeholder="All projects" />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="all">All projects</SelectItem>
+									{(projects.data ?? []).map((project) => (
+										<SelectItem key={project.projectId} value={project.projectId}>
+											{project.name}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
 					}
 				>
-					<QueryState
-						isPending={incidents.isPending}
-						isError={incidents.isError}
-						error={incidents.error}
-						onRetry={() => void incidents.refetch()}
-						skeleton={
-							<div className="flex flex-col gap-3">
-								{["a", "b", "c"].map((key) => (
-									<Skeleton key={key} className="h-16 w-full" />
-								))}
+					<div className="grid items-start gap-4 xl:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.6fr)]">
+						<div className="min-w-0">
+							<div className="mb-3 text-xs text-muted-foreground">
+								{incidents.data?.pages[0]?.openCount ?? "—"} open in this scope
 							</div>
-						}
-						isEmpty={(incidents.data ?? []).length === 0}
-						empty={
-							<p className="py-8 text-center text-sm text-muted-foreground">
-								No incidents yet. Alerts and failed deploys will appear here.
-							</p>
-						}
-					>
-						<div className="flex flex-col gap-3">
-							{(incidents.data ?? []).map((incident) => (
-								<div key={incident.incidentId} className="rounded-lg border px-4 py-3 text-sm">
-									<div className="flex flex-wrap items-center justify-between gap-2">
-										<div className="flex min-w-0 flex-wrap items-center gap-2">
-											<p className="font-medium">{incident.title}</p>
-											{incident.resolvedAt ? (
-												<Badge variant="secondary">Resolved</Badge>
-											) : incident.acknowledgedAt ? (
-												<Badge variant="outline">Acknowledged</Badge>
-											) : null}
-										</div>
-										<DateTime
-											value={incident.createdAt}
-											className="text-xs text-muted-foreground"
-										/>
+							<QueryState
+								isPending={incidents.isPending}
+								isError={incidents.isError}
+								error={incidents.error}
+								onRetry={() => void incidents.refetch()}
+								isEmpty={rows.length === 0}
+								empty={
+									<div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+										{state === "open"
+											? "No open incidents in this scope. Resolved incidents remain available in the filter."
+											: "No incidents match these filters."}
 									</div>
-									<p className="mt-1 flex flex-wrap items-center gap-1.5 text-muted-foreground">
-										<span>{incident.kind}</span>
-										{incident.serviceName ? (
-											<>
-												<span aria-hidden>·</span>
-												{/* An incident that names a service should take you to it —
-												    that is the next thing anyone reading this wants. */}
-												{serviceHref(incident) ? (
-													<Link
-														href={serviceHref(incident) ?? "#"}
-														className="underline underline-offset-2 hover:text-foreground"
-													>
-														{incident.serviceName}
-													</Link>
-												) : (
-													<span>{incident.serviceName}</span>
+								}
+								skeleton={<Skeleton className="h-48 w-full" />}
+							>
+								<ul className="divide-y overflow-hidden rounded-lg border">
+									{rows.map((incident) => (
+										<li key={incident.incidentId}>
+											<button
+												type="button"
+												onClick={() => update("incident", incident.incidentId)}
+												aria-pressed={selectedId === incident.incidentId}
+												className={cn(
+													"flex w-full flex-col gap-2 px-4 py-3 text-left hover:bg-muted/50",
+													selectedId === incident.incidentId && "bg-secondary",
 												)}
-											</>
-										) : null}
-										{incident.severity ? (
-											<>
-												<span aria-hidden>·</span>
-												<span>{incident.severity}</span>
-											</>
-										) : null}
-									</p>
-									{incident.message && (
-										<p className="mt-2 whitespace-pre-wrap text-muted-foreground">
-											{incident.message}
-										</p>
-									)}
-									{incident.resolvedAt ? (
-										<p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-											<Check className="size-3.5" />
-											Resolved <DateTime value={incident.resolvedAt} />
-											{typeof incident.metadata?.resolutionNote === "string" ? (
-												<span className="text-muted-foreground">
-													— {incident.metadata.resolutionNote}
+											>
+												<span className="flex items-start justify-between gap-2">
+													<span className="min-w-0 break-words text-sm font-medium">
+														{incident.title}
+													</span>
+													<ArrowRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
 												</span>
-											) : null}
-										</p>
-									) : proposalOf(incident) ? (
-										<div className="mt-3 flex flex-wrap items-center gap-2">
-											{proposalOf(incident)?.action.type === "none" ? (
-												<span className="text-xs text-muted-foreground">
-													Nothing to apply — the message says what to look at.
+												<span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+													<Badge variant={incident.resolvedAt ? "secondary" : "outline"}>
+														{incident.resolvedAt
+															? "Resolved"
+															: incident.acknowledgedAt
+																? "Acknowledged"
+																: "Open"}
+													</Badge>
+													<span>{incident.serviceName ?? incident.kind}</span>
+													<DateTime value={incident.createdAt} />
 												</span>
-											) : (
-												<DisabledHint hint={deployHint}>
-													<Button
-														size="sm"
-														disabled={!canDeploy || busyApply === incident.incidentId}
-														onClick={() =>
-															applyProposal.mutate({ incidentId: incident.incidentId })
-														}
-													>
-														{busyApply === incident.incidentId && (
-															<Loader2 className="size-3.5 animate-spin" />
-														)}
-														{proposalActionLabel(proposalOf(incident))}
-													</Button>
-												</DisabledHint>
-											)}
-											<DisabledHint hint={manageHint}>
-												<Button
-													size="sm"
-													variant="outline"
-													disabled={!canManage || busyDismiss === incident.incidentId}
-													onClick={() =>
-														dismissProposal.mutate({ incidentId: incident.incidentId })
-													}
-												>
-													{busyDismiss === incident.incidentId && (
-														<Loader2 className="size-3.5 animate-spin" />
-													)}
-													Dismiss
-												</Button>
-											</DisabledHint>
-										</div>
-									) : (
-										<div className="mt-3 flex flex-wrap gap-2">
-											{incident.acknowledgedAt ? null : (
-												<DisabledHint hint={manageHint}>
-													<Button
-														size="sm"
-														variant="outline"
-														disabled={!canManage || busyAck === incident.incidentId}
-														onClick={() => acknowledge.mutate({ incidentId: incident.incidentId })}
-													>
-														{busyAck === incident.incidentId && (
-															<Loader2 className="size-3.5 animate-spin" />
-														)}
-														Acknowledge
-													</Button>
-												</DisabledHint>
-											)}
-											<DisabledHint hint={manageHint}>
-												<Button
-													size="sm"
-													disabled={!canManage || busyResolve === incident.incidentId}
-													onClick={() => resolve.mutate({ incidentId: incident.incidentId })}
-												>
-													{busyResolve === incident.incidentId && (
-														<Loader2 className="size-3.5 animate-spin" />
-													)}
-													Resolve
-												</Button>
-											</DisabledHint>
-										</div>
-									)}
-								</div>
-							))}
+											</button>
+										</li>
+									))}
+								</ul>
+								{incidents.hasNextPage && (
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="mt-3"
+										disabled={incidents.isFetchingNextPage}
+										onClick={() => void incidents.fetchNextPage()}
+									>
+										{incidents.isFetchingNextPage && <Loader2 className="size-3.5 animate-spin" />}
+										Load older incidents
+									</Button>
+								)}
+							</QueryState>
 						</div>
-					</QueryState>
+						{selectedId ? (
+							<IncidentWorkbench
+								key={selectedId}
+								incidentId={selectedId}
+								onClose={() => update("incident", null)}
+							/>
+						) : (
+							<div className="flex min-h-64 items-center justify-center rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+								Select an incident to inspect its evidence and recovery options.
+							</div>
+						)}
+					</div>
 				</SettingsSection>
-
 				<StatusPageCard />
-
 				<LogSearchSection />
 			</SettingsStack>
 		</div>

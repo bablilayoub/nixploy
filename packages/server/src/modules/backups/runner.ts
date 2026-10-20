@@ -410,7 +410,7 @@ async function storeStreamedArchive(
 }
 
 /** Replay a pinned archive; input/read/consumer errors abort the command. */
-async function replayArchive(
+export async function replayArchive(
 	archive: ValidatedArchive,
 	serverId: string | null | undefined,
 	command: string,

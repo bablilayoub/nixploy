@@ -21,6 +21,8 @@
  *
  * Each batch is one transaction; a failure rolls that batch back and stops.
  */
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getTableColumns, getTableName, is } from "drizzle-orm";
 import { PgTable } from "drizzle-orm/pg-core";
 import type { Sql } from "postgres";
@@ -223,13 +225,15 @@ async function main(): Promise<void> {
 	}
 }
 
-main()
-	.then(async () => {
-		await client.end({ timeout: 5 });
-		process.exit(0);
-	})
-	.catch(async (error: unknown) => {
-		console.error(error instanceof Error ? error.message : error);
-		await client.end({ timeout: 5 }).catch(() => {});
-		process.exit(1);
-	});
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+	main()
+		.then(async () => {
+			await client.end({ timeout: 5 });
+			process.exit(0);
+		})
+		.catch(async (error: unknown) => {
+			console.error(error instanceof Error ? error.message : error);
+			await client.end({ timeout: 5 }).catch(() => {});
+			process.exit(1);
+		});
+}

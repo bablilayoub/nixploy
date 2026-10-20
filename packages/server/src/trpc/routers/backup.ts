@@ -1,12 +1,19 @@
 import { TRPCError } from "@trpc/server";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db";
-import { backups, destinations } from "../../db/schema";
+import { backups, destinations, environments, postgres, recoveryCopies } from "../../db/schema";
 import { getServiceContext } from "../../modules/application";
 import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { WEB_SERVER_APP_NAME } from "../../modules/backups/instance-backup";
+import {
+	createRecoveryCopy,
+	deleteRecoveryCopy,
+	listRecoveryCopies,
+	type RecoveryCopy,
+	recoveryCopyState,
+} from "../../modules/backups/recovery-copy";
 import { listBackupKeys, restoreBackup, verifyBackup } from "../../modules/backups/runner";
 import { latestBackupRuns, listBackupRuns } from "../../modules/backups/runs";
 import {
@@ -15,12 +22,19 @@ import {
 	runBackupNow,
 	unregisterBackupSchedule,
 } from "../../modules/backups/scheduler";
-import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
+import { notFound, preconditionFailed } from "../../modules/errors";
+import {
+	assertCapability,
+	assertOrgRole,
+	resolveCallerOrganizationId,
+} from "../../modules/projects";
+import { assertProjectVisible, isProjectVisible } from "../../modules/projects/project-scope";
 import {
 	type DatabaseServiceKind,
 	databaseKindSchema,
 	SERVICE_REGISTRY,
 } from "../../modules/services/registry";
+import { assertServerInOrganization } from "../assert-org-refs";
 import type { TRPCContext } from "../init";
 import { protectedProcedure, router } from "../init";
 import { redactDestinationSecrets } from "../redact-secrets";
@@ -135,7 +149,163 @@ const objectKeySchema = z
 		message: "Invalid object key",
 	});
 
+async function recoveryEnvironment(environmentId: string, organizationId: string) {
+	const environment = await db.query.environments.findFirst({
+		where: eq(environments.environmentId, environmentId),
+		with: { project: true },
+	});
+	if (!environment || environment.project.organizationId !== organizationId)
+		throw notFound("Environment not found");
+	assertProjectVisible(environment.projectId, "Environment");
+	return environment;
+}
+
+async function recoveryTarget(postgresId: string, organizationId: string) {
+	await assertDatabaseServiceAccess("postgres", postgresId, organizationId);
+	const row = await db.query.postgres.findFirst({ where: eq(postgres.postgresId, postgresId) });
+	if (!row) throw notFound("Recovery database not found");
+	return row;
+}
+
 export const backupRouter = router({
+	/** Latest retained PostgreSQL copies; both source and target project scope apply. */
+	copies: protectedProcedure.input(backupIdInput).query(async ({ ctx, input }) => {
+		const organizationId = await getOrganizationId(ctx.session);
+		await findBackupOrThrow(input.backupId, organizationId, ctx.session);
+		const rows = await listRecoveryCopies(input.backupId);
+		const result: (Omit<RecoveryCopy, "status"> & {
+			status: string;
+			projectId: string;
+			targetEnvironmentName: string;
+		})[] = [];
+		for (const row of rows) {
+			if (row.organizationId !== organizationId) continue;
+			const environment = await db.query.environments.findFirst({
+				where: eq(environments.environmentId, row.environmentId),
+				with: { project: true },
+			});
+			if (
+				!environment ||
+				environment.project.organizationId !== organizationId ||
+				!isProjectVisible(environment.projectId)
+			)
+				continue;
+			if (row.targetPostgresId) {
+				const target = await db.query.postgres.findFirst({
+					where: eq(postgres.postgresId, row.targetPostgresId),
+					with: { environment: { with: { project: true } } },
+				});
+				if (
+					!target ||
+					target.environment.project.organizationId !== organizationId ||
+					!isProjectVisible(target.environment.projectId)
+				)
+					continue;
+				result.push({
+					...row,
+					status: recoveryCopyState(row),
+					projectId: target.environment.projectId,
+					targetEnvironmentName: target.environment.name,
+				});
+			} else
+				result.push({
+					...row,
+					status: row.status === "ready" ? "deleted" : recoveryCopyState(row),
+					projectId: environment.projectId,
+					targetEnvironmentName: environment.name,
+				});
+		}
+		return result;
+	}),
+
+	/** Blocks until validation/restore finishes. Replaying requestId never creates another service. */
+	createCopy: protectedProcedure
+		.input(
+			backupIdInput.extend({
+				key: objectKeySchema,
+				environmentId: z.string().min(1),
+				name: z.string().trim().min(1).max(200),
+				requestId: z.uuid(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			for (const capability of [
+				"backups.manage",
+				"service.create",
+				"service.deploy",
+				"secrets.write",
+			] as const)
+				await assertCapability(ctx.session.user.id, organizationId, capability);
+			const backup = await findBackupOrThrow(input.backupId, organizationId, ctx.session);
+			if (backup.databaseType !== "postgres" || !backup.postgresId)
+				throw preconditionFailed("Recovery copies currently support PostgreSQL backups only");
+			const source = await recoveryTarget(backup.postgresId, organizationId);
+			const environment = await recoveryEnvironment(input.environmentId, organizationId);
+			if (environment.environmentId === source.environmentId)
+				throw preconditionFailed(
+					"Choose another environment to keep the recovery copy on a separate private network",
+				);
+			await assertServerInOrganization(source.serverId, organizationId);
+			const previous = await db.query.recoveryCopies.findFirst({
+				where: and(
+					eq(recoveryCopies.organizationId, organizationId),
+					eq(recoveryCopies.requestId, input.requestId),
+				),
+			});
+			if (previous?.organizationId === organizationId && previous.targetPostgresId)
+				await recoveryTarget(previous.targetPostgresId, organizationId);
+			const result = await createRecoveryCopy({ ...input, backup, source, organizationId });
+			void auditFromSession(ctx, organizationId, {
+				action: "backup.createCopy",
+				targetType: "backup",
+				targetId: backup.backupId,
+				targetName: input.name,
+				metadata: {
+					recoveryCopyId: result.recoveryCopyId,
+					targetPostgresId: result.targetPostgresId,
+					status: result.status,
+				},
+			});
+			return {
+				recoveryCopyId: result.recoveryCopyId,
+				status: recoveryCopyState(result),
+				targetPostgresId: result.targetPostgresId,
+				projectId: environment.projectId,
+				error: result.error,
+				tableCount: result.tableCount,
+			};
+		}),
+
+	/** Deletes only the managed target; no archive/source service is changed. */
+	deleteCopy: protectedProcedure
+		.input(z.object({ recoveryCopyId: z.string().min(1) }))
+		.mutation(async ({ ctx, input }) => {
+			const organizationId = await getOrganizationId(ctx.session);
+			await assertOrgRole(ctx.session.user.id, organizationId, "admin");
+			for (const capability of ["backups.manage", "service.delete"] as const)
+				await assertCapability(ctx.session.user.id, organizationId, capability);
+			const row = await db.query.recoveryCopies.findFirst({
+				where: eq(recoveryCopies.recoveryCopyId, input.recoveryCopyId),
+			});
+			if (!row || row.organizationId !== organizationId) throw notFound("Recovery copy not found");
+			if (row.backupId) await findBackupOrThrow(row.backupId, organizationId, ctx.session);
+			else if (row.sourcePostgresId) await recoveryTarget(row.sourcePostgresId, organizationId);
+			await recoveryEnvironment(row.environmentId, organizationId);
+			const target = row.targetPostgresId
+				? await recoveryTarget(row.targetPostgresId, organizationId)
+				: null;
+			await deleteRecoveryCopy(row, target);
+			void auditFromSession(ctx, organizationId, {
+				action: "backup.deleteCopy",
+				targetType: "postgres",
+				targetId: row.targetPostgresId ?? row.recoveryCopyId,
+				targetName: row.name,
+			});
+			return { success: true };
+		}),
+
 	/** Backups configured for one database service, or the instance itself, with their last run. */
 	all: protectedProcedure.input(allInputSchema).query(async ({ ctx, input }) => {
 		const organizationId = await getOrganizationId(ctx.session);

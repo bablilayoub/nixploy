@@ -14,6 +14,13 @@ import { pipeline } from "node:stream/promises";
 import { createGzip, gunzipSync } from "node:zlib";
 import { NORMAL_PROFILE, profileDefaults } from "../../lib/profile";
 import { getConfigDir } from "../application/paths";
+import { badRequest } from "../errors";
+import {
+	compareRuntimeLogCursors,
+	decodeRuntimeLogCursor,
+	encodeRuntimeLogCursor,
+	type RuntimeLogCursor,
+} from "./cursor";
 import { encodeLogLine, parseLogLines, type RuntimeLogLine } from "./format";
 import { type LogQuery, matchLogLine } from "./query";
 
@@ -152,6 +159,10 @@ export interface ReadRuntimeLogsInput {
 	query?: LogQuery | null;
 	/** Only lines older than this (epoch ms) — the cursor of the previous page. */
 	before?: number | null;
+	/** Opaque continuation; preferred over the legacy exclusive timestamp. */
+	cursor?: string | null;
+	since?: number;
+	until?: number;
 	limit: number;
 	/** Wall-clock budget for one read; a regex over a chatty day stops here. */
 	budgetMs?: number;
@@ -164,6 +175,10 @@ export interface ReadRuntimeLogsResult {
 	lines: RuntimeLogLine[];
 	/** `before` for the next page, or null when the history is exhausted. */
 	nextCursor: number | null;
+	/** Lossless continuation, including the position among equal timestamps. */
+	nextPageCursor: string | null;
+	/** Parallel to lines, used by the organization-wide merge. */
+	lineCursors: string[];
 	/** True when the read stopped on its budget rather than on the end of history. */
 	truncated: boolean;
 	scanned: number;
@@ -186,7 +201,11 @@ export async function readRuntimeLogs(input: ReadRuntimeLogsInput): Promise<Read
 	const maxScanned = input.maxScanned ?? DEFAULT_MAX_SCANNED;
 	const startedAt = Date.now();
 	const before = input.before ?? null;
-	const beforeHour = before === null ? null : hourKey(before);
+	const cursor = input.cursor ? decodeRuntimeLogCursor(input.cursor) : null;
+	if (cursor && cursor.appName !== input.appName)
+		throw badRequest("This cursor belongs to another service");
+	const upper = cursor?.t ?? before ?? input.until ?? null;
+	const beforeHour = upper === null ? null : hourKey(upper);
 
 	// Prefer the archive when both exist (a crash between gzip and unlink).
 	const files = await listHourFiles(dir);
@@ -198,25 +217,37 @@ export async function readRuntimeLogs(input: ReadRuntimeLogsInput): Promise<Read
 	const hours = [...byHour.keys()].sort().reverse();
 
 	const lines: RuntimeLogLine[] = [];
+	const lineCursors: string[] = [];
 	let scanned = 0;
 	let truncated = false;
 	let exhausted = true;
 	// Everything at or after the last examined line has been seen, whether
 	// it matched or not — so it is the honest cursor when a page ends early.
-	let lastScannedT: number | null = null;
+	let lastScanned: RuntimeLogCursor | null = null;
 	for (const hour of hours) {
 		if (beforeHour !== null && hour > beforeHour) continue;
+		if (input.since !== undefined && hour < hourKey(input.since)) break;
 		const file = byHour.get(hour);
 		if (!file) continue;
-		const stored = await readHourFile(dir, file);
-		for (let index = stored.length - 1; index >= 0; index -= 1) {
-			const line = stored[index];
-			if (!line) continue;
-			if (before !== null && line.t >= before) continue;
+		// Multiple containers can append out of timestamp order. The original
+		// append index survives later appends and hour compression.
+		const stored = (await readHourFile(dir, file)).map((line, index) => ({ line, index }));
+		stored.sort((a, b) => b.line.t - a.line.t || b.index - a.index);
+		for (const { line, index } of stored) {
+			const position = { t: line.t, appName: input.appName, index };
+			if (
+				cursor
+					? compareRuntimeLogCursors(position, cursor) <= 0
+					: before !== null && line.t >= before
+			)
+				continue;
+			if (input.until !== undefined && line.t > input.until) continue;
+			if (input.since !== undefined && line.t < input.since) continue;
 			scanned += 1;
-			lastScannedT = line.t;
+			lastScanned = position;
 			if (!input.query || matchLogLine(input.query, line)) {
 				lines.push(line);
+				lineCursors.push(encodeRuntimeLogCursor(position));
 				if (lines.length >= input.limit) {
 					exhausted = false;
 					break;
@@ -232,7 +263,9 @@ export async function readRuntimeLogs(input: ReadRuntimeLogsInput): Promise<Read
 	}
 	return {
 		lines,
-		nextCursor: exhausted ? null : (lastScannedT ?? before ?? null),
+		lineCursors,
+		nextCursor: exhausted ? null : (lastScanned?.t ?? before ?? null),
+		nextPageCursor: exhausted || !lastScanned ? null : encodeRuntimeLogCursor(lastScanned),
 		truncated,
 		scanned,
 	};

@@ -136,6 +136,10 @@ export const isListOrGetProcedure = (path: string): boolean =>
 export type ProjectAxis = "filtered" | "inherited" | "exempt";
 
 export const PROJECT_AXIS: Record<string, ProjectAxis> = {
+	"observability.incidentPage": "filtered",
+	"backup.copies": "filtered",
+	"configurationRelease.review": "filtered",
+	"observability.incident": "inherited",
 	// Narrows by the caller's filter directly.
 	"project.all": "filtered",
 

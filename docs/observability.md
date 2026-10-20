@@ -181,7 +181,18 @@ Two actions close the loop (`observability.acknowledgeIncident` /
   exists for. Acknowledging twice keeps the first acknowledger.
 - **Resolve** sets `resolved_at` (and back-fills the acknowledgement when it
   was skipped). An optional note is stored in `metadata.resolutionNote`,
-  never in `title` — the title is what the public status page renders.
+  never in `title` — the title is what the public status page renders. An
+  applied recovery requires a verification note and cannot be resolved while
+  its deployment remains queued or running.
+
+The workspace filters open/resolved/all incidents by project and uses stable
+keyset pages (`observability.incidentPage`). Its open count is calculated
+separately, so resolved noise cannot hide older open work. Selecting an incident
+creates a shareable `incident` URL parameter and loads verified, scoped service,
+domain and deployment references (`observability.incident`). Evidence links open
+the service's deploy/runtime history. Route diagnosis runs only after an explicit
+click and requires runtime permission; opening or refreshing a workspace does
+not launch a probe.
 
 Resolved incidents are dropped by the retention pass 90 days later.
 
@@ -213,8 +224,12 @@ model, and **nothing runs until a human says yes**
 - **Apply** (`observability.applyRemediation`, `nixploy incident apply`,
   `service.deploy` + `secrets.write`) runs the rollback through exactly the
   code the manual rollback uses — `performApplicationRollback` /
-  `restoreComposeSnapshot` + `queueDeployment` — then closes the incident
-  with *Applied: …* and the deployment id in its metadata. **Dismiss**
+  `restoreComposeSnapshot` + `queueDeployment`. An atomic admission blocks
+  duplicate apply/dismiss requests before side effects. The incident stays
+  open and shows the actual queued/running/completed/failed recovery result.
+  Completion still requires the operator to verify the service and resolve it
+  with a note. A missing result is shown as unavailable; it is never replayed
+  automatically. **Dismiss**
   (`dismissRemediation`, `project.write`) closes it untouched. Both are
   audited. Open proposals appear in the activity tray ("Needs a decision")
   and under Monitoring → Incidents; the list is pushed over `/ws/events` on
@@ -485,9 +500,10 @@ has `nixploy logs search`; MCP has `get_runtime_logs`; the API is
 Copilot reads it too: a failure explanation gets the last lines the service
 printed before the deploy ended, and a chat about a service gets its last
 lines now, next to the event timeline — redacted with the same secret list
-as the build log. Pages
-are newest-first and keyed by timestamp (`before` = the previous page's
-`nextCursor`). The query is a small grammar:
+as the build log. Pages are newest-first. Pass the opaque `nextPageCursor`
+back as `cursor` for stable tie ordering across services, including lines with
+the same millisecond timestamp. Legacy numeric `before`/`nextCursor` retains
+timestamp-only exclusive paging. The query is a small grammar:
 
 | Clause | Meaning |
 | --- | --- |
@@ -502,8 +518,8 @@ A read stops after 500 000 lines or four seconds and says so
 (`truncated: true`) rather than hanging on a chatty day; a regex that
 quantifies a group (`(a+)+`) is refused up front, since no budget saves a
 catastrophic backtrack. Org-wide reads merge services newest-first and cut
-the page at the newest per-service cursor, so paging never skips or repeats
-a line across services.
+the page using service-specific continuation positions. An empty scan-budget
+page can still have a continuation; the UI keeps **Load older** available.
 
 ## Platform logs
 

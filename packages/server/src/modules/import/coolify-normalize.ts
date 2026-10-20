@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { badRequest } from "../errors";
+import { toEnvString } from "../projects/env-values";
 import type { DatabaseServiceKind } from "../services/registry";
 import type { ImportNote } from "./normalize";
 import {
@@ -67,7 +68,7 @@ export function coolifyEnv(
 		.filter((row) =>
 			field === "buildArgs" ? row.is_buildtime === true : row.is_runtime !== false,
 		);
-	const values: string[] = [];
+	const values: Record<string, string> = {};
 	for (const row of relevant) {
 		const key = coolifyText(row, "key");
 		const value = coolifyText(row, "value");
@@ -86,9 +87,9 @@ export function coolifyEnv(
 			);
 			return { unavailable: true };
 		}
-		values.push(`${key}=${value}`);
+		values[key] = value;
 	}
-	return { value: values.join("\n"), unavailable: false };
+	return { value: toEnvString(values), unavailable: false };
 }
 
 function domains(

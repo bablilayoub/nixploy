@@ -11,6 +11,7 @@ export {
 	MAX_LINES_PER_CONTAINER_PASS,
 	runtimeLogsEnabled,
 } from "./harvest";
+export { readMergedRuntimeLogs } from "./pagination";
 export { isEmptyQuery, type LogQuery, LogQueryError, parseLogQuery } from "./query";
 export {
 	effectiveRuntimeLogLimits,

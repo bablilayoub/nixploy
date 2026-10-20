@@ -17,7 +17,10 @@ export function DeployProgressBar() {
 	}
 
 	return (
-		<div aria-hidden className="fixed inset-x-0 top-14 z-40 h-px overflow-hidden bg-border">
+		<div
+			aria-hidden
+			className="fixed inset-x-0 top-14 z-40 h-px overflow-hidden bg-border lg:start-52"
+		>
 			<style>
 				{`@keyframes nixploy-deploy-sweep {
 	from { transform: translateX(-100%); }
@@ -25,7 +28,7 @@ export function DeployProgressBar() {
 }`}
 			</style>
 			<div
-				className="h-full w-1/4 bg-foreground/60"
+				className="h-full w-1/4 bg-brand"
 				style={{ animation: "nixploy-deploy-sweep 1.2s linear infinite" }}
 			/>
 		</div>

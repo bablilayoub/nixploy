@@ -50,15 +50,15 @@ export function DeployHookCard({ appName }: { appName: string }) {
 			{!url ? (
 				<Skeleton className="h-20 w-full" />
 			) : (
-				<div className="grid gap-4">
-					<div className="grid gap-1.5">
+				<div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+					<div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1.5">
 						<Label htmlFor="deploy-hook-url">Webhook URL</Label>
 						<div className="flex items-center gap-2">
 							<Input id="deploy-hook-url" readOnly value={url} className="font-mono text-xs" />
 							<CopyButton value={url} label="Copy webhook URL" />
 						</div>
 					</div>
-					<div className="grid gap-1.5">
+					<div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1.5">
 						<Label htmlFor="deploy-hook-curl">Example</Label>
 						<div className="flex items-start gap-2">
 							<pre

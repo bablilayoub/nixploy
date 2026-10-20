@@ -29,7 +29,7 @@ export type CodeEditorProps = Omit<ReactCodeMirrorProps, "theme" | "editable" | 
 };
 
 /**
- * CodeMirror wrapper that follows the Nixploy light/dark stone theme
+ * CodeMirror wrapper that follows the shared Nixploy workspace tokens
  * and soft-locks with a blur overlay until Edit/View.
  */
 export function CodeEditor({
@@ -83,7 +83,7 @@ export function CodeEditor({
 	return (
 		<div
 			className={cn(
-				"relative overflow-hidden rounded-lg border border-border bg-card [&_.cm-editor]:outline-none",
+				"relative overflow-hidden rounded-lg border border-border bg-card transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25 [&_.cm-editor]:outline-none",
 				className,
 			)}
 		>

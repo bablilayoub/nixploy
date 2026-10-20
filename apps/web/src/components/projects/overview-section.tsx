@@ -32,16 +32,16 @@ function StatPanel({
 	className?: string;
 }) {
 	return (
-		<div className={cn("rounded-lg border border-border bg-card p-4", className)}>
+		<div className={cn("min-w-0 px-4 py-3 sm:px-5 sm:py-4", className)}>
 			<div className="flex items-center justify-between gap-2">
 				<p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
 				{icon}
 			</div>
-			<div className="mt-1 text-xl font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-2xl">
+			<div className="mt-1 font-mono text-xl font-medium tabular-nums tracking-tight sm:text-2xl">
 				{isPending ? <Skeleton className="h-7 w-14 sm:h-8 sm:w-16" /> : (value ?? 0)}
 			</div>
 			{!isPending && detail ? (
-				<p className="mt-2 text-xs leading-relaxed text-muted-foreground">{detail}</p>
+				<p className="mt-1 text-xs leading-5 text-muted-foreground">{detail}</p>
 			) : null}
 		</div>
 	);
@@ -75,7 +75,12 @@ export function OverviewCards() {
 	const deployments = data?.deploymentsLastDay;
 
 	return (
-		<div className={cn("grid grid-cols-2 gap-3", showDocker ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
+		<div
+			className={cn(
+				"grid grid-cols-2 overflow-hidden rounded-lg border border-border bg-card [&>*]:border-border [&>*:nth-child(2n)]:border-s sm:[&>*]:border-s sm:[&>*:first-child]:border-s-0",
+				showDocker ? "sm:grid-cols-4" : "sm:grid-cols-3",
+			)}
+		>
 			<StatPanel
 				label="Projects"
 				value={data?.projectCount}
@@ -84,7 +89,7 @@ export function OverviewCards() {
 			/>
 			<StatPanel
 				label="Services"
-				className="bg-muted/30"
+				className="bg-selection"
 				value={services?.total}
 				isPending={isPending}
 				icon={<Server className="size-4 text-muted-foreground" />}
@@ -109,7 +114,7 @@ export function OverviewCards() {
 			/>
 			<StatPanel
 				label="Deployments (24h)"
-				className={!showDocker ? "col-span-2 lg:col-span-1" : undefined}
+				className={!showDocker ? "col-span-2 border-t sm:col-span-1 sm:border-t-0" : undefined}
 				value={deployments?.total}
 				isPending={isPending}
 				icon={<Rocket className="size-4 text-muted-foreground" />}
@@ -146,13 +151,13 @@ function DockerStatPanel() {
 	return (
 		<Link
 			href="/dashboard/docker"
-			className="block rounded-lg border border-border bg-card p-4 transition-colors hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+			className="block min-w-0 px-4 py-3 transition-colors hover:bg-panel-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-5 sm:py-4"
 		>
 			<div className="flex items-center justify-between gap-2">
 				<p className="truncate text-xs font-medium text-muted-foreground">Docker</p>
 				<Container className="size-4 text-muted-foreground" />
 			</div>
-			<div className="mt-1 text-xl font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-2xl">
+			<div className="mt-1 font-mono text-xl font-medium tabular-nums tracking-tight sm:text-2xl">
 				{containersQuery.isPending ? (
 					<Skeleton className="h-7 w-14 sm:h-8 sm:w-16" />
 				) : containersQuery.isError ? (
@@ -162,7 +167,7 @@ function DockerStatPanel() {
 				)}
 			</div>
 			{!containersQuery.isPending && !containersQuery.isError ? (
-				<p className="mt-2 text-xs text-muted-foreground">
+				<p className="mt-1 text-xs leading-5 text-muted-foreground">
 					{running} / {containers.length} containers running
 				</p>
 			) : null}
@@ -181,7 +186,7 @@ export function RecentDeployments() {
 	return (
 		<section className="flex h-full min-w-0 flex-col rounded-lg border border-border bg-card p-4 sm:p-5">
 			<div className="mb-4 space-y-1">
-				<h2 className="text-sm font-semibold">Recent deployments</h2>
+				<h2 className="text-lg font-semibold tracking-tight">Recent deployments</h2>
 				{/* Static text: branching this on `isPending` made the server (which
 				    renders with the prefetched data) and the client's first paint
 				    disagree, which cost a hydration error on every dashboard load.
@@ -227,20 +232,21 @@ export function RecentDeployments() {
 						const name = deployment.service.name ?? deployment.service.appName ?? "Service";
 						const inner = (
 							<>
-								<span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/50">
+								<span className="flex size-4 shrink-0 items-center justify-center sm:size-8 sm:rounded-md sm:bg-panel-inset">
 									<StatusDot status={deploymentStatusDot[deployment.status] ?? "neutral"} />
 								</span>
-								<div className="min-w-0 flex-1 space-y-0.5">
-									<p className="truncate text-sm font-medium leading-none">{name}</p>
-									<p className="truncate text-xs text-muted-foreground">
-										{deployment.project.name} · <span className="capitalize">{serviceType}</span> ·{" "}
+								<div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
+									<p className="min-w-0 text-sm leading-5 font-medium wrap-anywhere">{name}</p>
+									<span className="text-xs leading-5 font-medium">
 										{deploymentStatusLabel[deployment.status] ?? deployment.status}
+									</span>
+									<p className="col-span-2 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+										<span className="min-w-0 truncate">
+											{deployment.project.name} · <span className="capitalize">{serviceType}</span>
+										</span>
+										<DateTime value={deployment.createdAt} className="shrink-0" />
 									</p>
 								</div>
-								<DateTime
-									value={deployment.createdAt}
-									className="ms-auto text-xs whitespace-nowrap text-muted-foreground"
-								/>
 							</>
 						);
 						return href ? (

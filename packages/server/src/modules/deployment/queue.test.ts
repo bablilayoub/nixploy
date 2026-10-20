@@ -59,8 +59,14 @@ const { readSql } = vi.hoisted(() => {
 	};
 });
 
-vi.mock("../../db", () => ({
-	db: {
+vi.mock("../../db", () => {
+	const database: {
+		execute: (query: unknown) => Promise<unknown[]>;
+		transaction: <T>(
+			callback: (tx: { execute: (query: unknown) => Promise<unknown[]> }) => Promise<T>,
+		) => Promise<T>;
+	} = {
+		transaction: async (callback) => callback(database),
 		execute: async (query: unknown) => {
 			const { text, params } = readSql(query);
 			if (text.includes("row_number()")) {
@@ -108,8 +114,9 @@ vi.mock("../../db", () => ({
 			}
 			return [];
 		},
-	},
-}));
+	};
+	return { db: database };
+});
 
 type QueueModule = typeof import("./queue");
 let queue: QueueModule;

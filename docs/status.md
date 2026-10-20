@@ -17,6 +17,52 @@ unsigned child. Required contracts use immutable workflow tooling while product
 checks retain the selected tag. Draft PR CI and final review remain required;
 no Release execution, signing or Git tag creation was performed for this patch.
 
+## Operator workspace — 2026-10-20 (integration in progress)
+
+Three product workflows and a shared panel design system are implemented on
+`codex/operator-workspace`; final integrated gates, production builds and PR
+review are still in progress. This is not a release/publication claim.
+
+- Configuration drafts save without Docker changes; reviewed, selected
+  application/Compose releases queue encrypted immutable environment/build-arg
+  snapshots. Canonical precedence includes the organization layer. Migration
+  `0048` removes plaintext organization variables at startup, fences old
+  metadata readers/writers and worker claims, and requires a coordinated drain.
+- Incidents have scoped evidence, project/state filters and older pages.
+  Recovery remains open through queued/running/failed/completed states and
+  requires explicit verification. Runtime logs retain equal-time entries and
+  continuation after an empty scan-budget page.
+- PostgreSQL recovery copies restore a validated archive into a retained,
+  private managed service with fresh credentials in another environment.
+  Source and archive are preserved; deletion verifies service and target-node
+  volume absence before dropping tracking. Other engines, server moves,
+  sanitization and application compatibility are outside this initial flow.
+- Mineral/plum/Plex design foundation, persistent desktop navigation and
+  shared controls/headers/editors ship with mobile directory priority,
+  readable deployment rows and stronger chart labels. Branding remains
+  authoritative. About/Privacy typography and used accordion states now have
+  owned styles; dependency removal is coordinated with the security branch.
+
+Current isolated proof includes two-replica queued-input immutability, real
+application rollback restoring HTTP, Compose failed rollback followed by manual
+repair, and 500,053 log lines with lossless continuation to 53 equal-time
+matches. A 3,200-row PostgreSQL copy matches source content, uses fresh credentials
+through a private-network client, and rejects the source password. Corrupt
+archives create no target. Browser create/delete removes only its copy and data
+volume; another retained copy and the source remain intact.
+
+Independent review caught and corrected historical-environment rollback,
+moved-service authorization, remote-volume deletion truth and hook dotenv
+transport issues. Hook creation uses Engine `Env`, bounded owned cleanup and
+signed ownership for abandoned-container recovery. Final literal-value and
+cleanup runtime checks and the integrated rerun remain required.
+
+The original four Swarm service IDs/specs, 74 pre-existing volumes, original
+network IDs and seven primary proxy-file hashes remain preserved at the
+in-progress resource check. Real multi-node/SSH placement and public DNS/ACME
+remain outside the local proof. Separate authorization/image hardening work is
+coordinated before this batch closes; no zero-vulnerability claim is made.
+
 ## Active backlog — 2026-10-20
 
 This is the authoritative current work list. The dated verification records and

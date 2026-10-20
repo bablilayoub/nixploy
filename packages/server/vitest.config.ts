@@ -43,7 +43,9 @@ export default defineConfig({
 					include: DB_BACKED,
 					exclude: [...configDefaults.exclude],
 					environment: "node",
-					env: { ENCRYPTION_KEY },
+					// Database suites claim jobs explicitly. Enqueueing a fixture must
+					// never leave a background worker consuming the next file's rows.
+					env: { ENCRYPTION_KEY, NIXPLOY_ROLE: "panel" },
 					// One database, one file at a time.
 					fileParallelism: false,
 				},

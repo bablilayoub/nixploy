@@ -29,6 +29,11 @@ import {
 import { LOGICAL_DATABASE_KINDS } from "../../modules/databases/logical";
 import { composeReadiness, provenanceForSession, queueDeployment } from "../../modules/deployment";
 import { parseEnv } from "../../modules/deployment/env";
+import {
+	captureDeploymentEnvironment,
+	environmentForComposeRollback,
+	findDeploymentEnvironment,
+} from "../../modules/deployment/environment-snapshot";
 import { assertPreviewDatabaseTarget } from "../../modules/preview/database";
 import {
 	assertCapability,
@@ -542,15 +547,25 @@ export const composeRouter = router({
 			// Put the snapshot's inputs back on the row, then deploy them the
 			// normal way — a router never deploys by itself.
 			const restored = await restoreComposeSnapshot(row, snapshot);
-			const deploymentId = await queueDeployment({
-				composeId: row.composeId,
-				type: "redeploy",
-				title: "Rollback",
-				trigger: "rollback",
-				triggeredBy: ctx.session.user.id,
-				// No commit for a compose rollback; name the deployment it restores.
-				commitMessage: `Rollback to deployment ${snapshot.deploymentId}`,
-			});
+			const currentEnvironment = await captureDeploymentEnvironment({ composeId: row.composeId });
+			const historicEnvironment = await findDeploymentEnvironment(snapshot.deploymentId);
+			const rollbackEnvironment = environmentForComposeRollback(
+				snapshot,
+				currentEnvironment,
+				historicEnvironment,
+			);
+			const deploymentId = await queueDeployment(
+				{
+					composeId: row.composeId,
+					type: "redeploy",
+					title: "Rollback",
+					trigger: "rollback",
+					triggeredBy: ctx.session.user.id,
+					// No commit for a compose rollback; name the deployment it restores.
+					commitMessage: `Rollback to deployment ${snapshot.deploymentId}`,
+				},
+				{ environment: rollbackEnvironment },
+			);
 			await auditFromSession(ctx, organizationId, {
 				action: "compose.rollback",
 				targetType: "compose",

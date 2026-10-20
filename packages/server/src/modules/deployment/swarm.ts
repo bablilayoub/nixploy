@@ -6,10 +6,11 @@ import type { PrivilegesSwarm } from "../../utils/swarm-overrides";
 import { getSwarmNetwork, resolveFileMountPath } from "../application/paths";
 import { mergeNodeConstraint } from "../cluster/placement";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
+import { resolveRuntimeEnvironment } from "../projects/env-resolution";
 import { getQuotaResourceDefaults, type QuotaResourceDefaults } from "../projects/quotas";
 import type { DeploymentContext } from "./context";
 import { getDocker } from "./docker";
-import { envToArray, mergeEnv } from "./env";
+import { envToArray } from "./env";
 import { ensureEnvironmentNetwork, INTERNAL_NETWORK_NAME, isPlatformNetwork } from "./network";
 import type { ApplicationRow } from "./sources";
 
@@ -287,6 +288,8 @@ export interface UpsertSwarmServiceOptions {
 	 * but must never share its published ports, volumes or host mounts.
 	 */
 	preview?: boolean;
+	runtimeEnv?: string;
+	deploymentId?: string;
 }
 
 type MountRow = Pick<
@@ -351,7 +354,7 @@ export function buildRuntimeSpecs(
  * pinned to `imageTag`. Updates roll start-first with a stop-first
  * rollback config; published ports go through the routing mesh.
  */
-/** Default budget for a rollout to produce one running task. */
+/** Default budget for every desired replica of a rollout to run. */
 export const DEFAULT_CONVERGENCE_TIMEOUT_MS = 180_000;
 const CONVERGENCE_POLL_MS = 2_000;
 
@@ -360,24 +363,38 @@ export function convergenceTimeoutMs(): number {
 	return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_CONVERGENCE_TIMEOUT_MS;
 }
 
+export const DEPLOYMENT_REVISION_LABEL = "io.nixploy.deployment-revision";
+
 type TaskLike = {
+	Spec?: { ContainerSpec?: { Labels?: Record<string, string> } };
 	Status?: { State?: string; Err?: string; Message?: string };
 	DesiredState?: string;
 	CreatedAt?: string;
 };
 
-/**
- * Decide from one task listing whether the rollout has converged. `running`
- * only appears once a HEALTHCHECK (when the image has one) passed, so this is
- * also the health gate. Three consecutive failed/rejected tasks mean the
- * image cannot start — surface the engine's reason instead of waiting out
- * the whole budget.
- */
+/** Only tasks carrying this deployment's revision satisfy a new rollout. */
 export function assessConvergence(
 	tasks: TaskLike[],
+	target?: { deploymentId: string; replicas: number | null },
 ): { state: "running" } | { state: "failed"; reason: string } | { state: "pending" } {
-	if (tasks.some((task) => task.Status?.State === "running")) return { state: "running" };
-	const recent = [...tasks]
+	const current = target
+		? tasks.filter(
+				(task) =>
+					task.Spec?.ContainerSpec?.Labels?.[DEPLOYMENT_REVISION_LABEL] === target.deploymentId,
+			)
+		: tasks;
+	const running = current.filter(
+		(task) => task.Status?.State === "running" && task.DesiredState !== "shutdown",
+	).length;
+	if (
+		target
+			? target.replicas === null
+				? current.length > 0 && running === tasks.length
+				: running >= target.replicas
+			: running > 0
+	)
+		return { state: "running" };
+	const recent = [...current]
 		.sort((a, b) => (b.CreatedAt ?? "").localeCompare(a.CreatedAt ?? ""))
 		.slice(0, 3);
 	if (
@@ -390,23 +407,30 @@ export function assessConvergence(
 	return { state: "pending" };
 }
 
-/**
- * Wait until the service has at least one running task. Throws when the
- * tasks keep failing or the budget (`NIXPLOY_CONVERGENCE_TIMEOUT_MS`) runs
- * out, so a deployment is only `done` once the new version actually serves.
- */
+/** Docker running state is a rollout gate, not an HTTP/readiness guarantee. */
 export async function waitForServiceConvergence(
 	appName: string,
-	options: { timeoutMs?: number; log?: (line: string) => void } = {},
+	options: {
+		timeoutMs?: number;
+		log?: (line: string) => void;
+		deploymentId?: string;
+		checkpoint?: () => void;
+	} = {},
 ): Promise<void> {
 	const docker = await getDocker();
+	const service = options.deploymentId ? await docker.getService(appName).inspect() : null;
+	const mode = service?.Spec?.Mode;
+	const target = options.deploymentId
+		? { deploymentId: options.deploymentId, replicas: mode?.Replicated?.Replicas ?? null }
+		: undefined;
 	const deadline = Date.now() + (options.timeoutMs ?? convergenceTimeoutMs());
 	let lastReason = "no task reached the running state";
 	while (Date.now() < deadline) {
+		options.checkpoint?.();
 		const tasks = (await docker
 			.listTasks({ filters: { service: [appName], "desired-state": ["running"] } })
 			.catch(() => [])) as TaskLike[];
-		const verdict = assessConvergence(tasks);
+		const verdict = assessConvergence(tasks, target);
 		if (verdict.state === "running") return;
 		if (verdict.state === "failed") {
 			throw new Error(`Service ${appName} failed to start: ${verdict.reason}`);
@@ -455,7 +479,9 @@ export async function upsertSwarmService(
 	const quotaDefaults = await loadQuotaDefaults(environment.project.organizationId);
 
 	// Env inheritance: project → environment → service (service wins).
-	const mergedEnv = mergeEnv(environment.project.env, environment.env, application.env);
+	const mergedEnv =
+		options.runtimeEnv ??
+		(await resolveRuntimeEnvironment(application.environmentId, application.env));
 	const env = envToArray(mergedEnv);
 
 	const { mounts: mountSpecs, ports: portSpecs } = buildRuntimeSpecs(
@@ -525,6 +551,11 @@ export async function upsertSwarmService(
 		EndpointSpec: portSpecs.length > 0 ? { Mode: "vip", Ports: portSpecs } : { Mode: "vip" },
 	};
 
+	if (options.deploymentId) {
+		const container = (spec.TaskTemplate as Docker.ContainerTaskSpec).ContainerSpec;
+		if (container)
+			container.Labels = { ...container.Labels, [DEPLOYMENT_REVISION_LABEL]: options.deploymentId };
+	}
 	const service = docker.getService(application.appName);
 	let current: Docker.Service | null = null;
 	try {

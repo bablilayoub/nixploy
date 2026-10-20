@@ -1,21 +1,22 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
+@import "./component-states.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-	--radius-sm: calc(var(--radius) - 2px);
+	--radius-sm: 4px;
 	--radius-md: var(--radius);
-	--radius-lg: calc(var(--radius) + 2px);
-	--radius-xl: calc(var(--radius) + 6px);
-	--radius-2xl: calc(var(--radius) + 10px);
-	--radius-3xl: calc(var(--radius) + 14px);
-	--radius-4xl: calc(var(--radius) + 18px);
+	--radius-lg: 8px;
+	--radius-xl: 12px;
+	--radius-2xl: 16px;
+	--radius-3xl: 20px;
+	--radius-4xl: 24px;
 	--font-sans:
-		var(--font-inter), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+		var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+		"Segoe UI Emoji";
 	--font-mono:
-		var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);
 	--color-card: var(--card);
@@ -35,6 +36,11 @@
 	--color-border: var(--border);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
+	--color-control: var(--control);
+	--color-shell: var(--shell);
+	--color-shell-foreground: var(--shell-foreground);
+	--color-panel-inset: var(--panel-inset);
+	--color-selection: var(--selection);
 	--color-success: var(--success);
 	--color-warning: var(--warning);
 	--color-info: var(--info);
@@ -43,6 +49,7 @@
 	--color-chart-3: var(--chart-3);
 	--color-chart-4: var(--chart-4);
 	--color-chart-5: var(--chart-5);
+	--color-chart-axis: var(--chart-axis);
 	--color-sidebar: var(--sidebar);
 	--color-sidebar-foreground: var(--sidebar-foreground);
 	--color-sidebar-primary: var(--sidebar-primary);
@@ -54,41 +61,59 @@
 }
 
 :root {
-	--radius: 0.625rem;
-	--background: #fafafa;
-	--foreground: #1c1917;
+	--radius: 4px;
+	--background: #f4f2f6;
+	--foreground: #28232d;
 	--card: #ffffff;
-	--card-foreground: #1c1917;
+	--card-foreground: #28232d;
 	--popover: #ffffff;
-	--popover-foreground: #1c1917;
-	--primary: #1c1917;
-	--primary-foreground: #fafaf9;
-	/* Organization accent (UX audit F34). Defaults to --primary, so the panel
-	   stays monochrome until a white-label accent is saved; OrgBrandingProvider
-	   overrides it on the root element. */
+	--popover-foreground: #28232d;
+	--primary: #a83b69;
+	--primary-foreground: #ffffff;
+	/* Instance and organization branding override primary/brand. Selection
+	   follows that choice, so there is never a competing fixed accent. */
 	--brand: var(--primary);
-	--secondary: #f5f5f4;
-	--secondary-foreground: #1c1917;
-	--muted: #f5f5f4;
-	--muted-foreground: #78716c;
-	--accent: #f5f5f4;
-	--accent-foreground: #1c1917;
-	--destructive: #dc2626;
-	--border: #e7e5e4;
-	--input: #e7e5e4;
-	--ring: #a8a29e;
-	--success: #16a34a;
-	--warning: #d97706;
-	--info: #2563eb;
-	/* Monochrome series: steps of the foreground, readable on both themes. */
+	--secondary: #ebe7ee;
+	--secondary-foreground: #403648;
+	--muted: #efecf2;
+	--muted-foreground: #73667e;
+	--accent: var(--selection);
+	--accent-foreground: var(--foreground);
+	--selection: color-mix(in oklab, var(--brand) 9%, var(--card));
+	--panel-inset: #f7f5f8;
+	--shell: #ede9f0;
+	--shell-foreground: #53485d;
+	--destructive: #b42f4b;
+	--border: #dcd5e2;
+	--control: #8d8296;
+	--input: var(--control);
+	--ring: var(--foreground);
+	--success: #28725c;
+	--warning: #8b620f;
+	--info: #366a94;
+	--chart-axis: #675671;
+	--code-background: #ffffff;
+	--code-foreground: #28232d;
+	--code-muted: #f3f0f6;
+	--code-muted-foreground: #73667e;
+	--code-border: #dcd5e2;
+	--code-active: #f7f4f9;
+	--code-selection: #e8ddea;
+	--code-keyword: #81375d;
+	--code-string: #28725c;
+	--code-number: #855e17;
+	--code-comment: #786981;
+	--code-tag: #366a94;
+	--code-property: #5c486e;
+	--code-invalid: #b42f4b;
+	/* Data series remain subordinate to state and the chosen organization accent. */
 	--chart-1: var(--foreground);
 	--chart-2: color-mix(in oklab, var(--foreground) 70%, transparent);
 	--chart-3: color-mix(in oklab, var(--foreground) 55%, transparent);
 	--chart-4: color-mix(in oklab, var(--foreground) 40%, transparent);
 	--chart-5: color-mix(in oklab, var(--foreground) 25%, transparent);
-	/* Match shadcn-admin: sidebar tracks page bg so inset gutters read as one canvas */
-	--sidebar: var(--background);
-	--sidebar-foreground: var(--foreground);
+	--sidebar: var(--shell);
+	--sidebar-foreground: var(--shell-foreground);
 	--sidebar-primary: var(--primary);
 	--sidebar-primary-foreground: var(--primary-foreground);
 	--sidebar-accent: var(--accent);
@@ -98,29 +123,44 @@
 }
 
 .dark {
-	/* Deeper canvas so cards actually lift (Vercel zinc-ish). */
-	--background: #09090b;
-	--foreground: #fafafa;
-	--card: #121214;
-	--card-foreground: #fafafa;
-	--popover: #18181b;
-	--popover-foreground: #fafafa;
-	--primary: #fafafa;
-	--primary-foreground: #09090b;
+	--background: #1e1b23;
+	--foreground: #f0eaf4;
+	--card: #25212c;
+	--card-foreground: #f0eaf4;
+	--popover: #2c2634;
+	--popover-foreground: #f0eaf4;
+	--primary: #f59abd;
+	--primary-foreground: #37172a;
 	--brand: var(--primary);
-	--secondary: #1c1c1f;
-	--secondary-foreground: #fafafa;
-	--muted: #1c1c1f;
-	--muted-foreground: #a1a1aa;
-	--accent: #1c1c1f;
-	--accent-foreground: #fafafa;
-	--destructive: #f87171;
-	--border: rgb(255 255 255 / 10%);
-	--input: rgb(255 255 255 / 12%);
-	--ring: #71717a;
-	--success: #4ade80;
-	--warning: #fbbf24;
-	--info: #60a5fa;
+	--secondary: #352d3e;
+	--secondary-foreground: #e3d9ea;
+	--muted: #302a37;
+	--muted-foreground: #b8adc1;
+	--selection: color-mix(in oklab, var(--brand) 12%, var(--card));
+	--panel-inset: #211c28;
+	--shell: #211d27;
+	--shell-foreground: #d8cedf;
+	--destructive: #ff98aa;
+	--border: #493e53;
+	--control: #82738f;
+	--success: #72d2ad;
+	--warning: #e7bb73;
+	--info: #8fbddf;
+	--chart-axis: #c6b9d0;
+	--code-background: #25212c;
+	--code-foreground: #f0eaf4;
+	--code-muted: #211c28;
+	--code-muted-foreground: #b8adc1;
+	--code-border: #493e53;
+	--code-active: #302938;
+	--code-selection: #4d3a50;
+	--code-keyword: #f5a9cc;
+	--code-string: #8bd5b7;
+	--code-number: #e7c083;
+	--code-comment: #b2a2bd;
+	--code-tag: #9ac8e6;
+	--code-property: #d3b6e3;
+	--code-invalid: #ff98aa;
 }
 
 @layer base {
@@ -140,10 +180,60 @@
 	}
 	body {
 		@apply min-h-svh w-full bg-background text-foreground antialiased;
+		/* Compatibility for existing chart/terminal and Swagger consumers. */
+		--font-inter: var(--font-plex-sans);
+		--font-jetbrains-mono: var(--font-plex-mono);
 	}
 	button:not(:disabled),
 	[role="button"]:not(:disabled) {
 		cursor: pointer;
+	}
+	button:focus-visible,
+	a:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 2px;
+	}
+}
+
+@media (pointer: coarse) {
+	[data-slot="button"],
+	[data-slot="select-trigger"],
+	[data-slot="tabs-trigger"],
+	[data-slot="dialog-close"],
+	[data-slot="dropdown-menu-item"],
+	[data-slot="select-item"] {
+		min-height: 2.75rem;
+	}
+	[data-slot="button"][data-size^="icon"],
+	[data-slot="dialog-close"],
+	[data-slot="command-palette-trigger-mobile"] {
+		min-width: 2.75rem;
+		min-height: 2.75rem;
+	}
+	[data-slot="input"] {
+		min-height: 2.75rem;
+	}
+}
+
+/* One active-context treatment shared by shell navigation and working rails. */
+@utility status-spine {
+	position: relative;
+	&::before {
+		content: "";
+		position: absolute;
+		inset-block: 0.625rem;
+		inset-inline-start: 0;
+		width: 2px;
+		background: var(--brand);
+	}
+	&::after {
+		content: "";
+		position: absolute;
+		inset-block-start: calc(50% - 2px);
+		inset-inline-start: -1px;
+		width: 4px;
+		height: 4px;
+		background: var(--brand);
 	}
 }
 
@@ -237,7 +327,9 @@ body[data-activity-tray="1"] [data-sonner-toaster][data-y-position="bottom"] {
 		animation: none !important;
 	}
 	.animate-in,
-	.animate-out {
+	.animate-out,
+	[class*=":animate-in"],
+	[class*=":animate-out"] {
 		animation-duration: 1ms;
 	}
 }

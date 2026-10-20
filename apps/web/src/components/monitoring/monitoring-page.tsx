@@ -37,10 +37,10 @@ function MonitoringTabs() {
 
 	// Unresolved incidents are the one number on this page worth seeing without
 	// opening the tab — it is the difference between "have a look" and "go now".
-	// Same query the tab runs, so it is one request either way.
+	// Count all visible open incidents, even beyond the first list page.
 	const openIncidents = useQuery({
-		...trpc.observability.incidents.queryOptions({ limit: 100 }),
-		select: (rows) => rows.filter((incident) => !incident.resolvedAt).length,
+		...trpc.observability.incidentPage.queryOptions({ state: "open", limit: 1 }),
+		select: (page) => page.openCount,
 	});
 	// A member without audit.read landing on ?tab=audit sees the fleet instead
 	// of an error branch the page cannot recover from.

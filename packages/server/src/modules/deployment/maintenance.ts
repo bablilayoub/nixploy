@@ -355,6 +355,13 @@ export async function runMaintenancePass(): Promise<void> {
 		["prune runtime logs", () => pruneRuntimeLogs({ limitsFor: runtimeLogLimitsResolver() })],
 		["prune import dumps", () => pruneImportDumps()],
 		["prune import containers", () => pruneImportContainers()],
+		[
+			"prune deployment hooks",
+			async () => {
+				const { pruneDeploymentHookContainers } = await import("./hooks-cleanup");
+				return await pruneDeploymentHookContainers();
+			},
+		],
 		["prune audit log", () => pruneAuditLogs()],
 	];
 	for (const [label, step] of steps) {

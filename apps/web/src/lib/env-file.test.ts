@@ -32,8 +32,9 @@ describe("parseEnvFile", () => {
 		expect(parseEnvFile("HASH=a#b")).toEqual([{ key: "HASH", value: "a#b" }]);
 	});
 
-	it("skips malformed lines and lets later duplicates win", () => {
+	it("keeps bare keys as empty values, skips invalid names and lets later duplicates win", () => {
 		expect(parseEnvFile(["no-equals", "=novalue", "1BAD=x", "A=1", "A=2"].join("\n"))).toEqual([
+			{ key: "no-equals", value: "" },
 			{ key: "A", value: "2" },
 		]);
 	});

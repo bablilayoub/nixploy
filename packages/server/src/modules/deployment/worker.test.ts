@@ -20,6 +20,7 @@ const {
 	composePipeline,
 	hooks,
 	pipeline,
+	environmentSnapshot,
 } = vi.hoisted(() => ({
 	updates: [] as Array<{ table: string; values: Record<string, unknown> }>,
 	deploymentRow: {
@@ -64,6 +65,12 @@ const {
 		runPostDeployHook: vi.fn(async () => {}),
 		runComposeExecHook: vi.fn(async () => {}),
 	},
+	environmentSnapshot: {
+		value: { runtimeEnv: "APPROVED=queued", buildArgs: "BUILD_APPROVED=queued" } as {
+			runtimeEnv: string;
+			buildArgs: string | null;
+		} | null,
+	},
 	/** Everything the application pipeline touches between source and rollout. */
 	pipeline: {
 		buildImage: vi.fn(async () => "app:latest"),
@@ -104,6 +111,13 @@ vi.mock("../../db", () => ({
 			},
 		}),
 	},
+}));
+
+vi.mock("./environment-snapshot", () => ({
+	findDeploymentEnvironment: async () => environmentSnapshot.value,
+}));
+vi.mock("../projects/env-resolution", () => ({
+	resolveRuntimeEnvironment: async (_id: string, env: string | null) => env ?? "",
 }));
 
 vi.mock("./logger", () => ({
@@ -194,6 +208,10 @@ describe("worker preview status bookkeeping", () => {
 		vi.resetModules();
 		delete (globalThis as { __nixployDeploymentQueue?: unknown }).__nixployDeploymentQueue;
 		updates.length = 0;
+		environmentSnapshot.value = {
+			runtimeEnv: "APPROVED=queued",
+			buildArgs: "BUILD_APPROVED=queued",
+		};
 		deploymentRow.error = null;
 		applicationLookup.hang = false;
 		applicationLookup.row = null;
@@ -342,6 +360,10 @@ describe("worker deadlines and interruption", () => {
 		vi.resetModules();
 		delete (globalThis as { __nixployDeploymentQueue?: unknown }).__nixployDeploymentQueue;
 		updates.length = 0;
+		environmentSnapshot.value = {
+			runtimeEnv: "APPROVED=queued",
+			buildArgs: "BUILD_APPROVED=queued",
+		};
 		deploymentRow.error = null;
 		applicationLookup.hang = true;
 		delete process.env.NIXPLOY_DEPLOY_TIMEOUT_MS;
@@ -536,6 +558,10 @@ describe("compose preview jobs", () => {
 		vi.resetModules();
 		delete (globalThis as { __nixployDeploymentQueue?: unknown }).__nixployDeploymentQueue;
 		updates.length = 0;
+		environmentSnapshot.value = {
+			runtimeEnv: "APPROVED=queued",
+			buildArgs: "BUILD_APPROVED=queued",
+		};
 		deploymentRow.error = null;
 		applicationLookup.hang = false;
 		applicationLookup.row = null;
@@ -717,6 +743,10 @@ describe("deploy hooks", () => {
 		vi.resetModules();
 		delete (globalThis as { __nixployDeploymentQueue?: unknown }).__nixployDeploymentQueue;
 		updates.length = 0;
+		environmentSnapshot.value = {
+			runtimeEnv: "APPROVED=queued",
+			buildArgs: "BUILD_APPROVED=queued",
+		};
 		deploymentRow.error = null;
 		applicationLookup.hang = false;
 		applicationLookup.row = null;
@@ -741,7 +771,16 @@ describe("deploy hooks", () => {
 			expect.anything(),
 			expect.objectContaining({ appName: "hooked-app", command: "npm run migrate" }),
 		);
-		expect(pipeline.upsertSwarmService).toHaveBeenCalled();
+		expect(pipeline.upsertSwarmService).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.anything(),
+			expect.anything(),
+			expect.objectContaining({ runtimeEnv: "APPROVED=queued", deploymentId: "d-hook" }),
+		);
+		expect(hooks.runPreDeployHook).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({ env: "APPROVED=queued" }),
+		);
 		expect(hooks.runPostDeployHook).toHaveBeenCalledWith(
 			expect.anything(),
 			expect.objectContaining({ appName: "hooked-app", command: "npm run warm" }),
@@ -766,6 +805,39 @@ describe("deploy hooks", () => {
 		const terminal = terminalUpdate();
 		expect(terminal?.values.status).toBe("error");
 		expect(terminal?.values.errorMessage).toContain("Pre-deploy command failed");
+	});
+
+	it("builds with queued build arguments instead of later draft edits", async () => {
+		applicationLookup.row = applicationRow({ sourceType: "git", buildArgs: "BUILD_APPROVED=late" });
+		deploymentRow.value = {
+			deploymentId: "d-build-snapshot",
+			status: "running",
+			logPath: "/tmp/snapshot.log",
+		};
+		pipeline.buildImage.mockClear();
+		const queue = await import("./queue");
+		await import("./worker");
+		queue.startJob("__local__", hookJob("d-build-snapshot"));
+		for (let i = 0; i < 8; i++) await flush();
+		expect(pipeline.buildImage).toHaveBeenCalledWith(
+			expect.objectContaining({ env: ["BUILD_APPROVED=queued"] }),
+		);
+	});
+
+	it("fails a legacy job without a snapshot before source/build/runtime mutations", async () => {
+		environmentSnapshot.value = null;
+		applicationLookup.row = applicationRow();
+		deploymentRow.value = {
+			deploymentId: "d-legacy",
+			status: "running",
+			logPath: "/tmp/legacy.log",
+		};
+		const queue = await import("./queue");
+		await import("./worker");
+		queue.startJob("__local__", hookJob("d-legacy"));
+		for (let i = 0; i < 8; i++) await flush();
+		expect(pipeline.upsertSwarmService).not.toHaveBeenCalled();
+		expect(terminalUpdate()?.values.errorMessage).toContain("queue a new deployment");
 	});
 
 	it("skips both hooks when the application has none configured", async () => {

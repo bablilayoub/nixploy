@@ -1,3 +1,5 @@
+import { parseEnv } from "@nixploy/server/modules/projects/env-values";
+
 /**
  * Minimal dotenv reader/writer for the env editor's import/export buttons.
  * Mirrors what the server accepts (`modules/projects/env-resolution.ts`):
@@ -10,41 +12,9 @@ export interface EnvEntry {
 	value: string;
 }
 
-const KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_.-]*$/;
-
-function unquote(raw: string): string {
-	const value = raw.trim();
-	if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
-		return value
-			.slice(1, -1)
-			.replace(/\\n/g, "\n")
-			.replace(/\\r/g, "\r")
-			.replace(/\\t/g, "\t")
-			.replace(/\\"/g, '"')
-			.replace(/\\\\/g, "\\");
-	}
-	if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
-		return value.slice(1, -1);
-	}
-	// Unquoted: an inline ` # comment` ends the value.
-	const hash = value.search(/\s#/);
-	return (hash >= 0 ? value.slice(0, hash) : value).trim();
-}
-
-/** Parse dotenv text into ordered entries; later duplicates win. */
+/** The editor and runtime use the same import-free dotenv parser. */
 export function parseEnvFile(text: string): EnvEntry[] {
-	const entries = new Map<string, string>();
-	for (const rawLine of text.split(/\r?\n/)) {
-		const line = rawLine.trim();
-		if (!line || line.startsWith("#")) continue;
-		const withoutExport = line.startsWith("export ") ? line.slice(7).trim() : line;
-		const eq = withoutExport.indexOf("=");
-		if (eq <= 0) continue;
-		const key = withoutExport.slice(0, eq).trim();
-		if (!KEY_PATTERN.test(key)) continue;
-		entries.set(key, unquote(withoutExport.slice(eq + 1)));
-	}
-	return [...entries.entries()].map(([key, value]) => ({ key, value }));
+	return Object.entries(parseEnv(text)).map(([key, value]) => ({ key, value }));
 }
 
 /** Quote a value only when the plain form would not round-trip. */
