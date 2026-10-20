@@ -2,8 +2,10 @@
 
 Baseline: merged security PR #24, `e5a681b93dd019795444c18015ffde63b0b26440`.
 The earlier amd64 CI scan reported **40 high / 0 critical** findings. That
-report selected only those severities; it does not establish baseline counts
-at lower severities or on arm64.
+report selected only those severities and inherited a repository ignore for
+`CVE-2025-68121`; its 40 visible findings are not an unfiltered baseline.
+Lower-severity and arm64 baseline counts were not established. The obsolete
+ignore file is removed in this change; final native scans run without it.
 
 ## Installed components and changes
 
@@ -55,6 +57,12 @@ exit code 1 and includes unfixed findings. Both publication workflows gate
 each architecture's digest before manifest assembly/signing. Base pulls and
 per-run/attempt Alpine refresh arguments prevent an unchanged cached `apk`
 layer from indefinitely retaining a package with an available patch.
+
+Independent review caught the inherited ignore after the first candidate
+was frozen. That candidate is superseded; its CI scans cannot establish
+unfiltered results. The local containerized arm64 scan ran outside the
+repository working directory, and is repeated with an explicit empty ignore
+file. Both native CI architectures must pass again at the corrected head.
 
 The image supports the direct runtime migrator and direct web tsx encryption
 rotator documented in `docker/README.md` and `docs/auth.md`. Development
