@@ -16,6 +16,23 @@ import type { TRPCContext } from "./init";
 
 // `init.ts` builds better-auth at import time from the schema barrel; keep the
 // real module and only blank the query client.
+vi.mock("../modules/application/org", () => ({ getOrganizationId: async () => "org-1" }));
+vi.mock("../modules/auth/sso-gate", async (original) => ({
+	...(await original<typeof import("../modules/auth/sso-gate")>()),
+	isSsoGateBlocked: async () => false,
+}));
+vi.mock("../modules/auth/two-factor-gate", async (original) => ({
+	...(await original<typeof import("../modules/auth/two-factor-gate")>()),
+	isTwoFactorGateBlocked: async () => false,
+}));
+
+// The database boundary below is stubbed; this fixture has an unrestricted caller.
+// Project denial and resolution failures are exercised with real scopes separately.
+vi.mock("../modules/projects/project-scope", async (original) => ({
+	...(await original<typeof import("../modules/projects/project-scope")>()),
+	resolveProjectFilterForSession: async () => ({ kind: "all" as const }),
+}));
+
 vi.mock("../db", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../db")>();
 	return { ...actual, db: { query: {} }, client: vi.fn() };

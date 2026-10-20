@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * node-schedule has no catch-up (audit #17): ticks missed while the panel was
@@ -48,12 +48,18 @@ beforeEach(() => {
 	delete process.env.NIXPLOY_CRON_CATCH_UP;
 });
 
+afterEach(() => vi.useRealTimers());
+
 describe("cronIntervalMs", () => {
 	it("measures the gap between two consecutive fires", () => {
-		expect(cronIntervalMs("*/5 * * * *")).toBe(5 * MINUTE);
-		expect(cronIntervalMs("0 * * * *")).toBe(HOUR);
-		expect(cronIntervalMs("0 3 * * *")).toBe(DAY);
-		expect(cronIntervalMs("0 0 * * 0")).toBe(7 * DAY);
+		// A fixed ordinary week keeps the real-time clock from crossing DST.
+		const from = new Date("2026-09-11T12:00:00.000Z");
+		vi.useFakeTimers();
+		vi.setSystemTime(from);
+		expect(cronIntervalMs("*/5 * * * *", from)).toBe(5 * MINUTE);
+		expect(cronIntervalMs("0 * * * *", from)).toBe(HOUR);
+		expect(cronIntervalMs("0 3 * * *", from)).toBe(DAY);
+		expect(cronIntervalMs("0 0 * * 0", from)).toBe(7 * DAY);
 	});
 
 	it("returns null for something that is not a recurring cron", () => {

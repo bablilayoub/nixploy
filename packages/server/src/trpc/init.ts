@@ -15,7 +15,6 @@ import {
 import { type DomainErrorCode, isDomainError } from "../modules/errors";
 import { type CapabilityScope, runWithCapabilityScope } from "../modules/projects/capabilities";
 import {
-	ALL_PROJECTS,
 	type ProjectFilter,
 	resolveProjectFilterForSession,
 	runWithProjectFilter,
@@ -219,14 +218,18 @@ export const protectedProcedure = t.procedure.use(errorBoundary).use(async ({ ct
 	// the IdP is blocked until they do. Instance admins are exempt inside the
 	// gate itself — they are the way back in when the IdP is down.
 	let ssoGated = false;
+	let gateOrganizationId: string | undefined;
 	try {
-		const orgId = await organizationId();
-		twoFactorGated = await isTwoFactorGateBlocked(session.user.id, orgId);
-		ssoGated = await isSsoGateBlocked(session.user.id, orgId);
-	} catch {
-		// No organization (FORBIDDEN) or an unreachable database: org-scoped
-		// procedures reject or fail on their own queries — the gate must not
-		// take down procedures that never touch tenant data.
+		gateOrganizationId = await organizationId();
+	} catch (error) {
+		// No organization: org-scoped procedures reject through the same cached
+		// resolver. Keep account/setup procedures available to callers without one.
+		if (!isDomainError(error) || error.code !== "FORBIDDEN") throw error;
+	}
+	if (gateOrganizationId) {
+		// Gate lookup failures must reject too: later data queries may succeed.
+		twoFactorGated = await isTwoFactorGateBlocked(session.user.id, gateOrganizationId);
+		ssoGated = await isSsoGateBlocked(session.user.id, gateOrganizationId);
 	}
 	if (twoFactorGated) {
 		throw new TRPCError({
@@ -247,14 +250,13 @@ export const protectedProcedure = t.procedure.use(errorBoundary).use(async ({ ct
 	 * A user with no teams-scoped membership anywhere — which is everyone until
 	 * somebody changes it — resolves to "all" after one indexed read.
 	 */
-	let projectFilter: ProjectFilter = ALL_PROJECTS;
+	let projectFilter: ProjectFilter;
 	try {
 		projectFilter = await resolveProjectFilterForSession(session, session.user.id);
 	} catch (error) {
-		// The database is unreachable; the procedure itself is about to fail on
-		// the same database. Leaving the filter at "all" changes nothing — every
-		// path this could have narrowed also checks the organization.
-		log.warn(`could not resolve the caller's project filter: ${String(error)}`);
+		// A failed visibility query does not imply every later query will fail.
+		// Never turn a transient authorization failure into unrestricted access.
+		throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", cause: error });
 	}
 
 	const run = () =>

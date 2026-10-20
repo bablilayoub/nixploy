@@ -5,6 +5,7 @@ import { saveEnvironment as saveApplicationEnvironment } from "../application/se
 import { saveEnvironment as saveComposeEnvironment } from "../compose/service";
 import { queueDeployment } from "../deployment";
 import { badRequest, notFound, preconditionFailed } from "../errors";
+import { assertProjectVisible } from "../projects/project-scope";
 import { extractEnvEntries, mergeDotenv } from "./apply-patch";
 import { readCachedExplanation } from "./explanation-cache";
 
@@ -36,6 +37,9 @@ export async function applySuggestedEnvPatch(options: {
 	if (!deployment || orgId !== options.organizationId) {
 		throw notFound("Deployment not found");
 	}
+	const environment = deployment.application?.environment ?? deployment.compose?.environment;
+	if (!environment) throw notFound("Deployment not found");
+	assertProjectVisible(environment.projectId, "Deployment");
 
 	let patch = options.patch?.trim() || null;
 	if (!patch && deployment.logPath) {

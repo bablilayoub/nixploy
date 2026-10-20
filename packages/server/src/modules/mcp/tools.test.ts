@@ -9,6 +9,22 @@ const mocks = vi.hoisted(() => ({
 	findManyProjects: vi.fn(),
 	findFirstMember: vi.fn(),
 }));
+vi.mock("../auth/sso-gate", async (original) => ({
+	...(await original<typeof import("../auth/sso-gate")>()),
+	isSsoGateBlocked: async () => false,
+}));
+vi.mock("../auth/two-factor-gate", async (original) => ({
+	...(await original<typeof import("../auth/two-factor-gate")>()),
+	isTwoFactorGateBlocked: async () => false,
+}));
+
+// The database boundary below is stubbed; this fixture has an unrestricted caller.
+// Project denial and resolution failures are exercised with real scopes separately.
+vi.mock("../projects/project-scope", async (original) => ({
+	...(await original<typeof import("../projects/project-scope")>()),
+	resolveProjectFilterForSession: async () => ({ kind: "all" as const }),
+}));
+
 vi.mock("../../db", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../db")>();
 	return {

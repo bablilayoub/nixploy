@@ -16,6 +16,12 @@ const mocks = vi.hoisted(() => ({
 	remove: vi.fn(),
 }));
 
+// The database is mocked; declare the fixture's successful SSO gate explicitly.
+vi.mock("../../modules/auth/sso-gate", async (original) => ({
+	...(await original<typeof import("../../modules/auth/sso-gate")>()),
+	isSsoGateBlocked: async () => false,
+}));
+
 vi.mock("../../db", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../../db")>();
 	return {

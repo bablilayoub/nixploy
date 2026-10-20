@@ -6,6 +6,7 @@ import { redactSensitiveText } from "../../utils/public-url";
 import { notFound, preconditionFailed } from "../errors";
 import { readMetricsHistory } from "../monitoring/store";
 import { recentServiceEvents } from "../observability/service-events";
+import { assertProjectVisible } from "../projects/project-scope";
 import { readRuntimeLogs } from "../runtime-logs/store";
 import { completeChat } from "./client";
 import { writeCachedExplanation } from "./explanation-cache";
@@ -75,6 +76,9 @@ async function loadDeploymentForOrg(deploymentId: string, organizationId: string
 	const composeOrg = deployment.compose?.environment.project.organizationId;
 	const orgId = appOrg ?? composeOrg;
 	if (orgId !== organizationId) return null;
+	const environment = deployment.application?.environment ?? deployment.compose?.environment;
+	if (!environment) return null;
+	assertProjectVisible(environment.projectId, "Deployment");
 	return deployment;
 }
 
@@ -414,6 +418,7 @@ export async function chatAboutService(
 		if (!app || app.environment.project.organizationId !== organizationId) {
 			throw notFound("Application not found");
 		}
+		assertProjectVisible(app.environment.projectId, "Application");
 
 		const appDomains = await db
 			.select({ domainId: domains.domainId, host: domains.host })
@@ -466,6 +471,7 @@ ${context}`;
 		if (!row || row.environment.project.organizationId !== organizationId) {
 			throw notFound("Compose service not found");
 		}
+		assertProjectVisible(row.environment.projectId, "Compose service");
 
 		const composeDomains = await db
 			.select({

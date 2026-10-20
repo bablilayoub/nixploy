@@ -5,7 +5,7 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
-## Active backlog — 2026-10-17
+## Active backlog — 2026-10-20
 
 This is the authoritative current work list. The dated verification records and
 historical checklists below retain their original context; an unchecked item
@@ -67,6 +67,10 @@ an implementation checkpoint, not a new release claim.
   `@tailwindcss/typography` publishes a compatible resolution; keep the blocking
   high/critical audit gate. The PR #15 evidence table below records the current
   dependency decision.
+- [ ] Recheck unpatched `braces` under the development CLI and tsup's esbuild
+  0.27 line. The local Node runtime also needs an operator update; npm audit
+  does not cover its bundled libraries. Exact reachability and alternatives
+  are in the [October security follow-up](audits/2026-10/security-follow-up.md).
 - [ ] Keep release/upgrade notes explicit about legacy Compose stacks sharing
   an environment needing redeploy. Legacy Swarm Stack naming upgrades require
   an explicit Stop and verified target-node storage placement; anonymous/image
@@ -88,6 +92,52 @@ stated evidence boundaries:
 | PR #16 Coolify API reader | Official v4.4.6 image/public-Git applications, raw Compose services and all five supported database configuration kinds passed inspect/plan/apply/repeat. A fresh selected image/Postgres import then explicitly started with HTTP 200 and generated-password TCP authentication; repository Compose applications/other database engines are skipped and secrets/data remain manual. |
 | PR #18 cold backup/recovery | Removed disposable source panel/database/config and workload volumes before fresh PostgreSQL/Redis/volume recovery; keys, original TOTP, large payload hashes and routed HTTP passed. Real MinIO separately passed an eight-part 64 MiB transfer and egress revocation. |
 | Terminal reconnect | Real local managed Redis terminal, exact-container dialog, fresh sessions after drops/restart/task replacement, authorization changes and guarded process cleanup passed. Remote SSH transport is covered by regressions; real remote placement remains above. |
+
+## Authorization and dependency follow-up — 2026-10-20
+
+Project-filter lookup failures now fail the protected request instead of
+falling back to unrestricted access. Membership, 2FA and SSO lookup errors
+also fail closed; confirmed absence of organization membership still permits
+account/setup procedures. Direct ZIP source uploads and API-key
+deploy hooks resolve current project visibility, retain organization/key-scope
+checks and enforce the organization SSO gate. Copilot checks project visibility
+before cached explanations, service context and environment changes. Hidden
+projects answer `NOT_FOUND`; trusted workers outside a caller scope remain
+unrestricted.
+
+The regressions reproduced the missing project checks and middleware failure
+fallback before the fixes. Focused coverage passes **32 server and 8 web
+cases**, including visible requests, revoked team access, failed visibility
+followed by a healthy request, application/Compose context and patches,
+cookie/API-key SSO, gate-query errors/recovery and the existing 2FA policy.
+
+Fresh registry audits move production from **2 moderate** to **1 moderate**
+and the whole graph from **8 high / 9 moderate / 4 low** to
+**1 high / 1 moderate / 1 low**. The separate migration-runner npm lock reports
+zero findings. No advisory is ignored, gate relaxed, runner replaced or
+unsupported major forced. The remaining high is unpatched `braces` under
+shadcn; that package also supplies an imported stylesheet, so deleting it as
+unused would break the panel build. The [security follow-up](audits/2026-10/security-follow-up.md)
+records versions, primary advisories, runtime limits and operator actions.
+
+Final local gates: **3,306 server tests passed / 1 optional registry probe
+skipped**, with real Postgres-backed suites enabled in an isolated database;
+**118 web**, **94 CLI** and **6 smoke-error** tests passed. All four workspace
+TypeScript checks, strict Biome (1,126 files), knip and web/landing/CLI
+production builds passed. Unrelated unit fixtures now explicitly
+declare their mock caller and policy gates instead of relying on the removed
+failure fallback; the schedule arithmetic test freezes its clock away from a
+DST transition. Neither change relaxes the production authorization guard.
+
+The primary's observed baseline was 4 services, 74 volumes, 69 public tables,
+2 users and 7 proxy files. Current identities and hashes were captured;
+the old five-file baseline was not restored. Tests use separate data; this
+change does not deploy a workload or change the user's running panel.
+The final check preserves every original service/volume/network identity and
+all seven proxy hashes; the primary remains 69 tables / 2 users and login
+returns HTTP 200. An additional unattributed volume is left untouched (75
+total). Owned temporary test databases were removed. Exact-head review and CI
+remain separate merge requirements.
 
 ## Terminal sessions — 2026-10-16/17
 

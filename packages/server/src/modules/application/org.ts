@@ -3,7 +3,11 @@ import { db } from "../../db";
 import { applications, environments, members, projects } from "../../db/schema";
 import type { TRPCContext } from "../../trpc/init";
 import { notFound } from "../errors";
-import { assertProjectVisible, resolveCallerOrganizationId } from "../projects";
+import {
+	assertProjectVisible,
+	resolveCallerOrganizationId,
+	resolveProjectFilter,
+} from "../projects";
 import { SERVICE_REGISTRY, type ServiceKind } from "../services/registry";
 
 type Session = NonNullable<TRPCContext["session"]>;
@@ -80,7 +84,12 @@ export const findApplicationByAppNameForUser = async (
 			eq(members.organizationId, application.environment.project.organizationId),
 		),
 	});
-	return membership ? application : null;
+	if (!membership) return null;
+	// These direct HTTP callers bypass protectedProcedure's async scope.
+	const filter = await resolveProjectFilter(userId);
+	return filter.kind === "all" || filter.projectIds.has(application.environment.projectId)
+		? application
+		: null;
 };
 
 /**
@@ -101,7 +110,11 @@ export const findApplicationForUser = async (
 			eq(members.organizationId, application.environment.project.organizationId),
 		),
 	});
-	return membership ? application : null;
+	if (!membership) return null;
+	const filter = await resolveProjectFilter(userId);
+	return filter.kind === "all" || filter.projectIds.has(application.environment.projectId)
+		? application
+		: null;
 };
 
 /**
