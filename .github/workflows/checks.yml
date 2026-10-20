@@ -120,3 +120,6 @@ jobs:
         # Docker is stubbed: failures must stop the rehearsal, and the documented
         # recovery key procedure must update both stopped services safely.
         run: node --test tools/dr-restore-test.test.mjs
+
+      - name: Release publication contracts
+        run: node --test tools/ci/image-signature.test.mjs tools/ci/release-publication.test.mjs

@@ -6,10 +6,10 @@ name: Release
 # The `checks` gate (typecheck, Biome, vitest incl. tenancy on Postgres 17,
 # Traefik drift — .github/workflows/checks.yml, shared with CI) must pass on
 # the tagged ref before anything is built. CI then builds/pushes GHCR
-# :vX.Y.Z for linux/amd64 and linux/arm64 with provenance + SBOM attestations,
+# images for linux/amd64 and linux/arm64 with provenance + SBOM attestations,
 # scans each architecture with Trivy (HIGH/CRITICAL are fatal, even unfixed),
-# signs the digest with cosign, and
-# only then moves :latest — so a high/critical finding cannot reach the channel every
+# stages and signs the index, verifies both shipped installers, then publishes
+# :vX.Y.Z and moves :latest — so a high/critical finding cannot reach the channel every
 # install auto-updates to. Finally it creates a GitHub Release with
 # auto-generated notes and attaches version-pinned install.sh / update.sh /
 # uninstall.sh plus SHA256SUMS. workflow_dispatch re-runs rebuild an existing
@@ -218,6 +218,13 @@ jobs:
           fetch-depth: 0
           ref: ${{ steps.tag.outputs.tag }}
 
+      - name: Checkout verification tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .release-verification
+          persist-credentials: false
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
@@ -250,9 +257,8 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # Only the immutable version tag is built here. `:latest` is moved
-          # further down, after Trivy and cosign, with `imagetools create` —
-          # re-tagging an already-pushed manifest, not a second build.
+          # Prepare the version tag without publishing it. Both this tag and
+          # :latest are promoted only after signing and installer verification.
           flavor: latest=false
           tags: |
             type=raw,value=${{ steps.tag.outputs.tag }}
@@ -263,45 +269,6 @@ jobs:
           path: /tmp/digests
           pattern: digest-*
           merge-multiple: true
-
-      - name: Create the manifest list
-        id: build
-        # Assembles the two per-architecture manifests into the tag. Everything
-        # below (cosign, :latest) works on the resulting list digest, so
-        # the scanned and signed artefact is exactly what :vX.Y.Z resolves to.
-        working-directory: /tmp/digests
-        run: |
-          set -euo pipefail
-          # shellcheck disable=SC2046
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<<"$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf "${REGISTRY}/${IMAGE_NAME}@sha256:%s " *)
-          DIGEST="$(docker buildx imagetools inspect \
-            "${REGISTRY}/${IMAGE_NAME}:${{ steps.tag.outputs.tag }}" \
-            --format '{{json .Manifest.Digest}}' | tr -d '"')"
-          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
-          echo "manifest ${DIGEST}"
-
-      - name: Install cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-
-      - name: Sign the image (keyless)
-        # One signature on the digest covers :vX.Y.Z and, once it is moved
-        # below, :latest. docs/releases.md carries the verify command.
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-        run: cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
-
-      - name: Move :latest
-        if: steps.latest.outputs.move == 'true'
-        # Re-tags the manifest that just passed Trivy and was signed; no
-        # rebuild, so :latest and :vX.Y.Z are byte-identical by construction.
-        env:
-          DIGEST: ${{ steps.build.outputs.digest }}
-        run: |
-          docker buildx imagetools create \
-            --tag "${REGISTRY}/${IMAGE_NAME}:latest" \
-            "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
 
       - name: Pin install.sh and update.sh
         run: |
@@ -338,6 +305,63 @@ jobs:
           set -euo pipefail
           sha256sum install.sh update.sh uninstall.sh > SHA256SUMS
           cat SHA256SUMS
+
+      - name: Stage the manifest list
+        id: build
+        # Keep public tags on their previous signed index until this exact
+        # list passes signing and the shipped installers' verification.
+        working-directory: /tmp/digests
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            --tag "${REGISTRY}/${IMAGE_NAME}:build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --metadata-file "$RUNNER_TEMP/manifest.json" \
+            $(printf "${REGISTRY}/${IMAGE_NAME}@sha256:%s " *)
+          DIGEST="$(jq -er '."containerimage.descriptor".digest | select(test("^sha256:[0-9a-f]{64}$"))' "$RUNNER_TEMP/manifest.json")"
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "manifest ${DIGEST}"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign the image (keyless)
+        # Sign the immutable index before either public tag can expose it.
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+
+      - name: Verify both shipped installers against this signed digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          children=(/tmp/digests/*)
+          "$GITHUB_WORKSPACE/.release-verification/tools/ci/check-installer-signatures.sh" \
+            "${REGISTRY}/${IMAGE_NAME}@${DIGEST}" \
+            "${REGISTRY}/${IMAGE_NAME}@sha256:${children[0]##*/}" \
+            "$GITHUB_WORKSPACE"
+
+      - name: Publish signed version tag
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<<"$DOCKER_METADATA_OUTPUT_JSON") \
+            "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+
+      - name: Move :latest
+        if: steps.latest.outputs.move == 'true'
+        # Re-tags the manifest that just passed Trivy and was signed; no
+        # rebuild, so :latest and :vX.Y.Z are byte-identical by construction.
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker buildx imagetools create \
+            --tag "${REGISTRY}/${IMAGE_NAME}:latest" \
+            "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3

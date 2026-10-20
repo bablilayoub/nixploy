@@ -227,12 +227,32 @@ ensure_cosign() {
 	ok "cosign ${COSIGN_VERSION} installed to ${bin}"
 }
 
+# Docker accepts host case and the default TLS port as aliases of official GHCR.
+# Normalize only this repository; foreign image and explicit bypass behavior stays intact.
+canonical_official_image_ref() {
+	local ref="$1" host="${1%%/*}" image="${1#*/}"
+	case "$image" in
+		bablilayoub/nixploy | bablilayoub/nixploy:* | bablilayoub/nixploy@*) ;;
+		*) printf '%s' "$ref"; return ;;
+	esac
+	host="$(printf '%s' "$host" | tr '[:upper:]' '[:lower:]')"
+	case "$host" in
+		ghcr.io | ghcr.io:443) printf 'ghcr.io/%s' "$image" ;;
+		ghcr.io:* | ghcr.io. | ghcr.io.:*) die "Unsupported official image reference: $ref. Use ghcr.io/bablilayoub/nixploy with a tag or digest." ;;
+		*) printf '%s' "$ref" ;;
+	esac
+}
+
 # Verify APP_IMAGE against the release pipeline's identity and pin it to the
 # signed digest (APP_IMAGE becomes <ref>@sha256:…). Images from another
 # repository are the operator's own build and are left alone.
 verify_app_image() {
+	if [ "${NIXPLOY_SKIP_VERIFY:-0}" != "1" ]; then
+		APP_IMAGE="$(canonical_official_image_ref "$APP_IMAGE")"
+		SIGNED_IMAGE_REPO="$(canonical_official_image_ref "$SIGNED_IMAGE_REPO")"
+	fi
 	case "${APP_IMAGE}" in
-		"${SIGNED_IMAGE_REPO}:"* | "${SIGNED_IMAGE_REPO}@"*) ;;
+		"${SIGNED_IMAGE_REPO}" | "${SIGNED_IMAGE_REPO}:"* | "${SIGNED_IMAGE_REPO}@"*) ;;
 		*)
 			info "${APP_IMAGE} is not a ${SIGNED_IMAGE_REPO} image — signature not checked"
 			return 0
