@@ -56,7 +56,7 @@ moved-service authorization, remote-volume deletion truth and hook dotenv
 transport issues. Hook creation uses Engine `Env`, bounded owned cleanup and
 signed ownership for abandoned-container recovery. Actual app/Compose literal
 hooks, nonzero failure, cancellation and exact owned late-helper cleanup passed.
-The final combined server run passed 3,386 tests (one optional registry probe
+The combined server run passed 3,489 tests (one optional registry probe
 skipped), with 119 web and 94 CLI tests passing. A subsequent focused queue
 run captured two rows becoming running in one claim while the caller received
 one. A transaction-local PostgreSQL reproduction confirms a repeated candidate
@@ -65,8 +65,8 @@ reproduces concurrent claims of sibling jobs for one app. The corrected claim
 locks one candidate, tries the enqueue app lock and rechecks a guarded primary-key
 update under explicit READ COMMITTED isolation. The stale-plan, held-claim and
 precise commit-window regressions fail before correction; corrected 18 DB/23
-unit cases pass. Peer source review is clear; a new integrated gate remains
-required before merge.
+unit cases pass. Peer source review, the integrated server run, workspace types,
+strict Biome and knip pass; current-head CI remains required before merge.
 
 The normal `0048` host path stops/verifies both old roles, requires private
 recovery assets, migrates/backfills separately, and pauses on failure. Old GUI
@@ -89,8 +89,9 @@ backend cases pass. Final production browser verification remains pending.
 The original four Swarm service IDs/specs, 74 pre-existing volumes, original
 network IDs and seven primary proxy-file hashes remain preserved at the
 in-progress resource check. Real multi-node/SSH placement and public DNS/ACME
-remain outside the local proof. Separate authorization/image hardening work is
-coordinated before this batch closes; no zero-vulnerability claim is made.
+remain outside the local proof. Authorization and image hardening are merged;
+fresh production dependency audit reports zero findings, while the full graph
+retains one low development-bundler advisory. Final publication is pending.
 
 ## Active backlog — 2026-10-20
 
@@ -153,19 +154,15 @@ an implementation checkpoint, not a new release claim.
 
 ### Maintenance
 
-- [ ] Runtime image hardening follow-up: independent production dependency
-  tree, patched libexpat/tsx/esbuild and native-architecture blocking scans are
-  implemented locally. ARM64 all-severity scan and real auth/migration/worker/source-build/operator
-  probes passed. Exact-head CI, amd64 runtime/scan evidence and independent
-  review remain pending; see the [runtime audit](audits/2026-10/runtime-image.md).
-- [ ] Revisit the remaining moderate `postcss-selector-parser` advisory when
-  `@tailwindcss/typography` publishes a compatible resolution; keep the blocking
-  high/critical audit gate. The PR #15 evidence table below records the current
-  dependency decision.
-- [ ] Recheck unpatched `braces` under the development CLI and tsup's esbuild
-  0.27 line. The local Node runtime also needs an operator update; npm audit
-  does not cover its bundled libraries. Exact reachability and alternatives
-  are in the [October security follow-up](audits/2026-10/security-follow-up.md).
+- [ ] Complete signed publication after runtime hardening PRs #25/#27. Both
+  native image scans and real Swarm probes pass; the source review is clear.
+  Publication and the separate Release ordering follow-up remain distinct
+  gates; see the [runtime audit](audits/2026-10/runtime-image.md).
+- [ ] Recheck tsup's development-only esbuild 0.27.7 when a supported update
+  resolves [GHSA-g7r4-m6w7-qqqr](https://github.com/advisories/GHSA-g7r4-m6w7-qqqr),
+  a low Windows development-server advisory. Removing unused shadcn and
+  typography packages removes the earlier braces/selector-parser findings.
+  Fresh production audit is zero; the full graph has this one low finding.
 - [ ] Keep release/upgrade notes explicit about legacy Compose stacks sharing
   an environment needing redeploy. Legacy Swarm Stack naming upgrades require
   an explicit Stop and verified target-node storage placement; anonymous/image
