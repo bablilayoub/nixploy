@@ -249,7 +249,7 @@ export function UpdatesCard() {
 										onRecheck={() => preflightQuery.refetch()}
 									/>
 									{preflightQuery.data?.checks.some((check) => check.id === "downgrade") ? (
-										<div className="flex items-center justify-between gap-4 text-sm">
+										<div className="flex flex-wrap items-center justify-between gap-4 text-sm">
 											<Label htmlFor="allow-downgrade">
 												I understand database migrations are never reversed.
 											</Label>
@@ -473,7 +473,7 @@ export function UpdatesCard() {
 						</div>
 					</div>
 
-					<div className="flex items-center justify-between gap-4">
+					<div className="flex flex-wrap items-center justify-between gap-4">
 						<div className="grid gap-0.5">
 							<Label htmlFor="auto-check">Automatic checks</Label>
 							<p className="text-xs text-muted-foreground">
@@ -495,7 +495,7 @@ export function UpdatesCard() {
 							}}
 						/>
 					</div>
-					<div className="flex items-center justify-between gap-4">
+					<div className="flex flex-wrap items-center justify-between gap-4">
 						<div className="grid gap-0.5">
 							<Label htmlFor="auto-update">Automatic updates</Label>
 							<p className="text-xs text-muted-foreground">

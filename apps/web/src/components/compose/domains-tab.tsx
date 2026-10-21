@@ -26,14 +26,14 @@ export function DomainsTab({ compose }: { compose: ComposeService }) {
 	].sort() as string[];
 
 	return (
-		<div className="flex flex-col gap-6">
+		<div className="flex min-w-0 flex-col gap-7">
 			<DomainManager
 				serviceType="compose"
 				serviceId={compose.composeId}
 				composeServices={serviceNames ?? []}
 			/>
 			{routedServices.map((serviceName) => (
-				<div key={serviceName} className="flex flex-col gap-6">
+				<div key={serviceName} className="flex min-w-0 flex-col gap-7">
 					<RedirectsManager composeId={compose.composeId} serviceName={serviceName} />
 					<SecurityManager composeId={compose.composeId} serviceName={serviceName} />
 				</div>

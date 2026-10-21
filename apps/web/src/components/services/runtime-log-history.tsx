@@ -84,9 +84,9 @@ export function RuntimeLogHistory({
 	};
 
 	return (
-		<div className="flex flex-col gap-3">
+		<div className="surface flex flex-col gap-4 overflow-hidden p-4 sm:p-5">
 			<form
-				className="flex flex-col gap-2 sm:flex-row sm:items-center"
+				className="flex flex-col gap-2 rounded-lg border bg-panel-inset p-3 sm:flex-row sm:items-center"
 				onSubmit={(event) => {
 					event.preventDefault();
 					submit();
@@ -146,15 +146,15 @@ export function RuntimeLogHistory({
 					/>
 				)}
 
-				<div className="overflow-hidden rounded-lg border border-border">
-					<div className="max-h-[32rem] overflow-auto font-mono text-xs">
+				<div className="overflow-hidden rounded-lg border border-border bg-control">
+					<div className="max-h-[32rem] overflow-auto overscroll-contain font-mono text-xs">
 						{lines.map((line, index) => (
 							<div
 								// biome-ignore lint/suspicious/noArrayIndexKey: lines are append-only and never reordered
 								key={`${line.t}-${index}`}
-								className="flex items-start gap-2 border-b border-border/60 px-3 py-1 last:border-b-0"
+								className="flex items-start gap-3 border-b border-border/60 px-3 py-2 last:border-b-0"
 							>
-								<span className="shrink-0 tabular-nums text-muted-foreground">
+								<span className="w-40 shrink-0 tabular-nums text-muted-foreground">
 									{formatTime(line.t)}
 								</span>
 								{line.level !== "default" ? (
@@ -181,7 +181,7 @@ export function RuntimeLogHistory({
 							</div>
 						))}
 					</div>
-					<div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
+					<div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-panel-inset px-3 py-3 text-xs text-muted-foreground">
 						<span>
 							{lines.length} line{lines.length === 1 ? "" : "s"}
 							{truncated

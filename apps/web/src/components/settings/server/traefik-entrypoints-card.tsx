@@ -234,7 +234,7 @@ export function TraefikEntrypointsCard() {
 									value={protocol}
 									onValueChange={(value) => setProtocol(value as EntrypointProtocol)}
 								>
-									<SelectTrigger>
+									<SelectTrigger aria-label="Protocol">
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>

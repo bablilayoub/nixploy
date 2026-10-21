@@ -658,6 +658,7 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 							))}
 							<TableCell>
 								<Switch
+									aria-label={`Enable backup ${entry.name || entry.database || entry.volumeName || entry.prefix}`}
 									checked={entry.enabled}
 									disabled={update.isPending || !canManage}
 									title={manageHint}
@@ -905,7 +906,7 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 								</SelectContent>
 							</Select>
 						</div>
-						<div className="grid grid-cols-2 gap-4">
+						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 							{!isVolume && (
 								<div className="flex flex-col gap-2">
 									<Label htmlFor="backup-database">Database</Label>

@@ -30,8 +30,8 @@ export function ServiceStatusBadge({ status }: { status: ServiceStatus }) {
 	const config = serviceStatusConfig[status ?? "idle"] ?? SERVICE_STATUS_IDLE;
 
 	return (
-		<Badge variant={config.variant} className="gap-1.5 font-normal">
-			<StatusDot status={config.status} className="ring-0" />
+		<Badge variant={config.variant} className="gap-1.5 font-medium">
+			<StatusDot status={config.status} className="ring-0 shadow-none" />
 			{config.label}
 		</Badge>
 	);
@@ -71,9 +71,12 @@ export function DeploymentStatusBadge({
 	const label = key === "queued" && queuePosition ? `${base} (#${queuePosition})` : base;
 
 	return (
-		<Badge variant={deploymentBadgeVariant[key] ?? "success"} className="gap-1.5 font-normal">
+		<Badge variant={deploymentBadgeVariant[key] ?? "success"} className="gap-1.5 font-medium">
 			{/* Only work in flight pulses; a finished deployment is a static fact. */}
-			<StatusDot status={dot} className={cn("ring-0", key === "running" && "animate-pulse")} />
+			<StatusDot
+				status={dot}
+				className={cn("ring-0 shadow-none", key === "running" && "animate-pulse")}
+			/>
 			{label}
 		</Badge>
 	);

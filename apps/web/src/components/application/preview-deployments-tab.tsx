@@ -93,7 +93,7 @@ function PreviewSettingsCard({ application }: { application: Application }) {
 			title="Preview settings"
 			description="Environment overrides, the cap on simultaneous previews, and how long a pull-request preview lives."
 		>
-			<div className="flex flex-col gap-4">
+			<div className="flex min-w-0 flex-col gap-5">
 				<div className="flex flex-col gap-2">
 					<Label htmlFor="preview-env">Preview environment variables</Label>
 					<Textarea

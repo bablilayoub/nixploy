@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 
 function Slider({
 	className,
+	"aria-label": ariaLabel,
+	"aria-labelledby": ariaLabelledBy,
 	defaultValue,
 	value,
 	min = 0,
@@ -26,7 +28,7 @@ function Slider({
 			min={min}
 			max={max}
 			className={cn(
-				"relative flex w-full touch-none items-center select-none data-[disabled]:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-44 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col",
+				"relative flex min-h-9 w-full touch-none items-center select-none data-[disabled]:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-44 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col",
 				className,
 			)}
 			{...props}
@@ -47,8 +49,10 @@ function Slider({
 			{_values.map((value) => (
 				<SliderPrimitive.Thumb
 					data-slot="slider-thumb"
+					aria-label={ariaLabel}
+					aria-labelledby={ariaLabelledBy}
 					key={`thumb-${value}`}
-					className="block size-4 shrink-0 rounded-full border border-primary bg-white shadow-sm ring-ring/50 transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
+					className="block size-5 shrink-0 rounded-full border border-primary bg-card shadow-xs ring-ring/50 transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
 				/>
 			))}
 		</SliderPrimitive.Root>

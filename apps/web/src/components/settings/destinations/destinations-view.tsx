@@ -125,7 +125,7 @@ export function DestinationsView() {
 	});
 
 	return (
-		<div className="flex flex-col gap-6">
+		<div className="flex min-w-0 flex-col gap-7">
 			<PageHeader
 				title="Backup storage"
 				description="S3-compatible buckets — or this host's disk — for database and volume backups."
@@ -154,7 +154,7 @@ export function DestinationsView() {
 									Connect an S3-compatible bucket, or keep backups on this host's disk.
 								</DialogDescription>
 							</DialogHeader>
-							<div className="grid gap-4">
+							<div className="grid gap-5">
 								<div className="grid gap-2">
 									<Label htmlFor="dest-provider">Storage</Label>
 									<Select
@@ -196,7 +196,7 @@ export function DestinationsView() {
 								</div>
 								{provider === "s3" && (
 									<>
-										<div className="grid grid-cols-2 gap-4">
+										<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 											<div className="grid gap-2">
 												<Label htmlFor="dest-bucket">Bucket</Label>
 												<Input
@@ -410,7 +410,7 @@ export function DestinationsView() {
 								});
 							}
 						}}
-						className="grid gap-4"
+						className="grid gap-5"
 					>
 						<div className="grid gap-2">
 							<Label htmlFor="edit-dest-name">Name</Label>
@@ -422,7 +422,7 @@ export function DestinationsView() {
 						</div>
 						{!(editing && isLocal(editing)) && (
 							<>
-								<div className="grid grid-cols-2 gap-4">
+								<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 									<div className="grid gap-2">
 										<Label htmlFor="edit-dest-bucket">Bucket</Label>
 										<Input

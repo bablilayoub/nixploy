@@ -120,7 +120,7 @@ export function IncidentsView({ embedded = false }: { embedded?: boolean } = {})
 												onClick={() => update("incident", incident.incidentId)}
 												aria-pressed={selectedId === incident.incidentId}
 												className={cn(
-													"flex w-full flex-col gap-2 px-4 py-3 text-left hover:bg-muted/50",
+													"flex w-full flex-col gap-2 px-4 py-3 text-left hover:bg-accent/50",
 													selectedId === incident.incidentId && "bg-secondary",
 												)}
 											>
@@ -205,6 +205,7 @@ function LogSearchSection() {
 					value={query}
 					onChange={(event) => setQuery(event.target.value)}
 					placeholder="Search logs…"
+					aria-label="Search log messages"
 				/>
 			</form>
 			{submitted && results.isLoading && <Skeleton className="h-20 w-full" />}

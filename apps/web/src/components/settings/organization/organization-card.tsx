@@ -121,7 +121,7 @@ export function OrganizationCard() {
 		<>
 			{/* Named for what it holds; the page is already titled "Organization". */}
 			<SettingsSection title="Name" description="How this organization is addressed and routed.">
-				<form onSubmit={onNameSubmit} className="grid gap-4">
+				<form onSubmit={onNameSubmit} className="grid gap-5">
 					<div className="grid gap-2">
 						<Label htmlFor="org-name">Name</Label>
 						<Input
@@ -141,7 +141,7 @@ export function OrganizationCard() {
 							references use it.
 						</p>
 					</div>
-					<div className="flex items-center gap-3">
+					<div className="flex flex-wrap items-center gap-3">
 						<DisabledHint hint={renameHint}>
 							<Button type="submit" disabled={nameSaveDisabled || isNamePending}>
 								{isNamePending && <Loader2 className="size-4 animate-spin" />}
@@ -167,7 +167,7 @@ export function OrganizationCard() {
 						</Button>
 					</div>
 				)}
-				<form onSubmit={onBrandingSubmit} className="grid gap-4">
+				<form onSubmit={onBrandingSubmit} className="grid gap-5">
 					<div className="grid gap-2">
 						<Label htmlFor="org-display-name">Display name</Label>
 						<Input
@@ -211,12 +211,13 @@ export function OrganizationCard() {
 								value={accentColor}
 								onChange={(e) => brandingDraft.patch({ accentColor: e.target.value })}
 								placeholder="#1c1917"
+								aria-label="Organization accent color in hex"
 								disabled={brandingDisabled}
 								title={brandHint}
 							/>
 						</div>
 					</div>
-					<div className="flex items-center gap-3">
+					<div className="flex flex-wrap items-center gap-3">
 						<DisabledHint hint={brandHint}>
 							<Button type="submit" disabled={brandingDisabled || saveBranding.isPending}>
 								{saveBranding.isPending && <Loader2 className="size-4 animate-spin" />}

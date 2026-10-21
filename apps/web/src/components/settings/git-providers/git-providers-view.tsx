@@ -86,13 +86,13 @@ export function GitProvidersView() {
 	}, [searchParams, router, queryClient, trpc.github.all, syncInstallation.mutateAsync]);
 
 	return (
-		<div className="flex flex-col gap-4">
+		<div className="surface flex flex-col gap-5 p-4 sm:p-6">
 			<PageHeader
 				title="Git providers"
 				description="Connect GitHub, GitLab, Bitbucket, or Gitea for repository deploys."
 			/>
 			<Tabs value={tab} onValueChange={selectTab}>
-				<TabsList>
+				<TabsList aria-label="Git provider type">
 					{(
 						[
 							["github", "GitHub"],

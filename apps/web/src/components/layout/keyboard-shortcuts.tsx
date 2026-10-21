@@ -54,7 +54,7 @@ function Key({ children }: { children: React.ReactNode }) {
 
 function Row({ label, keys }: { label: string; keys: string[] }) {
 	return (
-		<li className="flex items-center justify-between gap-4 text-sm">
+		<li className="flex flex-wrap items-center justify-between gap-4 text-sm">
 			<span>{label}</span>
 			<span className="flex items-center gap-1">
 				{keys.map((key) => (
@@ -154,7 +154,7 @@ export function KeyboardShortcuts() {
 					)}
 					<Row label="Command palette" keys={["⌘", "K"]} />
 					<Row label="Toggle this overlay" keys={["?"]} />
-					<li className="flex items-center justify-between gap-4 text-sm">
+					<li className="flex flex-wrap items-center justify-between gap-4 text-sm">
 						<span>Documentation</span>
 						<a
 							href={docsUrl()}

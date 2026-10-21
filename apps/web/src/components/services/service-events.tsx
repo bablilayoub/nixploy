@@ -55,7 +55,7 @@ const KIND_ICONS: Record<string, LucideIcon> = {
 
 const SEVERITY_STYLES: Record<string, string> = {
 	error: "border-destructive/40 bg-destructive/10 text-destructive",
-	warning: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+	warning: "border-warning/40 bg-warning/10 text-warning",
 	info: "border-border bg-muted text-muted-foreground",
 };
 
@@ -114,10 +114,10 @@ function EventRow({ event }: { event: ServiceEventItem }) {
 	const Icon = KIND_ICONS[event.kind] ?? CircleDot;
 	const severity = SEVERITY_STYLES[event.severity] ?? SEVERITY_STYLES.info;
 	return (
-		<li className="flex gap-3 px-4 py-3">
+		<li className="flex gap-4 px-5 py-5">
 			<div
 				className={cn(
-					"mt-0.5 flex size-7 flex-none items-center justify-center rounded-full border",
+					"mt-0.5 flex size-8 flex-none items-center justify-center rounded-full border",
 					severity,
 				)}
 			>
@@ -181,14 +181,15 @@ export function ServiceEvents({
 	const events = query.data?.pages.flatMap((page) => page.events) ?? [];
 
 	return (
-		<div className="flex flex-col gap-3">
-			<div className="flex flex-wrap gap-1">
+		<div className="surface flex flex-col gap-4 overflow-hidden p-4 sm:p-5">
+			<div className="flex flex-wrap gap-1 rounded-lg border bg-panel-inset p-1">
 				{FILTER_GROUPS.map((entry) => (
 					<Button
 						key={entry.id}
 						size="sm"
 						variant={group === entry.id ? "secondary" : "ghost"}
-						className="h-7 px-2.5 text-xs"
+						className="h-9 px-3 text-xs"
+						aria-pressed={group === entry.id}
 						onClick={() => setGroup(entry.id)}
 					>
 						{entry.label}

@@ -45,13 +45,18 @@ export function TwoFactorForm() {
 
 	return (
 		<Card>
-			<CardHeader className="text-center">
-				<CardTitle className="text-xl">Two-factor authentication</CardTitle>
+			<CardHeader className="text-start">
+				<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
+					Two-factor authentication
+				</CardTitle>
 				<CardDescription>Enter the 6-digit code from your authenticator app</CardDescription>
 			</CardHeader>
 			<CardContent>
 				<Form {...form}>
-					<form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
+					<form
+						onSubmit={form.handleSubmit(onSubmit)}
+						className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4"
+					>
 						<FormField
 							control={form.control}
 							name="code"

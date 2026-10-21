@@ -41,11 +41,11 @@ function LinkChip({ href, label }: { href: string; label: string }) {
 
 function ServiceCard({ service }: { service: TemplateDetails["services"][number] }) {
 	return (
-		<div className="flex flex-col gap-2 rounded-md border p-3">
-			<div className="flex items-center justify-between gap-2">
-				<div className="flex items-center gap-2">
+		<div className="flex min-w-0 flex-col gap-2 rounded-md border p-3">
+			<div className="flex flex-wrap items-center justify-between gap-2">
+				<div className="flex min-w-0 items-center gap-2">
 					<Box className="size-3.5 text-muted-foreground" />
-					<span className="font-mono text-sm font-medium">{service.name}</span>
+					<span className="break-all font-mono text-sm font-medium">{service.name}</span>
 				</div>
 				{service.isDomainTarget && (
 					<Badge variant="secondary" className="text-xs">
@@ -54,7 +54,9 @@ function ServiceCard({ service }: { service: TemplateDetails["services"][number]
 				)}
 			</div>
 			{service.image ? (
-				<p className="truncate font-mono text-xs text-muted-foreground">{service.image}</p>
+				<p title={service.image} className="truncate font-mono text-xs text-muted-foreground">
+					{service.image}
+				</p>
 			) : (
 				<p className="text-xs text-muted-foreground">No image (build context)</p>
 			)}
@@ -73,7 +75,11 @@ function ServiceCard({ service }: { service: TemplateDetails["services"][number]
 					<span className="text-xs font-medium text-muted-foreground">Volumes</span>
 					<ul className="space-y-0.5">
 						{service.volumes.map((volume) => (
-							<li key={volume} className="truncate font-mono text-xs text-muted-foreground">
+							<li
+								key={volume}
+								title={volume}
+								className="truncate font-mono text-xs text-muted-foreground"
+							>
 								{volume}
 							</li>
 						))}
@@ -83,7 +89,11 @@ function ServiceCard({ service }: { service: TemplateDetails["services"][number]
 			{service.envKeys.length > 0 && (
 				<div className="flex flex-wrap gap-1">
 					{service.envKeys.map((key) => (
-						<Badge key={key} variant="outline" className="font-mono text-xs">
+						<Badge
+							key={key}
+							variant="outline"
+							className="max-w-full break-all whitespace-normal font-mono text-xs"
+						>
 							{key}
 						</Badge>
 					))}
@@ -180,7 +190,7 @@ function DetailsBody({
 			<Separator />
 
 			<div className="flex flex-col gap-2">
-				<div className="flex items-center justify-between">
+				<div className="flex flex-wrap items-center justify-between gap-3">
 					<h3 className="text-sm font-medium">
 						Services{" "}
 						<span className="font-normal text-muted-foreground">({template.services.length})</span>
@@ -192,7 +202,7 @@ function DetailsBody({
 						</span>
 					</p>
 				</div>
-				<div className="grid gap-2 sm:grid-cols-2">
+				<div className="grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2">
 					{template.services.map((service) => (
 						<ServiceCard key={service.name} service={service} />
 					))}
@@ -207,13 +217,20 @@ function DetailsBody({
 							Environment variables{" "}
 							<span className="font-normal text-muted-foreground">({template.env.length})</span>
 						</h3>
-						<div className="overflow-hidden rounded-md border">
-							<table className="w-full text-left text-sm">
-								<thead className="border-b bg-secondary/40 text-xs text-muted-foreground">
+						<div className="scroll-shadow-x overflow-x-auto rounded-lg border bg-card">
+							<table className="w-full min-w-[30rem] text-left text-sm">
+								<caption className="sr-only">Template environment variables</caption>
+								<thead className="border-b bg-panel-inset text-xs text-muted-foreground">
 									<tr>
-										<th className="px-3 py-2 font-medium">Key</th>
-										<th className="px-3 py-2 font-medium">Default</th>
-										<th className="px-3 py-2 font-medium">Description</th>
+										<th scope="col" className="px-3 py-3 font-medium">
+											Key
+										</th>
+										<th scope="col" className="px-3 py-3 font-medium">
+											Default
+										</th>
+										<th scope="col" className="px-3 py-3 font-medium">
+											Description
+										</th>
 									</tr>
 								</thead>
 								<tbody>
@@ -238,7 +255,7 @@ function DetailsBody({
 			)}
 
 			<details className="rounded-md border">
-				<summary className="cursor-pointer px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+				<summary className="cursor-pointer px-3 py-2 text-xs leading-relaxed font-medium text-muted-foreground hover:text-foreground">
 					View compose file
 				</summary>
 				<pre className="max-h-64 overflow-auto border-t bg-secondary/30 p-3 font-mono text-xs leading-relaxed">

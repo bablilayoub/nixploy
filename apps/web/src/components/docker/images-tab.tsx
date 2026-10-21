@@ -88,9 +88,10 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 	if (imagesQuery.isError) return <DockerError error={imagesQuery.error} />;
 
 	return (
-		<div className="space-y-3 pt-4">
+		<div className="space-y-4 pt-3">
 			<div className="flex flex-wrap items-center gap-2">
 				<Input
+					aria-label="Image reference to pull"
 					placeholder="nginx:alpine"
 					value={reference}
 					onChange={(event) => setReference(event.target.value)}

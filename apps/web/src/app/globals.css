@@ -5,10 +5,11 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+	--spacing: 4px;
 	--radius-sm: calc(var(--radius) - 2px);
 	--radius-md: var(--radius);
-	--radius-lg: calc(var(--radius) + 2px);
-	--radius-xl: calc(var(--radius) + 6px);
+	--radius-lg: calc(var(--radius) + 6px);
+	--radius-xl: calc(var(--radius) + 12px);
 	--radius-2xl: calc(var(--radius) + 10px);
 	--radius-3xl: calc(var(--radius) + 14px);
 	--radius-4xl: calc(var(--radius) + 18px);
@@ -58,78 +59,83 @@
 }
 
 :root {
-	--radius: 0.625rem;
-	/* Compatibility aliases keep new workflows on the familiar neutral palette. */
-	--control: var(--input);
-	--panel-inset: var(--muted);
-	--selection: var(--accent);
-	--chart-axis: var(--muted-foreground);
-	--background: #fafafa;
-	--foreground: #1c1917;
+	--radius: 0.5rem;
+	--background: #f4f4f5;
+	--foreground: #17181b;
 	--card: #ffffff;
-	--card-foreground: #1c1917;
+	--card-foreground: var(--foreground);
 	--popover: #ffffff;
-	--popover-foreground: #1c1917;
-	--primary: #1c1917;
-	--primary-foreground: #fafaf9;
-	/* Organization accent (UX audit F34). Defaults to --primary, so the panel
-	   stays monochrome until a white-label accent is saved; OrgBrandingProvider
-	   overrides it on the root element. */
+	--popover-foreground: var(--foreground);
+	--primary: #191b1f;
+	--primary-foreground: #ffffff;
 	--brand: var(--primary);
-	--secondary: #f5f5f4;
-	--secondary-foreground: #1c1917;
-	--muted: #f5f5f4;
-	--muted-foreground: #78716c;
-	--accent: #f5f5f4;
-	--accent-foreground: #1c1917;
-	--destructive: #dc2626;
-	--border: #e7e5e4;
-	--input: #e7e5e4;
-	--ring: #a8a29e;
-	--success: #16a34a;
-	--warning: #d97706;
-	--info: #2563eb;
-	/* Monochrome series: steps of the foreground, readable on both themes. */
+	--secondary: #eceef0;
+	--secondary-foreground: var(--foreground);
+	--muted: #eceef0;
+	--muted-foreground: #62666f;
+	--accent: #eceef0;
+	--accent-foreground: var(--foreground);
+	--destructive: #b42332;
+	--border: #dedfe3;
+	--input: #858b95;
+	--ring: #737984;
+	--control: #f7f7f8;
+	--panel-inset: #f7f7f8;
+	--selection: #eceef0;
+	--chart-axis: #62666f;
+	--success: #187040;
+	--warning: #965b08;
+	--info: #285eb0;
 	--chart-1: var(--foreground);
-	--chart-2: color-mix(in oklab, var(--foreground) 70%, transparent);
-	--chart-3: color-mix(in oklab, var(--foreground) 55%, transparent);
-	--chart-4: color-mix(in oklab, var(--foreground) 40%, transparent);
-	--chart-5: color-mix(in oklab, var(--foreground) 25%, transparent);
-	/* Match shadcn-admin: sidebar tracks page bg so inset gutters read as one canvas */
-	--sidebar: var(--background);
+	--chart-2: color-mix(in oklab, var(--foreground) 75%, transparent);
+	--chart-3: color-mix(in oklab, var(--foreground) 60%, transparent);
+	--chart-4: color-mix(in oklab, var(--foreground) 45%, transparent);
+	--chart-5: color-mix(in oklab, var(--foreground) 30%, transparent);
+	--sidebar: #f4f4f5;
 	--sidebar-foreground: var(--foreground);
 	--sidebar-primary: var(--primary);
 	--sidebar-primary-foreground: var(--primary-foreground);
-	--sidebar-accent: var(--accent);
-	--sidebar-accent-foreground: var(--accent-foreground);
+	--sidebar-accent: #e5e7ea;
+	--sidebar-accent-foreground: var(--foreground);
 	--sidebar-border: var(--border);
 	--sidebar-ring: var(--ring);
+	--surface-shadow: 0 1px 2px rgb(17 19 23 / 3%), 0 0 0 1px rgb(255 255 255 / 40%) inset;
+	--overlay-shadow: 0 24px 80px -20px rgb(17 19 23 / 24%), 0 4px 12px rgb(17 19 23 / 8%);
+	color-scheme: light;
 }
 
 .dark {
-	/* Deeper canvas so cards actually lift (Vercel zinc-ish). */
-	--background: #09090b;
-	--foreground: #fafafa;
-	--card: #121214;
-	--card-foreground: #fafafa;
-	--popover: #18181b;
-	--popover-foreground: #fafafa;
-	--primary: #fafafa;
-	--primary-foreground: #09090b;
+	--background: #090a0b;
+	--foreground: #f5f5f6;
+	--card: #111315;
+	--card-foreground: var(--foreground);
+	--popover: #1b1d20;
+	--popover-foreground: var(--foreground);
+	--primary: #f4f5f6;
+	--primary-foreground: #111315;
 	--brand: var(--primary);
-	--secondary: #1c1c1f;
-	--secondary-foreground: #fafafa;
-	--muted: #1c1c1f;
-	--muted-foreground: #a1a1aa;
-	--accent: #1c1c1f;
-	--accent-foreground: #fafafa;
-	--destructive: #f87171;
-	--border: rgb(255 255 255 / 10%);
-	--input: rgb(255 255 255 / 12%);
-	--ring: #71717a;
-	--success: #4ade80;
-	--warning: #fbbf24;
-	--info: #60a5fa;
+	--secondary: #26292e;
+	--secondary-foreground: var(--foreground);
+	--muted: #202328;
+	--muted-foreground: #a0a5ae;
+	--accent: #26292e;
+	--accent-foreground: var(--foreground);
+	--destructive: #ff8b94;
+	--border: #2a2d32;
+	--input: #5c636e;
+	--ring: #a8aeb9;
+	--control: #0d0f11;
+	--panel-inset: #0d0f11;
+	--selection: #26292e;
+	--chart-axis: #a0a5ae;
+	--success: #7adea0;
+	--warning: #eac379;
+	--info: #91b7ee;
+	--sidebar: #0d0f11;
+	--sidebar-accent: #26292e;
+	--surface-shadow: 0 1px 3px rgb(0 0 0 / 18%), 0 1px 0 rgb(255 255 255 / 3%) inset;
+	--overlay-shadow: 0 24px 80px -20px rgb(0 0 0 / 65%), 0 0 0 1px rgb(255 255 255 / 3%) inset;
+	color-scheme: dark;
 }
 
 @layer base {
@@ -149,6 +155,12 @@
 	}
 	body {
 		@apply min-h-svh w-full bg-background text-foreground antialiased;
+		font-feature-settings: "cv11", "ss01";
+		line-height: 1.5;
+	}
+	:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 3px;
 	}
 	button:not(:disabled),
 	[role="button"]:not(:disabled) {
@@ -237,6 +249,18 @@ body[data-activity-tray="1"] [data-sonner-toaster][data-y-position="bottom"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		/* biome-ignore lint/complexity/noImportantStyles: honor the user preference over component motion */
+		animation-duration: 0.01ms !important;
+		/* biome-ignore lint/complexity/noImportantStyles: honor the user preference over component motion */
+		animation-iteration-count: 1 !important;
+		/* biome-ignore lint/complexity/noImportantStyles: honor the user preference over component motion */
+		transition-duration: 0.01ms !important;
+		/* biome-ignore lint/complexity/noImportantStyles: honor the user preference over component motion */
+		scroll-behavior: auto !important;
+	}
 	.animate-pulse,
 	.animate-ping {
 		animation: none;
@@ -260,15 +284,76 @@ body[data-activity-tray="1"] [data-sonner-toaster][data-y-position="bottom"] {
 	[data-slot="dialog-close"],
 	[data-slot="dropdown-menu-item"],
 	[data-slot="select-item"] {
-		min-height: 2.75rem;
+		min-height: 44px;
 	}
 	[data-slot="button"][data-size^="icon"],
 	[data-slot="dialog-close"],
 	[data-slot="command-palette-trigger-mobile"] {
-		min-width: 2.75rem;
-		min-height: 2.75rem;
+		min-width: 44px;
+		min-height: 44px;
 	}
 	[data-slot="input"] {
-		min-height: 2.75rem;
+		min-height: 44px;
+	}
+}
+
+@utility surface {
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	background: var(--card);
+	box-shadow: var(--surface-shadow);
+}
+@utility workspace-grid {
+	display: grid;
+	gap: 1.5rem;
+	grid-template-columns: minmax(0, 1fr);
+}
+@media (pointer: coarse) {
+	[data-ui="button"],
+	[role="checkbox"],
+	[role="switch"],
+	[data-slot="sheet-close"],
+	[data-slot="dialog-close"] {
+		min-height: 44px;
+		min-width: 44px;
+	}
+}
+
+@media (pointer: coarse) {
+	[data-slot="tabs-list"] {
+		min-height: 3.25rem;
+	}
+}
+
+/* Keep command chrome reachable as text grows; page content keeps the user's type scale. */
+@media (width < 48rem) {
+	.workspace-topbar {
+		--spacing: 4px;
+		padding-inline: 12px;
+		min-height: 64px;
+	}
+	.workspace-topbar :is([data-ui="button"], [data-slot="command-palette-trigger-mobile"]) {
+		width: 44px;
+		height: 44px;
+		min-width: 44px;
+		min-height: 44px;
+	}
+}
+[data-slot="chart"] .recharts-surface:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 3px;
+	border-radius: var(--radius);
+}
+
+@layer base {
+	form,
+	fieldset {
+		min-width: 0;
+	}
+	p,
+	h1,
+	h2,
+	h3 {
+		overflow-wrap: anywhere;
 	}
 }

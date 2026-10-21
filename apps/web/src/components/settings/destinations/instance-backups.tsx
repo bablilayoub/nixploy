@@ -233,6 +233,7 @@ export function InstanceBackups() {
 									<TableCell className="font-mono text-xs">{backup.prefix}</TableCell>
 									<TableCell>
 										<Switch
+											aria-label={`Enable instance backup ${backup.prefix}`}
 											checked={backup.enabled}
 											disabled={!canManage || updateMutation.isPending}
 											title={manageHint}
@@ -405,7 +406,7 @@ function InstanceBackupFormDialog({
 							value={form.destinationId}
 							onValueChange={(destinationId) => setForm({ ...form, destinationId })}
 						>
-							<SelectTrigger className="w-full">
+							<SelectTrigger aria-label="Destination" className="w-full">
 								<SelectValue placeholder="Select an S3 destination" />
 							</SelectTrigger>
 							<SelectContent>
@@ -417,7 +418,7 @@ function InstanceBackupFormDialog({
 							</SelectContent>
 						</Select>
 					</div>
-					<div className="grid grid-cols-2 gap-4">
+					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 						<div className="space-y-1.5">
 							<Label htmlFor="instance-backup-prefix">Prefix</Label>
 							<Input

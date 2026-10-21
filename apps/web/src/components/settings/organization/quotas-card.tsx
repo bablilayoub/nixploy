@@ -118,12 +118,15 @@ export function QuotasCard() {
 			title="Quotas"
 			description="Resource limits for this organization. Leave blank for unlimited. Owner or admin required to edit."
 		>
-			<form onSubmit={onSubmit} className="grid gap-4">
+			<form onSubmit={onSubmit} className="grid gap-5">
+				<p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+					Capacity and retention
+				</p>
 				<p className="text-sm text-muted-foreground">
 					Current usage: {usage.projects} projects, {usage.services} services
 				</p>
 				<fieldset disabled={!canManage} title={manageHint} className="contents">
-					<div className="grid gap-2">
+					<div className="grid gap-2 rounded-lg border bg-panel-inset p-4">
 						<Label htmlFor="max-projects">Max projects</Label>
 						<Input
 							id="max-projects"
@@ -134,7 +137,7 @@ export function QuotasCard() {
 							onChange={(e) => draft.patch({ maxProjects: e.target.value })}
 						/>
 					</div>
-					<div className="grid gap-2">
+					<div className="grid gap-2 rounded-lg border bg-panel-inset p-4">
 						<Label htmlFor="max-services">Max services</Label>
 						<Input
 							id="max-services"
@@ -145,7 +148,7 @@ export function QuotasCard() {
 							onChange={(e) => draft.patch({ maxServices: e.target.value })}
 						/>
 					</div>
-					<div className="grid gap-2">
+					<div className="grid gap-2 rounded-lg border bg-panel-inset p-4">
 						<Label htmlFor="max-cpu">Max CPU shares</Label>
 						<Input
 							id="max-cpu"
@@ -156,7 +159,7 @@ export function QuotasCard() {
 							onChange={(e) => draft.patch({ maxCpuShares: e.target.value })}
 						/>
 					</div>
-					<div className="grid gap-2">
+					<div className="grid gap-2 rounded-lg border bg-panel-inset p-4">
 						<Label htmlFor="max-memory">Max memory (MB)</Label>
 						<Input
 							id="max-memory"
@@ -167,7 +170,7 @@ export function QuotasCard() {
 							onChange={(e) => draft.patch({ maxMemoryMb: e.target.value })}
 						/>
 					</div>
-					<div className="grid gap-2">
+					<div className="grid gap-2 rounded-lg border bg-panel-inset p-4">
 						<Label htmlFor="runtime-log-days">Runtime log history (days)</Label>
 						<Input
 							id="runtime-log-days"
@@ -182,7 +185,7 @@ export function QuotasCard() {
 							ceiling; an organization can keep less, not more.
 						</p>
 					</div>
-					<div className="grid gap-2">
+					<div className="grid gap-2 rounded-lg border bg-panel-inset p-4">
 						<Label htmlFor="runtime-log-mb">Runtime log history per service (MB)</Label>
 						<Input
 							id="runtime-log-mb"

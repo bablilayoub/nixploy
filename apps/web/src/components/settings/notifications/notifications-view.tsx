@@ -115,7 +115,7 @@ export function NotificationsView() {
 					<div className="grid gap-6">
 						{Object.entries(grouped).map(([type, rows]) => (
 							<div key={type} className="grid gap-2">
-								<h3 className="text-sm font-medium text-muted-foreground">
+								<h3 className="text-xs leading-relaxed font-medium text-muted-foreground">
 									{NOTIFICATION_TYPE_LABELS[type as NotificationType] ?? type}
 								</h3>
 								<Table>

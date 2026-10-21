@@ -399,8 +399,9 @@ export function ProjectDetail({
 	}
 
 	return (
-		<div className="flex flex-col gap-6">
+		<div className="flex min-w-0 flex-col gap-4 sm:gap-6">
 			<PageHeader
+				compactActions
 				breadcrumb={
 					<Link
 						href="/dashboard"
@@ -439,10 +440,10 @@ export function ProjectDetail({
 			</Tabs>
 
 			{(tab === "services" || tab === "environment") && (
-				<div className="space-y-4">
-					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+				<div className="surface overflow-hidden">
+					<div className="flex flex-wrap items-center justify-between gap-3 bg-panel-inset px-4 py-3 sm:px-5 sm:py-4">
 						<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-							<span className="text-xs text-muted-foreground">Environment</span>
+							<span className="hidden text-xs text-muted-foreground sm:block">Environment</span>
 							{environmentsQuery.isPending ? (
 								<Skeleton className="h-9 w-40" />
 							) : activeEnvironment ? (
@@ -474,17 +475,25 @@ export function ProjectDetail({
 										}}
 									/>
 								</>
-							) : null}
+							) : null}{" "}
+							<DisabledHint hint={canWriteProject ? undefined : capabilityHint("project.write")}>
+								<CreateEnvironmentDialog projectId={projectId} onCreated={selectEnvironment}>
+									<Button
+										variant="outline"
+										size="icon"
+										className="sm:w-auto sm:px-3"
+										aria-label="New environment"
+										title="New environment"
+										disabled={!canWriteProject}
+									>
+										<Plus className="size-4" />
+										<span className="hidden sm:inline">New environment</span>
+									</Button>
+								</CreateEnvironmentDialog>
+							</DisabledHint>
 						</div>
 						{tab === "services" ? (
 							<div className="flex flex-wrap items-center gap-2">
-								<DisabledHint hint={canWriteProject ? undefined : capabilityHint("project.write")}>
-									<CreateEnvironmentDialog projectId={projectId} onCreated={selectEnvironment}>
-										<Button variant="outline" disabled={!canWriteProject}>
-											<Plus className="size-4" /> New environment
-										</Button>
-									</CreateEnvironmentDialog>
-								</DisabledHint>
 								{activeEnvironment ? (
 									<AddServiceMenu
 										projectId={projectId}
@@ -500,8 +509,8 @@ export function ProjectDetail({
 						) : null}
 					</div>
 					{tab === "services" ? (
-						<div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-start sm:justify-between">
-							<div className="relative w-full sm:w-72">
+						<div className="flex flex-wrap items-start justify-between gap-3 border-t px-4 py-3 sm:px-5 sm:py-4">
+							<div className="relative min-w-40 flex-1 sm:max-w-80">
 								<Search
 									aria-hidden
 									className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -511,7 +520,7 @@ export function ProjectDetail({
 									aria-label="Search services and upstreams"
 									value={search}
 									onChange={(event) => setSearch(event.target.value)}
-									className="h-9 ps-9 pe-9"
+									className="h-10 ps-9 pe-9"
 								/>
 								{search ? (
 									<Button

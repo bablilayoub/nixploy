@@ -150,7 +150,7 @@ function maskUrlPassword(url: string): string {
 }
 
 /** Connection URL with the password masked by default, a reveal toggle and copy (copies the real URL). */
-function ConnectionUrlField({ url }: { url: string }) {
+function ConnectionUrlField({ url, label }: { url: string; label: string }) {
 	const [revealed, setRevealed] = useState(false);
 	const masked = maskUrlPassword(url);
 	const hasPassword = masked !== url;
@@ -158,6 +158,7 @@ function ConnectionUrlField({ url }: { url: string }) {
 		<div className="flex items-center gap-1">
 			<Input
 				readOnly
+				aria-label={label}
 				value={revealed || !hasPassword ? url : masked}
 				className="font-mono text-xs"
 			/>
@@ -717,8 +718,8 @@ function GeneralTab({
 					)}
 
 					{versionChange.kind === "confirm" && (
-						<div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
-							<p className="text-sm text-amber-700 dark:text-amber-400">{versionChange.reason}</p>
+						<div className="space-y-2 rounded-lg border border-warning/40 bg-warning/5 p-3">
+							<p className="text-sm text-warning">{versionChange.reason}</p>
 							<div className="flex items-start gap-2 text-sm">
 								<Checkbox
 									id="db-upgrade-ack"
@@ -957,7 +958,10 @@ function LogicalDatabasesSection({
 								</DisabledHint>
 							</div>
 							{row.connectionUrl ? (
-								<ConnectionUrlField url={row.connectionUrl} />
+								<ConnectionUrlField
+									url={row.connectionUrl}
+									label={`Connection URL for ${row.name}`}
+								/>
 							) : (
 								<p className="text-sm text-muted-foreground">
 									{canReadSecrets
@@ -1113,7 +1117,7 @@ function ConnectionTab({
 					title="Internal connection URL"
 					description="Use this URL from services deployed on the internal network."
 				>
-					<ConnectionUrlField url={urls?.internal ?? ""} />
+					<ConnectionUrlField url={urls?.internal ?? ""} label="Internal connection URL" />
 				</SettingsSection>
 
 				<SettingsSection
@@ -1121,7 +1125,7 @@ function ConnectionTab({
 					description="Use this URL to connect from outside this server (requires an external port)."
 				>
 					{urls?.external ? (
-						<ConnectionUrlField url={urls.external} />
+						<ConnectionUrlField url={urls.external} label="External connection URL" />
 					) : hasExternalPort ? (
 						<p className="text-sm text-muted-foreground">External URL unavailable.</p>
 					) : (

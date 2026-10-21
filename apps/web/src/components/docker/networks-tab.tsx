@@ -69,7 +69,7 @@ export function NetworksTab({ serverId }: DockerTabProps) {
 	if (networksQuery.isError) return <DockerError error={networksQuery.error} />;
 
 	return (
-		<div className="space-y-3 pt-4">
+		<div className="space-y-4 pt-3">
 			<div className="flex flex-wrap items-center justify-between gap-2">
 				<p className="text-sm text-muted-foreground">{networks.length} networks</p>
 				<div className="flex items-center gap-2">

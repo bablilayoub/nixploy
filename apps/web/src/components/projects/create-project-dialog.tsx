@@ -138,7 +138,7 @@ export function CreateProjectDialog({
 					}}
 					className="flex flex-col gap-5"
 				>
-					<div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3 text-sm">
+					<div className="flex items-start gap-3 rounded-lg border bg-panel-inset p-3 text-sm">
 						<FolderGit2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
 						<p className="leading-relaxed text-muted-foreground">
 							Includes a <span className="font-medium text-foreground">production</span>{" "}

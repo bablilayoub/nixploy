@@ -324,7 +324,7 @@ export interface StickyCookie {
  * it by name.
  */
 export const MAINTENANCE_SERVICE = "nixploy-dashboard";
-/** Unauthenticated static route in the panel (`apps/web/src/app/__maintenance`). */
+/** Unauthenticated static route in the panel (`apps/web/src/app/%5F%5Fmaintenance`). */
 export const MAINTENANCE_QUERY = "/__maintenance";
 
 /**

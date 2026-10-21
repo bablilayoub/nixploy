@@ -7,7 +7,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 export type { CodeEditorProps } from "./code-editor-impl";
 
 function EditorFallback({ className }: { className?: string }) {
-	return <Skeleton className={className ?? "min-h-64 w-full rounded-lg"} />;
+	return (
+		<div role="status" aria-label="Loading editor">
+			<Skeleton className={className ?? "min-h-64 w-full rounded-lg border"} />
+		</div>
+	);
 }
 
 /** Lazy CodeMirror — keeps unrelated tabs free of the editor bundle. */

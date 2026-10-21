@@ -40,8 +40,8 @@ function EnvRows({
 		});
 
 	return (
-		<div className="overflow-hidden rounded-lg border border-border bg-card">
-			<div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+		<div className="overflow-hidden surface">
+			<div className="flex flex-wrap items-center justify-between gap-3 gap-2 border-b border-border px-3 py-2">
 				<p className="text-xs text-muted-foreground">
 					{entries.length} {entries.length === 1 ? "variable" : "variables"}
 				</p>
@@ -265,6 +265,7 @@ export function EnvEditor({
 			</div>
 			{unlocked ? (
 				<CodeEditor
+					label="Environment variables"
 					value={draft}
 					onChange={setDraft}
 					protect={false}
@@ -286,7 +287,7 @@ export function EnvEditor({
 					editHint={`Read-only — ${capabilityHint("secrets.write")}.`}
 				/>
 			)}
-			<div className="flex items-center justify-between gap-3">
+			<div className="flex flex-wrap items-center justify-between gap-3 gap-3">
 				<p className="text-xs text-muted-foreground">
 					One <code className="font-mono">KEY=VALUE</code> pair per line. Lines starting with{" "}
 					<code className="font-mono">#</code> are comments.

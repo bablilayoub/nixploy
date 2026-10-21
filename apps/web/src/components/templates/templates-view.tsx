@@ -229,7 +229,7 @@ export function TemplatesWorkbench({
 	const rail = <TemplateFilterRail view={view} filters={filters} sourceNames={sourceNames} />;
 
 	return (
-		<div className="flex flex-col gap-6">
+		<div className="flex min-w-0 flex-col gap-7">
 			<PageHeader
 				title="Templates"
 				description="One-click deploys for popular self-hosted apps."
@@ -420,7 +420,7 @@ export function TemplatesWorkbench({
 
 						{view.pageCount > 1 ? (
 							<Pagination
-								className="pt-4"
+								className="pt-3"
 								page={view.page}
 								pageCount={view.pageCount}
 								from={view.from}

@@ -73,7 +73,7 @@ export function DeployCommandsCard({ application }: { application: Application }
 			title="Deploy commands"
 			description="Run a command around the rollout — a database migration before it, a cache warm-up after it."
 		>
-			<div className="flex flex-col gap-4">
+			<div className="flex min-w-0 flex-col gap-5">
 				<div className="flex flex-col gap-2">
 					<Label htmlFor="pre-deploy-command">Pre-deploy command</Label>
 					<Textarea

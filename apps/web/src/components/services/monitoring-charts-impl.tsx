@@ -58,18 +58,18 @@ function wsUrl(params: Record<string, string | null | undefined>) {
 const tooltipStyle = {
 	backgroundColor: "var(--card)",
 	border: "1px solid var(--border)",
-	borderRadius: "10px",
+	borderRadius: "8px",
 	fontSize: "12px",
 	color: "var(--foreground)",
 } as const;
 
 const METRICS = {
-	cpu: "#0070f3",
-	memory: "#17c964",
-	rx: "#f5a524",
-	tx: "#8b5cf6",
-	disk: "#f31260",
-	pids: "#7c8b9c",
+	cpu: "var(--chart-1)",
+	memory: "var(--chart-2)",
+	rx: "var(--chart-3)",
+	tx: "var(--chart-1)",
+	disk: "var(--chart-2)",
+	pids: "var(--chart-3)",
 } as const;
 
 /** Gradient fill definition for one series (solid at top → transparent). */
@@ -103,7 +103,11 @@ function Sparkline({
 	return (
 		<div className="h-7">
 			<ResponsiveContainer width="100%" height="100%">
-				<AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+				<AreaChart
+					accessibilityLayer={false}
+					data={data}
+					margin={{ top: 2, right: 0, bottom: 0, left: 0 }}
+				>
 					<defs>
 						<SeriesGradient id={id} color={color} />
 					</defs>
@@ -155,7 +159,7 @@ function KpiCard({
 				<span className="text-[11px] font-medium text-muted-foreground">{label}</span>
 			</div>
 			<div className="mt-2">
-				<p className="text-lg font-semibold tracking-tight tabular-nums">{value}</p>
+				<p className="text-xl leading-snug font-semibold tracking-tight tabular-nums">{value}</p>
 				{sub ? (
 					<p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">{sub}</p>
 				) : null}
@@ -164,7 +168,7 @@ function KpiCard({
 				{meter != null ? (
 					<div className="h-1 overflow-hidden rounded-full bg-secondary">
 						<div
-							className="h-full rounded-full transition-[width] duration-500"
+							className="h-full rounded-full"
 							style={{ width: `${Math.min(Math.max(meter, 0), 100)}%`, backgroundColor: color }}
 						/>
 					</div>
@@ -202,7 +206,7 @@ function MetricChart({
 		}, 0),
 	}));
 	return (
-		<div className="space-y-3 rounded-lg border border-border p-4">
+		<div className="space-y-3 surface p-5">
 			<div className="flex items-center justify-between">
 				<p className="text-sm font-medium">{title}</p>
 				{latest ? (
@@ -217,6 +221,7 @@ function MetricChart({
 						data={data}
 						margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
 						syncId="service-metrics"
+						aria-label={`${title} over time`}
 					>
 						<defs>
 							{series.map((item) => (
@@ -259,6 +264,7 @@ function MetricChart({
 								dataKey={item.key}
 								name={item.label}
 								stroke={item.color}
+								strokeDasharray={item.key === "txRate" ? "5 4" : undefined}
 								fill={`url(#${item.gradientId})`}
 								strokeWidth={1.5}
 								isAnimationActive={false}
@@ -679,7 +685,7 @@ export function MonitoringCharts({
 				/>
 			) : ((range === "live" && !connected) || (range !== "live" && historyQuery.isLoading)) &&
 				samples.length === 0 ? (
-				<div className="flex h-40 items-center justify-center gap-2 rounded-lg border border-border p-4 text-sm text-muted-foreground">
+				<div className="flex h-40 items-center justify-center gap-2 surface p-5 text-sm text-muted-foreground">
 					<Activity className="size-4 animate-pulse" />
 					{range === "live" ? "Connecting to metrics stream…" : "Loading metrics history…"}
 				</div>

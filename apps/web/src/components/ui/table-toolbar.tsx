@@ -44,7 +44,7 @@ export function TableSearch<T>({
 				aria-label={label ?? placeholder}
 				onChange={(event) => view.setQuery(event.target.value)}
 				placeholder={placeholder}
-				className="h-9 w-full ps-8 pe-8 sm:w-56"
+				className="h-10 w-full ps-8 pe-8 sm:w-56"
 			/>
 			{view.query ? (
 				<button

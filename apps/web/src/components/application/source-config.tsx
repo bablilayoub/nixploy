@@ -310,11 +310,11 @@ export function SourceConfig({ application }: { application: Application }) {
 			title="Source"
 			description="Where the code or image for this application comes from."
 		>
-			<div className="flex flex-col gap-4">
+			<div className="flex min-w-0 flex-col gap-5">
 				<div className="flex flex-col gap-2">
 					<Label>Source type</Label>
 					<Select value={sourceType} onValueChange={(v) => changeSourceType(v as SourceType)}>
-						<SelectTrigger className="w-full sm:max-w-xs">
+						<SelectTrigger aria-label="Source type" className="w-full sm:max-w-xs">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
@@ -354,7 +354,7 @@ export function SourceConfig({ application }: { application: Application }) {
 									value={sshKeyId}
 									onValueChange={(value) => draft.patch({ sshKeyId: value })}
 								>
-									<SelectTrigger className="w-full">
+									<SelectTrigger aria-label="SSH key (optional)" className="w-full">
 										<SelectValue placeholder="None" />
 									</SelectTrigger>
 									<SelectContent>
@@ -425,7 +425,7 @@ export function SourceConfig({ application }: { application: Application }) {
 								value={registryId}
 								onValueChange={(value) => draft.patch({ registryId: value })}
 							>
-								<SelectTrigger className="w-full sm:max-w-xs">
+								<SelectTrigger aria-label="Registry (optional)" className="w-full sm:max-w-xs">
 									<SelectValue placeholder="None" />
 								</SelectTrigger>
 								<SelectContent>

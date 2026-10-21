@@ -110,8 +110,8 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 	if (volumesQuery.isError) return <DockerError error={volumesQuery.error} />;
 
 	return (
-		<div className="space-y-3 pt-4">
-			<div className="flex items-center justify-between">
+		<div className="space-y-4 pt-3">
+			<div className="flex flex-wrap items-center justify-between gap-3">
 				<p className="text-sm text-muted-foreground">{volumes.length} volumes</p>
 				<div className="flex items-center gap-2">
 					<TableSearch view={view} placeholder="Search volumes…" />
@@ -445,6 +445,7 @@ function VolumeBrowserSheet({
 								empty={null}
 							>
 								<CodeEditor
+									label="Volume file contents"
 									className="min-h-0 flex-1 overflow-auto rounded-lg border"
 									value={draft}
 									onChange={setDraft}

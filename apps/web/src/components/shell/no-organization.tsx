@@ -60,13 +60,15 @@ export function NoOrganization({ userName }: { userName?: string | null }) {
 	}
 
 	return (
-		<div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-6 text-center">
-			<div className="flex size-12 items-center justify-center rounded-full bg-secondary">
+		<div className="surface mx-auto my-10 flex min-h-[60vh] max-w-xl flex-col items-start justify-center gap-6 px-6 py-12 sm:px-10">
+			<div className="flex size-12 items-center justify-center rounded-lg border bg-panel-inset">
 				<Building2 className="size-6 text-muted-foreground" />
 			</div>
-			<div className="flex flex-col gap-1">
-				<h1 className="text-lg font-semibold">You have no organization</h1>
-				<p className="max-w-md text-sm text-muted-foreground">
+			<div className="flex flex-col gap-3">
+				<h1 className="text-3xl leading-tight font-semibold tracking-tight">
+					You have no organization
+				</h1>
+				<p className="max-w-md text-sm leading-relaxed text-muted-foreground">
 					Projects, servers and services all live inside an organization. Create one to get started,
 					or ask an admin to invite you to theirs.
 				</p>

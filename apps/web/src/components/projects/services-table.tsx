@@ -311,6 +311,7 @@ export function ServicesTable({
 			)}
 
 			<TableCard
+				toolbarFramed={false}
 				toolbar={
 					<>
 						<TableFacet label="Type" options={typeOptions} selected={types} onChange={setTypes} />
@@ -334,7 +335,7 @@ export function ServicesTable({
 			>
 				<Table>
 					<TableHeader>
-						<TableRow className="bg-muted/30 hover:bg-muted/30">
+						<TableRow className="bg-muted/30 hover:bg-accent/40">
 							<TableHead className="w-10 ps-3">
 								<Checkbox
 									aria-label="Select all services on this page"
@@ -382,7 +383,7 @@ export function ServicesTable({
 						/>
 						{groups.map((group) => (
 							<Fragment key={group.type}>
-								<TableRow className="bg-muted/30 hover:bg-muted/30">
+								<TableRow className="bg-muted/30 hover:bg-accent/40">
 									<TableCell
 										colSpan={5}
 										className="py-1.5 text-xs font-medium text-muted-foreground"

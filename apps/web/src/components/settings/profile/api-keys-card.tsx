@@ -253,7 +253,7 @@ export function ApiKeysCard() {
 											Pick the narrowest scope the client needs.
 										</DialogDescription>
 									</DialogHeader>
-									<div className="grid gap-4">
+									<div className="grid gap-5">
 										<div className="grid gap-2">
 											<Label htmlFor="api-key-name">Name</Label>
 											<Input
@@ -269,7 +269,7 @@ export function ApiKeysCard() {
 												value={scope}
 												onValueChange={(value) => setScope(value as ApiKeyScope)}
 											>
-												<SelectTrigger>
+												<SelectTrigger aria-label="Scope">
 													<SelectValue />
 												</SelectTrigger>
 												<SelectContent>
@@ -287,7 +287,7 @@ export function ApiKeysCard() {
 										<div className="grid gap-2">
 											<Label>Organization</Label>
 											<Select value={organizationId} onValueChange={setOrganizationId}>
-												<SelectTrigger>
+												<SelectTrigger aria-label="Organization">
 													<SelectValue placeholder="Select an organization" />
 												</SelectTrigger>
 												<SelectContent>
@@ -305,7 +305,7 @@ export function ApiKeysCard() {
 										<div className="grid gap-2">
 											<Label>Expires</Label>
 											<Select value={expiration} onValueChange={setExpiration}>
-												<SelectTrigger>
+												<SelectTrigger aria-label="Expires">
 													<SelectValue />
 												</SelectTrigger>
 												<SelectContent>

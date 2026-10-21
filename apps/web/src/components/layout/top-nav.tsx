@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Download, Menu } from "lucide-react";
+import { ArrowUpRight, Download, Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -13,160 +13,164 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { OrgSwitcher } from "@/components/org-switcher";
 import { Logo, LogoMark } from "@/components/shell/logo";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
-const allNavItems = sidebarNavGroups.flatMap((group) => group.items);
-
 function useUpdateAvailable() {
 	const trpc = useTRPC();
-	const bannerQuery = useQuery({
+	const banner = useQuery({
 		...trpc.updates.banner.queryOptions(),
 		refetchInterval: 5 * 60_000,
 		retry: false,
 	});
-	return Boolean(bannerQuery.data?.updateAvailable) && Boolean(bannerQuery.data?.canManageUpdate);
+	return Boolean(banner.data?.updateAvailable && banner.data?.canManageUpdate);
 }
 
-function NavLink({
-	href,
-	label,
-	active,
-	onNavigate,
-	badge,
-}: {
-	href: string;
-	label: string;
-	active: boolean;
-	onNavigate?: () => void;
-	badge?: boolean;
-}) {
-	return (
-		<Link
-			href={href}
-			aria-current={active ? "page" : undefined}
-			onClick={onNavigate}
-			className={cn(
-				"relative inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-				active
-					? "bg-muted font-medium text-foreground"
-					: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-			)}
-		>
-			{label}
-			{badge ? (
-				<span className="relative flex size-1.5">
-					<span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-75" />
-					<span className="relative inline-flex size-1.5 rounded-full bg-success" />
-				</span>
-			) : null}
-		</Link>
-	);
-}
-
-/** Vercel-style sticky top navigation — brand, links, search, account. */
+/** One navigation tree serves the desktop rail and the accessible mobile sheet. */
 export function TopNav() {
 	const pathname = usePathname();
 	const { can } = useCapabilities({ strict: true });
-	const navItems = allNavItems.filter((item) => !item.capability || can(item.capability));
 	const branding = useBranding();
 	const [mobileOpen, setMobileOpen] = useState(false);
 	const updateAvailable = useUpdateAvailable();
-
+	const current = sidebarNavGroups
+		.flatMap((group) => group.items)
+		.find((item) => isSidebarNavActive(pathname, item.url));
+	const navigation = (compact: boolean) => (
+		<div className="flex h-full min-h-0 flex-col">
+			<nav aria-label="Workspace" className="flex-1 space-y-7 overflow-y-auto px-3 py-6">
+				{sidebarNavGroups.map((group) => (
+					<div key={group.title} className="space-y-2">
+						<p
+							className={cn(
+								"px-3 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase",
+								compact && "md:hidden xl:block",
+							)}
+						>
+							{group.title}
+						</p>
+						{group.items
+							.filter((item) => !item.capability || can(item.capability))
+							.map((item) => {
+								const active = isSidebarNavActive(pathname, item.url);
+								const Icon = item.icon;
+								return (
+									<Link
+										key={item.url}
+										href={item.url}
+										title={compact ? item.title : undefined}
+										aria-current={active ? "page" : undefined}
+										onClick={() => setMobileOpen(false)}
+										className={cn(
+											"group flex min-h-11 items-center gap-3 rounded-md border border-transparent px-3 py-2 text-[13px] font-medium transition-colors",
+											compact && "md:justify-center md:px-2 xl:justify-start xl:px-3",
+											active
+												? "border-border bg-card text-foreground shadow-xs"
+												: "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+										)}
+									>
+										<Icon aria-hidden="true" className="size-4 shrink-0" strokeWidth={1.7} />
+										<span className={cn(compact && "md:sr-only xl:not-sr-only")}>{item.title}</span>
+										{item.url === "/dashboard/settings" && updateAvailable ? (
+											<span className="ms-auto size-1.5 rounded-full bg-success">
+												<span className="sr-only">Update available</span>
+											</span>
+										) : null}
+									</Link>
+								);
+							})}
+					</div>
+				))}
+			</nav>
+			<div
+				className={cn(
+					"m-3 rounded-lg border border-border/70 bg-card/60 p-3",
+					compact && "md:hidden xl:block",
+				)}
+			>
+				<a
+					href="https://nixploy.com/docs"
+					target="_blank"
+					rel="noreferrer"
+					className="flex min-h-11 items-center justify-between gap-3 text-xs font-medium"
+				>
+					Documentation <ArrowUpRight aria-hidden="true" className="size-3.5" />
+				</a>
+				<p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+					A little help, always close.
+				</p>
+			</div>
+		</div>
+	);
 	return (
-		<header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-md">
-			<div className="mx-auto flex h-14 w-full max-w-[1400px] items-center gap-3 px-4 sm:px-6">
-				<div className="flex min-w-0 items-center gap-2">
-					<Link href="/dashboard" className="hidden shrink-0 sm:inline-flex">
+		<>
+			<aside className="fixed inset-y-0 start-0 z-40 hidden w-20 flex-col border-e bg-sidebar md:flex xl:w-60">
+				<Link
+					href="/dashboard"
+					aria-label={branding.productName}
+					className="flex h-20 shrink-0 items-center justify-center border-b px-5 xl:justify-start"
+				>
+					<span className="hidden xl:block">
 						<Logo />
-					</Link>
-					<Link
-						href="/dashboard"
-						className="inline-flex shrink-0 sm:hidden"
-						aria-label={branding.productName}
-					>
-						<LogoMark className="size-7" />
-					</Link>
-					<Separator orientation="vertical" className="hidden h-4 sm:block" />
+					</span>
+					<LogoMark className="size-8 xl:hidden" />
+				</Link>
+				<div className="hidden border-b px-4 py-4 xl:block">
 					<OrgSwitcher />
 				</div>
-
-				<nav className="ms-1 hidden items-center gap-0.5 xl:flex">
-					{navItems.map((item) => (
-						<NavLink
-							key={item.url}
-							href={item.url}
-							label={item.title}
-							active={isSidebarNavActive(pathname, item.url)}
-							badge={item.url === "/dashboard/settings" ? updateAvailable : false}
-						/>
-					))}
-				</nav>
-
-				<div className="ms-auto flex items-center gap-1.5">
-					{updateAvailable ? (
+				{navigation(true)}
+			</aside>
+			<header className="workspace-topbar sticky top-0 z-30 flex min-h-16 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur-md sm:px-6 lg:px-8">
+				<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+					<SheetTrigger asChild>
 						<Button
-							asChild
-							variant="outline"
-							size="sm"
-							className="hidden h-8 gap-1.5 lg:inline-flex"
+							variant="ghost"
+							size="icon"
+							className="md:hidden"
+							aria-label="Open workspace navigation"
 						>
+							<Menu className="size-5" />
+						</Button>
+					</SheetTrigger>
+					<SheetContent side="left" className="flex w-72 flex-col gap-0 p-0">
+						<SheetHeader className="border-b p-5 text-start">
+							<SheetTitle>
+								<Logo />
+							</SheetTitle>
+							<div className="pt-4">
+								<OrgSwitcher />
+							</div>
+						</SheetHeader>
+						{navigation(false)}
+					</SheetContent>
+				</Sheet>
+				<div className="flex min-w-0 flex-1 items-center gap-2 text-xs text-muted-foreground">
+					<span className="hidden sm:inline">Workspace</span>
+					<span className="hidden text-border sm:inline">/</span>
+					<span className="truncate font-medium text-foreground">
+						{current?.title ?? "Projects"}
+					</span>
+				</div>
+				<div className="ms-auto flex shrink-0 items-center gap-1 sm:gap-2">
+					{updateAvailable ? (
+						<Button asChild variant="outline" size="sm" className="hidden lg:inline-flex">
 							<Link href="/dashboard/settings/server">
 								<Download className="size-3.5" />
-								Update
+								Update available
 							</Link>
 						</Button>
 					) : null}
+					<div className="hidden md:block xl:hidden">
+						<OrgSwitcher />
+					</div>
 					<CommandPalette />
 					<ModeToggle />
+					<span className="mx-1 h-5 w-px bg-border" />
 					<ProfileDropdown />
-
-					<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-						<SheetTrigger asChild>
-							<Button variant="ghost" size="icon" className="xl:hidden" aria-label="Open menu">
-								<Menu className="size-5" />
-							</Button>
-						</SheetTrigger>
-						<SheetContent side="left" className="w-72 p-0">
-							<SheetHeader className="border-b px-4 py-3 text-start">
-								<SheetTitle className="flex items-center gap-2">
-									<LogoMark className="size-5" />
-									{branding.productName}
-								</SheetTitle>
-							</SheetHeader>
-							<nav className="flex flex-col gap-1 p-3">
-								{navItems.map((item) => {
-									const Icon = item.icon;
-									const active = isSidebarNavActive(pathname, item.url);
-									return (
-										<Link
-											key={item.url}
-											href={item.url}
-											aria-current={active ? "page" : undefined}
-											onClick={() => setMobileOpen(false)}
-											className={cn(
-												"flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-												active
-													? "bg-muted font-medium text-foreground"
-													: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-											)}
-										>
-											<Icon className="size-4 shrink-0" />
-											{item.title}
-											{item.url === "/dashboard/settings" && updateAvailable ? (
-												<span className="ms-auto size-1.5 rounded-full bg-success" />
-											) : null}
-										</Link>
-									);
-								})}
-							</nav>
-						</SheetContent>
-					</Sheet>
 				</div>
-			</div>
-		</header>
+			</header>
+		</>
 	);
 }

@@ -22,7 +22,7 @@ export function EnvironmentTab({ application }: { application: Application }) {
 	});
 
 	return (
-		<div className="flex flex-col gap-4">
+		<div className="flex min-w-0 flex-col gap-5">
 			<EnvEditor
 				value={application.env}
 				loading={saveEnvironment.isPending}

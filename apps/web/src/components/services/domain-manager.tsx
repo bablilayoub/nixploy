@@ -339,7 +339,7 @@ function NixployAuthFields({
 						value={text("minRole") || "any"}
 						onValueChange={(value) => set("minRole", value === "any" ? "" : value)}
 					>
-						<SelectTrigger className="h-8">
+						<SelectTrigger aria-label="Minimum role" className="h-8">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
@@ -528,7 +528,7 @@ function MiddlewareFieldsEditor({
 						onChange={(event) => set("requestHeaders", event.target.value)}
 					/>
 				</div>
-				<div className="grid grid-cols-2 gap-2">
+				<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
 					<div className="space-y-1">
 						<Label className="text-xs">HSTS max-age (seconds)</Label>
 						<Input
@@ -1308,6 +1308,7 @@ export function DomainManager({
 												return (
 													<div className="flex items-center gap-2">
 														<Switch
+															aria-label={`Monitor uptime for ${domain.host}`}
 															checked={Boolean(probe?.enabled)}
 															disabled={setProbe.isPending || !canProbe}
 															title={canProbe ? undefined : capabilityHint("project.write")}
@@ -1392,7 +1393,7 @@ export function DomainManager({
 					>
 						<div className="space-y-1.5">
 							<Label htmlFor="domain-host">Host</Label>
-							<div className="flex gap-2">
+							<div className="flex flex-col gap-2 sm:flex-row">
 								<Input
 									id="domain-host"
 									placeholder="app.example.com"
@@ -1432,7 +1433,7 @@ export function DomainManager({
 										{dnsCheck.serverIp})
 									</p>
 								) : dnsCheck.resolved.length > 0 ? (
-									<p className="text-xs text-amber-600 dark:text-amber-400">
+									<p className="text-xs text-warning">
 										{dnsCheck.host} resolves to {dnsCheck.resolved.join(", ")}
 										{dnsCheck.serverIp
 											? ` — this server is ${dnsCheck.serverIp}. Point an A record here, or ignore this if a CDN or load balancer sits in front.`
@@ -1455,7 +1456,7 @@ export function DomainManager({
 									value={protocol}
 									onValueChange={(value) => setProtocol(value as RouteProtocol)}
 								>
-									<SelectTrigger>
+									<SelectTrigger aria-label="Protocol">
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -1480,7 +1481,7 @@ export function DomainManager({
 									value={entrypoint ?? ""}
 									onValueChange={(value) => setEntrypoint(value || null)}
 								>
-									<SelectTrigger>
+									<SelectTrigger aria-label="Entrypoint">
 										<SelectValue placeholder="Select an entrypoint" />
 									</SelectTrigger>
 									<SelectContent>
@@ -1505,7 +1506,7 @@ export function DomainManager({
 							<div className="space-y-1.5">
 								<Label>TLS</Label>
 								<Select value={tlsMode} onValueChange={(value) => setTlsMode(value as TlsMode)}>
-									<SelectTrigger>
+									<SelectTrigger aria-label="TLS">
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -1523,7 +1524,11 @@ export function DomainManager({
 						)}
 
 						<div
-							className={protocol === "http" ? "grid grid-cols-2 gap-3" : "grid grid-cols-1 gap-3"}
+							className={
+								protocol === "http"
+									? "grid grid-cols-1 sm:grid-cols-2 gap-3"
+									: "grid grid-cols-1 gap-3"
+							}
 						>
 							{protocol === "http" && (
 								<div className="space-y-1.5">
@@ -1584,7 +1589,7 @@ export function DomainManager({
 									value={serviceName ?? ""}
 									onValueChange={(value) => setServiceName(value || null)}
 								>
-									<SelectTrigger>
+									<SelectTrigger aria-label="Compose service">
 										<SelectValue placeholder="Select a service" />
 									</SelectTrigger>
 									<SelectContent>
@@ -1629,7 +1634,7 @@ export function DomainManager({
 									value={certificateType}
 									onValueChange={(value) => setCertificateType(value as CertificateType)}
 								>
-									<SelectTrigger>
+									<SelectTrigger aria-label="Certificate">
 										<SelectValue />
 									</SelectTrigger>
 									<SelectContent>
@@ -1639,7 +1644,7 @@ export function DomainManager({
 									</SelectContent>
 								</Select>
 								{host.trim().toLowerCase().endsWith(".traefik.me") && (
-									<p className="text-xs text-amber-600 dark:text-amber-400">
+									<p className="text-xs text-warning">
 										*.traefik.me is for localhost only — keep certificate on “None”. Open the HTTPS
 										URL and accept the browser warning for Traefik’s default cert.
 									</p>
@@ -1662,7 +1667,7 @@ export function DomainManager({
 										value={certificateId ?? ""}
 										onValueChange={(value) => setCertificateId(value || null)}
 									>
-										<SelectTrigger>
+										<SelectTrigger aria-label="Custom certificate">
 											<SelectValue placeholder="Select a certificate" />
 										</SelectTrigger>
 										<SelectContent>

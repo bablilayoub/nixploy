@@ -169,7 +169,10 @@ export function DockerView() {
 	} else {
 		body = (
 			<Tabs value={dockerTab} onValueChange={selectDockerTab} activationMode="manual">
-				<TabsList variant="line" className="w-full justify-start overflow-x-auto border-b">
+				<TabsList
+					aria-label="Docker resources"
+					className="h-auto w-full justify-start overflow-x-auto"
+				>
 					<TabsTrigger value="containers">
 						Containers
 						<TabCount value={listCounts.containers} />
@@ -216,7 +219,7 @@ export function DockerView() {
 	}
 
 	return (
-		<div className="flex flex-col gap-6">
+		<div className="flex min-w-0 flex-col gap-7">
 			<PageHeader
 				title="Docker"
 				description="Containers, images, swarm and system — full control of the daemon."

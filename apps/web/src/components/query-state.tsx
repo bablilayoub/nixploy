@@ -24,10 +24,10 @@ export function LoadError({
 	return (
 		<div
 			role="alert"
-			className="flex flex-col items-center gap-2 rounded-lg border border-dashed bg-card px-6 py-12 text-center"
+			className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-lg border border-destructive/25 bg-card px-5 py-10 text-center"
 		>
 			<AlertTriangle className="mb-1 size-8 text-muted-foreground" />
-			<p className="text-sm font-medium">{title}</p>
+			<p className="text-base font-semibold tracking-tight">{title}</p>
 			{message ? <p className="max-w-sm text-sm text-muted-foreground">{message}</p> : null}
 			{onRetry ? (
 				<Button variant="outline" size="sm" className="mt-2" onClick={onRetry}>
@@ -59,13 +59,15 @@ export function QueryState({
 }) {
 	if (isPending) {
 		return (
-			skeleton ?? (
-				<div className="divide-y rounded-lg border">
-					<Skeleton className="h-10 w-full" />
-					<Skeleton className="h-10 w-full" />
-					<Skeleton className="h-10 w-full" />
-				</div>
-			)
+			<div role="status" aria-label="Loading content" aria-busy="true">
+				{skeleton ?? (
+					<div className="divide-y rounded-lg border">
+						<Skeleton className="h-10 w-full" />
+						<Skeleton className="h-10 w-full" />
+						<Skeleton className="h-10 w-full" />
+					</div>
+				)}
+			</div>
 		);
 	}
 

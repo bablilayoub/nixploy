@@ -145,7 +145,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 
 	if (isLoading) {
 		return (
-			<div className="flex flex-col gap-6">
+			<div className="flex min-w-0 flex-col gap-7">
 				<div className="flex items-center gap-3">
 					<Skeleton className="size-10 rounded-lg" />
 					<div className="space-y-2">
@@ -226,7 +226,7 @@ export function ComposeDetail({ projectId, composeId }: { projectId: string; com
 	}
 
 	return (
-		<div className="flex flex-col gap-6">
+		<div className="flex min-w-0 flex-col gap-7">
 			<ServicePageHeader
 				projectId={projectId}
 				projectName={compose.environment.project.name}

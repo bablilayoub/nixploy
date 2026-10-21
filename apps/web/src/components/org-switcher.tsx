@@ -110,11 +110,11 @@ export function OrgSwitcher({ className }: { className?: string }) {
 					<Button
 						variant="ghost"
 						size="sm"
-						className={cn("h-8 min-w-0 shrink gap-2 px-2 font-normal", className)}
+						className={cn("h-10 min-w-0 shrink gap-2 px-2 font-normal", className)}
 					>
 						{isPending ? (
 							<>
-								<Skeleton className="size-5 rounded" />
+								<Skeleton className="size-6 rounded-md" />
 								<Skeleton className="h-3.5 w-20" />
 							</>
 						) : (

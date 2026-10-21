@@ -44,7 +44,9 @@ export function UpstreamsTable({
 
 	return (
 		<div className="mt-6 space-y-2">
-			<h2 className="text-sm font-medium text-muted-foreground">External upstreams</h2>
+			<h2 className="text-xs leading-relaxed font-medium text-muted-foreground">
+				External upstreams
+			</h2>
 			<TableCard>
 				<Table>
 					<TableBody>
