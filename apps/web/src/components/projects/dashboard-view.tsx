@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, FolderGit2, Plus, Search, X } from "lucide-react";
+import { ChevronRight, FolderGit2, Plus, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -10,6 +10,7 @@ import { capabilityHint } from "@/components/services/capability-hint";
 import { EmptyState } from "@/components/services/empty-state";
 import { PageHeader, StatusDot } from "@/components/shell";
 import { Button } from "@/components/ui/button";
+import { DateTime } from "@/components/ui/date-time";
 import { DisabledHint } from "@/components/ui/disabled-hint";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,7 +18,6 @@ import { useCapabilities } from "@/hooks/use-capabilities";
 import { useTRPC } from "@/lib/trpc";
 
 import { CreateProjectDialog } from "./create-project-dialog";
-import { DashboardRecovery } from "./dashboard-recovery";
 import { DeploymentsChart } from "./deployments-chart";
 import { GettingStartedCard } from "./getting-started-card";
 import { OverviewCards, RecentDeployments } from "./overview-section";
@@ -29,7 +29,6 @@ export function DashboardView() {
 	const createHint = canCreate ? undefined : capabilityHint("project.write");
 	const [search, setSearch] = useState("");
 	const [needsAttention, setNeedsAttention] = useState(false);
-	const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 	const {
 		data: projects,
 		isPending,
@@ -61,7 +60,7 @@ export function DashboardView() {
 	};
 
 	return (
-		<div className="workspace-container space-y-6">
+		<div className="space-y-6">
 			<PageHeader
 				title="Projects"
 				description="Projects, environments, and services."
@@ -76,13 +75,26 @@ export function DashboardView() {
 					</DisabledHint>
 				}
 			/>
-			<GettingStartedCard firstProjectId={projects?.[0]?.projectId} />
-			<OverviewCards />
-			<div className="workspace-columns grid min-w-0 gap-8">
-				<section className="min-w-0 space-y-4" aria-labelledby="project-list-heading">
-					<div className="flex flex-col gap-3">
+			{/* Phones keep the project directory ahead of the trend panels. */}
+			<div className="flex flex-col gap-6">
+				<div className="order-1 sm:order-none">
+					<GettingStartedCard firstProjectId={projects?.[0]?.projectId} />
+				</div>
+				<div className="order-3 sm:order-none">
+					<OverviewCards />
+				</div>
+				<div className="order-4 grid grid-cols-1 gap-4 sm:order-none lg:grid-cols-7">
+					<div className="col-span-1 lg:col-span-4">
+						<DeploymentsChart />
+					</div>
+					<div className="col-span-1 lg:col-span-3">
+						<RecentDeployments />
+					</div>
+				</div>
+				<section className="order-2 space-y-4 sm:order-none" aria-labelledby="project-list-heading">
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<div className="flex items-center gap-2">
-							<h2 id="project-list-heading" className="text-base font-semibold">
+							<h2 id="project-list-heading" className="text-sm font-semibold">
 								All projects
 							</h2>
 							{projects ? (
@@ -92,7 +104,7 @@ export function DashboardView() {
 							) : null}
 						</div>
 						<div className="flex flex-wrap items-center gap-2">
-							<div className="relative min-w-0 flex-1">
+							<div className="relative min-w-0 flex-1 sm:flex-none">
 								<Search
 									aria-hidden
 									className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -102,7 +114,7 @@ export function DashboardView() {
 									aria-label="Search projects"
 									value={search}
 									onChange={(event) => setSearch(event.target.value)}
-									className="h-9 w-full ps-9 pe-12"
+									className="h-9 w-full ps-9 pe-9 sm:w-64"
 								/>
 								{search ? (
 									<Button
@@ -110,7 +122,7 @@ export function DashboardView() {
 										size="icon-sm"
 										variant="ghost"
 										aria-label="Clear project search"
-										className="absolute end-0 top-0"
+										className="absolute end-0.5 top-0.5"
 										onClick={() => setSearch("")}
 									>
 										<X className="size-3.5" />
@@ -183,100 +195,39 @@ export function DashboardView() {
 							)
 						}
 					>
-						<div className="space-y-3">
-							{(filtered ?? []).map((project) => {
-								const isExpanded = expanded.has(project.projectId);
-								const detailsId = `project-environments-${project.projectId}`;
-								return (
-									<article
-										key={project.projectId}
-										className="overflow-hidden rounded-lg border bg-card"
-									>
-										<div className="flex min-w-0 flex-wrap items-center gap-3 px-4 py-5 sm:gap-4 sm:px-5">
-											<span className="hidden size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground sm:flex">
-												<FolderGit2 aria-hidden className="size-5" />
+						<div className="divide-y overflow-hidden rounded-lg border border-border bg-card">
+							{(filtered ?? []).map((project) => (
+								<Link
+									key={project.projectId}
+									href={`/dashboard/projects/${project.projectId}`}
+									className="group flex min-w-0 items-center gap-3 px-4 py-4 transition-colors hover:bg-muted/50 focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:gap-4"
+								>
+									<span className="hidden size-9 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground sm:flex">
+										<FolderGit2 className="size-4" />
+									</span>
+									<div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+										<div className="min-w-0 flex-1 space-y-1">
+											<span className="block truncate text-sm font-medium">{project.name}</span>
+											<span className="block truncate text-xs text-muted-foreground sm:text-sm">
+												{project.description ||
+													`${project.environments.length} ${project.environments.length === 1 ? "environment" : "environments"}`}
 											</span>
-											<div className="flex min-w-0 max-w-full flex-1 basis-40 flex-col gap-3 min-[951px]:flex-row min-[951px]:items-center min-[951px]:gap-5">
-												<div className="min-w-0 flex-1 space-y-1">
-													<h3 className="text-sm font-semibold sm:text-[0.9375rem]">
-														<Link
-															href={`/dashboard/projects/${project.projectId}`}
-															className="rounded-sm wrap-anywhere hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-														>
-															{project.name}
-														</Link>
-													</h3>
-													<p className="text-xs leading-relaxed text-muted-foreground wrap-anywhere">
-														{project.description ||
-															`${project.environments.length} ${project.environments.length === 1 ? "environment" : "environments"}`}
-													</p>
-												</div>
-												<ProjectHealth environments={project.environments} />
-											</div>
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon"
-												aria-label={`${isExpanded ? "Collapse" : "Expand"} ${project.name}`}
-												aria-expanded={isExpanded}
-												aria-controls={detailsId}
-												onClick={() =>
-													setExpanded((current) => {
-														const next = new Set(current);
-														if (next.has(project.projectId)) next.delete(project.projectId);
-														else next.add(project.projectId);
-														return next;
-													})
-												}
-											>
-												<ChevronDown
-													aria-hidden
-													className={`size-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`}
-												/>
-											</Button>
 										</div>
-										<div id={detailsId} hidden={!isExpanded} className="border-t">
-											{project.environments.length ? (
-												<ul className="divide-y">
-													{project.environments.map((environment) => (
-														<li key={environment.environmentId}>
-															<Link
-																href={`/dashboard/projects/${project.projectId}?env=${encodeURIComponent(environment.name)}`}
-																className="flex min-w-0 items-center gap-3 px-4 py-4 hover:bg-row-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:px-5"
-															>
-																<div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-																	<span className="text-sm font-medium wrap-anywhere">
-																		{environment.name}
-																	</span>
-																	<ProjectHealth environments={[environment]} />
-																</div>
-																<ChevronRight
-																	aria-hidden
-																	className="size-4 shrink-0 text-muted-foreground"
-																/>
-															</Link>
-														</li>
-													))}
-												</ul>
-											) : (
-												<p className="px-5 py-4 text-sm text-muted-foreground">
-													No environments yet. Open this project to add one.
-												</p>
-											)}
-										</div>
-									</article>
-								);
-							})}
+										<ProjectHealth environments={project.environments} />
+									</div>
+									<DateTime
+										value={project.createdAt}
+										className="hidden w-28 shrink-0 text-right text-xs text-muted-foreground lg:block"
+									/>
+									<ChevronRight
+										aria-hidden
+										className="size-4 shrink-0 text-muted-foreground group-hover:text-foreground"
+									/>
+								</Link>
+							))}
 						</div>
 					</QueryState>
-					<div className="pt-4">
-						<DeploymentsChart />
-					</div>
 				</section>
-				<aside aria-label="Workspace activity" className="min-w-0 space-y-7">
-					<RecentDeployments />
-					{projects?.length ? <DashboardRecovery projects={projects} /> : null}
-				</aside>
 			</div>
 		</div>
 	);

@@ -290,6 +290,24 @@ compiler/rotation branch above. Main before that follow-up retains the one low
 development-bundler advisory. Release workflow dispatch, Git tags and npm
 publication are not authorized.
 
+## Familiar panel restoration — 2026-10-21
+
+The user reversed the Studio rollout and requested the previous design. Revert
+only PR #30's source changes to the pre-Studio `60c80bf` tree, retaining PR #26's
+feature work, Release hardening and PR #29's compiler/rotation fixes. Preserve
+Light/Dark/System preferences, saved branding, user data, environment/keychain,
+services, volumes, networks and proxy configuration. No migration, Release,
+Git tag or npm publication is part of this restoration. The design brief records
+that Studio must not be reapplied without a new explicit request.
+
+Local restoration proof: server/web type checks, strict Biome (1,166 files) and
+the production web build pass. A fresh dump restored successfully; all 72 public
+tables, organization metadata, encrypted values, `.env`, full keychain and
+journal 52 match after switching source. Actual :3000 desktop/mobile light/dark,
+preference reloads, cross-tab and live System checks pass. The four original
+services, 74 volumes, eight networks and seven proxy hashes remain intact.
+Full rollback CI remains the merge gate.
+
 ## Active backlog — 2026-10-20
 
 This is the authoritative current work list. The dated verification records and
@@ -310,8 +328,8 @@ an implementation checkpoint, not a new release claim.
 
 ### Unimplemented product work
 
-- [ ] Select a dashboard direction before any aesthetic rollout. Five distinct
-  standalone prototypes are available; the real app keeps its familiar design.
+- [x] Restore the familiar panel design after the user reversed the Studio
+  rollout. Future aesthetic changes require a new explicit request.
 
 - [ ] Optional, opt-in expiry for completed recovery copies. Current verified
   copies are retained until manual deletion; the creation deadline never

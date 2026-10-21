@@ -31,7 +31,7 @@ const settingsItems = [
 ];
 
 /** Compact avatar menu for the top header — shadcn-admin ProfileDropdown pattern. */
-export function ProfileDropdown({ onNavigate }: { onNavigate?: () => void } = {}) {
+export function ProfileDropdown() {
 	const router = useRouter();
 	const queryClient = useQueryClient();
 	const { data: session, isPending } = useSession();
@@ -62,7 +62,7 @@ export function ProfileDropdown({ onNavigate }: { onNavigate?: () => void } = {}
 	return (
 		<DropdownMenu modal={false}>
 			<DropdownMenuTrigger asChild>
-				<Button variant="ghost" aria-label="Your account" className="relative size-8 rounded-full">
+				<Button variant="ghost" className="relative size-8 rounded-full">
 					<UserAvatar user={user} className="size-8" fallbackClassName="text-xs" size={64} />
 				</Button>
 			</DropdownMenuTrigger>
@@ -77,7 +77,7 @@ export function ProfileDropdown({ onNavigate }: { onNavigate?: () => void } = {}
 				<DropdownMenuGroup>
 					{settingsItems.map((item) => (
 						<DropdownMenuItem key={item.label} asChild>
-							<Link href={item.href} onClick={onNavigate}>
+							<Link href={item.href}>
 								<item.icon className="size-4" />
 								{item.label}
 							</Link>
