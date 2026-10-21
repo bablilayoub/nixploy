@@ -73,12 +73,12 @@ External provider setup, AI generation, terminal commands, live migrations/impor
 
 ## Static detector disposition and independent review
 
-`final-scores.json` covers all **320 owned TSX sources**, with zero scan errors. Raw heuristics report 118 anti-slop, 23 token and 12 static-accessibility findings. These are retained without changing rules or hiding source. They are not 153 confirmed product defects and are not presented as a zero-warning tool result.
+`final-scores.json` covers all **320 owned TSX sources**, with zero scan errors. Raw heuristics report 117 anti-slop, 23 token and 12 static-accessibility findings. These are retained without changing rules or hiding source. The counts are heuristic observations, not confirmed product defects, and are not presented as a zero-warning tool result.
 
 | Raw finding | Context and disposition |
 | --- | --- |
 | 55 hover/focus and 37 empty/error heuristics | Shared global focus rules, rebuilt primitives and `QueryState` own those contracts. Runtime matrices and source ownership provide closure beyond isolated-file matching. |
-| Five custom-modal heuristics | ProductShot is a static figure; ThemeProvider uses Radix DropdownMenu; site navigation uses Radix Dialog; ActivityTray and SaveBar are intentionally nonmodal/status surfaces. |
+| Four custom-modal heuristics | ProductShot is a static figure; ThemeProvider uses Radix DropdownMenu; ActivityTray and SaveBar are intentionally nonmodal/status surfaces. Site navigation uses Radix Dialog and is independently verified. |
 | Four removed-outline heuristics | Skip link uses a focus ring; CodeMirror uses the enclosing focus-within ring; OTP active slots show rings; Dialog contains focus and its actionable descendants show focus. |
 | Six destructive-action heuristics | Database, instance operations and template-source removal retain DangerZone/ConfirmActionDialog/AlertDialog confirmation. Existing immediate tag/individual-rule/brand-asset removal is explicitly accepted as minor metadata behavior, documented in the brief. |
 | Three table-overflow heuristics | Shared Table/scroll wrappers own horizontal overflow; parent reflow checks pass. The actual template environment-table issue found during review was fixed. |
