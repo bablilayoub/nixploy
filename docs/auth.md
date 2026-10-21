@@ -630,6 +630,14 @@ Do not run this alongside an upgrade, deploy, installer or another rotation.
    esac
    : > "$rotation_dir/state.tsv"
    : > "$rotation_dir/nodes"
+   rotation_role() {
+     # Preserve the raw snapshot, but accept Docker collapsing identical Env
+     # entries. Missing/empty role retains the legacy default of all.
+     awk '
+       /^NIXPLOY_ROLE=/ && !seen[$0]++ { count++; role=$0 }
+       END { if (count > 1) exit 1; sub(/^NIXPLOY_ROLE=/, "", role); print role }
+     ' "$1" || { echo 'Cannot resolve one stored NIXPLOY_ROLE; rotation stopped' >&2; return 1; }
+   }
    for service in "${rotation_services[@]}"; do
      replicas="$(docker service inspect --format '{{.Spec.Mode.Replicated.Replicas}}' "$service")"
      [[ "$replicas" =~ ^[0-9]+$ ]] \
@@ -637,6 +645,7 @@ Do not run this alongside an upgrade, deploy, installer or another rotation.
      identity="$(docker service inspect --format '{{.ID}}' "$service")"
      docker service inspect --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' \
        "$service" > "$rotation_dir/$service.before.env"
+     rotation_role "$rotation_dir/$service.before.env" > /dev/null
      printf '%s\t%s\t%s\n' "$service" "$identity" "$replicas" >> "$rotation_dir/state.tsv"
      for task in $(docker service ps --no-trunc --filter desired-state=running --format '{{.ID}}' "$service"); do
        node="$(docker inspect --type task --format '{{.NodeID}}' "$task")"
@@ -706,8 +715,9 @@ Do not run this alongside an upgrade, deploy, installer or another rotation.
      if sed -n '/^ENCRYPTION_KEY=/p' "$rotation_dir/$service.after.env" | read -r _; then
        echo 'Stale single-key fallback remains in stored Env' >&2; exit 1
      fi
-     test "$(sed -n 's/^NIXPLOY_ROLE=//p' "$rotation_dir/$service.before.env")" \
-       = "$(sed -n 's/^NIXPLOY_ROLE=//p' "$rotation_dir/$service.after.env")"
+     original_role="$(rotation_role "$rotation_dir/$service.before.env")"
+     stored_role="$(rotation_role "$rotation_dir/$service.after.env")"
+     test "$original_role" = "$stored_role"
    done < "$rotation_dir/state.tsv"
    printf 'ENCRYPTION_KEYS=%s\n' "$ENCRYPTION_KEYS" >> "$rotation_dir/rotate.env"
    rotation_run() {
@@ -743,7 +753,7 @@ Do not run this alongside an upgrade, deploy, installer or another rotation.
      cmp -s "$rotation_dir/$service.after.env" "$rotation_dir/$service.resume.env"
      docker service scale "$service=$replicas"
    done < "$rotation_dir/state.tsv"
-   unset ENCRYPTION_KEYS stored_chain value
+   unset ENCRYPTION_KEYS stored_chain original_role stored_role value
    ```
 
    Sign in, verify organization variables and representative stored credentials

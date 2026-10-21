@@ -13,8 +13,13 @@ also run from immutable workflow tooling for historical product tags. Identical
 stored database URL entries are accepted once; conflicting or missing entries
 fail preflight before draining or updating services. The literal documented
 procedure fails the identical-entry and preflight-ordering regressions before
-their corrections. Current combined-head validation passes
-95 CLI tests, 89 recovery/rotation/Release contracts on Node 22 and Node 24,
+their corrections. Independent review also reproduced Docker collapsing identical
+role entries during a key update. The runbook now validates unique roles before
+drain, compares resolved values afterward, preserves missing legacy roles and
+keeps writers stopped on a real role change. The literal corrected helper accepts
+the independent real-Docker before/after evidence; its two regressions fail before
+the fix. Current combined-head validation passes
+95 CLI tests, 93 recovery/rotation/Release contracts on Node 22 and Node 24,
 38 pure organization-upgrade checks, all four workspace type checks, strict
 Biome, knip and 3,353 backend tests (137 optional cases skipped). Normal npm
 pack/install repeats executable/export/version/UserAgent/HTTP exit checks; its
@@ -84,8 +89,8 @@ replicas, then one panel/zero workers; old ciphertext still needed its retained
 old key. All owned fixture resources were removed. Primary service specs,
 readiness, existing volumes/networks and ten proxy/config/env file hashes were
 preserved. The immutable shared fixture image is retained. Independent source and runtime review of the original patch passed. The
-combined head adds two database URL compatibility cases and awaits its final
-independent review; this is not a publication claim.
+combined head adds two database URL and four role compatibility/failure cases,
+and awaits its final independent review; this is not a publication claim.
 
 ## Operator workspace — 2026-10-21 (merged)
 

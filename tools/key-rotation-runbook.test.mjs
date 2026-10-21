@@ -46,6 +46,18 @@ async function rehearsal(options, verify) {
 				env: [`NIXPLOY_ROLE=worker`, `ENCRYPTION_KEY=${oldKey}`],
 			};
 		}
+		for (const service of Object.values(services)) {
+			if (options.duplicateRole) {
+				service.env.push(
+					options.duplicateRole === "identical"
+						? service.env.find((entry) => entry.startsWith("NIXPLOY_ROLE="))
+						: "NIXPLOY_ROLE=conflicting",
+				);
+			}
+			if (options.implicitRole) {
+				service.env = service.env.filter((entry) => !entry.startsWith("NIXPLOY_ROLE="));
+			}
+		}
 		await writeFile(statePath, JSON.stringify(services), { mode: 0o600 });
 		await writeFile(
 			path.join(bin, "docker"),
@@ -79,10 +91,12 @@ else if (args[0] === 'service' && args[1] === 'inspect') {
  const service = state[args.at(-1)];
  const priorKey = service.env.find(e => e.startsWith('ENCRYPTION_KEY='));
  if (service.replicas !== 0) fail('Updated a live writer');
- service.env = service.env.filter(e => !e.startsWith('ENCRYPTION_KEY=') && !e.startsWith('ENCRYPTION_KEYS='));
+ // Docker CLI normalizes identical Env entries during an unrelated key update.
+ service.env = [...new Set(service.env)].filter(e => !e.startsWith('ENCRYPTION_KEY=') && !e.startsWith('ENCRYPTION_KEYS='));
  service.env.push('ENCRYPTION_KEYS=' + process.env.ENCRYPTION_KEYS);
  if (process.env.ROTATION_SCENARIO === 'stale-single-key' && priorKey) service.env.push(priorKey);
  if (process.env.ROTATION_SCENARIO === 'wrong-stored-chain') service.env[service.env.length-1] = 'ENCRYPTION_KEYS=stale';
+ if (process.env.ROTATION_SCENARIO === 'changed-stored-role') service.env = service.env.filter(e => !e.startsWith('NIXPLOY_ROLE=')).concat('NIXPLOY_ROLE=worker');
  save();
 } else if (args[0] === 'run') {
  if (Object.values(state).some(s => s.replicas !== 0)) fail('Rotated with a live writer');
@@ -147,6 +161,8 @@ for (const options of [
 	{ panelReplicas: 1, workerReplicas: 0 },
 	{ split: false },
 	{ duplicateDatabase: "identical" },
+	{ duplicateRole: "identical" },
+	{ split: false, implicitRole: true },
 ]) {
 	test(`documented rotation preserves original roles and replicas: ${JSON.stringify(options)}`, async () => {
 		await rehearsal(options, ({ status, output, state, original, calls }) => {
@@ -155,8 +171,8 @@ for (const options of [
 				assert.equal(service.id, original[name].id);
 				assert.equal(service.replicas, original[name].replicas);
 				assert.deepEqual(
-					service.env.filter((e) => !e.startsWith("ENCRYPTION_KEYS=")),
-					original[name].env.filter((e) => !e.startsWith("ENCRYPTION_KEY=")),
+					service.env.filter((e) => !e.startsWith("ENCRYPTION_KEYS=")).sort(),
+					[...new Set(original[name].env.filter((e) => !e.startsWith("ENCRYPTION_KEY=")))].sort(),
 				);
 				assert.ok(service.env.includes(`ENCRYPTION_KEYS=${newKey},${oldKey}`));
 			}
@@ -183,11 +199,23 @@ test("conflicting database entries fail preflight before changing services", asy
 	});
 });
 
+test("conflicting role entries fail preflight before changing services", async () => {
+	await rehearsal({ duplicateRole: "conflicting" }, ({ status, state, calls, original }) => {
+		assert.notEqual(status, 0);
+		assert.deepEqual(state, original);
+		assert.equal(
+			calls.some((call) => call[1] === "scale" || call[1] === "update" || call[0] === "run"),
+			false,
+		);
+	});
+});
+
 for (const scenario of [
 	"wrong-stored-chain",
 	"stale-single-key",
 	"rotation-fails",
 	"new-key-fails",
+	"changed-stored-role",
 ]) {
 	test(`failure ${scenario} keeps every writer stopped`, async () => {
 		await rehearsal({ scenario }, ({ status, state }) => {
