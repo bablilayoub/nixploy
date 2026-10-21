@@ -231,7 +231,7 @@ export const nixployTerminalTheme = {
 		magenta: "#c084fc",
 		cyan: "#22d3ee",
 		white: "#f4f6fa",
-		brightBlack: "#657082",
+		brightBlack: "#9ca9bc",
 		brightRed: "#fca5a5",
 		brightGreen: "#86efac",
 		brightYellow: "#fde68a",

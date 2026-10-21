@@ -139,8 +139,8 @@ export function TopNav() {
 							</Button>
 						</SheetTrigger>
 						<SheetContent side="left" className="w-72 p-0">
-							<SheetHeader className="border-b px-4 py-3 text-start">
-								<SheetTitle className="flex items-center gap-2">
+							<SheetHeader className="border-b py-3 ps-4 pe-14 text-start">
+								<SheetTitle className="flex items-center gap-2 wrap-anywhere">
 									<LogoMark className="size-5" />
 									{branding.productName}
 								</SheetTitle>

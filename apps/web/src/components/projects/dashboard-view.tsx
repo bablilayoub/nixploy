@@ -61,7 +61,7 @@ export function DashboardView() {
 	};
 
 	return (
-		<div className="space-y-6">
+		<div className="workspace-container space-y-6">
 			<PageHeader
 				title="Projects"
 				description="Projects, environments, and services."
@@ -78,7 +78,7 @@ export function DashboardView() {
 			/>
 			<GettingStartedCard firstProjectId={projects?.[0]?.projectId} />
 			<OverviewCards />
-			<div className="grid min-w-0 gap-8 min-[721px]:grid-cols-[minmax(0,1fr)_235px] min-[951px]:grid-cols-[minmax(0,1fr)_270px] min-[1191px]:grid-cols-[minmax(0,1fr)_304px]">
+			<div className="workspace-columns grid min-w-0 gap-8">
 				<section className="min-w-0 space-y-4" aria-labelledby="project-list-heading">
 					<div className="flex flex-col gap-3">
 						<div className="flex items-center gap-2">
@@ -192,11 +192,11 @@ export function DashboardView() {
 										key={project.projectId}
 										className="overflow-hidden rounded-lg border bg-card"
 									>
-										<div className="flex min-w-0 items-center gap-3 px-4 py-5 sm:gap-4 sm:px-5">
+										<div className="flex min-w-0 flex-wrap items-center gap-3 px-4 py-5 sm:gap-4 sm:px-5">
 											<span className="hidden size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground sm:flex">
 												<FolderGit2 aria-hidden className="size-5" />
 											</span>
-											<div className="flex min-w-0 flex-1 flex-col gap-3 min-[951px]:flex-row min-[951px]:items-center min-[951px]:gap-5">
+											<div className="flex min-w-0 max-w-full flex-1 basis-40 flex-col gap-3 min-[951px]:flex-row min-[951px]:items-center min-[951px]:gap-5">
 												<div className="min-w-0 flex-1 space-y-1">
 													<h3 className="text-sm font-semibold sm:text-[0.9375rem]">
 														<Link

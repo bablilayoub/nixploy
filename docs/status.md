@@ -25,6 +25,17 @@ cross-tab synchronization pass without losing open-form input or focus. Saved
 branding and final state captures, independent review and CI remain pending;
 this is not a merge/publication claim.
 
+Independent Studio review caught tablet text-zoom crowding, two dark links using
+button-fill blue, the dark ANSI90 caption color and the sheet close target. The
+corrected layout uses em-based container queries and wrapping project headers;
+links use the readable brand foreground, ANSI90 uses the dark caption value,
+and the close control reserves 44px with bounded/scrollable sheet content.
+Eight controlled settings/preview link captures meet 4.5:1; four actual owned
+PostgreSQL terminal sessions display ANSI90 above 4.5:1. Eight saved-branding
+cases preserve accents, custom logo and accessible long names, then restore
+only the disposable organization's prior settings. Sixteen real keyboard/tab
+checks pass. Final corrected captures and exact-head CI/review remain required.
+
 PR #26 is merged at `4a2b65b`; its exact reviewed head passed both native Swarm
 and upgrade jobs, with zero findings/ignored findings in both full Trivy reports.
 The primary checkout is fast-forwarded, backed up with a verified restore,

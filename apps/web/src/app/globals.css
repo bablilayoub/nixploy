@@ -37,6 +37,7 @@
 	--color-accent-foreground: var(--accent-foreground);
 	--color-destructive: var(--destructive);
 	--color-destructive-fill: var(--destructive-fill);
+	--color-destructive-hover: var(--destructive-hover);
 	--color-border: var(--border);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
@@ -105,6 +106,7 @@
 	--accent-foreground: var(--foreground);
 	--destructive: var(--studio-error);
 	--destructive-fill: #ba4a52;
+	--destructive-hover: color-mix(in srgb, var(--destructive-fill) 90%, black);
 	--border: var(--studio-line);
 	--input: var(--studio-control);
 	--ring: var(--studio-focus);
@@ -158,6 +160,7 @@
 }
 
 /* Navigation follows available space in em, including enlarged text. */
+.workspace-container,
 .workspace-header {
 	container-type: inline-size;
 }
@@ -167,6 +170,23 @@
 	}
 	.workspace-menu-trigger {
 		display: none;
+	}
+}
+
+/* A readable project column takes priority over keeping the activity rail beside it. */
+@container (min-width: 45em) {
+	.workspace-columns {
+		grid-template-columns: minmax(0, 1fr) 235px;
+	}
+}
+@container (min-width: 59.5em) {
+	.workspace-columns {
+		grid-template-columns: minmax(0, 1fr) 270px;
+	}
+}
+@container (min-width: 74.5em) {
+	.workspace-columns {
+		grid-template-columns: minmax(0, 1fr) 304px;
 	}
 }
 
@@ -296,12 +316,14 @@ body[data-activity-tray="1"] [data-sonner-toaster][data-y-position="bottom"] {
 	[data-slot="select-trigger"],
 	[data-slot="tabs-trigger"],
 	[data-slot="dialog-close"],
+	[data-slot="sheet-close"],
 	[data-slot="dropdown-menu-item"],
 	[data-slot="select-item"] {
 		min-height: 2.75rem;
 	}
 	[data-slot="button"][data-size^="icon"],
 	[data-slot="dialog-close"],
+	[data-slot="sheet-close"],
 	[data-slot="command-palette-trigger-mobile"] {
 		min-width: 2.75rem;
 		min-height: 2.75rem;
