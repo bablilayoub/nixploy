@@ -15,8 +15,10 @@ Authority: `apps/web/src/app/globals.css`, mapped into existing shadcn semantic 
 | Primary fill / text | #285bd9 / white | #3265df / white |
 | Focus | #285bd9 | #a9c1ff |
 | Accent surface | #eef3ff | #293854 |
-| Success | #288565 | #79cba6 |
-| Warning | #946017 | #e3b97c |
-| Error | #ba4a52 | #f2a1aa |
+| Success | #1d7053 | #79cba6 |
+| Warning | #81500f | #e3b97c |
+| Error | #a43b43 | #f2a1aa |
 
 Inter body/headings; JetBrains Mono code; tabular numbers. Supporting type 12px+, body/forms 14px, sections16px, titles28/31px. Spacing uses the existing 4px grid. Controls7px, grouped surfaces11px, dialogs14px. Border grouping, minimal shadows, short hover/focus transitions and existing reduced-motion support. Keep saved accent overrides and logos; never use brand color for semantic health. Native color-scheme follows the resolved theme.
+
+Light status text is darkened from the concept values to retain 4.5:1 contrast on actual translucent badge fills over both canvas and card surfaces. Dark semantic values remain unchanged. Touch dimensions live in the shared primitive classes so Radix trigger/form slots retain them. Narrow or enlarged headers expose search and account through the existing navigation sheet; one controlled command palette owns keyboard shortcuts.

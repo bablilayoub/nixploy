@@ -102,7 +102,7 @@ export function DashboardView() {
 									aria-label="Search projects"
 									value={search}
 									onChange={(event) => setSearch(event.target.value)}
-									className="h-9 w-full ps-9 pe-9"
+									className="h-9 w-full ps-9 pe-12"
 								/>
 								{search ? (
 									<Button
@@ -110,7 +110,7 @@ export function DashboardView() {
 										size="icon-sm"
 										variant="ghost"
 										aria-label="Clear project search"
-										className="absolute end-0.5 top-0.5"
+										className="absolute end-0 top-0"
 										onClick={() => setSearch("")}
 									>
 										<X className="size-3.5" />

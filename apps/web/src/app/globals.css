@@ -79,9 +79,9 @@
 	--studio-action-hover: #224fc0;
 	--studio-focus: #285bd9;
 	--studio-tint: #eef3ff;
-	--studio-success: #288565;
-	--studio-warning: #946017;
-	--studio-error: #ba4a52;
+	--studio-success: #1d7053;
+	--studio-warning: #81500f;
+	--studio-error: #a43b43;
 	--studio-chart: #8295b1;
 	--studio-chart-line: #96a7bd;
 	--studio-backdrop: #18223366;
@@ -170,6 +170,17 @@
 	}
 	.workspace-menu-trigger {
 		display: none;
+	}
+}
+
+.workspace-header-search,
+.workspace-header-account {
+	display: none;
+}
+@container (min-width: 48em) {
+	.workspace-header-search,
+	.workspace-header-account {
+		display: block;
 	}
 }
 

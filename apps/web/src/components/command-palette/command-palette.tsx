@@ -31,7 +31,14 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+	type Dispatch,
+	type SetStateAction,
+	useCallback,
+	useEffect,
+	useMemo,
+	useState,
+} from "react";
 import { isSettingsNavItemAllowed, settingsNavItems } from "@/components/nav-settings";
 import { SERVICE_TYPE_META, type ServiceType } from "@/components/projects/service-types";
 import {
@@ -120,7 +127,15 @@ function pushRecentId(id: string) {
 }
 
 /** ⌘K command palette: navigation, project services, and actions. */
-export function CommandPalette({ className }: { className?: string }) {
+export function CommandPalette({
+	className,
+	open: controlledOpen,
+	onOpenChange,
+}: {
+	className?: string;
+	open?: boolean;
+	onOpenChange?: Dispatch<SetStateAction<boolean>>;
+}) {
 	const trpc = useTRPC();
 	const router = useRouter();
 	const queryClient = useQueryClient();
@@ -128,7 +143,9 @@ export function CommandPalette({ className }: { className?: string }) {
 	const { resolvedTheme, setTheme } = useTheme();
 	const { can, isInstanceAdmin, isLoading: capabilitiesPending } = useCapabilities();
 
-	const [open, setOpen] = useState(false);
+	const [internalOpen, setInternalOpen] = useState(false);
+	const open = controlledOpen ?? internalOpen;
+	const setOpen = onOpenChange ?? setInternalOpen;
 	const [recentIds, setRecentIds] = useState<string[]>([]);
 	const [query, setQuery] = useState("");
 
@@ -149,7 +166,7 @@ export function CommandPalette({ className }: { className?: string }) {
 		};
 		document.addEventListener("keydown", onKeyDown);
 		return () => document.removeEventListener("keydown", onKeyDown);
-	}, []);
+	}, [setOpen]);
 
 	// Hydrate recents from localStorage each time the palette opens.
 	useEffect(() => {

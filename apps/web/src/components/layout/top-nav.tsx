@@ -1,10 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Download, Menu } from "lucide-react";
+import { Download, Menu, Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useBranding } from "@/components/branding-provider";
 import { CommandPalette } from "@/components/command-palette";
 import { ProfileDropdown } from "@/components/layout/profile-dropdown";
@@ -74,6 +74,15 @@ export function TopNav() {
 	const navItems = allNavItems.filter((item) => !item.capability || can(item.capability));
 	const branding = useBranding();
 	const [mobileOpen, setMobileOpen] = useState(false);
+	const [commandOpen, setCommandOpen] = useState(false);
+	const commandFromMenu = useRef(false);
+	const menuTrigger = useRef<HTMLButtonElement>(null);
+	useEffect(() => {
+		if (commandOpen || !commandFromMenu.current) return;
+		commandFromMenu.current = false;
+		const frame = requestAnimationFrame(() => menuTrigger.current?.focus());
+		return () => cancelAnimationFrame(frame);
+	}, [commandOpen]);
 	const updateAvailable = useUpdateAvailable();
 
 	return (
@@ -123,22 +132,33 @@ export function TopNav() {
 							</Link>
 						</Button>
 					) : null}
-					<CommandPalette />
+					<div className="workspace-header-search">
+						<CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+					</div>
 					<ModeToggle />
-					<ProfileDropdown />
+					<div className="workspace-header-account">
+						<ProfileDropdown />
+					</div>
 
 					<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
 						<SheetTrigger asChild>
 							<Button
 								variant="ghost"
 								size="icon"
+								ref={menuTrigger}
 								className="workspace-menu-trigger"
 								aria-label="Open menu"
 							>
 								<Menu className="size-5" />
 							</Button>
 						</SheetTrigger>
-						<SheetContent side="left" className="w-72 p-0">
+						<SheetContent
+							side="left"
+							className="w-72 p-0"
+							onCloseAutoFocus={(event) => {
+								if (commandOpen) event.preventDefault();
+							}}
+						>
 							<SheetHeader className="border-b py-3 ps-4 pe-14 text-start">
 								<SheetTitle className="flex items-center gap-2 wrap-anywhere">
 									<LogoMark className="size-5" />
@@ -171,6 +191,25 @@ export function TopNav() {
 									);
 								})}
 							</nav>
+							<div className="space-y-3 border-t p-3">
+								<Button
+									type="button"
+									variant="outline"
+									className="w-full justify-start"
+									onClick={() => {
+										commandFromMenu.current = true;
+										setMobileOpen(false);
+										setCommandOpen(true);
+									}}
+								>
+									<Search aria-hidden className="size-4" />
+									Search workspace
+								</Button>
+								<div className="flex items-center justify-between gap-3 px-2">
+									<span className="text-sm text-muted-foreground">Account</span>
+									<ProfileDropdown onNavigate={() => setMobileOpen(false)} />
+								</div>
+							</div>
 						</SheetContent>
 					</Sheet>
 				</div>

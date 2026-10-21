@@ -36,6 +36,13 @@ cases preserve accents, custom logo and accessible long names, then restore
 only the disposable organization's prior settings. Sixteen real keyboard/tab
 checks pass. Final corrected captures and exact-head CI/review remain required.
 
+The next review delta darkens light semantic text for actual tinted badge
+surfaces, applies touch floors in primitive classes despite Radix slot changes,
+and removes the theme control's scale transform. Font-relative header rules
+keep theme access outside while placing search/account in the mobile sheet;
+a single controlled command palette retains global shortcuts and focus return.
+Final badge, target and non-overlap browser evidence is still pending.
+
 PR #26 is merged at `4a2b65b`; its exact reviewed head passed both native Swarm
 and upgrade jobs, with zero findings/ignored findings in both full Trivy reports.
 The primary checkout is fast-forwarded, backed up with a verified restore,
