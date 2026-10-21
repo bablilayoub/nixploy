@@ -14,91 +14,90 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	/*
-	 * One radius scale, used consistently:
-	 *   rounded-lg  (--radius, 12px) — buttons, inputs, chips with square ends
-	 *   rounded-xl  (16px)           — cards, code blocks, media frames
-	 *   rounded-2xl (20px)           — full-width section panels and the footer
-	 *   rounded-full                 — badges, pills and the nav island
-	 * A control and a card should never share a radius; two cards always should.
-	 */
-	--radius: 0.75rem;
-
-	--background: oklch(1 0 0);
-	--foreground: oklch(0.16 0 0);
-	--card: oklch(1 0 0);
-	--card-foreground: oklch(0.16 0 0);
-	--popover: oklch(1 0 0);
-	--popover-foreground: oklch(0.16 0 0);
-	--primary: oklch(0.2 0 0);
-	--primary-foreground: oklch(0.99 0 0);
-	--secondary: oklch(0.96 0 0);
-	--secondary-foreground: oklch(0.22 0 0);
-	--muted: oklch(0.96 0 0);
-	--muted-foreground: oklch(0.5 0 0);
-	--accent: oklch(0.96 0 0);
-	--accent-foreground: oklch(0.22 0 0);
-	--destructive: oklch(0.45 0 0);
-	--border: oklch(0.91 0 0);
-	--input: oklch(0.91 0 0);
-	--ring: oklch(0.6 0 0);
-
-	--chart-1: oklch(0.2 0 0);
-	--chart-2: oklch(0.36 0 0);
-	--chart-3: oklch(0.52 0 0);
-	--chart-4: oklch(0.68 0 0);
-	--chart-5: oklch(0.82 0 0);
-
-	--sidebar: oklch(0.99 0 0);
-	--sidebar-foreground: oklch(0.16 0 0);
-	--sidebar-primary: oklch(0.2 0 0);
-	--sidebar-primary-foreground: oklch(0.99 0 0);
-	--sidebar-accent: oklch(0.96 0 0);
-	--sidebar-accent-foreground: oklch(0.22 0 0);
-	--sidebar-border: oklch(0.91 0 0);
-	--sidebar-ring: oklch(0.6 0 0);
+	--radius: 0.5rem;
+	--background: #f4f4f5;
+	--foreground: #17181b;
+	--card: #ffffff;
+	--card-foreground: var(--foreground);
+	--popover: #ffffff;
+	--popover-foreground: var(--foreground);
+	--primary: #191b1f;
+	--primary-foreground: #ffffff;
+	--brand: var(--primary);
+	--secondary: #eceef0;
+	--secondary-foreground: var(--foreground);
+	--muted: #eceef0;
+	--muted-foreground: #62666f;
+	--accent: #eceef0;
+	--accent-foreground: var(--foreground);
+	--destructive: #b42332;
+	--border: #dedfe3;
+	--input: #858b95;
+	--ring: #737984;
+	--control: #f7f7f8;
+	--panel-inset: #f7f7f8;
+	--selection: #eceef0;
+	--chart-axis: #62666f;
+	--success: #187040;
+	--warning: #965b08;
+	--info: #285eb0;
+	--chart-1: var(--foreground);
+	--chart-2: color-mix(in oklab, var(--foreground) 75%, transparent);
+	--chart-3: color-mix(in oklab, var(--foreground) 60%, transparent);
+	--chart-4: color-mix(in oklab, var(--foreground) 45%, transparent);
+	--chart-5: color-mix(in oklab, var(--foreground) 30%, transparent);
+	--sidebar: #f4f4f5;
+	--sidebar-foreground: var(--foreground);
+	--sidebar-primary: var(--primary);
+	--sidebar-primary-foreground: var(--primary-foreground);
+	--sidebar-accent: #e5e7ea;
+	--sidebar-accent-foreground: var(--foreground);
+	--sidebar-border: var(--border);
+	--sidebar-ring: var(--ring);
+	--surface-shadow: 0 1px 2px rgb(17 19 23 / 3%), 0 0 0 1px rgb(255 255 255 / 40%) inset;
+	--overlay-shadow: 0 24px 80px -20px rgb(17 19 23 / 24%), 0 4px 12px rgb(17 19 23 / 8%);
+	color-scheme: light;
 }
 
 .dark {
-	--background: oklch(0.145 0 0);
-	--foreground: oklch(0.985 0 0);
-	--card: oklch(0.185 0 0);
-	--card-foreground: oklch(0.985 0 0);
-	--popover: oklch(0.185 0 0);
-	--popover-foreground: oklch(0.985 0 0);
-	--primary: oklch(0.985 0 0);
-	--primary-foreground: oklch(0.16 0 0);
-	--secondary: oklch(0.25 0 0);
-	--secondary-foreground: oklch(0.985 0 0);
-	--muted: oklch(0.25 0 0);
-	--muted-foreground: oklch(0.72 0 0);
-	--accent: oklch(0.27 0 0);
-	--accent-foreground: oklch(0.985 0 0);
-	--destructive: oklch(0.6 0 0);
-	--border: oklch(1 0 0 / 12%);
-	--input: oklch(1 0 0 / 15%);
-	--ring: oklch(0.7 0 0);
-
-	--chart-1: oklch(0.985 0 0);
-	--chart-2: oklch(0.82 0 0);
-	--chart-3: oklch(0.68 0 0);
-	--chart-4: oklch(0.52 0 0);
-	--chart-5: oklch(0.36 0 0);
-
-	--sidebar: oklch(0.165 0 0);
-	--sidebar-foreground: oklch(0.985 0 0);
-	--sidebar-primary: oklch(0.985 0 0);
-	--sidebar-primary-foreground: oklch(0.16 0 0);
-	--sidebar-accent: oklch(0.25 0 0);
-	--sidebar-accent-foreground: oklch(0.985 0 0);
-	--sidebar-border: oklch(1 0 0 / 12%);
-	--sidebar-ring: oklch(0.7 0 0);
+	--background: #090a0b;
+	--foreground: #f5f5f6;
+	--card: #111315;
+	--card-foreground: var(--foreground);
+	--popover: #1b1d20;
+	--popover-foreground: var(--foreground);
+	--primary: #f4f5f6;
+	--primary-foreground: #111315;
+	--brand: var(--primary);
+	--secondary: #26292e;
+	--secondary-foreground: var(--foreground);
+	--muted: #202328;
+	--muted-foreground: #a0a5ae;
+	--accent: #26292e;
+	--accent-foreground: var(--foreground);
+	--destructive: #ff8b94;
+	--border: #2a2d32;
+	--input: #5c636e;
+	--ring: #a8aeb9;
+	--control: #0d0f11;
+	--panel-inset: #0d0f11;
+	--selection: #26292e;
+	--chart-axis: #a0a5ae;
+	--success: #7adea0;
+	--warning: #eac379;
+	--info: #91b7ee;
+	--sidebar: #0d0f11;
+	--sidebar-accent: #26292e;
+	--surface-shadow: 0 1px 3px rgb(0 0 0 / 18%), 0 1px 0 rgb(255 255 255 / 3%) inset;
+	--overlay-shadow: 0 24px 80px -20px rgb(0 0 0 / 65%), 0 0 0 1px rgb(255 255 255 / 3%) inset;
+	color-scheme: dark;
 }
 
 @theme inline {
-	--font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-	--font-display: var(--font-space-grotesk), var(--font-geist), ui-sans-serif, sans-serif;
-	--font-mono: var(--font-geist-mono), ui-monospace, monospace;
+	--spacing: 4px;
+	--font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+	--font-display: var(--font-inter), var(--font-inter), ui-sans-serif, sans-serif;
+	--font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);
@@ -201,8 +200,8 @@
 @utility container-page {
 	margin-inline: auto;
 	width: 100%;
-	max-width: 80rem;
-	padding-inline: 1.5rem;
+	max-width: 86rem;
+	padding-inline: clamp(16px, 3vw, 24px);
 }
 
 @layer base {
@@ -227,8 +226,7 @@
 	}
 
 	html {
-		scroll-behavior: smooth;
-		color-scheme: dark;
+		scroll-behavior: auto;
 	}
 
 	h1,
@@ -254,6 +252,18 @@
 	}
 }
 
+@layer base {
+	form,
+	fieldset {
+		min-width: 0;
+	}
+	p,
+	h1,
+	h2,
+	h3 {
+		overflow-wrap: anywhere;
+	}
+}
 /*
  * Reduced motion. Motion-driven components are covered by `MotionConfig
  * reducedMotion="user"` in the root layout; this is for the CSS-driven ones —
@@ -287,7 +297,7 @@
 
 .legal-copy :where(h2, h3) {
 	color: var(--foreground);
-	font-family: var(--font-space-grotesk), var(--font-geist), ui-sans-serif, sans-serif;
+	font-family: var(--font-inter), var(--font-inter), ui-sans-serif, sans-serif;
 	font-weight: 600;
 	letter-spacing: -0.025em;
 	line-height: 1.35;
@@ -343,8 +353,73 @@
 	background: var(--accent);
 	color: var(--foreground);
 	padding: 0.125em 0.25em;
-	font-family: var(--font-geist-mono), ui-monospace, monospace;
+	font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
 	font-size: 0.875em;
 	font-weight: 400;
 	overflow-wrap: anywhere;
+}
+
+@utility surface {
+	border: 1px solid var(--border);
+	border-radius: 14px;
+	background: var(--card);
+	box-shadow: var(--surface-shadow);
+}
+@media (pointer: coarse) {
+	button,
+	[role="button"],
+	[role="menuitemradio"],
+	nav a,
+	footer a {
+		min-height: 44px;
+	}
+	button[aria-label] {
+		min-width: 44px;
+	}
+}
+@media (width < 40rem) {
+	.site-topbar {
+		--spacing: 4px;
+	}
+	.site-topbar .container-page {
+		padding-inline: 16px;
+		min-height: 72px;
+	}
+	.site-topbar button {
+		flex-shrink: 0;
+		width: 44px;
+		height: 44px;
+		min-width: 44px;
+		min-height: 44px;
+	}
+}
+[data-slot="button"] {
+	height: auto;
+	min-height: 40px;
+	max-width: 100%;
+	white-space: normal;
+	text-align: center;
+}
+@media (pointer: coarse) {
+	[data-slot="button"] {
+		min-height: 44px;
+	}
+}
+
+[data-slot="card"] {
+	min-width: 0;
+	border-radius: 14px;
+	background: var(--card);
+	box-shadow: var(--surface-shadow);
+}
+[data-slot="card-header"] {
+	min-width: 0;
+	grid-template-columns: minmax(0, 1fr);
+}
+[data-slot="card-content"] {
+	min-width: 0;
+}
+[data-slot="badge"] {
+	max-width: 100%;
+	white-space: normal;
 }

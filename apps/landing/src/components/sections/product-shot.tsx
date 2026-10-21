@@ -1,34 +1,45 @@
-import { BorderBeam } from "@/components/ui/border-beam";
-import { Safari } from "@/components/ui/safari";
+import { LayoutPanelLeft, LockKeyhole } from "lucide-react";
+import Image from "next/image";
+import { productCaptures } from "@/lib/product-captures";
 
-/*
- * The panel itself, in @magicui/safari, lit by @magicui/border-beam. The
- * capture is a real instance taken by tools/screenshots.
- */
+/** Actual product captures, with identical geometry in the light and dark theme. */
 export function ProductShot() {
 	return (
-		<section className="relative pb-24">
-			<div className="container-page">
-				{/* The frame's image area has a fixed aspect and the capture is taller,
-				    so `object-cover` slices the last row of the panel off with a hard
-				    edge. The fade ends the shot instead of cutting it — and it takes
-				    the beam with it, so the border does not stop in mid-air either. */}
-				<div className="relative overflow-hidden rounded-[22px] [mask-image:linear-gradient(to_bottom,#000_72%,transparent_99%)]">
-					<Safari
-						url="panel.acme.dev"
-						imageSrc="/screenshots/02-dashboard.png"
-						imageAlt="The Nixploy panel: projects, services with their state, deployments in the last 24 hours and Docker containers"
-						imageSizes="(min-width: 1360px) 1280px, 100vw"
+		<section aria-label="Inside the Nixploy workspace" className="container-page pb-16 lg:pb-24">
+			<figure className="overflow-hidden rounded-xl border bg-card shadow-[var(--overlay-shadow)]">
+				<div className="flex h-10 items-center justify-between gap-3 border-b bg-card px-4">
+					<LayoutPanelLeft aria-hidden="true" className="size-3.5 text-muted-foreground" />
+					<span className="inline-flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
+						<LockKeyhole className="size-3" />
+						Your workspace / Nixploy
+					</span>
+					<span className="w-8" />
+				</div>
+				<div className="relative aspect-[1440/1000] bg-background">
+					<Image
+						src={productCaptures.workspace.light}
+						alt="Nixploy workspace with projects, service health, and a continuous deployment timeline"
+						width={1440}
+						height={1000}
 						priority
-						className="w-full"
+						sizes="(min-width: 1360px) 1280px, 100vw"
+						className="h-auto w-full dark:hidden"
 					/>
-					<BorderBeam
-						duration={9}
-						size={340}
-						className="from-transparent via-foreground/60 to-transparent"
+					<Image
+						src={productCaptures.workspace.dark}
+						alt="Nixploy workspace in dark mode"
+						width={1440}
+						height={1000}
+						priority
+						sizes="(min-width: 1360px) 1280px, 100vw"
+						className="hidden h-auto w-full dark:block"
 					/>
 				</div>
-			</div>
+				<figcaption className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 font-mono text-[10px] text-muted-foreground">
+					<span>An example workspace.</span>
+					<span>Projects · Deployments · Infrastructure</span>
+				</figcaption>
+			</figure>
 		</section>
 	);
 }

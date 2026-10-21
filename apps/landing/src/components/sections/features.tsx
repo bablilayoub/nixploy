@@ -1,142 +1,79 @@
-import { Boxes, GitBranch, Globe, LineChart, Terminal as TerminalIcon } from "lucide-react";
-import Image from "next/image";
+import { ArrowUpRight, Boxes, GitBranch, Globe, LineChart, Terminal } from "lucide-react";
+import Link from "next/link";
 
-import { BentoCard, BentoGrid } from "@/components/ui/bento-grid";
-import { Marquee } from "@/components/ui/marquee";
-import { featuredTemplateIds } from "@/lib/landing-data";
-import { findTemplate } from "@/lib/templates";
-
-/*
- * What the product does, in @magicui/bento-grid. Each cell's artwork is
- * another registry component or a real capture: a marquee of catalog
- * entries and screenshots of the panel.
- */
-const marks = featuredTemplateIds
-	.map(findTemplate)
-	.filter((entry) => entry !== undefined)
-	.slice(0, 18);
-
-const Screenshot = ({ src, alt }: { src: string; alt: string }) => (
-	<div className="absolute inset-x-6 top-6 bottom-24 overflow-hidden rounded-lg border border-white/10 opacity-70 transition-all duration-300 group-hover:opacity-90 [mask-image:linear-gradient(to_top,transparent_12%,#000_60%)]">
-		{/* `sizes` matters here: without it the optimizer serves the full 3200px
-		    capture for a cell that is at most 760px wide. */}
-		<Image
-			src={src}
-			alt={alt}
-			width={3200}
-			height={2000}
-			sizes="(min-width: 1024px) 760px, 100vw"
-			className="h-auto w-full"
-		/>
-	</div>
-);
-
-/*
- * The CLI tile. A still, not a typing animation: the tile sits in a grid of
- * screenshots and a widget that replays itself every time it scrolls into
- * view pulled the eye off the rest of them. It also renders its content in
- * the server HTML, which the animated one could not.
- */
-const CommandStill = () => (
-	<div className="absolute inset-x-6 top-6 overflow-hidden rounded-lg border border-white/10 bg-white/[0.02] p-4 font-mono text-xs leading-6 opacity-80 transition-opacity duration-300 group-hover:opacity-100 [mask-image:linear-gradient(to_top,transparent,#000_65%)]">
-		<p className="text-foreground">$ nixploy app deploy api --ref v1.4.0 --wait</p>
-		<p className="text-muted-foreground">building dockerfile · linux/amd64</p>
-		<p className="text-muted-foreground">rollout 2/2 tasks running</p>
-		<p className="text-foreground">done in 48s · https://api.acme.dev</p>
-	</div>
-);
-
+const features = [
+	{
+		icon: GitBranch,
+		no: "01",
+		title: "A straight path to production.",
+		description:
+			"Connect your repository, choose a build, and follow every release from commit to running service.",
+		href: "/features",
+	},
+	{
+		icon: Boxes,
+		no: "02",
+		title: "A home for the whole stack.",
+		description:
+			"Applications, Compose stacks, and five database engines. Organize them into projects and environments.",
+		href: "/templates",
+	},
+	{
+		icon: Globe,
+		no: "03",
+		title: "The details are handled.",
+		description: "Domains, automatic TLS, and routing live alongside the services they belong to.",
+		href: "/docs",
+	},
+	{
+		icon: LineChart,
+		no: "04",
+		title: "See what needs you.",
+		description:
+			"Service health, deployment history, metrics, logs, and backups stay close to the work.",
+		href: "/features",
+	},
+	{
+		icon: Terminal,
+		no: "05",
+		title: "Work the way you work.",
+		description:
+			"Use the panel, CLI, REST API, or MCP. The same permissions follow you across every interface.",
+		href: "/agents",
+	},
+];
 export function Features() {
 	return (
-		<section id="features" className="py-20 lg:py-28">
-			<div className="container-page">
-				<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
-					What it does
+		<section id="features" className="container-page py-20 lg:py-28">
+			<div className="mb-12 grid gap-6 lg:grid-cols-2">
+				<p className="font-mono text-xs tracking-[0.12em] text-muted-foreground uppercase">
+					Made for the work
 				</p>
-				<h2 className="mt-4 max-w-2xl text-4xl font-semibold tracking-tight text-balance lg:text-5xl">
-					One box, the whole delivery loop
+				<h2 className="max-w-xl text-4xl leading-[1.1] font-semibold tracking-[-0.045em] sm:text-5xl">
+					Less between your code
+					<br />
+					and the world.
 				</h2>
-
-				<BentoGrid className="mt-12 auto-rows-[24rem]">
-					<BentoCard
-						name="Deploy a commit, not a mood"
-						className="col-span-3 lg:col-span-2"
-						Icon={GitBranch}
-						description="GitHub, GitLab, Bitbucket and Gitea, built by nixpacks, railpack, a Dockerfile or buildpacks. Every deploy pins the image it ran."
-						href="/docs/deploy"
-						cta="How deploys work"
-						background={
-							<Screenshot
-								src="/screenshots/05-deployments.png"
-								alt="Deployments with image digest, status and duration"
-							/>
-						}
-					/>
-					<BentoCard
-						name="146 one-click stacks"
-						className="col-span-3 lg:col-span-1"
-						Icon={Boxes}
-						description="Reviewed compose files with pinned images and named volumes."
-						href="/templates"
-						cta="Browse the catalog"
-						background={
-							<Marquee
-								pauseOnHover
-								vertical
-								className="absolute inset-x-0 top-0 h-[70%] [--duration:26s] [mask-image:linear-gradient(to_top,transparent_18%,#000_70%)]"
-							>
-								{marks.map((template) => (
-									<div
-										key={template.id}
-										className="mx-4 flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2"
-									>
-										<span className="truncate text-sm font-medium">{template.name}</span>
-										<span className="ml-auto shrink-0 text-xs text-muted-foreground">
-											{template.category}
-										</span>
-									</div>
-								))}
-							</Marquee>
-						}
-					/>
-					<BentoCard
-						name="Domains and TLS"
-						className="col-span-3 lg:col-span-1"
-						Icon={Globe}
-						description="Traefik routes it and Let's Encrypt signs it. Link a DNS provider and the record is created for you."
-						href="/docs/domains"
-						cta="Domains and TLS"
-						background={
-							<Screenshot
-								src="/screenshots/03-project.png"
-								alt="A project's services with their status and domain"
-							/>
-						}
-					/>
-					<BentoCard
-						name="Runtime you can read"
-						className="col-span-3 lg:col-span-1"
-						Icon={LineChart}
-						description="CPU, memory, network and disk per container, with logs kept after the container is gone."
-						href="/docs/observability"
-						cta="What it records"
-						background={
-							<Screenshot
-								src="/screenshots/06-monitoring.png"
-								alt="CPU, memory, network and disk charts for a service"
-							/>
-						}
-					/>
-					<BentoCard
-						name="The same surface from a terminal"
-						className="col-span-3 lg:col-span-1"
-						Icon={TerminalIcon}
-						description="Every procedure is a REST endpoint, a CLI verb and an MCP tool."
-						href="/docs/cli"
-						cta="Read the CLI reference"
-						background={<CommandStill />}
-					/>
-				</BentoGrid>
+			</div>
+			<div className="border-t">
+				{features.map(({ icon: Icon, no, title, description, href }) => (
+					<Link
+						key={no}
+						href={href}
+						className="group grid items-start gap-4 border-b py-7 transition-colors focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4 hover:bg-card sm:grid-cols-[4rem_minmax(0,1fr)_minmax(0,1fr)_2rem] sm:gap-8 sm:px-4"
+					>
+						<span className="font-mono text-xs text-muted-foreground">{no}</span>
+						<h3 className="flex items-start gap-4 text-xl leading-snug font-medium tracking-tight">
+							<Icon aria-hidden="true" className="mt-1 size-5 shrink-0 text-muted-foreground" />
+							{title}
+						</h3>
+						<p className="max-w-md text-sm leading-relaxed text-muted-foreground">{description}</p>
+						<ArrowUpRight
+							aria-hidden="true"
+							className="hidden size-5 text-muted-foreground group-hover:text-foreground sm:block"
+						/>
+					</Link>
+				))}
 			</div>
 		</section>
 	);

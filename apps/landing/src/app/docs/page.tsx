@@ -59,7 +59,9 @@ export default function DocsIndexPage() {
 		<DocsFrame activeHref="/docs">
 			<article>
 				<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">Docs</p>
-				<h1 className="mt-4 text-4xl font-semibold tracking-tight">Documentation</h1>
+				<h1 className="mt-4 text-4xl leading-[1.1] font-semibold tracking-[-0.045em]">
+					Documentation
+				</h1>
 				<p className="mt-4 text-lg text-muted-foreground">
 					Everything you need to run Nixploy in production — from the install one-liner to the REST
 					API, CLI, GitOps, and MCP tools for agents.

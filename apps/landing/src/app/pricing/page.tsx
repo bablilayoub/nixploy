@@ -35,12 +35,12 @@ export default function PricingPage() {
 						className={cn("relative", plan.highlight && "border-primary/40 bg-card/80")}
 					>
 						<CardHeader>
-							<div className="flex items-center gap-3">
+							<div className="flex flex-wrap items-center gap-3">
 								<CardTitle className="text-xl">{plan.name}</CardTitle>
 								{plan.highlight ? <Badge>Everything included</Badge> : null}
 							</div>
 							<CardDescription className="text-base">{plan.blurb}</CardDescription>
-							<p className="pt-4 font-display text-4xl font-semibold tracking-tight">
+							<p className="pt-4 font-display text-4xl leading-[1.1] font-semibold tracking-[-0.045em]">
 								{plan.price}
 								{plan.period ? (
 									<span className="ml-2 text-base font-normal text-muted-foreground">

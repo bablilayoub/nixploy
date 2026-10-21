@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
-/** The page is near-black everywhere, so the mark is always white on black. */
+/** The monochrome mark follows the surrounding theme. */
 export const NIXPLOY_MARK_SRC = "/brand/nixploy-mark-light.png";
 
 export function LogoMark({ className }: { className?: string }) {
@@ -17,7 +17,7 @@ export function LogoMark({ className }: { className?: string }) {
 				width={80}
 				height={80}
 				sizes="40px"
-				className="size-full object-cover"
+				className="size-full object-cover invert dark:invert-0"
 				priority
 			/>
 		</span>
@@ -36,7 +36,7 @@ export function Logo({
 	return (
 		<Link
 			href={href}
-			className={cn("inline-flex min-h-9 items-center gap-2.5 text-foreground", className)}
+			className={cn("inline-flex min-h-11 items-center gap-2.5 text-foreground", className)}
 			aria-label="Nixploy"
 		>
 			<LogoMark className="size-7" />

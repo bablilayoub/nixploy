@@ -1,4 +1,5 @@
 import { templateCount } from "@/lib/templates";
+import { productCaptures } from "./product-captures";
 
 export type FeatureDetail = {
 	name: string;
@@ -11,7 +12,7 @@ export type FeatureSection = {
 	title: string;
 	lede: string;
 	docHref?: string;
-	imageSrc?: string;
+	image?: { light: string; dark: string };
 	imageAlt?: string;
 	details: FeatureDetail[];
 };
@@ -43,7 +44,7 @@ export const featureSections: FeatureSection[] = [
 		title: "Ship from Git, an image, or a zip — builders you choose per app.",
 		lede: "Nixploy queues builds, streams logs live, and rolls Swarm services so a bad deploy never knocks the healthy revision offline. Preview environments attach to pull requests with a fork approval gate.",
 		docHref: "/docs/deploy",
-		imageSrc: "/screenshots/05-deployments.png",
+		image: productCaptures.deployments,
 		imageAlt: "Deployment history in the Nixploy panel",
 		details: [
 			{
@@ -84,7 +85,7 @@ export const featureSections: FeatureSection[] = [
 		title: "Databases you can restore, stacks you can own.",
 		lede: "Five engines with connection strings in the panel, scheduled dumps to S3-compatible storage, volume backups for named volumes, and an instance self-backup that captures the panel database plus Traefik/ACME/SSH config.",
 		docHref: "/docs/databases",
-		imageSrc: "/screenshots/03-project.png",
+		image: productCaptures.project,
 		imageAlt: "Project services including databases",
 		details: [
 			{
@@ -157,7 +158,7 @@ export const featureSections: FeatureSection[] = [
 		title: "Logs, metrics, terminals, alerts — tied to real containers.",
 		lede: "Watch build and runtime logs over websockets, sample CPU/memory/network/disk every 30 seconds with 48 hours of history, open a web terminal, and page your team when thresholds or uptime probes fail.",
 		docHref: "/docs/observability",
-		imageSrc: "/screenshots/06-monitoring.png",
+		image: productCaptures.monitoring,
 		imageAlt: "Service monitoring charts",
 		details: [
 			{
@@ -264,8 +265,8 @@ export const featureSections: FeatureSection[] = [
 		title: "One Swarm today. More servers when you need them.",
 		lede: "Start on a single Docker Swarm manager. Add remote nodes over SSH, place services with constraints, manage the daemon from the Docker control center, and update the panel from GHCR without SSH gymnastics.",
 		docHref: "/docs/servers",
-		imageSrc: "/screenshots/07-docker.png",
-		imageAlt: "Docker control center",
+		image: productCaptures.servers,
+		imageAlt: "Managed servers in the Nixploy workspace",
 		details: [
 			{
 				name: "Remote servers",
@@ -300,7 +301,7 @@ export const featureSections: FeatureSection[] = [
 		title: "Deploy Copilot when you want help. Templates when you want speed.",
 		lede: `Bring your own model key. Copilot explains failed deploys, chats with confirm-gated mutations, and generates compose files. The catalog ships ${templateCount} stacks across 15 categories with CI-checked image tags.`,
 		docHref: "/docs/ai",
-		imageSrc: "/screenshots/07-templates.png",
+		image: productCaptures.templates,
 		imageAlt: "Template catalog",
 		details: [
 			{

@@ -23,11 +23,9 @@ export default function OpengraphImage() {
 				display: "flex",
 				flexDirection: "column",
 				justifyContent: "space-between",
-				background: "#0c0c0c",
-				backgroundImage:
-					"radial-gradient(60% 70% at 25% 0%, rgba(255,255,255,0.10), transparent 70%)",
+				background: "#090a0b",
 				padding: 72,
-				color: "#fafafa",
+				color: "#f5f5f6",
 				fontFamily: "sans-serif",
 			}}
 		>
@@ -54,16 +52,16 @@ export default function OpengraphImage() {
 			<div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
 				<div
 					style={{
-						fontSize: 78,
+						fontSize: 74,
 						fontWeight: 700,
-						letterSpacing: -2.5,
+						letterSpacing: -3.5,
 						lineHeight: 1.05,
 						display: "flex",
 						flexDirection: "column",
 					}}
 				>
-					<span>Ship anything.</span>
-					<span style={{ color: "#a1a1a1" }}>Own everything.</span>
+					<span>Ship your work.</span>
+					<span style={{ color: "#a0a5ae" }}>Own the whole stack.</span>
 				</div>
 				<div style={{ fontSize: 30, color: "#b4b4b4", maxWidth: 900, lineHeight: 1.4 }}>
 					A platform as a service that runs on your own box. Git deploys, Compose stacks, databases,
@@ -77,7 +75,7 @@ export default function OpengraphImage() {
 					alignItems: "center",
 					justifyContent: "space-between",
 					fontSize: 24,
-					color: "#8f8f8f",
+					color: "#a0a5ae",
 					borderTop: "1px solid rgba(255,255,255,0.14)",
 					paddingTop: 28,
 				}}

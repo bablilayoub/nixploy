@@ -83,7 +83,7 @@ export default function ApiPage() {
 		>
 			<article>
 				<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">API</p>
-				<h1 className="mt-4 text-4xl font-semibold tracking-tight text-balance">
+				<h1 className="mt-4 text-4xl leading-[1.1] font-semibold tracking-[-0.045em] text-balance">
 					REST API reference
 				</h1>
 				<p className="mt-4 text-lg text-muted-foreground">
@@ -179,7 +179,7 @@ export default function ApiPage() {
 							<details
 								key={group.router}
 								id={`router-${group.router}`}
-								className="group scroll-mt-28 rounded-xl border bg-card/40"
+								className="group scroll-mt-28 rounded-xl border bg-card"
 							>
 								<summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
 									<ChevronRight
