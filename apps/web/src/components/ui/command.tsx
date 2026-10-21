@@ -26,13 +26,12 @@ function Command({ className, ...props }: React.ComponentProps<typeof CommandPri
 }
 
 function CommandDialog({
-	title = "Command palette",
+	title = "Command Palette",
 	description = "Search for a command to run...",
 	children,
 	className,
 	showCloseButton = true,
 	filter,
-	onCloseAutoFocus,
 	...props
 }: React.ComponentProps<typeof Dialog> & {
 	title?: string;
@@ -41,7 +40,6 @@ function CommandDialog({
 	showCloseButton?: boolean;
 	/** cmdk scorer — pass one to weight an item's label over its keywords. */
 	filter?: React.ComponentProps<typeof CommandPrimitive>["filter"];
-	onCloseAutoFocus?: React.ComponentProps<typeof DialogContent>["onCloseAutoFocus"];
 }) {
 	return (
 		<Dialog {...props}>
@@ -52,7 +50,6 @@ function CommandDialog({
 			<DialogContent
 				className={cn("overflow-hidden p-0", className)}
 				showCloseButton={showCloseButton}
-				onCloseAutoFocus={onCloseAutoFocus}
 			>
 				<Command
 					filter={filter}

@@ -1,10 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Download, Menu, Search } from "lucide-react";
+import { Download, Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useBranding } from "@/components/branding-provider";
 import { CommandPalette } from "@/components/command-palette";
 import { ProfileDropdown } from "@/components/layout/profile-dropdown";
@@ -50,10 +50,10 @@ function NavLink({
 			aria-current={active ? "page" : undefined}
 			onClick={onNavigate}
 			className={cn(
-				"relative inline-flex h-full items-center gap-1.5 rounded-sm px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+				"relative inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 				active
-					? "font-medium text-foreground after:absolute after:inset-x-2.5 after:bottom-0 after:h-0.5 after:bg-brand"
-					: "text-muted-foreground hover:text-foreground",
+					? "bg-muted font-medium text-foreground"
+					: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
 			)}
 		>
 			{label}
@@ -67,34 +67,25 @@ function NavLink({
 	);
 }
 
-/** Shared workspace navigation with the same destinations at every viewport. */
+/** Vercel-style sticky top navigation — brand, links, search, account. */
 export function TopNav() {
 	const pathname = usePathname();
 	const { can } = useCapabilities({ strict: true });
 	const navItems = allNavItems.filter((item) => !item.capability || can(item.capability));
 	const branding = useBranding();
 	const [mobileOpen, setMobileOpen] = useState(false);
-	const [commandOpen, setCommandOpen] = useState(false);
-	const commandFromMenu = useRef(false);
-	const menuTrigger = useRef<HTMLButtonElement>(null);
-
 	const updateAvailable = useUpdateAvailable();
 
 	return (
-		<header className="workspace-header sticky top-0 z-50 border-b bg-card">
-			<div className="mx-auto flex min-h-15 w-full max-w-[1460px] flex-wrap items-center gap-2 px-5 py-2 md:min-h-17 md:gap-3 md:px-8 xl:px-9">
-				<div className="flex min-w-[min(100%,10rem)] max-w-full flex-1 items-center gap-2 xl:flex-none">
-					<Link
-						href="/dashboard"
-						aria-label={branding.productName}
-						title={branding.productName}
-						className="hidden max-w-40 shrink-0 items-center pointer-coarse:min-h-11 sm:inline-flex"
-					>
+		<header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-md">
+			<div className="mx-auto flex h-14 w-full max-w-[1400px] items-center gap-3 px-4 sm:px-6">
+				<div className="flex min-w-0 items-center gap-2">
+					<Link href="/dashboard" className="hidden shrink-0 sm:inline-flex">
 						<Logo />
 					</Link>
 					<Link
 						href="/dashboard"
-						className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center sm:hidden"
+						className="inline-flex shrink-0 sm:hidden"
 						aria-label={branding.productName}
 					>
 						<LogoMark className="size-7" />
@@ -103,10 +94,7 @@ export function TopNav() {
 					<OrgSwitcher />
 				</div>
 
-				<nav
-					aria-label="Main navigation"
-					className="workspace-desktop-nav -my-2 ms-1 hidden h-17 items-center gap-0.5"
-				>
+				<nav className="ms-1 hidden items-center gap-0.5 xl:flex">
 					{navItems.map((item) => (
 						<NavLink
 							key={item.url}
@@ -118,7 +106,7 @@ export function TopNav() {
 					))}
 				</nav>
 
-				<div className="ms-auto flex max-w-full flex-wrap items-center gap-1.5">
+				<div className="ms-auto flex items-center gap-1.5">
 					{updateAvailable ? (
 						<Button
 							asChild
@@ -132,49 +120,24 @@ export function TopNav() {
 							</Link>
 						</Button>
 					) : null}
-					<div className="workspace-header-search">
-						<CommandPalette
-							open={commandOpen}
-							onOpenChange={setCommandOpen}
-							onCloseAutoFocus={(event) => {
-								if (!commandFromMenu.current) return;
-								event.preventDefault();
-								commandFromMenu.current = false;
-								menuTrigger.current?.focus();
-							}}
-						/>
-					</div>
+					<CommandPalette />
 					<ModeToggle />
-					<div className="workspace-header-account">
-						<ProfileDropdown />
-					</div>
+					<ProfileDropdown />
 
 					<Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
 						<SheetTrigger asChild>
-							<Button
-								variant="ghost"
-								size="icon"
-								ref={menuTrigger}
-								className="workspace-menu-trigger"
-								aria-label="Open menu"
-							>
+							<Button variant="ghost" size="icon" className="xl:hidden" aria-label="Open menu">
 								<Menu className="size-5" />
 							</Button>
 						</SheetTrigger>
-						<SheetContent
-							side="left"
-							className="w-72 p-0"
-							onCloseAutoFocus={(event) => {
-								if (commandOpen) event.preventDefault();
-							}}
-						>
-							<SheetHeader className="border-b py-3 ps-4 pe-14 text-start">
-								<SheetTitle className="flex items-center gap-2 wrap-anywhere">
+						<SheetContent side="left" className="w-72 p-0">
+							<SheetHeader className="border-b px-4 py-3 text-start">
+								<SheetTitle className="flex items-center gap-2">
 									<LogoMark className="size-5" />
 									{branding.productName}
 								</SheetTitle>
 							</SheetHeader>
-							<nav aria-label="Main navigation" className="flex flex-col gap-1 p-3">
+							<nav className="flex flex-col gap-1 p-3">
 								{navItems.map((item) => {
 									const Icon = item.icon;
 									const active = isSidebarNavActive(pathname, item.url);
@@ -200,25 +163,6 @@ export function TopNav() {
 									);
 								})}
 							</nav>
-							<div className="space-y-3 border-t p-3">
-								<Button
-									type="button"
-									variant="outline"
-									className="w-full justify-start"
-									onClick={() => {
-										commandFromMenu.current = true;
-										setMobileOpen(false);
-										setCommandOpen(true);
-									}}
-								>
-									<Search aria-hidden className="size-4" />
-									Search workspace
-								</Button>
-								<div className="flex items-center justify-between gap-3 px-2">
-									<span className="text-sm text-muted-foreground">Account</span>
-									<ProfileDropdown onNavigate={() => setMobileOpen(false)} />
-								</div>
-							</div>
 						</SheetContent>
 					</Sheet>
 				</div>

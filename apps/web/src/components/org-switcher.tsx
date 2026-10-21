@@ -110,8 +110,6 @@ export function OrgSwitcher({ className }: { className?: string }) {
 					<Button
 						variant="ghost"
 						size="sm"
-						aria-label={`Organization: ${displayName ?? "Organization"}`}
-						title={displayName ?? "Organization"}
 						className={cn("h-8 min-w-0 shrink gap-2 px-2 font-normal", className)}
 					>
 						{isPending ? (
@@ -131,10 +129,10 @@ export function OrgSwitcher({ className }: { className?: string }) {
 								)}
 								{/* A floor so the name ellipsises instead of shrinking to nothing;
 								    the search trigger next to it gives up the space instead. */}
-								<span className="min-w-0 max-w-24 truncate text-sm font-medium lg:max-w-36">
+								<span className="min-w-12 max-w-24 truncate text-sm font-medium lg:max-w-36">
 									{displayName ?? "Organization"}
 								</span>
-								<ChevronsUpDown className="hidden size-3.5 shrink-0 text-muted-foreground sm:block" />
+								<ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
 							</>
 						)}
 					</Button>

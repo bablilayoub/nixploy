@@ -31,15 +31,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import {
-	type ComponentProps,
-	type Dispatch,
-	type SetStateAction,
-	useCallback,
-	useEffect,
-	useMemo,
-	useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { isSettingsNavItemAllowed, settingsNavItems } from "@/components/nav-settings";
 import { SERVICE_TYPE_META, type ServiceType } from "@/components/projects/service-types";
 import {
@@ -128,17 +120,7 @@ function pushRecentId(id: string) {
 }
 
 /** ⌘K command palette: navigation, project services, and actions. */
-export function CommandPalette({
-	className,
-	open: controlledOpen,
-	onOpenChange,
-	onCloseAutoFocus,
-}: {
-	className?: string;
-	open?: boolean;
-	onOpenChange?: Dispatch<SetStateAction<boolean>>;
-	onCloseAutoFocus?: ComponentProps<typeof CommandDialog>["onCloseAutoFocus"];
-}) {
+export function CommandPalette({ className }: { className?: string }) {
 	const trpc = useTRPC();
 	const router = useRouter();
 	const queryClient = useQueryClient();
@@ -146,9 +128,7 @@ export function CommandPalette({
 	const { resolvedTheme, setTheme } = useTheme();
 	const { can, isInstanceAdmin, isLoading: capabilitiesPending } = useCapabilities();
 
-	const [internalOpen, setInternalOpen] = useState(false);
-	const open = controlledOpen ?? internalOpen;
-	const setOpen = onOpenChange ?? setInternalOpen;
+	const [open, setOpen] = useState(false);
 	const [recentIds, setRecentIds] = useState<string[]>([]);
 	const [query, setQuery] = useState("");
 
@@ -169,7 +149,7 @@ export function CommandPalette({
 		};
 		document.addEventListener("keydown", onKeyDown);
 		return () => document.removeEventListener("keydown", onKeyDown);
-	}, [setOpen]);
+	}, []);
 
 	// Hydrate recents from localStorage each time the palette opens.
 	useEffect(() => {
@@ -743,7 +723,7 @@ export function CommandPalette({
 				onClick={() => setOpen(true)}
 				aria-keyshortcuts="Meta+K Control+K"
 				className={cn(
-					"group relative hidden h-8 items-center pointer-coarse:min-h-11 gap-2 rounded-md bg-muted/40 pe-12 ps-2.5 text-sm font-normal text-muted-foreground shadow-none hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:inline-flex sm:w-40 lg:w-44 xl:w-40",
+					"group relative hidden h-8 items-center gap-2 rounded-md bg-muted/40 pe-12 ps-2.5 text-sm font-normal text-muted-foreground shadow-none hover:bg-accent sm:inline-flex sm:w-40 lg:w-52 xl:w-64",
 					className,
 				)}
 			>
@@ -759,7 +739,7 @@ export function CommandPalette({
 				onClick={() => setOpen(true)}
 				aria-label="Search"
 				className={cn(
-					"inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:hidden",
+					"inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:hidden",
 					className,
 				)}
 			>
@@ -769,7 +749,6 @@ export function CommandPalette({
 			<CommandDialog
 				open={open}
 				onOpenChange={setOpen}
-				onCloseAutoFocus={onCloseAutoFocus}
 				title="Command palette"
 				description="Search projects, services, pages, and actions"
 				filter={filter}

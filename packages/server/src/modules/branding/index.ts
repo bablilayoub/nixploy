@@ -7,7 +7,6 @@ import { createLogger } from "../../lib/logger";
 import { describeErrorWithCause } from "../../utils/error-cause";
 import { getConfigDir } from "../application/paths";
 import { badRequest, payloadTooLarge } from "../errors";
-import { brandPalette } from "./colors";
 import { sanitiseCustomCss } from "./css";
 
 const log = createLogger("branding");
@@ -113,12 +112,35 @@ export async function publicBranding(): Promise<PublicBranding> {
 	}
 }
 
-/** Instance fallback; an organization's inline palette still takes precedence. */
+/**
+ * sRGB relative luminance — the same calculation the per-organization accent
+ * uses, so a pale brand colour does not render white-on-white.
+ */
+function luminance(hex: string): number {
+	const channel = (value: number) => {
+		const c = value / 255;
+		return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+	};
+	return (
+		0.2126 * channel(Number.parseInt(hex.slice(1, 3), 16)) +
+		0.7152 * channel(Number.parseInt(hex.slice(3, 5), 16)) +
+		0.0722 * channel(Number.parseInt(hex.slice(5, 7), 16))
+	);
+}
+
+/**
+ * The instance accent as CSS custom properties, or "".
+ *
+ * Emitted as a stylesheet rule rather than an inline style on the element, so
+ * the per-organization accent — which `OrgBrandingProvider` sets inline at
+ * runtime — still wins inside the dashboard. The instance colour is the
+ * fallback, and the only one on the login and setup pages, which have no
+ * organization to read.
+ */
 export function brandingAccentCss(accentColor: string | null | undefined): string {
-	const light = brandPalette(accentColor, false);
-	const dark = brandPalette(accentColor, true);
-	if (!light || !dark) return "";
-	return `:root{--primary:${light.fill};--primary-foreground:${light.foreground};--primary-hover:${light.hover};--brand:${light.link};}.dark{--brand:${dark.link};}`;
+	if (!accentColor || !/^#[0-9A-Fa-f]{6}$/.test(accentColor)) return "";
+	const foreground = luminance(accentColor) > 0.45 ? "#1c1917" : "#fafafa";
+	return `:root{--primary:${accentColor};--primary-foreground:${foreground};--brand:${accentColor};}`;
 }
 
 /* -------------------------------------------------------------------------- */
