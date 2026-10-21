@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { settleActivity, trackActivity } from "@/components/layout/activity-tray";
 import { SettingsSection } from "@/components/layout/settings-section";
 import { LoadError } from "@/components/query-state";
+import { CopyButton } from "@/components/services/copy-button";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -373,12 +374,13 @@ export function RecoveryCopies({
 											{row.status === "ready" &&
 												` · ${row.tableCount ?? 0} ${row.tableCount === 1 ? "table" : "tables"} verified`}
 										</p>
-										<p
-											className="mt-3 rounded-md bg-panel-inset px-3 py-2 font-mono text-xs break-all text-muted-foreground"
-											title={row.objectKey}
-										>
-											{row.objectKey}
-										</p>
+										<details className="mt-3 text-xs text-muted-foreground">
+											<summary className="cursor-pointer py-2">Backup object details</summary>
+											<div className="flex items-start justify-between gap-3 rounded-md bg-panel-inset p-3">
+												<code className="min-w-0 break-all">{row.objectKey}</code>
+												<CopyButton value={row.objectKey} label="Copy backup object key" />
+											</div>
+										</details>
 										{row.error && (
 											<p className="mt-3 rounded-md border border-destructive/25 bg-destructive/5 p-3 text-sm text-destructive">
 												{row.error}

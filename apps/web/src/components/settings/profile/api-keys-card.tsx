@@ -169,7 +169,7 @@ export function ApiKeysCard() {
 		const { error } = await authClient.apiKey.delete({ keyId });
 		if (error) {
 			toastError(error, "Failed to delete API key");
-			return;
+			throw error;
 		}
 		toast.success("API key deleted");
 		await loadKeys();

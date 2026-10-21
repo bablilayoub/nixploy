@@ -103,10 +103,10 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 		return <Skeleton className="h-64 w-full" />;
 	}
 	if (servicesQuery.isError && !isSwarmInactiveError(servicesQuery.error)) {
-		return <DockerError error={servicesQuery.error} />;
+		return <DockerError error={servicesQuery.error} onRetry={() => void servicesQuery.refetch()} />;
 	}
 	if (nodesQuery.isError && !isSwarmInactiveError(nodesQuery.error)) {
-		return <DockerError error={nodesQuery.error} />;
+		return <DockerError error={nodesQuery.error} onRetry={() => void nodesQuery.refetch()} />;
 	}
 
 	// The router answers `[]` for both lists on a worker or standalone engine.

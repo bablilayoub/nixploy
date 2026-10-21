@@ -2,7 +2,15 @@
 
 Fieldwork replaces the rejected monochrome design across the panel, auth/public surfaces and marketing/docs. The build uses the existing shadcn/Radix/Recharts/Lucide stack with Geist and Geist Mono from Next's existing font support. No product dependency, schema, deploy-engine, tenancy or API change was introduced.
 
-## Source coverage and design
+## Detailed follow-up
+
+The later page-specific pass is recorded in [refinement.md](refinement.md). The
+current inventory is347 visual sources (329 owned/18 vendor),113 changed directly
+from main. The sections below retain the initial rollout evidence; the follow-up
+adds its own bounded matrices, final builds and preservation receipt. The final
+localhost3000 restart preserves all72 tables/240 rows and62 persistent files.
+
+## Initial source coverage and design
 
 [coverage.json](coverage.json) reconciles **344 visual sources:326 owned and18 vendor**, including55 page files. **72 visual sources change directly**; route/data wrappers and remaining consumers inherit the rebuilt shell, typography, surfaces, controls and settings composition. This is shared-system coverage, not a claim that every data wrapper needed a textual rewrite. Every source has a disposition. Vendor internals remain preserved;12 unused registry widgets are explicitly outside rendered scope.
 

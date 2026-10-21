@@ -91,8 +91,8 @@ export function DashboardView() {
 							</span>
 						)}
 					</div>
-					<div className="flex flex-wrap items-center gap-2">
-						<div className="relative min-w-0 flex-1 sm:flex-none">
+					<div className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+						<div className="relative min-w-0 w-full sm:w-auto sm:flex-none">
 							<Search
 								aria-hidden="true"
 								className="pointer-events-none absolute start-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
@@ -123,6 +123,7 @@ export function DashboardView() {
 								size="sm"
 								variant={needsAttention ? "secondary" : "ghost"}
 								aria-pressed={needsAttention}
+								className="h-auto min-h-9 justify-start whitespace-normal py-2 text-left"
 								onClick={() => setNeedsAttention((value) => !value)}
 							>
 								<StatusDot status="error" />

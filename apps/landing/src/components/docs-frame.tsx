@@ -121,6 +121,27 @@ export function DocsFrame({
 				</details>
 
 				<div className="min-w-0">
+					{headings.length > 1 && (
+						<details className="mb-6 rounded-xl border xl:hidden">
+							<summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+								On this page
+							</summary>
+							<nav aria-label="Article sections" className="px-4 pb-4">
+								<ul>
+									{headings.map((heading) => (
+										<li key={heading.id}>
+											<a
+												href={`#${heading.id}`}
+												className="flex min-h-11 items-center py-2 text-sm text-muted-foreground hover:text-foreground"
+											>
+												{heading.text}
+											</a>
+										</li>
+									))}
+								</ul>
+							</nav>
+						</details>
+					)}
 					{children}
 					<Pager activeHref={activeHref} />
 				</div>

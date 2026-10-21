@@ -27,6 +27,7 @@ export function SettingsSection({
 	return (
 		<section
 			id={id}
+			tabIndex={id ? -1 : undefined}
 			className={cn(
 				"fieldwork-settings-section",
 				danger && "fieldwork-settings-danger",

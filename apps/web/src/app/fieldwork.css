@@ -138,8 +138,8 @@
 	min-width: 0;
 }
 .fieldwork-summary-icon {
-	width: 2.5rem;
-	height: 2.5rem;
+	width: 40px;
+	height: 40px;
 	border-radius: 50%;
 	display: flex;
 	align-items: center;
@@ -372,7 +372,7 @@
 	min-width: 0;
 	border-bottom: 1px solid var(--border);
 	padding-block: 1.75rem;
-	scroll-margin-top: 10rem;
+	scroll-margin-top: 24px;
 }
 .fieldwork-settings-section:first-child:not(.fieldwork-settings-danger) {
 	padding-top: 0.5rem;
@@ -543,5 +543,167 @@
 	}
 	.fieldwork-identity-inner {
 		gap: 0.5rem;
+	}
+}
+/* Long workflows expose their destinations before the first field. */
+.fieldwork-section-links {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+	gap: 1px;
+	overflow: hidden;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--border);
+}
+.fieldwork-section-links > a {
+	padding: 16px 20px;
+	background: var(--card);
+	transition: background-color 140ms;
+}
+.fieldwork-section-links > a:hover {
+	background: var(--secondary);
+}
+.fieldwork-section-links > a:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: -3px;
+}
+.fieldwork-form-group {
+	scroll-margin-top: 24px;
+	outline: none;
+}
+.fieldwork-form-group + .fieldwork-form-group {
+	border-top: 1px solid var(--border);
+	padding-top: 24px;
+}
+.fieldwork-section-links + .fieldwork-form-group {
+	margin-top: 24px;
+}
+.fieldwork-form-group:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 6px;
+}
+.fieldwork-form-group > header {
+	padding: 0 0 16px;
+}
+.fieldwork-form-group > header > h2 {
+	font-size: 20px;
+	font-weight: 500;
+	letter-spacing: -0.025em;
+}
+.fieldwork-form-group > header > p {
+	margin-top: 6px;
+	font-size: 14px;
+	line-height: 1.6;
+	color: var(--muted-foreground);
+}
+.fieldwork-toggle-row {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 20px;
+	padding: 16px 0;
+	border-bottom: 1px solid var(--border);
+}
+.fieldwork-toggle-row > div {
+	min-width: 0;
+	max-width: 640px;
+}
+.fieldwork-toggle-row > [role="switch"] {
+	flex-shrink: 0;
+	margin-top: 2px;
+}
+.fieldwork-category-list {
+	height: auto;
+	align-items: stretch;
+	background: transparent;
+	padding: 0;
+}
+.fieldwork-deployment-row {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.fieldwork-category-list > [role="tab"] {
+	height: auto;
+	min-height: 48px;
+	justify-content: flex-start;
+	text-align: left;
+	white-space: normal;
+	padding: 12px 16px;
+	border: 1px solid transparent;
+}
+.fieldwork-category-list > [role="tab"][data-state="active"] {
+	border-color: var(--border);
+	background: var(--card);
+	box-shadow: none;
+}
+@media (min-width: 1024px) {
+	.fieldwork-deployment-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 12px 24px;
+	}
+	.fieldwork-deployment-row > :nth-child(1) {
+		grid-column: 2;
+		grid-row: 1;
+	}
+	.fieldwork-deployment-row > :nth-child(2) {
+		grid-column: 1;
+		grid-row: 1 / 3;
+	}
+	.fieldwork-deployment-row > :nth-child(3) {
+		grid-column: 2;
+		grid-row: 2;
+	}
+	.fieldwork-category-workspace {
+		display: grid;
+		grid-template-columns: 224px minmax(0, 1fr);
+		align-items: start;
+		gap: 40px;
+	}
+	.fieldwork-category-list {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		width: 100%;
+	}
+	.fieldwork-category-workspace > [role="tabpanel"] {
+		margin-top: 0;
+	}
+}
+@media (max-width: 1023px) {
+	.fieldwork-category-workspace {
+		flex-direction: column;
+		gap: 24px;
+	}
+	.fieldwork-category-list {
+		display: none;
+	}
+}
+
+html {
+	scroll-padding-bottom: var(--fieldwork-savebar-height, 0px);
+	scroll-padding-top: var(--fieldwork-chrome-height, 0px);
+}
+
+@media (width < 40rem) {
+	.fieldwork-project-header {
+		padding: 20px 20px 14px;
+		gap: 14px;
+	}
+	.fieldwork-project-description {
+		padding-inline: 20px;
+	}
+	.fieldwork-project-environments {
+		padding: 16px 20px 20px;
+	}
+	.fieldwork-project-footer {
+		padding: 14px 20px;
+	}
+}
+@media (width < 30rem) {
+	.fieldwork-project-environment {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 8px;
 	}
 }

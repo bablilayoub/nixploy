@@ -1,18 +1,9 @@
 "use client";
 
-import { Check, ChevronLeft, ChevronRight, ListFilter, Search, X } from "lucide-react";
-
+import { ChevronLeft, ChevronRight, ListFilter, Search, X } from "lucide-react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-	Command,
-	CommandEmpty,
-	CommandGroup,
-	CommandInput,
-	CommandItem,
-	CommandList,
-	CommandSeparator,
-} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
@@ -238,7 +229,12 @@ export function TableFacet({
 	className?: string;
 	align?: "start" | "center" | "end";
 }) {
+	const [query, setQuery] = useState("");
+	const [open, setOpen] = useState(false);
 	if (options.length === 0) return null;
+	const matching = options.filter((option) =>
+		option.label.toLowerCase().includes(query.trim().toLowerCase()),
+	);
 	const chosen = new Set(selected);
 	const toggle = (value: string) => {
 		const next = new Set(chosen);
@@ -248,7 +244,13 @@ export function TableFacet({
 	};
 
 	return (
-		<Popover>
+		<Popover
+			open={open}
+			onOpenChange={(next) => {
+				setOpen(next);
+				if (!next) setQuery("");
+			}}
+		>
 			<PopoverTrigger asChild>
 				<Button
 					variant="outline"
@@ -284,57 +286,59 @@ export function TableFacet({
 				</Button>
 			</PopoverTrigger>
 			<PopoverContent align={align} className="w-56 p-0">
-				<Command>
-					{options.length >= searchFrom ? (
-						<CommandInput placeholder={`Filter ${label.toLowerCase()}…`} className="h-9" />
-					) : null}
-					<CommandList>
-						<CommandEmpty>No matches.</CommandEmpty>
-						<CommandGroup>
-							{options.map((option) => {
-								const active = chosen.has(option.value);
-								return (
-									<CommandItem
-										key={option.value}
-										value={option.label}
-										onSelect={() => toggle(option.value)}
-									>
-										<span
-											className={cn(
-												"flex size-4 shrink-0 items-center justify-center rounded-sm border",
-												active
-													? "border-primary bg-primary text-primary-foreground"
-													: "border-input [&_svg]:invisible",
-											)}
-										>
-											<Check className="size-3" />
-										</span>
-										{option.icon}
-										<span className="truncate">{option.label}</span>
-										{option.count !== undefined ? (
-											<span className="ms-auto text-xs tabular-nums text-muted-foreground">
-												{option.count}
-											</span>
-										) : null}
-									</CommandItem>
-								);
-							})}
-						</CommandGroup>
-						{chosen.size > 0 ? (
-							<>
-								<CommandSeparator />
-								<CommandGroup>
-									<CommandItem
-										onSelect={() => onChange([])}
-										className="justify-center text-muted-foreground"
-									>
-										Clear filter
-									</CommandItem>
-								</CommandGroup>
-							</>
-						) : null}
-					</CommandList>
-				</Command>
+				{(options.length >= searchFrom || Boolean(query)) && (
+					<div className="border-b p-2">
+						<Input
+							type="search"
+							aria-label={`Filter ${label.toLowerCase()} options`}
+							placeholder={`Filter ${label.toLowerCase()}…`}
+							value={query}
+							onChange={(event) => setQuery(event.target.value)}
+						/>
+					</div>
+				)}
+				<fieldset className="max-h-72 overflow-y-auto p-1.5">
+					<legend className="sr-only">{label}</legend>
+					{matching.map((option) => (
+						<label
+							key={option.value}
+							className="flex min-h-10 cursor-pointer items-center gap-2 rounded-sm px-2 py-2 text-sm hover:bg-accent has-focus-visible:ring-2 has-focus-visible:ring-ring pointer-coarse:min-h-11"
+						>
+							<input
+								type="checkbox"
+								checked={chosen.has(option.value)}
+								onChange={() => toggle(option.value)}
+								className="size-4 shrink-0 accent-primary"
+							/>
+							{option.icon}
+							<span className="min-w-0 break-words">{option.label}</span>
+							{option.count !== undefined && (
+								<span className="ms-auto text-xs tabular-nums text-muted-foreground">
+									{option.count}
+								</span>
+							)}
+						</label>
+					))}
+					{matching.length === 0 && (
+						<p className="p-4 text-center text-sm text-muted-foreground">No matches.</p>
+					)}
+				</fieldset>
+				{chosen.size > 0 && (
+					<div className="border-t p-1.5">
+						<Button
+							variant="ghost"
+							size="sm"
+							className="w-full"
+							onClick={() => {
+								onChange([]);
+								setOpen(false);
+								setQuery("");
+							}}
+						>
+							Clear filter
+						</Button>
+					</div>
+				)}
 			</PopoverContent>
 		</Popover>
 	);

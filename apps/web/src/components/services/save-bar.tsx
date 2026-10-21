@@ -9,6 +9,7 @@ import {
 	useId,
 	useMemo,
 	useRef,
+	useState,
 	useSyncExternalStore,
 } from "react";
 
@@ -107,7 +108,28 @@ function SaveBar({ registry }: { registry: SaveBarRegistry }) {
 	// an external store is cheaper than mirroring entries into React state.
 	const entries = useSyncExternalStore(registry.subscribe, registry.snapshot, registry.snapshot);
 	const dirty = entries.filter((entry) => entry.dirty);
-	if (dirty.length === 0) return null;
+	const bar = useRef<HTMLDivElement>(null);
+	const [barHeight, setBarHeight] = useState(96);
+	const hasDirty = dirty.length > 0;
+	useEffect(() => {
+		if (!hasDirty || !bar.current) return;
+		const root = document.documentElement;
+		const previous = root.style.getPropertyValue("--fieldwork-savebar-height");
+		const update = () => {
+			const height = Math.ceil(bar.current?.getBoundingClientRect().height ?? 0) + 24;
+			setBarHeight(height);
+			root.style.setProperty("--fieldwork-savebar-height", `${height}px`);
+		};
+		update();
+		const observer = new ResizeObserver(update);
+		observer.observe(bar.current);
+		return () => {
+			observer.disconnect();
+			if (previous) root.style.setProperty("--fieldwork-savebar-height", previous);
+			else root.style.removeProperty("--fieldwork-savebar-height");
+		};
+	}, [hasDirty]);
+	if (!hasDirty) return null;
 
 	const pending = dirty.some((entry) => entry.pending);
 	const blocked = dirty.every((entry) => entry.disabled);
@@ -115,37 +137,41 @@ function SaveBar({ registry }: { registry: SaveBarRegistry }) {
 		dirty.length === 1 ? "Unsaved changes" : `Unsaved changes in ${dirty.length} sections`;
 
 	return (
-		<div
-			className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-4 md:ps-24 xl:ps-64"
-			role="status"
-		>
-			<div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-3 rounded-lg border border-border bg-popover px-4 py-3 shadow-[var(--overlay-shadow)]">
-				<CircleDot className="size-4 text-warning" aria-hidden />
-				<span className="text-sm text-foreground">{label}</span>
-				<Button
-					variant="outline"
-					size="sm"
-					disabled={pending}
-					onClick={() => {
-						for (const entry of dirty) entry.discard();
-					}}
-				>
-					Discard
-				</Button>
-				<Button
-					size="sm"
-					disabled={pending || blocked}
-					onClick={() => {
-						for (const entry of dirty) {
-							if (!entry.disabled) entry.save();
-						}
-					}}
-				>
-					{pending && <Loader2 className="size-4 animate-spin" />}
-					Save
-				</Button>
+		<>
+			<div aria-hidden="true" style={{ height: barHeight }} />
+			<div
+				ref={bar}
+				className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-4"
+				role="status"
+			>
+				<div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-3 rounded-lg border border-border bg-popover px-4 py-3 shadow-[var(--overlay-shadow)]">
+					<CircleDot className="size-4 text-warning" aria-hidden />
+					<span className="text-sm text-foreground">{label}</span>
+					<Button
+						variant="outline"
+						size="sm"
+						disabled={pending}
+						onClick={() => {
+							for (const entry of dirty) entry.discard();
+						}}
+					>
+						Discard
+					</Button>
+					<Button
+						size="sm"
+						disabled={pending || blocked}
+						onClick={() => {
+							for (const entry of dirty) {
+								if (!entry.disabled) entry.save();
+							}
+						}}
+					>
+						{pending && <Loader2 className="size-4 animate-spin" />}
+						Save
+					</Button>
+				</div>
 			</div>
-		</div>
+		</>
 	);
 }
 

@@ -18,6 +18,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -158,7 +159,13 @@ export function InstanceBackups() {
 			<SettingsSection
 				wide
 				title="Instance backups"
-				description="Scheduled dumps of this Nixploy instance itself — the platform database plus the config directory (Traefik configs, certificates). Restore is manual, see docs/instance-backup.md."
+				description={
+					<>
+						Scheduled copies of the platform database and configuration, including routing and
+						certificates. Restore them manually with the{" "}
+						<HelpLink slug="backups" label="backup guide" />.
+					</>
+				}
 				actions={
 					<Button
 						size="sm"

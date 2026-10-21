@@ -249,14 +249,17 @@ function PermissionState({
 	);
 }
 
-export function DockerError({ error }: { error: unknown }) {
+export function DockerError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
 	return (
-		<div className="flex h-40 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border text-center">
+		<div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/25 bg-card px-5 py-10 text-center">
 			<Container className="size-6 text-muted-foreground" />
 			<p className="text-sm font-medium">Docker is not reachable</p>
 			<p className="max-w-md text-xs text-muted-foreground">
 				{error instanceof Error ? error.message : "Failed to query the docker daemon."}
 			</p>
+			<Button variant="outline" size="sm" onClick={onRetry}>
+				Try again
+			</Button>
 		</div>
 	);
 }

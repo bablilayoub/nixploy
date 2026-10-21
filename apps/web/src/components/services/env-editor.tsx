@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Eye, EyeOff, Loader2, Pencil, Save, Upload, X } from "lucide-react";
+import { Download, Eye, EyeOff, Loader2, Pencil, Save, Search, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -9,6 +9,7 @@ import { UnsavedChangesPill } from "@/components/services/unsaved-changes-pill";
 import { Button } from "@/components/ui/button";
 import { CodeEditor } from "@/components/ui/code-editor";
 import { DisabledHint } from "@/components/ui/disabled-hint";
+import { Input } from "@/components/ui/input";
 import { type EnvEntry, mergeEnvText, parseEnvFile } from "@/lib/env-file";
 
 const MASK = "••••••••";
@@ -28,6 +29,10 @@ function EnvRows({
 	onEdit?: () => void;
 	editHint?: string;
 }) {
+	const [query, setQuery] = useState("");
+	const matching = entries.filter((entry) =>
+		entry.key.toLowerCase().includes(query.trim().toLowerCase()),
+	);
 	const [revealed, setRevealed] = useState<Set<string>>(() => new Set());
 	const allRevealed = entries.length > 0 && entries.every((entry) => revealed.has(entry.key));
 
@@ -41,7 +46,7 @@ function EnvRows({
 
 	return (
 		<div className="overflow-hidden surface">
-			<div className="flex flex-wrap items-center justify-between gap-3 gap-2 border-b border-border px-3 py-2">
+			<div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
 				<p className="text-xs text-muted-foreground">
 					{entries.length} {entries.length === 1 ? "variable" : "variables"}
 				</p>
@@ -65,16 +70,46 @@ function EnvRows({
 					</DisabledHint>
 				</div>
 			</div>
+			<div className="flex flex-wrap items-center gap-3 border-b px-4 py-3">
+				<div className="relative min-w-0 flex-1 sm:max-w-sm">
+					<Search
+						aria-hidden="true"
+						className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+					/>
+					<Input
+						type="search"
+						aria-label="Search variable names"
+						placeholder="Find a variable…"
+						value={query}
+						onChange={(event) => setQuery(event.target.value)}
+						className="pl-9"
+					/>
+				</div>
+				<p role="status" className="text-xs text-muted-foreground">
+					{matching.length} of {entries.length} shown · values stay hidden
+				</p>
+			</div>
+			{matching.length === 0 && (
+				<div className="px-4 py-8 text-center text-sm">
+					<p className="text-muted-foreground">No variable names match “{query}”.</p>
+					<Button variant="ghost" size="sm" onClick={() => setQuery("")}>
+						Clear search
+					</Button>
+				</div>
+			)}
 			<ul className="max-h-96 divide-y divide-border overflow-auto">
-				{entries.map((entry) => {
+				{matching.map((entry) => {
 					const shown = revealed.has(entry.key);
 					return (
-						<li key={entry.key} className="flex items-center gap-3 px-3 py-1.5 font-mono text-xs">
-							<span className="w-2/5 shrink-0 truncate text-foreground" title={entry.key}>
+						<li key={entry.key} className="flex items-start gap-3 px-4 py-3 font-mono text-xs">
+							<span
+								className="w-2/5 shrink-0 break-all leading-6 text-foreground"
+								title={entry.key}
+							>
 								{entry.key}
 							</span>
 							<span
-								className="min-w-0 flex-1 truncate text-muted-foreground"
+								className="min-w-0 flex-1 whitespace-pre-wrap break-all leading-6 text-muted-foreground"
 								title={shown ? entry.value : undefined}
 							>
 								{shown ? entry.value || <span className="italic">(empty)</span> : MASK}
@@ -83,7 +118,7 @@ function EnvRows({
 								type="button"
 								variant="ghost"
 								size="icon"
-								className="size-6 shrink-0"
+								className="size-8 shrink-0"
 								aria-label={shown ? `Hide value of ${entry.key}` : `Reveal value of ${entry.key}`}
 								aria-pressed={shown}
 								onClick={() => toggle(entry.key)}

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, Download, Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useBranding } from "@/components/branding-provider";
 import { CommandPalette } from "@/components/command-palette";
 import { ProfileDropdown } from "@/components/layout/profile-dropdown";
@@ -21,6 +21,23 @@ import { cn } from "@/lib/utils";
 /** Fieldwork keeps the entire workspace in the same horizontal frame. */
 export function TopNav() {
 	const pathname = usePathname();
+	const chrome = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		if (!chrome.current) return;
+		const root = document.documentElement;
+		const update = () =>
+			root.style.setProperty(
+				"--fieldwork-chrome-height",
+				`${Math.ceil(chrome.current?.getBoundingClientRect().height ?? 0)}px`,
+			);
+		update();
+		const observer = new ResizeObserver(update);
+		observer.observe(chrome.current);
+		return () => {
+			observer.disconnect();
+			root.style.removeProperty("--fieldwork-chrome-height");
+		};
+	}, []);
 	const { can } = useCapabilities({ strict: true });
 	const branding = useBranding();
 	const [mobileOpen, setMobileOpen] = useState(false);
@@ -35,7 +52,7 @@ export function TopNav() {
 		.flatMap((group) => group.items)
 		.filter((item) => !item.capability || can(item.capability));
 	return (
-		<div className="fieldwork-chrome">
+		<div ref={chrome} className="fieldwork-chrome">
 			<header className="workspace-topbar fieldwork-identity">
 				<div className="fieldwork-identity-inner">
 					<div className="fieldwork-identity-start">

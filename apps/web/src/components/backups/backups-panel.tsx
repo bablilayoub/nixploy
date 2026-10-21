@@ -765,6 +765,41 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 					</Button>
 				}
 			>
+				{!listQuery.isPending && !listQuery.isError && backups.length > 0 && (
+					<div className="mb-5 flex flex-wrap items-start justify-between gap-4 rounded-lg border bg-card px-5 py-4">
+						<div>
+							<p className="text-sm font-medium">
+								{backups.filter((entry) => entry.enabled).length} active backup{" "}
+								{backups.filter((entry) => entry.enabled).length === 1 ? "schedule" : "schedules"}
+							</p>
+							<p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+								{backups.some((entry) => entry.enabled)
+									? "Check each last run before relying on a stored copy."
+									: "Automatic backups are paused. Enable a schedule to resume them."}
+							</p>
+						</div>
+						<dl className="flex flex-wrap gap-5 text-sm">
+							<div>
+								<dt className="text-xs text-muted-foreground">Paused</dt>
+								<dd className="mt-1 font-medium tabular-nums">
+									{backups.filter((entry) => !entry.enabled).length}
+								</dd>
+							</div>
+							<div>
+								<dt className="text-xs text-muted-foreground">Last run failed</dt>
+								<dd className="mt-1 font-medium tabular-nums">
+									{backups.filter((entry) => entry.lastRun?.status === "error").length}
+								</dd>
+							</div>
+							<div>
+								<dt className="text-xs text-muted-foreground">Never run</dt>
+								<dd className="mt-1 font-medium tabular-nums">
+									{backups.filter((entry) => !entry.lastRun).length}
+								</dd>
+							</div>
+						</dl>
+					</div>
+				)}
 				{noDestinations ? (
 					<div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-10 text-center">
 						<DatabaseBackup className="size-8 text-muted-foreground" />

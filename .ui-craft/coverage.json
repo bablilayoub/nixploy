@@ -151,7 +151,7 @@
       "currentHash": "9375144023bca21c5c6db46a698d4d1cd905ed2c357bb2eae8f6cb1baf391644",
       "directlyChanged": true,
       "pageConsumers": [],
-      "renderingContract": "Standalone boundary/metadata proof"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/landing/src/app/features/page.tsx",
@@ -177,7 +177,7 @@
       "currentHash": "52a1f7c29bc555e7d20d51871f2077bf4fc095b1934c2202bd910317025ea01c",
       "directlyChanged": true,
       "pageConsumers": [],
-      "renderingContract": "Standalone boundary/metadata proof"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/landing/src/app/globals.css",
@@ -253,7 +253,7 @@
       "currentHash": "385271dcbc6cc85a9f47ebe9e78e4752b8fcec09b5f9381b373e08b7fd8c74cd",
       "directlyChanged": true,
       "pageConsumers": [],
-      "renderingContract": "Standalone boundary/metadata proof"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/landing/src/app/page.tsx",
@@ -318,12 +318,12 @@
       "owned": true,
       "baselineHash": "5a110765a1203fc2bddff45bf4d1949b4e0e0ac1f29f9445138d33695a1825f7",
       "review": "source-and-family-review",
-      "currentHash": "5a110765a1203fc2bddff45bf4d1949b4e0e0ac1f29f9445138d33695a1825f7",
-      "directlyChanged": false,
+      "currentHash": "cbb1c29841f01c67df8a66ba510aca516c051e1c2881326f2376623319318de2",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/landing/src/app/templates/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/landing/src/components/doc-article.tsx",
@@ -346,7 +346,7 @@
       "owned": true,
       "baselineHash": "6912ab38d4b1ee24e02d04a68951ab1a6bd7213196a4f0ed892534cbe1a4b7d1",
       "review": "source-and-family-review",
-      "currentHash": "a2e853b7e9ec4bdf8aa641738a4eb0630c4b210f677ff4df80576c0f9484707c",
+      "currentHash": "db6a5cde1ec1fddc10375bc916ed89e8177d9ced23614c3864ff7bec4aa4f31a",
       "directlyChanged": true,
       "pageConsumers": [
         "apps/landing/src/app/api/page.tsx",
@@ -648,6 +648,20 @@
       "renderingContract": "Direct Fieldwork composition"
     },
     {
+      "path": "apps/landing/src/components/template-catalog.tsx",
+      "app": "landing",
+      "kind": "component",
+      "owned": true,
+      "baselineHash": null,
+      "review": "detailed-refinement-and-browser-review",
+      "currentHash": "7990bc231f5716313f09d235e50ea7312b66fd735bf4a3913c092330030f1c53",
+      "directlyChanged": true,
+      "pageConsumers": [
+        "apps/landing/src/app/templates/page.tsx"
+      ],
+      "renderingContract": "Direct Fieldwork composition"
+    },
+    {
       "path": "apps/landing/src/components/theme-provider.tsx",
       "app": "landing",
       "kind": "component",
@@ -710,8 +724,7 @@
       "currentHash": "55308975af763394f1af7aeb42d66c7840b51a8ed0b99b42b56300a79ea03e91",
       "directlyChanged": false,
       "pageConsumers": [
-        "apps/landing/src/app/pricing/page.tsx",
-        "apps/landing/src/app/templates/page.tsx"
+        "apps/landing/src/app/pricing/page.tsx"
       ],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
@@ -1155,12 +1168,12 @@
       "owned": true,
       "baselineHash": "1a6136366198b3c436ffc3a75ec656c172dbb37a5f14bfaf028a87ae38ce1a17",
       "review": "source-and-family-review",
-      "currentHash": "1a6136366198b3c436ffc3a75ec656c172dbb37a5f14bfaf028a87ae38ce1a17",
-      "directlyChanged": false,
+      "currentHash": "07c462c4def0a41d02dac7051a5870c45a440bb28a2e692cbb7ef721ef1ec285",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(auth)/two-factor/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx",
@@ -1492,12 +1505,12 @@
       "owned": true,
       "baselineHash": "11026a25ba4c6042a12d3913756b5c7cfaac82e2e4025625869f1ab2d3024559",
       "review": "source-and-family-review",
-      "currentHash": "11026a25ba4c6042a12d3913756b5c7cfaac82e2e4025625869f1ab2d3024559",
-      "directlyChanged": false,
+      "currentHash": "c4c117a083703e935c21811faa6af0a9379c60324e20de7f6df5264f63ead2e0",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/app/(dashboard)/dashboard/settings/page.tsx",
@@ -1520,12 +1533,12 @@
       "owned": true,
       "baselineHash": "eed7ab387346cf7943690fb25534a4ba991120fb63954618892faef8d88b8a07",
       "review": "source-and-family-review",
-      "currentHash": "eed7ab387346cf7943690fb25534a4ba991120fb63954618892faef8d88b8a07",
-      "directlyChanged": false,
+      "currentHash": "30447cfef087d40bc7cd5fc14183f306388f98ef84d647eb0330cef2dcc6e429",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/app/(dashboard)/dashboard/settings/registries/page.tsx",
@@ -1590,12 +1603,12 @@
       "owned": true,
       "baselineHash": "02804edff484624427bf67adfd483be95143030f32cec2c6204e5decf05a0d46",
       "review": "source-and-family-review",
-      "currentHash": "02804edff484624427bf67adfd483be95143030f32cec2c6204e5decf05a0d46",
-      "directlyChanged": false,
+      "currentHash": "2c9ca95fca8fbf88e5bd22809217663eb77593d52b757f35677fc182abd44739",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/settings/sso/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/app/(dashboard)/dashboard/settings/templates/page.tsx",
@@ -1793,6 +1806,61 @@
       "renderingContract": "Standalone boundary/metadata proof"
     },
     {
+      "path": "apps/web/src/app/fieldwork.css",
+      "app": "web",
+      "kind": "stylesheet",
+      "owned": true,
+      "baselineHash": null,
+      "review": "source-and-family-review",
+      "currentHash": "74c86a1bcce2572a311882e67454d17ed2a2f2c67ab829fc2fa28c87660e71b4",
+      "directlyChanged": true,
+      "pageConsumers": [
+        "apps/web/src/app/%5F%5Fmaintenance/page.tsx",
+        "apps/web/src/app/(auth)/accept-invitation/[invitationId]/page.tsx",
+        "apps/web/src/app/(auth)/forgot-password/page.tsx",
+        "apps/web/src/app/(auth)/login/page.tsx",
+        "apps/web/src/app/(auth)/register/page.tsx",
+        "apps/web/src/app/(auth)/reset-password/[token]/page.tsx",
+        "apps/web/src/app/(auth)/setup/page.tsx",
+        "apps/web/src/app/(auth)/two-factor/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/migrations/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/compose/[composeId]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/mariadb/[id]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/mongo/[id]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/mysql/[id]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/postgres/[id]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/redis/[id]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/upstream/[id]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/schedules/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/activity/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/branding/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/certificates/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/destinations/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/incidents/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/notifications/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/registries/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/ssh-keys/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/sso/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/templates/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/templates/page.tsx",
+        "apps/web/src/app/page.tsx",
+        "apps/web/src/app/status/[token]/page.tsx",
+        "apps/web/src/app/swagger/page.tsx"
+      ],
+      "renderingContract": "Direct Fieldwork composition"
+    },
+    {
       "path": "apps/web/src/app/global-error.tsx",
       "app": "web",
       "kind": "error boundary",
@@ -1802,7 +1870,7 @@
       "currentHash": "f10f788bee3ef85e13c633364f7e3e08ccc87bec2233eb9ec4c6845df85fd195",
       "directlyChanged": true,
       "pageConsumers": [],
-      "renderingContract": "Standalone boundary/metadata proof"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/app/globals.css",
@@ -1924,7 +1992,7 @@
       "currentHash": "efef22501a0350673a72e9bb4c4cbfaf4ea782b31d9c1bec776760dde3e05c89",
       "directlyChanged": true,
       "pageConsumers": [],
-      "renderingContract": "Standalone boundary/metadata proof"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/app/page.tsx",
@@ -2002,7 +2070,7 @@
       "owned": true,
       "baselineHash": "bb72f6d1a908be1d3934673cd02b046a994350da90bad0ccb1ad763c271d6c53",
       "review": "source-and-family-review",
-      "currentHash": "42186cff202682a660204173d9796ad2f64e2f7d4f5f74f6d5cf86fe316b0750",
+      "currentHash": "929fb157964f15975e06600e0f2f6193249323c8e6370451f418969a1c1b400c",
       "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/status/[token]/page.tsx"
@@ -2058,12 +2126,12 @@
       "owned": true,
       "baselineHash": "b113903ebc0e06fefeb2081edcccbb853cece9819fa81605866fb132b4991d6f",
       "review": "source-and-family-review",
-      "currentHash": "b113903ebc0e06fefeb2081edcccbb853cece9819fa81605866fb132b4991d6f",
-      "directlyChanged": false,
+      "currentHash": "4f215c9483ca461d796328f3a2b576c3daec3688138b786aada10cd529872eee",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/application/application-context.tsx",
@@ -2086,12 +2154,12 @@
       "owned": true,
       "baselineHash": "d54f417fafac232eac659b9911c25494b20a4576b57cf6bddf88545bcb5fcabd",
       "review": "source-and-family-review",
-      "currentHash": "d54f417fafac232eac659b9911c25494b20a4576b57cf6bddf88545bcb5fcabd",
-      "directlyChanged": false,
+      "currentHash": "f519928991b0b6cdc87a83cda63dfa864d9fc11b4ef7a1642a9ec538735430f4",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/application/application-header.tsx",
@@ -2114,12 +2182,12 @@
       "owned": true,
       "baselineHash": "69ce7077f5df71b76d03ea2ff40d2f8c62002f535de5c28f9fd83d83a52b08aa",
       "review": "source-and-family-review",
-      "currentHash": "69ce7077f5df71b76d03ea2ff40d2f8c62002f535de5c28f9fd83d83a52b08aa",
-      "directlyChanged": false,
+      "currentHash": "82a038488c8dba1434ea4acecd4811a6b38b17a8186560536ceb3906402f2435",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/application/deploy-commands-card.tsx",
@@ -2156,12 +2224,12 @@
       "owned": true,
       "baselineHash": "c1a4106f3812d5418e0f0c66bfcb24cd7dfa35a4be051b8757b3df7fd8e41772",
       "review": "source-and-family-review",
-      "currentHash": "c1a4106f3812d5418e0f0c66bfcb24cd7dfa35a4be051b8757b3df7fd8e41772",
-      "directlyChanged": false,
+      "currentHash": "5c9b9d8fe4e949ce0403b0d7d272d249fac0255833f1982ada301ba7b890c5f1",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/application/drop-upload.tsx",
@@ -2198,12 +2266,12 @@
       "owned": true,
       "baselineHash": "9f7c39b1c4d18954e602af61302002a57ef3a545c9975795274265cd019d2ed4",
       "review": "source-and-family-review",
-      "currentHash": "9f7c39b1c4d18954e602af61302002a57ef3a545c9975795274265cd019d2ed4",
-      "directlyChanged": false,
+      "currentHash": "ad301e0d9738a0abacd9651113832245b3424d3264aacddc4e9a9337e8f30438",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/application/healthcheck-manager.tsx",
@@ -2355,12 +2423,12 @@
       "owned": true,
       "baselineHash": "aab2e340da376d3e1959f2a73a06bd286368102ae29ae2c7f73d4a24e4c26337",
       "review": "source-and-family-review",
-      "currentHash": "aab2e340da376d3e1959f2a73a06bd286368102ae29ae2c7f73d4a24e4c26337",
-      "directlyChanged": false,
+      "currentHash": "c6fca3253dbe1a2b04abbc9f93c8e1d52c8a5ada63c4bb9eba492889ce923853",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/application/swarm-config.tsx",
@@ -2515,8 +2583,8 @@
       "owned": true,
       "baselineHash": "b669d31d760d97f6c49bc50d8a50e95684c956534c1daffc010ca4645ab3e2af",
       "review": "source-and-family-review",
-      "currentHash": "b669d31d760d97f6c49bc50d8a50e95684c956534c1daffc010ca4645ab3e2af",
-      "directlyChanged": false,
+      "currentHash": "16ff53eb014445acd5207c4954ff7385a3920f16b20fd00647519866812c8b03",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/compose/[composeId]/page.tsx",
@@ -2526,7 +2594,7 @@
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/postgres/[id]/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/redis/[id]/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/backups/recovery-copies.tsx",
@@ -2535,8 +2603,8 @@
       "owned": true,
       "baselineHash": "1163be8f6256874b63d78038916c2b7a76883c90cc40473feca9ce5476fe3b6e",
       "review": "source-and-family-review",
-      "currentHash": "1163be8f6256874b63d78038916c2b7a76883c90cc40473feca9ce5476fe3b6e",
-      "directlyChanged": false,
+      "currentHash": "f903ec2e58960e1c4c9b0996ec529090a94f88816b3fa5d6a79df6d72210f175",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx",
@@ -2547,7 +2615,7 @@
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/postgres/[id]/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/redis/[id]/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/branding-provider.tsx",
@@ -2669,12 +2737,12 @@
       "owned": true,
       "baselineHash": "837dc9d50f0906ed2ab86d88a25f0e4afafe83cc31b9ea29e8769aeec33d139e",
       "review": "source-and-family-review",
-      "currentHash": "837dc9d50f0906ed2ab86d88a25f0e4afafe83cc31b9ea29e8769aeec33d139e",
-      "directlyChanged": false,
+      "currentHash": "97138cb47365f2b7442d3cca7285ccbe43dca6edea76d60aa8b9bb63adbf00f6",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/compose/[composeId]/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/compose/compose-file-tab.tsx",
@@ -2739,12 +2807,12 @@
       "owned": true,
       "baselineHash": "1e42b13aa0ea8ae81b708e0c57c8f834bef855320ee8b88ec1240398fda27057",
       "review": "source-and-family-review",
-      "currentHash": "1e42b13aa0ea8ae81b708e0c57c8f834bef855320ee8b88ec1240398fda27057",
-      "directlyChanged": false,
+      "currentHash": "8395634a581c74211c5680e96c9313913771db31fb70719ef6c974b6602e174c",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/compose/[composeId]/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/compose/generate-compose-dialog.tsx",
@@ -2865,8 +2933,8 @@
       "owned": true,
       "baselineHash": "46b8326c3ef3047af5940eecb0ef426ce0287037f27afd1263064a71be9caf45",
       "review": "source-and-family-review",
-      "currentHash": "46b8326c3ef3047af5940eecb0ef426ce0287037f27afd1263064a71be9caf45",
-      "directlyChanged": false,
+      "currentHash": "c1eb02cf10bea918f6c80347a72ba14434bed0586350f3b1f8999167fd91c66f",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/mariadb/[id]/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/mongo/[id]/page.tsx",
@@ -2874,7 +2942,7 @@
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/postgres/[id]/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/redis/[id]/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/docker/containers-tab.tsx",
@@ -2883,12 +2951,12 @@
       "owned": true,
       "baselineHash": "c238fc9a2454e9ef91438b00406ff0504222f05da4e47f6aff86504050e35632",
       "review": "source-and-family-review",
-      "currentHash": "c238fc9a2454e9ef91438b00406ff0504222f05da4e47f6aff86504050e35632",
-      "directlyChanged": false,
+      "currentHash": "81c1d42f99de8198b3e411fc909c064234a94f112267df23ab5614539e39a6d8",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/docker/docker-view.tsx",
@@ -2897,7 +2965,7 @@
       "owned": true,
       "baselineHash": "e657aac3734704ba4d122ffad20b9a9c10959b94131c5652905461f65362467c",
       "review": "source-and-family-review",
-      "currentHash": "74c34c381a8a571f3fe1081e8e7d9a82a2911edaa80a49f8e2978b5d7ff8a4af",
+      "currentHash": "a5ef895858ad5e33b5926f47bf04acba5186b7b26b75801487555dec1a15b6bc",
       "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"
@@ -2911,12 +2979,12 @@
       "owned": true,
       "baselineHash": "5cf97d139ba7296bb166d57733add4f24afa65fd5e4d9f503577136368b3d679",
       "review": "source-and-family-review",
-      "currentHash": "5cf97d139ba7296bb166d57733add4f24afa65fd5e4d9f503577136368b3d679",
-      "directlyChanged": false,
+      "currentHash": "ecc67d7610f2198d29eca76f28291f472903e10c70baf52fc443e32be0bfc49d",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/docker/networks-tab.tsx",
@@ -2925,12 +2993,12 @@
       "owned": true,
       "baselineHash": "e96126cf55df530fb29aae9a4494beb53c7c0a631d43fe2998ddad3877bce323",
       "review": "source-and-family-review",
-      "currentHash": "e96126cf55df530fb29aae9a4494beb53c7c0a631d43fe2998ddad3877bce323",
-      "directlyChanged": false,
+      "currentHash": "3332b2da06d1d4348ab52f98c0a3b1f665a98a1be58df07cf253d2b1d0249b8f",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/docker/swarm-tab.tsx",
@@ -2939,12 +3007,12 @@
       "owned": true,
       "baselineHash": "b58a231e6b453d8142f933d2872a6f594840699f200b2b3a4b77b7e9a9eed51d",
       "review": "source-and-family-review",
-      "currentHash": "b58a231e6b453d8142f933d2872a6f594840699f200b2b3a4b77b7e9a9eed51d",
-      "directlyChanged": false,
+      "currentHash": "0f71314a8d8ed746fbeace4c42e449aac571d791debf3d63f8bb039d1d295b38",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/docker/system-tab.tsx",
@@ -2953,12 +3021,12 @@
       "owned": true,
       "baselineHash": "8d54a981045bfe3e49a10a70f09d8b6beacc3b6cae5a9760245102b51cdfd228",
       "review": "source-and-family-review",
-      "currentHash": "8d54a981045bfe3e49a10a70f09d8b6beacc3b6cae5a9760245102b51cdfd228",
-      "directlyChanged": false,
+      "currentHash": "061c8d1ed46dfaca4f2afa60fcade7a746018d048a3a691bf0b432fad3c20cbe",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/docker/volumes-tab.tsx",
@@ -2967,12 +3035,12 @@
       "owned": true,
       "baselineHash": "e73be9c50b2e59d1e5a702811a722086b4e93164dff2721ebb9aeb601db96b42",
       "review": "source-and-family-review",
-      "currentHash": "e73be9c50b2e59d1e5a702811a722086b4e93164dff2721ebb9aeb601db96b42",
-      "directlyChanged": false,
+      "currentHash": "519263e7c1e2e214d513e83ed180d1fa8722dd59841e2f685d04015c3e40d97a",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/git-provider-repo-picker.tsx",
@@ -3298,13 +3366,36 @@
       "renderingContract": "Direct Fieldwork composition"
     },
     {
+      "path": "apps/web/src/components/layout/section-links.tsx",
+      "app": "web",
+      "kind": "component",
+      "owned": true,
+      "baselineHash": null,
+      "review": "detailed-refinement-and-browser-review",
+      "currentHash": "aefcb66bcf4bce56c3b231b422187636926e054a5def49d675b6ab0196ea764d",
+      "directlyChanged": true,
+      "pageConsumers": [
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/compose/[composeId]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/mariadb/[id]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/mongo/[id]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/mysql/[id]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/postgres/[id]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/redis/[id]/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx",
+        "apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"
+      ],
+      "renderingContract": "Direct Fieldwork composition"
+    },
+    {
       "path": "apps/web/src/components/layout/settings-section.tsx",
       "app": "web",
       "kind": "component",
       "owned": true,
       "baselineHash": "3cfa09e50f8fe738f67ccbd1ef20ea9acab14f010ac47a19228e935f8a07967e",
       "review": "source-and-family-review",
-      "currentHash": "d8d31f5111eb657757491716018596d86f417606d513c98bce04b238e230d481",
+      "currentHash": "f53f5ee05589db06005a42bd57185fb520fb8f4879551b7df3201d3e16a2288e",
       "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx",
@@ -3348,7 +3439,7 @@
       "owned": true,
       "baselineHash": "434375513ce6e0f653b0429ae4e1f824d2aa2abf73a9d8cab0e9cf237a441f17",
       "review": "source-and-family-review",
-      "currentHash": "e5ffd14657ca8584e3d9d0e1ad37699a44e2340f1f8c2715285611f0e1990b2f",
+      "currentHash": "d11fea397b71e6b297ac059eae6cfc79f758b27ce163d1a811ee33ebf7f9e05f",
       "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx",
@@ -3406,12 +3497,12 @@
       "owned": true,
       "baselineHash": "6f8e24d55a86ef11e2602c8c4de5b13f8d3accbc24d987a83430200ae3739e6d",
       "review": "source-and-family-review",
-      "currentHash": "6f8e24d55a86ef11e2602c8c4de5b13f8d3accbc24d987a83430200ae3739e6d",
-      "directlyChanged": false,
+      "currentHash": "955dc9a2c08815a5c7152001c809f24e63e412aa7623ee7aaf1991db96c354ab",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/migrations/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/mode-toggle.tsx",
@@ -3486,7 +3577,7 @@
       "owned": true,
       "baselineHash": "8a6291ccb03cea723013b4b956a19de1854d1cac87f35df90af9b7a81d0d4337",
       "review": "source-and-family-review",
-      "currentHash": "af85d9c22c90e3997dddc7c335169f94a003aa85753eb4c0ca02ac6c7e654237",
+      "currentHash": "5bc715c2b92ca6a1a19d7b92be3097eafdbe67cd5feafffcf5184f5ecfd04eda",
       "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"
@@ -3506,6 +3597,20 @@
         "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"
       ],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+    },
+    {
+      "path": "apps/web/src/components/monitoring/public-status-refresh.tsx",
+      "app": "web",
+      "kind": "component",
+      "owned": true,
+      "baselineHash": null,
+      "review": "detailed-refinement-and-browser-review",
+      "currentHash": "f14d35a1e55a350a1b17ee733116e1c1dddabc414a3a145e3bf63942a3f8ebc8",
+      "directlyChanged": true,
+      "pageConsumers": [
+        "apps/web/src/app/status/[token]/page.tsx"
+      ],
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/monitoring/status-page-card.tsx",
@@ -3528,8 +3633,8 @@
       "owned": true,
       "baselineHash": "10a7b2b527eb8b01b18516f44b802275c06e4b3f93827e8d698f59db7a057fb0",
       "review": "source-and-family-review",
-      "currentHash": "10a7b2b527eb8b01b18516f44b802275c06e4b3f93827e8d698f59db7a057fb0",
-      "directlyChanged": false,
+      "currentHash": "c8d53b25d2c8e0934b12046552f337b83ebc349a9d060633affc21a2d443556a",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/migrations/page.tsx",
@@ -3563,7 +3668,7 @@
         "apps/web/src/app/(dashboard)/dashboard/settings/templates/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/org-branding-provider.tsx",
@@ -3716,7 +3821,7 @@
       "owned": true,
       "baselineHash": "4e2f5342b0f4a8f532480a1409005e4f63c5d174714b6684f5549223febe0cdc",
       "review": "source-and-family-review",
-      "currentHash": "5406c49fb00bbefd0cf620b2ba3952032b7ce7ba7787bcc1e233d6412b0b2cbe",
+      "currentHash": "ed0a76e6fc919d9b936ca2f0d58af9aed426094b50d1999cacb50d2aa3ba153b",
       "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/page.tsx"
@@ -3842,7 +3947,7 @@
       "owned": true,
       "baselineHash": "38be64592cb328170e9d5ac188188d29a9f39230aa10eaf8303d865bb8dea05f",
       "review": "source-and-family-review",
-      "currentHash": "3f9e7002fd6870739172fe338f150a57f33195db6e436759da050c7efd1cf567",
+      "currentHash": "a1f3d60b232e816a04e8b59e09b1a6f2804852e1f102f0545a00a50a1be8e964",
       "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/page.tsx"
@@ -3981,14 +4086,14 @@
       "owned": true,
       "baselineHash": "226051874735cef5b55951a9428dd9ced4bb5d0d5999c64e1a368ea2604a99ac",
       "review": "source-and-family-review",
-      "currentHash": "226051874735cef5b55951a9428dd9ced4bb5d0d5999c64e1a368ea2604a99ac",
-      "directlyChanged": false,
+      "currentHash": "0870df0a292dbd8322f99a1b95b86eb53485b02716d2b575a50c08be9a430d7b",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/compose/[composeId]/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/schedules/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/services/configuration-release.tsx",
@@ -4032,6 +4137,7 @@
       "currentHash": "b6ae2509c23d497a924a65d2013e7481c4b865c28d1cdb691fb68b3273f4b9e5",
       "directlyChanged": false,
       "pageConsumers": [
+        "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx",
@@ -4076,13 +4182,13 @@
       "owned": true,
       "baselineHash": "1d372dc9643d00d68590c9dd274c2a203dee5d0ef9400146a1f7e664200a6cc8",
       "review": "source-and-family-review",
-      "currentHash": "1d372dc9643d00d68590c9dd274c2a203dee5d0ef9400146a1f7e664200a6cc8",
-      "directlyChanged": false,
+      "currentHash": "fa7e3b08bda1995616295189b9fb43965fbd6cf27ca0178e686bd254b36ea7ef",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/compose/[composeId]/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/services/domain-manager.tsx",
@@ -4091,14 +4197,14 @@
       "owned": true,
       "baselineHash": "eee69f91319b51b9515bc7c2044d08fc633edde859e133aa0fba985631401491",
       "review": "source-and-family-review",
-      "currentHash": "eee69f91319b51b9515bc7c2044d08fc633edde859e133aa0fba985631401491",
-      "directlyChanged": false,
+      "currentHash": "8bfeec04b78d2b927e2f2ad2c92e7e83e6f0bb8e2b8737436f42c8a7f712c292",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/compose/[composeId]/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/upstream/[id]/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/services/empty-state.tsx",
@@ -4145,8 +4251,8 @@
       "owned": true,
       "baselineHash": "f66ef21c0c2b2b8ed04b8a155a865e71b5f38c22fae7ad8872dc586c5eaeb972",
       "review": "source-and-family-review",
-      "currentHash": "f66ef21c0c2b2b8ed04b8a155a865e71b5f38c22fae7ad8872dc586c5eaeb972",
-      "directlyChanged": false,
+      "currentHash": "5bc1368e66bd5852749e29320b7609c543a085714cbc778fb6ae3f7951c5514e",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx",
@@ -4158,7 +4264,7 @@
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/redis/[id]/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/services/inherited-env.tsx",
@@ -4303,7 +4409,7 @@
       "owned": true,
       "baselineHash": "1dcde0a474ea3ad311c5a10478c5fce3450d183a73becf510a056755a45bfa0c",
       "review": "source-and-family-review",
-      "currentHash": "f6d2dd3a012d6aaf4cee11a77450de173408387849d0a3356460c2735c860ca8",
+      "currentHash": "8bea3865cc57f0f541a79c15bd573de50b411571375fb27a0f2546010e210bc2",
       "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx",
@@ -4324,8 +4430,8 @@
       "owned": true,
       "baselineHash": "bfe9d9ec2a45b8055a6dec883d338c1804a095b8b3b0d22a563c962e3559ba52",
       "review": "source-and-family-review",
-      "currentHash": "bfe9d9ec2a45b8055a6dec883d338c1804a095b8b3b0d22a563c962e3559ba52",
-      "directlyChanged": false,
+      "currentHash": "ceb866ba2e424a7c13fa2c567b764dc2f847391af303ceddd7a42878eb60d4e4",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx",
@@ -4352,7 +4458,7 @@
         "apps/web/src/app/(dashboard)/dashboard/settings/sso/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/settings/templates/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/services/service-actions-card.tsx",
@@ -4656,12 +4762,12 @@
       "owned": true,
       "baselineHash": "2d5432e1e8485d973697922ae2810432d47d2e923bf6c2805f688c5fdccd8c28",
       "review": "source-and-family-review",
-      "currentHash": "2d5432e1e8485d973697922ae2810432d47d2e923bf6c2805f688c5fdccd8c28",
-      "directlyChanged": false,
+      "currentHash": "3cc15be42b9a3d4f182ae3738516c85cfcf82c41766943f645835ec6ac899b7e",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/settings/branding/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/settings/certificates/certificates-view.tsx",
@@ -4721,12 +4827,12 @@
       "owned": true,
       "baselineHash": "85f300b07e331fde43c29640e4e78f82865cbce71fff0f0c7899f88e3ed394d6",
       "review": "source-and-family-review",
-      "currentHash": "85f300b07e331fde43c29640e4e78f82865cbce71fff0f0c7899f88e3ed394d6",
-      "directlyChanged": false,
+      "currentHash": "2f8a2403307e83d0d3224e77bab02468fa09ec0bccd811d2740ca19b0409e6a9",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/settings/destinations/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/settings/git-providers/bitbucket-panel.tsx",
@@ -4861,12 +4967,12 @@
       "owned": true,
       "baselineHash": "58e3c250c1788c6093098969b31504cfba7e3a62ad574c1d4cf5c7669bf2e988",
       "review": "source-and-family-review",
-      "currentHash": "58e3c250c1788c6093098969b31504cfba7e3a62ad574c1d4cf5c7669bf2e988",
-      "directlyChanged": false,
+      "currentHash": "8f4a75e6f695c04b0d08296b1ef92ea0e4b256899b9663824b7473e1ea92ad9a",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/settings/notifications/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/settings/notifications/notifications-view.tsx",
@@ -5001,12 +5107,12 @@
       "owned": true,
       "baselineHash": "42d13acd73450d8751a29054121495c585b325f95baa683602444c7ce538e4e3",
       "review": "source-and-family-review",
-      "currentHash": "42d13acd73450d8751a29054121495c585b325f95baa683602444c7ce538e4e3",
-      "directlyChanged": false,
+      "currentHash": "23f8de1d90318ea070b0d5c8b4c51a07b8ebb9732eec20558d8ad4d2b9eda582",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/settings/profile/mcp-setup-card.tsx",
@@ -5029,12 +5135,12 @@
       "owned": true,
       "baselineHash": "3ee3cd59c5fad144c9b7767af7473ca97b80401c40087a4b10161d708fdf60e2",
       "review": "source-and-family-review",
-      "currentHash": "3ee3cd59c5fad144c9b7767af7473ca97b80401c40087a4b10161d708fdf60e2",
-      "directlyChanged": false,
+      "currentHash": "58b5cc102b6dda9793a4fbf6c79b7e697c9e11d94967695694124a092f0d7899",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/settings/profile/profile-card.tsx",
@@ -5171,12 +5277,12 @@
       "owned": true,
       "baselineHash": "9f021ae50bc2bd6f433f03e0713569c1ca6916ac40593e242bc07e283e32bd22",
       "review": "source-and-family-review",
-      "currentHash": "9f021ae50bc2bd6f433f03e0713569c1ca6916ac40593e242bc07e283e32bd22",
-      "directlyChanged": false,
+      "currentHash": "9326db6d16c0b7d371c880accbdcb5f29bf720fcd52b3168383c397adb770896",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/settings/server/traefik-entrypoints-card.tsx",
@@ -5227,12 +5333,12 @@
       "owned": true,
       "baselineHash": "bb43b2698693825fd440e31dd1ad590fa373f250cce13df487a5a6cba422d5ad",
       "review": "source-and-family-review",
-      "currentHash": "bb43b2698693825fd440e31dd1ad590fa373f250cce13df487a5a6cba422d5ad",
-      "directlyChanged": false,
+      "currentHash": "af6591f8ad013c494d089888491c46ff69b5998697bdd67cb1adfb4ab95584cc",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/settings/servers/server-capacity-cell.tsx",
@@ -5339,12 +5445,12 @@
       "owned": true,
       "baselineHash": "87883e03010b755c475fa1954fcb48218c2d303486568488894e1a30709eda2c",
       "review": "source-and-family-review",
-      "currentHash": "87883e03010b755c475fa1954fcb48218c2d303486568488894e1a30709eda2c",
-      "directlyChanged": false,
+      "currentHash": "8477429fd53cd37524749ca9334a4009db1b21c16c1e91cb23329ad6bf5ba907",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/settings/sso/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/settings/templates/template-sources-view.tsx",
@@ -6331,6 +6437,7 @@
         "apps/web/src/app/(auth)/login/page.tsx",
         "apps/web/src/app/(auth)/reset-password/[token]/page.tsx",
         "apps/web/src/app/(auth)/setup/page.tsx",
+        "apps/web/src/app/(auth)/two-factor/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/migrations/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx",
@@ -6745,8 +6852,8 @@
       "owned": true,
       "baselineHash": "77698a9ea5010f8e5dfb308e29ade9869ed50bbf7bbacf3b5b3acc10277b65e5",
       "review": "source-and-family-review",
-      "currentHash": "77698a9ea5010f8e5dfb308e29ade9869ed50bbf7bbacf3b5b3acc10277b65e5",
-      "directlyChanged": false,
+      "currentHash": "678b4f8af67956883251cd56fbde6914d8d291611e70b73365ec13be5e7060c9",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx",
@@ -6768,7 +6875,7 @@
         "apps/web/src/app/(dashboard)/dashboard/settings/ssh-keys/page.tsx",
         "apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Direct Fieldwork composition"
     },
     {
       "path": "apps/web/src/components/ui/table.tsx",
@@ -6988,70 +7095,15 @@
         "apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"
       ],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
-    },
-    {
-      "path": "apps/web/src/app/fieldwork.css",
-      "app": "web",
-      "kind": "stylesheet",
-      "owned": true,
-      "baselineHash": null,
-      "review": "source-and-family-review",
-      "currentHash": "5f34ac39390851f5e50c83daace46d3cf2b46492e78b7db9cc923c351e7ce326",
-      "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/%5F%5Fmaintenance/page.tsx",
-        "apps/web/src/app/(auth)/accept-invitation/[invitationId]/page.tsx",
-        "apps/web/src/app/(auth)/forgot-password/page.tsx",
-        "apps/web/src/app/(auth)/login/page.tsx",
-        "apps/web/src/app/(auth)/register/page.tsx",
-        "apps/web/src/app/(auth)/reset-password/[token]/page.tsx",
-        "apps/web/src/app/(auth)/setup/page.tsx",
-        "apps/web/src/app/(auth)/two-factor/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/migrations/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/application/[id]/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/compose/[composeId]/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/mariadb/[id]/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/mongo/[id]/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/mysql/[id]/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/postgres/[id]/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/redis/[id]/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/services/upstream/[id]/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/schedules/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/activity/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/branding/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/certificates/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/destinations/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/incidents/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/notifications/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/registries/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/ssh-keys/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/sso/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/settings/templates/page.tsx",
-        "apps/web/src/app/(dashboard)/dashboard/templates/page.tsx",
-        "apps/web/src/app/page.tsx",
-        "apps/web/src/app/status/[token]/page.tsx",
-        "apps/web/src/app/swagger/page.tsx"
-      ],
-      "renderingContract": "Direct Fieldwork composition"
     }
   ],
   "direction": "Fieldwork",
   "summary": {
-    "visualSources": 344,
-    "owned": 326,
+    "visualSources": 347,
+    "owned": 329,
     "vendor": 18,
-    "directlyChanged": 72,
+    "directlyChanged": 113,
     "unclassified": 0
   },
-  "browserEvidence": "Verification matrices documented in verification.md; conditional branches distinguished from rendered routes."
+  "browserEvidence": "Initial matrices in verification.md; detailed page review and bounded follow-up matrices in refinement.md. Conditional branches distinguished from rendered routes."
 }

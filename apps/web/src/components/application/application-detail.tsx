@@ -246,11 +246,11 @@ export function ApplicationDetail({ projectId, id }: { projectId: string; id: st
 							className="w-full gap-4"
 						>
 							<SubTabsList>
-								<SubTabsTrigger value="logs">Logs</SubTabsTrigger>
+								<SubTabsTrigger value="logs">Live logs</SubTabsTrigger>
 								<SubTabsTrigger value="monitoring">Monitoring</SubTabsTrigger>
 								<SubTabsTrigger value="events">Events</SubTabsTrigger>
 								<SubTabsTrigger value="terminal">Terminal</SubTabsTrigger>
-								<SubTabsTrigger value="history">History</SubTabsTrigger>
+								<SubTabsTrigger value="history">Log history</SubTabsTrigger>
 							</SubTabsList>
 							<TabsContent value="logs" className="mt-0">
 								<SettingsSection bare title="Logs" description="Live container output.">
