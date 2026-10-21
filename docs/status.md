@@ -18,7 +18,16 @@ role entries during a key update. The runbook now validates unique roles before
 drain, compares resolved values afterward, preserves missing legacy roles and
 keeps writers stopped on a real role change. The literal corrected helper accepts
 the independent real-Docker before/after evidence; its two regressions fail before
-the fix. Current combined-head validation passes
+the fix. Linux CI then exposed TypeScript 7.0.2's intentional shallow-path
+watch guard: the `/tmp/<name>/src` fixture received OS events but had no source
+subscription, for both direct compiler and launcher execution, including delayed
+and atomic edits. The fixture now nests its project beneath the owned temporary
+directory; the native kernel subscriptions include project/source directories
+and immediate, delayed and atomic edits rebuild. All 95 CLI cases pass on Linux
+arm64/Node 24.21 and macOS arm64/Node 22.21 with the same deadlines, including
+invalid-edit/no-emit, recovery and shutdown assertions. Public CLI code, compiler
+arguments and dependencies are unchanged by this test-only correction. Current
+combined-head validation passes
 95 CLI tests, 93 recovery/rotation/Release contracts on Node 22 and Node 24,
 38 pure organization-upgrade checks, all four workspace type checks, strict
 Biome, knip and 3,353 backend tests (137 optional cases skipped). Normal npm

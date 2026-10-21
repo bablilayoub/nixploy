@@ -36,28 +36,32 @@ async function until(check: () => Promise<boolean>, label: string): Promise<void
 
 test("watch owns and stops the native compiler when Node execve is unavailable", async () => {
 	const scratch = await realpath(await mkdtemp(join(tmpdir(), "nixploy-cli-watch-test-")));
+	// TypeScript 7 excludes shallow paths from watching. Nest the temporary
+	// project so Linux /tmp fixtures exercise real watch subscriptions.
+	const project = join(scratch, "workspace", "cli");
 	const typescript = createRequire(import.meta.url).resolve("typescript/package.json");
 	const { default: getExePath } = await import(
 		pathToFileURL(join(dirname(typescript), "lib/getExePath.js")).href
 	);
 	const compiler = getExePath();
-	const source = join(scratch, "src/index.ts");
-	const output = join(scratch, "dist/index.js");
+	const source = join(project, "src/index.ts");
+	const output = join(project, "dist/index.js");
 	const trace = join(scratch, "spawn.jsonl");
 	let watcher: ReturnType<typeof spawn> | undefined;
 	let compilerPid: number | undefined;
 	let log = "";
 	try {
-		await mkdir(join(scratch, "scripts"));
-		await mkdir(join(scratch, "src"));
-		await mkdir(join(scratch, "node_modules"));
-		await symlink(dirname(typescript), join(scratch, "node_modules/typescript"), "junction");
+		await mkdir(project, { recursive: true });
+		await mkdir(join(project, "scripts"));
+		await mkdir(join(project, "src"));
+		await mkdir(join(project, "node_modules"));
+		await symlink(dirname(typescript), join(project, "node_modules/typescript"), "junction");
 		await writeFile(
-			join(scratch, "scripts/build.mjs"),
+			join(project, "scripts/build.mjs"),
 			await readFile(new URL("../scripts/build.mjs", import.meta.url)),
 		);
 		await writeFile(
-			join(scratch, "tsconfig.build.json"),
+			join(project, "tsconfig.build.json"),
 			JSON.stringify({
 				compilerOptions: {
 					target: "ES2022",
@@ -73,7 +77,7 @@ test("watch owns and stops the native compiler when Node execve is unavailable",
 			}),
 		);
 		await writeFile(source, '#!/usr/bin/env node\nexport const value = "before";\n');
-		const preload = join(scratch, "without-execve.mjs");
+		const preload = join(project, "without-execve.mjs");
 		await writeFile(
 			preload,
 			`import cp from "node:child_process";
@@ -102,7 +106,7 @@ syncBuiltinESMExports();
 			),
 		);
 		watcher = spawn(process.execPath, ["scripts/build.mjs", "--watch"], {
-			cwd: scratch,
+			cwd: project,
 			env: { ...env, NODE_OPTIONS: `--import=${pathToFileURL(preload).href}` },
 			stdio: ["ignore", "pipe", "pipe", "ipc"],
 			detached: process.platform !== "win32",
