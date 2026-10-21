@@ -586,8 +586,9 @@ Do not run this alongside an upgrade, deploy, installer or another rotation.
    `docker service update --force` does **not** change Swarm's stored Env.
 
 2. Capture the original service identities, roles and replica counts (including
-   zero), then stop both services. The private working directory contains
-   secrets; retain it on failure and never paste its files into logs.
+   zero), validate the database input, then stop both services. The private
+   working directory contains secrets; retain it on failure and never paste
+   its files into logs.
 
    ```bash
    # rotation: prepare
@@ -642,6 +643,13 @@ Do not run this alongside an upgrade, deploy, installer or another rotation.
        if [ -n "$node" ]; then printf '%s\n' "$node" >> "$rotation_dir/nodes"; fi
      done
    done
+   # Older installer environments can contain identical entries; conflicting
+   # or missing URLs must fail before draining writers.
+   awk '/^DATABASE_URL=/ && !seen[$0]++' "$rotation_dir/$rotation_panel.before.env" > "$rotation_dir/rotate.env"
+   if [ "$(wc -l < "$rotation_dir/rotate.env")" -ne 1 ] \
+     || [ -z "$(sed -n 's/^DATABASE_URL=//p' "$rotation_dir/rotate.env")" ]; then
+     echo 'Expected one unambiguous, nonempty DATABASE_URL; services are unchanged' >&2; exit 1
+   fi
    rotation_nodes_ready() {
      while IFS= read -r node; do
        test "$(docker node inspect --format '{{.Status.State}}' "$node")" = ready \
@@ -701,8 +709,6 @@ Do not run this alongside an upgrade, deploy, installer or another rotation.
      test "$(sed -n 's/^NIXPLOY_ROLE=//p' "$rotation_dir/$service.before.env")" \
        = "$(sed -n 's/^NIXPLOY_ROLE=//p' "$rotation_dir/$service.after.env")"
    done < "$rotation_dir/state.tsv"
-   sed -n '/^DATABASE_URL=/p' "$rotation_dir/$rotation_panel.before.env" > "$rotation_dir/rotate.env"
-   test "$(wc -l < "$rotation_dir/rotate.env")" -eq 1
    printf 'ENCRYPTION_KEYS=%s\n' "$ENCRYPTION_KEYS" >> "$rotation_dir/rotate.env"
    rotation_run() {
      docker run --rm --network "$rotation_network" \

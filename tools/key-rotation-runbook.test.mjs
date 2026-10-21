@@ -32,6 +32,13 @@ async function rehearsal(options, verify) {
 				],
 			},
 		};
+		if (options.duplicateDatabase) {
+			services.nixploy.env.push(
+				options.duplicateDatabase === "identical"
+					? services.nixploy.env[0]
+					: "DATABASE_URL=postgres://fixture:private-password@other/fixture",
+			);
+		}
 		if (options.split !== false) {
 			services["nixploy-worker"] = {
 				id: "worker-original-id",
@@ -81,7 +88,8 @@ else if (args[0] === 'service' && args[1] === 'inspect') {
  if (Object.values(state).some(s => s.replicas !== 0)) fail('Rotated with a live writer');
  const content = fs.readFileSync(args[args.indexOf('--env-file')+1], 'utf8');
  const chain = content.match(/^ENCRYPTION_KEYS=(.+)$/m)?.[1];
- if (!chain || !content.includes('DATABASE_URL=')) fail('Missing private input');
+ const databases = content.split('\\n').filter(line => line.startsWith('DATABASE_URL='));
+ if (!chain || databases.length !== 1 || databases[0] !== 'DATABASE_URL=postgres://fixture:private-password@fixture/fixture') fail('Ambiguous or missing private input');
  const dryRun = args.includes('--dry-run');
  if (process.env.ROTATION_SCENARIO === 'rotation-fails' && !dryRun) fail('Fixture lost key');
  if (process.env.ROTATION_SCENARIO === 'new-key-fails' && !chain.includes(',')) fail('New primary cannot decrypt');
@@ -138,6 +146,7 @@ for (const options of [
 	{ panelReplicas: 0, workerReplicas: 0 },
 	{ panelReplicas: 1, workerReplicas: 0 },
 	{ split: false },
+	{ duplicateDatabase: "identical" },
 ]) {
 	test(`documented rotation preserves original roles and replicas: ${JSON.stringify(options)}`, async () => {
 		await rehearsal(options, ({ status, output, state, original, calls }) => {
@@ -162,6 +171,17 @@ for (const options of [
 		});
 	});
 }
+
+test("conflicting database entries fail preflight before changing services", async () => {
+	await rehearsal({ duplicateDatabase: "conflicting" }, ({ status, state, calls, original }) => {
+		assert.notEqual(status, 0);
+		assert.deepEqual(state, original);
+		assert.equal(
+			calls.some((call) => call[1] === "scale" || call[1] === "update" || call[0] === "run"),
+			false,
+		);
+	});
+});
 
 for (const scenario of [
 	"wrong-stored-chain",

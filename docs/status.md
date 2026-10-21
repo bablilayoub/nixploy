@@ -5,6 +5,23 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Combined compiler and rotation hardening — 2026-10-21 (review pending)
+
+The independently reviewed CLI compiler and key rotation changes are combined
+on merged operator-workspace main (`4a2b65b`). The required rotation contracts
+also run from immutable workflow tooling for historical product tags. Identical
+stored database URL entries are accepted once; conflicting or missing entries
+fail preflight before draining or updating services. The literal documented
+procedure fails the identical-entry and preflight-ordering regressions before
+their corrections. Current combined-head validation passes
+95 CLI tests, 89 recovery/rotation/Release contracts on Node 22 and Node 24,
+38 pure organization-upgrade checks, all four workspace type checks, strict
+Biome, knip and 3,353 backend tests (137 optional cases skipped). Normal npm
+pack/install repeats executable/export/version/UserAgent/HTTP exit checks; its
+tarball is byte-identical to the earlier real API-tested artifact. Fresh full
+and production audits report zero advisories at every severity. Independent review of the combined
+head, its PR CI and publication remain pending.
+
 ## Release verification follow-up — 2026-10-21
 
 Runtime hardening and the native Trivy publication fix are merged. Main image
@@ -57,7 +74,7 @@ Historical backup keys remain in the recovery vault until retention or verified
 replacement recovery permits removal. Crypto behavior is unchanged; stale
 comments and the script's premature key-removal message are corrected.
 
-The 36 recovery/rotation contract cases pass, including unreachable nodes and
+The original 36 recovery/rotation contract cases pass, including unreachable nodes and
 rotation failures that must not resume writers. Server types, strict workspace
 Biome and 3,353 backend tests pass (137 optional tests skipped). An isolated
 native e658 image performed two real rotations of encrypted
@@ -66,15 +83,18 @@ exact API decryptability. The split fixture preserved two panel/one worker
 replicas, then one panel/zero workers; old ciphertext still needed its retained
 old key. All owned fixture resources were removed. Primary service specs,
 readiness, existing volumes/networks and ten proxy/config/env file hashes were
-preserved. The immutable shared fixture image is retained. Independent review
-and retargeting after the operator branch merges remain pending; this is not a
-publication claim.
+preserved. The immutable shared fixture image is retained. Independent source and runtime review of the original patch passed. The
+combined head adds two database URL compatibility cases and awaits its final
+independent review; this is not a publication claim.
 
-## Operator workspace — 2026-10-21 (integration in progress)
+## Operator workspace — 2026-10-21 (merged)
 
-Three product workflows and functional/accessibility corrections are implemented on
-`codex/operator-workspace`; final integrated gates, production builds and PR
-review are still in progress. This is not a release/publication claim.
+Three product workflows and functional/accessibility corrections merged in PR #26
+at `4a2b65b` after independent review of exact head `91fa982` and all 18 CI
+checks completed (17 passed, manual API job skipped). Both native image/runtime
+jobs and both real upgrade paths passed. Main CI and Docker publication are
+being verified separately; the primary operator database has not been migrated
+by these isolated proofs.
 
 - Configuration drafts save without Docker changes; reviewed, selected
   application/Compose releases queue encrypted immutable environment/build-arg
@@ -99,8 +119,10 @@ review are still in progress. This is not a release/publication claim.
   Carbon, Studio, Blueprint, Harbor and Focus. Their isolated gallery is at
   `http://127.0.0.1:4317` with artifacts under
   `~/.codex/visualizations/2026/10/21/nixploy-dashboard-directions`. No concept
-  has been selected; aesthetic rollout remains pending user choice. The rejected
-  overhaul is not completed product work. Branding remains authoritative.
+  was selected at that checkpoint. The user has since selected Studio with
+  light/dark modes and a persistent system option. That authorized implementation
+  proceeds separately after this merge. The rejected overhaul is not completed
+  product work. Branding remains authoritative.
 
 Current isolated proof includes two-replica queued-input immutability, real
 application rollback restoring HTTP, Compose failed rollback followed by manual
@@ -125,7 +147,7 @@ precise commit-window regressions fail before correction; corrected 18 DB/23
 unit cases pass. The corrected integrated server run passed 3,489 tests (one
 optional registry probe skipped), with 119 web and 94 CLI tests passing. Peer
 source review, workspace types, strict Biome and knip pass; corrected-head CI
-and independent clearance remain required before merge.
+and independent clearance passed at final head `91fa982` before merge.
 
 The normal `0048` host path stops/verifies both old roles, requires private
 recovery assets, migrates/backfills separately, and pauses on failure. Old GUI
@@ -145,7 +167,7 @@ shutdown and reports unconfirmed stops honestly. An unchanged real failure trap
 returned the original failure code after 8.6 seconds, independently confirmed
 both captured containers stopped, retained its recovery fence, and removed only
 its exact test resources. Final corrected-head CI and independent clearance
-remain required. At `c06ffdc`, both complete native Trivy reports contain zero
+passed at `91fa982`. At `c06ffdc`, both complete native Trivy reports contain zero
 findings at every severity and zero ignored findings; both native Swarm runtime
 jobs and both upgrade jobs pass, including populated encrypted-storage/fence/
 inheritance/identity assertions and post-upgrade API checks with the original key.
@@ -171,16 +193,17 @@ actual incident log continuation in both themes on mobile and desktop, with no
 browser errors or mutations. Sixteen tab scenarios additionally cover history,
 keyboard activation, delayed counts, resize, explicit RTL strip previews and
 no document scroll jumps. Tab panels retain a visible keyboard-focus indicator
-without changing their resting appearance. Final corrected-head verification remains required.
+without changing their resting appearance. Final corrected-head verification passed
+before merge.
 
 The original four Swarm service IDs/specs, 74 pre-existing volumes, original
 network IDs and seven primary proxy-file hashes remain preserved at the
 in-progress resource check. Real multi-node/SSH placement and public DNS/ACME
 remain outside the local proof. Authorization and image hardening are merged;
-fresh production dependency audit reports zero findings, while the full graph
-retains one low development-bundler advisory; its supported CLI compiler
-replacement is reviewed separately. Merge remains pending. Release workflow
-dispatch, Git tags and npm publication are not authorized.
+fresh production and full dependency audits report zero findings on the combined
+compiler/rotation branch above. Main before that follow-up retains the one low
+development-bundler advisory. Release workflow dispatch, Git tags and npm
+publication are not authorized.
 
 ## Active backlog — 2026-10-20
 
