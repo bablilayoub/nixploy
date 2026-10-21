@@ -1,6 +1,5 @@
 // Relative, not `@/`: `docs/pages.ts` imports this file and is itself imported
 // by a test in `apps/web`, where `@/` means `apps/web/src`. See CLAUDE.md.
-import { site, version } from "./site";
 import { templateCount } from "./templates";
 
 /**
@@ -12,13 +11,6 @@ import { templateCount } from "./templates";
  * it is not, the comment says exactly what to re-run or re-measure. A stale
  * number on this page is a claim, not a typo.
  */
-
-/** The fold's badge: the headline item of the latest release, linking to the changelog. */
-export const heroBadge = {
-	version,
-	text: "DNS records created for you",
-	href: `${site.github}/blob/main/CHANGELOG.md`,
-} as const;
 
 /** The fold's two lines; the second one is the quiet half of the promise. */
 export const heroTitle = ["Ship your work.", "Own the whole stack."] as const;

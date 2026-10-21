@@ -5,6 +5,42 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Fieldwork landing and README — 2026-10-21
+
+`codex/fieldwork-landing` aligns marketing with the merged panel. The home fold
+now stacks concise copy above an accessible Projects/Deployments/Monitoring
+preview using real, theme-matched example captures. The screenshots retain a
+keyboard-scrollable viewport and full-size links. Workflow copy explains project,
+release and operations structure; the closing docs action is visually secondary.
+README replaces all old screenshots with six light/dark picture pairs and uses
+the same product message, neutral badges and current MCP count. Existing install,
+architecture and development documentation remain.
+
+Landing types, strict repository Biome, knip,119 web tests and the landing
+production build pass. Browser proof covers16 combinations of light/dark,
+1440/768/390/320px and100/200% text, plus navigation focus/theme persistence.
+No runtime/hydration errors or document overflow were recorded. Fourteen local
+README images resolve. Preview runs on3373; localhost3000 and primary data/settings
+were not restarted or modified. The fold detector labels the three preview tabs
+as a band; visual review confirms the intended text-then-product stacked fold.
+Private receipts: `.nixploy-data/verification/landing-fieldwork/`.
+
+## Fieldwork merged — 2026-10-21
+
+PR33 merged into main as `2061fe7` after all17 automated checks passed;
+the explicitly manual API check was skipped normally. The merged tree matches
+the verified `fd08c49` production build exactly. Localhost3000 continues serving
+that frontend without a restart, with health/readiness200 and four authenticated
+light/dark dashboard/profile browser checks passing. The managed runtime checkout
+now points at the merged main revision. No product-code fix was necessary.
+
+Read-only before/after snapshots confirm all72 table hashes/240 rows,62 persistent
+configuration files and original environment/settings hashes unchanged through
+the merge. The original Desktop checkout/local changes and private backups remain
+preserved. Local merge receipts are in the ignored
+`.nixploy-data/verification/fieldwork-refinement/merge33-preservation.json` and
+`browser-merged.json`. Earlier entries describe their historical checkpoints.
+
 ## Fieldwork detailed page refinement — 2026-10-21 (running locally)
 
 The follow-up on `codex/fieldwork-rebuild` directly restructures detailed workflows

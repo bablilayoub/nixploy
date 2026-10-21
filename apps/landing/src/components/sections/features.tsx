@@ -1,73 +1,79 @@
-import { ArrowUpRight, Boxes, GitBranch, Globe, LineChart, Terminal } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
+import { productCaptures } from "@/lib/product-captures";
 
-const features = [
+const workflows = [
 	{
-		icon: GitBranch,
-		title: "A straight path to production.",
+		title: "Give every environment a home",
 		description:
-			"Connect your repository, choose a build, and follow every release from commit to running service.",
+			"Group applications, Compose stacks and databases by project. Keep production and staging easy to tell apart.",
+		href: "/docs/getting-started",
+		label: "Projects and environments",
+	},
+	{
+		title: "Follow every release",
+		description:
+			"Choose your source and builder, inspect build logs, and return to an earlier release when you need to.",
+		href: "/docs/deploy",
+		label: "Deployment workflow",
+	},
+	{
+		title: "Keep operations close",
+		description:
+			"Domains, environment variables, runtime logs and backups belong to the service. Find them in the same tab order across every service kind.",
 		href: "/features",
-	},
-	{
-		icon: Boxes,
-		title: "A home for the whole stack.",
-		description:
-			"Applications, Compose stacks, and five database engines. Organize them into projects and environments.",
-		href: "/templates",
-	},
-	{
-		icon: Globe,
-		title: "The details are handled.",
-		description: "Domains, automatic TLS, and routing live alongside the services they belong to.",
-		href: "/docs",
-	},
-	{
-		icon: LineChart,
-		title: "See what needs you.",
-		description:
-			"Service health, deployment history, metrics, logs, and backups stay close to the work.",
-		href: "/features",
-	},
-	{
-		icon: Terminal,
-		title: "Work the way you work.",
-		description:
-			"Use the panel, CLI, REST API, or MCP. The same permissions follow you across every interface.",
-		href: "/agents",
+		label: "Explore the platform",
 	},
 ];
+
 export function Features() {
 	return (
 		<section id="features" className="container-page py-20 lg:py-28">
-			<div className="mb-12 grid gap-6 lg:grid-cols-2">
-				<p className="max-w-sm text-base leading-relaxed text-muted-foreground">
-					The tools to run your stack, from the first deployment to everyday operations.
-				</p>
+			<div className="mb-10 flex flex-wrap items-end justify-between gap-6">
 				<h2 className="max-w-xl text-3xl leading-[1.15] font-medium tracking-[-0.035em] sm:text-4xl">
-					Less between your code
-					<br />
-					and the world.
+					A place for every environment.
 				</h2>
+				<p className="max-w-sm text-base leading-relaxed text-muted-foreground">
+					From the first service to the next release, the workspace follows the way your stack is
+					organized.
+				</p>
 			</div>
-			<div className="border-t">
-				{features.map(({ icon: Icon, title, description, href }) => (
-					<Link
-						key={title}
-						href={href}
-						className="group grid items-start gap-4 border-b py-7 transition-colors focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4 hover:bg-card sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2rem] sm:gap-8 sm:px-4"
-					>
-						<h3 className="flex items-start gap-4 text-xl leading-snug font-medium tracking-tight">
-							<Icon aria-hidden="true" className="mt-1 size-5 shrink-0 text-muted-foreground" />
-							{title}
-						</h3>
-						<p className="max-w-md text-sm leading-relaxed text-muted-foreground">{description}</p>
-						<ArrowUpRight
-							aria-hidden="true"
-							className="hidden size-5 text-muted-foreground group-hover:text-foreground sm:block"
+			<div className="grid items-start gap-10 lg:grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)] lg:gap-14">
+				<div className="border-t">
+					{workflows.map((item) => (
+						<div key={item.title} className="border-b py-7 first:pt-6">
+							<h3 className="text-lg font-medium tracking-tight">{item.title}</h3>
+							<p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+								{item.description}
+							</p>
+							<Link
+								href={item.href}
+								className="mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-medium underline-offset-4 hover:underline"
+							>
+								{item.label}
+								<ArrowUpRight aria-hidden="true" className="size-4" />
+							</Link>
+						</div>
+					))}
+				</div>
+				<figure className="min-w-0 rounded-xl border bg-card p-3 sm:p-5">
+					{(["light", "dark"] as const).map((theme) => (
+						<Image
+							key={theme}
+							src={productCaptures.project[theme]}
+							alt={`A project with services grouped into environments, ${theme} theme`}
+							width={1440}
+							height={1000}
+							sizes="(min-width:1024px) 55vw, 100vw"
+							className={`h-auto w-full rounded-md border ${theme === "light" ? "dark:hidden" : "hidden dark:block"}`}
 						/>
-					</Link>
-				))}
+					))}
+					<figcaption className="pt-4 text-xs leading-relaxed text-muted-foreground">
+						A real project view from an example workspace. The same service structure continues into
+						deployments, runtime and configuration.
+					</figcaption>
+				</figure>
 			</div>
 		</section>
 	);

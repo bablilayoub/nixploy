@@ -21,3 +21,14 @@ The follow-up correction is binding: matching shared styling is insufficient. Re
 
 ## Verification and integration
 Fresh managed worktree from origin/main f1d316e; selected demo and live app remain intact while building. Preserve live data/settings with backup and before/after proof when integrating. All relevant typechecks/tests, strict Biome, production builds, real browser workflows, full route/source coverage and independent design/a11y review before completion. No scope waived because a screen is inconvenient to exercise.
+
+
+## Landing and README follow-up — 2026-10-21
+
+Keep the approved Fieldwork palette, Geist typography and restrained motion.
+Marketing speaks to developers evaluating a self-hosted platform. Commit to the
+stacked fold: concise left-aligned headline/action followed by the actual workspace.
+The signature is a cropped product preview with accessible Projects/Deployments/
+Monitoring tabs, using real fixture captures and a full-size escape. No live metric
+claims or interactive imitation of the production panel. README uses the same
+message and theme-aware screenshots; install and architecture documentation stay.

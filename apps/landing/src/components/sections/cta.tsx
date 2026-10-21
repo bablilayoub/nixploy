@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 
-/* The close: @magicui/dot-pattern behind the same two buttons the fold uses. */
+/** Repeat the install action, with documentation as the quieter alternative. */
 export function Cta() {
 	return (
 		<section className="py-20 lg:py-28">
@@ -31,7 +31,7 @@ export function Cta() {
 								asChild
 								variant="outline"
 								size="lg"
-								className="h-12 rounded-md border-primary-foreground/30 bg-primary-foreground px-6 text-base text-primary hover:bg-primary-foreground/85"
+								className="h-12 rounded-md border-primary-foreground/30 bg-transparent px-6 text-base text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
 							>
 								<Link href="/docs">Read the docs</Link>
 							</Button>
