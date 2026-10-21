@@ -5,6 +5,39 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Full monochrome frontend rebuild — 2026-10-21 (review pending)
+
+The user's latest request replaces the earlier familiar/Studio design scope with
+a complete monochrome rebuild of the panel, auth/public surfaces and marketing
+site. Branch `codex/monochrome-rebuild` is based on canonical main `ec35e36`.
+Shared primitives, workspace rail/command bar, project/service compositions,
+deployment evidence, settings/forms, editors/viewers, public status, API explorer
+and every marketing/docs family participate. Routes, tab aliases, capability
+gates, existing confirmation/dirty-change behavior and tenant data contracts are
+preserved; no dependency was added. The maintenance page now uses the encoded
+App Router folder so its existing `/__maintenance` URL actually resolves.
+
+The source inventory reconciles 343 visual sources (325 owned / 18 vendor),
+209 directly changed and 55 page files with zero unclassified entries. Unchanged
+data wrappers inherit the rebuilt system; vendor internals remain preserved.
+Production browser proof includes 710 route captures, 348 corrected reflow cases,
+216 fresh dialog cases and 20 populated-row cases, plus actual setup, access/error
+states, offline/retry/dirty guards, saved source variants and keyboard/scroll
+verification of Swagger authorization. Both themes pass with no recorded page
+or hydration errors or document overflow in the final matrices. Independent
+design/accessibility reviews close all actionable findings. Four workspace types,
+strict Biome (1,175 files), 119 web tests, 3,353 backend tests (137 optional cases
+skipped) and both production builds pass. See
+[`../.ui-craft/verification.md`](../.ui-craft/verification.md) for exact boundaries,
+accepted minor exceptions and local receipt names; exact-head CI is on the PR.
+
+The primary running checkout/data/configuration and both existing dirty files
+were preserved. Review previews run separately on3363 (panel) and3364 (marketing)
+against a task-owned tmpfs Postgres with panel-only role; no worker/crons or live
+infrastructure mutations were started. Twelve content-addressed screenshots show
+the real rebuilt fixture UI and are labeled as an example workspace. This entry
+records the isolated review branch, not a production rollout or primary sync.
+
 ## Selected Studio implementation — 2026-10-21
 
 The user selected Studio, explicitly requiring light/dark support. The focused
