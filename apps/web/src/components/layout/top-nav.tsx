@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Download, Menu, Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useBranding } from "@/components/branding-provider";
 import { CommandPalette } from "@/components/command-palette";
 import { ProfileDropdown } from "@/components/layout/profile-dropdown";
@@ -77,12 +77,7 @@ export function TopNav() {
 	const [commandOpen, setCommandOpen] = useState(false);
 	const commandFromMenu = useRef(false);
 	const menuTrigger = useRef<HTMLButtonElement>(null);
-	useEffect(() => {
-		if (commandOpen || !commandFromMenu.current) return;
-		commandFromMenu.current = false;
-		const frame = requestAnimationFrame(() => menuTrigger.current?.focus());
-		return () => cancelAnimationFrame(frame);
-	}, [commandOpen]);
+
 	const updateAvailable = useUpdateAvailable();
 
 	return (
@@ -138,7 +133,16 @@ export function TopNav() {
 						</Button>
 					) : null}
 					<div className="workspace-header-search">
-						<CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+						<CommandPalette
+							open={commandOpen}
+							onOpenChange={setCommandOpen}
+							onCloseAutoFocus={(event) => {
+								if (!commandFromMenu.current) return;
+								event.preventDefault();
+								commandFromMenu.current = false;
+								menuTrigger.current?.focus();
+							}}
+						/>
 					</div>
 					<ModeToggle />
 					<div className="workspace-header-account">

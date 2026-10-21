@@ -5,7 +5,7 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
-## Selected Studio implementation — 2026-10-21 (in progress)
+## Selected Studio implementation — 2026-10-21
 
 The user selected Studio, explicitly requiring light/dark support. The focused
 `codex/studio-panel` branch applies its shared neutral/cobalt palette, horizontal
@@ -22,8 +22,8 @@ tests and 3,491 backend tests (one optional skip) pass. Production builds pass.
 Eight width/theme combinations also pass native expansion/filter/dialog/menu
 checks and 200% root-font reflow; live System, explicit theme persistence and
 cross-tab synchronization pass without losing open-form input or focus. Saved
-branding and final state captures, independent review and CI remain pending;
-this is not a merge/publication claim.
+branding is verified in the isolated fixture. The merge gate is exact-head
+independent review plus combined CI; primary integration follows that merge.
 
 Independent Studio review caught tablet text-zoom crowding, two dark links using
 button-fill blue, the dark ANSI90 caption color and the sheet close target. The
@@ -34,14 +34,21 @@ Eight controlled settings/preview link captures meet 4.5:1; four actual owned
 PostgreSQL terminal sessions display ANSI90 above 4.5:1. Eight saved-branding
 cases preserve accents, custom logo and accessible long names, then restore
 only the disposable organization's prior settings. Sixteen real keyboard/tab
-checks pass. Final corrected captures and exact-head CI/review remain required.
+checks pass. Corrected captures bind the applicable source hashes; unchanged
+workflow proofs carry forward.
 
 The next review delta darkens light semantic text for actual tinted badge
 surfaces, applies touch floors in primitive classes despite Radix slot changes,
 and removes the theme control's scale transform. Font-relative header rules
 keep theme access outside while placing search/account in the mobile sheet;
 a single controlled command palette retains global shortcuts and focus return.
-Final badge, target and non-overlap browser evidence is still pending.
+Sixteen fresh header cases pass actual target dimensions, pairwise non-overlap,
+mobile search/account access, focus return and exactly one global shortcut.
+Twenty actual success/error/warning badge samples pass native browser color
+compositing at a minimum 4.83:1. The final source is rebased onto merged PR #29
+(`60c80bf`); frozen install, all four types, 119 web tests, strict Biome and the
+full dependency audit (zero advisories) pass. Exact-head independent clearance
+and combined CI gate the normal merge and primary sync.
 
 PR #26 is merged at `4a2b65b`; its exact reviewed head passed both native Swarm
 and upgrade jobs, with zero findings/ignored findings in both full Trivy reports.
@@ -52,7 +59,7 @@ identities passed preservation checks. Its familiar appearance remains active
 until reviewed Studio integration. No Release workflow, Git tag or npm publish
 was requested or performed.
 
-## Combined compiler and rotation hardening — 2026-10-21 (review pending)
+## Combined compiler and rotation hardening — 2026-10-21 (merged)
 
 The independently reviewed CLI compiler and key rotation changes are combined
 on merged operator-workspace main (`4a2b65b`). The required rotation contracts
@@ -80,8 +87,10 @@ combined-head validation passes
 Biome, knip and 3,353 backend tests (137 optional cases skipped). Normal npm
 pack/install repeats executable/export/version/UserAgent/HTTP exit checks; its
 tarball is byte-identical to the earlier real API-tested artifact. Fresh full
-and production audits report zero advisories at every severity. Independent review of the combined
-head, its PR CI and publication remain pending.
+and production audits report zero advisories at every severity. PR #29 merged
+as `60c80bf` after independent clearance of `40ef0bb` and 18 completed checks
+(17 passed, manual API skipped), including both native Swarm and upgrade jobs.
+No Release workflow, Git tag or npm publication was performed.
 
 ## Release verification follow-up — 2026-10-21
 

@@ -32,6 +32,7 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
+	type ComponentProps,
 	type Dispatch,
 	type SetStateAction,
 	useCallback,
@@ -131,10 +132,12 @@ export function CommandPalette({
 	className,
 	open: controlledOpen,
 	onOpenChange,
+	onCloseAutoFocus,
 }: {
 	className?: string;
 	open?: boolean;
 	onOpenChange?: Dispatch<SetStateAction<boolean>>;
+	onCloseAutoFocus?: ComponentProps<typeof CommandDialog>["onCloseAutoFocus"];
 }) {
 	const trpc = useTRPC();
 	const router = useRouter();
@@ -766,6 +769,7 @@ export function CommandPalette({
 			<CommandDialog
 				open={open}
 				onOpenChange={setOpen}
+				onCloseAutoFocus={onCloseAutoFocus}
 				title="Command palette"
 				description="Search projects, services, pages, and actions"
 				filter={filter}
