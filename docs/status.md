@@ -5,6 +5,18 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Release verification follow-up — 2026-10-21
+
+Runtime hardening and the native Trivy publication fix are merged. Main image
+publication passes both native scans and both installer signature checks.
+The separate Release patch stages and signs the index, verifies both shipped
+installer assets, then promotes public tags. Independent source review and
+71 local workflow contracts pass. Real cosign checks of the existing v0.7.3
+assets accept its Release signer and reject a wrong expected identity and an
+unsigned child. Required contracts use immutable workflow tooling while product
+checks retain the selected tag. Draft PR CI and final review remain required;
+no Release execution, signing or Git tag creation was performed for this patch.
+
 ## Active backlog — 2026-10-20
 
 This is the authoritative current work list. The dated verification records and

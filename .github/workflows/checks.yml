@@ -116,7 +116,21 @@ jobs:
         # Drop the flag once it does.
         run: pnpm -F @nixploy/web run --if-present test
 
+      - name: Checkout workflow contract tooling
+        # Historical release tags predate these contracts. Product checks above
+        # still use inputs.ref; workflow contracts use the caller's immutable SHA.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .workflow-contracts
+          persist-credentials: false
+
       - name: Disaster recovery rehearsal contract
         # Docker is stubbed: failures must stop the rehearsal, and the documented
         # recovery key procedure must update both stopped services safely.
+        working-directory: .workflow-contracts
         run: node --test tools/dr-restore-test.test.mjs
+
+      - name: Release publication contracts
+        working-directory: .workflow-contracts
+        run: node --test tools/ci/image-signature.test.mjs tools/ci/release-publication.test.mjs
