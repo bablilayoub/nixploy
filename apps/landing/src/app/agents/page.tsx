@@ -212,7 +212,7 @@ export default function AgentsPage() {
 					{ label: "Trail", value: "Every mutation audited" },
 				].map((item) => (
 					<li key={item.label} className="border-b p-5 last:border-b-0 lg:border-b-0">
-						<p className="font-mono text-[11px] tracking-[0.18em] text-muted-foreground uppercase">
+						<p className="font-mono text-[11px] tracking-[0.18em] text-muted-foreground normal-case">
 							{item.label}
 						</p>
 						<p className="mt-2 font-semibold tracking-tight text-balance">{item.value}</p>

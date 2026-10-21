@@ -6,7 +6,6 @@ import { format } from "date-fns";
 import { Loader2, Pencil, Plug, Server, Wrench } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
@@ -157,18 +156,15 @@ export function ServersView() {
 						. Pin apps with Advanced → Placement constraints.
 					</span>
 				}
-			/>
-			{/* The page header already says "Servers" and what they are. */}
-			<SettingsSection
-				title="Connected hosts"
-				wide
 				actions={
 					<>
 						<TableSearch view={view} placeholder="Search hosts…" />
 						<CreateServerDialog disabled={!canManage} disabledReason={manageHint} />
 					</>
 				}
-			>
+			/>
+			{/* The page header already says "Servers" and what they are. */}
+			<div className="min-w-0">
 				<QueryState
 					isPending={isPending}
 					isError={isError}
@@ -342,7 +338,7 @@ export function ServersView() {
 					</Table>
 					<TablePagination view={view} noun="hosts" className="mt-3" />
 				</QueryState>
-			</SettingsSection>
+			</div>
 			<Dialog open={editing !== null} onOpenChange={(isOpen) => !isOpen && setEditing(null)}>
 				<DialogContent>
 					<DialogHeader>

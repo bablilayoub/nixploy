@@ -7,9 +7,7 @@ export default function GlobalError({ reset }: { reset: () => void }) {
 		<html lang="en">
 			<body>
 				<main className="mx-auto flex min-h-svh max-w-xl flex-col items-start justify-center gap-5 px-6 py-16">
-					<p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
-						Nixploy
-					</p>
+					<p className="text-xs text-muted-foreground normal-case">Nixploy</p>
 					<h1 className="text-4xl leading-tight font-semibold tracking-tight">
 						This page could not load.
 					</h1>

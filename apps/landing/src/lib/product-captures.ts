@@ -1,27 +1,27 @@
 /** Actual seeded-workspace captures. Content-addressed URLs prevent stale optimized images after a release. */
 export const productCaptures = {
 	workspace: {
-		light: "/screenshots/workspace-light-2f6a54786e.png",
-		dark: "/screenshots/workspace-dark-7c2907041c.png",
+		light: "/screenshots/workspace-light-9cd40f1b41.png",
+		dark: "/screenshots/workspace-dark-8f9d3fff7c.png",
 	},
 	project: {
-		light: "/screenshots/project-light-8331414e86.png",
-		dark: "/screenshots/project-dark-7791373e38.png",
+		light: "/screenshots/project-light-d4e5481e44.png",
+		dark: "/screenshots/project-dark-bd8fcbf8df.png",
 	},
 	deployments: {
-		light: "/screenshots/deployments-light-2807e9c649.png",
-		dark: "/screenshots/deployments-dark-2e8197bac7.png",
+		light: "/screenshots/deployments-light-fedde312aa.png",
+		dark: "/screenshots/deployments-dark-819ed14632.png",
 	},
 	monitoring: {
-		light: "/screenshots/monitoring-light-b785110dea.png",
-		dark: "/screenshots/monitoring-dark-c1709283d9.png",
+		light: "/screenshots/monitoring-light-11adf8e754.png",
+		dark: "/screenshots/monitoring-dark-6e936b344f.png",
 	},
 	servers: {
-		light: "/screenshots/servers-light-b06a4d29e8.png",
-		dark: "/screenshots/servers-dark-3f96d991d4.png",
+		light: "/screenshots/servers-light-18ad380dec.png",
+		dark: "/screenshots/servers-dark-9e905e2dbf.png",
 	},
 	templates: {
-		light: "/screenshots/templates-light-6044665964.png",
-		dark: "/screenshots/templates-dark-fb0e0e10c5.png",
+		light: "/screenshots/templates-light-73e0697a1c.png",
+		dark: "/screenshots/templates-dark-e770471812.png",
 	},
 } as const;

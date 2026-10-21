@@ -398,9 +398,66 @@ export function ProjectDetail({
 		);
 	}
 
+	const serviceFilters = (
+		<>
+			<div className="relative min-w-40 flex-1 lg:max-w-80">
+				<Search
+					aria-hidden
+					className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+				/>
+				<Input
+					placeholder="Search services and upstreams…"
+					aria-label="Search services and upstreams"
+					value={search}
+					onChange={(event) => setSearch(event.target.value)}
+					className="h-10 ps-9 pe-9"
+				/>
+				{search ? (
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-sm"
+						aria-label="Clear service search"
+						className="absolute end-0.5 top-0.5"
+						onClick={() => setSearch("")}
+					>
+						<X className="size-3.5" />
+					</Button>
+				) : null}
+			</div>
+			<div className="flex min-w-0 flex-wrap items-center gap-2">
+				{(tagsCatalogQuery.data?.length ?? 0) > 0 ? (
+					<Select
+						value={tagFilter ?? "all"}
+						onValueChange={(value) => setTagFilter(value === "all" ? null : value)}
+					>
+						<SelectTrigger aria-label="Filter services by tag" className="max-w-56">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="all">All tags</SelectItem>
+							{tagsCatalogQuery.data?.map((tag) => (
+								<SelectItem key={tag.tagId} value={tag.tagId}>
+									<span
+										aria-hidden
+										className="size-2 shrink-0 rounded-full"
+										style={{ backgroundColor: tag.color }}
+									/>
+									{tag.name}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				) : null}
+				{activeEnvironment ? <ManageTagsDialog /> : null}
+			</div>
+		</>
+	);
+
 	return (
 		<div className="flex min-w-0 flex-col gap-4 sm:gap-6">
 			<PageHeader
+				className="mb-0"
 				compactActions
 				breadcrumb={
 					<Link
@@ -440,16 +497,19 @@ export function ProjectDetail({
 			</Tabs>
 
 			{(tab === "services" || tab === "environment") && (
-				<div className="surface overflow-hidden">
-					<div className="flex flex-wrap items-center justify-between gap-3 bg-panel-inset px-4 py-3 sm:px-5 sm:py-4">
-						<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+				<div className="min-w-0 space-y-3">
+					<div className="flex flex-wrap items-center justify-between gap-3 py-1">
+						<div className="flex min-w-0 max-w-full flex-nowrap items-center gap-2">
 							<span className="hidden text-xs text-muted-foreground sm:block">Environment</span>
 							{environmentsQuery.isPending ? (
 								<Skeleton className="h-9 w-40" />
 							) : activeEnvironment ? (
 								<>
 									<Select value={activeEnvironmentName} onValueChange={switchEnvironment}>
-										<SelectTrigger aria-label="Select environment" className="max-w-56 min-w-32">
+										<SelectTrigger
+											aria-label="Select environment"
+											className="w-40 min-w-0 max-w-56"
+										>
 											<SelectValue />
 										</SelectTrigger>
 										<SelectContent>
@@ -508,63 +568,21 @@ export function ProjectDetail({
 							</div>
 						) : null}
 					</div>
-					{tab === "services" ? (
-						<div className="flex flex-wrap items-start justify-between gap-3 border-t px-4 py-3 sm:px-5 sm:py-4">
-							<div className="relative min-w-40 flex-1 sm:max-w-80">
-								<Search
-									aria-hidden
-									className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-								/>
-								<Input
-									placeholder="Search services and upstreams…"
-									aria-label="Search services and upstreams"
-									value={search}
-									onChange={(event) => setSearch(event.target.value)}
-									className="h-10 ps-9 pe-9"
-								/>
-								{search ? (
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon-sm"
-										aria-label="Clear service search"
-										className="absolute end-0.5 top-0.5"
-										onClick={() => setSearch("")}
-									>
-										<X className="size-3.5" />
-									</Button>
-								) : null}
-							</div>
-							<div className="flex min-w-0 flex-wrap items-center gap-2">
-								{(tagsCatalogQuery.data?.length ?? 0) > 0 ? (
-									<Select
-										value={tagFilter ?? "all"}
-										onValueChange={(value) => setTagFilter(value === "all" ? null : value)}
-									>
-										<SelectTrigger aria-label="Filter services by tag" className="max-w-56">
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="all">All tags</SelectItem>
-											{tagsCatalogQuery.data?.map((tag) => (
-												<SelectItem key={tag.tagId} value={tag.tagId}>
-													<span
-														aria-hidden
-														className="size-2 shrink-0 rounded-full"
-														style={{ backgroundColor: tag.color }}
-													/>
-													{tag.name}
-												</SelectItem>
-											))}
-										</SelectContent>
-									</Select>
-								) : null}
-								{activeEnvironment ? <ManageTagsDialog /> : null}
-							</div>
-						</div>
-					) : null}
 				</div>
 			)}
+
+			{tab === "services" && activeEnvironment && !environmentsQuery.isError ? (
+				<ServicesTable
+					key={activeEnvironment?.environmentId}
+					toolbarStart={serviceFilters}
+					renderTable={!isLoadingServices && services.length > 0}
+					onResetFilters={resetFilters}
+					projectId={projectId}
+					environmentName={activeEnvironmentName}
+					services={filteredServices}
+					currentEnvironmentId={activeEnvironment?.environmentId}
+				/>
+			) : null}
 
 			{(tab === "services" || tab === "environment") && environmentsQuery.isError ? (
 				<LoadError
@@ -642,22 +660,13 @@ export function ProjectDetail({
 							</div>
 						))}
 					</div>
-				) : filteredServices.length > 0 ? (
-					<>
-						<ServicesTable
-							key={activeEnvironment?.environmentId}
-							projectId={projectId}
-							environmentName={activeEnvironmentName}
-							services={filteredServices}
-							currentEnvironmentId={activeEnvironment?.environmentId}
-						/>
-						<UpstreamsTable
-							projectId={projectId}
-							upstreams={tagFilter ? [] : (upstreamsQuery.data ?? [])}
-							primaryDomains={primaryDomains}
-							search={search}
-						/>
-					</>
+				) : services.length > 0 ? (
+					<UpstreamsTable
+						projectId={projectId}
+						upstreams={tagFilter ? [] : (upstreamsQuery.data ?? [])}
+						primaryDomains={primaryDomains}
+						search={search}
+					/>
 				) : hasMatchingUpstreams ? (
 					<UpstreamsTable
 						projectId={projectId}

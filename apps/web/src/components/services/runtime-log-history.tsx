@@ -160,7 +160,7 @@ export function RuntimeLogHistory({
 								{line.level !== "default" ? (
 									<span
 										className={cn(
-											"shrink-0 rounded px-1 py-px text-[10px] font-semibold",
+											"shrink-0 rounded px-1 py-px text-[11px] font-semibold",
 											LEVEL_CLASS[line.level],
 										)}
 									>
@@ -170,7 +170,7 @@ export function RuntimeLogHistory({
 									<span className="w-7 shrink-0" />
 								)}
 								{!appName ? (
-									<Badge variant="outline" className="shrink-0 font-mono text-[10px]">
+									<Badge variant="outline" className="shrink-0 font-mono text-[11px]">
 										{line.appName}
 									</Badge>
 								) : null}

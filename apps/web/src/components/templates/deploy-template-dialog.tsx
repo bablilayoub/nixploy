@@ -133,7 +133,7 @@ function StepRail({
 						>
 							<span
 								className={cn(
-									"flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold",
+									"flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold",
 									active && "bg-foreground text-background",
 									done && "bg-foreground/15 text-foreground",
 									!active && !done && "bg-muted text-muted-foreground",
@@ -429,7 +429,7 @@ function DeployTemplateForm({ template }: { template: TemplateSummary }) {
 											{entry.required ? " (required)" : ""}
 										</Label>
 										{generated && (
-											<Badge variant="outline" className="text-[10px]">
+											<Badge variant="outline" className="text-[11px]">
 												auto-generated
 											</Badge>
 										)}

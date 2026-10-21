@@ -5,7 +5,6 @@ import type { inferRouterOutputs } from "@trpc/server";
 import { format } from "date-fns";
 import { HardDrive, Loader2, Pencil, Plug, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
@@ -129,16 +128,6 @@ export function DestinationsView() {
 			<PageHeader
 				title="Backup storage"
 				description="S3-compatible buckets — or this host's disk — for database and volume backups."
-			/>
-			<SettingsSection
-				wide
-				title={
-					<span className="flex items-center gap-2">
-						<HardDrive className="size-4 text-muted-foreground" />
-						Backup storage
-					</span>
-				}
-				description="Where database, volume and instance backups are stored. S3-compatible buckets for any org; the panel host's local disk (instance admin only)."
 				actions={
 					<Dialog open={open} onOpenChange={setOpen}>
 						<DialogTrigger asChild>
@@ -274,7 +263,8 @@ export function DestinationsView() {
 						</DialogContent>
 					</Dialog>
 				}
-			>
+			/>
+			<div className="min-w-0">
 				<QueryState
 					isPending={isPending}
 					isError={isError}
@@ -378,7 +368,7 @@ export function DestinationsView() {
 						</TableBody>
 					</Table>
 				</QueryState>
-			</SettingsSection>
+			</div>
 			{isInstanceAdmin && <InstanceBackups />}
 			<Dialog open={editing !== null} onOpenChange={(isOpen) => !isOpen && setEditing(null)}>
 				<DialogContent>

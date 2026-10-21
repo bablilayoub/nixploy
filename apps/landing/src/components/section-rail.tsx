@@ -47,7 +47,7 @@ export function SectionRail({
 
 	return (
 		<nav aria-label="On this page" className={className}>
-			<p className="px-3 font-mono text-[11px] tracking-[0.18em] text-muted-foreground uppercase">
+			<p className="px-3 font-mono text-[11px] tracking-[0.18em] text-muted-foreground normal-case">
 				Sections
 			</p>
 			<ul className="mt-3 flex flex-col">

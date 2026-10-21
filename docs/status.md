@@ -5,7 +5,39 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
-## Full monochrome frontend rebuild — 2026-10-21 (review pending)
+## Fieldwork frontend — 2026-10-21 (running locally)
+
+The user selected Fieldwork and rejected the previous design. Branch
+`codex/fieldwork-rebuild`, based on canonical main `f1d316e`, carries that direction
+across the panel, all service kinds/tabs, settings, auth/setup/access, public
+status/errors/Swagger and marketing/docs. Horizontal navigation, Geist typography,
+neutral surfaces, project/environment objects and divided settings sections replace
+the previous rail/card-heavy composition. Existing routes, capability/tenant gates,
+URL tab aliases, dirty guards, confirmations, saved themes and branding remain.
+No dependency, schema, API, CLI or deploy-engine change was introduced.
+
+The inventory reconciles344 visual sources (326 owned/18 vendor;72 directly
+changed) and55 page files. Consumers inherit rebuilt shared primitives and theme;
+unused vendor widgets stay explicitly classified. The local verification receipt
+records710 route captures,348 reflow cases,216 dialog cases,20 populated control
+cases, saved source variants, actual setup/access/error states,32 normal/long
+branding cases and final keyboard/search/contrast follow-ups. Four workspace
+TypeScript checks, strict Biome (1,176 files), pinned knip,119 web tests,3,353 backend
+tests (137 optional cases skipped) and both production builds pass. Independent
+design/accessibility reviews close all judged Critical/Major findings. Full scope,
+heuristic exceptions and evidence names are in
+[`../.ui-craft/verification.md`](../.ui-craft/verification.md).
+
+**localhost3000 now serves the verified branch with the original primary database,
+environment, encryption/auth keys and configuration path.** A PostgreSQL17 archive
+and private configuration backup were made first. The shutdown/startup comparison
+proves all72 tables/237 rows/3 projects/2 organizations/2 users and62 persistent
+configuration files unchanged through the switch. Existing authentication works;
+health/readiness return200. The original primary checkout and its two local dirty
+files remain unchanged for rollback. Marketing is available locally on3373. This
+is a local rollout with a review branch, not a GitHub merge or remote deployment.
+
+## Previous monochrome frontend — 2026-10-21 (superseded by Fieldwork)
 
 The user's latest request replaces the earlier familiar/Studio design scope with
 a complete monochrome rebuild of the panel, auth/public surfaces and marketing

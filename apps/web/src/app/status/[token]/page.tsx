@@ -93,9 +93,7 @@ export default async function StatusPage({ params }: { params: Promise<{ token: 
 				<ModeToggle />
 			</div>
 			<header className="surface flex flex-col gap-4 p-6 sm:p-8">
-				<p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
-					Service status
-				</p>
+				<p className="text-xs text-muted-foreground normal-case">Service status</p>
 				<h1 className="text-3xl leading-tight font-semibold tracking-[-0.04em]">{status.title}</h1>
 				<p className="text-sm text-muted-foreground">
 					{status.probes.length === 0

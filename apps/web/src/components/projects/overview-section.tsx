@@ -1,66 +1,30 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Container, FolderGit2, Rocket, Server } from "lucide-react";
+import { Rocket, Server } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
 
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { StatusDot } from "@/components/shell";
 import { DateTime } from "@/components/ui/date-time";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCapabilities } from "@/hooks/use-capabilities";
 import { useRunningDeployments } from "@/hooks/use-running-deployments";
 import { deploymentStatusDot, deploymentStatusLabel } from "@/lib/status";
 import { useTRPC } from "@/lib/trpc";
-import { cn } from "@/lib/utils";
+import { countRunningServices } from "./service-summary";
 
-function StatPanel({
-	label,
-	value,
-	detail,
-	isPending,
-	icon,
-	className,
-}: {
-	label: string;
-	value: number | undefined;
-	detail?: ReactNode;
-	isPending: boolean;
-	icon: ReactNode;
-	className?: string;
-}) {
-	return (
-		<div className={cn("surface px-5 py-4", className)}>
-			<div className="flex items-center justify-between gap-2">
-				<p className="text-xs leading-relaxed font-medium text-muted-foreground">{label}</p>
-				{icon}
-			</div>
-			<div className="mt-2 text-[2rem] leading-tight font-semibold tabular-nums tracking-[-0.045em]">
-				{isPending ? <Skeleton className="h-7 w-14 sm:h-8 sm:w-16" /> : (value ?? 0)}
-			</div>
-			{!isPending && detail ? (
-				<p className="mt-2 text-xs leading-relaxed text-muted-foreground">{detail}</p>
-			) : null}
-		</div>
-	);
-}
-
-/** Organization-wide stats: projects, services by status, deployments of the last day. */
-export function OverviewCards() {
+/** A single truthful status strip, not a row of decorative KPI cards. */
+export function OverviewCards({ onAttention }: { onAttention: () => void }) {
 	const trpc = useTRPC();
-	const { can, isInstanceAdmin } = useCapabilities({ strict: true });
-	const showDocker = isInstanceAdmin && can("docker.manage");
 	const { data, isPending, isError, error, refetch } = useQuery(
 		trpc.project.overview.queryOptions(),
 	);
-
-	if (isError) {
+	if (isError)
 		return (
 			<QueryState
 				isPending={false}
-				isError={isError}
+				isError
 				error={error}
 				onRetry={() => refetch()}
 				isEmpty={false}
@@ -69,109 +33,60 @@ export function OverviewCards() {
 				{null}
 			</QueryState>
 		);
-	}
-
 	const services = data?.services;
-	const deployments = data?.deploymentsLastDay;
-
 	return (
-		<div
-			className={cn(
-				"grid grid-cols-1 gap-3 min-[480px]:grid-cols-2",
-				showDocker ? "lg:grid-cols-4" : "lg:grid-cols-3",
-			)}
-		>
-			<StatPanel
-				label="Projects"
-				value={data?.projectCount}
-				isPending={isPending}
-				icon={<FolderGit2 className="size-4 text-muted-foreground" />}
-			/>
-			<StatPanel
-				label="Services"
-				className=""
-				value={services?.total}
-				isPending={isPending}
-				icon={<Server className="size-4 text-muted-foreground" />}
-				detail={
-					services && (
-						<>
-							{services.running} running
-							{services.error > 0 ? (
-								<>
-									{" · "}
-									<Link
-										href="/dashboard/monitoring"
-										className="rounded-sm text-destructive underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+		<section className="fieldwork-summary" aria-label="Workspace summary">
+			<div className="fieldwork-summary-primary">
+				<span className="fieldwork-summary-icon">
+					<Server aria-hidden="true" className="size-5" strokeWidth={1.5} />
+				</span>
+				<div>
+					{isPending ? (
+						<Skeleton className="h-4 w-44" />
+					) : (
+						<strong>
+							{countRunningServices(services)} of {services?.total ?? 0} services running
+						</strong>
+					)}
+					<div className="fieldwork-summary-detail">
+						{isPending ? (
+							<Skeleton className="h-3 w-32" />
+						) : (
+							<>
+								<span>{data?.projectCount ?? 0} projects</span>
+								{(services?.error ?? 0) > 0 ? (
+									<button
+										type="button"
+										onClick={onAttention}
+										className="text-destructive underline-offset-4 hover:underline"
 									>
-										{services.error} error
-									</Link>
-								</>
-							) : null}
-						</>
-					)
-				}
-			/>
-			<StatPanel
-				label="Deployments (24h)"
-				className={!showDocker ? "min-[480px]:col-span-2 lg:col-span-1" : undefined}
-				value={deployments?.total}
-				isPending={isPending}
-				icon={<Rocket className="size-4 text-muted-foreground" />}
-				detail={
-					deployments && (
-						<>
-							{deployments.done} succeeded
-							{deployments.error > 0 ? (
-								<>
-									{" · "}
-									<Link
-										href="/dashboard/monitoring?tab=incidents"
-										className="rounded-sm text-destructive underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-									>
-										{deployments.error} failed
-									</Link>
-								</>
-							) : null}
-						</>
-					)
-				}
-			/>
-			{showDocker ? <DockerStatPanel /> : null}
-		</div>
-	);
-}
-
-function DockerStatPanel() {
-	const trpc = useTRPC();
-	const containersQuery = useQuery(trpc.docker.containers.queryOptions({}));
-	const containers = containersQuery.data ?? [];
-	const running = containers.filter((container) => container.State === "running").length;
-
-	return (
-		<Link
-			href="/dashboard/docker"
-			className="block surface p-5 transition-colors hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-		>
-			<div className="flex items-center justify-between gap-2">
-				<p className="text-xs leading-relaxed font-medium text-muted-foreground">Docker</p>
-				<Container className="size-4 text-muted-foreground" />
+										{services?.error} need attention
+									</button>
+								) : (
+									<span>No service errors reported</span>
+								)}
+							</>
+						)}
+					</div>
+				</div>
 			</div>
-			<div className="mt-2 text-[2rem] leading-tight font-semibold tabular-nums tracking-[-0.045em]">
-				{containersQuery.isPending ? (
-					<Skeleton className="h-7 w-14 sm:h-8 sm:w-16" />
-				) : containersQuery.isError ? (
-					<span className="text-sm font-normal text-muted-foreground">Unavailable</span>
+			<div className="fieldwork-summary-metric">
+				{isPending ? (
+					<Skeleton className="h-7 w-12" />
 				) : (
-					running
+					<strong>{data?.deploymentsLastDay.total ?? 0}</strong>
 				)}
+				<span>deployments in 24 hours</span>
 			</div>
-			{!containersQuery.isPending && !containersQuery.isError ? (
-				<p className="mt-2 text-xs text-muted-foreground">
-					{running} / {containers.length} containers running
-				</p>
-			) : null}
-		</Link>
+			<div className="fieldwork-summary-metric">
+				{isPending ? (
+					<Skeleton className="h-7 w-12" />
+				) : (
+					<strong>{data?.deploymentsLastDay.done ?? 0}</strong>
+				)}
+				<span>successful deployments</span>
+			</div>
+		</section>
 	);
 }
 
@@ -184,14 +99,14 @@ export function RecentDeployments() {
 	const deployments = all.slice(0, 4);
 
 	return (
-		<section className="flex h-full min-w-0 flex-col surface p-5 sm:p-5">
+		<section className="flex h-full min-w-0 flex-col surface p-6">
 			<div className="mb-5 space-y-1">
-				<h2 className="text-base font-semibold tracking-tight">Recent deployments</h2>
+				<h2 className="text-base font-medium tracking-tight">Recent deployments</h2>
 				{/* Static text: branching this on `isPending` made the server (which
 				    renders with the prefetched data) and the client's first paint
 				    disagree, which cost a hydration error on every dashboard load.
 				    Loading and empty already have their own states below. */}
-				<p className="text-sm text-muted-foreground">The latest changes, across your workspace.</p>
+				<p className="text-sm text-muted-foreground">Latest releases across all projects.</p>
 			</div>
 			<QueryState
 				isPending={isPending}

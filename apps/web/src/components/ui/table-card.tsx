@@ -12,7 +12,7 @@ export function TableCard({
 	footer,
 	/** When false, skip the rounded border frame (use inside SettingsSection). */
 	framed = true,
-	toolbarFramed = true,
+	toolbarFramed = false,
 }: {
 	className?: string;
 	children: React.ReactNode;
@@ -33,7 +33,7 @@ export function TableCard({
 					{toolbar}
 				</div>
 			) : null}
-			{framed ? <div className="surface overflow-x-auto">{children}</div> : children}
+			{framed ? <div className="surface relative overflow-x-auto">{children}</div> : children}
 			{footer}
 		</div>
 	);

@@ -5,7 +5,6 @@ import type { inferRouterOutputs } from "@trpc/server";
 import { format } from "date-fns";
 import { Award, Loader2, Pencil, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
@@ -137,16 +136,9 @@ export function CertificatesView() {
 	return (
 		<div className="flex flex-col gap-8">
 			<Dialog open={open} onOpenChange={setOpen}>
-				<PageHeader title="Certificates" description="Custom TLS certificates served by Traefik." />
-				<SettingsSection
-					wide
-					title={
-						<span className="flex items-center gap-2">
-							<Award className="size-4 text-muted-foreground" />
-							Certificates
-						</span>
-					}
-					description="Certificates stored on this server."
+				<PageHeader
+					title="Certificates"
+					description="Custom TLS certificates served by Traefik."
 					actions={
 						<DialogTrigger asChild>
 							<Button size="sm" disabled={!canManage} title={manageHint}>
@@ -155,7 +147,8 @@ export function CertificatesView() {
 							</Button>
 						</DialogTrigger>
 					}
-				>
+				/>
+				<div className="min-w-0">
 					<QueryState
 						isPending={isPending}
 						isError={isError}
@@ -241,7 +234,7 @@ export function CertificatesView() {
 						</Table>
 						<TablePagination view={view} noun="certificates" className="mt-3" />
 					</QueryState>
-				</SettingsSection>
+				</div>
 				<DialogContent className="max-w-2xl">
 					<DialogHeader>
 						<DialogTitle>Add certificate</DialogTitle>

@@ -49,7 +49,7 @@ const isTypingTarget = (target: EventTarget | null) => {
 };
 
 function Key({ children }: { children: React.ReactNode }) {
-	return <kbd className="rounded border bg-secondary px-1 font-mono text-[10px]">{children}</kbd>;
+	return <kbd className="rounded border bg-secondary px-1 font-mono text-[11px]">{children}</kbd>;
 }
 
 function Row({ label, keys }: { label: string; keys: string[] }) {
@@ -143,7 +143,7 @@ export function KeyboardShortcuts() {
 					{NAV_SHORTCUTS.map((shortcut) => (
 						<Row key={shortcut.key} label={shortcut.label} keys={["g", shortcut.key]} />
 					))}
-					<li className="pt-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+					<li className="pt-1 text-[11px] font-medium normal-case tracking-wide text-muted-foreground">
 						On a service page
 					</li>
 					{SERVICE_SHORTCUTS.map((shortcut) => (

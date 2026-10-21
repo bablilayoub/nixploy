@@ -23,9 +23,7 @@ function NavList({ activeHref }: { activeHref: string }) {
 		<div className="flex flex-col gap-7">
 			{docsNav.map((group) => (
 				<div key={group.title}>
-					<p className="px-3 text-xs font-semibold tracking-wide text-foreground uppercase">
-						{group.title}
-					</p>
+					<p className="px-3 text-xs font-medium text-foreground normal-case">{group.title}</p>
 					<ul className="mt-2 flex flex-col">
 						{group.items.map((item) => {
 							const active = activeHref === item.href || (item.index && activeHref === "/docs");
@@ -37,7 +35,7 @@ function NavList({ activeHref }: { activeHref: string }) {
 										className={cn(
 											"flex min-h-11 items-center rounded-md px-3 text-sm transition-colors",
 											active
-												? "border border-border bg-card font-medium text-foreground shadow-xs"
+												? "border border-transparent bg-accent/70 font-medium text-foreground"
 												: "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
 										)}
 									>
@@ -130,9 +128,7 @@ export function DocsFrame({
 				{headings.length > 1 ? (
 					<aside className="hidden xl:block">
 						<nav aria-label="On this page" className="sticky top-24">
-							<p className="text-xs font-semibold tracking-wide text-foreground uppercase">
-								On this page
-							</p>
+							<p className="text-xs font-medium text-foreground normal-case">On this page</p>
 							<ul className="mt-3 flex flex-col border-l">
 								{headings.map((heading) => (
 									<li key={heading.id}>

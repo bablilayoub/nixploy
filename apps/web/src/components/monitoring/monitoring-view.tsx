@@ -37,7 +37,7 @@ function HostStat({
 		<div className="flex min-w-0 flex-1 flex-col gap-1.5 px-4 py-3 sm:border-r sm:border-border sm:last:border-r-0">
 			<div className="flex items-center gap-1.5 text-muted-foreground">
 				<Icon className="size-3.5 shrink-0" />
-				<span className="text-[11px] font-medium uppercase tracking-wide">{label}</span>
+				<span className="text-[11px] font-medium normal-case tracking-wide">{label}</span>
 			</div>
 			<p className="truncate text-sm font-semibold tabular-nums">{value}</p>
 			{percent != null ? (

@@ -1,19 +1,16 @@
-# Monochrome token spine
+# Fieldwork token spine
 
 | Role | Light | Dark |
-| --- | --- | --- |
-| Canvas | #f4f4f5 | #090a0b |
-| Working surface | #ffffff | #111315 |
-| Raised / overlay | #ffffff | #1b1d20 |
-| Inset / controls | #f7f7f8 | #0d0f11 |
-| Foreground | #17181b | #f5f5f6 |
-| Supporting text | #62666f | #a0a5ae |
-| Border | #dedfe3 | #2a2d32 |
-| Control boundary | #858b95 | #5c636e |
-| Primary | #191b1f / white text | #f4f5f6 / near-black text |
-| Selection | #eceef0 | #26292e |
-| Focus | #737984 | #a8aeb9 |
+|---|---|---|
+| Canvas | #f6f7f8 | #17191c |
+| Working surface | #ffffff | #202327 |
+| Overlay | #ffffff | #2a2e33 |
+| Inset | #f0f2f4 | #1a1c20 |
+| Foreground | #202327 | #f0f2f4 |
+| Supporting text | #616973 | #abb1ba |
+| Divider | #e0e4e8 | #383e46 |
+| Input boundary | #8a939f | #737f8f |
+| Primary | #24272b | #eceff2 |
+| Focus | #6b7480 | #a3afbc |
 
-Use existing semantic Tailwind tokens and a single provider. Preserve saved brand overrides. Functional success/warning/error/info colors have readable foregrounds and neutral/tinted surfaces; no decorative rainbow. Chart series are monochrome opacity steps, with real status distinctions only.
-
-Inter for UI and headings; JetBrains Mono for code/operational identifiers. Display 28–36px, section 16–18px, body14px, supporting12–13px, mobile form inputs16px. Tabular numerals throughout operational views. Spacing 4/8/12/16/24/32/48px on a fixed 4px layout grid; text can grow independently and controls expand vertically. Controls8px radius, cards14px, dialogs20px. Desktop controls36–40px; coarse-pointer targets44px minimum including wrappers and icon controls. Motion100–180ms, reduced-motion removes spatial transitions. Recessed surfaces use neutral inset highlights and two-layer shadows.
+Semantic success/warning/error retain readable colors and explicit labels; branding overrides remain intact. Primitive/semantic/component tokens, no duplicate theme provider. Use Geist UI and Geist Mono code. Body14px, supporting12px, section16px, intermediate20px, page32px weight500; 11px allowed only for compact counts/ticks. Marketing14/18/30/64. Spacing4/8/12/16/20/24/32/40/48/64px, fixed pixel layout spacing with rem text and wrapping so enlarged text has room. Control radius6px, object card10–12px, overlay16px. Desktop controls36–40px; coarse44px. Borders separate; shadows only at meaningful elevation. White card/overlay fills intentionally share a light fill and use backdrop/border/shadow to distinguish overlays. Motion120–180ms on state change only, no repeated entrance choreography.

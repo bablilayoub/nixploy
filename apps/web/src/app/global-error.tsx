@@ -24,9 +24,7 @@ export default function GlobalError({
 		<html lang="en">
 			<body className="font-sans antialiased">
 				<main className="mx-auto flex min-h-svh max-w-xl flex-col items-start justify-center gap-5 px-6">
-					<p className="font-mono text-xs tracking-widest text-muted-foreground uppercase">
-						Application error
-					</p>
+					<p className="text-xs text-muted-foreground normal-case">Application error</p>
 					<h1 className="text-3xl leading-tight font-semibold tracking-tight">
 						Nixploy failed to load
 					</h1>

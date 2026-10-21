@@ -1,16 +1,16 @@
 import { brandingAccentCss, publicBranding } from "@nixploy/server/modules/branding/index";
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 
 import { BrandingProvider } from "@/components/branding-provider";
 
 import { Providers } from "./providers";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const jetbrainsMono = JetBrains_Mono({
+const inter = Geist({ subsets: ["latin"], variable: "--font-geist" });
+const jetbrainsMono = Geist_Mono({
 	subsets: ["latin"],
-	variable: "--font-jetbrains-mono",
+	variable: "--font-geist-mono",
 });
 
 /**

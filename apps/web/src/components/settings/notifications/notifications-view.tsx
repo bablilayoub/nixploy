@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Bell, Loader2, Pencil, Plus, Send } from "lucide-react";
 import { useState } from "react";
-import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
@@ -70,16 +69,6 @@ export function NotificationsView() {
 			<PageHeader
 				title="Notifications"
 				description="Channels that receive deployment, backup and platform events."
-			/>
-			<SettingsSection
-				wide
-				title={
-					<span className="flex items-center gap-2">
-						<Bell className="size-4 text-muted-foreground" />
-						Channels
-					</span>
-				}
-				description="Notification channels grouped by type."
 				actions={
 					<Button
 						size="sm"
@@ -91,7 +80,8 @@ export function NotificationsView() {
 						Add notification
 					</Button>
 				}
-			>
+			/>
+			<div className="min-w-0">
 				<QueryState
 					isPending={isPending}
 					isError={isError}
@@ -214,7 +204,7 @@ export function NotificationsView() {
 						))}
 					</div>
 				</QueryState>
-			</SettingsSection>
+			</div>
 			<NotificationDialog open={createOpen} onOpenChange={setCreateOpen} />
 			<NotificationDialog
 				open={editing !== null}

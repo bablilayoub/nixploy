@@ -82,7 +82,7 @@ export default function ApiPage() {
 			headings={Object.entries(SECTIONS).map(([id, text]) => ({ id, text }))}
 		>
 			<article>
-				<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">API</p>
+				<p className="text-xs text-muted-foreground normal-case">API</p>
 				<h1 className="mt-4 text-4xl leading-[1.1] font-semibold tracking-[-0.045em] text-balance">
 					REST API reference
 				</h1>
