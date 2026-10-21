@@ -1,10 +1,10 @@
+#!/usr/bin/env node
 import { Command } from "commander";
 import { applyExitOverride, resolveExitCode } from "./cli-runtime.js";
 import { registerCommands } from "./commands/index.js";
 import { EXIT_OK } from "./errors.js";
 import { setOutputMode } from "./utils/output.js";
-
-declare const __CLI_VERSION__: string;
+import { CLI_VERSION } from "./version.js";
 
 // `nixploy audit export | head` (or any piped command) closes stdout early and
 // Node turns the next write into an unhandled EPIPE with a stack trace. The
@@ -19,7 +19,7 @@ const program = new Command();
 program
 	.name("nixploy")
 	.description("Nixploy CLI — projects, apps, databases, domains and env vars from your terminal")
-	.version(__CLI_VERSION__)
+	.version(CLI_VERSION)
 	.option("--url <url>", "Nixploy panel base URL (overrides the profile and NIXPLOY_API_URL)")
 	.option("--api-key <key>", "API key (visible in `ps`; prefer a profile or NIXPLOY_API_KEY)")
 	.option("--profile <name>", "Credential profile from ~/.nixploy/config.json")

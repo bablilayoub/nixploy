@@ -1,11 +1,8 @@
 import { resolveApiKey, resolveApiUrl, resolveOrganizationId } from "./config.js";
 import { exitCodeForStatus } from "./errors.js";
+import { CLI_VERSION } from "./version.js";
 
-declare const __CLI_VERSION__: string;
-
-/** CLI version baked in by tsup (`"dev"` when running from source). */
-export const CLI_VERSION: string =
-	typeof __CLI_VERSION__ === "string" && __CLI_VERSION__ ? __CLI_VERSION__ : "dev";
+export { CLI_VERSION };
 
 /** Sent on every request so panel logs can tell CLI versions apart. */
 export const USER_AGENT = `nixploy-cli/${CLI_VERSION}`;

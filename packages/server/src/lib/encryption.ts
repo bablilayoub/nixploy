@@ -63,9 +63,9 @@ const WEAK_KEY_MESSAGE =
 
 /**
  * Raw key material, primary first. `ENCRYPTION_KEYS` is a comma-separated
- * list: the FIRST entry encrypts, every entry can decrypt. That is what makes
- * a rotation possible without downtime — set `ENCRYPTION_KEYS="new,old"`,
- * restart, run `pnpm nixploy:rotate-key`, then drop the old entry.
+ * list: the FIRST entry encrypts; every entry can decrypt across a rotation
+ * window. Stop all writers and follow the stored Swarm Env, verification and
+ * backup-key retention procedure in docs/auth.md.
  * `ENCRYPTION_KEY` stays supported as the single-key form.
  */
 export function encryptionKeyList(env: NodeJS.ProcessEnv = process.env): string[] {

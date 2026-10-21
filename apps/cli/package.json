@@ -41,8 +41,8 @@
 		"registry": "https://registry.npmjs.org"
 	},
 	"scripts": {
-		"build": "tsup",
-		"dev": "tsup --watch",
+		"build": "node scripts/build.mjs",
+		"dev": "node scripts/build.mjs --watch",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run --config vitest.config.ts",
 		"prepublishOnly": "pnpm run typecheck && pnpm run build"
@@ -52,7 +52,6 @@
 	},
 	"devDependencies": {
 		"@types/node": "^22.20.2",
-		"tsup": "^8.3.5",
 		"typescript": "^7.0.2",
 		"vitest": "^5.0.0"
 	}

@@ -37,8 +37,8 @@
 			"ignoreDependencies": ["postcss", "tailwindcss", "tw-animate-css"]
 		},
 		"apps/cli": {
-			"entry": ["src/index.ts", "tsup.config.ts", "vitest.config.ts", "src/**/*.test.ts"],
-			"project": ["src/**/*.ts", "*.ts"]
+			"entry": ["src/index.ts", "scripts/*.mjs", "vitest.config.ts", "src/**/*.test.ts"],
+			"project": ["src/**/*.ts", "*.ts", "scripts/*.mjs"]
 		},
 		"packages/server": {
 			"entry": [

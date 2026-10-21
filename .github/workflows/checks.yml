@@ -127,9 +127,9 @@ jobs:
 
       - name: Disaster recovery rehearsal contract
         # Docker is stubbed: failures must stop the rehearsal, and the documented
-        # recovery key procedure must update both stopped services safely.
+        # recovery and rotation procedures must update both stopped services safely.
         working-directory: .workflow-contracts
-        run: node --test tools/dr-restore-test.test.mjs
+        run: node --test tools/dr-restore-test.test.mjs tools/key-rotation-runbook.test.mjs
 
       - name: Release publication contracts
         working-directory: .workflow-contracts

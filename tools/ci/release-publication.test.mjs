@@ -72,6 +72,7 @@ test("Reusable checks run workflow contracts when the selected product tag preda
 	const checkout = path.join(workspace, tooling.with.path);
 	const files = [
 		"tools/dr-restore-test.test.mjs",
+		"tools/key-rotation-runbook.test.mjs",
 		"tools/ci/image-signature.test.mjs",
 		"tools/ci/release-publication.test.mjs",
 		"tools/ci/organization-upgrade-proof.mjs",
