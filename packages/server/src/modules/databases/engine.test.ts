@@ -28,12 +28,12 @@ describe("buildDatabaseSwarmSpec placement", () => {
 	const taskTemplate = (spec: Record<string, unknown>) =>
 		spec.TaskTemplate as { Placement?: { Constraints?: string[] } };
 
-	it("has no placement for databases on the Nixploy host", () => {
+	it("does not invent a node identity when called without deployment context", () => {
 		expect(taskTemplate(buildDatabaseSwarmSpec(def, 1))).not.toHaveProperty("Placement");
 		expect(taskTemplate(buildDatabaseSwarmSpec(def, 1, null))).not.toHaveProperty("Placement");
 	});
 
-	it("pins databases on a managed server to its swarm node (local data volume)", () => {
+	it("pins local or remote databases to the resolved concrete node", () => {
 		const spec = buildDatabaseSwarmSpec(def, 1, "node123");
 		expect(taskTemplate(spec).Placement).toEqual({ Constraints: ["node.id==node123"] });
 		// The rest of the spec is unchanged by the pin.

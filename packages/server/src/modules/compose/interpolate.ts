@@ -1,4 +1,4 @@
-import { parseEnv } from "../deployment/env";
+import { mergeEnv as mergeEnvironment, parseEnv } from "../deployment/env";
 import { badRequest } from "../errors";
 import type { ComposeEnv, ComposeFileSpec } from "./parse";
 
@@ -171,27 +171,9 @@ export function escapeComposeInterpolation(spec: ComposeFileSpec): ComposeFileSp
 	return mapStrings(spec, (text) => text.replaceAll("$", () => "$$")) as ComposeFileSpec;
 }
 
-/**
- * Value the container should see for one `KEY=VALUE` env line. Surrounding
- * matching quotes are stripped (what `docker compose --env-file` used to do
- * for these files); nothing else is interpreted.
- */
-function unquoteEnvValue(value: string): string {
-	const trimmed = value.trim();
-	if (trimmed.length >= 2) {
-		const first = trimmed[0];
-		if ((first === '"' || first === "'") && trimmed.endsWith(first)) {
-			return trimmed.slice(1, -1);
-		}
-	}
-	return trimmed;
-}
-
-/** Merged `KEY=VALUE` lines → interpolation map. */
+/** Canonical dotenv values are already unquoted/unescaped exactly once. */
 export function composeEnvMap(mergedEnv: string | null | undefined): Record<string, string> {
-	const env: Record<string, string> = {};
-	for (const [key, value] of parseEnv(mergedEnv)) env[key] = unquoteEnvValue(value);
-	return env;
+	return Object.fromEntries(parseEnv(mergedEnv));
 }
 
 /**
@@ -212,16 +194,5 @@ export function shouldRedactEnvValue(value: string): boolean {
  * (project → environment → service). Comments and blank lines are dropped.
  */
 export function mergeEnvVars(...sources: Array<string | null | undefined>): string {
-	const byKey = new Map<string, string>();
-	for (const source of sources) {
-		if (!source) continue;
-		for (const line of source.split("\n")) {
-			const trimmed = line.trim();
-			if (!trimmed || trimmed.startsWith("#")) continue;
-			const eq = trimmed.indexOf("=");
-			if (eq <= 0) continue;
-			byKey.set(trimmed.slice(0, eq).trim(), trimmed);
-		}
-	}
-	return [...byKey.values()].join("\n");
+	return mergeEnvironment(...sources);
 }

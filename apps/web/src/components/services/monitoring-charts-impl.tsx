@@ -227,7 +227,8 @@ function MetricChart({
 						<XAxis
 							dataKey="time"
 							stroke="var(--muted-foreground)"
-							fontSize={10}
+							tick={{ fill: "var(--chart-axis)" }}
+							fontSize={11}
 							fontFamily="var(--font-jetbrains-mono), ui-monospace, monospace"
 							tickLine={false}
 							axisLine={false}
@@ -235,7 +236,8 @@ function MetricChart({
 						/>
 						<YAxis
 							stroke="var(--muted-foreground)"
-							fontSize={10}
+							tick={{ fill: "var(--chart-axis)" }}
+							fontSize={11}
 							fontFamily="var(--font-jetbrains-mono), ui-monospace, monospace"
 							tickLine={false}
 							axisLine={false}
@@ -552,9 +554,10 @@ export function MonitoringCharts({
 						<button
 							key={String(option.value)}
 							type="button"
+							aria-pressed={range === option.value}
 							onClick={() => setRange(option.value)}
 							className={cn(
-								"rounded-md px-2 py-1 text-xs transition-colors",
+								"min-h-11 min-w-11 rounded-md px-2 py-1 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:min-h-8 sm:min-w-8",
 								range === option.value
 									? "bg-secondary font-medium text-foreground"
 									: "text-muted-foreground hover:bg-secondary/60",

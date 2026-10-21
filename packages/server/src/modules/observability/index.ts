@@ -3,10 +3,11 @@ import { db } from "../../db";
 import { alertRules, deployments, incidents, serviceLogs, uptimeProbes } from "../../db/schema";
 import { profileDefaults } from "../../lib/profile";
 import { assertSafeOutboundUrl, pinnedFetch } from "../../utils/public-url";
-import { badRequest, notFound } from "../errors";
+import { badRequest, conflict, notFound } from "../errors";
 import { notifyEvent } from "../notifications";
 import { assertCapability } from "../projects/capabilities";
 import { projectIdFilter } from "../projects/project-scope";
+import { findIncident, recoveryStartIsActive } from "./incident-workspace";
 
 export {
 	mirrorAuditOntoTimeline,
@@ -23,6 +24,7 @@ export {
 	type ServiceEventSeverity,
 	serviceEventKindLabel,
 } from "./event-kinds";
+export { findIncident, getIncidentWorkspace, listIncidentPage } from "./incident-workspace";
 export {
 	deleteServiceEvents,
 	listServiceEvents,
@@ -104,15 +106,6 @@ export async function listIncidents(
 	});
 }
 
-/** Load one incident, scoped to the caller's organization. */
-export async function findIncident(incidentId: string, organizationId: string) {
-	const row = await db.query.incidents.findFirst({
-		where: and(eq(incidents.incidentId, incidentId), eq(incidents.organizationId, organizationId)),
-	});
-	if (!row) throw notFound("Incident not found");
-	return row;
-}
-
 /**
  * Acknowledge an incident: someone is looking at it. The row stays OPEN
  * (`resolvedAt` untouched) — acknowledging is the "seen it" signal, resolving
@@ -147,6 +140,32 @@ export async function resolveIncident(input: {
 }) {
 	const existing = await findIncident(input.incidentId, input.organizationId);
 	if (existing.resolvedAt) return existing;
+	const proposal = existing.metadata?.proposal as
+		| {
+				operation?: { state?: string; deploymentId?: string; startedAt?: string };
+				appliedAt?: string;
+				deploymentId?: string;
+		  }
+		| undefined;
+	if (proposal?.operation || proposal?.appliedAt) {
+		if (!input.note?.trim())
+			throw badRequest("Describe what you verified before resolving this recovery.");
+		const operation = proposal.operation;
+		const deploymentId = operation?.deploymentId ?? proposal.deploymentId;
+		const deployment = deploymentId
+			? await db.query.deployments.findFirst({
+					where: eq(deployments.deploymentId, deploymentId),
+					columns: { status: true },
+				})
+			: undefined;
+		if (
+			(operation && recoveryStartIsActive(operation)) ||
+			deployment?.status === "queued" ||
+			deployment?.status === "running"
+		) {
+			throw badRequest("Wait for the recovery operation to finish before resolving the incident.");
+		}
+	}
 	const metadata = {
 		...(existing.metadata ?? {}),
 		...(input.note?.trim()
@@ -162,9 +181,22 @@ export async function resolveIncident(input: {
 			acknowledgedBy: existing.acknowledgedBy ?? input.userId,
 			metadata,
 		})
-		.where(eq(incidents.incidentId, existing.incidentId))
+		.where(
+			and(
+				eq(incidents.incidentId, existing.incidentId),
+				isNull(incidents.resolvedAt),
+				existing.metadata === null
+					? isNull(incidents.metadata)
+					: sql`${incidents.metadata} = ${JSON.stringify(existing.metadata)}::jsonb`,
+			),
+		)
 		.returning();
-	return row ?? existing;
+	if (row) return row;
+	const current = await findIncident(input.incidentId, input.organizationId);
+	if (current.resolvedAt) return current;
+	throw conflict(
+		"The incident changed while you were resolving it. Refresh and inspect the recovery first.",
+	);
 }
 
 export async function listAlertRules(

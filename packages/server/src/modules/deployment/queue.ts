@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../../db";
 import { isWorkerRole } from "../../lib/role";
+import { DomainError } from "../errors";
 import type { TargetedProcess } from "./docker";
 import { deploymentEvents } from "./events";
 import { publishDeploymentStatusDetached } from "./notify";
@@ -10,17 +11,18 @@ import { publishDeploymentStatusDetached } from "./notify";
  *
  * The `deployment` table is the source of truth: `queueDeployment`
  * (`./index.ts`) inserts a row with `status = 'queued'` and this module's
- * worker loop claims it with a single atomic statement
- * (`UPDATE … WHERE deployment_id = (SELECT … FOR UPDATE SKIP LOCKED LIMIT 1)`,
- * see {@link claimNextDeployment}). Nothing about *which* job runs next lives
+ * worker loop claims it in a short transaction: lock one candidate, take the
+ * app's advisory lock, then update that primary key after checking the mutex
+ * again (see {@link claimNextDeployment}). Nothing about *which* job runs next lives
  * in process memory any more, so a restart, a crash or a SIGKILL mid-build
  * never loses the backlog — the rows are still `queued` and the next boot
  * picks them up.
  *
- * What the claim query enforces, in SQL:
+ * What the claim transaction enforces, in SQL:
  * - **FIFO per target server** (`server_id IS NOT DISTINCT FROM $1`,
  *   `ORDER BY created_at, deployment_id`).
- * - **Per-app mutex** — `NOT EXISTS (… status = 'running' … same app_name)`:
+ * - **Per-app mutex** — the same app advisory lock used by enqueue, plus
+ *   `NOT EXISTS (… status = 'running' … same app_name)` after acquiring it:
  *   two jobs for one service never build at the same time whatever
  *   `NIXPLOY_DEPLOY_CONCURRENCY` says (they would race on the code checkout
  *   and the `<appName>:latest` tag). A busy app's row stays in line and the
@@ -207,7 +209,7 @@ interface ClaimedRow {
 
 /**
  * Claim the oldest runnable `queued` row for one server and flip it to
- * `running` in the same statement. Returns `null` when nothing is runnable
+ * `running` in the same transaction. Returns `null` when nothing is runnable
  * (empty line, every candidate's app already building, every row locked by
  * another claimer).
  *
@@ -216,29 +218,87 @@ interface ClaimedRow {
  * preview from before migration 0023). Boot recovery finalizes those.
  */
 export async function claimNextDeployment(serverId: string | null): Promise<QueueJob | null> {
-	const rows = (await db.execute(sql`
-		update "deployment" d
-		set "status" = 'running', "started_at" = now()
-		from (
-			select q."deployment_id"
+	const rows = (await db.transaction(
+		async (tx) => {
+			// A fresh statement snapshot is required for the mutex recheck below.
+			// Drizzle ignores transaction options for a nested SAVEPOINT, so reject
+			// an incompatible outer transaction before setting the protocol or
+			// selecting/locking any deployment row.
+			const [isolation] = (await tx.execute(sql`show transaction_isolation`)) as unknown as {
+				transaction_isolation: string;
+			}[];
+			if (isolation?.transaction_isolation !== "read committed") {
+				throw new DomainError(
+					"PRECONDITION_FAILED",
+					"Deployment claims require a READ COMMITTED transaction",
+				);
+			}
+			// The database fence rejects claims from workers predating immutable environments.
+			await tx.execute(sql`set local nixploy.environment_snapshot_protocol = '1'`);
+			const busyApps: string[] = [];
+			for (;;) {
+				// Select separately from UPDATE: an UPDATE FROM LIMIT subquery can
+				// be rescanned once per target row under a nested-loop plan.
+				const candidates = (await tx.execute(sql`
+			select q."deployment_id", q."app_name"
 			from "deployment" q
 			where q."status" = 'queued'
 				and q."server_id" is not distinct from ${serverId}::text
 				and q."app_name" is not null
+				and q."app_name" <> all(${sql.param(busyApps)}::text[])
 				and not exists (
 					select 1
 					from "deployment" r
 					where r."status" = 'running' and r."app_name" = q."app_name"
 				)
 			order by q."created_at", q."deployment_id"
-			for update skip locked
+			for update of q skip locked
 			limit 1
-		) s
-		where d."deployment_id" = s."deployment_id"
+		`)) as unknown as { deployment_id: string; app_name: string }[];
+				if (candidates.length > 1) {
+					throw new DomainError("INTERNAL_SERVER_ERROR", "Deployment claim selected multiple rows");
+				}
+				const candidate = candidates[0];
+				if (!candidate) return [];
+
+				// Enqueue locks app-before-row, so never wait for its app lock while
+				// holding our row lock. Try another app instead of stalling the line.
+				const [lock] = (await tx.execute(sql`
+				select pg_try_advisory_xact_lock(hashtext(${candidate.app_name})) as acquired
+			`)) as unknown as { acquired: boolean }[];
+				if (!lock?.acquired) {
+					busyApps.push(candidate.app_name);
+					continue;
+				}
+
+				// This new statement sees a claim that committed while we were
+				// selecting/locking. A second queued sibling can never bypass it.
+				const claimed = (await tx.execute(sql`
+		update "deployment" d
+		set "status" = 'running', "started_at" = now()
+		where d."deployment_id" = ${candidate.deployment_id}
+			and d."status" = 'queued'
+			and d."server_id" is not distinct from ${serverId}::text
+			and d."app_name" = ${candidate.app_name}
+			and not exists (
+				select 1 from "deployment" r
+				where r."status" = 'running' and r."app_name" = d."app_name"
+			)
 		returning d."deployment_id", d."application_id", d."compose_id",
 			d."title", d."server_id", d."app_name", d."preview_deployment_id",
 			d."requested_ref"
 	`)) as unknown as ClaimedRow[];
+				// Keep this inside the transaction: unexpected cardinality must roll
+				// back rather than leave running rows without corresponding jobs.
+				if (claimed.length > 1) {
+					throw new DomainError("INTERNAL_SERVER_ERROR", "Deployment claim changed multiple rows");
+				}
+				if (claimed.length) return claimed;
+				busyApps.push(candidate.app_name);
+			}
+		},
+		{ isolationLevel: "read committed" },
+	)) as unknown as ClaimedRow[];
 
 	const row = rows[0];
 	if (!row?.app_name) return null;

@@ -93,6 +93,51 @@ Verification checks restore completion and liveness; it does not compare rows,
 file hashes or application behavior. A recovery drill must also validate those
 contents and the credentials used by the recovered application.
 
+## Retained PostgreSQL recovery copies
+
+Open a PostgreSQL service's **Backups → Recovery copies → Create copy**.
+Choose a stored dump, name the copy and select another accessible environment.
+An organization admin needs `backups.manage`, `service.create`, `service.deploy`
+and `secrets.write`; both source and target project scope are enforced.
+
+The operation downloads and validates the entire gzip before creating a target.
+It provisions a new managed PostgreSQL service on the source server with the
+same configured, versioned image, a separate environment network, fresh user and
+password, and no published host port. It restores the pinned archive bytes in a
+transaction and queries the restored table catalog before marking the copy
+**Ready**. Credentials are encrypted on the normal PostgreSQL service row;
+**Open database → Connection** uses the existing secret-read gate.
+
+Copies contain the original, unsanitized data. They count toward service quotas,
+consume storage and remain until explicitly deleted. Restore/catalog verification
+does not prove application compatibility or sanitize data. A failed restore keeps
+the incomplete target with **Needs attention**. An interrupted operation reports
+**Result unavailable**, never Ready; inspect the retained target or delete it.
+The source database and stored archive are preserved throughout.
+
+The create API (`backup.createCopy`) blocks through completion and accepts an
+idempotent UUID `requestId`; repeating that same request cannot create another
+service. Recovery copies remain reachable from the source or target service's
+Backups tab and the project's Recovery copies tab after their original schedule
+is deleted. The project inventory also retains copies whose database metadata
+is missing. `backup.copyInventory` accepts a `postgresId` or `projectId` and
+returns up to 100 items plus `nextCursor`; pass that cursor unchanged for older
+copies. The legacy `backup.copies` array remains available.
+The returned `deadline` is the creation-operation timeout (ten minutes), not
+an expiry for the data. Ready copies have no automatic expiry and remain until
+explicitly deleted.
+**Delete copy** (`backup.deleteCopy`, admin plus `backups.manage` and
+`service.delete`) confirms removal of only that target service and data volume,
+and refuses active recovery work. This initial workflow supports PostgreSQL only;
+it does not upgrade database versions or copy to another server.
+
+Each new copy records its original server and volume identity. Deletion refuses
+a target whose server or app name changed; restore its original placement or
+inspect and remove its resources manually. Missing/unreachable original servers
+and volumes that survive teardown retain the recovery record. Copies created
+without recorded origins require manual inspection; a missing managed-service
+row alone is never proof that its data volume was removed.
+
 ## What gets backed up (instance)
 
 Every instance run produces **two artifacts** in the destination:
@@ -149,6 +194,14 @@ a different panel domain can require a password/TOTP sign-in and re-enrolment.
 > at rest, but readable with your `ENCRYPTION_KEY`), and the archive contains
 > TLS private keys and SSH private keys in plain text. Point instance backups
 > at a private bucket with tight IAM.
+
+Backups from before the organization-variable encryption backfill in migration
+`0048` can also contain plaintext organization variables in metadata. The
+upgrade and later key rotations do not rewrite those historical dumps. Keep
+their access restricted and expire them according to your recovery and
+retention requirements; do not assume every secret in an older dump is
+encrypted. See [the upgrade boundary](./upgrade-notes.md#next-operator-workspace-upgrade)
+before restoring a pre-upgrade dump or reverting the panel and worker builds.
 
 Instance retention (`keepLatestCount`) prunes matching timestamp pairs after
 both new artifacts are stored. Config is published first and its SQL sibling

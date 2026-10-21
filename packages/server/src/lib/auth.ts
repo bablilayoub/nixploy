@@ -46,6 +46,7 @@ import {
 	syncSsoMemberRole,
 } from "../modules/auth/sso";
 import { readStoredIdTokenClaims } from "../modules/auth/sso-claims";
+import { isDomainError } from "../modules/errors";
 import { deleteOrganizationCascade, hasCapability } from "../modules/projects";
 import { trustedProxyCidrsForAuth } from "../utils/rate-limit";
 import { authDatabase, currentAuthTransaction } from "./auth-database";
@@ -246,7 +247,14 @@ function buildAuth(
 						console.log(
 							`Deleting organization "${organization.name}" (${organization.id}), requested by ${user.email}`,
 						);
-						await deleteOrganizationCascade(organization.id);
+						try {
+							await deleteOrganizationCascade(organization.id);
+						} catch (error) {
+							if (isDomainError(error) && error.code === "PRECONDITION_FAILED") {
+								throw new APIError("BAD_REQUEST", { message: error.message });
+							}
+							throw error;
+						}
 					},
 					beforeCreateInvitation: async ({ invitation, inviter, organization }) => {
 						if (!(await hasCapability(inviter.id, organization.id, "members.manage"))) {

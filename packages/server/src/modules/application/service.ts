@@ -19,7 +19,7 @@ import type { PrivilegesSwarm } from "../../utils/swarm-overrides";
 import { assertSafeAppName, assertSafePublishedPort } from "../../utils/validators";
 import { unregisterBackupsForService } from "../backups/scheduler";
 import { getServerSwarmNodeId } from "../cluster/swarm-node";
-import { envToArray, mergeEnv } from "../deployment/env";
+import { envToArray } from "../deployment/env";
 import { removeServiceLogs } from "../deployment/maintenance";
 import { ensureEnvironmentNetwork, pruneEnvironmentNetwork } from "../deployment/network";
 import {
@@ -35,6 +35,7 @@ import {
 import { invalidateDockerListings } from "../docker/containers";
 import { conflict, notFound, preconditionFailed } from "../errors";
 import { deletePreviewDeployment } from "../preview";
+import { resolveRuntimeEnvironment } from "../projects/env-resolution";
 import type { QuotaResourceDefaults } from "../projects/quotas";
 import { removeRuntimeLogs } from "../runtime-logs/store";
 import { unregisterSchedulesForService } from "../schedules";
@@ -204,11 +205,7 @@ type ApplicationRow = Pick<
 export const loadMergedApplicationEnv = async (
 	application: Pick<Application, "environmentId" | "env">,
 ): Promise<string[]> => {
-	const environment = await db.query.environments.findFirst({
-		where: eq(environments.environmentId, application.environmentId),
-		with: { project: true },
-	});
-	return envToArray(mergeEnv(environment?.project.env, environment?.env, application.env));
+	return envToArray(await resolveRuntimeEnvironment(application.environmentId, application.env));
 };
 
 export interface ApplicationSwarmSpecOptions {
@@ -398,7 +395,8 @@ export const upsertApplicationSwarmService = async (application: ApplicationRow)
 		applicationMounts,
 		applicationPorts,
 		image,
-		env,
+		// A port/mount/resource edit must not release saved variable drafts.
+		current ? (currentContainerSpec?.Env ?? []) : env,
 		{ swarmNodeId, environmentNetwork, routed, quotaDefaults },
 	);
 

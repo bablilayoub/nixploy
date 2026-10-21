@@ -83,14 +83,14 @@ export function DeploymentsChart() {
 								axisLine={false}
 								minTickGap={24}
 								tickMargin={6}
-								fontSize={10}
+								fontSize={11}
 							/>
 							<YAxis
 								tickLine={false}
 								axisLine={false}
 								width={28}
 								allowDecimals={false}
-								fontSize={10}
+								fontSize={11}
 							/>
 							<ChartTooltip content={<ChartTooltipContent />} />
 							<ChartLegend content={<ChartLegendContent />} />

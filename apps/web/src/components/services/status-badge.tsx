@@ -31,10 +31,7 @@ export function ServiceStatusBadge({ status }: { status: ServiceStatus }) {
 
 	return (
 		<Badge variant={config.variant} className="gap-1.5 font-normal">
-			<StatusDot
-				status={config.status}
-				className={cn("ring-0", config.status === "success" && "animate-pulse")}
-			/>
+			<StatusDot status={config.status} className="ring-0" />
 			{config.label}
 		</Badge>
 	);

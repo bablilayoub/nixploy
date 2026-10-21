@@ -43,18 +43,21 @@ describe.skipIf(!testUrl)("compose deployment snapshots", () => {
 		status: "done" | "error" | "running",
 		title = "Deployment",
 	): Promise<string> => {
-		const [row] = await dbModule.db
-			.insert(schema.deployments)
-			.values({
-				title,
-				status,
-				logPath: `/tmp/snap-${Date.now()}-${Math.random()}.log`,
-				composeId: tenant.composeId,
-				appName: `snap-${Math.random().toString(16).slice(2, 8)}`,
-				startedAt: new Date(),
-				finishedAt: status === "running" ? null : new Date(),
-			})
-			.returning();
+		const [row] = await dbModule.db.transaction(async (tx) => {
+			await tx.execute(drizzle.sql`set local nixploy.environment_snapshot_protocol = '1'`);
+			return await tx
+				.insert(schema.deployments)
+				.values({
+					title,
+					status,
+					logPath: `/tmp/snap-${Date.now()}-${Math.random()}.log`,
+					composeId: tenant.composeId,
+					appName: `snap-${Math.random().toString(16).slice(2, 8)}`,
+					startedAt: new Date(),
+					finishedAt: status === "running" ? null : new Date(),
+				})
+				.returning();
+		});
 		if (!row) throw new Error("deployment seed failed");
 		return row.deploymentId;
 	};

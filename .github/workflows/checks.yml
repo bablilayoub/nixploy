@@ -134,3 +134,7 @@ jobs:
       - name: Release publication contracts
         working-directory: .workflow-contracts
         run: node --test tools/ci/image-signature.test.mjs tools/ci/release-publication.test.mjs
+
+      - name: Organization upgrade proof contract
+        working-directory: .workflow-contracts
+        run: node tools/ci/organization-upgrade-proof.mjs --self-test

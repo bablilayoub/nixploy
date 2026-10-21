@@ -1,21 +1,22 @@
 import Docker from "dockerode";
-import { eq } from "drizzle-orm";
+import { and, eq, ne, or } from "drizzle-orm";
 import { db } from "../../db";
 import {
 	environments,
 	type mariadb,
 	type mongo,
 	type mysql,
-	type postgres,
+	postgres,
+	recoveryCopies,
 	type redis,
 	servers,
 } from "../../db/schema";
 import { bestEffort } from "../../utils/best-effort";
 import { execAsyncRemote } from "../../utils/exec";
 import { assertSafeTenantHostPort } from "../../utils/validators";
+import { inspectRecoveryRuntime, type RecoveryOrigin } from "../backups/recovery-copy-identity";
 import { mergeNodeConstraint } from "../cluster/placement";
 import { resolveLocalPublicHost } from "../cluster/public-host";
-import { getServerSwarmNodeId } from "../cluster/swarm-node";
 import { ensureEnvironmentNetworkById, pruneEnvironmentNetwork } from "../deployment/network";
 import {
 	DEFAULT_CAPABILITY_ADD,
@@ -31,6 +32,7 @@ import type { QuotaResourceDefaults } from "../projects/quotas";
 import { removeRuntimeLogs } from "../runtime-logs/store";
 import { randomAppNameSuffix, slugifyName } from "../services/app-name";
 import { SERVICE_REGISTRY } from "../services/registry";
+import { assertDatabaseTaskNode, databaseSwarmNodeId } from "./placement";
 
 /**
  * Shared engine for the five one-click database services (postgres, mysql,
@@ -322,7 +324,7 @@ export const DB_DUMP_CONFIG: Record<DatabaseKind, DumpConfig> = {
 
 // ── small helpers ───────────────────────────────────────────────────────────
 
-const docker = new Docker();
+const docker = new Docker({ socketPath: process.env.DOCKER_SOCKET ?? "/var/run/docker.sock" });
 
 const isRemote = (serverId: string | null | undefined): serverId is string =>
 	typeof serverId === "string" && serverId.length > 0;
@@ -389,6 +391,7 @@ export interface ServiceDefinition {
 	env: string[];
 	args: string[];
 	volumeName: string;
+	volumeLabels?: Record<string, string>;
 	dataDir: string;
 	publishedPort: number | null;
 	targetPort: number;
@@ -483,7 +486,7 @@ export function buildDatabaseSwarmSpec(
 						VolumeOptions: {
 							NoCopy: false,
 							DriverConfig: { Name: "local" },
-							Labels: { "nixploy.managed": "true" },
+							Labels: { ...def.volumeLabels, "nixploy.managed": "true" },
 						},
 					},
 				],
@@ -716,20 +719,59 @@ export async function deployDatabase<K extends DatabaseKind>(
 	row: DatabaseRowMap[K],
 ): Promise<{ created: boolean }> {
 	const base = row as BaseRow;
+	const origin = await db.query.recoveryCopies.findFirst({
+		where: and(
+			ne(recoveryCopies.status, "deleted"),
+			or(
+				eq(recoveryCopies.originAppName, row.appName),
+				kind === "postgres"
+					? eq(recoveryCopies.targetPostgresId, (row as PostgresRow).postgresId)
+					: undefined,
+			),
+		),
+		columns: {
+			recoveryCopyId: true,
+			targetPostgresId: true,
+			originSwarmNodeId: true,
+			originServerId: true,
+			originAppName: true,
+		},
+	});
+	if (
+		origin &&
+		(kind !== "postgres" ||
+			origin.targetPostgresId !== (row as PostgresRow).postgresId ||
+			origin.originServerId !== row.serverId ||
+			origin.originAppName !== row.appName)
+	) {
+		throw preconditionFailed(
+			"The recovery database name remains reserved for its original retained copy",
+		);
+	}
 	const [swarmNodeId, networks, organizationId] = await Promise.all([
-		isRemote(row.serverId) ? getServerSwarmNodeId(row.serverId) : null,
+		databaseSwarmNodeId(row.serverId),
 		ensureDatabaseNetworks(base.environmentId),
 		loadDatabaseOrganizationId(base.environmentId),
 	]);
+	if (origin && origin.originSwarmNodeId !== swarmNodeId)
+		throw preconditionFailed(
+			"The recovery database no longer matches its immutable storage node. Inspect its original volume before redeploying.",
+		);
 	const def = buildServiceDefinition(kind, row, {
 		networks,
 		quotaDefaults: await loadQuotaDefaults(organizationId),
 	});
+	if (origin) def.volumeLabels = { "nixploy.recovery.copy": origin.recoveryCopyId };
 	await assertManagedDatabaseService(def.name, kind, "update");
 
 	const service = docker.getService(def.name);
 	const existing = await service.inspect().catch(() => null);
 	if (existing) {
+		assertDatabaseTaskNode(
+			await docker.listTasks({ filters: { service: [existing.ID] } }),
+			swarmNodeId,
+			existing.Spec?.TaskTemplate?.Placement?.Constraints,
+		);
 		await updateServiceWithRetry(def.name, (current) => {
 			const replicas =
 				(current as { Mode?: { Replicated?: { Replicas?: number } } }).Mode?.Replicated?.Replicas ??
@@ -808,9 +850,68 @@ export async function removeDatabase(
 	serverId: string | null,
 	kind?: DatabaseKind,
 	environmentId?: string | null,
+	options?: { recoveryCopyId: string },
 ): Promise<void> {
+	let recoveryOrigin: RecoveryOrigin | undefined;
+	// General service removal must enforce the same immutable origin as the
+	// dedicated recovery-copy action, including after a target appName edit.
+	if (kind === undefined || kind === "postgres") {
+		const target = await db.query.postgres.findFirst({
+			where: eq(postgres.appName, appName),
+			columns: { postgresId: true },
+		});
+		const origin = await db.query.recoveryCopies.findFirst({
+			where: and(
+				ne(recoveryCopies.status, "deleted"),
+				or(
+					eq(recoveryCopies.originAppName, appName),
+					target ? eq(recoveryCopies.targetPostgresId, target.postgresId) : undefined,
+				),
+			),
+		});
+		if (origin) {
+			if (options?.recoveryCopyId !== origin.recoveryCopyId) {
+				throw preconditionFailed(
+					"Use Delete copy in Backups to remove this tracked recovery database",
+				);
+			}
+			if (
+				origin.originServerId !== serverId ||
+				origin.originAppName !== appName ||
+				origin.originVolumeName !== `${appName}-data` ||
+				!origin.originSwarmNodeId
+			) {
+				throw preconditionFailed(
+					"The recovery database no longer matches its immutable storage location",
+				);
+			}
+			recoveryOrigin = {
+				recoveryCopyId: origin.recoveryCopyId,
+				originServerId: origin.originServerId,
+				originSwarmNodeId: origin.originSwarmNodeId,
+				originAppName: appName,
+				originVolumeName: origin.originVolumeName,
+				originVolumeCreatedAt: origin.originVolumeCreatedAt,
+			};
+			const runtime = await inspectRecoveryRuntime(recoveryOrigin);
+			if (!runtime.serviceExists && runtime.volumeExists) {
+				throw preconditionFailed(
+					"The original recovery volume remains without a verifiable service; inspect it manually",
+				);
+			}
+		}
+	}
+	if (options && !recoveryOrigin)
+		throw preconditionFailed("The recovery copy origin could not be verified");
 	try {
 		await removeDatabaseService(appName, serverId, kind);
+		if (recoveryOrigin) {
+			const after = await inspectRecoveryRuntime(recoveryOrigin);
+			if (after.serviceExists || after.volumeExists)
+				throw preconditionFailed(
+					"The original recovery resources remain; tracking is retained for retry",
+				);
+		}
 		await bestEffort(`remove runtime logs for ${appName}`, () => removeRuntimeLogs(appName));
 	} finally {
 		// Drop the environment overlay once the last service of the environment

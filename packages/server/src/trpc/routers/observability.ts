@@ -10,8 +10,10 @@ import {
 	deleteAlertRule,
 	disableStatusPage,
 	enableStatusPage,
+	getIncidentWorkspace,
 	getStatusPage,
 	listAlertRules,
+	listIncidentPage,
 	listIncidents,
 	listServiceEvents,
 	listUptimeProbes,
@@ -35,6 +37,7 @@ import {
 	LogQueryError,
 	parseLogQuery,
 	type RuntimeLogLine,
+	readMergedRuntimeLogs,
 	readRuntimeLogs,
 } from "../../modules/runtime-logs";
 import {
@@ -95,6 +98,31 @@ const assertComposeAccess = async (composeId: string, organizationId: string) =>
 };
 
 export const observabilityRouter = router({
+	incidentPage: protectedProcedure
+		.input(
+			z.object({
+				projectId: z.string().min(1).optional(),
+				state: z.enum(["open", "resolved", "all"]).default("open"),
+				cursor: z.string().max(500).nullish(),
+				limit: z.number().int().min(1).max(100).default(30),
+			}),
+		)
+		.query(async ({ ctx, input }) => {
+			const organizationId = await resolveCallerOrganizationId(
+				ctx.session.user.id,
+				ctx.session.session.activeOrganizationId,
+			);
+			return listIncidentPage(organizationId, input);
+		}),
+	incident: protectedProcedure
+		.input(z.object({ incidentId: z.string().min(1) }))
+		.query(async ({ ctx, input }) => {
+			const organizationId = await resolveCallerOrganizationId(
+				ctx.session.user.id,
+				ctx.session.session.activeOrganizationId,
+			);
+			return getIncidentWorkspace(input.incidentId, organizationId);
+		}),
 	incidents: protectedProcedure
 		.input(
 			z
@@ -447,6 +475,9 @@ export const observabilityRouter = router({
 				appName: z.string().min(1).max(64).optional(),
 				query: z.string().max(500).optional(),
 				before: z.number().int().positive().optional(),
+				cursor: z.string().max(300).nullish(),
+				since: z.number().int().positive().max(8_640_000_000_000_000).optional(),
+				until: z.number().int().positive().max(8_640_000_000_000_000).optional(),
 				limit: z.number().int().min(1).max(500).optional(),
 			}),
 		)
@@ -455,6 +486,11 @@ export const observabilityRouter = router({
 				ctx.session.user.id,
 				ctx.session.session.activeOrganizationId,
 			);
+			if (input.since && input.until && input.since > input.until)
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "The history start must be before its end",
+				});
 			await assertCapability(ctx.session.user.id, organizationId, "service.runtime");
 			let query: LogQuery | null = null;
 			if (input.query?.trim()) {
@@ -481,12 +517,16 @@ export const observabilityRouter = router({
 					appName: input.appName,
 					query,
 					before: input.before ?? null,
+					cursor: input.cursor,
+					since: input.since,
+					until: input.until,
 					limit,
 				});
 				const appName = input.appName;
 				return {
 					lines: page.lines.map((line): Line => ({ ...line, appName })),
 					nextCursor: page.nextCursor,
+					nextPageCursor: page.nextPageCursor,
 					truncated: page.truncated,
 					scanned: page.scanned,
 				};
@@ -516,38 +556,15 @@ export const observabilityRouter = router({
 					? []
 					: (await Promise.all(SERVICE_DEFS.map((def) => def.module.listSummaries(envIds)))).flat();
 
-			const deadline = Date.now() + 4_000;
-			const lines: Line[] = [];
-			let cut: number | null = null;
-			let truncated = false;
-			let scanned = 0;
-			for (const summary of summaries) {
-				const budgetMs = deadline - Date.now();
-				if (budgetMs <= 0) {
-					truncated = true;
-					break;
-				}
-				const page = await readRuntimeLogs({
-					appName: summary.appName,
-					query,
-					before: input.before ?? null,
-					limit,
-					budgetMs,
-				});
-				scanned += page.scanned;
-				truncated ||= page.truncated;
-				for (const line of page.lines) lines.push({ ...line, appName: summary.appName });
-				if (page.nextCursor !== null)
-					cut = cut === null ? page.nextCursor : Math.max(cut, page.nextCursor);
-			}
-			lines.sort((a, b) => b.t - a.t);
-			// Only the range every service has fully covered is returned; the
-			// rest comes back on the next page from `cut` down.
-			const covered = cut === null ? lines : lines.filter((line) => line.t >= (cut as number));
-			const page = covered.slice(0, limit);
-			const last = page[page.length - 1];
-			const nextCursor = covered.length > limit ? (last?.t ?? cut) : cut;
-			return { lines: page, nextCursor, truncated, scanned };
+			return readMergedRuntimeLogs({
+				appNames: summaries.map((summary) => summary.appName),
+				query,
+				before: input.before,
+				cursor: input.cursor,
+				since: input.since,
+				until: input.until,
+				limit,
+			});
 		}),
 
 	uptimeProbes: protectedProcedure.query(async ({ ctx }) => {

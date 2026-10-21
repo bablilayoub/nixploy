@@ -134,7 +134,7 @@ export function TopNav() {
 							<SheetHeader className="border-b px-4 py-3 text-start">
 								<SheetTitle className="flex items-center gap-2">
 									<LogoMark className="size-5" />
-									Nixploy
+									{branding.productName}
 								</SheetTitle>
 							</SheetHeader>
 							<nav className="flex flex-col gap-1 p-3">

@@ -177,6 +177,7 @@ describe.skipIf(!testUrl)("remediation rule pass (postgres)", () => {
 		expect(proposal.rule).toBe("rollout_failed");
 		expect(proposal.action.type).toBe("rollback_application");
 		expect(incident?.message).toContain("converge step");
+		expect(incident?.metadata?.deploymentId).toBe(failed?.deploymentId);
 
 		await dbModule.db
 			.delete(schema.deployments)

@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "../../db";
 import {
 	applications,
@@ -9,6 +9,7 @@ import {
 	serviceEvents,
 } from "../../db/schema";
 import { createLogger } from "../../lib/logger";
+import { bestEffort } from "../../utils/best-effort";
 import { describeErrorWithCause } from "../../utils/error-cause";
 import { performApplicationRollback } from "../application/rollback";
 import {
@@ -20,6 +21,7 @@ import { publishPlatformEventDetached } from "../deployment/notify";
 import { badRequest, notFound, preconditionFailed } from "../errors";
 import { notifyEvent } from "../notifications";
 import { findIncident, recordIncident, resolveIncident } from "../observability";
+import { assertProjectVisible } from "../projects/project-scope";
 import { isServiceKind } from "../services/kinds";
 import { SERVICE_REGISTRY } from "../services/registry";
 import {
@@ -305,7 +307,14 @@ async function proposeForRollout(signal: RolloutSignal): Promise<void> {
 	const tenancy = await SERVICE_REGISTRY[signal.serviceType].module.findTenancy(signal.serviceId);
 	if (!tenancy || tenancy.organizationId !== signal.organizationId) return;
 	const proposal = buildRolloutProposal(signal, await rollbackCandidate(signal));
-	await fileProposal(signal.serviceType, signal.serviceId, signal.appName, tenancy, proposal);
+	await fileProposal(
+		signal.serviceType,
+		signal.serviceId,
+		signal.appName,
+		tenancy,
+		proposal,
+		signal.deploymentId,
+	);
 }
 
 async function proposeFor(signal: FailureSignal): Promise<void> {
@@ -325,6 +334,7 @@ async function fileProposal(
 	appName: string,
 	tenancy: { organizationId: string; projectId: string; name: string },
 	proposal: RemediationProposal,
+	failedDeploymentId?: string,
 ): Promise<void> {
 	const signal = { serviceType, serviceId, appName };
 	const incident = await recordIncident({
@@ -336,7 +346,11 @@ async function fileProposal(
 		message: proposal.reason,
 		serviceId: signal.serviceId,
 		serviceName: tenancy.name,
-		metadata: { serviceKind: signal.serviceType, proposal },
+		metadata: {
+			serviceKind: signal.serviceType,
+			proposal,
+			...(failedDeploymentId ? { deploymentId: failedDeploymentId } : {}),
+		},
 	});
 	log.info("Remediation proposed", {
 		service: signal.appName,
@@ -383,6 +397,13 @@ async function openProposal(incidentId: string, organizationId: string) {
 	if (incident.resolvedAt)
 		throw preconditionFailed("This proposal was already applied or dismissed");
 	const proposal = incident.metadata?.proposal;
+	const progress = proposal as
+		| { operation?: unknown; appliedAt?: unknown; dismissedAt?: unknown }
+		| undefined;
+	if (progress?.operation || progress?.appliedAt || progress?.dismissedAt)
+		throw preconditionFailed(
+			"This recovery was already requested or dismissed. Inspect its result before resolving the incident.",
+		);
 	if (!isRemediationProposal(proposal)) throw badRequest("This proposal has no readable action");
 	return { incident, proposal: proposal as RemediationProposal };
 }
@@ -395,7 +416,7 @@ export interface ApplyRemediationResult {
 
 /**
  * A human said yes: perform the proposed rollback through the same code the
- * manual rollback uses, then close the proposal with what was done. The
+ * manual rollback uses. Starting recovery leaves the incident open for verification. The
  * caller has checked `service.deploy` (and `secrets.write` for compose).
  */
 export async function applyRemediation(input: {
@@ -410,74 +431,132 @@ export async function applyRemediation(input: {
 		);
 	}
 	if (!incident.serviceId) throw preconditionFailed("The proposal's service is gone");
+	// Incident project references are historical. A service may have moved since
+	// the incident was filed, so authorize its current project before admission.
+	const currentKind = proposal.action.type === "rollback_application" ? "application" : "compose";
+	const currentTenancy = await SERVICE_REGISTRY[currentKind].module.findTenancy(incident.serviceId);
+	if (currentTenancy?.organizationId !== input.organizationId) throw notFound("Service not found");
+	assertProjectVisible(currentTenancy.projectId, "Service");
 
-	let deploymentId: string;
-	if (proposal.action.type === "rollback_application") {
-		const application = await db.query.applications.findFirst({
-			where: eq(applications.applicationId, incident.serviceId),
-			columns: { applicationId: true, appName: true, serverId: true },
-		});
-		if (!application) throw notFound("Application not found");
-		const tenancy = await SERVICE_REGISTRY.application.module.findTenancy(
-			application.applicationId,
-		);
-		if (tenancy?.organizationId !== input.organizationId) throw notFound("Application not found");
-		const result = await performApplicationRollback({
-			application,
-			rollbackId: proposal.action.rollbackId,
-			triggeredBy: input.userId,
-		});
-		deploymentId = result.deployment.deploymentId;
-	} else {
-		const row = await db.query.compose.findFirst({
-			where: eq(compose.composeId, incident.serviceId),
-			columns: { composeId: true, sourceType: true },
-		});
-		if (!row) throw notFound("Compose service not found");
-		const tenancy = await SERVICE_REGISTRY.compose.module.findTenancy(row.composeId);
-		if (tenancy?.organizationId !== input.organizationId)
-			throw notFound("Compose service not found");
-		const snapshot = await findComposeSnapshot(row.composeId, proposal.action.snapshotId);
-		if (!snapshot) throw notFound("Rollback snapshot not found");
-		await restoreComposeSnapshot(row, snapshot);
-		// Lazy: `deployment/index.ts` registers the job runner and pulls the
-		// worker in; the reconciler (which loads this module) must not.
-		const { queueDeployment } = await import("../deployment");
-		deploymentId = await queueDeployment({
-			composeId: row.composeId,
-			type: "redeploy",
-			title: "Rollback",
-			trigger: "rollback",
-			triggeredBy: input.userId,
-			commitMessage: `Rollback to deployment ${snapshot.deploymentId}`,
-		});
-	}
-
-	await db
+	const operation = {
+		state: "applying",
+		startedAt: new Date().toISOString(),
+		appliedBy: input.userId,
+	};
+	// One atomic admission before any Docker/Compose side effect. A competing
+	// approval or dismissal cannot run a second operation from the same proposal.
+	const [claimed] = await db
 		.update(incidents)
 		.set({
-			metadata: {
-				...(incident.metadata ?? {}),
-				proposal: {
-					...proposal,
-					appliedAt: new Date().toISOString(),
-					appliedBy: input.userId,
-					deploymentId,
-				},
-			},
+			metadata: sql`jsonb_set(${incidents.metadata}, '{proposal,operation}', ${JSON.stringify(operation)}::jsonb, true)`,
+			acknowledgedAt: sql`coalesce(${incidents.acknowledgedAt}, now())`,
+			acknowledgedBy: sql`coalesce(${incidents.acknowledgedBy}, ${input.userId})`,
 		})
-		.where(eq(incidents.incidentId, incident.incidentId));
-	await resolveIncident({
-		incidentId: incident.incidentId,
-		organizationId: input.organizationId,
-		userId: input.userId,
-		note: `Applied: ${
-			proposal.action.type === "rollback_application"
-				? `rolled back to ${proposal.action.image}`
-				: `restored deployment ${proposal.action.sourceDeploymentId}`
-		} (deployment ${deploymentId})`,
-	});
-	return { incidentId: incident.incidentId, action: proposal.action.type, deploymentId };
+		.where(
+			and(
+				eq(incidents.incidentId, incident.incidentId),
+				eq(incidents.organizationId, input.organizationId),
+				isNull(incidents.resolvedAt),
+				sql`${incidents.metadata}->'proposal'->'operation' IS NULL`,
+				sql`${incidents.metadata}->'proposal'->>'appliedAt' IS NULL`,
+				sql`${incidents.metadata}->'proposal'->>'dismissedAt' IS NULL`,
+			),
+		)
+		.returning({ incidentId: incidents.incidentId });
+	if (!claimed) throw preconditionFailed("This recovery was already requested or dismissed.");
+	const saveOperation = async (value: Record<string, unknown>) => {
+		await db
+			.update(incidents)
+			.set({
+				metadata: sql`jsonb_set(${incidents.metadata}, '{proposal,operation}', ${JSON.stringify(value)}::jsonb, true)`,
+			})
+			.where(
+				and(
+					eq(incidents.incidentId, incident.incidentId),
+					eq(incidents.organizationId, input.organizationId),
+				),
+			);
+		publishPlatformEventDetached({
+			kind: "incident",
+			organizationId: input.organizationId,
+			incidentId: incident.incidentId,
+			incidentKind: REMEDIATION_INCIDENT_KIND,
+		});
+	};
+	try {
+		let deploymentId: string;
+		if (proposal.action.type === "rollback_application") {
+			const application = await db.query.applications.findFirst({
+				where: eq(applications.applicationId, incident.serviceId),
+				columns: { applicationId: true, appName: true, serverId: true },
+			});
+			if (!application) throw notFound("Application not found");
+			const tenancy = await SERVICE_REGISTRY.application.module.findTenancy(
+				application.applicationId,
+			);
+			if (tenancy?.organizationId !== input.organizationId) throw notFound("Application not found");
+			assertProjectVisible(tenancy.projectId, "Application");
+			const result = await performApplicationRollback({
+				application,
+				rollbackId: proposal.action.rollbackId,
+				triggeredBy: input.userId,
+			});
+			deploymentId = result.deployment.deploymentId;
+		} else {
+			const row = await db.query.compose.findFirst({
+				where: eq(compose.composeId, incident.serviceId),
+				columns: { composeId: true, sourceType: true },
+			});
+			if (!row) throw notFound("Compose service not found");
+			const tenancy = await SERVICE_REGISTRY.compose.module.findTenancy(row.composeId);
+			if (tenancy?.organizationId !== input.organizationId)
+				throw notFound("Compose service not found");
+			assertProjectVisible(tenancy.projectId, "Compose service");
+			const snapshot = await findComposeSnapshot(row.composeId, proposal.action.snapshotId);
+			if (!snapshot) throw notFound("Rollback snapshot not found");
+			await restoreComposeSnapshot(row, snapshot);
+			// Lazy: `deployment/index.ts` registers the job runner and pulls the
+			// worker in; the reconciler (which loads this module) must not.
+			const { queueDeployment } = await import("../deployment");
+			const {
+				captureDeploymentEnvironment,
+				findDeploymentEnvironment,
+				environmentForComposeRollback,
+			} = await import("../deployment/environment-snapshot");
+			const environment = environmentForComposeRollback(
+				snapshot,
+				await captureDeploymentEnvironment({ composeId: row.composeId }),
+				await findDeploymentEnvironment(snapshot.deploymentId),
+			);
+			deploymentId = await queueDeployment(
+				{
+					composeId: row.composeId,
+					type: "redeploy",
+					title: "Rollback",
+					trigger: "rollback",
+					triggeredBy: input.userId,
+					commitMessage: `Rollback to deployment ${snapshot.deploymentId}`,
+				},
+				{ environment },
+			);
+		}
+
+		await saveOperation({ ...operation, state: "submitted", deploymentId });
+		return { incidentId: incident.incidentId, action: proposal.action.type, deploymentId };
+	} catch (error) {
+		await bestEffort(
+			"Record failed incident recovery",
+			() =>
+				saveOperation({
+					...operation,
+					state: "failed",
+					error: error instanceof Error ? error.message : "Recovery could not be completed",
+					finishedAt: new Date().toISOString(),
+				}),
+			"error",
+		);
+		throw error;
+	}
 }
 
 /** A human said no: close the proposal, leave the service alone until the next window. */
@@ -487,7 +566,7 @@ export async function dismissRemediation(input: {
 	userId: string;
 }): Promise<{ incidentId: string }> {
 	const { incident } = await openProposal(input.incidentId, input.organizationId);
-	await db
+	const [dismissed] = await db
 		.update(incidents)
 		.set({
 			metadata: {
@@ -499,7 +578,17 @@ export async function dismissRemediation(input: {
 				},
 			},
 		})
-		.where(eq(incidents.incidentId, incident.incidentId));
+		.where(
+			and(
+				eq(incidents.incidentId, incident.incidentId),
+				isNull(incidents.resolvedAt),
+				sql`${incidents.metadata}->'proposal'->'operation' IS NULL`,
+				sql`${incidents.metadata}->'proposal'->>'appliedAt' IS NULL`,
+				sql`${incidents.metadata}->'proposal'->>'dismissedAt' IS NULL`,
+			),
+		)
+		.returning({ incidentId: incidents.incidentId });
+	if (!dismissed) throw preconditionFailed("This recovery was already requested or dismissed.");
 	await resolveIncident({
 		incidentId: incident.incidentId,
 		organizationId: input.organizationId,

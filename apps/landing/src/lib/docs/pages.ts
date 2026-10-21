@@ -377,6 +377,15 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 				type: "note",
 				text: "Builders receive only the application's build args — the merged runtime env goes to the Swarm service alone, so a runtime secret no longer gets baked into image layers or the BuildKit cache. Move any key a build genuinely needs into Build args. Secret-looking keys in a Dockerfile build become BuildKit --secret mounts, which never appear in docker history.",
 			},
+			{ type: "h2", text: "Reviewed configuration releases" },
+			{
+				type: "p",
+				text: "Saving variables creates a draft and makes no Docker change. Organization → project → environment → service use one parser and precedence order. Review saved changes to see redacted changes and their winning layers, select applications or Compose stacks, then explicitly deploy. Database-generated credentials and previews retain their separate lifecycle.",
+			},
+			{
+				type: "note",
+				text: "Regular deployments capture encrypted environment and build-argument inputs when queued, so later draft edits cannot replace them. This does not freeze all settings, repository commits or mutable image tags. The encrypted organization-storage upgrade requires the current host update.sh: it backs up recovery assets, verifies both old roles stopped, and migrates separately before starting the new worker and panel. Failures pause for recovery; an older image needs its matching database/config/keys restored first. See docs/upgrade-notes.md before upgrading. Older queued jobs without snapshots must be reviewed and queued again.",
+			},
 			{ type: "h2", text: "The queue" },
 			{
 				type: "ul",
@@ -394,10 +403,10 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 				type: "ul",
 				items: [
 					"Deploy / redeploy / start / stop / reload",
-					"Swarm rolling updates — a failed deploy leaves the previous revision up",
-					"A convergence gate waits for one task to actually reach running (after the image's HEALTHCHECK) before the deploy is called successful; three failed tasks fail it with the engine's reason",
+					"Swarm rolling updates follow the service's update and rollback policy; inspect the actual result after a failed rollout or post-deploy hook",
+					"Application convergence requires the new deployment revision on every desired replica; an old running task cannot satisfy the new deployment's gate",
 					"One-click rollback to a previous successful image — the newest 5 pins per app are kept",
-					"Compose rollback restores the stack's compose file and its service-level env from a snapshot taken at each render",
+					"Compose rollback restores the stack's saved body and runtime environment; newer snapshots also retain the deployment's build arguments. Git-backed sources keep their repository as the body authority",
 					"Optional push of the built image to a registry, so replicas on other nodes and rollbacks after a node swap can pull it",
 					"Docker-image sources can auto-update: hourly digest check, redeploy when the tag moves",
 				],
@@ -405,13 +414,13 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 			{ type: "h2", text: "Deploy hooks" },
 			{
 				type: "p",
-				text: "A pre-deploy command (migrations, say) runs in a throwaway container built from the image this job just produced, with the merged runtime env handed over a 0600 env file — never on argv. A non-zero exit aborts the deploy before the rollout, so the old version keeps serving. The post-deploy command runs once the rollout converges.",
+				text: "An application pre-deploy command runs in a throwaway container from the image this job produced. The Docker Engine API receives the parsed environment directly, preserving literal quotes, dollar signs and newlines without putting values on argv. A non-zero exit aborts before rollout. The post-deploy command targets the new deployment revision after convergence.",
 			},
 			{
 				type: "ul",
 				items: [
 					"The image must contain a shell: the hook overrides the image's own ENTRYPOINT with sh, and exit 127 means there is no /bin/sh (scratch and distroless images cannot host one)",
-					"Hooks are time-boxed by NIXPLOY_HOOK_TIMEOUT_MS (default 10 minutes); the container and the env file are always cleaned up",
+					"Hooks are time-boxed by NIXPLOY_HOOK_TIMEOUT_MS (default 10 minutes), with cleanup limited to the operation's labelled container",
 					"Previews never run them — a pull request's migration must not touch the environment production shares",
 				],
 			},
@@ -781,6 +790,15 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 					"A failed verification is visible in the history next to the dump it rejected",
 				],
 			},
+			{ type: "h2", text: "PostgreSQL recovery copies" },
+			{
+				type: "p",
+				text: "Backups → Recovery copies restores a stored PostgreSQL dump into a new managed database in another accessible environment. It validates the archive before provisioning, uses the source's versioned image/server, generates fresh credentials, publishes no host port, and checks the restored table catalog before showing Ready. The source and stored dump are preserved.",
+			},
+			{
+				type: "note",
+				text: "Copies retain unsanitized data and consume normal service/storage resources until explicitly deleted. An admin needs backup, service creation/deployment and secret-write permissions. A failed restore keeps its incomplete target for inspection or deletion; an interrupted operation never shows success. Deletion checks the recorded original server and volume, refuses placement changes, and retains tracking when cleanup cannot be verified. This initial workflow does not upgrade versions or copy to another server. Verify application compatibility yourself.",
+			},
 			{ type: "h2", text: "Volume backups" },
 			{
 				type: "p",
@@ -874,8 +892,9 @@ nixploy import apply --source dokploy --url https://old-panel.example.com --sour
 					"Per-service and host threshold alert rules",
 					"Uptime probes with flip notifications",
 					"Expiry warnings for uploaded TLS certificates, from 21 days out",
-					"Incident timeline on the Monitoring page — acknowledge records who is looking at it and leaves the incident open; resolve closes it with an optional note",
+					"Incident workspace on Monitoring — filter open/resolved/all by project, page older work, and follow scoped service/deployment/log evidence. Acknowledge keeps it open; an applied recovery requires a verification note to resolve",
 					"Proposed remediations: a service that fails three tasks in ten minutes gets an incident carrying a suggested rollback — to the previous pinned image, or a compose stack's earlier snapshot — that waits for a person to apply or dismiss it. Nothing runs on its own, an out-of-memory loop is told to raise its limit rather than roll back, and one proposal per service per hour keeps it quiet",
+					"Recovery shows its actual queued, running, completed, failed or unavailable result. Queueing is not resolution; duplicate approvals are blocked. Opening the workspace never runs a route probe automatically",
 					"Public status page at /status/<token>: chosen probes, their state, 90-day uptime and recent incident titles, on an unauthenticated link you can rotate or take offline",
 					"Fleet overview across local and remote servers",
 				],

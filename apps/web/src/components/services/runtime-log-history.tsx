@@ -1,7 +1,7 @@
 "use client";
 
 import type { LogLineLevel } from "@nixploy/server/modules/observability/log-levels";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { History, Loader2, Search } from "lucide-react";
 import { useState } from "react";
 import { QueryState } from "@/components/query-state";
@@ -10,8 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
-import { toastError } from "@/lib/describe-error";
-import { useTRPC, useTRPCClient } from "@/lib/trpc";
+import { useTRPC } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
 type HistoryLine = {
@@ -53,40 +52,35 @@ const formatTime = (t: number): string => {
  * page, every visible service. The first page is a query; older pages are
  * fetched on demand and appended, keyed by the server's timestamp cursor.
  */
-export function RuntimeLogHistory({ appName }: { appName?: string }) {
+export function RuntimeLogHistory({
+	appName,
+	since,
+	until,
+}: {
+	appName?: string;
+	since?: number;
+	until?: number;
+}) {
 	const trpc = useTRPC();
-	const trpcClient = useTRPCClient();
 	const [draft, setDraft] = useState("");
 	const [query, setQuery] = useState("");
-	const [older, setOlder] = useState<{ lines: HistoryLine[]; cursor: number | null } | null>(null);
-	const [loadingOlder, setLoadingOlder] = useState(false);
-
-	const input = { appName, query: query || undefined, limit: PAGE_SIZE };
-	const firstPage = useQuery(trpc.observability.runtimeLogs.queryOptions(input));
-
-	const lines: HistoryLine[] = [...(firstPage.data?.lines ?? []), ...(older?.lines ?? [])];
-	const cursor = older ? older.cursor : (firstPage.data?.nextCursor ?? null);
-	const truncated = firstPage.data?.truncated ?? false;
-
+	const history = useInfiniteQuery(
+		trpc.observability.runtimeLogs.infiniteQueryOptions(
+			{
+				appName,
+				query: query || undefined,
+				since,
+				until,
+				limit: PAGE_SIZE,
+			},
+			{ getNextPageParam: (page) => page.nextPageCursor },
+		),
+	);
+	const lines: HistoryLine[] = history.data?.pages.flatMap((page) => page.lines) ?? [];
+	const truncated = history.data?.pages.some((page) => page.truncated) ?? false;
 	const submit = () => {
-		setOlder(null);
-		setQuery(draft.trim());
-	};
-
-	const loadOlder = async () => {
-		if (cursor === null) return;
-		setLoadingOlder(true);
-		try {
-			const page = await trpcClient.observability.runtimeLogs.query({ ...input, before: cursor });
-			setOlder((current) => ({
-				lines: [...(current?.lines ?? []), ...page.lines],
-				cursor: page.nextCursor,
-			}));
-		} catch (error) {
-			toastError(error, "Failed to load older lines");
-		} finally {
-			setLoadingOlder(false);
-		}
+		if (draft.trim() === query) void history.refetch();
+		else setQuery(draft.trim());
 	};
 
 	return (
@@ -108,8 +102,8 @@ export function RuntimeLogHistory({ appName }: { appName?: string }) {
 						aria-label="Search runtime logs"
 					/>
 				</div>
-				<Button type="submit" variant="outline" size="sm" disabled={firstPage.isFetching}>
-					{firstPage.isFetching ? <Loader2 className="size-4 animate-spin" /> : null}
+				<Button type="submit" variant="outline" size="sm" disabled={history.isFetching}>
+					{history.isFetching ? <Loader2 className="size-4 animate-spin" /> : null}
 					Search
 				</Button>
 			</form>
@@ -121,24 +115,37 @@ export function RuntimeLogHistory({ appName }: { appName?: string }) {
 				<code className="font-mono">/regex/</code> narrow further. <HelpLink slug="observability" />
 			</p>
 
+			{since !== undefined && until !== undefined && (
+				<p className="text-xs text-muted-foreground">
+					Incident window: {formatTime(since)} – {formatTime(until)}
+				</p>
+			)}
 			<QueryState
-				isPending={firstPage.isPending}
-				isError={firstPage.isError}
-				error={firstPage.error}
-				onRetry={() => firstPage.refetch()}
-				isEmpty={lines.length === 0}
-				empty={
+				isPending={history.isPending}
+				isError={history.isError}
+				error={history.error}
+				onRetry={() => void history.refetch()}
+				isEmpty={false}
+				empty={null}
+			>
+				{lines.length === 0 && (
 					<EmptyState
 						icon={History}
-						title={query ? "No lines match" : "No history yet"}
+						title={
+							history.hasNextPage
+								? "No matches in this scanned range"
+								: query
+									? "No lines match"
+									: "No history in this window"
+						}
 						description={
-							query
-								? "Try fewer terms, or load older history from a wider window."
-								: "The worker collects output every 30 s while a container runs; the first lines show up within a minute."
+							history.hasNextPage
+								? "Continue into older history to keep searching."
+								: "Try a broader search. The worker collects running container output every 30 seconds."
 						}
 					/>
-				}
-			>
+				)}
+
 				<div className="overflow-hidden rounded-lg border border-border">
 					<div className="max-h-[32rem] overflow-auto font-mono text-xs">
 						{lines.map((line, index) => (
@@ -181,19 +188,19 @@ export function RuntimeLogHistory({ appName }: { appName?: string }) {
 								? " — the search stopped on its scan budget; narrow the query or load older"
 								: ""}
 						</span>
-						{cursor !== null ? (
+						{history.hasNextPage ? (
 							<Button
 								type="button"
 								variant="ghost"
 								size="sm"
-								disabled={loadingOlder}
-								onClick={() => void loadOlder()}
+								disabled={history.isFetchingNextPage}
+								onClick={() => void history.fetchNextPage()}
 							>
-								{loadingOlder ? <Loader2 className="size-4 animate-spin" /> : null}
+								{history.isFetchingNextPage ? <Loader2 className="size-4 animate-spin" /> : null}
 								Load older
 							</Button>
 						) : (
-							<span>Start of history</span>
+							<span>End of selected history</span>
 						)}
 					</div>
 				</div>

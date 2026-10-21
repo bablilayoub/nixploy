@@ -1,0 +1,1 @@
+ALTER TABLE "recovery_copy" ADD COLUMN "origin_swarm_node_id" text;

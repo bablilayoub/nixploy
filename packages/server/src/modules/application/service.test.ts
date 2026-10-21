@@ -20,6 +20,13 @@ vi.mock("../../db", () => ({
 		},
 	},
 }));
+const resolveRuntime = vi.hoisted(() =>
+	vi.fn(
+		async () =>
+			"ORG=encrypted\nPROJECT_VAR=1\nSHARED=from-app\nDATABASE_URL=postgres://db/app\nAPP_ONLY=1",
+	),
+);
+vi.mock("../projects/env-resolution", () => ({ resolveRuntimeEnvironment: resolveRuntime }));
 // Sibling modules with heavy import graphs — not under test here.
 vi.mock("../preview", () => ({ deletePreviewDeployment: vi.fn() }));
 vi.mock("../deployment/maintenance", () => ({ removeServiceLogs: vi.fn() }));
@@ -53,9 +60,11 @@ const application = {
 };
 
 describe("loadMergedApplicationEnv", () => {
-	it("inherits project → environment → application (deeper level wins)", async () => {
+	it("uses canonical organization → project → environment → service resolution", async () => {
 		const env = await loadMergedApplicationEnv(application);
+		expect(resolveRuntime).toHaveBeenCalledWith("env-1", application.env);
 		expect(env).toEqual([
+			"ORG=encrypted",
 			"PROJECT_VAR=1",
 			"SHARED=from-app",
 			"DATABASE_URL=postgres://db/app",

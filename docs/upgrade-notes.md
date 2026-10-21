@@ -10,6 +10,109 @@ Upgrade mechanics (rollback, pre-update dump, downgrade guard) are in
 
 ---
 
+## Next operator workspace upgrade
+
+Migration `0048` changes the organization-variable storage contract. This is
+an upgrade boundary, including installations with a separate worker:
+
+1. Back up the database and config directory, and preserve the encryption-key
+   chain and authentication secret outside the database backup.
+2. Use the current host `update.sh`. It stops the canonical panel and worker,
+   waits for their actual tasks to stop, and saves private database/config and
+   actual service-environment recovery assets. The boundary requires this
+   backup even when ordinary backup skipping was requested. Stop any custom
+   or non-Swarm panel/worker processes yourself before proceeding.
+3. The updater runs a separate new-image migrator while both services stay
+   stopped, then encrypts legacy organization
+   variables and removes only `metadata.env` in one transaction. Other metadata,
+   such as quotas and branding, is preserved. A conflicting or invalid legacy
+   value blocks the backfill. Only after success does it start the new worker
+   and panel. Missing drain acknowledgement, active/unknown tasks or an
+   unreachable node block migration. A deployment still recorded as `running`
+   also blocks migration; inspect it before explicitly finalizing it.
+4. Check readiness, organization variables and a reviewed deployment. Queued
+   jobs created by an older build have no immutable environment snapshot and
+   fail before Docker work; review and deploy them again with the new build.
+
+The physical organization metadata column is renamed. Older readers and writers
+fail visibly; a database protocol guard also rejects older deployment claimers.
+Running an old binary against the upgraded database is unsupported. To roll
+back this boundary, restore the pre-upgrade database and matching config/keys
+before starting the older build. Swarm image rollback alone does not reverse
+the schema or recover removed plaintext variables. Keep all old processes
+stopped during migration: a database guard cannot undo external commands that
+an already running process issued before shutdown.
+
+An older GUI updater cannot cross this boundary: the new migrator rejects it
+before changing the database. The new GUI directs split installations to the
+host updater, rechecks standalone topology after pulling, verifies target-image
+storage compatibility and pauses failed rolls. Boundary host failures keep
+roles stopped or paused; never restart the older binaries against the changed
+schema. Restore the pre-upgrade dump into an empty replacement database and
+restore the matching config/key assets before starting those binaries. An
+acknowledged image downgrade does not waive that requirement.
+
+For a development installation running Node processes instead of platform
+Swarm services, stop every panel and worker and make the same backups first.
+With the original database URL, key chain and auth secret loaded, run from
+`packages/server`:
+
+```bash
+NIXPLOY_OFFLINE_UPGRADE=stopped-all-roles-and-backed-up-0048 \
+  pnpm exec tsx src/scripts/migrate-organization-env.ts
+```
+
+This explicit operator assertion covers processes outside Swarm; it does not
+automatically stop them. The script refuses canonical platform services or any
+other connected database client, migrates on one acknowledged connection, and
+runs the backfill. Ordinary `pnpm db:migrate` cannot silently cross a populated
+legacy database boundary.
+
+The backfill transaction preserves its legacy source if validation, encryption
+or a database write fails; resolve the startup error before accepting work.
+This transition encrypts the live database only. Backups made before the
+backfill can contain plaintext organization variables in metadata, even when
+other secret columns are encrypted. Restrict access to those backups, keep
+them only for the required recovery period, and expire them under your backup
+retention policy. The upgrade does not rewrite existing backup objects.
+
+**Saving variables no longer updates an application service.** Organization,
+project, environment and service variables use one parser and precedence order.
+Save drafts, review redacted changes and their winning layers, then explicitly
+deploy selected applications or Compose stacks. Every newly queued regular application/Compose deployment
+captures encrypted environment and build-argument inputs in its transaction;
+later variable edits do not change those inputs. This does not freeze all
+service settings, repository commits or image tags. Managed database credential
+variables retain their separate lifecycle.
+
+**Recovery stays open until verified.** An incident's recovery operation shows
+the actual queued, running, completed, failed or unavailable result. Enqueueing
+a rollback no longer marks the incident resolved. Resolving an applied recovery
+requires a note and is blocked while its deployment is active. Incidents can
+be filtered and paged; runtime-log clients can use `nextPageCursor` with `cursor`
+to preserve entries sharing a timestamp. Legacy numeric `before`/`nextCursor`
+remains supported with its previous timestamp-only behavior.
+
+**PostgreSQL recovery copies are retained services.** Backups → Recovery copies
+validates a stored dump, provisions a new private PostgreSQL database in another
+accessible environment, generates fresh credentials, restores it and checks
+its table catalog. The source image and placement are retained; a versioned
+PostgreSQL image is required. The source database and archive are preserved.
+Copies contain unsanitized data, consume normal service/storage resources and
+remain until explicitly deleted. A failed restore retains its incomplete
+target for inspection or deletion; an interrupted operation never reports
+success. Migration `0049` records the original server and data-volume identity.
+Deletion refuses moved targets or unknown legacy origins and retains tracking
+when that original location cannot be verified. A successful restore/catalog
+check does not establish application
+compatibility, data sanitization or production readiness. Other database
+engines are outside this initial workflow.
+
+**The panel has a new default design system.** IBM Plex typography, mineral
+surfaces, plum actions and a persistent desktop sidebar apply to shared
+operator screens. Saved instance/organization logos and accent colors remain
+authoritative; routes, service-tab deep links and capability gates are retained.
+
 ## v0.6.0
 
 One migration (`0046`, additive: `web_server_settings.dns_auto_records`).

@@ -77,6 +77,7 @@ import { useCapabilities } from "@/hooks/use-capabilities";
 import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 import type { AppRouter } from "@/lib/trpc-types";
+import { RecoveryCopies } from "./recovery-copies";
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type DatabaseBackupEntry = RouterOutputs["backup"]["all"][number];
@@ -780,6 +781,17 @@ export function BackupsPanel({ target }: { target: BackupsTarget }) {
 					table
 				)}
 			</SettingsSection>
+			{target.kind === "database" && target.databaseType === "postgres" && (
+				<RecoveryCopies
+					key={target.serviceId}
+					scope={{ postgresId: target.serviceId }}
+					backups={backups}
+					backupsStatus={
+						databaseQuery.isPending ? "pending" : databaseQuery.isError ? "error" : "ready"
+					}
+					onRetryBackups={() => void databaseQuery.refetch()}
+				/>
+			)}
 
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>

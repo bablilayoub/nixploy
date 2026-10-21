@@ -11,22 +11,27 @@ A developer or small-team operator managing production services from a laptop, w
 1. An unverified state must look unfinished: imports, templates and deployments distinguish saved configuration from a running service.
 2. Review before changing infrastructure: source selection, target, redacted changes and manual work remain visible before apply.
 3. Keep operational information close: service names, environment, health and next action belong together; failures never look empty.
-4. Neutral chrome carries functional color: preserve the organization accent, use semantic colors for state, and spend space on readable data.
+4. Keep the familiar stone/zinc monochrome app, Inter and JetBrains Mono, existing horizontal navigation and saved branding. Present distinct concepts for selection before any future aesthetic rollout.
 5. Keep learned navigation intact: preserve routes, deep links, service tab order, command palette and capability gates.
 
 # Success criteria
 
-An operator can find a failing service on desktop or phone, create a service from existing Compose, and review then import a selected source environment without accidentally deploying it. Import results identify the remaining secrets, data, server, routing and deployment work.
+An operator can find the service needing attention, identify its environment and current state, inspect evidence, and take the next permitted action on desktop or phone. Editing, deployment and recovery clearly distinguish a draft, an in-flight operation and a verified result.
 
 # Scope
 
-- Reskin shared panel seams and dashboard/project creation surfaces while retaining their information architecture.
-- Preserve the existing Inter and JetBrains Mono fonts, neutral light/dark palette and organization branding.
+- Preserve the real app's familiar visual identity, shared primitives and navigation. Add functional workflows and useful accessibility/mobile corrections within that design.
+- Offer three to five clearly distinct modern dashboard concepts as standalone sample-data previews. Wait for the user's selection before changing app appearance; preserve instance/organization logos and accent colors.
 - Hover and focus motion only; no decorative entrance sequences.
 - Marketing structure and vendored registry components remain governed by the landing app's existing contract.
 - Production host changes, public DNS/ACME and same-host takeover are outside this implementation.
 
 # Learned constraints
 
-- 2026-10-15: Product/design decisions are delegated; use repository evidence and the calm operator-panel direction without waiting for discovery answers.
-- Craft 8, motion 2, density 6, variance 4. Signature: a compact review-to-next-action workflow, with keyboard access through the existing command palette.
+- 2026-10-15: Functional product decisions are delegated; use repository evidence without waiting for discovery answers. Aesthetic delegation is superseded by the 2026-10-21 requirement to compare standalone concepts before an app appearance change.
+- **2026-10-20 — Deprecated 2026-10-21:** The earlier replacement-design direction delegated palette/font choices. *Deprecation reason:* the user rejected the resulting mineral/plum/IBM Plex overhaul and reinstated the familiar app design.
+- **2026-10-20 — Deprecated 2026-10-21:** Craft 8/motion 2/density 7/variance 5 and the status-spine signature described the rejected overhaul; do not apply them to the real app.
+
+- **2026-10-21** — Retain the existing familiar visual design in the real app. The rejected mineral/plum/IBM Plex overhaul must not ship. Preserve functional/security fixes, useful UX corrections and safe owned CSS/dependency removals. Offer **three to five clearly distinct modern dashboard concept previews** for the user to compare and select before any future aesthetic rollout. *Why:* the user explicitly dislikes the redesign and wants comparison and choice. This supersedes conflicting prior aesthetic directions; accessibility and correctness remain required.
+
+- **2026-10-21 — Deprecated prior principle 4:** ~~A distinctive workspace supports concentration: cool mineral surfaces, plum actions and IBM Plex typography establish the default identity; the saved organization accent remains authoritative.~~ *Why:* the user rejected that visual overhaul and wants the familiar design retained while comparing standalone concepts.

@@ -23,6 +23,10 @@ import {
 	roleDefaultCapabilities,
 	serializeOrgMetadata,
 } from "../../modules/projects";
+import {
+	loadOrganizationEnvironment,
+	saveOrganizationEnvironment,
+} from "../../modules/projects/organization-env";
 import { instanceRuntimeLogLimits } from "../../modules/runtime-logs/retention";
 import { textBlobSchema } from "../../utils/input-limits";
 import { protectedProcedure, router } from "../init";
@@ -42,14 +46,6 @@ const quotaInputSchema = z.object({
 	/** Runtime log history per service, MB — under the instance ceiling. */
 	runtimeLogMaxMbPerService: z.number().int().min(0).max(1_000_000).nullable().optional(),
 });
-
-/**
- * Organization-level env vars live in `organization.metadata.env` (dotenv
- * string) — the slot `resolveEnvironmentVariables` reads as the lowest
- * level of org → project → environment → service. `OrgMetadata` in
- * `modules/projects/quotas.ts` does not declare it; the slot is typed here.
- */
-type OrgMetadataWithEnv = ReturnType<typeof parseOrgMetadata> & { env?: string };
 
 const brandingInputSchema = z.object({
 	displayName: z.string().min(1).max(255).nullable().optional(),
@@ -232,8 +228,7 @@ export const organizationRouter = router({
 			throw new TRPCError({ code: "NOT_FOUND", message: "Organization not found" });
 		}
 		const canSeeSecrets = await hasCapability(ctx.session.user.id, organizationId, "secrets.read");
-		const metadata = parseOrgMetadata(org.metadata) as OrgMetadataWithEnv;
-		const env = typeof metadata.env === "string" ? metadata.env : "";
+		const env = await loadOrganizationEnvironment(organizationId);
 		return {
 			organizationId,
 			env: canSeeSecrets ? env : null,
@@ -261,12 +256,7 @@ export const organizationRouter = router({
 			if (!org) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Organization not found" });
 			}
-			const metadata = parseOrgMetadata(org.metadata) as OrgMetadataWithEnv;
-			metadata.env = input.env;
-			await db
-				.update(organizations)
-				.set({ metadata: serializeOrgMetadata(metadata) })
-				.where(eq(organizations.id, organizationId));
+			await saveOrganizationEnvironment(organizationId, input.env);
 
 			await auditFromSession(ctx, organizationId, {
 				action: "organization.environment",
@@ -275,7 +265,7 @@ export const organizationRouter = router({
 				targetName: org.name,
 			});
 
-			return { organizationId, env: input.env };
+			return { organizationId };
 		}),
 
 	/**

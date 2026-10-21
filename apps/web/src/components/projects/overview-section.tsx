@@ -230,17 +230,18 @@ export function RecentDeployments() {
 								<span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/50">
 									<StatusDot status={deploymentStatusDot[deployment.status] ?? "neutral"} />
 								</span>
-								<div className="min-w-0 flex-1 space-y-0.5">
-									<p className="truncate text-sm font-medium leading-none">{name}</p>
-									<p className="truncate text-xs text-muted-foreground">
-										{deployment.project.name} · <span className="capitalize">{serviceType}</span> ·{" "}
+								<div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
+									<p className="min-w-0 text-sm leading-5 font-medium wrap-anywhere">{name}</p>
+									<span className="text-xs leading-5 font-medium">
 										{deploymentStatusLabel[deployment.status] ?? deployment.status}
+									</span>
+									<p className="col-span-2 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+										<span className="min-w-0 truncate">
+											{deployment.project.name} · <span className="capitalize">{serviceType}</span>
+										</span>
+										<DateTime value={deployment.createdAt} className="shrink-0" />
 									</p>
 								</div>
-								<DateTime
-									value={deployment.createdAt}
-									className="ms-auto text-xs whitespace-nowrap text-muted-foreground"
-								/>
 							</>
 						);
 						return href ? (

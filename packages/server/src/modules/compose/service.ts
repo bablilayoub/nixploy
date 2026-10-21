@@ -21,6 +21,7 @@ import type { DeploymentContext } from "../deployment/context";
 import { removeServiceLogs } from "../deployment/maintenance";
 import { ensureEnvironmentNetworkById, pruneEnvironmentNetwork } from "../deployment/network";
 import { badRequest, conflict, notFound, preconditionFailed } from "../errors";
+import { resolveRuntimeEnvironment } from "../projects/env-resolution";
 import { assertProjectVisible } from "../projects/project-scope";
 import { removeRuntimeLogs } from "../runtime-logs/store";
 import { unregisterSchedulesForService } from "../schedules";
@@ -48,7 +49,6 @@ import {
 	composeEnvMap,
 	hostPrivilegedComposeSafety,
 	listComposeServices,
-	mergeEnvVars,
 	parseComposeFile,
 	shouldRedactEnvValue,
 } from "./compose-file";
@@ -379,6 +379,8 @@ async function exposedServiceNames(composeId: string): Promise<Set<string>> {
 }
 
 export interface PrepareComposeFilesOptions {
+	/** Approved immutable runtime variables captured when this job was queued. */
+	runtimeEnv?: string;
 	/**
 	 * Deployment this render belongs to. When it resolves (explicitly, or via
 	 * the currently-claimed job — see `snapshot.ts#resolveCurrentDeploymentId`)
@@ -450,12 +452,9 @@ export async function prepareComposeFiles(
 	}
 
 	// Env inheritance: project → environment → service (service wins).
-	const full = await findComposeById(composeRow.composeId);
-	const mergedEnv = mergeEnvVars(
-		full?.environment.project.env,
-		full?.environment.env,
-		composeRow.env,
-	);
+	const mergedEnv =
+		options.runtimeEnv ??
+		(await resolveRuntimeEnvironment(composeRow.environmentId, composeRow.env));
 	const env = composeEnvMap(mergedEnv);
 
 	// Stack rows pinned to a server: `docker stack deploy` runs on the primary

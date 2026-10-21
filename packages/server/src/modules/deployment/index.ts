@@ -1,9 +1,10 @@
 import { and, eq, sql } from "drizzle-orm";
-import { db } from "../../db";
+import { type DbExecutor, db } from "../../db";
 import { applications, compose, deployments, previewDeployments } from "../../db/schema";
 import { generateId } from "../../db/schema/utils";
 import { isPanelRole, isSplitRole } from "../../lib/role";
 import { bestEffort } from "../../utils/best-effort";
+import { captureDeploymentEnvironment, recordDeploymentEnvironment } from "./environment-snapshot";
 import { deploymentEvents } from "./events";
 import {
 	CANCEL_ACK_GRACE_MS,
@@ -125,7 +126,27 @@ async function supersedeQueuedJobs(
  * Returns the deploymentId — the WS layer streams the log from disk and
  * closes on the matching {@link deploymentEvents} `finish` (or DB status).
  */
-export async function queueDeployment(job: DeploymentJobInput): Promise<string> {
+export interface QueuedDeploymentNotice {
+	deploymentId: string;
+	serverId: string | null;
+	superseded: string[];
+}
+
+export interface QueueDeploymentOptions {
+	executor?: DbExecutor;
+	/** A batch transaction publishes notices only after its outer commit. */
+	notices?: QueuedDeploymentNotice[];
+	releaseId?: string;
+	environment?: Awaited<ReturnType<typeof captureDeploymentEnvironment>>;
+}
+
+export async function queueDeployment(
+	job: DeploymentJobInput,
+	options: QueueDeploymentOptions = {},
+): Promise<string> {
+	const executor = options.executor ?? db;
+	if (options.executor && !options.notices)
+		throw new Error("An external queue transaction requires deferred notices");
 	if (!job.applicationId && !job.composeId) {
 		throw new Error("queueDeployment requires an applicationId or composeId");
 	}
@@ -133,7 +154,7 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
 	let appName: string;
 	let serverId: string | null;
 	if (job.previewDeploymentId) {
-		const preview = await db.query.previewDeployments.findFirst({
+		const preview = await executor.query.previewDeployments.findFirst({
 			where: eq(previewDeployments.previewDeploymentId, job.previewDeploymentId),
 		});
 		if (!preview) throw new Error(`Preview deployment not found: ${job.previewDeploymentId}`);
@@ -154,14 +175,14 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
 			job.applicationId = preview.applicationId ?? undefined;
 		}
 	} else if (job.applicationId) {
-		const application = await db.query.applications.findFirst({
+		const application = await executor.query.applications.findFirst({
 			where: eq(applications.applicationId, job.applicationId),
 		});
 		if (!application) throw new Error(`Application not found: ${job.applicationId}`);
 		appName = application.appName;
 		serverId = application.serverId;
 	} else {
-		const composeRow = await db.query.compose.findFirst({
+		const composeRow = await executor.query.compose.findFirst({
 			where: eq(compose.composeId, job.composeId ?? ""),
 		});
 		if (!composeRow) throw new Error(`Compose service not found: ${job.composeId}`);
@@ -172,7 +193,7 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
 	const deploymentId = generateId();
 	const isPreview = Boolean(job.previewDeploymentId);
 
-	const superseded = await db.transaction(async (tx) => {
+	const superseded = await executor.transaction(async (tx) => {
 		// Serialize concurrent enqueues for ONE app so two pushes landing in
 		// the same millisecond cannot each insert a queued row and then find
 		// nothing to supersede. Different apps never contend.
@@ -214,26 +235,39 @@ export async function queueDeployment(job: DeploymentJobInput): Promise<string> 
 			commitAuthor: job.commitAuthor ?? null,
 			requestedRef: job.ref ?? null,
 		});
+		if (!isPreview) {
+			const environment = options.environment ?? (await captureDeploymentEnvironment(job, tx));
+			await recordDeploymentEnvironment(deploymentId, environment, {
+				executor: tx,
+				releaseId: options.releaseId,
+			});
+		}
 		return await supersedeQueuedJobs(tx, { appName, deploymentId });
 	});
 
-	for (const id of superseded) {
-		deploymentEvents.emit("finish", { deploymentId: id, status: "cancelled" });
-		publishDeploymentStatusDetached(id, "cancelled");
-	}
-	startQueueLoop();
-	deploymentEvents.emit("enqueued", { deploymentId, serverId });
-	// Cross-process wake-up: in role `panel` the claim loop lives in
-	// nixploy-worker, which the in-process `enqueued` event cannot reach. A lost
-	// NOTIFY only costs latency — the loop's slow poll is the fallback.
-	void notifyDeployQueued({ deploymentId, serverId });
-	// So the caller's very next `deployment.byApplication` already renders
-	// "Queued (#n)" instead of waiting for the loop's own refresh.
-	await refreshQueueSnapshot().catch(() => {});
-	publishDeploymentStatusDetached(deploymentId, "queued", {
-		queuePosition: getQueuePosition(deploymentId),
-	});
+	const notice = { deploymentId, serverId, superseded };
+	if (options.notices) options.notices.push(notice);
+	else await publishQueuedDeployments([notice]);
 	return deploymentId;
+}
+
+/** All rows and their encrypted snapshots have committed before a worker wakes. */
+export async function publishQueuedDeployments(notices: QueuedDeploymentNotice[]): Promise<void> {
+	for (const { deploymentId, serverId, superseded } of notices) {
+		for (const id of superseded) {
+			deploymentEvents.emit("finish", { deploymentId: id, status: "cancelled" });
+			publishDeploymentStatusDetached(id, "cancelled");
+		}
+		startQueueLoop();
+		deploymentEvents.emit("enqueued", { deploymentId, serverId });
+		void notifyDeployQueued({ deploymentId, serverId });
+	}
+	await refreshQueueSnapshot().catch(() => {});
+	for (const { deploymentId } of notices) {
+		publishDeploymentStatusDetached(deploymentId, "queued", {
+			queuePosition: getQueuePosition(deploymentId),
+		});
+	}
 }
 
 /**

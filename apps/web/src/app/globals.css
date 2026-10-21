@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
+@import "./component-states.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -35,6 +35,10 @@
 	--color-border: var(--border);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
+	--color-control: var(--control);
+	--color-panel-inset: var(--panel-inset);
+	--color-selection: var(--selection);
+	--color-chart-axis: var(--chart-axis);
 	--color-success: var(--success);
 	--color-warning: var(--warning);
 	--color-info: var(--info);
@@ -55,6 +59,11 @@
 
 :root {
 	--radius: 0.625rem;
+	/* Compatibility aliases keep new workflows on the familiar neutral palette. */
+	--control: var(--input);
+	--panel-inset: var(--muted);
+	--selection: var(--accent);
+	--chart-axis: var(--muted-foreground);
 	--background: #fafafa;
 	--foreground: #1c1917;
 	--card: #ffffff;
@@ -237,7 +246,29 @@ body[data-activity-tray="1"] [data-sonner-toaster][data-y-position="bottom"] {
 		animation: none !important;
 	}
 	.animate-in,
-	.animate-out {
+	.animate-out,
+	[class*=":animate-in"],
+	[class*=":animate-out"] {
 		animation-duration: 1ms;
+	}
+}
+
+@media (pointer: coarse) {
+	[data-slot="button"],
+	[data-slot="select-trigger"],
+	[data-slot="tabs-trigger"],
+	[data-slot="dialog-close"],
+	[data-slot="dropdown-menu-item"],
+	[data-slot="select-item"] {
+		min-height: 2.75rem;
+	}
+	[data-slot="button"][data-size^="icon"],
+	[data-slot="dialog-close"],
+	[data-slot="command-palette-trigger-mobile"] {
+		min-width: 2.75rem;
+		min-height: 2.75rem;
+	}
+	[data-slot="input"] {
+		min-height: 2.75rem;
 	}
 }

@@ -9,13 +9,126 @@ file is for **state** and **tasks**.
 
 Runtime hardening and the native Trivy publication fix are merged. Main image
 publication passes both native scans and both installer signature checks.
-The separate Release patch stages and signs the index, verifies both shipped
+The merged Release patch stages and signs the index, verifies both shipped
 installer assets, then promotes public tags. Independent source review and
-71 local workflow contracts pass. Real cosign checks of the existing v0.7.3
+71 local workflow contracts pass on both Node 22 and Node 24. Real cosign checks of the existing v0.7.3
 assets accept its Release signer and reject a wrong expected identity and an
 unsigned child. Required contracts use immutable workflow tooling while product
-checks retain the selected tag. Draft PR CI and final review remain required;
-no Release execution, signing or Git tag creation was performed for this patch.
+checks retain the selected tag. PR #28 merged after independent review and all
+required CI passed; no Release execution, signing or Git tag creation was
+performed for this patch.
+
+## Operator workspace — 2026-10-21 (integration in progress)
+
+Three product workflows and functional/accessibility corrections are implemented on
+`codex/operator-workspace`; final integrated gates, production builds and PR
+review are still in progress. This is not a release/publication claim.
+
+- Configuration drafts save without Docker changes; reviewed, selected
+  application/Compose releases queue encrypted immutable environment/build-arg
+  snapshots. Canonical precedence includes the organization layer. Migration
+  `0048` removes plaintext organization variables at startup, fences old
+  metadata readers/writers and worker claims, and requires a coordinated drain through the current host updater.
+- Incidents have scoped evidence, project/state filters and older pages.
+  Recovery remains open through queued/running/failed/completed states and
+  requires explicit verification. Runtime logs retain equal-time entries and
+  continuation after an empty scan-budget page.
+- PostgreSQL recovery copies restore a validated archive into a retained,
+  private managed service with fresh credentials in another environment.
+  Source and archive are preserved; deletion verifies service and target-node
+  volume absence before dropping tracking. Other engines, server moves,
+  sanitization and application compatibility are outside this initial flow.
+- **Binding design correction, 2026-10-21:** retain the familiar Inter/JetBrains
+  Mono, stone/zinc monochrome app, horizontal navigation and existing primitive
+  styling. The mineral/plum/Plex overhaul is rejected and must not ship.
+  The familiar appearance is restored while retaining functional/security work, mobile
+  tab visibility, readable deployment rows, accessible controls and safe owned
+  CSS/dependency removals. Five standalone dashboard prototypes are available:
+  Carbon, Studio, Blueprint, Harbor and Focus. Their isolated gallery is at
+  `http://127.0.0.1:4317` with artifacts under
+  `~/.codex/visualizations/2026/10/21/nixploy-dashboard-directions`. No concept
+  has been selected; aesthetic rollout remains pending user choice. The rejected
+  overhaul is not completed product work. Branding remains authoritative.
+
+Current isolated proof includes two-replica queued-input immutability, real
+application rollback restoring HTTP, Compose failed rollback followed by manual
+repair, and 500,053 log lines with lossless continuation to 53 equal-time
+matches. A 3,200-row PostgreSQL copy matches source content, uses fresh credentials
+through a private-network client, and rejects the source password. Corrupt
+archives create no target. Browser create/delete removes only its copy and data
+volume; another retained copy and the source remain intact.
+
+Independent review caught and corrected historical-environment rollback,
+moved-service authorization, remote-volume deletion truth and hook dotenv
+transport issues. Hook creation uses Engine `Env`, bounded owned cleanup and
+signed ownership for abandoned-container recovery. Actual app/Compose literal
+hooks, nonzero failure, cancellation and exact owned late-helper cleanup passed.
+Queue investigation captured two rows becoming running in one claim while
+the caller received one. A transaction-local PostgreSQL reproduction confirms a repeated candidate
+subquery under stale one-row statistics. A separate held-transaction probe also
+reproduces concurrent claims of sibling jobs for one app. The corrected claim
+locks one candidate, tries the enqueue app lock and rechecks a guarded primary-key
+update under explicit READ COMMITTED isolation. The stale-plan, held-claim and
+precise commit-window regressions fail before correction; corrected 18 DB/23
+unit cases pass. The corrected integrated server run passed 3,489 tests (one
+optional registry probe skipped), with 119 web and 94 CLI tests passing. Peer
+source review, workspace types, strict Biome and knip pass; corrected-head CI
+and independent clearance remain required before merge.
+
+The normal `0048` host path stops/verifies both old roles, requires private
+recovery assets, migrates/backfills separately, and pauses on failure. Old GUI
+rolls fail before schema changes; new GUI split updates require the host path.
+Native PostgreSQL proof preserves legacy values/metadata on a rejected gate
+and restores the old schema/values from a pre-upgrade dump into an empty DB.
+Actual seeded old-release split-worker upgrade proof remains a required CI gate.
+At `e658d48`, both native image scans and Swarm runtime jobs passed, but both
+real upgrade jobs timed out after successful old-task drain, post-drain backup,
+native migration and backfill. A healthy new worker had no `UpdateStatus`, so
+the completed-only convergence gate never ran. A real Docker reproduction
+confirmed the failure; the corrected gate distinguishes absent metadata from
+inspection failure, verifies exact service/task identities and image/replicas,
+and retains a 60-second stable-task window. Its actual unchanged 150-iteration
+function passed after 66 seconds. Failure cleanup now waits for confirmed actual
+shutdown and reports unconfirmed stops honestly. An unchanged real failure trap
+returned the original failure code after 8.6 seconds, independently confirmed
+both captured containers stopped, retained its recovery fence, and removed only
+its exact test resources. Final corrected-head CI and independent clearance
+remain required. At `c06ffdc`, both complete native Trivy reports contain zero
+findings at every severity and zero ignored findings; both native Swarm runtime
+jobs and both upgrade jobs pass, including populated encrypted-storage/fence/
+inheritance/identity assertions and post-upgrade API checks with the original key.
+The final rebased head also routes the organization-upgrade self-test through
+immutable workflow tooling: a missing-tool historical-tag regression fails before
+that correction. Primary migration and publication remain outside these proofs.
+Migration `0049` records immutable recovery origins. A real moved-target deletion
+was rejected with its original volume/service intact, then ordinary deletion
+succeeded after restoring placement, preserving the source and unrelated copies.
+`0050` records the concrete daemon node; `0051` retains the exact labeled volume
+creation identity and restricts environment/organization/target cascades. Bulk
+teardown refuses retained copies before side effects. A fresh 3,200-row direct
+module drill verifies precreated storage, task locality, redeploy and successful
+cleanup after the service was already removed. Source/unrelated resources remain
+unchanged. Schedule-independent service/project inventory now has exact
+timestamp/ID pagination and preserves missing-target cleanup actions; 78 focused
+backend cases pass. Production workflow verification captured 118 actual
+screenshots plus one explicitly mocked paging capture; the rejected visual
+checkpoint is historical. The shared tab wrapper reveals selected deep-link
+tabs and preserves manual keyboard focus during layout changes. Familiar-design
+production checks cover 32 page views, 20 redacted configuration reviews and
+actual incident log continuation in both themes on mobile and desktop, with no
+browser errors or mutations. Sixteen tab scenarios additionally cover history,
+keyboard activation, delayed counts, resize, explicit RTL strip previews and
+no document scroll jumps. Tab panels retain a visible keyboard-focus indicator
+without changing their resting appearance. Final corrected-head verification remains required.
+
+The original four Swarm service IDs/specs, 74 pre-existing volumes, original
+network IDs and seven primary proxy-file hashes remain preserved at the
+in-progress resource check. Real multi-node/SSH placement and public DNS/ACME
+remain outside the local proof. Authorization and image hardening are merged;
+fresh production dependency audit reports zero findings, while the full graph
+retains one low development-bundler advisory; its supported CLI compiler
+replacement is reviewed separately. Merge remains pending. Release workflow
+dispatch, Git tags and npm publication are not authorized.
 
 ## Active backlog — 2026-10-20
 
@@ -37,6 +150,12 @@ an implementation checkpoint, not a new release claim.
 
 ### Unimplemented product work
 
+- [ ] Select a dashboard direction before any aesthetic rollout. Five distinct
+  standalone prototypes are available; the real app keeps its familiar design.
+
+- [ ] Optional, opt-in expiry for completed recovery copies. Current verified
+  copies are retained until manual deletion; the creation deadline never
+  expires ready data.
 - [ ] Same-host takeover/adoption, proxy cutover and rollback remain a design
   sketch. Implement them against a disposable VM running the source panel,
   then prove original volume identity, certificates, traffic and rollback.
@@ -75,19 +194,15 @@ an implementation checkpoint, not a new release claim.
 
 ### Maintenance
 
-- [ ] Runtime image hardening follow-up: independent production dependency
-  tree, patched libexpat/tsx/esbuild and native-architecture blocking scans are
-  implemented locally. ARM64 all-severity scan and real auth/migration/worker/source-build/operator
-  probes passed. Exact-head CI, amd64 runtime/scan evidence and independent
-  review remain pending; see the [runtime audit](audits/2026-10/runtime-image.md).
-- [ ] Revisit the remaining moderate `postcss-selector-parser` advisory when
-  `@tailwindcss/typography` publishes a compatible resolution; keep the blocking
-  high/critical audit gate. The PR #15 evidence table below records the current
-  dependency decision.
-- [ ] Recheck unpatched `braces` under the development CLI and tsup's esbuild
-  0.27 line. The local Node runtime also needs an operator update; npm audit
-  does not cover its bundled libraries. Exact reachability and alternatives
-  are in the [October security follow-up](audits/2026-10/security-follow-up.md).
+- [ ] Complete signed publication after runtime hardening PRs #25/#27. Both
+  native image scans and real Swarm probes pass; the source review is clear.
+  Publication and the separate Release ordering follow-up remain distinct
+  gates; see the [runtime audit](audits/2026-10/runtime-image.md).
+- [ ] Recheck tsup's development-only esbuild 0.27.7 when a supported update
+  resolves [GHSA-g7r4-m6w7-qqqr](https://github.com/advisories/GHSA-g7r4-m6w7-qqqr),
+  a low Windows development-server advisory. Removing unused shadcn and
+  typography packages removes the earlier braces/selector-parser findings.
+  Fresh production audit is zero; the full graph has this one low finding.
 - [ ] Keep release/upgrade notes explicit about legacy Compose stacks sharing
   an environment needing redeploy. Legacy Swarm Stack naming upgrades require
   an explicit Stop and verified target-node storage placement; anonymous/image

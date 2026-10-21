@@ -1,5 +1,7 @@
 import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
+import { sql } from "drizzle-orm";
+import { db } from "../../db";
 import { createLogger } from "../../lib/logger";
 import { bestEffort } from "../../utils/best-effort";
 import { describeErrorWithCause } from "../../utils/error-cause";
@@ -33,6 +35,84 @@ const UPDATE_STUCK_AFTER_MS = 15 * 60 * 1000;
 export const PRE_UPDATE_BACKUP_KEEP = 3;
 const PRE_UPDATE_BACKUP_PREFIX = "pre-update-";
 const POSTGRES_SERVICE_LABEL = "com.docker.swarm.service.name=nixploy-postgres";
+const WORKER_SERVICE_NAME = "nixploy-worker";
+
+/** A panel cannot coordinate the shutdown of a separate worker while replacing itself. */
+async function assertStandaloneUpdate(): Promise<void> {
+	let output: string;
+	try {
+		output = await execAsync("docker service ls --format '{{.Name}}'", { timeout: 15_000 });
+	} catch {
+		throw preconditionFailed(
+			"Cannot verify the platform services. Run the updated host update.sh to inspect and coordinate the update.",
+		);
+	}
+	const services = output
+		.split("\n")
+		.map((name) => name.trim())
+		.filter(Boolean);
+	if (
+		!services.includes(NIXPLOY_SERVICE_NAME) ||
+		services.some((name) => !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(name))
+	) {
+		throw preconditionFailed(
+			"Cannot verify the platform services. Run the updated host update.sh to inspect and coordinate the update.",
+		);
+	}
+	if (services.includes(WORKER_SERVICE_NAME)) {
+		throw preconditionFailed(
+			"This installation has a separate worker. Run the updated host update.sh so both the panel and worker are drained and upgraded together.",
+		);
+	}
+}
+
+async function assertImageDowngradeSafe(): Promise<void> {
+	let upgraded: boolean;
+	try {
+		const rows = await db.execute<{ upgraded: boolean }>(sql`
+			select exists (
+				select 1 from information_schema.columns
+				where table_schema = 'public' and table_name = 'organization'
+				and column_name = 'metadata_v2'
+			) as upgraded
+		`);
+		if (typeof rows[0]?.upgraded !== "boolean") throw new Error("Unknown storage protocol");
+		upgraded = rows[0].upgraded;
+	} catch {
+		throw preconditionFailed(
+			"Cannot verify database compatibility. Use the updated host update.sh before attempting a downgrade.",
+		);
+	}
+	if (upgraded) {
+		throw preconditionFailed(
+			"Image-only downgrades are unavailable after the encrypted organization-variable upgrade. Restore the matching pre-upgrade database, config and encryption keys through the host recovery procedure before starting an older release.",
+		);
+	}
+}
+
+/** Tags and digests can name an old build without looking like a downgrade. */
+async function assertImageStorageCompatible(image: string): Promise<void> {
+	try {
+		const rows = await db.execute<{ upgraded: boolean }>(sql`
+			select exists (
+				select 1 from information_schema.columns
+				where table_schema = 'public' and table_name = 'organization'
+				and column_name = 'metadata_v2'
+			) as upgraded
+		`);
+		if (typeof rows[0]?.upgraded !== "boolean") throw new Error("Unknown storage protocol");
+		if (!rows[0].upgraded) return;
+		const result = await execAsync(
+			`docker run --rm --network none --entrypoint sh ${shellQuote(image)} -c 'test -f /app/packages/server/drizzle/0048_noisy_albert_cleary.sql && printf encrypted-org-env-v1'`,
+			{ timeout: 30_000 },
+		);
+		if (result.trim() !== "encrypted-org-env-v1") throw new Error("Incompatible storage protocol");
+	} catch {
+		throw preconditionFailed(
+			"The target image cannot be verified against encrypted organization variables. Use the updated host update.sh; starting an older build requires restoring its matching database, config and keys first.",
+		);
+	}
+}
 
 export interface ApplyUpdateResult {
 	started: boolean;
@@ -150,6 +230,10 @@ export async function preUpdateDatabaseDump(image: string): Promise<string | nul
  * couple of seconds so the HTTP response reaches the browser before this
  * very process is stopped.
  *
+ * Split installations require the host updater to drain both roles. A failed
+ * standalone roll pauses for recovery instead of restarting an old image
+ * against a schema that may already have changed.
+ *
  * Refused while deployments are in flight (the restart would interrupt
  * them — see `deployment/recovery.ts`) unless `force` is set; the automatic
  * updater never forces and simply retries on its next tick.
@@ -165,7 +249,8 @@ export async function applyUpdate(options?: {
 	version?: string;
 	/**
 	 * Acknowledge that rolling to an OLDER release does not reverse database
-	 * migrations (docs/upgrade-notes.md). Required for a downgrade.
+	 * migrations (docs/upgrade-notes.md). Does not permit an image-only downgrade
+	 * after the encrypted organization-variable storage upgrade.
 	 */
 	allowDowngrade?: boolean;
 	/** Roll even while deployments are running. */
@@ -219,16 +304,19 @@ export async function applyUpdate(options?: {
 	// acknowledgement — migrations are not reversed, so the older build meets
 	// a newer schema. `options.version` already went through
 	// `assertVersionAllowed`; this catches every other path.
-	if (!options?.version && !options?.allowDowngrade) {
-		const targetTag = imageVersionTag(image);
-		const target = parseVersion(targetTag);
-		if (target && compareVersions(targetTag, getAppVersion()) < 0) {
+	const targetTag = imageVersionTag(image);
+	const target = parseVersion(targetTag);
+	if (target && compareVersions(targetTag, getAppVersion()) < 0) {
+		isDowngrade = true;
+		if (!options?.version && !options?.allowDowngrade) {
 			throw badRequest(
 				`${releaseTag(targetTag)} is older than the running v${getAppVersion()}. ` +
 					"Database migrations are not reversed on downgrade — pass allowDowngrade to proceed anyway.",
 			);
 		}
 	}
+	if (isDowngrade) await assertImageDowngradeSafe();
+	await assertStandaloneUpdate();
 
 	if (!options?.force) {
 		// The pull and the dump both write to the config filesystem; running out
@@ -266,6 +354,14 @@ export async function applyUpdate(options?: {
 		await patchUpdateSettings({ lastError: `Image pull failed: ${message}` });
 		throw error;
 	}
+	// A long pull must not reuse stale evidence that no separate worker exists.
+	try {
+		await assertStandaloneUpdate();
+		await assertImageStorageCompatible(image);
+	} catch (error) {
+		applyInFlight = false;
+		throw error;
+	}
 
 	let backupPath: string | null = null;
 	try {
@@ -290,10 +386,8 @@ export async function applyUpdate(options?: {
 	setTimeout(() => {
 		void (async () => {
 			try {
-				// A task that fails to start (bad migration, boot crash) rolls the
-				// service back to the previous spec instead of crash-looping with
-				// the panel down. Rollback must be stop-first for the same
-				// host-mode port reason as the update itself.
+				// Migrations may have committed before startup fails. Pause so an
+				// older image cannot resume against an incompatible database.
 				await execAsync(
 					[
 						"docker service update",
@@ -302,9 +396,9 @@ export async function applyUpdate(options?: {
 						"--no-resolve-image",
 						`--image ${shellQuote(image)}`,
 						"--update-order stop-first",
-						"--update-failure-action rollback",
+						"--update-failure-action pause",
 						// Same monitor window as install.sh / update.sh (ROLL_ARGS): a
-						// task that passes HEALTHCHECK and dies within 60 s still rolls back.
+						// task that passes HEALTHCHECK and dies within 60 s still pauses.
 						"--update-monitor 60s",
 						// Panels installed before the graceful-shutdown work keep Swarm's
 						// 10 s default until update.sh runs; set it here too so an in-app
@@ -334,10 +428,10 @@ export async function applyUpdate(options?: {
 		started: true,
 		image,
 		message: isDowngrade
-			? "Downgrade started — database migrations are NOT reversed; restore the pre-update dump if the older version cannot read the schema"
+			? "Downgrade started — database migrations are not reversed; failed updates pause for manual recovery"
 			: backupPath
-				? "Update started — database dumped, the dashboard restarts in a few seconds"
-				: "Update started — the dashboard restarts in a few seconds",
+				? "Update started — database dumped. The dashboard restarts; failed updates pause for manual recovery"
+				: "Update started — the dashboard restarts; failed updates pause for manual recovery",
 		backupPath,
 		isDowngrade,
 	};

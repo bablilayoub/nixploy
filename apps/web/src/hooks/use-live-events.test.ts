@@ -18,19 +18,21 @@ const deployment = (overrides: Partial<Extract<LiveEvent, { kind: "deployment" }
 });
 
 describe("frameInvalidations", () => {
-	it("refetches the incident list, and nothing else, for an incident frame", () => {
+	it("refreshes incident list, count and selected investigation for an incident frame", () => {
 		expect(
 			paths(
 				frameInvalidations({ kind: "incident", incidentId: "inc_1", incidentKind: "remediation" }),
 			),
-		).toEqual(["observability.incidents"]);
+		).toEqual(["observability.incidents", "observability.incidentPage", "observability.incident"]);
 	});
 
-	it("only moves the deployment lists while a job is still in flight", () => {
+	it("updates deployment and investigation progress without claiming the service changed", () => {
 		for (const status of ["queued", "running"]) {
 			const targets = paths(frameInvalidations(deployment({ status, applicationId: "app_1" })));
 			expect(targets).toContain("deployment.recent");
 			expect(targets).toContain("deployment.byApplication");
+			expect(targets).toContain("observability.incident");
+			expect(targets).not.toContain("observability.incidentPage");
 			// A running job has not changed the service's status yet.
 			expect(targets).not.toContain("application.one");
 			expect(targets).not.toContain("docker.containers");

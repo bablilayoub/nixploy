@@ -6,6 +6,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
+import { ConfigurationRelease } from "@/components/services/configuration-release";
 import { EnvEditor } from "@/components/services/env-editor";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -57,7 +58,11 @@ export function EnvironmentVariablesTab({
 
 	const saveProjectEnv = useSaveMutation(trpc.project.saveEnvironment.mutationOptions(), {
 		successMessage: "Project variables saved",
-		invalidate: [trpc.project.one.queryKey({ projectId }), resolvedKey],
+		invalidate: [
+			trpc.project.one.queryKey({ projectId }),
+			resolvedKey,
+			trpc.configurationRelease.review.queryKey(),
+		],
 	});
 
 	const saveEnvironmentEnv = useSaveMutation(
@@ -65,7 +70,13 @@ export function EnvironmentVariablesTab({
 			// Dynamic text, so it stays here instead of `successMessage`.
 			onSuccess: () => toast.success(`Variables saved for "${environment?.name}"`),
 		}),
-		{ invalidate: [trpc.environment.byProject.queryKey({ projectId }), resolvedKey] },
+		{
+			invalidate: [
+				trpc.environment.byProject.queryKey({ projectId }),
+				resolvedKey,
+				trpc.configurationRelease.review.queryKey(),
+			],
+		},
 	);
 
 	return (
@@ -122,6 +133,7 @@ export function EnvironmentVariablesTab({
 					downloadName="project.env"
 					onSave={(env) => saveProjectEnv.mutateAsync({ projectId, env })}
 				/>
+				<ConfigurationRelease scope={{ kind: "project", id: projectId }} />
 			</SettingsSection>
 
 			{environment && (
@@ -143,6 +155,7 @@ export function EnvironmentVariablesTab({
 							})
 						}
 					/>
+					<ConfigurationRelease scope={{ kind: "environment", id: environment.environmentId }} />
 				</SettingsSection>
 			)}
 

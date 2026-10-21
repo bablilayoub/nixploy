@@ -4,8 +4,8 @@ import type { QueueJob } from "./queue";
 /**
  * Durable-queue unit tests.
  *
- * The queue's ordering rules live in one SQL statement, so this suite runs
- * against a fake `db.execute` that models that statement's semantics: FIFO
+ * The queue's ordering rules live in a SQL transaction, so this suite runs
+ * against a fake `db.execute` that models its selection/update semantics: FIFO
  * per server, the `NOT EXISTS … status = 'running'` per-app mutex on the row's
  * own `app_name` and the `row_number()` position snapshot. The real statement
  * (and `FOR UPDATE SKIP LOCKED` under concurrency) is exercised against
@@ -23,7 +23,16 @@ interface FakeRow {
 	title: string;
 }
 
-const { table } = vi.hoisted(() => ({ table: { rows: [] as FakeRow[] } }));
+const { table } = vi.hoisted(() => ({
+	table: {
+		rows: [] as FakeRow[],
+		busyApps: new Set<string>(),
+		duplicateClaimRows: false,
+		isolationLevel: "read committed",
+		transactionConfigs: [] as ({ isolationLevel?: string } | undefined)[],
+		statements: [] as string[],
+	},
+}));
 
 /** Flatten a drizzle `SQL` into its literal text and its bound parameters. */
 const { readSql } = vi.hoisted(() => {
@@ -59,10 +68,30 @@ const { readSql } = vi.hoisted(() => {
 	};
 });
 
-vi.mock("../../db", () => ({
-	db: {
+vi.mock("../../db", () => {
+	const database: {
+		execute: (query: unknown) => Promise<unknown[]>;
+		transaction: <T>(
+			callback: (tx: { execute: (query: unknown) => Promise<unknown[]> }) => Promise<T>,
+			config?: { isolationLevel?: string },
+		) => Promise<T>;
+	} = {
+		transaction: async (callback, config) => {
+			table.transactionConfigs.push(config);
+			const before = table.rows.map((row) => ({ ...row }));
+			try {
+				return await callback(database);
+			} catch (error) {
+				table.rows = before;
+				throw error;
+			}
+		},
 		execute: async (query: unknown) => {
 			const { text, params } = readSql(query);
+			table.statements.push(text);
+			if (text.includes("show transaction_isolation")) {
+				return [{ transaction_isolation: table.isolationLevel }];
+			}
 			if (text.includes("row_number()")) {
 				const queued = table.rows
 					.filter((row) => row.status === "queued")
@@ -77,8 +106,8 @@ vi.mock("../../db", () => ({
 					return { deployment_id: row.deploymentId, server_id: row.serverId, pos };
 				});
 			}
-			if (text.includes(`set "status" = 'running'`)) {
-				const [serverId] = params as [string | null];
+			if (text.includes('select q."deployment_id", q."app_name"')) {
+				const [serverId, busyApps] = params as [string | null, string[]];
 				const busy = new Set(
 					table.rows.filter((row) => row.status === "running").map((row) => row.appName),
 				);
@@ -87,29 +116,47 @@ vi.mock("../../db", () => ({
 						(row) =>
 							row.status === "queued" &&
 							row.serverId === (serverId ?? null) &&
+							!busyApps.includes(row.appName) &&
 							!busy.has(row.appName),
 					)
 					.sort(
 						(a, b) => a.createdAt - b.createdAt || a.deploymentId.localeCompare(b.deploymentId),
 					)[0];
+				return candidate
+					? [{ deployment_id: candidate.deploymentId, app_name: candidate.appName }]
+					: [];
+			}
+			if (text.includes("pg_try_advisory_xact_lock")) {
+				return [{ acquired: !table.busyApps.has(params[0] as string) }];
+			}
+			if (text.includes(`set "status" = 'running'`)) {
+				const [deploymentId, serverId, appName] = params as [string, string | null, string];
+				const candidate = table.rows.find(
+					(row) =>
+						row.deploymentId === deploymentId &&
+						row.serverId === serverId &&
+						row.appName === appName &&
+						row.status === "queued" &&
+						!table.rows.some((other) => other.appName === appName && other.status === "running"),
+				);
 				if (!candidate) return [];
 				candidate.status = "running";
-				return [
-					{
-						deployment_id: candidate.deploymentId,
-						application_id: `app-${candidate.appName}`,
-						compose_id: null,
-						title: candidate.title,
-						server_id: candidate.serverId,
-						app_name: candidate.appName,
-						preview_deployment_id: candidate.previewDeploymentId,
-					},
-				];
+				const claimed = {
+					deployment_id: candidate.deploymentId,
+					application_id: `app-${candidate.appName}`,
+					compose_id: null,
+					title: candidate.title,
+					server_id: candidate.serverId,
+					app_name: candidate.appName,
+					preview_deployment_id: candidate.previewDeploymentId,
+				};
+				return table.duplicateClaimRows ? [claimed, claimed] : [claimed];
 			}
 			return [];
 		},
-	},
-}));
+	};
+	return { db: database };
+});
 
 type QueueModule = typeof import("./queue");
 let queue: QueueModule;
@@ -177,11 +224,50 @@ beforeEach(async () => {
 	vi.resetModules();
 	resetGlobals();
 	table.rows = [];
+	table.busyApps.clear();
+	table.duplicateClaimRows = false;
+	table.isolationLevel = "read committed";
+	table.transactionConfigs = [];
+	table.statements = [];
 	clock = 0;
 	queue = await import("./queue");
 });
 
 describe("durable queue: claiming", () => {
+	it("requests READ COMMITTED and checks it before protocol or claim statements", async () => {
+		enqueueRow("j1", "app-a");
+		expect(await queue.claimNextDeployment(null)).toMatchObject({ deploymentId: "j1" });
+		expect(table.transactionConfigs).toEqual([{ isolationLevel: "read committed" }]);
+		expect(table.statements[0]).toBe("show transaction_isolation");
+		expect(table.statements[1]).toContain("set local nixploy.environment_snapshot_protocol");
+	});
+
+	it.each(["repeatable read", "serializable", "unknown"])(
+		"rejects an incompatible inherited isolation (%s) before row mutation",
+		async (isolation) => {
+			table.isolationLevel = isolation;
+			enqueueRow("j1", "app-a");
+			await expect(queue.claimNextDeployment(null)).rejects.toThrow("READ COMMITTED");
+			expect(table.rows[0]?.status).toBe("queued");
+			expect(table.statements).toEqual(["show transaction_isolation"]);
+		},
+	);
+
+	it("rolls back rather than dropping unexpected extra claimed rows", async () => {
+		enqueueRow("j1", "app-1");
+		table.duplicateClaimRows = true;
+		await expect(queue.claimNextDeployment(null)).rejects.toThrow("changed multiple rows");
+		expect(table.rows.map((row) => row.status)).toEqual(["queued"]);
+	});
+
+	it("skips an app with a held enqueue lock and claims the next free app", async () => {
+		enqueueRow("j1", "app-1");
+		enqueueRow("j2", "app-2");
+		table.busyApps.add("app-1");
+		expect(await queue.claimNextDeployment(null)).toMatchObject({ deploymentId: "j2" });
+		expect(table.rows.find((row) => row.deploymentId === "j1")?.status).toBe("queued");
+	});
+
 	it("claims rows for one server serially, oldest first", async () => {
 		const { runner, started, finish } = controlledRunner();
 		queue.setJobRunner(runner);

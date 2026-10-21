@@ -446,8 +446,10 @@ Or from the latest GitHub Release asset (pinned `NIXPLOY_VERSION`):
 curl -fsSL https://github.com/bablilayoub/nixploy/releases/latest/download/update.sh | sudo bash
 ```
 
-Keeps secrets, Postgres data, ACME certs, and Traefik routes. Migrations run on
-boot. Or use **Settings → Platform → Updates** in the UI.
+Keeps secrets, Postgres data, ACME certs, and Traefik routes. Ordinary compatible
+migrations run on boot. The organization-variable storage transition in `0048`
+requires the current host updater; see [the upgrade boundary](./upgrade-notes.md#next-operator-workspace-upgrade).
+The GUI updater directs split installations to this host path.
 
 Like the installer, `update.sh` verifies the new image's cosign signature and
 pins the roll to the signed digest before it touches the service
@@ -456,11 +458,17 @@ pins the roll to the signed digest before it touches the service
 On a [split install](#split-worker) both services are rolled: `nixploy-worker`
 first, because it is the half that runs the migrations, then `nixploy` — whose
 `/api/ready` keeps it out of the service VIP until the schema matches.
+For `0048`, both old roles are stopped and their actual tasks verified first;
+a separate new-image container migrates and backfills while both remain at zero
+replicas. Private backups include the database, config and actual service
+environment, preserving the complete key chain. Only successful migration and
+backfill permit the new worker and panel to start. Unknown tasks, unreachable
+nodes, missing recovery assets or unsupported placement block this boundary.
 
 `update.sh` waits for Swarm to report each roll `completed` — the old task
 drained (stop grace 90 s), the new one placed and past its health check —
 before it probes readiness; probing earlier reaches the old task, which is
-still serving during the drain. The roll is `stop-first` with
+still serving during the drain. Ordinary compatible host rolls are `stop-first` with
 `--update-failure-action rollback`: the image's
 `HEALTHCHECK` (`GET /api/ready`, see [observability.md](./observability.md#platform-health-endpoints))
 gates readiness — it answers 503 while Postgres, the Docker socket or the
@@ -471,7 +479,10 @@ Traefik on loopback (`https://<host>/api/ready`, with a `/setup` fallback for
 images that predate the endpoint), so `:3000` does not need to be published.
 The service has a 90 s stop grace period so an in-flight deploy can finish
 or be marked as interrupted cleanly. To roll back by hand:
-`docker service rollback nixploy`.
+`docker service rollback nixploy` only when the old build supports the current
+schema. Boundary `0048` failures pause with roles stopped; restore matching
+database/config/key assets before starting an older build. GUI standalone
+updates also pause on failure instead of automatically restarting an old image.
 
 ### Upgrade safety
 
@@ -489,7 +500,8 @@ paths therefore dump the platform database right before the roll:
 - `update.sh` runs `pg_dump --clean --if-exists` inside `nixploy-postgres`
   into `<config>/backups/pre-update-<tag>-<timestamp>.sql.gz` (mode `600`,
   the newest 3 are kept) and prints the restore command. A failed or empty
-  dump aborts the update; `NIXPLOY_PRE_UPDATE_BACKUP=0` skips it.
+  dump aborts the update; `NIXPLOY_PRE_UPDATE_BACKUP=0` skips ordinary backups.
+  Boundary `0048` requires its full recovery backup and refuses that override.
 - The in-app updater (Settings → Updates) does the same through the Docker
   socket. When no `nixploy-postgres` container is on the node (development
   against a plain Postgres) it logs a warning and continues.
@@ -515,7 +527,10 @@ paths therefore dump the platform database right before the roll:
   keep the dialog open with a retryable error, and **Update anyway** preserves
   the chosen version and downgrade acknowledgement.
 
-Restore a dump (stops nothing; run it before pinning an older tag):
+For a compatible schema, restore a dump only after stopping panel and worker
+roles. For boundary `0048`, restore into an empty replacement database with
+the pre-upgrade config and complete key chain; the command below alone does
+not remove tables and constraints introduced after the dump.
 
 ```bash
 gunzip -c /etc/nixploy/backups/pre-update-v0.2.0-20260910T120000Z.sql.gz \
@@ -529,13 +544,17 @@ Migrations are forward-only, so `update.sh` refuses to roll to a **lower**
 semver tag (`NIXPLOY_VERSION=v0.1.0` while `v0.2.0` runs). To go back:
 
 1. Restore the pre-update dump that was taken **before** the version you are
-   leaving was installed (command above).
+   leaving was installed. Stop every panel/worker first. Crossing `0048`
+   requires an empty replacement database and matching config/key assets.
 2. Re-run with the old tag and the guard disabled:
    `NIXPLOY_VERSION=v0.1.0 NIXPLOY_ALLOW_DOWNGRADE=1 … update.sh`.
 
 `/api/ready` reports `migrations.state: "ahead"` (a warning, not a failure)
 while old code runs on a newer schema. Non-semver tags (`latest`, digests)
-skip the guard.
+skip the semver guard; the encrypted-storage image check still applies. The
+host updater refuses an image lacking `0048` while `metadata_v2` exists, even
+with `NIXPLOY_ALLOW_DOWNGRADE=1`. The GUI requires host recovery for downgrades
+after this boundary.
 
 The in-app updater (Settings → Server → Updates) has the same guard:
 `updates.runUpdate({ version, allowDowngrade })` and the `pinnedVersion`

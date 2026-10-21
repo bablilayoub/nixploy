@@ -17,3 +17,7 @@ Use `apps/web/src/app/globals.css` and the shadcn component variants as the auth
 | Layers | Existing sticky navigation, Radix overlays and activity/toast stack; avoid new arbitrary z-indices |
 
 Page headers wrap meaningful long names, align a concise description and primary action, and share responsive spacing. Filters and secondary controls sit below the page heading. Loading skeletons follow final geometry; partial-query failures remain visible with retry.
+
+## Compatibility and approval
+
+The 2026-10-21 learned constraint in the brief governs appearance. `control`, `panel-inset`, `selection` and `chart-axis` are aliases of existing input/muted/accent/text tokens for the new workflows. They introduce no new palette. Keep owned component-state CSS and dependency removals. Standalone concept previews require selection before any app rollout.

@@ -576,7 +576,7 @@ export const applicationRouter = router({
 			await assertCapability(ctx.session.user.id, organizationId, "secrets.write");
 			await assertApplicationAccess(input.applicationId, organizationId);
 			const application = await saveEnvironment(input.applicationId, input.env, input.buildArgs);
-			await upsertApplicationSwarmService(application);
+			// Saving variables is a draft edit. Only explicit deployment changes runtime.
 			// Counts, never keys or values — an env key name can be as telling
 			// as the value it holds.
 			void auditFromSession(ctx, organizationId, {

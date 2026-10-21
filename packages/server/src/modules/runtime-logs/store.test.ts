@@ -86,6 +86,52 @@ describe("runtime log store", () => {
 		expect(page.nextCursor).not.toBeNull();
 	});
 
+	it("pages every equal-millisecond line across compression and concurrent appends", async () => {
+		await appendRuntimeLogLines(
+			"ties",
+			Array.from({ length: 53 }, (_, index) => ({
+				t: now,
+				level: "info" as const,
+				message: String(index),
+			})),
+		);
+		const first = await readRuntimeLogs({ appName: "ties", limit: 10 });
+		await appendRuntimeLogLines("ties", [{ t: now, level: "info", message: "new after page" }]);
+		await sealClosedHours("ties", now + HOUR);
+		const messages = first.lines.map((line) => line.message);
+		let cursor = first.nextPageCursor;
+		while (cursor) {
+			const page = await readRuntimeLogs({ appName: "ties", limit: 10, cursor });
+			messages.push(...page.lines.map((line) => line.message));
+			cursor = page.nextPageCursor;
+		}
+		expect(messages).toEqual(Array.from({ length: 53 }, (_, index) => String(52 - index)));
+	});
+
+	it("orders out-of-order container appends and preserves legacy before and time windows", async () => {
+		await appendRuntimeLogLines("mixed", [
+			{ t: now, level: "info", message: "latest" },
+			{ t: now - 2, level: "info", message: "oldest" },
+			{ t: now - 1, level: "info", message: "middle" },
+		]);
+		expect(
+			(await readRuntimeLogs({ appName: "mixed", limit: 10 })).lines.map((line) => line.message),
+		).toEqual(["latest", "middle", "oldest"]);
+		expect(
+			(await readRuntimeLogs({ appName: "mixed", limit: 10, before: now })).lines.map(
+				(line) => line.message,
+			),
+		).toEqual(["middle", "oldest"]);
+		expect(
+			(
+				await readRuntimeLogs({ appName: "mixed", limit: 10, since: now - 1, until: now - 1 })
+			).lines.map((line) => line.message),
+		).toEqual(["middle"]);
+		await expect(
+			readRuntimeLogs({ appName: "mixed", limit: 10, cursor: "invalid" }),
+		).rejects.toMatchObject({ code: "BAD_REQUEST" });
+	});
+
 	it("prunes by age and by bytes and drops a dead service's directory", async () => {
 		const old = now - 10 * 24 * HOUR;
 		await appendRuntimeLogLines("stale", [{ t: old, level: "info", message: "old" }]);

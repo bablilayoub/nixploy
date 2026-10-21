@@ -29,11 +29,13 @@ import { previewDatabaseEnv } from "../preview/database";
 import { parsePreviewSourceRef } from "../preview/source-ref";
 import { reportPreviewCommitStatus } from "../preview/status";
 import { syncPreviewTraefik } from "../preview/traefik";
+import { resolveRuntimeEnvironment } from "../projects/env-resolution";
 import { toTraefikDomainEntry, writeAppTraefikConfig } from "../traefik/config-writer";
 import { buildImage } from "./builders";
 import type { DeploymentContext } from "./context";
 import { CommandError, spawnTargeted } from "./docker";
 import { mergeEnv, parseEnv, resolveBuildEnv } from "./env";
+import { findDeploymentEnvironment } from "./environment-snapshot";
 import { type DeploymentStatus, deploymentEvents } from "./events";
 import {
 	DEFAULT_HOOK_CONVERGENCE_MS,
@@ -273,7 +275,7 @@ async function runApplicationJob(
 	// seed hook and the log redaction all see one env. (Adding it only to the
 	// merged hook env left the service itself without it: smoke-tested.)
 	const previewDatabaseLine = preview ? await previewDatabaseEnv(preview) : null;
-	const deployTarget: ApplicationRow = previewDatabaseLine
+	let deployTarget: ApplicationRow = previewDatabaseLine
 		? { ...baseTarget, env: mergeEnv(baseTarget.env, previewDatabaseLine) }
 		: baseTarget;
 
@@ -281,13 +283,17 @@ async function runApplicationJob(
 	// merged env (project → environment → application), not just the app's own.
 	// The logger applies a redaction floor (short/numeric values are skipped).
 	// `deployTarget.env` already carries `previewEnv` for preview jobs.
-	const mergedEnv = mergeEnv(
-		application.environment.project.env,
-		application.environment.env,
-		deployTarget.env,
-	);
+	const snapshot = preview ? null : await findDeploymentEnvironment(job.deploymentId);
+	if (!preview && !snapshot)
+		throw new Error("Deployment has no immutable environment snapshot; queue a new deployment");
+	const mergedEnv =
+		snapshot?.runtimeEnv ??
+		(await resolveRuntimeEnvironment(application.environmentId, deployTarget.env));
+	const buildArgs = snapshot ? snapshot.buildArgs : application.buildArgs;
+	if (snapshot)
+		deployTarget = { ...deployTarget, env: snapshot.serviceEnv, buildArgs: snapshot.buildArgs };
 	for (const [, value] of parseEnv(mergedEnv)) ctx.logger.addSecret(value);
-	for (const [, value] of parseEnv(application.buildArgs)) ctx.logger.addSecret(value);
+	for (const [, value] of parseEnv(buildArgs)) ctx.logger.addSecret(value);
 	// `deployTarget`, not `application`: an image preview turns a git-source
 	// parent into a docker-source job for this deployment only.
 	const registryAuth =
@@ -334,7 +340,7 @@ async function runApplicationJob(
 			// Build args only (product audit, Env #2): the merged runtime env
 			// used to be baked into nixpacks/railpack/pack images and their
 			// cache. `NIXPLOY_BUILD_WITH_RUNTIME_ENV=1` restores that.
-			env: resolveBuildEnv(application.buildArgs, mergedEnv),
+			env: resolveBuildEnv(buildArgs, mergedEnv),
 		});
 	}
 	checkpoint();
@@ -404,20 +410,22 @@ async function runApplicationJob(
 	await ctx.step("rollout");
 	await upsertSwarmService(ctx, deployTarget, pushedRef ?? imageTag, {
 		preview: Boolean(preview),
+		runtimeEnv: mergedEnv,
+		deploymentId: job.deploymentId,
 	});
 	checkpoint();
 
-	// `done` means the new version serves: wait for one running task (Swarm
-	// reports `running` only after the image's HEALTHCHECK passed). A rollout
-	// whose tasks keep failing fails the deployment with the engine's reason;
-	// with start-first updates the previous version keeps serving meanwhile.
+	// Require every desired replica to belong to this deployment. Running is
+	// Docker task state; this does not prove HTTP readiness or route reachability.
 	await ctx.step("converge");
 	ctx.logger.line("Waiting for the service to start...");
 	await waitForServiceConvergence(deployTarget.appName, {
 		log: (line) => ctx.logger.line(line),
+		deploymentId: job.deploymentId,
+		checkpoint,
 	});
 	checkpoint();
-	ctx.logger.line("Service is running");
+	ctx.logger.line("All desired replicas are running the new deployment");
 
 	if (preview) {
 		// Route (parent's container port) + parent's basic-auth/redirects.
@@ -444,6 +452,7 @@ async function runApplicationJob(
 			await ctx.step("post_deploy");
 			await runPostDeployHook(ctx, {
 				appName: application.appName,
+				deploymentId: job.deploymentId,
 				command: postDeployCommand,
 			});
 			checkpoint();
@@ -524,7 +533,13 @@ async function runComposeJob(
 		if (previewDatabaseLine) target = { ...target, env: mergeEnv(target.env, previewDatabaseLine) };
 	}
 
-	for (const [, value] of parseEnv(target.env)) ctx.logger.addSecret(value);
+	const snapshot = preview ? null : await findDeploymentEnvironment(job.deploymentId);
+	if (!preview && !snapshot)
+		throw new Error("Deployment has no immutable environment snapshot; queue a new deployment");
+	const runtimeEnv =
+		snapshot?.runtimeEnv ?? (await resolveRuntimeEnvironment(target.environmentId, target.env));
+	if (snapshot) target = { ...target, env: snapshot.serviceEnv, buildArgs: snapshot.buildArgs };
+	for (const [, value] of parseEnv(runtimeEnv)) ctx.logger.addSecret(value);
 
 	// Materialize compose file + merged env file (clones git sources too).
 	// One step for the whole call: it clones, renders and (when the stack opts
@@ -537,6 +552,7 @@ async function runComposeJob(
 	// one would offer a PR's file as a production rollback target.
 	const files = await prepareComposeFiles(target, {
 		deploymentId: preview ? null : job.deploymentId,
+		runtimeEnv,
 		// Only a real deploy builds: `prepareComposeFiles` is also called by
 		// start/stop/domain resync, which must reuse the images the last deploy
 		// produced rather than rebuild behind the operator's back. Previews of a

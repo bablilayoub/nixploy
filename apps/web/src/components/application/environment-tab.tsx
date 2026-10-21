@@ -1,14 +1,10 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
-import { toast } from "sonner";
-
+import { ConfigurationRelease } from "@/components/services/configuration-release";
 import { EnvEditor } from "@/components/services/env-editor";
 import { InheritedEnv } from "@/components/services/inherited-env";
 import { useCapabilities } from "@/hooks/use-capabilities";
-import { useFollowDeployment } from "@/hooks/use-running-deployments";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
-import { toastError } from "@/lib/describe-error";
 import { useTRPC } from "@/lib/trpc";
 
 import type { Application } from "./types";
@@ -17,29 +13,12 @@ export function EnvironmentTab({ application }: { application: Application }) {
 	const trpc = useTRPC();
 	const { can } = useCapabilities();
 	const applicationId = application.applicationId;
-	const followDeployment = useFollowDeployment();
-	const canDeploy = can("service.deploy") && application.readiness.canDeploy;
-
-	const deploy = useMutation(
-		trpc.application.deploy.mutationOptions({
-			onSuccess: (result) => followDeployment(result.deploymentId),
-			onError: (error) => toastError(error),
-		}),
-	);
-
-	// A saved variable reaches the container on the next rollout, not on save.
-	// The toast says so and offers the rollout, instead of leaving the operator
-	// to wonder why nothing changed.
 	const saveEnvironment = useSaveMutation(trpc.application.saveEnvironment.mutationOptions(), {
-		invalidate: [trpc.application.one.queryKey({ applicationId })],
-		onSuccess: () => {
-			toast.success("Environment variables saved", {
-				description: canDeploy ? "They apply on the next deployment." : undefined,
-				action: canDeploy
-					? { label: "Deploy", onClick: () => deploy.mutate({ applicationId }) }
-					: undefined,
-			});
-		},
+		successMessage: "Variables saved as a draft",
+		invalidate: [
+			trpc.application.one.queryKey({ applicationId }),
+			trpc.configurationRelease.review.queryKey(),
+		],
 	});
 
 	return (
@@ -54,6 +33,7 @@ export function EnvironmentTab({ application }: { application: Application }) {
 				footerHint="Saved variables reach the container on the next deployment."
 				onSave={(env) => saveEnvironment.mutateAsync({ applicationId, env })}
 			/>
+			<ConfigurationRelease scope={{ kind: "application", id: applicationId }} />
 			<InheritedEnv
 				projectId={application.environment.project.projectId}
 				environmentName={application.environment.name}

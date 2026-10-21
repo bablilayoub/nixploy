@@ -13,7 +13,10 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { eq, inArray, like, or } from "drizzle-orm";
+import { eq, inArray, like, or, sql } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { TenantFixture } from "../../trpc/tenancy.harness";
 
@@ -136,6 +139,16 @@ describe.skipIf(!testUrl)("durable deploy queue (postgres)", () => {
 		});
 	};
 
+	const deferred = () => {
+		let resolve: () => void = () => {};
+		let reject: (error: unknown) => void = () => {};
+		const promise = new Promise<void>((yes, no) => {
+			resolve = yes;
+			reject = no;
+		});
+		return { promise, resolve, reject };
+	};
+
 	const statusOf = async (deploymentId: string) => {
 		const [row] = await dbModule.db
 			.select({ status: schema.deployments.status, errorMessage: schema.deployments.errorMessage })
@@ -191,11 +204,83 @@ describe.skipIf(!testUrl)("durable deploy queue (postgres)", () => {
 		}
 	};
 
+	/** Failure evidence must survive cleanup, without exposing deployment inputs. */
+	const failureSnapshot = async (testName: string) => {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			const capture = dbModule.db.transaction(async (tx) => {
+				await tx.execute(sql`set local statement_timeout = '750ms'`);
+				await tx.execute(sql`set local lock_timeout = '250ms'`);
+				const rows = await tx.execute(sql`
+					select json_build_object(
+						'database', current_database(), 'backendPid', pg_backend_pid(),
+						'serverTime', clock_timestamp(),
+						'deployments', (select coalesce(json_agg(d), '[]') from (
+							select deployment_id, application_id, preview_deployment_id,
+								server_id, app_name, status, created_at, started_at, finished_at
+							from deployment where application_id in (${tenant.applicationId}, ${otherApplicationId})
+								or app_name like ${`%${suffix}%`}
+							order by created_at, deployment_id limit 50
+						) d),
+						'applications', (select coalesce(json_agg(a), '[]') from (
+							select application_id, app_name, environment_id, server_id from application
+							where application_id in (${tenant.applicationId}, ${otherApplicationId})
+						) a),
+						'activity', (select coalesce(json_agg(a), '[]') from (
+							select pid, state, wait_event_type, wait_event, application_name,
+								backend_start, xact_start from pg_stat_activity
+							where datname = current_database()
+							order by (state = 'active') desc, xact_start nulls last, pid limit 20
+						) a),
+						'locks', (select coalesce(json_agg(l), '[]') from (
+							select l.pid, c.relname as relation, l.mode, l.granted from pg_locks l
+							join pg_class c on c.oid = l.relation
+							join pg_stat_activity a on a.pid = l.pid
+							where a.datname = current_database()
+								and c.oid in ('deployment'::regclass, 'application'::regclass)
+							order by l.pid, c.relname, l.mode limit 50
+						) l)
+					) as snapshot
+				`);
+				return { status: "captured", snapshot: rows[0]?.snapshot };
+			});
+			const result = await Promise.race([
+				capture.catch(() => ({ status: "unavailable" })),
+				new Promise<{ status: "timeout" }>((resolve) => {
+					timer = setTimeout(() => resolve({ status: "timeout" }), 1500);
+				}),
+			]);
+			console.error(
+				"QUEUE_FAILURE_DIAGNOSTIC",
+				JSON.stringify({
+					test: testName,
+					nonce: suffix,
+					nodePid: process.pid,
+					clientTime: new Date().toISOString(),
+					serverIds: [lineA, lineB],
+					...result,
+				}),
+			);
+		} catch {
+			// Diagnostics must never replace the original assertion failure.
+		} finally {
+			if (timer) clearTimeout(timer);
+		}
+	};
+
 	// Both ends: `beforeEach` so a test starts from a known line, `afterEach` so
 	// the LAST test of the file does not leave a `running` row behind for the
 	// next run of this same file.
 	beforeEach(wipeDeployments);
-	afterEach(wipeDeployments);
+	afterEach(async ({ task }) => {
+		try {
+			if (task.result?.state === "fail") {
+				await failureSnapshot(task.name);
+			}
+		} finally {
+			await wipeDeployments();
+		}
+	});
 
 	it("claims the oldest queued row for a server and flips it to running", async () => {
 		const base = Date.now();
@@ -206,11 +291,275 @@ describe.skipIf(!testUrl)("durable deploy queue (postgres)", () => {
 		expect(first?.deploymentId).toBe("q-old");
 		expect(first?.appName).toBe(appNameOne);
 		expect((await statusOf("q-old"))?.status).toBe("running");
+		expect((await statusOf("q-new"))?.status).toBe("queued");
 
 		const second = await queue.claimNextDeployment(lineA);
 		expect(second?.deploymentId).toBe("q-new");
 		expect(second?.appName).toBe(appNameTwo);
 
+		expect(await queue.claimNextDeployment(lineA)).toBeNull();
+	});
+
+	it("changes only one row when stale statistics favor rescanning the candidate", async () => {
+		await dbModule.db.transaction(async (tx) => {
+			// Keep planner statistics local to this transaction: a one-row estimate
+			// with two actual candidates selects the formerly unsafe nested loop.
+			await tx.execute(
+				sql`create temporary table deployment (like public.deployment including all) on commit drop`,
+			);
+			await tx.insert(schema.deployments).values({
+				deploymentId: `plan-first-${suffix}`,
+				status: "queued",
+				logPath: "/tmp/queue-plan-first.log",
+				appName: appNameOne,
+				serverId: lineA,
+				createdAt: new Date(Date.now() - 2000),
+			});
+			await tx.execute(sql`analyze pg_temp.deployment`);
+			await tx.insert(schema.deployments).values({
+				deploymentId: `plan-second-${suffix}`,
+				status: "queued",
+				logPath: "/tmp/queue-plan-second.log",
+				appName: appNameTwo,
+				serverId: lineA,
+				createdAt: new Date(Date.now() - 1000),
+			});
+
+			const first = await dbModule.runWithDatabaseTransaction(tx, () =>
+				queue.claimNextDeployment(lineA),
+			);
+			expect(first?.deploymentId).toBe(`plan-first-${suffix}`);
+			const rows = await tx
+				.select({ id: schema.deployments.deploymentId, status: schema.deployments.status })
+				.from(schema.deployments)
+				.orderBy(schema.deployments.createdAt);
+			expect(rows).toEqual([
+				{ id: `plan-first-${suffix}`, status: "running" },
+				{ id: `plan-second-${suffix}`, status: "queued" },
+			]);
+		});
+	});
+
+	it.each(["same server", "different servers"])(
+		"keeps an uncommitted same-app claim exclusive while another app can run (%s)",
+		async (placement) => {
+			const base = Date.now();
+			const secondServer = placement === "same server" ? lineA : lineB;
+			await insertQueued(`race-first-${suffix}`, tenant.applicationId, new Date(base - 3000));
+			await insertQueued(`race-sibling-${suffix}`, tenant.applicationId, new Date(base - 2000), {
+				serverId: secondServer,
+			});
+			await insertQueued(`race-other-${suffix}`, otherApplicationId, new Date(base - 1000), {
+				serverId: secondServer,
+			});
+
+			let release: () => void = () => {};
+			const held = new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			let ready: (job: Awaited<ReturnType<QueueModule["claimNextDeployment"]>>) => void = () => {};
+			let failed: (error: unknown) => void = () => {};
+			const claimed = new Promise<Awaited<ReturnType<QueueModule["claimNextDeployment"]>>>(
+				(resolve, reject) => {
+					ready = resolve;
+					failed = reject;
+				},
+			);
+			const firstTransaction = dbModule.db.transaction((tx) =>
+				dbModule.runWithDatabaseTransaction(tx, async () => {
+					ready(await queue.claimNextDeployment(lineA));
+					await held;
+				}),
+			);
+			void firstTransaction.catch(failed);
+			try {
+				expect((await claimed)?.deploymentId).toBe(`race-first-${suffix}`);
+				expect((await queue.claimNextDeployment(secondServer))?.deploymentId).toBe(
+					`race-other-${suffix}`,
+				);
+				expect((await statusOf(`race-sibling-${suffix}`))?.status).toBe("queued");
+			} finally {
+				release();
+				await firstTransaction;
+			}
+			expect(await queue.claimNextDeployment(secondServer)).toBeNull();
+		},
+	);
+
+	it.each(["read committed", "repeatable read"] as const)(
+		"uses a fresh statement snapshot when a first claim commits between selection and app lock (default %s)",
+		async (defaultIsolation) => {
+			const base = Date.now();
+			const firstId = `window-first-${suffix}`;
+			const siblingId = `window-sibling-${suffix}`;
+			const otherId = `window-other-${suffix}`;
+			await insertQueued(firstId, tenant.applicationId, new Date(base - 3000));
+			await insertQueued(siblingId, tenant.applicationId, new Date(base - 2000));
+			await insertQueued(otherId, otherApplicationId, new Date(base - 1000));
+
+			// This client changes only its own session default, never the shared
+			// database/role. Ordinary queue transactions must override that default.
+			const connection = postgres(testUrl as string, {
+				max: 1,
+				prepare: false,
+				connection: { default_transaction_isolation: defaultIsolation },
+			});
+			const claimDb = drizzle(connection, { schema });
+			const dialect = new PgDialect();
+			const firstReady = deferred();
+			const firstRelease = deferred();
+			const selected = deferred();
+			const secondRelease = deferred();
+			const stages: string[] = [];
+			let firstSelection = true;
+			let firstAppLock = true;
+			type Transaction = Parameters<Parameters<typeof claimDb.transaction>[0]>[0];
+			const intercept = (tx: Transaction) =>
+				new Proxy(tx, {
+					get(transaction, property) {
+						if (property === "execute") {
+							return async (query: Parameters<typeof tx.execute>[0]) => {
+								const text =
+									typeof query === "string" ? query : dialect.sqlToQuery(query.getSQL()).sql;
+								const result = await transaction.execute(query);
+								if (firstSelection && text.includes('select q."deployment_id", q."app_name"')) {
+									firstSelection = false;
+									expect(result[0]).toMatchObject({ deployment_id: siblingId });
+									stages.push("second-selected-sibling");
+									selected.resolve();
+									await secondRelease.promise;
+								} else if (firstAppLock && text.includes("pg_try_advisory_xact_lock")) {
+									firstAppLock = false;
+									expect(stages.at(-1)).toBe("first-committed");
+									expect(result[0]).toMatchObject({ acquired: true });
+									stages.push("second-acquired-sibling-lock");
+								}
+								return result;
+							};
+						}
+						const value = Reflect.get(transaction, property);
+						return typeof value === "function" ? value.bind(transaction) : value;
+					},
+				});
+			const intercepted = new Proxy(claimDb, {
+				get(target, property) {
+					if (property === "transaction") {
+						return (...[callback, config]: Parameters<typeof claimDb.transaction>) =>
+							target.transaction((tx) => callback(intercept(tx)), config);
+					}
+					const value = Reflect.get(target, property);
+					return typeof value === "function" ? value.bind(target) : value;
+				},
+			});
+			let secondClaim: ReturnType<QueueModule["claimNextDeployment"]> | undefined;
+			const firstClaim = dbModule.db.transaction((tx) =>
+				dbModule.runWithDatabaseTransaction(tx, async () => {
+					expect((await queue.claimNextDeployment(lineA))?.deploymentId).toBe(firstId);
+					stages.push("first-updated-uncommitted");
+					firstReady.resolve();
+					await firstRelease.promise;
+				}),
+			);
+			void firstClaim.catch(firstReady.reject);
+			try {
+				expect((await connection`show default_transaction_isolation`)[0]).toMatchObject({
+					default_transaction_isolation: defaultIsolation,
+				});
+				await firstReady.promise;
+				secondClaim = dbModule.runWithDatabaseTransaction(intercepted, () =>
+					queue.claimNextDeployment(lineA),
+				);
+				void secondClaim.catch(selected.reject);
+				await selected.promise;
+				firstRelease.resolve();
+				await firstClaim;
+				stages.push("first-committed");
+				expect((await statusOf(firstId))?.status).toBe("running");
+				secondRelease.resolve();
+				expect((await secondClaim)?.deploymentId).toBe(otherId);
+				expect((await statusOf(siblingId))?.status).toBe("queued");
+				expect((await statusOf(otherId))?.status).toBe("running");
+				expect(stages).toEqual([
+					"first-updated-uncommitted",
+					"second-selected-sibling",
+					"first-committed",
+					"second-acquired-sibling-lock",
+				]);
+			} finally {
+				firstRelease.resolve();
+				secondRelease.resolve();
+				await Promise.allSettled([firstClaim, secondClaim]);
+				await connection.end();
+			}
+		},
+	);
+
+	it.each(["repeatable read", "serializable"] as const)(
+		"rejects an inherited %s transaction before protocol or row changes",
+		async (isolationLevel) => {
+			const id = `nested-isolation-${suffix}`;
+			await insertQueued(id, tenant.applicationId, new Date());
+			await dbModule.db.transaction(
+				async (tx) => {
+					await tx.execute(sql`set local nixploy.environment_snapshot_protocol = '0'`);
+					await expect(
+						dbModule.runWithDatabaseTransaction(tx, () => queue.claimNextDeployment(lineA)),
+					).rejects.toThrow("READ COMMITTED");
+					const [protocol] = await tx.execute(
+						sql`select current_setting('nixploy.environment_snapshot_protocol', true) as value`,
+					);
+					expect(protocol?.value).toBe("0");
+					const rows = await tx
+						.select({ status: schema.deployments.status, startedAt: schema.deployments.startedAt })
+						.from(schema.deployments)
+						.where(eq(schema.deployments.deploymentId, id));
+					expect(rows).toEqual([{ status: "queued", startedAt: null }]);
+				},
+				{ isolationLevel },
+			);
+			expect((await statusOf(id))?.status).toBe("queued");
+		},
+	);
+
+	it("does not deadlock against an enqueue holding the app lock or orphan its replacement", async () => {
+		const { queueDeployment } = await import("./index");
+		const base = Date.now();
+		await insertQueued(`enqueue-old-${suffix}`, tenant.applicationId, new Date(base - 2000));
+		await insertQueued(`enqueue-other-${suffix}`, otherApplicationId, new Date(base - 1000));
+		let release: () => void = () => {};
+		const held = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		let ready: () => void = () => {};
+		let failed: (error: unknown) => void = () => {};
+		const locked = new Promise<void>((resolve, reject) => {
+			ready = resolve;
+			failed = reject;
+		});
+		const enqueue = dbModule.db.transaction(async (tx) => {
+			await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${appNameOne}))`);
+			ready();
+			await held;
+			return queueDeployment(
+				{ applicationId: tenant.applicationId, type: "deploy" },
+				{ executor: tx, notices: [] },
+			);
+		});
+		void enqueue.catch(failed);
+		let replacement: string;
+		try {
+			await locked;
+			expect((await queue.claimNextDeployment(lineA))?.deploymentId).toBe(
+				`enqueue-other-${suffix}`,
+			);
+			expect((await statusOf(`enqueue-old-${suffix}`))?.status).toBe("queued");
+		} finally {
+			release();
+			replacement = await enqueue;
+		}
+		expect((await statusOf(`enqueue-old-${suffix}`))?.status).toBe("cancelled");
+		expect((await statusOf(replacement))?.status).toBe("queued");
+		expect((await queue.claimNextDeployment(lineA))?.deploymentId).toBe(replacement);
 		expect(await queue.claimNextDeployment(lineA)).toBeNull();
 	});
 
