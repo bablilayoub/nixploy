@@ -7,37 +7,36 @@
  * (@shadcn, @magicui, @aceternity, @cult-ui, @kokonutui) renders correctly
  * without being re-styled by hand. Values are ours; names are theirs.
  *
- * The site is dark, and `<html>` carries `.dark` — the light block is the
- * fallback a component's `dark:` variant needs to have something to vary
- * from, and it keeps the registry previews honest.
+ * Fieldwork supports the visitor's saved light/dark/system preference.
+ * Both palettes give registry components the same semantic surface roles.
  */
 @custom-variant dark (&:is(.dark *));
 
 :root {
 	--radius: 0.5rem;
-	--background: #f4f4f5;
-	--foreground: #17181b;
+	--background: #f6f7f8;
+	--foreground: #202327;
 	--card: #ffffff;
 	--card-foreground: var(--foreground);
 	--popover: #ffffff;
 	--popover-foreground: var(--foreground);
-	--primary: #191b1f;
+	--primary: #24272b;
 	--primary-foreground: #ffffff;
 	--brand: var(--primary);
-	--secondary: #eceef0;
+	--secondary: #edf0f2;
 	--secondary-foreground: var(--foreground);
-	--muted: #eceef0;
-	--muted-foreground: #62666f;
-	--accent: #eceef0;
+	--muted: #edf0f2;
+	--muted-foreground: #616973;
+	--accent: #edf0f2;
 	--accent-foreground: var(--foreground);
 	--destructive: #b42332;
-	--border: #dedfe3;
-	--input: #858b95;
-	--ring: #737984;
-	--control: #f7f7f8;
-	--panel-inset: #f7f7f8;
-	--selection: #eceef0;
-	--chart-axis: #62666f;
+	--border: #e0e4e8;
+	--input: #8a939f;
+	--ring: #6b7480;
+	--control: #f0f2f4;
+	--panel-inset: #f0f2f4;
+	--selection: #edf0f2;
+	--chart-axis: #616973;
 	--success: #187040;
 	--warning: #965b08;
 	--info: #285eb0;
@@ -46,7 +45,7 @@
 	--chart-3: color-mix(in oklab, var(--foreground) 60%, transparent);
 	--chart-4: color-mix(in oklab, var(--foreground) 45%, transparent);
 	--chart-5: color-mix(in oklab, var(--foreground) 30%, transparent);
-	--sidebar: #f4f4f5;
+	--sidebar: #f6f7f8;
 	--sidebar-foreground: var(--foreground);
 	--sidebar-primary: var(--primary);
 	--sidebar-primary-foreground: var(--primary-foreground);
@@ -54,40 +53,40 @@
 	--sidebar-accent-foreground: var(--foreground);
 	--sidebar-border: var(--border);
 	--sidebar-ring: var(--ring);
-	--surface-shadow: 0 1px 2px rgb(17 19 23 / 3%), 0 0 0 1px rgb(255 255 255 / 40%) inset;
+	--surface-shadow: 0 1px 2px rgb(17 19 23 / 2%);
 	--overlay-shadow: 0 24px 80px -20px rgb(17 19 23 / 24%), 0 4px 12px rgb(17 19 23 / 8%);
 	color-scheme: light;
 }
 
 .dark {
-	--background: #090a0b;
-	--foreground: #f5f5f6;
-	--card: #111315;
+	--background: #17191c;
+	--foreground: #f0f2f4;
+	--card: #202327;
 	--card-foreground: var(--foreground);
-	--popover: #1b1d20;
+	--popover: #2a2e33;
 	--popover-foreground: var(--foreground);
-	--primary: #f4f5f6;
-	--primary-foreground: #111315;
+	--primary: #eceff2;
+	--primary-foreground: #202327;
 	--brand: var(--primary);
-	--secondary: #26292e;
+	--secondary: #30353c;
 	--secondary-foreground: var(--foreground);
-	--muted: #202328;
-	--muted-foreground: #a0a5ae;
-	--accent: #26292e;
+	--muted: #30353c;
+	--muted-foreground: #abb1ba;
+	--accent: #30353c;
 	--accent-foreground: var(--foreground);
 	--destructive: #ff8b94;
-	--border: #2a2d32;
-	--input: #5c636e;
-	--ring: #a8aeb9;
-	--control: #0d0f11;
-	--panel-inset: #0d0f11;
-	--selection: #26292e;
-	--chart-axis: #a0a5ae;
+	--border: #383e46;
+	--input: #737f8f;
+	--ring: #a3afbc;
+	--control: #1a1c20;
+	--panel-inset: #1a1c20;
+	--selection: #30353c;
+	--chart-axis: #abb1ba;
 	--success: #7adea0;
 	--warning: #eac379;
 	--info: #91b7ee;
-	--sidebar: #0d0f11;
-	--sidebar-accent: #26292e;
+	--sidebar: #1a1c20;
+	--sidebar-accent: #30353c;
 	--surface-shadow: 0 1px 3px rgb(0 0 0 / 18%), 0 1px 0 rgb(255 255 255 / 3%) inset;
 	--overlay-shadow: 0 24px 80px -20px rgb(0 0 0 / 65%), 0 0 0 1px rgb(255 255 255 / 3%) inset;
 	color-scheme: dark;
@@ -95,9 +94,9 @@
 
 @theme inline {
 	--spacing: 4px;
-	--font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-	--font-display: var(--font-inter), var(--font-inter), ui-sans-serif, sans-serif;
-	--font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+	--font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+	--font-display: var(--font-geist), var(--font-geist), ui-sans-serif, sans-serif;
+	--font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);
@@ -297,7 +296,7 @@
 
 .legal-copy :where(h2, h3) {
 	color: var(--foreground);
-	font-family: var(--font-inter), var(--font-inter), ui-sans-serif, sans-serif;
+	font-family: var(--font-geist), var(--font-geist), ui-sans-serif, sans-serif;
 	font-weight: 600;
 	letter-spacing: -0.025em;
 	line-height: 1.35;
@@ -353,7 +352,7 @@
 	background: var(--accent);
 	color: var(--foreground);
 	padding: 0.125em 0.25em;
-	font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+	font-family: var(--font-geist-mono), ui-monospace, monospace;
 	font-size: 0.875em;
 	font-weight: 400;
 	overflow-wrap: anywhere;

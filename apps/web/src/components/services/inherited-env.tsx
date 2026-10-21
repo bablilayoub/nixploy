@@ -120,7 +120,7 @@ export function InheritedEnv({
 										{revealed ? entry.value || <span className="italic">(empty)</span> : MASK}
 									</span>
 									{overridden && (
-										<span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 font-sans text-[10px] text-muted-foreground">
+										<span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground">
 											overridden here
 										</span>
 									)}

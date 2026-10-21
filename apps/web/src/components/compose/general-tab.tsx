@@ -8,6 +8,7 @@ import {
 	type GitProviderSourceType,
 	splitRepoSelection,
 } from "@/components/git-provider-repo-picker";
+import { SectionLinks } from "@/components/layout/section-links";
 import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { capabilityHint } from "@/components/services/capability-hint";
 import { useSaveBar } from "@/components/services/save-bar";
@@ -136,6 +137,17 @@ export function GeneralTab({
 		enabled: sourceType === "gitea",
 	});
 
+	const providerQuery =
+		sourceType === "github"
+			? githubQuery
+			: sourceType === "gitlab"
+				? gitlabQuery
+				: sourceType === "bitbucket"
+					? bitbucketQuery
+					: sourceType === "gitea"
+						? giteaQuery
+						: null;
+
 	// Each provider router returns rows joined with the shared gitProvider
 	// record; normalize to { id, name } for the select.
 	const providers: { id: string; name: string }[] =
@@ -214,264 +226,325 @@ export function GeneralTab({
 
 	return (
 		<SettingsStack>
-			<SettingsSection title="General" description="How this compose file is deployed.">
-				<div className="flex min-w-0 flex-col gap-7">
-					<div className="flex flex-col gap-2">
-						<Label htmlFor="compose-type">Compose type</Label>
-						<Select
-							value={composeType}
-							onValueChange={(value) =>
-								draft.patch({ composeType: value as ComposeService["composeType"] })
-							}
-						>
-							<SelectTrigger id="compose-type" className="max-w-sm">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="docker-compose">Docker Compose</SelectItem>
-								<SelectItem value="stack">Swarm Stack</SelectItem>
-							</SelectContent>
-						</Select>
-						<p className="text-sm text-muted-foreground">
-							Stack mode deploys with <code>docker stack deploy</code> instead of{" "}
-							<code>docker compose up</code>. <HelpLink slug="deploy" />
-						</p>
-					</div>
-					<div className="flex flex-wrap items-center justify-between gap-4 surface p-5">
-						<div>
-							<Label htmlFor="isolated-deployment">Isolated deployment</Label>
-							<p className="text-sm text-muted-foreground">
-								Randomize service and container names to avoid collisions between copies of this
-								compose file. <HelpLink slug="deploy" />
-							</p>
-						</div>
-						<Switch
-							id="isolated-deployment"
-							checked={isolatedDeployment}
-							onCheckedChange={(checked) => draft.patch({ isolatedDeployment: checked })}
-						/>
-					</div>
-					<div className="flex flex-wrap items-center justify-between gap-4 surface p-5">
-						<div>
-							<Label htmlFor="auto-deploy">Auto deploy</Label>
-							<p className="text-sm text-muted-foreground">
-								Deploy automatically when the source repository changes.
-							</p>
-						</div>
-						<Switch
-							id="auto-deploy"
-							checked={autoDeploy}
-							onCheckedChange={(checked) => draft.patch({ autoDeploy: checked })}
-						/>
-					</div>
-					<div className="flex flex-wrap items-center justify-between gap-4 surface p-5">
-						<div>
-							<Label htmlFor="build-enabled">Build services from source</Label>
-							<p className="text-sm text-muted-foreground">
-								Let services in this stack use <code>build:</code>. Nixploy builds each one from the
-								repository and deploys the resulting image — compose never reads a path on the host.
-							</p>
-						</div>
-						<Switch
-							id="build-enabled"
-							checked={buildEnabled}
-							disabled={!canWrite}
-							onCheckedChange={(checked) => draft.patch({ buildEnabled: checked })}
-						/>
-					</div>
-					{buildEnabled && (
+			<SectionLinks
+				label="Compose configuration sections"
+				items={[
+					{ id: "compose-source", label: "Source", detail: "Repository and Compose file" },
+					{
+						id: "compose-behavior",
+						label: "Deployment",
+						detail: "Build, isolation and networking",
+					},
+					{
+						id: "compose-commands",
+						label: "Lifecycle commands",
+						detail: "Before and after deployment",
+					},
+				]}
+			/>
+			<div id="compose-source" tabIndex={-1} className="fieldwork-form-group">
+				<SettingsSection
+					title="Source"
+					description="Choose the repository or stored Compose file to deploy."
+				>
+					<div className="flex min-w-0 flex-col gap-5">
 						<div className="flex flex-col gap-2">
-							<Label htmlFor="compose-build-args">Build args</Label>
-							<Textarea
-								id="compose-build-args"
-								className="min-h-16 font-mono text-xs sm:max-w-lg"
-								placeholder="NODE_ENV=production"
-								value={buildArgs}
-								disabled={!canWrite}
-								onChange={(event) => draft.patch({ buildArgs: event.target.value })}
-							/>
-							<p className="text-sm text-muted-foreground">
-								One <code>KEY=VALUE</code> per line, shared by every build service of the stack.
-								Credential-shaped keys are passed as BuildKit secrets instead of build args, so they
-								stay out of the image history.
-							</p>
+							<Label htmlFor="source-type">Source type</Label>
+							<Select
+								value={sourceType}
+								onValueChange={(value) => changeSourceType(value as SourceType)}
+							>
+								<SelectTrigger id="source-type" className="max-w-sm">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="raw">Raw (paste)</SelectItem>
+									<SelectItem value="git">Git</SelectItem>
+									<SelectItem value="github">GitHub</SelectItem>
+									<SelectItem value="gitlab">GitLab</SelectItem>
+									<SelectItem value="bitbucket">Bitbucket</SelectItem>
+									<SelectItem value="gitea">Gitea</SelectItem>
+								</SelectContent>
+							</Select>
 						</div>
-					)}
-					<div className="flex flex-wrap items-center justify-between gap-4 surface p-5">
-						<div>
-							<Label htmlFor="publish-ports">Publish host ports</Label>
-							<p className="text-sm text-muted-foreground">
-								Let services in this stack bind host ports with <code>ports:</code>. A published
-								port bypasses Traefik, so domains, TLS and middlewares do not apply to it.
-								Privileged, database and platform ports stay blocked.
-							</p>
-						</div>
-						<Switch
-							id="publish-ports"
-							checked={publishPorts}
-							disabled={!canWrite}
-							onCheckedChange={(checked) => draft.patch({ publishPorts: checked })}
-						/>
-					</div>
-					<div className="flex flex-col gap-2">
-						<Label htmlFor="compose-pre-deploy">Pre-deploy command</Label>
-						<Textarea
-							id="compose-pre-deploy"
-							className="min-h-16 font-mono text-xs sm:max-w-lg"
-							placeholder="php artisan down"
-							value={preDeployCommand}
-							disabled={!canWrite}
-							onChange={(event) => draft.patch({ preDeployCommand: event.target.value })}
-						/>
-						<p className="text-sm text-muted-foreground">
-							Runs in a container of the project that is currently running, before it is replaced
-							(skipped on the first deploy). A non-zero exit aborts the deployment and leaves the
-							running project untouched.
-						</p>
-					</div>
-					<div className="flex flex-col gap-2">
-						<Label htmlFor="compose-post-deploy">Post-deploy command</Label>
-						<Textarea
-							id="compose-post-deploy"
-							className="min-h-16 font-mono text-xs sm:max-w-lg"
-							placeholder="php artisan migrate --force"
-							value={postDeployCommand}
-							disabled={!canWrite}
-							onChange={(event) => draft.patch({ postDeployCommand: event.target.value })}
-						/>
-						<p className="text-sm text-muted-foreground">
-							Runs in a container of the project that was just brought up. A non-zero exit marks the
-							deployment failed. Save from the button at the bottom of this page.
-						</p>
-					</div>
-				</div>
-			</SettingsSection>
 
-			<SettingsSection title="Source" description="Where the compose file comes from.">
-				<div className="flex min-w-0 flex-col gap-5">
-					<div className="flex flex-col gap-2">
-						<Label htmlFor="source-type">Source type</Label>
-						<Select
-							value={sourceType}
-							onValueChange={(value) => changeSourceType(value as SourceType)}
-						>
-							<SelectTrigger id="source-type" className="max-w-sm">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="raw">Raw (paste)</SelectItem>
-								<SelectItem value="git">Git</SelectItem>
-								<SelectItem value="github">GitHub</SelectItem>
-								<SelectItem value="gitlab">GitLab</SelectItem>
-								<SelectItem value="bitbucket">Bitbucket</SelectItem>
-								<SelectItem value="gitea">Gitea</SelectItem>
-							</SelectContent>
-						</Select>
-					</div>
-
-					{sourceType === "raw" && (
-						<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-							The compose file is stored directly on this service.{" "}
-							{onOpenComposeFile ? (
-								<button
-									type="button"
-									onClick={onOpenComposeFile}
-									className="font-medium text-foreground underline-offset-4 hover:underline"
-								>
-									Edit it in the Compose file tab →
-								</button>
-							) : (
-								<>
-									Edit it in the <span className="font-medium">Compose file</span> tab.
-								</>
-							)}
-						</p>
-					)}
-
-					{sourceType === "git" && (
-						<>
-							<div className="flex flex-col gap-2">
-								<Label htmlFor="git-url">Repository URL</Label>
-								<Input
-									id="git-url"
-									placeholder="https://github.com/org/repo.git"
-									value={gitUrl}
-									onChange={(e) => draft.patch({ gitUrl: e.target.value })}
-								/>
-							</div>
-							<div className="flex flex-col gap-2">
-								<Label htmlFor="git-branch">Branch</Label>
-								<Input
-									id="git-branch"
-									placeholder="main"
-									value={gitBranch}
-									onChange={(e) => draft.patch({ gitBranch: e.target.value })}
-								/>
-							</div>
-						</>
-					)}
-
-					{isGitProviderSource(sourceType) && (
-						<>
-							<div className="flex flex-col gap-2">
-								<Label htmlFor="provider">Provider</Label>
-								<Select
-									value={providerId}
-									onValueChange={(value) => draft.patch({ providerId: value })}
-								>
-									<SelectTrigger id="provider" className="max-w-sm">
-										<SelectValue
-											placeholder={providersLoading ? "Loading providers…" : "Select a provider"}
-										/>
-									</SelectTrigger>
-									<SelectContent>
-										{providers.map((provider) => (
-											<SelectItem key={provider.id} value={provider.id}>
-												{provider.name}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-								{!providersLoading && providers.length === 0 && (
-									<p className="text-sm text-muted-foreground">
-										No {GIT_PROVIDER_LABELS[sourceType]} provider configured yet — add one under
-										Settings → Git providers.
-									</p>
+						{sourceType === "raw" && (
+							<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+								The compose file is stored directly on this service.{" "}
+								{onOpenComposeFile ? (
+									<button
+										type="button"
+										onClick={onOpenComposeFile}
+										className="font-medium text-foreground underline-offset-4 hover:underline"
+									>
+										Edit it in the Compose file tab →
+									</button>
+								) : (
+									<>
+										Edit it in the <span className="font-medium">Compose file</span> tab.
+									</>
 								)}
-							</div>
-							<GitProviderRepoPicker
-								sourceType={sourceType}
-								providerId={providerId}
-								repoSelection={repoSelection}
-								onRepoSelectionChange={(value) => draft.patch({ repoSelection: value })}
-								branch={branch}
-								onBranchChange={(value) => draft.patch({ branch: value })}
-							/>
-						</>
-					)}
+							</p>
+						)}
 
-					{sourceType !== "raw" && (
+						{sourceType === "git" && (
+							<>
+								<div className="flex flex-col gap-2">
+									<Label htmlFor="git-url">Repository URL</Label>
+									<Input
+										id="git-url"
+										placeholder="https://github.com/org/repo.git"
+										value={gitUrl}
+										onChange={(e) => draft.patch({ gitUrl: e.target.value })}
+									/>
+								</div>
+								<div className="flex flex-col gap-2">
+									<Label htmlFor="git-branch">Branch</Label>
+									<Input
+										id="git-branch"
+										placeholder="main"
+										value={gitBranch}
+										onChange={(e) => draft.patch({ gitBranch: e.target.value })}
+									/>
+								</div>
+							</>
+						)}
+
+						{isGitProviderSource(sourceType) && (
+							<>
+								<div className="flex flex-col gap-2">
+									<Label htmlFor="provider">Provider</Label>
+									<Select
+										value={providerId}
+										onValueChange={(value) => draft.patch({ providerId: value })}
+									>
+										<SelectTrigger
+											id="provider"
+											disabled={!providerQuery?.isSuccess}
+											className="max-w-sm"
+										>
+											<SelectValue
+												placeholder={providersLoading ? "Loading providers…" : "Select a provider"}
+											/>
+										</SelectTrigger>
+										<SelectContent>
+											{providers.map((provider) => (
+												<SelectItem key={provider.id} value={provider.id}>
+													{provider.name}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+									{providerQuery?.isError && (
+										<div
+											role="alert"
+											className="flex flex-wrap items-center gap-3 rounded-md border border-destructive/25 p-3 text-sm"
+										>
+											<p className="text-muted-foreground">
+												Couldn’t load Git providers. Your source settings are unchanged.
+											</p>
+											<Button
+												variant="outline"
+												size="sm"
+												disabled={providerQuery.isFetching}
+												onClick={() => void providerQuery.refetch()}
+											>
+												Retry providers
+											</Button>
+										</div>
+									)}
+
+									{providerQuery?.isSuccess && !providersLoading && providers.length === 0 && (
+										<p className="text-sm text-muted-foreground">
+											No {GIT_PROVIDER_LABELS[sourceType]} provider configured yet — add one under
+											Settings → Git providers.
+										</p>
+									)}
+								</div>
+								<GitProviderRepoPicker
+									sourceType={sourceType}
+									providerId={providerId}
+									repoSelection={repoSelection}
+									onRepoSelectionChange={(value) => draft.patch({ repoSelection: value })}
+									branch={branch}
+									onBranchChange={(value) => draft.patch({ branch: value })}
+								/>
+							</>
+						)}
+
+						{sourceType !== "raw" && (
+							<div className="flex flex-col gap-2">
+								<Label htmlFor="compose-path">Compose path</Label>
+								<Input
+									id="compose-path"
+									placeholder="./docker-compose.yml"
+									value={composePath}
+									onChange={(e) => draft.patch({ composePath: e.target.value })}
+								/>
+							</div>
+						)}
+					</div>
+				</SettingsSection>
+			</div>
+			<div id="compose-behavior" tabIndex={-1} className="fieldwork-form-group">
+				{" "}
+				<SettingsSection
+					title="Deployment behavior"
+					description="Choose how the stack is built, isolated and exposed."
+				>
+					<div className="flex min-w-0 flex-col gap-2">
 						<div className="flex flex-col gap-2">
-							<Label htmlFor="compose-path">Compose path</Label>
-							<Input
-								id="compose-path"
-								placeholder="./docker-compose.yml"
-								value={composePath}
-								onChange={(e) => draft.patch({ composePath: e.target.value })}
+							<Label htmlFor="compose-type">Compose type</Label>
+							<Select
+								value={composeType}
+								onValueChange={(value) =>
+									draft.patch({ composeType: value as ComposeService["composeType"] })
+								}
+							>
+								<SelectTrigger id="compose-type" className="max-w-sm">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="docker-compose">Docker Compose</SelectItem>
+									<SelectItem value="stack">Swarm Stack</SelectItem>
+								</SelectContent>
+							</Select>
+							<p className="text-sm text-muted-foreground">
+								Stack mode deploys with <code>docker stack deploy</code> instead of{" "}
+								<code>docker compose up</code>. <HelpLink slug="deploy" />
+							</p>
+						</div>
+						<div className="fieldwork-toggle-row">
+							<div>
+								<Label htmlFor="isolated-deployment">Isolated deployment</Label>
+								<p className="text-sm text-muted-foreground">
+									Randomize service and container names to avoid collisions between copies of this
+									compose file. <HelpLink slug="deploy" />
+								</p>
+							</div>
+							<Switch
+								id="isolated-deployment"
+								checked={isolatedDeployment}
+								onCheckedChange={(checked) => draft.patch({ isolatedDeployment: checked })}
 							/>
 						</div>
-					)}
-
-					<div className="flex items-center justify-end gap-3">
-						<UnsavedChangesPill dirty={draft.dirty} />
-						<DisabledHint hint={canWrite ? undefined : capabilityHint("service.write")}>
-							<Button onClick={onSave} disabled={updateMutation.isPending || !canWrite}>
-								{updateMutation.isPending ? "Saving…" : "Save"}
-							</Button>
-						</DisabledHint>
+						<div className="fieldwork-toggle-row">
+							<div>
+								<Label htmlFor="auto-deploy">Auto deploy</Label>
+								<p className="text-sm text-muted-foreground">
+									Deploy automatically when the source repository changes.
+								</p>
+							</div>
+							<Switch
+								id="auto-deploy"
+								checked={autoDeploy}
+								onCheckedChange={(checked) => draft.patch({ autoDeploy: checked })}
+							/>
+						</div>
+						<div className="fieldwork-toggle-row">
+							<div>
+								<Label htmlFor="build-enabled">Build services from source</Label>
+								<p className="text-sm text-muted-foreground">
+									Let services in this stack use <code>build:</code>. Nixploy builds each one from
+									the repository and deploys the resulting image — compose never reads a path on the
+									host.
+								</p>
+							</div>
+							<Switch
+								id="build-enabled"
+								checked={buildEnabled}
+								disabled={!canWrite}
+								onCheckedChange={(checked) => draft.patch({ buildEnabled: checked })}
+							/>
+						</div>
+						{buildEnabled && (
+							<div className="flex flex-col gap-2">
+								<Label htmlFor="compose-build-args">Build args</Label>
+								<Textarea
+									id="compose-build-args"
+									className="min-h-16 font-mono text-xs sm:max-w-lg"
+									placeholder="NODE_ENV=production"
+									value={buildArgs}
+									disabled={!canWrite}
+									onChange={(event) => draft.patch({ buildArgs: event.target.value })}
+								/>
+								<p className="text-sm text-muted-foreground">
+									One <code>KEY=VALUE</code> per line, shared by every build service of the stack.
+									Credential-shaped keys are passed as BuildKit secrets instead of build args, so
+									they stay out of the image history.
+								</p>
+							</div>
+						)}
+						<div className="fieldwork-toggle-row">
+							<div>
+								<Label htmlFor="publish-ports">Publish host ports</Label>
+								<p className="text-sm text-muted-foreground">
+									Let services in this stack bind host ports with <code>ports:</code>. A published
+									port bypasses Traefik, so domains, TLS and middlewares do not apply to it.
+									Privileged, database and platform ports stay blocked.
+								</p>
+							</div>
+							<Switch
+								id="publish-ports"
+								checked={publishPorts}
+								disabled={!canWrite}
+								onCheckedChange={(checked) => draft.patch({ publishPorts: checked })}
+							/>
+						</div>
 					</div>
+				</SettingsSection>
+			</div>
+			<div id="compose-commands" tabIndex={-1} className="fieldwork-form-group">
+				<SettingsSection
+					title="Lifecycle commands"
+					description="Optional commands around a deployment. Save these with the rest of the configuration."
+				>
+					<div className="grid gap-6 xl:grid-cols-2">
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="compose-pre-deploy">Pre-deploy command</Label>
+							<Textarea
+								id="compose-pre-deploy"
+								className="min-h-16 font-mono text-xs sm:max-w-lg"
+								placeholder="php artisan down"
+								value={preDeployCommand}
+								disabled={!canWrite}
+								onChange={(event) => draft.patch({ preDeployCommand: event.target.value })}
+							/>
+							<p className="text-sm text-muted-foreground">
+								Runs in a container of the project that is currently running, before it is replaced
+								(skipped on the first deploy). A non-zero exit aborts the deployment and leaves the
+								running project untouched.
+							</p>
+						</div>
+						<div className="flex flex-col gap-2">
+							<Label htmlFor="compose-post-deploy">Post-deploy command</Label>
+							<Textarea
+								id="compose-post-deploy"
+								className="min-h-16 font-mono text-xs sm:max-w-lg"
+								placeholder="php artisan migrate --force"
+								value={postDeployCommand}
+								disabled={!canWrite}
+								onChange={(event) => draft.patch({ postDeployCommand: event.target.value })}
+							/>
+							<p className="text-sm text-muted-foreground">
+								Runs in a container of the project that was just brought up. A non-zero exit marks
+								the deployment failed.
+							</p>
+						</div>
+					</div>
+				</SettingsSection>
+			</div>
+			<div className="flex flex-wrap items-center justify-between gap-4 border-t pt-5">
+				<p className="text-sm text-muted-foreground">Changes take effect on the next deployment.</p>
+				<div className="flex items-center justify-end gap-3">
+					<UnsavedChangesPill dirty={draft.dirty} />
+					<DisabledHint hint={canWrite ? undefined : capabilityHint("service.write")}>
+						<Button onClick={onSave} disabled={updateMutation.isPending || !canWrite}>
+							{updateMutation.isPending ? "Saving…" : "Save configuration"}
+						</Button>
+					</DisabledHint>
 				</div>
-			</SettingsSection>
+			</div>
 		</SettingsStack>
 	);
 }

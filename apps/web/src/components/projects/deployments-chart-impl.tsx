@@ -36,7 +36,11 @@ export function DeploymentsChart() {
 	);
 	const rows = (data ?? []).map((row) => ({
 		...row,
-		label: row.date.slice(5), // MM-DD
+		label: new Intl.DateTimeFormat(undefined, {
+			month: "short",
+			day: "numeric",
+			timeZone: "UTC",
+		}).format(new Date(`${row.date}T00:00:00Z`)),
 	}));
 	// A fortnight of flat zeroes is a chart that says nothing; a fresh instance
 	// gets a sentence instead.
@@ -46,8 +50,8 @@ export function DeploymentsChart() {
 		<section className="surface flex h-full min-w-0 flex-col p-5 sm:p-6">
 			<div className="mb-6 flex flex-wrap items-start justify-between gap-4">
 				<div className="space-y-1">
-					<h2 className="text-base font-semibold tracking-tight">Deployment activity</h2>
-					<p className="text-xs text-muted-foreground">A continuous view of what you ship.</p>
+					<h2 className="text-base font-medium tracking-tight">Deployment activity</h2>
+					<p className="text-xs text-muted-foreground">Successful and failed builds by day.</p>
 				</div>
 				<fieldset
 					className="flex min-w-0 max-w-full flex-wrap gap-1 rounded-md border bg-panel-inset p-1"

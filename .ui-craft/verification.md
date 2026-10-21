@@ -1,97 +1,67 @@
-# Frontend rebuild verification — 2026-10-21
+# Fieldwork frontend verification — 2026-10-21
 
-The panel, public/auth surfaces and marketing/docs site use one rebuilt monochrome system. This receipt covers presentation and interaction preservation. Existing API, tenancy, deployment and infrastructure behavior is retained. No dependencies were added.
+Fieldwork replaces the rejected monochrome design across the panel, auth/public surfaces and marketing/docs. The build uses the existing shadcn/Radix/Recharts/Lucide stack with Geist and Geist Mono from Next's existing font support. No product dependency, schema, deploy-engine, tenancy or API change was introduced.
 
-## Source coverage
+## Detailed follow-up
 
-[`coverage.json`](coverage.json) reconciles every current visual TSX/CSS source: **343 sources, 325 owned and 18 vendored; 209 directly changed; 55 page files; zero unclassified entries**. Route wrappers and feature components that already express the correct data/behavior contract inherit rebuilt primitives, compositions and tokens. This is explicit shared-system coverage, not a claim that every source file needed a textual edit. Twelve inactive vendor widgets remain unused; mounted vendor integrations inherit the new site system. Vendor internals were preserved according to repository instructions.
+The later page-specific pass is recorded in [refinement.md](refinement.md). The
+current inventory is347 visual sources (329 owned/18 vendor),113 changed directly
+from main. The sections below retain the initial rollout evidence; the follow-up
+adds its own bounded matrices, final builds and preservation receipt. The final
+localhost3000 restart preserves all72 tables/240 rows and62 persistent files.
 
-The graph includes 450 TS/TSX/CSS sources. Its only visual sources outside a page import chain are the explicit error/404 boundaries, generated metadata image and 12 inactive vendor components. Each has a separate disposition. Redirect captures record their destinations. Conditional migration plan/apply results are source-inspected and inherit shared primitives; no live migration execution is claimed.
+## Initial source coverage and design
+
+[coverage.json](coverage.json) reconciles **344 visual sources:326 owned and18 vendor**, including55 page files. **72 visual sources change directly**; route/data wrappers and remaining consumers inherit the rebuilt shell, typography, surfaces, controls and settings composition. This is shared-system coverage, not a claim that every data wrapper needed a textual rewrite. Every source has a disposition. Vendor internals remain preserved;12 unused registry widgets are explicitly outside rendered scope.
+
+The project inventory uses actual environments and service counts, divided rows and one routine project-opening affordance. Existing legacy `done` service states count as healthy, matching ServiceStatusBadge. The attention summary activates the existing project filter. Settings use divided sections and one resource heading; operational editors/tables retain their own frames. All existing destinations, service tab order/aliases, permissions, dirty guards and destructive confirmations remain authoritative.
+
+[Research](research/README.md) records the official Anthropic frontend-design skill and Vercel Web Interface Guidelines applied alongside installed UI Craft. No skill was installed globally.
 
 ## Local gates
 
-| Gate | Result | Local receipt |
-| --- | --- | --- |
-| All four workspace TypeScript checks | Pass | `typecheck-release.log` |
-| Changed-file Biome autofix | Pass | `biome-release-changed.log` |
-| Strict whole-workspace Biome | Pass, 1,175 files | `biome-workspace-release.log` |
-| Pinned dead-code gate | Pass, knip5.88.1 | `knip-release.log` |
-| Backend tests | 234 files / 3,353 tests passed; 14 files / 137 optional tests skipped | `test-workspace.log` |
-| Web tests | 18 files / 119 tests passed | `test-web-release.log` |
-| Web production build | Pass | `build-web-release.log` |
-| Landing production build | Pass | `build-landing-release.log` |
-| Whitespace / dependency review | Clean diff; package manifests and lockfile unchanged | Git diff |
+All four workspace TypeScript checks, strict Biome (**1,176 files**), pinned knip5.88.1 and both production builds pass. Backend tests: **3,353 passed /137 optional cases skipped** across234 passing files and14 skipped files. Web tests: **119 passed** across18 files. Package manifests, lockfile and server/CLI sources are unchanged. Generated next-env files were restored in the implementation worktree.
 
-Remote checks are reported on the pull request at its exact head. Local browser matrices below are separate from CI; CI does not execute this local screenshot harness.
+Latest logs under ignored `.nixploy-data/verification/fieldwork-rebuild/`: `typecheck-final-verified.log`, `biome-final-verified.log`, `knip-release.log`, `test-server.log`, `test-web-release.log`, `build-web-final-verified.log`, `build-landing-final-verified.log`. Remote CI is distinct and belongs to the exact pull-request head.
 
-## Browser and state proof
+## Browser evidence
 
-All receipts and full-size captures are under the ignored local directory `.nixploy-data/verification/monochrome-rebuild/`. That directory also contains private fixture credentials and must not be committed or uploaded wholesale. Playwright used headless Brave/Chromium with fresh extension-free contexts. Both themes were tested. Coarse-pointer captures use viewport screenshots and assert the media query; full-page emulation previously changed that query and was discarded as touch proof.
+Playwright uses fresh extension-free Chromium/Brave contexts and disposable PostgreSQL17 fixtures. Panel processes use role `panel`, with Traefik boot disabled; fixture seeding never touched the primary database. Every matrix below tests both themes. Coarse-pointer evidence uses viewport screenshots and verifies the actual media query. Enlarged text means200% root font, not literal browser zoom.
 
-| Matrix | Verified scope and result |
-| --- | --- |
-| `final-route-report.json` | 710 captures: 268 authenticated panel, 26 public/auth and 416 marketing/docs. Zero page/hydration errors or document overflow. 702 responses 200; eight deliberate 404 cases. |
-| `confirmation-report.json` | 18 focused production captures close the initial unnamed-control findings and verify root/redirect destinations. Zero errors, document overflow or unnamed visible controls. |
-| `verified-reflow-report.json` | 348 cases: 29 surface families × 320/390/768px × 100/200% root text × two themes. Zero errors or document overflow. Twelve corrected profile cases replace the corresponding failing samples; the original report is retained. This proves doubled root text, not literal browser zoom. |
-| `overlay-recheck-report.json` | Fresh 216-case sweep: 36 dialogs × desktop/390px/320px with doubled text × two themes. Zero errors, overflow, unnamed controls or lost focus return. Supersedes the earlier report with six narrow-dialog overflow findings. |
-| `wizard-report.json` | All three template deployment steps, 18 cases across the same theme/viewport profiles. No deployment submitted. |
-| `source-states-report.json` | 28 saved-source cases cover six Git builders and upload source at desktop and 320px/200% in both themes; fixture source/build fields restored. Four additional authenticated Swagger captures distinguish the actual explorer from login redirects. No builds/uploads/deployments submitted. |
-| `populated-controls-report.json` | 20 production cases: disabled database/volume/instance backup, schedule and alert records. Every switch has its contextual name, keyboard focus and coarse 44px target. Temporary records removed; no toggle or execution actions invoked. |
-| `swagger-3363-report.json` | 18 production collapsed/expanded operation/authorization cases. Zero errors or document overflow; dark descriptions use readable semantic text color. |
-| `swagger-focus-3363-report.json` | Six production keyboard/scroll cases, including 320×640px/200%. Named modal/X, initial focus, forward/reverse Tab containment, Escape/X opener restoration, background inert/scroll lock, exact overflow/position restoration and reachable internally scrolled Close. |
-| `setup-report.json` | Actual welcome/owner/organization/review/completion flow on a separately migrated database; both-theme step captures and empty dashboard. Completed without page errors. |
-| `access-report.json` | 16 real 2FA-required, SSO-required, viewer and no-organization cases. Temporary role/policy/membership changes restored. |
-| `error-report.json` | 20 browser renders of the actual five error-boundary components, with a reset callback spy. Both themes, desktop/320px enlarged text, stored/System/OS/storage preference checks. Isolated harness stubs the Next link boundary; no intentional production crash. |
-| `functional-report.json` | Both themes: dirty edit cancel/discard guard, filtered empty/reset, offline/reconnect notice, reduced motion and enlarged-text profile. Browser-only delayed/faulted query responses exercise loading/error/retry; the real API recovers on retry. |
-| `capture-manifest.json` | Twelve actual production UI images, six matching light/dark pairs, shipped with content-addressed filenames. Fixture numbers are labeled as an example workspace. Metadata image also verified at 1200×630px. |
-| `landing-header-final-report.json` | 20 additional production captures after the CI cleanup: identical shared hero copy, GitHub brand icon, both themes at 1440/390/320px with 100/200% text, and mobile navigation forward/reverse Tab containment, Escape and exact opener return. Zero errors or overflow. |
+| Receipt | Coverage |
+|---|---|
+| `release-route-report.json` + `landing-release-report.json` |710 route captures:268 panel,26 public/auth,416 marketing/docs. Zero page/hydration errors, document overflow or unnamed visible controls in the release matrices. Deliberate404s/redirect destinations are recorded. |
+| `final-reflow-report.json` |348 cases:29 families ×320/390/768px ×100/200% text ×two themes. Zero overflow or page errors. |
+| `overlay-release-report.json` |216 cases:36 dialogs ×desktop/390px/320px with enlarged text ×two themes. Zero overflow, page errors, unnamed fields, lost initial focus or body focus return. |
+| `wizard-report.json` |18 template deployment-step captures; no deployment submitted. |
+| `source-states-report.json` |28 saved source cases (six Git builders plus upload), plus4 authenticated Swagger captures. Fixture source/build fields restored. |
+| `populated-controls-report.json` |20 populated alert/backup/volume/instance/schedule cases; disabled fixture records cleaned up; no jobs or Docker actions invoked. |
+| `setup-report.json` + `access-report.json` |Actual fresh setup completes through all five steps, plus16 access-policy/viewer/no-organization cases. Fixture policies and memberships restored. |
+| `error-report.json` |20 isolated renders of real web/landing error boundaries, including retry callback, System-theme synchronization and320px/200% text. This is component proof, not a claim that production crashed. |
+| `functional-report.json` |Dirty-form cancel/discard, filtered empty/reset, offline/reconnect, reduced motion, query loading/error/retry in both themes. Response faults are browser-only. |
+| `final-interaction-report.json` |6 final groups verify persistent service-search DOM/focus through loading/zero results, reset, attention action and compact account navigation/visible targets. |
+| `branding-report.json` + `branding-long-report.json` |32 saved-branding cases across1440/768/390/320px: normal and80-character unbroken product names, custom accent/CSS, footer/support/docs links, both themes. Original fixture settings restored. |
+| `swagger-3372-report.json` + `swagger-focus-3372-report.json` |18 collapsed/expanded/authorization captures and6 focused keyboard/scroll cases, including forward/reverse Tab containment, Escape and exact opener/scroll restoration. |
+| `product-captures.json` + `capture-manifest.json` |Twelve actual fixture captures with content-addressed URLs; home labels the workspace as an example. |
 
-The route matrix includes **50 non-HTML responses**: Markdown/text documentation and the generated metadata PNG. Its 25 dark-mode “theme mismatch” flags belong to these non-HTML responses, where an HTML dark class does not apply. The other 660 captures are HTML. Public `/swagger` captures are authentication redirects; only the authenticated matrices prove the explorer.
+The710-route sweep includes non-HTML documentation/text and a generated PNG. Dark-class checks do not apply to those responses. Public Swagger routes redirect to login; only authenticated Swagger cases prove the explorer.
 
-External provider setup, AI generation, terminal commands, live migrations/import application, backup execution, restore, Docker mutation and real deployment were not invoked for this presentation rebuild. Their controls, permission gates, source contracts and existing unit coverage are preserved; parent-route screenshots do not prove every conditional business branch.
+Final follow-ups cover the last bounded changes after the broad matrices: a persistent service toolbar fixes first-keystroke focus loss during loading; environment controls stay together on phones; long branding wraps inside auth; the dark input token increases to `#737f8f`. Independent design checks include8 responsive and2 delayed-query cases. Accessibility verifies44px visible targets, sheet navigation/focus and input contrast **3.36:1 against the dark dialog /4.19:1 against its input fill**. No outstanding judged Critical/Major findings remain. Reviewer receipts: `review-design-closure.json`, `review-a11y-fieldwork-final.json`.
 
-## Finish bar by vertical slice
+No real deployment, terminal command, provider setup, AI generation, migration apply, backup execution or restore was invoked for this visual rebuild. Their source contracts, permission gates and shared visual components are retained; route screenshots do not prove every conditional business branch.
 
-| Slice | Primary → supporting hierarchy | State/interaction evidence |
-| --- | --- | --- |
-| Workspace/project directory | Project/service directory → recent deployment evidence → summary metrics → navigation/help | Real populated/filtered/empty/error/loading states; mobile first service now y646 at 390×844; create/environment/source dialogs and focus return. |
-| Service operations | Active editor/table/log content → service identity and permitted action → release/runtime evidence → explanatory text | All seven service kinds and upstream, stable URL tab aliases/order, named editors, dirty guard, logs focus return, recovery/configuration presentation, conditional saved-source variants. |
-| Settings/infrastructure | Working form or table → section heading/navigation → role/permission explanation → supporting help | All settings route families, populated conditional switches, credential/provider/member dialogs, existing destructive confirmations and capability controls. |
-| Auth/access/public | Form or overall service state → specific next action → context → branding/help | Real setup, invitation/login/recovery/2FA shells, authorization gates, no organization, populated status, maintenance 200, real 404/error boundaries and Swagger modal. |
-| Marketing/docs | Product outcome headline → actual interface → specific capabilities and installation action → technical detail | All generated route instances, including 146 template, 23 documentation and three comparison entries; theme persistence/System synchronization, mobile navigation trap and metadata output. |
+## Finish bar and static detector
 
-1. **Hierarchy:** working content dominates; operational evidence and navigation have lower visual weight. Marketing uses a product-led composition rather than equal feature cards.
-2. **Type:** existing Inter and JetBrains Mono; compact supporting copy, tight display headings, tabular operational data. Forms and controls grow with text. Prose columns remain constrained; data tables/code intentionally allow internal horizontal scrolling.
-3. **Surface stack:** semantic canvas/control/card/overlay roles in both modes. The deliberate white light-card/overlay fill exception is recorded in the brief; border, shadow and backdrop provide elevation. Native color-scheme follows theme.
-4. **Spacing:** fixed 4px layout scale independent of root text size; distinct control, group and section rhythm. Operational tables deliberately compress. Header and dialog pixel gutters keep controls reachable when text doubles.
-5. **Iconography:** existing Lucide family and real brand assets; status always includes text or a meaningful non-color signal.
-6. **States:** idle/populated, delayed loading, empty/filtered, query error/retry, actual setup success, partial/unknown uptime, dirty/conflict discard and offline/reconnect all have explicit shared designs. Existing server preconditions/conflict errors remain authoritative; no concurrent-edit protocol was invented.
-7. **Motion:** restrained hover/state transitions, no decorative idle particle/marquee effects in active marketing compositions. Global reduced-motion contract removes spatial movement and collapses timings; production functional checks pass.
-8. **Copy:** sentence case, specific operation labels and preserved factual marketing/source attribution. Example fixture data is labeled. Conditional third-party text remains vendor-owned.
-9. **Detail:** distinct control/card/dialog radii; layered neutral shadows, strong control edges, clear active tabs, visible focus and wrap/scroll behavior at enlarged text. Control boundaries measure 3.20:1 light and 3.17:1 dark against their fill.
-10. **Data:** existing locale/time/byte/count formatting retained, aligned tabular numerals and readable identifiers. Unknown probes remain unknown; screenshots and charts do not introduce fabricated costs or success claims.
+Hierarchy: project inventory and working form/editor dominate; navigation and evidence support them. Type: Geist UI/Geist Mono code, restrained400/500/600 weights and tabular operational numbers. Surfaces: distinct canvas/card/overlay in both themes; white light overlays intentionally use border/backdrop/shadow rather than a different fill. Spacing: fixed4px layout scale with rem text, wrapping and contained table/code overflow. Icons: existing Lucide plus factual brand marks. States: real loading/empty/error/partial/access/offline/dirty/success flows above. Motion: short state changes and global reduced-motion override. Copy: sentence case and concrete operations. Detail: separated control/card/dialog geometry, visible focus, tested touch targets and contrast. Data: scoped real counts, unknown metrics kept unknown, no fabricated costs/dependencies.
 
-## Static detector disposition and independent review
+The deterministic scan covers326 owned visual sources and4 supporting modules, with a final changed-source pass. It reports143 contextual heuristics, not a clean scan:57 hover/focus matches are covered by shared global/primitive focus;37 data-state matches delegate to parents or mutation error helpers;25 mixed-unit matches are deliberate fixed geometry with scalable text/vendor CSS; three table matches have scroll owners; three modal matches are dropdown/nonmodal status surfaces; four outline matches have rings/active slots/focus containment; six destructive heuristics retain existing confirmations or accepted immediate metadata-only actions. Seven technical-prose em-dash and one uniform quota-grid matches are accepted minor style exceptions. `static-audit-combined.json` and `static-disposition.json` retain findings and reasons. Heuristic scores are not treated as proof of perfect design.
 
-`final-scores.json` covers all **320 owned TSX sources**, with zero scan errors. Raw heuristics report 117 anti-slop, 23 token and 12 static-accessibility findings. These are retained without changing rules or hiding source. The counts are heuristic observations, not confirmed product defects, and are not presented as a zero-warning tool result.
+## Local integration and preservation
 
-| Raw finding | Context and disposition |
-| --- | --- |
-| 55 hover/focus and 37 empty/error heuristics | Shared global focus rules, rebuilt primitives and `QueryState` own those contracts. Runtime matrices and source ownership provide closure beyond isolated-file matching. |
-| Four custom-modal heuristics | ProductShot is a static figure; ThemeProvider uses Radix DropdownMenu; ActivityTray and SaveBar are intentionally nonmodal/status surfaces. Site navigation uses Radix Dialog and is independently verified. |
-| Four removed-outline heuristics | Skip link uses a focus ring; CodeMirror uses the enclosing focus-within ring; OTP active slots show rings; Dialog contains focus and its actionable descendants show focus. |
-| Six destructive-action heuristics | Database, instance operations and template-source removal retain DangerZone/ConfirmActionDialog/AlertDialog confirmation. Existing immediate tag/individual-rule/brand-asset removal is explicitly accepted as minor metadata behavior, documented in the brief. |
-| Three table-overflow heuristics | Shared Table/scroll wrappers own horizontal overflow; parent reflow checks pass. The actual template environment-table issue found during review was fixed. |
-| Seven prose em-dash and one uniform-grid heuristics | Existing technical prose and deliberately comparable quota fields; accepted minor stylistic exceptions. |
-| 21 color literals / two tiny radii | Metadata/Satori output, branding input values/defaults, library selectors and checkbox/tooltip micro-geometry are explicit boundaries. Application surfaces use semantic tokens. |
-| 11 reduced-motion / one image-alt heuristics | Motion is constrained globally and checked at runtime. The image match is a comment containing `<img>`; the actual branding preview has alt text. |
+**localhost3000 serves the verified `codex/fieldwork-rebuild` branch**, using the original primary environment, encryption/auth keys, database and absolute configuration path. The original Desktop checkout and its dirty generated/status files remain byte-identical. No migration, reset or seed ran against primary data. Existing worker/crons/Traefik settings are retained; the new runtime uses the production build.
 
-The fold classifier still calls the marketing composition a band because it sees three sibling sections. Actual rendered product dominance, evidence and cost-of-detail checks pass; this classifier mismatch is an accepted minor heuristic limitation. It is not relabeled as a passing classifier result.
+A PostgreSQL17 custom archive was created and its table list verified, and62 persistent configuration files were copied privately before switching. Comparing the snapshot taken after the old server stopped with the new server's snapshot proves **all72 tables /237 rows /3 projects /2 organizations /2 users and all62 configuration files unchanged**. Health and readiness return200, and four authenticated light/dark dashboard/profile captures show the existing session works with zero hydration errors.
 
-Independent read-only design and accessibility reviews ran against source and real browser output. Findings that led to fixes included control-edge contrast, primary-tab distinction, mobile service visibility, maintenance routing, content-addressed product captures, enlarged-text overflow, missing labels, focus return, and the Swagger modal's semantics/trap/scroll behavior. The final judged bar requires zero outstanding Critical/Major findings; accepted minor exceptions are recorded above. Full local review receipts are `review-design-final.json`, `review-design-verified.json` and `review-a11y-closure.json`.
+During the preceding verification interval, one session organization selection and periodic health-monitor timestamps changed while the original server was still running; the final shutdown snapshot includes and preserves those latest states. They were not overwritten from an earlier backup.
 
-## Fixture and integration safety
-
-The primary checkout, its dirty `next-env.d.ts`, original chat's dirty status note, existing application database/configuration and port3000 process were preserved. The new managed branch/worktree is `codex/monochrome-rebuild`. A task-labeled Postgres17 container uses loopback port59579 and a tmpfs database; panel previews run with role `panel` and Traefik boot disabled. No worker/crons/workloads were started. The separate setup preview is stopped.
-
-Review previews: panel `http://localhost:3363`, marketing `http://localhost:3364`; development previews remain on3360/3361. Exact owned resource identities and ports are in ignored `fixture-ledger.json`. Cleanup must target only that ledger's resources. Private credentials remain local and untracked.
+Private integration receipts live in ignored `.nixploy-data/verification/fieldwork-local3000/`: archive, configuration copy, environment/file snapshots, `launcher.json`, `preservation-comparison.json`, readiness and browser reports. These contain secrets and must never be committed or uploaded wholesale. Marketing runs locally on3373. This receipt records a local rollout and review branch, not a remote production deployment or a GitHub merge.

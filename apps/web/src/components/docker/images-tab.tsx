@@ -85,7 +85,8 @@ export function ImagesTab({ serverId }: DockerTabProps) {
 	const view = useTableView({ rows: images, search: searchImage });
 
 	if (imagesQuery.isLoading) return <Skeleton className="h-64 w-full" />;
-	if (imagesQuery.isError) return <DockerError error={imagesQuery.error} />;
+	if (imagesQuery.isError)
+		return <DockerError error={imagesQuery.error} onRetry={() => void imagesQuery.refetch()} />;
 
 	return (
 		<div className="space-y-4 pt-3">

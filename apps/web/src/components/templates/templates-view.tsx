@@ -495,7 +495,7 @@ function CardGrid({
 					{/* The rule carries the eye from the label across to the row it
 					    labels, which is what separates the sections — not the gap. */}
 					<div className="flex items-center gap-3">
-						<h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+						<h2 className="text-[11px] font-medium normal-case tracking-wide text-muted-foreground">
 							{section.category}
 						</h2>
 						<span className="text-[11px] tabular-nums text-muted-foreground/60">

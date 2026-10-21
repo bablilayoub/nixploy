@@ -1,15 +1,14 @@
-# Monochrome rebuild execution
+# Fieldwork rebuild execution
 
-- [x] Inventory and baseline audit; isolated fixture and baseline captures.
-- [x] Token spine and every shared primitive, shell/navigation and theme interactions.
-- [x] Dashboard/project directory, every project page and dialogs.
-- [x] All service kinds/tabs, operational viewers/editors, recovery/config/environment/domain flows.
-- [x] Every settings/infrastructure/migration/template/monitoring/schedule surface.
-- [x] Auth and public/error/status/Swagger surfaces.
-- [x] All marketing/docs route compositions and actual new product screenshots.
-- [x] Whole-source coverage reconciliation, state/keyboard/touch/200%/theme checks.
-- [x] Full types/tests/lint/build and independent design/accessibility review; fix findings.
+- [x] Apply the selected Fieldwork direction and record the rejection of the prior design.
+- [x] Research Anthropic frontend-design and Vercel Web Interface Guidelines; use existing product dependencies.
+- [x] Build the horizontal workspace, responsive navigation, semantic themes and Geist typography.
+- [x] Recompose projects, all service families/tabs and settings; preserve existing data/action contracts.
+- [x] Match auth/setup/access/public/error/Swagger, marketing and documentation families.
+- [x] Replace all twelve marketing captures with real, content-addressed Fieldwork examples.
+- [x] Reconcile every visual source and execute route/state/dialog/responsive/keyboard checks in disposable fixtures.
+- [x] Resolve independent design and accessibility findings; pass types, tests, strict lint, dead-code and production builds.
+- [x] Back up the primary database/configuration, run the verified branch on3000 with original settings, and compare shutdown/startup snapshots.
+Review delivery uses an attached draft pull request; exact-head CI is reported separately.
 
-Delivery gate: reviewable commits and a pull request with exact-head CI. The
-durable local receipt is [verification.md](verification.md); live CI status
-belongs to the pull request. Primary checkout/data stay isolated for review.
+Latest implementation receipt: [verification.md](verification.md). The original primary checkout and its local changes remain available; localhost3000 runs the selected branch against the same primary database/configuration.

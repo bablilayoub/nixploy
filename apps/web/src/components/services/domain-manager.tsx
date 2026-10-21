@@ -6,6 +6,7 @@ import {
 	Globe,
 	Loader2,
 	Lock,
+	MoreHorizontal,
 	Pencil,
 	Plus,
 	RefreshCw,
@@ -41,6 +42,13 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { HelpLink } from "@/components/ui/help-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1214,11 +1222,7 @@ export function DomainManager({
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead>Host</TableHead>
-									<TableHead>Protocol</TableHead>
-									<TableHead>Path</TableHead>
-									<TableHead>Port</TableHead>
-									{serviceType === "compose" && <TableHead>Service</TableHead>}
+									<TableHead>Domain and route</TableHead>
 									<TableHead>Certificate</TableHead>
 									<TableHead>Middlewares</TableHead>
 									<TableHead>Uptime</TableHead>
@@ -1228,13 +1232,13 @@ export function DomainManager({
 							<TableBody>
 								{domains.map((domain) => (
 									<TableRow key={domain.domainId}>
-										<TableCell>
+										<TableCell className="min-w-56 max-w-md whitespace-normal">
 											{(domain.protocol ?? "http") === "http" ? (
 												<a
 													href={`${domain.https ? "https" : "http"}://${domain.host}`}
 													target="_blank"
 													rel="noreferrer"
-													className="inline-flex items-center gap-1.5 font-mono text-xs hover:underline"
+													className="inline-flex max-w-full items-center gap-1.5 break-all text-sm font-medium hover:underline"
 												>
 													{domain.https && <Lock className="size-3 text-success" />}
 													{domain.host}
@@ -1242,41 +1246,31 @@ export function DomainManager({
 											) : (
 												// A layer-4 route is not a URL a browser can open; a plain
 												// TCP router does not even match on the host.
-												<span className="inline-flex items-center gap-1.5 font-mono text-xs">
+												<span className="inline-flex max-w-full items-center gap-1.5 break-all text-sm font-medium">
 													{domain.tlsMode !== "none" && <Lock className="size-3 text-success" />}
 													{domain.tlsMode === "none" ? "any host" : domain.host}
 												</span>
 											)}
+
+											<p className="mt-2 break-all font-mono text-xs text-muted-foreground">
+												{(domain.protocol ?? "http") === "http" ? (
+													<>
+														{domain.https ? "HTTPS" : "HTTP"} · {domain.path ?? "/"}
+														{domain.internalPath && domain.internalPath !== "/"
+															? ` → ${domain.internalPath}`
+															: ""}{" "}
+														· {domain.serviceName ? `${domain.serviceName}:` : "port "}
+														{domain.port ?? "—"}
+													</>
+												) : (
+													<>
+														{domain.protocol.toUpperCase()} · {domain.entrypoint} →{" "}
+														{domain.serviceName ? `${domain.serviceName}:` : ""}
+														{domain.port ?? "—"}
+													</>
+												)}
+											</p>
 										</TableCell>
-										<TableCell>
-											{(domain.protocol ?? "http") === "http" ? (
-												<Badge variant="outline" className="text-xs">
-													{domain.https ? "HTTPS" : "HTTP"}
-												</Badge>
-											) : (
-												<Badge variant="outline" className="text-xs">
-													{domain.protocol.toUpperCase()} · {domain.entrypoint}
-												</Badge>
-											)}
-										</TableCell>
-										<TableCell className="font-mono text-xs">
-											{(domain.protocol ?? "http") !== "http" ? "—" : (domain.path ?? "/")}
-											{domain.internalPath && domain.internalPath !== "/" ? (
-												<span
-													className="text-muted-foreground"
-													title={`Rewritten to ${domain.internalPath} before reaching the container`}
-												>
-													{" "}
-													→ {domain.internalPath}
-												</span>
-											) : null}
-										</TableCell>
-										<TableCell className="font-mono text-xs">{domain.port ?? "—"}</TableCell>
-										{serviceType === "compose" && (
-											<TableCell className="font-mono text-xs">
-												{domain.serviceName ?? "—"}
-											</TableCell>
-										)}
 										<TableCell>
 											<Badge variant="outline" className="text-xs capitalize">
 												{(domain.protocol ?? "http") !== "http" && domain.tlsMode === "passthrough"
@@ -1324,48 +1318,55 @@ export function DomainManager({
 											})()}
 										</TableCell>
 										<TableCell className="text-right">
-											<div className="flex justify-end gap-1">
+											<div className="flex items-center justify-end gap-1">
 												<Button
 													variant="ghost"
-													size="icon-sm"
+													size="sm"
 													aria-label={`Diagnose domain ${domain.host}`}
-													title="Why does this host answer 502 or 404?"
 													onClick={() => setDiagnosing(domain)}
 												>
-													<Stethoscope className="size-3.5" />
+													<Stethoscope className="size-4" />
+													Diagnose
 												</Button>
-												<Button
-													variant="ghost"
-													size="icon-sm"
-													aria-label={`Create DNS record for ${domain.host}`}
-													disabled={!canManage || ensureDns.isPending}
-													title={
-														manageHint ?? "Point this host at the server at the linked DNS provider"
-													}
-													onClick={() => ensureDns.mutate({ domainId: domain.domainId })}
-												>
-													<Globe className="size-3.5" />
-												</Button>
-												<Button
-													variant="ghost"
-													size="icon-sm"
-													aria-label={`Edit domain ${domain.host}`}
-													disabled={!canManage}
-													title={manageHint}
-													onClick={() => openEdit(domain)}
-												>
-													<Pencil className="size-3.5" />
-												</Button>
-												<Button
-													variant="ghost"
-													size="icon-sm"
-													aria-label={`Delete domain ${domain.host}`}
-													disabled={!canManage}
-													title={manageHint}
-													onClick={() => setDeleting(domain)}
-												>
-													<Trash2 className="size-3.5 text-destructive" />
-												</Button>
+												<DropdownMenu>
+													<DropdownMenuTrigger asChild>
+														<Button
+															variant="ghost"
+															size="icon-sm"
+															aria-label={`Actions for domain ${domain.host}`}
+														>
+															<MoreHorizontal className="size-4" />
+														</Button>
+													</DropdownMenuTrigger>
+													<DropdownMenuContent align="end">
+														<DropdownMenuItem
+															disabled={!canManage}
+															title={manageHint}
+															onSelect={() => openEdit(domain)}
+														>
+															<Pencil className="size-4" />
+															Edit domain
+														</DropdownMenuItem>
+														<DropdownMenuItem
+															disabled={!canManage || ensureDns.isPending}
+															title={manageHint}
+															onSelect={() => ensureDns.mutate({ domainId: domain.domainId })}
+														>
+															<Globe className="size-4" />
+															Create DNS record
+														</DropdownMenuItem>
+														<DropdownMenuSeparator />
+														<DropdownMenuItem
+															variant="destructive"
+															disabled={!canManage}
+															title={manageHint}
+															onSelect={() => setDeleting(domain)}
+														>
+															<Trash2 className="size-4" />
+															Delete domain
+														</DropdownMenuItem>
+													</DropdownMenuContent>
+												</DropdownMenu>
 											</div>
 										</TableCell>
 									</TableRow>

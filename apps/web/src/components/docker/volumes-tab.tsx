@@ -107,7 +107,8 @@ export function VolumesTab({ serverId }: DockerTabProps) {
 	const view = useTableView({ rows: volumes, search: searchVolume });
 
 	if (volumesQuery.isLoading) return <Skeleton className="h-64 w-full" />;
-	if (volumesQuery.isError) return <DockerError error={volumesQuery.error} />;
+	if (volumesQuery.isError)
+		return <DockerError error={volumesQuery.error} onRetry={() => void volumesQuery.refetch()} />;
 
 	return (
 		<div className="space-y-4 pt-3">

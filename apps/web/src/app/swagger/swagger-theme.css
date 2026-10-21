@@ -1,13 +1,13 @@
 /*
  * Dashboard-aligned Swagger UI theme.
  * Intro/auth chrome lives in React; vendor info + scheme strips are hidden.
- * Fonts: Inter (--font-inter) + JetBrains Mono (--font-jetbrains-mono).
+ * Fonts: Geist for interface text; Geist Mono for paths and code.
  */
 
 .swagger-explorer {
 	--sw-radius: var(--radius);
-	--sw-font: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-	--sw-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+	--sw-font: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+	--sw-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 	font-family: var(--sw-font);
 	-webkit-font-smoothing: antialiased;
 }
@@ -80,10 +80,10 @@
 }
 
 .swagger-explorer .swagger-ui .servers-title {
-	font-size: 0.6875rem;
+	font-size: 0.75rem;
 	font-weight: 500;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
+	letter-spacing: 0;
+	text-transform: none;
 	color: var(--muted-foreground);
 }
 

@@ -5,7 +5,75 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
-## Full monochrome frontend rebuild — 2026-10-21 (review pending)
+## Fieldwork detailed page refinement — 2026-10-21 (running locally)
+
+The follow-up on `codex/fieldwork-rebuild` directly restructures detailed workflows
+rather than relying on the shared theme. Compose source precedes deployment
+behavior and commands; application advanced settings use a descriptive category
+rail/native mobile selector; database identity, upgrades and connection context
+are separated. Profile, organization, platform and branding forms have explicit
+groups and section navigation. Deployment/domain/Docker tables, migration steps,
+log history, environment search, fleet selection, backup summaries and schedule
+filters now have task-specific hierarchy and recovery. SSO has one heading/action.
+
+Functional fixes include backup-code sign-in, persistent authenticator errors,
+failed API-key deletion retaining its confirmation, branding/mobile dirty guards,
+native checkbox filters with restored focus, required server/notification fields,
+query retries and measured save-bar/header clearance. Public status refreshes
+visibly; marketing templates are searchable and mobile docs have section links.
+No dependency, schema, backend, permission or deploy-engine contract changed.
+
+The current inventory reconciles347 visual sources (329 owned/18 vendor),113
+changed directly from main. Follow-up verification adds322 route captures,
+420 reflow cases with the two dashboard findings closed by32 focused cases,
+23 interaction cases,10 edge cases,2 facet proofs,20 populated controls and2
+real backup-code outcomes. Final production checks add12 SSO/branding cases,
+8 marketing captures plus12 asset URLs, and4 authenticated primary captures.
+Workspace types, strict Biome (1,179 files), knip,119 web tests,3,353 backend tests
+(137 optional cases skipped), and both production builds pass. Independent design
+and accessibility reviews verify the final bounded fixes. See
+[`../.ui-craft/refinement.md`](../.ui-craft/refinement.md) for decisions and limits.
+
+The final build runs onlocalhost3000 with the original environment, database,
+keys and configuration directory. All72 tables/240 rows and62 persistent files
+match exactly across the final restart; health/readiness return200. A PostgreSQL17
+archive, configuration copy and earlier build are retained privately. Primary
+fixtures were never reset or seeded. The original Desktop checkout and its local
+changes remain preserved. PR33 remains a draft; no GitHub merge occurred.
+
+## Fieldwork frontend — 2026-10-21 (running locally)
+
+The user selected Fieldwork and rejected the previous design. Branch
+`codex/fieldwork-rebuild`, based on canonical main `f1d316e`, carries that direction
+across the panel, all service kinds/tabs, settings, auth/setup/access, public
+status/errors/Swagger and marketing/docs. Horizontal navigation, Geist typography,
+neutral surfaces, project/environment objects and divided settings sections replace
+the previous rail/card-heavy composition. Existing routes, capability/tenant gates,
+URL tab aliases, dirty guards, confirmations, saved themes and branding remain.
+No dependency, schema, API, CLI or deploy-engine change was introduced.
+
+The inventory reconciles344 visual sources (326 owned/18 vendor;72 directly
+changed) and55 page files. Consumers inherit rebuilt shared primitives and theme;
+unused vendor widgets stay explicitly classified. The local verification receipt
+records710 route captures,348 reflow cases,216 dialog cases,20 populated control
+cases, saved source variants, actual setup/access/error states,32 normal/long
+branding cases and final keyboard/search/contrast follow-ups. Four workspace
+TypeScript checks, strict Biome (1,176 files), pinned knip,119 web tests,3,353 backend
+tests (137 optional cases skipped) and both production builds pass. Independent
+design/accessibility reviews close all judged Critical/Major findings. Full scope,
+heuristic exceptions and evidence names are in
+[`../.ui-craft/verification.md`](../.ui-craft/verification.md).
+
+**localhost3000 now serves the verified branch with the original primary database,
+environment, encryption/auth keys and configuration path.** A PostgreSQL17 archive
+and private configuration backup were made first. The shutdown/startup comparison
+proves all72 tables/237 rows/3 projects/2 organizations/2 users and62 persistent
+configuration files unchanged through the switch. Existing authentication works;
+health/readiness return200. The original primary checkout and its two local dirty
+files remain unchanged for rollback. Marketing is available locally on3373. This
+is a local rollout with a review branch, not a GitHub merge or remote deployment.
+
+## Previous monochrome frontend — 2026-10-21 (superseded by Fieldwork)
 
 The user's latest request replaces the earlier familiar/Studio design scope with
 a complete monochrome rebuild of the panel, auth/public surfaces and marketing

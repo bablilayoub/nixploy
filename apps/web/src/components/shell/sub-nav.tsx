@@ -55,13 +55,13 @@ export function SubNav({
 							? cn(
 									"flex min-h-10 items-center gap-2.5 rounded-md border border-transparent px-3 py-2 text-[13px]",
 									isActive
-										? "border-border bg-card font-semibold text-foreground shadow-xs"
+										? "border-transparent bg-accent/70 font-medium text-foreground"
 										: "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
 								)
 							: cn(
 									"inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-md border px-3 py-2",
 									isActive
-										? "border-border border-border bg-card font-semibold text-foreground shadow-xs"
+										? "border-border border-transparent bg-accent/70 font-medium text-foreground"
 										: "border-transparent text-muted-foreground hover:bg-secondary/70 hover:text-foreground",
 								),
 					)}
@@ -93,7 +93,7 @@ export function SubNav({
 					>
 						<span
 							className={cn(
-								"shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground",
+								"shrink-0 text-xs font-medium text-muted-foreground",
 								vertical ? "px-3 pb-0.5" : "",
 							)}
 						>

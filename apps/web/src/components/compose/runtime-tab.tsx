@@ -85,7 +85,7 @@ export function ComposeRuntimeTab({ compose, mode }: { compose: ComposeService; 
 										<span className="flex items-center gap-2">
 											<span className="truncate">{containerLabel(row)}</span>
 											{row.state !== "running" && (
-												<Badge variant="outline" className="text-[10px]">
+												<Badge variant="outline" className="text-[11px]">
 													{row.state}
 												</Badge>
 											)}

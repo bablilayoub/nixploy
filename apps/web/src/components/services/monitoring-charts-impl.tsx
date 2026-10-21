@@ -234,7 +234,7 @@ function MetricChart({
 							stroke="var(--muted-foreground)"
 							tick={{ fill: "var(--chart-axis)" }}
 							fontSize={11}
-							fontFamily="var(--font-jetbrains-mono), ui-monospace, monospace"
+							fontFamily="var(--font-geist-mono), ui-monospace, monospace"
 							tickLine={false}
 							axisLine={false}
 							minTickGap={40}
@@ -243,7 +243,7 @@ function MetricChart({
 							stroke="var(--muted-foreground)"
 							tick={{ fill: "var(--chart-axis)" }}
 							fontSize={11}
-							fontFamily="var(--font-jetbrains-mono), ui-monospace, monospace"
+							fontFamily="var(--font-geist-mono), ui-monospace, monospace"
 							tickLine={false}
 							axisLine={false}
 							width={52}

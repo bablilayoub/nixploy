@@ -130,7 +130,7 @@ function LogLine({ line, number, wrap }: { line: string; number: number; wrap: b
 				)}
 			>
 				{level !== "default" ? (
-					<span className="me-2 inline-block min-w-12 text-[10px] font-semibold uppercase">
+					<span className="me-2 inline-block min-w-12 text-[11px] font-semibold normal-case">
 						{level}
 					</span>
 				) : null}

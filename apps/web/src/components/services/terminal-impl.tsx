@@ -142,7 +142,7 @@ export function ServiceTerminal({
 				screenReaderMode: true,
 				disableStdin: true,
 				fontSize: 13,
-				fontFamily: "var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace",
+				fontFamily: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace",
 				convertEol: true,
 				theme: nixployTerminalTheme[isDark ? "dark" : "light"],
 			});

@@ -6,7 +6,6 @@ import { format } from "date-fns";
 import { Check, Copy, KeyRound, Loader2, Pencil, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { SettingsSection } from "@/components/layout/settings-section";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
@@ -133,9 +132,7 @@ export function SshKeysView() {
 
 	return (
 		<div className="flex flex-col gap-8">
-			<PageHeader title="SSH keys" description="Keypairs used to connect to remote servers." />
-			<SettingsSection
-				wide
+			<PageHeader
 				title="SSH keys"
 				description="Keypairs used to connect to remote servers."
 				actions={
@@ -224,7 +221,8 @@ export function SshKeysView() {
 						</DialogContent>
 					</Dialog>
 				}
-			>
+			/>
+			<div className="min-w-0">
 				<QueryState
 					isPending={isPending}
 					isError={isError}
@@ -302,7 +300,7 @@ export function SshKeysView() {
 					</Table>
 					<TablePagination view={view} noun="keys" className="mt-3" />
 				</QueryState>
-			</SettingsSection>
+			</div>
 			<Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
 				<DialogContent>
 					<DialogHeader>

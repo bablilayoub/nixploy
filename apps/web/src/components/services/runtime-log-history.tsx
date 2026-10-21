@@ -64,12 +64,16 @@ export function RuntimeLogHistory({
 	const trpc = useTRPC();
 	const [draft, setDraft] = useState("");
 	const [query, setQuery] = useState("");
+	const [level, setLevel] = useState("all");
+	const [range, setRange] = useState("all");
+	const [rangeSince, setRangeSince] = useState<number | undefined>();
+	const effectiveQuery = [query, level === "all" ? "" : `level:${level}`].filter(Boolean).join(" ");
 	const history = useInfiniteQuery(
 		trpc.observability.runtimeLogs.infiniteQueryOptions(
 			{
 				appName,
-				query: query || undefined,
-				since,
+				query: effectiveQuery || undefined,
+				since: since ?? rangeSince,
 				until,
 				limit: PAGE_SIZE,
 			},
@@ -97,7 +101,7 @@ export function RuntimeLogHistory({
 					<Input
 						value={draft}
 						onChange={(event) => setDraft(event.target.value)}
-						placeholder='timeout "connection refused" -healthcheck level:error container:web /re.*gex/'
+						placeholder="Search messages…"
 						className="pl-8 font-mono text-xs"
 						aria-label="Search runtime logs"
 					/>
@@ -107,12 +111,71 @@ export function RuntimeLogHistory({
 					Search
 				</Button>
 			</form>
+			<div className="flex flex-wrap items-end gap-3">
+				<label className="grid gap-2 text-xs text-muted-foreground">
+					<span>Log level</span>
+					<select
+						aria-label="Log level"
+						value={level}
+						onChange={(event) => setLevel(event.target.value)}
+						className="h-10 rounded-md border border-input bg-card px-3 text-sm text-foreground"
+					>
+						<option value="all">All levels</option>
+						<option value="error">Error</option>
+						<option value="warn">Warning</option>
+						<option value="info">Info</option>
+						<option value="debug">Debug</option>
+						<option value="success">Success</option>
+					</select>
+				</label>
+				{since === undefined && (
+					<label className="grid gap-2 text-xs text-muted-foreground">
+						<span>Time range</span>
+						<select
+							aria-label="Log time range"
+							value={range}
+							onChange={(event) => {
+								const next = event.target.value;
+								setRange(next);
+								setRangeSince(
+									next === "all" ? undefined : Date.now() - Number(next) * 60 * 60 * 1000,
+								);
+							}}
+							className="h-10 rounded-md border border-input bg-card px-3 text-sm text-foreground"
+						>
+							<option value="all">All retained logs</option>
+							<option value="1">Last hour</option>
+							<option value="6">Last 6 hours</option>
+							<option value="24">Last 24 hours</option>
+						</select>
+					</label>
+				)}
+				{(query || level !== "all" || range !== "all") && (
+					<Button
+						variant="ghost"
+						size="sm"
+						onClick={() => {
+							setDraft("");
+							setQuery("");
+							setLevel("all");
+							setRange("all");
+							setRangeSince(undefined);
+						}}
+					>
+						Clear filters
+					</Button>
+				)}
+				<details className="ml-auto text-xs text-muted-foreground">
+					<summary className="cursor-pointer py-3">Search syntax</summary>
+					<p className="max-w-xl py-2 leading-relaxed">
+						Terms must all match. Use <code>-term</code> to exclude, <code>container:web</code> for
+						a container, <code>level:error,warn</code> for multiple levels or <code>/regex/</code>.{" "}
+						<HelpLink slug="observability" />
+					</p>
+				</details>
+			</div>
 			<p className="text-xs text-muted-foreground">
-				Collected every 30 s from <code className="font-mono">docker logs</code> and kept past the
-				container's lifetime. Terms must all match; <code className="font-mono">-term</code>{" "}
-				excludes, <code className="font-mono">level:error,warn</code>,{" "}
-				<code className="font-mono">container:web</code> and{" "}
-				<code className="font-mono">/regex/</code> narrow further. <HelpLink slug="observability" />
+				Collected every 30 seconds and retained after the container stops.
 			</p>
 
 			{since !== undefined && until !== undefined && (
@@ -152,15 +215,15 @@ export function RuntimeLogHistory({
 							<div
 								// biome-ignore lint/suspicious/noArrayIndexKey: lines are append-only and never reordered
 								key={`${line.t}-${index}`}
-								className="flex items-start gap-3 border-b border-border/60 px-3 py-2 last:border-b-0"
+								className="flex flex-wrap items-start gap-x-3 gap-y-2 border-b border-border/60 px-3 py-3 last:border-b-0 lg:flex-nowrap"
 							>
-								<span className="w-40 shrink-0 tabular-nums text-muted-foreground">
+								<span className="shrink-0 tabular-nums text-muted-foreground lg:w-40">
 									{formatTime(line.t)}
 								</span>
 								{line.level !== "default" ? (
 									<span
 										className={cn(
-											"shrink-0 rounded px-1 py-px text-[10px] font-semibold",
+											"shrink-0 rounded px-1 py-px text-[11px] font-semibold",
 											LEVEL_CLASS[line.level],
 										)}
 									>
@@ -170,14 +233,18 @@ export function RuntimeLogHistory({
 									<span className="w-7 shrink-0" />
 								)}
 								{!appName ? (
-									<Badge variant="outline" className="shrink-0 font-mono text-[10px]">
+									<Badge variant="outline" className="shrink-0 font-mono text-[11px]">
 										{line.appName}
 									</Badge>
 								) : null}
 								{line.container ? (
-									<span className="shrink-0 text-muted-foreground">{line.container}</span>
+									<span className="min-w-0 break-all text-muted-foreground lg:max-w-40">
+										{line.container}
+									</span>
 								) : null}
-								<span className="min-w-0 whitespace-pre-wrap break-all">{line.message}</span>
+								<span className="min-w-0 w-full whitespace-pre-wrap break-words leading-relaxed lg:w-auto lg:flex-1">
+									{line.message}
+								</span>
 							</div>
 						))}
 					</div>

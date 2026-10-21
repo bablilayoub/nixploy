@@ -24,7 +24,7 @@ export const heroBadge = {
 export const heroTitle = ["Ship your work.", "Own the whole stack."] as const;
 
 export const heroLead =
-	"Applications, databases, and everything in between. A deployment platform that feels right at home on your servers.";
+	"Deploy Git repositories and Compose stacks. Manage databases, domains, backups and monitoring on your own servers.";
 
 /**
  * What `docker stats` reports for the three Swarm services on the production

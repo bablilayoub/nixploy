@@ -13,15 +13,15 @@ import { RollbacksManager } from "./rollbacks-manager";
 import { SecurityManager } from "./security-manager";
 import { SwarmConfig } from "./swarm-config";
 
-const ADVANCED_TABS = [
-	"mounts",
-	"ports",
-	"redirects",
-	"security",
-	"healthcheck",
-	"placement",
-	"swarm",
-	"rollbacks",
+const ADVANCED_CATEGORIES = [
+	{ value: "mounts", label: "Mounts", description: "Volumes, files and bind mounts" },
+	{ value: "ports", label: "Ports", description: "Direct container connections" },
+	{ value: "redirects", label: "Redirects", description: "URL forwarding rules" },
+	{ value: "security", label: "Security", description: "Access and request protection" },
+	{ value: "healthcheck", label: "Healthcheck", description: "Container readiness checks" },
+	{ value: "placement", label: "Placement", description: "Where replicas can run" },
+	{ value: "swarm", label: "Swarm", description: "Updates, scaling and runtime" },
+	{ value: "rollbacks", label: "Rollbacks", description: "Restore a deployment snapshot" },
 ];
 
 export function AdvancedTab() {
@@ -29,24 +29,50 @@ export function AdvancedTab() {
 	const applicationId = application.applicationId;
 	// Third level of the page's tabs: kept in its own `?advanced=` param so
 	// `?tab=advanced&advanced=swarm` deep-links without touching `?tab=`.
-	const [tab, selectTab] = useSyncedTab("mounts", (value) => ADVANCED_TABS.includes(value), {
-		param: "advanced",
-	});
+	const [tab, selectTab] = useSyncedTab(
+		"mounts",
+		(value) => ADVANCED_CATEGORIES.some((category) => category.value === value),
+		{
+			param: "advanced",
+		},
+	);
 
 	return (
-		<Tabs value={tab} onValueChange={selectTab} className="w-full">
-			<TabsList
-				aria-label="Advanced configuration categories"
-				className="h-auto flex-wrap justify-start overflow-visible"
-			>
-				<TabsTrigger value="mounts">Mounts</TabsTrigger>
-				<TabsTrigger value="ports">Ports</TabsTrigger>
-				<TabsTrigger value="redirects">Redirects</TabsTrigger>
-				<TabsTrigger value="security">Security</TabsTrigger>
-				<TabsTrigger value="healthcheck">Healthcheck</TabsTrigger>
-				<TabsTrigger value="placement">Placement</TabsTrigger>
-				<TabsTrigger value="swarm">Swarm</TabsTrigger>
-				<TabsTrigger value="rollbacks">Rollbacks</TabsTrigger>
+		<Tabs
+			value={tab}
+			onValueChange={selectTab}
+			orientation="vertical"
+			className="fieldwork-category-workspace w-full"
+		>
+			<label className="grid gap-2 text-sm font-medium lg:hidden">
+				Advanced section
+				<select
+					aria-label="Advanced section"
+					value={tab}
+					onChange={(event) => selectTab(event.target.value)}
+					className="h-11 w-full rounded-md border border-input bg-card px-3 font-normal"
+				>
+					{ADVANCED_CATEGORIES.map((category) => (
+						<option key={category.value} value={category.value}>
+							{category.label}
+						</option>
+					))}
+				</select>
+				<span className="text-xs font-normal text-muted-foreground">
+					{ADVANCED_CATEGORIES.find((category) => category.value === tab)?.description}
+				</span>
+			</label>
+			<TabsList aria-label="Advanced configuration categories" className="fieldwork-category-list">
+				{ADVANCED_CATEGORIES.map((category) => (
+					<TabsTrigger key={category.value} value={category.value}>
+						<span className="min-w-0">
+							<span className="block text-sm font-medium">{category.label}</span>
+							<span className="mt-1 block text-xs font-normal leading-relaxed text-muted-foreground">
+								{category.description}
+							</span>
+						</span>
+					</TabsTrigger>
+				))}
 			</TabsList>
 			<TabsContent value="mounts" className="mt-2">
 				<MountsManager target={{ kind: "application", applicationId }} />

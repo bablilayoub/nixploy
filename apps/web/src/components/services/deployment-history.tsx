@@ -43,11 +43,10 @@ import { useCapabilities } from "@/hooks/use-capabilities";
 import { useLiveEventsConnected } from "@/hooks/use-live-events";
 import { describeTriggeredBy, firstLine, TRIGGER_LABELS } from "@/hooks/use-running-deployments";
 import { useSaveMutation } from "@/hooks/use-save-mutation";
-import { toastError } from "@/lib/describe-error";
+import { describeError, toastError } from "@/lib/describe-error";
 import { formatDuration } from "@/lib/format";
 import { deploymentStatusLabel } from "@/lib/status";
 import { useTRPC } from "@/lib/trpc";
-import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
 
@@ -363,6 +362,21 @@ export function DeploymentHistory({
 						<Skeleton key={row} className="h-10 w-full" />
 					))}
 				</div>
+			) : deploymentsQuery.isError ? (
+				<div
+					role="alert"
+					className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-destructive/30 p-5"
+				>
+					<div>
+						<p className="text-sm font-medium">Couldn’t load deployment history</p>
+						<p className="mt-1 text-sm text-muted-foreground">
+							{describeError(deploymentsQuery.error, "Try loading the history again.")}
+						</p>
+					</div>
+					<Button variant="outline" onClick={() => deploymentsQuery.refetch()}>
+						Try again
+					</Button>
+				</div>
 			) : deployments.length === 0 ? (
 				// A filtered-to-nothing list is not an empty history: the first says
 				// to drop the filter, the second says to deploy something.
@@ -372,7 +386,7 @@ export function DeploymentHistory({
 					description={
 						statuses.length > 0
 							? "This service has deployments, just none in the selected states."
-							: "Hit Deploy to ship the first one."
+							: "Use Deploy above to create the first deployment."
 					}
 					action={
 						statuses.length > 0 ? (
@@ -402,32 +416,14 @@ export function DeploymentHistory({
 				>
 					<ol className="surface divide-y overflow-hidden" aria-label="Deployment timeline">
 						{deployments.map((deployment) => (
-							<li
-								key={deployment.deploymentId}
-								className="relative flex gap-4 px-4 py-6 sm:gap-5 sm:px-6"
-							>
-								<div
-									aria-hidden="true"
-									className="relative flex w-6 shrink-0 justify-center before:absolute before:top-6 before:-bottom-6 before:left-1/2 before:w-px before:bg-border"
-								>
-									<span
-										className={cn(
-											"relative z-10 mt-1 size-3 rounded-full border-2 border-card ring-4 ring-background",
-											deployment.status === "error"
-												? "bg-destructive"
-												: isActive(deployment.status)
-													? "bg-info"
-													: "bg-foreground",
-										)}
-									/>
-								</div>
-								<article className="min-w-0 flex-1">
-									<div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+							<li key={deployment.deploymentId} className="px-4 py-5 sm:px-5">
+								<article className="fieldwork-deployment-row min-w-0">
+									<div className="flex flex-wrap items-center gap-3 lg:flex-col lg:items-end lg:gap-2">
 										<DeploymentStatusBadge
 											status={deployment.status}
 											queuePosition={deployment.queuePosition}
 										/>
-										<span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+										<span className="text-xs tabular-nums text-muted-foreground">
 											<DateTime value={deployment.createdAt} /> ·{" "}
 											{formatDuration(deployment.startedAt, deployment.finishedAt)}
 										</span>
@@ -490,7 +486,7 @@ export function DeploymentHistory({
 											</span>
 										)}
 									</div>
-									<div className="mt-4 flex flex-wrap items-center gap-2">
+									<div className="flex flex-wrap items-center gap-2 lg:justify-end">
 										<Button
 											variant="ghost"
 											size="sm"

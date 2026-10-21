@@ -189,7 +189,7 @@ export function ServicePageHeader({
 
 	return (
 		<PageHeader
-			className="surface p-5 shadow-[var(--surface-shadow)] sm:p-6"
+			className="fieldwork-service-header"
 			breadcrumb={
 				<nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5">
 					<Link

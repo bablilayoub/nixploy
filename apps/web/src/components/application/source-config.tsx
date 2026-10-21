@@ -198,6 +198,17 @@ export function SourceConfig({ application }: { application: Application }) {
 	const bitbucketProviders = useQuery(trpc.bitbucket.all.queryOptions());
 	const giteaProviders = useQuery(trpc.gitea.all.queryOptions());
 
+	const providerQuery =
+		sourceType === "github"
+			? githubProviders
+			: sourceType === "gitlab"
+				? gitlabProviders
+				: sourceType === "bitbucket"
+					? bitbucketProviders
+					: sourceType === "gitea"
+						? giteaProviders
+						: null;
+
 	// Each provider router returns rows joined with the shared gitProvider
 	// record; normalize to { id, name } for the select.
 	const providerOptions: { id: string; name: string }[] =
@@ -374,12 +385,18 @@ export function SourceConfig({ application }: { application: Application }) {
 				{isGitProviderSource(sourceType) && (
 					<>
 						<div className="flex flex-col gap-2">
-							<Label>{GIT_PROVIDER_LABELS[sourceType]} Provider</Label>
+							<Label htmlFor="application-source-provider">
+								{GIT_PROVIDER_LABELS[sourceType]} provider
+							</Label>
 							<Select
 								value={providerId}
 								onValueChange={(value) => draft.patch({ providerId: value })}
 							>
-								<SelectTrigger className="w-full sm:max-w-xs">
+								<SelectTrigger
+									id="application-source-provider"
+									disabled={!providerQuery?.isSuccess}
+									className="w-full sm:max-w-xs"
+								>
 									<SelectValue placeholder="Select a provider" />
 								</SelectTrigger>
 								<SelectContent>
@@ -390,7 +407,26 @@ export function SourceConfig({ application }: { application: Application }) {
 									))}
 								</SelectContent>
 							</Select>
-							{providerOptions.length === 0 && (
+							{providerQuery?.isError && (
+								<div
+									role="alert"
+									className="flex flex-wrap items-center gap-3 rounded-md border border-destructive/25 p-3 text-sm"
+								>
+									<p className="text-muted-foreground">
+										Couldn’t load Git providers. Your source settings are unchanged.
+									</p>
+									<Button
+										variant="outline"
+										size="sm"
+										disabled={providerQuery.isFetching}
+										onClick={() => void providerQuery.refetch()}
+									>
+										Retry providers
+									</Button>
+								</div>
+							)}
+
+							{providerQuery?.isSuccess && providerOptions.length === 0 && (
 								<p className="text-xs text-muted-foreground">
 									No {GIT_PROVIDER_LABELS[sourceType]} providers configured. Add one under Settings
 									→ Git providers.

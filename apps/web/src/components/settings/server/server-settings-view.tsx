@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { SectionLinks } from "@/components/layout/section-links";
 import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
 import { useSaveBar } from "@/components/services/save-bar";
 import { AcmeDnsCard } from "@/components/settings/server/acme-dns-card";
@@ -415,6 +416,18 @@ export function ServerSettingsView() {
 				description="Domain, Traefik, host health, maintenance, and updates."
 			/>
 
+			<SectionLinks
+				label="Platform settings sections"
+				items={[
+					{ id: "access", label: "Access and routing", detail: "Panel domain, DNS and proxy" },
+					{ id: "health", label: "Host and maintenance", detail: "Monitoring and cleanup" },
+					{
+						id: "platform-administration",
+						label: "Administration",
+						detail: "Updates, AI and users",
+					},
+				]}
+			/>
 			<SettingsStack>
 				{/* Access: domain + Let's Encrypt */}
 				<SettingsSection
@@ -753,9 +766,11 @@ export function ServerSettingsView() {
 					)}
 				</SettingsSection>
 
-				<UpdatesCard />
-				<AiSettingsCard />
-				<UsersCard />
+				<div id="platform-administration" tabIndex={-1} className="fieldwork-form-group">
+					<UpdatesCard />
+					<AiSettingsCard />
+					<UsersCard />
+				</div>
 			</SettingsStack>
 		</div>
 	);

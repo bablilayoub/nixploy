@@ -72,7 +72,7 @@ function editorChrome(palette: Palette, isDark: boolean): Extension {
 				backgroundColor: palette.background,
 				fontSize: "13px",
 				fontFamily:
-					"var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+					"var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
 			},
 			".cm-content": {
 				caretColor: palette.cursor,

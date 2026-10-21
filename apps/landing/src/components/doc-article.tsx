@@ -102,7 +102,7 @@ function Block({ block, occurrence }: { block: DocBlock; occurrence: number }) {
 export function DocArticle({ page }: { page: DocPage }) {
 	return (
 		<article className="max-w-3xl text-base leading-[1.8]">
-			<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">Docs</p>
+			<p className="text-xs text-muted-foreground normal-case">Docs</p>
 			<h1 className="mt-4 text-4xl leading-[1.1] font-semibold tracking-[-0.045em] text-balance">
 				{page.title}
 			</h1>

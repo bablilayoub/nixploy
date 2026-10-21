@@ -66,7 +66,8 @@ export function NetworksTab({ serverId }: DockerTabProps) {
 	const view = useTableView({ rows: networks, search: searchNetwork });
 
 	if (networksQuery.isLoading) return <Skeleton className="h-64 w-full" />;
-	if (networksQuery.isError) return <DockerError error={networksQuery.error} />;
+	if (networksQuery.isError)
+		return <DockerError error={networksQuery.error} onRetry={() => void networksQuery.refetch()} />;
 
 	return (
 		<div className="space-y-4 pt-3">

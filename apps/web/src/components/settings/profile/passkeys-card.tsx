@@ -5,6 +5,7 @@ import { Fingerprint, Loader2, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { SettingsSection } from "@/components/layout/settings-section";
+import { LoadError } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { ConfirmDeleteDialog } from "@/components/settings/confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
@@ -128,6 +129,16 @@ export function PasskeysCard() {
 			</SettingsSection>
 		);
 	}
+
+	if (availability.isError)
+		return (
+			<SettingsSection title="Passkeys" description="Sign-in with a passkey.">
+				<LoadError
+					message="Could not check whether passkeys are available."
+					onRetry={() => void availability.refetch()}
+				/>
+			</SettingsSection>
+		);
 
 	if (!available) {
 		return (

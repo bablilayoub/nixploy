@@ -25,8 +25,8 @@ export function ProseLink({ href, children }: { href: string; children: ReactNod
 }
 
 /*
- * Every page that is not the home page: the same bar, a header on a dotted
- * field (@magicui/dot-pattern), the page's own blocks, the shared close and
+ * Every page that is not the home page: the same navigation, a clear neutral
+ * header, the page's own blocks, the shared close and
  * the footer. Structure only — the parts are registry components.
  */
 export function PageFrame({
@@ -54,7 +54,7 @@ export function PageFrame({
 			<SiteNavbar />
 			<main id="main-content" className="relative">
 				{title ? (
-					<header className="relative border-b bg-card pt-32 pb-12 lg:pt-40 lg:pb-16">
+					<header className="relative border-b pt-32 pb-12 lg:pt-40 lg:pb-16">
 						<div className={cn("container-page relative", width === "prose" && "max-w-3xl")}>
 							{mark ? (
 								<span className="mb-5 inline-flex size-14 items-center justify-center rounded-xl border bg-card">
@@ -62,11 +62,9 @@ export function PageFrame({
 								</span>
 							) : null}
 							{eyebrow ? (
-								<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
-									{eyebrow}
-								</p>
+								<p className="text-xs text-muted-foreground normal-case">{eyebrow}</p>
 							) : null}
-							<h1 className="mt-4 max-w-3xl text-4xl leading-[1.05] font-semibold tracking-[-0.05em] text-balance sm:text-5xl lg:text-6xl">
+							<h1 className="mt-4 max-w-3xl text-4xl leading-[1.08] font-medium tracking-[-0.045em] text-balance sm:text-5xl lg:text-6xl">
 								{title}
 							</h1>
 							{description ? (

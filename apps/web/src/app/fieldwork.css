@@ -1,0 +1,709 @@
+/* Fieldwork's component layer. Every selector belongs to one named surface. */
+.fieldwork-chrome {
+	position: sticky;
+	top: 0;
+	z-index: 30;
+	background: var(--card);
+}
+.fieldwork-identity {
+	border-bottom: 1px solid var(--border);
+}
+.fieldwork-identity-inner {
+	max-width: 1440px;
+	margin-inline: auto;
+	min-height: 4.5rem;
+	padding-inline: 2.5rem;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 2rem;
+}
+.fieldwork-identity-start {
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 1.5rem;
+}
+.fieldwork-logo {
+	max-width: 24rem;
+	min-width: 0;
+	flex-shrink: 1;
+	display: flex;
+	align-items: center;
+	min-height: 2.5rem;
+}
+.fieldwork-logo > span {
+	min-width: 0;
+}
+.fieldwork-logo :where(span:last-child) {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.fieldwork-brand-divider {
+	height: 1.5rem;
+	width: 1px;
+	background: var(--border);
+	transform: rotate(15deg);
+}
+.fieldwork-org-switcher {
+	max-width: 18rem;
+}
+.fieldwork-identity-tools {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	flex-shrink: 0;
+}
+.fieldwork-primary-row {
+	border-bottom: 1px solid var(--border);
+}
+.fieldwork-primary-inner {
+	max-width: 1440px;
+	margin-inline: auto;
+	padding-inline: 2.5rem;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 2rem;
+}
+.fieldwork-primary-nav {
+	display: flex;
+	align-items: center;
+	gap: 1.75rem;
+	min-width: 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.fieldwork-primary-link {
+	min-height: 3rem;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	position: relative;
+	color: var(--muted-foreground);
+	font-size: 0.8125rem;
+	white-space: nowrap;
+	transition: color 140ms;
+}
+.fieldwork-primary-link:hover {
+	color: var(--foreground);
+}
+.fieldwork-primary-link[aria-current] {
+	color: var(--foreground);
+	font-weight: 500;
+}
+.fieldwork-primary-link[aria-current]::after {
+	content: "";
+	position: absolute;
+	inset-inline: 0;
+	bottom: 0;
+	height: 2px;
+	background: var(--foreground);
+	border-radius: 2px 2px 0 0;
+}
+.fieldwork-docs-link {
+	min-height: 2.75rem;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.375rem;
+	font-size: 0.75rem;
+	color: var(--muted-foreground);
+	white-space: nowrap;
+}
+.fieldwork-docs-link:hover {
+	color: var(--foreground);
+}
+.fieldwork-page-header {
+	--header-space: 1.75rem;
+}
+.fieldwork-service-header {
+	padding-bottom: 0;
+	margin-bottom: 0;
+}
+.fieldwork-summary {
+	display: flex;
+	align-items: center;
+	gap: 1.5rem;
+	padding: 1.25rem 1.5rem;
+	border: 1px solid var(--border);
+	border-radius: 0.625rem;
+	background: var(--card);
+}
+.fieldwork-summary-primary {
+	display: flex;
+	align-items: center;
+	gap: 0.875rem;
+	flex: 1;
+	min-width: 0;
+}
+.fieldwork-summary-icon {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--muted-foreground);
+	background: var(--panel-inset);
+	flex-shrink: 0;
+}
+.fieldwork-summary-primary strong {
+	display: block;
+	font-weight: 500;
+	font-size: 0.875rem;
+}
+.fieldwork-summary-detail {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.625rem;
+	font-size: 0.75rem;
+	color: var(--muted-foreground);
+	margin-top: 0.25rem;
+}
+.fieldwork-summary-metric {
+	border-inline-start: 1px solid var(--border);
+	min-width: 10rem;
+	padding-inline-start: 1.5rem;
+}
+.fieldwork-summary-metric strong {
+	display: block;
+	font-size: 1.5rem;
+	font-weight: 500;
+	letter-spacing: -0.03em;
+}
+.fieldwork-summary-metric span {
+	display: block;
+	font-size: 0.75rem;
+	color: var(--muted-foreground);
+	margin-top: 0.125rem;
+}
+.fieldwork-project-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 1.5rem;
+}
+.fieldwork-project {
+	min-width: 0;
+	background: var(--card);
+	border: 1px solid var(--border);
+	border-radius: 0.75rem;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+}
+.fieldwork-project-header {
+	padding: 1.5rem 1.5rem 1rem;
+	display: flex;
+	align-items: center;
+	gap: 0.875rem;
+}
+.fieldwork-project-symbol {
+	width: 2.5rem;
+	height: 2.5rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--border);
+	border-radius: 0.625rem;
+	background: var(--panel-inset);
+	color: var(--foreground);
+	flex-shrink: 0;
+}
+.fieldwork-project-heading {
+	flex: 1;
+	min-width: 0;
+}
+.fieldwork-project-heading h3 {
+	overflow-wrap: anywhere;
+	font-size: 1rem;
+	font-weight: 500;
+	letter-spacing: -0.02em;
+}
+.fieldwork-project-heading a:hover {
+	text-decoration: underline;
+	text-underline-offset: 4px;
+}
+.fieldwork-project-heading p {
+	font-size: 0.75rem;
+	color: var(--muted-foreground);
+	margin-top: 0.25rem;
+}
+.fieldwork-project-description {
+	padding-inline: 1.5rem;
+	font-size: 0.8125rem;
+	color: var(--muted-foreground);
+	line-height: 1.6;
+}
+.fieldwork-project-environments {
+	display: grid;
+	gap: 0;
+	padding: 1rem 1.5rem;
+}
+.fieldwork-project-environment {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 0.5rem 1rem;
+	padding: 0.875rem 0;
+	border-top: 1px solid var(--border);
+	min-width: 0;
+	transition: color 140ms;
+}
+.fieldwork-project-environment > strong {
+	font-size: 0.8125rem;
+	font-weight: 500;
+	overflow-wrap: anywhere;
+}
+.fieldwork-project-environment > span {
+	font-size: 0.75rem;
+	color: var(--muted-foreground);
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	flex-wrap: wrap;
+}
+.fieldwork-project-environment > span:last-child {
+	grid-column: 1 / -1;
+}
+.fieldwork-project-environment:hover > strong {
+	text-decoration: underline;
+	text-underline-offset: 4px;
+}
+.fieldwork-project-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	border-top: 1px solid var(--border);
+	padding: 0.875rem 1.5rem;
+	margin-top: auto;
+	font-size: 0.75rem;
+	color: var(--muted-foreground);
+}
+.fieldwork-project-footer > a {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+}
+.fieldwork-project-footer > a:hover {
+	color: var(--foreground);
+}
+.fieldwork-evidence {
+	display: grid;
+	grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+	gap: 1.5rem;
+	align-items: start;
+}
+.fieldwork-auth {
+	min-height: 100svh;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	background: var(--background);
+}
+.fieldwork-auth-story {
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	border-inline-end: 1px solid var(--border);
+	background: var(--card);
+	padding: 3rem;
+}
+.fieldwork-auth-message {
+	margin-block: 4rem;
+	max-width: 30rem;
+}
+.fieldwork-auth-message h2 {
+	font-size: clamp(2.75rem, 3.6vw, 3.75rem);
+	font-weight: 500;
+	letter-spacing: -0.05em;
+	line-height: 1.08;
+}
+.fieldwork-auth-message p {
+	margin-top: 1.5rem;
+	max-width: 24rem;
+	font-size: 0.9375rem;
+	line-height: 1.7;
+	color: var(--muted-foreground);
+}
+.fieldwork-auth-path {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	flex-wrap: wrap;
+	margin-top: 2.5rem;
+	padding-top: 1.5rem;
+	border-top: 1px solid var(--border);
+	color: var(--muted-foreground);
+	font-size: 0.75rem;
+}
+.fieldwork-auth-path > span {
+	display: flex;
+	gap: 0.5rem;
+	align-items: center;
+}
+.fieldwork-auth-side {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+}
+.fieldwork-auth-form {
+	overflow-wrap: anywhere;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex: 1;
+	padding: 2.5rem;
+}
+.fieldwork-auth-form > div {
+	width: 100%;
+	max-width: 24rem;
+}
+.fieldwork-auth-footer {
+	overflow-wrap: anywhere;
+	padding: 1.5rem 2rem;
+	color: var(--muted-foreground);
+	font-size: 0.75rem;
+	text-align: center;
+}
+.fieldwork-settings-section {
+	width: 100%;
+	min-width: 0;
+	border-bottom: 1px solid var(--border);
+	padding-block: 1.75rem;
+	scroll-margin-top: 24px;
+}
+.fieldwork-settings-section:first-child:not(.fieldwork-settings-danger) {
+	padding-top: 0.5rem;
+}
+.fieldwork-settings-section:last-child:not(.fieldwork-settings-danger) {
+	border-bottom: 0;
+}
+.fieldwork-settings-split {
+	display: grid;
+	grid-template-columns: minmax(12rem, 1fr) minmax(0, 1.8fr);
+	gap: 3rem;
+}
+.fieldwork-settings-body {
+	min-width: 0;
+}
+.fieldwork-settings-body :is(input:not([type="checkbox"]), textarea, select) {
+	background: var(--card);
+}
+.fieldwork-settings-danger {
+	border: 1px solid color-mix(in oklab, var(--destructive) 30%, var(--border));
+	border-radius: 0.625rem;
+	padding: 1.5rem;
+	background: color-mix(in oklab, var(--destructive) 2%, var(--card));
+}
+@media (width < 80rem) {
+	.fieldwork-identity-inner,
+	.fieldwork-primary-inner {
+		padding-inline: 1.5rem;
+	}
+	.fieldwork-primary-nav {
+		gap: 1.5rem;
+	}
+	.fieldwork-summary-metric {
+		min-width: 8rem;
+	}
+}
+@media (width < 64rem) {
+	.fieldwork-chrome {
+		position: relative;
+	}
+	.fieldwork-identity-inner {
+		min-height: 4rem;
+		gap: 1rem;
+	}
+	.fieldwork-docs-link {
+		display: none;
+	}
+	.fieldwork-primary-nav {
+		gap: 1.5rem;
+	}
+	.fieldwork-identity-start {
+		gap: 0.75rem;
+	}
+	.fieldwork-summary-metric:last-child {
+		display: none;
+	}
+	.fieldwork-evidence {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.fieldwork-auth {
+		grid-template-columns: 1fr;
+	}
+	.fieldwork-auth-story {
+		display: none;
+	}
+	.fieldwork-settings-split {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 1.5rem;
+	}
+}
+@media (width < 48rem) {
+	.fieldwork-identity {
+		--spacing: 4px;
+	}
+	.fieldwork-identity-inner,
+	.fieldwork-primary-inner {
+		padding-inline: 16px;
+	}
+	.fieldwork-identity-inner {
+		min-height: 4rem;
+	}
+	.fieldwork-brand-divider {
+		display: none;
+	}
+	.fieldwork-identity-tools {
+		gap: 4px;
+	}
+	.fieldwork-identity-start {
+		gap: 0.375rem;
+	}
+	.fieldwork-identity-start .fieldwork-org-switcher,
+	.fieldwork-account {
+		display: none;
+	}
+	.fieldwork-logo {
+		max-width: calc(100vw - 184px);
+		min-width: 0;
+		overflow: hidden;
+	}
+	.fieldwork-logo img {
+		max-height: 1.75rem;
+		width: auto;
+	}
+	.fieldwork-primary-row {
+		display: none;
+	}
+	.fieldwork-identity-start .fieldwork-org-switcher > span:first-child {
+		display: none;
+	}
+	.fieldwork-summary {
+		padding: 1rem;
+		gap: 1rem;
+	}
+	.fieldwork-summary-metric {
+		display: none;
+	}
+	.fieldwork-project-grid {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 1rem;
+	}
+	.fieldwork-project-header {
+		padding: 1.25rem 1.25rem 0.875rem;
+	}
+	.fieldwork-project-description {
+		padding-inline: 1.25rem;
+	}
+	.fieldwork-project-environments {
+		padding: 1rem 1.25rem 1.25rem;
+		gap: 0.625rem;
+	}
+	.fieldwork-project-environment {
+		padding: 0.875rem 0;
+	}
+	.fieldwork-project-footer {
+		padding: 0.875rem 1.25rem;
+	}
+	.fieldwork-auth-form {
+		overflow-wrap: anywhere;
+		padding: 2rem 1.25rem;
+	}
+	.fieldwork-settings-section {
+		padding-block: 1.5rem;
+	}
+}
+@media (pointer: coarse) {
+	[data-slot="command-palette-trigger"],
+	.fieldwork-template-title,
+	.fieldwork-template-tag,
+	.fieldwork-template-link {
+		min-height: 44px;
+		min-width: 44px;
+	}
+	.fieldwork-primary-link,
+	.fieldwork-docs-link,
+	.fieldwork-project-heading a,
+	.fieldwork-project-footer > a {
+		min-height: 2.75rem;
+	}
+	.fieldwork-project-heading a {
+		display: inline-flex;
+		align-items: center;
+	}
+}
+
+@media (width < 24rem) {
+	.fieldwork-identity-start > .fieldwork-org-switcher {
+		display: none;
+	}
+	.fieldwork-identity-inner {
+		gap: 0.5rem;
+	}
+}
+/* Long workflows expose their destinations before the first field. */
+.fieldwork-section-links {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+	gap: 1px;
+	overflow: hidden;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--border);
+}
+.fieldwork-section-links > a {
+	padding: 16px 20px;
+	background: var(--card);
+	transition: background-color 140ms;
+}
+.fieldwork-section-links > a:hover {
+	background: var(--secondary);
+}
+.fieldwork-section-links > a:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: -3px;
+}
+.fieldwork-form-group {
+	scroll-margin-top: 24px;
+	outline: none;
+}
+.fieldwork-form-group + .fieldwork-form-group {
+	border-top: 1px solid var(--border);
+	padding-top: 24px;
+}
+.fieldwork-section-links + .fieldwork-form-group {
+	margin-top: 24px;
+}
+.fieldwork-form-group:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 6px;
+}
+.fieldwork-form-group > header {
+	padding: 0 0 16px;
+}
+.fieldwork-form-group > header > h2 {
+	font-size: 20px;
+	font-weight: 500;
+	letter-spacing: -0.025em;
+}
+.fieldwork-form-group > header > p {
+	margin-top: 6px;
+	font-size: 14px;
+	line-height: 1.6;
+	color: var(--muted-foreground);
+}
+.fieldwork-toggle-row {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 20px;
+	padding: 16px 0;
+	border-bottom: 1px solid var(--border);
+}
+.fieldwork-toggle-row > div {
+	min-width: 0;
+	max-width: 640px;
+}
+.fieldwork-toggle-row > [role="switch"] {
+	flex-shrink: 0;
+	margin-top: 2px;
+}
+.fieldwork-category-list {
+	height: auto;
+	align-items: stretch;
+	background: transparent;
+	padding: 0;
+}
+.fieldwork-deployment-row {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.fieldwork-category-list > [role="tab"] {
+	height: auto;
+	min-height: 48px;
+	justify-content: flex-start;
+	text-align: left;
+	white-space: normal;
+	padding: 12px 16px;
+	border: 1px solid transparent;
+}
+.fieldwork-category-list > [role="tab"][data-state="active"] {
+	border-color: var(--border);
+	background: var(--card);
+	box-shadow: none;
+}
+@media (min-width: 1024px) {
+	.fieldwork-deployment-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 12px 24px;
+	}
+	.fieldwork-deployment-row > :nth-child(1) {
+		grid-column: 2;
+		grid-row: 1;
+	}
+	.fieldwork-deployment-row > :nth-child(2) {
+		grid-column: 1;
+		grid-row: 1 / 3;
+	}
+	.fieldwork-deployment-row > :nth-child(3) {
+		grid-column: 2;
+		grid-row: 2;
+	}
+	.fieldwork-category-workspace {
+		display: grid;
+		grid-template-columns: 224px minmax(0, 1fr);
+		align-items: start;
+		gap: 40px;
+	}
+	.fieldwork-category-list {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		width: 100%;
+	}
+	.fieldwork-category-workspace > [role="tabpanel"] {
+		margin-top: 0;
+	}
+}
+@media (max-width: 1023px) {
+	.fieldwork-category-workspace {
+		flex-direction: column;
+		gap: 24px;
+	}
+	.fieldwork-category-list {
+		display: none;
+	}
+}
+
+html {
+	scroll-padding-bottom: var(--fieldwork-savebar-height, 0px);
+	scroll-padding-top: var(--fieldwork-chrome-height, 0px);
+}
+
+@media (width < 40rem) {
+	.fieldwork-project-header {
+		padding: 20px 20px 14px;
+		gap: 14px;
+	}
+	.fieldwork-project-description {
+		padding-inline: 20px;
+	}
+	.fieldwork-project-environments {
+		padding: 16px 20px 20px;
+	}
+	.fieldwork-project-footer {
+		padding: 14px 20px;
+	}
+}
+@media (width < 30rem) {
+	.fieldwork-project-environment {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 8px;
+	}
+}

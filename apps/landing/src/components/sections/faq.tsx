@@ -13,10 +13,8 @@ export function Faq() {
 		<section id="faq" className="py-20 lg:py-28">
 			<div className="container-page grid gap-10 lg:grid-cols-12 lg:gap-16">
 				<div className="lg:col-span-4">
-					<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
-						Questions
-					</p>
-					<h2 className="mt-4 text-4xl leading-[1.1] font-semibold tracking-[-0.045em] text-balance lg:text-5xl">
+					<p className="text-xs text-muted-foreground normal-case">Questions</p>
+					<h2 className="mt-4 text-3xl leading-[1.15] font-medium tracking-[-0.035em] text-balance lg:text-4xl">
 						The ones people ask first
 					</h2>
 					<p className="mt-4 text-muted-foreground">

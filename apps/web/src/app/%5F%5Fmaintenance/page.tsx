@@ -18,8 +18,8 @@ export default function MaintenancePage() {
 		<main
 			style={{
 				minHeight: "100svh",
-				background: "var(--background, #f4f4f5)",
-				color: "var(--foreground, #17181b)",
+				background: "var(--background, #f6f7f8)",
+				color: "var(--foreground, #202327)",
 				display: "flex",
 				alignItems: "center",
 				justifyContent: "center",
@@ -33,8 +33,8 @@ export default function MaintenancePage() {
 				<p
 					style={{
 						fontSize: "0.75rem",
-						letterSpacing: "0.12em",
-						textTransform: "uppercase",
+						letterSpacing: "0",
+						textTransform: "none",
 						marginBottom: "1.5rem",
 					}}
 				>
@@ -45,7 +45,7 @@ export default function MaintenancePage() {
 						fontSize: "2.5rem",
 						letterSpacing: "-0.04em",
 						lineHeight: 1.1,
-						fontWeight: 600,
+						fontWeight: 500,
 						margin: "0 0 0.75rem",
 					}}
 				>

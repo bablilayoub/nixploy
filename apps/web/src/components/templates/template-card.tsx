@@ -1,32 +1,11 @@
 "use client";
-
 import { BookOpen, Code2, Globe, ShieldAlert } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { needsInstanceAdmin } from "./template-catalog";
 import { TemplateLogo } from "./template-logo";
 import type { TemplateSummary } from "./templates-view";
 
-/**
- * One gallery entry.
- *
- * No fill: a border on the page's own black, the way the dashboard's cards are
- * drawn. Every surface inside it is quiet for the same reason — the marks and
- * the deploy button are the only things meant to carry colour.
- *
- * The mark leads. A catalog is scanned by logo — nobody reads four hundred
- * names — so it gets its own row at 56px, centred, with the name and what the
- * entry asks for under it, and the description in a recessed block below. That
- * recess is doing real work: `--card` sits four points above `--background` in
- * dark mode, and one flat panel at that contrast reads as a grey rectangle
- * rather than a card.
- *
- * The whole card is the "open details" target — a stretched transparent button
- * rather than a wrapper `<button>`, so the deploy button and the links can sit
- * inside it without nesting one interactive element in another. Those are
- * raised above the overlay with `z-10`; everything else is inert text.
- */
+/** A catalogue object: identity, requirements, description, then an explicit action. */
 export function TemplateCard({
 	template,
 	onInspect,
@@ -37,9 +16,7 @@ export function TemplateCard({
 	template: TemplateSummary;
 	onInspect: () => void;
 	onDeploy: () => void;
-	/** Reason the caller cannot deploy (disables the button), or null. */
 	deployBlocker: string | null;
-	/** Clicking a tag filters by it. */
 	onTag?: (tag: string) => void;
 }) {
 	const settingsCount = template.env.length;
@@ -51,74 +28,71 @@ export function TemplateCard({
 	].filter((link): link is { href: string; label: string; icon: typeof Globe } =>
 		Boolean(link.href),
 	);
-
 	return (
-		<article className="group relative flex h-full flex-col overflow-hidden rounded-lg border border-border transition-colors hover:border-foreground/25">
-			{/* The corner carries provenance: which catalog, and whether it needs the
-			    instance admin. Absolute so it never pushes the mark off centre. */}
-			<div className="absolute end-3 top-3 z-[1] flex items-center gap-1">
-				{admin ? (
+		<article className="group relative flex h-full min-w-0 flex-col rounded-xl border bg-card transition-colors hover:border-input">
+			<header className="flex items-start gap-3 px-5 pt-5">
+				<span className="flex size-11 shrink-0 items-center justify-center rounded-lg border bg-panel-inset">
+					<TemplateLogo name={template.name} logo={template.logo} className="size-7" />
+				</span>
+				<div className="min-w-0 flex-1">
+					<h3 className="truncate text-base leading-snug font-medium tracking-tight">
+						<button
+							type="button"
+							onClick={onInspect}
+							aria-label={`${template.name} details`}
+							className="fieldwork-template-title inline-flex max-w-full items-center text-start underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+						>
+							<span className="truncate">{template.name}</span>
+						</button>
+					</h3>
+					<p className="mt-1 text-xs text-muted-foreground">{template.category}</p>
+				</div>
+				{admin && (
 					<ShieldAlert
-						className="size-3.5 text-warning"
+						className="mt-1 size-4 shrink-0 text-warning"
 						aria-label="Needs the instance admin: host access or published ports"
 					/>
-				) : null}
-				{template.source ? (
-					<span className="max-w-24 truncate rounded-md border bg-control/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-						{template.source.name}
-					</span>
-				) : null}
-			</div>
-
-			<div className="flex flex-col items-center gap-3 px-4 pt-6 pb-3 text-center">
-				{/* One step off the card, nothing more: `template-logo.tsx` already
-				    tints the marks that would vanish on a dark tile. */}
-				<div className="flex size-12 items-center justify-center rounded-xl bg-muted ring-1 ring-inset ring-border">
-					<TemplateLogo name={template.name} logo={template.logo} className="size-7" />
-				</div>
-				<div className="flex w-full min-w-0 flex-col gap-0.5">
-					<h3 className="truncate text-[15px] leading-tight font-semibold">{template.name}</h3>
-					<p className="truncate text-[11px] text-muted-foreground">
-						{template.category} ·{" "}
-						{settingsCount === 0
-							? "no setup"
-							: `${settingsCount} ${settingsCount === 1 ? "setting" : "settings"}`}
-					</p>
-				</div>
-				{/* Tags are clickable filters. Three fit on one row at every column
-				    count the grid uses; a fourth wrapped and broke the baseline. */}
-				<div className="flex min-h-[1.375rem] flex-wrap items-center justify-center gap-1">
-					{template.tags.slice(0, 3).map((tag) => (
+				)}
+			</header>
+			<p className="mt-4 line-clamp-2 min-h-10 px-5 text-sm leading-5 text-muted-foreground">
+				{template.description}
+			</p>
+			<div className="mt-4 flex min-h-7 flex-wrap items-center gap-1.5 px-5">
+				{template.tags.slice(0, 3).map((tag) =>
+					onTag ? (
 						<button
-							key={tag}
 							type="button"
+							key={tag}
 							onClick={(event) => {
 								event.stopPropagation();
-								onTag?.(tag);
+								onTag(tag);
 							}}
-							className={cn(
-								"relative z-10 rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground transition-colors",
-								onTag ? "hover:border-foreground/30 hover:text-foreground" : "cursor-default",
-							)}
+							className="fieldwork-template-tag relative z-10 rounded border px-1.5 py-0.5 text-xs text-muted-foreground hover:border-input hover:text-foreground"
 						>
 							{tag}
 						</button>
-					))}
+					) : (
+						<span
+							key={tag}
+							className="rounded border px-1.5 py-0.5 text-[11px] text-muted-foreground"
+						>
+							{tag}
+						</span>
+					),
+				)}
+			</div>
+			<div className="mt-auto px-5 pt-4 pb-4">
+				<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+					<span>
+						{settingsCount === 0
+							? "No configuration needed"
+							: `${settingsCount} ${settingsCount === 1 ? "setting" : "settings"}`}
+					</span>
+					{template.source && <span className="truncate">{template.source.name}</span>}
 				</div>
 			</div>
-
-			{/* Two lines reserved — the reservation is what keeps a row of cards on
-			    one baseline; the card is otherwise one flat surface, like every
-			    other card in the dashboard. */}
-			<p className="line-clamp-2 min-h-9 flex-1 px-4 text-center text-xs leading-[1.125rem] text-muted-foreground">
-				{template.description}
-			</p>
-
-			<div className="mt-4 flex items-center justify-between gap-2 border-t px-3 py-2.5">
-				<div className="flex min-w-0 items-center gap-0.5">
-					{/* Where the project lives, for the decision made before deploying.
-					    Quiet rather than hover-revealed: a hover-only control does not
-					    exist on a touch screen. */}
+			<footer className="flex items-center justify-between gap-2 rounded-b-xl border-t bg-panel-inset px-4 py-3">
+				<div className="flex items-center gap-1">
 					{links.map((link) => (
 						<a
 							key={link.label}
@@ -127,35 +101,23 @@ export function TemplateCard({
 							rel="noreferrer"
 							aria-label={`${template.name}: ${link.label}`}
 							onClick={(event) => event.stopPropagation()}
-							className="relative z-10 inline-flex rounded-md p-1.5 text-muted-foreground/50 transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+							className="fieldwork-template-link relative z-10 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
 						>
-							<link.icon className="size-3.5" />
+							<link.icon aria-hidden="true" className="size-3.5" />
 						</a>
 					))}
 				</div>
-				{/* Quiet until the card is engaged, then it reads as the primary
-				    action. The stacked `group-hover:hover:` is not redundant: the
-				    button's own `hover:bg-secondary/80` would otherwise fight
-				    `group-hover:bg-primary` at the moment the pointer is on it. */}
 				<Button
 					size="sm"
-					variant="secondary"
-					className="relative z-10 group-hover:bg-primary group-hover:text-primary-foreground group-hover:hover:bg-primary/90"
+					variant="outline"
+					className="relative z-10 bg-card"
 					onClick={onDeploy}
 					disabled={deployBlocker !== null}
 					title={deployBlocker ?? undefined}
 				>
 					Deploy
 				</Button>
-			</div>
-
-			<button
-				type="button"
-				onClick={onInspect}
-				className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-			>
-				<span className="sr-only">{template.name} details</span>
-			</button>
+			</footer>
 		</article>
 	);
 }

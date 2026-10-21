@@ -463,9 +463,12 @@ export function NotificationDialog({
 				>
 					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 						<div className="grid gap-2">
-							<Label htmlFor="notification-name">Name</Label>
+							<Label htmlFor="notification-name">
+								Name <span className="text-xs font-normal text-muted-foreground">(required)</span>
+							</Label>
 							<Input
 								id="notification-name"
+								required
 								value={name}
 								onChange={(e) => setName(e.target.value)}
 							/>
@@ -503,9 +506,15 @@ export function NotificationDialog({
 
 					{fields.map((field) => (
 						<div key={field.key} className="grid gap-2">
-							<Label htmlFor={`notification-${field.key}`}>{field.label}</Label>
+							<Label htmlFor={`notification-${field.key}`}>
+								{field.label}
+								{field.required && !keepStoredConfig && (
+									<span className="text-xs font-normal text-muted-foreground"> (required)</span>
+								)}
+							</Label>
 							<Input
 								id={`notification-${field.key}`}
+								required={field.required && !keepStoredConfig}
 								type={field.type ?? "text"}
 								placeholder={field.placeholder}
 								value={values[field.key] ?? ""}
@@ -543,8 +552,16 @@ export function NotificationDialog({
 							))}
 						</div>
 					</div>
+					{missingRequired && (
+						<p className="text-xs text-muted-foreground" role="status">
+							Complete the required channel fields to continue.
+						</p>
+					)}
 					<DialogFooter>
-						<Button type="submit" disabled={saving || !name || missingRequired}>
+						<Button type="button" variant="outline" disabled={saving} onClick={close}>
+							Cancel
+						</Button>
+						<Button type="submit" disabled={saving || !name.trim() || missingRequired}>
 							{saving && <Loader2 className="size-4 animate-spin" />}
 							{editing ? "Save" : "Add channel"}
 						</Button>

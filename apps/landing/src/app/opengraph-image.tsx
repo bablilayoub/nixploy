@@ -1,20 +1,16 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { ImageResponse } from "next/og";
-
+import { heroLead, heroTitle } from "@/lib/landing-data";
 import { site } from "@/lib/site";
 
-/*
- * The card every share of nixploy.com shows.
- *
- * It used to be a 1200×1200 PNG of the mark alone — the wrong aspect for Open
- * Graph, so it was cropped by most clients, and it said nothing about what the
- * product is. Generated here instead: right size, on the site's palette, and
- * it cannot drift from the copy because it reads `site`.
- */
 export const alt = "Nixploy — a platform as a service you host yourself";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default function OpengraphImage() {
+/** The share card follows Fieldwork and uses the same product copy as the site. */
+export default async function OpengraphImage() {
+	const mark = await readFile(join(process.cwd(), "public/brand/nixploy-mark-dark.png"));
 	return new ImageResponse(
 		<div
 			style={{
@@ -23,65 +19,53 @@ export default function OpengraphImage() {
 				display: "flex",
 				flexDirection: "column",
 				justifyContent: "space-between",
-				background: "#090a0b",
-				padding: 72,
-				color: "#f5f5f6",
+				background: "#f6f7f8",
+				padding: 64,
+				color: "#202327",
 				fontFamily: "sans-serif",
 			}}
 		>
 			<div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-				<div
-					style={{
-						width: 44,
-						height: 44,
-						borderRadius: 12,
-						background: "#fafafa",
-						display: "flex",
-						alignItems: "center",
-						justifyContent: "center",
-						color: "#0c0c0c",
-						fontSize: 26,
-						fontWeight: 700,
-					}}
-				>
-					N
-				</div>
-				<div style={{ fontSize: 30, fontWeight: 600, letterSpacing: -0.5 }}>{site.name}</div>
+				{/* ImageResponse consumes the embedded bytes; this is not a browser image. */}
+				{/* biome-ignore lint/performance/noImgElement: Satori requires an img element. */}
+				<img
+					src={`data:image/png;base64,${mark.toString("base64")}`}
+					width={44}
+					height={44}
+					alt=""
+				/>
+				<span style={{ fontSize: 28, fontWeight: 600, letterSpacing: -0.6 }}>{site.name}</span>
 			</div>
-
 			<div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
 				<div
 					style={{
-						fontSize: 74,
-						fontWeight: 700,
-						letterSpacing: -3.5,
-						lineHeight: 1.05,
 						display: "flex",
 						flexDirection: "column",
+						fontSize: 76,
+						fontWeight: 600,
+						letterSpacing: -3.5,
+						lineHeight: 1.05,
 					}}
 				>
-					<span>Ship your work.</span>
-					<span style={{ color: "#a0a5ae" }}>Own the whole stack.</span>
+					<span>{heroTitle[0]}</span>
+					<span>{heroTitle[1]}</span>
 				</div>
-				<div style={{ fontSize: 30, color: "#b4b4b4", maxWidth: 900, lineHeight: 1.4 }}>
-					A platform as a service that runs on your own box. Git deploys, Compose stacks, databases,
-					domains with TLS, backups and monitoring.
+				<div style={{ fontSize: 26, color: "#616973", maxWidth: 940, lineHeight: 1.5 }}>
+					{heroLead}
 				</div>
 			</div>
-
 			<div
 				style={{
 					display: "flex",
-					alignItems: "center",
 					justifyContent: "space-between",
-					fontSize: 24,
-					color: "#a0a5ae",
-					borderTop: "1px solid rgba(255,255,255,0.14)",
-					paddingTop: 28,
+					fontSize: 22,
+					color: "#616973",
+					borderTop: "1px solid #e0e4e8",
+					paddingTop: 24,
 				}}
 			>
 				<span>nixploy.com</span>
-				<span>Apache-2.0 · self-hosted</span>
+				<span>Open source · Self-hosted</span>
 			</div>
 		</div>,
 		size,

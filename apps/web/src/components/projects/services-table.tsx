@@ -3,7 +3,14 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Loader2, Play, Square } from "lucide-react";
 import Link from "next/link";
-import { type ComponentProps, Fragment, useCallback, useMemo, useState } from "react";
+import {
+	type ComponentProps,
+	Fragment,
+	type ReactNode,
+	useCallback,
+	useMemo,
+	useState,
+} from "react";
 import { toast } from "sonner";
 
 import { capabilityHint } from "@/components/services/capability-hint";
@@ -79,11 +86,17 @@ export function ServicesTable({
 	environmentName,
 	services,
 	currentEnvironmentId,
+	toolbarStart,
+	onResetFilters,
+	renderTable = true,
 }: {
 	projectId: string;
 	environmentName: string;
 	services: ServiceEntry[];
 	currentEnvironmentId?: string;
+	toolbarStart?: ReactNode;
+	onResetFilters: () => void;
+	renderTable?: boolean;
 }) {
 	const trpc = useTRPC();
 	const trpcClient = useTRPCClient();
@@ -312,8 +325,10 @@ export function ServicesTable({
 
 			<TableCard
 				toolbarFramed={false}
+				framed={renderTable}
 				toolbar={
 					<>
+						{toolbarStart}
 						<TableFacet label="Type" options={typeOptions} selected={types} onChange={setTypes} />
 						<TableFacet
 							label="Status"
@@ -331,168 +346,189 @@ export function ServicesTable({
 						/>
 					</>
 				}
-				footer={<TablePagination view={view} noun="services" />}
+				footer={renderTable ? <TablePagination view={view} noun="services" /> : null}
 			>
-				<Table>
-					<TableHeader>
-						<TableRow className="bg-muted/30 hover:bg-accent/40">
-							<TableHead className="w-10 ps-3">
-								<Checkbox
-									aria-label="Select all services on this page"
-									checked={
-										view.visible.length > 0 &&
-										view.visible.every((service) => selected.has(serviceKey(service)))
-											? true
-											: view.visible.some((service) => selected.has(serviceKey(service)))
-												? "indeterminate"
-												: false
-									}
-									onCheckedChange={(checked) =>
-										setSelected((previous) => {
-											const next = new Set(previous);
-											for (const service of view.visible) {
-												if (checked === true) next.add(serviceKey(service));
-												else next.delete(serviceKey(service));
-											}
-											return next;
-										})
-									}
-								/>
-							</TableHead>
-							<TableHead className="hidden w-32 text-xs text-muted-foreground sm:table-cell">
-								Status
-							</TableHead>
-							<TableHead className="text-xs text-muted-foreground">Service</TableHead>
-							<TableHead className="hidden text-xs text-muted-foreground md:table-cell">
-								Address or description
-							</TableHead>
-							<TableHead>
-								<span className="sr-only">Actions</span>
-							</TableHead>
-						</TableRow>
-					</TableHeader>
-					<TableBody>
-						<TableNoMatch
-							view={view}
-							colSpan={5}
-							onClear={() => {
-								setTypes([]);
-								setStatuses([]);
-								view.clear();
-							}}
-						/>
-						{groups.map((group) => (
-							<Fragment key={group.type}>
-								<TableRow className="bg-muted/30 hover:bg-accent/40">
-									<TableCell
-										colSpan={5}
-										className="py-1.5 text-xs font-medium text-muted-foreground"
-									>
-										{SERVICE_TYPE_META[group.type].label}
-										<span className="ms-2 tabular-nums text-muted-foreground/70">
-											{group.items.length}
-										</span>
+				{renderTable && (
+					<Table>
+						<TableHeader>
+							<TableRow className="bg-muted/30 hover:bg-accent/40">
+								<TableHead className="w-10 ps-3">
+									<Checkbox
+										aria-label="Select all services on this page"
+										checked={
+											view.visible.length > 0 &&
+											view.visible.every((service) => selected.has(serviceKey(service)))
+												? true
+												: view.visible.some((service) => selected.has(serviceKey(service)))
+													? "indeterminate"
+													: false
+										}
+										onCheckedChange={(checked) =>
+											setSelected((previous) => {
+												const next = new Set(previous);
+												for (const service of view.visible) {
+													if (checked === true) next.add(serviceKey(service));
+													else next.delete(serviceKey(service));
+												}
+												return next;
+											})
+										}
+									/>
+								</TableHead>
+								<TableHead className="hidden w-32 text-xs text-muted-foreground sm:table-cell">
+									Status
+								</TableHead>
+								<TableHead className="text-xs text-muted-foreground">Service</TableHead>
+								<TableHead className="hidden text-xs text-muted-foreground md:table-cell">
+									Address or description
+								</TableHead>
+								<TableHead>
+									<span className="sr-only">Actions</span>
+								</TableHead>
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{services.length === 0 && (
+								<TableRow>
+									<TableCell colSpan={5} className="py-10 text-center">
+										<div className="space-y-3">
+											<p className="text-sm text-muted-foreground">
+												No services match these filters.
+											</p>
+											<Button variant="outline" size="sm" onClick={onResetFilters}>
+												Clear filters
+											</Button>
+										</div>
 									</TableCell>
 								</TableRow>
-								{group.items.map((service) => {
-									const href = `/dashboard/projects/${projectId}/services/${service.type}/${service.id}`;
-									const key = serviceKey(service);
-									return (
-										<TableRow
-											key={key}
-											className="relative focus-within:bg-muted/50"
-											data-state={selected.has(key) ? "selected" : undefined}
+							)}
+							<TableNoMatch
+								view={view}
+								colSpan={5}
+								onClear={() => {
+									setTypes([]);
+									setStatuses([]);
+									view.clear();
+								}}
+							/>
+							{groups.map((group) => (
+								<Fragment key={group.type}>
+									<TableRow className="bg-muted/30 hover:bg-accent/40">
+										<TableCell
+											colSpan={5}
+											className="py-1.5 text-xs font-medium text-muted-foreground"
 										>
-											<TableCell className="w-10 ps-3">
-												<Checkbox
-													checked={selected.has(key)}
-													onCheckedChange={(checked) => toggle(service, checked === true)}
-													aria-label={`Select ${service.name}`}
-													className="relative z-10"
-												/>
-											</TableCell>
-											<TableCell className="hidden w-32 sm:table-cell">
-												{/* Same vocabulary as the service headers; only the header dot pulses, not every row. */}
-												<span className="[&_.animate-pulse]:animate-none">
-													{deployingBadge(service) ?? (
-														<ServiceStatusBadge status={service.status as BadgeStatus} />
-													)}
-												</span>
-											</TableCell>
-											<TableCell className="w-full min-w-0 max-w-48 py-3 sm:max-w-64">
-												<div className="flex min-w-0 flex-col gap-1">
-													<Link
-														href={href}
-														className="truncate text-sm font-medium after:absolute after:inset-0 hover:underline focus-visible:outline-none focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring"
-														title={service.name}
-													>
-														{service.name}
-													</Link>
-													<span className="sm:hidden [&_.animate-pulse]:animate-none">
+											{SERVICE_TYPE_META[group.type].label}
+											<span className="ms-2 tabular-nums text-muted-foreground/70">
+												{group.items.length}
+											</span>
+										</TableCell>
+									</TableRow>
+									{group.items.map((service) => {
+										const href = `/dashboard/projects/${projectId}/services/${service.type}/${service.id}`;
+										const key = serviceKey(service);
+										const KindIcon = SERVICE_TYPE_META[service.type].icon;
+										return (
+											<TableRow
+												key={key}
+												className="relative focus-within:bg-muted/50"
+												data-state={selected.has(key) ? "selected" : undefined}
+											>
+												<TableCell className="w-10 ps-3">
+													<Checkbox
+														checked={selected.has(key)}
+														onCheckedChange={(checked) => toggle(service, checked === true)}
+														aria-label={`Select ${service.name}`}
+														className="relative z-10"
+													/>
+												</TableCell>
+												<TableCell className="hidden w-32 sm:table-cell">
+													{/* Same vocabulary as the service headers; only the header dot pulses, not every row. */}
+													<span className="[&_.animate-pulse]:animate-none">
 														{deployingBadge(service) ?? (
 															<ServiceStatusBadge status={service.status as BadgeStatus} />
 														)}
 													</span>
+												</TableCell>
+												<TableCell className="w-full min-w-0 max-w-48 py-3 sm:max-w-64">
+													<div className="flex min-w-0 flex-col gap-1">
+														<Link
+															href={href}
+															className="truncate text-sm font-medium after:absolute after:inset-0 hover:underline focus-visible:outline-none focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring"
+															title={service.name}
+														>
+															<KindIcon
+																aria-hidden="true"
+																className="me-2 inline-block size-4 text-muted-foreground"
+															/>
+															{service.name}
+														</Link>
+														<span className="sm:hidden [&_.animate-pulse]:animate-none">
+															{deployingBadge(service) ?? (
+																<ServiceStatusBadge status={service.status as BadgeStatus} />
+															)}
+														</span>
+														{service.domain ? (
+															<span className="relative z-10 flex min-w-0 md:hidden">
+																<ServiceUrl domain={service.domain} compact />
+															</span>
+														) : service.description ? (
+															<span className="block truncate text-xs text-muted-foreground md:hidden">
+																{service.description}
+															</span>
+														) : null}
+														{(service.tags?.length ?? 0) > 0 && (
+															<div className="relative z-10 flex flex-wrap gap-1">
+																{service.tags?.map((tag) => (
+																	<span
+																		key={tag.tagId}
+																		className="rounded-full px-1.5 py-0.5 text-[11px] font-medium"
+																		style={{
+																			backgroundColor: `${tag.color}22`,
+																			color: tag.color,
+																		}}
+																	>
+																		{tag.name}
+																	</span>
+																))}
+															</div>
+														)}
+													</div>
+												</TableCell>
+												<TableCell className="hidden max-w-72 text-sm text-muted-foreground md:table-cell">
 													{service.domain ? (
-														<span className="relative z-10 flex min-w-0 md:hidden">
+														<span className="relative z-10 flex min-w-0">
 															<ServiceUrl domain={service.domain} compact />
 														</span>
-													) : service.description ? (
-														<span className="block truncate text-xs text-muted-foreground md:hidden">
-															{service.description}
-														</span>
-													) : null}
-													{(service.tags?.length ?? 0) > 0 && (
-														<div className="relative z-10 flex flex-wrap gap-1">
-															{service.tags?.map((tag) => (
-																<span
-																	key={tag.tagId}
-																	className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-																	style={{
-																		backgroundColor: `${tag.color}22`,
-																		color: tag.color,
-																	}}
-																>
-																	{tag.name}
-																</span>
-															))}
-														</div>
+													) : (
+														<span className="block truncate">{service.description || "—"}</span>
 													)}
-												</div>
-											</TableCell>
-											<TableCell className="hidden max-w-72 text-sm text-muted-foreground md:table-cell">
-												{service.domain ? (
-													<span className="relative z-10 flex min-w-0">
-														<ServiceUrl domain={service.domain} compact />
-													</span>
-												) : (
-													<span className="block truncate">{service.description || "—"}</span>
-												)}
-											</TableCell>
-											<TableCell className="w-20 text-right">
-												<div className="flex items-center justify-end gap-1">
-													<ServiceRowActions
-														service={service}
-														projectId={projectId}
-														environmentName={environmentName}
-														currentEnvironmentId={currentEnvironmentId}
-													/>
-													<Link
-														href={href}
-														aria-label={`Open ${service.name}`}
-														className="relative z-10 hidden size-8 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex"
-													>
-														<ChevronRight className="size-4 text-muted-foreground" />
-													</Link>
-												</div>
-											</TableCell>
-										</TableRow>
-									);
-								})}
-							</Fragment>
-						))}
-					</TableBody>
-				</Table>
+												</TableCell>
+												<TableCell className="w-20 text-right">
+													<div className="flex items-center justify-end gap-1">
+														<ServiceRowActions
+															service={service}
+															projectId={projectId}
+															environmentName={environmentName}
+															currentEnvironmentId={currentEnvironmentId}
+														/>
+														<Link
+															href={href}
+															aria-label={`Open ${service.name}`}
+															className="relative z-10 hidden size-8 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:inline-flex"
+														>
+															<ChevronRight className="size-4 text-muted-foreground" />
+														</Link>
+													</div>
+												</TableCell>
+											</TableRow>
+										);
+									})}
+								</Fragment>
+							))}
+						</TableBody>
+					</Table>
+				)}
 			</TableCard>
 		</div>
 	);

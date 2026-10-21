@@ -119,7 +119,7 @@ export function QuotasCard() {
 			description="Resource limits for this organization. Leave blank for unlimited. Owner or admin required to edit."
 		>
 			<form onSubmit={onSubmit} className="grid gap-5">
-				<p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+				<p className="text-xs font-semibold tracking-wide text-muted-foreground normal-case">
 					Capacity and retention
 				</p>
 				<p className="text-sm text-muted-foreground">

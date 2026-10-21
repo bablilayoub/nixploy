@@ -1,14 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { MotionProvider } from "@/components/motion-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { site } from "@/lib/site";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
-const mono = JetBrains_Mono({
+const inter = Geist({ subsets: ["latin"], variable: "--font-geist", display: "swap" });
+const mono = Geist_Mono({
 	subsets: ["latin"],
-	variable: "--font-jetbrains-mono",
+	variable: "--font-geist-mono",
 	display: "swap",
 });
 const THEME_INIT = `(function(){try{var t=localStorage.getItem('theme');document.documentElement.classList.toggle('dark',t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches))}catch(e){document.documentElement.classList.toggle('dark',matchMedia('(prefers-color-scheme: dark)').matches)}})()`;
@@ -53,8 +53,8 @@ export const viewport: Viewport = {
 	// Matches `--background` in globals.css (oklch(0.145 0 0)); a theme colour
 	// that is not the page colour shows as a seam in the browser chrome.
 	themeColor: [
-		{ media: "(prefers-color-scheme: light)", color: "#f4f4f5" },
-		{ media: "(prefers-color-scheme: dark)", color: "#090a0b" },
+		{ media: "(prefers-color-scheme: light)", color: "#f6f7f8" },
+		{ media: "(prefers-color-scheme: dark)", color: "#17191c" },
 	],
 };
 
