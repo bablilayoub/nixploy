@@ -42,9 +42,12 @@ review are still in progress. This is not a release/publication claim.
   styling. The mineral/plum/Plex overhaul is rejected and must not ship.
   The familiar appearance is restored while retaining functional/security work, mobile
   tab visibility, readable deployment rows, accessible controls and safe owned
-  CSS/dependency removals. Offer three to five distinct standalone dashboard
-  concepts for selection before any later appearance rollout; the coordinator
-  owns those previews. Branding remains authoritative.
+  CSS/dependency removals. Five standalone dashboard prototypes are available:
+  Carbon, Studio, Blueprint, Harbor and Focus. Their isolated gallery is at
+  `http://127.0.0.1:4317` with artifacts under
+  `~/.codex/visualizations/2026/10/21/nixploy-dashboard-directions`. No concept
+  has been selected; aesthetic rollout remains pending user choice. The rejected
+  overhaul is not completed product work. Branding remains authoritative.
 
 Current isolated proof includes two-replica queued-input immutability, real
 application rollback restoring HTTP, Compose failed rollback followed by manual
@@ -108,7 +111,8 @@ production checks cover 32 page views, 20 redacted configuration reviews and
 actual incident log continuation in both themes on mobile and desktop, with no
 browser errors or mutations. Sixteen tab scenarios additionally cover history,
 keyboard activation, delayed counts, resize, explicit RTL strip previews and
-no document scroll jumps. Final corrected-head verification remains required.
+no document scroll jumps. Tab panels retain a visible keyboard-focus indicator
+without changing their resting appearance. Final corrected-head verification remains required.
 
 The original four Swarm service IDs/specs, 74 pre-existing volumes, original
 network IDs and seven primary proxy-file hashes remain preserved at the
@@ -138,6 +142,9 @@ an implementation checkpoint, not a new release claim.
   are available. Real local Gitea status writes are already verified.
 
 ### Unimplemented product work
+
+- [ ] Select a dashboard direction before any aesthetic rollout. Five distinct
+  standalone prototypes are available; the real app keeps its familiar design.
 
 - [ ] Optional, opt-in expiry for completed recovery copies. Current verified
   copies are retained until manual deletion; the creation deadline never
