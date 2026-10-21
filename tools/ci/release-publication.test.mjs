@@ -74,16 +74,23 @@ test("Reusable checks run workflow contracts when the selected product tag preda
 		"tools/dr-restore-test.test.mjs",
 		"tools/ci/image-signature.test.mjs",
 		"tools/ci/release-publication.test.mjs",
+		"tools/ci/organization-upgrade-proof.mjs",
 	];
 	for (const file of files) {
 		assert.equal(existsSync(path.join(workspace, file)), false);
 		await mkdir(path.dirname(path.join(checkout, file)), { recursive: true });
 		await writeFile(
 			path.join(checkout, file),
-			`import test from "node:test";\ntest(${JSON.stringify(file)}, () => {});\n`,
+			file.endsWith("organization-upgrade-proof.mjs")
+				? 'if (process.argv[2] !== "--self-test") throw new Error("Expected pure self-test");\n'
+				: `import test from "node:test";\ntest(${JSON.stringify(file)}, () => {});\n`,
 		);
 	}
-	for (const name of ["Disaster recovery rehearsal contract", "Release publication contracts"]) {
+	for (const name of [
+		"Disaster recovery rehearsal contract",
+		"Release publication contracts",
+		"Organization upgrade proof contract",
+	]) {
 		const contract = checks.find((entry) => entry.name === name);
 		assert.ok(contract?.run, `Missing required contract: ${name}`);
 		assert.ok(checks.indexOf(contract) > checks.indexOf(tooling));

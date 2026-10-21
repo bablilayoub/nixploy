@@ -9,13 +9,14 @@ file is for **state** and **tasks**.
 
 Runtime hardening and the native Trivy publication fix are merged. Main image
 publication passes both native scans and both installer signature checks.
-The separate Release patch stages and signs the index, verifies both shipped
+The merged Release patch stages and signs the index, verifies both shipped
 installer assets, then promotes public tags. Independent source review and
-71 local workflow contracts pass. Real cosign checks of the existing v0.7.3
+71 local workflow contracts pass on both Node 22 and Node 24. Real cosign checks of the existing v0.7.3
 assets accept its Release signer and reject a wrong expected identity and an
 unsigned child. Required contracts use immutable workflow tooling while product
-checks retain the selected tag. Draft PR CI and final review remain required;
-no Release execution, signing or Git tag creation was performed for this patch.
+checks retain the selected tag. PR #28 merged after independent review and all
+required CI passed; no Release execution, signing or Git tag creation was
+performed for this patch.
 
 ## Operator workspace — 2026-10-21 (integration in progress)
 
@@ -92,7 +93,13 @@ shutdown and reports unconfirmed stops honestly. An unchanged real failure trap
 returned the original failure code after 8.6 seconds, independently confirmed
 both captured containers stopped, retained its recovery fence, and removed only
 its exact test resources. Final corrected-head CI and independent clearance
-remain required. No primary migration or release occurred.
+remain required. At `c06ffdc`, both complete native Trivy reports contain zero
+findings at every severity and zero ignored findings; both native Swarm runtime
+jobs and both upgrade jobs pass, including populated encrypted-storage/fence/
+inheritance/identity assertions and post-upgrade API checks with the original key.
+The final rebased head also routes the organization-upgrade self-test through
+immutable workflow tooling: a missing-tool historical-tag regression fails before
+that correction. Primary migration and publication remain outside these proofs.
 Migration `0049` records immutable recovery origins. A real moved-target deletion
 was rejected with its original volume/service intact, then ordinary deletion
 succeeded after restoring placement, preserving the source and unrelated copies.
