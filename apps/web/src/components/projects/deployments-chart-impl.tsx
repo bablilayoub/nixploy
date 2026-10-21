@@ -42,7 +42,7 @@ export function DeploymentsChart() {
 	return (
 		<section className="flex h-full min-w-0 flex-col rounded-lg border border-border bg-card p-4 sm:p-5">
 			<div className="mb-4 space-y-1">
-				<h2 className="text-sm font-semibold">Deployment activity</h2>
+				<h2 className="text-base font-semibold">Deployment activity</h2>
 				<p className="text-sm text-muted-foreground">Deployments over the last 14 days</p>
 			</div>
 			<div className="ps-2">
@@ -83,14 +83,14 @@ export function DeploymentsChart() {
 								axisLine={false}
 								minTickGap={24}
 								tickMargin={6}
-								fontSize={11}
+								fontSize={12}
 							/>
 							<YAxis
 								tickLine={false}
 								axisLine={false}
 								width={28}
 								allowDecimals={false}
-								fontSize={11}
+								fontSize={12}
 							/>
 							<ChartTooltip content={<ChartTooltipContent />} />
 							<ChartLegend content={<ChartLegendContent />} />

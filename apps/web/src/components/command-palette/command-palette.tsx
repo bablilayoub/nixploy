@@ -723,7 +723,7 @@ export function CommandPalette({ className }: { className?: string }) {
 				onClick={() => setOpen(true)}
 				aria-keyshortcuts="Meta+K Control+K"
 				className={cn(
-					"group relative hidden h-8 items-center gap-2 rounded-md bg-muted/40 pe-12 ps-2.5 text-sm font-normal text-muted-foreground shadow-none hover:bg-accent sm:inline-flex sm:w-40 lg:w-52 xl:w-64",
+					"group relative hidden h-8 items-center gap-2 rounded-md bg-muted/40 pe-12 ps-2.5 text-sm font-normal text-muted-foreground shadow-none hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:inline-flex sm:w-40 lg:w-44 xl:w-40",
 					className,
 				)}
 			>
@@ -739,7 +739,7 @@ export function CommandPalette({ className }: { className?: string }) {
 				onClick={() => setOpen(true)}
 				aria-label="Search"
 				className={cn(
-					"inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground sm:hidden",
+					"inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:hidden",
 					className,
 				)}
 			>

@@ -5,6 +5,35 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Selected Studio implementation — 2026-10-21 (in progress)
+
+The user selected Studio, explicitly requiring light/dark support. The focused
+`codex/studio-panel` branch applies its shared neutral/cobalt palette, horizontal
+navigation, broad expandable project rows, compact metrics and activity/recovery
+rail. Existing Inter/mono fonts, saved branding, Light/Dark/System provider,
+capability gates and routes remain authoritative. Environment expansion uses
+already-loaded scoped summaries; recovery reads one selected project inventory.
+No new dependency, server inventory endpoint or deployment polling is added.
+
+Initial production browser verification passes 32 authenticated surfaces and four
+navigation/command states in desktop/mobile light/dark with no console/page
+errors, mutations or document overflow. All four workspace type checks, strict Biome, knip, 24 branding tests, 119 web
+tests and 3,491 backend tests (one optional skip) pass. Production builds pass.
+Eight width/theme combinations also pass native expansion/filter/dialog/menu
+checks and 200% root-font reflow; live System, explicit theme persistence and
+cross-tab synchronization pass without losing open-form input or focus. Saved
+branding and final state captures, independent review and CI remain pending;
+this is not a merge/publication claim.
+
+PR #26 is merged at `4a2b65b`; its exact reviewed head passed both native Swarm
+and upgrade jobs, with zero findings/ignored findings in both full Trivy reports.
+The primary checkout is fast-forwarded, backed up with a verified restore,
+migrated from journal48 to52 and restarted healthy. All69 original public tables,
+keys, ciphertext/plaintext hashes and original service/volume/network/proxy
+identities passed preservation checks. Its familiar appearance remains active
+until reviewed Studio integration. No Release workflow, Git tag or npm publish
+was requested or performed.
+
 ## Combined compiler and rotation hardening — 2026-10-21 (review pending)
 
 The independently reviewed CLI compiler and key rotation changes are combined
