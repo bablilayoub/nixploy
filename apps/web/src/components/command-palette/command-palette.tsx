@@ -740,7 +740,7 @@ export function CommandPalette({
 				onClick={() => setOpen(true)}
 				aria-keyshortcuts="Meta+K Control+K"
 				className={cn(
-					"group relative hidden h-8 items-center gap-2 rounded-md bg-muted/40 pe-12 ps-2.5 text-sm font-normal text-muted-foreground shadow-none hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:inline-flex sm:w-40 lg:w-44 xl:w-40",
+					"group relative hidden h-8 items-center pointer-coarse:min-h-11 gap-2 rounded-md bg-muted/40 pe-12 ps-2.5 text-sm font-normal text-muted-foreground shadow-none hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:inline-flex sm:w-40 lg:w-44 xl:w-40",
 					className,
 				)}
 			>

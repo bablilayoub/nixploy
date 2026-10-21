@@ -56,9 +56,11 @@ export function LogoMark({ className }: { className?: string }) {
 export function Logo({ className }: { className?: string }) {
 	const branding = useBranding();
 	return (
-		<span className={cn("flex items-center gap-2", className)}>
+		<span className={cn("flex min-w-0 items-center gap-2", className)}>
 			<LogoMark className="size-6" />
-			<span className="text-sm font-semibold tracking-tight">{branding.productName}</span>
+			<span className="min-w-0 truncate text-sm font-semibold tracking-tight">
+				{branding.productName}
+			</span>
 		</span>
 	);
 }

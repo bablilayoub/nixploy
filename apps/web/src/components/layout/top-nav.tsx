@@ -88,13 +88,18 @@ export function TopNav() {
 	return (
 		<header className="workspace-header sticky top-0 z-50 border-b bg-card">
 			<div className="mx-auto flex min-h-15 w-full max-w-[1460px] flex-wrap items-center gap-2 px-5 py-2 md:min-h-17 md:gap-3 md:px-8 xl:px-9">
-				<div className="flex min-w-0 flex-1 items-center gap-2 xl:flex-none">
-					<Link href="/dashboard" className="hidden shrink-0 sm:inline-flex">
+				<div className="flex min-w-[min(100%,10rem)] max-w-full flex-1 items-center gap-2 xl:flex-none">
+					<Link
+						href="/dashboard"
+						aria-label={branding.productName}
+						title={branding.productName}
+						className="hidden max-w-40 shrink-0 items-center pointer-coarse:min-h-11 sm:inline-flex"
+					>
 						<Logo />
 					</Link>
 					<Link
 						href="/dashboard"
-						className="inline-flex shrink-0 sm:hidden"
+						className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center sm:hidden"
 						aria-label={branding.productName}
 					>
 						<LogoMark className="size-7" />
