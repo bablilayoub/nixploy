@@ -1,5 +1,6 @@
 "use client";
 
+import { GitHubLogoIcon } from "@radix-ui/react-icons";
 import { ArrowUpRight, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -58,7 +59,7 @@ export function SiteNavbar() {
 							className="hidden min-h-11 items-center gap-1.5 px-3 text-[13px] text-muted-foreground hover:text-foreground sm:inline-flex"
 						>
 							GitHub
-							<ArrowUpRight className="size-3.5" />
+							<GitHubLogoIcon aria-hidden="true" className="size-3.5" />
 						</a>
 						<Button asChild className="hidden h-10 rounded-md sm:inline-flex">
 							<Link href="/docs/install">Get started</Link>

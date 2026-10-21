@@ -15,6 +15,7 @@ The graph includes 450 TS/TSX/CSS sources. Its only visual sources outside a pag
 | All four workspace TypeScript checks | Pass | `typecheck-release.log` |
 | Changed-file Biome autofix | Pass | `biome-release-changed.log` |
 | Strict whole-workspace Biome | Pass, 1,175 files | `biome-workspace-release.log` |
+| Pinned dead-code gate | Pass, knip5.88.1 | `knip-release.log` |
 | Backend tests | 234 files / 3,353 tests passed; 14 files / 137 optional tests skipped | `test-workspace.log` |
 | Web tests | 18 files / 119 tests passed | `test-web-release.log` |
 | Web production build | Pass | `build-web-release.log` |
@@ -43,6 +44,7 @@ All receipts and full-size captures are under the ignored local directory `.nixp
 | `error-report.json` | 20 browser renders of the actual five error-boundary components, with a reset callback spy. Both themes, desktop/320px enlarged text, stored/System/OS/storage preference checks. Isolated harness stubs the Next link boundary; no intentional production crash. |
 | `functional-report.json` | Both themes: dirty edit cancel/discard guard, filtered empty/reset, offline/reconnect notice, reduced motion and enlarged-text profile. Browser-only delayed/faulted query responses exercise loading/error/retry; the real API recovers on retry. |
 | `capture-manifest.json` | Twelve actual production UI images, six matching light/dark pairs, shipped with content-addressed filenames. Fixture numbers are labeled as an example workspace. Metadata image also verified at 1200×630px. |
+| `landing-header-final-report.json` | 20 additional production captures after the CI cleanup: identical shared hero copy, GitHub brand icon, both themes at 1440/390/320px with 100/200% text, and mobile navigation forward/reverse Tab containment, Escape and exact opener return. Zero errors or overflow. |
 
 The route matrix includes **50 non-HTML responses**: Markdown/text documentation and the generated metadata PNG. Its 25 dark-mode “theme mismatch” flags belong to these non-HTML responses, where an HTML dark class does not apply. The other 660 captures are HTML. Public `/swagger` captures are authentication redirects; only the authenticated matrices prove the explorer.
 

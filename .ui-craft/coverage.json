@@ -25,10 +25,12 @@
 		"swagger-3363-report.json",
 		"swagger-focus-3363-report.json",
 		"review-design-final.json",
-		"review-a11y-closure.json"
+		"review-a11y-closure.json",
+		"landing-header-final-report.json"
 	],
 	"supportingContracts": [
 		"apps/landing/src/lib/features.ts",
+		"apps/landing/src/lib/landing-data.ts",
 		"apps/landing/src/lib/product-captures.ts",
 		"apps/landing/src/lib/use-standalone-theme.ts",
 		"apps/web/src/app/swagger/swagger-dialog-accessibility.ts",

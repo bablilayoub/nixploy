@@ -26,7 +26,7 @@ states, offline/retry/dirty guards, saved source variants and keyboard/scroll
 verification of Swagger authorization. Both themes pass with no recorded page
 or hydration errors or document overflow in the final matrices. Independent
 design/accessibility reviews close all actionable findings. Four workspace types,
-strict Biome (1,175 files), 119 web tests, 3,353 backend tests (137 optional cases
+strict Biome (1,175 files), pinned knip, 119 web tests, 3,353 backend tests (137 optional cases
 skipped) and both production builds pass. See
 [`../.ui-craft/verification.md`](../.ui-craft/verification.md) for exact boundaries,
 accepted minor exceptions and local receipt names; exact-head CI is on the PR.

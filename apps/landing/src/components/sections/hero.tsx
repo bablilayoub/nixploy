@@ -1,7 +1,7 @@
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { heroBadge } from "@/lib/landing-data";
+import { heroBadge, heroLead, heroTitle } from "@/lib/landing-data";
 
 /** Product-dominant fold: a narrow editorial introduction gives the canvas to the real panel. */
 export function Hero() {
@@ -22,15 +22,12 @@ export function Hero() {
 			</div>
 			<div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
 				<h1 className="max-w-3xl text-[clamp(2.75rem,5.5vw,5.5rem)] leading-[0.98] font-semibold tracking-[-0.065em]">
-					Ship your work.
+					{heroTitle[0]}
 					<br />
-					<span className="text-muted-foreground">Own the whole stack.</span>
+					<span className="text-muted-foreground">{heroTitle[1]}</span>
 				</h1>
 				<div className="max-w-sm space-y-6 lg:pb-1">
-					<p className="text-base leading-relaxed text-muted-foreground">
-						Applications, databases, and everything in between. A deployment platform that feels
-						right at home on your servers.
-					</p>
+					<p className="text-base leading-relaxed text-muted-foreground">{heroLead}</p>
 					<div className="flex flex-wrap items-center gap-3">
 						<Button asChild size="lg" className="h-12 rounded-md px-5">
 							<Link href="/docs/install">
