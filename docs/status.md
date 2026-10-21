@@ -50,6 +50,11 @@ compositing at a minimum 4.83:1. The final source is rebased onto merged PR #29
 full dependency audit (zero advisories) pass. Exact-head independent clearance
 and combined CI gate the normal merge and primary sync.
 
+Final capture review also widened the metric grid's font-relative minimum and
+removed within-word label breaking: enlarged tablet views use fewer readable
+columns instead of a 3+1 arrangement. Focus, header and semantic-color code is
+unchanged by that small final reflow delta.
+
 PR #26 is merged at `4a2b65b`; its exact reviewed head passed both native Swarm
 and upgrade jobs, with zero findings/ignored findings in both full Trivy reports.
 The primary checkout is fast-forwarded, backed up with a verified restore,
@@ -91,6 +96,16 @@ and production audits report zero advisories at every severity. PR #29 merged
 as `60c80bf` after independent clearance of `40ef0bb` and 18 completed checks
 (17 passed, manual API skipped), including both native Swarm and upgrade jobs.
 No Release workflow, Git tag or npm publication was performed.
+
+Main `60c80bf` also passed CI, CodeQL, both native Swarm tests, both upgrades
+and signed Docker publication. A separate [Dependabot motion update](https://github.com/bablilayoub/nixploy/actions/runs/39525795906)
+failed on public npm `setprototypeof` requests returning HTTP 502 at
+01:13:21 UTC (cached at 01:13:31 and 01:14:31). Its authentication-error label
+has no observed 401/403 or repository registry-auth cause; the logs cannot
+distinguish npm origin from Dependabot's proxy. One authorized normal retry
+was rejected: "This workflow run cannot be retried". Registry/auth configuration
+remains unchanged; a later supported Dependabot run must establish recovery.
+This external updater limitation is separate from the successful product gates.
 
 ## Release verification follow-up — 2026-10-21
 

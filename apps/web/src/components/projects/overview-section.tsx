@@ -35,9 +35,7 @@ function StatPanel({
 	return (
 		<div className={cn("min-w-0 p-4 sm:px-5 sm:py-5", className)}>
 			<div className="flex items-center justify-between gap-2">
-				<p className="text-xs leading-relaxed font-medium text-muted-foreground wrap-anywhere">
-					{label}
-				</p>
+				<p className="text-xs leading-relaxed font-medium text-muted-foreground">{label}</p>
 				<span className="hidden shrink-0 sm:inline-flex">{icon}</span>
 			</div>
 			<div className="mt-1 text-xl font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-2xl">
@@ -80,7 +78,7 @@ export function OverviewCards() {
 	return (
 		<div
 			className={cn(
-				"grid grid-cols-[repeat(auto-fit,minmax(min(100%,5.5rem),1fr))] overflow-hidden rounded-lg border bg-card [&>*]:border-border [&>*+*]:border-s",
+				"grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] overflow-hidden rounded-lg border bg-card [&>*]:border-border [&>*+*]:border-s",
 			)}
 		>
 			<StatPanel
@@ -154,9 +152,7 @@ function DockerStatPanel() {
 			className="hidden min-w-0 p-4 transition-colors hover:bg-row-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:block sm:px-5 sm:py-5"
 		>
 			<div className="flex items-center justify-between gap-2">
-				<p className="text-xs leading-relaxed font-medium text-muted-foreground wrap-anywhere">
-					Docker
-				</p>
+				<p className="text-xs leading-relaxed font-medium text-muted-foreground">Docker</p>
 				<Container className="size-4 text-muted-foreground" />
 			</div>
 			<div className="mt-1 text-xl font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-2xl">
