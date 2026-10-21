@@ -215,7 +215,7 @@ export function GeneralTab({
 	return (
 		<SettingsStack>
 			<SettingsSection title="General" description="How this compose file is deployed.">
-				<div className="flex flex-col gap-6">
+				<div className="flex min-w-0 flex-col gap-7">
 					<div className="flex flex-col gap-2">
 						<Label htmlFor="compose-type">Compose type</Label>
 						<Select
@@ -237,7 +237,7 @@ export function GeneralTab({
 							<code>docker compose up</code>. <HelpLink slug="deploy" />
 						</p>
 					</div>
-					<div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+					<div className="flex flex-wrap items-center justify-between gap-4 surface p-5">
 						<div>
 							<Label htmlFor="isolated-deployment">Isolated deployment</Label>
 							<p className="text-sm text-muted-foreground">
@@ -251,7 +251,7 @@ export function GeneralTab({
 							onCheckedChange={(checked) => draft.patch({ isolatedDeployment: checked })}
 						/>
 					</div>
-					<div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+					<div className="flex flex-wrap items-center justify-between gap-4 surface p-5">
 						<div>
 							<Label htmlFor="auto-deploy">Auto deploy</Label>
 							<p className="text-sm text-muted-foreground">
@@ -264,7 +264,7 @@ export function GeneralTab({
 							onCheckedChange={(checked) => draft.patch({ autoDeploy: checked })}
 						/>
 					</div>
-					<div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+					<div className="flex flex-wrap items-center justify-between gap-4 surface p-5">
 						<div>
 							<Label htmlFor="build-enabled">Build services from source</Label>
 							<p className="text-sm text-muted-foreground">
@@ -297,7 +297,7 @@ export function GeneralTab({
 							</p>
 						</div>
 					)}
-					<div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+					<div className="flex flex-wrap items-center justify-between gap-4 surface p-5">
 						<div>
 							<Label htmlFor="publish-ports">Publish host ports</Label>
 							<p className="text-sm text-muted-foreground">
@@ -348,7 +348,7 @@ export function GeneralTab({
 			</SettingsSection>
 
 			<SettingsSection title="Source" description="Where the compose file comes from.">
-				<div className="flex flex-col gap-4">
+				<div className="flex min-w-0 flex-col gap-5">
 					<div className="flex flex-col gap-2">
 						<Label htmlFor="source-type">Source type</Label>
 						<Select

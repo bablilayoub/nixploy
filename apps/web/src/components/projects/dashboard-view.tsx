@@ -62,8 +62,8 @@ export function DashboardView() {
 	return (
 		<div className="space-y-6">
 			<PageHeader
-				title="Projects"
-				description="Projects, environments, and services."
+				title="Your workspace"
+				description="Every project. Every environment. One place to ship."
 				actions={
 					<DisabledHint hint={createHint}>
 						<CreateProjectDialog handleDeepLink={!capabilitiesLoading && canCreate}>
@@ -75,27 +75,13 @@ export function DashboardView() {
 					</DisabledHint>
 				}
 			/>
-			{/* Phones keep the project directory ahead of the trend panels. */}
-			<div className="flex flex-col gap-6">
-				<div className="order-1 sm:order-none">
-					<GettingStartedCard firstProjectId={projects?.[0]?.projectId} />
-				</div>
-				<div className="order-3 sm:order-none">
-					<OverviewCards />
-				</div>
-				<div className="order-4 grid grid-cols-1 gap-4 sm:order-none lg:grid-cols-7">
-					<div className="col-span-1 lg:col-span-4">
-						<DeploymentsChart />
-					</div>
-					<div className="col-span-1 lg:col-span-3">
-						<RecentDeployments />
-					</div>
-				</div>
-				<section className="order-2 space-y-4 sm:order-none" aria-labelledby="project-list-heading">
+			<OverviewCards />
+			<div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+				<section className="min-w-0 space-y-4" aria-labelledby="project-list-heading">
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 						<div className="flex items-center gap-2">
-							<h2 id="project-list-heading" className="text-sm font-semibold">
-								All projects
+							<h2 id="project-list-heading" className="text-base font-semibold tracking-tight">
+								Projects
 							</h2>
 							{projects ? (
 								<span className="rounded-md bg-muted px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
@@ -114,7 +100,7 @@ export function DashboardView() {
 									aria-label="Search projects"
 									value={search}
 									onChange={(event) => setSearch(event.target.value)}
-									className="h-9 w-full ps-9 pe-9 sm:w-64"
+									className="h-10 w-full ps-9 pe-9 sm:w-64"
 								/>
 								{search ? (
 									<Button
@@ -195,20 +181,22 @@ export function DashboardView() {
 							)
 						}
 					>
-						<div className="divide-y overflow-hidden rounded-lg border border-border bg-card">
+						<div className="surface divide-y overflow-hidden">
 							{(filtered ?? []).map((project) => (
 								<Link
 									key={project.projectId}
 									href={`/dashboard/projects/${project.projectId}`}
-									className="group flex min-w-0 items-center gap-3 px-4 py-4 transition-colors hover:bg-muted/50 focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:gap-4"
+									className="group flex min-w-0 items-center gap-3 px-5 py-5 transition-colors hover:bg-accent/50 focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:gap-4"
 								>
-									<span className="hidden size-9 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground sm:flex">
+									<span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-panel-inset text-foreground">
 										<FolderGit2 className="size-4" />
 									</span>
 									<div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
 										<div className="min-w-0 flex-1 space-y-1">
-											<span className="block truncate text-sm font-medium">{project.name}</span>
-											<span className="block truncate text-xs text-muted-foreground sm:text-sm">
+											<span className="block text-sm font-semibold break-words">
+												{project.name}
+											</span>
+											<span className="block text-xs leading-relaxed text-muted-foreground">
 												{project.description ||
 													`${project.environments.length} ${project.environments.length === 1 ? "environment" : "environments"}`}
 											</span>
@@ -228,7 +216,10 @@ export function DashboardView() {
 						</div>
 					</QueryState>
 				</section>
+				<RecentDeployments />
 			</div>
+			<DeploymentsChart />
+			<GettingStartedCard firstProjectId={projects?.[0]?.projectId} />
 		</div>
 	);
 }

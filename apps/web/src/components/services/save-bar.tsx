@@ -116,10 +116,10 @@ function SaveBar({ registry }: { registry: SaveBarRegistry }) {
 
 	return (
 		<div
-			className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-4"
+			className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-4 md:ps-24 xl:ps-64"
 			role="status"
 		>
-			<div className="bg-background/95 pointer-events-auto flex items-center gap-3 rounded-lg border border-border px-4 py-2 shadow-lg backdrop-blur">
+			<div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-3 rounded-lg border border-border bg-popover px-4 py-3 shadow-[var(--overlay-shadow)]">
 				<CircleDot className="size-4 text-warning" aria-hidden />
 				<span className="text-sm text-foreground">{label}</span>
 				<Button

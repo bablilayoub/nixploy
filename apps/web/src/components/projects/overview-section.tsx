@@ -32,12 +32,12 @@ function StatPanel({
 	className?: string;
 }) {
 	return (
-		<div className={cn("rounded-lg border border-border bg-card p-4", className)}>
+		<div className={cn("surface px-5 py-4", className)}>
 			<div className="flex items-center justify-between gap-2">
-				<p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
+				<p className="text-xs leading-relaxed font-medium text-muted-foreground">{label}</p>
 				{icon}
 			</div>
-			<div className="mt-1 text-xl font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-2xl">
+			<div className="mt-2 text-[2rem] leading-tight font-semibold tabular-nums tracking-[-0.045em]">
 				{isPending ? <Skeleton className="h-7 w-14 sm:h-8 sm:w-16" /> : (value ?? 0)}
 			</div>
 			{!isPending && detail ? (
@@ -75,7 +75,12 @@ export function OverviewCards() {
 	const deployments = data?.deploymentsLastDay;
 
 	return (
-		<div className={cn("grid grid-cols-2 gap-3", showDocker ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
+		<div
+			className={cn(
+				"grid grid-cols-1 gap-3 min-[480px]:grid-cols-2",
+				showDocker ? "lg:grid-cols-4" : "lg:grid-cols-3",
+			)}
+		>
 			<StatPanel
 				label="Projects"
 				value={data?.projectCount}
@@ -84,7 +89,7 @@ export function OverviewCards() {
 			/>
 			<StatPanel
 				label="Services"
-				className="bg-muted/30"
+				className=""
 				value={services?.total}
 				isPending={isPending}
 				icon={<Server className="size-4 text-muted-foreground" />}
@@ -109,7 +114,7 @@ export function OverviewCards() {
 			/>
 			<StatPanel
 				label="Deployments (24h)"
-				className={!showDocker ? "col-span-2 lg:col-span-1" : undefined}
+				className={!showDocker ? "min-[480px]:col-span-2 lg:col-span-1" : undefined}
 				value={deployments?.total}
 				isPending={isPending}
 				icon={<Rocket className="size-4 text-muted-foreground" />}
@@ -146,13 +151,13 @@ function DockerStatPanel() {
 	return (
 		<Link
 			href="/dashboard/docker"
-			className="block rounded-lg border border-border bg-card p-4 transition-colors hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+			className="block surface p-5 transition-colors hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 		>
 			<div className="flex items-center justify-between gap-2">
-				<p className="truncate text-xs font-medium text-muted-foreground">Docker</p>
+				<p className="text-xs leading-relaxed font-medium text-muted-foreground">Docker</p>
 				<Container className="size-4 text-muted-foreground" />
 			</div>
-			<div className="mt-1 text-xl font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-2xl">
+			<div className="mt-2 text-[2rem] leading-tight font-semibold tabular-nums tracking-[-0.045em]">
 				{containersQuery.isPending ? (
 					<Skeleton className="h-7 w-14 sm:h-8 sm:w-16" />
 				) : containersQuery.isError ? (
@@ -176,17 +181,17 @@ export function RecentDeployments() {
 	// while something is queued or running instead of every 10 s forever, and
 	// every deploy mutation invalidates it, so the list still updates live.
 	const { deployments: all, isPending, isError, error, refetch } = useRunningDeployments();
-	const deployments = all.slice(0, 8);
+	const deployments = all.slice(0, 4);
 
 	return (
-		<section className="flex h-full min-w-0 flex-col rounded-lg border border-border bg-card p-4 sm:p-5">
-			<div className="mb-4 space-y-1">
-				<h2 className="text-sm font-semibold">Recent deployments</h2>
+		<section className="flex h-full min-w-0 flex-col surface p-5 sm:p-5">
+			<div className="mb-5 space-y-1">
+				<h2 className="text-base font-semibold tracking-tight">Recent deployments</h2>
 				{/* Static text: branching this on `isPending` made the server (which
 				    renders with the prefetched data) and the client's first paint
 				    disagree, which cost a hydration error on every dashboard load.
 				    Loading and empty already have their own states below. */}
-				<p className="text-sm text-muted-foreground">Latest across your organization</p>
+				<p className="text-sm text-muted-foreground">The latest changes, across your workspace.</p>
 			</div>
 			<QueryState
 				isPending={isPending}
@@ -216,7 +221,7 @@ export function RecentDeployments() {
 					/>
 				}
 			>
-				<div className="space-y-1">
+				<div className="divide-y">
 					{deployments.map((deployment) => {
 						const serviceType = deployment.service.type;
 						const serviceId =
@@ -248,7 +253,7 @@ export function RecentDeployments() {
 							<Link
 								key={deployment.deploymentId}
 								href={href}
-								className="flex items-center gap-3 rounded-md px-2 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+								className="flex items-center gap-3 rounded-md px-2 py-2.5 transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 							>
 								{inner}
 							</Link>

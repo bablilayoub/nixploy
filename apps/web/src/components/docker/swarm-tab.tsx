@@ -112,7 +112,7 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 	// The router answers `[]` for both lists on a worker or standalone engine.
 	if (nodes.length === 0 && services.length === 0) {
 		return (
-			<div className="pt-4">
+			<div className="pt-3">
 				<EmptyState
 					icon={Boxes}
 					title="Swarm mode is inactive on this server"
@@ -131,7 +131,7 @@ export function SwarmTab({ serverId }: DockerTabProps) {
 	return (
 		<div className="space-y-6 pt-4">
 			<div className="space-y-3">
-				<div className="flex items-center justify-between">
+				<div className="flex flex-wrap items-center justify-between gap-3">
 					<h3 className="text-sm font-medium">Nodes</h3>
 					<Button variant="outline" size="sm" onClick={invalidate}>
 						<RefreshCw className="size-3.5" />

@@ -87,8 +87,8 @@ export function UpstreamDetail({
 
 	if (upstreamQuery.isPending) {
 		return (
-			<div className="space-y-4">
-				<Skeleton className="h-8 w-64" />
+			<div className="space-y-5">
+				<Skeleton className="h-10 w-64" />
 				<Skeleton className="h-40 w-full" />
 				<Skeleton className="h-64 w-full" />
 			</div>

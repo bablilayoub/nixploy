@@ -1,30 +1,22 @@
-# Deprecated proposal — 2026-10-21
+# Full frontend rebuild specification
 
-The user rejected this mineral/plum/IBM Plex redesign. This document is historical context, not an approved implementation target. The familiar app design and the latest learned constraint in brief.md govern the real app. Prepare three to five standalone concepts for user selection before any future aesthetic rollout.
+## Shell
+Persistent 240px desktop workspace rail with grouped capability-filtered destinations, logo/organization at top and account/help at foot. Compact command bar with context, command palette and theme access. Recessed main canvas, responsive icon rail/tablet and accessible mobile sheet; one global palette, visible focus return. Existing route descriptors remain authoritative.
 
-# Operator workspace — 2026-10-20
+## Dashboard and projects
+A compact operational heading and truthful summary; deployment trend/evidence with real data; dominant project directory with environment context, status and visible actions. No synthetic customer/cost metrics. Project pages use environment navigation and a cohesive service directory. Loading/empty/error/filtered states keep their real actions.
 
-Scope: reskin plus approved shell/directory layout changes. Preserve all URLs, navigation destinations, service tab order, organization choice, capability filtering, keyboard interactions, unsaved-change guards and infrastructure confirmation flows. No dependency changes.
+## Services and operators
+All application/Compose/database/upstream screens share identity/status, ordered URL-synced tabs and purposeful action hierarchy. Deploy history becomes a continuous evidence timeline; runtime/logs/terminal/editors use a coherent instrument frame. Domains/env/backups/configuration/recovery use structured forms, secret-safe review, explicit partial/error states, sticky save context and unchanged permission guards.
 
-Craft 8 · motion 2 · density 7 · variance 5. Signature: status spine, a fine leading rule with a square endpoint that identifies the current context without moving content.
+## Settings and infrastructure
+A clear settings directory and secondary navigation; concise headers, separated editorial labels and control groups, structured tables and contextual empty states. Every provider, organization/security/member, destination/certificate, server, notification, registry, incident and template-source surface participates. All destructive actions keep confirmation and audit behavior.
 
-## Composition
+## Auth and public surfaces
+Rebuilt neutral split auth shell with actual product/architecture detail, compact accessible forms and honest first-user/SSO/2FA/invitation states. Rebuild maintenance/error/404/public uptime and Swagger chrome. Preserve token privacy and native server route behavior.
 
-- Desktop: subtly tinted grouped navigation, persistent organization context, a compact search/account bar, fluid working canvas. Below desktop, use the existing accessible navigation sheet.
-- Projects: compact status summary, project directory as the dominant task region, deployment history/trends below. Empty, filtered, loading and failed states retain their existing actions.
-- Project: project identity, URL-synced sections, environment/action rail, service search and tables. Preserve environment switching and unsaved-change confirmation.
-- Service: shared breadcrumb, wrapping identity, explicit state and primary action; tabs retain their routes/order. Configuration sections use an 18px hierarchy; operational viewers keep their own working frame.
-- Editors/viewers: shared palette and font authority, legible comments, distinct inset/toolbars, explicit loading/connection/error states.
+## Marketing and docs
+Rebuild all marketing route compositions, shared nav/footer, docs frame/article, feature/template/compare/pricing/about/privacy/API/agents pages. Preserve truthful copy, SEO, URLs, source attribution and real brand assets. Use newly captured real application screenshots. Vendor internals remain third-party; all integrations and tokens are verified.
 
-## Shared component contract
-
-Existing primitive props and variant names remain valid. Feature work uses Button, Input, Select, Badge, Tabs, TableCard, SettingsSection and PageHeader rather than restyling controls locally. Color utilities include `bg-shell`, `text-shell-foreground`, `bg-panel-inset`, `border-control`, `bg-selection`; the `status-spine` utility is reserved for the active context. Primary action and selection colors always derive from overridable `primary`/`brand` tokens.
-
-Use 4/8/12px radii by role, 4px spacing increments, 40–48px desktop rows and 44px touch targets. Typography: IBM Plex Sans, IBM Plex Mono for operational values/identifiers; page 28/32, section 18/24, body 14/20, supporting 12/16, code 13/20.
-
-## Verification
-
-- Baseline and final real-app screenshots at desktop/mobile in light/dark; organization custom accent included.
-- Keyboard navigation, menus/dialogs, long names, empty and partial/error states, scroll overflow and 200% zoom.
-- No hydration/console errors; semantic text/focus contrast; reduced-motion behavior.
-- Web typecheck and strict changed-file Biome; final production build/full gates coordinated by root.
+## Completion
+All coverage.json entries have explicit direct or shared-system implementation evidence and browser verification disposition. No unexplained legacy presentation, zero missing routes/actions, no new dependencies. All required types/tests/lint/build checks pass and independent final design/accessibility findings are resolved before integration. Preserve user data and original infrastructure throughout.

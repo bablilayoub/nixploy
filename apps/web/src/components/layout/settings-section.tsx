@@ -42,11 +42,16 @@ export function SettingsSection({
 }) {
 	const heading = (
 		<div className="min-w-0 space-y-1">
-			<h3 className={cn("text-sm font-medium", danger ? "text-destructive" : "text-foreground")}>
+			<h3
+				className={cn(
+					"text-base leading-snug font-semibold tracking-tight",
+					danger ? "text-destructive" : "text-foreground",
+				)}
+			>
 				{title}
 			</h3>
 			{description ? (
-				<p className="text-sm text-muted-foreground text-pretty">{description}</p>
+				<p className="text-sm leading-relaxed text-muted-foreground text-pretty">{description}</p>
 			) : null}
 		</div>
 	);
@@ -55,7 +60,10 @@ export function SettingsSection({
 		return (
 			<section
 				id={id}
-				className={cn("scroll-mt-24 rounded-lg border border-destructive/40 p-4 sm:p-5", className)}
+				className={cn(
+					"scroll-mt-24 rounded-lg border border-destructive/35 bg-destructive/3 p-5 sm:p-6",
+					className,
+				)}
 			>
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
 					{heading}
@@ -74,11 +82,7 @@ export function SettingsSection({
 		return (
 			<section
 				id={id}
-				className={cn(
-					"w-full scroll-mt-24",
-					bare ? "py-1" : "rounded-lg border border-border p-4 sm:p-5",
-					className,
-				)}
+				className={cn("w-full scroll-mt-24", bare ? "py-1" : "surface p-5 sm:p-6", className)}
 			>
 				<div className="flex w-full flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-8">
 					<div className="max-w-2xl">{heading}</div>
@@ -97,15 +101,15 @@ export function SettingsSection({
 		<section
 			id={id}
 			className={cn(
-				"w-full scroll-mt-24 rounded-lg border border-border p-4 sm:p-5",
+				"w-full scroll-mt-24 surface p-5 sm:p-6",
 				// The heading column is fixed so headings line up down the page; the
 				// body takes whatever is left and never drops below its own minimum.
-				"lg:grid lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:gap-8",
+				"xl:grid xl:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] xl:gap-10",
 				className,
 			)}
 		>
 			{heading}
-			<div className={cn("w-full", children || actions ? "mt-5 lg:mt-0" : null)}>
+			<div className={cn("w-full", children || actions ? "mt-5 xl:mt-0" : null)}>
 				{actions ? (
 					<div className="flex flex-wrap items-center gap-2 lg:justify-end">{actions}</div>
 				) : null}
@@ -125,5 +129,5 @@ export function SettingsStack({
 	children: ReactNode;
 	className?: string;
 }) {
-	return <div className={cn("flex w-full flex-col gap-4", className)}>{children}</div>;
+	return <div className={cn("flex w-full flex-col gap-5", className)}>{children}</div>;
 }

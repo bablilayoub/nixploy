@@ -204,7 +204,7 @@ export default function AgentsPage() {
 		>
 			{/* The four facts that decide whether any of this is a good idea, in the
 			    same divided panel the features page opens with. */}
-			<ul className="grid grid-cols-2 divide-border overflow-hidden rounded-2xl border bg-card/40 lg:grid-cols-4 lg:divide-x">
+			<ul className="grid grid-cols-2 divide-border overflow-hidden rounded-2xl border bg-card lg:grid-cols-4 lg:divide-x">
 				{[
 					{ label: "MCP tools", value: `${mcpToolCount} annotated` },
 					{ label: "Auth", value: "Scoped API keys" },

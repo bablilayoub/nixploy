@@ -62,8 +62,8 @@ export function InheritedEnv({
 	const ownKeys = new Set(parseEnvFile(ownEnv ?? "").map((entry) => entry.key));
 
 	return (
-		<div className="rounded-lg border border-border">
-			<div className="flex items-center justify-between gap-2 px-3 py-2">
+		<div className="overflow-hidden rounded-lg border border-border bg-card">
+			<div className="flex items-center justify-between gap-2 bg-panel-inset px-4 py-3">
 				<button
 					type="button"
 					className="flex min-w-0 items-center gap-2 text-sm"

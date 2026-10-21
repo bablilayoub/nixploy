@@ -270,7 +270,7 @@ export function MigrationsView() {
 					</>
 				}
 			/>
-			<div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4 text-sm">
+			<div className="flex items-start gap-3 rounded-lg border bg-panel-inset p-4 text-sm">
 				<LockKeyhole className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
 				<p className="text-muted-foreground">
 					Dokploy and Coolify live APIs are supported; database dumps are supported for Dokploy.
@@ -495,7 +495,7 @@ export function MigrationsView() {
 								</div>
 								{currentEnvironment && (
 									<section className="space-y-2">
-										<div className="flex items-center justify-between gap-3">
+										<div className="flex flex-wrap items-center justify-between gap-3">
 											<h3 className="text-sm font-medium">
 												Services{" "}
 												<span className="text-muted-foreground tabular-nums">

@@ -175,7 +175,7 @@ export function ServiceRowActions({
 					<div className="flex flex-col gap-2">
 						<Label>Target environment</Label>
 						<Select value={targetEnvironmentId} onValueChange={setTargetEnvironmentId}>
-							<SelectTrigger>
+							<SelectTrigger aria-label="Target environment">
 								<SelectValue placeholder="Select an environment" />
 							</SelectTrigger>
 							<SelectContent>

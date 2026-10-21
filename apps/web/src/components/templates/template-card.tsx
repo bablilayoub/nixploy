@@ -64,7 +64,7 @@ export function TemplateCard({
 					/>
 				) : null}
 				{template.source ? (
-					<span className="max-w-24 truncate rounded-md border bg-background/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+					<span className="max-w-24 truncate rounded-md border bg-control/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
 						{template.source.name}
 					</span>
 				) : null}

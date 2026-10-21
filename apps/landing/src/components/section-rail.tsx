@@ -59,7 +59,7 @@ export function SectionRail({
 								href={`#${item.id}`}
 								aria-current={active ? "true" : undefined}
 								className={cn(
-									"flex min-h-9 items-center gap-3 rounded-lg px-3 text-sm transition-colors",
+									"flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm transition-colors",
 									active
 										? "bg-accent font-medium text-foreground"
 										: "text-muted-foreground hover:text-foreground",

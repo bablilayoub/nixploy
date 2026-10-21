@@ -115,7 +115,7 @@ export function GiteaPanel() {
 							<DialogTitle>Add Gitea provider</DialogTitle>
 							<DialogDescription>Connect with a personal access token.</DialogDescription>
 						</DialogHeader>
-						<div className="grid gap-4">
+						<div className="grid gap-5">
 							<div className="grid gap-2">
 								<Label htmlFor="gitea-name">Name</Label>
 								<Input id="gitea-name" value={name} onChange={(e) => setName(e.target.value)} />

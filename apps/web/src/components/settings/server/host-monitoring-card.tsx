@@ -29,7 +29,7 @@ function Meter({
 			{percent !== null && (
 				<div className="h-1 overflow-hidden rounded-full bg-muted">
 					<div
-						className="h-full rounded-full bg-foreground/80 transition-[width] duration-500"
+						className="h-full rounded-full bg-foreground/80"
 						style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
 					/>
 				</div>

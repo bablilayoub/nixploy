@@ -41,9 +41,9 @@ export function NotRunningState({
 				className,
 			)}
 		>
-			<PowerOff className="mb-1 size-6 text-muted-foreground" aria-hidden />
-			<p className="text-sm font-medium text-foreground">{title}</p>
-			<p className="max-w-sm text-sm text-muted-foreground">{description}</p>
+			<PowerOff className="mb-3 size-8 text-muted-foreground" aria-hidden />
+			<p className="text-base font-semibold text-foreground">{title}</p>
+			<p className="max-w-sm text-sm leading-relaxed text-muted-foreground">{description}</p>
 			{action || onRetry ? (
 				<div className="mt-2 flex flex-wrap items-center justify-center gap-2">
 					{action}

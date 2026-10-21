@@ -162,7 +162,7 @@ export function BrandingCard() {
 							<Input
 								id="branding-accent"
 								value={form.accentColor}
-								placeholder="#4f46e5"
+								placeholder="#737984"
 								onChange={(event) =>
 									setForm((current) => ({ ...current, accentColor: event.target.value }))
 								}
@@ -321,7 +321,13 @@ function AssetSlot({
 					// A plain <img>: the source is an operator upload served from our
 					// own origin, which Next's optimiser cannot help with anyway.
 					// biome-ignore lint/performance/noImgElement: runtime-uploaded asset, not a build-time import
-					<img src={url} alt={label} className="max-h-10 max-w-full object-contain" />
+					<img
+						src={url}
+						alt={label}
+						width={160}
+						height={40}
+						className="max-h-10 max-w-full object-contain"
+					/>
 				) : (
 					<span className="text-xs text-muted-foreground">Default</span>
 				)}

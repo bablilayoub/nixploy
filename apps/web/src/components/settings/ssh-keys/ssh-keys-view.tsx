@@ -155,7 +155,7 @@ export function SshKeysView() {
 										: "Generate a fresh ed25519 keypair."}
 								</DialogDescription>
 							</DialogHeader>
-							<div className="grid gap-4">
+							<div className="grid gap-5">
 								<div className="grid gap-2">
 									<Label htmlFor="ssh-key-name">Name</Label>
 									<Input
@@ -168,7 +168,7 @@ export function SshKeysView() {
 								{generated && (
 									<>
 										<div className="grid gap-2">
-											<div className="flex items-center justify-between">
+											<div className="flex flex-wrap items-center justify-between gap-3">
 												<Label>Private key</Label>
 												<CopyButton value={generated.privateKey} />
 											</div>
@@ -180,7 +180,7 @@ export function SshKeysView() {
 											/>
 										</div>
 										<div className="grid gap-2">
-											<div className="flex items-center justify-between">
+											<div className="flex flex-wrap items-center justify-between gap-3">
 												<Label>Public key</Label>
 												<CopyButton value={generated.publicKey} />
 											</div>
@@ -322,7 +322,7 @@ export function SshKeysView() {
 								});
 							}
 						}}
-						className="grid gap-4"
+						className="grid gap-5"
 					>
 						<div className="grid gap-2">
 							<Label htmlFor="edit-ssh-key-name">Name</Label>

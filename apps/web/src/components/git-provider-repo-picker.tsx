@@ -219,7 +219,7 @@ export function GitProviderRepoPicker({
 						}}
 						disabled={reposLoading || !!reposError}
 					>
-						<SelectTrigger className="w-full">
+						<SelectTrigger aria-label="Repository" className="w-full">
 							<SelectValue placeholder={reposLoading ? "Loading…" : "Select a repository"} />
 						</SelectTrigger>
 						<SelectContent>
@@ -238,7 +238,7 @@ export function GitProviderRepoPicker({
 						onValueChange={onBranchChange}
 						disabled={!repoSelection || branchesLoading}
 					>
-						<SelectTrigger className="w-full">
+						<SelectTrigger aria-label="Branch" className="w-full">
 							<SelectValue placeholder={branchesLoading ? "Loading…" : "Select a branch"} />
 						</SelectTrigger>
 						<SelectContent>

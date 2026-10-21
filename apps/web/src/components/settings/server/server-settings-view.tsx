@@ -163,7 +163,7 @@ function DashboardDomainFields({
 
 	if (isLoading) {
 		return (
-			<div className="grid gap-4">
+			<div className="grid gap-5">
 				<Skeleton className="h-9 w-full" />
 				<Skeleton className="h-9 w-40" />
 			</div>
@@ -423,7 +423,7 @@ export function ServerSettingsView() {
 					description="Serve this panel from your own domain with automatic HTTPS."
 				>
 					{settingsQuery.isPending ? (
-						<div className="grid gap-4">
+						<div className="grid gap-5">
 							<Skeleton className="h-9 w-full" />
 							<Skeleton className="h-9 w-full" />
 						</div>
@@ -507,7 +507,7 @@ export function ServerSettingsView() {
 					{settingsQuery.isPending ? (
 						<Skeleton className="h-9 w-full" />
 					) : (
-						<div className="flex items-center justify-between gap-4">
+						<div className="flex flex-wrap items-center justify-between gap-4">
 							<div className="grid gap-0.5">
 								<Label htmlFor="traefik-dashboard">Traefik dashboard</Label>
 								<p className="text-xs text-muted-foreground">Expose the dashboard and API.</p>
@@ -536,6 +536,7 @@ export function ServerSettingsView() {
 								<>
 									{traefikConfig?.staticConfig ? (
 										<CodeEditor
+											label="Traefik static configuration"
 											value={traefikConfig.staticConfig}
 											extensions={[yaml()]}
 											readOnly
@@ -585,7 +586,7 @@ export function ServerSettingsView() {
 						<Skeleton className="h-9 w-full" />
 					) : (
 						<>
-							<div className="flex items-center justify-between gap-4">
+							<div className="flex flex-wrap items-center justify-between gap-4">
 								<div className="grid gap-0.5">
 									<Label htmlFor="allow-private-egress">Allow private network targets</Label>
 									<p className="text-xs text-muted-foreground">
@@ -710,7 +711,7 @@ export function ServerSettingsView() {
 						<Skeleton className="h-9 w-full" />
 					) : (
 						<>
-							<div className="flex items-center justify-between gap-4">
+							<div className="flex flex-wrap items-center justify-between gap-4">
 								<div className="grid gap-0.5">
 									<Label htmlFor="cleanup-cron">Scheduled cleanup</Label>
 									<p className="text-xs text-muted-foreground">

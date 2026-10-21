@@ -80,7 +80,7 @@ export default function FeaturesPage() {
 				<h2 id="at-a-glance" className="sr-only">
 					At a glance
 				</h2>
-				<ul className="grid grid-cols-2 divide-border overflow-hidden rounded-2xl border bg-card/40 sm:grid-cols-3 sm:divide-x xl:grid-cols-6">
+				<ul className="grid grid-cols-2 divide-border overflow-hidden rounded-2xl border bg-card sm:grid-cols-3 sm:divide-x xl:grid-cols-6">
 					{featureHighlights.map((item) => (
 						<li key={item.label} className="border-b p-5 last:border-b-0 sm:border-b-0">
 							<p className="font-mono text-[11px] tracking-[0.18em] text-muted-foreground uppercase">
@@ -148,17 +148,25 @@ export default function FeaturesPage() {
 										) : null}
 									</div>
 
-									{section.imageSrc ? (
+									{section.image ? (
 										<div className="lg:col-span-7">
 											<Card className="overflow-hidden p-2">
-												<div className="overflow-hidden rounded-lg border [mask-image:linear-gradient(to_bottom,#000_60%,transparent)]">
+												<div className="overflow-hidden rounded-lg border bg-background">
 													<Image
-														src={section.imageSrc}
+														src={section.image.light}
 														alt={section.imageAlt ?? ""}
-														width={3200}
-														height={2000}
+														width={1440}
+														height={1000}
 														sizes="(min-width: 1024px) 720px, 100vw"
-														className="h-auto w-[140%] max-w-none"
+														className="h-auto w-full dark:hidden"
+													/>
+													<Image
+														src={section.image.dark}
+														alt={section.imageAlt ?? ""}
+														width={1440}
+														height={1000}
+														sizes="(min-width: 1024px) 720px, 100vw"
+														className="hidden h-auto w-full dark:block"
 													/>
 												</div>
 											</Card>

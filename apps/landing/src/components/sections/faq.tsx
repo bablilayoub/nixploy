@@ -16,7 +16,7 @@ export function Faq() {
 					<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
 						Questions
 					</p>
-					<h2 className="mt-4 text-4xl font-semibold tracking-tight text-balance lg:text-5xl">
+					<h2 className="mt-4 text-4xl leading-[1.1] font-semibold tracking-[-0.045em] text-balance lg:text-5xl">
 						The ones people ask first
 					</h2>
 					<p className="mt-4 text-muted-foreground">
@@ -25,7 +25,7 @@ export function Faq() {
 							href={`${site.github}/issues`}
 							target="_blank"
 							rel="noreferrer"
-							className="text-primary underline-offset-4 hover:underline"
+							className="text-primary underline underline-offset-4 hover:decoration-2"
 						>
 							open an issue on GitHub
 						</a>

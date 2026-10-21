@@ -1,39 +1,24 @@
-# Product purpose
+# Monochrome operator workspace
 
-Nixploy deploys and operates applications, Compose stacks and databases on the operator's own Docker Swarm servers.
+## Product and audience
+Nixploy is a self-hosted PaaS for developers and operators running applications, Compose stacks and databases on their own infrastructure. The interface must make health, deployment evidence and the next permitted action immediately clear.
 
-# Primary user
+## Latest direction and authority — 2026-10-21
+The user explicitly requested: “the whole frontend should be rebuilt”, “every page, every component … no exception”, “keep the monochrome”, and delegated design choices while asleep. This explicitly supersedes the older familiar-design, Studio/revert and concept-selection restrictions. No additional aesthetic confirmation is required. The supplied dark PaaS reference establishes depth, typographic hierarchy, quiet borders, a persistent rail, dense operational views and carefully composed mobile forms. Its product names, AWS claims, sample metrics and red brand are reference content, not Nixploy requirements.
 
-A developer or small-team operator managing production services from a laptop, with a phone used for status checks and recovery.
+## Design principles
+1. Rebuild every frontend family: app, auth, project/service workspaces, settings, infrastructure, recovery, editors, public status, API explorer, marketing and documentation. Track each source surface in coverage.json.
+2. Monochrome identity: charcoal, graphite, white and silver; color communicates actual operational state only. Saved tenant/instance branding remains supported.
+3. Distinct surface depth with restrained inset highlights, fine borders and compact controls. Strong hierarchy and useful density, never a wall of equal cards.
+4. Preserve routes, deep links, permissions, tenant/project scoping, service tab order, truthful states, unsaved-change guards and confirmation flows. Rebuild presentation without weakening backend invariants.
+5. Light, dark and System remain persistent and synchronized. All surfaces work at 320/390/768/1440px and enlarged text, with keyboard/focus and touch access.
+6. Existing libraries and fonts are reused. No new dependencies, invented metrics, fake product screenshots or infrastructure side effects for visual verification.
 
-# Principles
+## Craft read
+Deployment workspace for developers/operators; product language; monochrome light/dark; craft 9, motion 3, density 7, variance 6. Signature bet: a recessed workspace canvas with a continuous deployment timeline. Marketing: product-forward, actual captured interface, restrained technical editorial composition.
 
-1. An unverified state must look unfinished: imports, templates and deployments distinguish saved configuration from a running service.
-2. Review before changing infrastructure: source selection, target, redacted changes and manual work remain visible before apply.
-3. Keep operational information close: service names, environment, health and next action belong together; failures never look empty.
-4. Keep the familiar stone/zinc monochrome app, Inter and JetBrains Mono, existing horizontal navigation and saved branding. Present distinct concepts for selection before any future aesthetic rollout.
-5. Keep learned navigation intact: preserve routes, deep links, service tab order, command palette and capability gates.
+## Build and verification
+Isolated branch/worktree based on the familiar-panel snapshot06963e0, rebased onto canonical main for review. Preserve the running primary checkout/data/configuration. Use an isolated fixture for all forms and business mutations. Inventory every page/component; rebuild primitives first, then every feature family; verify before/after screenshots in both modes, responsive/200% text, real workflows, tests/typechecks/strict lint/production builds. Independent design and accessibility review per ui-craft verify-team instructions.
 
-# Success criteria
-
-An operator can find the service needing attention, identify its environment and current state, inspect evidence, and take the next permitted action on desktop or phone. Editing, deployment and recovery clearly distinguish a draft, an in-flight operation and a verified result.
-
-# Scope
-
-- Preserve the real app's familiar visual identity, shared primitives and navigation. Add functional workflows and useful accessibility/mobile corrections within that design.
-- Offer three to five clearly distinct modern dashboard concepts as standalone sample-data previews. Wait for the user's selection before changing app appearance; preserve instance/organization logos and accent colors.
-- Hover and focus motion only; no decorative entrance sequences.
-- Marketing structure and vendored registry components remain governed by the landing app's existing contract.
-- Production host changes, public DNS/ACME and same-host takeover are outside this implementation.
-
-# Learned constraints
-
-- 2026-10-15: Functional product decisions are delegated; use repository evidence without waiting for discovery answers. Aesthetic delegation is superseded by the 2026-10-21 requirement to compare standalone concepts before an app appearance change.
-- **2026-10-20 — Deprecated 2026-10-21:** The earlier replacement-design direction delegated palette/font choices. *Deprecation reason:* the user rejected the resulting mineral/plum/IBM Plex overhaul and reinstated the familiar app design.
-- **2026-10-20 — Deprecated 2026-10-21:** Craft 8/motion 2/density 7/variance 5 and the status-spine signature described the rejected overhaul; do not apply them to the real app.
-
-- **2026-10-21** — Retain the existing familiar visual design in the real app. The rejected mineral/plum/IBM Plex overhaul must not ship. Preserve functional/security fixes, useful UX corrections and safe owned CSS/dependency removals. Offer **three to five clearly distinct modern dashboard concept previews** for the user to compare and select before any future aesthetic rollout. *Why:* the user explicitly dislikes the redesign and wants comparison and choice. This supersedes conflicting prior aesthetic directions; accessibility and correctness remain required.
-
-- **2026-10-21 — Deprecated prior principle 4:** ~~A distinctive workspace supports concentration: cool mineral surfaces, plum actions and IBM Plex typography establish the default identity; the saved organization accent remains authoritative.~~ *Why:* the user rejected that visual overhaul and wants the familiar design retained while comparing standalone concepts.
-
-- **2026-10-21 — Studio selection deprecated; restore familiar panel:** The earlier “go with Studio” choice is superseded. Restore the panel appearance from before PR #30 and retain its existing Light/Dark/System preferences, Inter/mono typography and saved branding. Do not reapply Studio without a new explicit request. *Why:* after viewing the live Studio rollout, the user requested “rollback the old design.” Preserve all earlier feature/security changes.
+## Deliberate boundaries
+Light cards and overlays share a white fill; border contrast, backdrop and the stronger overlay shadow establish elevation. This is the deliberate exception to the finish bar's numeric light-fill luminance separation. Dense operational tables and command lists retain compact spacing and internal horizontal scrolling where exact identifiers must remain readable. Existing immediate removal of tags, individual alert rules and uploaded brand assets remains immediate; service/database/infrastructure destruction keeps its existing confirmations. These metadata actions can be recreated through the same controls; adding undo is separate behavior work.

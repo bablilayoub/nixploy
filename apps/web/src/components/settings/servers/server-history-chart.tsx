@@ -39,15 +39,15 @@ interface Row {
 }
 
 const COLORS = {
-	cpu: "#0070f3",
-	memory: "#17c964",
-	disk: "#f5a524",
+	cpu: "var(--chart-1)",
+	memory: "var(--chart-2)",
+	disk: "var(--chart-3)",
 } as const;
 
 const tooltipStyle = {
 	backgroundColor: "var(--card)",
 	border: "1px solid var(--border)",
-	borderRadius: "10px",
+	borderRadius: "8px",
 	fontSize: "12px",
 	color: "var(--foreground)",
 } as const;
@@ -72,7 +72,7 @@ function Panel({
 	formatValue: (value: number) => string;
 }) {
 	return (
-		<div className="rounded-lg border border-border p-3">
+		<div className="surface p-4">
 			<div className="flex items-baseline justify-between gap-2">
 				<p className="text-sm font-medium">{title}</p>
 				<p className="font-mono text-xs text-muted-foreground">{value}</p>

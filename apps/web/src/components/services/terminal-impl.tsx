@@ -138,7 +138,8 @@ export function ServiceTerminal({
 			if (disposed || ended) return;
 
 			terminal = new XTerm({
-				cursorBlink: true,
+				cursorBlink: false,
+				screenReaderMode: true,
 				disableStdin: true,
 				fontSize: 13,
 				fontFamily: "var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace",
@@ -303,12 +304,7 @@ export function ServiceTerminal({
 					className="min-h-[26rem]"
 				/>
 			)}
-			<div
-				className={cn(
-					"relative overflow-hidden rounded-lg border border-border bg-card",
-					notRunning && "hidden",
-				)}
-			>
+			<div className={cn("relative overflow-hidden surface", notRunning && "hidden")}>
 				{status !== "connected" && !notRunning && (
 					<div
 						className={cn(

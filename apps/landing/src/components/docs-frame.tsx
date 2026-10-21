@@ -35,9 +35,9 @@ function NavList({ activeHref }: { activeHref: string }) {
 										href={item.href}
 										aria-current={active ? "page" : undefined}
 										className={cn(
-											"flex min-h-9 items-center rounded-md px-3 text-sm transition-colors",
+											"flex min-h-11 items-center rounded-md px-3 text-sm transition-colors",
 											active
-												? "bg-accent text-foreground"
+												? "border border-border bg-card font-medium text-foreground shadow-xs"
 												: "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
 										)}
 									>
@@ -61,7 +61,7 @@ function Pager({ activeHref }: { activeHref: string }) {
 			{prev ? (
 				<Link
 					href={prev.href}
-					className="group flex flex-col gap-1 rounded-xl border p-4 transition-colors hover:border-foreground/25"
+					className="group flex flex-col gap-1 rounded-lg border bg-card p-5 transition-colors hover:border-foreground/25"
 				>
 					<span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
 						<ArrowLeft className="size-3.5 transition-transform group-hover:-translate-x-0.5" />
@@ -75,7 +75,7 @@ function Pager({ activeHref }: { activeHref: string }) {
 			{next ? (
 				<Link
 					href={next.href}
-					className="group flex flex-col items-end gap-1 rounded-xl border p-4 text-right transition-colors hover:border-foreground/25 sm:col-start-2"
+					className="group flex flex-col items-end gap-1 rounded-lg border bg-card p-5 text-right transition-colors hover:border-foreground/25 sm:col-start-2"
 				>
 					<span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
 						Next
@@ -103,7 +103,7 @@ export function DocsFrame({
 			<SiteNavbar />
 			<main
 				id="main-content"
-				className="container-page pt-20 pb-20 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-14 lg:pt-24 xl:grid-cols-[240px_minmax(0,1fr)_200px] xl:gap-12"
+				className="container-page pt-28 pb-20 lg:grid lg:grid-cols-[208px_minmax(0,1fr)] lg:gap-10 lg:pt-32 xl:grid-cols-[208px_minmax(0,1fr)_200px] xl:gap-12"
 			>
 				<aside className="hidden lg:block">
 					<nav
@@ -138,7 +138,7 @@ export function DocsFrame({
 									<li key={heading.id}>
 										<a
 											href={`#${heading.id}`}
-											className="-ml-px flex min-h-9 items-center border-l border-transparent py-1 pl-3 text-sm text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+											className="-ml-px flex min-h-11 items-center border-l border-transparent py-1 pl-3 text-sm text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
 										>
 											{heading.text}
 										</a>

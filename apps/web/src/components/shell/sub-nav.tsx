@@ -48,19 +48,20 @@ export function SubNav({
 				<Link
 					key={item.href}
 					href={item.href}
+					aria-current={isActive ? "page" : undefined}
 					className={cn(
 						"text-sm transition-colors",
 						vertical
 							? cn(
-									"flex items-center gap-2.5 rounded-md px-2.5 py-2",
+									"flex min-h-10 items-center gap-2.5 rounded-md border border-transparent px-3 py-2 text-[13px]",
 									isActive
-										? "bg-secondary font-medium text-foreground"
+										? "border-border bg-card font-semibold text-foreground shadow-xs"
 										: "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
 								)
 							: cn(
-									"inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-3 py-1.5",
+									"inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-md border px-3 py-2",
 									isActive
-										? "border-border bg-secondary font-medium text-foreground"
+										? "border-border border-border bg-card font-semibold text-foreground shadow-xs"
 										: "border-transparent text-muted-foreground hover:bg-secondary/70 hover:text-foreground",
 								),
 					)}
@@ -82,7 +83,7 @@ export function SubNav({
 	if (groups && groups.length > 0) {
 		return (
 			<nav
-				className={cn(vertical ? "flex flex-col gap-5" : "flex flex-col gap-3", className)}
+				className={cn(vertical ? "flex flex-col gap-6" : "flex flex-col gap-3", className)}
 				aria-label="Secondary"
 			>
 				{groups.map((group) => (

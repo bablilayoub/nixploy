@@ -459,9 +459,9 @@ export function NotificationDialog({
 						event.preventDefault();
 						submit();
 					}}
-					className="grid gap-4"
+					className="grid gap-5"
 				>
-					<div className="grid grid-cols-2 gap-4">
+					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 						<div className="grid gap-2">
 							<Label htmlFor="notification-name">Name</Label>
 							<Input
@@ -480,7 +480,7 @@ export function NotificationDialog({
 									setValues({});
 								}}
 							>
-								<SelectTrigger>
+								<SelectTrigger aria-label="Type">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
@@ -523,7 +523,7 @@ export function NotificationDialog({
 
 					<div className="grid gap-2">
 						<Label>Notify on</Label>
-						<div className="grid grid-cols-2 gap-2">
+						<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
 							{EVENT_TOGGLES.map((eventToggle) => (
 								<div key={eventToggle.key} className="flex items-center gap-2">
 									<Checkbox

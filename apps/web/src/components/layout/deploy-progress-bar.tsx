@@ -17,7 +17,10 @@ export function DeployProgressBar() {
 	}
 
 	return (
-		<div aria-hidden className="fixed inset-x-0 top-14 z-40 h-px overflow-hidden bg-border">
+		<div
+			aria-hidden
+			className="fixed inset-x-0 md:start-20 xl:start-60 top-16 z-40 h-px overflow-hidden bg-border"
+		>
 			<style>
 				{`@keyframes nixploy-deploy-sweep {
 	from { transform: translateX(-100%); }

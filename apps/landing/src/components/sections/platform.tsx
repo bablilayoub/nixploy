@@ -24,7 +24,7 @@ export function Platform() {
 					<p className="font-mono text-xs tracking-[0.18em] text-muted-foreground uppercase">
 						All of it
 					</p>
-					<h2 className="mt-4 text-4xl font-semibold tracking-tight text-balance lg:text-5xl">
+					<h2 className="mt-4 text-4xl leading-[1.1] font-semibold tracking-[-0.045em] text-balance lg:text-5xl">
 						There is no enterprise tier
 					</h2>
 					<p className="mt-5 text-lg text-muted-foreground">

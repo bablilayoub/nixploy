@@ -247,7 +247,7 @@ export function CertificatesView() {
 						<DialogTitle>Add certificate</DialogTitle>
 						<DialogDescription>Paste the PEM certificate chain and private key.</DialogDescription>
 					</DialogHeader>
-					<div className="grid gap-4">
+					<div className="grid gap-5">
 						<div className="grid gap-2">
 							<Label htmlFor="cert-name">Name</Label>
 							<Input
@@ -317,7 +317,7 @@ export function CertificatesView() {
 								});
 							}
 						}}
-						className="grid gap-4"
+						className="grid gap-5"
 					>
 						<div className="grid gap-2">
 							<Label htmlFor="edit-cert-name">Name</Label>

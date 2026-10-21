@@ -107,26 +107,14 @@ const LEVEL_STYLES: Record<
 	},
 };
 
-/**
- * One log line: line number, a level rule, the dimmed timestamp, the text.
- *
- * The three-letter badge that used to sit in front of every line is gone. It
- * repeated what the colour of the text already said, and a column of ERR / INF /
- * DBG chips down the left made the whole block read as a table of tags rather
- * than as output. The rule keeps errors just as findable while the text itself
- * starts at a straight left edge.
- *
- * The number is the line's position in the *unfiltered* stream, so it still
- * means something after a filter narrows the view — and gives you something to
- * point at when someone asks which line failed.
- */
+/** Stream line with stable numbering and a readable severity independent of color. */
 function LogLine({ line, number, wrap }: { line: string; number: number; wrap: boolean }) {
 	const { level, text } = classifyLine(line);
 	const style = level === "default" ? null : LEVEL_STYLES[level];
 	const timestamp = text.match(TIMESTAMP_REGEX);
 	const body = timestamp ? text.slice(timestamp[0].length) : text;
 	return (
-		<div className="group flex gap-2">
+		<div className="group flex gap-2 py-0.5 hover:bg-accent/40">
 			<span className="w-10 shrink-0 select-none pe-1 text-right text-muted-foreground/50 tabular-nums">
 				{number}
 			</span>
@@ -141,6 +129,11 @@ function LogLine({ line, number, wrap }: { line: string; number: number; wrap: b
 					style?.text ?? "text-foreground",
 				)}
 			>
+				{level !== "default" ? (
+					<span className="me-2 inline-block min-w-12 text-[10px] font-semibold uppercase">
+						{level}
+					</span>
+				) : null}
 				{timestamp && <span className="text-muted-foreground">{timestamp[1]} </span>}
 				{body || " "}
 			</span>
@@ -446,7 +439,7 @@ export function LogViewer({
 
 	if (!deploymentId && !appName && !containerId) {
 		return (
-			<div className="flex h-64 items-center justify-center rounded-lg border border-border bg-card text-sm text-muted-foreground">
+			<div className="flex h-64 items-center justify-center surface text-sm text-muted-foreground">
 				Select a service to view its logs.
 			</div>
 		);
@@ -464,7 +457,7 @@ export function LogViewer({
 	}
 
 	return (
-		<div className="overflow-hidden rounded-lg border border-border bg-card">
+		<div className="overflow-hidden surface">
 			{/*
 			 * One toolbar, not two. It used to be a status row and a filter row —
 			 * seven controls over two lines, with the follow-latest arrow sitting
@@ -486,7 +479,7 @@ export function LogViewer({
 										: "neutral"
 						}
 					/>
-					<span className="truncate">
+					<span className="truncate" role="status" aria-live="polite">
 						{status === "connected" && "Live"}
 						{status === "connecting" && (
 							<span className="inline-flex items-center gap-1.5">

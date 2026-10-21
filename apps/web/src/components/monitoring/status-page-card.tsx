@@ -93,7 +93,7 @@ export function StatusPageCard() {
 			{probes.isPending || page.isPending ? (
 				<Skeleton className="h-24 w-full" />
 			) : (
-				<div className="flex flex-col gap-4">
+				<div className="flex min-w-0 flex-col gap-5">
 					<div className="flex flex-col gap-2">
 						<Label htmlFor="status-page-title">Page title</Label>
 						<Input

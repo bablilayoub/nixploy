@@ -493,6 +493,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 								</TableCell>
 								<TableCell>
 									<Switch
+										aria-label={`Enable schedule ${schedule.name}`}
 										checked={schedule.enabled}
 										// Double-clicks would otherwise queue enable + disable back to back.
 										disabled={
@@ -563,7 +564,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 							setForm({ ...form, scheduleType: value as ScheduleType, targetId: "" })
 						}
 					>
-						<SelectTrigger>
+						<SelectTrigger aria-label="Target">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
@@ -587,7 +588,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 						value={form.targetId || undefined}
 						onValueChange={(value) => setForm({ ...form, targetId: value })}
 					>
-						<SelectTrigger>
+						<SelectTrigger aria-label="Server">
 							<SelectValue placeholder="Select server" />
 						</SelectTrigger>
 						<SelectContent>
@@ -618,7 +619,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 						setForm({ ...form, cronExpression: value });
 					}}
 				>
-					<SelectTrigger>
+					<SelectTrigger aria-label="Schedule preset">
 						<SelectValue />
 					</SelectTrigger>
 					<SelectContent>
@@ -635,6 +636,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 				{isGlobal ? <Label htmlFor="schedule-cron">Cron (UTC)</Label> : null}
 				<Input
 					id="schedule-cron"
+					aria-label="Cron expression (UTC)"
 					className="font-mono text-sm"
 					placeholder="0 0 * * *"
 					value={form.cronExpression}
@@ -711,7 +713,7 @@ export function SchedulesPanel({ source }: { source: SchedulesSource }) {
 			</div>
 			{!editing &&
 				(isGlobal ? (
-					<div className="flex items-center justify-between gap-4">
+					<div className="flex flex-wrap items-center justify-between gap-4">
 						<Label htmlFor="schedule-enabled">Enabled</Label>
 						<Switch
 							id="schedule-enabled"

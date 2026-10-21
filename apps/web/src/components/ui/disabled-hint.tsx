@@ -33,7 +33,10 @@ export function DisabledHint({
 				<span
 					// biome-ignore lint/a11y/noNoninteractiveTabindex: focusable tooltip trigger standing in for the disabled control (shadcn pattern)
 					tabIndex={0}
-					className={cn("inline-flex rounded-md [&>*]:pointer-events-none", className)}
+					className={cn(
+						"inline-flex rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background [&>*]:pointer-events-none",
+						className,
+					)}
 				>
 					{children}
 				</span>

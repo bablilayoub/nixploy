@@ -135,11 +135,8 @@ export function IncidentWorkbench({
 				? "Restore previous deployment"
 				: null;
 	return (
-		<section
-			className="min-w-0 overflow-hidden rounded-lg border bg-card"
-			aria-label="Incident investigation"
-		>
-			<div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+		<section className="min-w-0 overflow-hidden surface" aria-label="Incident investigation">
+			<div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
 				<h3 className="text-sm font-medium">Investigation</h3>
 				<div className="flex gap-1">
 					<Button
@@ -189,7 +186,7 @@ export function IncidentWorkbench({
 									{data.incident.severity} · <DateTime value={data.incident.createdAt} />
 								</span>
 							</div>
-							<h4 className="break-words text-lg font-semibold tracking-tight">
+							<h4 className="break-words text-xl leading-snug font-semibold tracking-tight tracking-tight">
 								{data.incident.title}
 							</h4>
 							<p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
@@ -207,7 +204,10 @@ export function IncidentWorkbench({
 							)}
 						</div>
 						{data.recovery && recoveryState && (
-							<div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-4" role="status">
+							<div
+								className="flex flex-col gap-2 rounded-lg border bg-panel-inset p-4"
+								role="status"
+							>
 								<p className="text-sm font-medium">{RECOVERY_LABEL[recoveryState]}</p>
 								<p className="text-xs text-muted-foreground">
 									{recoveryActive
@@ -234,7 +234,7 @@ export function IncidentWorkbench({
 							</div>
 						)}
 						{data.incident.resolvedAt ? (
-							<div className="rounded-lg border bg-muted/30 p-4">
+							<div className="rounded-lg border bg-panel-inset p-4">
 								<p className="flex items-center gap-2 text-sm font-medium">
 									<Check className="size-4" />
 									Resolved <DateTime value={data.incident.resolvedAt} />
@@ -248,7 +248,7 @@ export function IncidentWorkbench({
 						) : (
 							<>
 								{!data.recovery && proposal && (
-									<div className="flex flex-col gap-3 rounded-lg border p-4">
+									<div className="flex flex-col gap-3 surface p-5">
 										<p className="text-sm font-medium">Proposed recovery</p>
 										<p className="text-xs text-muted-foreground">
 											{applyLabel

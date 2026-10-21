@@ -12,17 +12,28 @@ export function TableCard({
 	footer,
 	/** When false, skip the rounded border frame (use inside SettingsSection). */
 	framed = true,
+	toolbarFramed = true,
 }: {
 	className?: string;
 	children: React.ReactNode;
 	toolbar?: React.ReactNode;
 	footer?: React.ReactNode;
 	framed?: boolean;
+	toolbarFramed?: boolean;
 }) {
 	return (
-		<div className={cn("flex flex-col gap-4", className)}>
-			{toolbar ? <div className="flex flex-wrap items-center gap-2">{toolbar}</div> : null}
-			{framed ? <div className="overflow-x-auto rounded-md border">{children}</div> : children}
+		<div className={cn("flex min-w-0 flex-col gap-3", className)}>
+			{toolbar ? (
+				<div
+					className={cn(
+						"flex flex-wrap items-center gap-2",
+						toolbarFramed && "rounded-lg border bg-card px-3 py-2",
+					)}
+				>
+					{toolbar}
+				</div>
+			) : null}
+			{framed ? <div className="surface overflow-x-auto">{children}</div> : children}
 			{footer}
 		</div>
 	);

@@ -133,7 +133,7 @@ export function ContainersTab({ serverId }: DockerTabProps) {
 	}
 
 	return (
-		<div className="space-y-3 pt-4">
+		<div className="space-y-4 pt-3">
 			<div className="flex flex-wrap items-center justify-between gap-2">
 				<p className="text-sm text-muted-foreground">
 					{containers.length} container{containers.length === 1 ? "" : "s"}

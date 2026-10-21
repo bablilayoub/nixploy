@@ -159,13 +159,18 @@ export function LoginForm({
 
 	return (
 		<Card>
-			<CardHeader className="text-center">
-				<CardTitle className="text-xl">Welcome back</CardTitle>
+			<CardHeader className="text-start">
+				<CardTitle as="h1" className="text-[1.75rem] leading-tight tracking-tight">
+					Welcome back
+				</CardTitle>
 				<CardDescription>Sign in to your {branding.productName} instance</CardDescription>
 			</CardHeader>
 			<CardContent>
 				<Form {...form}>
-					<form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4">
+					<form
+						onSubmit={form.handleSubmit(onSubmit)}
+						className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4"
+					>
 						{formError && (
 							<div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
 								<AlertCircle className="size-4" />
@@ -219,7 +224,7 @@ export function LoginForm({
 					<div className="mt-4 grid gap-4">
 						<div className="flex items-center gap-3">
 							<span className="h-px flex-1 bg-border" />
-							<span className="text-xs text-muted-foreground">or</span>
+							<span className="text-xs leading-relaxed break-words text-muted-foreground">or</span>
 							<span className="h-px flex-1 bg-border" />
 						</div>
 						{passkeysAvailable && (

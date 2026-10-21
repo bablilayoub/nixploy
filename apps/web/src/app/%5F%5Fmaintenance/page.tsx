@@ -17,18 +17,38 @@ export default function MaintenancePage() {
 	return (
 		<main
 			style={{
-				minHeight: "100vh",
+				minHeight: "100svh",
+				background: "var(--background, #f4f4f5)",
+				color: "var(--foreground, #17181b)",
 				display: "flex",
 				alignItems: "center",
 				justifyContent: "center",
 				padding: "2rem",
-				textAlign: "center",
+				textAlign: "left",
 				fontFamily:
 					"ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
 			}}
 		>
-			<div style={{ maxWidth: "32rem" }}>
-				<h1 style={{ fontSize: "1.5rem", fontWeight: 600, margin: "0 0 0.75rem" }}>
+			<div style={{ maxWidth: "32rem", borderTop: "2px solid currentColor", paddingTop: "2rem" }}>
+				<p
+					style={{
+						fontSize: "0.75rem",
+						letterSpacing: "0.12em",
+						textTransform: "uppercase",
+						marginBottom: "1.5rem",
+					}}
+				>
+					Back shortly
+				</p>
+				<h1
+					style={{
+						fontSize: "2.5rem",
+						letterSpacing: "-0.04em",
+						lineHeight: 1.1,
+						fontWeight: 600,
+						margin: "0 0 0.75rem",
+					}}
+				>
 					Under maintenance
 				</h1>
 				<p style={{ margin: 0, opacity: 0.7, lineHeight: 1.6 }}>

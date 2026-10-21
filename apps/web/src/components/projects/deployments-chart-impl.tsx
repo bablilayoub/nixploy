@@ -1,8 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { useState } from "react";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { QueryState } from "@/components/query-state";
+import { Button } from "@/components/ui/button";
 import {
 	type ChartConfig,
 	ChartContainer,
@@ -28,8 +30,9 @@ const chartConfig = {
 /** Deployments per day (14d), done vs error — dashboard trend panel. */
 export function DeploymentsChart() {
 	const trpc = useTRPC();
+	const [days, setDays] = useState(14);
 	const { data, isPending, isError, error, refetch } = useQuery(
-		trpc.deployment.daily.queryOptions({ days: 14 }),
+		trpc.deployment.daily.queryOptions({ days }),
 	);
 	const rows = (data ?? []).map((row) => ({
 		...row,
@@ -40,12 +43,36 @@ export function DeploymentsChart() {
 	const hasDeployments = rows.some((row) => row.done > 0 || row.error > 0);
 
 	return (
-		<section className="flex h-full min-w-0 flex-col rounded-lg border border-border bg-card p-4 sm:p-5">
-			<div className="mb-4 space-y-1">
-				<h2 className="text-sm font-semibold">Deployment activity</h2>
-				<p className="text-sm text-muted-foreground">Deployments over the last 14 days</p>
+		<section className="surface flex h-full min-w-0 flex-col p-5 sm:p-6">
+			<div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+				<div className="space-y-1">
+					<h2 className="text-base font-semibold tracking-tight">Deployment activity</h2>
+					<p className="text-xs text-muted-foreground">A continuous view of what you ship.</p>
+				</div>
+				<fieldset
+					className="flex min-w-0 max-w-full flex-wrap gap-1 rounded-md border bg-panel-inset p-1"
+					aria-label="Activity period"
+				>
+					{[7, 14, 30].map((period) => (
+						<Button
+							key={period}
+							size="sm"
+							variant={days === period ? "secondary" : "ghost"}
+							aria-pressed={days === period}
+							onClick={() => setDays(period)}
+							className="h-7 px-2 text-xs"
+						>
+							{period} days
+						</Button>
+					))}
+				</fieldset>
 			</div>
-			<div className="ps-2">
+			<p className="sr-only">
+				{rows.reduce((total, row) => total + row.done, 0)} succeeded and{" "}
+				{rows.reduce((total, row) => total + row.error, 0)} failed deployments over the last {days}{" "}
+				days.
+			</p>
+			<div className="min-w-0 ps-2">
 				{isPending ? (
 					<Skeleton className="h-[220px] w-full" />
 				) : isError ? (
@@ -61,22 +88,16 @@ export function DeploymentsChart() {
 					</QueryState>
 				) : !hasDeployments ? (
 					<div className="flex h-[220px] items-center justify-center text-center text-sm text-muted-foreground">
-						No deployments in the last 14 days.
+						No deployments in the last {days} days.
 					</div>
 				) : (
 					<ChartContainer config={chartConfig} className="aspect-auto h-[220px] w-full">
-						<AreaChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-							<defs>
-								<linearGradient id="dash-done" x1="0" y1="0" x2="0" y2="1">
-									<stop offset="0%" stopColor="var(--color-done)" stopOpacity={0.3} />
-									<stop offset="100%" stopColor="var(--color-done)" stopOpacity={0.02} />
-								</linearGradient>
-								<linearGradient id="dash-error" x1="0" y1="0" x2="0" y2="1">
-									<stop offset="0%" stopColor="var(--color-error)" stopOpacity={0.3} />
-									<stop offset="100%" stopColor="var(--color-error)" stopOpacity={0.02} />
-								</linearGradient>
-							</defs>
-							<CartesianGrid strokeDasharray="3 3" vertical={false} />
+						<BarChart
+							aria-label="Daily deployment activity, succeeded and failed"
+							data={rows}
+							margin={{ top: 4, right: 4, bottom: 0, left: 0 }}
+						>
+							<CartesianGrid strokeDasharray="2 6" vertical={false} />
 							<XAxis
 								dataKey="label"
 								tickLine={false}
@@ -94,23 +115,21 @@ export function DeploymentsChart() {
 							/>
 							<ChartTooltip content={<ChartTooltipContent />} />
 							<ChartLegend content={<ChartLegendContent />} />
-							<Area
-								type="monotone"
+							<Bar
 								dataKey="done"
-								stroke="var(--color-done)"
-								fill="url(#dash-done)"
-								strokeWidth={1.5}
+								fill="var(--color-done)"
+								radius={[4, 4, 0, 0]}
+								maxBarSize={32}
 								isAnimationActive={false}
 							/>
-							<Area
-								type="monotone"
+							<Bar
 								dataKey="error"
-								stroke="var(--color-error)"
-								fill="url(#dash-error)"
-								strokeWidth={1.5}
+								fill="var(--color-error)"
+								radius={[4, 4, 0, 0]}
+								maxBarSize={32}
 								isAnimationActive={false}
 							/>
-						</AreaChart>
+						</BarChart>
 					</ChartContainer>
 				)}
 			</div>

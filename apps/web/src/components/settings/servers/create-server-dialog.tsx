@@ -75,7 +75,7 @@ export function CreateServerDialog({
 					<DialogTitle>Add server</DialogTitle>
 					<DialogDescription>Register a remote Docker host reachable over SSH.</DialogDescription>
 				</DialogHeader>
-				<div className="grid gap-4">
+				<div className="grid gap-5">
 					<div className="grid gap-2">
 						<Label htmlFor="server-name">Name</Label>
 						<Input
@@ -93,7 +93,7 @@ export function CreateServerDialog({
 							onChange={(e) => setDescription(e.target.value)}
 						/>
 					</div>
-					<div className="grid grid-cols-2 gap-4">
+					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 						<div className="grid gap-2">
 							<Label htmlFor="server-ip">IP address</Label>
 							<Input
@@ -129,7 +129,7 @@ export function CreateServerDialog({
 							value={sshKeyId ?? "none"}
 							onValueChange={(value) => setSshKeyId(value === "none" ? null : value)}
 						>
-							<SelectTrigger>
+							<SelectTrigger aria-label="SSH key">
 								<SelectValue placeholder="Select an SSH key" />
 							</SelectTrigger>
 							<SelectContent>
@@ -148,7 +148,7 @@ export function CreateServerDialog({
 							value={swarmRole}
 							onValueChange={(value) => setSwarmRole(value as "worker" | "manager")}
 						>
-							<SelectTrigger>
+							<SelectTrigger aria-label="Swarm role">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>

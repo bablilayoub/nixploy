@@ -349,7 +349,7 @@ export function SsoProvidersView() {
 					</DialogHeader>
 
 					<form
-						className="flex flex-col gap-4"
+						className="flex min-w-0 flex-col gap-5"
 						onSubmit={(event) => {
 							event.preventDefault();
 							if (editing) {
@@ -479,6 +479,7 @@ export function SsoProvidersView() {
 							</div>
 						) : null}
 
+						<h3 className="mt-3 border-b pb-3 text-sm font-semibold">Connection</h3>
 						<div className="grid gap-4 sm:grid-cols-2">
 							<div className="flex flex-col gap-1.5">
 								<Label htmlFor="sso-client-id">Client ID</Label>
@@ -536,6 +537,7 @@ export function SsoProvidersView() {
 							</div>
 						</div>
 
+						<h3 className="mt-3 border-b pb-3 text-sm font-semibold">Access</h3>
 						<div className="grid gap-4 sm:grid-cols-2">
 							<div className="flex flex-col gap-1.5">
 								<Label htmlFor="sso-default-org">New users join</Label>

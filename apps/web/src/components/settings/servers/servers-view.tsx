@@ -367,7 +367,7 @@ export function ServersView() {
 								});
 							}
 						}}
-						className="grid gap-4"
+						className="grid gap-5"
 					>
 						<div className="grid gap-2">
 							<Label htmlFor="edit-server-name">Name</Label>
@@ -385,7 +385,7 @@ export function ServersView() {
 								onChange={(e) => setEditDescription(e.target.value)}
 							/>
 						</div>
-						<div className="grid grid-cols-2 gap-4">
+						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 							<div className="grid gap-2">
 								<Label htmlFor="edit-server-ip">IP address</Label>
 								<Input
@@ -424,7 +424,7 @@ export function ServersView() {
 								value={editSshKeyId ?? "none"}
 								onValueChange={(value) => setEditSshKeyId(value === "none" ? null : value)}
 							>
-								<SelectTrigger>
+								<SelectTrigger aria-label="SSH key">
 									<SelectValue placeholder="Select an SSH key" />
 								</SelectTrigger>
 								<SelectContent>
@@ -443,7 +443,7 @@ export function ServersView() {
 								value={editSwarmRole}
 								onValueChange={(value) => setEditSwarmRole(value as "worker" | "manager")}
 							>
-								<SelectTrigger>
+								<SelectTrigger aria-label="Swarm role">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
@@ -456,7 +456,7 @@ export function ServersView() {
 								<HelpLink slug="servers" />
 							</p>
 						</div>
-						<div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2">
+						<div className="flex flex-wrap items-center justify-between gap-4 rounded-md border px-3 py-2">
 							<div className="grid gap-0.5">
 								<Label htmlFor="edit-server-metrics">Metrics history</Label>
 								<p className="text-xs text-muted-foreground">

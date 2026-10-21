@@ -1,6 +1,6 @@
 "use client";
 
-import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSyncedTab } from "@/hooks/use-synced-tab";
 
 import { useApplication } from "./application-context";
@@ -12,7 +12,6 @@ import { RedirectsManager } from "./redirects-manager";
 import { RollbacksManager } from "./rollbacks-manager";
 import { SecurityManager } from "./security-manager";
 import { SwarmConfig } from "./swarm-config";
-import { UnderlineTabsList, UnderlineTabsTrigger } from "./underline-tabs";
 
 const ADVANCED_TABS = [
 	"mounts",
@@ -36,38 +35,41 @@ export function AdvancedTab() {
 
 	return (
 		<Tabs value={tab} onValueChange={selectTab} className="w-full">
-			<UnderlineTabsList>
-				<UnderlineTabsTrigger value="mounts">Mounts</UnderlineTabsTrigger>
-				<UnderlineTabsTrigger value="ports">Ports</UnderlineTabsTrigger>
-				<UnderlineTabsTrigger value="redirects">Redirects</UnderlineTabsTrigger>
-				<UnderlineTabsTrigger value="security">Security</UnderlineTabsTrigger>
-				<UnderlineTabsTrigger value="healthcheck">Healthcheck</UnderlineTabsTrigger>
-				<UnderlineTabsTrigger value="placement">Placement</UnderlineTabsTrigger>
-				<UnderlineTabsTrigger value="swarm">Swarm</UnderlineTabsTrigger>
-				<UnderlineTabsTrigger value="rollbacks">Rollbacks</UnderlineTabsTrigger>
-			</UnderlineTabsList>
-			<TabsContent value="mounts" className="mt-6">
+			<TabsList
+				aria-label="Advanced configuration categories"
+				className="h-auto flex-wrap justify-start overflow-visible"
+			>
+				<TabsTrigger value="mounts">Mounts</TabsTrigger>
+				<TabsTrigger value="ports">Ports</TabsTrigger>
+				<TabsTrigger value="redirects">Redirects</TabsTrigger>
+				<TabsTrigger value="security">Security</TabsTrigger>
+				<TabsTrigger value="healthcheck">Healthcheck</TabsTrigger>
+				<TabsTrigger value="placement">Placement</TabsTrigger>
+				<TabsTrigger value="swarm">Swarm</TabsTrigger>
+				<TabsTrigger value="rollbacks">Rollbacks</TabsTrigger>
+			</TabsList>
+			<TabsContent value="mounts" className="mt-2">
 				<MountsManager target={{ kind: "application", applicationId }} />
 			</TabsContent>
-			<TabsContent value="ports" className="mt-6">
+			<TabsContent value="ports" className="mt-2">
 				<PortsManager applicationId={applicationId} />
 			</TabsContent>
-			<TabsContent value="redirects" className="mt-6">
+			<TabsContent value="redirects" className="mt-2">
 				<RedirectsManager applicationId={applicationId} />
 			</TabsContent>
-			<TabsContent value="security" className="mt-6">
+			<TabsContent value="security" className="mt-2">
 				<SecurityManager applicationId={applicationId} />
 			</TabsContent>
-			<TabsContent value="healthcheck" className="mt-6">
+			<TabsContent value="healthcheck" className="mt-2">
 				<HealthcheckManager application={application} />
 			</TabsContent>
-			<TabsContent value="placement" className="mt-6">
+			<TabsContent value="placement" className="mt-2">
 				<PlacementManager application={application} />
 			</TabsContent>
-			<TabsContent value="swarm" className="mt-6">
+			<TabsContent value="swarm" className="mt-2">
 				<SwarmConfig application={application} />
 			</TabsContent>
-			<TabsContent value="rollbacks" className="mt-6">
+			<TabsContent value="rollbacks" className="mt-2">
 				<RollbacksManager applicationId={applicationId} />
 			</TabsContent>
 		</Tabs>

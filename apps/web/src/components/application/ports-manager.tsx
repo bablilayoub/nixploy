@@ -275,7 +275,7 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 									}))
 								}
 							>
-								<SelectTrigger className="w-full">
+								<SelectTrigger aria-label="Protocol" className="w-full">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
@@ -295,7 +295,7 @@ export function PortsManager({ applicationId }: { applicationId: string }) {
 									}))
 								}
 							>
-								<SelectTrigger className="w-full">
+								<SelectTrigger aria-label="Publish mode" className="w-full">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>

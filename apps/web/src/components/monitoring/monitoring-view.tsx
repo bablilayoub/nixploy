@@ -44,7 +44,7 @@ function HostStat({
 				<div className="h-1 overflow-hidden rounded-full bg-muted">
 					<div
 						className={cn(
-							"h-full rounded-full transition-[width] duration-500",
+							"h-full rounded-full",
 							percent >= 90 ? "bg-destructive" : "bg-foreground/80",
 						)}
 						style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
@@ -128,7 +128,7 @@ function PlatformAlertsCard() {
 						<span
 							className={cn(
 								"mt-1 size-2 shrink-0 rounded-full",
-								alert.severity === "critical" ? "bg-destructive" : "bg-amber-500",
+								alert.severity === "critical" ? "bg-destructive" : "bg-warning",
 							)}
 						/>
 						<div className="min-w-0">
@@ -335,7 +335,7 @@ export function MonitoringView({ embedded = false }: { embedded?: boolean } = {}
 				<section className="min-w-0 rounded-lg border">
 					{selected ? (
 						<>
-							<div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+							<div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5">
 								<div className="min-w-0">
 									<p className="truncate text-sm font-medium">{selected.name}</p>
 									<p className="truncate font-mono text-xs text-muted-foreground">

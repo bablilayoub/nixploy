@@ -168,7 +168,7 @@ export function TemplateSourcesView() {
 	});
 
 	return (
-		<div className="flex flex-col gap-6">
+		<div className="flex min-w-0 flex-col gap-7">
 			<PageHeader
 				title="Templates"
 				description="Bring your own template catalogs alongside the built-in ones."
@@ -192,7 +192,7 @@ export function TemplateSourcesView() {
 						</DialogTrigger>
 						<DialogContent>
 							<form
-								className="grid gap-4"
+								className="grid gap-5"
 								onSubmit={(event) => {
 									event.preventDefault();
 									if (!canManage || createMutation.isPending) return;
@@ -214,7 +214,7 @@ export function TemplateSourcesView() {
 										<HelpLink slug="templates" />
 									</DialogDescription>
 								</DialogHeader>
-								<div className="grid gap-4">
+								<div className="grid gap-5">
 									<div className="grid gap-2">
 										<Label htmlFor="source-name">Name</Label>
 										<Input

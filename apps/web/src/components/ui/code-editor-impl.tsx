@@ -1,10 +1,11 @@
 "use client";
 
 import type { Extension } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 import CodeMirror, { type ReactCodeMirrorProps } from "@uiw/react-codemirror";
 import { Eye, Pencil } from "lucide-react";
 import { useTheme } from "next-themes";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useMounted } from "@/hooks/use-mounted";
@@ -13,6 +14,8 @@ import { cn } from "@/lib/utils";
 
 export type CodeEditorProps = Omit<ReactCodeMirrorProps, "theme" | "editable" | "readOnly"> & {
 	className?: string;
+	/** Contextual name for the actual editable region. */
+	label: string;
 	/**
 	 * Soft-lock with a blurred overlay until the user clicks Edit/View.
 	 * Default true. Permanently read-only surfaces still use a View unlock.
@@ -34,6 +37,7 @@ export type CodeEditorProps = Omit<ReactCodeMirrorProps, "theme" | "editable" | 
  */
 export function CodeEditor({
 	className,
+	label,
 	extensions,
 	protect = true,
 	locked: lockedProp,
@@ -47,6 +51,8 @@ export function CodeEditor({
 }: CodeEditorProps) {
 	const { resolvedTheme } = useTheme();
 	const mounted = useMounted();
+	const editor = useRef<EditorView | null>(null);
+	const unlockRequested = useRef(false);
 	const [unlockedInternal, setUnlockedInternal] = useState(!protect);
 
 	const isControlled = lockedProp !== undefined;
@@ -66,7 +72,14 @@ export function CodeEditor({
 
 	const isDark = mounted ? resolvedTheme === "dark" : true;
 	const theme = isDark ? nixployCodeMirrorDark : nixployCodeMirrorLight;
+	useEffect(() => {
+		if (!locked && unlockRequested.current) {
+			editor.current?.focus();
+			unlockRequested.current = false;
+		}
+	}, [locked]);
 	const mergedExtensions: Extension[] = [
+		EditorView.contentAttributes.of({ "aria-label": label }),
 		...(Array.isArray(extensions) ? extensions : extensions ? [extensions] : []),
 	];
 
@@ -83,12 +96,15 @@ export function CodeEditor({
 	return (
 		<div
 			className={cn(
-				"relative overflow-hidden rounded-lg border border-border bg-card transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25 [&_.cm-editor]:outline-none",
+				"relative overflow-hidden rounded-lg border border-border bg-control shadow-[var(--surface-shadow)] transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25 [&_.cm-editor]:outline-none",
 				className,
 			)}
 		>
 			<CodeMirror
 				theme={theme}
+				onCreateEditor={(view) => {
+					editor.current = view;
+				}}
 				extensions={mergedExtensions}
 				editable={canEdit}
 				readOnly={!canEdit}
@@ -99,7 +115,14 @@ export function CodeEditor({
 			{protect && locked && (
 				<div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/60 backdrop-blur-sm">
 					<div className="flex flex-wrap items-center justify-center gap-2">
-						<Button type="button" size="sm" onClick={() => setLocked(false)}>
+						<Button
+							type="button"
+							size="sm"
+							onClick={() => {
+								unlockRequested.current = true;
+								setLocked(false);
+							}}
+						>
 							<UnlockIcon className="size-3.5" />
 							{unlockLabel}
 						</Button>
