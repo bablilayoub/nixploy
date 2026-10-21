@@ -134,7 +134,7 @@ function PreviewHosts({ preview }: { preview: PreviewDeployment }) {
 					href={`${domain.https ? "https" : "http"}://${domain.host}`}
 					target="_blank"
 					rel="noreferrer"
-					className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+					className="inline-flex items-center gap-1 text-sm text-brand hover:underline"
 				>
 					{domain.host}
 					<ExternalLink className="size-3" />

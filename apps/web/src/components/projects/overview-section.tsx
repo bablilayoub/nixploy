@@ -3,11 +3,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Container, FolderGit2, Rocket, Server } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { StatusDot } from "@/components/shell";
+import { Button } from "@/components/ui/button";
 import { DateTime } from "@/components/ui/date-time";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCapabilities } from "@/hooks/use-capabilities";
@@ -32,10 +33,10 @@ function StatPanel({
 	className?: string;
 }) {
 	return (
-		<div className={cn("rounded-lg border border-border bg-card p-4", className)}>
+		<div className={cn("min-w-0 p-4 sm:px-5 sm:py-5", className)}>
 			<div className="flex items-center justify-between gap-2">
-				<p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
-				{icon}
+				<p className="text-xs leading-relaxed font-medium text-muted-foreground">{label}</p>
+				<span className="hidden shrink-0 sm:inline-flex">{icon}</span>
 			</div>
 			<div className="mt-1 text-xl font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-2xl">
 				{isPending ? <Skeleton className="h-7 w-14 sm:h-8 sm:w-16" /> : (value ?? 0)}
@@ -75,7 +76,11 @@ export function OverviewCards() {
 	const deployments = data?.deploymentsLastDay;
 
 	return (
-		<div className={cn("grid grid-cols-2 gap-3", showDocker ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
+		<div
+			className={cn(
+				"grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] overflow-hidden rounded-lg border bg-card [&>*]:border-border [&>*+*]:border-s",
+			)}
+		>
 			<StatPanel
 				label="Projects"
 				value={data?.projectCount}
@@ -84,7 +89,6 @@ export function OverviewCards() {
 			/>
 			<StatPanel
 				label="Services"
-				className="bg-muted/30"
 				value={services?.total}
 				isPending={isPending}
 				icon={<Server className="size-4 text-muted-foreground" />}
@@ -109,7 +113,6 @@ export function OverviewCards() {
 			/>
 			<StatPanel
 				label="Deployments (24h)"
-				className={!showDocker ? "col-span-2 lg:col-span-1" : undefined}
 				value={deployments?.total}
 				isPending={isPending}
 				icon={<Rocket className="size-4 text-muted-foreground" />}
@@ -146,10 +149,10 @@ function DockerStatPanel() {
 	return (
 		<Link
 			href="/dashboard/docker"
-			className="block rounded-lg border border-border bg-card p-4 transition-colors hover:border-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+			className="hidden min-w-0 p-4 transition-colors hover:bg-row-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:block sm:px-5 sm:py-5"
 		>
 			<div className="flex items-center justify-between gap-2">
-				<p className="truncate text-xs font-medium text-muted-foreground">Docker</p>
+				<p className="text-xs leading-relaxed font-medium text-muted-foreground">Docker</p>
 				<Container className="size-4 text-muted-foreground" />
 			</div>
 			<div className="mt-1 text-xl font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-2xl">
@@ -176,17 +179,19 @@ export function RecentDeployments() {
 	// while something is queued or running instead of every 10 s forever, and
 	// every deploy mutation invalidates it, so the list still updates live.
 	const { deployments: all, isPending, isError, error, refetch } = useRunningDeployments();
-	const deployments = all.slice(0, 8);
+	const [showMore, setShowMore] = useState(false);
+	const recent = all.slice(0, 8);
+	const deployments = showMore ? recent : recent.slice(0, 3);
 
 	return (
-		<section className="flex h-full min-w-0 flex-col rounded-lg border border-border bg-card p-4 sm:p-5">
+		<section className="min-w-0">
 			<div className="mb-4 space-y-1">
-				<h2 className="text-sm font-semibold">Recent deployments</h2>
+				<h2 className="text-base font-semibold">Recent deployments</h2>
 				{/* Static text: branching this on `isPending` made the server (which
 				    renders with the prefetched data) and the client's first paint
 				    disagree, which cost a hydration error on every dashboard load.
 				    Loading and empty already have their own states below. */}
-				<p className="text-sm text-muted-foreground">Latest across your organization</p>
+				<p className="text-xs text-muted-foreground">Latest across accessible projects</p>
 			</div>
 			<QueryState
 				isPending={isPending}
@@ -227,12 +232,14 @@ export function RecentDeployments() {
 						const name = deployment.service.name ?? deployment.service.appName ?? "Service";
 						const inner = (
 							<>
-								<span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/50">
+								<span className="flex w-4 shrink-0 items-center justify-center self-stretch border-s border-border ps-4">
 									<StatusDot status={deploymentStatusDot[deployment.status] ?? "neutral"} />
 								</span>
-								<div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1">
-									<p className="min-w-0 text-sm leading-5 font-medium wrap-anywhere">{name}</p>
-									<span className="text-xs leading-5 font-medium">
+								<div className="flex min-w-0 flex-1 flex-col gap-1">
+									<p className="min-w-0 text-[0.8125rem] leading-5 font-medium wrap-anywhere">
+										{name}
+									</p>
+									<span className="text-xs leading-5 text-muted-foreground">
 										{deploymentStatusLabel[deployment.status] ?? deployment.status}
 									</span>
 									<p className="col-span-2 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
@@ -248,7 +255,7 @@ export function RecentDeployments() {
 							<Link
 								key={deployment.deploymentId}
 								href={href}
-								className="flex items-center gap-3 rounded-md px-2 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+								className="flex items-start gap-3 rounded-md py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 							>
 								{inner}
 							</Link>
@@ -260,6 +267,18 @@ export function RecentDeployments() {
 					})}
 				</div>
 			</QueryState>
+			{recent.length > 3 ? (
+				<Button
+					type="button"
+					variant="ghost"
+					size="sm"
+					className="mt-2 h-auto max-w-full py-2 text-start whitespace-normal text-brand"
+					aria-expanded={showMore}
+					onClick={() => setShowMore((current) => !current)}
+				>
+					{showMore ? "Show fewer deployments" : `Show ${recent.length} deployments`}
+				</Button>
+			) : null}
 		</section>
 	);
 }

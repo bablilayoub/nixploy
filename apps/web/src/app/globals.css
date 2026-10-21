@@ -7,8 +7,8 @@
 @theme inline {
 	--radius-sm: calc(var(--radius) - 2px);
 	--radius-md: var(--radius);
-	--radius-lg: calc(var(--radius) + 2px);
-	--radius-xl: calc(var(--radius) + 6px);
+	--radius-lg: calc(var(--radius) + 4px);
+	--radius-xl: calc(var(--radius) + 7px);
 	--radius-2xl: calc(var(--radius) + 10px);
 	--radius-3xl: calc(var(--radius) + 14px);
 	--radius-4xl: calc(var(--radius) + 18px);
@@ -24,6 +24,10 @@
 	--color-popover-foreground: var(--popover-foreground);
 	--color-primary: var(--primary);
 	--color-primary-foreground: var(--primary-foreground);
+	--color-primary-hover: var(--primary-hover);
+	--color-surface-hover: var(--studio-hover);
+	--color-row-hover: var(--studio-row-hover);
+	--color-overlay: var(--studio-backdrop);
 	--color-brand: var(--brand);
 	--color-secondary: var(--secondary);
 	--color-secondary-foreground: var(--secondary-foreground);
@@ -32,6 +36,8 @@
 	--color-accent: var(--accent);
 	--color-accent-foreground: var(--accent-foreground);
 	--color-destructive: var(--destructive);
+	--color-destructive-fill: var(--destructive-fill);
+	--color-destructive-hover: var(--destructive-hover);
 	--color-border: var(--border);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
@@ -58,45 +64,65 @@
 }
 
 :root {
-	--radius: 0.625rem;
-	/* Compatibility aliases keep new workflows on the familiar neutral palette. */
+	/* Studio primitives: semantic roles below are shared by every panel surface. */
+	--studio-canvas: #f7f8fa;
+	--studio-surface: #ffffff;
+	--studio-soft: #f4f6fa;
+	--studio-hover: #f6f7fa;
+	--studio-row-hover: #fafbfe;
+	--studio-text: #20242c;
+	--studio-support: #667081;
+	--studio-line: #e5e8ed;
+	--studio-control: #c6ceda;
+	--studio-link: #285bd9;
+	--studio-action: #285bd9;
+	--studio-action-hover: #224fc0;
+	--studio-focus: #285bd9;
+	--studio-tint: #eef3ff;
+	--studio-success: #1d7053;
+	--studio-warning: #81500f;
+	--studio-error: #a43b43;
+	--studio-chart: #8295b1;
+	--studio-chart-line: #96a7bd;
+	--studio-backdrop: #18223366;
+	--studio-toast: #202b3c;
+	--studio-toast-text: #ffffff;
+	--radius: 0.4375rem;
+	--background: var(--studio-canvas);
+	--foreground: var(--studio-text);
+	--card: var(--studio-surface);
+	--card-foreground: var(--foreground);
+	--popover: var(--studio-surface);
+	--popover-foreground: var(--foreground);
+	--primary: var(--studio-action);
+	--primary-hover: var(--studio-action-hover);
+	--primary-foreground: #ffffff;
+	--brand: var(--studio-link);
+	--secondary: var(--studio-soft);
+	--secondary-foreground: var(--foreground);
+	--muted: var(--studio-soft);
+	--muted-foreground: var(--studio-support);
+	--accent: var(--studio-tint);
+	--accent-foreground: var(--foreground);
+	--destructive: var(--studio-error);
+	--destructive-fill: #ba4a52;
+	--destructive-hover: color-mix(in srgb, var(--destructive-fill) 90%, black);
+	--border: var(--studio-line);
+	--input: var(--studio-control);
+	--ring: var(--studio-focus);
 	--control: var(--input);
 	--panel-inset: var(--muted);
 	--selection: var(--accent);
 	--chart-axis: var(--muted-foreground);
-	--background: #fafafa;
-	--foreground: #1c1917;
-	--card: #ffffff;
-	--card-foreground: #1c1917;
-	--popover: #ffffff;
-	--popover-foreground: #1c1917;
-	--primary: #1c1917;
-	--primary-foreground: #fafaf9;
-	/* Organization accent (UX audit F34). Defaults to --primary, so the panel
-	   stays monochrome until a white-label accent is saved; OrgBrandingProvider
-	   overrides it on the root element. */
-	--brand: var(--primary);
-	--secondary: #f5f5f4;
-	--secondary-foreground: #1c1917;
-	--muted: #f5f5f4;
-	--muted-foreground: #78716c;
-	--accent: #f5f5f4;
-	--accent-foreground: #1c1917;
-	--destructive: #dc2626;
-	--border: #e7e5e4;
-	--input: #e7e5e4;
-	--ring: #a8a29e;
-	--success: #16a34a;
-	--warning: #d97706;
-	--info: #2563eb;
-	/* Monochrome series: steps of the foreground, readable on both themes. */
-	--chart-1: var(--foreground);
-	--chart-2: color-mix(in oklab, var(--foreground) 70%, transparent);
-	--chart-3: color-mix(in oklab, var(--foreground) 55%, transparent);
-	--chart-4: color-mix(in oklab, var(--foreground) 40%, transparent);
-	--chart-5: color-mix(in oklab, var(--foreground) 25%, transparent);
-	/* Match shadcn-admin: sidebar tracks page bg so inset gutters read as one canvas */
-	--sidebar: var(--background);
+	--success: var(--studio-success);
+	--warning: var(--studio-warning);
+	--info: var(--studio-link);
+	--chart-1: var(--studio-chart-line);
+	--chart-2: var(--studio-chart);
+	--chart-3: var(--muted-foreground);
+	--chart-4: var(--foreground);
+	--chart-5: var(--primary);
+	--sidebar: var(--card);
 	--sidebar-foreground: var(--foreground);
 	--sidebar-primary: var(--primary);
 	--sidebar-primary-foreground: var(--primary-foreground);
@@ -104,32 +130,75 @@
 	--sidebar-accent-foreground: var(--accent-foreground);
 	--sidebar-border: var(--border);
 	--sidebar-ring: var(--ring);
+	color-scheme: light;
 }
 
 .dark {
-	/* Deeper canvas so cards actually lift (Vercel zinc-ish). */
-	--background: #09090b;
-	--foreground: #fafafa;
-	--card: #121214;
-	--card-foreground: #fafafa;
-	--popover: #18181b;
-	--popover-foreground: #fafafa;
-	--primary: #fafafa;
-	--primary-foreground: #09090b;
-	--brand: var(--primary);
-	--secondary: #1c1c1f;
-	--secondary-foreground: #fafafa;
-	--muted: #1c1c1f;
-	--muted-foreground: #a1a1aa;
-	--accent: #1c1c1f;
-	--accent-foreground: #fafafa;
-	--destructive: #f87171;
-	--border: rgb(255 255 255 / 10%);
-	--input: rgb(255 255 255 / 12%);
-	--ring: #71717a;
-	--success: #4ade80;
-	--warning: #fbbf24;
-	--info: #60a5fa;
+	--studio-canvas: #15171c;
+	--studio-surface: #1d2027;
+	--studio-soft: #272d38;
+	--studio-hover: #282e39;
+	--studio-row-hover: #232833;
+	--studio-text: #edf0f5;
+	--studio-support: #aeb8c9;
+	--studio-line: #343b47;
+	--studio-control: #515e73;
+	--studio-link: #9bb8ff;
+	--studio-action: #3265df;
+	--studio-action-hover: #285bd9;
+	--studio-focus: #a9c1ff;
+	--studio-tint: #293854;
+	--studio-success: #79cba6;
+	--studio-warning: #e3b97c;
+	--studio-error: #f2a1aa;
+	--studio-chart: #8297ba;
+	--studio-chart-line: #8da4c6;
+	--studio-backdrop: #07090cb8;
+	--studio-toast: #e2e9f6;
+	--studio-toast-text: #172136;
+	color-scheme: dark;
+}
+
+/* Navigation follows available space in em, including enlarged text. */
+.workspace-container,
+.workspace-header {
+	container-type: inline-size;
+}
+@container (min-width: 80em) {
+	.workspace-desktop-nav {
+		display: flex;
+	}
+	.workspace-menu-trigger {
+		display: none;
+	}
+}
+
+.workspace-header-search,
+.workspace-header-account {
+	display: none;
+}
+@container (min-width: 48em) {
+	.workspace-header-search,
+	.workspace-header-account {
+		display: block;
+	}
+}
+
+/* A readable project column takes priority over keeping the activity rail beside it. */
+@container (min-width: 45em) {
+	.workspace-columns {
+		grid-template-columns: minmax(0, 1fr) 235px;
+	}
+}
+@container (min-width: 59.5em) {
+	.workspace-columns {
+		grid-template-columns: minmax(0, 1fr) 270px;
+	}
+}
+@container (min-width: 74.5em) {
+	.workspace-columns {
+		grid-template-columns: minmax(0, 1fr) 304px;
+	}
 }
 
 @layer base {
@@ -258,12 +327,14 @@ body[data-activity-tray="1"] [data-sonner-toaster][data-y-position="bottom"] {
 	[data-slot="select-trigger"],
 	[data-slot="tabs-trigger"],
 	[data-slot="dialog-close"],
+	[data-slot="sheet-close"],
 	[data-slot="dropdown-menu-item"],
 	[data-slot="select-item"] {
 		min-height: 2.75rem;
 	}
 	[data-slot="button"][data-size^="icon"],
 	[data-slot="dialog-close"],
+	[data-slot="sheet-close"],
 	[data-slot="command-palette-trigger-mobile"] {
 		min-width: 2.75rem;
 		min-height: 2.75rem;

@@ -55,7 +55,10 @@ export function SettingsSection({
 		return (
 			<section
 				id={id}
-				className={cn("scroll-mt-24 rounded-lg border border-destructive/40 p-4 sm:p-5", className)}
+				className={cn(
+					"scroll-mt-24 rounded-lg border border-destructive/40 bg-card p-4 sm:p-5",
+					className,
+				)}
 			>
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
 					{heading}
@@ -76,7 +79,7 @@ export function SettingsSection({
 				id={id}
 				className={cn(
 					"w-full scroll-mt-24",
-					bare ? "py-1" : "rounded-lg border border-border p-4 sm:p-5",
+					bare ? "py-1" : "rounded-lg border border-border bg-card p-4 sm:p-5",
 					className,
 				)}
 			>
@@ -97,7 +100,7 @@ export function SettingsSection({
 		<section
 			id={id}
 			className={cn(
-				"w-full scroll-mt-24 rounded-lg border border-border p-4 sm:p-5",
+				"w-full scroll-mt-24 rounded-lg border border-border bg-card p-4 sm:p-5",
 				// The heading column is fixed so headings line up down the page; the
 				// body takes whatever is left and never drops below its own minimum.
 				"lg:grid lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:gap-8",

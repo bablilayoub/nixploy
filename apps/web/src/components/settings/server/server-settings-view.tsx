@@ -254,7 +254,7 @@ function DashboardDomainFields({
 					href={`https://${savedDomain}`}
 					target="_blank"
 					rel="noreferrer"
-					className="inline-flex w-fit items-center gap-1 text-sm font-medium text-primary hover:underline"
+					className="inline-flex w-fit items-center gap-1 text-sm font-medium text-brand hover:underline"
 				>
 					https://{savedDomain}
 					<ExternalLink className="size-3.5" />
