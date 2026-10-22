@@ -24,6 +24,4 @@ export const site = {
 		"curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash",
 	installWithDomain:
 		"NIXPLOY_DOMAIN=panel.example.com NIXPLOY_LETSENCRYPT_EMAIL=you@example.com curl -fsSL https://raw.githubusercontent.com/bablilayoub/nixploy/main/install.sh | sudo bash",
-	/** Short credit — About page only. */
-	inspiredBy: "Inspired by the self-hosted deploy tools that came before — built to be better.",
 } as const;

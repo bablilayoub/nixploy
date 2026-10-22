@@ -46,11 +46,13 @@ function CompareBody({ entry }: { entry: Comparison }) {
 	return (
 		<PageFrame eyebrow="Compare" title={`Nixploy vs ${entry.name}`} description={entry.headline}>
 			<Card className="mx-auto max-w-3xl p-6 text-center text-sm text-muted-foreground">
-				Every claim about {entry.name} below links to where it was read, and was read rather than
-				remembered — last checked <span className="text-foreground">{VERIFIED_ON}</span>. These
-				projects ship weekly, so if something here is out of date,{" "}
-				<ProseLink href={`${site.github}/issues`}>tell us</ProseLink> and it gets fixed. We have not
-				included opinions about anybody&apos;s reliability or security history.
+				<p>
+					Every claim about {entry.name} below links to where it was read, and was read rather than
+					remembered — last checked <span className="text-foreground">{VERIFIED_ON}</span>. These
+					projects ship weekly, so if something here is out of date,{" "}
+					<ProseLink href={`${site.github}/issues`}>tell us</ProseLink> and it gets fixed. We have
+					not included opinions about anybody&apos;s reliability or security history.
+				</p>
 			</Card>
 
 			<div className="mt-12 grid gap-4 lg:grid-cols-12">
@@ -66,7 +68,7 @@ function CompareBody({ entry }: { entry: Comparison }) {
 					<CardContent>
 						<dl className="flex flex-col gap-5">
 							<div>
-								<Label>GitHub stars</Label>
+								<Label>GitHub stars at source review</Label>
 								<dd className="mt-2">{entry.stars} · Nixploy has 3</dd>
 							</div>
 							<div>
@@ -82,9 +84,9 @@ function CompareBody({ entry }: { entry: Comparison }) {
 
 			<section className="mt-20">
 				<h2 className="text-3xl font-semibold tracking-tight lg:text-4xl">Where they differ</h2>
-				<div className="mt-8 flex flex-col gap-4">
+				<div className="mt-8 flex flex-col">
 					{entry.facts.map((fact) => (
-						<Card key={fact.label} className="p-6">
+						<section key={fact.label} className="signal-comparison-fact">
 							<h3 className="font-medium">{fact.label}</h3>
 							<dl className="mt-4 grid gap-6 sm:grid-cols-2">
 								<div>
@@ -98,7 +100,7 @@ function CompareBody({ entry }: { entry: Comparison }) {
 									<dd className="mt-2 text-sm">{fact.ours}</dd>
 								</div>
 							</dl>
-						</Card>
+						</section>
 					))}
 				</div>
 			</section>

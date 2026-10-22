@@ -2,6 +2,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { SectionRail } from "@/components/section-rail";
 import { Cta } from "@/components/sections/cta";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNavbar } from "@/components/site-navbar";
@@ -21,6 +22,7 @@ import { cn } from "@/lib/utils";
 function NavList({ activeHref }: { activeHref: string }) {
 	return (
 		<div className="flex flex-col gap-7">
+			<p className="px-3 pb-2 font-mono text-xs text-primary">Nixploy / developer docs</p>
 			{docsNav.map((group) => (
 				<div key={group.title}>
 					<p className="px-3 text-xs font-medium text-foreground normal-case">{group.title}</p>
@@ -101,7 +103,7 @@ export function DocsFrame({
 			<SiteNavbar />
 			<main
 				id="main-content"
-				className="container-page pt-28 pb-20 lg:grid lg:grid-cols-[208px_minmax(0,1fr)] lg:gap-10 lg:pt-32 xl:grid-cols-[208px_minmax(0,1fr)_200px] xl:gap-12"
+				className="signal-docs container-page pt-28 pb-20 lg:grid lg:grid-cols-[208px_minmax(0,1fr)] lg:gap-10 lg:pt-32 xl:grid-cols-[208px_minmax(0,1fr)_200px] xl:gap-12"
 			>
 				<aside className="hidden lg:block">
 					<nav
@@ -148,21 +150,11 @@ export function DocsFrame({
 
 				{headings.length > 1 ? (
 					<aside className="hidden xl:block">
-						<nav aria-label="On this page" className="sticky top-24">
-							<p className="text-xs font-medium text-foreground normal-case">On this page</p>
-							<ul className="mt-3 flex flex-col border-l">
-								{headings.map((heading) => (
-									<li key={heading.id}>
-										<a
-											href={`#${heading.id}`}
-											className="-ml-px flex min-h-11 items-center border-l border-transparent py-1 pl-3 text-sm text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
-										>
-											{heading.text}
-										</a>
-									</li>
-								))}
-							</ul>
-						</nav>
+						<SectionRail
+							title="On this page"
+							items={headings.map((heading) => ({ id: heading.id, label: heading.text }))}
+							className="sticky top-24"
+						/>
 					</aside>
 				) : null}
 			</main>

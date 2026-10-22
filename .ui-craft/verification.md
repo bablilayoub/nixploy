@@ -2,6 +2,13 @@
 
 Fieldwork replaces the rejected monochrome design across the panel, auth/public surfaces and marketing/docs. The build uses the existing shadcn/Radix/Recharts/Lucide stack with Geist and Geist Mono from Next's existing font support. No product dependency, schema, deploy-engine, tenancy or API change was introduced.
 
+## Latest public website pass — 2026-10-23
+
+[signal-website.md](signal-website.md) records the modern technical rebuild of the
+whole public website, with its own route, reflow, interaction and motion evidence.
+It supersedes the marketing direction below. Panel Fieldwork is unchanged. The
+following sections retain their original rollout checkpoints.
+
 ## Detailed follow-up
 
 The later page-specific pass is recorded in [refinement.md](refinement.md). The

@@ -15,6 +15,8 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 
+import { DeploymentPath } from "@/components/deployment-path";
+import { Reveal } from "@/components/motion-provider";
 import { PageFrame, ProseLink } from "@/components/page-frame";
 import { SectionRail } from "@/components/section-rail";
 import { Button } from "@/components/ui/button";
@@ -76,7 +78,8 @@ export default function FeaturesPage() {
 			{/* One panel with cells rather than six cards: these are six facts of
 			    the same kind, and six bordered boxes made them look like six
 			    features. */}
-			<section aria-labelledby="at-a-glance">
+			<DeploymentPath compact />
+			<section className="mt-12" aria-labelledby="at-a-glance">
 				<h2 id="at-a-glance" className="sr-only">
 					At a glance
 				</h2>
@@ -120,10 +123,10 @@ export default function FeaturesPage() {
 								key={section.id}
 								id={section.id}
 								aria-labelledby={`${section.id}-title`}
-								className="scroll-mt-28 border-t pt-10 first:border-t-0 first:pt-0"
+								className="signal-feature-section scroll-mt-28 border-t pt-10 first:border-t-0 first:pt-0"
 							>
-								<div className="grid gap-10 lg:grid-cols-12 lg:items-start">
-									<div className="lg:col-span-5">
+								<Reveal className="grid gap-10 lg:grid-cols-12 lg:items-start">
+									<div className={section.image ? "lg:col-span-5" : "max-w-3xl lg:col-span-12"}>
 										<p className="inline-flex items-center gap-2 text-sm font-medium">
 											<span className="font-mono text-xs text-muted-foreground">
 												{String(index + 1).padStart(2, "0")}
@@ -172,7 +175,7 @@ export default function FeaturesPage() {
 											</Card>
 										</div>
 									) : null}
-								</div>
+								</Reveal>
 
 								{/* The detail cards run the full width under the row, whether or
 							    not the section has a screenshot. Beside it, they left half of

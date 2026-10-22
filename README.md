@@ -8,7 +8,7 @@
 <h1 align="center">Nixploy</h1>
 
 <p align="center">
-  <strong>Ship your work. Own the whole stack.</strong><br />
+  <strong>From your code. To your cloud.</strong><br />
   Deploy applications, Compose stacks and databases on your own servers. One workspace for releases, domains, logs and backups.
 </p>
 

@@ -20,9 +20,11 @@ import { cn } from "@/lib/utils";
 export function SectionRail({
 	items,
 	className,
+	title = "Sections",
 }: {
 	items: ReadonlyArray<{ id: string; label: string }>;
 	className?: string;
+	title?: string;
 }) {
 	const [current, setCurrent] = useState<string | null>(null);
 
@@ -48,7 +50,7 @@ export function SectionRail({
 	return (
 		<nav aria-label="On this page" className={className}>
 			<p className="px-3 font-mono text-[11px] tracking-[0.18em] text-muted-foreground normal-case">
-				Sections
+				{title}
 			</p>
 			<ul className="mt-3 flex flex-col">
 				{items.map((item, index) => {
@@ -61,7 +63,7 @@ export function SectionRail({
 								className={cn(
 									"flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm transition-colors",
 									active
-										? "bg-accent font-medium text-foreground"
+										? "bg-accent font-medium text-primary"
 										: "text-muted-foreground hover:text-foreground",
 								)}
 							>

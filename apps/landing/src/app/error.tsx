@@ -19,8 +19,8 @@ export default function LandingError({
 				id="main-content"
 				className="container-page flex min-h-[70svh] flex-col items-start justify-center gap-5 pt-28 pb-16"
 			>
-				<p className="text-xs text-muted-foreground normal-case">Something interrupted this page</p>
-				<h1 className="max-w-2xl text-4xl leading-tight font-semibold tracking-[-0.04em]">
+				<p className="signal-kicker">Something interrupted this page</p>
+				<h1 className="max-w-2xl text-5xl leading-tight font-medium tracking-[-0.04em]">
 					Let’s try that again.
 				</h1>
 				<p className="max-w-lg text-base leading-relaxed text-muted-foreground">

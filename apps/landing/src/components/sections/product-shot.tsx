@@ -32,8 +32,19 @@ export function ProductShot() {
 		<section
 			id="workspace"
 			aria-label="Explore the Nixploy workspace"
-			className="container-page scroll-mt-24 pb-16 lg:pb-24"
+			className="signal-product container-page scroll-mt-24"
 		>
+			<div className="signal-product-heading">
+				<h2>
+					A clear view.
+					<br />
+					<span className="text-muted-foreground">Of the whole stack.</span>
+				</h2>
+				<p>
+					Projects, releases and operations, connected in one workspace. Explore the actual panel
+					below.
+				</p>
+			</div>
 			<Tabs.Root
 				defaultValue="workspace"
 				className="overflow-hidden rounded-xl border bg-card shadow-[var(--surface-shadow)]"

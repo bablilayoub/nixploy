@@ -35,18 +35,10 @@ const columns = [
 	},
 ] as const;
 
-/**
- * The footer is a panel, not a strip: one rounded surface holding the columns,
- * the legal line, and the wordmark set large enough to end the page.
- *
- * The wordmark is decoration — `aria-hidden`, unselectable, clipped by the
- * panel and faded into it, so it reads as a watermark rather than a heading a
- * screen reader has to announce. It is sized in `vw` and the panel hides its
- * overflow, which is what keeps it from widening the page at any viewport.
- */
+/** Shared sitemap and a restrained wordmark close the public site. */
 export function SiteFooter() {
 	return (
-		<footer className="border-t bg-card pt-12 pb-6">
+		<footer className="signal-footer">
 			<div className="container-page px-0">
 				<div className="relative overflow-hidden px-0 pt-4">
 					<div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-12">
@@ -108,6 +100,12 @@ export function SiteFooter() {
 						</p>
 					</div>
 				</div>
+			</div>
+			<div className="container-page signal-footer-wordmark">
+				<span aria-hidden="true">nixploy.</span>
+				<span className="pb-2 text-xs text-muted-foreground">
+					Your infrastructure. Every layer.
+				</span>
 			</div>
 		</footer>
 	);

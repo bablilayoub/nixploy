@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { Reveal } from "@/components/motion-provider";
 import { Cta } from "@/components/sections/cta";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteNavbar } from "@/components/site-navbar";
@@ -50,21 +51,21 @@ export function PageFrame({
 	close?: boolean;
 }) {
 	return (
-		<div className="relative min-h-screen">
+		<div className="signal-page relative min-h-screen">
 			<SiteNavbar />
 			<main id="main-content" className="relative">
 				{title ? (
-					<header className="relative border-b pt-32 pb-12 lg:pt-40 lg:pb-16">
-						<div className={cn("container-page relative", width === "prose" && "max-w-3xl")}>
+					<header className="signal-page-hero">
+						<Reveal
+							className={cn("container-page relative z-10", width === "prose" && "max-w-3xl")}
+						>
 							{mark ? (
 								<span className="mb-5 inline-flex size-14 items-center justify-center rounded-xl border bg-card">
 									{mark}
 								</span>
 							) : null}
-							{eyebrow ? (
-								<p className="text-xs text-muted-foreground normal-case">{eyebrow}</p>
-							) : null}
-							<h1 className="mt-4 max-w-3xl text-4xl leading-[1.08] font-medium tracking-[-0.045em] text-balance sm:text-5xl lg:text-6xl">
+							{eyebrow ? <p className="signal-kicker">{eyebrow}</p> : null}
+							<h1 className="mt-4 max-w-5xl text-4xl leading-[1.08] font-medium tracking-[-0.045em] text-balance sm:text-5xl lg:text-6xl">
 								{title}
 							</h1>
 							{description ? (
@@ -73,17 +74,17 @@ export function PageFrame({
 								</p>
 							) : null}
 							{actions ? <div className="mt-8 flex flex-wrap gap-3">{actions}</div> : null}
-						</div>
+						</Reveal>
 					</header>
 				) : null}
 				<div
 					className={cn(
-						"container-page pb-16",
+						"signal-page-body container-page",
 						width === "prose" && "max-w-3xl",
 						title ? "pt-12" : "pt-24 lg:pt-28",
 					)}
 				>
-					{children}
+					<div className="min-w-0">{children}</div>
 				</div>
 			</main>
 			{close ? <Cta /> : null}

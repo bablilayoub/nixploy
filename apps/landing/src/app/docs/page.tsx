@@ -1,12 +1,10 @@
 import { ArrowRight, DatabaseBackup, Globe, Rocket, Terminal } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
-
 import { DocsFrame } from "@/components/docs-frame";
-import { CodeBlock } from "@/components/ui/code-block";
+import { InstallCommand } from "@/components/install-command";
 import { docsNav } from "@/lib/docs/nav";
 import { docsPages } from "@/lib/docs/pages";
-import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
 	title: "Docs — Nixploy",
@@ -57,18 +55,18 @@ const groupSummaries: Record<string, string> = {
 export default function DocsIndexPage() {
 	return (
 		<DocsFrame activeHref="/docs">
-			<article>
+			<article className="signal-docs-index">
 				<p className="text-xs text-muted-foreground normal-case">Docs</p>
 				<h1 className="mt-4 text-4xl leading-[1.1] font-semibold tracking-[-0.045em]">
 					Documentation
 				</h1>
 				<p className="mt-4 text-lg text-muted-foreground">
-					Everything you need to run Nixploy in production — from the install one-liner to the REST
-					API, CLI, GitOps, and MCP tools for agents.
+					Start with one server. Deploy your first service. Then go deeper into the platform, APIs
+					and tools that keep your stack running.
 				</p>
 
 				<div className="mt-8">
-					<CodeBlock language="bash" filename="install.sh" code={site.install} />
+					<InstallCommand />
 				</div>
 
 				<section className="mt-10" aria-labelledby="start-here">
@@ -86,7 +84,7 @@ export default function DocsIndexPage() {
 										<item.icon className="size-4" aria-hidden />
 									</span>
 									<span className="min-w-0">
-										<span className="flex items-baseline gap-2">
+										<span className="flex min-w-0 flex-wrap items-baseline gap-2">
 											<span className="font-mono text-xs text-muted-foreground">
 												{String(index + 1).padStart(2, "0")}
 											</span>

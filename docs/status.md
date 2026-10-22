@@ -5,6 +5,31 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Signal public website — 2026-10-23
+
+`codex/fieldwork-landing` replaces the rejected marketing treatment across home,
+features, templates/detail, pricing, agents, docs/articles, API, comparisons/detail,
+about, privacy and recovery pages. Graphite/porcelain with orange, larger type,
+an interactive architecture band, real product evidence and restrained Motion
+replace the previous visual direction. Global docs search, endpoint filters,
+category browsing, copy feedback and keyboard tabs are functional. Animation
+pause persists; reduced-motion preferences and no-JS reading are preserved.
+Existing route/data/source/metadata contracts remain, and README copy aligns.
+
+Local gates pass: workspace types, strict Biome (1,187 files), knip, landing
+production build,119 web tests and3,353 server tests (137 optional skipped against
+fixtures). Browser evidence covers416 public URL/theme checks,192 reflow cases,
+22 interaction groups,20 settled/focus captures and8 isolated error-boundary
+cases. Independent design/accessibility findings are closed. The static detector
+retains20 reviewed contextual heuristics; no claim of a perfect numerical score.
+See [Signal verification](../.ui-craft/signal-website.md) for scope and limits.
+
+The production website preview runs on3373. Panel3000 remains the merged PR33
+frontend, with healthy/readiness responses and no source or runtime restart.
+No primary database, environment, keys or persistent configuration was changed.
+PR34 is updated as a draft; no merge or remote website deployment is performed.
+Private receipts: `.nixploy-data/verification/signal-website/`.
+
 ## Fieldwork landing and README — 2026-10-21
 
 `codex/fieldwork-landing` aligns marketing with the merged panel. The home fold

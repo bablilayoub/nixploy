@@ -6,10 +6,10 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { PageFrame, ProseLink } from "@/components/page-frame";
+import { TemplateLogo } from "@/components/template-logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CodeBlock } from "@/components/ui/code-block";
-import { brandIconSrc } from "@/lib/brand";
 import { site } from "@/lib/site";
 import { findTemplate, type TemplateEntry, templateCount, templateSlugs } from "@/lib/templates";
 
@@ -63,12 +63,6 @@ function Prose({ text }: { text: string }) {
 }
 
 /** The template's mark at the size the header tile holds. */
-function TemplateMark({ logo }: { logo: string }) {
-	return (
-		// biome-ignore lint/performance/noImgElement: remote brand marks from a CDN, no loader configured
-		<img src={brandIconSrc(logo)} alt="" width={28} height={28} className="size-7" />
-	);
-}
 
 /*
  * One labelled fact: a mono eyebrow over a mono value, on its own small
@@ -77,7 +71,7 @@ function TemplateMark({ logo }: { logo: string }) {
  */
 function Fact({ label, children }: { label: string; children: ReactNode }) {
 	return (
-		<div className="rounded-lg border bg-accent/30 px-4 py-4">
+		<div className="border-b py-4 last:border-b-0">
 			<dt className="text-xs text-muted-foreground normal-case">{label}</dt>
 			<dd className="mt-2 font-mono text-xs">{children}</dd>
 		</div>
@@ -156,7 +150,7 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 			eyebrow={template.category}
 			title={`Self-host ${template.name}`}
 			description={<Prose text={template.description} />}
-			mark={<TemplateMark logo={template.logo} />}
+			mark={<TemplateLogo logo={template.logo} name={template.name} />}
 			actions={
 				<>
 					<Button asChild size="lg" className="rounded-lg">
@@ -172,13 +166,30 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 				</>
 			}
 		>
-			<div className="grid gap-4 lg:grid-cols-12">
+			<div className="mb-8">
+				<Link href="/templates" className="signal-text-action text-muted-foreground">
+					← All templates
+				</Link>
+			</div>
+			<div className="signal-facts mb-10">
+				{[
+					{ label: "Container images", value: template.images.length },
+					{ label: "Persistent volumes", value: template.volumes.length },
+					{ label: "Generated secrets", value: generated.length },
+				].map((fact) => (
+					<div key={fact.label}>
+						<p className="text-xs text-muted-foreground">{fact.label}</p>
+						<p className="mt-2 font-mono text-2xl">{fact.value}</p>
+					</div>
+				))}
+			</div>
+			<div className="grid items-start gap-6 lg:grid-cols-12">
 				<Card className="p-6 sm:p-8 lg:col-span-7">
 					<h2 className="text-2xl font-semibold tracking-tight">
 						Deploy {template.name} with Nixploy
 					</h2>
 					<p className="mt-3 text-muted-foreground">
-						Install Nixploy on any Docker host — a €5 VPS is enough for most of these:
+						Start with Nixploy on a Linux host. Size the server for the application and its data:
 					</p>
 					<div className="mt-6">
 						<CodeBlock language="bash" filename="install.sh" code={site.install} />
@@ -208,7 +219,7 @@ function TemplateBody({ template }: { template: TemplateEntry }) {
 					</ol>
 				</Card>
 
-				<Card className="p-6 sm:p-8 lg:col-span-5">
+				<Card className="p-6 sm:p-8 lg:sticky lg:top-28 lg:col-span-5">
 					<h2 className="text-2xl font-semibold tracking-tight">What this deploys</h2>
 					<dl className="mt-6 flex flex-col gap-3">
 						<Fact label="Images">

@@ -16,8 +16,8 @@ export default function TemplatesPage() {
 	return (
 		<PageFrame
 			eyebrow="Templates"
-			title={`Self-host ${templateCount} apps, one click each`}
-			description="Every template is a reviewed Docker Compose stack: pinned images, named volumes, sensible variables. Pick one, give it a domain, and Nixploy handles TLS, backups and monitoring."
+			title="Your next stack starts here."
+			description={`${templateCount} reviewed applications. Every template is a reviewed Docker Compose stack: pinned images, named volumes, sensible variables. Pick one, give it a domain, and Nixploy handles TLS, backups and monitoring.`}
 			actions={
 				<Button asChild size="lg" className="rounded-lg">
 					<Link href="/docs/install">Install Nixploy</Link>

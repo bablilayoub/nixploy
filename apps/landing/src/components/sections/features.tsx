@@ -1,6 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { Reveal } from "@/components/motion-provider";
 import { productCaptures } from "@/lib/product-captures";
 
 const workflows = [
@@ -39,8 +40,8 @@ export function Features() {
 					organized.
 				</p>
 			</div>
-			<div className="grid items-start gap-10 lg:grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)] lg:gap-14">
-				<div className="border-t">
+			<div className="signal-feature-panel">
+				<Reveal className="border-t">
 					{workflows.map((item) => (
 						<div key={item.title} className="border-b py-7 first:pt-6">
 							<h3 className="text-lg font-medium tracking-tight">{item.title}</h3>
@@ -56,7 +57,7 @@ export function Features() {
 							</Link>
 						</div>
 					))}
-				</div>
+				</Reveal>
 				<figure className="min-w-0 rounded-xl border bg-card p-3 sm:p-5">
 					{(["light", "dark"] as const).map((theme) => (
 						<Image

@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "./component-states.css";
+@import "./signal.css";
 
 /*
  * The shadcn token contract, so every component pulled from a registry
@@ -14,29 +15,29 @@
 
 :root {
 	--radius: 0.5rem;
-	--background: #f6f7f8;
-	--foreground: #202327;
+	--background: #f5f6f8;
+	--foreground: #14181f;
 	--card: #ffffff;
 	--card-foreground: var(--foreground);
 	--popover: #ffffff;
 	--popover-foreground: var(--foreground);
-	--primary: #24272b;
+	--primary: #bc3e17;
 	--primary-foreground: #ffffff;
 	--brand: var(--primary);
-	--secondary: #edf0f2;
+	--secondary: #e9ecf0;
 	--secondary-foreground: var(--foreground);
-	--muted: #edf0f2;
-	--muted-foreground: #616973;
-	--accent: #edf0f2;
+	--muted: #e9ecf0;
+	--muted-foreground: #555f6d;
+	--accent: #e9ecf0;
 	--accent-foreground: var(--foreground);
 	--destructive: #b42332;
-	--border: #e0e4e8;
-	--input: #8a939f;
-	--ring: #6b7480;
-	--control: #f0f2f4;
-	--panel-inset: #f0f2f4;
-	--selection: #edf0f2;
-	--chart-axis: #616973;
+	--border: #dce0e6;
+	--input: #858e9c;
+	--ring: #bc3e17;
+	--control: #edf0f4;
+	--panel-inset: #edf0f4;
+	--selection: #f9dfd5;
+	--chart-axis: #555f6d;
 	--success: #187040;
 	--warning: #965b08;
 	--info: #285eb0;
@@ -45,11 +46,11 @@
 	--chart-3: color-mix(in oklab, var(--foreground) 60%, transparent);
 	--chart-4: color-mix(in oklab, var(--foreground) 45%, transparent);
 	--chart-5: color-mix(in oklab, var(--foreground) 30%, transparent);
-	--sidebar: #f6f7f8;
+	--sidebar: #edf0f4;
 	--sidebar-foreground: var(--foreground);
 	--sidebar-primary: var(--primary);
 	--sidebar-primary-foreground: var(--primary-foreground);
-	--sidebar-accent: #e5e7ea;
+	--sidebar-accent: #e3e7ed;
 	--sidebar-accent-foreground: var(--foreground);
 	--sidebar-border: var(--border);
 	--sidebar-ring: var(--ring);
@@ -59,34 +60,34 @@
 }
 
 .dark {
-	--background: #17191c;
-	--foreground: #f0f2f4;
-	--card: #202327;
+	--background: #0b0d11;
+	--foreground: #f4f5f7;
+	--card: #12151b;
 	--card-foreground: var(--foreground);
-	--popover: #2a2e33;
+	--popover: #1c2028;
 	--popover-foreground: var(--foreground);
-	--primary: #eceff2;
-	--primary-foreground: #202327;
+	--primary: #ff895c;
+	--primary-foreground: #1b100b;
 	--brand: var(--primary);
-	--secondary: #30353c;
+	--secondary: #232934;
 	--secondary-foreground: var(--foreground);
-	--muted: #30353c;
-	--muted-foreground: #abb1ba;
-	--accent: #30353c;
+	--muted: #232934;
+	--muted-foreground: #a9b2c0;
+	--accent: #232934;
 	--accent-foreground: var(--foreground);
 	--destructive: #ff8b94;
-	--border: #383e46;
-	--input: #737f8f;
-	--ring: #a3afbc;
-	--control: #1a1c20;
-	--panel-inset: #1a1c20;
-	--selection: #30353c;
-	--chart-axis: #abb1ba;
+	--border: #2b313c;
+	--input: #737f91;
+	--ring: #ff895c;
+	--control: #0e1117;
+	--panel-inset: #0e1117;
+	--selection: #37251f;
+	--chart-axis: #a9b2c0;
 	--success: #7adea0;
 	--warning: #eac379;
 	--info: #91b7ee;
-	--sidebar: #1a1c20;
-	--sidebar-accent: #30353c;
+	--sidebar: #0e1117;
+	--sidebar-accent: #232934;
 	--surface-shadow: 0 1px 3px rgb(0 0 0 / 18%), 0 1px 0 rgb(255 255 255 / 3%) inset;
 	--overlay-shadow: 0 24px 80px -20px rgb(0 0 0 / 65%), 0 0 0 1px rgb(255 255 255 / 3%) inset;
 	color-scheme: dark;

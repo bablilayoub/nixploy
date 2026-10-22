@@ -58,7 +58,7 @@ function Block({ block, occurrence }: { block: DocBlock; occurrence: number }) {
 			return (
 				<h2
 					id={headingId(block.text, occurrence)}
-					className="mt-12 scroll-mt-28 border-t pt-7 text-2xl font-semibold tracking-tight"
+					className="mt-14 scroll-mt-28 border-t pt-8 text-2xl font-medium tracking-tight"
 				>
 					{block.text}
 				</h2>
@@ -101,8 +101,8 @@ function Block({ block, occurrence }: { block: DocBlock; occurrence: number }) {
 
 export function DocArticle({ page }: { page: DocPage }) {
 	return (
-		<article className="max-w-3xl text-base leading-[1.8]">
-			<p className="text-xs text-muted-foreground normal-case">Docs</p>
+		<article className="signal-doc-article max-w-3xl text-base leading-[1.8]">
+			<p className="signal-kicker">Docs</p>
 			<h1 className="mt-4 text-4xl leading-[1.1] font-semibold tracking-[-0.045em] text-balance">
 				{page.title}
 			</h1>

@@ -32,3 +32,24 @@ The signature is a cropped product preview with accessible Projects/Deployments/
 Monitoring tabs, using real fixture captures and a full-size escape. No live metric
 claims or interactive imitation of the production panel. README uses the same
 message and theme-aware screenshots; install and architecture documentation stay.
+
+
+## Public website rebuild — 2026-10-23 (supersedes marketing direction above)
+
+The user rejects the basic Fieldwork marketing site and explicitly authorizes a
+modern technical rebuild of every public page, with good animation and freedom
+over colors/components. Panel Fieldwork and all primary data/settings stay intact.
+Rebuild scope: home, product, templates/catalog/detail, pricing, agents, docs/index/
+articles, REST reference, comparisons/index/detail, about, privacy, errors and OG.
+Preserve route/data/metadata contracts, documentation, sources and install actions.
+
+Craft9 / motion6 / density5 / variance7. Public-site identity: graphite/porcelain,
+signal orange, precise Geist display and mono code. Dark-first for new visitors;
+retain stored Light/Dark/System. Fold composition: band. Signature: interactive
+source→build→Swarm→Traefik schematic tied to Nixploy's real architecture,
+clearly illustrative, with stage-specific explanations and documentation links.
+Real panel screenshots remain evidence; no invented live metrics or customers.
+Use existing Motion/Radix/Lucide only. Entrances and hover give hierarchy; drawing
+and signal travel explain deployment. A persistent pause control and OS reduced
+motion stop nonessential movement. No scroll hijacking or hidden no-JS content.
+Each page family gets a direct composition pass, not just inherited token changes.

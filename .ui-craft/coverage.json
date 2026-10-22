@@ -9,12 +9,10 @@
       "owned": true,
       "baselineHash": "66bb6eb4c416f1f960629d077b679afb76d2b830899c579dbd51ce07857005da",
       "review": "source-and-family-review",
-      "currentHash": "66bb6eb4c416f1f960629d077b679afb76d2b830899c579dbd51ce07857005da",
-      "directlyChanged": false,
-      "pageConsumers": [
-        "apps/landing/src/app/about/page.tsx"
-      ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "currentHash": "affaf30d7d3834d3b081c0aed37fdbbc9cc9709ce52ebc78fb94a5aae29a3481",
+      "directlyChanged": true,
+      "pageConsumers": ["apps/landing/src/app/about/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/app/agents/page.tsx",
@@ -23,12 +21,10 @@
       "owned": true,
       "baselineHash": "9544c22f042a6b8afa37b164ee3e43a4c902d996214ade6db7b229a0d5a29ec3",
       "review": "source-and-family-review",
-      "currentHash": "9d7302a711a344694519b0e41f72ee29b36fe16ba6c6e0abff4b448a19848cff",
+      "currentHash": "36c88562496d457618b1a905e9e6c5f8a865861d7daec3a183f82ec7383aceb1",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/landing/src/app/agents/page.tsx"
-      ],
-      "renderingContract": "Direct Fieldwork composition"
+      "pageConsumers": ["apps/landing/src/app/agents/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/app/api/page.tsx",
@@ -37,12 +33,10 @@
       "owned": true,
       "baselineHash": "c2964d23aabc0a58db4528fad58781682661ad3ba6c906510c225cfbde3d95dc",
       "review": "source-and-family-review",
-      "currentHash": "a40c103fc870ccc1915957898b381d87de04fb8121f829194a04bd9b379d29ad",
+      "currentHash": "a3a2568db9c87572c76a544d933fdfffe99851e9b83a4ece60a44a00e465eeab",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/landing/src/app/api/page.tsx"
-      ],
-      "renderingContract": "Direct Fieldwork composition"
+      "pageConsumers": ["apps/landing/src/app/api/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/app/compare/[slug]/page.tsx",
@@ -51,12 +45,10 @@
       "owned": true,
       "baselineHash": "65ebd21494d26b2f1868c59d3c45bf4e64bd98a4912acde9e897ca3b63f06604",
       "review": "source-and-family-review",
-      "currentHash": "fc005cf4557af5d57dafb59d14fff07e37029f1e5c21cd6cad72ddf760309af0",
+      "currentHash": "5675c5ff26562b1d998995f701392a23e4f07d82c8401acd598d9ebae3c16d1a",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/landing/src/app/compare/[slug]/page.tsx"
-      ],
-      "renderingContract": "Direct Fieldwork composition"
+      "pageConsumers": ["apps/landing/src/app/compare/[slug]/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/app/compare/page.tsx",
@@ -65,12 +57,10 @@
       "owned": true,
       "baselineHash": "83039d4353becdb72c936086110ac9ec1e3f914b4abd6110bb0b8a11fb52e840",
       "review": "source-and-family-review",
-      "currentHash": "83039d4353becdb72c936086110ac9ec1e3f914b4abd6110bb0b8a11fb52e840",
-      "directlyChanged": false,
-      "pageConsumers": [
-        "apps/landing/src/app/compare/page.tsx"
-      ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "currentHash": "6fb19c555ebb095d7a7822c5b007fcc7dc13d69591f90d39fb8bce4f93877402",
+      "directlyChanged": true,
+      "pageConsumers": ["apps/landing/src/app/compare/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/app/component-states.css",
@@ -107,9 +97,7 @@
       "review": "source-and-family-review",
       "currentHash": "a20ca2315938b77907b324f7997dd0b31558c67583a6d8aca4eb35869ecb81b3",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/landing/src/app/docs/[slug]/page.tsx"
-      ],
+      "pageConsumers": ["apps/landing/src/app/docs/[slug]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -134,12 +122,10 @@
       "owned": true,
       "baselineHash": "91aa54c44ebb283c95cdb121626762ef4f3741d5fb92d8e24400b0b5310f1738",
       "review": "source-and-family-review",
-      "currentHash": "f95150e605016be6360bc8431a0881509211cd968d6ab26e417dd4534cb48c8c",
+      "currentHash": "19864de0076f10f44104a38523b58826adb9e9e427c602948ce74f3a015cf0de",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/landing/src/app/docs/page.tsx"
-      ],
-      "renderingContract": "Direct Fieldwork composition"
+      "pageConsumers": ["apps/landing/src/app/docs/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/app/error.tsx",
@@ -148,10 +134,10 @@
       "owned": true,
       "baselineHash": "0dc9f286b49cf38b8b47dd542ff075de075ca0d4651fbc2bc1014be1bc6d95b9",
       "review": "source-and-family-review",
-      "currentHash": "9375144023bca21c5c6db46a698d4d1cd905ed2c357bb2eae8f6cb1baf391644",
+      "currentHash": "ab354d73dab1b36692786bf7c8db2c0315f78afcf631c97776e2e34625467cf5",
       "directlyChanged": true,
       "pageConsumers": [],
-      "renderingContract": "Direct Fieldwork composition"
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/app/features/page.tsx",
@@ -160,12 +146,10 @@
       "owned": true,
       "baselineHash": "de74a3b2e92154a0f84be9bbbc306815f3483ad4e6e7bec9fae90e5623a43872",
       "review": "source-and-family-review",
-      "currentHash": "5b763c101240c7c4d727a2a9ffef6ce97f30d0a52b3222b04372411f6b26ce13",
+      "currentHash": "cd1f438b7390f22bf5ce6d0d12d5dc61d1b9e505382e166a274088a18611c192",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/landing/src/app/features/page.tsx"
-      ],
-      "renderingContract": "Direct Fieldwork composition"
+      "pageConsumers": ["apps/landing/src/app/features/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/app/global-error.tsx",
@@ -174,10 +158,10 @@
       "owned": true,
       "baselineHash": "0a9dee7aed36dd1b32443f1c38272c1243ad0a12ff68afd4971e265a3ed1574e",
       "review": "source-and-family-review",
-      "currentHash": "52a1f7c29bc555e7d20d51871f2077bf4fc095b1934c2202bd910317025ea01c",
+      "currentHash": "273eb83722b1d457bcd87922d841538360f4e448d75c1058f4b259483eb0e55e",
       "directlyChanged": true,
       "pageConsumers": [],
-      "renderingContract": "Direct Fieldwork composition"
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/app/globals.css",
@@ -186,7 +170,7 @@
       "owned": true,
       "baselineHash": "65c2169ad599c8cf72d90fad78d328182691dacc2b5ec3ac2d730e713ac93a17",
       "review": "source-and-family-review",
-      "currentHash": "522b9188fb2d9a35034e5efbd6ed6a1a86b4f8542583585b51d4e1d3384fdacb",
+      "currentHash": "c1c6b8ea918a1f4776096308f06525c37652a7501b7524ff4ba9a801b4343f3f",
       "directlyChanged": true,
       "pageConsumers": [
         "apps/landing/src/app/about/page.tsx",
@@ -203,7 +187,7 @@
         "apps/landing/src/app/templates/[slug]/page.tsx",
         "apps/landing/src/app/templates/page.tsx"
       ],
-      "renderingContract": "Direct Fieldwork composition"
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/app/layout.tsx",
@@ -212,7 +196,7 @@
       "owned": true,
       "baselineHash": "a5b17210515d3c291108619dc427d5166f44d8ed63ef4d472436adb7ab2567c0",
       "review": "source-and-family-review",
-      "currentHash": "560ddebb953f77506c38a4f7cf1368d9c39a2c0836133ee46e47115afba6f376",
+      "currentHash": "0ea8d3c66f0074734c5265b1d859eafc23624734c2f12d3b2e907b356d0cf3a4",
       "directlyChanged": true,
       "pageConsumers": [
         "apps/landing/src/app/about/page.tsx",
@@ -229,7 +213,7 @@
         "apps/landing/src/app/templates/[slug]/page.tsx",
         "apps/landing/src/app/templates/page.tsx"
       ],
-      "renderingContract": "Direct Fieldwork composition"
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/app/not-found.tsx",
@@ -238,10 +222,10 @@
       "owned": true,
       "baselineHash": "074097c97b6f7d1e9c944f5b532f20935ea93e6662e425d6a024dc603d43142f",
       "review": "source-and-family-review",
-      "currentHash": "074097c97b6f7d1e9c944f5b532f20935ea93e6662e425d6a024dc603d43142f",
-      "directlyChanged": false,
+      "currentHash": "9953d4d428ca62f72c31d1c1bcc2a3460e986a3fa3e3e13ab323037b312809bb",
+      "directlyChanged": true,
       "pageConsumers": [],
-      "renderingContract": "Standalone boundary/metadata proof"
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/app/opengraph-image.tsx",
@@ -250,10 +234,10 @@
       "owned": true,
       "baselineHash": "9ad609e0be46f288812e338a98a15bc445f86bf05681d6cf6429bdcc0b3d08b2",
       "review": "source-and-family-review",
-      "currentHash": "385271dcbc6cc85a9f47ebe9e78e4752b8fcec09b5f9381b373e08b7fd8c74cd",
+      "currentHash": "7c01bea6aa8f296cf319ad87ca304a11faf34dd7d726008e1c891660d7af772d",
       "directlyChanged": true,
       "pageConsumers": [],
-      "renderingContract": "Direct Fieldwork composition"
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/app/page.tsx",
@@ -264,9 +248,7 @@
       "review": "source-and-family-review",
       "currentHash": "c4895bd7556e293ec06d2eced7d44a3bd97649662e8d8884ae0cfca9acc57d82",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/landing/src/app/page.tsx"
-      ],
+      "pageConsumers": ["apps/landing/src/app/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -276,12 +258,10 @@
       "owned": true,
       "baselineHash": "a4b696d75daa320ebe8ad92b2f4610a6b11bc096fb46f9deead471f39c814b82",
       "review": "source-and-family-review",
-      "currentHash": "a4b696d75daa320ebe8ad92b2f4610a6b11bc096fb46f9deead471f39c814b82",
-      "directlyChanged": false,
-      "pageConsumers": [
-        "apps/landing/src/app/pricing/page.tsx"
-      ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "currentHash": "6b218fb92827cc371b7040a44c920522d4c7a60d6b432b453348b8016fa73c14",
+      "directlyChanged": true,
+      "pageConsumers": ["apps/landing/src/app/pricing/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/app/privacy/page.tsx",
@@ -290,12 +270,48 @@
       "owned": true,
       "baselineHash": "e5cb17698fa4d40ab2e7eefd6959c2c246590d99e55c8545281f4231e1198bb4",
       "review": "source-and-family-review",
-      "currentHash": "e5cb17698fa4d40ab2e7eefd6959c2c246590d99e55c8545281f4231e1198bb4",
-      "directlyChanged": false,
+      "currentHash": "a7a46a5dccc1592e09e5e48c6fe1ed801f48662956f062b3e2a5f3a734cabd5c",
+      "directlyChanged": true,
+      "pageConsumers": ["apps/landing/src/app/privacy/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
+    },
+    {
+      "path": "apps/landing/src/app/signal.css",
+      "app": "landing",
+      "kind": "component",
+      "owned": true,
+      "baselineHash": null,
+      "review": "Signal page-family/browser/independent review",
+      "currentHash": "f6061ce15274958abc284e10aaf9ffa3e96576d2e21abb9ba3b02071d3e3bccb",
+      "directlyChanged": true,
       "pageConsumers": [
-        "apps/landing/src/app/privacy/page.tsx"
+        "apps/landing/src/app/about/page.tsx",
+        "apps/landing/src/app/agents/page.tsx",
+        "apps/landing/src/app/api/page.tsx",
+        "apps/landing/src/app/compare/[slug]/page.tsx",
+        "apps/landing/src/app/compare/page.tsx",
+        "apps/landing/src/app/docs/[slug]/page.tsx",
+        "apps/landing/src/app/docs/page.tsx",
+        "apps/landing/src/app/features/page.tsx",
+        "apps/landing/src/app/page.tsx",
+        "apps/landing/src/app/pricing/page.tsx",
+        "apps/landing/src/app/privacy/page.tsx",
+        "apps/landing/src/app/templates/[slug]/page.tsx",
+        "apps/landing/src/app/templates/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Signal public-site composition and motion"
+    },
+    {
+      "path": "apps/landing/src/app/template.tsx",
+      "app": "landing",
+      "kind": "layout",
+      "owned": true,
+      "baselineHash": null,
+      "review": "Signal page-family/browser/independent review",
+      "currentHash": "3241f39a89119348b6e331dbda0f18beb12ece839276c8285de4f1e4d4a81233",
+      "directlyChanged": true,
+      "pageConsumers": [],
+      "renderingContract": "Signal public-site composition and motion"
     },
     {
       "path": "apps/landing/src/app/templates/[slug]/page.tsx",
@@ -304,12 +320,10 @@
       "owned": true,
       "baselineHash": "6928ee38c206b81e150a77131d9193d1755b88da7de4f4ae0b96b047b98bfd77",
       "review": "source-and-family-review",
-      "currentHash": "abcad710b731ff445322a9ff1bcf455788f46513d4cd40e74bacfad4a729911c",
+      "currentHash": "966cdedd53ca85131815ea14cb6cb4b4b94f84da65be9bab489d2b694c33b57d",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/landing/src/app/templates/[slug]/page.tsx"
-      ],
-      "renderingContract": "Direct Fieldwork composition"
+      "pageConsumers": ["apps/landing/src/app/templates/[slug]/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/app/templates/page.tsx",
@@ -318,12 +332,38 @@
       "owned": true,
       "baselineHash": "5a110765a1203fc2bddff45bf4d1949b4e0e0ac1f29f9445138d33695a1825f7",
       "review": "source-and-family-review",
-      "currentHash": "cbb1c29841f01c67df8a66ba510aca516c051e1c2881326f2376623319318de2",
+      "currentHash": "5e10a9a964e17450d43554c443dfef0aff5923b16a831944b33e0156b9fa277e",
+      "directlyChanged": true,
+      "pageConsumers": ["apps/landing/src/app/templates/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
+    },
+    {
+      "path": "apps/landing/src/components/api-explorer.tsx",
+      "app": "landing",
+      "kind": "component",
+      "owned": true,
+      "baselineHash": null,
+      "review": "Signal page-family/browser/independent review",
+      "currentHash": "bca841b46e6ca5d90dbcefca081c3a7c9b6fa928c1e37babd8d315fdea062107",
+      "directlyChanged": true,
+      "pageConsumers": ["apps/landing/src/app/api/page.tsx"],
+      "renderingContract": "Signal public-site composition and motion"
+    },
+    {
+      "path": "apps/landing/src/components/deployment-path.tsx",
+      "app": "landing",
+      "kind": "component",
+      "owned": true,
+      "baselineHash": null,
+      "review": "Signal page-family/browser/independent review",
+      "currentHash": "457cb96974f29c3af1fee5b6904b5aa801e8fae2e9ad96f5275b2b8128021607",
       "directlyChanged": true,
       "pageConsumers": [
-        "apps/landing/src/app/templates/page.tsx"
+        "apps/landing/src/app/about/page.tsx",
+        "apps/landing/src/app/features/page.tsx",
+        "apps/landing/src/app/page.tsx"
       ],
-      "renderingContract": "Direct Fieldwork composition"
+      "renderingContract": "Signal public-site composition and motion"
     },
     {
       "path": "apps/landing/src/components/doc-article.tsx",
@@ -332,12 +372,10 @@
       "owned": true,
       "baselineHash": "8fb7b4c4a7d7e3c0ea25507149e00fada740e6e34c120d242ed5d3ed17a5817d",
       "review": "source-and-family-review",
-      "currentHash": "9ae731a8ce1250ff7636cab6797b7616bbd3d1f9292f803c3d6f3a17f5076c5d",
+      "currentHash": "c61021cd37f278f376c6cbcc5f9da85cdf8791d9b0f99a1407567009894c6b19",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/landing/src/app/docs/[slug]/page.tsx"
-      ],
-      "renderingContract": "Direct Fieldwork composition"
+      "pageConsumers": ["apps/landing/src/app/docs/[slug]/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/components/docs-frame.tsx",
@@ -346,14 +384,40 @@
       "owned": true,
       "baselineHash": "6912ab38d4b1ee24e02d04a68951ab1a6bd7213196a4f0ed892534cbe1a4b7d1",
       "review": "source-and-family-review",
-      "currentHash": "db6a5cde1ec1fddc10375bc916ed89e8177d9ced23614c3864ff7bec4aa4f31a",
+      "currentHash": "b8725257a872864471ff8742a711e7b139b52abd3218a79de20da4135afc3638",
       "directlyChanged": true,
       "pageConsumers": [
         "apps/landing/src/app/api/page.tsx",
         "apps/landing/src/app/docs/[slug]/page.tsx",
         "apps/landing/src/app/docs/page.tsx"
       ],
-      "renderingContract": "Direct Fieldwork composition"
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
+    },
+    {
+      "path": "apps/landing/src/components/docs-search.tsx",
+      "app": "landing",
+      "kind": "component",
+      "owned": true,
+      "baselineHash": null,
+      "review": "Signal page-family/browser/independent review",
+      "currentHash": "14e760b7f5918469993ae9b83304542cca3bbc81711370088b30cc63afee1f8e",
+      "directlyChanged": true,
+      "pageConsumers": [
+        "apps/landing/src/app/about/page.tsx",
+        "apps/landing/src/app/agents/page.tsx",
+        "apps/landing/src/app/api/page.tsx",
+        "apps/landing/src/app/compare/[slug]/page.tsx",
+        "apps/landing/src/app/compare/page.tsx",
+        "apps/landing/src/app/docs/[slug]/page.tsx",
+        "apps/landing/src/app/docs/page.tsx",
+        "apps/landing/src/app/features/page.tsx",
+        "apps/landing/src/app/page.tsx",
+        "apps/landing/src/app/pricing/page.tsx",
+        "apps/landing/src/app/privacy/page.tsx",
+        "apps/landing/src/app/templates/[slug]/page.tsx",
+        "apps/landing/src/app/templates/page.tsx"
+      ],
+      "renderingContract": "Signal public-site composition and motion"
     },
     {
       "path": "apps/landing/src/components/icons.tsx",
@@ -380,6 +444,32 @@
         "apps/landing/src/app/templates/page.tsx"
       ],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+    },
+    {
+      "path": "apps/landing/src/components/install-command.tsx",
+      "app": "landing",
+      "kind": "component",
+      "owned": true,
+      "baselineHash": null,
+      "review": "Signal page-family/browser/independent review",
+      "currentHash": "ddff9b96aa0117f070070fc92ff4e28de0d988c216a9ad97ec8a63e62baca4a6",
+      "directlyChanged": true,
+      "pageConsumers": [
+        "apps/landing/src/app/about/page.tsx",
+        "apps/landing/src/app/agents/page.tsx",
+        "apps/landing/src/app/api/page.tsx",
+        "apps/landing/src/app/compare/[slug]/page.tsx",
+        "apps/landing/src/app/compare/page.tsx",
+        "apps/landing/src/app/docs/[slug]/page.tsx",
+        "apps/landing/src/app/docs/page.tsx",
+        "apps/landing/src/app/features/page.tsx",
+        "apps/landing/src/app/page.tsx",
+        "apps/landing/src/app/pricing/page.tsx",
+        "apps/landing/src/app/privacy/page.tsx",
+        "apps/landing/src/app/templates/[slug]/page.tsx",
+        "apps/landing/src/app/templates/page.tsx"
+      ],
+      "renderingContract": "Signal public-site composition and motion"
     },
     {
       "path": "apps/landing/src/components/logo.tsx",
@@ -414,8 +504,8 @@
       "owned": true,
       "baselineHash": "f657d3b0e7ad3ddb021ac931ef517bc33cbb1a2f620f39f2fea8aa127e0dd9f3",
       "review": "source-and-family-review",
-      "currentHash": "f657d3b0e7ad3ddb021ac931ef517bc33cbb1a2f620f39f2fea8aa127e0dd9f3",
-      "directlyChanged": false,
+      "currentHash": "92b2a94f71c2bf902eef77ab677d9914fa6e04c7f7cc37f0c37313ccc7d92bee",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/landing/src/app/about/page.tsx",
         "apps/landing/src/app/agents/page.tsx",
@@ -431,7 +521,7 @@
         "apps/landing/src/app/templates/[slug]/page.tsx",
         "apps/landing/src/app/templates/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/components/page-frame.tsx",
@@ -440,7 +530,7 @@
       "owned": true,
       "baselineHash": "fe2e677e5f1cd736155b9d2fe0775003717fad225fe4fd42f5f5b8e73b6161e2",
       "review": "source-and-family-review",
-      "currentHash": "fc8c434beda6ae32a57dd4724bb3b8524a426f4d3dc992b6b86c02014f77dd14",
+      "currentHash": "0e7715b7ca645768078af43d9003ef4f5503cb91c6d4dde910a3d23c1393c66c",
       "directlyChanged": true,
       "pageConsumers": [
         "apps/landing/src/app/about/page.tsx",
@@ -455,7 +545,7 @@
         "apps/landing/src/app/templates/[slug]/page.tsx",
         "apps/landing/src/app/templates/page.tsx"
       ],
-      "renderingContract": "Direct Fieldwork composition"
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/components/section-rail.tsx",
@@ -464,12 +554,15 @@
       "owned": true,
       "baselineHash": "569a8082d4ab9be29935fca5f3248956f2eefe36483eb988e64ebc0bad8421eb",
       "review": "source-and-family-review",
-      "currentHash": "33cf1fca9ab547b45276bfaa88b013f6baa6037fc92dd1444014ee4bfbb7fabd",
+      "currentHash": "8a8c2dd7b30ecb3892952d184a883f85618d78b60209b1e5f620d31f43d61049",
       "directlyChanged": true,
       "pageConsumers": [
+        "apps/landing/src/app/api/page.tsx",
+        "apps/landing/src/app/docs/[slug]/page.tsx",
+        "apps/landing/src/app/docs/page.tsx",
         "apps/landing/src/app/features/page.tsx"
       ],
-      "renderingContract": "Direct Fieldwork composition"
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/components/sections/cta.tsx",
@@ -478,8 +571,8 @@
       "owned": true,
       "baselineHash": "eafe22dda7eadb35b270f744616b513767fe19fda591ca202ac4da82cfaf6346",
       "review": "source-and-family-review",
-      "currentHash": "eafe22dda7eadb35b270f744616b513767fe19fda591ca202ac4da82cfaf6346",
-      "directlyChanged": false,
+      "currentHash": "1606e88dad4ffa60f659b78986964ef96137c7a2241ae3d92f4da27277979b31",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/landing/src/app/about/page.tsx",
         "apps/landing/src/app/agents/page.tsx",
@@ -495,7 +588,7 @@
         "apps/landing/src/app/templates/[slug]/page.tsx",
         "apps/landing/src/app/templates/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/components/sections/faq.tsx",
@@ -504,12 +597,10 @@
       "owned": true,
       "baselineHash": "45e6ec54c94d8db14ce29055cd9559d7e6a33462a78d5b389a617259b27c234a",
       "review": "source-and-family-review",
-      "currentHash": "154ea86f18f7e578b8a456adff5b30bf671ab276b571a028aafe51c290de75e1",
+      "currentHash": "a47f7edba9ebfeb51320be569de470af76c4a5260f816585384ba2f4c910d2db",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/landing/src/app/page.tsx"
-      ],
-      "renderingContract": "Direct Fieldwork composition"
+      "pageConsumers": ["apps/landing/src/app/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/components/sections/features.tsx",
@@ -518,12 +609,10 @@
       "owned": true,
       "baselineHash": "6fbcdda4a348fc1234f55916e6a7700e1078a357b3bcc7ada0c4c20ea8ee01e2",
       "review": "source-and-family-review",
-      "currentHash": "c7f674c6c56d510f481a83a254513d22d53e1f869ce3da8d7f2402109bb3dc9d",
+      "currentHash": "485c097a17966492868f8d8f5b8116551a71d31726ddcf614385c1acdbcd1faa",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/landing/src/app/page.tsx"
-      ],
-      "renderingContract": "Direct Fieldwork composition"
+      "pageConsumers": ["apps/landing/src/app/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/components/sections/hero.tsx",
@@ -532,12 +621,10 @@
       "owned": true,
       "baselineHash": "a7cea8bb39c15ce44eee2d6c3dbf88e2de11a9c694ec8120c2c6319bd8b5b4bb",
       "review": "source-and-family-review",
-      "currentHash": "318b136f4de620251b1bd50171f3e2fcf33ced4802f311c612186b553bdd3eb0",
+      "currentHash": "50224970179b8c8b7968242f9bd91e8d740aa727fbb0a927d856c38bc06ce568",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/landing/src/app/page.tsx"
-      ],
-      "renderingContract": "Direct Fieldwork composition"
+      "pageConsumers": ["apps/landing/src/app/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/components/sections/platform.tsx",
@@ -546,12 +633,10 @@
       "owned": true,
       "baselineHash": "5023a8bae7bd3674efcf350ffcd93023f03665f9d6f4ef524d7aa2f712b82a11",
       "review": "source-and-family-review",
-      "currentHash": "f64bb9d84ebc1cd50dc7f6e808520273640ebf09647fe7b94eced74965c2a50b",
+      "currentHash": "a9bc4960dd91f22dbfb1f7dc721eaab71809e78502ff56c133df548e26458b9e",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/landing/src/app/page.tsx"
-      ],
-      "renderingContract": "Direct Fieldwork composition"
+      "pageConsumers": ["apps/landing/src/app/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/components/sections/product-shot.tsx",
@@ -560,12 +645,10 @@
       "owned": true,
       "baselineHash": "b711cd50686fd838375306d89312c5918b4cf62bc87bb546bf1e61cb4b55c842",
       "review": "source-and-family-review",
-      "currentHash": "adaffe7c2a7626c3b316c0b9b77fa9f460b229662a9524d2dc057934342e2eb0",
+      "currentHash": "c9e77bbfcab05d22dfd19eef1097b69df9ea80649b95f79ce1eca5165d261b04",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/landing/src/app/page.tsx"
-      ],
-      "renderingContract": "Direct Fieldwork composition"
+      "pageConsumers": ["apps/landing/src/app/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/components/sections/stats.tsx",
@@ -574,12 +657,10 @@
       "owned": true,
       "baselineHash": "1edf8c1a9efcd2514209efd642f42173e562d1cc061006798e42d15e888c43ab",
       "review": "source-and-family-review",
-      "currentHash": "1edf8c1a9efcd2514209efd642f42173e562d1cc061006798e42d15e888c43ab",
-      "directlyChanged": false,
-      "pageConsumers": [
-        "apps/landing/src/app/page.tsx"
-      ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "currentHash": "572db5bb65aeea2c423a119d9ade8838daf1c928bd62c36ff266308a3b9a10be",
+      "directlyChanged": true,
+      "pageConsumers": ["apps/landing/src/app/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/components/sections/templates.tsx",
@@ -588,12 +669,10 @@
       "owned": true,
       "baselineHash": "a3dca92aa95dc270198f8848a8f9cb2ef56a06e4bb12d8287cd832628919bb6a",
       "review": "source-and-family-review",
-      "currentHash": "cabb0f1c3f3bac530981e83f9efb2728b79033597d66e2992dbc4c1475ce3681",
+      "currentHash": "83f73c563dc37b16a4a34e778dab2149ef0ec537b7d565c53246d6378dbda716",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/landing/src/app/page.tsx"
-      ],
-      "renderingContract": "Direct Fieldwork composition"
+      "pageConsumers": ["apps/landing/src/app/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/components/site-footer.tsx",
@@ -602,8 +681,8 @@
       "owned": true,
       "baselineHash": "67b6c12942f5f01e49d842b1046f36ab33e6778fb64604b3ff6aa5cf4d97b508",
       "review": "source-and-family-review",
-      "currentHash": "67b6c12942f5f01e49d842b1046f36ab33e6778fb64604b3ff6aa5cf4d97b508",
-      "directlyChanged": false,
+      "currentHash": "0e5a4a40c005d72bb34111ab03e70d99d5e2d3db76e980014f3a79dc6f68c1e2",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/landing/src/app/about/page.tsx",
         "apps/landing/src/app/agents/page.tsx",
@@ -619,7 +698,7 @@
         "apps/landing/src/app/templates/[slug]/page.tsx",
         "apps/landing/src/app/templates/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/components/site-navbar.tsx",
@@ -628,7 +707,7 @@
       "owned": true,
       "baselineHash": "d1c1721ded25cf89b36a159497ab93ba3fe26add393710564c5a30e9085124fd",
       "review": "source-and-family-review",
-      "currentHash": "60d0ea9e80efd77032aa39ffb2d3d1e8fc3200495a5ac1aa03fc53cd821d8071",
+      "currentHash": "ba7036ab6d0ffffa741f66d57b1acb1a81ed400efa497efe1dbba4f81f878997",
       "directlyChanged": true,
       "pageConsumers": [
         "apps/landing/src/app/about/page.tsx",
@@ -645,7 +724,7 @@
         "apps/landing/src/app/templates/[slug]/page.tsx",
         "apps/landing/src/app/templates/page.tsx"
       ],
-      "renderingContract": "Direct Fieldwork composition"
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
     },
     {
       "path": "apps/landing/src/components/template-catalog.tsx",
@@ -654,12 +733,26 @@
       "owned": true,
       "baselineHash": null,
       "review": "detailed-refinement-and-browser-review",
-      "currentHash": "7990bc231f5716313f09d235e50ea7312b66fd735bf4a3913c092330030f1c53",
+      "currentHash": "48d016ea437e64a23bb179b4d12bb94376b50c256654c37561d9c1880843463e",
+      "directlyChanged": true,
+      "pageConsumers": ["apps/landing/src/app/templates/page.tsx"],
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
+    },
+    {
+      "path": "apps/landing/src/components/template-logo.tsx",
+      "app": "landing",
+      "kind": "component",
+      "owned": true,
+      "baselineHash": null,
+      "review": "Signal page-family/browser/independent review",
+      "currentHash": "c662a75039748735806e0257dc040181ef416680203f4f78529c6237b58d415a",
       "directlyChanged": true,
       "pageConsumers": [
+        "apps/landing/src/app/page.tsx",
+        "apps/landing/src/app/templates/[slug]/page.tsx",
         "apps/landing/src/app/templates/page.tsx"
       ],
-      "renderingContract": "Direct Fieldwork composition"
+      "renderingContract": "Signal public-site composition and motion"
     },
     {
       "path": "apps/landing/src/components/theme-provider.tsx",
@@ -668,8 +761,8 @@
       "owned": true,
       "baselineHash": "267b58bbead5e77a7294dbb646d8889b36b7b1502ad34a0f2f371fd6bf073848",
       "review": "source-and-family-review",
-      "currentHash": "267b58bbead5e77a7294dbb646d8889b36b7b1502ad34a0f2f371fd6bf073848",
-      "directlyChanged": false,
+      "currentHash": "42ba2b280efeb6c5eeea11d9384e822c07b2cabee7dac75725f25b5131e32da9",
+      "directlyChanged": true,
       "pageConsumers": [
         "apps/landing/src/app/about/page.tsx",
         "apps/landing/src/app/agents/page.tsx",
@@ -685,7 +778,19 @@
         "apps/landing/src/app/templates/[slug]/page.tsx",
         "apps/landing/src/app/templates/page.tsx"
       ],
-      "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
+      "renderingContract": "Signal public-site composition, motion and preserved content contracts"
+    },
+    {
+      "path": "apps/landing/src/components/trace-tabs.tsx",
+      "app": "landing",
+      "kind": "component",
+      "owned": true,
+      "baselineHash": null,
+      "review": "Signal page-family/browser/independent review",
+      "currentHash": "f152ef529b2d73c62c18d73bd96dc307d48686e11556b7304153f7d0e31a4474",
+      "directlyChanged": true,
+      "pageConsumers": ["apps/landing/src/app/agents/page.tsx"],
+      "renderingContract": "Signal public-site composition and motion"
     },
     {
       "path": "apps/landing/src/components/ui/accordion.tsx",
@@ -696,10 +801,7 @@
       "review": "source-and-family-review",
       "currentHash": "1f27d48598a86d0a3012dfac98d3e0977d3a7bbf33d2cf5ddc6215f558b35c4d",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/landing/src/app/page.tsx",
-        "apps/landing/src/app/pricing/page.tsx"
-      ],
+      "pageConsumers": ["apps/landing/src/app/page.tsx", "apps/landing/src/app/pricing/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -723,9 +825,7 @@
       "review": "source-and-family-review",
       "currentHash": "55308975af763394f1af7aeb42d66c7840b51a8ed0b99b42b56300a79ea03e91",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/landing/src/app/pricing/page.tsx"
-      ],
+      "pageConsumers": [],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -805,10 +905,7 @@
         "apps/landing/src/app/compare/page.tsx",
         "apps/landing/src/app/docs/[slug]/page.tsx",
         "apps/landing/src/app/features/page.tsx",
-        "apps/landing/src/app/page.tsx",
-        "apps/landing/src/app/pricing/page.tsx",
-        "apps/landing/src/app/templates/[slug]/page.tsx",
-        "apps/landing/src/app/templates/page.tsx"
+        "apps/landing/src/app/templates/[slug]/page.tsx"
       ],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
@@ -826,7 +923,6 @@
         "apps/landing/src/app/api/page.tsx",
         "apps/landing/src/app/compare/[slug]/page.tsx",
         "apps/landing/src/app/docs/[slug]/page.tsx",
-        "apps/landing/src/app/docs/page.tsx",
         "apps/landing/src/app/templates/[slug]/page.tsx"
       ],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
@@ -952,9 +1048,7 @@
       "review": "source-and-family-review",
       "currentHash": "a6783a930d31c73aa521c9a39c6abfba4e3cdc36e0b0147e2991902f3d8fd79a",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/%5F%5Fmaintenance/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/%5F%5Fmaintenance/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -966,9 +1060,7 @@
       "review": "source-and-family-review",
       "currentHash": "9c5801f85e1bb23b11c584761a5a187cbf88355b9e4cd51676a3ecc58d9e36a1",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(auth)/accept-invitation/[invitationId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(auth)/accept-invitation/[invitationId]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -980,9 +1072,7 @@
       "review": "source-and-family-review",
       "currentHash": "2546bd304c34593fa75bc5ab471d73a21c2caeca250c4ca6b274b19e28e90e73",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(auth)/accept-invitation/[invitationId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(auth)/accept-invitation/[invitationId]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -994,9 +1084,7 @@
       "review": "source-and-family-review",
       "currentHash": "11265c849496e09b2dca62f89a2753fa4de8066b3bd46c1954574bf12e639f11",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(auth)/forgot-password/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(auth)/forgot-password/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1008,9 +1096,7 @@
       "review": "source-and-family-review",
       "currentHash": "5557ca4d68a5adbf9e025ff09f6f2b516cd7d3c8f7fe9f1f56fa272caa6e383d",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(auth)/forgot-password/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(auth)/forgot-password/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1042,9 +1128,7 @@
       "review": "source-and-family-review",
       "currentHash": "1256e48773918c7047664ef02546eaf68716390ea18b760fed067fda34f7c864",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(auth)/login/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(auth)/login/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1056,9 +1140,7 @@
       "review": "source-and-family-review",
       "currentHash": "2eb147ef6a71b2063491567e6290acc318499d1e52fb9eb449acadcba21511ee",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(auth)/login/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(auth)/login/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1086,9 +1168,7 @@
       "review": "source-and-family-review",
       "currentHash": "adb2a839b19f408511610e144229192e198ff98a8b7bb61010a1ce5c762bc38d",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(auth)/register/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(auth)/register/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1100,9 +1180,7 @@
       "review": "source-and-family-review",
       "currentHash": "1d44d70a2c8dc4d96a47f9b92b2218dfc5b0620fbd6197706e7b058f8b7966fe",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(auth)/reset-password/[token]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(auth)/reset-password/[token]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1114,9 +1192,7 @@
       "review": "source-and-family-review",
       "currentHash": "e7ec3d19db06f8938cc8099fab6acb7e98b1a87a567721c159de614d1c699a38",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(auth)/reset-password/[token]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(auth)/reset-password/[token]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1128,9 +1204,7 @@
       "review": "source-and-family-review",
       "currentHash": "f5874cf1548c59e849a53c4fe104117ca032888edc5d076d1a338f781f6391d8",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(auth)/setup/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(auth)/setup/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1142,9 +1216,7 @@
       "review": "source-and-family-review",
       "currentHash": "e261905d8b72d85655a5c63504f1118a39b8db7cfceaa5482f6c066eec6d5997",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(auth)/setup/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(auth)/setup/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1156,9 +1228,7 @@
       "review": "source-and-family-review",
       "currentHash": "3e485d5d85acff7120fe2ff0168f2c6a580448d80b7151a73ba90ac0f880bbed",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(auth)/two-factor/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(auth)/two-factor/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1170,9 +1240,7 @@
       "review": "source-and-family-review",
       "currentHash": "07c462c4def0a41d02dac7051a5870c45a440bb28a2e692cbb7ef721ef1ec285",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(auth)/two-factor/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(auth)/two-factor/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -1184,9 +1252,7 @@
       "review": "source-and-family-review",
       "currentHash": "ea7b122dd6cb067fb35d1afda422d6b13c00239e8140c8f312aa014a61a8bf6f",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1198,9 +1264,7 @@
       "review": "source-and-family-review",
       "currentHash": "86676e0f06dd7cc298ec95339da11920517be4dfa2539681a4e9ba4fad9cffa7",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/migrations/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/migrations/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1212,9 +1276,7 @@
       "review": "source-and-family-review",
       "currentHash": "5794b133859d5a9a6ea958fac626f48e329bab97e62c9c0a156a5a505ad332b7",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1226,9 +1288,7 @@
       "review": "source-and-family-review",
       "currentHash": "de9eb76e10d088076fa99d2c1de09937587a3512ae5222fd86b8921c8b1e8453",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1240,9 +1300,7 @@
       "review": "source-and-family-review",
       "currentHash": "4cbab4946c1e7529b57ba9a0601f4f3e92ac33594b6861e53f24771c47b86f0d",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1366,9 +1424,7 @@
       "review": "source-and-family-review",
       "currentHash": "6de8fe0dee225d026cbf1f1326481c74b8c2969eef96d1cfd67251df3ef3ef7a",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/schedules/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/schedules/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1380,9 +1436,7 @@
       "review": "source-and-family-review",
       "currentHash": "c2415c0c0755aecb17afeef066ff0812269829c81ead09b80bfcc5fbf2aa80e5",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/activity/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/activity/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1394,9 +1448,7 @@
       "review": "source-and-family-review",
       "currentHash": "8402bb13ccc398b225b9f4e19023ef0efa5ba0933e7446f48921e3e148294ae6",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/branding/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/branding/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1408,9 +1460,7 @@
       "review": "source-and-family-review",
       "currentHash": "5f75eff4425a7768ff2bfd49490afb93646638936d78a3801fc26262f9524831",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/certificates/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/certificates/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1422,9 +1472,7 @@
       "review": "source-and-family-review",
       "currentHash": "2d16d685ca915ed192687afb7978f371ff802a6c007fff066da4c73c2f6673b1",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/destinations/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/destinations/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1436,9 +1484,7 @@
       "review": "source-and-family-review",
       "currentHash": "453eb40f52be493e040afddc9f7fdc24b664f93f044a99da3cd91e9ecf8eab6f",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1450,9 +1496,7 @@
       "review": "source-and-family-review",
       "currentHash": "0c9e61fc07373f9c048c00b5f77dabb0a5e388a73b348f77a5928ad525830632",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/incidents/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/incidents/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1493,9 +1537,7 @@
       "review": "source-and-family-review",
       "currentHash": "058ccbfd6692a0bcfbd6d049d90df193d7318bd79a82399e2dfcb18c867811d5",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/notifications/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/notifications/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1507,9 +1549,7 @@
       "review": "source-and-family-review",
       "currentHash": "c4c117a083703e935c21811faa6af0a9379c60324e20de7f6df5264f63ead2e0",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -1521,9 +1561,7 @@
       "review": "source-and-family-review",
       "currentHash": "f7d98c8e5c747436fa35764473ce93c351b08fd642303d649f7a6663a6a512ce",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1535,9 +1573,7 @@
       "review": "source-and-family-review",
       "currentHash": "30447cfef087d40bc7cd5fc14183f306388f98ef84d647eb0330cef2dcc6e429",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -1549,9 +1585,7 @@
       "review": "source-and-family-review",
       "currentHash": "70024b9b2997e0176627c2d8b7d29b82e0ea5fe3dffac24adc96b3261c447f9c",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/registries/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/registries/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1563,9 +1597,7 @@
       "review": "source-and-family-review",
       "currentHash": "256c0e51bf41d13df5732e05a3c0dbbe20eecd1be80afa6656594a7eadb84718",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1577,9 +1609,7 @@
       "review": "source-and-family-review",
       "currentHash": "97ba650889b5d3b27430435e8c045151f7b732331219da93576357c5064cf619",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1591,9 +1621,7 @@
       "review": "source-and-family-review",
       "currentHash": "8e6443b961a062c2caba389f9f495c00e7b5cd0c2e1c4664acb0a51a595e417f",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/ssh-keys/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/ssh-keys/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1605,9 +1633,7 @@
       "review": "source-and-family-review",
       "currentHash": "2c9ca95fca8fbf88e5bd22809217663eb77593d52b757f35677fc182abd44739",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/sso/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/sso/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -1619,9 +1645,7 @@
       "review": "source-and-family-review",
       "currentHash": "eb08804ba8a66f12be4d618770b15b186ce8b400469103083bb2858cbdde4a0e",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/templates/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/templates/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -1633,9 +1657,7 @@
       "review": "source-and-family-review",
       "currentHash": "e43b0ef84649cfa37d0041fffd0453c484183a4e384cb7e3ad2f44ef989821ad",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -2003,9 +2025,7 @@
       "review": "source-and-family-review",
       "currentHash": "3229dccc2c5e800d9c5271e8e4e9a7e907eb1ffc15db762efb1fdf20322fcf0d",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -2072,9 +2092,7 @@
       "review": "source-and-family-review",
       "currentHash": "929fb157964f15975e06600e0f2f6193249323c8e6370451f418969a1c1b400c",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/status/[token]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/status/[token]/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -2086,9 +2104,7 @@
       "review": "source-and-family-review",
       "currentHash": "3994506a8169f74bc549fd89ceabe31c8a5de6ca4a673a0096973be54416e864",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/swagger/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/swagger/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -2100,9 +2116,7 @@
       "review": "source-and-family-review",
       "currentHash": "2d4a17fb6fa6d103e047c7290465c98264e320e437bf834909c8d116da74efad",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/swagger/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/swagger/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -2114,9 +2128,7 @@
       "review": "source-and-family-review",
       "currentHash": "4ad52354d901857041f641a502a73577e9d6df1bbc69b61e0d124a39752876cb",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/swagger/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/swagger/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -2953,9 +2965,7 @@
       "review": "source-and-family-review",
       "currentHash": "81c1d42f99de8198b3e411fc909c064234a94f112267df23ab5614539e39a6d8",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -2967,9 +2977,7 @@
       "review": "source-and-family-review",
       "currentHash": "a5ef895858ad5e33b5926f47bf04acba5186b7b26b75801487555dec1a15b6bc",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -2981,9 +2989,7 @@
       "review": "source-and-family-review",
       "currentHash": "ecc67d7610f2198d29eca76f28291f472903e10c70baf52fc443e32be0bfc49d",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -2995,9 +3001,7 @@
       "review": "source-and-family-review",
       "currentHash": "3332b2da06d1d4348ab52f98c0a3b1f665a98a1be58df07cf253d2b1d0249b8f",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -3009,9 +3013,7 @@
       "review": "source-and-family-review",
       "currentHash": "0f71314a8d8ed746fbeace4c42e449aac571d791debf3d63f8bb039d1d295b38",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -3023,9 +3025,7 @@
       "review": "source-and-family-review",
       "currentHash": "061c8d1ed46dfaca4f2afa60fcade7a746018d048a3a691bf0b432fad3c20cbe",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -3037,9 +3037,7 @@
       "review": "source-and-family-review",
       "currentHash": "519263e7c1e2e214d513e83ed180d1fa8722dd59841e2f685d04015c3e40d97a",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/docker/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -3485,9 +3483,7 @@
       "review": "source-and-family-review",
       "currentHash": "a96e90c87b85688e3206d790c168a342077b0bbb03dacf5352ba4a48de8ef056",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/migrations/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/migrations/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3499,9 +3495,7 @@
       "review": "source-and-family-review",
       "currentHash": "955dc9a2c08815a5c7152001c809f24e63e412aa7623ee7aaf1991db96c354ab",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/migrations/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/migrations/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -3565,9 +3559,7 @@
       "review": "source-and-family-review",
       "currentHash": "b46bfac9a20ec2be7d82c05a43f6fd4f4329ce22eb3e4fe8dc1b9fe1d913fd2b",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3579,9 +3571,7 @@
       "review": "source-and-family-review",
       "currentHash": "5bc715c2b92ca6a1a19d7b92be3097eafdbe67cd5feafffcf5184f5ecfd04eda",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -3593,9 +3583,7 @@
       "review": "source-and-family-review",
       "currentHash": "576f0d8fcb4fd84af839d658edefc62a35107570642de84cafeb77515600a239",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3607,9 +3595,7 @@
       "review": "detailed-refinement-and-browser-review",
       "currentHash": "f14d35a1e55a350a1b17ee733116e1c1dddabc414a3a145e3bf63942a3f8ebc8",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/status/[token]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/status/[token]/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -3621,9 +3607,7 @@
       "review": "source-and-family-review",
       "currentHash": "a9a0e93807d07f85d37a7ab56a73bc31c437f8da8b94e1f99f6e96a48687890c",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3767,9 +3751,7 @@
       "review": "source-and-family-review",
       "currentHash": "e652720ee641dc143d43d6346c69f0137362865197cebef9140a50315db08ecb",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3781,9 +3763,7 @@
       "review": "source-and-family-review",
       "currentHash": "0473352b8dd00a17b0d65566725790a70e83d14da9aab0d3cdbfc94425bcf4e6",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3795,9 +3775,7 @@
       "review": "source-and-family-review",
       "currentHash": "43c5567d88d1b87cabc02e5ee45b05f2f3d9e3d05a868160ff09687c749be530",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3809,9 +3787,7 @@
       "review": "source-and-family-review",
       "currentHash": "0da98494eff2ccaa1fb5055b7c559eb3b9dc993d348060f1852b6d62796fa21e",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3823,9 +3799,7 @@
       "review": "source-and-family-review",
       "currentHash": "ed0a76e6fc919d9b936ca2f0d58af9aed426094b50d1999cacb50d2aa3ba153b",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -3837,9 +3811,7 @@
       "review": "source-and-family-review",
       "currentHash": "8a9dc796609d57f677e6361faca10042760ba573f9b44d2680da4383e372279f",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -3851,9 +3823,7 @@
       "review": "source-and-family-review",
       "currentHash": "efe25f9e7027e9356810bbaa37602f6d381904fdb84057ad0197d5b43caaad4c",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3865,9 +3835,7 @@
       "review": "source-and-family-review",
       "currentHash": "795f38b9202679ba00b670f4f7ddd3eac593ec63cad224b868020daec3790ce3",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3879,9 +3847,7 @@
       "review": "source-and-family-review",
       "currentHash": "2d5b3e63639e784ad7e8ad3afa047c36def23a771ad530c626fe2ac5ec8accbb",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3893,9 +3859,7 @@
       "review": "source-and-family-review",
       "currentHash": "c3eb23edc1cfc088fd41e2dd08aa04ecca240ad2892e4fbd1e17f119bc29266d",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3907,9 +3871,7 @@
       "review": "source-and-family-review",
       "currentHash": "b909cffc0bb15d9acc03409c6334657132408fa5ab1ef50e801c01109a169a7a",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3921,9 +3883,7 @@
       "review": "source-and-family-review",
       "currentHash": "ce9b2f7bfddb3f15a2006d183882e82ea2cb950a26b9facbfbc5e78732b49e8c",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3935,9 +3895,7 @@
       "review": "source-and-family-review",
       "currentHash": "e414b1e3321809dd0a3ce50546f5f40bf5880a43b46bb9aeb0198729087a6bbc",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3949,9 +3907,7 @@
       "review": "source-and-family-review",
       "currentHash": "a1f3d60b232e816a04e8b59e09b1a6f2804852e1f102f0545a00a50a1be8e964",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -3963,9 +3919,7 @@
       "review": "source-and-family-review",
       "currentHash": "d55401e27e3428c3b5da0bedeae21e64d0ca4b8b90261ba2dda9feff8d552d96",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -3977,9 +3931,7 @@
       "review": "source-and-family-review",
       "currentHash": "70972b8a8445036623f86dc5ce38b7fd5c1f9f454a6b6d2a0757a8734afd3f23",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -3991,9 +3943,7 @@
       "review": "source-and-family-review",
       "currentHash": "3181dc2c866e3ea57c38e14ec907e8b443992ab9e580528eea97fe999250561f",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -4005,9 +3955,7 @@
       "review": "source-and-family-review",
       "currentHash": "8f08570281edacc1b77921afc44aa883daba74f0e256c94f87944eaa64107e22",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -4019,9 +3967,7 @@
       "review": "source-and-family-review",
       "currentHash": "dd310e6f9ad5626b061e106119b3a132c1a1251b0b27aa1ed7810b24d583e01c",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -4033,9 +3979,7 @@
       "review": "source-and-family-review",
       "currentHash": "28a42e9fe655434d297e05bd8efc45fc51ed0c5a48152a693d80fd725e552183",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/projects/[projectId]/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -4750,9 +4694,7 @@
       "review": "source-and-family-review",
       "currentHash": "a0b1c86bb0218d888bff0406a64a0bdb6727d578905af011db605ed593c6001b",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -4764,9 +4706,7 @@
       "review": "source-and-family-review",
       "currentHash": "3cc15be42b9a3d4f182ae3738516c85cfcf82c41766943f645835ec6ac899b7e",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/branding/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/branding/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -4778,9 +4718,7 @@
       "review": "source-and-family-review",
       "currentHash": "27106f79bedbec1948c37236eb03cf2b016ed8bf3630c222ece389c268783890",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/certificates/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/certificates/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -4815,9 +4753,7 @@
       "review": "source-and-family-review",
       "currentHash": "41abdd5587349388e7ebd370b1bd4a0ce54f162b3b151cad61c55f0f3449b883",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/destinations/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/destinations/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -4829,9 +4765,7 @@
       "review": "source-and-family-review",
       "currentHash": "2f8a2403307e83d0d3224e77bab02468fa09ec0bccd811d2740ca19b0409e6a9",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/destinations/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/destinations/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -4843,9 +4777,7 @@
       "review": "source-and-family-review",
       "currentHash": "021058c9407a9c369748a4f0bafb429f367f1281e1957ddfa7a05badf79f1eb7",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -4857,9 +4789,7 @@
       "review": "source-and-family-review",
       "currentHash": "3a6de23caf7a2cd0119d26a5271653c0a3f1a892d3a76c2334c2562e969611f1",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -4871,9 +4801,7 @@
       "review": "source-and-family-review",
       "currentHash": "e12b4e7bfe4b8258cbdc843b35dda9794d8cfd08099585c735bc9b4fd5d4a1ed",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -4885,9 +4813,7 @@
       "review": "source-and-family-review",
       "currentHash": "a8de0b5c1cacffee805d4aa1a76401ba4512081446d4c32b3fd9e0ba6c257f14",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -4899,9 +4825,7 @@
       "review": "source-and-family-review",
       "currentHash": "f24fe4f2aaafe563902a7617c42009e6e53210a8b8b5a3b6a028155f3f7a7f0a",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -4913,9 +4837,7 @@
       "review": "source-and-family-review",
       "currentHash": "714dca214e1f1b8d2b98de77a640212308d0f4e565f17ae1baf5cc62d8a46d79",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -4927,9 +4849,7 @@
       "review": "source-and-family-review",
       "currentHash": "0d43fe6996df77ac008951b5520de183def85df47d906a0feb974656a78cb6bc",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/git-providers/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -4941,9 +4861,7 @@
       "review": "source-and-family-review",
       "currentHash": "a160e7c5075de2cf8210f4e355a8f94841ef1cd176bd30756a43bee69f22085f",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -4955,9 +4873,7 @@
       "review": "source-and-family-review",
       "currentHash": "7ff2eeec3441efd67aaf862fac955a4812a10f7ecc900de312e3258cffa7569f",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/monitoring/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -4969,9 +4885,7 @@
       "review": "source-and-family-review",
       "currentHash": "8f4a75e6f695c04b0d08296b1ef92ea0e4b256899b9663824b7473e1ea92ad9a",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/notifications/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/notifications/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -4983,9 +4897,7 @@
       "review": "source-and-family-review",
       "currentHash": "d7fb0e98bc7409992fecfe1bef89947f5f43a5dc291aa1fc73960cad6074dac3",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/notifications/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/notifications/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -4997,9 +4909,7 @@
       "review": "source-and-family-review",
       "currentHash": "ddfe77b01eb3ef96e8d5486d3d4e58e0c852a3ecf3770b087f457603b9940419",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5011,9 +4921,7 @@
       "review": "source-and-family-review",
       "currentHash": "887692445bfdeba6d3185044a793aa8bb442504ecf3471f7e87d2a3cddfbae80",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5025,9 +4933,7 @@
       "review": "source-and-family-review",
       "currentHash": "b5a3a03971e93d374f21b6cebf4ebc452e8fc2db14e8edf06478d900ffd5f281",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5039,9 +4945,7 @@
       "review": "source-and-family-review",
       "currentHash": "5a4ba5cc051a2babb7e31405772fde32950ba7c8f9f96be111738c43717cd456",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5053,9 +4957,7 @@
       "review": "source-and-family-review",
       "currentHash": "168973b3f9e794d06b595065b9466417b089314f792056b6015c8ac93be05e34",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -5067,9 +4969,7 @@
       "review": "source-and-family-review",
       "currentHash": "f97c4b42f542bcfe6dc504f4624da6f120252198e375c54fa8e5113f20ac56e5",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5081,9 +4981,7 @@
       "review": "source-and-family-review",
       "currentHash": "0996419318d3bf27d5a05aad56ef9ef70868a10fc637193522643d8a6f9a50ea",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5095,9 +4993,7 @@
       "review": "source-and-family-review",
       "currentHash": "c9e8d446dd8c41724e7c604ac1b4051da9c2deebfbfd0ce3d7afb9c165134026",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/organization/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5109,9 +5005,7 @@
       "review": "source-and-family-review",
       "currentHash": "23f8de1d90318ea070b0d5c8b4c51a07b8ebb9732eec20558d8ad4d2b9eda582",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -5123,9 +5017,7 @@
       "review": "source-and-family-review",
       "currentHash": "810d04a3bf153fe444d7385fac4b701f31ec899f3481736f9e507d7058b58309",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5137,9 +5029,7 @@
       "review": "source-and-family-review",
       "currentHash": "58b5cc102b6dda9793a4fbf6c79b7e697c9e11d94967695694124a092f0d7899",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -5151,9 +5041,7 @@
       "review": "source-and-family-review",
       "currentHash": "4af2408fd1b3c29af422b1a0cb1a71c85a57b42d53229d6e80d88db46a1d34f9",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5165,9 +5053,7 @@
       "review": "source-and-family-review",
       "currentHash": "d34dd73cd2f47561229e64fb9232e2c2d5e5e85756a10fd1a8e62b3e67d6138c",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/profile/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5223,9 +5109,7 @@
       "review": "source-and-family-review",
       "currentHash": "80718848cfbbeecbcb77682b36d69a2f3d8758d74d25ed694beb761f03bd925f",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/registries/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/registries/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -5237,9 +5121,7 @@
       "review": "source-and-family-review",
       "currentHash": "769c0ef06d5fc7b3907288e4fe955912ea50bfb2b6367e29d3d679d4dc3210f5",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5251,9 +5133,7 @@
       "review": "source-and-family-review",
       "currentHash": "4158e4851e608d97ca8285388e1cdaa605dfffc6d60d15b8f195170d4a6664fa",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5265,9 +5145,7 @@
       "review": "source-and-family-review",
       "currentHash": "45811d8fa4ca882d6ec99043c77bf5d4023118ffd87270ce82a61cf04fd717b2",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5279,9 +5157,7 @@
       "review": "source-and-family-review",
       "currentHash": "9326db6d16c0b7d371c880accbdcb5f29bf720fcd52b3168383c397adb770896",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -5293,9 +5169,7 @@
       "review": "source-and-family-review",
       "currentHash": "0382ae109b60e8d29d2f377772d80f95a2413b4fc58040f39eaa22721f4d91fe",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5307,9 +5181,7 @@
       "review": "source-and-family-review",
       "currentHash": "c52add9da73fa23cc2d401c1e35098537085521894595cb2cabb510dac20bd21",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5321,9 +5193,7 @@
       "review": "source-and-family-review",
       "currentHash": "49b0dbe2d13c5e3235d9a045dd77530f52bf74778b4159e42b0b3752be60f6cd",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/server/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5335,9 +5205,7 @@
       "review": "source-and-family-review",
       "currentHash": "af6591f8ad013c494d089888491c46ff69b5998697bdd67cb1adfb4ab95584cc",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -5349,9 +5217,7 @@
       "review": "source-and-family-review",
       "currentHash": "26f7c1dccff21e51b6ce319bb2aa9cc2f74c9d1f42b2c8054a55e6b31b438800",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5363,9 +5229,7 @@
       "review": "source-and-family-review",
       "currentHash": "4c816dd36e96789ed57d73c8dc439b771a27e3f242f5e14fc80ab7bd7d21aadd",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5377,9 +5241,7 @@
       "review": "source-and-family-review",
       "currentHash": "4f9f6e1170a0b6cd0f0a043a60b8f23c5b8e5f46b974db56428192b1053a1e73",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5391,9 +5253,7 @@
       "review": "source-and-family-review",
       "currentHash": "d090e5fdf998fa660e619ef04ad2a9150d6ae7057f723fde71e83bd053596fc0",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5405,9 +5265,7 @@
       "review": "source-and-family-review",
       "currentHash": "5bbd8eb7e1a1d66b26f09ef588ee1e82bafd7c06949c1102c7b58adc8f240854",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5419,9 +5277,7 @@
       "review": "source-and-family-review",
       "currentHash": "e6a380fef6feb4e6a35403f916f994a403b127a2ee3eb137f74ed90ff0481594",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/servers/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -5433,9 +5289,7 @@
       "review": "source-and-family-review",
       "currentHash": "d5244ddd9fc291dacb3e263b9f777653c831064b0f36d5e4942f397048b5cc3c",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/ssh-keys/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/ssh-keys/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -5447,9 +5301,7 @@
       "review": "source-and-family-review",
       "currentHash": "8477429fd53cd37524749ca9334a4009db1b21c16c1e91cb23329ad6bf5ba907",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/sso/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/sso/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -5461,9 +5313,7 @@
       "review": "source-and-family-review",
       "currentHash": "b7720afa468bc98262cada850be5af6e8906ebe5b72f0b1071af29ad2b816847",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/settings/templates/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/settings/templates/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -5747,9 +5597,7 @@
       "review": "source-and-family-review",
       "currentHash": "4426d751a833f253b433ca168d4b980d24b45503b47ec3b632cdbfe17d062172",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -5761,9 +5609,7 @@
       "review": "source-and-family-review",
       "currentHash": "7c48b9670f9bed1f6eb5d8ca1ae389164de1cf0886cf1795022feb9571982cfb",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -5775,9 +5621,7 @@
       "review": "source-and-family-review",
       "currentHash": "09c2adec15f0b9ddc7b266cdc984e879f7efa73c0c63bba4bdcdaec6c1d0fdc9",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5789,9 +5633,7 @@
       "review": "source-and-family-review",
       "currentHash": "41709c36ef3776687d1ea6c05958724aad31e6b0983798dabdb5466b95c0ae04",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -5803,9 +5645,7 @@
       "review": "source-and-family-review",
       "currentHash": "2f080daa3fb2beb0e4a7b0fccc89fead0bd75c433eee663b908addec899d47b1",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5817,9 +5657,7 @@
       "review": "source-and-family-review",
       "currentHash": "c39b6da98766476550d3f8760d64cfb5693da8525098c54cd8502158b665250c",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -5831,9 +5669,7 @@
       "review": "source-and-family-review",
       "currentHash": "73b280a9cefbb5cb6f49183c018ec3c10bbc867b79e9fefad50fad26a87282b7",
       "directlyChanged": true,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/templates/page.tsx"],
       "renderingContract": "Direct Fieldwork composition"
     },
     {
@@ -6043,9 +5879,7 @@
       "review": "source-and-family-review",
       "currentHash": "3d28f208a6af87b6ddb6630a11d00f1b2e0b97c4f949cbeafe8a8085b1b9278b",
       "directlyChanged": false,
-      "pageConsumers": [
-        "apps/web/src/app/(dashboard)/dashboard/page.tsx"
-      ],
+      "pageConsumers": ["apps/web/src/app/(dashboard)/dashboard/page.tsx"],
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     },
     {
@@ -7097,13 +6931,13 @@
       "renderingContract": "Fieldwork shell, typography, theme and shared primitives"
     }
   ],
-  "direction": "Fieldwork",
+  "direction": "Fieldwork panel / Signal public website",
   "summary": {
-    "visualSources": 347,
-    "owned": 329,
+    "visualSources": 355,
+    "owned": 337,
     "vendor": 18,
-    "directlyChanged": 113,
+    "directlyChanged": 131,
     "unclassified": 0
   },
-  "browserEvidence": "Initial matrices in verification.md; detailed page review and bounded follow-up matrices in refinement.md. Conditional branches distinguished from rendered routes."
+  "browserEvidence": "Latest public website matrices and review dispositions in signal-website.md; panel rollout and detailed follow-up remain in verification.md and refinement.md. Conditional branches distinguished from rendered routes."
 }

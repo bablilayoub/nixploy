@@ -5,7 +5,9 @@ import { ArrowUpRight, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Dialog } from "radix-ui";
+import { DocsSearch } from "@/components/docs-search";
 import { Logo } from "@/components/logo";
+import { MotionToggle } from "@/components/motion-provider";
 import { ThemeToggle } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
 import { site } from "@/lib/site";
@@ -35,14 +37,14 @@ export function SiteNavbar() {
 			<header className="site-topbar fixed inset-x-0 top-0 z-40 border-b bg-card/95 backdrop-blur-md">
 				<div className="container-page flex min-h-18 items-center gap-4">
 					<Logo />
-					<nav aria-label="Main navigation" className="ms-6 hidden items-center gap-7 lg:flex">
+					<nav aria-label="Main navigation" className="ms-6 hidden items-center gap-5 lg:flex">
 						{links.map(({ label, href }) => (
 							<Link
 								key={href}
 								href={href}
 								aria-current={active(href) ? "page" : undefined}
 								className={cn(
-									"inline-flex min-h-11 items-center text-[13px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4 hover:text-foreground",
+									"inline-flex min-h-11 items-center text-[12px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4 hover:text-foreground",
 									active(href) ? "text-foreground" : "text-muted-foreground",
 								)}
 							>
@@ -51,17 +53,21 @@ export function SiteNavbar() {
 						))}
 					</nav>
 					<div className="ms-auto flex items-center gap-2">
+						<DocsSearch />
+						<span className="hidden sm:inline-flex">
+							<MotionToggle />
+						</span>
 						<ThemeToggle />
 						<a
 							href={site.github}
 							target="_blank"
 							rel="noreferrer"
-							className="hidden min-h-11 items-center gap-1.5 px-3 text-[13px] text-muted-foreground hover:text-foreground sm:inline-flex"
+							className="hidden min-h-11 items-center gap-1.5 px-2 text-[12px] text-muted-foreground hover:text-foreground sm:inline-flex"
 						>
 							GitHub
 							<GitHubLogoIcon aria-hidden="true" className="size-3.5" />
 						</a>
-						<Button asChild className="hidden h-10 rounded-md sm:inline-flex">
+						<Button asChild className="hidden h-10 rounded-md xl:inline-flex">
 							<Link href="/docs/install">Install Nixploy</Link>
 						</Button>
 						<Dialog.Root>
@@ -104,6 +110,7 @@ export function SiteNavbar() {
 											</Dialog.Close>
 										))}
 									</nav>
+									<MotionToggle label />
 									<Dialog.Close asChild>
 										<Button asChild className="mt-8 h-12 w-full">
 											<Link href="/docs/install">Install Nixploy</Link>

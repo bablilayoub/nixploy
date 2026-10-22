@@ -10,12 +10,12 @@ const ThemeContext = createContext<{
 	setPreference: (value: Preference) => void;
 }>({ preference: "system", setPreference: () => {} });
 function valid(value: string | null): Preference {
-	return value === "light" || value === "dark" ? value : "system";
+	return value === "light" || value === "dark" || value === "system" ? value : "dark";
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-	const [preference, setPreference] = useState<Preference>("system");
-	const current = useRef<Preference>("system");
+	const [preference, setPreference] = useState<Preference>("dark");
+	const current = useRef<Preference>("dark");
 	useEffect(() => {
 		const media = window.matchMedia("(prefers-color-scheme: dark)");
 		const apply = () => {

@@ -1,7 +1,7 @@
-import { ChevronRight } from "lucide-react";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import { ApiExplorer } from "@/components/api-explorer";
 import { DocsFrame } from "@/components/docs-frame";
 import { ProseLink } from "@/components/page-frame";
 import { CodeBlock } from "@/components/ui/code-block";
@@ -81,7 +81,7 @@ export default function ApiPage() {
 			activeHref="/api"
 			headings={Object.entries(SECTIONS).map(([id, text]) => ({ id, text }))}
 		>
-			<article>
+			<article className="signal-api-reference">
 				<p className="text-xs text-muted-foreground normal-case">API</p>
 				<h1 className="mt-4 text-4xl leading-[1.1] font-semibold tracking-[-0.045em] text-balance">
 					REST API reference
@@ -91,6 +91,18 @@ export default function ApiPage() {
 					Swagger UI, <Code>@nixploy/cli</Code>, and MCP.
 				</p>
 
+				<div className="signal-facts mt-8">
+					{[
+						{ label: "Interface", value: "REST + OpenAPI" },
+						{ label: "Authentication", value: "Scoped API keys" },
+						{ label: "Endpoints", value: apiEndpointCount },
+					].map((item) => (
+						<div key={item.label}>
+							<p className="text-xs text-muted-foreground">{item.label}</p>
+							<p className="mt-2 text-sm font-medium">{item.value}</p>
+						</div>
+					))}
+				</div>
 				<Section id="auth">
 					<P>
 						Create a key under <Strong>Settings → Profile</Strong> on your panel. Send it on every
@@ -161,80 +173,7 @@ export default function ApiPage() {
 					</P>
 					{/* An index first: 49 routers with every table open is a page nobody
 					    can navigate, so each router is a disclosure and this is the way in. */}
-					<nav aria-label="Routers" className="mt-6 flex flex-wrap gap-2">
-						{apiCatalog.map((group) => (
-							<a
-								key={group.router}
-								href={`#router-${group.router}`}
-								className="inline-flex min-h-8 items-center gap-1.5 rounded-full border px-3 font-mono text-xs text-muted-foreground transition-colors hover:border-foreground/25 hover:text-foreground"
-							>
-								{group.router}
-								<span className="text-muted-foreground/60">{group.endpoints.length}</span>
-							</a>
-						))}
-					</nav>
-
-					<div className="mt-8 flex flex-col gap-3">
-						{apiCatalog.map((group) => (
-							<details
-								key={group.router}
-								id={`router-${group.router}`}
-								className="group scroll-mt-28 rounded-xl border bg-card"
-							>
-								<summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
-									<ChevronRight
-										className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
-										aria-hidden
-									/>
-									<span className="min-w-0 flex-1">
-										<span className="block font-medium">{group.title}</span>
-										<span className="mt-0.5 block text-sm text-muted-foreground">
-											{group.description}
-										</span>
-									</span>
-									<span className="shrink-0 font-mono text-xs text-muted-foreground">
-										{group.router} · {group.endpoints.length}
-									</span>
-								</summary>
-								<div className="overflow-x-auto border-t">
-									<table className="w-full min-w-[34rem] text-left">
-										<caption className="sr-only">{group.title} endpoints</caption>
-										<thead className="text-xs text-muted-foreground">
-											<tr>
-												<th scope="col" className="px-4 py-2 font-medium">
-													Method
-												</th>
-												<th scope="col" className="px-4 py-2 font-medium">
-													Path
-												</th>
-												<th scope="col" className="px-4 py-2 font-medium">
-													Summary
-												</th>
-												<th scope="col" className="px-4 py-2 font-medium">
-													Requires
-												</th>
-											</tr>
-										</thead>
-										<tbody>
-											{group.endpoints.map((ep) => (
-												<tr key={`${ep.method}-${ep.path}`} className="border-t text-sm">
-													<td className="px-4 py-2 font-mono text-xs">{ep.method}</td>
-													<td className="px-4 py-2 font-mono text-xs">/api/{ep.path}</td>
-													<td className="px-4 py-2 text-muted-foreground">{ep.summary}</td>
-													<td className="px-4 py-2 font-mono text-xs text-muted-foreground">
-														{[
-															...(ep.capability ?? []),
-															...(ep.instanceAdmin ? ["instance admin"] : []),
-														].join(", ") || "—"}
-													</td>
-												</tr>
-											))}
-										</tbody>
-									</table>
-								</div>
-							</details>
-						))}
-					</div>
+					<ApiExplorer groups={apiCatalog} />
 				</Section>
 
 				<p className="mt-16 border-t pt-6 text-sm text-muted-foreground">

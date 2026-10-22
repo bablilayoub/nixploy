@@ -19,9 +19,9 @@ export default async function OpengraphImage() {
 				display: "flex",
 				flexDirection: "column",
 				justifyContent: "space-between",
-				background: "#f6f7f8",
+				background: "#0b0d11",
 				padding: 64,
-				color: "#202327",
+				color: "#f4f5f7",
 				fontFamily: "sans-serif",
 			}}
 		>
@@ -48,9 +48,9 @@ export default async function OpengraphImage() {
 					}}
 				>
 					<span>{heroTitle[0]}</span>
-					<span>{heroTitle[1]}</span>
+					<span style={{ color: "#ff895c" }}>{heroTitle[1]}</span>
 				</div>
-				<div style={{ fontSize: 26, color: "#616973", maxWidth: 940, lineHeight: 1.5 }}>
+				<div style={{ fontSize: 26, color: "#a9b2c0", maxWidth: 940, lineHeight: 1.5 }}>
 					{heroLead}
 				</div>
 			</div>
@@ -59,8 +59,8 @@ export default async function OpengraphImage() {
 					display: "flex",
 					justifyContent: "space-between",
 					fontSize: 22,
-					color: "#616973",
-					borderTop: "1px solid #e0e4e8",
+					color: "#a9b2c0",
+					borderTop: "1px solid #2b313c",
 					paddingTop: 24,
 				}}
 			>

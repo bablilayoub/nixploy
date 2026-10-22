@@ -1,68 +1,70 @@
+import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
-
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { brandIconSrc } from "@/lib/brand";
+import { Reveal } from "@/components/motion-provider";
+import { TemplateLogo } from "@/components/template-logo";
 import { featuredTemplateIds } from "@/lib/landing-data";
-import { findTemplate, type TemplateEntry, templateCount } from "@/lib/templates";
+import { findTemplate, templateCount } from "@/lib/templates";
 
-/*
- * A static catalog preview. Names and categories come from the generated catalog, so it cannot
- * advertise a template we do not ship.
- */
-const featured = featuredTemplateIds.map(findTemplate).filter((entry) => entry !== undefined);
-
-function TemplateCard({ template }: { template: TemplateEntry }) {
-	return (
-		<Link href={`/templates/${template.id}`} className="group min-w-0">
-			<Card className="h-full gap-0 rounded-lg border bg-card p-5 shadow-[var(--surface-shadow)] transition-colors group-hover:border-ring">
-				<div className="flex items-center gap-3">
-					<span className="inline-flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent">
-						{/* biome-ignore lint/performance/noImgElement: remote brand marks from a CDN, no loader configured */}
-						<img
-							src={brandIconSrc(template.logo)}
-							alt=""
-							width={20}
-							height={20}
-							loading="lazy"
-							className="size-5"
-						/>
-					</span>
-					<span className="min-w-0">
-						<span className="block truncate text-sm font-medium">{template.name}</span>
-						<span className="mt-0.5 block text-xs text-muted-foreground">{template.category}</span>
-					</span>
-				</div>
-				<p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
-					{template.description.replaceAll("`", "")}
-				</p>
-			</Card>
-		</Link>
-	);
-}
-
+const featured = featuredTemplateIds
+	.map(findTemplate)
+	.filter((entry) => entry !== undefined)
+	.slice(0, 7);
 export function Templates() {
+	const [lead, ...rest] = featured;
 	return (
-		<section id="templates" className="py-20 lg:py-28">
-			<div className="container-page flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-				<div className="max-w-2xl">
-					<p className="text-xs text-muted-foreground normal-case">One click</p>
-					<h2 className="mt-4 text-3xl leading-[1.15] font-medium tracking-[-0.035em] text-balance lg:text-4xl">
-						{templateCount} stacks you do not have to write
-					</h2>
-					<p className="mt-4 text-lg text-muted-foreground">
-						Pinned images, named volumes, and only the variables the stack actually needs.
-					</p>
-				</div>
-				<Button asChild variant="outline" size="lg" className="rounded-lg">
-					<Link href="/templates">Browse all {templateCount}</Link>
-				</Button>
+		<section id="templates" className="container-page py-20 lg:py-28">
+			<div className="signal-product-heading">
+				<h2>
+					Less setup.
+					<br />
+					<span className="text-muted-foreground">More building.</span>
+				</h2>
+				<p>
+					{templateCount} reviewed Compose stacks, from developer tools to the applications your
+					team runs every day.
+				</p>
 			</div>
-
-			<div className="container-page mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-				{featured.slice(0, 9).map((template) => (
-					<TemplateCard key={template.id} template={template} />
-				))}
+			<Reveal className="signal-template-showcase">
+				{lead && (
+					<Link href={`/templates/${lead.id}`} className="signal-featured-template">
+						<TemplateLogo logo={lead.logo} name={lead.name} />
+						<span className="mt-10 block text-xs text-primary">Ready to deploy</span>
+						<h3 className="mt-3 text-4xl font-medium tracking-tight">{lead.name}</h3>
+						<p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+							{lead.description.replaceAll("`", "")}
+						</p>
+						<span className="mt-8 inline-flex min-h-11 items-center gap-2 text-sm">
+							Explore the stack
+							<ArrowUpRight className="size-4" aria-hidden="true" />
+						</span>
+					</Link>
+				)}
+				<div className="grid gap-3 sm:grid-cols-2">
+					{rest.map((template) => (
+						<Link
+							key={template.id}
+							href={`/templates/${template.id}`}
+							className="signal-template-card flex items-start gap-4"
+						>
+							<TemplateLogo logo={template.logo} name={template.name} />
+							<span className="min-w-0">
+								<span className="block text-base font-medium">{template.name}</span>
+								<span className="mt-1 block text-xs text-muted-foreground">
+									{template.category}
+								</span>
+								<span className="mt-3 line-clamp-2 block text-xs leading-relaxed text-muted-foreground">
+									{template.description.replaceAll("`", "")}
+								</span>
+							</span>
+						</Link>
+					))}
+				</div>
+			</Reveal>
+			<div className="mt-8 flex justify-end">
+				<Link href="/templates" className="signal-text-action">
+					Browse all {templateCount} applications
+					<ArrowUpRight className="size-4" aria-hidden="true" />
+				</Link>
 			</div>
 		</section>
 	);

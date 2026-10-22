@@ -13,10 +13,10 @@ import { templateCount } from "./templates";
  */
 
 /** The fold's two lines; the second one is the quiet half of the promise. */
-export const heroTitle = ["Ship your work.", "Own the whole stack."] as const;
+export const heroTitle = ["From your code.", "To your cloud."] as const;
 
 export const heroLead =
-	"Deploy Git repositories and Compose stacks. Manage databases, domains, backups and monitoring on your own servers.";
+	"Deploy applications, databases and Compose stacks on your own servers. Keep your infrastructure. Own every layer.";
 
 /**
  * What `docker stats` reports for the three Swarm services on the production

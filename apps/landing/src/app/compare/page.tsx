@@ -36,7 +36,7 @@ export default function ComparePage() {
 			title="How Nixploy compares"
 			description="This category is crowded, and three of these projects are older and larger than this one. Here is where each actually differs — sourced, dated, and including the rows where they win."
 		>
-			<div className="grid gap-4 lg:grid-cols-3">
+			<div className="signal-comparison-list">
 				{comparisons.map((entry) => (
 					<Link
 						key={entry.slug}
@@ -44,10 +44,12 @@ export default function ComparePage() {
 						aria-label={`Nixploy vs ${entry.name}`}
 						className="group block h-full"
 					>
-						<Card className="h-full transition-colors hover:border-primary/40">
+						<Card className="h-full gap-4 transition-colors hover:border-primary/40 lg:grid lg:grid-cols-[minmax(0,.7fr)_minmax(0,1.3fr)] lg:items-center lg:py-5">
 							<CardHeader>
 								<CardTitle className="text-2xl">Nixploy vs {entry.name}</CardTitle>
-								<p className="font-mono text-xs text-muted-foreground">{entry.stars} stars</p>
+								<p className="font-mono text-xs text-muted-foreground">
+									Source review: {VERIFIED_ON}
+								</p>
 							</CardHeader>
 							<CardContent className="flex h-full flex-col">
 								<p className="flex-1 text-muted-foreground">{entry.headline}</p>

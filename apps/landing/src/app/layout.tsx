@@ -11,7 +11,7 @@ const mono = Geist_Mono({
 	variable: "--font-geist-mono",
 	display: "swap",
 });
-const THEME_INIT = `(function(){try{var t=localStorage.getItem('theme');document.documentElement.classList.toggle('dark',t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches))}catch(e){document.documentElement.classList.toggle('dark',matchMedia('(prefers-color-scheme: dark)').matches)}})()`;
+const THEME_INIT = `(function(){try{var t=localStorage.getItem('theme');document.documentElement.classList.toggle('dark',t!=='light'&&(t!=='system'||matchMedia('(prefers-color-scheme: dark)').matches))}catch(e){document.documentElement.classList.add('dark')}})()`;
 
 /*
  * Motion writes its `initial` state as an inline style, so every reveal on the
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
 		apple: [{ url: "/apple-icon.png", type: "image/png" }],
 	},
 	openGraph: {
-		title: "Nixploy — Ship anything. Own everything.",
+		title: "Nixploy — From your code. To your cloud.",
 		description: site.description,
 		url: site.url,
 		siteName: site.name,
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
 	},
 	twitter: {
 		card: "summary_large_image",
-		title: "Nixploy — Ship anything. Own everything.",
+		title: "Nixploy — From your code. To your cloud.",
 		description: site.description,
 	},
 	robots: { index: true, follow: true },
@@ -53,8 +53,8 @@ export const viewport: Viewport = {
 	// Matches `--background` in globals.css (oklch(0.145 0 0)); a theme colour
 	// that is not the page colour shows as a seam in the browser chrome.
 	themeColor: [
-		{ media: "(prefers-color-scheme: light)", color: "#f6f7f8" },
-		{ media: "(prefers-color-scheme: dark)", color: "#17191c" },
+		{ media: "(prefers-color-scheme: light)", color: "#f5f6f8" },
+		{ media: "(prefers-color-scheme: dark)", color: "#0b0d11" },
 	],
 };
 

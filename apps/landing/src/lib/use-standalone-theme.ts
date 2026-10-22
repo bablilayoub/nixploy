@@ -3,7 +3,7 @@
 import { useLayoutEffect } from "react";
 
 /** Last-resort pages replace the root layout and must not need its providers. */
-export function useStandaloneTheme(fallback: "light" | "system" = "light") {
+export function useStandaloneTheme(fallback: "light" | "dark" | "system" = "light") {
 	useLayoutEffect(() => {
 		const media = window.matchMedia("(prefers-color-scheme: dark)");
 		const apply = () => {
