@@ -20,7 +20,7 @@
 				"src/**/*.test.ts"
 			],
 			"project": ["**/*.{ts,tsx,mjs}"],
-			"ignore": ["next-env.d.ts", "src/components/ui/**"],
+			"ignore": ["next-env.d.ts", ".next*/**", "src/components/ui/**"],
 			"ignoreDependencies": [
 				"bcryptjs",
 				"playwright-core",

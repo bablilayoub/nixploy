@@ -1,3 +1,6 @@
+Current design and verification: [Monochrome library rebuild](monochrome-library.md).
+The checkpoints below describe previous implementations.
+
 # Fieldwork frontend verification — 2026-10-21
 
 Fieldwork replaces the rejected monochrome design across the panel, auth/public surfaces and marketing/docs. The build uses the existing shadcn/Radix/Recharts/Lucide stack with Geist and Geist Mono from Next's existing font support. No product dependency, schema, deploy-engine, tenancy or API change was introduced.

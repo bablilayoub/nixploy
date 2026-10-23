@@ -1,6 +1,7 @@
 "use client";
 import { ChevronRight, Search } from "lucide-react";
 import { useState } from "react";
+import { Input } from "@/components/ui/input";
 import type { ApiRouterGroup } from "@/lib/docs/api-catalog";
 export function ApiExplorer({ groups }: { groups: ApiRouterGroup[] }) {
 	const [query, setQuery] = useState(""),
@@ -22,14 +23,15 @@ export function ApiExplorer({ groups }: { groups: ApiRouterGroup[] }) {
 	return (
 		<div className="mt-7">
 			<div className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-4">
-				<label className="grid min-w-0 flex-1 gap-2 text-sm">
+				<label htmlFor="endpoint-search" className="grid min-w-0 flex-1 gap-2 text-sm">
 					<span>Find an endpoint</span>
 					<span className="relative">
 						<Search
 							className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground"
 							aria-hidden="true"
 						/>
-						<input
+						<Input
+							id="endpoint-search"
 							type="search"
 							value={query}
 							onChange={(event) => setQuery(event.target.value)}

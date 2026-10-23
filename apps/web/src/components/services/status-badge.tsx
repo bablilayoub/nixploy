@@ -42,15 +42,14 @@ type DeploymentStatus = "queued" | "running" | "done" | "error" | "cancelled" | 
 type BadgeVariant = "secondary" | "success" | "destructive" | "info";
 
 /**
- * Only the badge colour lives here — the words come from
+ * Only the badge treatment lives here — the words come from
  * `deploymentStatusLabel`, so the badge, the dashboard list and the log drawer
  * cannot drift apart again (the badge used to say "Error" where the rest of
  * the panel said "Failed").
  */
 const deploymentBadgeVariant: Record<string, BadgeVariant> = {
 	queued: "secondary",
-	// Blue while it runs, green once it succeeded — the same reading as the dots
-	// in the dashboard list, which had the two colours the other way round here.
+	// Neutral tones and explicit labels keep the same status vocabulary as the dashboard.
 	running: "info",
 	done: "success",
 	error: "destructive",

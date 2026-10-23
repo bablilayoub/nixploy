@@ -26,3 +26,15 @@ atmosphere, not a content background. Fine grid belongs only to hero/page masthe
 Display clamp44–96px, section32–52px, body16–18px, code13–14px, labels12px.
 Controls6–8px, cards12px, product/diagramframes20px. Motion opacity150ms,
 controls180ms, entrance400–550ms, staggers60ms; pause/reduced-motion stop travel.
+
+
+## Monochrome library authority — 2026-10-23
+
+Both applications use the same achromatic ramp: light canvas #fafafa, surface and
+popover #ffffff, foreground/primary #171717, secondary/inset #f5f5f5, muted text
+#636363, divider #e5e5e5, input #8a8a8a. Dark canvas #0a0a0a, surface #141414,
+overlay #1c1c1c, primary/foreground #fafafa, secondary/inset #222222, muted text
+#b3b3b3, divider #303030, input #737373. Status semantics use neutral tones plus
+explicit labels/icons; chart series use distinct gray levels and labels. Brand
+icons may keep authentic colors. Saved custom branding values are preserved.
+Geist and Geist Mono remain; no new font or component runtime dependency.

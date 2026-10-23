@@ -10,8 +10,14 @@ import { Logo } from "@/components/logo";
 import { MotionToggle } from "@/components/motion-provider";
 import { ThemeToggle } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
+import {
+	NavigationMenu,
+	NavigationMenuItem,
+	NavigationMenuLink,
+	NavigationMenuList,
+	navigationMenuTriggerStyle,
+} from "@/components/ui/navigation-menu";
 import { site } from "@/lib/site";
-import { cn } from "@/lib/utils";
 
 const links = [
 	{ label: "Product", href: "/features" },
@@ -34,24 +40,26 @@ export function SiteNavbar() {
 			>
 				Skip to content
 			</a>
-			<header className="site-topbar fixed inset-x-0 top-0 z-40 border-b bg-card/95 backdrop-blur-md">
+			<header className="site-topbar fixed inset-x-0 top-0 z-40 border-b bg-background">
 				<div className="container-page flex min-h-18 items-center gap-4">
 					<Logo />
-					<nav aria-label="Main navigation" className="ms-6 hidden items-center gap-5 lg:flex">
-						{links.map(({ label, href }) => (
-							<Link
-								key={href}
-								href={href}
-								aria-current={active(href) ? "page" : undefined}
-								className={cn(
-									"inline-flex min-h-11 items-center text-[12px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4 hover:text-foreground",
-									active(href) ? "text-foreground" : "text-muted-foreground",
-								)}
-							>
-								{label}
-							</Link>
-						))}
-					</nav>
+					<NavigationMenu aria-label="Main navigation" className="hidden lg:flex">
+						<NavigationMenuList>
+							{links.map(({ label, href }) => (
+								<NavigationMenuItem key={href}>
+									<NavigationMenuLink
+										asChild
+										active={active(href)}
+										className={navigationMenuTriggerStyle()}
+									>
+										<Link href={href} aria-current={active(href) ? "page" : undefined}>
+											{label}
+										</Link>
+									</NavigationMenuLink>
+								</NavigationMenuItem>
+							))}
+						</NavigationMenuList>
+					</NavigationMenu>
 					<div className="ms-auto flex items-center gap-2">
 						<DocsSearch />
 						<span className="hidden sm:inline-flex">

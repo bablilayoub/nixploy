@@ -9,6 +9,14 @@ import type { ReactNode } from "react";
 import { ServiceUrlBar } from "@/components/services/service-url";
 import { DeploymentStatusBadge, ServiceStatusBadge } from "@/components/services/status-badge";
 import { PageHeader } from "@/components/shell";
+import {
+	Breadcrumb,
+	BreadcrumbItem,
+	BreadcrumbLink,
+	BreadcrumbList,
+	BreadcrumbPage,
+	BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { DateTime } from "@/components/ui/date-time";
 import { DisabledHint } from "@/components/ui/disabled-hint";
@@ -191,34 +199,39 @@ export function ServicePageHeader({
 		<PageHeader
 			className="fieldwork-service-header"
 			breadcrumb={
-				<nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5">
-					<Link
-						href="/dashboard"
-						className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-					>
-						Projects
-					</Link>
-					<span aria-hidden>/</span>
-					<Link
-						href={`/dashboard/projects/${projectId}`}
-						className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-					>
-						{crumbs.project ?? "Project"}
-					</Link>
-					{crumbs.environment ? (
-						<>
-							<span aria-hidden>/</span>
-							<Link
-								href={`/dashboard/projects/${projectId}?env=${encodeURIComponent(crumbs.environment)}`}
-								className="rounded-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-							>
-								{crumbs.environment}
-							</Link>
-						</>
-					) : null}
-					<span aria-hidden>/</span>
-					<span className="text-foreground">{name}</span>
-				</nav>
+				<Breadcrumb>
+					<BreadcrumbList>
+						<BreadcrumbItem>
+							<BreadcrumbLink asChild>
+								<Link href="/dashboard">Projects</Link>
+							</BreadcrumbLink>
+						</BreadcrumbItem>
+						<BreadcrumbSeparator />
+						<BreadcrumbItem>
+							<BreadcrumbLink asChild>
+								<Link href={`/dashboard/projects/${projectId}`}>{crumbs.project ?? "Project"}</Link>
+							</BreadcrumbLink>
+						</BreadcrumbItem>
+						{crumbs.environment && (
+							<>
+								<BreadcrumbSeparator />
+								<BreadcrumbItem>
+									<BreadcrumbLink asChild>
+										<Link
+											href={`/dashboard/projects/${projectId}?env=${encodeURIComponent(crumbs.environment)}`}
+										>
+											{crumbs.environment}
+										</Link>
+									</BreadcrumbLink>
+								</BreadcrumbItem>
+							</>
+						)}
+						<BreadcrumbSeparator />
+						<BreadcrumbItem>
+							<BreadcrumbPage>{name}</BreadcrumbPage>
+						</BreadcrumbItem>
+					</BreadcrumbList>
+				</Breadcrumb>
 			}
 			title={
 				<span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">

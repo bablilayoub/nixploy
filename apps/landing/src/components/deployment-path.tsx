@@ -1,8 +1,16 @@
 "use client";
 import { ArrowUpRight, Box, GitBranch, Globe, Layers } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
-import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardFooter,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const stages = [
 	{
@@ -39,60 +47,46 @@ const stages = [
 	},
 ];
 export function DeploymentPath({ compact = false }: { compact?: boolean }) {
-	const [selected, setSelected] = useState(1);
-	const stage = stages[selected];
 	return (
-		<div className={`deployment-path ${compact ? "is-compact" : ""}`}>
-			<div className="path-topline">
-				<span className="inline-flex items-center gap-2">
-					<span className="signal-dot" />
-					The deployment path
-				</span>
-				<span>Select a stage to explore</span>
-			</div>
-			<ol className="path-stages">
-				{stages.map(({ Icon, name, detail }, index) => (
-					<li key={name} className="path-stage" style={{ "--stage": index } as React.CSSProperties}>
-						<button
-							type="button"
-							aria-pressed={selected === index}
-							onClick={() => setSelected(index)}
-							className="path-stage-button"
-						>
-							<span className="path-stage-icon">
-								<Icon className="size-6" aria-hidden="true" />
-							</span>
-							<span className="path-stage-name">{name}</span>
-							<span className="path-stage-detail">{detail}</span>
-						</button>
-					</li>
-				))}
-			</ol>
-			<div className="path-explanation">
-				<p className="font-mono text-xs text-primary">
-					{String(selected + 1).padStart(2, "0")} / {stage.name}
-				</p>
-				<AnimatePresence initial={false} mode="wait">
-					<motion.p
-						key={selected}
-						initial={{ opacity: 0 }}
-						animate={{ opacity: 1 }}
-						exit={{ opacity: 0 }}
-						transition={{ duration: 0.16 }}
-						className="text-sm leading-relaxed text-muted-foreground"
-						role="status"
-					>
-						{stage.explanation}
-					</motion.p>
-				</AnimatePresence>
-			</div>
-			<div className="path-bottomline">
-				<span>Illustrated flow · your infrastructure</span>
-				<Link href={stage.guide}>
-					Explore {stage.name.toLowerCase()}
-					<ArrowUpRight className="size-3.5" aria-hidden="true" />
-				</Link>
-			</div>
-		</div>
+		<Card className={compact ? "my-6" : "my-10"}>
+			<CardHeader>
+				<CardTitle>The deployment workflow</CardTitle>
+				<CardDescription>
+					Source, build, deploy and route on infrastructure you control.
+				</CardDescription>
+			</CardHeader>
+			<CardContent>
+				<Tabs defaultValue="1">
+					<TabsList className="h-auto w-full flex-wrap justify-start">
+						{stages.map((stage, index) => (
+							<TabsTrigger
+								key={stage.name}
+								value={String(index)}
+								className="min-h-11 max-w-full whitespace-normal text-left"
+							>
+								<stage.Icon aria-hidden="true" className="size-4" />
+								{stage.name}
+							</TabsTrigger>
+						))}
+					</TabsList>
+					{stages.map((stage, index) => (
+						<TabsContent key={stage.name} value={String(index)} className="pt-6">
+							<p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
+								{stage.explanation}
+							</p>
+							<Button asChild variant="link" className="mt-4">
+								<Link href={stage.guide}>
+									Read the guide
+									<ArrowUpRight aria-hidden="true" data-icon="inline-end" />
+								</Link>
+							</Button>
+						</TabsContent>
+					))}
+				</Tabs>
+			</CardContent>
+			<CardFooter>
+				<p className="text-xs text-muted-foreground">Workflow reference · your infrastructure</p>
+			</CardFooter>
+		</Card>
 	);
 }

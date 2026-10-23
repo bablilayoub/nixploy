@@ -8,7 +8,7 @@ export const alt = "Nixploy — a platform as a service you host yourself";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-/** The share card follows Fieldwork and uses the same product copy as the site. */
+/** The share card follows the monochrome website and uses the same product copy as the site. */
 export default async function OpengraphImage() {
 	const mark = await readFile(join(process.cwd(), "public/brand/nixploy-mark-dark.png"));
 	return new ImageResponse(
@@ -19,9 +19,9 @@ export default async function OpengraphImage() {
 				display: "flex",
 				flexDirection: "column",
 				justifyContent: "space-between",
-				background: "#0b0d11",
+				background: "#0a0a0a",
 				padding: 64,
-				color: "#f4f5f7",
+				color: "#fafafa",
 				fontFamily: "sans-serif",
 			}}
 		>
@@ -48,9 +48,9 @@ export default async function OpengraphImage() {
 					}}
 				>
 					<span>{heroTitle[0]}</span>
-					<span style={{ color: "#ff895c" }}>{heroTitle[1]}</span>
+					<span style={{ color: "#a3a3a3" }}>{heroTitle[1]}</span>
 				</div>
-				<div style={{ fontSize: 26, color: "#a9b2c0", maxWidth: 940, lineHeight: 1.5 }}>
+				<div style={{ fontSize: 26, color: "#a3a3a3", maxWidth: 940, lineHeight: 1.5 }}>
 					{heroLead}
 				</div>
 			</div>
@@ -59,8 +59,8 @@ export default async function OpengraphImage() {
 					display: "flex",
 					justifyContent: "space-between",
 					fontSize: 22,
-					color: "#a9b2c0",
-					borderTop: "1px solid #2b313c",
+					color: "#a3a3a3",
+					borderTop: "1px solid #303030",
 					paddingTop: 24,
 				}}
 			>

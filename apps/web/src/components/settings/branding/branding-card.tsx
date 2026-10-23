@@ -156,7 +156,7 @@ export function BrandingCard() {
 								<Input
 									id="branding-accent"
 									value={form.accentColor}
-									placeholder="#737984"
+									placeholder="#737373"
 									onChange={(event) =>
 										setForm((current) => ({ ...current, accentColor: event.target.value }))
 									}

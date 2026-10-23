@@ -3,6 +3,7 @@ import { ArrowUpRight, Search, X } from "lucide-react";
 import Link from "next/link";
 import { Dialog } from "radix-ui";
 import { useEffect, useState } from "react";
+import { Input } from "@/components/ui/input";
 import { docsNav } from "@/lib/docs/nav";
 
 const entries = docsNav.flatMap((group) =>
@@ -54,7 +55,7 @@ export function DocsSearch() {
 					</Dialog.Description>
 					<div className="flex items-center gap-3 border-b p-5">
 						<Search className="size-5 shrink-0 text-primary" aria-hidden="true" />
-						<input
+						<Input
 							aria-label="Search documentation pages"
 							type="search"
 							value={query}

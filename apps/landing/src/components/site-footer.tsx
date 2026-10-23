@@ -101,12 +101,6 @@ export function SiteFooter() {
 					</div>
 				</div>
 			</div>
-			<div className="container-page signal-footer-wordmark">
-				<span aria-hidden="true">nixploy.</span>
-				<span className="pb-2 text-xs text-muted-foreground">
-					Your infrastructure. Every layer.
-				</span>
-			</div>
 		</footer>
 	);
 }

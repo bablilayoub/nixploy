@@ -1,4 +1,7 @@
-# Signal public website — 2026-10-23
+# Signal public website — historical checkpoint
+
+Superseded by [Monochrome library rebuild](monochrome-library.md). The notes below
+describe the earlier rejected direction and its verification, not the current UI.
 
 The user rejected the basic marketing treatment and requested a modern technical
 website with animation across every public page. Signal supersedes the marketing

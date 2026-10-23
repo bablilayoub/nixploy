@@ -1,12 +1,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Rocket, Server } from "lucide-react";
+import { Rocket } from "lucide-react";
 import Link from "next/link";
 
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/services/empty-state";
 import { StatusDot } from "@/components/shell";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader } from "@/components/ui/card";
 import { DateTime } from "@/components/ui/date-time";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRunningDeployments } from "@/hooks/use-running-deployments";
@@ -34,58 +36,55 @@ export function OverviewCards({ onAttention }: { onAttention: () => void }) {
 			</QueryState>
 		);
 	const services = data?.services;
+	const metrics = [
+		{
+			label: "Running services",
+			value: countRunningServices(services),
+			detail: `${services?.total ?? 0} services across your workspace`,
+		},
+		{
+			label: "Projects",
+			value: data?.projectCount ?? 0,
+			detail: "Grouped into isolated environments",
+		},
+		{
+			label: "Deployments",
+			value: data?.deploymentsLastDay.total ?? 0,
+			detail: "Releases in the last 24 hours",
+		},
+		{ label: "Need attention", value: services?.error ?? 0, detail: "Services reporting an error" },
+	];
 	return (
-		<section className="fieldwork-summary" aria-label="Workspace summary">
-			<div className="fieldwork-summary-primary">
-				<span className="fieldwork-summary-icon">
-					<Server aria-hidden="true" className="size-5" strokeWidth={1.5} />
-				</span>
-				<div>
-					{isPending ? (
-						<Skeleton className="h-4 w-44" />
-					) : (
-						<strong>
-							{countRunningServices(services)} of {services?.total ?? 0} services running
-						</strong>
-					)}
-					<div className="fieldwork-summary-detail">
+		<section
+			aria-label="Workspace summary"
+			aria-busy={isPending}
+			className="grid grid-cols-2 gap-3 xl:grid-cols-4"
+		>
+			{metrics.map((metric) => (
+				<Card key={metric.label} className="gap-2 py-4">
+					<CardHeader>
+						<CardDescription>{metric.label}</CardDescription>
+					</CardHeader>
+					<CardContent>
+						{isPending ? (
+							<Skeleton className="h-9 w-16" />
+						) : (
+							<p className="text-3xl font-medium tracking-tight tabular-nums">{metric.value}</p>
+						)}
+					</CardContent>
+					<CardFooter className="hidden min-h-11 text-xs text-muted-foreground sm:flex">
 						{isPending ? (
 							<Skeleton className="h-3 w-32" />
+						) : metric.label === "Need attention" && (services?.error ?? 0) > 0 ? (
+							<Button variant="link" size="sm" onClick={onAttention}>
+								Review services
+							</Button>
 						) : (
-							<>
-								<span>{data?.projectCount ?? 0} projects</span>
-								{(services?.error ?? 0) > 0 ? (
-									<button
-										type="button"
-										onClick={onAttention}
-										className="text-destructive underline-offset-4 hover:underline"
-									>
-										{services?.error} need attention
-									</button>
-								) : (
-									<span>No service errors reported</span>
-								)}
-							</>
+							metric.detail
 						)}
-					</div>
-				</div>
-			</div>
-			<div className="fieldwork-summary-metric">
-				{isPending ? (
-					<Skeleton className="h-7 w-12" />
-				) : (
-					<strong>{data?.deploymentsLastDay.total ?? 0}</strong>
-				)}
-				<span>deployments in 24 hours</span>
-			</div>
-			<div className="fieldwork-summary-metric">
-				{isPending ? (
-					<Skeleton className="h-7 w-12" />
-				) : (
-					<strong>{data?.deploymentsLastDay.done ?? 0}</strong>
-				)}
-				<span>successful deployments</span>
-			</div>
+					</CardFooter>
+				</Card>
+			))}
 		</section>
 	);
 }

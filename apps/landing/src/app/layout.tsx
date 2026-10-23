@@ -34,7 +34,7 @@ export const metadata: Metadata = {
 		apple: [{ url: "/apple-icon.png", type: "image/png" }],
 	},
 	openGraph: {
-		title: "Nixploy — From your code. To your cloud.",
+		title: "Nixploy — Your stack. Your servers.",
 		description: site.description,
 		url: site.url,
 		siteName: site.name,
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
 	},
 	twitter: {
 		card: "summary_large_image",
-		title: "Nixploy — From your code. To your cloud.",
+		title: "Nixploy — Your stack. Your servers.",
 		description: site.description,
 	},
 	robots: { index: true, follow: true },
@@ -53,8 +53,8 @@ export const viewport: Viewport = {
 	// Matches `--background` in globals.css (oklch(0.145 0 0)); a theme colour
 	// that is not the page colour shows as a seam in the browser chrome.
 	themeColor: [
-		{ media: "(prefers-color-scheme: light)", color: "#f5f6f8" },
-		{ media: "(prefers-color-scheme: dark)", color: "#0b0d11" },
+		{ media: "(prefers-color-scheme: light)", color: "#fafafa" },
+		{ media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
 	],
 };
 

@@ -30,7 +30,10 @@ export function MotionProvider({ children }: { children: ReactNode }) {
 }
 export function MotionToggle({ label = false }: { label?: boolean }) {
 	const { playing, toggle } = useContext(MotionContext);
-	const reduced = useReducedMotion();
+	const prefersReduced = useReducedMotion();
+	const [mounted, setMounted] = useState(false);
+	useEffect(() => setMounted(true), []);
+	const reduced = mounted && prefersReduced;
 	const text = reduced
 		? "Reduced motion enabled"
 		: playing
@@ -70,7 +73,7 @@ export function Reveal({
 			whileInView={{ y: 0 }}
 			viewport={{ once: true, amount: 0.08 }}
 			transition={{
-				duration: playing && !reduced ? 0.45 : 0,
+				duration: playing && !reduced ? 0.3 : 0,
 				delay: playing && !reduced ? delay : 0,
 				ease: [0.22, 1, 0.36, 1],
 			}}

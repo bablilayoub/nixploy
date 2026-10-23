@@ -20,6 +20,8 @@ const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
 	reactStrictMode: true,
+	// Keep review builds isolated when an existing panel is serving .next.
+	distDir: process.env.NIXPLOY_NEXT_DIST_DIR ?? ".next",
 	async headers() {
 		return [{ source: "/(.*)", headers: SECURITY_HEADERS }];
 	},

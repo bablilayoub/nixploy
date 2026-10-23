@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { TemplateLogo } from "@/components/template-logo";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { TemplateEntry } from "@/lib/templates";
 
 type CatalogEntry = Pick<
@@ -58,14 +59,18 @@ export function TemplateCatalog({
 			</aside>
 			<div className="min-w-0">
 				<div className="flex flex-col gap-4 rounded-xl border bg-card p-4 sm:flex-row sm:items-end sm:p-5">
-					<label className="grid min-w-0 flex-1 gap-2 text-sm font-medium">
+					<label
+						htmlFor="template-search"
+						className="grid min-w-0 flex-1 gap-2 text-sm font-medium"
+					>
 						<span>Find an application</span>
 						<span className="relative">
 							<Search
 								aria-hidden="true"
 								className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
 							/>
-							<input
+							<Input
+								id="template-search"
 								type="search"
 								value={query}
 								onChange={(event) => setQuery(event.target.value)}

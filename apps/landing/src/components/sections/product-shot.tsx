@@ -2,7 +2,7 @@
 
 import { ArrowUpRight } from "lucide-react";
 import Image from "next/image";
-import { Tabs } from "radix-ui";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { productCaptures } from "@/lib/product-captures";
 
 const views = [
@@ -35,39 +35,35 @@ export function ProductShot() {
 			className="signal-product container-page scroll-mt-24"
 		>
 			<div className="signal-product-heading">
-				<h2>
-					A clear view.
-					<br />
-					<span className="text-muted-foreground">Of the whole stack.</span>
-				</h2>
+				<h2>Explore the workspace.</h2>
 				<p>
 					Projects, releases and operations, connected in one workspace. Explore the actual panel
 					below.
 				</p>
 			</div>
-			<Tabs.Root
+			<Tabs
 				defaultValue="workspace"
 				className="overflow-hidden rounded-xl border bg-card shadow-[var(--surface-shadow)]"
 			>
 				<div className="flex flex-wrap items-center justify-between gap-x-5 border-b px-3 sm:px-5">
-					<Tabs.List
+					<TabsList
 						aria-label="Workspace preview"
 						className="flex min-w-0 flex-wrap gap-x-2 sm:gap-x-5"
 					>
 						{views.map((view) => (
-							<Tabs.Trigger
+							<TabsTrigger
 								key={view.key}
 								value={view.key}
 								className="min-h-12 border-b-2 border-transparent px-2 text-sm focus-visible:-outline-offset-4 text-muted-foreground hover:text-foreground data-[state=active]:border-foreground data-[state=active]:font-medium data-[state=active]:text-foreground"
 							>
 								{view.label}
-							</Tabs.Trigger>
+							</TabsTrigger>
 						))}
-					</Tabs.List>
+					</TabsList>
 					<p className="py-3 text-xs text-muted-foreground">Example workspace</p>
 				</div>
 				{views.map((view) => (
-					<Tabs.Content
+					<TabsContent
 						key={view.key}
 						value={view.key}
 						className="m-0 focus-visible:-outline-offset-2"
@@ -108,9 +104,9 @@ export function ProductShot() {
 								))}
 							</figcaption>
 						</figure>
-					</Tabs.Content>
+					</TabsContent>
 				))}
-			</Tabs.Root>
+			</Tabs>
 		</section>
 	);
 }

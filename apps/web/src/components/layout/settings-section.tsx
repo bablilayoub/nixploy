@@ -1,7 +1,15 @@
 import type { ReactNode } from "react";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardFooter,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-/** A form section uses alignment and space; tables/editors keep their own frame. */
+/** Library Card composition keeps each settings task and its actions together. */
 export function SettingsSection({
 	title,
 	description,
@@ -23,50 +31,30 @@ export function SettingsSection({
 	actions?: ReactNode;
 	id?: string;
 }) {
-	const stacked = wide || bare || danger;
 	return (
-		<section
+		<Card
 			id={id}
 			tabIndex={id ? -1 : undefined}
 			className={cn(
-				"fieldwork-settings-section",
-				danger && "fieldwork-settings-danger",
-				!stacked && "fieldwork-settings-split",
+				"scroll-mt-24",
+				bare && "border-0 bg-transparent shadow-none",
+				danger && "border-input",
 				className,
 			)}
 		>
-			<div
-				className={cn(
-					"min-w-0",
-					stacked && "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between",
-				)}
-			>
-				<div className="max-w-xl space-y-2">
-					<h3
-						className={cn(
-							"text-base leading-snug font-medium tracking-tight",
-							danger ? "text-destructive" : "text-foreground",
-						)}
-					>
-						{title}
-					</h3>
-					{description && (
-						<p className="max-w-lg text-sm leading-relaxed text-muted-foreground">{description}</p>
-					)}
-				</div>
-				{stacked && actions && (
-					<div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
-				)}
-			</div>
-			{(children || (!stacked && actions)) && (
-				<div className={cn("fieldwork-settings-body", stacked && "mt-5")}>
-					{!stacked && actions && (
-						<div className="mb-4 flex flex-wrap items-center gap-2">{actions}</div>
-					)}
-					{children && <div className="min-w-0 space-y-4">{children}</div>}
-				</div>
+			<CardHeader>
+				<CardTitle as="h3">{title}</CardTitle>
+				{description && <CardDescription>{description}</CardDescription>}
+			</CardHeader>
+			{children && (
+				<CardContent>
+					<div className={cn("flex min-w-0 flex-col gap-4", !wide && !bare && "max-w-3xl")}>
+						{children}
+					</div>
+				</CardContent>
 			)}
-		</section>
+			{actions && <CardFooter className="border-t">{actions}</CardFooter>}
+		</Card>
 	);
 }
 export function SettingsStack({
@@ -76,5 +64,5 @@ export function SettingsStack({
 	children: ReactNode;
 	className?: string;
 }) {
-	return <div className={cn("flex w-full min-w-0 flex-col gap-0", className)}>{children}</div>;
+	return <div className={cn("flex w-full min-w-0 flex-col gap-6", className)}>{children}</div>;
 }

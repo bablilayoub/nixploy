@@ -1,30 +1,24 @@
-import { ArrowUpRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { InstallCommand } from "@/components/install-command";
-import { Reveal } from "@/components/motion-provider";
+import { Button } from "@/components/ui/button";
 export function Cta() {
 	return (
-		<section className="signal-cta">
-			<div className="container-page">
-				<Reveal className="signal-cta-inner">
-					<div>
-						<p className="signal-kicker">Your next deployment</p>
-						<h2>
-							Build something.
-							<br />
-							<span className="text-muted-foreground">Keep everything.</span>
-						</h2>
-						<p className="mt-5 max-w-md text-base leading-relaxed text-muted-foreground">
-							An open platform on your own servers. No license key. No feature gates. Just your
-							stack, ready to ship.
-						</p>
-						<Link href="/docs/install" className="signal-text-action mt-5">
+		<section className="signal-cta border-t">
+			<div className="container-page grid min-w-0 items-center gap-8 lg:grid-cols-2">
+				<div>
+					<h2 className="text-3xl font-medium tracking-tight">Your next deployment starts here.</h2>
+					<p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
+						One command on a Linux server. No license key, no per-seat charge, no feature gates.
+					</p>
+					<Button asChild variant="link" className="mt-5">
+						<Link href="/docs/install">
 							Read the installation guide
-							<ArrowUpRight className="size-4" aria-hidden="true" />
+							<ArrowRight aria-hidden="true" data-icon="inline-end" />
 						</Link>
-					</div>
-					<InstallCommand />
-				</Reveal>
+					</Button>
+				</div>
+				<InstallCommand />
 			</div>
 		</section>
 	);

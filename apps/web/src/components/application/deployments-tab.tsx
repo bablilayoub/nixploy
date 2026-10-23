@@ -13,7 +13,9 @@ export function DeploymentsTab({ application }: { application: Application }) {
 			<details id="deployment-automation" className="group rounded-xl border bg-card">
 				<summary className="cursor-pointer rounded-xl px-5 py-4 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
 					Deployment automation
-					<span className="ml-2 font-normal text-muted-foreground">Commands and deploy hook</span>
+					<span className="mt-1 block text-wrap font-normal text-muted-foreground sm:ml-2 sm:mt-0 sm:inline">
+						Commands and deploy hook
+					</span>
 				</summary>
 				<div className="border-t px-5 py-5 sm:px-6">
 					<DeployCommandsCard application={application} />

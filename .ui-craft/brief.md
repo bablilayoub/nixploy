@@ -53,3 +53,32 @@ Use existing Motion/Radix/Lucide only. Entrances and hover give hierarchy; drawi
 and signal travel explain deployment. A persistent pause control and OS reduced
 motion stop nonessential movement. No scroll hijacking or hidden no-JS content.
 Each page family gets a direct composition pass, not just inherited token changes.
+
+
+## Latest authority — monochrome library rebuild (2026-10-23)
+
+The user rejects Signal as vibe-coded and requests a library-led monochrome
+rebuild across the actual Next.js platform AND all website pages. This supersedes
+both Signal orange and the prior Fieldwork-only app decision. Use official shadcn
+(Radix) components and block composition; selected existing Magic UI assets serve
+real screenshots. Neutral black/white/gray only for theme, status and charts;
+factual brand/service icons may retain their colors. Saved settings, branding data,
+Light/Dark/System, authentication, permissions and all routes remain intact.
+
+App: conventional shadcn SidebarProvider/SidebarInset, organization switcher,
+workspace navigation, command search and account menu. Resource tables lead;
+forms and service tabs retain their real workflows. Website: product-led split
+fold, real screenshots, quiet border geometry, compact type, no orange glow,
+glass capsule, animated architectural ornament or oversized footer wordmark.
+Craft9 / motion3 in app,4 on website / density6 app,4 website / variance4.
+Signature: the actual project/environment inventory, shown consistently in product
+and marketing. Functional behavior is carried by library primitives. No fake data.
+Use the existing dependency set; vendor official components through the registry
+CLI, mapping Radix imports to the installed umbrella package where necessary.
+
+Research: official Anthropic frontend-design, Vercel Web Interface Guidelines and
+shadcn skill. Their styling advice is subordinate to explicit monochrome choice,
+repo tenancy/security constraints and existing component APIs. No global skills
+installation or preset overwrite is needed. Full-site source/family inventory,
+fixture browser tests, independent design/a11y review and preservation proof remain
+required before finishing. Do not mistake reachability counts for good design.

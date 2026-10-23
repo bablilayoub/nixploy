@@ -1,3 +1,6 @@
+Latest: [Monochrome library research](monochrome-libraries.md), including official
+shadcn skill and registry component provenance.
+
 # Design research applied to Fieldwork
 
 Reviewed 2026-10-21 following the user's explicit request to search for UI/UX skills.

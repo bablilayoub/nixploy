@@ -5,6 +5,35 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Monochrome library rebuild — 2026-10-23
+
+`codex/fieldwork-landing` now updates both the actual Next.js platform and every
+public website family to a monochrome shadcn composition. Official Sidebar/Sheet,
+Breadcrumb, Card/Table/Empty and authentication forms replace the custom shell;
+settings inherit the shared Card anatomy. Website navigation/search/tabs use
+shadcn components, with existing Magic UI Safari/BlurFade/Bento and twelve fresh
+production fixture screenshots. README and documentation images match the app.
+Official frontend-design, Vercel guidelines and shadcn skills were researched and
+read; registry source reuses installed dependencies, with no manifest/lock change.
+
+Local gates pass: four workspace typechecks, strict Biome1,192 files, knip, both
+production builds,119 web tests and3,353 server tests (137 optional skipped). The
+710-route/theme sweep records no runtime/hydration error, document overflow or
+unnamed visible control. Responsive discovery504 cases led to252 passing closure
+cases. Functional state checks,12 final control checks,16 settled image captures
+and independent design/accessibility closure complement the route evidence.
+See [current design and receipts](../.ui-craft/monochrome-library.md) and
+[research/provenance](../.ui-craft/research/monochrome-libraries.md). Earlier entries
+below retain their original checkpoints and superseded design descriptions.
+
+Production platform runs on3000 and website preview on3373. At restart all72
+tables/240 rows and62 persistent config files matched exact hashes, with original
+environment/keys and settings retained. Subsequent authenticated verification
+changes only normal rolling session expiry and update-check timestamps. No primary
+reset/migration/seed/restore ran; private DB/config backups and old build remain.
+PR34 is updated as a draft; no merge or remote deployment is performed.
+Private receipts: `.nixploy-data/verification/mono-library/`.
+
 ## Signal public website — 2026-10-23
 
 `codex/fieldwork-landing` replaces the rejected marketing treatment across home,

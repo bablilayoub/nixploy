@@ -18,8 +18,8 @@ export default function MaintenancePage() {
 		<main
 			style={{
 				minHeight: "100svh",
-				background: "var(--background, #f6f7f8)",
-				color: "var(--foreground, #202327)",
+				background: "var(--background, #fafafa)",
+				color: "var(--foreground, #171717)",
 				display: "flex",
 				alignItems: "center",
 				justifyContent: "center",

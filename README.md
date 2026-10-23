@@ -8,7 +8,7 @@
 <h1 align="center">Nixploy</h1>
 
 <p align="center">
-  <strong>From your code. To your cloud.</strong><br />
+  <strong>Your stack. Your servers.</strong><br />
   Deploy applications, Compose stacks and databases on your own servers. One workspace for releases, domains, logs and backups.
 </p>
 
@@ -24,15 +24,15 @@
 <p align="center">
   <a href="https://github.com/bablilayoub/nixploy/actions/workflows/ci.yml"><img src="https://github.com/bablilayoub/nixploy/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
   <a href="https://github.com/bablilayoub/nixploy/actions/workflows/release.yml"><img src="https://github.com/bablilayoub/nixploy/actions/workflows/release.yml/badge.svg" alt="Release" /></a>
-  <img src="https://img.shields.io/badge/license-Apache--2.0-737984" alt="License" />
-  <img src="https://img.shields.io/badge/node-%3E%3D22-737984" alt="Node" />
-  <img src="https://img.shields.io/badge/docker-swarm-737984" alt="Docker Swarm" />
+  <img src="https://img.shields.io/badge/license-Apache--2.0-737373" alt="License" />
+  <img src="https://img.shields.io/badge/node-%3E%3D22-737373" alt="Node" />
+  <img src="https://img.shields.io/badge/docker-swarm-737373" alt="Docker Swarm" />
 </p>
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/workspace-dark-01bdca29fb.png" />
-    <img src="apps/landing/public/screenshots/workspace-light-bd138bbc02.png" alt="Nixploy project overview with environments, service health and deployment activity" width="960" />
+    <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/workspace-dark-ad3d81f289.png" />
+    <img src="apps/landing/public/screenshots/workspace-light-d4f41b1fab.png" alt="Nixploy project overview with environments, service health and deployment activity" width="960" />
   </picture>
 </p>
 
@@ -92,14 +92,16 @@ Product docs: [nixploy.com/docs](https://nixploy.com/docs) · API: [nixploy.com/
 
 Projects bring environments and services together. Every service keeps its source,
 deployments, runtime, domains, environment and backups in a consistent navigation.
-Light, dark and system themes are available throughout the panel.
+The workspace and public website share monochrome light, dark and system themes.
+Navigation, forms and resource tables use shadcn/ui components, with real product
+captures in the website’s Magic UI preview.
 
 <details>
 <summary>Projects and environments</summary>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/project-dark-bd8fcbf8df.png" />
-  <img src="apps/landing/public/screenshots/project-light-d4e5481e44.png" alt="Project services organized by environment" width="960" />
+  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/project-dark-158badc764.png" />
+  <img src="apps/landing/public/screenshots/project-light-3a7d452069.png" alt="Project services organized by environment" width="960" />
 </picture>
 
 </details>
@@ -108,8 +110,8 @@ Light, dark and system themes are available throughout the panel.
 <summary>Deployment history</summary>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/deployments-dark-0ddea753b1.png" />
-  <img src="apps/landing/public/screenshots/deployments-light-5905c6fdbc.png" alt="Deployment history with commit details and release status" width="960" />
+  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/deployments-dark-f881a13e5e.png" />
+  <img src="apps/landing/public/screenshots/deployments-light-c33ffe00b7.png" alt="Deployment history with commit details and release status" width="960" />
 </picture>
 
 </details>
@@ -118,8 +120,8 @@ Light, dark and system themes are available throughout the panel.
 <summary>Fleet monitoring</summary>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/monitoring-dark-38d9342705.png" />
-  <img src="apps/landing/public/screenshots/monitoring-light-268ffd7e88.png" alt="Searchable service inventory and selected service monitoring" width="960" />
+  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/monitoring-dark-ac7b2256af.png" />
+  <img src="apps/landing/public/screenshots/monitoring-light-a02192ab09.png" alt="Searchable service inventory and selected service monitoring" width="960" />
 </picture>
 
 </details>
@@ -128,8 +130,8 @@ Light, dark and system themes are available throughout the panel.
 <summary>Template catalog</summary>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/templates-dark-b9ed3be23d.png" />
-  <img src="apps/landing/public/screenshots/templates-light-4943a09971.png" alt="Searchable catalog of applications and databases" width="960" />
+  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/templates-dark-5755950227.png" />
+  <img src="apps/landing/public/screenshots/templates-light-3913b88f9f.png" alt="Searchable catalog of applications and databases" width="960" />
 </picture>
 
 </details>
@@ -138,8 +140,8 @@ Light, dark and system themes are available throughout the panel.
 <summary>Servers</summary>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/servers-dark-9e905e2dbf.png" />
-  <img src="apps/landing/public/screenshots/servers-light-18ad380dec.png" alt="Server inventory and infrastructure management" width="960" />
+  <source media="(prefers-color-scheme: dark)" srcset="apps/landing/public/screenshots/servers-dark-47f7cdd142.png" />
+  <img src="apps/landing/public/screenshots/servers-light-3177335e6f.png" alt="Server inventory and infrastructure management" width="960" />
 </picture>
 
 </details>

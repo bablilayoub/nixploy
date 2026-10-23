@@ -129,20 +129,24 @@ export function ProfileCard() {
 						{PRESET_AVATARS.map((preset) => {
 							const selected = currentImage === presetImageValue(preset.id);
 							return (
-								<button
+								<Button
+									variant="ghost"
+									size="icon"
 									key={preset.id}
 									type="button"
 									title={preset.label}
+									aria-label={preset.label}
+									aria-pressed={selected}
 									disabled={pending}
 									onClick={() => void saveImage(presetImageValue(preset.id))}
 									className={cn(
-										"size-10 overflow-hidden rounded-full border border-border transition-colors hover:border-foreground/40 disabled:opacity-50",
+										"size-11 overflow-hidden rounded-full border border-border transition-colors hover:border-foreground/40 disabled:opacity-50",
 										selected && "ring-2 ring-foreground ring-offset-2 ring-offset-background",
 									)}
 								>
 									{/* biome-ignore lint/performance/noImgElement: inline data-URI presets */}
 									<img src={preset.src} alt="" className="size-full object-cover" />
-								</button>
+								</Button>
 							);
 						})}
 					</div>

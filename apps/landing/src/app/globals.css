@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "./component-states.css";
-@import "./signal.css";
+@import "./site.css";
 
 /*
  * The shadcn token contract, so every component pulled from a registry
@@ -15,42 +15,42 @@
 
 :root {
 	--radius: 0.5rem;
-	--background: #f5f6f8;
-	--foreground: #14181f;
+	--background: #fafafa;
+	--foreground: #171717;
 	--card: #ffffff;
 	--card-foreground: var(--foreground);
 	--popover: #ffffff;
 	--popover-foreground: var(--foreground);
-	--primary: #bc3e17;
+	--primary: #171717;
 	--primary-foreground: #ffffff;
 	--brand: var(--primary);
-	--secondary: #e9ecf0;
+	--secondary: #f5f5f5;
 	--secondary-foreground: var(--foreground);
-	--muted: #e9ecf0;
-	--muted-foreground: #555f6d;
-	--accent: #e9ecf0;
+	--muted: #f5f5f5;
+	--muted-foreground: #636363;
+	--accent: #f0f0f0;
 	--accent-foreground: var(--foreground);
-	--destructive: #b42332;
-	--border: #dce0e6;
-	--input: #858e9c;
-	--ring: #bc3e17;
-	--control: #edf0f4;
-	--panel-inset: #edf0f4;
-	--selection: #f9dfd5;
-	--chart-axis: #555f6d;
-	--success: #187040;
-	--warning: #965b08;
-	--info: #285eb0;
+	--destructive: #242424;
+	--border: #e5e5e5;
+	--input: #8a8a8a;
+	--ring: #525252;
+	--control: #ffffff;
+	--panel-inset: #f5f5f5;
+	--selection: #e5e5e5;
+	--chart-axis: #636363;
+	--success: #404040;
+	--warning: #525252;
+	--info: #636363;
 	--chart-1: var(--foreground);
 	--chart-2: color-mix(in oklab, var(--foreground) 75%, transparent);
 	--chart-3: color-mix(in oklab, var(--foreground) 60%, transparent);
 	--chart-4: color-mix(in oklab, var(--foreground) 45%, transparent);
 	--chart-5: color-mix(in oklab, var(--foreground) 30%, transparent);
-	--sidebar: #edf0f4;
+	--sidebar: #f5f5f5;
 	--sidebar-foreground: var(--foreground);
 	--sidebar-primary: var(--primary);
 	--sidebar-primary-foreground: var(--primary-foreground);
-	--sidebar-accent: #e3e7ed;
+	--sidebar-accent: #e8e8e8;
 	--sidebar-accent-foreground: var(--foreground);
 	--sidebar-border: var(--border);
 	--sidebar-ring: var(--ring);
@@ -60,37 +60,43 @@
 }
 
 .dark {
-	--background: #0b0d11;
-	--foreground: #f4f5f7;
-	--card: #12151b;
+	--background: #0a0a0a;
+	--foreground: #fafafa;
+	--card: #141414;
 	--card-foreground: var(--foreground);
-	--popover: #1c2028;
+	--popover: #1c1c1c;
 	--popover-foreground: var(--foreground);
-	--primary: #ff895c;
-	--primary-foreground: #1b100b;
+	--primary: #fafafa;
+	--primary-foreground: #171717;
 	--brand: var(--primary);
-	--secondary: #232934;
+	--secondary: #222222;
 	--secondary-foreground: var(--foreground);
-	--muted: #232934;
-	--muted-foreground: #a9b2c0;
-	--accent: #232934;
+	--muted: #222222;
+	--muted-foreground: #b3b3b3;
+	--accent: #262626;
 	--accent-foreground: var(--foreground);
-	--destructive: #ff8b94;
-	--border: #2b313c;
-	--input: #737f91;
-	--ring: #ff895c;
-	--control: #0e1117;
-	--panel-inset: #0e1117;
-	--selection: #37251f;
-	--chart-axis: #a9b2c0;
-	--success: #7adea0;
-	--warning: #eac379;
-	--info: #91b7ee;
-	--sidebar: #0e1117;
-	--sidebar-accent: #232934;
+	--destructive: #e5e5e5;
+	--border: #303030;
+	--input: #737373;
+	--ring: #a3a3a3;
+	--control: #141414;
+	--panel-inset: #171717;
+	--selection: #333333;
+	--chart-axis: #b3b3b3;
+	--success: #d4d4d4;
+	--warning: #bfbfbf;
+	--info: #a3a3a3;
+	--sidebar: #101010;
+	--sidebar-accent: #242424;
 	--surface-shadow: 0 1px 3px rgb(0 0 0 / 18%), 0 1px 0 rgb(255 255 255 / 3%) inset;
 	--overlay-shadow: 0 24px 80px -20px rgb(0 0 0 / 65%), 0 0 0 1px rgb(255 255 255 / 3%) inset;
 	color-scheme: dark;
+	--sidebar-foreground: var(--foreground);
+	--sidebar-primary: var(--primary);
+	--sidebar-primary-foreground: var(--primary-foreground);
+	--sidebar-accent-foreground: var(--foreground);
+	--sidebar-border: var(--border);
+	--sidebar-ring: var(--ring);
 }
 
 @theme inline {
