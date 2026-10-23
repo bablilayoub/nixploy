@@ -5,6 +5,17 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Phone access — 2026-10-23
+
+OpenHole forwards to a separate loopback panel process on3374 using the current
+`.next-original-polish` build and existing primary database/configuration. Its
+runtime auth URL trusts the temporary HTTPS tunnel; localhost:3000 keeps its
+existing process and environment. No persisted auth/domain settings changed. HTTPS login and same-origin auth checks
+pass; a normal login-page-to-dashboard browser sequence shows the existing
+projects without a reload. Cold direct-dashboard stress checks can hit OpenHole
+limits; this is a temporary phone-access tunnel, not a production deployment.
+Private launcher and reachability receipts: `.nixploy-data/verification/phone-access/`.
+
 ## Reviewed original-design refinements — 2026-10-23
 
 Applied the four approved findings while retaining the restored visual direction:
