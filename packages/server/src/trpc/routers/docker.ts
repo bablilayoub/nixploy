@@ -4,6 +4,7 @@ import { auditFromSession } from "../../modules/audit";
 import { assertInstanceAdmin } from "../../modules/auth/instance-admin";
 import { findServerById } from "../../modules/cluster/servers";
 import {
+	CONTAINER_LIST_COMMAND,
 	dockerListingCache,
 	dockerListingKey,
 	invalidateDockerListings,
@@ -20,6 +21,7 @@ import {
 	listServiceVolumeGuard,
 	pruneUnusedVolumes,
 } from "../../modules/docker/prune";
+import { readDockerSystemInfo } from "../../modules/docker/system";
 import { emitDockerCleanupNotification } from "../../modules/notifications";
 import { assertCapability, resolveCallerOrganizationId } from "../../modules/projects";
 import { execAsync, execAsyncRemote } from "../../utils/exec";
@@ -164,12 +166,7 @@ export const dockerRouter = router({
 
 	containers: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
 		await assertAdmin(ctx, input?.serverId);
-		const out = await cachedListing(
-			ctx,
-			"containers",
-			input.serverId,
-			`docker ps -a --format '{{json .}}'`,
-		);
+		const out = await cachedListing(ctx, "containers", input.serverId, CONTAINER_LIST_COMMAND);
 		return parseJsonLines<{
 			ID: string;
 			Image: string;
@@ -445,23 +442,7 @@ export const dockerRouter = router({
 
 	systemInfo: protectedProcedure.input(serverInput).query(async ({ ctx, input }) => {
 		await assertAdmin(ctx, input?.serverId);
-		const [version, df] = await Promise.all([
-			runOn(ctx, input.serverId, `docker version --format '{{json .}}'`),
-			runOn(ctx, input.serverId, `docker system df --format '{{json .}}'`),
-		]);
-		return {
-			version: JSON.parse(version.trim()) as {
-				Server?: { Version?: string; Os?: string; Arch?: string };
-				Client?: { Version?: string };
-			},
-			df: parseJsonLines<{
-				Type: string;
-				TotalCount: string;
-				Active: string;
-				Size: string;
-				Reclaimable: string;
-			}>(df),
-		};
+		return readDockerSystemInfo((command) => runOn(ctx, input.serverId, command));
 	}),
 
 	systemPrune: protectedProcedure

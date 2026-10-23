@@ -132,9 +132,9 @@ async function probeComposeContainers(
 	const project = shq(appName);
 	// Label filters only — Docker `name=` is a substring match and leaks across tenants.
 	const commands = [
-		`docker ps -a --filter label=com.docker.compose.project=${project} --format '{{json .}}'`,
-		`docker ps -a --filter label=com.docker.stack.namespace=${project} --format '{{json .}}'`,
-		`docker ps -a --filter label=com.docker.swarm.service.name=${project} --format '{{json .}}'`,
+		`docker ps -a --size=false --filter label=com.docker.compose.project=${project} --format '{{json .}}'`,
+		`docker ps -a --size=false --filter label=com.docker.stack.namespace=${project} --format '{{json .}}'`,
+		`docker ps -a --size=false --filter label=com.docker.swarm.service.name=${project} --format '{{json .}}'`,
 	];
 
 	const chunks = await Promise.all(commands.map((command) => run(serverId, command)));

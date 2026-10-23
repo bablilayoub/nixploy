@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { SettingsSection, SettingsStack } from "@/components/layout/settings-section";
@@ -100,29 +100,57 @@ export function SystemTab({ serverId }: DockerTabProps) {
 				/>
 			)}
 
-			<SettingsSection title="Disk usage" className="lg:col-span-2">
-				<Table>
-					<TableHeader>
-						<TableRow>
-							<TableHead>Type</TableHead>
-							<TableHead>Total</TableHead>
-							<TableHead>Active</TableHead>
-							<TableHead>Size</TableHead>
-							<TableHead>Reclaimable</TableHead>
-						</TableRow>
-					</TableHeader>
-					<TableBody>
-						{(info?.df ?? []).map((row) => (
-							<TableRow key={row.Type}>
-								<TableCell className="text-xs font-medium">{row.Type}</TableCell>
-								<TableCell className="text-xs">{row.TotalCount}</TableCell>
-								<TableCell className="text-xs">{row.Active}</TableCell>
-								<TableCell className="font-mono text-xs">{row.Size}</TableCell>
-								<TableCell className="font-mono text-xs">{row.Reclaimable}</TableCell>
+			<SettingsSection
+				title="Disk usage"
+				className="lg:col-span-2"
+				actions={
+					info?.diskUsageError ? (
+						<Button
+							variant="outline"
+							size="sm"
+							disabled={infoQuery.isFetching}
+							onClick={() => void infoQuery.refetch()}
+						>
+							<RefreshCw className="size-3.5" />
+							Retry
+						</Button>
+					) : undefined
+				}
+			>
+				{info?.diskUsageError ? (
+					<div role="status" className="space-y-2 text-sm">
+						<p>Disk usage is unavailable because Docker cannot find a container snapshot.</p>
+						<p className="text-muted-foreground">
+							Ask a server administrator to inspect container{" "}
+							<code className="break-all font-mono text-xs">{info.diskUsageError.containerId}</code>{" "}
+							and its storage mounts before cleanup. This check leaves containers and volumes
+							untouched.
+						</p>
+					</div>
+				) : (
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>Type</TableHead>
+								<TableHead>Total</TableHead>
+								<TableHead>Active</TableHead>
+								<TableHead>Size</TableHead>
+								<TableHead>Reclaimable</TableHead>
 							</TableRow>
-						))}
-					</TableBody>
-				</Table>
+						</TableHeader>
+						<TableBody>
+							{(info?.df ?? []).map((row) => (
+								<TableRow key={row.Type}>
+									<TableCell className="text-xs font-medium">{row.Type}</TableCell>
+									<TableCell className="text-xs">{row.TotalCount}</TableCell>
+									<TableCell className="text-xs">{row.Active}</TableCell>
+									<TableCell className="font-mono text-xs">{row.Size}</TableCell>
+									<TableCell className="font-mono text-xs">{row.Reclaimable}</TableCell>
+								</TableRow>
+							))}
+						</TableBody>
+					</Table>
+				)}
 			</SettingsSection>
 
 			<AlertDialog open={pruneOpen !== null} onOpenChange={(open) => !open && setPruneOpen(null)}>

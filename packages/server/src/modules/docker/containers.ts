@@ -23,6 +23,10 @@ import { createTtlCache, DOCKER_LISTING_TTL_MS } from "../../utils/ttl-cache";
  */
 export const dockerListingCache = createTtlCache<string>({ ttlMs: DOCKER_LISTING_TTL_MS });
 
+// JSON formatting implicitly enables Docker's size probe. A stale task with a
+// missing writable snapshot must not block a list that never displays sizes.
+export const CONTAINER_LIST_COMMAND = "docker ps -a --size=false --format '{{json .}}'";
+
 /** Cache key for one listing view on one server (`null` = the Nixploy host). */
 export const dockerListingKey = (view: string, serverId: string | null | undefined): string =>
 	`${view}:${serverId ?? "__local__"}`;

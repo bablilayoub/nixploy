@@ -5,6 +5,30 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## Docker snapshot resilience — 2026-10-24
+
+A production report identified dead Swarm tasks with missing writable snapshots.
+The full-JSON Docker CLI formatter implicitly requested sizes and made one stale
+task fail both container listing and disk accounting. Reproduced against a fake
+Engine using the exact v0.8.0 image/CLI: the old command requests `size=1` and fails;
+`--size=false` lists both healthy and dead tasks without that probe.
+
+Docker and Compose listings explicitly disable sizes. System retains engine
+details for the specific missing-snapshot error, reports the affected container
+and supports retry; other daemon errors remain errors. The read paths do not
+remove containers or volumes. Authorization, existing cleanup operations and
+stored data/settings are unchanged. Documentation describes manual, inspected
+cleanup without volume removal.
+
+Local validation: server/web typechecks, strict Biome, knip and the production web
+build pass; 3,497 server, 119 web and 95 CLI tests pass (one optional registry check
+skipped). Eight new tests cover the real CLI protocol and system partial failure;
+CI explicitly enables the CLI regression against a fake Engine with no daemon.
+Twelve browser captures cover healthy, missing-snapshot and retry-recovery states
+in both themes at 375/1280px. Preview/tests use isolated fixture data; production
+and localhost:3000 are untouched. Prepared for the next update; not released yet.
+Private receipts: `.nixploy-data/verification/snapshot-fix/` in the release checkout.
+
 ## v0.8.0 published — 2026-10-23
 
 [PR #34](https://github.com/bablilayoub/nixploy/pull/34) is merged and

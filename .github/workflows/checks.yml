@@ -107,6 +107,10 @@ jobs:
         # prints the skipped-test inventory, so a Postgres-backed suite that
         # quietly stopped running cannot pass for green (audit ops-dx #20).
         run: pnpm test:db
+        env:
+          # The CLI talks to a fake Engine over localhost; no Docker daemon
+          # or container cleanup is involved in the stale-snapshot regression.
+          NIXPLOY_TEST_DOCKER_CLI: "1"
 
       - name: CLI tests
         run: pnpm -F @nixploy/cli test

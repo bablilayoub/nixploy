@@ -12,6 +12,22 @@ host or any managed server (selector in the header).
 | Volumes | List with mountpoints; remove (docker rejects in-use), prune unused named + anonymous volumes (skips `nixploy-postgres-data`). |
 | System | Engine version/OS, `docker system df` disk usage, system prune (with/without volumes; volume pass also clears named unused). |
 
+### Missing container snapshots
+
+Docker can retain a dead task whose writable-layer snapshot has already gone.
+Docker and Compose container listings use `--size=false`: JSON formatting otherwise implicitly
+requests disk sizes and one stale task can fail the entire listing. System keeps
+engine details visible if disk accounting reports this specific error, shows the
+affected container ID and lets the operator retry. Other daemon/SSH failures still
+surface as errors; unavailable disk totals are never presented as zero usage.
+
+This handling does not repair the daemon or remove anything. Inspect the affected
+container's status, service and mounts before cleanup, preserve its metadata, and
+verify a running replacement where appropriate. Remove only confirmed obsolete
+tasks with plain `docker rm <id>`; avoid force/volume-removal flags. Existing named
+and anonymous volumes must be retained. Do not use a broad prune as snapshot
+repair.
+
 ## Server side
 
 - Router: `packages/server/src/trpc/routers/docker.ts` (registered as
