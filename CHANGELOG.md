@@ -11,6 +11,27 @@ this file is the summary.
 
 ## Unreleased
 
+## [0.8.0] — 2026-10-23
+
+### Known regressions and upgrade requirements
+
+- Migration `0048` is a coordinated upgrade boundary: use this release’s host
+  `update.sh`, keep the database/config/encryption-key backups, and stop every
+  old panel and worker. Older GUI updaters cannot cross it. Image rollback alone
+  does not undo the storage transition; see `docs/upgrade-notes.md#v080`.
+- Previously queued deployments lack the immutable environment snapshot and must
+  be reviewed and deployed again. No other regressions are known from the
+  completed checks; PostgreSQL recovery-copy coverage has the limits documented
+  in the upgrade notes.
+- Includes migrations `0047`–`0051`: template source support, encrypted organization
+  variables/deployment snapshots, and retained recovery-copy identity/safety.
+
+### Security
+
+- Upgrade both Next.js apps to the patched 16.4.3 release, addressing
+  GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr and GHSA-p3m5-59mp-jv5r
+  (CVE-2026-94482). No vulnerability-gate exemptions are added.
+
 ### Added
 
 - Reviewed configuration releases: save drafts, inspect redacted changes and
@@ -25,9 +46,12 @@ this file is the summary.
 
 ### Changed
 
-- Panel design system: mineral surfaces, plum actions, IBM Plex typography,
-  persistent desktop navigation, shared status markers and clearer mobile
-  directory/deployment hierarchy. Saved branding remains authoritative.
+- Restore the original panel and public website design, including familiar
+  navigation, Inter/JetBrains Mono typography and the original component styling.
+  Saved branding, service-tab deep links and capability gates remain supported.
+- Bring the project directory ahead of analytics, show complete mobile setup
+  instructions and provide 44px mobile header targets. Resource sliders have
+  accessible names and keep keyboard focus through repeated edits.
 - Organization variables move from plaintext metadata to encrypted storage.
   Migration `0048` requires a coordinated stop/drain and a backup; old binaries
   cannot use the upgraded storage/worker protocol. The current host updater

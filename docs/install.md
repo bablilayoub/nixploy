@@ -448,7 +448,7 @@ curl -fsSL https://github.com/bablilayoub/nixploy/releases/latest/download/updat
 
 Keeps secrets, Postgres data, ACME certs, and Traefik routes. Ordinary compatible
 migrations run on boot. The organization-variable storage transition in `0048`
-requires the current host updater; see [the upgrade boundary](./upgrade-notes.md#next-operator-workspace-upgrade).
+requires the current host updater; see [the upgrade boundary](./upgrade-notes.md#operator-workspace-upgrade).
 The GUI updater directs split installations to this host path.
 
 Like the installer, `update.sh` verifies the new image's cosign signature and

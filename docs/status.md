@@ -5,6 +5,17 @@ and move items between the backlog sections. Durable knowledge belongs in
 [`../CLAUDE.md`](../CLAUDE.md) / [`codebase-map.md`](./codebase-map.md); this
 file is for **state** and **tasks**.
 
+## v0.8.0 release preparation — 2026-10-23
+
+Preparing the reviewed original-design restoration and refinements for publication.
+The prior PR CI failures are Next.js advisories; both apps now select the patched
+16.4.3 release. Version 0.8.0 includes the new configuration/recovery workflows and
+migrations 0047–0051 since v0.7.3. Changelog and upgrade notes describe the mandatory
+host-updater boundary, backups, queued-deployment handling and rollback limits.
+Release validation runs in a separate checkout so existing local/tunnel processes
+and their dependencies remain intact. Remote CI, image signing and publication
+remain pending until their actual workflows succeed.
+
 ## Phone access — 2026-10-23
 
 OpenHole forwards to a separate loopback panel process on3374 using the current
